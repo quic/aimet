@@ -60,6 +60,13 @@ ConvType = ['Conv', 'ConvTranspose']
 LinearType = ['Gemm', 'MatMul']
 BatchNormType = ['BatchNormalization']
 
+class BNLayer:
+    """ Captures beta and gamma parameter for BatchNorm layers to be used during High Bias absorption """
+    def __init__(self):
+        self.bn_layer = None
+        self.gamma = None
+        self.beta = None
+
 
 def _find_conv_bn_pairs(connected_graph: ConnectedGraph) -> Dict:
     """
@@ -187,7 +194,7 @@ def is_valid_bn_fold(conv_linear: onnx_pb.NodeProto, model: onnx_pb.ModelProto, 
     return valid
 
 
-def fold_all_batch_norms_to_weight(model: onnx_pb.ModelProto) -> List[Tuple[onnx_pb.NodeProto, onnx_pb.NodeProto]]:
+def fold_all_batch_norms_to_weight(model: onnx_pb.ModelProto) -> List:
     """
     Fold all possible batch_norm layers in a model into the weight of the corresponding conv layers
 
@@ -197,16 +204,19 @@ def fold_all_batch_norms_to_weight(model: onnx_pb.ModelProto) -> List[Tuple[onnx
     connected_graph = ConnectedGraph(model)
     model = connected_graph.model
     conv_bn_pairs, bn_conv_pairs = find_all_batch_norms_to_fold(connected_graph)
-
+    conv_bns = []
+    bn_convs = []
     for conv, bn in conv_bn_pairs:
-        _fold_to_weight(model, conv, bn, True)
+        bn_layer = _fold_to_weight(model, conv, bn, True)
+        conv_bns.append((conv, bn_layer))
         remove_node(bn, model.graph)
 
     for bn, conv in bn_conv_pairs:
-        _fold_to_weight(model, conv, bn, False)
+        bn_layer = _fold_to_weight(model, conv, bn, False)
+        bn_convs.append((conv, bn_layer))
         remove_node(bn, model.graph)
 
-    return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs]
+    return conv_bns + bn_convs
 
 
 def _fold_to_weight(model: onnx_pb.ModelProto,
@@ -247,7 +257,11 @@ def _fold_to_weight(model: onnx_pb.ModelProto,
     elif conv_linear.op_type in LinearType and not get_node_attribute(conv_linear, "transB"):
         weight = transpose_tensor(weight, (1, 0))
 
-    _call_mo_batch_norm_fold(model, weight, bias, bn, fold_backward=fold_backward)
+    channels = weight.dims[0] if fold_backward else weight.dims[1]
+    bn_param = get_bn_params(model, bn, channels)
+    bn_layer = copy_bn_params_to_bn_layer(bn, bn_param)
+
+    _call_mo_batch_norm_fold(weight, bias, bn_param, fold_backward=fold_backward)
 
     # Transpose weight back to original configuration
     if conv_linear.op_type == "ConvTranspose" and groups == 1:
@@ -257,6 +271,7 @@ def _fold_to_weight(model: onnx_pb.ModelProto,
 
     weight_param = ParamUtils.get_param(model, conv_linear, WEIGHT_INDEX)
     weight_param.raw_data = weight.raw_data
+    return bn_layer
 
 
 def _matmul_to_gemm(node: onnx_pb.NodeProto, model: onnx_pb.ModelProto):
@@ -284,23 +299,18 @@ def _matmul_to_gemm(node: onnx_pb.NodeProto, model: onnx_pb.ModelProto):
     node.input.append(bias_name)
 
 
-def _call_mo_batch_norm_fold(model: onnx_pb.ModelProto,
-                             weight: onnx_pb.TensorProto,
+def _call_mo_batch_norm_fold(weight: onnx_pb.TensorProto,
                              bias: onnx_pb.TensorProto,
-                             bn: onnx_pb.NodeProto,
+                             bn_params: libpymo.BNParams,
                              fold_backward: bool):
     """
     Calls C++ batch norm folding API.
 
-    :param model: onnx model containing the (conv, bn) pair to be folded
     :param weight: Weight or scale tensor to fold BN into.
     :param bias: Bias tensor to fold BN into.
-    :param bn: Batch Norm layer
+    :param bn_params: Batch Norm layer
     :param fold_backward: True if BatchNorm comes after Conv/Linear layer
     """
-    channels = weight.dims[0] if fold_backward else weight.dims[1]
-    bn_params = get_bn_params(model, bn, channels)
-
     weight_tensor = libpymo.TensorParams()
 
     weight_tensor.data = numpy_helper.to_array(weight).reshape(-1)
@@ -344,6 +354,20 @@ def get_bn_params(model: onnx_pb.ModelProto, bn: onnx_pb.NodeProto, channels: in
     bn_params.runningVar = np.repeat(sigma.reshape(-1), resize)
 
     return bn_params
+
+
+def copy_bn_params_to_bn_layer(bn: onnx_pb.NodeProto, bn_params: libpymo.BNParams) -> BNLayer:
+    """
+    Copies bn params to a BN layer which can be used later by High bias absorption
+    :param bn: BN layer
+    :param bn_params: libpymo.BNParams object for the BatchNorm layer
+    :return BNLayer object
+    """
+    bn_layer = BNLayer()
+    bn_layer.bn_layer = bn
+    bn_layer.gamma = bn_params.gamma
+    bn_layer.beta = bn_params.beta
+    return bn_layer
 
 
 @contextlib.contextmanager

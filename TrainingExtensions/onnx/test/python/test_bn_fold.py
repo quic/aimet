@@ -46,14 +46,13 @@ import torchvision
 import pytest
 
 import torch
-from torch.nn.modules.batchnorm import _BatchNorm
 
 from aimet_onnx.batch_norm_fold import _find_conv_bn_pairs, find_all_batch_norms_to_fold, fold_all_batch_norms_to_weight
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
 
 from test_models import BNAfterConv, BNBeforeConv, BNAfterDynamicMatMul, BNAfterConvTranspose, BNAfterConv1d, \
                         BNAfterLinear, BNBeforeLinear, BNBeforeFlattenLinear, BNBeforeConv1d, BNBeforeConvTranspose, \
-                        MyModel, _convert_to_onnx_no_fold, _convert_to_onnx
+                        MyModel, _convert_to_onnx_no_fold, _convert_to_onnx, initialize_bn_params
 
 
 def get_outputs_after_fold(model, test_data):
@@ -76,22 +75,12 @@ def get_outputs_after_fold(model, test_data):
     return baseline_output, folded_output, pairs
 
 
-def _initialize_bn_params(model: torch.nn.Module):
-    for module in model.modules():
-        if isinstance(module, _BatchNorm) and module.affine:
-            with torch.no_grad():
-                module.weight.copy_(torch.randn_like(module.weight))
-                module.bias.copy_(torch.randn_like(module.bias))
-                module.running_mean.copy_(torch.randn_like(module.bias))
-                module.running_var.add_(torch.randn_like(module.bias).abs())
-
-
 class TestBatchNormFold:
     """ Test methods for BatchNormFold"""
 
     def test_find_batch_norms_to_fold(self):
         model = MyModel().eval()
-        _initialize_bn_params(model)
+        initialize_bn_params(model)
 
         input_shape = (2, 10, 24, 24)
         x = torch.randn(*input_shape, requires_grad=True)
@@ -259,7 +248,7 @@ class TestBatchNormFold:
         torch.manual_seed(10)
         torch_model = BNBeforeFlattenLinear()
         torch_model.eval()
-        _initialize_bn_params(torch_model)
+        initialize_bn_params(torch_model)
 
         input_shape = (2, 10, 24, 24)
         test_data = np.random.randn(*input_shape).astype(np.float32)
@@ -276,7 +265,7 @@ class TestBatchNormFold:
         torch.manual_seed(10)
         torch_model = BNBeforeFlattenLinear()
         torch_model.eval()
-        _initialize_bn_params(torch_model)
+        initialize_bn_params(torch_model)
 
         input_shape = (2, 10, 24, 24)
         test_data = np.random.randn(*input_shape).astype(np.float32)
@@ -293,7 +282,7 @@ class TestBatchNormFold:
         torch.manual_seed(10)
         torch_model = torchvision.models.resnet18()
         num_batchnorm = len([m for m in torch_model.modules() if isinstance(m, torch.nn.BatchNorm2d)])
-        _initialize_bn_params(torch_model)
+        initialize_bn_params(torch_model)
 
         input_shape = (2, 3, 224, 224)
         test_data = np.random.randn(*input_shape).astype(np.float32)
@@ -310,7 +299,7 @@ class TestBatchNormFold:
         torch.manual_seed(10)
         torch_model = BNBeforeConv(bias=bias)
         torch_model.eval()
-        _initialize_bn_params(torch_model)
+        initialize_bn_params(torch_model)
 
         input_shape = (2, 10, 24, 24)
         test_data = np.random.randn(*input_shape).astype(np.float32)
@@ -327,7 +316,7 @@ class TestBatchNormFold:
         torch.manual_seed(10)
         torch_model = BNBeforeConv(bias=True, groups=20)
         torch_model.eval()
-        _initialize_bn_params(torch_model)
+        initialize_bn_params(torch_model)
 
         input_shape = (2, 10, 24, 24)
         test_data = np.random.randn(*input_shape).astype(np.float32)
@@ -362,7 +351,7 @@ class TestBatchNormFold:
         torch.manual_seed(10)
         torch_model = BNAfterConvTranspose(groups=10)
         torch_model.eval()
-        _initialize_bn_params(torch_model)
+        initialize_bn_params(torch_model)
 
         input_shape = (2, 10, 24, 24)
         test_data = np.random.randn(*input_shape).astype(np.float32)
@@ -379,7 +368,7 @@ class TestBatchNormFold:
         torch.manual_seed(10)
         torch_model = BNBeforeLinear(bias=False)
         torch_model.eval()
-        _initialize_bn_params(torch_model)
+        initialize_bn_params(torch_model)
 
         input_shape = (32, 10)
         test_data = np.random.randn(*input_shape).astype(np.float32)
@@ -404,7 +393,7 @@ class TestBatchNormFold:
         torch.manual_seed(10)
         torch_model = BNBeforeLinear(bias=True)
         torch_model.eval()
-        _initialize_bn_params(torch_model)
+        initialize_bn_params(torch_model)
 
         input_shape = (32, 10)
         test_data = np.random.randn(*input_shape).astype(np.float32)
@@ -421,7 +410,7 @@ class TestBatchNormFold:
         torch.manual_seed(10)
         torch_model = BNAfterLinear(bias=True)
         torch_model.eval()
-        _initialize_bn_params(torch_model)
+        initialize_bn_params(torch_model)
 
         input_shape = (32, 10)
         test_data = np.random.randn(*input_shape).astype(np.float32)
@@ -438,7 +427,7 @@ class TestBatchNormFold:
         torch.manual_seed(10)
         torch_model = BNAfterLinear(bias=False)
         torch_model.eval()
-        _initialize_bn_params(torch_model)
+        initialize_bn_params(torch_model)
 
         input_shape = (32, 10)
         test_data = np.random.randn(*input_shape).astype(np.float32)
@@ -464,7 +453,7 @@ class TestBatchNormFold:
         torch.manual_seed(10)
         torch_model = BNBeforeConv1d(bias=bias)
         torch_model.eval()
-        _initialize_bn_params(torch_model)
+        initialize_bn_params(torch_model)
 
         input_shape = (2, 10, 24)
         test_data = np.random.randn(*input_shape).astype(np.float32)
@@ -481,7 +470,7 @@ class TestBatchNormFold:
         torch.manual_seed(10)
         torch_model = BNAfterConv1d(bias=bias)
         torch_model.eval()
-        _initialize_bn_params(torch_model)
+        initialize_bn_params(torch_model)
 
         input_shape = (2, 10, 24)
         test_data = np.random.randn(*input_shape).astype(np.float32)
@@ -498,7 +487,7 @@ class TestBatchNormFold:
         torch.manual_seed(10)
         torch_model = BNAfterDynamicMatMul(bias=bias, padding=1)
         torch_model.eval()
-        _initialize_bn_params(torch_model)
+        initialize_bn_params(torch_model)
 
         input_shape = (32, 10, 24)
         test_data = np.random.randn(*input_shape).astype(np.float32)

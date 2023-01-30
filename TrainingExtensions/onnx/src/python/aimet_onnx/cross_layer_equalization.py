@@ -49,11 +49,14 @@ from onnx import onnx_pb, numpy_helper
 
 from aimet_common.utils import AimetLogger
 from aimet_common.connected_graph.connectedgraph import get_ordered_ops
-from aimet_common.cross_layer_equalization import GraphSearchUtils, CrossLayerScaling as CLS, ClsSetInfo
+from aimet_common.cross_layer_equalization import GraphSearchUtils, CrossLayerScaling as CLS, ClsSetInfo, \
+    HighBiasFold as HBF
 import aimet_common.libpymo as libpymo      # pylint: disable=import-error
 
 from aimet_onnx.meta.connectedgraph import ConnectedGraph, WEIGHT_INDEX, BIAS_INDEX
+from aimet_onnx.meta.operations import Op
 from aimet_onnx.utils import transpose_tensor, ParamUtils, get_node_attribute
+from aimet_onnx.batch_norm_fold import BNLayer
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -247,3 +250,80 @@ class CrossLayerScaling(CLS):
             bias_param = ParamUtils.get_param(self._model.model, cls_set[1].get_module(),
                                               BIAS_INDEX)
             bias_param.raw_data = np.asarray(curr_layer_params.bias, dtype=np.float32).tobytes()
+
+
+class HighBiasFold(HBF):
+    """
+    Code to apply the high-bias-fold technique to a model
+    """
+    def __init__(self, model: onnx_pb.ModelProto):
+        self._model = model
+
+    def _check_if_bias_is_none(self, layer: Op) -> bool:
+        """ Returns if bias is a None for a layer. True if bias is None"""
+        bias = ParamUtils.get_param(self._model.model, layer.get_module(), BIAS_INDEX)
+        return not bias
+
+    #TODO
+    def _populate_bn_params_in_libpymo_obj(self, prev_layer_bn_params: libpymo.BNParamsHighBiasFold,
+                                           bn_layer: BNLayer):
+        """
+        Populates BatchNorm params in the libpymo object
+        :param prev_layer_bn_params: Data structure to pack batch norm parameter
+        :param bn_layer: BatchNorm layer
+        """
+        prev_layer_bn_params.gamma = bn_layer.gamma
+        prev_layer_bn_params.beta = bn_layer.beta
+
+    def _pack_previous_and_current_layer_params(self, cls_pair_info: ClsSetInfo.ClsSetLayerPairInfo,
+                                                prev_layer_params: libpymo.LayerParams,
+                                                curr_layer_params: libpymo.LayerParams):
+        """
+        Helper method to pack information of previous and current layer.
+
+        :param cls_pair_info: Layer pairs that were scaled using CLS and related information.
+        :param prev_layer_params: Data structure to pack previous layer parameters.
+        :param curr_layer_params: Data structure to pack current layer parameters.
+        """
+        prev_layer_params.activationIsRelu = cls_pair_info.relu_activation_between_layers
+
+        bias = ParamUtils.get_param(self._model.model, cls_pair_info.layer1.get_module(),
+                                    BIAS_INDEX)
+
+        prev_layer_params.bias = numpy_helper.to_array(bias).reshape(-1)
+
+        module = cls_pair_info.layer2.get_module()
+        weight = ParamUtils.get_param(self._model.model, module, WEIGHT_INDEX)
+        bias = ParamUtils.get_param(self._model.model, module, BIAS_INDEX)
+
+        groups = get_node_attribute(module, "group")
+
+        # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
+        if module.op_type == "ConvTranspose" and groups == 1:
+            weight = transpose_tensor(weight, (1, 0, 2, 3))
+
+        curr_layer_params.bias = numpy_helper.to_array(bias).reshape(-1)
+        curr_layer_params.weight = numpy_helper.to_array(weight).reshape(-1)
+        curr_layer_params.weightShape = np.array(weight.dims)
+
+    def _update_bias_for_layer_from_libpymo_obj(self, layer_param: libpymo.LayerParams,
+                                                module: onnx_pb.NodeProto):
+        """
+        Update bias parameter from libpymo object
+        """
+        bias = ParamUtils.get_param(self._model.model, module, BIAS_INDEX)
+
+        bias.raw_data = np.asarray(layer_param.bias, dtype=np.float32).tobytes()
+
+    def _update_previous_and_current_layer_bias(self, cls_pair_info: ClsSetInfo.ClsSetLayerPairInfo,
+                                                prev_layer_params: libpymo.LayerParams,
+                                                curr_layer_params: libpymo.LayerParams):
+        """
+        Update biases for previous and current layer.
+
+        :param cls_pair_info: Layer pairs that were scaled using CLS and related information.
+        :param prev_layer_params: Data structure holding weight and bias for previous layer in cls set.
+        :param curr_layer_params: Data structure holding weight and bias for current layer in cls set.
+        """
+        self._update_bias_for_layer_from_libpymo_obj(prev_layer_params, cls_pair_info.layer1.get_module())
+        self._update_bias_for_layer_from_libpymo_obj(curr_layer_params, cls_pair_info.layer2.get_module())
