@@ -342,7 +342,8 @@ class OnnxSaver:
 
         cls.check_onnx_node_names(onnx_model, pytorch_model)
 
-        onnx.save(onnx_model, onnx_model_path)
+        save_as_external_data = onnx_model.ByteSize() >= onnx.checker.MAXIMUM_PROTOBUF
+        onnx.save(onnx_model, onnx_model_path, save_as_external_data=save_as_external_data)
 
     @classmethod
     def check_onnx_node_names(cls, onnx_model: onnx.ModelProto, pytorch_model: torch.nn.Module):
@@ -991,6 +992,7 @@ class OnnxSaver:
         temp_file = os.path.join(working_dir,
                                  'temp_onnx_model_with_markers.onnx' if not add_all_markers else
                                  'temp_onnx_model_with_all_markers.onnx')
+
         if is_conditional:
             with aimet_torch.utils.in_eval_mode(model), torch.no_grad():
                 dummy_output = model(*dummy_input)
@@ -998,7 +1000,8 @@ class OnnxSaver:
             torch.onnx.export(scripted_model, dummy_input, temp_file, example_outputs=dummy_output,
                               enable_onnx_checker=False, **onnx_export_args.kwargs)
         else:
-            torch.onnx.export(model, dummy_input, temp_file, enable_onnx_checker=False, **onnx_export_args.kwargs)
+            torch.onnx.export(model, dummy_input, temp_file, enable_onnx_checker=False,
+                              **onnx_export_args.kwargs)
 
         return cls.load_simply_onnx_model(temp_file)
 

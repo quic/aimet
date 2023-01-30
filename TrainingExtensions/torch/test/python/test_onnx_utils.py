@@ -39,6 +39,8 @@ import contextlib
 import os
 import logging
 from collections import defaultdict
+import pytest
+from packaging.version import Version
 
 import torch
 from torchvision import models
@@ -643,6 +645,30 @@ class TestOnnxUtils:
 
         if os.path.exists(onnx_path):
             os.remove(onnx_path)
+
+    @pytest.mark.skipif(Version(torch.__version__) < Version('1.10.0'),
+                        reason="Need Pytorch1.10.0 https://github.com/pytorch/pytorch/pull/60244")
+    def test_set_node_name_for_large_model(self):
+        class LargeModel(torch.nn.Module):
+            def __init__(self):
+                super(LargeModel, self).__init__()
+                self.fc = torch.nn.Linear(1024, 1024*1024)
+            def forward(self, input):
+                return self.fc(input)
+
+        model = LargeModel()
+        dummy_input = torch.randn(1024)
+        onnx_path = "./data/MyModel.onnx"
+
+        #Clean up before running test
+        if os.path.exists(onnx_path):
+            os.remove(onnx_path)
+
+        export_args = onnx_utils.OnnxExportApiArgs(opset_version=11)
+
+        onnx_utils.OnnxSaver.set_node_names(onnx_path,model, dummy_input, onnx_export_args=export_args)
+
+        assert os.path.exists(onnx_path)
 
     def test_set_unique_node_names(self):
         """
