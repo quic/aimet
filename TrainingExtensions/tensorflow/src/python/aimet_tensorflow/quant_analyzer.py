@@ -366,8 +366,8 @@ class QuantAnalyzer:
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
 
-        output_op_names = [graph_op.output_op_node.name for graph_op in sim.connected_graph.get_all_ops().values()
-                           if graph_op.output_op_node is not None]
+        # pylint: disable=protected-access
+        output_op_names = QuantizationSimModel._get_ops_to_quantize_activations_for(self._session.graph, sim.connected_graph)
         mse_loss_dict = {}
 
         for _, output_op_name in enumerate(output_op_names):
