@@ -148,7 +148,7 @@ class TestCLS:
         output_before_cle = session.run(None, {'input': test_data})
         equalize_model(model)
         output_after_cle = session.run(None, {'input': test_data})
-        assert np.allclose(output_after_cle, output_before_cle, rtol=10-2)
+        assert np.allclose(output_after_cle, output_before_cle, rtol=1e-2)
 
 
 class TestHighBiasFold:
