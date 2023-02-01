@@ -709,8 +709,8 @@ class TestQuantizationSimStaticGrad:
 
         sim = QuantizationSimModel(model, dummy_input=dummy_input)
         assert 2 == len(sim.model.add.input_quantizers)
-        assert not sim.model.add.input_quantizers[0].enabled
-        assert not sim.model.add.input_quantizers[1].enabled
+        assert sim.model.add.input_quantizers[0].enabled
+        assert sim.model.add.input_quantizers[1].enabled
 
         sim.model.add.input_quantizers[1].enabled = True
 
@@ -971,6 +971,29 @@ class TestQuantizationSimStaticGrad:
 
         print(sim.model.conv1.input_quantizers[0])
         print(sim.model.conv1.output_quantizers[0])
+
+
+    def test_inputs_shared_constant_intermediate_quantization(self):
+        """"""
+        model = Model_Inputs_Shared_Constant_Intermediate()
+
+        dummy_input = (torch.randn(1, 10, 10, 10), torch.randn(1, 10, 10, 10), torch.randn(1, 10, 10, 10))
+
+        def forward_pass(model, args):
+            model(*dummy_input)
+
+        sim = QuantizationSimModel(model, dummy_input=dummy_input)
+
+        sim.compute_encodings(forward_pass, None)
+
+        # save encodings
+        input_names = ['a', 'b', 'c']
+
+        sim.export('./data/', 'Model_Inputs_Shared_Constant_Intermediate', dummy_input, onnx_export_args=OnnxExportApiArgs(input_names=input_names))
+        with open("./data/Model_Inputs_Shared_Constant_Intermediate.encodings", "r") as encodings_file:
+            activation_encoding_tensors = set(json.load(encodings_file)['activation_encodings'].keys())
+            assert set(input_names).issubset(activation_encoding_tensors)
+
 
     # -------------------------------------------
     def test_input_and_output_quantization(self):
@@ -3155,3 +3178,45 @@ class Clamp(torch.nn.Module):
         Forward-pass routine for add op
         """
         return x.clamp(0)
+
+class Add(nn.Module):
+
+	def __init__(self):
+		super(Add, self).__init__()
+
+	def forward(self, x1, x2):
+
+		return x1 + x2
+
+class Multiply(nn.Module):
+
+	def __init__(self):
+		super(Multiply, self).__init__()
+
+	def forward(self, x1, x2):
+
+		return x1 * x2
+
+class Model_Inputs_Shared_Constant_Intermediate(nn.Module):
+    def __init__(self):
+        super(Model_Inputs_Shared_Constant_Intermediate, self).__init__()
+        self.add1 = Add()
+        self.add2 = Add()
+        self.mul = Multiply()
+        self.tensor1 = torch.tensor([2.0])
+        #self.tensor2 = torch.tensor([3.0])
+        self.relu1 = nn.ReLU()
+        self.relu2 = nn.ReLU()
+        self.relu3 = nn.ReLU()
+
+    def forward(self, a, b, c):
+        x = self.add1(a, self.tensor1)
+        y = self.add2(b, self.tensor1)  # Failure Pattern 1 : input, shared constant
+        z = self.mul(c, x)  # Failure Pattern 2 : input, intermediate output
+
+        x = self.relu1(x)
+        y = self.relu2(y)
+        z = self.relu3(z)
+        return x, y, z
+
+
