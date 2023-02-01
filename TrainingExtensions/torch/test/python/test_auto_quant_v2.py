@@ -164,7 +164,13 @@ W32_ACC = FP32_ACC # Assume W32 accuracy is equal to FP32 accuracy
 
 
 @contextlib.contextmanager
-def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc):
+def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc, fp32_acc=None, w32_acc=None):
+    if fp32_acc is None:
+        fp32_acc = FP32_ACC
+
+    if w32_acc is None:
+        w32_acc = W32_ACC
+
     const_true = torch.tensor(True, dtype=torch.bool)
 
     def bn_folding(model: Model, *_, **__):
@@ -190,10 +196,10 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc):
     def mock_eval_callback(model, _):
         if not isinstance(model._conv_0, StaticGridQuantWrapper):
             # Not quantized: return fp32 accuracy
-            return FP32_ACC
+            return fp32_acc
         if model._conv_0.param_quantizers["weight"].bitwidth == 32:
             # W32 evaluation for early exit. Return W32 accuracy
-            return W32_ACC
+            return w32_acc
 
         acc = bn_folded_acc
         if model.applied_cle:
@@ -362,30 +368,25 @@ class TestAutoQuant:
             auto_quant.apply(Model().cuda(), dummy_input.cpu())
 
     def test_auto_quant_early_exit(self, cpu_model, dummy_input, unlabeled_data_loader):
-        global W32_ACC
         allowed_accuracy_drop = 0.1
-        _ORIGINAL_W32_ACC = W32_ACC
-        try:
-            W32_ACC = FP32_ACC - (allowed_accuracy_drop * 2)
+        w32_acc = FP32_ACC - (allowed_accuracy_drop * 2)
 
-            with create_tmp_directory() as results_dir:
-                with patch_ptq_techniques(
-                    bn_folded_acc=0, cle_acc=0, adaround_acc=0
-                ) as mocks:
-                    auto_quant = AutoQuant(
-                        allowed_accuracy_drop=allowed_accuracy_drop,
-                        unlabeled_dataset_iterable=unlabeled_data_loader,
-                        eval_callback=mocks.eval_callback,
-                    )
-                    output_model, acc, encoding_path =\
-                        auto_quant.apply(cpu_model,
-                                         dummy_input_on_cpu=dummy_input.cpu(),
-                                         results_dir=results_dir)
-            assert output_model is None
-            assert acc is None
-            assert encoding_path is None
-        finally:
-            W32_ACC = _ORIGINAL_W32_ACC
+        with create_tmp_directory() as results_dir:
+            with patch_ptq_techniques(
+                bn_folded_acc=0, cle_acc=0, adaround_acc=0, w32_acc=w32_acc
+            ) as mocks:
+                auto_quant = AutoQuant(
+                    allowed_accuracy_drop=allowed_accuracy_drop,
+                    unlabeled_dataset_iterable=unlabeled_data_loader,
+                    eval_callback=mocks.eval_callback,
+                )
+                output_model, acc, encoding_path =\
+                    auto_quant.apply(cpu_model,
+                                     dummy_input_on_cpu=dummy_input.cpu(),
+                                     results_dir=results_dir)
+        assert output_model is None
+        assert acc is None
+        assert encoding_path is None
 
     def test_auto_quant_caching(
         self, cpu_model, dummy_input, unlabeled_data_loader,
