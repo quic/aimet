@@ -297,12 +297,15 @@ class _AutoQuantV2:
 
         :param model: Model to quantize.
         :param dummy_input: Dummy input to the model.
-        :param quant_scheme: Quantization scheme. Defaults to self.default_quant_scheme.
         :param rounding_mode: Rounding mode. Defaults to self.default_rounding_mode.
         :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs andoutputs.
-                                  Defaults to self.default_output_bw.
+            Defaults to self.default_output_bw.
+        :param output_quant_scheme: Quantization scheme for output quantizers.
+            Defaults to self.default_quant_scheme.output_quant_scheme.
         :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters.
-                                 Defaults to self.default_param_bw.
+            Defaults to self.default_param_bw.
+        :param paramt_quant_scheme: Quantization scheme for param quantizers.
+            Defaults to self.default_quant_scheme.param_quant_scheme.
         :param config_file: Path to configuration file for model quantizers.
                             Defaults to self.default_config_file.
         :param encoding_path: Path to parameter encodings file.
