@@ -338,6 +338,56 @@ class TestBatchNormFold(unittest.TestCase):
         sess.close()
         new_sess.close()
 
+    def test_batch_norm_conversiion(self):
+        """
+        Test batch norm conversion.
+        """
+        tf.compat.v1.reset_default_graph()
+        inputs = tf.keras.Input(shape=(32, 32, 3,))
+        conv_op = tf.keras.layers.Conv2D(32, (3, 3),
+                                         kernel_initializer=tf.random_uniform_initializer(-1, 1),
+                                         bias_initializer='random_uniform')(inputs)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True,
+                                                   beta_initializer='random_uniform',
+                                                   gamma_initializer='random_uniform',
+                                                   moving_mean_initializer='random_uniform',
+                                                   moving_variance_initializer='ones')(conv_op)
+        # @todo check why moving var with random_uniform init fails on 1.15
+        relu_op = tf.nn.relu(bn_op)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True,
+                                                   beta_initializer='random_uniform',
+                                                   gamma_initializer='random_uniform',
+                                                   moving_mean_initializer='random_uniform',
+                                                   moving_variance_initializer='ones')(relu_op)
+        # @todo check why moving var with random_uniform init fails on 1.15
+        _ = tf.nn.relu(bn_op)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
+        sess.run(init)
+
+        conv_op = sess.graph.get_operation_by_name('conv2d/Conv2D')
+        np.random.seed(0)
+        w_shape = conv_op.inputs[0].shape
+        numpy_data = np.random.rand(1, w_shape[1], w_shape[2], w_shape[3])
+
+        relu_op = sess.graph.get_operation_by_name('Relu_1')
+        baseline_output = sess.run(relu_op.outputs[0], feed_dict={conv_op.inputs[0]:numpy_data})
+
+        new_sess, pairs = fold_all_batch_norms(sess, "input_1", 'Relu_1')
+
+        new_conv_op = new_sess.graph.get_operation_by_name('conv2d/Conv2D')
+        w2 = new_conv_op.inputs[0]
+        feed_dict ={w2:numpy_data}
+
+        new_relu_op = new_sess.graph.get_operation_by_name('Relu_1')
+        output_after_fold = new_sess.run(new_relu_op.outputs[0], feed_dict= feed_dict)
+
+        self.assertTrue(len(pairs) == 1)
+        self.assertTrue(np.allclose(baseline_output, output_after_fold, atol=1.e-4))
+        sess.close()
+        new_sess.close()
+
     @pytest.mark.tf1
     def test_removing_bn_ops_from_update_ops(self):
         """
