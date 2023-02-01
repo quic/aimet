@@ -318,6 +318,22 @@ class BNAfterConvTranspose(torch.nn.Module):
         return x
 
 
+class BNAfterConvTranspose1d(torch.nn.Module):
+    def __init__(self, padding=0, stride=1, dilation=1, groups=1, output_padding=0):
+        super(BNAfterConvTranspose1d, self).__init__()
+        self.conv1 = torch.nn.ConvTranspose1d(10, 10, 3, padding=padding, stride=stride, dilation=dilation,
+                                              groups=groups, output_padding=output_padding)
+        self.bn1 = torch.nn.BatchNorm1d(10)
+        self.relu1 = torch.nn.ReLU()
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu1(x)
+
+        return x
+
+
 class BNBeforeConvTranspose(torch.nn.Module):
     def __init__(self, padding=0, stride=1, dilation=1, groups=1, output_padding=0):
         super(BNBeforeConvTranspose, self).__init__()
