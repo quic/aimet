@@ -357,6 +357,7 @@ def _get_bn_epsilon(graph_def: tf.Graph, bn_conn_graph_op: Op) -> float:
     return epsilon
 
 
+
 def _get_epsilon_for_un_fused_bn(graph_def: tf.Graph, bn_conn_graph_op: Op) -> Union[None, float]:
     """
     Get epsilon for un fused BN. Single category applicable to all keras, legacy and compat un fused BNs.
