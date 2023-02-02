@@ -105,6 +105,9 @@ def transpose_tensor(t: onnx.onnx_ml_pb2.TensorProto, axes: Union[List, Tuple]) 
     :return: t permuted according to the axis ordering in axes
     """
     t_np = numpy_helper.to_array(t)
+    # Expand tensor with singleton dimensions to match axes
+    while len(t_np.shape) < len(axes):
+        t_np = np.expand_dims(t_np, len(t_np.shape))
     return numpy_helper.from_array(np.transpose(t_np, axes), name=t.name)
 
 
