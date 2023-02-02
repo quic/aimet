@@ -47,6 +47,7 @@ import tensorflow as tf
 from aimet_tensorflow.examples.test_models import keras_model
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.quant_analyzer import QuantAnalyzer, CallbackFunc
+from aimet_tensorflow.utils.common import iterate_tf_dataset
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
@@ -82,17 +83,20 @@ def forward_pass_callback(session: tf.compat.v1.Session, _: Any = None):
         session.run(model_output, feed_dict={model_input: dummy_input})
     return 0.8
 
+def get_quantsim_and_quantanalyzer(session):
+    sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
+    sim.compute_encodings(forward_pass_callback, None)
+    quant_analyzer = QuantAnalyzer(session, start_op_names=['conv2d_input'],
+                                   output_op_names=['keras_model/Softmax'],
+                                   forward_pass_callback=CallbackFunc(forward_pass_callback),
+                                   eval_callback=CallbackFunc(forward_pass_callback), use_cuda=False)
+    return sim, quant_analyzer
 
 #pylint: disable=redefined-outer-name
 def test_export_per_layer_stats_histogram(cpu_session):
     """ test export_per_layer_stats_histogram() """
 
-    sim = QuantizationSimModel(cpu_session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
-    sim.compute_encodings(forward_pass_callback, None)
-    quant_analyzer = QuantAnalyzer(cpu_session, start_op_names=['conv2d_input'],
-                                   output_op_names=['keras_model/Softmax'],
-                                   forward_pass_callback=CallbackFunc(forward_pass_callback),
-                                   eval_callback=CallbackFunc(forward_pass_callback), use_cuda=False)
+    sim, quant_analyzer = get_quantsim_and_quantanalyzer(cpu_session)
 
     try:
         #pylint: disable=protected-access
@@ -167,12 +171,8 @@ def test_export_per_layer_stats_histogram_per_channel(cpu_session):
 def test_export_per_layer_encoding_min_max_range(cpu_session):
     """ test export_per_layer_encoding_min_max_range() """
 
-    sim = QuantizationSimModel(cpu_session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
-    sim.compute_encodings(forward_pass_callback, None)
-    quant_analyzer = QuantAnalyzer(cpu_session, start_op_names=['conv2d_input'],
-                                   output_op_names=['keras_model/Softmax'],
-                                   forward_pass_callback=CallbackFunc(forward_pass_callback),
-                                   eval_callback=CallbackFunc(forward_pass_callback), use_cuda=False)
+    sim, quant_analyzer = get_quantsim_and_quantanalyzer(cpu_session)
+
     try:
         #pylint: disable=protected-access
         quant_analyzer._export_per_layer_encoding_min_max_range(sim, results_dir="./tmp/")
@@ -238,12 +238,7 @@ def test_model_sensitivity_to_quantization(cpu_session):
     """ tests _check_model_sensitivity_to_quantization() which perform the sensitivity analysis to
     parameter and activation quantization individually """
 
-    sim = QuantizationSimModel(cpu_session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
-    sim.compute_encodings(forward_pass_callback, None)
-    quant_analyzer = QuantAnalyzer(cpu_session, start_op_names=['conv2d_input'],
-                                   output_op_names=['keras_model/Softmax'],
-                                   forward_pass_callback=CallbackFunc(forward_pass_callback),
-                                   eval_callback=CallbackFunc(forward_pass_callback), use_cuda=False)
+    sim, quant_analyzer = get_quantsim_and_quantanalyzer(cpu_session)
     #pylint: disable=protected-access
     fp32_acc, weight_quantized_acc, act_quantized_acc = quant_analyzer._check_model_sensitivity_to_quantization(sim)
     try:
@@ -285,13 +280,7 @@ def test_get_enabled_param_quantizers(cpu_session):
 
 def test_get_enabled_quantizer_groups(cpu_session):
     """ test get_enabled_quantizers() """
-
-    sim = QuantizationSimModel(cpu_session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
-    sim.compute_encodings(forward_pass_callback, None)
-    quant_analyzer = QuantAnalyzer(cpu_session, start_op_names=['conv2d_input'],
-                                   output_op_names=['keras_model/Softmax'],
-                                   forward_pass_callback=CallbackFunc(forward_pass_callback),
-                                   eval_callback=CallbackFunc(forward_pass_callback), use_cuda=False)
+    sim, quant_analyzer = get_quantsim_and_quantanalyzer(cpu_session)
     # total 10 quantizer groups are created.
     #pylint: disable=protected-access
     #pylint: disable=no-member
@@ -304,12 +293,7 @@ def test_get_enabled_quantizer_groups(cpu_session):
 #pylint: disable=redefined-outer-name
 def test_perform_per_layer_analysis_by_enabling_quant_ops(cpu_session):
     """test _perform_per_op_analysis_by_enabling_quant_ops()"""
-    sim = QuantizationSimModel(cpu_session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
-    sim.compute_encodings(forward_pass_callback, None)
-    quant_analyzer = QuantAnalyzer(cpu_session, start_op_names=['conv2d_input'],
-                                   output_op_names=['keras_model/Softmax'],
-                                   forward_pass_callback=CallbackFunc(forward_pass_callback),
-                                   eval_callback=CallbackFunc(forward_pass_callback), use_cuda=False)
+    sim, quant_analyzer = get_quantsim_and_quantanalyzer(cpu_session)
     try:
         #pylint: disable=protected-access
         #pylint: disable=no-member
@@ -325,18 +309,31 @@ def test_perform_per_layer_analysis_by_enabling_quant_ops(cpu_session):
 #pylint: disable=redefined-outer-name
 def test_perform_per_layer_analysis_by_disabling_quant_ops(cpu_session):
     """test _perform_per_op_analysis_by_disabling_quant_ops()"""
-    sim = QuantizationSimModel(cpu_session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
-    sim.compute_encodings(forward_pass_callback, None)
-    quant_analyzer = QuantAnalyzer(cpu_session, start_op_names=['conv2d_input'],
-                                   output_op_names=['keras_model/Softmax'],
-                                   forward_pass_callback=CallbackFunc(forward_pass_callback),
-                                   eval_callback=CallbackFunc(forward_pass_callback), use_cuda=False)
+    sim, quant_analyzer = get_quantsim_and_quantanalyzer(cpu_session)
     try:
         #pylint: disable=protected-access
         #pylint: disable=no-member
         quant_analyzer._perform_per_op_analysis_by_disabling_quant_ops(sim, results_dir="./tmp/")
         assert os.path.isfile("./tmp/per_op_quant_disabled.html")
         assert os.path.isfile("./tmp/per_op_quant_disabled.json")
+    finally:
+        sim.session.close()
+        cpu_session.close()
+        if os.path.isdir("./tmp/"):
+            shutil.rmtree("./tmp/")
+
+def test_export_per_op_mse_loss(cpu_session):
+    """ test _export_per_layer_mse_loss() """
+    sim, quant_analyzer = get_quantsim_and_quantanalyzer(cpu_session)
+    dataset_size = 128
+    batch_size = 32
+    input_data = np.random.rand(dataset_size, 16, 16, 3)
+    dataset = tf.data.Dataset.from_tensor_slices(input_data)
+    quant_analyzer._unlabeled_dataset  = dataset.batch(batch_size=batch_size)
+    quant_analyzer._num_batches = 4
+    try:
+        quant_analyzer._perform_per_op_mse_loss(sim, results_dir="./tmp/")
+        assert os.path.isfile("./tmp/per_op_mse_loss.html")
     finally:
         sim.session.close()
         cpu_session.close()

@@ -46,8 +46,8 @@ from bokeh.models import ColumnDataSource, Band, Span
 import torch
 from torch.utils.data import DataLoader
 
-from aimet_common.quant_analyzer import save_json, export_per_layer_sensitivity_analysis_plot, \
-    create_and_export_min_max_ranges_plot
+from aimet_common.quant_analyzer import save_json, export_per_layer_sensitivity_analysis_plot,\
+    create_and_export_min_max_ranges_plot, export_per_layer_mse_plot
 from aimet_common.utils import AimetLogger, CallbackFunc
 from aimet_common.defs import QuantScheme
 from aimet_torch import utils
@@ -424,38 +424,6 @@ class QuantAnalyzer:
         plotting.save(plot)
         return plot
 
-
-    @staticmethod
-    def _export_per_layer_mse_plot(mse_loss_dict: Dict, results_dir: str, title: str) -> plotting.Figure:
-        """
-        Export per layer MSE loss between fp32 and quantized output activations in html format.
-
-        :param mse_loss_dict: layer wise MSE loss.
-        :param results_dir:  Directory to save the results.
-        :param title: Title of the plot.
-        :return: Layer-wise MSE loss plot.
-        """
-        layer_names = []
-        mse_losses = []
-        for layer_name, mse_loss in mse_loss_dict.items():
-            layer_names.append(layer_name)
-            mse_losses.append(mse_loss)
-
-        # Configure the output file to be saved.
-        filename = os.path.join(results_dir, f"{title}.html")
-        plotting.output_file(filename)
-        plot = plotting.figure(x_range=layer_names,
-                               plot_height=DEFAULT_BOKEH_FIGURE_HEIGHT,
-                               title=title,
-                               x_axis_label="Layers",
-                               y_axis_label="MSE loss")
-        plot.circle(x=layer_names, y=mse_losses, size=10)
-        plot.line(x=layer_names, y=mse_losses)
-        plot.xaxis.major_label_orientation = "vertical"
-        plot.sizing_mode = "scale_width"
-        plotting.save(plot)
-        return plot
-
     def _create_and_export_stats_histogram_plot(self,
                                                 quantizer: StaticGridTensorQuantizer,
                                                 results_dir: str,
@@ -715,9 +683,9 @@ class QuantAnalyzer:
             loss = self._compute_mse_loss(module, quant_wrapper, self._model, sim)
             mse_loss_dict[name] = loss
 
-        self._export_per_layer_mse_plot(mse_loss_dict,
-                                        results_dir,
-                                        title="per_layer_mse_loss")
+        export_per_layer_mse_plot(mse_loss_dict,
+                                  results_dir,
+                                  title="per_layer_mse_loss")
         save_json(mse_loss_dict, results_dir, title="per_layer_mse_loss.json")
         _logger.info("Exported per layer MSE loss plot.")
         return mse_loss_dict
