@@ -194,7 +194,7 @@ def is_valid_bn_fold(conv_linear: onnx_pb.NodeProto, model: onnx_pb.ModelProto, 
     return valid
 
 
-def fold_all_batch_norms_to_weight(model: onnx_pb.ModelProto) -> List:
+def fold_all_batch_norms_to_weight(model: onnx_pb.ModelProto) -> [List]:
     """
     Fold all possible batch_norm layers in a model into the weight of the corresponding conv layers
 
@@ -216,7 +216,7 @@ def fold_all_batch_norms_to_weight(model: onnx_pb.ModelProto) -> List:
         bn_convs.append((conv, bn_layer))
         remove_node(bn, model.graph)
 
-    return conv_bns + bn_convs
+    return conv_bns, bn_convs
 
 
 def _fold_to_weight(model: onnx_pb.ModelProto,

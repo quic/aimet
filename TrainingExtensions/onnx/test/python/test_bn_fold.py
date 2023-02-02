@@ -59,8 +59,8 @@ def get_outputs_after_fold(model, test_data):
     onnx.checker.check_model(model.model)
     filename = './onnx_test_model.onnx'
     onnx.save(model.model, filename)
-    pairs = fold_all_batch_norms_to_weight(model.model)
-
+    conv_bn, bn_conv = fold_all_batch_norms_to_weight(model.model)
+    pairs = conv_bn + bn_conv
     onnx.checker.check_model(model.model)
     folded_filename = './onnx_test_model_folded.onnx'
     onnx.save(model.model, folded_filename)
