@@ -434,7 +434,7 @@ class MyModelFoldFoward(torch.nn.Module):
 
         self.conv1 = torch.nn.Conv2d(10, 20, 3)
         self.bn1 = torch.nn.BatchNorm2d(20)
-        self.relu1 = torch.nn.ReLU()
+        self.relu1 = torch.nn.ReLU6()
 
         self.conv2 = torch.nn.Conv2d(20, 15, 3)
         self.bn2 = torch.nn.BatchNorm2d(15)

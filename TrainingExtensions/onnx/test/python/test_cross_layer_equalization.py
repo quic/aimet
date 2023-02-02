@@ -44,7 +44,7 @@ from onnx import numpy_helper
 from aimet_common.cross_layer_equalization import GraphSearchUtils
 from aimet_onnx.meta.connectedgraph import ConnectedGraph, WEIGHT_INDEX, BIAS_INDEX
 from aimet_onnx.cross_layer_equalization import get_ordered_list_of_conv_modules, \
-    cls_supported_layer_types, cls_supported_activation_types, CrossLayerScaling, HighBiasFold
+    cls_supported_layer_types, cls_supported_activation_types, CrossLayerScaling, HighBiasFold, equalize_model
 from aimet_onnx.utils import ParamUtils
 from aimet_onnx.batch_norm_fold import fold_all_batch_norms_to_weight
 
@@ -140,27 +140,37 @@ class TestCLS:
         assert np.allclose(output_after_cls, output_before_cls)
         assert len(cls_set_infos) == 8
 
+    def test_cle(self):
+        model = test_models.my_model_with_bns()
+        input_shape = (2, 10, 24, 24)
+        test_data = np.random.randn(*input_shape).astype(np.float32)
+        session = _build_session(model)
+        output_before_cle = session.run(None, {'input': test_data})
+        equalize_model(model)
+        output_after_cle = session.run(None, {'input': test_data})
+        assert np.allclose(output_after_cle, output_before_cle, rtol=1e-2)
+
 
 class TestHighBiasFold:
-    """ Test methods for BatchNormFold"""
+    """ Test methods for HighBiasFold"""
 
-    def test_find_batch_norms_to_fold(self):
+    def test_find_high_bias_fold(self):
         model = test_models.my_model_with_bns()
 
         conv_bn_pairs, bn_conv_pairs = fold_all_batch_norms_to_weight(model.model)
         bn_dict = {}
         convs = []
-        conv_bn_pairs = [conv_bn_pairs]
+
         for conv_bn in conv_bn_pairs:
             bn_dict[conv_bn[0].name] = conv_bn[1]
             convs.append(conv_bn[0])
 
-        bias1 = copy.deepcopy(numpy_helper.to_array(ParamUtils.get_param(model.model, convs[0], BIAS_INDEX)))
+        bias1 = copy.deepcopy(numpy_helper.to_array(ParamUtils.get_param(model.model, convs[1], BIAS_INDEX)))
         cls = CrossLayerScaling(model)
         cls_set_info = cls.scale_model()
         hbf = HighBiasFold(model)
         hbf.bias_fold(cls_set_info, bn_dict)
-        bias1_new = numpy_helper.to_array(ParamUtils.get_param(model.model, convs[0], BIAS_INDEX))
+        bias1_new = numpy_helper.to_array(ParamUtils.get_param(model.model, convs[1], BIAS_INDEX))
         assert not bias1.sum() == bias1_new.sum()
 
 def _build_session(model):

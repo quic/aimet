@@ -56,7 +56,7 @@ import aimet_common.libpymo as libpymo      # pylint: disable=import-error
 from aimet_onnx.meta.connectedgraph import ConnectedGraph, WEIGHT_INDEX, BIAS_INDEX
 from aimet_onnx.meta.operations import Op
 from aimet_onnx.utils import transpose_tensor, ParamUtils, get_node_attribute
-from aimet_onnx.batch_norm_fold import BNLayer
+from aimet_onnx.batch_norm_fold import BNLayer, fold_all_batch_norms_to_weight
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -327,3 +327,24 @@ class HighBiasFold(HBF):
         """
         self._update_bias_for_layer_from_libpymo_obj(prev_layer_params, cls_pair_info.layer1.get_module())
         self._update_bias_for_layer_from_libpymo_obj(curr_layer_params, cls_pair_info.layer2.get_module())
+
+
+def equalize_model(model: onnx_pb.ModelProto):
+    """
+    High-level API to perform Cross-Layer Equalization (CLE) on the given model. The model is equalized in place.
+
+    :param model: Model to equalize
+    """
+    conv_bn_pairs, _ = fold_all_batch_norms_to_weight(model)
+
+    bn_dict = {}
+    for conv_bn in conv_bn_pairs:
+        bn_dict[conv_bn[0].name] = conv_bn[1]
+
+    # perform cross-layer scaling on applicable layer sets
+    cls = CrossLayerScaling(model)
+    cls_set_info = cls.scale_model()
+
+    # high-bias fold
+    hbf = HighBiasFold(model)
+    hbf.bias_fold(cls_set_info, bn_dict)
