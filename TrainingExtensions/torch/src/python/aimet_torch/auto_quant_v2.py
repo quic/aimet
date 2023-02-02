@@ -35,12 +35,14 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+# pylint: disable=too-many-lines
 
 """Temporary buffer file for adding new features to AutoQuant"""
 import copy
 import contextlib
 from dataclasses import dataclass
 import functools
+import itertools
 import os
 from typing import Any, Collection, Callable, Dict, List, Optional, Tuple, Union, Mapping
 import torch
@@ -53,7 +55,7 @@ from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
 from aimet_torch.cross_layer_equalization import equalize_model
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.quantsim import QuantizationSimModel
-from aimet_torch.utils import in_eval_mode
+from aimet_torch.utils import get_all_quantizers, in_eval_mode
 from aimet_torch.onnx_utils import OnnxExportApiArgs
 from aimet_torch.model_preparer import prepare_model
 from aimet_torch.model_validator.model_validator import ModelValidator
@@ -62,7 +64,7 @@ from aimet_common.auto_quant import Diagnostics
 from aimet_common.cache import Cache
 from aimet_common.defs import QuantScheme
 from aimet_common.utils import AimetLogger, Spinner
-from aimet_common.quantsim import validate_quantsim_inputs
+from aimet_common.quantsim import _validate_quant_scheme, _validate_rounding_mode, _validate_bitwidth
 
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.AutoQuant)
@@ -73,6 +75,76 @@ cache = Cache()
 # The number of samples to be used for performance evaluation.
 # NOTE: None means "all".
 NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION = None
+
+
+@dataclass(frozen=True)
+class _QuantSchemePair:
+    param_quant_scheme: QuantScheme
+    output_quant_scheme: QuantScheme
+
+
+QUANT_SCHEME_CANDIDATES = (
+    # Weight:     tf
+    # Activation: tf
+    _QuantSchemePair(QuantScheme.post_training_tf,
+                     QuantScheme.post_training_tf),
+
+    # Weight:     tf
+    # Activation: tf_enhanced
+    _QuantSchemePair(QuantScheme.post_training_tf,
+                     QuantScheme.post_training_tf_enhanced),
+
+    # Weight:     tf_enhanced
+    # Activation: tf
+    _QuantSchemePair(QuantScheme.post_training_tf_enhanced,
+                     QuantScheme.post_training_tf),
+
+    # Weight:     tf_enhanced
+    # Activation: tf_enhanced
+    _QuantSchemePair(QuantScheme.post_training_tf_enhanced,
+                     QuantScheme.post_training_tf_enhanced),
+)
+
+
+def _choose_default_quant_scheme(param_bw: int,
+                                 output_bw: int,
+                                 eval_fn: Callable[[_QuantSchemePair], float]) -> _QuantSchemePair:
+    """
+    Choose a default param/output quant scheme among QUANT_SCHEME_CANDIDATES.
+
+    :param param_bw: Parameter bitwidth
+    :param output_bw: Output bitwidth
+    :param eval_fn: A callable that takes a pair of quant schemes
+        (for param and output respectively) and return the eval score
+    :return: The quant scheme that yields the best eval score.
+    """
+    candidates = QUANT_SCHEME_CANDIDATES
+
+    # If the weight representation has sufficient precision (i.e. bitwidth >= 16),
+    # always use tf scheme
+    if param_bw >= 16:
+        candidates = [
+            candidate for candidate in candidates
+            if candidate.param_quant_scheme == QuantScheme.post_training_tf
+        ]
+
+    # If the output representation has sufficient precision (i.e. bitwidth >= 16),
+    # always use tf scheme
+    if output_bw >= 16:
+        candidates = [
+            candidate for candidate in candidates
+            if candidate.output_quant_scheme == QuantScheme.post_training_tf
+        ]
+
+    # If we have only one candidate left, we don't need to evaluated
+    # the quant scheme for comparison
+    if len(candidates) == 1:
+        return candidates[0]
+
+    assert candidates
+
+    # Find the quant scheme that yields the best eval score
+    return max(candidates, key=eval_fn)
 
 
 class _AutoQuantV2:
@@ -92,7 +164,7 @@ class _AutoQuantV2:
             eval_callback: Callable[[torch.nn.Module, Optional[int]], float],
             default_param_bw: int = 8,
             default_output_bw: int = 8,
-            default_quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
+            default_quant_scheme: QuantScheme = None,
             default_rounding_mode: str = 'nearest',
             default_config_file: str = None,
     ) -> None:
@@ -124,10 +196,11 @@ class _AutoQuantV2:
                 .format(allowed_accuracy_drop)
             )
 
-        validate_quantsim_inputs(default_quant_scheme,
-                                 default_rounding_mode,
-                                 default_output_bw,
-                                 default_param_bw)
+        if default_quant_scheme:
+            _validate_quant_scheme(default_quant_scheme)
+
+        _validate_rounding_mode(default_rounding_mode)
+        _validate_bitwidth(default_param_bw, default_output_bw)
 
         @functools.wraps(eval_callback)
         def eval_callback_wrapper(model: torch.nn.Module,
@@ -142,7 +215,12 @@ class _AutoQuantV2:
         self.eval_callback = eval_callback_wrapper
         self.default_param_bw = default_param_bw
         self.default_output_bw = default_output_bw
-        self.default_quant_scheme = default_quant_scheme
+        if default_quant_scheme is not None:
+            # By default, use the same quant scheme for param and output
+            self.default_quant_scheme = _QuantSchemePair(default_quant_scheme,
+                                                         default_quant_scheme)
+        else:
+            self.default_quant_scheme = None
         self.default_rounding_mode = default_rounding_mode
         self.default_config_file = default_config_file
 
@@ -201,14 +279,15 @@ class _AutoQuantV2:
         if propagate_encodings is not None:
             self._export_kwargs.update(propagate_encodings=propagate_encodings)
 
-    def _create_quantsim_and_encodings( # pylint: disable=too-many-arguments
+    def _create_quantsim_and_encodings( # pylint: disable=too-many-arguments, too-many-locals
             self,
             model: torch.nn.Module,
             dummy_input: Union[torch.Tensor, Tuple],
-            quant_scheme: QuantScheme = None,
             rounding_mode: str = None,
             default_output_bw: int = None,
+            output_quant_scheme: QuantScheme = None,
             default_param_bw: int = None,
+            param_quant_scheme: QuantScheme = None,
             config_file: str = None,
             encoding_path: str = None,
     ) -> QuantizationSimModel:
@@ -218,12 +297,15 @@ class _AutoQuantV2:
 
         :param model: Model to quantize.
         :param dummy_input: Dummy input to the model.
-        :param quant_scheme: Quantization scheme. Defaults to self.default_quant_scheme.
         :param rounding_mode: Rounding mode. Defaults to self.default_rounding_mode.
         :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs andoutputs.
-                                  Defaults to self.default_output_bw.
+            Defaults to self.default_output_bw.
+        :param output_quant_scheme: Quantization scheme for output quantizers.
+            Defaults to self.default_quant_scheme.output_quant_scheme.
         :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters.
-                                 Defaults to self.default_param_bw.
+            Defaults to self.default_param_bw.
+        :param paramt_quant_scheme: Quantization scheme for param quantizers.
+            Defaults to self.default_quant_scheme.param_quant_scheme.
         :param config_file: Path to configuration file for model quantizers.
                             Defaults to self.default_config_file.
         :param encoding_path: Path to parameter encodings file.
@@ -236,13 +318,24 @@ class _AutoQuantV2:
             assert default_param_bw <= 32
 
         kwargs = dict(
-            quant_scheme=(quant_scheme or self.default_quant_scheme),
             rounding_mode=(rounding_mode or self.default_rounding_mode),
             default_output_bw=(default_output_bw or self.default_output_bw),
             default_param_bw=(default_param_bw or self.default_param_bw),
             config_file=(config_file or self.default_config_file),
         )
         sim = QuantizationSimModel(model, dummy_input, **kwargs)
+
+        param_quantizers, input_quantizers, output_quantizers = utils.get_all_quantizers(sim.model)
+
+        # Set input/output quantizers' quant schemes
+        for quantizer in itertools.chain(input_quantizers, output_quantizers):
+            quantizer.quant_scheme = output_quant_scheme or\
+                                     self.default_quant_scheme.output_quant_scheme
+
+        # Set param quantizers' quant schemes
+        for quantizer in param_quantizers:
+            quantizer.quant_scheme = param_quant_scheme or\
+                                     self.default_quant_scheme.param_quant_scheme
 
         if encoding_path:
             sim.set_and_freeze_param_encodings(encoding_path)
@@ -337,16 +430,15 @@ class _AutoQuantV2:
         filename_prefix = "adaround"
         adaround_encoding_path = os.path.join(results_dir,
                                               "{}.encodings".format(filename_prefix))
-        model = Adaround.apply_adaround(model,
-                                        dummy_input,
-                                        self.adaround_params,
-                                        path=results_dir,
-                                        filename_prefix=filename_prefix,
-                                        default_param_bw=self.default_param_bw,
-                                        param_bw_override_list=None,
-                                        ignore_quant_ops_list=None,
-                                        default_quant_scheme=self.default_quant_scheme,
-                                        default_config_file=self.default_config_file)
+
+        sim = self._create_quantsim_and_encodings(model, dummy_input)
+
+        _, input_quantizers, output_quantizers = get_all_quantizers(sim.model)
+        for quantizer in itertools.chain(input_quantizers, output_quantizers):
+            quantizer.enabled = False
+
+        model = Adaround._apply_adaround(sim, model, dummy_input, self.adaround_params, # pylint: disable=protected-access
+                                         path=results_dir, filename_prefix=filename_prefix)
 
         return model, adaround_encoding_path
 
@@ -394,7 +486,7 @@ class _AutoQuantV2:
                result["accuracy"],\
                result["encoding_path"]
 
-    def _apply_helper( # pylint: disable=too-many-arguments, too-many-locals
+    def _apply_helper( # pylint: disable=too-many-arguments, too-many-locals, too-many-branches
             self,
             auto_quant_main_fn: Callable,
             fp32_model: torch.nn.Module,
@@ -491,8 +583,26 @@ class _AutoQuantV2:
                     results_dir=results_dir,
                 )
 
-                ret = auto_quant_main_fn(fp32_model, target_acc, dummy_input,
-                                         eval_manager, results_dir)
+                orig_quant_scheme = self.default_quant_scheme
+
+                # Default quant scheme is not set. Choose quant scheme automatically.
+                if self.default_quant_scheme is None:
+                    with eval_manager.analysis_session("Selecting optimal quantization scheme") as sess:
+                        def eval_fn(quant_scheme: _QuantSchemePair):
+                            return sess.eval(
+                                fp32_model,
+                                param_quant_scheme=quant_scheme.param_quant_scheme,
+                                output_quant_scheme=quant_scheme.output_quant_scheme
+                            )
+
+                        self.default_quant_scheme = _choose_default_quant_scheme(self.default_param_bw,
+                                                                                 self.default_output_bw,
+                                                                                 eval_fn)
+                try:
+                    ret = auto_quant_main_fn(fp32_model, target_acc, dummy_input,
+                                             eval_manager, results_dir)
+                finally:
+                    self.default_quant_scheme = orig_quant_scheme
 
                 acc = ret["accuracy"]
                 if acc is not None:

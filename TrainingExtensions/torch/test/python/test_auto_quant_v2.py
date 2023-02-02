@@ -37,7 +37,6 @@
 # =============================================================================
 
 import contextlib
-import copy
 from dataclasses import dataclass
 import itertools
 from unittest.mock import patch, MagicMock
@@ -53,6 +52,9 @@ from aimet_torch import utils
 from aimet_torch.auto_quant import _AutoQuantV2 as AutoQuant
 from aimet_torch.adaround.adaround_weight import AdaroundParameters, Adaround
 from aimet_torch.quantsim import QuantizationSimModel, OnnxExportApiArgs
+from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
+from aimet_torch.save_utils import SaveUtils
+from aimet_common.defs import QuantScheme
 
 
 class Model(torch.nn.Module):
@@ -181,10 +183,10 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc, fp32_acc=None, w3
         model.applied_bn_folding.copy_(const_true)
         model.applied_cle.copy_(const_true)
 
-    def adaround(model: Model, *_, **__):
-        model = copy.deepcopy(model)
-        model.applied_adaround.copy_(const_true)
-        return model
+    def adaround(sim, *_, **__):
+        sim.model.applied_adaround.copy_(const_true)
+        SaveUtils.remove_quantization_wrappers(sim.model)
+        return sim.model
 
     class _QuantizationSimModel(QuantizationSimModel):
         def compute_encodings(self, *_):
@@ -219,7 +221,7 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc, fp32_acc=None, w3
     with patch("aimet_torch.auto_quant_v2.QuantizationSimModel", side_effect=_QuantizationSimModel) as mock_qsim,\
             patch("aimet_torch.auto_quant_v2.fold_all_batch_norms", side_effect=bn_folding) as mock_bn_folding,\
             patch("aimet_torch.auto_quant_v2.equalize_model", side_effect=cle) as mock_cle,\
-            patch("aimet_torch.auto_quant_v2.Adaround.apply_adaround", side_effect=adaround) as mock_adaround:
+            patch("aimet_torch.auto_quant_v2.Adaround._apply_adaround", side_effect=adaround) as mock_adaround:
         try:
             yield Mocks(
                 eval_callback=mock_eval_callback,
@@ -427,6 +429,40 @@ class TestAutoQuant:
                 assert mocks.equalize_model.call_count == 1
                 assert mocks.apply_adaround.call_count == 1
 
+    def test_auto_quant_scheme_selection(
+        self, cpu_model, dummy_input, unlabeled_data_loader,
+    ):
+        allowed_accuracy_drop = 0.0
+        bn_folded_acc, cle_acc, adaround_acc = 40., 50., 60.
+        with patch_ptq_techniques(
+            bn_folded_acc, cle_acc, adaround_acc
+        ) as mocks:
+            def eval_callback(model, _):
+                # Assumes the model's eval score drops to zero
+                # unless param_quant_scheme == tf and output_quant_scheme == tfe
+                if isinstance(model._conv_0, StaticGridQuantWrapper):
+                    if model._conv_0.param_quantizers["weight"].quant_scheme != QuantScheme.post_training_tf:
+                        return 0.0
+                    if model._conv_0.output_quantizers[0].quant_scheme != QuantScheme.post_training_tf_enhanced:
+                        return 0.0
+                return mocks.eval_callback(model, _)
+
+            real_auto_quant_main = AutoQuant._auto_quant_main
+            def auto_quant_main_fn(self, *args, **kwargs):
+                # Since all the other candidates (tf-tf, tfe-tf, and tfe-tfe) yields zero accuracy,
+                # it is expected that tf-tfe is selected as the quant scheme for AutoQuant.
+                assert self.default_quant_scheme.param_quant_scheme == QuantScheme.post_training_tf
+                assert self.default_quant_scheme.output_quant_scheme == QuantScheme.post_training_tf_enhanced
+                return real_auto_quant_main(self, *args, **kwargs)
+
+            with patch("aimet_torch.auto_quant_v2._AutoQuantV2._auto_quant_main", auto_quant_main_fn):
+                auto_quant = AutoQuant(
+                    allowed_accuracy_drop=allowed_accuracy_drop,
+                    unlabeled_dataset_iterable=unlabeled_data_loader,
+                    eval_callback=eval_callback,
+                )
+                auto_quant.apply(cpu_model, dummy_input)
+
     def test_set_additional_params(self, cpu_model, dummy_input, unlabeled_data_loader):
         allowed_accuracy_drop = 0
         bn_folded_acc = 0
@@ -456,8 +492,8 @@ class TestAutoQuant:
                     auto_quant, cpu_model, dummy_input,
                     allowed_accuracy_drop, bn_folded_acc, cle_acc, adaround_acc
                 )
-                adaround_args, _ = Adaround.apply_adaround.call_args
-                _, _, actual_adaround_params = adaround_args
+                adaround_args, _ = mocks.apply_adaround.call_args
+                _, _, _, actual_adaround_params = adaround_args
                 assert adaround_params == actual_adaround_params
             finally:
                 setattr(QuantizationSimModel, "export", export)
