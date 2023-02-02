@@ -295,3 +295,24 @@ class TestQuantAnalyzer:
         finally:
             if os.path.isdir("./tmp/"):
                 shutil.rmtree("./tmp/")
+
+    def test_export_per_layer_mse_loss(self, clear_session):
+        """ test export_per_layer_mse_loss() """
+        model = keras_functional_conv_net()
+
+        dummy_input = np.random.rand(1, 28, 28, 3)
+        sim = QuantizationSimModel(model)
+        sim.compute_encodings(forward_pass_func, dummy_input)
+
+        forward_pass_callback = CallbackFunc(forward_pass_func, dummy_input)
+        eval_callback = CallbackFunc(eval_func, dummy_input)
+        quant_analyzer = QuantAnalyzer(model, forward_pass_callback, eval_callback)
+
+        unlabeled_dataset = tf.data.Dataset.from_tensor_slices(np.random.rand(32, 28, 28, 3)).batch(32)
+        quant_analyzer.enable_per_layer_mse_loss(unlabeled_dataset)
+        try:
+            quant_analyzer.export_per_layer_mse_loss(sim, results_dir="./tmp/")
+            assert os.path.isfile("./tmp/per_layer_mse_loss.html")
+        finally:
+            if os.path.isdir("./tmp/"):
+                shutil.rmtree("./tmp/")
