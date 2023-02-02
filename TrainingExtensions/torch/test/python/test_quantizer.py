@@ -3179,40 +3179,23 @@ class Clamp(torch.nn.Module):
         """
         return x.clamp(0)
 
-class Add(nn.Module):
-
-	def __init__(self):
-		super(Add, self).__init__()
-
-	def forward(self, x1, x2):
-
-		return x1 + x2
-
-class Multiply(nn.Module):
-
-	def __init__(self):
-		super(Multiply, self).__init__()
-
-	def forward(self, x1, x2):
-
-		return x1 * x2
 
 class Model_Inputs_Shared_Constant_Intermediate(nn.Module):
     def __init__(self):
         super(Model_Inputs_Shared_Constant_Intermediate, self).__init__()
-        self.add1 = Add()
-        self.add2 = Add()
-        self.mul = Multiply()
+        self.add1 = elementwise_ops.Add()
+        self.add2 = elementwise_ops.Add()
+        self.mul = elementwise_ops.Multiply()
         self.tensor1 = torch.tensor([2.0])
-        #self.tensor2 = torch.tensor([3.0])
+
         self.relu1 = nn.ReLU()
         self.relu2 = nn.ReLU()
         self.relu3 = nn.ReLU()
 
     def forward(self, a, b, c):
         x = self.add1(a, self.tensor1)
-        y = self.add2(b, self.tensor1)  # Failure Pattern 1 : input, shared constant
-        z = self.mul(c, x)  # Failure Pattern 2 : input, intermediate output
+        y = self.add2(b, self.tensor1)
+        z = self.mul(c, x)
 
         x = self.relu1(x)
         y = self.relu2(y)
