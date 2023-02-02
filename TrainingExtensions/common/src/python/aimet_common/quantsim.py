@@ -186,16 +186,25 @@ def validate_quantsim_inputs(
     :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters
     :param data_type: Data type of the quantized values (int or float).
     """
-    # sanity checks
+    _validate_quant_scheme(quant_scheme)
+    _validate_rounding_mode(rounding_mode)
+    _validate_bitwidth(default_param_bw, default_output_bw, data_type)
+
+
+def _validate_quant_scheme(quant_scheme: Union[str, QuantScheme]):
     if quant_scheme not in ('tf_enhanced', 'tf', 'percentile') and not isinstance(quant_scheme, QuantScheme):
         raise ValueError('Parameter quantization mode is not a valid selection. Valid selections are '
                          'tf, tf_enhanced, percentile, QuantScheme.post_training_tf, '
                          'QuantScheme.post_training_tf_enhanced, QuantScheme.post_training_percentile')
 
+def _validate_rounding_mode(rounding_mode: str):
     if rounding_mode not in ('nearest', 'stochastic'):
         raise ValueError('Parameter round mode is not a valid selection. Valid selections are nearest or '
                          'stochastic')
 
+def _validate_bitwidth(default_output_bw: int,
+                       default_param_bw: int,
+                       data_type: QuantizationDataType = QuantizationDataType.int):
     if default_param_bw < 4 or default_param_bw > 32:
         raise ValueError('Default bitwidth for parameters must be between 4 and 32, not ' + str(default_param_bw))
 
