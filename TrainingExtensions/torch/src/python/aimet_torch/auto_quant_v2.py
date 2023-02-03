@@ -622,7 +622,7 @@ class _AutoQuantV2:
 
                 return ret
 
-    def _auto_quant_main( # pylint: disable=broad-except, too-many-locals
+    def _auto_quant_main( # pylint: disable=broad-except, too-many-locals, too-many-branches
             self,
             fp32_model: torch.nn.Module,
             target_acc: float,
