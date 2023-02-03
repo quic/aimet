@@ -81,8 +81,8 @@ endif (ENABLE_CUDA)
 
 
 set_target_properties(OnnxCppOps PROPERTIES
-        OUTPUT_NAME "aimet_ort_ops"
-        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts/aimet_onnx"
+        OUTPUT_NAME "aimet_onnxrt_ops"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts/aimet_common"
         )
 
 
@@ -112,9 +112,9 @@ set_target_properties(quant_info
         PROPERTIES
         OUTPUT_NAME "quant_info"
         SUFFIX ".${Python3_SOABI}.so"
-        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts/aimet_onnx/"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts/aimet_common/"
         )
 
 install(TARGETS quant_info
-        LIBRARY DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_onnx
+        LIBRARY DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_common
         )

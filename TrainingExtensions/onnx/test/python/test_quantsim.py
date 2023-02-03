@@ -42,7 +42,7 @@ import numpy as np
 from onnx import load_model
 from aimet_common.defs import QuantScheme
 from aimet_onnx.quantsim import QuantizationSimModel
-from aimet_onnx.qc_quantize_op import OpMode, reset_qc_quantize_op_dict
+from aimet_onnx.qc_quantize_op import OpMode
 from aimet_torch.quantsim import QuantizationSimModel as PtQuantizationSimModel
 from aimet_torch.examples.test_models import SingleResidual
 from test_models import build_dummy_model
@@ -113,7 +113,6 @@ class TestQuantSim:
             assert qc_quantize_op_dict[name].op_mode == OpMode.oneShotQuantizeDequantize
         for name in sim.activation_names:
             assert qc_quantize_op_dict[name].op_mode == OpMode.updateStats
-        reset_qc_quantize_op_dict()
 
     def test_compute_encodings(self):
         """Test to perform compute encodings"""
@@ -138,7 +137,6 @@ class TestQuantSim:
         for name, qc_op in sim.get_qc_quantize_op().items():
             assert qc_op.quant_info.tensorQuantizerRef.isEncodingValid is True
             assert qc_op.op_mode == OpMode.quantizeDequantize or OpMode.oneShotQuantizeDequantize
-        reset_qc_quantize_op_dict()
 
     def test_export_model_with_quant_args(self):
         """Test to export encodings and model"""
@@ -199,7 +197,6 @@ class TestQuantSim:
         for param in param_keys:
             param_encodings_keys = list(encoding_data["param_encodings"][param].keys())
             assert param_encodings_keys == ['bitwidth', 'dtype', 'is_symmetric', 'max', 'min', 'offset', 'scale']
-        reset_qc_quantize_op_dict()
 
     def test_compare_encodings_with_PT(self):
         """Test to compare encodings with PT"""

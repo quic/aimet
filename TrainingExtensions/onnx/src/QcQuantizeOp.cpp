@@ -86,11 +86,6 @@ void QcQuantizeKernel::Compute(OrtKernelContext* context)
     {
         op_mode = DlQuantization::TensorQuantizerOpMode::passThrough;
     }
-    else if (api_.GetDimensionsCount(output_info) != 4)
-    {
-        // For non-four-dimensional tensors, set op_mode to update_stats, TensorQuantizer doesn't support.
-        op_mode = DlQuantization::TensorQuantizerOpMode::updateStats;
-    }
 
     api_.ReleaseTensorTypeAndShapeInfo(output_info);
 

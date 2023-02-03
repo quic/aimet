@@ -42,19 +42,10 @@ from typing import Union
 import aimet_common.libpymo as libpymo
 from aimet_common.libpymo import TensorQuantizerOpMode
 from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO
-from aimet_onnx import libquant_info
+from aimet_common import libquant_info
 
 
-qc_quantize_op_dict = {}
 OpMode = TensorQuantizerOpMode
-
-def reset_qc_quantize_op_dict():
-    """
-    Reset qc_quantize_op dict to prevent overwrite
-    """
-    # pylint: disable=global-statement
-    global qc_quantize_op_dict
-    qc_quantize_op_dict.clear()
 
 
 class QcQuantizeOp:
@@ -208,19 +199,6 @@ class QcQuantizeOp:
         :param op_mode: The OpMode to be used
         """
         self.quant_info.opMode = op_mode
-
-    def set_encodings(self, encodings: libpymo.TfEncoding):
-        """
-        set encodings of tensor quantizer by given encodings
-        """
-        self.encodings = encodings
-        self._tensor_quantizer.isEncodingValid = True
-
-    def set_mode(self, op_mode: OpMode):
-        """
-        set the mode of QcQuantizeOp
-        """
-        self.op_mode = op_mode
 
     def reset_encoding_stats(self):
         """

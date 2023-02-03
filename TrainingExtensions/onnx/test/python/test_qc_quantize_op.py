@@ -44,11 +44,11 @@ import os
 from aimet_common import libpymo
 from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO
 from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode
-from aimet_onnx import libquant_info
+from aimet_common import libquant_info
 
 
 shared_library = os.path.dirname(libquant_info.__file__)
-shared_library = os.path.join(shared_library, "libaimet_ort_ops.so")
+shared_library = os.path.join(shared_library, "libaimet_onnxrt_ops.so")
 op_domain = "aimet.customop"
 op_name = "QcQuantizeOp"
 
@@ -138,9 +138,9 @@ class TestQcQuantizeOp:
         encodings.max = 1
         encodings.min = -5.0
 
-        qc_op.set_encodings(encodings)
+        qc_op.encodings = encodings
 
-        qc_op.set_mode(OpMode.quantizeDequantize)
+        qc_op.op_mode = OpMode.quantizeDequantize
         output = session.run(None, {'input': input_arr})[0]
 
         assert np.max(output) <= 1.1
@@ -169,7 +169,7 @@ class TestQcQuantizeOp:
         assert math.isclose(qc_op.encodings.max, 2.5, rel_tol=1e-2)
         assert math.isclose(qc_op.encodings.min, -7, rel_tol=1e-2)
 
-        qc_op.set_mode(OpMode.quantizeDequantize)
+        qc_op.op_mode = OpMode.quantizeDequantize
         output = session.run(None, {'input': input_arr2})[0]
         assert np.max(output) <= 2.6
         assert np.min(output) >= -7.1
@@ -230,8 +230,8 @@ class TestQcQuantizeOp:
         encodings.max = 2.5
         encodings.min = -7
         encodings.offset = -188
-        qc_op.set_encodings(encodings)
-        qc_op.set_mode(OpMode.quantizeDequantize)
+        qc_op.encodings = encodings
+        qc_op.op_mode = OpMode.quantizeDequantize
 
         output_qdq = session.run(None, {'input': input_arr})
 
@@ -259,8 +259,8 @@ class TestQcQuantizeOp:
         encodings.max = 7
         encodings.min = -7
         encodings.offset = -128
-        qc_op.set_encodings(encodings)
-        qc_op.set_mode(OpMode.quantizeDequantize)
+        qc_op.encodings = encodings
+        qc_op.op_mode = OpMode.quantizeDequantize
 
         output_qdq = session.run(None, {'input': input_arr})
 
@@ -290,8 +290,8 @@ class TestQcQuantizeOp:
         encodings.max = 5.3
         encodings.min = 0.0
         encodings.offset = 0
-        qc_op.set_encodings(encodings)
-        qc_op.set_mode(OpMode.quantizeDequantize)
+        qc_op.encodings = encodings
+        qc_op.op_mode = OpMode.quantizeDequantize
 
         output_qdq = session.run(None, {'input': input_arr})
 

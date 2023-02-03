@@ -42,7 +42,7 @@ from typing import Dict
 from onnx import helper, onnx_pb
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
-from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode, qc_quantize_op_dict
+from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import encoding_version, extract_global_quantizer_args
 from aimet_common.utils import save_json_yaml
@@ -50,7 +50,7 @@ from aimet_common import libpymo
 
 from aimet_onnx.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
-from aimet_onnx import libquant_info
+from aimet_common import libquant_info
 
 WORKING_DIR = '/tmp/quantsim/'
 
@@ -81,7 +81,7 @@ class QuantizationSimModel:
         :param config_file: Path to Configuration file for model quantizers
         """
         self.model = ONNXModel(model)
-        self.qc_quantize_op_dict = qc_quantize_op_dict
+        self.qc_quantize_op_dict = {}
         self.connected_graph = ConnectedGraph(self.model)
         self._quant_scheme = quant_scheme
         self._rounding_mode = rounding_mode
@@ -202,7 +202,7 @@ class QuantizationSimModel:
         """
         sess_options = SessionOptions()
         shared_library = os.path.dirname(libquant_info.__file__)
-        shared_library = os.path.join(shared_library, "libaimet_ort_ops.so")
+        shared_library = os.path.join(shared_library, "libaimet_onnxrt_ops.so")
         sess_options.register_custom_ops_library(shared_library)
         sess_options.graph_optimization_level = GraphOptimizationLevel.ORT_DISABLE_ALL
         session = InferenceSession(
@@ -244,7 +244,7 @@ class QuantizationSimModel:
         for op_name, qc_op in self.qc_quantize_op_dict.items():
             qc_op.compute_encodings()
             if op_name in self.activation_names:
-                qc_op.set_mode(OpMode.quantizeDequantize)
+                qc_op.op_mode = OpMode.quantizeDequantize
 
     def _export_encodings(self, encoding_file_path):
         """
