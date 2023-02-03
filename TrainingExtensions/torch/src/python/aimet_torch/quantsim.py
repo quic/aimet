@@ -925,13 +925,15 @@ class QuantizationSimModel:
                 activation_encodings_torch[layer_name][QUANTIZER_TYPE_OUTPUT][index] = enc
 
         if propagate_encodings:
-            quantizer = layer.output_quantizers[0]
-            for activation_tensor in propagate_tensors:
-                quantizer_encoding = _get_encoding_by_quantizer(quantizer)
-                enc = QuantizationSimModel._create_encoding_dict(quantizer_encoding,
-                                                                 quantizer,
-                                                                 propagate_encodings=True)
-                activation_encodings_onnx[activation_tensor] = [enc]
+            enabled_quantizers = [q for q in layer.output_quantizers if q.enabled]
+            if enabled_quantizers:
+                quantizer = enabled_quantizers[0]
+                for activation_tensor in propagate_tensors:
+                    quantizer_encoding = _get_encoding_by_quantizer(quantizer)
+                    enc = QuantizationSimModel._create_encoding_dict(quantizer_encoding,
+                                                                     quantizer,
+                                                                     propagate_encodings=True)
+                    activation_encodings_onnx[activation_tensor] = [enc]
 
 
     @staticmethod
