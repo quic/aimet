@@ -179,6 +179,7 @@ RUN python3 -m pip --no-cache-dir install \
         sphinx==2.1.1 \
         sphinx-jinja==1.1.1 \
         sphinx-autodoc-typehints==1.6.0 \
+        sphinx-rtd-theme \
         tensorboard==2.4.0 \
         tensorboardX==2.4 \
         tensorflow-gpu==2.4.3 \
