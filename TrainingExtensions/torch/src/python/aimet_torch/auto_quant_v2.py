@@ -470,9 +470,11 @@ class _AutoQuantV2:
         :param strict_validation: Flag set to True by default. When False, AutoQuant will
             proceed with execution and try to handle errors internally if possible. This
             may produce unideal or unintuitive results.
+
+        :raises ValueError: If the model is on GPU but dummy_input_on_gpu is not specified.
+        :raises RuntimeError: If none of the PTQ techniques were finished successfully.
+
         :return: Tuple of  (best model, eval score, encoding path front).
-        :raises:
-            - ValueError if the model is on GPU and dummy_input_on_gpu is not specified.
         """
         result = self._apply_helper(self._auto_quant_main,
                                     fp32_model,
@@ -516,9 +518,11 @@ class _AutoQuantV2:
         :param strict_validation: Flag set to True by default. When False, AutoQuant will
             proceed with execution and try to handle errors internally if possible. This
             may produce unideal or unintuitive results.
+
+        :raises ValueError: If the model is on GPU but dummy_input_on_gpu is not specified.
+        :raises RuntimeError: If none of the PTQ techniques were finished successfully.
+
         :return: The best ptq result as a dictionary.
-        :raises:
-            - ValueError if the model is on GPU and dummy_input_on_gpu is not specified.
         """
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
@@ -639,6 +643,9 @@ class _AutoQuantV2:
             proceed with execution and try to handle errors internally if possible. This
             may produce unideal or unintuitive results.
         :param results_dir: Directory to save the results.
+
+        :raises RuntimeError: If none of the PTQ techniques were finished successfully.
+
         :return: The best ptq result as a dictionary.
         """
         with eval_manager.analysis_session(f"W32A{self.default_output_bw} Evaluation") as sess:
