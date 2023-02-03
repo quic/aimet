@@ -2012,6 +2012,19 @@ class TestQuantizationSimStaticGrad:
         pretty_data = json.dumps(encodings, indent=2)
         print(pretty_data)
 
+        # verifying the encodings propagation is disabled if output quantizers are disabled.
+        sim = QuantizationSimModel(model, dummy_input)
+        sim.model.ps.output_quantizers[0].enabled = False
+        # Quantize
+        sim.compute_encodings(forward_pass, None)
+
+        # Save encodings again - now with propagate encodings flag enabled
+        sim.export('./data', 'encodings_propagation_quant_disabled', dummy_input, propagate_encodings=True)
+        with open('./data/encodings_propagation_quant_disabled.encodings') as f:
+            encodings = json.load(f)
+        assert len(encodings['activation_encodings']) == 1
+        assert 't.1' in encodings['activation_encodings']
+
     def test_encodings_propagation_lstm_model(self):
         """
         Test encodings are propagated correctly when more than
