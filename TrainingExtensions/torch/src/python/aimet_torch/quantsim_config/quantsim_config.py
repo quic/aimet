@@ -188,17 +188,9 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         quantization enabled.
         """
         tensor_quantizers_for_input_true = []
-
         if op.get_module() is not None:
-            if op.inputs: #filter out some inputs quantizer(i.g,those connecting to previous ops)
-                for idx, inp in enumerate(op.inputs):
-                    if not inp.producer and inp.is_model_input:
-                        qc_quantize_wrapper = self._module_to_quantsim_wrapper_dict[op.get_module()]
-                        tensor_quantizers_for_input_true.append(qc_quantize_wrapper.input_quantizers[idx])
-            else: # fallback to all inputs quantizers(i.g, nested_input)
-                qc_quantize_wrapper = self._module_to_quantsim_wrapper_dict[op.get_module()]
-                tensor_quantizers_for_input_true += qc_quantize_wrapper.input_quantizers
-
+            qc_quantize_wrapper = self._module_to_quantsim_wrapper_dict[op.get_module()]
+            tensor_quantizers_for_input_true += qc_quantize_wrapper.input_quantizers
         else:
             queue = [op]
             while queue:
