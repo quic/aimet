@@ -49,7 +49,17 @@ from aimet_common import libquant_info
 
 shared_library = os.path.dirname(libquant_info.__file__)
 shared_library = os.path.join(shared_library, "libaimet_onnxrt_ops.so")
-op_domain = "aimet.customop"
+
+available_providers = [
+    provider
+    for provider in ort.get_available_providers()
+    if provider not in {"TvmExecutionProvider", "TensorrtExecutionProvider"}
+]
+
+if "CUDAExecutionProvider" in available_providers:
+    op_domain = "aimet.customop.cuda"
+else:
+    op_domain = "aimet.customop.cpu"
 op_name = "QcQuantizeOp"
 
 def create_quant_info(encoding,
@@ -107,7 +117,7 @@ class TestQcQuantizeOp:
         quant_node = helper.make_node(op_name, inputs=['input'], outputs=['output'],
                                       domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
         model = create_model_from_node(quant_node, input_arr.shape)
-        session = build_session(model, ['CPUExecutionProvider'])
+        session = build_session(model, available_providers)
         session.run(None, {'input': input_arr})
         encodings = tensor_quantizer.computeEncoding(cpp_encodings.bw,
                                                          quant_info.useSymmetricEncoding)
@@ -123,7 +133,7 @@ class TestQcQuantizeOp:
         quant_node = helper.make_node(op_name, inputs=['input'], outputs=['output'],
                                       domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
         model = create_model_from_node(quant_node, input_arr.shape)
-        session = build_session(model, ['CPUExecutionProvider'])
+        session = build_session(model, available_providers)
         qc_op = QcQuantizeOp(quant_info=quant_info,
                      quant_scheme=QuantScheme.post_training_tf,
                      rounding_mode='nearest',
@@ -154,7 +164,7 @@ class TestQcQuantizeOp:
         quant_node = helper.make_node(op_name, inputs=['input'], outputs=['output'],
                                       domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
         model = create_model_from_node(quant_node, input_arr.shape)
-        session = build_session(model, ['CPUExecutionProvider'])
+        session = build_session(model, available_providers)
         qc_op = QcQuantizeOp(quant_info=quant_info,
                      quant_scheme=QuantScheme.post_training_tf,
                      rounding_mode='nearest',
@@ -182,7 +192,7 @@ class TestQcQuantizeOp:
         quant_node = helper.make_node(op_name, inputs=['input'], outputs=['output'],
                                       domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
         model = create_model_from_node(quant_node, input_arr.shape)
-        session = build_session(model, ['CPUExecutionProvider'])
+        session = build_session(model, available_providers)
         qc_op = QcQuantizeOp(quant_info=quant_info,
                      quant_scheme=QuantScheme.post_training_tf,
                      rounding_mode='nearest',
@@ -213,7 +223,7 @@ class TestQcQuantizeOp:
         quant_node = helper.make_node(op_name, inputs=['input'], outputs=['output'],
                                       domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
         model = create_model_from_node(quant_node, input_arr.shape)
-        session = build_session(model, ['CPUExecutionProvider'])
+        session = build_session(model, available_providers)
         qc_op = QcQuantizeOp(quant_info=quant_info,
                      quant_scheme=QuantScheme.post_training_tf,
                      rounding_mode='nearest',
@@ -244,7 +254,7 @@ class TestQcQuantizeOp:
         quant_node = helper.make_node(op_name, inputs=['input'], outputs=['output'],
                                       domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
         model = create_model_from_node(quant_node, input_arr.shape)
-        session = build_session(model, ['CPUExecutionProvider'])
+        session = build_session(model, available_providers)
         qc_op = QcQuantizeOp(quant_info=quant_info,
                      quant_scheme=QuantScheme.post_training_tf,
                      rounding_mode='nearest',
@@ -272,7 +282,7 @@ class TestQcQuantizeOp:
         quant_node = helper.make_node(op_name, inputs=['input'], outputs=['output'],
                                       domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
         model = create_model_from_node(quant_node, input_arr.shape)
-        session = build_session(model, ['CPUExecutionProvider'])
+        session = build_session(model, available_providers)
         qc_op = QcQuantizeOp(quant_info=quant_info,
                      quant_scheme=QuantScheme.post_training_tf,
                      rounding_mode='nearest',

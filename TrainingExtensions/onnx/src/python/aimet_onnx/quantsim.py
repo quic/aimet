@@ -44,6 +44,7 @@ import onnx
 from onnx import helper, onnx_pb, mapping
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
+import onnxruntime as ort
 from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import encoding_version, extract_global_quantizer_args
@@ -63,6 +64,11 @@ op_types_to_ignore = ["branch", "Flatten", "Gather", "Reshape", "Shape", "Unsque
 
 data_types_to_quantize = [np.float32]
 
+available_providers_without_tvm_and_tensorrt = [
+    provider
+    for provider in ort.get_available_providers()
+    if provider not in {"TvmExecutionProvider", "TensorrtExecutionProvider"}
+]
 
 class QuantizationSimModel:
     """ Creates a QuantizationSimModel model by adding quantization simulations ops to a given model """
@@ -76,7 +82,7 @@ class QuantizationSimModel:
                  default_param_bw: int = 8,
                  default_activation_bw: int = 8,
                  use_symmetric_encodings: bool = False, use_cuda: bool = False,
-                 config_file: str = None):
+                 device: int = 0, config_file: str = None):
         """
         Constructor
 
@@ -101,8 +107,10 @@ class QuantizationSimModel:
         self._use_symmetric_encodings = use_symmetric_encodings
         self._use_cuda = use_cuda
         if use_cuda:
-            self.providers = ["CUDAExecutionProvider"]
+            self._op_domain = "aimet.customop.cuda"
+            self.providers = [('CUDAExecutionProvider', {'device_id': device}), 'CPUExecutionProvider']
         else:
+            self._op_domain = "aimet.customop.cpu"
             self.providers = ['CPUExecutionProvider']
         self.param_names = []
         self.activation_names = []
@@ -206,7 +214,7 @@ class QuantizationSimModel:
                 inputs=[name],
                 outputs=[name + '_qdq'],
                 name='QcQuantizeOp_' + name,
-                domain="aimet.customop",
+                domain=self._op_domain,
                 op_name=name,
                 quant_info=libpymo.PtrToInt64(quant_info),
             )
@@ -232,7 +240,7 @@ class QuantizationSimModel:
                 inputs=[name],
                 outputs=[name + '_updated'],
                 name='QcQuantizeOp_' + name,
-                domain="aimet.customop",
+                domain=self._op_domain,
                 op_name=name,
                 quant_info=libpymo.PtrToInt64(quant_info)
             )
