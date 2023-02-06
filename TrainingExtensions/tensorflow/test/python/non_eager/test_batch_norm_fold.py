@@ -53,7 +53,7 @@ from aimet_common.defs import QuantScheme
 
 from aimet_tensorflow.utils import graph_saver
 from aimet_tensorflow.batch_norm_fold import fold_all_batch_norms, find_all_batch_norms_to_fold, \
-    fold_all_batch_norms_to_scale, _get_weight_tensor_transpose_reshape
+    fold_all_batch_norms_to_scale, _get_weight_tensor_transpose_reshape, _get_bn_params
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.examples.test_models import tf_slim_basic_model
 from aimet_tensorflow.utils.graph import update_keras_bn_ops_trainable_flag
@@ -387,6 +387,42 @@ class TestBatchNormFold(unittest.TestCase):
         self.assertTrue(np.allclose(baseline_output, output_after_fold, atol=1.e-4))
         sess.close()
         new_sess.close()
+
+    def test_modify_bn_params_to_weight_bias_form(self):
+        """
+        Test Modify BN Parameters utility.
+        """
+
+        tf.compat.v1.reset_default_graph()
+        inputs = tf.keras.Input(shape=(1, 1, 4,))
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(inputs, training=False)
+        x = tf.keras.layers.Flatten()(bn_op)
+        _ = tf.keras.layers.Dense(2, activation=tf.nn.relu, name="linear_layer")(x)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session(graph = tf.compat.v1.get_default_graph())
+        sess.run(init)
+
+        bn_op = sess.graph.get_operation_by_name('batch_normalization/FusedBatchNormV3')
+
+        bn_params = _get_bn_params(sess, bn_op)
+        weight = np.array(bn_params.gamma) / np.array(bn_params.runningVar)
+        bias = np.array(bn_params.beta) - np.array(bn_params.runningMean) * weight
+        BNUtils.modify_bn_params_to_weight_bias_form(sess, bn_op, weight, bias)
+
+
+        bn_params_after_conversion = _get_bn_params(sess, bn_op)
+
+        self.assertTrue(np.allclose(np.array(bn_params_after_conversion.gamma), weight, atol=1.e-4))
+        self.assertTrue(np.allclose(np.array(bn_params_after_conversion.beta), bias, atol=1.e-4))
+        self.assertTrue(np.allclose(np.array(bn_params_after_conversion.runningMean),
+                        np.zeros(np.array(bn_params.runningMean).shape, dtype=np.array(bn_params.runningMean).dtype), atol=1.e-4))
+        self.assertTrue(np.allclose(np.array(bn_params_after_conversion.runningVar),
+                                    np.ones(np.array(bn_params.runningVar).shape, dtype=np.array(bn_params.runningVar).dtype), atol=1.e-3))
+
+
+        sess.close()
+
 
     @pytest.mark.tf1
     def test_removing_bn_ops_from_update_ops(self):
