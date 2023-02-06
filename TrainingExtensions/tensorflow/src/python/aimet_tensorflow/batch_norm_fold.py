@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -134,7 +134,7 @@ def _find_conv_bn_pairs(conn_graph: ConnectedGraph):
 
 
 def find_all_batch_norms_to_fold(sess: tf.compat.v1.Session, start_op_names: Union[List[str], str],
-                                 output_op_names: Union[List[str], str], return_bn_conn_op=False) -> List[PairType]:
+                                 output_op_names: Union[List[str], str], return_bn_conn_op=False) -> Tuple[List[PairType], Set[tf.Operation]]:
     """
     uses searcher to choose layers for bias correction
     :param sess: tf.compat.v1.Session type
@@ -359,9 +359,8 @@ def fold_all_batch_norms(sess: tf.compat.v1.Session, input_op_names: Union[str, 
     for pair in bn_conv_linear_pairs:
         pairs_to_return.append((pair[0], pair[1].op))
 
-
     # Convert the standalone BNs which are not folded
-    bn_converted = ConvertBatchNorms(after_fold_sess, input_op_names, output_op_names, bns_to_fold)
+    bn_converted = convert_standalone_batchnorms(after_fold_sess, input_op_names, output_op_names, bns_to_fold)
     if bn_converted:
         logger.info("%d BatchNorms' weights got converted", len(bn_converted))
 
@@ -370,8 +369,10 @@ def fold_all_batch_norms(sess: tf.compat.v1.Session, input_op_names: Union[str, 
 
     return after_fold_sess, pairs_to_return
 
-def ConvertBatchNorms(sess, input_op_names: Union[str, List[str]],
-                      output_op_names: Union[str, List[str]], bns_folded: List):
+
+def convert_standalone_batchnorms(sess, input_op_names: Union[str, List[str]],
+                                  output_op_names: Union[str, List[str]], bns_folded: List) -> List[tf.Operation]:
+
     """
     Converts the weights of standalone batch norms remaining in the model after BN folding
     :param sess: TF session in which the graph is loaded
@@ -388,12 +389,13 @@ def ConvertBatchNorms(sess, input_op_names: Union[str, List[str]],
     # look for bn layers which are not folded
     for op in list_of_ordered_ops:
         if op.type in ['FusedBatchNormV3', 'FusedBatchNorm', 'BatchNormalization'] and op not in bns_folded:
-            ConvertBN(sess, op)
+            convert_batchnorm_parameters(sess, op)
             converted_bns.append(op)
             logger.debug("%s weights got converted", op)
     return converted_bns
 
-def ConvertBN(sess, op):
+
+def convert_batchnorm_parameters(sess, op):
     """
     Convert the weights of BN such that it works as y = weights * x + bias
     :param sess: TF Session in which the graph is loaded
@@ -403,6 +405,7 @@ def ConvertBN(sess, op):
     weight = np.array(bn_params.gamma) / np.array(bn_params.runningVar)
     bias = np.array(bn_params.beta) - np.array(bn_params.runningMean) * weight
     BNUtils.modify_bn_params_to_weight_bias_form(sess, op, weight, bias)
+
 
 def fold_all_batch_norms_to_scale(sim: QuantizationSimModel,
                                   starting_op_names: List[str],

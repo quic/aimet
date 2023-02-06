@@ -107,8 +107,10 @@ class BNUtils:
     def modify_bn_params_to_weight_bias_form(sess: tf.compat.v1.Session, bn_op: tf.Operation, weight: np.ndarray, bias: np.ndarray):
         """
         To change the batch normalization parameters to work as y = weight * input + bias
-        :param sess:
-        :param bn_op: Batch normalization op that should be worked as passthrough op (no-op)
+        :param sess: tf Session in which BN op is present
+        :param bn_op: Batch normalization op whose parameter needs to be converted
+        :param weight: weight value which needs to be assigned to gamma parameter of the bn
+        :param bias: bias value which need to be assigned to beta parameter of the bn
         """
         bn_gamma_tf_var, bn_beta_tf_var, bn_mean_tf_var, bn_var_tf_var = BNUtils.get_bn_params_tf_variable(sess, bn_op)
         with sess.graph.as_default():
