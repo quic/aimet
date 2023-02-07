@@ -709,7 +709,7 @@ class TestQuantizationSimStaticGrad:
 
         sim = QuantizationSimModel(model, dummy_input=dummy_input)
         assert 2 == len(sim.model.add.input_quantizers)
-        assert sim.model.add.input_quantizers[0].enabled
+        assert not sim.model.add.input_quantizers[0].enabled
         assert sim.model.add.input_quantizers[1].enabled
 
 
@@ -986,9 +986,9 @@ class TestQuantizationSimStaticGrad:
 
         sim.compute_encodings(forward_pass, None)
 
-        # check mul's first input quantizer is real input(enable) , second input is intermediate (enable)
+        # check mul's first input quantizer is real input(enable) , second input is intermediate (disable)
         assert sim.model.mul.input_quantizers[0].enabled
-        assert sim.model.mul.input_quantizers[1].enabled
+        assert not sim.model.mul.input_quantizers[1].enabled
 
         # save encodings
         input_names = ['a', 'b', 'c']
