@@ -654,22 +654,30 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
     @property
     def encoding(self) -> Optional[List[libpymo.TfEncoding]]:
         """ Get encodings in libpymo form """
-        num_of_encodings = self._encoding_min.shape[0]
-        all_encodings = [None] * num_of_encodings
-        for i in range(num_of_encodings):
-            if self._is_encoding_valid:
-                encodings = libpymo.TfEncoding()
-                # pylint: disable = protected-access
-                encodings.min = tf.keras.backend.get_value(self._encoding_min[i])
-                encodings.max = tf.keras.backend.get_value(self._encoding_max[i])
-                encodings.delta, encodings.offset = calculate_delta_offset(encodings.min, encodings.max,
-                                                                           self.bitwidth, self.is_symmetric,
-                                                                           self.use_strict_symmetric[i])
-                encodings.bw = self.bitwidth
-                all_encodings[i] = encodings
-            else:
-                return None
-        return all_encodings
+        if self._is_encoding_valid:
+            total_number_of_encodings = self._encoding_min.shape[0]
+
+            # Get all backend tensors up front
+            all_keras_backend_encoding_mins, all_keras_backend_encoding_maxs = \
+                tf.keras.backend.batch_get_value([self._encoding_min, self._encoding_max])
+
+            # Create all encoding objects upfront and then update each one's properties
+            all_tf_encoding_objects = list(libpymo.TfEncoding() for _ in range(total_number_of_encodings))
+
+            # Get all use_strict_symmetric values up front, otherwise we create the list each call
+            all_use_strict_symmetric = self.use_strict_symmetric
+
+            for idx, encoding in enumerate(all_tf_encoding_objects):
+                encoding.min = all_keras_backend_encoding_mins[idx]
+                encoding.max = all_keras_backend_encoding_maxs[idx]
+                encoding.delta, encoding.offset = calculate_delta_offset(encoding.min, encoding.max,
+                                                                         self.bitwidth, self.is_symmetric,
+                                                                         all_use_strict_symmetric[idx])
+                encoding.bw = self.bitwidth
+
+            return all_tf_encoding_objects
+
+        return None
 
     @encoding.setter
     @abc.abstractmethod

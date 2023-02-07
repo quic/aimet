@@ -51,6 +51,7 @@ from aimet_tensorflow.utils.constants import QUANT_ALLOWED_DTYPES
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
+
 class QuantizerSettings:
     """ Class holding quantizer settings """
 
