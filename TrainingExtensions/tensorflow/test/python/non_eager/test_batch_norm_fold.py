@@ -58,8 +58,9 @@ from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.examples.test_models import tf_slim_basic_model
 from aimet_tensorflow.utils.graph import update_keras_bn_ops_trainable_flag
 from aimet_tensorflow.quantsim import QuantizationSimModel
-from aimet_tensorflow.utils.op.conv import WeightTensorUtils
+from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
+from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
 
@@ -338,7 +339,7 @@ class TestBatchNormFold(unittest.TestCase):
         sess.close()
         new_sess.close()
 
-    def test_batch_norm_conversiion(self):
+    def test_batch_norm_conversion(self):
         """
         Test batch norm conversion.
         """
@@ -352,14 +353,14 @@ class TestBatchNormFold(unittest.TestCase):
                                                    gamma_initializer='random_uniform',
                                                    moving_mean_initializer='random_uniform',
                                                    moving_variance_initializer='ones')(conv_op)
-        # @todo check why moving var with random_uniform init fails on 1.15
+
         relu_op = tf.nn.relu(bn_op)
         bn_op = tf.keras.layers.BatchNormalization(fused=True,
                                                    beta_initializer='random_uniform',
                                                    gamma_initializer='random_uniform',
                                                    moving_mean_initializer='random_uniform',
                                                    moving_variance_initializer='ones')(relu_op)
-        # @todo check why moving var with random_uniform init fails on 1.15
+
         _ = tf.nn.relu(bn_op)
 
         init = tf.compat.v1.global_variables_initializer()
@@ -381,7 +382,7 @@ class TestBatchNormFold(unittest.TestCase):
         feed_dict ={w2:numpy_data}
 
         new_relu_op = new_sess.graph.get_operation_by_name('Relu_1')
-        output_after_fold = new_sess.run(new_relu_op.outputs[0], feed_dict= feed_dict)
+        output_after_fold = new_sess.run(new_relu_op.outputs[0], feed_dict=feed_dict)
 
         self.assertTrue(len(pairs) == 1)
         self.assertTrue(np.allclose(baseline_output, output_after_fold, atol=1.e-4))
@@ -410,7 +411,6 @@ class TestBatchNormFold(unittest.TestCase):
         bias = np.array(bn_params.beta) - np.array(bn_params.runningMean) * weight
         BNUtils.modify_bn_params_to_weight_bias_form(sess, bn_op, weight, bias)
 
-
         bn_params_after_conversion = _get_bn_params(sess, bn_op)
 
         self.assertTrue(np.allclose(np.array(bn_params_after_conversion.gamma), weight, atol=1.e-4))
@@ -419,7 +419,6 @@ class TestBatchNormFold(unittest.TestCase):
                         np.zeros(np.array(bn_params.runningMean).shape, dtype=np.array(bn_params.runningMean).dtype), atol=1.e-4))
         self.assertTrue(np.allclose(np.array(bn_params_after_conversion.runningVar),
                                     np.ones(np.array(bn_params.runningVar).shape, dtype=np.array(bn_params.runningVar).dtype), atol=1.e-3))
-
 
         sess.close()
 
