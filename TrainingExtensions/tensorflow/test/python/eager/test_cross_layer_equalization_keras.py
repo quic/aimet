@@ -424,8 +424,8 @@ class TestTrainingExtensionsCrossLayerScaling:
         """
         model = keras_functional_conv_net()
 
-        _ = fold_all_batch_norms(model)
-        _, conv1, _, _, conv2, _, _, conv3, conv4 = model.layers
+        _, model = fold_all_batch_norms(model)
+        _, conv1, _, conv2, _, conv3, conv4 = model.layers
         cls_sets = [(conv1, conv2), (conv2, conv3), (conv3, conv4)]
 
         expected = [True, True, False]
