@@ -673,6 +673,7 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
                 encoding.delta, encoding.offset = calculate_delta_offset(encoding.min, encoding.max,
                                                                          self.bitwidth, self.is_symmetric,
                                                                          all_use_strict_symmetric[idx])
+                encoding.bw = self.bitwidth
 
             return all_tf_encoding_objects
 
