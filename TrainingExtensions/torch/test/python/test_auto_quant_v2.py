@@ -237,15 +237,6 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc, fp32_acc=None, w3
             pass
 
 
-@pytest.fixture(autouse=True)
-def patch_dependencies():
-    def render(*_, **__):
-        return ""
-
-    with patch("aimet_torch.auto_quant_v2.jinja2.environment.Template.render", side_effect=render):
-         yield
-
-
 class TestAutoQuant:
     def test_auto_quant_default_values(self, unlabeled_data_loader):
         auto_quant = AutoQuant(

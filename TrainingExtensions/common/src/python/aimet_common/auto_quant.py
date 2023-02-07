@@ -98,7 +98,8 @@ class _DiagnosticsContent(abc.ABC):
 class _PlainTextContent(_DiagnosticsContent):
     """Content of diagnostics in plain text."""
     def get_html_elem(self) -> str:
-        return f"<div> {self._content} </div>"
+        content = self._content.replace("\n", "<br/>\n")
+        return f"<div> {content} </div>"
 
 
 class _BokehModelContent(_DiagnosticsContent):
