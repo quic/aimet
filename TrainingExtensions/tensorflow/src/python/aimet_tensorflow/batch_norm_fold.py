@@ -374,7 +374,8 @@ def convert_standalone_batchnorms(sess, input_op_names: Union[str, List[str]],
                                   output_op_names: Union[str, List[str]], bns_folded: List) -> List[tf.Operation]:
 
     """
-    Converts the weights of standalone batch norms remaining in the model after BN folding
+    Converts the weights of standalone batch norms remaining in the model after BN folding.
+
     :param sess: TF session in which the graph is loaded
     :param input_op_names: Name of the starting op in the given graph or a list of names in case of multi-input model
     :param output_op_names: List of output op names of the model, used to help ConnectedGraph determine valid ops
@@ -398,6 +399,7 @@ def convert_standalone_batchnorms(sess, input_op_names: Union[str, List[str]],
 def convert_batchnorm_parameters(sess, op):
     """
     Convert the weights of BN such that it works as y = weights * x + bias
+
     :param sess: TF Session in which the graph is loaded
     :param op: bn_op which whose weights need to be converted
     """
