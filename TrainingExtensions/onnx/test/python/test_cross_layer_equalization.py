@@ -37,6 +37,7 @@
 # =============================================================================
 import numpy as np
 import copy
+import torch
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 from onnxruntime_extensions import get_library_path
 from onnx import numpy_helper
@@ -143,6 +144,30 @@ class TestCLS:
     def test_cle(self):
         model = test_models.my_model_with_bns()
         input_shape = (2, 10, 24, 24)
+        test_data = np.random.randn(*input_shape).astype(np.float32)
+        session = _build_session(model)
+        output_before_cle = session.run(None, {'input': test_data})
+        equalize_model(model)
+        output_after_cle = session.run(None, {'input': test_data})
+        assert np.allclose(output_after_cle, output_before_cle, rtol=1e-2)
+
+    def test_cle_conv1D_model(self):
+        x = torch.randn((2, 10, 24))
+        model = test_models.BNAfterConv1d()
+        model = test_models._convert_to_onnx_no_fold(model, x)
+        input_shape = (2, 10, 24)
+        test_data = np.random.randn(*input_shape).astype(np.float32)
+        session = _build_session(model)
+        output_before_cle = session.run(None, {'input': test_data})
+        equalize_model(model)
+        output_after_cle = session.run(None, {'input': test_data})
+        assert np.allclose(output_after_cle, output_before_cle, rtol=1e-2)
+
+    def test_cle_transpose1D_model(self):
+        x = torch.randn((2, 10, 24))
+        model = test_models.BNAfterConvTranspose1d()
+        model = test_models._convert_to_onnx_no_fold(model, x)
+        input_shape = (2, 10, 24)
         test_data = np.random.randn(*input_shape).astype(np.float32)
         session = _build_session(model)
         output_before_cle = session.run(None, {'input': test_data})

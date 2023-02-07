@@ -325,12 +325,14 @@ class BNAfterConvTranspose1d(torch.nn.Module):
                                               groups=groups, output_padding=output_padding)
         self.bn1 = torch.nn.BatchNorm1d(10)
         self.relu1 = torch.nn.ReLU()
+        self.conv2 = torch.nn.ConvTranspose1d(10, 10, 3, padding=padding, stride=stride, dilation=dilation,
+                                              groups=groups, output_padding=output_padding)
 
     def forward(self, x):
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu1(x)
-
+        x = self.conv2(x)
         return x
 
 
@@ -358,11 +360,14 @@ class BNAfterConv1d(torch.nn.Module):
         self.conv1 = torch.nn.Conv1d(10, 10, 3, padding=padding, stride=stride, dilation=dilation, groups=groups, bias=bias)
         self.bn1 = torch.nn.BatchNorm1d(10)
         self.relu1 = torch.nn.ReLU()
+        self.conv2 = torch.nn.Conv1d(10, 10, 3, padding=padding, stride=stride, dilation=dilation, groups=groups,
+                                     bias=bias)
 
     def forward(self, x):
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu1(x)
+        x = self.conv2(x)
 
         return x
 
