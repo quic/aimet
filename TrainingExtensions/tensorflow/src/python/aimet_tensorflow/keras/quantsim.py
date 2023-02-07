@@ -268,7 +268,7 @@ class QuantizationSimModel(tf.keras.Model):
         :param quantizer: Quantizer to get encoding info from
         :return: Dictionary or List of dictionaries containing encodings info for the tensor quantizer
         """
-        quantizer_encodings = [quantizer.encoding] if not isinstance(quantizer.encoding, List) else quantizer.encoding
+        quantizer_encodings = [quantizer.encoding] if not isinstance(quantizer, ParamPerChannelQuantizer) else quantizer.encoding
         return [
             {
                 'min': encoding.min,
@@ -293,7 +293,7 @@ class QuantizationSimModel(tf.keras.Model):
         param_encodings = {}
         for wrapper in self.quant_wrappers():
             for idx, input_quantizer in enumerate(wrapper.input_quantizers):
-                if input_quantizer.encoding is not None or input_quantizer.data_type == QuantizationDataType.float:
+                if input_quantizer.is_encoding_valid() or input_quantizer.data_type == QuantizationDataType.float:
                     # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
                     # inbound_nodes parameter populated, so the name of the quantizer is used instead
                     if not wrapper._layer_to_wrap.inbound_nodes:
@@ -303,12 +303,12 @@ class QuantizationSimModel(tf.keras.Model):
                     encoding_dict = self._get_encoding_dict_for_quantizer(input_quantizer)
                     activation_encodings[tensor_name] = encoding_dict
             for idx, param_quantizer in enumerate(wrapper.param_quantizers):
-                if param_quantizer.encoding is not None or param_quantizer.data_type == QuantizationDataType.float:
+                if param_quantizer.is_encoding_valid() or param_quantizer.data_type == QuantizationDataType.float:
                     param_name = wrapper._layer_to_wrap.weights[idx].name
                     encoding_dict = self._get_encoding_dict_for_quantizer(param_quantizer)
                     param_encodings[param_name] = encoding_dict
             for idx, output_quantizer in enumerate(wrapper.output_quantizers):
-                if output_quantizer.encoding is not None or output_quantizer.data_type == QuantizationDataType.float:
+                if output_quantizer.is_encoding_valid() or output_quantizer.data_type == QuantizationDataType.float:
                     # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
                     # inbound_nodes parameter populated, so the name of the quantizer is used instead
                     if not wrapper._layer_to_wrap.inbound_nodes:
@@ -391,6 +391,7 @@ class QuantizationSimModel(tf.keras.Model):
             _logger.error("Could not convert h5 to frozen pb. "
                           "Please call export() again with custom_objects defined.")
             raise
+
         encodings_dict = self.get_encodings_dict()
         encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
         save_json_yaml(encoding_file_path, encodings_dict)
