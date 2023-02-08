@@ -48,8 +48,9 @@ import numpy as np
 import torch
 
 from aimet_common.utils import AimetLogger
-from aimet_torch.cross_layer_equalization_python import ClsSet, PythonCLSImpl, PythonHBFImpl
-from aimet_torch.cross_layer_equalization_mo import MOCLSImpl, MOHBFImpl
+from aimet_torch.cle.impl import ClsSet
+from aimet_torch.cle.python_impl import PythonCLSImpl, PythonHBFImpl
+from aimet_torch.cle.mo_impl import MOCLSImpl, MOHBFImpl
 from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
