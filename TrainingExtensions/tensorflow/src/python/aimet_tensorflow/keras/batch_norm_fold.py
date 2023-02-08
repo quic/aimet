@@ -486,6 +486,7 @@ def _delete_bn_from_functional(model: tf.keras.Model,
         if layer.name in model.output_names:
             model_outputs.append(x)
 
+    tf.keras.backend.clear_session() # clear session to not have tensor name conflicts
     return tf.keras.Model(inputs=model.inputs, outputs=model_outputs)
 
 
@@ -628,13 +629,14 @@ def fold_all_batch_norms(model: tf.keras.Model):
 
     # Potential new model is returned in case the model is a functional model
     potential_new_model = fold_given_batch_norms(model, bn_conv_linear_pairs)
+    model = potential_new_model if potential_new_model else model
 
     # When returning the pairs, we want the second element of the pair to be the BN
     pairs_to_return = []
     for bn, conv, _ in bn_conv_linear_pairs:
         pairs_to_return.append((bn, conv))
 
-    return pairs_to_return, potential_new_model
+    return pairs_to_return, model
 
 #pylint: disable=protected-access
 def fold_all_batch_norms_to_scale(sim: QuantizationSimModel):
