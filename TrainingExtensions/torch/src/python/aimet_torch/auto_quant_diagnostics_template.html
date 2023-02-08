@@ -104,19 +104,19 @@
       </g>
 
       <g transform="translate(290 330)">
-        <rect {node_cle}/>
+        <rect {node_cross_layer_equalization}/>
         <text class="node-label">
           <tspan x="55" y="25">CLE</tspan>
         </text>
       </g>
 
       <g transform="translate(357 370) rotate(90)">
-        <path {edge_cle_out} stroke-linecap="square" d="M0 0 h37"/>
-        <polygon {edge_cle_out} class="arrow-tip" points="23,7.5 23,-7.5 39,0"/>
+        <path {edge_cross_layer_equalization_out} stroke-linecap="square" d="M0 0 h37"/>
+        <polygon {edge_cross_layer_equalization_out} class="arrow-tip" points="23,7.5 23,-7.5 39,0"/>
       </g>
 
       <g transform="translate(260 410)">
-        <polygon {node_test_cle} class="diamond" points="0,30 97,60 194,30 97,0"/>
+        <polygon {node_test_cross_layer_equalization} class="diamond" points="0,30 97,60 194,30 97,0"/>
           <text class="node-label" lengthAdjust="spacing" textLength= "130" >
             <tspan x="40" y="32">eval score >= target?</tspan>
           </text>
@@ -125,9 +125,9 @@
 
       <g transform="translate(398 422)">
         <g transform="rotate(335)">
-          <path {edge_test_cle_if_false} stroke-linecap="square" d="M0 0 h128"/>
-          <polygon {edge_test_cle_if_false} class="arrow-tip" points="116,7.5 116,-7.5 132,0"/>
-          <text class="edge-label" {edge_test_cle_if_false}>
+          <path {edge_test_cross_layer_equalization_if_false} stroke-linecap="square" d="M0 0 h128"/>
+          <polygon {edge_test_cross_layer_equalization_if_false} class="arrow-tip" points="116,7.5 116,-7.5 132,0"/>
+          <text class="edge-label" {edge_test_cross_layer_equalization_if_false}>
             <tspan x="30" y="15">no</tspan>
           </text>
         </g>
@@ -135,10 +135,10 @@
 
       <g transform="translate(357 470)">
         <g transform="rotate(90)">
-          <path {edge_test_cle_if_true} stroke-linecap="square" d="M0 0 h37"/>
-          <polygon {edge_test_cle_if_true} class="arrow-tip" points="23,7.5 23,-7.5 39,0"/>
+          <path {edge_test_cross_layer_equalization_if_true} stroke-linecap="square" d="M0 0 h37"/>
+          <polygon {edge_test_cross_layer_equalization_if_true} class="arrow-tip" points="23,7.5 23,-7.5 39,0"/>
         </g>
-        <text class="edge-label" {edge_test_cle_if_true}>
+        <text class="edge-label" {edge_test_cross_layer_equalization_if_true}>
           <tspan x="5" y="15">yes</tspan>
         </text>
       </g>

@@ -40,9 +40,11 @@
 """Temporary buffer file for adding new features to AutoQuant"""
 import copy
 import contextlib
+from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 import functools
 import itertools
+import string
 import os
 import sys
 import io
@@ -851,14 +853,23 @@ class _EvalManager:
         self._all_sessions.append(session)
         return session
 
+    HTML_TEMPLATE_FILE = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "auto_quant_diagnostics_template.html",
+    )
+    CSS_FILE = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "auto_quant_diagnostics_template.css",
+    )
+
     def export_diagnostics(self) -> str:
         """
         Export diagnostics in html format.
         :return: Diagnostics string in html format.
         """
-        loader = jinja2.FileSystemLoader(os.path.dirname(os.path.abspath(__file__)))
+        loader = jinja2.FileSystemLoader(os.path.dirname(self.HTML_TEMPLATE_FILE))
         env = jinja2.Environment(loader=loader)
-        template = env.get_template("auto_quant_diagnostics_template.html")
+        template = env.get_template(os.path.basename(self.HTML_TEMPLATE_FILE))
 
         if any(sess.diagnostics.contains_bokeh() for sess in self._all_sessions):
             from bokeh.resources import CDN
@@ -874,16 +885,34 @@ class _EvalManager:
 
         html = template.render(head=head, body=body)
 
-        result = {
-            sess.title_lowercase: sess.result for sess in self._all_sessions
-        }
-        kwargs = _build_flowchart_metadata(result)
-        css_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                     "auto_quant_diagnostics_template.css")
-        with open(css_file_path) as f:
-            css = f.read()
-        kwargs.update(css=css)
-        html = html.format(**kwargs)
+        result = OrderedDict()
+        result["ptq_techniques"] = OrderedDict()
+
+        for sess in self._all_sessions:
+            if isinstance(sess, _PtqSession):
+                result["ptq_techniques"][sess.title_lowercase] = sess.result
+            else:
+                result[sess.title_lowercase] = sess.result
+
+        metadata = _build_flowchart_metadata(result)
+        metadata.update(css=open(self.CSS_FILE).read())
+
+        class DefaultFormatter(string.Formatter):
+            """
+            Formatter that fill in the format string with empty string ('') if not specified.
+
+            For example:
+
+            >>> DefaultFormatter().format('{first} & {second}', second='something')
+            ' & something'
+            """
+            def get_value(self, key, args, kwargs):
+                try:
+                    return super().get_value(key, args, kwargs)
+                except KeyError:
+                    return ''
+
+        html = DefaultFormatter().format(html, **metadata)
 
         filename = os.path.join(self._results_dir, "diagnostics.html")
         with open(filename, "w") as f:
@@ -1149,160 +1178,105 @@ def _build_flowchart_metadata(result: Mapping) -> Dict: # pylint: disable=too-ma
     """
     Build flowchart metadata for the html template of summary report
 
-    :param result: Result of AutoQuant
+    :param result: Result of AutoQuant with the following format:
+
+        result := {
+            "prepare_model": _stage_result,
+            "quantscheme_selection": _stage_result,
+            "w32_evaluation": _stage_result,
+            "ptq_techniques" [
+                "batchnorm_folding": _stage_result,
+                "cross_layer_equalization": _stage_result,
+                "adaround": _stage_result,
+            ]
+
+        }
+
+        where _stage_result is a dictionary defined as below:
+
+        _stage_result := {
+            "status": str,
+            "error": Exception,
+            "target_satisfied": bool,
+            "effective": bool,
+        }
+
     :return: Dictionary that contains flowchart metadata for html template
     """
-    kwargs = dict(
+    metadata = defaultdict(str)
+    metadata.update(
         edge_prepare_model_in='data-visited="true"',
         node_prepare_model='data-visited="true"',
-        edge_prepare_model_out='',
-
-        node_quant_scheme_selection='',
-        edge_quant_scheme_selection_out='',
-
-        node_test_w32_eval_score='',
-        edge_test_w32_eval_score_if_false='',
-        edge_test_w32_eval_score_if_true='',
-
-        node_batchnorm_folding='',
-        edge_batchnorm_folding_out='',
-
-        node_test_batchnorm_folding='',
-        edge_test_batchnorm_folding_if_false='',
-        edge_test_batchnorm_folding_if_true='',
-
-        node_cle='',
-        edge_cle_out='',
-
-        node_test_cle='',
-        edge_test_cle_if_false='',
-        edge_test_cle_if_true='',
-
-        node_adaround='',
-        edge_adaround_out='',
-
-        node_test_adaround='',
-        edge_test_adaround_if_false='',
-        edge_test_adaround_if_true='',
-
-        node_result_success='',
-        node_result_fail='',
     )
 
     status = result['prepare_model']['status']
-    kwargs.update(
+    metadata.update(
         node_prepare_model=f'data-visited="true" data-stage-result="{status}"',
     )
 
     if status == 'error-failed':
-        return kwargs
+        return metadata
 
-    kwargs.update(
+    metadata.update(
         edge_prepare_model_out='data-visited="true"',
     )
 
     if "quantscheme_selection" in result:
         status = result['quantscheme_selection']['status']
-        kwargs.update(
+        metadata.update(
             node_quant_scheme_selection=f'data-visited="true" data-stage-result="{status}"',
         )
 
         if status == 'error-failed':
-            return kwargs
+            return metadata
 
-    kwargs.update(
+    metadata.update(
         edge_quant_scheme_selection_out='data-visited="true"',
         node_test_w32_eval_score='data-visited="true"',
     )
 
     if not result["w32_evaluation"]["target_satisfied"]:
-        kwargs.update(
+        metadata.update(
             edge_test_w32_eval_score_if_false='data-visited="true"',
             node_result_fail='data-visited="true"',
         )
-        return kwargs
+        return metadata
 
-    kwargs.update(
+    metadata.update(
         edge_test_w32_eval_score_if_true='data-visited="true"',
     )
 
-    status = result['batchnorm_folding']['status']
-    kwargs.update(
-        node_batchnorm_folding=f'data-visited="true" data-stage-result="{status}"',
-    )
 
-    if status == 'error-failed':
-        return kwargs
+    for ptq_name, ptq_result in result["ptq_techniques"].items():
+        status = ptq_result['status']
+        effective = ptq_result['effective']
+        if status == "success" and not effective:
+            status = "discarded"
+        metadata.update({
+            f"node_{ptq_name}": f'data-visited="true" data-stage-result="{status}"',
+        })
 
-    kwargs.update(
-        edge_batchnorm_folding_out='data-visited="true"',
-        node_test_batchnorm_folding='data-visited="true"',
-    )
+        if status == 'error-failed':
+            return metadata
 
-    if result['batchnorm_folding']['target_satisfied']:
-        kwargs.update(
-            edge_test_batchnorm_folding_if_true='data-visited="true"',
-            node_result_success='data-visited="true"',
-        )
-        return kwargs
+        metadata.update({
+            f'edge_{ptq_name}_out': 'data-visited="true"',
+            f'node_test_{ptq_name}': 'data-visited="true"',
+        })
 
-    kwargs.update(
-        edge_test_batchnorm_folding_if_false='data-visited="true"',
-    )
+        if ptq_result['target_satisfied']:
+            metadata.update({
+                f'edge_test_{ptq_name}_if_true': 'data-visited="true"',
+                'node_result_success': 'data-visited="true"',
+            })
+            return metadata
 
-    status = result['cross_layer_equalization']['status']
-    effective = result['cross_layer_equalization']['effective']
-    if status == "success" and not effective:
-        status = "discarded"
-    kwargs.update(
-        node_cle=f'data-visited="true" data-stage-result="{status}"',
-    )
+        metadata.update({
+            f'edge_test_{ptq_name}_if_false': 'data-visited="true"',
+        })
 
-    if status == 'error-failed':
-        return kwargs
-
-    kwargs.update(
-        edge_cle_out='data-visited="true"',
-        node_test_cle='data-visited="true"',
-    )
-
-    if result['cross_layer_equalization']['target_satisfied']:
-        kwargs.update(
-            edge_test_cle_if_true='data-visited="true"',
-            node_result_success='data-visited="true"',
-        )
-        return kwargs
-
-    kwargs.update(
-        edge_test_cle_if_false='data-visited="true"',
-    )
-
-    status = result['adaround']['status']
-    effective = result['adaround']['effective']
-    if status == "success" and not effective:
-        status = "discarded"
-    kwargs.update(
-        node_adaround=f'data-visited="true" data-stage-result="{status}"',
-    )
-
-    if status == 'error-failed':
-        return kwargs
-
-    kwargs.update(
-        edge_adaround_out='data-visited="true"',
-        node_test_adaround='data-visited="true"',
-    )
-
-    if result['adaround']['target_satisfied']:
-        kwargs.update(
-            edge_test_adaround_if_true='data-visited="true"',
-            node_result_success='data-visited="true"',
-        )
-        return kwargs
-
-    kwargs.update(
-        edge_test_adaround_if_false='data-visited="true"',
+    metadata.update(
         node_result_fail='data-visited="true"',
     )
 
-    return kwargs
+    return metadata
