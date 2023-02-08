@@ -50,7 +50,7 @@ from torch.utils.data import Dataset, DataLoader
 
 from aimet_torch import utils
 from aimet_torch.auto_quant import _AutoQuantV2 as AutoQuant
-from aimet_torch.adaround.adaround_weight import AdaroundParameters, Adaround
+from aimet_torch.adaround.adaround_weight import AdaroundParameters
 from aimet_torch.quantsim import QuantizationSimModel, OnnxExportApiArgs
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
 from aimet_torch.save_utils import SaveUtils
@@ -67,15 +67,18 @@ class Model(torch.nn.Module):
         self._conv_0 = torch.nn.Conv2d(in_channels=3, out_channels=3, kernel_size=(3, 3), padding=1)
         self._relu = torch.nn.ReLU()
 
+        # Test flags
         self.register_buffer("applied_bn_folding", torch.tensor(False, dtype=torch.bool), persistent=True)
         self.register_buffer("applied_cle", torch.tensor(False, dtype=torch.bool), persistent=True)
         self.register_buffer("applied_adaround", torch.tensor(False, dtype=torch.bool), persistent=True)
 
     def forward(self, x: torch.Tensor):
-        x = torch.where(self.applied_bn_folding, x, x)
-        x = torch.where(self.applied_cle, x, x)
-        x = torch.where(self.applied_adaround, x, x)
-        return self._relu(self._conv_0(x))
+        # Return the test flags along with the forward pass results so that the test flags
+        # don't get discarded when the model is converted to GraphModule by model preparer.
+        return self._relu(self._conv_0(x)),\
+               self.applied_bn_folding,\
+               self.applied_cle,\
+               self.applied_adaround
 
 
 class InvalidModel(Model):
@@ -310,13 +313,15 @@ class TestAutoQuant:
                 output_model, acc, encoding_path =\
                     auto_quant.apply(input_model,
                                      dummy_input_on_cpu=dummy_input.cpu(),
-                                     results_dir=results_dir)
+                                     results_dir=results_dir,
+                                     strict_validation=True)
             else:
                 output_model, acc, encoding_path =\
                     auto_quant.apply(input_model,
                                      dummy_input_on_cpu=dummy_input.cpu(),
                                      dummy_input_on_gpu=dummy_input.cuda(),
-                                     results_dir=results_dir)
+                                     results_dir=results_dir,
+                                     strict_validation=True)
 
             assert utils.get_device(output_model) == utils.get_device(input_model)
             assert_applied_techniques(
@@ -367,7 +372,46 @@ class TestAutoQuant:
         auto_quant = AutoQuant(0, unlabeled_data_loader, MagicMock())
         # If model is on cuda device, dummy input on gpu should be provided.
         with pytest.raises(ValueError):
-            auto_quant.apply(Model().cuda(), dummy_input.cpu())
+            auto_quant.apply(Model().cuda(), dummy_input.cpu(), strict_validation=True)
+
+    def test_auto_quant_fallback(
+        self, cpu_model, dummy_input, unlabeled_data_loader,
+    ):
+        def error_fn(*_, **__):
+            raise Exception
+
+        allowed_accuracy_drop = 0.0
+        bn_folded_acc, cle_acc, adaround_acc = .4, .5, .6
+        with patch_ptq_techniques(
+            bn_folded_acc, cle_acc, adaround_acc
+        ) as mocks:
+            auto_quant = AutoQuant(
+                allowed_accuracy_drop=allowed_accuracy_drop,
+                unlabeled_dataset_iterable=unlabeled_data_loader,
+                eval_callback=mocks.eval_callback,
+            )
+
+            with patch("aimet_torch.auto_quant_v2.fold_all_batch_norms", side_effect=error_fn):
+                # If batchnorm folding fails, should return Adaround results
+                _, acc, _ = auto_quant.apply(cpu_model, dummy_input, strict_validation=False)
+                assert acc == adaround_acc
+
+            with patch("aimet_torch.auto_quant_v2.equalize_model", side_effect=error_fn):
+                # If CLE fails, should return Adaround results
+                _, acc, _ = auto_quant.apply(cpu_model, dummy_input, strict_validation=False)
+                assert acc == adaround_acc
+
+            with patch("aimet_torch.auto_quant_v2.Adaround._apply_adaround", side_effect=error_fn):
+                # If adaround fails, should return CLE results
+                _, acc, _ = auto_quant.apply(cpu_model, dummy_input, strict_validation=False)
+                assert acc == cle_acc
+
+            with patch("aimet_torch.auto_quant_v2.fold_all_batch_norms", side_effect=error_fn),\
+                    patch("aimet_torch.auto_quant_v2.equalize_model", side_effect=error_fn),\
+                    patch("aimet_torch.auto_quant_v2.Adaround._apply_adaround", side_effect=error_fn):
+                # If everything fails, should raise an error
+                with pytest.raises(RuntimeError):
+                    auto_quant.apply(cpu_model, dummy_input, strict_validation=False)
 
     def test_auto_quant_early_exit(self, cpu_model, dummy_input, unlabeled_data_loader):
         allowed_accuracy_drop = 0.1
@@ -412,7 +456,8 @@ class TestAutoQuant:
                 ]
 
                 # No previously cached results
-                auto_quant.apply(cpu_model, dummy_input, results_dir=results_dir, cache_id=cache_id)
+                auto_quant.apply(cpu_model, dummy_input, results_dir=results_dir,
+                                 cache_id=cache_id, strict_validation=True)
 
                 for cache_file in cache_files:
                     assert os.path.exists(cache_file)
@@ -422,7 +467,8 @@ class TestAutoQuant:
                 assert mocks.apply_adaround.call_count == 1
 
                 # Load cached result
-                auto_quant.apply(cpu_model, dummy_input, results_dir=results_dir, cache_id=cache_id)
+                auto_quant.apply(cpu_model, dummy_input, results_dir=results_dir,
+                                 cache_id=cache_id, strict_validation=True)
 
                 # PTQ functions should not be called twice.
                 assert mocks.fold_all_batch_norms.call_count == 1

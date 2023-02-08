@@ -470,9 +470,11 @@ class _AutoQuantV2:
         :param strict_validation: Flag set to True by default. When False, AutoQuant will
             proceed with execution and try to handle errors internally if possible. This
             may produce unideal or unintuitive results.
+
+        :raises ValueError: If the model is on GPU but dummy_input_on_gpu is not specified.
+        :raises RuntimeError: If none of the PTQ techniques were finished successfully.
+
         :return: Tuple of  (best model, eval score, encoding path front).
-        :raises:
-            - ValueError if the model is on GPU and dummy_input_on_gpu is not specified.
         """
         result = self._apply_helper(self._auto_quant_main,
                                     fp32_model,
@@ -516,9 +518,11 @@ class _AutoQuantV2:
         :param strict_validation: Flag set to True by default. When False, AutoQuant will
             proceed with execution and try to handle errors internally if possible. This
             may produce unideal or unintuitive results.
+
+        :raises ValueError: If the model is on GPU but dummy_input_on_gpu is not specified.
+        :raises RuntimeError: If none of the PTQ techniques were finished successfully.
+
         :return: The best ptq result as a dictionary.
-        :raises:
-            - ValueError if the model is on GPU and dummy_input_on_gpu is not specified.
         """
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
@@ -600,7 +604,7 @@ class _AutoQuantV2:
                                                                                  eval_fn)
                 try:
                     ret = auto_quant_main_fn(fp32_model, target_acc, dummy_input,
-                                             eval_manager, results_dir)
+                                             eval_manager, results_dir, strict_validation)
                 finally:
                     self.default_quant_scheme = orig_quant_scheme
 
@@ -618,13 +622,14 @@ class _AutoQuantV2:
 
                 return ret
 
-    def _auto_quant_main(
+    def _auto_quant_main( # pylint: disable=broad-except, too-many-locals, too-many-branches
             self,
             fp32_model: torch.nn.Module,
             target_acc: float,
             dummy_input: Union[torch.Tensor, Tuple],
             eval_manager: "_EvalManager",
             results_dir: str = "/tmp",
+            strict_validation: bool = False,
     ) -> Dict[str, Any]:
         """
         Helper function of apply().
@@ -634,7 +639,13 @@ class _AutoQuantV2:
         :param dummy_input: Dummy input to the model.
             The device of dumyy_input should be same as that of model.
         :param eval_manager: _Evalmanager object.
+        :param strict_validation: Flag set to True by default. When False, AutoQuant will
+            proceed with execution and try to handle errors internally if possible. This
+            may produce unideal or unintuitive results.
         :param results_dir: Directory to save the results.
+
+        :raises RuntimeError: If none of the PTQ techniques were finished successfully.
+
         :return: The best ptq result as a dictionary.
         """
         with eval_manager.analysis_session(f"W32A{self.default_output_bw} Evaluation") as sess:
@@ -660,39 +671,65 @@ class _AutoQuantV2:
 
         # Batchnorm Folding
         with eval_manager.ptq_session("Batchnorm Folding") as sess:
-            model, folded_pairs = self._apply_batchnorm_folding(fp32_model, dummy_input)
-            for conv, bn in folded_pairs:
-                sess.diagnostics.add(f"{conv} was merged with {bn}.")
-            sess.set_ptq_result(model=model,
-                                applied_techniques=["batchnorm_folding"],
-                                export_kwargs=self._export_kwargs)
+            try:
+                model, folded_pairs = self._apply_batchnorm_folding(fp32_model, dummy_input)
+                for conv, bn in folded_pairs:
+                    sess.diagnostics.add(f"{conv} was merged with {bn}.")
+                sess.set_ptq_result(model=model,
+                                    applied_techniques=["batchnorm_folding"],
+                                    export_kwargs=self._export_kwargs)
+
+            except Exception:
+                if strict_validation:
+                    raise
 
         best_result = eval_manager.get_best_ptq_result()
-        if best_result.accuracy >= target_acc:
+        if best_result and best_result.accuracy >= target_acc:
             return best_result.as_dict()
 
         # Cross-Layer Equalization
         with eval_manager.ptq_session("Cross-Layer Equalization") as sess:
-            model = self._apply_cross_layer_equalization(fp32_model, dummy_input)
-            sess.set_ptq_result(model=model,
-                                applied_techniques=["cross_layer_equalization"],
-                                export_kwargs=self._export_kwargs)
+            try:
+                model = self._apply_cross_layer_equalization(fp32_model, dummy_input)
+                sess.set_ptq_result(model=model,
+                                    applied_techniques=["cross_layer_equalization"],
+                                    export_kwargs=self._export_kwargs)
+            except Exception:
+                if strict_validation:
+                    raise
 
         best_result = eval_manager.get_best_ptq_result()
-        if best_result.accuracy >= target_acc:
+        if best_result and best_result.accuracy >= target_acc:
             return best_result.as_dict()
+
+        if best_result is None:
+            model = fp32_model
+            applied_techniques = []
+        else:
+            model = best_result.load_model()
+            applied_techniques = best_result.applied_techniques
 
         # AdaRound
         with eval_manager.ptq_session("AdaRound") as sess:
-            model, encoding_path = self._apply_adaround(best_result.load_model(),
-                                                        dummy_input,
-                                                        results_dir)
-            sess.set_ptq_result(model=model,
-                                encoding_path=encoding_path,
-                                applied_techniques=[*best_result.applied_techniques, "adaround"],
-                                export_kwargs=self._export_kwargs)
+            try:
+                model, encoding_path = self._apply_adaround(model,
+                                                            dummy_input,
+                                                            results_dir)
+                sess.set_ptq_result(model=model,
+                                    encoding_path=encoding_path,
+                                    applied_techniques=[*applied_techniques, "adaround"],
+                                    export_kwargs=self._export_kwargs)
 
-        return eval_manager.get_best_ptq_result().as_dict()
+            except Exception:
+                if strict_validation:
+                    raise
+
+        best_result = eval_manager.get_best_ptq_result()
+        if best_result:
+            return best_result.as_dict()
+
+        raise RuntimeError("None of batchnorm folding, CLE, or Adaround "
+                           "has been finished successfully.")
 
 
 @dataclass
@@ -753,15 +790,16 @@ class _EvalManager:
         self._all_sessions: List[_EvalSession] = []
         self._ptq_sessions: List[_PtqSession] = []
 
-    def get_best_ptq_result(self) -> PtqResult:
+    def get_best_ptq_result(self) -> Optional[PtqResult]:
         """
         Get the results with the highest evaluation score among the ptq results evaluated so far.
         :return: The best evaluation result so far.
         """
-        if not self._ptq_sessions:
-            raise RuntimeError
+        ptq_results = [sess.ptq_result for sess in self._ptq_sessions
+                       if sess.ptq_result is not None]
+        if not ptq_results:
+            return None
 
-        ptq_results = [sess.ptq_result for sess in self._ptq_sessions]
         return max(ptq_results, key=lambda ptq_result: ptq_result.accuracy)
 
     def analysis_session(self, title: str) -> "_EvalSession":
@@ -910,10 +948,8 @@ class _PtqSession(_EvalSession):
         self._ptq_result = None
 
     @property
-    def ptq_result(self) -> PtqResult:
+    def ptq_result(self) -> Optional[PtqResult]:
         """Getter of self._ptq_result."""
-        if self._ptq_result is None:
-            raise RuntimeError("Attribute `_ptq_result` is not set.")
         return self._ptq_result
 
     def set_ptq_result(
@@ -1009,8 +1045,9 @@ class _PtqSession(_EvalSession):
         if exc_val is not None:
             return
 
-        _logger.info("Session finished: %s. (eval score: %f)",
-                     self._title, self.ptq_result.accuracy)
+        if self._ptq_result is not None:
+            _logger.info("Session finished: %s. (eval score: %f)",
+                         self._title, self._ptq_result.accuracy)
 
 
 @contextlib.contextmanager
