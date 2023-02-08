@@ -50,6 +50,7 @@ from packaging import version
 from tensorflow import keras
 
 from aimet_common.defs import QuantScheme
+from aimet_tensorflow.examples.test_models import keras_model
 from aimet_tensorflow.keras.cross_layer_equalization import equalize_model
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
@@ -803,5 +804,59 @@ def test_model_stays_valid_after_export_per_channel():
 
     if os.path.exists(tmp_config_file):
         os.remove(tmp_config_file)
+
+
+def test_load_encodings():
+    """ Test set and freeze parameter encodings functionality """
+    tf.compat.v1.reset_default_graph()
+
+    model = keras_model()
+
+    sim = QuantizationSimModel(model)
+    param_encodings = {'conv2d_1/kernel:0': [{'bitwidth': 4, 'is_symmetric': False,
+                                                           'max': 0.14584073424339294,
+                                                           'min': -0.12761062383651733,
+                                                           'offset': -7.0, 'scale': 0.01823008991777897}]}
+    activation_encodings = {"conv2d_1/Tanh:0": [
+        {
+            "bitwidth": 8,
+            "dtype": "int",
+            "is_symmetric": "False",
+            "max": 5.98828125,
+            "min": -7.78128125,
+            "offset": -144,
+            "scale": 0.05399828431372549
+        }
+    ]}
+
+    dummy_encodings = {"activation_encodings": activation_encodings,
+                       "param_encodings": param_encodings}
+
+    # export encodings to JSON file
+    encoding_file_path = os.path.join('./', 'dummy.encodings')
+    with open(encoding_file_path, 'w') as encoding_fp:
+        json.dump(dummy_encodings, encoding_fp, sort_keys=True, indent=4)
+
+    sim.load_encodings_to_sim(encoding_file_path='./dummy.encodings')
+
+    extracted_encoding = sim.get_encodings_dict()
+
+    # For param
+    expected_encoding = param_encodings['conv2d_1/kernel:0'][0]
+    actual_encoding   = extracted_encoding["param_encodings"]['conv2d_1/kernel:0'][0]
+    assert actual_encoding.get('min') == expected_encoding.get('min')
+    assert actual_encoding.get('max') == expected_encoding.get('max')
+
+    # For activation
+    expected_encoding = activation_encodings["conv2d_1/Tanh:0"][0]
+    actual_encoding   = extracted_encoding["activation_encodings"]["conv2d_1/Tanh:0"][0]
+    assert actual_encoding.get('min') == expected_encoding.get('min')
+    assert actual_encoding.get('max') == expected_encoding.get('max')
+
+
+    # Delete encodings JSON file
+    if os.path.exists("./dummy.encodings"):
+        os.remove("./dummy.encodings")
+
 
 test_model_stays_valid_after_export_per_tensor()
