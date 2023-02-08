@@ -300,11 +300,14 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
             "input_quantizers": [input_quantizer.get_config() for input_quantizer in self.input_quantizers],
             "output_quantizers": [output_quantizer.get_config() for output_quantizer in self.output_quantizers],
             "param_quantizers": [param_quantizer.get_config() for param_quantizer in self.param_quantizers],
-            "shadow_params": self._shadow_params,
+            "shadow_params": self._shadow_params, # maybe delete??
             "layer_to_wrap": {
                 'original_keras_layer_class': self._layer_to_wrap.__class__,
                 'config': self._layer_to_wrap.get_config(),
-            }
+                'inbound_nodes': self._layer_to_wrap.inbound_nodes,
+                'outbound_nodes': self._layer_to_wrap.outbound_nodes,
+                'input': self._layer_to_wrap.input,
+            },
         }
 
     @classmethod
@@ -312,7 +315,19 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         """ Override from_config """
         # Wrapped layer is noted here and built backwards starting from the quantizers. This is to ensure that the wrapped
         # layer is made only once and used by all the quantizers.
+        layer_to_wraps_inbound_nodes, layer_to_wraps_outbound_nodes = config['layer_to_wrap'].pop('inbound_nodes'), \
+            config['layer_to_wrap'].pop('outbound_nodes')
+        layer_to_wraps_input = config['layer_to_wrap'].pop('input')
+
+        # Rebuilding the layer to wrap. However, we cannot just build the layer by itself because it will not have the
+        # correct weight names. Therefore, we build the layer and then pass the original layers input to the layer.
         config['layer_to_wrap'] = config['layer_to_wrap']['original_keras_layer_class'].from_config(config['layer_to_wrap']['config'])
+        config['layer_to_wrap'](layer_to_wraps_input)
+
+        # The layer_to_wrap is built, but it does not have the correct inbound and outbound nodes. Therefore, we set them
+        # to the correct values. This is necessary for exporting of encodings.
+        config['layer_to_wrap']._inbound_nodes = layer_to_wraps_inbound_nodes # pylint: disable=protected-access
+        config['layer_to_wrap']._outbound_nodes = layer_to_wraps_outbound_nodes # pylint: disable=protected-access
 
         # Go through the configs for each quantizer and create the quantizer objects through their from_config methods
         # First, the quantizer configs are updated with the layer_to_wrap which was built in the line above.

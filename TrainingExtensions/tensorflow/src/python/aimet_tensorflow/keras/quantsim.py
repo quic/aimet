@@ -387,10 +387,14 @@ class QuantizationSimModel(tf.keras.Model):
         self._model_without_wrappers.save(model_path + '.h5', save_format='h5')
 
         custom_objects = custom_objects or {}
+        custom_objects['tf'] = tf
         custom_objects['QcQuantizeWrapper'] = QcQuantizeWrapper
+        custom_objects['QcQuantizableMultiHeadAttention'] = QcQuantizableMultiHeadAttention
 
         quantsim_model_config = self.model.get_config()
         quantsim_model_weights = self.model.get_weights()
+        quantsim_model_weight_names_to_weights = {w.name: w for w in self.model.weights}
+
         # Conversion of saved h5 model to pb model for consumption by SNPE/QNN]
         try:
             convert_h5_model_to_pb_model(f'{model_path}.h5', custom_objects=custom_objects)
@@ -398,8 +402,20 @@ class QuantizationSimModel(tf.keras.Model):
             _logger.error("Could not convert h5 to frozen pb. "
                           "Please call export() again with custom_objects defined.")
             raise
-
         self.model = tf.keras.Model.from_config(quantsim_model_config, custom_objects=custom_objects)
+
+        # Add weights that are not attached to layers. For example, non-trainable weights that are used for
+        # auto-quant.
+        if len(self.model.weights) != len(quantsim_model_weights):
+            model_weight_names = {w.name for w in self.model.weights}
+            missing_weights = set(quantsim_model_weight_names_to_weights.keys()) - model_weight_names
+
+            for weight in missing_weights:
+                if not quantsim_model_weight_names_to_weights[weight].trainable:
+                    self.model.add_weight(weight, quantsim_model_weight_names_to_weights[weight].shape,
+                                          quantsim_model_weight_names_to_weights[weight].dtype,
+                                          quantsim_model_weight_names_to_weights[weight].initializer)
+
         self.model.set_weights(quantsim_model_weights)
 
         encodings_dict = self.get_encodings_dict()
