@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -44,7 +44,7 @@ import numpy as np
 import aimet_common.libpymo as libpymo
 
 from aimet_common.cross_layer_equalization import ClsSetInfo
-from aimet_torch.cross_layer_equalization_python import ClsSet, CLSImpl, HBFImpl
+from aimet_torch.cle.impl import ClsSet, CLSImpl, HBFImpl
 
 
 class MOCLSImpl(CLSImpl):
