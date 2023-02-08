@@ -54,7 +54,6 @@ from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_
 from aimet_common.utils import AimetLogger
 from aimet_torch import transformer_utils, onnx_utils
 from aimet_torch import utils, elementwise_ops
-from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.examples.test_models import TwoLayerBidirectionalLSTMModel, SingleLayerRNNModel, \
     ModelWithTwoInputs, SimpleConditional, RoiModel, InputOutputDictModel
 from aimet_torch.meta.connectedgraph import ConnectedGraph
@@ -62,7 +61,8 @@ from aimet_torch.onnx_utils import OnnxExportApiArgs
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, \
     StaticGridQuantWrapper, QcQuantizeOpMode, LearnedGridQuantWrapper
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
-from aimet_torch.quantsim import QuantizationSimModel, check_accumulator_overflow, load_encodings_to_sim
+from aimet_torch.quantsim import QuantizationSimModel, check_accumulator_overflow, load_encodings_to_sim, \
+    has_valid_encodings
 from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
@@ -2258,6 +2258,34 @@ class TestQuantizationSimStaticGrad:
 
         assert sim.model.add.input_quantizers[0].encoding is not None
         assert sim.model.add.input_quantizers[1].encoding is not None
+
+    def test_has_valid_encodings(self):
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super(Model, self).__init__()
+                self.relu1 = torch.nn.ReLU()
+                self.conv = torch.nn.Conv2d(3, 8, (2, 2))
+                self.relu2 = torch.nn.ReLU()
+                self.unused_module = torch.nn.PReLU()
+
+            def forward(self, *inputs):
+                x = self.relu1(inputs[0])
+                x = self.conv(x)
+                x = self.relu2(x)
+                return x
+
+        model = Model()
+        model.eval()
+        qsim = QuantizationSimModel(model, dummy_input=torch.randn(1, 3, 8, 8))
+        modules = [qsim.model.relu1, qsim.model.conv, qsim.model.relu2, qsim.model.unused_module]
+        for m in modules:
+            assert not has_valid_encodings(m)
+        qsim.compute_encodings(lambda m, _: m(torch.randn(1, 3, 8, 8)), None)
+        for m in modules:
+            if m == qsim.model.unused_module:
+                assert not has_valid_encodings(m)
+            else:
+                assert has_valid_encodings(m)
 
 
 class TestQuantizationSimLearnedGrid:
