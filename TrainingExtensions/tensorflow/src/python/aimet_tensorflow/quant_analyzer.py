@@ -541,7 +541,8 @@ class QuantAnalyzer:
         create_and_export_min_max_ranges_plot(min_max_range_for_activations_dict,
                                               min_max_ranges_dir,
                                               title="activations")
-
+        save_json(min_max_range_for_weights_dict, min_max_ranges_dir, title="weights.json")
+        save_json(min_max_range_for_activations_dict, min_max_ranges_dir, title="activations.json")
         _logger.info("Exported per layer encoding min-max ranges.")
         return min_max_range_for_weights_dict, min_max_range_for_activations_dict
 
