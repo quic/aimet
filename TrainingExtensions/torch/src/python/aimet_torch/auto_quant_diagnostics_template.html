@@ -7,7 +7,7 @@
     </style>
   </head>
   <body>
-    <svg  xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600">
+    <svg  xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600">
       <g transform="translate(128 20) rotate(90)">
         <path {edge_prepare_model_in} stroke-linecap="square" d="M0 0 h35"/>
         <polygon {edge_prepare_model_in} class="arrow-tip" points="24,7.5 24,-7.5 40,0"/>
@@ -26,7 +26,7 @@
       </g>
 
       <g transform="translate(60 150)">
-        <rect data-visited="true" data-stage-result="success" />
+        <rect {node_quant_scheme_selection} />
         <text class="node-label" lengthAdjust="spacing" textLength= "130" >
           <tspan x="5" y="25">QuantScheme Selection</tspan>
         </text>
@@ -198,6 +198,67 @@
           <tspan x="5" y="25">Target accuracy achieved</tspan>
         </text>
       </g>
+
+      <!---------------------- Legend ---------------------->
+
+      <g transform="translate(560 0)">
+        <rect {node_result_success} class="legend" />
+        <text class="legend-title" >
+          <tspan x="40" y="25">Legend</tspan>
+        </text>
+
+        <g transform="translate(10 40)">
+          <rect class="legend-item" />
+          <text class="legend-label">
+            <tspan x="23" y="8">: not visited</tspan>
+          </text>
+        </g>
+
+        <g transform="translate(10 55)">
+          <rect class="legend-item" data-visited="true" data-stage-result="success" />
+          <text class="legend-label">
+            <tspan x="23" y="8">: applied successfully </tspan>
+          </text>
+        </g>
+
+        <g transform="translate(10 70)">
+          <rect class="legend-item" data-visited="true" data-stage-result="discarded" />
+          <text class="legend-label">
+            <tspan x="23" y="8">: discarded </tspan>
+          </text>
+        </g>
+
+        <g transform="translate(10 85)">
+          <rect class="legend-item" data-visited="true" data-stage-result="error-failed" />
+          <text class="legend-label">
+            <tspan x="23" y="8">: failed with error </tspan>
+          </text>
+        </g>
+
+        <g transform="translate(10 100)">
+          <rect class="legend-item" data-visited="true" data-stage-result="error-ignored" />
+          <text class="legend-label">
+            <tspan x="23" y="8">: error ignored </tspan>
+          </text>
+        </g>
+
+        <g transform="translate(10 120)">
+          <path stroke-linecap="square" d="M0 0 h15" />
+          <polygon class="arrow-tip" points="15,3 15,-3 20,0" />
+          <text class="legend-label">
+            <tspan x="23" y="3">: not visited </tspan>
+          </text>
+        </g>
+
+        <g transform="translate(10 135)">
+          <path stroke-linecap="square" d="M0 0 h15" data-visited="true"/>
+          <polygon class="arrow-tip" points="15,3 15,-3 20,0" data-visited="true"/>
+          <text class="legend-label">
+            <tspan x="23" y="3">: visited </tspan>
+          </text>
+        </g>
+      </g>
+      <!-------------------- Legend End -------------------->
 
     </svg>
 

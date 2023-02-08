@@ -6,24 +6,24 @@ text.node-label {
 }
 text.edge-label {
     font-size: 12px;
-    fill: #D5D8DC;
+    fill: #D5D8DC; /* light grey */
 }
 rect {
     width: 140px;
     height: 40px;
     fill: #FFFFFF;
-    stroke: #D5D8DC;
+    stroke: #D5D8DC; /* light grey */
 }
 polygon.diamond {
     fill: #FFFFFF;
-    stroke: #D5D8DC;
+    stroke: #D5D8DC; /* light grey */
 }
 path {
-    stroke: #D5D8DC;
+    stroke: #D5D8DC; /* light grey */
 }
 polygon.arrow-tip {
-    stroke: #D5D8DC;
-    fill: #D5D8DC;
+    stroke: #D5D8DC; /* light grey */
+    fill: #D5D8DC; /* light grey */
 }
 
 [data-visited="true"] {
@@ -41,7 +41,7 @@ text.edge-label[data-visited="true"] {
 }
 
 rect[data-stage-result="discarded"] {
-    fill: #CECECE;
+    fill: #CECECE; /* grey */
 }
 rect[data-stage-result="success"] {
     fill: #2ECC71; /* green */
@@ -50,11 +50,26 @@ rect[data-stage-result="error-ignored"] {
     fill: #F9FF3B; /* yellow */
 }
 rect[data-stage-result="error-failed"] {
-    fill: #F94D4D;
+    fill: #F94D4D; /* red */
 }
 rect.result-success[data-visited="true"] {
     fill: #2ECC71; /* green */
 }
 rect.result-fail[data-visited="true"] {
     fill: #F94D4D; /* red */
+}
+
+rect.legend {
+    width: 135px;
+    height: 150px;
+    fill: #FFFFFF;
+    stroke: #000000;
+}
+
+rect.legend-item {
+    width: 20px;
+    height: 10px;
+}
+text.legend-label {
+    font-size: 10px;
 }
