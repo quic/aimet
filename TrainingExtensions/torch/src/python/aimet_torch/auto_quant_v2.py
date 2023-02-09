@@ -147,7 +147,7 @@ def _choose_default_quant_scheme(param_bw: int,
     return max(candidates, key=eval_fn)
 
 
-class _AutoQuantV2:
+class _AutoQuantV2: # pylint: disable=too-many-instance-attributes
     """
     Integrate and apply post-training quantization techniques.
 
@@ -241,7 +241,11 @@ class _AutoQuantV2:
                                                   len(unlabeled_dataset_iterable))
         self._export_kwargs = dict(
             onnx_export_args=OnnxExportApiArgs(),
-            propagate_encodings=False
+            propagate_encodings=False,
+        )
+        self._model_preparer_kwargs = dict(
+            modules_to_exclude=None,
+            concrete_args=None,
         )
 
     def _evaluate_model_performance(self, model) -> float:
@@ -278,6 +282,23 @@ class _AutoQuantV2:
             self._export_kwargs.update(onnx_export_args=onnx_export_args)
         if propagate_encodings is not None:
             self._export_kwargs.update(propagate_encodings=propagate_encodings)
+
+    def set_model_preparer_params(
+            self,
+            modules_to_exclude: List[torch.nn.Module] = None,
+            concrete_args: Optional[Dict[str, Any]] = None,
+    ):
+        """
+        Set parameters for model preparer.
+
+        :param modules_to_exclude: List of modules to exclude when tracing.
+        :param concrete_args: Parameter for model preparer. Allows you to partially specialize
+            your function, whether it's to remove control flow or data structures. If the
+            model has control flow, torch.fx won't be able to trace the model. Check
+            torch.fx.symbolic_trace API in detail.
+        """
+        self._model_preparer_kwargs["modules_to_exclude"] = copy.copy(modules_to_exclude)
+        self._model_preparer_kwargs["concrete_args"] = copy.copy(concrete_args)
 
     def _create_quantsim_and_encodings( # pylint: disable=too-many-arguments, too-many-locals
             self,
@@ -316,6 +337,9 @@ class _AutoQuantV2:
 
         if default_param_bw is not None:
             assert default_param_bw <= 32
+
+        if output_quant_scheme is None or param_quant_scheme is None:
+            assert self.default_quant_scheme is not None
 
         kwargs = dict(
             rounding_mode=(rounding_mode or self.default_rounding_mode),
@@ -449,7 +473,6 @@ class _AutoQuantV2:
             dummy_input_on_gpu: Optional[Union[torch.Tensor, Tuple]] = None,
             results_dir: str = "/tmp",
             cache_id: str = None,
-            concrete_args: Dict[str, Any] = None,
             strict_validation: bool = False,
     ) -> Tuple[torch.nn.Module, float, str]:
         """
@@ -463,10 +486,6 @@ class _AutoQuantV2:
         :param cache_id: A string that composes a cache id in combination with results_dir.
             If specified, AutoQuant will load/save the PTQ results from/to the file system
             if previous PTQ results produced under the same results_dir and cache_id exist,
-        :param concrete_args: Parameter for model preparer. Allows you to partially specialize
-            your function, whether it's to remove control flow or data structures. If the
-            model has control flow, torch.fx won't be able to trace the model. Check
-            torch.fx.symbolic_trace API in detail.
         :param strict_validation: Flag set to True by default. When False, AutoQuant will
             proceed with execution and try to handle errors internally if possible. This
             may produce unideal or unintuitive results.
@@ -482,13 +501,12 @@ class _AutoQuantV2:
                                     dummy_input_on_gpu,
                                     results_dir,
                                     cache_id,
-                                    concrete_args,
-                                    strict_validation)
+                                    strict_validation=strict_validation)
         return result["model"],\
                result["accuracy"],\
                result["encoding_path"]
 
-    def _apply_helper( # pylint: disable=too-many-arguments, too-many-locals, too-many-branches
+    def _apply_helper( # pylint: disable=too-many-arguments, too-many-locals, too-many-branches, unused-argument
             self,
             auto_quant_main_fn: Callable,
             fp32_model: torch.nn.Module,
@@ -542,11 +560,10 @@ class _AutoQuantV2:
             cache_dir = os.path.join(results_dir, ".auto_quant_cache", cache_id)
 
         try:
-            fp32_model = prepare_model(fp32_model, concrete_args=concrete_args)
+            fp32_model = prepare_model(fp32_model, **self._model_preparer_kwargs)
         except Exception as e: # pylint: disable=broad-except
             if strict_validation:
                 raise
-            # TODO: Add warning to summary
             _logger.warning(
                 "Model preparation has failed."
                 " Falling back to the original model (Reason: %s)", str(e)
@@ -554,7 +571,6 @@ class _AutoQuantV2:
 
 
         if ModelValidator.validate_model(fp32_model, dummy_input):
-            # TODO: Add warning to summary
             _logger.info(
                 "Model validation has succeeded. Proceeding to AutoQuant algorithm."
             )
@@ -564,7 +580,6 @@ class _AutoQuantV2:
                     "Model validation has failed."
                     " Please make the necessary changes to the model and run again."
                 )
-            # TODO: Add warning to summary
             _logger.warning(
                 "Model validation has failed. Proceeding to AutoQuant algorithm regardless."
             )
