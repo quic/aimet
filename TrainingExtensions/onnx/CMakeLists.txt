@@ -48,22 +48,12 @@ add_library(OnnxCppOps SHARED
         src/QcQuantizeInfo.h
         src/QcQuantizeOp.cpp)
 
-set(ONNXRUNTIME_VER "1.13.1" CACHE STRING "ONNX Runtime version")
-set(ONNXRUNTIME_URL "v${ONNXRUNTIME_VER}/onnxruntime-linux-x64-${ONNXRUNTIME_VER}.tgz")
 
-FetchContent_Declare(
-        onnxruntime
-        URL https://github.com/microsoft/onnxruntime/releases/download/${ONNXRUNTIME_URL}
-)
-
-FetchContent_makeAvailable(onnxruntime)
-set(ONNXRUNTIME_INCLUDE_DIR ${onnxruntime_SOURCE_DIR}/include)
-set(ONNXRUNTIME_LIB_DIR ${onnxruntime_SOURCE_DIR}/lib)
+find_path(ONNXRUNTIME_INC "onnxruntime_cxx_api.h" PATH_SUFFIXES "include" NO_DEFAULT_PATH HINTS "/usr/local/bin/onnxruntime_headers")
 
 
 target_include_directories(OnnxCppOps PRIVATE
-        ${ONNXRUNTIME_INCLUDE_DIR}
-        ${ONNXRUNTIME_LIB_DIR}
+        ${ONNXRUNTIME_INC}
         ${CMAKE_CURRENT_SOURCE_DIR}/../common/include
         )
 

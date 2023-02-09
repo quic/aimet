@@ -35,7 +35,28 @@
 //  @@-COPYRIGHT-END-@@
 //
 //==============================================================================
-
+// MIT License
+//
+// Copyright (c) Microsoft Corporation
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+//==============================================================================
 
 #include "QcQuantizeOp.h"
 #include "AimetOpUtils.h"
@@ -47,6 +68,8 @@
 
 static const char* c_OpDomain = "aimet.customop";
 
+// Code reuse from onnxruntime start:
+// Source: https://github.com/microsoft/onnxruntime/blob/861125ccbc0853b2761bbc268841342550a4ff58/onnxruntime/test/testdata/custom_op_library/custom_op_library.cc#L19-L46
 
 struct OrtTensorDimensions : std::vector<int64_t>
 {
@@ -57,6 +80,39 @@ struct OrtTensorDimensions : std::vector<int64_t>
         ort.ReleaseTensorTypeAndShapeInfo(info);
     }
 };
+
+
+struct OrtCustomOpDomainDeleter
+{
+    explicit OrtCustomOpDomainDeleter(const OrtApi* ort_api)
+    {
+        ort_api_ = ort_api;
+    }
+    void operator()(OrtCustomOpDomain* domain) const
+    {
+        ort_api_->ReleaseCustomOpDomain(domain);
+    }
+
+    const OrtApi* ort_api_;
+};
+
+
+using OrtCustomOpDomainUniquePtr = std::unique_ptr<OrtCustomOpDomain, OrtCustomOpDomainDeleter>;
+static std::vector<OrtCustomOpDomainUniquePtr> ort_custom_op_domain_container;
+static std::mutex ort_custom_op_domain_mutex;
+
+
+static void AddOrtCustomOpDomainToContainer(OrtCustomOpDomain* domain, const OrtApi* ort_api)
+{
+    std::lock_guard<std::mutex> lock(ort_custom_op_domain_mutex);
+    auto ptr = std::unique_ptr<OrtCustomOpDomain, OrtCustomOpDomainDeleter>(domain, OrtCustomOpDomainDeleter(ort_api));
+    ort_custom_op_domain_container.push_back(std::move(ptr));
+}
+
+
+static const QcQuantizeOp c_QcQuantizeOp;
+
+// Code reuse from onnxruntime end
 
 
 QcQuantizeKernel::QcQuantizeKernel(const OrtApi* api, const OrtKernelInfo* info) : api_(*api), info_(info)
@@ -131,35 +187,6 @@ ONNXTensorElementDataType QcQuantizeOp::GetOutputType(size_t /*index*/)
 };
 
 
-struct OrtCustomOpDomainDeleter
-{
-    explicit OrtCustomOpDomainDeleter(const OrtApi* ort_api)
-    {
-        ort_api_ = ort_api;
-    }
-    void operator()(OrtCustomOpDomain* domain) const
-    {
-        ort_api_->ReleaseCustomOpDomain(domain);
-    }
-
-    const OrtApi* ort_api_;
-};
-
-
-using OrtCustomOpDomainUniquePtr = std::unique_ptr<OrtCustomOpDomain, OrtCustomOpDomainDeleter>;
-static std::vector<OrtCustomOpDomainUniquePtr> ort_custom_op_domain_container;
-static std::mutex ort_custom_op_domain_mutex;
-
-
-static void AddOrtCustomOpDomainToContainer(OrtCustomOpDomain* domain, const OrtApi* ort_api)
-{
-    std::lock_guard<std::mutex> lock(ort_custom_op_domain_mutex);
-    auto ptr = std::unique_ptr<OrtCustomOpDomain, OrtCustomOpDomainDeleter>(domain, OrtCustomOpDomainDeleter(ort_api));
-    ort_custom_op_domain_container.push_back(std::move(ptr));
-}
-
-
-static const QcQuantizeOp c_QcQuantizeOp;
 
 
 OrtStatus* ORT_API_CALL RegisterCustomOps(OrtSessionOptions* options, const OrtApiBase* api)
