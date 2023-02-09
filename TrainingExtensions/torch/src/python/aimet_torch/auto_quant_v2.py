@@ -45,6 +45,7 @@ from dataclasses import dataclass
 import functools
 import itertools
 import string
+import traceback
 import os
 import sys
 import io
@@ -998,6 +999,25 @@ class _EvalSession: # pylint: disable=too-many-instance-attributes
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._spinner.__exit__(exc_type, exc_val, exc_tb)
+
+        if exc_val:
+            buffer = io.StringIO()
+            traceback.print_exception(exc_type, exc_val, exc_tb, file=buffer)
+
+            if self._strict_validation:
+                self._log.write(buffer.getvalue())
+            else:
+                self._log.write(
+                    "################################################################\n"
+                    "################################################################\n"
+                    "################################################################\n"
+                    "WARNING: The following exception was raised but ignored:\n\n"
+                    f"{buffer.getvalue()}"
+                    "################################################################\n"
+                    "################################################################\n"
+                    "################################################################\n"
+                )
+
         self._stdout_redirect.stop()
         self.diagnostics.add(self._log.getvalue())
 
@@ -1009,7 +1029,8 @@ class _EvalSession: # pylint: disable=too-many-instance-attributes
         else:
             self.result["status"] = "error-ignored"
 
-        if not self._strict_validation:
+        if exc_val and not self._strict_validation:
+            # Return True so that the error doesn't propagate further
             return True
         return None
 
