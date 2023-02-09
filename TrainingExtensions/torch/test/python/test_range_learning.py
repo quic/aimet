@@ -1,9 +1,9 @@
-# /usr/bin/env python3.6
+# /usr/bin/env python3.8
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -35,7 +35,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
+import pytest
 import torch
 
 from aimet_common.defs import QuantScheme, QuantizationDataType
@@ -107,7 +107,8 @@ class TestRangeLearning:
 
         return get_detached_grad(encoding_min), get_detached_grad(encoding_max), y.detach()
 
-    def test_asymmetric_quantizer(self):
+    @pytest.mark.parametrize("encoding_min, encoding_max", [(-5, 0), (-5, 5), (0, 5)])
+    def test_asymmetric_quantizer(self, encoding_min, encoding_max):
         """
         check if it has identical gradient compared to autograd function
         """
@@ -121,13 +122,12 @@ class TestRangeLearning:
         tensor_quantizer.use_unsigned_symmetric = True
         auto_quantizer = RangeLearningAsymAutograd(bitwidth=8)
 
-        init_encoding_min = -5
-        init_encoding_max = 5
         aimet_grad_min, aimet_grad_max, aimet_xq = self.get_gradients(
-                tensor_quantizer.quantize_dequantize, init_encoding_min, init_encoding_max)
+                tensor_quantizer.quantize_dequantize, encoding_min, encoding_max)
         auto_grad_min, auto_grad_max, auto_xq = self.get_gradients(
-                auto_quantizer.forward, init_encoding_min, init_encoding_max)
+                auto_quantizer.forward, encoding_min, encoding_max)
 
+        assert torch.allclose(aimet_xq, auto_xq)
         assert torch.allclose(aimet_grad_min, auto_grad_min)
         assert torch.allclose(aimet_grad_max, auto_grad_max)
 
@@ -150,6 +150,7 @@ class TestRangeLearning:
         auto_grad_min, auto_grad_max, auto_xq = self.get_gradients(
                 auto_quantizer.forward, init_encoding_min, init_encoding_max)
 
+        assert torch.allclose(aimet_xq, auto_xq)
         assert torch.allclose(aimet_grad_min, -auto_grad_max)
         assert torch.allclose(aimet_grad_max, auto_grad_max)
 
@@ -172,5 +173,6 @@ class TestRangeLearning:
         auto_grad_min, auto_grad_max, auto_xq = self.get_gradients(
                 auto_quantizer.forward, init_encoding_min, init_encoding_max)
 
+        assert torch.allclose(aimet_xq, auto_xq)
         assert torch.allclose(aimet_grad_min, auto_grad_min)
         assert torch.allclose(aimet_grad_max, auto_grad_max)
