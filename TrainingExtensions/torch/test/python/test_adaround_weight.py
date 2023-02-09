@@ -132,6 +132,7 @@ class MultiDataLoaders:
     def __init__(self, data_loader1, data_loader2):
         self._dl1 = data_loader1
         self._dl2 = data_loader2
+        self.batch_size = self._dl1.batch_size
 
     def __len__(self):
         return len(self._dl1) + len(self._dl2)
