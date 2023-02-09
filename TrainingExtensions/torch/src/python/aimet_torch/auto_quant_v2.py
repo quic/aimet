@@ -910,7 +910,7 @@ class _EvalManager:
             def get_value(self, key, args, kwargs):
                 try:
                     return super().get_value(key, args, kwargs)
-                except KeyError:
+                except (KeyError, IndexError):
                     return ''
 
         html = DefaultFormatter().format(html, **metadata)
