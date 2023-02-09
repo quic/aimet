@@ -88,9 +88,6 @@ MAP_PYMO_TO_ROUND_MODE = {libpymo.RoundingMode.ROUND_NEAREST: 'nearest',
 
 SUPPORTED_KERNELS_ACTION = SupportedKernelsAction.warn_on_error
 
-DROPOUT_TYPES = (torch.nn.Dropout, torch.nn.Dropout2d, torch.nn.Dropout3d)
-
-
 def _get_encoding_by_quantizer(quantizer: Union[StaticGridTensorQuantizer, LearnedGridTensorQuantizer]) \
         -> Optional[Union[libpymo.TfEncoding, List[libpymo.TfEncoding]]]:
     """
@@ -394,9 +391,7 @@ class QuantizationSimModel:
         model_path = os.path.join(path, model_filename)
 
         # Create a version of the model without any quantization ops
-        model_to_export = copy.deepcopy(self.model).cpu()
-        all_modules_in_model_to_export = [module for module in model_to_export.modules()]
-        self._remove_quantization_wrappers(model_to_export, all_modules_in_model_to_export)
+        model_to_export = QuantizationSimModel.get_original_model(self.model)
 
         torch.save(model_to_export, model_path)
 
@@ -430,7 +425,7 @@ class QuantizationSimModel:
                                                 dummy_input: Union[torch.Tensor, Tuple],
                                                 excluded_layer_names: List = None):
         """
-        This method exports  a onnx mode and the corresponding encodings
+        This method exports a torchscript mode and the corresponding encodings
 
         :param path: path where to store model pth and encodings
         :param filename_prefix: Prefix to use for filenames of the model pth and encodings files
@@ -440,12 +435,11 @@ class QuantizationSimModel:
         :param excluded_layer_names: List of names of layers that have been excluded from quantization.
         :return: None
         """
+        # Create torchscript model and obtain node to i/o tensor name map
+        ts_path = os.path.join(path, filename_prefix + '.torchscript.pth')
         with utils.in_eval_mode(original_model), torch.no_grad():
-            trace = torch.jit.trace(original_model, dummy_input)
-            ts_path = os.path.join(path, filename_prefix + '.torchscript.pth')
-            trace.save(ts_path)
+            torchscript_utils.create_torch_script_model(ts_path, original_model, dummy_input)
 
-            # reload the trace from the saved trace file
             trace = torch.jit.load(ts_path)
             torch_script_node_io_tensor_map, valid_param_set = \
                 torchscript_utils.get_node_to_io_tensor_names_map(original_model, trace, dummy_input)
@@ -481,16 +475,10 @@ class QuantizationSimModel:
 
         """
         # pylint: disable=too-many-locals
-        if module_marker_map is None:
-            module_marker_map = {}
-        # Save model to onnx
+        # Create onnx model and obtain node to i/o tensor name map
         onnx_path = os.path.join(path, filename_prefix + '.onnx')
-
-        for dropout_type in DROPOUT_TYPES:
-            utils.replace_modules_of_type1_with_type2(original_model, dropout_type, torch.nn.Identity)
-
-        OnnxSaver.set_node_names(onnx_path, original_model, dummy_input, is_conditional, module_marker_map,
-                                 onnx_export_args)
+        OnnxSaver.create_onnx_model_with_pytorch_layer_names(onnx_path, original_model, dummy_input, is_conditional,
+                                                             module_marker_map, onnx_export_args)
 
         onnx_model = onnx.load(onnx_path)
         onnx_node_to_io_tensor_map, valid_param_set = OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
@@ -745,7 +733,7 @@ class QuantizationSimModel:
             # TODO: specifically call out dropout layers here since they are specifically switched out during export.
             # These ops should eventually be reworked as part of math invariant ops to ignore quantization altogether.
             # pylint: disable=protected-access
-            if isinstance(layer, QcQuantizeWrapper) and isinstance(layer._module_to_wrap, DROPOUT_TYPES):
+            if isinstance(layer, QcQuantizeWrapper) and isinstance(layer._module_to_wrap, utils.DROPOUT_TYPES):
                 continue
 
             if layer_name not in layers_in_io_tensor:
@@ -1245,6 +1233,17 @@ class QuantizationSimModel:
             if not utils.is_leaf_module(module_ref):
                 cls._remove_quantization_wrappers(module_ref, list_of_modules_to_exclude)
 
+    @staticmethod
+    def get_original_model(model: torch.nn.Module):
+        """
+        This function returns the model with all quantization wrappers removed.
+        :return: Model without quantization wrappers.
+        """
+        original_model = copy.deepcopy(model)
+        all_modules_in_original_model = [module for module in original_model.modules()]
+        QuantizationSimModel._remove_quantization_wrappers(original_model, all_modules_in_original_model)
+        return original_model
+
     def _add_inputs_hook(self, hooks):
         module_to_name_map = {}
         for name, module in self.model.named_modules():
@@ -1568,7 +1567,6 @@ class QuantizationSimModel:
         else:
             _validate_torchquantizer(quant_sim_model)
             OnnxSaver._export_model_to_onnx(quant_sim_model, dummy_input, model_path, is_conditional, onnx_export_args) # pylint: disable=protected-access
-
 
 
 def save_checkpoint(quant_sim_model: QuantizationSimModel, file_path: str):

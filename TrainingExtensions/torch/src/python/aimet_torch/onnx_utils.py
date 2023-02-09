@@ -61,7 +61,6 @@ from aimet_torch.defs import OpToIOTensors
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
-
 # runs the second pass of markers for non-leaf torch module and updates names of onnx ops belonging to
 # non-leaf pytorch module
 update_all_onnx_nodes_name = True
@@ -318,6 +317,30 @@ class OnnxSaver:
     """
 
     @classmethod
+    def create_onnx_model_with_pytorch_layer_names(cls, onnx_model_path: str, pytorch_model: torch.nn.Module,
+                                                   dummy_input: Union[torch.Tensor, Tuple, List], is_conditional=False,
+                                                   module_marker_map=None, onnx_export_args: Optional[Union[OnnxExportApiArgs, dict]] = None):
+        """
+        This utility does some pre-processing on the pytorch model and then uses it to obtain an equivalent onnx model
+        with node names same as that in pytorch model. Whatever pre-processing/post-processing steps to be done on
+        the resultant onnx model must be done here.
+
+        :param onnx_model_path: Path to the ONNX model file
+        :param pytorch_model: Equivalent PyTorch model instance
+        :param dummy_input: Dummy input to the model. Used to parse model graph.
+        :param is_conditional: True if model is a conditional model, False otherwise
+        :param module_marker_map: Maps module names to traced custom markers (only used for conditional models)
+        :param onnx_export_args:  override options for torch.onnx.export call
+        :return:
+        """
+        # Pre-processing pytorch model
+        for dropout_type in aimet_torch.utils.DROPOUT_TYPES:
+            aimet_torch.utils.replace_modules_of_type1_with_type2(pytorch_model, dropout_type, torch.nn.Identity)
+
+        # Obtaining equivalent onnx model
+        cls.set_node_names(onnx_model_path, pytorch_model, dummy_input, is_conditional, module_marker_map, onnx_export_args)
+
+    @classmethod
     def set_node_names(cls, onnx_model_path: str, pytorch_model: torch.nn.Module,
                        dummy_input: Union[torch.Tensor, Tuple], is_conditional=False, module_marker_map=None,
                        onnx_export_args: Optional[Union[OnnxExportApiArgs, dict]] = None):
@@ -496,7 +519,6 @@ class OnnxSaver:
 
         cls._fix_param_names(onnx_model)
         cls._fix_initializer_names(onnx_model, pt_model)
-
 
         return onnx_model
 
