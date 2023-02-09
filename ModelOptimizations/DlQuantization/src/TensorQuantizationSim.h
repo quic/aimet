@@ -89,9 +89,16 @@ public:
     void dequantizePerChannelTensor(const uint8_t* inputTensorData, const std::vector<uint32_t> &inputShape, uint32_t axis,
                                     DTYPE* outputTensorData, uint8_t bw, const std::vector<TfEncoding> &encodings, bool shiftToSigned) override;
 
-    void fillQuantizeInfo(TfEncoding& encoding, DlQuantization::ComputationMode& cpuGpuMode, uint8_t bw,
-                          double encodingMin, double encodingMax, bool use_cuda)
-                          override;
+    void fillEncodingInfo(TfEncoding& encoding, uint8_t bw, double encodingMin, double encodingMax) override;
+
+    void generateScaleOffset(double &encodingMin, double &encodingMax, uint8_t bw, double &encodingScale,
+                             double &encodingOffset);
+
+    inline DlQuantization::ComputationMode getComputationMode(bool use_cuda)
+    {
+        return (use_cuda ? DlQuantization::ComputationMode::COMP_MODE_GPU
+                         : DlQuantization::ComputationMode::COMP_MODE_CPU);
+    }
 
     ~TensorQuantizationSim() = default;
 };
