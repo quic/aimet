@@ -105,9 +105,9 @@ protected:
 
 template <typename D, typename T>
 void modeSpecificActionInt(const D& d, const T* inTensor, size_t count, T* outTensor,
-                        const uint64* tensorQuantizerRef, const int32* opMode,
-                        const double* min, const double* max, const int8* bw,
-                        const bool* useSymEncoding, DlQuantization::IAllocator* allocator)
+                        const uint64* tensorQuantizerRef, const int32 opMode,
+                        const double encodingMin, const double encodingMax, const int8 bitwidth,
+                        const bool useSymmetricEncoding, DlQuantization::IAllocator* allocator)
 {
     bool useCuda = false;
     if (std::is_same<D, GPUDevice>::value)
@@ -118,13 +118,8 @@ void modeSpecificActionInt(const D& d, const T* inTensor, size_t count, T* outTe
     // Note that all of the pointers to data here could either be pointing to CPU memory or GPU memory
     // We first copy everything to CPU memory and then use them
     auto tensorQuantizerRefHost = copyLiteralToHost<uint64>(d, tensorQuantizerRef);
-    auto opModeHost = copyLiteralToHost<int32>(d, opMode);
-    auto opModeEnum = static_cast<const DlQuantization::TensorQuantizerOpMode>(opModeHost);
-    auto encodingMin = copyLiteralToHost<double>(d, min);
-    auto encodingMax = copyLiteralToHost<double>(d, max);
+    auto opModeEnum = static_cast<const DlQuantization::TensorQuantizerOpMode>(opMode);
     auto tensorQuantizer = reinterpret_cast<DlQuantization::TensorQuantizerOpFacade*>(tensorQuantizerRefHost);
-    auto bitwidth = copyLiteralToHost<int8>(d, bw);
-    auto useSymmetricEncoding = copyLiteralToHost<bool>(d, useSymEncoding);
 
     switch (opModeEnum)
     {

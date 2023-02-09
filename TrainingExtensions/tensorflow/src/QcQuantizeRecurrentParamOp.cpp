@@ -62,8 +62,8 @@ REGISTER_OP("QcQuantizeRecurrentParam")
 
 template <typename D, typename T>
 void modeSpecificAction(const D& d, const T* inTensor, size_t count, T* outTensor,
-                        const uint64* tensorQuantizerRef, const int32* opMode, const double* min, const double* max,
-                        const int8* bw, const bool* useSymEncoding, const int32* timeStepInOp,
+                        const uint64* tensorQuantizerRef, const int32 opMode, const double encodingMin, const double encodingMax,
+                        const int8 bitwidth, const bool useSymmetricEncoding, const int32 timesteps,
                         int &computeEncodingCounter, DlQuantization::TfEncoding &cachedEncoding, bool &isEncodingValid,
                         DlQuantization::IAllocator* allocator)
 {
@@ -76,15 +76,10 @@ void modeSpecificAction(const D& d, const T* inTensor, size_t count, T* outTenso
     // Note that all of the pointers to data here could either be pointing to CPU memory or GPU memory
     // We first copy everything to CPU memory and then use them
     auto tensorQuantizerRefHost = copyLiteralToHost<uint64>(d, tensorQuantizerRef);
-    auto opModeHost = copyLiteralToHost<int32>(d, opMode);
     auto tensorQuantizer = reinterpret_cast<DlQuantization::TensorQuantizerOpFacade*>(tensorQuantizerRefHost);
     // these are needed by QAT 2.0
-    auto encodingMin = copyLiteralToHost<double>(d, min);
-    auto encodingMax = copyLiteralToHost<double>(d, max);
-    auto opModeEnum = static_cast<const DlQuantization::TensorQuantizerOpMode>(opModeHost);
-    auto bitwidth = copyLiteralToHost<int8>(d, bw);
-    auto useSymmetricEncoding = copyLiteralToHost<bool>(d, useSymEncoding);
-    auto timesteps = copyLiteralToHost<int32>(d, timeStepInOp);
+    auto opModeEnum = static_cast<const DlQuantization::TensorQuantizerOpMode>(opMode);
+
 
     switch (opModeEnum)
     {
@@ -206,8 +201,8 @@ public:
 #endif
 
         modeSpecificAction(context->eigen_device<Device>(), inTensorFlat, inTensor.NumElements(), outTensorFlat,
-                           quantizerAddr, opMode,  encodingMin, encodingMax, bitwidth, useSymmetricEncoding,
-                           time_steps, _computeEncodingCounter, _cachedEncoding, _isEncodingValid, allocator);
+                           quantizerAddr, *opMode, *encodingMin, *encodingMax, *bitwidth, *useSymmetricEncoding,
+                           *time_steps, _computeEncodingCounter, _cachedEncoding, _isEncodingValid, allocator);
     }
 };
 
@@ -221,7 +216,16 @@ REGISTER_CPU(float);
 
 #ifdef GOOGLE_CUDA
 #define REGISTER_GPU(T) \
-    REGISTER_KERNEL_BUILDER(Name("QcQuantizeRecurrentParam").Device(DEVICE_GPU).TypeConstraint<T>("T"), QcQuantizeRecurrentParamOp<GPUDevice, T>);
+    REGISTER_KERNEL_BUILDER(Name("QcQuantizeRecurrentParam")                                    \
+                            .Device(DEVICE_GPU)                                                 \
+                            .TypeConstraint<T>("T")                                             \
+                            .HostMemory("op_mode")                                              \
+                            .HostMemory("encoding_min")                                         \
+                            .HostMemory("encoding_max")                                         \
+                            .HostMemory("bit_width")                                            \
+                            .HostMemory("use_symmetric_encoding")                               \
+                            .HostMemory("time_steps"),                                          \
+                            QcQuantizeRecurrentParamOp<GPUDevice, T>);
 REGISTER_GPU(float);
 
 #endif   // GOOGLE_CUDA
