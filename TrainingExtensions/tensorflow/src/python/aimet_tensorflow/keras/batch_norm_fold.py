@@ -43,6 +43,7 @@ from enum import IntEnum
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.keras.engine.functional import Functional
+from tensorflow.python.keras.layers.core import TFOpLambda
 
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
@@ -476,7 +477,11 @@ def _delete_bn_from_functional(model: tf.keras.Model,
             # outbound nodes of the batch normalization layers so that the model can be built correctly and not duplicate
             # the non batch normalization layers inbound/outbound nodes.
             layer._inbound_nodes = []  # pylint: disable=protected-access
-            x = layer(layer_input)
+            # Special case for when there is a Lambda opertaion with multiple inputs. For example, x = y + z.
+            if isinstance(layer, TFOpLambda) and isinstance(layer_input, List):
+                x = layer(*layer_input)
+            else:
+                x = layer(layer_input)
             layer._outbound_nodes = [] # pylint: disable=protected-access
 
             # Set new output tensor (in this case, it will be the same as the original model)
@@ -571,8 +576,6 @@ def _delete_all_bns_from_model(model: (tf.keras.Model, tf.keras.layers.Layer),
     """
 
     if isinstance(model, Functional) and not isinstance(model, tf.keras.Sequential):
-        logger.warning("Functional models will have a new model returned with the Batch Normalizaiton layers removed."
-                       "Please use this new model for the rest of the AIMET flow.")
         return _delete_bn_from_functional(model, bn_layers)
 
     module_to_name_map = common.module_to_name_map(model)
@@ -635,6 +638,9 @@ def fold_all_batch_norms(model: tf.keras.Model):
     pairs_to_return = []
     for bn, conv, _ in bn_conv_linear_pairs:
         pairs_to_return.append((bn, conv))
+
+    logger.warning("A new model is returned with the Batch Normalizaiton layers removed for Keras models."
+                   "Please use this new model for the rest of the AIMET flow.")
 
     return pairs_to_return, model
 
