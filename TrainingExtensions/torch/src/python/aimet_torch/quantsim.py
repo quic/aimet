@@ -738,6 +738,7 @@ class QuantizationSimModel:
         param_encodings = {}
         layers_in_io_tensor = QuantizationSimModel._get_layers_in_io_tensor_map(op_to_io_tensor_map)
 
+        layer_names_not_found = []
         for layer_name, layer in QuantizationSimModel._get_qc_quantized_layers(sim_model):
             if not has_valid_encodings(layer):
                 continue
@@ -747,7 +748,6 @@ class QuantizationSimModel:
             if isinstance(layer, QcQuantizeWrapper) and isinstance(layer._module_to_wrap, DROPOUT_TYPES):
                 continue
 
-            layer_names_not_found = []
             if layer_name not in layers_in_io_tensor:
                 layer_names_not_found.append(layer_name)
             else:
@@ -756,7 +756,7 @@ class QuantizationSimModel:
                                                                       param_encodings, op_to_io_tensor_map,
                                                                       valid_param_set, propagate_encodings)
 
-        if layers_in_io_tensor:
+        if layer_names_not_found:
             logger.warning("The following layers were not found in the exported onnx model. Encodings for these layers"
                            " will not appear in the exported encodings file:\n"
                            "%s\n"
@@ -765,7 +765,7 @@ class QuantizationSimModel:
                            "encodings. Not an issue if the layer is not meant to be run.\n"
                            "\t- The layer has valid encodings but was not seen while exporting to onnx using the dummy "
                            "input provided in sim.export(). Ensure that the dummy input covers all layers.",
-                           layers_in_io_tensor)
+                           layer_names_not_found)
         encodings_dict_onnx = {'version': encoding_version,
                                'activation_encodings': activation_encodings_onnx,
                                'param_encodings': param_encodings,
