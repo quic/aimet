@@ -37,7 +37,7 @@
 # =============================================================================
 
 """ Implementation for simulating models running on Quantized hardware """
-from typing import List, Union, Dict
+from typing import List, Union, Dict, Tuple
 import torch
 
 from aimet_common.utils import AimetLogger
@@ -257,3 +257,17 @@ def get_node_to_io_tensor_names_map(model: torch.nn.Module,
     #assert index == len(modules)
 
     return node_to_io_tensor_name_map, valid_param_set
+
+
+def create_torch_script_model(ts_path: str, original_model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple]):
+    """
+    This utility obtains an equivalent torchscript model for the given pytorch model. Whatever pre-processing/post-processing
+    steps to be done on the resultant torchscript model must be done here.
+
+    :param ts_path: Path to the torchscript model file
+    :param original_model: Equivalent PyTorch model instance
+    :param dummy_input: Dummy input to the model. Used to parse model graph
+    :return:
+    """
+    trace = torch.jit.trace(original_model, dummy_input)
+    trace.save(ts_path)
