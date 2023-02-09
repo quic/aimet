@@ -575,7 +575,7 @@ def _delete_all_bns_from_model(model: (tf.keras.Model, tf.keras.layers.Layer),
     :return: new model with bn layers removed, if model is functional else None
     """
 
-    if isinstance(model, Functional) and not isinstance(model, tf.keras.Sequential):
+    if isinstance(model, Functional) and not isinstance(model, tf.keras.Sequential) and bn_layers:
         return _delete_bn_from_functional(model, bn_layers)
 
     module_to_name_map = common.module_to_name_map(model)
