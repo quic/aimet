@@ -124,6 +124,7 @@
             "handlers": ["console"],
             "propagate": false
         }
+
     },
 
     "root": {

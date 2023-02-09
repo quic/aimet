@@ -2673,6 +2673,7 @@ class TestQuantizationSimStaticGrad:
         if os.path.exists(results_dir):
             shutil.rmtree(results_dir)
 
+
 class TestQuantizationSimLearnedGrid:
 
     # -------------------------------------------------------------------------------
