@@ -14,7 +14,7 @@
       </g>
 
       <g transform="translate(60 60)">
-        <rect {node_prepare_model}/>
+        <rect id='node_prepare_model' {node_prepare_model}/>
         <text class="node-label">
           <tspan x="25" y="25">Prepare Model</tspan>
         </text>
@@ -26,7 +26,7 @@
       </g>
 
       <g transform="translate(60 150)">
-        <rect {node_quant_scheme_selection} />
+        <rect id='node_quant_scheme_selection' {node_quant_scheme_selection}/>
         <text class="node-label" lengthAdjust="spacing" textLength= "130" >
           <tspan x="5" y="25">QuantScheme Selection</tspan>
         </text>
@@ -38,7 +38,7 @@
       </g>
 
       <g transform="translate(30 230)">
-        <polygon {node_test_w32_eval_score} class="diamond" points="0,30 97,60 194,30 97,0"/>
+        <polygon id='node_test_w32_eval_score' {node_test_w32_eval_score} class="diamond" points="0,30 97,60 194,30 97,0"/>
           <text class="node-label" lengthAdjust="spacing" textLength= "130" >
             <tspan x="35" y="32">W32 eval score >= target?</tspan>
           </text>
@@ -64,7 +64,7 @@
       </g>
 
       <g transform="translate(60 330)">
-        <rect {node_batchnorm_folding}/>
+        <rec id='node_batchnorm_folding' {node_batchnorm_folding}/>
         <text class="node-label">
           <tspan x="15" y="25">BatchNorm Folding</tspan>
         </text>
@@ -76,7 +76,7 @@
       </g>
 
       <g transform="translate(30 410)">
-        <polygon {node_test_batchnorm_folding} class="diamond" points="0,30 97,60 194,30 97,0"/>
+        <polygon id='node_test_batchnorm_folding' {node_test_batchnorm_folding} class="diamond" points="0,30 97,60 194,30 97,0"/>
           <text class="node-label" lengthAdjust="spacing" textLength= "130" >
             <tspan x="40" y="32">eval score >= target?</tspan>
           </text>
@@ -104,7 +104,7 @@
       </g>
 
       <g transform="translate(290 330)">
-        <rect {node_cross_layer_equalization}/>
+        <rect id='node_cross_layer_equalization' {node_cross_layer_equalization}/>
         <text class="node-label">
           <tspan x="55" y="25">CLE</tspan>
         </text>
@@ -116,7 +116,7 @@
       </g>
 
       <g transform="translate(260 410)">
-        <polygon {node_test_cross_layer_equalization} class="diamond" points="0,30 97,60 194,30 97,0"/>
+        <polygon id='node_test_cross_layer_equalization' {node_test_cross_layer_equalization} class="diamond" points="0,30 97,60 194,30 97,0"/>
           <text class="node-label" lengthAdjust="spacing" textLength= "130" >
             <tspan x="40" y="32">eval score >= target?</tspan>
           </text>
@@ -145,7 +145,7 @@
 
 
       <g transform="translate(520 330)">
-        <rect {node_adaround}/>
+        <rect id='node_adaround' {node_adaround}/>
         <text class="node-label">
           <tspan x="35" y="25">AdaRound</tspan>
         </text>
@@ -159,7 +159,7 @@
       </g>
 
       <g transform="translate(490 410)">
-        <polygon {node_test_adaround} class="diamond" points="0,30 97,60 194,30 97,0"/>
+        <polygon id='node_test_adaround' {node_test_adaround} class="diamond" points="0,30 97,60 194,30 97,0"/>
           <text class="node-label" lengthAdjust="spacing" textLength= "130" >
             <tspan x="40" y="32">eval score >= target?</tspan>
           </text>
@@ -186,14 +186,14 @@
 
 
       <g transform="translate(520 240)">
-        <rect {node_result_fail} class="result-fail" rx="20"/>
+        <rect id='node_result_fail' {node_result_fail} class="result-fail" rx="20"/>
         <text class="node-label" lengthAdjust="spacing" textLength= "130" >
           <tspan x="5" y="25">Target accuracy not achieved</tspan>
         </text>
       </g>
 
       <g transform="translate(290 510)">
-        <rect {node_result_success} class="result-success" rx="20"/>
+        <rect id='node_result_success' {node_result_success} class="result-success" rx="20"/>
         <text class="node-label" lengthAdjust="spacing" textLength= "130" >
           <tspan x="5" y="25">Target accuracy achieved</tspan>
         </text>
