@@ -361,9 +361,9 @@ class QcQuantizeWrapper(nn.Module):
     def set_activation_encoding(self, module_name: str, activation_encodings: Dict):
         """
         Set encoding for activations from encodings dictionary
+
         :param module_name: name of module
         :param activation_encodings: activation encodings dictionary
-        :return:
         """
 
         def _set_quantizer_encodings(type_of_quantizer: str, quantizers: List[TensorQuantizer]):
@@ -374,22 +374,31 @@ class QcQuantizeWrapper(nn.Module):
             """
             if type_of_quantizer in activation_encodings[module_name]:
                 encodings = activation_encodings[module_name][type_of_quantizer]
-                # The number of quantizers and encodings might not be same, suppose 1st output quantizer is disabled out of 4,
-                # number of encodings will be 3 but number of output quantizers will still be 4
+                # The number of quantizers and encodings might not be same. For example, suppose the 1st output
+                # quantizer is disabled out of 4. The number of encodings will be 3, but number of output quantizers
+                # will still be 4.
+                # This can occur if a certain quantizer corresponded to a tensor with unquantizable datatype.
                 for index, quantizer in enumerate(quantizers):
                     ind = str(index)
-                    if ind in encodings and not quantizer.enabled:
-                        raise RuntimeError("The quantsim passed for loading encodings does not have the same configuration as the"
-                                           "quantsim which was used to export the encodings")
+                    if ind not in encodings:
+                        quantizer.enabled = False
+                        _logger.debug("No encoding loaded for %s quantizer %s of layer %s", type_of_quantizer, ind,
+                                      module_name)
+                        continue
+                    if not quantizer.enabled:
+                        raise RuntimeError("The quantsim passed for loading encodings does not have the same "
+                                           "configuration as the quantsim which was used to export the encodings")
 
-                    if quantizer.enabled and encodings[ind]['dtype'] == 'int':
+                    if encodings[ind]['dtype'] == 'int':
                         encoding, is_symmetric = utils.create_encoding_from_dict(encodings[ind])
                         quantizer.bitwidth = encoding.bw
                         quantizer.use_symmetric_encodings = is_symmetric
                         quantizer.encoding = encoding
-                    elif quantizer.enabled and encodings[ind]['dtype'] == 'float':
+                    elif encodings[ind]['dtype'] == 'float':
                         quantizer.bitwidth = encodings[ind]['bitwidth']
                         quantizer.data_type = QuantizationDataType.float
+                    else:
+                        raise RuntimeError("Unrecognized encodings datatype")
 
         _logger.info("Setting quantization encodings for activation quantizers of: %s", module_name)
 
