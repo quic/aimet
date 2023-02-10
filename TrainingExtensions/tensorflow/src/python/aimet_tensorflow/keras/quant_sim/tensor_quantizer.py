@@ -35,6 +35,8 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+# TODO: Need to break up file
+# pylint: disable=too-many-lines
 """ Tensor quantizer for tf 2 keras """
 import abc
 import functools
