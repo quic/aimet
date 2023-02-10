@@ -82,6 +82,12 @@ void quantizeDequantize(const GPUDevice& d, TTypes<float>::ConstMatrix inputs,
 void quantizeDequantize(const CPUDevice& d, TTypes<float>::ConstMatrix inputs,
                         DlQuantization::TfEncoding encodings, TTypes<float>::Matrix outputs, int channel);
 
+void quantizeDequantizePerChannel(const GPUDevice& d, TTypes<float>::ConstMatrix inputs, TTypes<float>::Matrix outputs,
+                           Tensor* encodingMin, Tensor* encodingMax, Tensor* encodingScale, Tensor* encodingOffset);
+
+void quantizeDequantizePerChannel(const CPUDevice& d, TTypes<float>::ConstMatrix inputs, TTypes<float>::Matrix outputs,
+                           Tensor* encodingMin, Tensor* encodingMax, Tensor* encodingScale, Tensor* encodingOffset);
+
 #if GOOGLE_CUDA
 class TensorFlowCudaAllocator: public DlQuantization::IAllocator
 {

@@ -87,8 +87,36 @@ void quantizeDequantize(const CPUDevice& d, TTypes<float>::ConstMatrix inputs,
     const auto clampedTensor         = inputs.chip<1>(channel).cwiseMax(min).cwiseMin(max);
     const auto tensor = (clampedTensor * invScale).round() + offset;
     outputs.chip<1>(channel) = (tensor - offset) * scale;
-
 };
+
+void quantizeDequantizePerChannel(const CPUDevice& d, TTypes<float>::ConstMatrix inputs, TTypes<float>::Matrix outputs,
+                           Tensor* encodingMinTensor, Tensor* encodingMaxTensor, Tensor* encodingScaleTensor,
+                           Tensor* encodingOffsetTensor)
+{
+    int numChannels = encodingMinTensor->shape().dim_size(0);
+    double* encodingMin = encodingMinTensor->flat<double>().data();
+    double* encodingMax = encodingMaxTensor->flat<double>().data();
+    double* encodingScale = encodingScaleTensor->flat<double>().data();
+    double* encodingOffset = encodingOffsetTensor->flat<double>().data();
+
+    for(int channel = 0; channel < numChannels; channel++)
+    {
+        DlQuantization::TfEncoding encoding;
+        encoding.min = *encodingMin;
+        encoding.max = *encodingMax;
+        encoding.delta = *encodingScale;
+        encoding.offset =  *encodingOffset;
+
+        quantizeDequantize(d, inputs, encoding, outputs, channel);
+        encodingMin++;
+        encodingMax++;
+        encodingScale++;
+        encodingOffset++;
+    }
+
+    return;
+}
+
 
 template void copyInputTensorsToOutputTensors(const CPUDevice& d, const float* inTensor, size_t count, float* outTensor);
 template int8 copyLiteralToHost<int8>(const CPUDevice&, const int8* deviceValue);

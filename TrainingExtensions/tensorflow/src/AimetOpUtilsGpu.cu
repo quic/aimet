@@ -98,6 +98,26 @@ void quantizeDequantize(const GPUDevice& d, TTypes<float>::ConstMatrix inputs,
 
 };
 
+void quantizeDequantizePerChannel(const GPUDevice& d, TTypes<float>::ConstMatrix inputs, TTypes<float>::Matrix outputs,
+                           Tensor* encodingMin, Tensor* encodingMax, Tensor* encodingScale, Tensor* encodingOffset)
+{
+    // Input matrix dimensions [numRows X numChannels]. Extracting numRows below
+    int numRows =  inputs.dimension(0);
+
+    // the encodings tensors have the dimensions of [numChannels X 1]. But, since the input is of shape
+    // [numRows X numChannels], we would need to broadcast the encodings tensors to bring them to required shape.
+    // Ref: https://eigen.tuxfamily.org/dox/unsupported/eigen_tensors.html#title89
+    Eigen::array<int, 2> bcast({numRows, 1});
+    auto encodingMinBcast = encodingMin->flat<double>().broadcast(bcast);
+    auto encodingMaxBcast = encodingMax->flat<double>().broadcast(bcast);
+    auto encodingScaleBcast = encodingScale->flat<double>().broadcast(bcast);
+
+    // Do note that the below operations omit doing offset add/subtract since it is unnecessary here
+    auto clampedTensor = inputs.cwiseMax(encodingMinBcast).cwiseMin(encodingMaxBcast);
+    auto tensor1 = (clampedTensor / encodingScaleBcast).round() * encodingScaleBcast;
+    outputs.device(d) = tensor1;
+}
+
 template void copyInputTensorsToOutputTensors(const GPUDevice& d, const float* inTensor, size_t count, float* outTensor);
 template int8 copyLiteralToHost<int8>(const GPUDevice&, const int8* deviceValue);
 template int32 copyLiteralToHost<int32>(const GPUDevice&, const int32* deviceValue);
