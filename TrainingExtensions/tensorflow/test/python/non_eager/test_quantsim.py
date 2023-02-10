@@ -2473,5 +2473,12 @@ class TestQuantSimRangeLearning:
             assert relu_output_encoding_min_before_train != relu_output_encoding_min_after_train
             assert relu_output_encoding_max_before_train != relu_output_encoding_max_after_train
 
+
+            baseline = sim.session.run(logits, feed_dict={inp_tensor: inp_data})
+            sim.export('/tmp', 'quant_sim_model')
+            after_sim_export = sim.session.run(logits, feed_dict={inp_tensor: inp_data})
+            assert np.allclose(baseline, after_sim_export)
+
+
         sess.close()
         sim.session.close()
