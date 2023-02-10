@@ -44,10 +44,10 @@ import numpy as np
 import aimet_common.libpymo as libpymo
 
 from aimet_common.cross_layer_equalization import ClsSetInfo
-from aimet_torch.cle.impl import ClsSet, CLSImpl, HBFImpl
+from aimet_torch.cle.impl import ClsSet, ClsImpl, HbfImpl
 
 
-class MOCLSImpl(CLSImpl):
+class MoClsImpl(ClsImpl):
     """
     This class implements the CLS algorithm using MO version while following the base Implementation interface.
     """
@@ -280,7 +280,7 @@ class MOCLSImpl(CLSImpl):
             cls_set[1].bias.data = cls_set[1].bias.data.type(torch.FloatTensor)
 
 
-class MOHBFImpl(HBFImpl):
+class MoHbfImpl(HbfImpl):
     """
     This class implements the HBF algorithm using MO version while following the base Implementation interface.
     """

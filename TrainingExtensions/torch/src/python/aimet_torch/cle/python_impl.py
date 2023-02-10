@@ -41,10 +41,10 @@
 import torch
 import numpy as np
 
-from aimet_torch.cle.impl import ClsSet, CLSImpl, HBFImpl
+from aimet_torch.cle.impl import ClsSet, ClsImpl, HbfImpl
 
 
-class PythonCLSImpl(CLSImpl):
+class PythonClsImpl(ClsImpl):
     """
     This class implements the CLS algorithm using Python version while following the base Implementation interface.
     """
@@ -105,7 +105,7 @@ class PythonCLSImpl(CLSImpl):
         return scale_factor.numpy()
 
 
-class PythonHBFImpl(HBFImpl):
+class PythonHbfImpl(HbfImpl):
     """
     This class implements the HBF algorithm using python version while following the base Implementation interface.
     """
