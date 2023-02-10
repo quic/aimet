@@ -49,8 +49,8 @@ import torch
 
 from aimet_common.utils import AimetLogger
 from aimet_torch.cle.impl import ClsSet
-from aimet_torch.cle.python_impl import PythonCLSImpl, PythonHBFImpl
-from aimet_torch.cle.mo_impl import MOCLSImpl, MOHBFImpl
+from aimet_torch.cle.python_impl import PythonClsImpl, PythonHbfImpl
+from aimet_torch.cle.mo_impl import MoClsImpl, MoHbfImpl
 from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
@@ -155,6 +155,7 @@ class GraphSearchUtils:
         :param visited_nodes: Running list of visited nodes (to short-circuit recursion)
         :return: None
         """
+
         if not visited_nodes:
             visited_nodes = []
         if not current_group:
@@ -351,30 +352,27 @@ class CrossLayerScaling:
     """
     Code to apply the cross-layer-scaling technique to a model
     """
+    python_only: bool = False
 
     @staticmethod
-    def scale_cls_sets(cls_sets: List[ClsSet], python_only: bool = False) -> List[ScaleFactor]:
+    def scale_cls_sets(cls_sets: List[ClsSet]) -> List[ScaleFactor]:
         """
         Scale multiple CLS sets
 
         :param cls_sets: List of CLS sets
-        :param python_only: Enable python only version of CLE algorithm. If set to False, MO (c++) version
-         is used. Default is False.
         :return: Scaling factors calculated and applied for each CLS set in order
         """
         scale_factor_list = []
         for cls_set in cls_sets:
-            scale_factor = CrossLayerScaling.scale_cls_set(cls_set, python_only=python_only)
+            scale_factor = CrossLayerScaling.scale_cls_set(cls_set)
             scale_factor_list.append(scale_factor)
         return scale_factor_list
 
     @staticmethod
-    def scale_cls_set(cls_set: ClsSet, python_only: bool = False) -> ScaleFactor:
+    def scale_cls_set(cls_set: ClsSet) -> ScaleFactor:
         """
         Scale a CLS set
         :param cls_set: Either a pair or regular conv layers or a triplet of depthwise separable layers
-        :param python_only: Enable python only version of CLE algorithm. If set to False, MO (c++) version
-         is used. Default is False.
         :return: Scaling factor calculated and applied
         """
         on_gpu = False
@@ -386,7 +384,7 @@ class CrossLayerScaling:
                 module.cpu()
 
         # Pick implementation version (either MO (c++) or python) depending on the user provided flag.
-        cls_impl = PythonCLSImpl() if python_only else MOCLSImpl()
+        cls_impl = PythonClsImpl() if CrossLayerScaling.python_only else MoClsImpl()
         if len(cls_set) == 3:
             scale_factor = cls_impl.scale_cls_set_with_depthwise_layers(cls_set)
         else:
@@ -399,15 +397,11 @@ class CrossLayerScaling:
         return scale_factor
 
     @classmethod
-    def scale_cls_set_with_conv_layers(cls, cls_set: ClsSet, python_only: bool = False) -> np.ndarray:
+    def scale_cls_set_with_conv_layers(cls, cls_set: ClsSet) -> np.ndarray:
         """
         API to invoke equalize layer params (update for weights and bias is in place)
 
-        NOTE: This API is kept for backward compatibility and will be removed in future releases.
-
         :param cls_set: Consecutive Conv layers Tuple whose weights and biases need to be equalized
-        :param python_only: Enable python only version of CLE algorithm. If set to False, MO (c++) version
-         is used. Default is False.
         :return: Scaling factor S_12 for each conv layer pair: numpy array
         """
         on_gpu = False
@@ -418,7 +412,7 @@ class CrossLayerScaling:
                 on_gpu = True
                 module.cpu()
 
-        cls_impl = PythonCLSImpl() if python_only else MOCLSImpl()
+        cls_impl = PythonClsImpl() if CrossLayerScaling.python_only else MoClsImpl()
         scaling_factor = cls_impl.scale_cls_set_with_conv_layers(cls_set)
 
         if on_gpu:
@@ -428,16 +422,12 @@ class CrossLayerScaling:
         return scaling_factor
 
     @classmethod
-    def scale_cls_set_with_depthwise_layers(cls, cls_set: ClsSet, python_only: bool = False) -> [np.ndarray, np.ndarray]:
+    def scale_cls_set_with_depthwise_layers(cls, cls_set: ClsSet) -> [np.ndarray, np.ndarray]:
         """
         API to invoke equalize layer params for depth wise separable layers(update for weights and bias is in place)
 
-        NOTE: This API is kept for backward compatibility and will be removed in future releases.
-
         :param cls_set: Consecutive Conv layers whose weights and biases need to be equalized.
                         Second Conv layer is a depth-wise conv and third conv layer is point-wise conv
-        :param python_only: Enable python only version of CLE algorithm. If set to False, MO (c++) version
-         is used. Default is False.
         :return: Scaling factors S_12 and S_23 : numpy arrays
         """
         on_gpu = False
@@ -448,7 +438,7 @@ class CrossLayerScaling:
                 on_gpu = True
                 module.cpu()
 
-        cls_impl = PythonCLSImpl() if python_only else MOCLSImpl()
+        cls_impl = PythonClsImpl() if CrossLayerScaling.python_only else MoClsImpl()
         scaling_factors = cls_impl.scale_cls_set_with_depthwise_layers(cls_set)
 
         if on_gpu:
@@ -527,7 +517,8 @@ class CrossLayerScaling:
             cls_sets += cls_set
 
         # Scale the CLS sets
-        scale_factors = CrossLayerScaling.scale_cls_sets(cls_sets, python_only=python_only)
+        CrossLayerScaling.python_only = python_only
+        scale_factors = CrossLayerScaling.scale_cls_sets(cls_sets)
 
         # Find if there were relu activations between layers of each cls set
         is_relu_activation_in_cls_sets = graph_search.is_relu_activation_present_in_cls_sets(cls_sets)
@@ -567,12 +558,13 @@ class HighBiasFold:
 
         for cls_set_info in cls_set_info_list:
             for cls_pair_info in cls_set_info.cls_pair_info_list:
+
                 if (cls_pair_info.layer1.bias is None) or (cls_pair_info.layer2.bias is None) or \
                         (cls_pair_info.layer1 not in bn_layers):
                     continue
 
                 # Pick an implementation version based on user provided flag.
-                hbf_impl = PythonHBFImpl() if python_only else MOHBFImpl()
+                hbf_impl = PythonHbfImpl() if python_only else MoHbfImpl()
                 hbf_impl.bias_fold(cls_pair_info, bn_layers)
 
 

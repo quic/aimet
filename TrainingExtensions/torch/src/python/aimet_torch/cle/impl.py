@@ -50,7 +50,7 @@ ClsSet = Union[Tuple[torch.nn.Conv2d, torch.nn.Conv2d],
                Tuple[torch.nn.Conv2d, torch.nn.Conv2d, torch.nn.Conv2d]]
 
 
-class CLSImpl(abc.ABC):
+class ClsImpl(abc.ABC):
     """
     The Implementation interface declares methods common to both MO (c++) and python versions of CLS algorithm.
     """
@@ -116,7 +116,7 @@ class CLSImpl(abc.ABC):
         return torch.amax(torch.abs(tensor), dim=dim)
 
 
-class HBFImpl(abc.ABC):
+class HbfImpl(abc.ABC):
     """
     The Implementation interface declares methods common to both MO (c++) and python versions of HBF algorithm.
     """
