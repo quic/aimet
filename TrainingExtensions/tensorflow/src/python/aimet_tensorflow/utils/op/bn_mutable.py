@@ -40,6 +40,7 @@ from typing import List, Union
 import tensorflow as tf
 from aimet_tensorflow import graph_editor
 from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
+from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.batch_norm_fold import find_all_batch_norms_to_fold
 
@@ -60,7 +61,7 @@ def modify_model_bn_mutable(model: tf.keras.Model):
 
 # pylint: disable=too-many-locals
 def modify_sess_bn_mutable(sess: tf.compat.v1.Session, start_op_names: Union[List[str], str],
-                           output_op_names: Union[List[str], str], training_tf_placeholder: bool = True):
+                           output_op_names: Union[List[str], str], training_tf_placeholder: bool = True) -> tf.compat.v1.Session:
     """
     Utilities to modify batchnorm layer's momentum and training argument of tf session model as tf.Variable and/or tf.placeholder
     :param sess: active tf.compat.v1.Session
@@ -68,7 +69,7 @@ def modify_sess_bn_mutable(sess: tf.compat.v1.Session, start_op_names: Union[Lis
     :param output_op_names: List of output op names of the model, used to help ConnectedGraph determine valid ops
            (to ignore training ops for example).  If None, all ops in the model are considered valid.
     :param training_tf_placeholder: Use tf.placeholder as training arg when set to True, else use tf.Variable
-
+    :return: new session with updated graph
     """
     bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, start_op_names, output_op_names, return_bn_conn_op=True)
     with sess.graph.as_default():
@@ -105,3 +106,5 @@ def modify_sess_bn_mutable(sess: tf.compat.v1.Session, start_op_names: Union[Lis
             graph_editor.detach_inputs(batchnorm_tensor.op)
 
     initialize_uninitialized_vars(sess)
+    after_bn_mutable_sess = save_and_load_graph('./temp_bn_mutable', sess)
+    return after_bn_mutable_sess
