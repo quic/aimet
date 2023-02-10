@@ -626,20 +626,20 @@ class TestAutoQuant:
         ) as mocks:
             def eval_callback(model, _):
                 # Assumes the model's eval score drops to zero
-                # unless param_quant_scheme == tf and output_quant_scheme == tfe
+                # unless param_quant_scheme == tfe and output_quant_scheme == tf
                 if isinstance(model._conv_0, StaticGridQuantWrapper):
-                    if model._conv_0.param_quantizers["weight"].quant_scheme != QuantScheme.post_training_tf:
+                    if model._conv_0.param_quantizers["weight"].quant_scheme != QuantScheme.post_training_tf_enhanced:
                         return 0.0
-                    if model._conv_0.output_quantizers[0].quant_scheme != QuantScheme.post_training_tf_enhanced:
+                    if model._conv_0.output_quantizers[0].quant_scheme != QuantScheme.post_training_tf:
                         return 0.0
                 return mocks.eval_callback(model, _)
 
             real_auto_quant_main = AutoQuant._auto_quant_main
             def auto_quant_main_fn(self, *args, **kwargs):
-                # Since all the other candidates (tf-tf, tfe-tf, and tfe-tfe) yields zero accuracy,
+                # Since all the other candidates (tf-tf, tfe-tfe, and tfe-percentile) yields zero accuracy,
                 # it is expected that tf-tfe is selected as the quant scheme for AutoQuant.
-                assert self.default_quant_scheme.param_quant_scheme == QuantScheme.post_training_tf
-                assert self.default_quant_scheme.output_quant_scheme == QuantScheme.post_training_tf_enhanced
+                assert self.default_quant_scheme.param_quant_scheme == QuantScheme.post_training_tf_enhanced
+                assert self.default_quant_scheme.output_quant_scheme == QuantScheme.post_training_tf
                 return real_auto_quant_main(self, *args, **kwargs)
 
             with patch("aimet_torch.auto_quant_v2._AutoQuantV2._auto_quant_main", auto_quant_main_fn):
