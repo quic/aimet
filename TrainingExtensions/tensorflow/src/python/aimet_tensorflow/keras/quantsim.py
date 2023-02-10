@@ -387,13 +387,33 @@ class QuantizationSimModel(tf.keras.Model):
         self._model_without_wrappers.save(model_path + '.h5', save_format='h5')
 
         custom_objects = custom_objects or {}
-        custom_objects['tf'] = tf
         custom_objects['QcQuantizeWrapper'] = QcQuantizeWrapper
         custom_objects['QcQuantizableMultiHeadAttention'] = QcQuantizableMultiHeadAttention
 
+        # Save the state of the model to later rebuild it after converting to a frozen pb. Freezing to a pb invalidates
+        # all Keras graphs. Meaning that the model needs to be rebuilt to allow users to still use sim.model after exporting.
         quantsim_model_config = self.model.get_config()
         quantsim_model_weights = self.model.get_weights()
-        quantsim_model_weight_names_to_weights = {w.name: w for w in self.model.weights}
+
+        # There could be some weights that are added on later on that are not attached to the model itself. For example,
+        # like the auto-quant tests. This function is used to get all the weights and their weight names. Unfortunately,
+        # unattached weights names do not have to be unique. For example, there could be multiple 'Variable:0's in the weights
+        # This function adds a special parsing character so that sets can be used to speed up computation for identifying missing
+        # weights when rebuilding.
+        SPECIAL_PARSE_CHAR = "@"
+        def get_model_weight_names_to_weights_dict():
+            dict_with_weights_to_return = {}
+            found_duplicates = {}
+            for w in self.model.weights:
+                if w.name in dict_with_weights_to_return:
+                    dict_with_weights_to_return[
+                        f"{w.name}{SPECIAL_PARSE_CHAR}{found_duplicates.get(w.name, 0) + 1}"] = w
+                    found_duplicates[w.name] = found_duplicates.get(w.name, 0) + 1
+                else:
+                    dict_with_weights_to_return[w.name] = w
+            return dict_with_weights_to_return
+
+        quantsim_model_weight_names_to_weights = get_model_weight_names_to_weights_dict()
 
         # Conversion of saved h5 model to pb model for consumption by SNPE/QNN]
         try:
@@ -404,15 +424,16 @@ class QuantizationSimModel(tf.keras.Model):
             raise
         self.model = tf.keras.Model.from_config(quantsim_model_config, custom_objects=custom_objects)
 
-        # Add weights that are not attached to layers. For example, non-trainable weights that are used for
-        # auto-quant.
+        # Second part of handling weights that might not be attached to the model. Here, we use the initial models weights
+        # found and manually add the missing weights while also getting back the original name.
         if len(self.model.weights) != len(quantsim_model_weights):
-            model_weight_names = {w.name for w in self.model.weights}
-            missing_weights = set(quantsim_model_weight_names_to_weights.keys()) - model_weight_names
+            model_weight_names = get_model_weight_names_to_weights_dict()
 
+            missing_weights = set(quantsim_model_weight_names_to_weights.keys()) - set(model_weight_names.keys())
             for weight in missing_weights:
                 if not quantsim_model_weight_names_to_weights[weight].trainable:
-                    self.model.add_weight(weight, quantsim_model_weight_names_to_weights[weight].shape,
+                    self.model.add_weight(''.join(weight.split(SPECIAL_PARSE_CHAR)[:-1]), # To get original name back
+                                          quantsim_model_weight_names_to_weights[weight].shape,
                                           quantsim_model_weight_names_to_weights[weight].dtype,
                                           quantsim_model_weight_names_to_weights[weight].initializer)
 
