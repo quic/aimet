@@ -57,6 +57,12 @@ T copyLiteralToHost(const CPUDevice& d, const T* deviceValue)
     return *deviceValue;
 }
 
+template <typename T>
+void copyArrayToHost(const CPUDevice& d, const T* srcPtr, T* destPtr, int count)
+{
+    memcpy(destPtr, srcPtr, sizeof(T) * count);
+}
+
 void chipAndCopyPerChannelValues(const CPUDevice& d, Tensor tensorToCopyInto,
                                  TTypes<float>::ConstMatrix tensorToCopyFrom, int channel)
 {
@@ -87,8 +93,36 @@ void quantizeDequantize(const CPUDevice& d, TTypes<float>::ConstMatrix inputs,
     const auto clampedTensor         = inputs.chip<1>(channel).cwiseMax(min).cwiseMin(max);
     const auto tensor = (clampedTensor * invScale).round() + offset;
     outputs.chip<1>(channel) = (tensor - offset) * scale;
-
 };
+
+void quantizeDequantizePerChannel(const CPUDevice& d, TTypes<float>::ConstMatrix inputs, TTypes<float>::Matrix outputs,
+                           Tensor* encodingMinTensor, Tensor* encodingMaxTensor, Tensor* encodingScaleTensor,
+                           Tensor* encodingOffsetTensor, Tensor* encodingInvScaleTensor)
+{
+    int numChannels = encodingMinTensor->shape().dim_size(0);
+    double* encodingMin = encodingMinTensor->flat<double>().data();
+    double* encodingMax = encodingMaxTensor->flat<double>().data();
+    double* encodingScale = encodingScaleTensor->flat<double>().data();
+    double* encodingOffset = encodingOffsetTensor->flat<double>().data();
+
+    for(int channel = 0; channel < numChannels; channel++)
+    {
+        DlQuantization::TfEncoding encoding;
+        encoding.min = *encodingMin;
+        encoding.max = *encodingMax;
+        encoding.delta = *encodingScale;
+        encoding.offset =  *encodingOffset;
+
+        quantizeDequantize(d, inputs, encoding, outputs, channel);
+        encodingMin++;
+        encodingMax++;
+        encodingScale++;
+        encodingOffset++;
+    }
+
+    return;
+}
+
 
 template void copyInputTensorsToOutputTensors(const CPUDevice& d, const float* inTensor, size_t count, float* outTensor);
 template int8 copyLiteralToHost<int8>(const CPUDevice&, const int8* deviceValue);
@@ -96,3 +130,5 @@ template int32 copyLiteralToHost<int32>(const CPUDevice&, const int32* deviceVal
 template uint64 copyLiteralToHost<uint64>(const CPUDevice&, const uint64* deviceValue);
 template double copyLiteralToHost<double>(const CPUDevice&, const double* deviceValue);
 template bool copyLiteralToHost<bool>(const CPUDevice&, const bool* deviceValue);
+template void copyArrayToHost<double>(const CPUDevice& d, const double* srcPtr, double* destPtr, int count);
+template void copyArrayToHost<float>(const CPUDevice& d, const float* srcPtr, float* destPtr, int count);
