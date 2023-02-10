@@ -61,10 +61,16 @@ template <typename T>
 T copyLiteralToHost(const CPUDevice& d, const T* deviceValue);
 
 template <typename T>
+void copyArrayToHost(const CPUDevice& d, const T* srcPtr, T* destPtr, int count);
+
+template <typename T>
 void copyInputTensorsToOutputTensors(const GPUDevice& d, const T* inTensor, size_t count, T* outTensor);
 
 template <typename T>
 T copyLiteralToHost(const GPUDevice& d, const T* deviceValue);
+
+template <typename T>
+void copyArrayToHost(const GPUDevice& d, const T* srcPtr, T* destPtr, int count);
 
 void chipAndCopyPerChannelValues(const CPUDevice& d, Tensor tensorToCopyInto,
                                  TTypes<float>::ConstMatrix tensorToCopyFrom, int channel);
@@ -81,6 +87,14 @@ void quantizeDequantize(const GPUDevice& d, TTypes<float>::ConstMatrix inputs,
 
 void quantizeDequantize(const CPUDevice& d, TTypes<float>::ConstMatrix inputs,
                         DlQuantization::TfEncoding encodings, TTypes<float>::Matrix outputs, int channel);
+
+void quantizeDequantizePerChannel(const GPUDevice& d, TTypes<float>::ConstMatrix inputs, TTypes<float>::Matrix outputs,
+                           Tensor* encodingMin, Tensor* encodingMax, Tensor* encodingScale, Tensor* encodingOffset,
+                           Tensor* encodingInvScaleTensor);
+
+void quantizeDequantizePerChannel(const CPUDevice& d, TTypes<float>::ConstMatrix inputs, TTypes<float>::Matrix outputs,
+                           Tensor* encodingMin, Tensor* encodingMax, Tensor* encodingScale, Tensor* encodingOffset,
+                           Tensor* encodingInvScaleTensor);
 
 #if GOOGLE_CUDA
 class TensorFlowCudaAllocator: public DlQuantization::IAllocator
