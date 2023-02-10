@@ -54,6 +54,7 @@ from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
 from aimet_tensorflow.utils.op.bn_mutable import modify_model_bn_mutable, modify_sess_bn_mutable
 from aimet_tensorflow.batch_norm_fold import find_all_batch_norms_to_fold
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
+from aimet_tensorflow.utils.common import create_input_feed_dict
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
@@ -565,12 +566,7 @@ class TestBnMutable(unittest.TestCase):
         input_new_tensor = sess.graph.get_tensor_by_name('input_1:0')
         relu_new_tensor = sess.graph.get_tensor_by_name('Relu_1:0')
 
-        feed_dict = {input_new_tensor: dummy_val}
-        # Set training var to False
-        training_tf_var = training_tf_var.pop()
-        for var in tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES):
-            if var.name == training_tf_var.name:
-                feed_dict[var] = False
+        feed_dict = create_input_feed_dict(sess.graph, input_op_names, dummy_val)
         # Fetch outputs of new batchnorms
         bn1_new_output, bn2_new_output, relu_new_output = sess.run([bn1_new_tensor, bn2_new_tensor, relu_new_tensor],
                                                                    feed_dict=feed_dict)
@@ -671,12 +667,7 @@ class TestBnMutable(unittest.TestCase):
         input_new_tensor = sess.graph.get_tensor_by_name('input_1:0')
         relu_new_tensor = sess.graph.get_tensor_by_name('Relu_1:0')
 
-        feed_dict = {input_new_tensor: dummy_val}
-        # Set training var to False
-        training_tf_var = training_tf_var.pop()
-        for var in tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES):
-            if var.name == training_tf_var.name:
-                feed_dict[var] = False
+        feed_dict = create_input_feed_dict(sess.graph, input_op_names, dummy_val)
         # Fetch outputs of new batchnorms
         bn1_new_output, bn2_new_output, relu_new_output = sess.run([bn1_new_tensor, bn2_new_tensor, relu_new_tensor],
                                                                    feed_dict=feed_dict)
