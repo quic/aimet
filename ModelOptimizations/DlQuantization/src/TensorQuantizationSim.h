@@ -91,7 +91,7 @@ public:
 
     void fillEncodingInfo(TfEncoding& encoding, uint8_t bw, double encodingMin, double encodingMax) override;
 
-    void generateScaleOffset(const double &encodingMin, const double &encodingMax, uint8_t bw, double &encodingScale,
+    void generateScaleOffset(double &encodingMin, double &encodingMax, uint8_t bw, double &encodingScale,
                              double &encodingOffset);
 
     inline DlQuantization::ComputationMode getComputationMode(bool use_cuda)
