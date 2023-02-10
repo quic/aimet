@@ -87,6 +87,8 @@ NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION = None
 class _QuantSchemePair:
     param_quant_scheme: QuantScheme
     output_quant_scheme: QuantScheme
+    param_percentile: Optional[float] = None
+    output_percentile: Optional[float] = None
 
 
 QUANT_SCHEME_CANDIDATES = (
@@ -95,11 +97,6 @@ QUANT_SCHEME_CANDIDATES = (
     _QuantSchemePair(QuantScheme.post_training_tf,
                      QuantScheme.post_training_tf),
 
-    # Weight:     tf
-    # Activation: tf_enhanced
-    _QuantSchemePair(QuantScheme.post_training_tf,
-                     QuantScheme.post_training_tf_enhanced),
-
     # Weight:     tf_enhanced
     # Activation: tf
     _QuantSchemePair(QuantScheme.post_training_tf_enhanced,
@@ -109,6 +106,18 @@ QUANT_SCHEME_CANDIDATES = (
     # Activation: tf_enhanced
     _QuantSchemePair(QuantScheme.post_training_tf_enhanced,
                      QuantScheme.post_training_tf_enhanced),
+
+    # Weight:     tf_enhanced
+    # Activation: percentile(99.9)
+    _QuantSchemePair(QuantScheme.post_training_tf_enhanced,
+                     QuantScheme.post_training_percentile,
+                     output_percentile=99.9),
+
+    # Weight:     tf_enhanced
+    # Activation: percentile(99.99)
+    _QuantSchemePair(QuantScheme.post_training_tf_enhanced,
+                     QuantScheme.post_training_percentile,
+                     output_percentile=99.99),
 )
 
 
@@ -306,15 +315,17 @@ class _AutoQuantV2: # pylint: disable=too-many-instance-attributes
         self._model_preparer_kwargs["modules_to_exclude"] = copy.copy(modules_to_exclude)
         self._model_preparer_kwargs["concrete_args"] = copy.copy(concrete_args)
 
-    def _create_quantsim_and_encodings( # pylint: disable=too-many-arguments, too-many-locals
+    def _create_quantsim_and_encodings( # pylint: disable=too-many-arguments, too-many-locals, too-many-branches
             self,
             model: torch.nn.Module,
             dummy_input: Union[torch.Tensor, Tuple],
             rounding_mode: str = None,
             default_output_bw: int = None,
             output_quant_scheme: QuantScheme = None,
+            output_percentile: float = None,
             default_param_bw: int = None,
             param_quant_scheme: QuantScheme = None,
+            param_percentile: float = None,
             config_file: str = None,
             encoding_path: str = None,
     ) -> QuantizationSimModel:
@@ -329,10 +340,14 @@ class _AutoQuantV2: # pylint: disable=too-many-instance-attributes
             Defaults to self.default_output_bw.
         :param output_quant_scheme: Quantization scheme for output quantizers.
             Defaults to self.default_quant_scheme.output_quant_scheme.
+        :param output_percentile: Percentile value for outputs.
+            Only valid if output quant scheme is percentile scheme.
         :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters.
             Defaults to self.default_param_bw.
-        :param paramt_quant_scheme: Quantization scheme for param quantizers.
+        :param param_quant_scheme: Quantization scheme for param quantizers.
             Defaults to self.default_quant_scheme.param_quant_scheme.
+        :param param_percentile: Percentile value for parameters.
+            Only valid if param quant scheme is percentile scheme.
         :param config_file: Path to configuration file for model quantizers.
                             Defaults to self.default_config_file.
         :param encoding_path: Path to parameter encodings file.
@@ -357,15 +372,28 @@ class _AutoQuantV2: # pylint: disable=too-many-instance-attributes
 
         param_quantizers, input_quantizers, output_quantizers = utils.get_all_quantizers(sim.model)
 
+        if self.default_quant_scheme is not None:
+            output_quant_scheme = output_quant_scheme or\
+                                   self.default_quant_scheme.output_quant_scheme
+            output_percentile = output_percentile or self.default_quant_scheme.output_percentile
+            param_quant_scheme = param_quant_scheme or\
+                                 self.default_quant_scheme.param_quant_scheme
+            param_percentile = param_percentile or self.default_quant_scheme.param_percentile
+
         # Set input/output quantizers' quant schemes
         for quantizer in itertools.chain(input_quantizers, output_quantizers):
-            quantizer.quant_scheme = output_quant_scheme or\
-                                     self.default_quant_scheme.output_quant_scheme
+            quantizer.quant_scheme = output_quant_scheme
+            if quantizer.quant_scheme == QuantScheme.post_training_percentile and\
+                    output_percentile is not None:
+                quantizer.set_percentile_value(output_percentile)
 
         # Set param quantizers' quant schemes
         for quantizer in param_quantizers:
             quantizer.quant_scheme = param_quant_scheme or\
                                      self.default_quant_scheme.param_quant_scheme
+            if quantizer.quant_scheme == QuantScheme.post_training_percentile and\
+                    param_percentile is not None:
+                quantizer.set_percentile_value(param_percentile)
 
         if encoding_path:
             sim.set_and_freeze_param_encodings(encoding_path)
@@ -617,7 +645,9 @@ class _AutoQuantV2: # pylint: disable=too-many-instance-attributes
                             return sess.eval(
                                 fp32_model,
                                 param_quant_scheme=quant_scheme.param_quant_scheme,
-                                output_quant_scheme=quant_scheme.output_quant_scheme
+                                param_percentile=quant_scheme.param_percentile,
+                                output_quant_scheme=quant_scheme.output_quant_scheme,
+                                output_percentile=quant_scheme.output_percentile,
                             )
 
                         self.default_quant_scheme = _choose_default_quant_scheme(self.default_param_bw,
