@@ -43,6 +43,7 @@ import itertools
 import json
 import shutil
 from typing import Tuple, Union, Dict, List, Callable, Any
+import math
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -72,14 +73,16 @@ class AdaroundParameters:
     """
     Configuration parameters for Adaround
     """
-    def __init__(self, data_loader: DataLoader, num_batches: int,
-                 default_num_iterations: int = 10000, default_reg_param: float = 0.01,
+    def __init__(self, data_loader: DataLoader, num_batches: int = None,
+                 default_num_iterations: int = None, default_reg_param: float = 0.01,
                  default_beta_range: Tuple = (20, 2), default_warm_start: float = 0.2,
                  forward_fn: Callable[[torch.nn.Module, Any], Any] = None):
         """
         :param data_loader: Data loader
-        :param num_batches: Number of batches
-        :param default_num_iterations: Number of iterations to adaround each layer. Default 10000
+        :param num_batches: Number of batches. If not specified, the default value is determined as
+         the largest N where N satisfies (N-1) * batch_size < 2000 <= N * batch_size
+        :param default_num_iterations: Number of iterations to adaround each layer.
+         The default value is 10K for models with 8- or higher bit weights, and 15K for models with lower than 8 bit weights.
         :param default_reg_param: Regularization parameter, trading off between rounding loss vs reconstruction loss.
          Default 0.01
         :param default_beta_range: Start and stop beta parameter for annealing of rounding loss (start_beta, end_beta).
@@ -89,9 +92,17 @@ class AdaroundParameters:
          yielded from the data loader. The function expects model as first argument and inputs to model
          as second argument.
         """
-        if len(data_loader) < num_batches:
+        if num_batches is not None and len(data_loader) < num_batches:
             raise ValueError(f'Can not fetch {num_batches} batches from '
                              f'a data loader of length {len(data_loader)}.')
+
+        if num_batches is None:
+            batch_size = data_loader.batch_size or 1
+
+            if batch_size * len(data_loader) < 2000:
+                num_batches = len(data_loader)
+            else:
+                num_batches = math.ceil(2000 / batch_size)
 
         self.data_loader = data_loader
         self.num_batches = num_batches
@@ -205,12 +216,28 @@ class Adaround:
         :param params: Adaround parameters
         :param dummy_input: Dummy input to the model
         """
+        # pylint: disable=too-many-locals
+
+        num_iterations = params.num_iterations
+
+        if num_iterations is None:
+            param_quantizers, _, _ = utils.get_all_quantizers(quant_sim.model)
+            lowest_weight_bw = min(
+                quantizer.bitwidth for quantizer in param_quantizers
+                if quantizer.enabled and quantizer.data_type == QuantizationDataType.int
+            )
+            # If the lowest wegith bitwidth is < 8, then set num_iterations to 15K by default
+            if lowest_weight_bw < 8:
+                num_iterations = 15000
+            else:
+                num_iterations = 10000
+
         try:
             # Cache model input data to WORKING_DIR
             cached_dataset = utils.CachedDataset(params.data_loader, params.num_batches, WORKING_DIR)
 
             # Optimization Hyper parameters
-            opt_params = AdaroundHyperParameters(params.num_iterations, params.reg_param, params.beta_range,
+            opt_params = AdaroundHyperParameters(num_iterations, params.reg_param, params.beta_range,
                                                  params.warm_start)
 
             # AdaRound must be applied to modules in the order of occurrence
