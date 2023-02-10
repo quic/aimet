@@ -49,7 +49,7 @@ add_library(OnnxCppOps SHARED
         src/QcQuantizeOp.cpp)
 
 
-find_path(ONNXRUNTIME_INC "onnxruntime_cxx_api.h" PATH_SUFFIXES "include" NO_DEFAULT_PATH HINTS "/usr/local/bin/onnxruntime_headers")
+find_path(ONNXRUNTIME_INC "onnxruntime_cxx_api.h" PATH_SUFFIXES onnxruntime_headers/include)
 
 
 target_include_directories(OnnxCppOps PRIVATE
