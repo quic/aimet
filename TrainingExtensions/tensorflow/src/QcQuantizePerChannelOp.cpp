@@ -197,6 +197,42 @@ DlQuantization::TfEncoding getTfEncoding(const D& d, const double encodingMin, c
     return encoding;
 }
 
+void generatePerChannelScaleOffset(Tensor* encodingMinTensor, Tensor* encodingMaxTensor, int8 bw,
+                                   Tensor* encodingScaleTensor, Tensor* encodingOffsetTensor)
+{
+    int numChannels = encodingMinTensor->shape().dim_size(0);
+    std::unique_ptr<DlQuantization::ITensorQuantizationSim<float>> _tensorQuantizationSim;
+    _tensorQuantizationSim = DlQuantization::getTensorQuantizationSim<float>();
+
+    double* encodingMin = encodingMinTensor->flat<double>().data();
+    double* encodingMax = encodingMaxTensor->flat<double>().data();
+    double* encodingScale = encodingScaleTensor->flat<double>().data();
+    double* encodingOffset = encodingOffsetTensor->flat<double>().data();
+
+    for(int channel = 0; channel < numChannels; channel++)
+    {
+        _tensorQuantizationSim->generateScaleOffset(*encodingMin, *encodingMax, bw, *encodingScale, *encodingOffset);
+        encodingMin++; encodingMax++;
+        encodingScale++; encodingOffset++;
+    }
+}
+
+template <typename T>
+void copyConstTensorToNonConstTensor(const Tensor* constTensor, Tensor* nonConstTensor)
+{
+    int numElements = constTensor->shape().dim_size(0);
+
+    const T *in = constTensor->flat<T>().data();
+    T *out = nonConstTensor->flat<T>().data();
+
+    for(int i = 0; i < numElements; i++)
+    {
+       *out = *in;
+       in++;
+       out++;
+    }
+}
+
 // OpKernel definition.
 // 'Device is templated on the type of device.
 // template parameter <T> is the datatype of the tensors.
@@ -231,14 +267,14 @@ public:
         uint64* quantizerAddr = (uint64*) quantizerRefTensor->flat<int64>().data();
 
         // Read the encoding_min
-        const Tensor* encodingMinTensor;
-        OP_REQUIRES_OK(context, context->input("encoding_min", &encodingMinTensor));
-        const double* encodingMin = encodingMinTensor->flat<double>().data();
+        const Tensor* encodingMinTensorConst;
+        OP_REQUIRES_OK(context, context->input("encoding_min", &encodingMinTensorConst));
+        const double* encodingMin = encodingMinTensorConst->flat<double>().data();
 
         // Read the encoding_max
-        const Tensor* encodingMaxTensor;
-        OP_REQUIRES_OK(context, context->input("encoding_max", &encodingMaxTensor));
-        const double* encodingMax = encodingMaxTensor->flat<double>().data();
+        const Tensor* encodingMaxTensorConst;
+        OP_REQUIRES_OK(context, context->input("encoding_max", &encodingMaxTensorConst));
+        const double* encodingMax = encodingMaxTensorConst->flat<double>().data();
 
         // read bitwidth
         const Tensor* bitwidthTensor;
@@ -264,8 +300,8 @@ public:
             numChannels = shapeVector[numDimensionsTensor - 1];
         }
         // Number of channels should be equal to the number of encodings provided.
-        assert(numChannels == encodingMaxTensor->shape().dim_size(0));
-        assert(numChannels == encodingMinTensor->shape().dim_size(0));
+        assert(numChannels == encodingMaxTensorConst->shape().dim_size(0));
+        assert(numChannels == encodingMinTensorConst->shape().dim_size(0));
 
         // use symmetric encoding
         const Tensor* useSymmetricEncodingTensor;
@@ -337,9 +373,9 @@ public:
                     allocator = &_allocator;
 #endif
 
-                    for (int channel = 0; channel < numChannels; channel++)
+                    if (opModeEnum == DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize)
                     {
-                        if (opModeEnum == DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize)
+                        for (int channel = 0; channel < numChannels; channel++)
                         {
                             // Chip input tensor along last dimensions
                             chipAndCopyPerChannelValues(context->eigen_device<Device>(), temp1, inTensorTwoDim, channel);
@@ -354,16 +390,33 @@ public:
                             quantizeDequantize(context->eigen_device<Device>(), inTensorTwoDim, encodings, outTensorTwoDim,
                                                channel);
                         }
-                        else if (opModeEnum == DlQuantization::TensorQuantizerOpMode::quantizeDequantize)
-                        {
-                            // When only inference is required, we skip computation of encodings
-                            DlQuantization::TfEncoding encodings = getTfEncoding(context->eigen_device<Device>(),
-                                                                                 *encodingMin, *encodingMax, *bitwidth);
-                            quantizeDequantize(context->eigen_device<Device>(), inTensorTwoDim, encodings, outTensorTwoDim,
-                                               channel);
-                            encodingMin++;
-                            encodingMax++;
-                        }
+                    }
+                    else if (opModeEnum == DlQuantization::TensorQuantizerOpMode::quantizeDequantize)
+                    {
+                        // allocate tensors for scale and offset. By default, TF would allocate tensors in the device
+                        // where the op is currently executing in. To always allocate on the Host, additional argument
+                        // of type AllocatorAttributes needs to be passed. The object should be set to be allocated on
+                        // host and also made GPU compatible.
+                        // Ref: https://git.ecdf.ed.ac.uk/s1886313/tensorflow/-/blob/c4c19f1294599c501dd512db59ee4229b437abc8/tensorflow/core/framework/allocator.h#L252
+                        Tensor encodingMinTensor, encodingMaxTensor, encodingScaleTensor, encodingOffsetTensor;
+                        AllocatorAttributes attr;
+                        attr.set_on_host(true);
+                        attr.set_gpu_compatible(true);
+
+                        OP_REQUIRES_OK(context, context->allocate_temp(DT_DOUBLE, encodingMinTensorConst->shape(), &encodingMinTensor, attr));
+                        OP_REQUIRES_OK(context, context->allocate_temp(DT_DOUBLE, encodingMinTensorConst->shape(), &encodingMaxTensor, attr));
+                        OP_REQUIRES_OK(context, context->allocate_temp(DT_DOUBLE, encodingMinTensorConst->shape(), &encodingScaleTensor, attr));
+                        OP_REQUIRES_OK(context, context->allocate_temp(DT_DOUBLE, encodingMinTensorConst->shape(), &encodingOffsetTensor, attr));
+
+                        // min/max tensors need to be made non-const because they will be modified
+                        copyConstTensorToNonConstTensor<double>(encodingMinTensorConst, &encodingMinTensor);
+                        copyConstTensorToNonConstTensor<double>(encodingMaxTensorConst, &encodingMaxTensor);
+
+                        generatePerChannelScaleOffset(&encodingMinTensor, &encodingMaxTensor, *bitwidth,
+                                                      &encodingScaleTensor, &encodingOffsetTensor);
+                        quantizeDequantizePerChannel(context->eigen_device<Device>(), inTensorTwoDim, outTensorTwoDim,
+                                              &encodingMinTensor, &encodingMaxTensor, &encodingScaleTensor,
+                                              &encodingOffsetTensor);
                     }
                 }
                 else if (numDimensionsTensor == 1)

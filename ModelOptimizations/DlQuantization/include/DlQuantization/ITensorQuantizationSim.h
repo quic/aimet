@@ -101,6 +101,9 @@ public:
                                             bool shiftToSigned) = 0;
 
     virtual void fillEncodingInfo(TfEncoding& encoding, uint8_t bw, double encodingMin, double encodingMax) = 0;
+
+    virtual void generateScaleOffset(double &encodingMin, double &encodingMax, uint8_t bw,
+                                     double &encodingScale, double &encodingOffset) = 0;
 };
 
 }   // namespace DlQuantization

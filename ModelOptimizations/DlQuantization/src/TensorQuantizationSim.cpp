@@ -57,9 +57,11 @@ TensorQuantizationSim<DTYPE>::TensorQuantizationSim()
 }
 
 template <typename DTYPE>
-void TensorQuantizationSim<DTYPE>::generateScaleOffset(const double &encodingMin, const double &encodingMax, uint8_t bw,
+void TensorQuantizationSim<DTYPE>::generateScaleOffset(double &encodingMin, double &encodingMax, uint8_t bw,
                                                        double &encodingScale, double &encodingOffset)
 {
+    gateMinMax(encodingMin, encodingMax);
+
     // Detect if we are in strict-symmetric mode
     double numSteps = pow(2, bw) - 1;
     if (encodingMin == -encodingMax)
@@ -79,7 +81,6 @@ void TensorQuantizationSim<DTYPE>::fillEncodingInfo(TfEncoding& encoding, uint8_
     encoding.bw = bw;
     encoding.min = encodingMin;
     encoding.max = encodingMax;
-    gateMinMax(encoding.min, encoding.max);
     generateScaleOffset(encoding.min, encoding.max, bw, encoding.delta, encoding.offset);
 }
 
