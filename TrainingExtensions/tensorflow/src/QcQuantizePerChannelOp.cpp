@@ -158,7 +158,7 @@ DlQuantization::TfEncoding updateStatsAndComputeEncodingsTfFunctions(const Tenso
 
 template <typename D, typename T>
 DlQuantization::TfEncoding updateStatsAndComputeEncodings(const D& d, const T* inTensor, size_t count,
-                                                          const uint64* tensorQuantizerRef, const int8* bw,
+                                                          const uint64* tensorQuantizerRef, const int8 bitwidth,
                                                           const bool* useSymEncoding, DlQuantization::IAllocator* allocator)
 {
     bool useCuda = false;
@@ -171,7 +171,6 @@ DlQuantization::TfEncoding updateStatsAndComputeEncodings(const D& d, const T* i
     // We first copy everything to CPU memory and then use them
     auto tensorQuantizerRefHost = copyLiteralToHost<uint64>(d, tensorQuantizerRef);
     auto tensorQuantizer = reinterpret_cast<DlQuantization::TensorQuantizerOpFacade*>(tensorQuantizerRefHost);
-    auto bitwidth = copyLiteralToHost<int8>(d, bw);
     auto useSymmetricEncoding = copyLiteralToHost<bool>(d, useSymEncoding);
 
     tensorQuantizer->updateStats(inTensor, count, useCuda, allocator);
@@ -201,6 +200,48 @@ DlQuantization::TfEncoding getTfEncoding(const D& d, const double* min, const do
     DlQuantization::TfEncoding encoding;
     _tensorQuantizationSim->fillEncodingInfo(encoding, bitwidth, encodingMin, encodingMax);
     return encoding;
+}
+
+void generatePerChannelScaleOffset(Tensor* encodingMinTensor, Tensor* encodingMaxTensor, int8 bw,
+                                   Tensor* encodingScaleTensor, Tensor* encodingOffsetTensor)
+{
+    int numChannels = encodingMinTensor->shape().dim_size(0);
+    std::unique_ptr<DlQuantization::ITensorQuantizationSim<float>> _tensorQuantizationSim;
+    _tensorQuantizationSim = DlQuantization::getTensorQuantizationSim<float>();
+
+    double* encodingMin = encodingMinTensor->flat<double>().data();
+    double* encodingMax = encodingMaxTensor->flat<double>().data();
+    double* encodingScale = encodingScaleTensor->flat<double>().data();
+    double* encodingOffset = encodingOffsetTensor->flat<double>().data();
+
+    for(int channel = 0; channel < numChannels; channel++)
+    {
+        _tensorQuantizationSim->generateScaleOffset(*encodingMin, *encodingMax, bw, *encodingScale, *encodingOffset);
+        encodingMin++; encodingMax++;
+        encodingScale++; encodingOffset++;
+    }
+}
+
+void generateInvScale(Tensor* encodingScaleTensor, Tensor* encodingInvScaleTensor)
+{
+    int numChannels = encodingScaleTensor->shape().dim_size(0);
+    double *in = encodingScaleTensor->flat<double>().data();
+    double *out = encodingInvScaleTensor->flat<double>().data();
+
+    for(int i = 0; i < numChannels; i++)
+    {
+        *out = 1.0f / (double) *in;
+        out++; in++;
+    }
+}
+
+template <typename D>
+void copyConstTensorToNonConstTensor(const D& d, const Tensor* constTensor, Tensor* nonConstTensor)
+{
+    int numElements = constTensor->shape().dim_size(0);
+    const double *in = constTensor->flat<double>().data();
+    double *out = nonConstTensor->flat<double>().data();
+    copyArrayToHost(d, in, out, numElements);
 }
 
 // OpKernel definition.
@@ -237,19 +278,17 @@ public:
         uint64* quantizerAddr = (uint64*) quantizerRefTensor->flat<int64>().data();
 
         // Read the encoding_min
-        const Tensor* encodingMinTensor;
-        OP_REQUIRES_OK(context, context->input("encoding_min", &encodingMinTensor));
-        const double* encodingMin = encodingMinTensor->flat<double>().data();
+        const Tensor* encodingMinTensorConst;
+        OP_REQUIRES_OK(context, context->input("encoding_min", &encodingMinTensorConst));
 
         // Read the encoding_max
-        const Tensor* encodingMaxTensor;
-        OP_REQUIRES_OK(context, context->input("encoding_max", &encodingMaxTensor));
-        const double* encodingMax = encodingMaxTensor->flat<double>().data();
+        const Tensor* encodingMaxTensorConst;
+        OP_REQUIRES_OK(context, context->input("encoding_max", &encodingMaxTensorConst));
 
         // read bitwidth
         const Tensor* bitwidthTensor;
         OP_REQUIRES_OK(context, context->input("bit_width", &bitwidthTensor));
-        const int8* bitwidth = bitwidthTensor->flat<int8>().data();
+        const int8 bitwidth = copyLiteralToHost<int8>(context->eigen_device<Device>(), bitwidthTensor->flat<int8>().data());
 
         // Read axis for per channel quantization
         const Tensor* axisHandlingTensor;
@@ -273,8 +312,8 @@ public:
             numChannels = shapeVector[numDimensionsTensor - 1];
         }
         // Number of channels should be equal to the number of encodings provided.
-        assert(numChannels == encodingMaxTensor->shape().dim_size(0));
-        assert(numChannels == encodingMinTensor->shape().dim_size(0));
+        assert(numChannels == encodingMaxTensorConst->shape().dim_size(0));
+        assert(numChannels == encodingMinTensorConst->shape().dim_size(0));
 
         // use symmetric encoding
         const Tensor* useSymmetricEncodingTensor;
@@ -297,7 +336,7 @@ public:
 
         if(!copyLiteralToHost<bool>(context->eigen_device<Device>(), isIntDataType))
         {
-            assert(copyLiteralToHost<int8>(context->eigen_device<Device>(), bitwidth) == 16);
+            assert(bitwidth == 16);
             modeSpecificActionFp16<Device, T>(context, inTensor, quantizerAddr, opMode, outTensor);
         }
         else
@@ -348,9 +387,9 @@ public:
                     allocator = &_allocator;
 #endif
 
-                    for (int channel = 0; channel < numChannels; channel++)
+                    if (opModeEnum == DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize)
                     {
-                        if (opModeEnum == DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize)
+                        for (int channel = 0; channel < numChannels; channel++)
                         {
                             // Chip input tensor along last dimensions
                             chipAndCopyPerChannelValues(context->eigen_device<Device>(), temp1, inTensorTwoDim, channel);
@@ -365,14 +404,36 @@ public:
                             quantizeDequantize(context->eigen_device<Device>(), inTensorTwoDim, encodings, outTensorTwoDim,
                                                channel);
                         }
-                        else if (opModeEnum == DlQuantization::TensorQuantizerOpMode::quantizeDequantize)
-                        {
-                            // When only inference is required, we skip computation of encodings
-                            DlQuantization::TfEncoding encodings = getTfEncoding(context->eigen_device<Device>(),
-                                                                                 encodingMin++, encodingMax++, bitwidth);
-                            quantizeDequantize(context->eigen_device<Device>(), inTensorTwoDim, encodings, outTensorTwoDim,
-                                               channel);
-                        }
+                    }
+                    else if (opModeEnum == DlQuantization::TensorQuantizerOpMode::quantizeDequantize)
+                    {
+                        // allocate tensors for scale and offset. By default, TF would allocate tensors in the device
+                        // where the op is currently executing in. To always allocate on the Host, additional argument
+                        // of type AllocatorAttributes needs to be passed. The object should be set to be allocated on
+                        // host and also made GPU compatible.
+                        Tensor encodingMinTensor, encodingMaxTensor, encodingScaleTensor, encodingOffsetTensor, encodingInvScaleTensor;
+                        AllocatorAttributes attr;
+                        attr.set_on_host(true);
+#if GOOGLE_CUDA
+                        attr.set_gpu_compatible(true);
+#endif
+
+                        OP_REQUIRES_OK(context, context->allocate_temp(DT_DOUBLE, encodingMinTensorConst->shape(), &encodingMinTensor, attr));
+                        OP_REQUIRES_OK(context, context->allocate_temp(DT_DOUBLE, encodingMinTensorConst->shape(), &encodingMaxTensor, attr));
+                        OP_REQUIRES_OK(context, context->allocate_temp(DT_DOUBLE, encodingMinTensorConst->shape(), &encodingScaleTensor, attr));
+                        OP_REQUIRES_OK(context, context->allocate_temp(DT_DOUBLE, encodingMinTensorConst->shape(), &encodingOffsetTensor, attr));
+                        OP_REQUIRES_OK(context, context->allocate_temp(DT_DOUBLE, encodingMinTensorConst->shape(), &encodingInvScaleTensor, attr));
+
+                        // min/max tensors need to be made non-const because they will be modified
+                        copyConstTensorToNonConstTensor(context->eigen_device<Device>(), encodingMinTensorConst, &encodingMinTensor);
+                        copyConstTensorToNonConstTensor(context->eigen_device<Device>(), encodingMaxTensorConst, &encodingMaxTensor);
+
+                        generatePerChannelScaleOffset(&encodingMinTensor, &encodingMaxTensor, bitwidth,
+                                                      &encodingScaleTensor, &encodingOffsetTensor);
+                        generateInvScale(&encodingScaleTensor, &encodingInvScaleTensor);
+                        quantizeDequantizePerChannel(context->eigen_device<Device>(), inTensorTwoDim, outTensorTwoDim,
+                                              &encodingMinTensor, &encodingMaxTensor, &encodingScaleTensor,
+                                              &encodingOffsetTensor, &encodingInvScaleTensor);
                     }
                 }
                 else if (numDimensionsTensor == 1)
@@ -389,9 +450,11 @@ public:
                     auto outTensorFlat = outTensor->flat<T>().data();
                     for (int channel = 0; channel < numChannels; channel++)
                     {
+                        const double* encodingMax = encodingMaxTensorConst->flat<double>().data();
+                        const double* encodingMin = encodingMinTensorConst->flat<double>().data();
                         modeSpecificActionInt(context->eigen_device<Device>(), inTensorFlat++, numElements, outTensorFlat++,
-                                              quantizerAddr++, opMode, encodingMin++, encodingMax++, bitwidth,
-                                              useSymmetricEncoding, allocator);
+                                              quantizerAddr++, opMode, encodingMin++, encodingMax++,
+                                              bitwidthTensor->flat<int8>().data(), useSymmetricEncoding, allocator);
                     }
                 }
             }

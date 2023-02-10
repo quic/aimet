@@ -66,6 +66,14 @@ T copyLiteralToHost(const GPUDevice& d, const T* deviceValue)
     return hostValue;
 }
 
+template <typename T>
+void copyArrayToHost(const GPUDevice& d, const T* srcPtr, T* destPtr, int count)
+{
+    // copies array from device to host
+    // assumes srcPtr is pointing to array in the device memory, destPtr points to array in host memory
+    cudaMemcpy(destPtr, srcPtr, sizeof(T) * count, cudaMemcpyDeviceToHost);
+}
+
 void chipAndCopyPerChannelValues(const GPUDevice& d, Tensor tensorToCopyInto,
                                  TTypes<float>::ConstMatrix tensorToCopyFrom, int channel)
 {
@@ -98,11 +106,35 @@ void quantizeDequantize(const GPUDevice& d, TTypes<float>::ConstMatrix inputs,
 
 };
 
+void quantizeDequantizePerChannel(const GPUDevice& d, TTypes<float>::ConstMatrix inputs, TTypes<float>::Matrix outputs,
+                           Tensor* encodingMinTensor, Tensor* encodingMaxTensor, Tensor* encodingScaleTensor,
+                           Tensor* encodingOffset, Tensor* encodingInvScaleTensor)
+{
+    // Input matrix dimensions [numRows X numChannels]. Extracting numRows below
+    int numRows =  inputs.dimension(0);
+
+    // the encodings tensors have the dimensions of [numChannels X 1]. But, since the input is of shape
+    // [numRows X numChannels], we would need to broadcast the encodings tensors to bring them to required shape.
+    // Ref: https://eigen.tuxfamily.org/dox/unsupported/eigen_tensors.html#title89
+    Eigen::array<int, 2> bcast({numRows, 1});
+    auto encodingMinBcast = encodingMinTensor->flat<double>().template cast<float>().broadcast(bcast);
+    auto encodingMaxBcast = encodingMaxTensor->flat<double>().template cast<float>().broadcast(bcast);
+    auto encodingScaleBcast = encodingScaleTensor->flat<double>().template cast<float>().broadcast(bcast);
+    auto encodingInvScaleBcast = encodingInvScaleTensor->flat<double>().template cast<float>().broadcast(bcast);
+
+    // Do note that the below operations omit doing offset add/subtract since it is unnecessary here
+    auto clampedTensor = inputs.cwiseMax(encodingMinBcast).cwiseMin(encodingMaxBcast);
+    auto tensor1 = (clampedTensor * encodingInvScaleBcast).round() * encodingScaleBcast;
+    outputs.device(d) = tensor1;
+}
+
 template void copyInputTensorsToOutputTensors(const GPUDevice& d, const float* inTensor, size_t count, float* outTensor);
 template int8 copyLiteralToHost<int8>(const GPUDevice&, const int8* deviceValue);
 template int32 copyLiteralToHost<int32>(const GPUDevice&, const int32* deviceValue);
 template uint64 copyLiteralToHost<uint64>(const GPUDevice&, const uint64* deviceValue);
 template double copyLiteralToHost<double>(const GPUDevice&, const double* deviceValue);
 template bool copyLiteralToHost<bool>(const GPUDevice&, const bool* deviceValue);
+template void copyArrayToHost<double>(const GPUDevice& d, const double* srcPtr, double* destPtr, int count);
+template void copyArrayToHost<float>(const GPUDevice& d, const float* srcPtr, float* destPtr, int count);
 
 #endif   // GOOGLE_CUDA
