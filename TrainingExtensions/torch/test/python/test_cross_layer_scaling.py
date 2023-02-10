@@ -731,11 +731,13 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         output = model(random_input)
 
         # Invoke MO implementation
-        CrossLayerScaling.scale_cls_set_with_conv_layers((model.conv1, model.conv2), python_only=False)
+        CrossLayerScaling.python_only = False
+        CrossLayerScaling.scale_cls_set_with_conv_layers((model.conv1, model.conv2))
         output_using_mo = model(random_input)
 
         # Invoke python implementation
-        CrossLayerScaling.scale_cls_set_with_conv_layers((model_copy.conv1, model_copy.conv2), python_only=True)
+        CrossLayerScaling.python_only = True
+        CrossLayerScaling.scale_cls_set_with_conv_layers((model_copy.conv1, model_copy.conv2))
         output_using_python = model_copy(random_input)
 
         # Verify the outputs.
