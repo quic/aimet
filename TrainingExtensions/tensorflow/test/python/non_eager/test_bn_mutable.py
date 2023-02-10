@@ -220,7 +220,7 @@ class TestBnMutable(unittest.TestCase):
                       old1_mean_read_var, old2_mean_read_var, old1_var_read_var, old2_var_read_var])
 
         # Modify batchnorm of sess
-        modify_sess_bn_mutable(sess, input_op_names, output_op_names)
+        sess = modify_sess_bn_mutable(sess, input_op_names, output_op_names)
 
 
         conn_graph_new = ConnectedGraph(sess.graph, input_op_names, output_op_names)
@@ -326,7 +326,7 @@ class TestBnMutable(unittest.TestCase):
                                                                    feed_dict={input_old_tensor: dummy_val})
 
         # Modify batchnorm of sess
-        modify_sess_bn_mutable(sess, input_op_names, output_op_names)
+        sess = modify_sess_bn_mutable(sess, input_op_names, output_op_names)
 
         conn_graph_new = ConnectedGraph(sess.graph, input_op_names, output_op_names)
         self.assertEqual(len(conn_graph_new.get_all_ops()), 7)
@@ -428,7 +428,7 @@ class TestBnMutable(unittest.TestCase):
                                                                               training_tensor: False})
 
         # Modify batchnorm of sess
-        modify_sess_bn_mutable(sess, input_op_names, output_op_names)
+        sess = modify_sess_bn_mutable(sess, input_op_names, output_op_names)
 
         conn_graph_new = ConnectedGraph(sess.graph, input_op_names, output_op_names)
         self.assertEqual(len(conn_graph_new.get_all_ops()), 7)
@@ -528,7 +528,7 @@ class TestBnMutable(unittest.TestCase):
                                                                    feed_dict={input_old_tensor: dummy_val})
 
         # Modify batchnorm of sess
-        modify_sess_bn_mutable(sess, input_op_names, output_op_names, training_tf_placeholder=False)
+        sess = modify_sess_bn_mutable(sess, input_op_names, output_op_names, training_tf_placeholder=False)
 
         conn_graph_new = ConnectedGraph(sess.graph, input_op_names, output_op_names)
         self.assertEqual(len(conn_graph_new.get_all_ops()), 7)
@@ -634,7 +634,7 @@ class TestBnMutable(unittest.TestCase):
                                                                               training_tensor: False})
 
         # Modify batchnorm of sess
-        modify_sess_bn_mutable(sess, input_op_names, output_op_names, training_tf_placeholder=False)
+        sess = modify_sess_bn_mutable(sess, input_op_names, output_op_names, training_tf_placeholder=False)
 
         conn_graph_new = ConnectedGraph(sess.graph, input_op_names, output_op_names)
         self.assertEqual(len(conn_graph_new.get_all_ops()), 7)
@@ -738,7 +738,7 @@ class TestBnMutable(unittest.TestCase):
                                                                    feed_dict={input_old_tensor: dummy_val})
 
         # Modify batchnorm of sess
-        modify_sess_bn_mutable(sess, input_op_names, output_op_names)
+        sess = modify_sess_bn_mutable(sess, input_op_names, output_op_names)
 
         conn_graph_new = ConnectedGraph(sess.graph, input_op_names, output_op_names)
         self.assertEqual(len(conn_graph_new.get_all_ops()), 7)
@@ -837,7 +837,7 @@ class TestBnMutable(unittest.TestCase):
                                                                    feed_dict={input_old_tensor: dummy_val})
 
         # Modify batchnorm of sess
-        modify_sess_bn_mutable(sess, input_op_names, output_op_names)
+        sess = modify_sess_bn_mutable(sess, input_op_names, output_op_names)
 
         conn_graph_new = ConnectedGraph(sess.graph, input_op_names, output_op_names)
         self.assertEqual(len(conn_graph_new.get_all_ops()), 7)
