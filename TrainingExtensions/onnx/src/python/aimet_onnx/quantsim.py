@@ -81,7 +81,7 @@ class QuantizationSimModel:
                  rounding_mode: str = 'nearest',
                  default_param_bw: int = 8,
                  default_activation_bw: int = 8,
-                 use_symmetric_encodings: bool = False, use_cuda: bool = False,
+                 use_symmetric_encodings: bool = False, use_cuda: bool = True,
                  device: int = 0, config_file: str = None):
         """
         Constructor
@@ -106,6 +106,8 @@ class QuantizationSimModel:
         self._default_activation_bw = default_activation_bw
         self._use_symmetric_encodings = use_symmetric_encodings
         self._use_cuda = use_cuda
+        if 'CUDAExecutionProvider' not in ort.get_available_providers():
+            self._use_cuda = False
         if use_cuda:
             self._op_domain = "aimet.customop.cuda"
             self.providers = [('CUDAExecutionProvider', {'device_id': device}), 'CPUExecutionProvider']
@@ -225,8 +227,8 @@ class QuantizationSimModel:
                                                           encodings=None,
                                                           op_mode=OpMode.oneShotQuantizeDequantize,
                                                           bitwidth=self._default_param_bw,
-                                                          use_symmetric_encodings=self._use_symmetric_encodings,
-                                                          use_cuda=self._use_cuda)
+                                                          use_symmetric_encodings=self._use_symmetric_encodings
+                                                          )
 
     def _insert_activation_quantization_nodes(self):
         """
@@ -251,8 +253,8 @@ class QuantizationSimModel:
                                                           encodings=None,
                                                           op_mode=OpMode.updateStats,
                                                           bitwidth=self._default_activation_bw,
-                                                          use_symmetric_encodings=self._use_symmetric_encodings,
-                                                          use_cuda=self._use_cuda)
+                                                          use_symmetric_encodings=self._use_symmetric_encodings
+                                                          )
 
     def _build_session(self, providers):
         """

@@ -47,7 +47,7 @@ void copyInputTensorsToOutputTensors(const T* inTensor, size_t count, T* outTens
 #ifdef ONNX_CUDA
         cudaMemcpy(outTensor, inTensor, count * sizeof(float), cudaMemcpyDeviceToDevice);
 #else
-        std::copy(inTensor, inTensor + count, outTensor);
+        throw std::runtime_error("Not compiled for GPU mode.");
 #endif
     }
     else

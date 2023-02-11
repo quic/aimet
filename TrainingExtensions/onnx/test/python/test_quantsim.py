@@ -40,6 +40,7 @@ import os
 import torch
 import numpy as np
 from onnx import load_model
+import pytest
 from aimet_common.defs import QuantScheme
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.qc_quantize_op import OpMode
@@ -282,4 +283,61 @@ class TestQuantSim:
             param_encodings_keys = list(encoding_data["param_encodings"][param].keys())
             assert param_encodings_keys == ['bitwidth', 'dtype', 'is_symmetric', 'max', 'min', 'offset', 'scale']
 
+    @pytest.mark.cuda
+    def test_compare_encodings_cpu_gpu(self):
+        """Test to compare encodings with PT"""
+        if not os.path.exists('/tmp'):
+            os.mkdir('/tmp')
+
+        def pytorch_callback(model, inputs):
+            model.eval()
+            model(torch.as_tensor(inputs))
+
+        def onnx_callback(session, inputs):
+            in_tensor = {'input': inputs}
+            session.run(None, in_tensor)
+
+        inputs = np.random.rand(128, 3, 32, 32).astype(np.float32)
+        model = DummyModel()
+        model.eval()
+
+        torch.onnx.export(model, torch.as_tensor(inputs), '/tmp/dummy_model.onnx', training=torch.onnx.TrainingMode.PRESERVE,
+                          input_names=['input'], output_names=['output'])
+
+        onnx_model_cpu = load_model('/tmp/dummy_model.onnx')
+        onnx_model_gpu = load_model('/tmp/dummy_model.onnx')
+
+        onnx_sim_cpu = QuantizationSimModel(onnx_model_cpu, use_cuda=False, quant_scheme=QuantScheme.post_training_tf_enhanced)
+        onnx_sim_gpu = QuantizationSimModel(onnx_model_gpu, use_cuda=True, quant_scheme=QuantScheme.post_training_tf_enhanced)
+
+        onnx_sim_cpu.compute_encodings(onnx_callback, inputs)
+        onnx_sim_cpu.export('/tmp', 'onnx_sim_cpu')
+        onnx_sim_gpu.compute_encodings(onnx_callback, inputs)
+        onnx_sim_gpu.export('/tmp', 'onnx_sim_gpu')
+
+
+        with open('/tmp/onnx_sim_cpu.encodings') as f:
+            cpu_encodings = json.load(f)
+        with open('/tmp/onnx_sim_gpu.encodings') as f:
+            gpu_encodings = json.load(f)
+
+        for name in list(cpu_encodings['activation_encodings'].keys()):
+            assert round(cpu_encodings['activation_encodings'][name]['max'], 4) == \
+                   round(gpu_encodings['activation_encodings'][name]['max'], 4)
+            assert round(cpu_encodings['activation_encodings'][name]['min'], 4) == \
+                   round(gpu_encodings['activation_encodings'][name]['min'], 4)
+            assert round(cpu_encodings['activation_encodings'][name]['scale'], 4) == \
+                   round(gpu_encodings['activation_encodings'][name]['scale'], 4)
+            assert cpu_encodings['activation_encodings'][name]['offset'] == \
+                   gpu_encodings['activation_encodings'][name]['offset']
+
+        for name in list(cpu_encodings['param_encodings'].keys()):
+            assert round(cpu_encodings['param_encodings'][name]['max'], 4) == \
+                   round(gpu_encodings['param_encodings'][name]['max'], 4)
+            assert round(cpu_encodings['param_encodings'][name]['min'], 4) == \
+                   round(gpu_encodings['param_encodings'][name]['min'], 4)
+            assert round(cpu_encodings['param_encodings'][name]['scale'], 4) == \
+                   round(gpu_encodings['param_encodings'][name]['scale'], 4)
+            assert cpu_encodings['param_encodings'][name]['offset'] == \
+                   gpu_encodings['param_encodings'][name]['offset']
 

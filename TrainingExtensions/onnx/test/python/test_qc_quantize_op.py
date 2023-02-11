@@ -41,6 +41,7 @@ import math
 import onnxruntime as ort
 from onnx import helper
 import os
+import pytest
 from aimet_common import libpymo
 from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO
 from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode
@@ -141,7 +142,7 @@ class TestQcQuantizeOp:
                      op_mode=OpMode.oneShotQuantizeDequantize,
                      bitwidth=8,
                      use_symmetric_encodings=False,
-                     use_cuda=False)
+                     )
 
         encodings = libpymo.TfEncoding()
         encodings.bw = 8
@@ -172,7 +173,7 @@ class TestQcQuantizeOp:
                      op_mode=OpMode.updateStats,
                      bitwidth=8,
                      use_symmetric_encodings=False,
-                     use_cuda=False)
+                     )
 
         session.run(None, {'input': input_arr})[0]
         qc_op.compute_encodings()
@@ -200,7 +201,7 @@ class TestQcQuantizeOp:
                      op_mode=OpMode.oneShotQuantizeDequantize,
                      bitwidth=8,
                      use_symmetric_encodings=False,
-                     use_cuda=False)
+                     )
 
         quantizer = libpymo.TensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
                                        MAP_ROUND_MODE_TO_PYMO['nearest'])
@@ -231,7 +232,7 @@ class TestQcQuantizeOp:
                      op_mode=OpMode.oneShotQuantizeDequantize,
                      bitwidth=8,
                      use_symmetric_encodings=False,
-                     use_cuda=False)
+                     )
 
         output_oneshot = session.run(None, {'input': input_arr})[0]
 
@@ -261,7 +262,7 @@ class TestQcQuantizeOp:
                      op_mode=OpMode.oneShotQuantizeDequantize,
                      bitwidth=8,
                      use_symmetric_encodings=True,
-                     use_cuda=False)
+                     )
         output_oneshot = session.run(None, {'input': input_arr})
 
         encodings = libpymo.TfEncoding()
@@ -289,7 +290,7 @@ class TestQcQuantizeOp:
                      op_mode=OpMode.oneShotQuantizeDequantize,
                      bitwidth=8,
                      use_symmetric_encodings=True,
-                     use_cuda=False)
+                     )
 
         qc_op.use_unsigned_symmetric = True
 
@@ -307,6 +308,41 @@ class TestQcQuantizeOp:
 
         assert np.allclose(output_oneshot, output_qdq)
 
+    @pytest.mark.cuda
+    def test_one_shot_quantize_dequantize_cpu_vs_gpu(self):
+        input_arr = np.asarray([[[[0, 1.2, 1.5, 4.0, 4.9, 5.3]]]]).astype(np.float32)
+        quant_info_cpu = libquant_info.QcQuantizeInfo()
+        quant_node_cpu = helper.make_node(op_name, inputs=['input'], outputs=['output'],
+                                      domain="aimet.customop.cpu", quant_info=libpymo.PtrToInt64(quant_info_cpu))
+        model_cpu = create_model_from_node(quant_node_cpu, input_arr.shape)
+        session_cpu = build_session(model_cpu, available_providers)
+        qc_op_cpu = QcQuantizeOp(quant_info=quant_info_cpu,
+                     quant_scheme=QuantScheme.post_training_tf,
+                     rounding_mode='nearest',
+                     op_mode=OpMode.oneShotQuantizeDequantize,
+                     bitwidth=8,
+                     use_symmetric_encodings=True)
+
+        output_cpu = session_cpu.run(None, {'input': input_arr})
+
+        quant_info_gpu = libquant_info.QcQuantizeInfo()
+        quant_node_gpu = helper.make_node(op_name, inputs=['input'], outputs=['output'],
+                                      domain="aimet.customop.cuda", quant_info=libpymo.PtrToInt64(quant_info_gpu))
+        model_gpu = create_model_from_node(quant_node_gpu, input_arr.shape)
+        session_gpu = build_session(model_gpu, available_providers)
+        qc_op_gpu = QcQuantizeOp(quant_info=quant_info_gpu,
+                     quant_scheme=QuantScheme.post_training_tf,
+                     rounding_mode='nearest',
+                     op_mode=OpMode.oneShotQuantizeDequantize,
+                     bitwidth=8,
+                     use_symmetric_encodings=True)
+
+
+        output_gpu = session_gpu.run(None, {'input': input_arr})
+
+
+        assert np.alltrue(output_gpu[0] == output_cpu[0])
+
     def test_set_get_properties(self):
         quant_info = libquant_info.QcQuantizeInfo()
         quant_node = helper.make_node(op_name, inputs=['input'], outputs=['output'],
@@ -317,7 +353,7 @@ class TestQcQuantizeOp:
                      op_mode=OpMode.oneShotQuantizeDequantize,
                      bitwidth=8,
                      use_symmetric_encodings=True,
-                     use_cuda=False)
+                     )
         qc_op.use_strict_symmetric = True
         assert quant_info.tensorQuantizerRef.getStrictSymmetric() == True
 
