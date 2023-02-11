@@ -79,14 +79,14 @@ def slim_mutable_bn_model(training_as_placeholder=False):
         inputs = tf.keras.Input(shape=(32, 32, 3,))
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
 
-        layer = normalization_layers.BatchNormalization(name="old1")
+        layer = normalization_layers.BatchNormalization(name="old1", epsilon = 1e-05)
         bn_op = layer.apply(conv_op, training=bn_training)
 
         relu0 = tf.nn.relu(bn_op)
         conv_op1 = tf.keras.layers.Conv2D(32, (3, 3))(relu0)
 
 
-        bn_op1 = tf.compat.v1.layers.batch_normalization(conv_op1, name="old2", training=bn_training,fused=True)
+        bn_op1 = tf.compat.v1.layers.batch_normalization(conv_op1, epsilon = 1e-05, name="old2", training=bn_training,fused=True)
 
         relu1 = tf.nn.relu(bn_op1)
 
@@ -101,7 +101,7 @@ def v1_bn_model(training_as_placeholder=False):
     inputs = tf.keras.Input(shape=(32, 32, 3,))
     conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
 
-    bn_op = tf.compat.v1.layers.batch_normalization(conv_op, name="old1", training=bn_training,
+    bn_op = tf.compat.v1.layers.batch_normalization(conv_op, name="old1", epsilon = 1e-05, training=bn_training,
                                                     beta_initializer=tf.compat.v1.random_uniform_initializer(),
                                                     gamma_initializer=tf.compat.v1.random_uniform_initializer(),
                                                     moving_mean_initializer=tf.compat.v1.random_uniform_initializer(),
@@ -111,7 +111,7 @@ def v1_bn_model(training_as_placeholder=False):
 
     conv_op1 = tf.keras.layers.Conv2D(32, (3, 3))(relu0)
 
-    bn_op1 = tf.compat.v1.layers.batch_normalization(conv_op1, name="old2", training=bn_training,
+    bn_op1 = tf.compat.v1.layers.batch_normalization(conv_op1, name="old2", epsilon = 1e-05, training=bn_training,
                                                      beta_initializer=tf.compat.v1.random_uniform_initializer(),
                                                      gamma_initializer=tf.compat.v1.random_uniform_initializer(),
                                                      moving_mean_initializer=tf.compat.v1.random_uniform_initializer(),
@@ -130,7 +130,8 @@ def keras_bn_model(training_as_placeholder=False):
     inputs = tf.keras.Input(shape=(32, 32, 3,))
     conv_output = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
 
-    bn_op = tf.keras.layers.BatchNormalization(name="old1",
+    # epsilon = 1e-05 to simulate pytorch Bn
+    bn_op = tf.keras.layers.BatchNormalization(name="old1", epsilon = 1e-05,
                                                beta_initializer=tf.compat.v1.random_uniform_initializer(),
                                                gamma_initializer=tf.compat.v1.random_uniform_initializer(),
                                                moving_mean_initializer=tf.compat.v1.random_uniform_initializer(),
@@ -145,7 +146,7 @@ def keras_bn_model(training_as_placeholder=False):
     # values to unpack (expected 2, got 0)
     relu = tf.nn.relu(bn_output)
     conv1_output = tf.keras.layers.Conv2D(32, (3, 3))(relu)
-    bn1_op = tf.keras.layers.BatchNormalization(name="old2",
+    bn1_op = tf.keras.layers.BatchNormalization(name="old2",epsilon = 1e-05,
                                                 beta_initializer=tf.compat.v1.random_uniform_initializer(),
                                                 gamma_initializer=tf.compat.v1.random_uniform_initializer(),
                                                 moving_mean_initializer=tf.compat.v1.random_uniform_initializer(),
