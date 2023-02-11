@@ -87,15 +87,17 @@ def modify_sess_bn_mutable(sess: tf.compat.v1.Session, start_op_names: Union[Lis
             gamma_read_var = BNUtils.get_gamma_read_var_op_tensor(sess.graph, batchnorm_tensor.op)
             mean_read_var = BNUtils.get_moving_mean_read_var_op_tensor(sess.graph, batchnorm_tensor.op)
             var_read_var = BNUtils.get_moving_variance_read_var_op_tensor(sess.graph, batchnorm_tensor.op)
+            epsilon = BNUtils.get_epsilon(batchnorm_tensor.op)
 
             beta, gamma, mean, var = sess.run([beta_read_var, gamma_read_var, mean_read_var, var_read_var])
+
 
             beta_init = tf.compat.v1.constant_initializer(beta, dtype=tf.float32, verify_shape=True)
             gamma_init = tf.compat.v1.constant_initializer(gamma, dtype=tf.float32, verify_shape=True)
             mean_init = tf.compat.v1.constant_initializer(mean, dtype=tf.float32, verify_shape=True)
             var_init = tf.compat.v1.constant_initializer(var, dtype=tf.float32, verify_shape=True)
             momentum = tf.Variable(_DEFAULT_TF_BN_MOMENTUM, trainable=False, name=modified_name + "/momentum_mutable")
-            new_bn = tf.compat.v1.layers.batch_normalization(batchnorm_tensor.in_tensor, beta_initializer=beta_init,
+            new_bn = tf.compat.v1.layers.batch_normalization(batchnorm_tensor.in_tensor, epsilon=epsilon, beta_initializer=beta_init,
                                                              gamma_initializer=gamma_init,
                                                              moving_mean_initializer=mean_init,
                                                              moving_variance_initializer=var_init,
