@@ -87,7 +87,11 @@ def modify_sess_bn_mutable(sess: tf.compat.v1.Session, start_op_names: Union[Lis
             gamma_read_var = BNUtils.get_gamma_read_var_op_tensor(sess.graph, batchnorm_tensor.op)
             mean_read_var = BNUtils.get_moving_mean_read_var_op_tensor(sess.graph, batchnorm_tensor.op)
             var_read_var = BNUtils.get_moving_variance_read_var_op_tensor(sess.graph, batchnorm_tensor.op)
-            epsilon = BNUtils.get_epsilon(batchnorm_tensor.op)
+            if batchnorm_tensor.op.type == 'Identity':
+                # can't find a way to read epsilon if BN type is Identity
+                epsilon = 1e-05
+            else:
+                epsilon = BNUtils.get_epsilon(batchnorm_tensor.op)
 
             beta, gamma, mean, var = sess.run([beta_read_var, gamma_read_var, mean_read_var, var_read_var])
 
