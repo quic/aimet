@@ -675,7 +675,7 @@ def _common_stays_valid_after_export_helper(model, rand_inp, config=None):
 
     original_sim_output = sim.model.predict(rand_inp)
     original_sim_model_weights = sim.model.get_weights()
-
+    original_nodes = [node[0] for node in sim.model._nodes_by_depth.values()]
     original_layer_and_quantizers = {}
     for layer in sim.model.layers:
         if isinstance(layer, tf.keras.layers.InputLayer):
@@ -716,6 +716,12 @@ def _common_stays_valid_after_export_helper(model, rand_inp, config=None):
             assert original_encoding[i].min == new_encoding[i].min, f"original: {original_encoding[i].min}, new: {new_encoding[i].min}"
             assert original_encoding[i].max == new_encoding[i].max, f"original: {original_encoding[i].max}, new: {new_encoding[i].max}"
 
+    def check_nodes_are_different(original_node, new_node):
+        assert original_node.name != new_node.name
+        assert original_node.op != new_node.op
+        assert original_node.input != new_node.input
+        assert original_node.output != new_node.output
+
     for layer in sim.model.layers:
         if isinstance(layer, tf.keras.layers.InputLayer):
             continue
@@ -724,7 +730,6 @@ def _common_stays_valid_after_export_helper(model, rand_inp, config=None):
         for i, _ in enumerate(layer.input_quantizers):
             check_encodings(original_layer_and_quantizers[layer.name]["input_quantizers"][i].encoding,
                             layer.input_quantizers[i].encoding)
-
         assert len(layer.output_quantizers) == len(original_layer_and_quantizers[layer.name]["output_quantizers"]), f"Not the same number of output quantizers for layer {layer.name}"
         for i, _ in enumerate(layer.output_quantizers):
             check_encodings(original_layer_and_quantizers[layer.name]["output_quantizers"][i].encoding,
@@ -736,6 +741,8 @@ def _common_stays_valid_after_export_helper(model, rand_inp, config=None):
                             layer.param_quantizers[i].encoding)
 
     np.testing.assert_array_equal(original_sim_output, sim.model.predict(rand_inp))
+
+    np.testing.assert_raises(AssertionError, np.testing.assert_array_equal, original_nodes, [node[0] for node in sim.model._nodes_by_depth.values()])
 
 
 def test_model_stays_valid_after_export_per_tensor():
@@ -800,3 +807,5 @@ def test_model_stays_valid_after_export_per_channel():
 
     if os.path.exists(tmp_config_file):
         os.remove(tmp_config_file)
+
+test_model_stays_valid_after_export_per_tensor()

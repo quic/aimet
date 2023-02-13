@@ -422,7 +422,14 @@ class QuantizationSimModel(tf.keras.Model):
             _logger.error("Could not convert h5 to frozen pb. "
                           "Please call export() again with custom_objects defined.")
             raise
-        self.model = tf.keras.Model.from_config(quantsim_model_config, custom_objects=custom_objects)
+
+        # The model is rebuilt in two steps here. First, the model is rebuilt using the from_config method to get the
+        # overall model structure back with the original layers wrapped and their quantizers correctly made. Then, that model
+        # is cloned via the clone_model method to ensure there is no shared state between the original model and the
+        # rebuilt model. Specifically, this cuts ties between the inbound/outbound nodes from the original model that were used to
+        # rebuild the model.
+        self.model = tf.keras.models.clone_model(tf.keras.Model.from_config(
+            quantsim_model_config, custom_objects=custom_objects))
 
         # Second part of handling weights that might not be attached to the model. Here, we use the initial models weights
         # found and manually add the missing weights while also getting back the original name.
