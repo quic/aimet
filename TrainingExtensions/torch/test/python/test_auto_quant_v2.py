@@ -41,6 +41,7 @@ from dataclasses import dataclass
 import itertools
 from unittest.mock import patch, MagicMock
 import os
+from bs4 import BeautifulSoup
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
 import pytest
 import shutil
@@ -121,12 +122,51 @@ def unlabeled_data_loader(dummy_input):
     return DataLoader(dataset)
 
 
+def assert_html(html_parsed, properties):
+    for id_, prop in properties.items():
+        elem = html_parsed.find(id=id_)
+        assert elem is not None
+        for prop_name, prop_val in prop.items():
+            if prop_val is None:
+                assert prop_name not in elem.attrs
+            else:
+                assert elem[prop_name] == prop_val
+
+
+_VISITED = { 'data-visited': 'true', }
+_NOT_VISITED = { 'data-visited': None, }
+_SUCCESS = {
+    'data-visited': 'true',
+    'data-stage-result': 'success'
+}
+_DISCARDED = {
+    'data-visited': 'true',
+    'data-stage-result': 'discarded'
+}
+_ERROR_IGNORED = {
+    'data-visited': 'true',
+    'data-stage-result': 'error-ignored'
+}
+_ERROR_FAILED = {
+    'data-visited': 'true',
+    'data-stage-result': 'error-failed'
+}
+
 def assert_applied_techniques(
         output_model, acc, encoding_path,
         target_acc, bn_folded_acc, cle_acc, adaround_acc,
+        results_dir,
 ):
+    html_path = os.path.join(results_dir, 'diagnostics.html')
+    with open(html_path) as f:
+        html_parsed = BeautifulSoup(f.read(), features="html.parser")
+
     # Batchnorm folding is always applied.
     assert output_model.applied_bn_folding
+    assert_html(html_parsed, {
+        'node_batchnorm_folding': _SUCCESS,
+        'node_test_batchnorm_folding': _VISITED,
+    })
 
     # If accuracy is good enough after batchnorm folding
     if bn_folded_acc >= target_acc:
@@ -134,7 +174,24 @@ def assert_applied_techniques(
         assert encoding_path.endswith("batchnorm_folding.encodings")
         assert not output_model.applied_cle
         assert not output_model.applied_adaround
+
+        assert_html(html_parsed, {
+            'node_cross_layer_equalization': _NOT_VISITED,
+            'node_test_cross_layer_equalization': _NOT_VISITED,
+            'node_adaround': _NOT_VISITED,
+            'node_test_adaround': _NOT_VISITED,
+            'node_result_fail': _NOT_VISITED,
+            'node_result_success': _VISITED,
+        })
         return
+
+    # CLE should be applied if and only if it brings accuracy gain
+    assert output_model.applied_cle == (bn_folded_acc < cle_acc)
+
+    assert_html(html_parsed, {
+        'node_cross_layer_equalization': _SUCCESS if output_model.applied_cle else _DISCARDED,
+        'node_test_cross_layer_equalization': _VISITED,
+    })
 
     # If accuracy is good enough after cle
     if cle_acc >= target_acc:
@@ -142,17 +199,38 @@ def assert_applied_techniques(
         assert encoding_path.endswith("cross_layer_equalization.encodings")
         assert output_model.applied_cle
         assert not output_model.applied_adaround
+
+        assert_html(html_parsed, {
+            'node_adaround': _NOT_VISITED,
+            'node_test_adaround': _NOT_VISITED,
+            'node_result_fail': _NOT_VISITED,
+            'node_result_success': _VISITED,
+        })
         return
 
-    # CLE should be applied if and only if it brings accuracy gain
-    assert output_model.applied_cle == (bn_folded_acc < cle_acc)
+    assert output_model.applied_adaround == (adaround_acc >= max(bn_folded_acc, cle_acc))
+
+    assert_html(html_parsed, {
+        'node_adaround': _SUCCESS if output_model.applied_adaround else _DISCARDED,
+        'node_test_adaround': _VISITED,
+    })
 
     # If accuracy is good enough after adaround
     if adaround_acc >= target_acc:
         assert acc == adaround_acc
         assert encoding_path.endswith("adaround.encodings")
         assert output_model.applied_adaround
+
+        assert_html(html_parsed, {
+            'node_result_fail': _NOT_VISITED,
+            'node_result_success': _VISITED,
+        })
         return
+
+    assert_html(html_parsed, {
+        'node_result_fail': _VISITED,
+        'node_result_success': _NOT_VISITED,
+    })
 
     assert acc == max(bn_folded_acc, cle_acc, adaround_acc)
 
@@ -237,15 +315,6 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc, fp32_acc=None, w3
             pass
 
 
-@pytest.fixture(autouse=True)
-def patch_dependencies():
-    def render(*_, **__):
-        return ""
-
-    with patch("aimet_torch.auto_quant_v2.jinja2.environment.Template.render", side_effect=render):
-         yield
-
-
 class TestAutoQuant:
     def test_auto_quant_default_values(self, unlabeled_data_loader):
         auto_quant = AutoQuant(
@@ -327,6 +396,7 @@ class TestAutoQuant:
             assert_applied_techniques(
                 output_model, acc, encoding_path,
                 target_acc, bn_folded_acc, cle_acc, adaround_acc,
+                results_dir,
             )
 
     def test_auto_quant_invalid_input(self, unlabeled_data_loader):
@@ -377,8 +447,11 @@ class TestAutoQuant:
     def test_auto_quant_fallback(
         self, cpu_model, dummy_input, unlabeled_data_loader,
     ):
+        class _Exception(Exception):
+            pass
+
         def error_fn(*_, **__):
-            raise Exception
+            raise _Exception
 
         allowed_accuracy_drop = 0.0
         bn_folded_acc, cle_acc, adaround_acc = .4, .5, .6
@@ -391,27 +464,84 @@ class TestAutoQuant:
                 eval_callback=mocks.eval_callback,
             )
 
-            with patch("aimet_torch.auto_quant_v2.fold_all_batch_norms", side_effect=error_fn):
-                # If batchnorm folding fails, should return Adaround results
-                _, acc, _ = auto_quant.apply(cpu_model, dummy_input, strict_validation=False)
-                assert acc == adaround_acc
+            with create_tmp_directory() as results_dir:
+                with patch("aimet_torch.auto_quant_v2.prepare_model", side_effect=error_fn):
+                    # If prepare_model fails, should return Adaround results
+                    _, acc, _ = auto_quant.apply(cpu_model, dummy_input, results_dir=results_dir, strict_validation=False)
+                    assert acc == adaround_acc
 
-            with patch("aimet_torch.auto_quant_v2.equalize_model", side_effect=error_fn):
-                # If CLE fails, should return Adaround results
-                _, acc, _ = auto_quant.apply(cpu_model, dummy_input, strict_validation=False)
-                assert acc == adaround_acc
+                    with open(os.path.join(results_dir, 'diagnostics.html')) as f:
+                        html_parsed = BeautifulSoup(f.read(), features="html.parser")
+                        assert_html(html_parsed, {
+                            'node_prepare_model': _ERROR_IGNORED,
+                            'node_batchnorm_folding': _SUCCESS,
+                            'node_cross_layer_equalization': _SUCCESS,
+                            'node_adaround': _SUCCESS,
+                        })
 
-            with patch("aimet_torch.auto_quant_v2.Adaround._apply_adaround", side_effect=error_fn):
-                # If adaround fails, should return CLE results
-                _, acc, _ = auto_quant.apply(cpu_model, dummy_input, strict_validation=False)
-                assert acc == cle_acc
+                with patch("aimet_torch.auto_quant_v2.fold_all_batch_norms", side_effect=error_fn):
+                    # If batchnorm folding fails, should return Adaround results
+                    _, acc, _ = auto_quant.apply(cpu_model, dummy_input, results_dir=results_dir, strict_validation=False)
+                    assert acc == adaround_acc
 
-            with patch("aimet_torch.auto_quant_v2.fold_all_batch_norms", side_effect=error_fn),\
-                    patch("aimet_torch.auto_quant_v2.equalize_model", side_effect=error_fn),\
-                    patch("aimet_torch.auto_quant_v2.Adaround._apply_adaround", side_effect=error_fn):
-                # If everything fails, should raise an error
-                with pytest.raises(RuntimeError):
-                    auto_quant.apply(cpu_model, dummy_input, strict_validation=False)
+                    with open(os.path.join(results_dir, 'diagnostics.html')) as f:
+                        html_parsed = BeautifulSoup(f.read(), features="html.parser")
+                        assert_html(html_parsed, {
+                            'node_batchnorm_folding': _ERROR_IGNORED,
+                            'node_cross_layer_equalization': _SUCCESS,
+                            'node_adaround': _SUCCESS,
+                        })
+
+                with patch("aimet_torch.auto_quant_v2.equalize_model", side_effect=error_fn):
+                    # If CLE fails, should return Adaround results
+                    _, acc, _ = auto_quant.apply(cpu_model, dummy_input, results_dir=results_dir, strict_validation=False)
+                    assert acc == adaround_acc
+
+                    with open(os.path.join(results_dir, 'diagnostics.html')) as f:
+                        html_parsed = BeautifulSoup(f.read(), features="html.parser")
+                        assert_html(html_parsed, {
+                            'node_batchnorm_folding': _SUCCESS,
+                            'node_cross_layer_equalization': _ERROR_IGNORED,
+                            'node_adaround': _SUCCESS,
+                        })
+
+                with patch("aimet_torch.auto_quant_v2.Adaround._apply_adaround", side_effect=error_fn):
+                    # If adaround fails, should return CLE results
+                    _, acc, _ = auto_quant.apply(cpu_model, dummy_input, results_dir=results_dir, strict_validation=False)
+                    assert acc == cle_acc
+
+                    with open(os.path.join(results_dir, 'diagnostics.html')) as f:
+                        html_parsed = BeautifulSoup(f.read(), features="html.parser")
+                        assert_html(html_parsed, {
+                            'node_batchnorm_folding': _SUCCESS,
+                            'node_cross_layer_equalization': _SUCCESS,
+                            'node_adaround': _ERROR_IGNORED,
+                        })
+
+                with patch("aimet_torch.auto_quant_v2.fold_all_batch_norms", side_effect=error_fn),\
+                        patch("aimet_torch.auto_quant_v2.equalize_model", side_effect=error_fn),\
+                        patch("aimet_torch.auto_quant_v2.Adaround._apply_adaround", side_effect=error_fn):
+                    # If everything fails, should raise an error
+                    with pytest.raises(RuntimeError):
+                        auto_quant.apply(cpu_model, dummy_input, results_dir=results_dir, strict_validation=False)
+                        assert_html(html_parsed, {
+                            'node_batchnorm_folding': _ERROR_IGNORED,
+                            'node_cross_layer_equalization': _ERROR_IGNORED,
+                            'node_adaround': _ERROR_IGNORED,
+                        })
+
+                with patch("aimet_torch.auto_quant_v2.equalize_model", side_effect=error_fn):
+                    # Hard stop
+                    with pytest.raises(_Exception):
+                        auto_quant.apply(cpu_model, dummy_input, results_dir=results_dir, strict_validation=True)
+
+                    with open(os.path.join(results_dir, 'diagnostics.html')) as f:
+                        html_parsed = BeautifulSoup(f.read(), features="html.parser")
+                        assert_html(html_parsed, {
+                            'node_batchnorm_folding': _SUCCESS,
+                            'node_cross_layer_equalization': _ERROR_FAILED,
+                            'node_adaround': _NOT_VISITED,
+                        })
 
     def test_auto_quant_early_exit(self, cpu_model, dummy_input, unlabeled_data_loader):
         allowed_accuracy_drop = 0.1
@@ -430,9 +560,20 @@ class TestAutoQuant:
                     auto_quant.apply(cpu_model,
                                      dummy_input_on_cpu=dummy_input.cpu(),
                                      results_dir=results_dir)
-        assert output_model is None
-        assert acc is None
-        assert encoding_path is None
+
+            assert output_model is None
+            assert acc is None
+            assert encoding_path is None
+
+            with open(os.path.join(results_dir, 'diagnostics.html')) as f:
+                html_parsed = BeautifulSoup(f.read(), features="html.parser")
+                assert_html(html_parsed, {
+                    'node_test_w32_eval_score': _VISITED,
+                    'node_batchnorm_folding': _NOT_VISITED,
+                    'node_cross_layer_equalization': _NOT_VISITED,
+                    'node_adaround': _NOT_VISITED,
+                    'node_result_fail': _VISITED,
+                })
 
     def test_auto_quant_caching(
         self, cpu_model, dummy_input, unlabeled_data_loader,
@@ -511,9 +652,9 @@ class TestAutoQuant:
 
     def test_set_additional_params(self, cpu_model, dummy_input, unlabeled_data_loader):
         allowed_accuracy_drop = 0
-        bn_folded_acc = 0
-        cle_acc = 0
-        adaround_acc = 0
+        bn_folded_acc = .1
+        cle_acc = .2
+        adaround_acc = .3
         with patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc) as mocks:
             export = QuantizationSimModel.export
 
