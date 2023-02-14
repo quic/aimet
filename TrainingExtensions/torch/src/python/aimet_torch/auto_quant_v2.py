@@ -40,10 +40,16 @@
 """Temporary buffer file for adding new features to AutoQuant"""
 import copy
 import contextlib
+from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 import functools
 import itertools
+import string
+import traceback
 import os
+import sys
+import io
+from unittest.mock import patch
 from typing import Any, Collection, Callable, Dict, List, Optional, Tuple, Union, Mapping
 import torch
 from torch.utils.data import DataLoader
@@ -559,33 +565,41 @@ class _AutoQuantV2: # pylint: disable=too-many-instance-attributes
         else:
             cache_dir = os.path.join(results_dir, ".auto_quant_cache", cache_id)
 
+        eval_manager = _EvalManager(
+            quantsim_factory=self._create_quantsim_and_encodings,
+            eval_func=self._evaluate_model_performance,
+            dummy_input=dummy_input,
+            dummy_input_on_cpu=dummy_input_on_cpu,
+            results_dir=results_dir,
+            strict_validation=strict_validation,
+        )
+
         try:
-            fp32_model = prepare_model(fp32_model, **self._model_preparer_kwargs)
-        except Exception as e: # pylint: disable=broad-except
-            if strict_validation:
-                raise
-            _logger.warning(
-                "Model preparation has failed."
-                " Falling back to the original model (Reason: %s)", str(e)
-            )
+            with eval_manager.analysis_session("Prepare Model") as sess:
+                fp32_model = prepare_model(fp32_model, **self._model_preparer_kwargs)
+
+                if sess.result["status"] == "error-ignored":
+                    _logger.warning(
+                        "Model preparation has failed."
+                        " Falling back to the original model (Reason: %s)", str(sess.result["error"])
+                    )
 
 
-        if ModelValidator.validate_model(fp32_model, dummy_input):
-            _logger.info(
-                "Model validation has succeeded. Proceeding to AutoQuant algorithm."
-            )
-        else:
-            if strict_validation:
-                raise ValueError(
-                    "Model validation has failed."
-                    " Please make the necessary changes to the model and run again."
-                )
-            _logger.warning(
-                "Model validation has failed. Proceeding to AutoQuant algorithm regardless."
-            )
+                if ModelValidator.validate_model(fp32_model, dummy_input):
+                    _logger.info(
+                        "Model validation has succeeded. Proceeding to AutoQuant algorithm."
+                    )
+                else:
+                    if strict_validation:
+                        raise ValueError(
+                            "Model validation has failed."
+                            " Please make the necessary changes to the model and run again."
+                        )
+                    _logger.warning(
+                        "Model validation has failed. Proceeding to AutoQuant algorithm regardless."
+                    )
 
-        with in_eval_mode(fp32_model):
-            with cache.enable(cache_dir):
+            with in_eval_mode(fp32_model), cache.enable(cache_dir):
                 _logger.info("Starting AutoQuant")
 
                 fp32_acc = self._evaluate_model_performance(fp32_model)
@@ -594,19 +608,11 @@ class _AutoQuantV2: # pylint: disable=too-many-instance-attributes
                 _logger.info("Target eval score: %f", target_acc)
                 _logger.info("FP32 eval score (W32A32): %f", fp32_acc)
 
-                eval_manager = _EvalManager(
-                    quantsim_factory=self._create_quantsim_and_encodings,
-                    eval_func=self._evaluate_model_performance,
-                    dummy_input=dummy_input,
-                    dummy_input_on_cpu=dummy_input_on_cpu,
-                    results_dir=results_dir,
-                )
-
                 orig_quant_scheme = self.default_quant_scheme
 
                 # Default quant scheme is not set. Choose quant scheme automatically.
                 if self.default_quant_scheme is None:
-                    with eval_manager.analysis_session("Selecting optimal quantization scheme") as sess:
+                    with eval_manager.analysis_session("QuantScheme Selection") as sess:
                         def eval_fn(quant_scheme: _QuantSchemePair):
                             return sess.eval(
                                 fp32_model,
@@ -633,9 +639,9 @@ class _AutoQuantV2: # pylint: disable=too-many-instance-attributes
                             "Consider Quantization Aware Training."
                         )
 
-                eval_manager.export_diagnostics()
-
                 return ret
+        finally:
+            eval_manager.export_diagnostics()
 
     def _auto_quant_main( # pylint: disable=broad-except, too-many-locals, too-many-branches
             self,
@@ -663,7 +669,7 @@ class _AutoQuantV2: # pylint: disable=too-many-instance-attributes
 
         :return: The best ptq result as a dictionary.
         """
-        with eval_manager.analysis_session(f"W32A{self.default_output_bw} Evaluation") as sess:
+        with eval_manager.analysis_session(f"W32 Evaluation") as sess:
             w32_eval_score = sess.eval(model=fp32_model, default_param_bw=32)
 
             # Early exit
@@ -684,63 +690,57 @@ class _AutoQuantV2: # pylint: disable=too-many-instance-attributes
                     "applied_techniques": None,
                 }
 
+            sess.result["target_satisfied"] = True
+
         # Batchnorm Folding
         with eval_manager.ptq_session("Batchnorm Folding") as sess:
-            try:
-                model, folded_pairs = self._apply_batchnorm_folding(fp32_model, dummy_input)
-                for conv, bn in folded_pairs:
-                    sess.diagnostics.add(f"{conv} was merged with {bn}.")
-                sess.set_ptq_result(model=model,
-                                    applied_techniques=["batchnorm_folding"],
-                                    export_kwargs=self._export_kwargs)
-
-            except Exception:
-                if strict_validation:
-                    raise
+            model, _ = self._apply_batchnorm_folding(fp32_model, dummy_input)
+            sess.set_ptq_result(model=model,
+                                applied_techniques=["batchnorm_folding"],
+                                export_kwargs=self._export_kwargs)
 
         best_result = eval_manager.get_best_ptq_result()
         if best_result and best_result.accuracy >= target_acc:
+            sess.result["target_satisfied"] = True
             return best_result.as_dict()
 
         # Cross-Layer Equalization
         with eval_manager.ptq_session("Cross-Layer Equalization") as sess:
-            try:
-                model = self._apply_cross_layer_equalization(fp32_model, dummy_input)
-                sess.set_ptq_result(model=model,
-                                    applied_techniques=["cross_layer_equalization"],
-                                    export_kwargs=self._export_kwargs)
-            except Exception:
-                if strict_validation:
-                    raise
+            model = self._apply_cross_layer_equalization(fp32_model, dummy_input)
+            sess.set_ptq_result(model=model,
+                                applied_techniques=["cross_layer_equalization"],
+                                export_kwargs=self._export_kwargs)
 
         best_result = eval_manager.get_best_ptq_result()
         if best_result and best_result.accuracy >= target_acc:
+            sess.result["target_satisfied"] = True
             return best_result.as_dict()
 
         if best_result is None:
             model = fp32_model
             applied_techniques = []
         else:
+            if "cross_layer_equalization" not in best_result.applied_techniques:
+                sess.result["effective"] = False
             model = best_result.load_model()
             applied_techniques = best_result.applied_techniques
 
         # AdaRound
         with eval_manager.ptq_session("AdaRound") as sess:
-            try:
-                model, encoding_path = self._apply_adaround(model,
-                                                            dummy_input,
-                                                            results_dir)
-                sess.set_ptq_result(model=model,
-                                    encoding_path=encoding_path,
-                                    applied_techniques=[*applied_techniques, "adaround"],
-                                    export_kwargs=self._export_kwargs)
-
-            except Exception:
-                if strict_validation:
-                    raise
+            model, encoding_path = self._apply_adaround(model,
+                                                        dummy_input,
+                                                        results_dir)
+            sess.set_ptq_result(model=model,
+                                encoding_path=encoding_path,
+                                applied_techniques=[*applied_techniques, "adaround"],
+                                export_kwargs=self._export_kwargs)
 
         best_result = eval_manager.get_best_ptq_result()
         if best_result:
+            if "adaround" not in best_result.applied_techniques:
+                sess.result["effective"] = False
+            if best_result.accuracy >= target_acc:
+                sess.result["target_satisfied"] = True
             return best_result.as_dict()
 
         raise RuntimeError("None of batchnorm folding, CLE, or Adaround "
@@ -786,7 +786,8 @@ class _EvalManager:
                  eval_func: Callable[[torch.nn.Module], float],
                  dummy_input: Union[torch.Tensor, Tuple],
                  dummy_input_on_cpu: Union[torch.Tensor, Tuple],
-                 results_dir: str):
+                 results_dir: str,
+                 strict_validation: bool):
         """
         :param quantsim_factory: A factory function that returns QuantizationSimModel.
         :param eval_func: Evaluation function.
@@ -799,6 +800,7 @@ class _EvalManager:
         self._dummy_input = dummy_input
         self._dummy_input_on_cpu = dummy_input_on_cpu
         self._results_dir = results_dir
+        self._strict_validation = strict_validation
 
         os.makedirs(self._results_dir, exist_ok=True)
 
@@ -847,18 +849,28 @@ class _EvalManager:
                               self._eval_func,
                               self._dummy_input,
                               self._dummy_input_on_cpu,
-                              results_dir=os.path.join(self._results_dir, ".trace"))
+                              results_dir=os.path.join(self._results_dir, ".trace"),
+                              strict_validation=self._strict_validation)
         self._all_sessions.append(session)
         return session
+
+    HTML_TEMPLATE_FILE = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "auto_quant_diagnostics_template.html",
+    )
+    CSS_FILE = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "auto_quant_diagnostics_template.css",
+    )
 
     def export_diagnostics(self) -> str:
         """
         Export diagnostics in html format.
         :return: Diagnostics string in html format.
         """
-        loader = jinja2.FileSystemLoader(os.path.dirname(os.path.abspath(__file__)))
+        loader = jinja2.FileSystemLoader(os.path.dirname(self.HTML_TEMPLATE_FILE))
         env = jinja2.Environment(loader=loader)
-        template = env.get_template("auto_quant_diagnostics_template.html")
+        template = env.get_template(os.path.basename(self.HTML_TEMPLATE_FILE))
 
         if any(sess.diagnostics.contains_bokeh() for sess in self._all_sessions):
             from bokeh.resources import CDN
@@ -873,13 +885,43 @@ class _EvalManager:
         }
 
         html = template.render(head=head, body=body)
+
+        result = OrderedDict()
+        result["ptq_techniques"] = OrderedDict()
+
+        for sess in self._all_sessions:
+            if isinstance(sess, _PtqSession):
+                result["ptq_techniques"][sess.title_lowercase] = sess.result
+            else:
+                result[sess.title_lowercase] = sess.result
+
+        metadata = _build_flowchart_metadata(result)
+        metadata.update(css=open(self.CSS_FILE).read())
+
+        class DefaultFormatter(string.Formatter):
+            """
+            Formatter that fill in the format string with empty string ('') if not specified.
+
+            For example:
+
+            >>> DefaultFormatter().format('{first} & {second}', second='something')
+            ' & something'
+            """
+            def get_value(self, key, args, kwargs):
+                try:
+                    return super().get_value(key, args, kwargs)
+                except (KeyError, IndexError):
+                    return ''
+
+        html = DefaultFormatter().format(html, **metadata)
+
         filename = os.path.join(self._results_dir, "diagnostics.html")
         with open(filename, "w") as f:
             f.write(html)
         return html
 
 
-class _EvalSession:
+class _EvalSession: # pylint: disable=too-many-instance-attributes
     """
     Evaluation session for AutoQuant.
 
@@ -893,7 +935,8 @@ class _EvalSession:
             eval_func: Callable[[torch.nn.Module], float],
             dummy_input: Union[torch.Tensor, Tuple],
             dummy_input_on_cpu: Union[torch.Tensor, Tuple],
-            results_dir: str
+            results_dir: str,
+            strict_validation: bool,
     ):
         """
         :param title: Title of the session.
@@ -903,32 +946,40 @@ class _EvalSession:
         :param dummy_input_on_cpu: Dummy input to the model in CPU memory.
         :param results_dir: Base directory to save the temporary serialized model.
         """
-        self._title = title
+        self.title = title
         self._quantsim_factory = quantsim_factory
         self._eval_func = eval_func
         self._dummy_input = dummy_input
         self._dummy_input_on_cpu = dummy_input_on_cpu
         self._results_dir = results_dir
-        self._spinner = None
+        self._strict_validation = strict_validation
+        self.result = {
+            "status": None,
+            "error": None,
+            "target_satisfied": False,
+            "effective": True,
+        }
+
+        self._spinner = Spinner(self.title)
 
         os.makedirs(self._results_dir, exist_ok=True)
 
-        self._diagnostics = Diagnostics()
+        self.diagnostics = Diagnostics()
 
         # Map session title to file name.
         # e.g. title: "Cross-Layer Equalization" -> filename: "cross_layer_equalization"
-        self._filename = self._title.lower().replace("-", " ")
-        self._filename = "_".join(self._filename.split())
+        self.title_lowercase = self.title.lower().replace("-", " ")
+        self.title_lowercase = "_".join(self.title_lowercase.split())
 
-    @property
-    def title(self):
-        """Getter of self._title."""
-        return self._title
+        stdout_write = sys.stdout.write
+        self._log = io.StringIO()
 
-    @property
-    def diagnostics(self):
-        """Getter of self._diagnostics."""
-        return self._diagnostics
+        # Redirects stdout to self._log
+        def write_wrapper(*args, **kwargs):
+            self._log.write(*args, **kwargs)
+            return stdout_write(*args, **kwargs)
+
+        self._stdout_redirect = patch.object(sys.stdout, "write", write_wrapper)
 
     def eval(self, model: torch.nn.Module, **kwargs):
         """
@@ -942,13 +993,46 @@ class _EvalSession:
         return acc
 
     def __enter__(self):
-        self._spinner = Spinner(self._title)
         self._spinner.__enter__()
+        self._stdout_redirect.start()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self._spinner is not None:
-            self._spinner.__exit__(exc_type, exc_val, exc_tb)
+        self._spinner.__exit__(exc_type, exc_val, exc_tb)
+
+        if exc_val:
+            buffer = io.StringIO()
+            traceback.print_exception(exc_type, exc_val, exc_tb, file=buffer)
+
+            if self._strict_validation:
+                self._log.write(buffer.getvalue())
+            else:
+                self._log.write(
+                    "################################################################\n"
+                    "################################################################\n"
+                    "################################################################\n"
+                    "WARNING: The following exception was raised but ignored:\n\n"
+                    f"{buffer.getvalue()}"
+                    "################################################################\n"
+                    "################################################################\n"
+                    "################################################################\n"
+                )
+
+        self._stdout_redirect.stop()
+        self.diagnostics.add(self._log.getvalue())
+
+        self.result["error"] = exc_val
+        if not exc_val:
+            self.result["status"] = "success"
+        elif self._strict_validation:
+            self.result["status"] = "error-failed"
+        else:
+            self.result["status"] = "error-ignored"
+
+        if exc_val and not self._strict_validation:
+            # Return True so that the error doesn't propagate further
+            return True
+        return None
 
 
 class _PtqSession(_EvalSession):
@@ -1044,25 +1128,21 @@ class _PtqSession(_EvalSession):
         :return: The paths where model and encoding are saved
         """
         sim.export(path=self._results_dir,
-                   filename_prefix=self._filename,
+                   filename_prefix=self.title_lowercase,
                    dummy_input=self._dummy_input_on_cpu,
                    **export_kwargs)
-        model_path = os.path.join(self._results_dir, f"{self._filename}.pth")
-        encoding_path = os.path.join(self._results_dir, f"{self._filename}.encodings")
+        model_path = os.path.join(self._results_dir, f"{self.title_lowercase}.pth")
+        encoding_path = os.path.join(self._results_dir, f"{self.title_lowercase}.encodings")
         _logger.info("The results of %s is saved in %s and %s.",
-                     self._title, model_path, encoding_path)
+                     self.title, model_path, encoding_path)
         return model_path, encoding_path
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Raises error if set_ptq_result is not called."""
-        super(_PtqSession, self).__exit__(exc_type, exc_val, exc_tb)
-
-        if exc_val is not None:
-            return
-
         if self._ptq_result is not None:
             _logger.info("Session finished: %s. (eval score: %f)",
-                         self._title, self._ptq_result.accuracy)
+                         self.title, self._ptq_result.accuracy)
+        return super(_PtqSession, self).__exit__(exc_type, exc_val, exc_tb)
 
 
 @contextlib.contextmanager
@@ -1113,3 +1193,111 @@ def spy_auto_quant(auto_quant: _AutoQuantV2):
         yield spy
     finally:
         setattr(auto_quant, "_auto_quant_main", _auto_quant_main)
+
+
+def _build_flowchart_metadata(result: Mapping) -> Dict: # pylint: disable=too-many-return-statements
+    """
+    Build flowchart metadata for the html template of summary report
+
+    :param result: Result of AutoQuant with the following format:
+
+        result := {
+            "prepare_model": _stage_result,
+            "quantscheme_selection": _stage_result,
+            "w32_evaluation": _stage_result,
+            "ptq_techniques" [
+                "batchnorm_folding": _stage_result,
+                "cross_layer_equalization": _stage_result,
+                "adaround": _stage_result,
+            ]
+
+        }
+
+        where _stage_result is a dictionary defined as below:
+
+        _stage_result := {
+            "status": str,
+            "error": Exception,
+            "target_satisfied": bool,
+            "effective": bool,
+        }
+
+    :return: Dictionary that contains flowchart metadata for html template
+    """
+    metadata = defaultdict(str)
+    metadata.update(
+        edge_prepare_model_in='data-visited="true"',
+        node_prepare_model='data-visited="true"',
+    )
+
+    status = result['prepare_model']['status']
+    metadata.update(
+        node_prepare_model=f'data-visited="true" data-stage-result="{status}"',
+    )
+
+    if status == 'error-failed':
+        return metadata
+
+    metadata.update(
+        edge_prepare_model_out='data-visited="true"',
+    )
+
+    if "quantscheme_selection" in result:
+        status = result['quantscheme_selection']['status']
+        metadata.update(
+            node_quant_scheme_selection=f'data-visited="true" data-stage-result="{status}"',
+        )
+
+        if status == 'error-failed':
+            return metadata
+
+    metadata.update(
+        edge_quant_scheme_selection_out='data-visited="true"',
+        node_test_w32_eval_score='data-visited="true"',
+    )
+
+    if not result["w32_evaluation"]["target_satisfied"]:
+        metadata.update(
+            edge_test_w32_eval_score_if_false='data-visited="true"',
+            node_result_fail='data-visited="true"',
+        )
+        return metadata
+
+    metadata.update(
+        edge_test_w32_eval_score_if_true='data-visited="true"',
+    )
+
+
+    for ptq_name, ptq_result in result["ptq_techniques"].items():
+        status = ptq_result['status']
+        effective = ptq_result['effective']
+        if status == "success" and not effective:
+            status = "discarded"
+        metadata.update({
+            f"node_{ptq_name}": f'data-visited="true" data-stage-result="{status}"',
+        })
+
+        if status == 'error-failed':
+            return metadata
+
+        metadata.update({
+            f'edge_{ptq_name}_out': 'data-visited="true"',
+            f'node_test_{ptq_name}': 'data-visited="true"',
+        })
+
+        if ptq_result['target_satisfied']:
+            metadata.update({
+                f'edge_test_{ptq_name}_if_true': 'data-visited="true"',
+                'node_result_success': 'data-visited="true"',
+            })
+            return metadata
+
+        metadata.update({
+            f'edge_test_{ptq_name}_if_false': 'data-visited="true"',
+        })
+
+    metadata.update(
+        node_result_fail='data-visited="true"',
+    )
+
+    return metadata
