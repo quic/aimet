@@ -191,12 +191,6 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         if op.get_module() is not None:
             qc_quantize_wrapper = self._module_to_quantsim_wrapper_dict[op.get_module()]
             tensor_quantizers_for_input_true += qc_quantize_wrapper.input_quantizers
-            if op in get_all_input_ops(self._conn_graph) and op.inputs:  # filter out some inputs quantizer(i.g,those connecting to previous ops)
-                for idx, inp in enumerate(op.inputs):
-                    if inp.producer and not inp.is_model_input:
-                        tensor_quantizers_for_input_true.remove(qc_quantize_wrapper.input_quantizers[idx])
-
-
         else:
             queue = [op]
             while queue:
@@ -531,6 +525,17 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         :param model_input_configs: Configuration for model inputs
         """
         input_ops = get_all_input_ops(self._conn_graph)
+
+        for op in input_ops:
+            if op.input_ops:
+                quantizors = self._get_tensor_quantizers_for_input_true_setting(op)
+                for idx, product in enumerate(op.inputs):
+                    if not product.is_model_input:  # filter out some inputs quantizer(i.g,those connecting to previous ops)
+                        input_true_list = self._named_modules_to_tensor_quantizers_dict[op.get_module()][0]
+                        quantizor = quantizors[idx]
+                        input_true_list.remove(quantizor)
+
+
         for op in input_ops:
             if op.get_module() in self._named_modules_to_tensor_quantizers_dict:
                 modified_tensor_quantizers = {}
