@@ -209,3 +209,95 @@ if version.parse(tf.version.VERSION) >= version.parse("2.00"):
             ]
 
         return model_transformer.ModelTransformer(model, transform_list).transform()
+
+    class ReplaceSeparableConvWithDepthwisePointwise(transforms.Transform):
+        """
+        Transform class for the case like tf.keras.layers.SeparableConv2D
+        Result is separated such as layers.DepthwiseConv2D and layers.Conv2D
+        """
+
+        def pattern(self):
+            """
+            Pattern to transform
+            """
+            return transforms.LayerPattern("SeparableConv2D")
+
+        def replacement(self, match_layer):
+            """
+            Replacement logic for match_layer
+            :param match_layer: matched layer by pattern
+            """
+            DEPTHWISE_INDEX = 0
+            POINTWISE_INDEX = 1
+            BIAS_INDEX = 2
+
+            match_layer_config = match_layer.layer["config"]
+            depthwise_layer = layers.DepthwiseConv2D(
+                match_layer_config["kernel_size"],
+                strides=match_layer_config["strides"],
+                padding=match_layer_config["padding"],
+                depth_multiplier=match_layer_config["depth_multiplier"],
+                depthwise_initializer=match_layer_config["depthwise_initializer"],
+                depthwise_regularizer=match_layer_config["depthwise_regularizer"],
+                depthwise_constraint=match_layer_config["depthwise_constraint"],
+                activation=match_layer_config["activation"],
+                data_format=match_layer_config["data_format"],
+                trainable=match_layer_config["trainable"],
+            )
+            depthwise_layer_config = layers.serialize(depthwise_layer)
+            depthwise_layer_config["name"] = depthwise_layer_config["config"]["name"]
+
+            pointwise_layer = layers.Conv2D(
+                match_layer_config["filters"],
+                kernel_size=(1, 1),
+                strides=match_layer_config["strides"],
+                padding=match_layer_config["padding"],
+                use_bias=match_layer_config["use_bias"],
+                kernel_initializer=match_layer_config["kernel_initializer"],
+                bias_initializer=match_layer_config["bias_initializer"],
+                kernel_regularizer=match_layer_config["kernel_regularizer"],
+                bias_regularizer=match_layer_config["bias_regularizer"],
+                activation=match_layer_config["activation"],
+                activity_regularizer=match_layer_config["activity_regularizer"],
+                kernel_constraint=match_layer_config["kernel_constraint"],
+                bias_constraint=match_layer_config["bias_constraint"],
+                data_format=match_layer_config["data_format"],
+                trainable=match_layer_config["trainable"],
+            )
+            pointwise_layer_config = layers.serialize(pointwise_layer)
+            pointwise_layer_config["name"] = pointwise_layer_config["config"]["name"]
+
+
+            separable_weights = [*match_layer.weights.values()]
+            depthwise_kernel_weights = separable_weights[DEPTHWISE_INDEX]
+            pointwise_kernel_weights = separable_weights[POINTWISE_INDEX]
+            
+            if match_layer_config["name"] == "block2_sepconv1":
+                print()
+
+            if match_layer_config["use_bias"]:
+                bias_weights = separable_weights[BIAS_INDEX]
+                
+                return transforms.LayerNode(
+                    pointwise_layer_config,
+                    input_layers=[
+                        transforms.LayerNode(depthwise_layer_config, weights=[depthwise_kernel_weights]),
+                    ],
+                    weights=[pointwise_kernel_weights, bias_weights]
+                )
+
+            return transforms.LayerNode(
+                pointwise_layer_config,
+                input_layers=[transforms.LayerNode(depthwise_layer_config, [depthwise_kernel_weights])],
+                weights=[pointwise_kernel_weights]
+            )
+
+
+    def replace_separable_conv_with_depthwise_pointwise(model: tf.keras.Model) -> typing.Tuple[tf.keras.Model, typing.Dict]:
+        """
+        Replace SeparableConv2D with DepthwiseConv2D and Conv2D in tf.keras.Model
+
+        :param model: tf.keras.Model
+        """
+        transform_list = [ReplaceSeparableConvWithDepthwisePointwise()]
+        return model_transformer.ModelTransformer(model, transform_list).transform()
