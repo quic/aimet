@@ -1,9 +1,9 @@
-# /usr/bin/env python3.5
+# /usr/bin/env python3.8
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -41,6 +41,7 @@
 import os
 import io
 import copy
+import math
 import pickle
 from typing import Tuple, List, Union, Dict, Callable, Set, Optional
 from collections.abc import Iterable
@@ -571,11 +572,30 @@ class QuantizationSimModel:
                 else:
                     old_quantizer.encoding.min = -old_quantizer.encoding.max
 
+            # NOTE: In range learning, we do calculation with non-strict symmetric way
+            #   even if unsigned symmetric conditions are satisfied
+            # Make the min value symmetric with max, and update the corresponding delta and offset
+            if old_quantizer.enabled and old_quantizer.is_unsigned_symmetric:
+                num_steps = 2 ** old_quantizer.bitwidth - 1
+                half_num_steps = num_steps / 2
+                if isinstance(old_quantizer.encoding, list):
+                    for encoding in old_quantizer.encoding:
+                        encoding.min = -encoding.max
+                        encoding.delta = encoding.max / math.floor(half_num_steps)
+                        encoding.offset = -math.ceil(half_num_steps)
+                else:
+                    old_quantizer.encoding.min = -old_quantizer.encoding.max
+                    old_quantizer.encoding.delta = old_quantizer.encoding.max / math.floor(half_num_steps)
+                    old_quantizer.encoding.offset = -math.ceil(half_num_steps)
+
             new_quantizer.encoding = old_quantizer.encoding
             new_quantizer.use_symmetric_encodings = old_quantizer.use_symmetric_encodings
             new_quantizer.use_strict_symmetric = old_quantizer.use_strict_symmetric
             new_quantizer.use_unsigned_symmetric = old_quantizer.use_unsigned_symmetric
-            new_quantizer.is_unsigned_symmetric = old_quantizer.is_unsigned_symmetric
+            # NOTE: Set is_unsigned_symmetric to False for learned grid quantizers
+            # This is for the purpose of preventing unsigned symmetric operation
+            #   during QAT 2.0 range learning
+            new_quantizer.is_unsigned_symmetric = False
 
         # pylint: disable=protected-access
         module = post_training_module._module_to_wrap
@@ -596,7 +616,8 @@ class QuantizationSimModel:
             _copy_quantizer_attributes(trainable_module.input_quantizers[index], quantizer)
         # Copy user settable attributes for params
         for name, quantizer in post_training_module.param_quantizers.items():
-            _copy_quantizer_attributes(trainable_module.param_quantizers[name], quantizer)
+            learned_grid_quantizer = trainable_module.param_quantizers[name]
+            _copy_quantizer_attributes(learned_grid_quantizer, quantizer)
 
         return trainable_module
 
