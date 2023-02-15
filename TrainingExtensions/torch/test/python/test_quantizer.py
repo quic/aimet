@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2017-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2017-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -309,6 +309,16 @@ class ModuleListModel(nn.Module):
 
     def forward(self, *inputs):
         return self.layers[2](inputs[0])
+
+
+class ConvReluModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv = torch.nn.Conv2d(3, 5, kernel_size=2, bias=False)
+        self.relu = torch.nn.ReLU()
+
+    def forward(self, inputs):
+        return self.relu(self.conv(inputs))
 
 
 class TestQuantizationSimStaticGrad:
@@ -3114,6 +3124,100 @@ class TestQuantizationSimLearnedGrid:
         # Forward and backward should finish without runtime error
         out = quant_sim.model(dummy_input)
         out.sum().backward()
+
+    def test_quantizer_flag_when_unsigned_symmetric_is_enabled(self):
+        results_dir = os.path.abspath("./tmp/")
+        os.makedirs(results_dir, exist_ok=True)
+
+        # Use symmetric quantization both activation and parameter and
+        #   enable unsigned symmetric and per channel quantization flag
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "True"
+                },
+                "params": {
+                    "is_quantized": "True",
+                    "is_symmetric": "True"
+                },
+                "strict_symmetric": "False",
+                "unsigned_symmetric": "True",
+                "per_channel_quantization": "True",
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open("./tmp/quantsim_config.json", "w") as f:
+            json.dump(quantsim_config, f)
+
+        model = ConvReluModel()
+        # Force all weight values to have positive numbers
+        model.conv.weight = nn.Parameter(model.conv.weight.data.clamp_min(0))
+
+        dummy_input = torch.rand(16, 3, 28, 28)
+        sim = QuantizationSimModel(model, dummy_input=dummy_input,
+                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                   config_file="./tmp/quantsim_config.json")
+
+        sim.compute_encodings(evaluate, dummy_input)
+        # Check whether encoding of weight parameter is symmetric characteristic
+        for encoding in sim.model.conv.param_quantizers["weight"].encoding:
+            assert encoding.min == -encoding.max
+            assert encoding.offset == -128
+            assert np.allclose(encoding.delta, encoding.max / 127.0)
+
+        # Param quantizer should have is_unsigned_symmetric to False,
+        #   even though unsigned_symmetric is True and encoding range is all positive
+        assert not sim.model.conv.param_quantizers["weight"].is_unsigned_symmetric
+
+        # Activation quantizer can have is_unsigned_symmetric to False,
+        #   even though unsigned_symmetric is True and encoding range is all positive
+        assert not sim.model.relu.output_quantizers[0].is_unsigned_symmetric
+
+        def _validate_export_result(file_name: str) -> None:
+            def _validate_encoding(_encoding_info):
+                encoding_min = encoding_info["min"]
+                encoding_max = encoding_info["max"]
+                scale = encoding_info["scale"]
+                offset = encoding_info["offset"]
+
+                assert encoding_min == -encoding_max - scale
+                assert offset == -128
+                assert np.isclose(encoding_min, scale * offset, atol=1e-6)
+                assert np.isclose(encoding_max, encoding_min + scale * 255, atol=1e-6)
+
+            with open(f"{results_dir}/{file_name}.encodings", "r") as encodings_file:
+                encodings = json.load(encodings_file)
+
+                activation_encodings = encodings["activation_encodings"]
+                for _, encoding_info_list in activation_encodings.items():
+                    for encoding_info in encoding_info_list:
+                        _validate_encoding(encoding_info)
+
+                param_encodings = encodings["param_encodings"]
+                for encoding_info in param_encodings["conv.weight"]:
+                    _validate_encoding(encoding_info)
+
+        sim.export(results_dir, "before_range_learning", dummy_input)
+        _validate_export_result("before_range_learning")
+
+        optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.001, momentum=0.5)
+        for _ in range(20):
+            inputs = torch.rand(32, 3, 28, 28)
+            out = sim.model(inputs)
+            loss = out.flatten().sum()
+            loss.backward()
+            optimizer.step()
+
+        sim.export(results_dir, "after_range_learning", dummy_input)
+        _validate_export_result("after_range_learning")
+
+        if os.path.exists(results_dir):
+            shutil.rmtree(results_dir)
 
 
 class CustModelV1Simple(torch.nn.Module):
