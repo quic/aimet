@@ -611,9 +611,6 @@ class QuantizationSimModel:
         param_encodings = encodings['param_encodings']
         activation_encodings = encodings['activation_encodings']
 
-        # op mode will be Quantize dequantize
-        op_mode = libpymo.TensorQuantizerOpMode.quantizeDequantize
-
         for op_name, quantizer_info in self._param_quantizers.items():
             quant_op = self.session.graph.get_operation_by_name(op_name)
             tensor_name = quant_op.inputs[0].name
@@ -621,9 +618,9 @@ class QuantizationSimModel:
                 encoding_dict = param_encodings[tensor_name] if self.per_channel_quantization_enabled else \
                     param_encodings[tensor_name][0]
                 encoding, is_symmetric = create_encoding_from_dict(encoding_dict)
-                quantizer_info.use_symmetric_encoding = is_symmetric
-                quantizer_info.set_encoding(encoding)
-                quantizer_info.set_op_mode(op_mode)
+                bitwidth = encoding_dict[0].get('bitwidth') if self.per_channel_quantization_enabled else \
+                    encoding_dict.get('bitwidth')
+                quantizer_info.set_encodings_to_quantizer(bitwidth, is_symmetric, encoding, libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
                 _logger.info("Setting quantization encodings for parameter: %s", tensor_name)
 
         for op_name, quantizer_info in self._activation_quantizers.items():
@@ -632,9 +629,8 @@ class QuantizationSimModel:
             if tensor_name in activation_encodings:
                 encoding_dict = activation_encodings[tensor_name][0]
                 encoding, is_symmetric = create_encoding_from_dict(encoding_dict)
-                quantizer_info.use_symmetric_encoding = is_symmetric
-                quantizer_info.set_encoding(encoding)
-                quantizer_info.set_op_mode(op_mode)
+                quantizer_info.set_encodings_to_quantizer(encoding_dict.get('bitwidth'), is_symmetric,
+                                                          encoding, libpymo.TensorQuantizerOpMode.quantizeDequantize)
                 _logger.info("Setting quantization encodings for activation: %s", tensor_name)
 
     def _param_op_mode_after_analysis(self, quant_scheme) -> libpymo.TensorQuantizerOpMode:
@@ -654,7 +650,7 @@ class QuantizationSimModel:
 
         return op_mode
 
-    def get_min_max_var_dict(self)-> Dict:
+    def get_min_max_var_dict(self) -> Dict:
         """
         Fetches all the min max variables in given Quantized graph.
         :return: dictionary of min/ max variable names to var mapping
@@ -667,7 +663,7 @@ class QuantizationSimModel:
 
         return variable_dict
 
-    def read_min_max(self, quant_op_name: str, variable_dict: Dict = None)-> (float, float):
+    def read_min_max(self, quant_op_name: str, variable_dict: Dict = None) -> (float, float):
         """
         Reads min and max params from quantize op
         :param quant_op_name: quantize op name to read min and max variables from.

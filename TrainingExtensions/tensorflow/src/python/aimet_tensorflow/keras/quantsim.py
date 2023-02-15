@@ -523,10 +523,8 @@ class QuantizationSimModel(tf.keras.Model):
                 if tensor_name in activation_encodings:
                     encoding, is_symmetric = quantsim_utils.create_encoding_from_dict(activation_encodings[tensor_name][0])
                     input_quantizer.tensor_quantizer.isEncodingValid = True
-                    input_quantizer.bitwidth = encoding.bw
-                    input_quantizer.use_symmetric_encodings = is_symmetric
-                    input_quantizer.encoding = encoding
-                    input_quantizer.quant_mode = libpymo.TensorQuantizerOpMode.quantizeDequantize
+                    input_quantizer.set_quantizer_encodings(encoding.bw, is_symmetric, encoding,
+                                                            libpymo.TensorQuantizerOpMode.quantizeDequantize)
                     _logger.info("Setting encodings for : %s", tensor_name)
 
             for idx, param_quantizer in enumerate(wrapper.param_quantizers):
@@ -537,15 +535,13 @@ class QuantizationSimModel(tf.keras.Model):
                         encoding, is_symmetric = quantsim_utils.create_encoding_from_dict(param_encodings[param_name])
                         for tensor_quantizer in param_quantizer.tensor_quantizer:
                             tensor_quantizer.isEncodingValid = True
-                        param_quantizer.bitwidth = encoding[0].bw
+                        bw = encoding[0].bw
                     else:
                         encoding, is_symmetric = quantsim_utils.create_encoding_from_dict(param_encodings[param_name][0])
                         param_quantizer.tensor_quantizer.isEncodingValid = True
-                        param_quantizer.bitwidth = encoding.bw
-
-                    param_quantizer.use_symmetric_encodings = is_symmetric
-                    param_quantizer.encoding = encoding
-                    param_quantizer.quant_mode = libpymo.TensorQuantizerOpMode.quantizeDequantize
+                        bw = encoding.bw
+                    param_quantizer.set_quantizer_encodings(bw, is_symmetric, encoding,
+                                                            libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
                     _logger.info("Setting encodings for : %s", param_name)
 
             for idx, output_quantizer in enumerate(wrapper.output_quantizers):
@@ -559,10 +555,8 @@ class QuantizationSimModel(tf.keras.Model):
                 if tensor_name in activation_encodings:
                     encoding, is_symmetric = quantsim_utils.create_encoding_from_dict(activation_encodings[tensor_name][0])
                     output_quantizer.tensor_quantizer.isEncodingValid = True
-                    output_quantizer.use_symmetric_encodings = is_symmetric
-                    output_quantizer.bitwidth = encoding.bw
-                    output_quantizer.encoding = encoding
-                    output_quantizer.quant_mode = libpymo.TensorQuantizerOpMode.quantizeDequantize
+                    output_quantizer.set_quantizer_encodings(encoding.bw, is_symmetric, encoding,
+                                                             libpymo.TensorQuantizerOpMode.quantizeDequantize)
                     _logger.info("Setting encodings for : %s", tensor_name)
 
     def _param_op_mode_after_analysis(self, quant_scheme) -> libpymo.TensorQuantizerOpMode:
