@@ -143,14 +143,14 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         random_tensor = torch.rand(2, 2)
         random_tensor_new = utils.change_tensor_device_placement(random_tensor, device=torch.device('cuda:0'))
 
-        self.assertEqual(random_tensor.device, torch.device('cpu'))
-        self.assertEqual(random_tensor_new.device, torch.device('cuda:0'))
+        assert random_tensor.device == torch.device('cpu')
+        assert random_tensor_new.device == torch.device('cuda:0')
 
         random_tensor = torch.rand(2, 2).to(device='cuda:0')
         random_tensor_new = utils.change_tensor_device_placement(random_tensor, device=torch.device('cpu'))
 
-        self.assertEqual(random_tensor.device, torch.device('cuda:0'))
-        self.assertEqual(random_tensor_new.device, torch.device('cpu'))
+        assert random_tensor.device == torch.device('cuda:0')
+        assert random_tensor_new.device == torch.device('cpu')
 
         # 2) list of tensors
 
@@ -163,9 +163,12 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         random_tensor_new = utils.change_tensor_device_placement(random_tensor, device=torch.device('cuda:0'))
 
         for item in random_tensor_new:
-            self.assertEqual(item.device, torch.device('cuda:0'))
+            assert item.device == torch.device('cuda:0')
 
-        self.assertEqual(len(random_tensor), len(random_tensor_new))
+        for item in random_tensor:
+            assert item.device == torch.device('cpu')
+
+        assert len(random_tensor) == len(random_tensor_new)
 
         random_tensor = [
             torch.rand(2, 2).to(device='cuda:0'),
@@ -176,9 +179,12 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         random_tensor_new = utils.change_tensor_device_placement(random_tensor, device=torch.device('cpu'))
 
         for item in random_tensor_new:
-            self.assertEqual(item.device, torch.device('cpu'))
+            assert item.device == torch.device('cpu')
 
-        self.assertEqual(len(random_tensor), len(random_tensor_new))
+        for item in random_tensor:
+            assert item.device == torch.device('cuda:0')
+
+        assert len(random_tensor) == len(random_tensor_new)
 
         # 3) list of list of tenors
 
@@ -190,15 +196,23 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
 
         random_tensor_new = utils.change_tensor_device_placement(random_tensor, device=torch.device('cuda:0'))
 
-        self.assertEqual(random_tensor_new[0][0].device, torch.device('cuda:0'))
-        self.assertEqual(random_tensor_new[0][1].device, torch.device('cuda:0'))
-        self.assertEqual(random_tensor_new[1][0].device, torch.device('cuda:0'))
-        self.assertEqual(random_tensor_new[1][1].device, torch.device('cuda:0'))
-        self.assertEqual(random_tensor_new[1][2].device, torch.device('cuda:0'))
-        self.assertEqual(random_tensor_new[1][3].device, torch.device('cuda:0'))
-        self.assertEqual(random_tensor_new[2].device, torch.device('cuda:0'))
+        assert random_tensor_new[0][0].device == torch.device('cuda:0')
+        assert random_tensor_new[0][1].device == torch.device('cuda:0')
+        assert random_tensor_new[1][0].device == torch.device('cuda:0')
+        assert random_tensor_new[1][1].device == torch.device('cuda:0')
+        assert random_tensor_new[1][2].device == torch.device('cuda:0')
+        assert random_tensor_new[1][3].device == torch.device('cuda:0')
+        assert random_tensor_new[2].device == torch.device('cuda:0')
 
-        self.assertEqual(len(random_tensor), len(random_tensor_new))
+        assert random_tensor[0][0].device == torch.device('cpu')
+        assert random_tensor[0][1].device == torch.device('cpu')
+        assert random_tensor[1][0].device == torch.device('cpu')
+        assert random_tensor[1][1].device == torch.device('cpu')
+        assert random_tensor[1][2].device == torch.device('cpu')
+        assert random_tensor[1][3].device == torch.device('cpu')
+        assert random_tensor[2].device == torch.device('cpu')
+
+        assert len(random_tensor) == len(random_tensor_new)
 
         # 4) tuple of tensors
         random_tensor = (
@@ -208,22 +222,33 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         )
         random_tensor_new = utils.change_tensor_device_placement(random_tensor, device=torch.device('cuda:0'))
 
-        self.assertEqual(random_tensor_new[0][0].device, torch.device('cuda:0'))
-        self.assertEqual(random_tensor_new[0][1].device, torch.device('cuda:0'))
-        self.assertEqual(random_tensor_new[1][0].device, torch.device('cuda:0'))
-        self.assertEqual(random_tensor_new[1][1].device, torch.device('cuda:0'))
-        self.assertEqual(random_tensor_new[1][2].device, torch.device('cuda:0'))
-        self.assertEqual(random_tensor_new[1][3].device, torch.device('cuda:0'))
-        self.assertEqual(random_tensor_new[2][0].device, torch.device('cuda:0'))
-        self.assertEqual(random_tensor_new[2][1].device, torch.device('cuda:0'))
-        self.assertEqual(random_tensor_new[2][2].device, torch.device('cuda:0'))
-        self.assertEqual(random_tensor_new[2][3].device, torch.device('cuda:0'))
+        assert random_tensor_new[0][0].device == torch.device('cuda:0')
+        assert random_tensor_new[0][1].device == torch.device('cuda:0')
+        assert random_tensor_new[1][0].device == torch.device('cuda:0')
+        assert random_tensor_new[1][1].device == torch.device('cuda:0')
+        assert random_tensor_new[1][2].device == torch.device('cuda:0')
+        assert random_tensor_new[1][3].device == torch.device('cuda:0')
+        assert random_tensor_new[2][0].device == torch.device('cuda:0')
+        assert random_tensor_new[2][1].device == torch.device('cuda:0')
+        assert random_tensor_new[2][2].device == torch.device('cuda:0')
+        assert random_tensor_new[2][3].device == torch.device('cuda:0')
 
-        self.assertEqual(len(random_tensor), len(random_tensor_new))
-        self.assertTrue(isinstance(random_tensor_new, tuple))
-        self.assertTrue(isinstance(random_tensor_new[0], list))
-        self.assertTrue(isinstance(random_tensor_new[1], list))
-        self.assertTrue(isinstance(random_tensor_new[2], tuple))
+        assert random_tensor[0][0].device == torch.device('cpu')
+        assert random_tensor[0][1].device == torch.device('cpu')
+        assert random_tensor[1][0].device == torch.device('cpu')
+        assert random_tensor[1][1].device == torch.device('cpu')
+        assert random_tensor[1][2].device == torch.device('cpu')
+        assert random_tensor[1][3].device == torch.device('cpu')
+        assert random_tensor[2][0].device == torch.device('cpu')
+        assert random_tensor[2][1].device == torch.device('cpu')
+        assert random_tensor[2][2].device == torch.device('cpu')
+        assert random_tensor[2][3].device == torch.device('cpu')
+
+        assert len(random_tensor) == len(random_tensor_new)
+        assert isinstance(random_tensor_new, tuple)
+        assert isinstance(random_tensor_new[0], list)
+        assert isinstance(random_tensor_new[1], list)
+        assert isinstance(random_tensor_new[2], tuple)
 
         # 4) tuple of tuple of tenors
 
@@ -235,14 +260,19 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
 
         random_tensor_new = utils.change_tensor_device_placement(random_tensor, device=torch.device('cuda:0'))
 
-        self.assertEqual(random_tensor_new[0][0].device, torch.device('cuda:0'))
-        self.assertEqual(random_tensor_new[0][1].device, torch.device('cuda:0'))
-        self.assertEqual(random_tensor_new[1].device, torch.device('cuda:0'))
-        self.assertEqual(random_tensor_new[2].device, torch.device('cuda:0'))
+        assert random_tensor_new[0][0].device == torch.device('cuda:0')
+        assert random_tensor_new[0][1].device == torch.device('cuda:0')
+        assert random_tensor_new[1].device == torch.device('cuda:0')
+        assert random_tensor_new[2].device == torch.device('cuda:0')
 
-        self.assertEqual(len(random_tensor), len(random_tensor_new))
-        self.assertTrue(isinstance(random_tensor_new, tuple))
-        self.assertTrue(isinstance(random_tensor_new[0], tuple))
+        assert random_tensor[0][0].device == torch.device('cpu')
+        assert random_tensor[0][1].device == torch.device('cpu')
+        assert random_tensor[1].device == torch.device('cpu')
+        assert random_tensor[2].device == torch.device('cpu')
+
+        assert len(random_tensor) == len(random_tensor_new)
+        assert isinstance(random_tensor_new, tuple)
+        assert isinstance(random_tensor_new[0], tuple)
 
     def _collect_inp_out_data(self, device):
         model = TinyModel().to(device=device)

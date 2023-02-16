@@ -569,7 +569,7 @@ def get_ordered_lists_of_conv_fc(model: torch.nn.Module, input_shapes: Tuple,
     return module_list
 
 
-def change_tensor_device_placement(tensor_data: Union[torch.tensor, List, Tuple], device: torch.device):
+def change_tensor_device_placement(tensor_data: Union[torch.Tensor, List, Tuple], device: torch.device):
     """
     Change the tensor_data's device placement
 
@@ -577,24 +577,12 @@ def change_tensor_device_placement(tensor_data: Union[torch.tensor, List, Tuple]
     :param device: device information
     :return: tensor_data with modified device placement
     """
-    assert isinstance(tensor_data, (torch.Tensor, list, tuple))
-
     if isinstance(tensor_data, torch.Tensor):
-        tensor_data = tensor_data.to(device=device)
+        return tensor_data.to(device=device)
 
-    elif isinstance(tensor_data, tuple):
-        # convert to list first
-        tensor_data = list(tensor_data)
-        # call the function recursively
-        tensor_data = change_tensor_device_placement(tensor_data, device)
-        # convert back to tuple
-        tensor_data = tuple(tensor_data)
-
-    else:
-        for index, item in enumerate(tensor_data):
-            # change the entry in-place
-            # and call the function recursively
-            tensor_data[index] = change_tensor_device_placement(item, device=device)
+    if isinstance(tensor_data, (tuple, list)):
+        cls = tuple if isinstance(tensor_data, tuple) else list
+        return cls(change_tensor_device_placement(x, device) for x in tensor_data)
 
     return tensor_data
 
