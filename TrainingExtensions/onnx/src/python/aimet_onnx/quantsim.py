@@ -40,7 +40,6 @@
 import os
 from typing import Dict
 import numpy as np
-
 import onnx
 from onnx import helper, onnx_pb, mapping
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
@@ -59,9 +58,10 @@ from aimet_common import libquant_info
 WORKING_DIR = '/tmp/quantsim/'
 
 op_types_to_ignore = ["branch", "Flatten", "Gather", "Reshape", "Shape", "Unsqueeze", "Squeeze", "Split",
-                   "Compress", "Tile", "Transpose", "Identity"]
+                      "Compress", "Tile", "Transpose", "Identity"]
 
 data_types_to_quantize = [np.float32]
+
 
 class QuantizationSimModel:
     """ Creates a QuantizationSimModel model by adding quantization simulations ops to a given model """
@@ -140,19 +140,34 @@ class QuantizationSimModel:
             if node.op_type not in op_types_to_ignore:
                 for name in node.output:
                     if name not in self.activation_names and name not in self.param_names and \
-                            self.activation_data_types[name] in data_types_to_quantize:
+                            self._needs_quant_op(name):
                         self.activation_names.append(name)
         for node in self.model.graph().input:
-            if node.name not in self.activation_names and node.name not in self.param_names and \
-                    self.activation_data_types[node.name] == np.float32:
+            name = node.name
+            if name not in self.activation_names and name not in self.param_names and self._needs_quant_op(name):
                 self.activation_names.append(node.name)
         for node in self.model.graph().output:
             if node.name in self.activation_names:
                 node.name += '_updated'
 
+    def _needs_quant_op(self, name: str) -> bool:
+        """
+        Checks whether the given activation should be quantized
+
+        :param name: Name of the activation
+        :return: True if the activation should be quantized
+        """
+        # Check if activation is used as an input to another node
+        if name not in self.activation_data_types.keys():
+            return False
+        # Check activation datatype
+        elif self.activation_data_types[name] not in data_types_to_quantize:
+            return False
+        return True
+
     def _get_activation_types(self):
         """
-        Get the data type for each activation
+        Get the data type for each op input activation
         """
         num_outputs = len(self.model.graph().output)
         activations = []
@@ -201,13 +216,13 @@ class QuantizationSimModel:
         Insert quantization node for each param tensor
         """
         for name in self.param_names:
-            self.model.replace_input_of_all_nodes(name, name+'_qdq')
+            self.model.replace_input_of_all_nodes(name, name + '_qdq')
 
             quant_info = libquant_info.QcQuantizeInfo()
             custom_node = helper.make_node(
                 op_type='QcQuantizeOp',
                 inputs=[name],
-                outputs=[name+'_qdq'],
+                outputs=[name + '_qdq'],
                 name='QcQuantizeOp_' + name,
                 domain="aimet.customop",
                 op_name=name,
@@ -228,12 +243,12 @@ class QuantizationSimModel:
         Insert quantization node for each activation tensor
         """
         for name in self.activation_names:
-            self.model.replace_input_of_all_nodes(name, name+'_updated')
+            self.model.replace_input_of_all_nodes(name, name + '_updated')
             quant_info = libquant_info.QcQuantizeInfo()
             custom_node = helper.make_node(
                 op_type='QcQuantizeOp',
                 inputs=[name],
-                outputs=[name+'_updated'],
+                outputs=[name + '_updated'],
                 name='QcQuantizeOp_' + name,
                 domain="aimet.customop",
                 op_name=name,
@@ -305,6 +320,7 @@ class QuantizationSimModel:
         Export encodings to json and yaml file
         :param encoding_file_path: path to save the encoding files
         """
+
         def update_encoding_dict_entry_int(encoding_dict: Dict, op_name: str):
             encoding_dict[op_name] = {'min': self.qc_quantize_op_dict[name].encodings.min,
                                       'max': self.qc_quantize_op_dict[name].encodings.max,
@@ -313,6 +329,7 @@ class QuantizationSimModel:
                                       'bitwidth': self.qc_quantize_op_dict[name].encodings.bw,
                                       'is_symmetric': self.qc_quantize_op_dict[name].use_symmetric_encodings,
                                       'dtype': 'int'}
+
         param_encodings = {}
         for name in self.param_names:
             if self.qc_quantize_op_dict[name].enabled:
