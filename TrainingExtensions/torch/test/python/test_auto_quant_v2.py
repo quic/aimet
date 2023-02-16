@@ -50,7 +50,8 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 
 from aimet_torch import utils
-from aimet_torch.auto_quant import _AutoQuantV2 as AutoQuant
+from aimet_torch.model_preparer import prepare_model
+from aimet_torch.auto_quant_v2 import _AutoQuantV2 as AutoQuant
 from aimet_torch.adaround.adaround_weight import AdaroundParameters
 from aimet_torch.quantsim import QuantizationSimModel, OnnxExportApiArgs
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
@@ -316,15 +317,6 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc, fp32_acc=None, w3
 
 
 class TestAutoQuant:
-    def test_auto_quant_default_values(self, unlabeled_data_loader):
-        auto_quant = AutoQuant(
-            allowed_accuracy_drop=0.0,
-            unlabeled_dataset_iterable=unlabeled_data_loader,
-            eval_callback=MagicMock(),
-        )
-        assert auto_quant.adaround_params.data_loader is unlabeled_data_loader
-        assert auto_quant.adaround_params.num_batches == len(unlabeled_data_loader)
-
     @pytest.mark.parametrize(
         "bn_folded_acc, cle_acc, adaround_acc",
         itertools.permutations([.5, .6, .7])
@@ -350,9 +342,61 @@ class TestAutoQuant:
             allowed_accuracy_drop, bn_folded_acc, cle_acc, adaround_acc,
     ):
         self._test_auto_quant(
-            gpu_model, dummy_input, unlabeled_data_loader,
+            gpu_model, dummy_input.cuda(), unlabeled_data_loader,
             allowed_accuracy_drop, bn_folded_acc, cle_acc, adaround_acc,
         )
+
+    def test_consecutive_calls(self, cpu_model, dummy_input, unlabeled_data_loader):
+        bn_folded_acc, cle_acc, adaround_acc = .5, .6, .7
+
+        with patch_ptq_techniques(
+            bn_folded_acc, cle_acc, adaround_acc
+        ) as mocks:
+            with create_tmp_directory() as results_dir:
+                auto_quant = AutoQuant(cpu_model,
+                                       dummy_input,
+                                       unlabeled_data_loader,
+                                       mocks.eval_callback,
+                                       results_dir=results_dir)
+
+                # Should return proper model & summary report
+                # regardless of consecutive calls
+                for allowed_accuracy_drop in (.5, .4, .3, .2, .1, .05):
+                    self._do_test_optimize_auto_quant(
+                        auto_quant, cpu_model,
+                        allowed_accuracy_drop, bn_folded_acc, cle_acc, adaround_acc
+                    )
+
+        with patch_ptq_techniques(
+            bn_folded_acc, cle_acc, adaround_acc
+        ) as mocks:
+            with patch("aimet_torch.auto_quant_v2.prepare_model", side_effect=prepare_model) as prepare_model_mock:
+                auto_quant = AutoQuant(cpu_model,
+                                       dummy_input,
+                                       unlabeled_data_loader,
+                                       mocks.eval_callback,
+                                       results_dir=results_dir)
+
+                # When inference() and optimize() are called in back-to-back,
+                # reusable intermediate reseults should be always reused.
+                auto_quant.inference()
+                auto_quant.optimize()
+                assert prepare_model_mock.call_count == 1
+                assert mocks.fold_all_batch_norms.call_count == 1
+                assert mocks.equalize_model.call_count == 1
+
+                auto_quant.optimize()
+                assert prepare_model_mock.call_count == 1
+                assert mocks.fold_all_batch_norms.call_count == 1
+                assert mocks.equalize_model.call_count == 1
+
+                self._do_test_optimize_auto_quant(
+                    auto_quant, cpu_model,
+                    0.0, bn_folded_acc, cle_acc, adaround_acc
+                )
+                assert prepare_model_mock.call_count == 1
+                assert mocks.fold_all_batch_norms.call_count == 1
+                assert mocks.equalize_model.call_count == 1
 
     def _test_auto_quant(
             self, model, dummy_input, unlabeled_data_loader,
@@ -361,88 +405,103 @@ class TestAutoQuant:
         with patch_ptq_techniques(
             bn_folded_acc, cle_acc, adaround_acc
         ) as mocks:
-            auto_quant = AutoQuant(
-                allowed_accuracy_drop=allowed_accuracy_drop,
-                unlabeled_dataset_iterable=unlabeled_data_loader,
-                eval_callback=mocks.eval_callback,
-            )
-            self._do_test_apply_auto_quant(
-                auto_quant, model, dummy_input,
-                allowed_accuracy_drop, bn_folded_acc, cle_acc, adaround_acc
-            )
+            with create_tmp_directory() as results_dir:
+                auto_quant = AutoQuant(model,
+                                       dummy_input,
+                                       unlabeled_data_loader,
+                                       mocks.eval_callback,
+                                       results_dir=results_dir)
+                self._do_test_optimize_auto_quant(
+                    auto_quant, model, allowed_accuracy_drop,
+                    bn_folded_acc, cle_acc, adaround_acc
+                )
 
-    def _do_test_apply_auto_quant(
-            self, auto_quant, input_model, dummy_input,
+    def _do_test_optimize_auto_quant(
+            self, auto_quant, input_model,
             allowed_accuracy_drop, bn_folded_acc, cle_acc, adaround_acc,
     ):
-        with create_tmp_directory() as results_dir:
             target_acc = FP32_ACC - allowed_accuracy_drop
 
-            if utils.get_device(input_model) == torch.device("cpu"):
-                output_model, acc, encoding_path =\
-                    auto_quant.apply(input_model,
-                                     dummy_input_on_cpu=dummy_input.cpu(),
-                                     results_dir=results_dir,
-                                     strict_validation=True)
-            else:
-                output_model, acc, encoding_path =\
-                    auto_quant.apply(input_model,
-                                     dummy_input_on_cpu=dummy_input.cpu(),
-                                     dummy_input_on_gpu=dummy_input.cuda(),
-                                     results_dir=results_dir,
-                                     strict_validation=True)
+            output_model, acc, encoding_path = auto_quant.optimize(allowed_accuracy_drop)
 
             assert utils.get_device(output_model) == utils.get_device(input_model)
             assert_applied_techniques(
                 output_model, acc, encoding_path,
                 target_acc, bn_folded_acc, cle_acc, adaround_acc,
-                results_dir,
+                auto_quant.results_dir,
             )
 
-    def test_auto_quant_invalid_input(self, unlabeled_data_loader):
-        # Allowed accuracy drop < 0
+    def test_auto_quant_invalid_input(self, cpu_model, dummy_input, unlabeled_data_loader):
         with pytest.raises(ValueError):
-            _ = AutoQuant(-1.0, unlabeled_data_loader, MagicMock(), MagicMock())
+            AutoQuant(None, dummy_input, unlabeled_data_loader, lambda: None)
+
+        with pytest.raises(ValueError):
+            AutoQuant(cpu_model, None, unlabeled_data_loader, lambda: None)
+
+        with pytest.raises(ValueError):
+            AutoQuant(cpu_model, dummy_input, None, lambda: None)
+
+        with pytest.raises(ValueError):
+            AutoQuant(cpu_model, dummy_input, unlabeled_data_loader, None)
+
+        with pytest.raises(ValueError):
+            AutoQuant(cpu_model, dummy_input, unlabeled_data_loader, lambda: None, results_dir=None)
+
+        with pytest.raises(ValueError):
+            AutoQuant(cpu_model, dummy_input, unlabeled_data_loader, lambda: None, strict_validation=None)
 
         # Bitwidth < 4 or bitwidth > 32
         with pytest.raises(ValueError):
-            _ = AutoQuant(0, unlabeled_data_loader, MagicMock(), default_param_bw=2)
+            AutoQuant(cpu_model, dummy_input, unlabeled_data_loader, lambda: None, param_bw=2)
 
         with pytest.raises(ValueError):
-            _ = AutoQuant(0, unlabeled_data_loader, MagicMock(), default_param_bw=64)
+            AutoQuant(cpu_model, dummy_input, unlabeled_data_loader, lambda: None, param_bw=64)
 
         with pytest.raises(ValueError):
-            _ = AutoQuant(0, unlabeled_data_loader, MagicMock(), default_output_bw=2)
+            AutoQuant(cpu_model, dummy_input, unlabeled_data_loader, lambda: None, output_bw=2)
 
         with pytest.raises(ValueError):
-            _ = AutoQuant(0, unlabeled_data_loader, MagicMock(), default_output_bw=64)
+            AutoQuant(cpu_model, dummy_input, unlabeled_data_loader, lambda: None, output_bw=64)
+
+        auto_quant = AutoQuant(cpu_model, dummy_input, unlabeled_data_loader, lambda: None)
+        # Allowed accuracy drop < 0
+        with pytest.raises(ValueError):
+            _ = auto_quant.optimize(-1.0)
 
     def test_auto_quant_model_preparer(self, unlabeled_data_loader, dummy_input):
-        allowed_accuracy_drop = 0.0
-        bn_folded_acc, cle_acc, adaround_acc = 40., 50., 60.
+        bn_folded_acc, cle_acc, adaround_acc = .4, .5, .6
 
         with patch_ptq_techniques(
             bn_folded_acc, cle_acc, adaround_acc
         ) as mocks:
-            auto_quant = AutoQuant(
-                allowed_accuracy_drop=allowed_accuracy_drop,
-                unlabeled_dataset_iterable=unlabeled_data_loader,
-                eval_callback=mocks.eval_callback,
-            )
+            auto_quant = AutoQuant(InvalidModel(),
+                                   dummy_input,
+                                   unlabeled_data_loader,
+                                   mocks.eval_callback,
+                                   strict_validation=True)
 
             # If strict_validation is True (default), AutoQuant crashes with an exception.
             with pytest.raises(torch.fx.proxy.TraceError):
-                auto_quant.apply(InvalidModel(), dummy_input, strict_validation=True)
+                auto_quant.inference()
+
+            # If strict_validation is True (default), AutoQuant crashes with an exception.
+            with pytest.raises(torch.fx.proxy.TraceError):
+                auto_quant.optimize()
+
+        with patch_ptq_techniques(
+            bn_folded_acc, cle_acc, adaround_acc
+        ) as mocks:
+            auto_quant = AutoQuant(InvalidModel(),
+                                   dummy_input,
+                                   unlabeled_data_loader,
+                                   mocks.eval_callback,
+                                   strict_validation=False)
 
             # If strict_validation is False, AutoQuant ignores the errors and proceed. 
-            auto_quant.apply(InvalidModel(), dummy_input, strict_validation=False)
+            auto_quant.inference()
 
-    @pytest.mark.cuda
-    def test_auto_quant_invalid_input_gpu(self, unlabeled_data_loader, dummy_input):
-        auto_quant = AutoQuant(0, unlabeled_data_loader, MagicMock())
-        # If model is on cuda device, dummy input on gpu should be provided.
-        with pytest.raises(ValueError):
-            auto_quant.apply(Model().cuda(), dummy_input.cpu(), strict_validation=True)
+            # If strict_validation is False, AutoQuant ignores the errors and proceed. 
+            auto_quant.optimize()
 
     def test_auto_quant_fallback(
         self, cpu_model, dummy_input, unlabeled_data_loader,
@@ -453,21 +512,20 @@ class TestAutoQuant:
         def error_fn(*_, **__):
             raise _Exception
 
-        allowed_accuracy_drop = 0.0
         bn_folded_acc, cle_acc, adaround_acc = .4, .5, .6
         with patch_ptq_techniques(
             bn_folded_acc, cle_acc, adaround_acc
         ) as mocks:
-            auto_quant = AutoQuant(
-                allowed_accuracy_drop=allowed_accuracy_drop,
-                unlabeled_dataset_iterable=unlabeled_data_loader,
-                eval_callback=mocks.eval_callback,
-            )
-
             with create_tmp_directory() as results_dir:
+                auto_quant = AutoQuant(cpu_model,
+                                       dummy_input,
+                                       unlabeled_data_loader,
+                                       mocks.eval_callback,
+                                       results_dir=results_dir,
+                                       strict_validation=False)
                 with patch("aimet_torch.auto_quant_v2.prepare_model", side_effect=error_fn):
                     # If prepare_model fails, should return Adaround results
-                    _, acc, _ = auto_quant.apply(cpu_model, dummy_input, results_dir=results_dir, strict_validation=False)
+                    _, acc, _ = auto_quant.optimize()
                     assert acc == adaround_acc
 
                     with open(os.path.join(results_dir, 'diagnostics.html')) as f:
@@ -479,9 +537,15 @@ class TestAutoQuant:
                             'node_adaround': _SUCCESS,
                         })
 
+                auto_quant = AutoQuant(cpu_model,
+                                       dummy_input,
+                                       unlabeled_data_loader,
+                                       mocks.eval_callback,
+                                       results_dir=results_dir,
+                                       strict_validation=False)
                 with patch("aimet_torch.auto_quant_v2.fold_all_batch_norms", side_effect=error_fn):
                     # If batchnorm folding fails, should return Adaround results
-                    _, acc, _ = auto_quant.apply(cpu_model, dummy_input, results_dir=results_dir, strict_validation=False)
+                    _, acc, _ = auto_quant.optimize()
                     assert acc == adaround_acc
 
                     with open(os.path.join(results_dir, 'diagnostics.html')) as f:
@@ -492,9 +556,15 @@ class TestAutoQuant:
                             'node_adaround': _SUCCESS,
                         })
 
+                auto_quant = AutoQuant(cpu_model,
+                                       dummy_input,
+                                       unlabeled_data_loader,
+                                       mocks.eval_callback,
+                                       results_dir=results_dir,
+                                       strict_validation=False)
                 with patch("aimet_torch.auto_quant_v2.equalize_model", side_effect=error_fn):
                     # If CLE fails, should return Adaround results
-                    _, acc, _ = auto_quant.apply(cpu_model, dummy_input, results_dir=results_dir, strict_validation=False)
+                    _, acc, _ = auto_quant.optimize()
                     assert acc == adaround_acc
 
                     with open(os.path.join(results_dir, 'diagnostics.html')) as f:
@@ -505,9 +575,15 @@ class TestAutoQuant:
                             'node_adaround': _SUCCESS,
                         })
 
+                auto_quant = AutoQuant(cpu_model,
+                                       dummy_input,
+                                       unlabeled_data_loader,
+                                       mocks.eval_callback,
+                                       results_dir=results_dir,
+                                       strict_validation=False)
                 with patch("aimet_torch.auto_quant_v2.Adaround._apply_adaround", side_effect=error_fn):
                     # If adaround fails, should return CLE results
-                    _, acc, _ = auto_quant.apply(cpu_model, dummy_input, results_dir=results_dir, strict_validation=False)
+                    _, acc, _ = auto_quant.optimize()
                     assert acc == cle_acc
 
                     with open(os.path.join(results_dir, 'diagnostics.html')) as f:
@@ -518,22 +594,37 @@ class TestAutoQuant:
                             'node_adaround': _ERROR_IGNORED,
                         })
 
+                auto_quant = AutoQuant(cpu_model,
+                                       dummy_input,
+                                       unlabeled_data_loader,
+                                       mocks.eval_callback,
+                                       results_dir=results_dir,
+                                       strict_validation=False)
                 with patch("aimet_torch.auto_quant_v2.fold_all_batch_norms", side_effect=error_fn),\
                         patch("aimet_torch.auto_quant_v2.equalize_model", side_effect=error_fn),\
                         patch("aimet_torch.auto_quant_v2.Adaround._apply_adaround", side_effect=error_fn):
                     # If everything fails, should raise an error
                     with pytest.raises(RuntimeError):
-                        auto_quant.apply(cpu_model, dummy_input, results_dir=results_dir, strict_validation=False)
+                        auto_quant.optimize()
+
+                    with open(os.path.join(results_dir, 'diagnostics.html')) as f:
+                        html_parsed = BeautifulSoup(f.read(), features="html.parser")
                         assert_html(html_parsed, {
                             'node_batchnorm_folding': _ERROR_IGNORED,
                             'node_cross_layer_equalization': _ERROR_IGNORED,
                             'node_adaround': _ERROR_IGNORED,
                         })
 
+                auto_quant = AutoQuant(cpu_model,
+                                       dummy_input,
+                                       unlabeled_data_loader,
+                                       mocks.eval_callback,
+                                       results_dir=results_dir,
+                                       strict_validation=True)
                 with patch("aimet_torch.auto_quant_v2.equalize_model", side_effect=error_fn):
-                    # Hard stop
+                    # Hard stop if strict_validation=True
                     with pytest.raises(_Exception):
-                        auto_quant.apply(cpu_model, dummy_input, results_dir=results_dir, strict_validation=True)
+                        auto_quant.optimize()
 
                     with open(os.path.join(results_dir, 'diagnostics.html')) as f:
                         html_parsed = BeautifulSoup(f.read(), features="html.parser")
@@ -551,15 +642,12 @@ class TestAutoQuant:
             with patch_ptq_techniques(
                 bn_folded_acc=0, cle_acc=0, adaround_acc=0, w32_acc=w32_acc
             ) as mocks:
-                auto_quant = AutoQuant(
-                    allowed_accuracy_drop=allowed_accuracy_drop,
-                    unlabeled_dataset_iterable=unlabeled_data_loader,
-                    eval_callback=mocks.eval_callback,
-                )
-                output_model, acc, encoding_path =\
-                    auto_quant.apply(cpu_model,
-                                     dummy_input_on_cpu=dummy_input.cpu(),
-                                     results_dir=results_dir)
+                auto_quant = AutoQuant(cpu_model,
+                                       dummy_input,
+                                       unlabeled_data_loader,
+                                       mocks.eval_callback,
+                                       results_dir=results_dir)
+                output_model, acc, encoding_path = auto_quant.optimize(allowed_accuracy_drop)
 
             assert output_model is None
             assert acc is None
@@ -580,25 +668,26 @@ class TestAutoQuant:
     ):
         allowed_accuracy_drop = 0.0
         bn_folded_acc, cle_acc, adaround_acc = .4, .5, .6
+        cache_id = "unittest"
+
         with patch_ptq_techniques(
             bn_folded_acc, cle_acc, adaround_acc
         ) as mocks:
-            auto_quant = AutoQuant(
-                allowed_accuracy_drop=allowed_accuracy_drop,
-                unlabeled_dataset_iterable=unlabeled_data_loader,
-                eval_callback=mocks.eval_callback,
-            )
-
             with create_tmp_directory() as results_dir:
-                cache_id = "unittest"
+                auto_quant = AutoQuant(cpu_model,
+                                       dummy_input,
+                                       unlabeled_data_loader,
+                                       mocks.eval_callback,
+                                       results_dir=results_dir,
+                                       cache_id=cache_id)
+
                 cache_files  = [
                     os.path.join(results_dir, ".auto_quant_cache", cache_id, f"{key}.pkl")
                     for key in ("batchnorm_folding", "cle", "adaround")
                 ]
 
                 # No previously cached results
-                auto_quant.apply(cpu_model, dummy_input, results_dir=results_dir,
-                                 cache_id=cache_id, strict_validation=True)
+                auto_quant.optimize(allowed_accuracy_drop)
 
                 for cache_file in cache_files:
                     assert os.path.exists(cache_file)
@@ -607,9 +696,14 @@ class TestAutoQuant:
                 assert mocks.equalize_model.call_count == 1
                 assert mocks.apply_adaround.call_count == 1
 
+                auto_quant = AutoQuant(cpu_model,
+                                       dummy_input,
+                                       unlabeled_data_loader,
+                                       mocks.eval_callback,
+                                       results_dir=results_dir,
+                                       cache_id=cache_id)
                 # Load cached result
-                auto_quant.apply(cpu_model, dummy_input, results_dir=results_dir,
-                                 cache_id=cache_id, strict_validation=True)
+                auto_quant.optimize(allowed_accuracy_drop)
 
                 # PTQ functions should not be called twice.
                 assert mocks.fold_all_batch_norms.call_count == 1
@@ -620,7 +714,7 @@ class TestAutoQuant:
         self, cpu_model, dummy_input, unlabeled_data_loader,
     ):
         allowed_accuracy_drop = 0.0
-        bn_folded_acc, cle_acc, adaround_acc = 40., 50., 60.
+        bn_folded_acc, cle_acc, adaround_acc = .4, .5, .6
         with patch_ptq_techniques(
             bn_folded_acc, cle_acc, adaround_acc
         ) as mocks:
@@ -634,21 +728,20 @@ class TestAutoQuant:
                         return 0.0
                 return mocks.eval_callback(model, _)
 
-            real_auto_quant_main = AutoQuant._auto_quant_main
-            def auto_quant_main_fn(self, *args, **kwargs):
+            _apply_batchnorm_folding = AutoQuant._apply_batchnorm_folding
+            def apply_batchnorm_folding(self, *args, **kwargs):
                 # Since all the other candidates (tf-tf, tfe-tfe, and tfe-percentile) yields zero accuracy,
                 # it is expected that tf-tfe is selected as the quant scheme for AutoQuant.
-                assert self.default_quant_scheme.param_quant_scheme == QuantScheme.post_training_tf_enhanced
-                assert self.default_quant_scheme.output_quant_scheme == QuantScheme.post_training_tf
-                return real_auto_quant_main(self, *args, **kwargs)
+                assert self._quantsim_params["quant_scheme"].param_quant_scheme == QuantScheme.post_training_tf_enhanced
+                assert self._quantsim_params["quant_scheme"].output_quant_scheme == QuantScheme.post_training_tf
+                return _apply_batchnorm_folding(self, *args, **kwargs)
 
-            with patch("aimet_torch.auto_quant_v2._AutoQuantV2._auto_quant_main", auto_quant_main_fn):
-                auto_quant = AutoQuant(
-                    allowed_accuracy_drop=allowed_accuracy_drop,
-                    unlabeled_dataset_iterable=unlabeled_data_loader,
-                    eval_callback=eval_callback,
-                )
-                auto_quant.apply(cpu_model, dummy_input)
+            with patch("aimet_torch.auto_quant_v2._AutoQuantV2._apply_batchnorm_folding", apply_batchnorm_folding):
+                auto_quant = AutoQuant(cpu_model,
+                                       dummy_input,
+                                       unlabeled_data_loader,
+                                       eval_callback)
+                auto_quant.optimize(allowed_accuracy_drop)
 
     def test_set_additional_params(self, cpu_model, dummy_input, unlabeled_data_loader):
         allowed_accuracy_drop = 0
@@ -665,18 +758,17 @@ class TestAutoQuant:
 
             try:
                 setattr(QuantizationSimModel, "export", export_wrapper)
-                auto_quant = AutoQuant(
-                    allowed_accuracy_drop=0,
-                    unlabeled_dataset_iterable=unlabeled_data_loader,
-                    eval_callback=mocks.eval_callback,
-                )
+                auto_quant = AutoQuant(cpu_model,
+                                       dummy_input,
+                                       unlabeled_data_loader,
+                                       mocks.eval_callback)
                 adaround_params = AdaroundParameters(unlabeled_data_loader, 1)
                 auto_quant.set_adaround_params(adaround_params)
 
                 auto_quant.set_export_params(OnnxExportApiArgs(10), True)
 
-                self._do_test_apply_auto_quant(
-                    auto_quant, cpu_model, dummy_input,
+                self._do_test_optimize_auto_quant(
+                    auto_quant, cpu_model,
                     allowed_accuracy_drop, bn_folded_acc, cle_acc, adaround_acc
                 )
                 adaround_args, _ = mocks.apply_adaround.call_args
