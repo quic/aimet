@@ -184,7 +184,6 @@ class CachedDataset(Dataset):
             raise ValueError(f'Can not fetch {num_batches} batches from '
                              f'a data loader of length {len(data_loader)}.')
 
-        self._batch_size = data_loader.batch_size or 1
         self._num_batches = num_batches
         self._path = path
 

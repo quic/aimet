@@ -43,7 +43,6 @@ import itertools
 import json
 import shutil
 from typing import Tuple, Union, Dict, List, Callable, Any
-import math
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -73,14 +72,14 @@ class AdaroundParameters:
     """
     Configuration parameters for Adaround
     """
-    def __init__(self, data_loader: DataLoader, num_batches: int = None,
+    def __init__(self, data_loader: DataLoader, num_batches: int,
                  default_num_iterations: int = None, default_reg_param: float = 0.01,
                  default_beta_range: Tuple = (20, 2), default_warm_start: float = 0.2,
                  forward_fn: Callable[[torch.nn.Module, Any], Any] = None):
         """
         :param data_loader: Data loader
-        :param num_batches: Number of batches. If not specified, the default value is determined as
-         the largest N where N satisfies (N-1) * batch_size < 2000 <= N * batch_size
+        :param num_batches: Number of batches to be used for Adaround.
+         A commonly recommended value for this parameter is the smaller value among (1) len(data_loader) and (2) ceil(2000/batch_size)
         :param default_num_iterations: Number of iterations to adaround each layer.
          The default value is 10K for models with 8- or higher bit weights, and 15K for models with lower than 8 bit weights.
         :param default_reg_param: Regularization parameter, trading off between rounding loss vs reconstruction loss.
@@ -92,17 +91,9 @@ class AdaroundParameters:
          yielded from the data loader. The function expects model as first argument and inputs to model
          as second argument.
         """
-        if num_batches is not None and len(data_loader) < num_batches:
+        if len(data_loader) < num_batches:
             raise ValueError(f'Can not fetch {num_batches} batches from '
                              f'a data loader of length {len(data_loader)}.')
-
-        if num_batches is None:
-            batch_size = data_loader.batch_size or 1
-
-            if batch_size * len(data_loader) < 2000:
-                num_batches = len(data_loader)
-            else:
-                num_batches = math.ceil(2000 / batch_size)
 
         self.data_loader = data_loader
         self.num_batches = num_batches

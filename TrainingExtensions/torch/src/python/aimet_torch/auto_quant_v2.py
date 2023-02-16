@@ -46,11 +46,12 @@ import functools
 import itertools
 import string
 import traceback
+import math
 import os
 import sys
 import io
 from unittest.mock import patch
-from typing import Any, Collection, Callable, Dict, List, Optional, Tuple, Union, Mapping
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, Mapping
 import torch
 from torch.utils.data import DataLoader
 import jinja2
@@ -175,7 +176,7 @@ class _AutoQuantV2: # pylint: disable=too-many-instance-attributes
     def __init__( # pylint: disable=too-many-arguments
             self,
             allowed_accuracy_drop: float,
-            unlabeled_dataset_iterable: Union[DataLoader, Collection],
+            unlabeled_dataset_iterable: DataLoader,
             eval_callback: Callable[[torch.nn.Module, Optional[int]], float],
             default_param_bw: int = 8,
             default_output_bw: int = 8,
@@ -185,9 +186,8 @@ class _AutoQuantV2: # pylint: disable=too-many-instance-attributes
     ) -> None:
         """
         :param allowed_accuracy_drop: Maximum allowed accuracy drop.
-        :param unlabeled_dataset_iterable: A collection (i.e. iterable with `__len__`)
-                that iterates over an unlabeled dataset used for encoding computation.
-                The values yielded by this iterable are expected to be able to be
+        :param unlabeled_dataset_iterable: Unlabeled data loader used for encoding computation.
+                The values yielded by this data loader are expected to be able to be
                 passed directly to the model. By default, this iterable will
                 be also used for Adaround unless otherwise specified by
                 `self.set_adaround_params`.
@@ -205,6 +205,9 @@ class _AutoQuantV2: # pylint: disable=too-many-instance-attributes
         :param default_rounding_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'
         :param default_config_file: Path to configuration file for model quantizers
         """
+        if not isinstance(unlabeled_dataset_iterable, DataLoader):
+            raise TypeError(f"Expected `unlabeled_dataset_iterable` to be an instance of torch.data.DataLoader (got {type(unlabeled_dataset_iterable)})")
+
         if allowed_accuracy_drop < 0:
             raise ValueError(
                 "`allowed_accuracy_drop` must be a positive value. Got {:.2f}"
@@ -252,8 +255,12 @@ class _AutoQuantV2: # pylint: disable=too-many-instance-attributes
 
         self.forward_pass_callback = forward_pass_callback
 
-        self.adaround_params = AdaroundParameters(unlabeled_dataset_iterable,
-                                                  len(unlabeled_dataset_iterable))
+        # Use at most 2000 samples for AdaRound.
+        num_samples = min(len(unlabeled_dataset_iterable.dataset), 2000)
+        batch_size = unlabeled_dataset_iterable.batch_size or 1
+        num_batches = math.ceil(num_samples / batch_size)
+        self.adaround_params = AdaroundParameters(unlabeled_dataset_iterable, num_batches)
+
         self._export_kwargs = dict(
             onnx_export_args=OnnxExportApiArgs(),
             propagate_encodings=False,
