@@ -834,38 +834,20 @@ class TestAdaround:
         dummy_input = torch.randn(input_shape)
         batch_size = 16
         data_loader = create_fake_data_loader(dataset_size=64, batch_size=batch_size, image_size=input_shape[1:])
-        params = AdaroundParameters(data_loader=data_loader)
+        params = AdaroundParameters(data_loader=data_loader, num_batches=4)
 
         for param_bw in (8, 16, 9):
             with patch.object(AdaroundOptimizer, "adaround_module") as adaround_module_fn_mock:
                 _ = Adaround.apply_adaround(model, dummy_input, params, path='./', filename_prefix='resnet18',
                                             default_param_bw=8)
-            _, _, _, _, _, cached_dataset, _, opt_params  = adaround_module_fn_mock.call_args[0]
+            _, _, _, _, _, _, _, opt_params  = adaround_module_fn_mock.call_args[0]
             # If adaround is performed with sub-8 bit weights, the default num_iterations should be 10K
             assert opt_params.num_iterations == 10000
-
-            # If the dataset is smaller than 2K, should use whole dataset
-            assert cached_dataset._num_batches == len(data_loader)
 
         for param_bw in (4, 7):
             with patch.object(AdaroundOptimizer, "adaround_module") as adaround_module_fn_mock:
                 _ = Adaround.apply_adaround(model, dummy_input, params, path='./', filename_prefix='resnet18',
                                             default_param_bw=param_bw)
             # If adaround is performed with sub-8 bit weights, the default num_iterations should be 15K
-            _, _, _, _, _, cached_dataset, _, opt_params  = adaround_module_fn_mock.call_args[0]
+            _, _, _, _, _, _, _, opt_params  = adaround_module_fn_mock.call_args[0]
             assert opt_params.num_iterations == 15000
-
-            # If the dataset is smaller than 2K, should use whole dataset
-            assert cached_dataset._num_batches == len(data_loader)
-
-        batch_size = 300
-        data_loader = create_fake_data_loader(dataset_size=3000, batch_size=batch_size, image_size=input_shape[1:])
-        params = AdaroundParameters(data_loader=data_loader)
-        with patch.object(AdaroundOptimizer, "adaround_module") as adaround_module_fn_mock:
-            _ = Adaround.apply_adaround(model, dummy_input, params, path='./', filename_prefix='resnet18',
-                                        default_param_bw=param_bw)
-            _, _, _, _, _, cached_dataset, _, _  = adaround_module_fn_mock.call_args[0]
-        # If the dataset is larger than 2K, should use only 2K
-        assert cached_dataset._batch_size * (cached_dataset._num_batches - 1) <\
-                2000 <=\
-                cached_dataset._batch_size * cached_dataset._num_batches
