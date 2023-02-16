@@ -43,9 +43,9 @@ import numpy as np
 import shutil
 import math
 import torch
+import torch.nn
 import torchvision
 import torch.nn.functional as F
-from torch import nn
 
 import aimet_torch.model_validator.validation_checks
 import aimet_torch.utils
@@ -575,15 +575,15 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
     def test_load_pytorch_model(self):
         """ test load_pytorch_model utility """
 
-        class MiniModel(nn.Module):
+        class MiniModel(torch.nn.Module):
 
             def __init__(self):
                 super(MiniModel, self).__init__()
-                self.conv1 = nn.Conv2d(3, 8, kernel_size=2, stride=2, padding=2, bias=False)
-                self.bn1 = nn.BatchNorm2d(8)
-                self.relu1 = nn.ReLU(inplace=True)
-                self.maxpool = nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
-                self.fc = nn.Linear(128, 12)
+                self.conv1 = torch.nn.Conv2d(3, 8, kernel_size=2, stride=2, padding=2, bias=False)
+                self.bn1 = torch.nn.BatchNorm2d(8)
+                self.relu1 = torch.nn.ReLU(inplace=True)
+                self.maxpool = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
+                self.fc = torch.nn.Linear(128, 12)
 
             def forward(self, *inputs):
                 x = self.conv1(inputs[0])
@@ -597,16 +597,16 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         with open('./data/mini_model.py', 'w') as f:
             print("""
 import torch
-from torch import nn
-class MiniModel(nn.Module):
+import torch.nn
+class MiniModel(torch.nn.Module):
 
     def __init__(self):
         super(MiniModel, self).__init__()
-        self.conv1 = nn.Conv2d(3, 8, kernel_size=2, stride=2, padding=2, bias=False)
-        self.bn1 = nn.BatchNorm2d(8)
-        self.relu1 = nn.ReLU(inplace=True)
-        self.maxpool = nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
-        self.fc = nn.Linear(128, 12)
+        self.conv1 = torch.nn.Conv2d(3, 8, kernel_size=2, stride=2, padding=2, bias=False)
+        self.bn1 = torch.nn.BatchNorm2d(8)
+        self.relu1 = torch.nn.ReLU(inplace=True)
+        self.maxpool = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
+        self.fc = torch.nn.Linear(128, 12)
 
     def forward(self, *inputs):
         x = self.conv1(inputs[0])
