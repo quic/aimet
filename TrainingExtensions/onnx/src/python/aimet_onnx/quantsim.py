@@ -304,8 +304,7 @@ class QuantizationSimModel:
         forward_pass_callback(self.session, forward_pass_callback_args)
         for op_name, qc_op in self.qc_quantize_op_dict.items():
             qc_op.compute_encodings()
-            if op_name in self.activation_names:
-                qc_op.op_mode = OpMode.quantizeDequantize
+            qc_op.op_mode = OpMode.quantizeDequantize
 
     def _export_encodings(self, encoding_file_path):
         """
