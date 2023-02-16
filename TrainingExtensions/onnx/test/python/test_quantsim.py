@@ -56,6 +56,7 @@ class DummyModel(SingleResidual):
         super().__init__()
         # change padding size to 0, onnxruntime only support input size is the factor of output size for pooling
         self.conv4 = torch.nn.Conv2d(32, 8, kernel_size=2, stride=2, padding=0, bias=True)
+        self.flatten = torch.nn.Flatten()
         # TODO
         # remove bn layer for currently not supporting non-4 dim param tensors
         del self.bn1
@@ -87,7 +88,7 @@ class DummyModel(SingleResidual):
         x = self.relu3(x)
 
         x = self.avgpool(x)
-        x = torch.flatten(x, 1)
+        x = self.flatten(x)
         x = self.fc(x)
 
         return x
@@ -99,10 +100,10 @@ class TestQuantSim:
         """ Test to insert qc quantize op to the graph"""
         model = build_dummy_model()
         sim = QuantizationSimModel(model)
-        assert len(sim.model.nodes()) == 15
+        assert len(sim.model.nodes()) == 14
 
         node_ls = [node.op_type for node in sim.model.nodes()]
-        assert node_ls == ['Conv', 'Relu', 'MaxPool', 'Flatten', 'Gemm'] + ['QcQuantizeOp'] * 10
+        assert node_ls == ['Conv', 'Relu', 'MaxPool', 'Flatten', 'Gemm'] + ['QcQuantizeOp'] * 9
 
         # Check if qc quantize op node is correctly connect to the corresponding onnx node
         assert sim.model.find_node_by_name('QcQuantizeOp_input', [], sim.model.graph()).output[0] == \
@@ -187,7 +188,7 @@ class TestQuantSim:
         with open('/tmp/quant_sim_model.encodings', 'rb') as json_file:
             encoding_data = json.load(json_file)
         activation_keys = list(encoding_data["activation_encodings"].keys())
-        assert activation_keys == ['3', '4', '5', '6', 'input', 'output']
+        assert activation_keys == ['3', '4', '5', 'input', 'output']
         for act in activation_keys:
             act_encodings_keys = list(encoding_data["activation_encodings"][act].keys())
             assert act_encodings_keys == ['bitwidth', 'dtype', 'is_symmetric', 'max', 'min', 'offset', 'scale']
@@ -255,3 +256,11 @@ class TestQuantSim:
                    round(onnx_encodings['param_encodings'][name]['scale'], 4)
             assert pt_encodings['param_encodings'][name][0]['offset'] == \
                    onnx_encodings['param_encodings'][name]['offset']
+
+    def test_single_residual(self):
+        from test_models import single_residual_model
+        model = single_residual_model().model
+        sim = QuantizationSimModel(model)
+        print(sim.model.graph())
+
+

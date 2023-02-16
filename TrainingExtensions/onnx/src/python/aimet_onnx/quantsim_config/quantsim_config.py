@@ -121,9 +121,10 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         and output quantizers of an op
         """
         op_to_quantizers = {}
-        for node in self._model.model.graph.node:
-            if 'QcQuantizeOp' in node.name:
+        for name, op in self._conn_graph.get_all_ops().items():
+            if 'branch' in name or 'QcQuantizeOp' in name:
                 continue
+            node = op.get_module()
             op_to_quantizers[node.name] = OpToQuantizers()
             for input_product in node.input:
                 self._populate_input_and_param_quantizer(op_to_quantizers[node.name], input_product)

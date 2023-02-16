@@ -39,7 +39,10 @@
 
 import os
 from typing import Dict
-from onnx import helper, onnx_pb
+import numpy as np
+
+import onnx
+from onnx import helper, onnx_pb, mapping
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
 from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode
@@ -47,6 +50,7 @@ from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import encoding_version, extract_global_quantizer_args
 from aimet_common.utils import save_json_yaml
 from aimet_common import libpymo
+import onnxruntime as ort
 
 from aimet_onnx.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
@@ -54,6 +58,10 @@ from aimet_common import libquant_info
 
 WORKING_DIR = '/tmp/quantsim/'
 
+op_types_to_ignore = ["branch", "Flatten", "Gather", "Reshape", "Shape", "Unsqueeze", "Squeeze", "Split",
+                   "Compress", "Tile", "Transpose", "Identity"]
+
+data_types_to_quantize = [np.float32]
 
 class QuantizationSimModel:
     """ Creates a QuantizationSimModel model by adding quantization simulations ops to a given model """
@@ -96,6 +104,7 @@ class QuantizationSimModel:
         self.param_names = []
         self.activation_names = []
         self._get_param_names()
+        self._get_activation_types()
         self._get_activation_names()
         self._add_quantization_nodes()
         self.session = self._build_session(self.providers)
@@ -119,21 +128,66 @@ class QuantizationSimModel:
         Get the names of params
         """
         for param in self.model.initializer():
-            if param.name not in self.param_names and param.name:
-                self.param_names.append(param.name)
+            if mapping.TENSOR_TYPE_TO_NP_TYPE[param.data_type] in data_types_to_quantize:
+                if param.name not in self.param_names and param.name:
+                    self.param_names.append(param.name)
 
     def _get_activation_names(self):
         """
         Get the names of activations
         """
         for node in self.model.nodes():
-            for name in node.input:
-                if name not in self.activation_names and name not in self.param_names:
-                    self.activation_names.append(name)
-        for node in self.model.graph().output:
-            if node.name not in self.activation_names and node.name not in self.param_names:
+            if node.op_type not in op_types_to_ignore:
+                for name in node.output:
+                    if name not in self.activation_names and name not in self.param_names and \
+                            self.activation_data_types[name] in data_types_to_quantize:
+                        self.activation_names.append(name)
+        for node in self.model.graph().input:
+            if node.name not in self.activation_names and node.name not in self.param_names and \
+                    self.activation_data_types[node.name] == np.float32:
                 self.activation_names.append(node.name)
+        for node in self.model.graph().output:
+            if node.name in self.activation_names:
                 node.name += '_updated'
+
+    def _get_activation_types(self):
+        """
+        Get the data type for each activation
+        """
+        num_outputs = len(self.model.graph().output)
+        activations = []
+        for node in self.model.nodes():
+            for name in node.input:
+                if name not in activations and name not in self.param_names:
+                    activations.append(name)
+        for name in activations:
+            val_info = onnx.helper.ValueInfoProto()
+            val_info.name = name
+            self.model.graph().output.append(val_info)
+        dummy_input = self._make_dummy_input()
+        sess = self._build_session(ort.get_available_providers())
+        outputs = sess.run(None, dummy_input)
+        self.activation_data_types = {}
+        for idx in range(len(self.model.graph().output)):
+            act_name = self.model.graph().output[idx].name
+            dtype = outputs[idx].dtype
+            self.activation_data_types[act_name] = dtype
+        del self.model.graph().output[num_outputs:]
+
+    def _make_dummy_input(self) -> Dict:
+        """
+        Create a dummy input based on the model input types and shapes
+        :return: Dictionary of input_name : input array
+        """
+        input_dict = {}
+        for item in self.model.graph().input:
+            name = item.name
+            dtype = item.type.tensor_type.elem_type
+            shape = []
+            for dim in item.type.tensor_type.shape.dim:
+                shape.append(dim.dim_value)
+            input_dict[name] = np.random.randn(*shape).astype(mapping.TENSOR_TYPE_TO_NP_TYPE[dtype])
+        return input_dict
 
     def _add_quantization_nodes(self):
         """
