@@ -100,7 +100,8 @@ public:
                                             DTYPE* outputTensorData, uint8_t bw, const std::vector<TfEncoding> &encodings,
                                             bool shiftToSigned) = 0;
 
-    virtual void fillEncodingInfo(TfEncoding& encoding, uint8_t bw, double encodingMin, double encodingMax) = 0;
+    virtual void fillQuantizeInfo(TfEncoding& encoding, DlQuantization::ComputationMode& cpuGpuMode, uint8_t bw,
+                          double encodingMin, double encodingMax, bool use_cuda) = 0;
 };
 
 }   // namespace DlQuantization

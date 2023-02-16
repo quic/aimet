@@ -199,7 +199,8 @@ DlQuantization::TfEncoding getTfEncoding(const D& d, const double* min, const do
     _tensorQuantizationSim = DlQuantization::getTensorQuantizationSim<float>();
 
     DlQuantization::TfEncoding encoding;
-    _tensorQuantizationSim->fillEncodingInfo(encoding, bitwidth, encodingMin, encodingMax);
+    DlQuantization::ComputationMode cpuGpuMode;
+    _tensorQuantizationSim->fillQuantizeInfo(encoding, cpuGpuMode, bitwidth, encodingMin, encodingMax, useCuda);
     return encoding;
 }
 
@@ -261,20 +262,19 @@ public:
         auto axisHandlingEnum = static_cast<const AxisHandling>(axisHandling);
 
         // Get number of channels
-        int numChannels = 0;
+        int channelShape;
         if (axisHandlingEnum == AxisHandling::LAST_TWO_AXES)
         {
-            numChannels = shapeVector[numDimensionsTensor - 2] * shapeVector[numDimensionsTensor - 1];
+            channelShape = shapeVector[numDimensionsTensor - 2] * shapeVector[numDimensionsTensor - 1];
         }
         else
         {
             // For normal case, last axis as number of channels.
             // This includes conv transpose since py function will transpose kernel prior to this op.
-            numChannels = shapeVector[numDimensionsTensor - 1];
+            channelShape = shapeVector[numDimensionsTensor - 1];
         }
         // Number of channels should be equal to the number of encodings provided.
-        assert(numChannels == encodingMaxTensor->shape().dim_size(0));
-        assert(numChannels == encodingMinTensor->shape().dim_size(0));
+        assert(channelShape == encodingMaxTensor->shape().dim_size(0));
 
         // use symmetric encoding
         const Tensor* useSymmetricEncodingTensor;
@@ -348,7 +348,7 @@ public:
                     allocator = &_allocator;
 #endif
 
-                    for (int channel = 0; channel < numChannels; channel++)
+                    for (int channel = 0; channel < channelShape; channel++)
                     {
                         if (opModeEnum == DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize)
                         {
@@ -387,7 +387,7 @@ public:
                     int numElements    = 1;
                     auto inTensorFlat  = inTensor.flat<T>().data();
                     auto outTensorFlat = outTensor->flat<T>().data();
-                    for (int channel = 0; channel < numChannels; channel++)
+                    for (int channel = 0; channel < channelShape; channel++)
                     {
                         modeSpecificActionInt(context->eigen_device<Device>(), inTensorFlat++, numElements, outTensorFlat++,
                                               quantizerAddr++, opMode, encodingMin++, encodingMax++, bitwidth,
