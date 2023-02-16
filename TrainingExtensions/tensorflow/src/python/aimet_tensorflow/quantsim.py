@@ -615,23 +615,44 @@ class QuantizationSimModel:
             quant_op = self.session.graph.get_operation_by_name(op_name)
             tensor_name = quant_op.inputs[0].name
             if tensor_name in param_encodings:
+                # Check if the quantizer is disabled
+                if not quantizer_info.enabled:
+                    _logger.info("Not loading encodings for parameter: %s as quantizer is disabled", tensor_name)
+                    continue
                 encoding_dict = param_encodings[tensor_name] if self.per_channel_quantization_enabled else \
                     param_encodings[tensor_name][0]
                 encoding, is_symmetric = create_encoding_from_dict(encoding_dict)
                 bitwidth = encoding_dict[0].get('bitwidth') if self.per_channel_quantization_enabled else \
                     encoding_dict.get('bitwidth')
-                quantizer_info.set_encodings_to_quantizer(bitwidth, is_symmetric, encoding, libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
+                quantizer_info.set_encodings_to_quantizer(bitwidth, is_symmetric, encoding,
+                                                          libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
                 _logger.info("Setting quantization encodings for parameter: %s", tensor_name)
+            else:
+                # Case where encoding is not present in the encoding file
+                # So we will disable the quantizer if its active
+                if quantizer_info.enabled:
+                    quantizer_info.enabled = False
+                    _logger.info("Encoding for parameter: %s not present thus disabling this quantizer.", tensor_name)
 
         for op_name, quantizer_info in self._activation_quantizers.items():
             quant_op = self.session.graph.get_operation_by_name(op_name)
             tensor_name = quant_op.inputs[0].name
             if tensor_name in activation_encodings:
+                # Check if the quantizer is disabled
+                if not quantizer_info.enabled:
+                    _logger.info("Not loading encodings for parameter: %s as quantizer is disabled", tensor_name)
+                    continue
                 encoding_dict = activation_encodings[tensor_name][0]
                 encoding, is_symmetric = create_encoding_from_dict(encoding_dict)
                 quantizer_info.set_encodings_to_quantizer(encoding_dict.get('bitwidth'), is_symmetric,
                                                           encoding, libpymo.TensorQuantizerOpMode.quantizeDequantize)
                 _logger.info("Setting quantization encodings for activation: %s", tensor_name)
+            else:
+                # Case where encoding is not present in the encoding file
+                # So we will disable the quantizer if its active
+                if quantizer_info.enabled:
+                    quantizer_info.enabled = False
+                    _logger.info("Encoding for parameter: %s not present thus disabling this quantizer.", tensor_name)
 
     def _param_op_mode_after_analysis(self, quant_scheme) -> libpymo.TensorQuantizerOpMode:
         """
