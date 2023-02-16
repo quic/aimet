@@ -165,7 +165,7 @@ class QuantizationSimModel:
             val_info.name = name
             self.model.graph().output.append(val_info)
         dummy_input = self._make_dummy_input()
-        sess = self._build_session(ort.get_available_providers())
+        sess = self._build_session(self.providers)
         outputs = sess.run(None, dummy_input)
         self.activation_data_types = {}
         for idx in range(len(self.model.graph().output)):

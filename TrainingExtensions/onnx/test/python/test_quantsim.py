@@ -45,7 +45,7 @@ from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.qc_quantize_op import OpMode
 from aimet_torch.quantsim import QuantizationSimModel as PtQuantizationSimModel
 from aimet_torch.examples.test_models import SingleResidual
-from test_models import build_dummy_model
+from test_models import build_dummy_model, single_residual_model
 
 
 class DummyModel(SingleResidual):
@@ -56,7 +56,6 @@ class DummyModel(SingleResidual):
         super().__init__()
         # change padding size to 0, onnxruntime only support input size is the factor of output size for pooling
         self.conv4 = torch.nn.Conv2d(32, 8, kernel_size=2, stride=2, padding=0, bias=True)
-        self.flatten = torch.nn.Flatten()
         # TODO
         # remove bn layer for currently not supporting non-4 dim param tensors
         del self.bn1
@@ -88,7 +87,7 @@ class DummyModel(SingleResidual):
         x = self.relu3(x)
 
         x = self.avgpool(x)
-        x = self.flatten(x)
+        x = torch.flatten(x, 1)
         x = self.fc(x)
 
         return x
@@ -258,9 +257,30 @@ class TestQuantSim:
                    onnx_encodings['param_encodings'][name]['offset']
 
     def test_single_residual(self):
-        from test_models import single_residual_model
         model = single_residual_model().model
         sim = QuantizationSimModel(model)
-        print(sim.model.graph())
+        for quantizer in sim.qc_quantize_op_dict:
+            sim.qc_quantize_op_dict[quantizer].enabled = True
+
+        def dummy_callback(session, args):
+            pass
+
+        sim.compute_encodings(dummy_callback, None)
+        sim.export('/tmp/', 'quant_sim_model')
+
+        with open('/tmp/quant_sim_model.encodings', 'rb') as json_file:
+            encoding_data = json.load(json_file)
+        activation_keys = list(encoding_data["activation_encodings"].keys())
+        assert activation_keys == ['20', '21', '24', '25', '26', '28', '29', '30', '31', '33', '34', '44', '47', 'input', 'output']
+        for act in activation_keys:
+            act_encodings_keys = list(encoding_data["activation_encodings"][act].keys())
+            assert act_encodings_keys == ['bitwidth', 'dtype', 'is_symmetric', 'max', 'min', 'offset', 'scale']
+
+        param_keys = list(encoding_data['param_encodings'].keys())
+        assert param_keys == ['45', '46', '48', '49', 'conv3.weight', 'conv4.bias', 'conv4.weight', 'fc.bias', 'fc.weight']
+        for param in param_keys:
+            param_encodings_keys = list(encoding_data["param_encodings"][param].keys())
+            assert param_encodings_keys == ['bitwidth', 'dtype', 'is_symmetric', 'max', 'min', 'offset', 'scale']
+        reset_qc_quantize_op_dict()
 
 
