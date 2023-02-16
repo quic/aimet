@@ -51,9 +51,12 @@ from aimet_common.utils import save_json_yaml
 from aimet_common import libpymo
 import onnxruntime as ort
 
+from aimet_onnx import utils
+from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode, qc_quantize_op_dict
 from aimet_onnx.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
 from aimet_common import libquant_info
+from aimet_onnx.utils import make_dummy_input, add_hook_to_get_activation, remove_activation_hooks
 
 WORKING_DIR = '/tmp/quantsim/'
 
@@ -88,7 +91,9 @@ class QuantizationSimModel:
         :param use_cuda: True if using CUDA to run quantization op. False otherwise.
         :param config_file: Path to Configuration file for model quantizers
         """
-        self.model = ONNXModel(model)
+        self.model = model
+        if not isinstance(model, ONNXModel):
+            self.model = ONNXModel(model)
         self.qc_quantize_op_dict = {}
         self.connected_graph = ConnectedGraph(self.model)
         self._quant_scheme = quant_scheme
@@ -103,9 +108,9 @@ class QuantizationSimModel:
             self.providers = ['CPUExecutionProvider']
         self.param_names = []
         self.activation_names = []
+        self.activation_dtypes = {}
         self._get_param_names()
-        self._get_activation_types()
-        self._get_activation_names()
+        self._get_activations_to_quantize()
         self._add_quantization_nodes()
         self.session = self._build_session(self.providers)
 
@@ -132,25 +137,26 @@ class QuantizationSimModel:
                 if param.name not in self.param_names and param.name:
                     self.param_names.append(param.name)
 
-    def _get_activation_names(self):
+    def _get_activations_to_quantize(self):
         """
-        Get the names of activations
+        Get the names of activations to quantize
         """
+        self.get_activation_dtypes()
         for node in self.model.nodes():
             if node.op_type not in op_types_to_ignore:
                 for name in node.output:
                     if name not in self.activation_names and name not in self.param_names and \
-                            self._needs_quant_op(name):
+                            self._is_op_quantizable(name):
                         self.activation_names.append(name)
         for node in self.model.graph().input:
             name = node.name
-            if name not in self.activation_names and name not in self.param_names and self._needs_quant_op(name):
+            if name not in self.activation_names and name not in self.param_names and self._is_op_quantizable(name):
                 self.activation_names.append(node.name)
         for node in self.model.graph().output:
             if node.name in self.activation_names:
                 node.name += '_updated'
 
-    def _needs_quant_op(self, name: str) -> bool:
+    def _is_op_quantizable(self, name: str) -> bool:
         """
         Checks whether the given activation should be quantized
 
@@ -158,51 +164,29 @@ class QuantizationSimModel:
         :return: True if the activation should be quantized
         """
         # Check if activation is used as an input to another node
-        if name not in self.activation_data_types.keys():
+        if name not in self.activation_dtypes.keys():
             return False
         # Check activation datatype
-        elif self.activation_data_types[name] not in data_types_to_quantize:
+        elif self.activation_dtypes[name] not in data_types_to_quantize:
             return False
         return True
 
-    def _get_activation_types(self):
+    def get_activation_dtypes(self):
         """
-        Get the data type for each op input activation
+        Get the data type for each activation
         """
-        num_outputs = len(self.model.graph().output)
-        activations = []
-        for node in self.model.nodes():
-            for name in node.input:
-                if name not in activations and name not in self.param_names:
-                    activations.append(name)
+        activations = utils.get_graph_intermediate_activations(self.model.graph())
+        hooks = []
         for name in activations:
-            val_info = onnx.helper.ValueInfoProto()
-            val_info.name = name
-            self.model.graph().output.append(val_info)
-        dummy_input = self._make_dummy_input()
+            hooks.append(add_hook_to_get_activation(self.model.model, name))
+        dummy_input = make_dummy_input(self.model.model)
         sess = self._build_session(self.providers)
         outputs = sess.run(None, dummy_input)
-        self.activation_data_types = {}
         for idx in range(len(self.model.graph().output)):
             act_name = self.model.graph().output[idx].name
             dtype = outputs[idx].dtype
-            self.activation_data_types[act_name] = dtype
-        del self.model.graph().output[num_outputs:]
-
-    def _make_dummy_input(self) -> Dict:
-        """
-        Create a dummy input based on the model input types and shapes
-        :return: Dictionary of input_name : input array
-        """
-        input_dict = {}
-        for item in self.model.graph().input:
-            name = item.name
-            dtype = item.type.tensor_type.elem_type
-            shape = []
-            for dim in item.type.tensor_type.shape.dim:
-                shape.append(dim.dim_value)
-            input_dict[name] = np.random.randn(*shape).astype(mapping.TENSOR_TYPE_TO_NP_TYPE[dtype])
-        return input_dict
+            self.activation_dtypes[act_name] = dtype
+        remove_activation_hooks(self.model.model, hooks)
 
     def _add_quantization_nodes(self):
         """
