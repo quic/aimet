@@ -532,9 +532,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 modified_tensor_quantizers = {}
                 self._set_config_for_module(self._named_modules_to_tensor_quantizers_dict[op.get_module()],
                                             model_input_configs, modified_tensor_quantizers)
-        
-
-      # ------------[filter out some inputs quantizer(i.g,those connecting to previous ops)]------------------------------
+        # ------------[filter out some inputs quantizer(i.g,those connecting to previous ops)]------------------------------
         for op in input_ops:
             if op.input_ops:
                 quantizors = self._get_tensor_quantizers_for_input_true_setting(op)
