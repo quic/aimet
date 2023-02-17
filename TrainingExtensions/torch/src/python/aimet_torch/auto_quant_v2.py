@@ -168,7 +168,10 @@ def _validate_inputs(model: torch.nn.Module,
                      eval_callback: Callable[[torch.nn.Module], float],
                      dummy_input: torch.Tensor,
                      results_dir: str,
-                     strict_validation: bool):
+                     strict_validation: bool,
+                     param_bw: int,
+                     output_bw: int,
+                     rounding_mode: str):
     """
     Confirms inputs are of the correct type
     :param model: Model to be quantized
@@ -177,6 +180,9 @@ def _validate_inputs(model: torch.nn.Module,
     :param dummy_input: Dummy input for the model
     :param results_dir: Directory to save the results of PTQ techniques
     :param strict_validation: Flag set to True by default. When False, AutoQuant will proceed with execution and try to handle errors internally if possible. This may produce unideal or unintuitive results.
+    :param param_bw: Parameter bitwidth
+    :param output_bw: Output bitwidth
+    :param rounding_mode: Rounding mode
     """
     if not isinstance(model, torch.nn.Module):
         raise ValueError('Model must be of type torch.nn.Module, not ' + str(type(model).__name__))
@@ -201,8 +207,11 @@ def _validate_inputs(model: torch.nn.Module,
     if not isinstance(strict_validation, bool):
         raise ValueError('strict_validation must be of type bool, not ' + str(type(strict_validation).__name__))
 
+    _validate_bitwidth(output_bw, param_bw)
+    _validate_rounding_mode(rounding_mode)
 
-class _AutoQuantV2: # pylint: disable=too-many-instance-attributes
+
+class AutoQuant: # pylint: disable=too-many-instance-attributes
     """
     Integrate and apply post-training quantization techniques.
 
@@ -216,7 +225,7 @@ class _AutoQuantV2: # pylint: disable=too-many-instance-attributes
             self,
             model: torch.nn.Module,
             dummy_input: Union[torch.Tensor, Tuple],
-            data_loader: DataLoader,
+            data_loader: Union[DataLoader, Collection],
             eval_callback: Callable[[torch.nn.Module], float],
             param_bw: int = 8,
             output_bw: int = 8,
@@ -228,16 +237,21 @@ class _AutoQuantV2: # pylint: disable=too-many-instance-attributes
             strict_validation: bool = True) -> None:
         '''
         :param model: Model to be quantized. Assumes model is on the correct device
+        :param dummy_input: Dummy input for the model. Assumes that dummy_input is on the correct device
         :param data_loader: A collection that iterates over an unlabeled dataset, used for computing encodings
         :param eval_callback: Function that calculates the evaluation score
-        :param dummy_input: Dummy input for the model. Assumes that dummy_input is on the correct device
+        :param param_bw: Parameter bitwidth
+        :param output_bw: Output bitwidth
+        :param quant_scheme: Quantization scheme
+        :param rounding_mode: Rounding mode
+        :param config_file: Path to configuration file for model quantizers
         :param results_dir: Directory to save the results of PTQ techniques
+        :param cache_id: ID associated with cache results
         :param strict_validation: Flag set to True by default.hen False, AutoQuant will proceed with execution and handle errors internally if possible. This may produce unideal or unintuitive results.
         '''
         _validate_inputs(model, data_loader, eval_callback, dummy_input, results_dir,
-                         strict_validation)
-        _validate_bitwidth(output_bw, param_bw)
-        _validate_rounding_mode(rounding_mode)
+                         strict_validation, param_bw, output_bw, rounding_mode)
+
         if quant_scheme is not None:
             _validate_quant_scheme(quant_scheme)
             # By default, use the same quant scheme for param and output
@@ -266,7 +280,7 @@ class _AutoQuantV2: # pylint: disable=too-many-instance-attributes
 
         def forward_pass_callback(model, _: Any = None):
             device = utils.get_device(model)
-            with utils.in_eval_mode(model), torch.no_grad():
+            with in_eval_mode(model), torch.no_grad():
                 for input_data in tqdm(data_loader):
                     input_data = utils.change_tensor_device_placement(input_data, device)
                     if isinstance(input_data, torch.Tensor):
@@ -542,7 +556,7 @@ class _AutoQuantV2: # pylint: disable=too-many-instance-attributes
 
         return model, adaround_encoding_path
 
-    def inference(self) -> Tuple[QuantizationSimModel, float]:
+    def run_inference(self) -> Tuple[QuantizationSimModel, float]:
         '''
         Creates a quantization model and performs inference
 
@@ -1149,7 +1163,7 @@ class _EvalSession: # pylint: disable=too-many-instance-attributes
 
 
 @contextlib.contextmanager
-def spy_auto_quant(auto_quant: _AutoQuantV2):
+def spy_auto_quant(auto_quant: AutoQuant):
     """
     Install a spy that collects the handles to the ptq result of
     each stage of AutoQuant.
