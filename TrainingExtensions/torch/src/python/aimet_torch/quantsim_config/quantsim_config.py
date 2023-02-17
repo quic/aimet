@@ -526,21 +526,24 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         """
         input_ops = get_all_input_ops(self._conn_graph)
 
-        for op in input_ops:
-            if op.input_ops:
-                quantizors = self._get_tensor_quantizers_for_input_true_setting(op)
-                for idx, product in enumerate(op.inputs):
-                    if not product.is_model_input:  # filter out some inputs quantizer(i.g,those connecting to previous ops)
-                        input_true_list = self._named_modules_to_tensor_quantizers_dict[op.get_module()][0]
-                        quantizor = quantizors[idx]
-                        input_true_list.remove(quantizor)
-
 
         for op in input_ops:
             if op.get_module() in self._named_modules_to_tensor_quantizers_dict:
                 modified_tensor_quantizers = {}
                 self._set_config_for_module(self._named_modules_to_tensor_quantizers_dict[op.get_module()],
                                             model_input_configs, modified_tensor_quantizers)
+        
+
+      # ------------[filter out some inputs quantizer(i.g,those connecting to previous ops)]------------------------------
+        for op in input_ops:
+            if op.input_ops:
+                quantizors = self._get_tensor_quantizers_for_input_true_setting(op)
+                for idx, product in enumerate(op.inputs):
+                    if not product.is_model_input:
+                        if quantizors[idx].enabled:
+                            quantizors[idx].enabled = False
+
+
 
     def _set_model_output_configs(self, model_output_configs: ConfigType):
         """
@@ -553,6 +556,8 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 modified_tensor_quantizers = {}
                 self._set_config_for_module(self._named_modules_to_tensor_quantizers_dict[op.get_module()],
                                             model_output_configs, modified_tensor_quantizers)
+
+
 
     # -----------------------------------[ override support begin] --------------------------------------------- #
 
