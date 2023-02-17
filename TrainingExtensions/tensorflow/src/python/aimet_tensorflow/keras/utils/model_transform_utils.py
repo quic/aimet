@@ -267,9 +267,6 @@ if version.parse(tf.version.VERSION) >= version.parse("2.00"):
             depthwise_layer_weights = OrderedDict()
             pointwise_layer_weights = OrderedDict()
 
-            if match_layer_config['name'] == "block2_sepconv1":
-                print(match_layer.weights)
-
             # The weights from the original layer are split into two layers. The weights names have to match the
             # new layers naming convention. For example, the pointiwse layer cannot have the kernel named "pointwise_kernel"
             # otherwise Keras will not map that weight to the layer. The weights names have to be "kernel" and "bias".
