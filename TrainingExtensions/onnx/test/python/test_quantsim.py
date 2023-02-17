@@ -42,7 +42,7 @@ import numpy as np
 from onnx import load_model
 from aimet_common.defs import QuantScheme
 from aimet_onnx.quantsim import QuantizationSimModel
-from aimet_onnx.qc_quantize_op import OpMode, reset_qc_quantize_op_dict
+from aimet_onnx.qc_quantize_op import OpMode
 from aimet_torch.quantsim import QuantizationSimModel as PtQuantizationSimModel
 from aimet_torch.examples.test_models import SingleResidual
 from test_models import build_dummy_model
@@ -110,10 +110,9 @@ class TestQuantSim:
         # Check if op_mode is set correctly for each qc quantize op node
         qc_quantize_op_dict = sim.get_qc_quantize_op()
         for name in sim.param_names:
-            assert qc_quantize_op_dict[name].op_mode == OpMode.one_shot_quantize_dequantize
+            assert qc_quantize_op_dict[name].op_mode == OpMode.oneShotQuantizeDequantize
         for name in sim.activation_names:
-            assert qc_quantize_op_dict[name].op_mode == OpMode.update_stats
-        reset_qc_quantize_op_dict()
+            assert qc_quantize_op_dict[name].op_mode == OpMode.updateStats
 
     def test_compute_encodings(self):
         """Test to perform compute encodings"""
@@ -124,7 +123,7 @@ class TestQuantSim:
             sim.qc_quantize_op_dict[quantizer].enabled = True
 
         for name, qc_op in sim.get_qc_quantize_op().items():
-            assert qc_op.tensor_quantizer.isEncodingValid is False
+            assert qc_op.quant_info.tensorQuantizerRef.isEncodingValid is False
 
         def callback(session, args):
             in_tensor = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
@@ -136,9 +135,8 @@ class TestQuantSim:
             assert qc_op.encodings.bw == 8
 
         for name, qc_op in sim.get_qc_quantize_op().items():
-            assert qc_op.tensor_quantizer.isEncodingValid is True
-            assert qc_op.op_mode == OpMode.quantize_dequantize or OpMode.one_shot_quantize_dequantize
-        reset_qc_quantize_op_dict()
+            assert qc_op.quant_info.tensorQuantizerRef.isEncodingValid is True
+            assert qc_op.op_mode == OpMode.quantizeDequantize or OpMode.oneShotQuantizeDequantize
 
     def test_export_model_with_quant_args(self):
         """Test to export encodings and model"""
@@ -199,7 +197,6 @@ class TestQuantSim:
         for param in param_keys:
             param_encodings_keys = list(encoding_data["param_encodings"][param].keys())
             assert param_encodings_keys == ['bitwidth', 'dtype', 'is_symmetric', 'max', 'min', 'offset', 'scale']
-        reset_qc_quantize_op_dict()
 
     def test_compare_encodings_with_PT(self):
         """Test to compare encodings with PT"""
