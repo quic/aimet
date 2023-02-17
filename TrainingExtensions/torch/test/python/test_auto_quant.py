@@ -49,7 +49,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 
 from aimet_torch import utils
-from aimet_torch.auto_quant import _AutoQuantV1 as AutoQuant
+from aimet_torch.auto_quant import AutoQuant
 from aimet_torch.adaround.adaround_weight import AdaroundParameters, Adaround
 from aimet_torch.quantsim import QuantizationSimModel, OnnxExportApiArgs
 
