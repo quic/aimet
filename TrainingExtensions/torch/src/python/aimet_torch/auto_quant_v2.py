@@ -229,7 +229,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
             eval_callback: Callable[[torch.nn.Module], float],
             param_bw: int = 8,
             output_bw: int = 8,
-            quant_scheme: QuantScheme = None,
+            quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
             rounding_mode: str = 'nearest',
             config_file: str = None,
             results_dir: str = "/tmp",
