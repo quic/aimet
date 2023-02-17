@@ -190,23 +190,6 @@ else
     prebuilt_docker_image_name="${prebuilt_docker_image_url}/aimet:latest"
 fi
 
-# Either use code linaro docker image or build it from scratch
-if [ -n "$USE_LINARO" ]; then
-    docker_image_name=$prebuilt_docker_image_name
-    echo -e "*** Using pre-built docker image: $docker_image_name ***\n"
-else
-    echo -e "*** Building docker image${loading_symbol} ***\n"
-    pushd ${dockerfile_path}
-    DOCKER_BUILD_CMD="docker build -t ${docker_image_name} -f ${docker_file} ."
-    if [ $interactive_mode -eq 1 ] && [ $dry_run -eq 1 ]; then
-        echo ${DOCKER_BUILD_CMD}
-        echo
-    else
-        eval ${DOCKER_BUILD_CMD}
-    fi
-    popd
-fi
-
 if [[ -z "${BUILD_NUMBER}" ]]; then
     # If invoked from command line by user, use a timestamp suffix
     results_path=${outputRootFolder}/buildntest_results/$timestamp
@@ -238,6 +221,24 @@ else
     for container_name in "${containers[@]}"; do 
         docker kill "$container_name" || true;
     done
+fi
+
+# Either use code linaro docker image or build it from scratch
+if [ -n "$USE_LINARO" ]; then
+    docker_image_name=$prebuilt_docker_image_name
+    echo -e "*** Using pre-built docker image: $docker_image_name ***\n"
+    docker pull $docker_image_name
+else
+    echo -e "*** Building docker image${loading_symbol} ***\n"
+    pushd ${dockerfile_path}
+    DOCKER_BUILD_CMD="docker build -t ${docker_image_name} -f ${docker_file} ."
+    if [ $interactive_mode -eq 1 ] && [ $dry_run -eq 1 ]; then
+        echo ${DOCKER_BUILD_CMD}
+        echo
+    else
+        eval ${DOCKER_BUILD_CMD}
+    fi
+    popd
 fi
 
 # Add data dependency path as additional volume mount if it exists

@@ -377,7 +377,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                         quantizer.enabled = False
                     else:
                         quantizer.enabled = True
-                        quantizer.set_mode(OpMode.update_stats)
+                        quantizer.op_mode = OpMode.updateStats
                 else:
                     quantizer.use_symmetric_encodings = quantizer_setting
                 if quantizer not in modified_quantize_ops:

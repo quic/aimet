@@ -42,14 +42,15 @@ from typing import Dict
 from onnx import helper, onnx_pb
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
-from onnxruntime_extensions import get_library_path
-from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode, qc_quantize_op_dict
+from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import encoding_version, extract_global_quantizer_args
 from aimet_common.utils import save_json_yaml
+from aimet_common import libpymo
 
 from aimet_onnx.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
+from aimet_common import libquant_info
 
 WORKING_DIR = '/tmp/quantsim/'
 
@@ -80,7 +81,7 @@ class QuantizationSimModel:
         :param config_file: Path to Configuration file for model quantizers
         """
         self.model = ONNXModel(model)
-        self.qc_quantize_op_dict = qc_quantize_op_dict
+        self.qc_quantize_op_dict = {}
         self.connected_graph = ConnectedGraph(self.model)
         self._quant_scheme = quant_scheme
         self._rounding_mode = rounding_mode
@@ -148,20 +149,22 @@ class QuantizationSimModel:
         for name in self.param_names:
             self.model.replace_input_of_all_nodes(name, name+'_qdq')
 
+            quant_info = libquant_info.QcQuantizeInfo()
             custom_node = helper.make_node(
                 op_type='QcQuantizeOp',
                 inputs=[name],
                 outputs=[name+'_qdq'],
                 name='QcQuantizeOp_' + name,
-                domain='ai.onnx.contrib',
+                domain="aimet.customop",
                 op_name=name,
-                op_mode='one_shot_quantize_dequantize',
+                quant_info=libpymo.PtrToInt64(quant_info),
             )
             self.model.add_node(custom_node)
-            self.qc_quantize_op_dict[name] = QcQuantizeOp(quant_scheme=self._quant_scheme,
+            self.qc_quantize_op_dict[name] = QcQuantizeOp(quant_info=quant_info,
+                                                          quant_scheme=self._quant_scheme,
                                                           rounding_mode=self._rounding_mode,
                                                           encodings=None,
-                                                          op_mode=OpMode.one_shot_quantize_dequantize,
+                                                          op_mode=OpMode.oneShotQuantizeDequantize,
                                                           bitwidth=self._default_param_bw,
                                                           use_symmetric_encodings=self._use_symmetric_encodings,
                                                           use_cuda=self._use_cuda)
@@ -172,21 +175,22 @@ class QuantizationSimModel:
         """
         for name in self.activation_names:
             self.model.replace_input_of_all_nodes(name, name+'_updated')
-
+            quant_info = libquant_info.QcQuantizeInfo()
             custom_node = helper.make_node(
                 op_type='QcQuantizeOp',
                 inputs=[name],
                 outputs=[name+'_updated'],
                 name='QcQuantizeOp_' + name,
-                domain='ai.onnx.contrib',
+                domain="aimet.customop",
                 op_name=name,
-                op_mode='update_stats',
+                quant_info=libpymo.PtrToInt64(quant_info)
             )
             self.model.add_node(custom_node)
-            self.qc_quantize_op_dict[name] = QcQuantizeOp(quant_scheme=self._quant_scheme,
+            self.qc_quantize_op_dict[name] = QcQuantizeOp(quant_info=quant_info,
+                                                          quant_scheme=self._quant_scheme,
                                                           rounding_mode=self._rounding_mode,
                                                           encodings=None,
-                                                          op_mode=OpMode.update_stats,
+                                                          op_mode=OpMode.updateStats,
                                                           bitwidth=self._default_activation_bw,
                                                           use_symmetric_encodings=self._use_symmetric_encodings,
                                                           use_cuda=self._use_cuda)
@@ -197,7 +201,9 @@ class QuantizationSimModel:
         :param providers: providers to execute onnxruntime
         """
         sess_options = SessionOptions()
-        sess_options.register_custom_ops_library(get_library_path())
+        shared_library = os.path.dirname(libquant_info.__file__)
+        shared_library = os.path.join(shared_library, "libaimet_onnxrt_ops.so")
+        sess_options.register_custom_ops_library(shared_library)
         sess_options.graph_optimization_level = GraphOptimizationLevel.ORT_DISABLE_ALL
         session = InferenceSession(
             path_or_bytes=self.model.model.SerializeToString(),
@@ -238,7 +244,7 @@ class QuantizationSimModel:
         for op_name, qc_op in self.qc_quantize_op_dict.items():
             qc_op.compute_encodings()
             if op_name in self.activation_names:
-                qc_op.set_mode(OpMode.quantize_dequantize)
+                qc_op.op_mode = OpMode.quantizeDequantize
 
     def _export_encodings(self, encoding_file_path):
         """

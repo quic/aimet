@@ -39,62 +39,21 @@
 
 import os
 from typing import Union
-from enum import Enum
-import numpy as np
-from onnxruntime_extensions import onnx_op, PyCustomOpDef
 import aimet_common.libpymo as libpymo
+from aimet_common.libpymo import TensorQuantizerOpMode
 from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO
+from aimet_common import libquant_info
 
 
-qc_quantize_op_dict = {}
-TF_ENHANCED_USE_DOWNSAMPLING = bool(int(os.environ.get("AIMET_TFE_USE_DOWNSAMPLING", "0")))
-TF_ENHANCED_OFFSET_FACTOR = 0
-TF_ENHANCED_STRIDE_FACTOR = 2
-
-
-@onnx_op(op_type='QcQuantizeOp',
-         inputs=[PyCustomOpDef.dt_float],
-         outputs=[PyCustomOpDef.dt_float],
-         attrs=['op_name'],
-         )
-def custom_onnxruntime_op(x, **kwargs):
-    """
-    Custom ONNXRuntime operations
-    """
-    op_name = kwargs['op_name']
-    qc_op = qc_quantize_op_dict[op_name]
-
-    # TODO
-    # For non-four-dimensional tensors, set op_mode to update_stats, libpymo.tensorQunatizer doesn't support.
-    if len(x.shape) != 4:
-        qc_op.set_mode(OpMode.update_stats)
-
-    return qc_op.compute(x)
-
-
-def reset_qc_quantize_op_dict():
-    """
-    Reset qc_quantize_op dict to prevent overwrite
-    """
-    # pylint: disable=global-statement
-    global qc_quantize_op_dict
-    qc_quantize_op_dict.clear()
-
-
-class OpMode(Enum):
-    """
-    op modes for tensor quantizer
-    """
-    update_stats = 1
-    quantize_dequantize = 2
-    one_shot_quantize_dequantize = 3
+OpMode = TensorQuantizerOpMode
 
 
 class QcQuantizeOp:
     """ A custom quantization operation to perform using ONNXRuntime """
 
     # pylint: disable=too-many-arguments
-    def __init__(self, quant_scheme: QuantScheme = QuantScheme.post_training_tf,
+    def __init__(self, quant_info: libquant_info.QcQuantizeInfo,
+                 quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
                  rounding_mode: str = 'nearest',
                  encodings: Union[libpymo.TfEncoding, None] = None,
                  op_mode: Union[OpMode, None] = None,
@@ -102,6 +61,7 @@ class QcQuantizeOp:
                  use_cuda: bool = False):
         """
         Args:
+            quant_info: libquant_info.QcQuantizeInfo object holding quantization parameters passed to the C++ op
             quant_scheme: Quantization scheme (e.g. QuantScheme.post_training_tf)
             rounding_mode: Rounding mode (e.g. nearest)
             encodings: libpymo.TfEncoding object with min, max, offset, delta, bw
@@ -110,12 +70,13 @@ class QcQuantizeOp:
             use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
             use_cuda: True if using CUDA to run quantization op. False otherwise.
         """
+        self.quant_info = quant_info
         self.quant_scheme = quant_scheme
         self.rounding_mode = rounding_mode
-        self.tensor_quantizer = self._build_tensor_quantizer()
-        self.encodings = encodings
+        self.set_tensor_quantizer(self._build_tensor_quantizer())
         self.op_mode = op_mode
         self.bitwidth = bitwidth
+        self.encodings = encodings
         self.use_symmetric_encodings = use_symmetric_encodings
         self.use_cuda = use_cuda
         self.enabled = True
@@ -124,13 +85,54 @@ class QcQuantizeOp:
         return libpymo.TensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[self.quant_scheme],
                                        MAP_ROUND_MODE_TO_PYMO[self.rounding_mode])
 
+    def set_tensor_quantizer(self, tensor_quantizer: libpymo.TensorQuantizer):
+        """
+        Stores tensor_quantizer in self._tensor_quantizer and passes a pointer to the object
+        to the C++ op's QcQuantInfo object
+        :param tensor_quantizer: The libpymo.TensorQuantizer object to give to the C++ op
+        """
+        self._tensor_quantizer = tensor_quantizer
+        self.quant_info.tensorQuantizerRef = libpymo.PtrToInt64(tensor_quantizer)
+
+    @property
+    def enabled(self) -> bool:
+        """
+        If False, quant_info.OpMode will be overriden with OpMode.passThrough to prevent quantization
+        :return: True if the quantizer is to be utilized, False otherwise
+        """
+        return self.quant_info.enabled
+
+    @enabled.setter
+    def enabled(self, enable: bool):
+        """
+        Set the value of enabled to be accessed by the C++ op
+        :param enable: True if the op is to be utilized, False will override the OpMode with passThrough
+        """
+        self.quant_info.enabled = enable
+
+    @property
+    def use_symmetric_encodings(self) -> bool:
+        """
+        Reads useSymmetricEncoding from the node's QcQuantizeInfo object
+        :return: True if the node is to use symmetric encodings
+        """
+        return self.quant_info.useSymmetricEncoding
+
+    @use_symmetric_encodings.setter
+    def use_symmetric_encodings(self, use_symmetric_encodings: bool):
+        """
+        Sets the useSymmetricEncoding attribute of the nodes QcQuantizeInfo object
+        :param use_symmetric_encodings: True if the node is to use symmetric encodings
+        """
+        self.quant_info.useSymmetricEncoding = use_symmetric_encodings
+
     @property
     def use_strict_symmetric(self) -> bool:
         """
         Reads useStrictSymmetric config from Tensor Quantizer
         :return: True if strict symmetric mode is to be used, False otherwise
         """
-        return self.tensor_quantizer.getStrictSymmetric()
+        return self._tensor_quantizer.getStrictSymmetric()
 
     @use_strict_symmetric.setter
     def use_strict_symmetric(self, use_strict_symmetric: bool):
@@ -138,7 +140,7 @@ class QcQuantizeOp:
         Sets the useStrictSymmetric associated with the Tensor Quantizer
         :param use_strict_symmetric: True if strict symmetric mode is to be used, False otherwise
         """
-        self.tensor_quantizer.setStrictSymmetric(use_strict_symmetric)
+        self._tensor_quantizer.setStrictSymmetric(use_strict_symmetric)
         self.encodings = None
 
     @property
@@ -147,7 +149,7 @@ class QcQuantizeOp:
         Reads useStrictSymmetric config from Tensor Quantizer
         :return: True if unsigned symmetric mode is to be used, False otherwise
         """
-        return self.tensor_quantizer.getUnsignedSymmetric()
+        return self._tensor_quantizer.getUnsignedSymmetric()
 
     @use_unsigned_symmetric.setter
     def use_unsigned_symmetric(self, use_unsigned_symmetric: bool):
@@ -155,34 +157,55 @@ class QcQuantizeOp:
         Sets the useUnsignedSymmetric associated with the Tensor Quantizer
         :param use_unsigned_symmetric: True if unsigned symmetric mode is to be used, False otherwise
         """
-        self.tensor_quantizer.setUnsignedSymmetric(use_unsigned_symmetric)
+        self._tensor_quantizer.setUnsignedSymmetric(use_unsigned_symmetric)
         self.encodings = None
 
-    def set_encodings(self, encodings: libpymo.TfEncoding):
+    @property
+    def encodings(self) -> libpymo.TfEncoding:
         """
-        set encodings of tensor quantizer by given encodings
+        Reads the encodings object from the node's QcQuantizeInfo
+        :return: The libpymo.TfEncoding object used to store the node's quantization encoding
         """
-        self.encodings = encodings
-        self.tensor_quantizer.isEncodingValid = True
+        return self.quant_info.encoding
 
-    def get_encodings(self):
+    @encodings.setter
+    def encodings(self, encoding: Union[libpymo.TfEncoding, None]):
         """
-        return the encodings of tensor quantizer
+        Stores encoding in self._encoding to prevent deletion and sets self.quant_info.encoding to point to encoding.
+        If encoding is None, creates an empty encoding to prevent seg faults
+        :param encoding: The libpymo.TfEncoding object to be used by the C++ op
         """
-        return self.encodings
+        if encoding is None:
+            encoding = libpymo.TfEncoding()
+            self._tensor_quantizer.isEncodingValid = False
+        else:
+            self._tensor_quantizer.isEncodingValid = True
+        self._encoding = encoding
+        self.quant_info.encoding = encoding
+        self.quant_info.encoding.bw = self.bitwidth
 
-    def set_mode(self, op_mode: OpMode):
+    @property
+    def op_mode(self) -> OpMode:
         """
-        set the mode of QcQuantizeOp
+        Reads the OpMode from the node's quant_info object
+        :return: The node's current mode of operation
         """
-        self.op_mode = op_mode
+        return self.quant_info.opMode
+
+    @op_mode.setter
+    def op_mode(self, op_mode: OpMode):
+        """
+        Sets the opMode field in the node's quant_info
+        :param op_mode: The OpMode to be used
+        """
+        self.quant_info.opMode = op_mode
 
     def reset_encoding_stats(self):
         """
         reset the stats of tensor quantizer
         """
         self.encodings = None
-        self.tensor_quantizer.resetEncodingStats()
+        self._tensor_quantizer.resetEncodingStats()
 
     def set_bitwidth(self, bitwidth: int):
         """
@@ -196,49 +219,13 @@ class QcQuantizeOp:
         Set QcQuantizeOp as given quant scheme
         """
         self.quant_scheme = quant_scheme
-        self.tensor_quantizer = self._build_tensor_quantizer()
+        self.set_tensor_quantizer(self._build_tensor_quantizer())
         self.reset_encoding_stats()
 
-    def compute_encodings(self):
+    def compute_encodings(self) -> libpymo.TfEncoding:
         """
         Compute and return encodings of each tensor quantizer
         """
-        self.encodings = self.tensor_quantizer.computeEncoding(self.bitwidth,
+        self.encodings = self._tensor_quantizer.computeEncoding(self.bitwidth,
                                                                self.use_symmetric_encodings)
         return self.encodings
-
-    def compute(self, in_tensor: Union[None, np.array] = None):
-        """
-        forward function called by ONNXRuntime
-        """
-        if self.enabled:
-            if self.op_mode == OpMode.update_stats:
-                output = in_tensor
-                if TF_ENHANCED_USE_DOWNSAMPLING and self.quant_scheme == QuantScheme.post_training_tf_enhanced:
-                    in_tensor_flatten = in_tensor.reshape(-1)
-                    in_tensor = \
-                        in_tensor_flatten[TF_ENHANCED_OFFSET_FACTOR::TF_ENHANCED_STRIDE_FACTOR].astype(np.float32)
-                self.tensor_quantizer.updateStats(in_tensor, self.use_cuda)
-
-            elif self.op_mode == OpMode.one_shot_quantize_dequantize:
-                out_tensor = np.zeros(in_tensor.shape).astype(np.float32)
-                self.reset_encoding_stats()
-                self.tensor_quantizer.updateStats(in_tensor, self.use_cuda)
-                self.encodings = self.tensor_quantizer.computeEncoding(self.bitwidth,
-                                                                       self.use_symmetric_encodings)
-                self.tensor_quantizer.quantizeDequantize(in_tensor, out_tensor, self.encodings.min,
-                                                         self.encodings.max, self.bitwidth, self.use_cuda)
-                output = out_tensor
-
-            elif self.op_mode == OpMode.quantize_dequantize:
-                out_tensor = np.zeros(in_tensor.shape).astype(np.float32)
-                self.tensor_quantizer.quantizeDequantize(in_tensor, out_tensor, self.encodings.min,
-                                                         self.encodings.max, self.bitwidth, self.use_cuda)
-                output = out_tensor
-            else:
-                raise Exception("Please initialize the op_mode before calling compute function")
-
-        else:
-            output = in_tensor
-
-        return output
