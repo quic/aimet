@@ -41,6 +41,7 @@
 """Automatic Post-Training Quantization"""
 import copy
 import contextlib
+from warnings import warn
 from dataclasses import dataclass
 import functools
 import os
@@ -57,7 +58,6 @@ from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.utils import in_eval_mode
 from aimet_torch.onnx_utils import OnnxExportApiArgs
-from aimet_torch.auto_quant_v2 import _AutoQuantV2
 
 from aimet_common.auto_quant import Diagnostics
 from aimet_common.cache import Cache
@@ -76,8 +76,11 @@ cache = Cache()
 NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION = None
 
 
-class _AutoQuantV1:
+class AutoQuant:
     """
+     WARNING:
+       auto_quant.py/AutoQuant will be deprecated. Please import AutoQuant from auto_quant_v2.py instead
+
     Integrate and apply post-training quantization techniques.
 
     AutoQuant includes 1) batchnorm folding, 2) cross-layer equalization,
@@ -119,6 +122,7 @@ class _AutoQuantV1:
         :param default_rounding_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'
         :param default_config_file: Path to configuration file for model quantizers
         """
+        warn('auto_quant.py/AutoQuant will be deprecated. Please import AutoQuant from auto_quant_v2.py instead.', DeprecationWarning, stacklevel=2)
         if allowed_accuracy_drop < 0:
             raise ValueError(
                 "`allowed_accuracy_drop` must be a positive value. Got {:.2f}"
@@ -875,23 +879,3 @@ def spy_auto_quant(auto_quant: "AutoQuant"):
         yield spy
     finally:
         setattr(auto_quant, "_auto_quant_main", _auto_quant_main)
-
-
-
-AutoQuant = _AutoQuantV1
-
-
-def enable_auto_quant_v2():
-    """
-    Enable AutoQuantV2
-    """
-    global AutoQuant # pylint: disable=global-statement
-    AutoQuant = _AutoQuantV2
-
-
-def disable_auto_quant_v2():
-    """
-    Disable AutoQuantV2
-    """
-    global AutoQuant # pylint: disable=global-statement
-    AutoQuant = _AutoQuantV1
