@@ -51,7 +51,7 @@ from torch.utils.data import Dataset, DataLoader
 
 from aimet_torch import utils
 from aimet_torch.model_preparer import prepare_model
-from aimet_torch.auto_quant_v2 import _AutoQuantV2 as AutoQuant
+from aimet_torch.auto_quant_v2 import AutoQuant
 from aimet_torch.adaround.adaround_weight import AdaroundParameters
 from aimet_torch.quantsim import QuantizationSimModel, OnnxExportApiArgs
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
@@ -377,9 +377,9 @@ class TestAutoQuant:
                                        mocks.eval_callback,
                                        results_dir=results_dir)
 
-                # When inference() and optimize() are called in back-to-back,
+                # When run_inference() and optimize() are called in back-to-back,
                 # reusable intermediate reseults should be always reused.
-                auto_quant.inference()
+                auto_quant.run_inference()
                 auto_quant.optimize()
                 assert prepare_model_mock.call_count == 1
                 assert mocks.fold_all_batch_norms.call_count == 1
@@ -482,7 +482,7 @@ class TestAutoQuant:
 
             # If strict_validation is True (default), AutoQuant crashes with an exception.
             with pytest.raises(torch.fx.proxy.TraceError):
-                auto_quant.inference()
+                auto_quant.run_inference()
 
             # If strict_validation is True (default), AutoQuant crashes with an exception.
             with pytest.raises(torch.fx.proxy.TraceError):
@@ -498,7 +498,7 @@ class TestAutoQuant:
                                    strict_validation=False)
 
             # If strict_validation is False, AutoQuant ignores the errors and proceed. 
-            auto_quant.inference()
+            auto_quant.run_inference()
 
             # If strict_validation is False, AutoQuant ignores the errors and proceed. 
             auto_quant.optimize()
@@ -736,7 +736,7 @@ class TestAutoQuant:
                 assert self._quantsim_params["quant_scheme"].output_quant_scheme == QuantScheme.post_training_tf
                 return _apply_batchnorm_folding(self, *args, **kwargs)
 
-            with patch("aimet_torch.auto_quant_v2._AutoQuantV2._apply_batchnorm_folding", apply_batchnorm_folding):
+            with patch("aimet_torch.auto_quant_v2.AutoQuant._apply_batchnorm_folding", apply_batchnorm_folding):
                 auto_quant = AutoQuant(cpu_model,
                                        dummy_input,
                                        unlabeled_data_loader,
