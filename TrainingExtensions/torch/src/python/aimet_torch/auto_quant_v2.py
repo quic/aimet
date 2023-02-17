@@ -46,12 +46,11 @@ import functools
 import itertools
 import math
 import traceback
-import math
 import os
 import sys
 import io
 from unittest.mock import patch
-from typing import Any, Callable, Collection, Dict, List, Optional, Tuple, Union, Mapping
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, Mapping
 import torch
 from torch.utils.data import DataLoader
 import jinja2
@@ -163,8 +162,8 @@ def _choose_default_quant_scheme(param_bw: int,
     return max(candidates, key=eval_fn)
 
 
-def _validate_inputs(model: torch.nn.Module,
-                     unlabeled_dataset: Union[DataLoader, Collection],
+def _validate_inputs(model: torch.nn.Module, # pylint: disable=too-many-arguments
+                     data_loader: DataLoader,
                      eval_callback: Callable[[torch.nn.Module], float],
                      dummy_input: torch.Tensor,
                      results_dir: str,
@@ -175,7 +174,7 @@ def _validate_inputs(model: torch.nn.Module,
     """
     Confirms inputs are of the correct type
     :param model: Model to be quantized
-    :param unlabeled_dataset: A collection that iterates over an unlabeled dataset, used for computing encodings
+    :param data_loader: A collection that iterates over an unlabeled dataset, used for computing encodings
     :param eval_callback: Function that calculates the evaluation score
     :param dummy_input: Dummy input for the model
     :param results_dir: Directory to save the results of PTQ techniques
@@ -187,9 +186,9 @@ def _validate_inputs(model: torch.nn.Module,
     if not isinstance(model, torch.nn.Module):
         raise ValueError('Model must be of type torch.nn.Module, not ' + str(type(model).__name__))
 
-    if not isinstance(unlabeled_dataset, (DataLoader, Collection)):
-        raise ValueError('unlabeled_dataset must be of type DataLoader or Collection, not ' + str(
-            type(unlabeled_dataset).__name__))
+    if not isinstance(data_loader, DataLoader):
+        raise ValueError('data_loader must be of type DataLoader, not ' + str(
+            type(data_loader).__name__))
 
     if not isinstance(eval_callback, Callable):
         raise ValueError('eval_callback must be of type Callable, not ' + str(type(eval_callback).__name__))
@@ -225,7 +224,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
             self,
             model: torch.nn.Module,
             dummy_input: Union[torch.Tensor, Tuple],
-            data_loader: Union[DataLoader, Collection],
+            data_loader: DataLoader,
             eval_callback: Callable[[torch.nn.Module], float],
             param_bw: int = 8,
             output_bw: int = 8,
@@ -333,7 +332,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         """
         Set Adaround parameters.
         If this method is not called explicitly by the user, AutoQuant will use
-        `unlabeled_dataset_iterable` (passed to `__init__`) for Adaround.
+        `data_loader` (passed to `__init__`) for Adaround.
 
         :param adaround_params: Adaround parameters.
         """
