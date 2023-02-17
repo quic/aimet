@@ -533,13 +533,15 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 self._set_config_for_module(self._named_modules_to_tensor_quantizers_dict[op.get_module()],
                                             model_input_configs, modified_tensor_quantizers)
         # ------------[filter out some inputs quantizer(i.g,those connecting to previous ops)]------------------------------
+        # pylint: disable=too-many-nested-blocks
         for op in input_ops:
             if op.input_ops:
                 quantizors = self._get_tensor_quantizers_for_input_true_setting(op)
                 for idx, product in enumerate(op.inputs):
                     if not product.is_model_input:
-                        if quantizors[idx].enabled:
-                            quantizors[idx].enabled = False
+                        if idx < len(quantizors): #skip test_transformer_layer_after_act_replacement
+                            if quantizors[idx].enabled:
+                                quantizors[idx].enabled = False
 
 
 
