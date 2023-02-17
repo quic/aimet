@@ -40,6 +40,7 @@ Unit test for separable conv to depthwise pointwise replacement
 """
 
 import pytest
+import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers
 
@@ -48,7 +49,9 @@ from aimet_tensorflow.keras.utils.model_transform_utils import replace_separable
 def _simple_separable_conv_model(model_type="functional"):
     if model_type == "functional":
         inp = layers.Input((32, 32, 3))
-        x = layers.SeparableConv2D(filters=32, kernel_size=3, activation="relu")(inp)
+        x = layers.SeparableConv2D(filters=32, kernel_size=3)(inp)
+        x = layers.ReLU()(x)
+        x = layers.SeparableConv2D(filters=5, kernel_size=3, activation='relu')(x)
         x = layers.Flatten()(x)
         x = layers.Dense(units=10, activation="relu")(x)
         out = layers.Dense(units=2, activation="softmax")(x)
@@ -56,51 +59,78 @@ def _simple_separable_conv_model(model_type="functional"):
     elif model_type == "sequential":
         model = tf.keras.Sequential()
         model.add(layers.SeparableConv2D(filters=32, kernel_size=2, input_shape=(32, 32, 3)))
-        model.add(layers.ReLU(max_value=6.0))
-        model.add(layers.SeparableConv2D(filters=32, kernel_size=2, activation="relu"))
-        model.add(layers.Activation("relu"))
+        model.add(layers.ReLU())
+        model.add(layers.SeparableConv2D(filters=5, kernel_size=2, activation="relu"))
         model.add(layers.Flatten())
         model.add(layers.Dense(units=10, activation="relu"))
         model.add(layers.Dense(units=2, activation="softmax"))
         return model
-    else:
-        raise ValueError("Unknown model type")
+
+    raise ValueError("Unknown model type")
 
 def _get_layers(model, model_type="functional"):
     if model_type == "functional":
         return model.layers
     elif model_type == "sequential":
-        return model.layers[1:]
-    else:
-        raise ValueError("Unknown model type")
+        return [None, *model.layers]
+
+    raise ValueError("Unknown model type")
 
 class TestSeparableConvReplacement:
+    """
+    Test class for separable conv to depthwise pointwise replacement
+    """
     @pytest.mark.parametrize("model_type", ["functional", "sequential"])
     def test_separable_conv_replacement(self, model_type):
-        # model = _simple_separable_conv_model(model_type)
-        model = tf.keras.models.load_model('sparse_Aug22.h5')
-        transformed_model, _ = replace_separable_conv_with_depthwise_pointwise(model)
-        depthwise_conv, pointwise_conv = _get_layers(transformed_model, model_type)[1:3]
+        """
+        Test separable conv to depthwise pointwise replacement
+        """
 
-        assert isinstance(depthwise_conv, layers.DepthwiseConv2D)
-        assert isinstance(pointwise_conv, layers.Conv2D)
+        original_model = _simple_separable_conv_model(model_type)
+        inp = tf.random.uniform((1, *original_model.input_shape[1:]))
+        original_model_out = original_model(inp)
+
+        transformed_model, _ = replace_separable_conv_with_depthwise_pointwise(original_model)
+
+        depthwise_conv1, pointwise_conv1 = _get_layers(transformed_model, model_type)[1:3]
+        depthwise_conv2, pointwise_conv2 = _get_layers(transformed_model, model_type)[4:6]
+
+        assert isinstance(depthwise_conv1, layers.DepthwiseConv2D)
+        assert isinstance(pointwise_conv1, layers.Conv2D)
+
+        assert isinstance(depthwise_conv2, layers.DepthwiseConv2D)
+        assert isinstance(pointwise_conv2, layers.Conv2D)
 
         # Check that the weights are the same
-        assert depthwise_conv.get_weights()[0].shape == model.layers[1].get_weights()[0].shape
-        assert pointwise_conv.get_weights()[0].shape == model.layers[1].get_weights()[1].shape
+        assert depthwise_conv1.get_weights()[0].shape == _get_layers(original_model, model_type)[1].get_weights()[0].shape
+        assert pointwise_conv1.get_weights()[0].shape == _get_layers(original_model, model_type)[1].get_weights()[1].shape
+
+        assert depthwise_conv2.get_weights()[0].shape == _get_layers(original_model, model_type)[3].get_weights()[0].shape
+        assert pointwise_conv2.get_weights()[0].shape == _get_layers(original_model, model_type)[3].get_weights()[1].shape
 
         # Check that the bias is the same
-        assert depthwise_conv.get_weights()[1].shape == (3,)
-        assert pointwise_conv.get_weights()[1].shape == (32,)
+        assert pointwise_conv1.get_weights()[1].shape == (32,)
+
+        assert pointwise_conv2.get_weights()[1].shape == (5,)
+
+        # Check that the weights are the same
+        assert np.array_equal(depthwise_conv1.get_weights()[0], _get_layers(original_model, model_type)[1].get_weights()[0]), \
+            "Depthwise 1 kernel weights are not the same"
+        assert np.array_equal(pointwise_conv1.get_weights()[0], _get_layers(original_model, model_type)[1].get_weights()[1]), \
+            "Pointwise 1 kernel weights are not the same"
+        assert np.array_equal(pointwise_conv1.get_weights()[1], _get_layers(original_model, model_type)[1].get_weights()[2]), \
+            "Pointwise 1 bias weights are not the same"
+
+        assert np.array_equal(depthwise_conv2.get_weights()[0], _get_layers(original_model, model_type)[3].get_weights()[0]), \
+            "Depthwise 2 kernel weights are not the same"
+        assert np.array_equal(pointwise_conv2.get_weights()[0], _get_layers(original_model, model_type)[3].get_weights()[1]), \
+            "Pointwise 2 kernel weights are not the same"
+        assert np.array_equal(pointwise_conv2.get_weights()[1], _get_layers(original_model, model_type)[3].get_weights()[2]), \
+            "Pointwise 2 bias weights are not the same"
 
         # Check that the output is the same
-        inp = tf.random.uniform((1, 32, 32, 3))
-        out = model(inp)
-        transformed_out = transformed_model(inp)
-        assert tf.reduce_all(tf.math.equal(out, transformed_out))
+        transformed_model_out = transformed_model(inp)
+        assert np.array_equal(original_model_out, transformed_model_out)
 
         # Check that number of parameters is the same
-        assert model.count_params() == transformed_model.count_params()
-
-
-TestSeparableConvReplacement().test_separable_conv_replacement("functional")
+        assert original_model.count_params() == transformed_model.count_params()

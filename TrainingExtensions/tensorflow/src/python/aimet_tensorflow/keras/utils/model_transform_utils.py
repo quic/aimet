@@ -39,7 +39,7 @@
 Classes and utilities to replace ReLU6 with ReLU
 """
 import typing
-
+from collections import OrderedDict
 import tensorflow as tf
 from tensorflow.keras import layers
 from packaging import version
@@ -212,8 +212,8 @@ if version.parse(tf.version.VERSION) >= version.parse("2.00"):
 
     class ReplaceSeparableConvWithDepthwisePointwise(transforms.Transform):
         """
-        Transform class for the case like tf.keras.layers.SeparableConv2D
-        Result is separated such as layers.DepthwiseConv2D and layers.Conv2D
+        Transform class for the case tf.keras.layers.SeparableConv2D
+        Result is separated into two separate layers, layers.DepthwiseConv2D and layers.Conv2D
         """
 
         def pattern(self):
@@ -227,71 +227,70 @@ if version.parse(tf.version.VERSION) >= version.parse("2.00"):
             Replacement logic for match_layer
             :param match_layer: matched layer by pattern
             """
-            DEPTHWISE_INDEX = 0
-            POINTWISE_INDEX = 1
-            BIAS_INDEX = 2
 
             match_layer_config = match_layer.layer["config"]
+            original_layer_name = match_layer_config["name"].split("/")[0]
+
             depthwise_layer = layers.DepthwiseConv2D(
                 match_layer_config["kernel_size"],
                 strides=match_layer_config["strides"],
                 padding=match_layer_config["padding"],
                 depth_multiplier=match_layer_config["depth_multiplier"],
-                depthwise_initializer=match_layer_config["depthwise_initializer"],
-                depthwise_regularizer=match_layer_config["depthwise_regularizer"],
-                depthwise_constraint=match_layer_config["depthwise_constraint"],
-                activation=match_layer_config["activation"],
+                dilation_rate=match_layer_config["dilation_rate"],
+                groups=match_layer_config["groups"],
                 data_format=match_layer_config["data_format"],
-                trainable=match_layer_config["trainable"],
+                depthwise_regularizer=match_layer_config["depthwise_regularizer"],
+                bias_regularizer=match_layer_config["bias_regularizer"],
+                use_bias=False,  # Always False as per Keras source code
+                name=original_layer_name + "/depthwise"  # Needed to avoid name conflicts
             )
             depthwise_layer_config = layers.serialize(depthwise_layer)
             depthwise_layer_config["name"] = depthwise_layer_config["config"]["name"]
 
             pointwise_layer = layers.Conv2D(
                 match_layer_config["filters"],
-                kernel_size=(1, 1),
+                kernel_size=1,  # Always 1 as per Keras source code
                 strides=match_layer_config["strides"],
-                padding=match_layer_config["padding"],
+                padding="valid",  # Always valid as per Keras source code
+                data_format=match_layer_config["data_format"],
+                dilation_rate=(1, 1),  # Always (1, 1) as per Keras source code
+                activation=match_layer_config["activation"],
                 use_bias=match_layer_config["use_bias"],
-                kernel_initializer=match_layer_config["kernel_initializer"],
-                bias_initializer=match_layer_config["bias_initializer"],
                 kernel_regularizer=match_layer_config["kernel_regularizer"],
                 bias_regularizer=match_layer_config["bias_regularizer"],
-                activation=match_layer_config["activation"],
                 activity_regularizer=match_layer_config["activity_regularizer"],
-                kernel_constraint=match_layer_config["kernel_constraint"],
-                bias_constraint=match_layer_config["bias_constraint"],
-                data_format=match_layer_config["data_format"],
-                trainable=match_layer_config["trainable"],
+                name=original_layer_name + "/pointwise"  # Needed to avoid name conflicts
             )
             pointwise_layer_config = layers.serialize(pointwise_layer)
             pointwise_layer_config["name"] = pointwise_layer_config["config"]["name"]
 
+            depthwise_layer_weights = OrderedDict()
+            pointwise_layer_weights = OrderedDict()
 
-            separable_weights = [*match_layer.weights.values()]
-            depthwise_kernel_weights = separable_weights[DEPTHWISE_INDEX]
-            pointwise_kernel_weights = separable_weights[POINTWISE_INDEX]
-            
-            if match_layer_config["name"] == "block2_sepconv1":
-                print()
+            if match_layer_config['name'] == "block2_sepconv1":
+                print(match_layer.weights)
 
-            if match_layer_config["use_bias"]:
-                bias_weights = separable_weights[BIAS_INDEX]
-                
-                return transforms.LayerNode(
-                    pointwise_layer_config,
-                    input_layers=[
-                        transforms.LayerNode(depthwise_layer_config, weights=[depthwise_kernel_weights]),
-                    ],
-                    weights=[pointwise_kernel_weights, bias_weights]
-                )
+            # The weights from the original layer are split into two layers. The weights names have to match the
+            # new layers naming convention. For example, the pointiwse layer cannot have the kernel named "pointwise_kernel"
+            # otherwise Keras will not map that weight to the layer. The weights names have to be "kernel" and "bias".
+            for weight_name, weight_value in match_layer.weights.items():
+                # The tensor number is the last part of the weight name. For example, "depthwise_kernel:0"
+                # The tensor number is ported over to the new layers.
+                tensor_number = weight_name.split(":")[1]
+
+                if weight_name.startswith("depthwise_kernel"):
+                    depthwise_layer_weights[f"depthwise_kernel:{tensor_number}"] = weight_value
+
+                elif weight_name.startswith("pointwise_kernel"):
+                    pointwise_layer_weights[f"kernel:{tensor_number}"] = weight_value
+
+                elif weight_name.startswith("bias"):
+                    pointwise_layer_weights[f"bias:{tensor_number}"] = weight_value
 
             return transforms.LayerNode(
                 pointwise_layer_config,
-                input_layers=[transforms.LayerNode(depthwise_layer_config, [depthwise_kernel_weights])],
-                weights=[pointwise_kernel_weights]
-            )
-
+                weights=pointwise_layer_weights,
+                input_layers=[transforms.LayerNode(depthwise_layer_config, weights=depthwise_layer_weights)])
 
     def replace_separable_conv_with_depthwise_pointwise(model: tf.keras.Model) -> typing.Tuple[tf.keras.Model, typing.Dict]:
         """

@@ -41,7 +41,7 @@ from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms
 from aimet_tensorflow.keras.batch_norm_fold import fold_given_batch_norms
 from aimet_tensorflow.keras.cross_layer_equalization import HighBiasFold, CrossLayerScaling
 from aimet_tensorflow.keras.cross_layer_equalization import equalize_model
-from aimet_tensorflow.keras.utils.model_transform_utils import replace_relu6_with_relu
+from aimet_tensorflow.keras.utils.model_transform_utils import replace_relu6_with_relu, replace_separable_conv_with_depthwise_pointwise
 
 
 def cross_layer_equalization_auto():
@@ -56,9 +56,10 @@ def cross_layer_equalization_auto_stepwise():
     Individual api calls to perform cross layer equalization one step at a time. Pairs to fold and
     scale are found automatically.
     1. Replace Relu6 with Relu
-    2. Fold batch norms
-    3. Perform cross layer scaling
-    4. Perform high bias fold
+    2. Replace SeparableConv2D with DepthwiseConv2D and Conv2D (pointwise)
+    3. Fold batch norms
+    4. Perform cross layer scaling
+    5. Perform high bias fold
     """
 
     # Load the model to equalize
@@ -70,14 +71,17 @@ def cross_layer_equalization_auto_stepwise():
     # 2. Fold all batch norms
     folded_pairs, model = fold_all_batch_norms(model_for_cle)
 
+    # 3. Fold all batch norms
+    folded_pairs = fold_all_batch_norms(model_for_cle)
+
     bn_dict = {}
     for conv_or_linear, bn in folded_pairs:
         bn_dict[conv_or_linear] = bn
 
-    # 3. Perform cross-layer scaling on applicable layer groups
+    # 4. Perform cross-layer scaling on applicable layer groups
     cls_set_info_list = CrossLayerScaling.scale_model(model_for_cle)
 
-    # 4. Perform high bias fold
+    # 5. Perform high bias fold
     HighBiasFold.bias_fold(cls_set_info_list, bn_dict)
 
     return model_for_cle

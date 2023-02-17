@@ -466,6 +466,7 @@ def equalize_model(model: tf.keras.Model) -> tf.keras.Model:
     """
     # replace any ReLU6 layers with ReLU
     model_for_cle, _ = model_transform_utils.replace_relu6_with_relu(model)
+    model_for_cle, _ = model_transform_utils.replace_separable_conv_with_depthwise_pointwise(model_for_cle)
 
     folded_pairs, potential_folded_functional_model = fold_all_batch_norms(model_for_cle)
     # fold_all_batch_norms could return a new model if the original model was a Functional model
