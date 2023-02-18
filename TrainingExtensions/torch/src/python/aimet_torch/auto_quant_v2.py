@@ -44,7 +44,6 @@ from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 import functools
 import itertools
-import string
 import traceback
 import math
 import os
@@ -895,10 +894,6 @@ class _EvalManager:
         os.path.dirname(os.path.abspath(__file__)),
         "auto_quant_diagnostics_template.html",
     )
-    CSS_FILE = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "auto_quant_diagnostics_template.css",
-    )
 
     def export_diagnostics(self) -> str:
         """
@@ -915,13 +910,17 @@ class _EvalManager:
         else:
             head = ""
 
-        body = {
-            sess.title: sess.diagnostics
-            for sess in self._all_sessions
-            if not sess.diagnostics.is_empty()
-        }
-
-        html = template.render(head=head, body=body)
+        log = io.StringIO()
+        for sess in self._all_sessions:
+            if sess.diagnostics.is_empty():
+                continue
+            log.write(
+                f"<h1> {sess.title} </h1>\n"
+            )
+            content = "\n".join(
+                line.get_html_elem() for line in sess.diagnostics
+            )
+            log.write(f"{content}\n")
 
         result = OrderedDict()
         result["ptq_techniques"] = OrderedDict()
@@ -932,25 +931,9 @@ class _EvalManager:
             else:
                 result[sess.title_lowercase] = sess.result
 
-        metadata = _build_flowchart_metadata(result)
-        metadata.update(css=open(self.CSS_FILE).read())
+        flowchart_metadata = _build_flowchart_metadata(result)
 
-        class DefaultFormatter(string.Formatter):
-            """
-            Formatter that fill in the format string with empty string ('') if not specified.
-
-            For example:
-
-            >>> DefaultFormatter().format('{first} & {second}', second='something')
-            ' & something'
-            """
-            def get_value(self, key, args, kwargs):
-                try:
-                    return super().get_value(key, args, kwargs)
-                except (KeyError, IndexError):
-                    return ''
-
-        html = DefaultFormatter().format(html, **metadata)
+        html = template.render(head=head, log=log.getvalue(), **flowchart_metadata)
 
         filename = os.path.join(self._results_dir, "diagnostics.html")
         with open(filename, "w") as f:
