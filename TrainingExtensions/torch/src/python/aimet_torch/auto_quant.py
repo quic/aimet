@@ -122,7 +122,11 @@ class AutoQuant:
         :param default_rounding_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'
         :param default_config_file: Path to configuration file for model quantizers
         """
-        warn('auto_quant.py/AutoQuant will be deprecated. Please import AutoQuant from auto_quant_v2.py instead.', DeprecationWarning, stacklevel=2)
+        warn('Please note that auto_quant.AutoQuant is deprecated and will be removed '
+             'in the next AIMET release. Please use auto_quant_v2.AutoQuant instead. '
+             'The API is slightly changed - please refer to the API docs.',
+             DeprecationWarning, stacklevel=2)
+
         if allowed_accuracy_drop < 0:
             raise ValueError(
                 "`allowed_accuracy_drop` must be a positive value. Got {:.2f}"
