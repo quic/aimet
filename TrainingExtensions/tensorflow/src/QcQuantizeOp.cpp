@@ -114,14 +114,15 @@ public:
         // is_int_data_type
         const Tensor* isIntDataTypeTensor;
         OP_REQUIRES_OK(context, context->input("is_int_data_type", &isIntDataTypeTensor));
-        auto isIntDataType = isIntDataTypeTensor->flat<bool>().data();
+        auto isIntDataTypeFlat = isIntDataTypeTensor->flat<bool>().data();
+        auto isIntDataType = copyLiteralToHost<bool>(context->eigen_device<Device>(), isIntDataTypeFlat);
 
         // allocate output tensors
         Tensor* outTensor = nullptr;
         OP_REQUIRES_OK(context, context->allocate_output(0, inTensor.shape(), &outTensor));
         auto outTensorFlat = outTensor->flat<T>().data();
 
-        if(*isIntDataType)
+        if(isIntDataType)
         {
             DlQuantization::IAllocator* allocator = nullptr;
 #if GOOGLE_CUDA
@@ -130,11 +131,11 @@ public:
             allocator = &_allocator;
 #endif
             modeSpecificActionInt(context->eigen_device<Device>(), inTensorFlat, inTensor.NumElements(), outTensorFlat,
-                           quantizerAddr, *opMode, *encodingMin, *encodingMax, *bitwidth, *useSymmetricEncoding, allocator);
+                           quantizerAddr, opMode, encodingMin, encodingMax, bitwidth, useSymmetricEncoding, allocator);
         }
         else
         {
-            modeSpecificActionFp16<Device, T>(context, inTensor, quantizerAddr, *opMode, outTensor);
+            modeSpecificActionFp16<Device, T>(context, inTensor, quantizerAddr, opMode, outTensor);
         }
     }
 };
@@ -146,18 +147,10 @@ public:
 REGISTER_CPU(float);
 
 // Register the GPU kernels.
+
 #ifdef GOOGLE_CUDA
-#define REGISTER_GPU(T)                                                         \
-    REGISTER_KERNEL_BUILDER(Name("QcQuantize")                                  \
-                            .Device(DEVICE_GPU)                                 \
-                            .TypeConstraint<T>("T")                             \
-                            .HostMemory("op_mode")                              \
-                            .HostMemory("encoding_min")                         \
-                            .HostMemory("encoding_max")                         \
-                            .HostMemory("bit_width")                            \
-                            .HostMemory("use_symmetric_encoding")               \
-                            .HostMemory("is_int_data_type"),                    \
-                            QcQuantizeOp<GPUDevice, T>);
+#define REGISTER_GPU(T) \
+    REGISTER_KERNEL_BUILDER(Name("QcQuantize").Device(DEVICE_GPU).TypeConstraint<T>("T"), QcQuantizeOp<GPUDevice, T>);
 REGISTER_GPU(float);
 
 #endif   // GOOGLE_CUDA

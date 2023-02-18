@@ -104,9 +104,10 @@ class QuantizeDequantizeFp16Functor <GPUDevice>
 
 template <typename D, typename T>
 void modeSpecificActionFp16(OpKernelContext* context, const Tensor& inTensor, const uint64* tensorQuantizerRef,
-                            const int32 opMode, Tensor* outTensor)
+                            const int32* opMode, Tensor* outTensor)
 {
-    auto opModeEnum = static_cast<const DlQuantization::TensorQuantizerOpMode>(opMode);
+    auto opModeHost = copyLiteralToHost<int32>(context->eigen_device<D>(), opMode);
+    auto opModeEnum = static_cast<const DlQuantization::TensorQuantizerOpMode>(opModeHost);
 
     switch (opModeEnum)
     {
