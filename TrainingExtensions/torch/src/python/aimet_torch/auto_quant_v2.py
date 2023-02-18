@@ -70,7 +70,7 @@ from aimet_common.auto_quant import Diagnostics
 from aimet_common.cache import Cache
 from aimet_common.defs import QuantScheme
 from aimet_common.utils import AimetLogger, Spinner
-from aimet_common.quantsim import _validate_quant_scheme, _validate_rounding_mode, _validate_bitwidth
+from aimet_common.quantsim import validate_quantsim_inputs
 
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.AutoQuant)
@@ -91,7 +91,7 @@ class _QuantSchemePair:
     output_percentile: Optional[float] = None
 
 
-QUANT_SCHEME_CANDIDATES = (
+_QUANT_SCHEME_CANDIDATES = (
     # Weight:     tf
     # Activation: tf
     _QuantSchemePair(QuantScheme.post_training_tf,
@@ -121,53 +121,13 @@ QUANT_SCHEME_CANDIDATES = (
 )
 
 
-def _choose_default_quant_scheme(param_bw: int,
-                                 output_bw: int,
-                                 eval_fn: Callable[[_QuantSchemePair], float]) -> _QuantSchemePair:
-    """
-    Choose a default param/output quant scheme among QUANT_SCHEME_CANDIDATES.
-
-    :param param_bw: Parameter bitwidth
-    :param output_bw: Output bitwidth
-    :param eval_fn: A callable that takes a pair of quant schemes
-        (for param and output respectively) and return the eval score
-    :return: The quant scheme that yields the best eval score.
-    """
-    candidates = QUANT_SCHEME_CANDIDATES
-
-    # If the weight representation has sufficient precision (i.e. bitwidth >= 16),
-    # always use tf scheme
-    if param_bw >= 16:
-        candidates = [
-            candidate for candidate in candidates
-            if candidate.param_quant_scheme == QuantScheme.post_training_tf
-        ]
-
-    # If the output representation has sufficient precision (i.e. bitwidth >= 16),
-    # always use tf scheme
-    if output_bw >= 16:
-        candidates = [
-            candidate for candidate in candidates
-            if candidate.output_quant_scheme == QuantScheme.post_training_tf
-        ]
-
-    # If we have only one candidate left, we don't need to evaluated
-    # the quant scheme for comparison
-    if len(candidates) == 1:
-        return candidates[0]
-
-    assert candidates
-
-    # Find the quant scheme that yields the best eval score
-    return max(candidates, key=eval_fn)
-
-
 def _validate_inputs(model: torch.nn.Module, # pylint: disable=too-many-arguments
                      data_loader: DataLoader,
                      eval_callback: Callable[[torch.nn.Module], float],
                      dummy_input: torch.Tensor,
                      results_dir: str,
                      strict_validation: bool,
+                     quant_scheme: QuantScheme,
                      param_bw: int,
                      output_bw: int,
                      rounding_mode: str):
@@ -179,6 +139,7 @@ def _validate_inputs(model: torch.nn.Module, # pylint: disable=too-many-argument
     :param dummy_input: Dummy input for the model
     :param results_dir: Directory to save the results of PTQ techniques
     :param strict_validation: Flag set to True by default. When False, AutoQuant will proceed with execution and try to handle errors internally if possible. This may produce unideal or unintuitive results.
+    :param quant_scheme: Quantization scheme
     :param param_bw: Parameter bitwidth
     :param output_bw: Output bitwidth
     :param rounding_mode: Rounding mode
@@ -206,8 +167,7 @@ def _validate_inputs(model: torch.nn.Module, # pylint: disable=too-many-argument
     if not isinstance(strict_validation, bool):
         raise ValueError('strict_validation must be of type bool, not ' + str(type(strict_validation).__name__))
 
-    _validate_bitwidth(output_bw, param_bw)
-    _validate_rounding_mode(rounding_mode)
+    validate_quantsim_inputs(quant_scheme, rounding_mode, output_bw, param_bw)
 
 
 class AutoQuant: # pylint: disable=too-many-instance-attributes
@@ -228,7 +188,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
             eval_callback: Callable[[torch.nn.Module], float],
             param_bw: int = 8,
             output_bw: int = 8,
-            quant_scheme: QuantScheme = None,
+            quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
             rounding_mode: str = 'nearest',
             config_file: str = None,
             results_dir: str = "/tmp",
@@ -249,14 +209,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         :param strict_validation: Flag set to True by default.hen False, AutoQuant will proceed with execution and handle errors internally if possible. This may produce unideal or unintuitive results.
         '''
         _validate_inputs(model, data_loader, eval_callback, dummy_input, results_dir,
-                         strict_validation, param_bw, output_bw, rounding_mode)
-
-        if quant_scheme is not None:
-            _validate_quant_scheme(quant_scheme)
-            # By default, use the same quant scheme for param and output
-            quant_scheme = _QuantSchemePair(quant_scheme, quant_scheme)
-        else:
-            quant_scheme = None
+                         strict_validation, quant_scheme, param_bw, output_bw, rounding_mode)
 
         self.fp32_model = model
         self.dummy_input = dummy_input
@@ -266,7 +219,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         self._quantsim_params = dict(
             param_bw=param_bw,
             output_bw=output_bw,
-            quant_scheme=quant_scheme,
+            quant_scheme=_QuantSchemePair(quant_scheme, quant_scheme),
             rounding_mode=rounding_mode,
             config_file=config_file,
         )
@@ -321,6 +274,8 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
             dummy_input_on_cpu=utils.change_tensor_device_placement(dummy_input, torch.device("cpu")),
             results_dir=self.results_dir,
             strict_validation=strict_validation)
+
+        self._quant_scheme_candidates = _QUANT_SCHEME_CANDIDATES
 
     def _evaluate_model_performance(self, model) -> float:
         """
@@ -561,11 +516,6 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
 
         :return: QuantizationSimModel, model accuracy as float
         '''
-        # Default quant scheme is not set. Choose quant scheme automatically.
-        if self._quantsim_params["quant_scheme"] is None:
-            with self.eval_manager.session("QuantScheme Selection") as sess:
-                self._quantsim_params["quant_scheme"] = sess.wrap(self._choose_default_quant_scheme)()
-
         with self.eval_manager.session("Prepare Model") as sess:
             model = sess.wrap(self._prepare_model)(self.fp32_model)
 
@@ -636,6 +586,19 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         finally:
             self.eval_manager.export_diagnostics()
 
+    def get_quant_scheme_candidates(self):
+        """
+        Return candidates for quant scheme search
+        """
+        return self._quant_scheme_candidates
+
+    def set_quant_scheme_candidates(self, candidates):
+        """
+        Set candidates for quant scheme search
+        :param candidates: Candidates for quant scheme search
+        """
+        self._quant_scheme_candidates = copy.copy(candidates)
+
     def _choose_default_quant_scheme(self):
         def eval_fn(pair: _QuantSchemePair):
             sim = self._create_quantsim_and_encodings(
@@ -650,7 +613,33 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         param_bw = self._quantsim_params["param_bw"]
         output_bw = self._quantsim_params["output_bw"]
 
-        return _choose_default_quant_scheme(param_bw, output_bw, eval_fn)
+        candidates = self.get_quant_scheme_candidates()
+
+        # If the weight representation has sufficient precision (i.e. bitwidth >= 16),
+        # always use tf scheme
+        if param_bw >= 16:
+            candidates = [
+                candidate for candidate in candidates
+                if candidate.param_quant_scheme == QuantScheme.post_training_tf
+            ]
+
+        # If the output representation has sufficient precision (i.e. bitwidth >= 16),
+        # always use tf scheme
+        if output_bw >= 16:
+            candidates = [
+                candidate for candidate in candidates
+                if candidate.output_quant_scheme == QuantScheme.post_training_tf
+            ]
+
+        # If we have only one candidate left, we don't need to evaluated
+        # the quant scheme for comparison
+        if len(candidates) == 1:
+            return candidates[0]
+
+        assert candidates
+
+        # Find the quant scheme that yields the best eval score
+        return max(candidates, key=eval_fn)
 
     def _optimize_main(self, fp32_model: torch.nn.Module, target_acc: float):
         """
