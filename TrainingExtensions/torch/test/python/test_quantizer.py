@@ -709,8 +709,8 @@ class TestQuantizationSimStaticGrad:
 
         sim = QuantizationSimModel(model, dummy_input=dummy_input)
         assert 2 == len(sim.model.add.input_quantizers)
-        assert not sim.model.add.input_quantizers[0].enabled
-        assert not sim.model.add.input_quantizers[1].enabled
+        assert sim.model.add.input_quantizers[0].enabled
+        assert sim.model.add.input_quantizers[1].enabled
 
         sim.model.add.input_quantizers[1].enabled = True
 
