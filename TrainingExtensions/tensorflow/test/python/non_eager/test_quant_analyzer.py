@@ -323,19 +323,45 @@ def test_perform_per_layer_analysis_by_disabling_quant_ops(cpu_session):
             shutil.rmtree("./tmp/")
 
 def test_export_per_op_mse_loss(cpu_session):
-    """ test _export_per_layer_mse_loss() """
+    """ test _perform_per_op_mse_loss() """
     sim, quant_analyzer = get_quantsim_and_quantanalyzer(cpu_session)
     dataset_size = 128
     batch_size = 32
     input_data = np.random.rand(dataset_size, 16, 16, 3)
     dataset = tf.data.Dataset.from_tensor_slices(input_data)
-    quant_analyzer._unlabeled_dataset  = dataset.batch(batch_size=batch_size)
+    quant_analyzer._unlabeled_dataset = dataset.batch(batch_size=batch_size)
     quant_analyzer._num_batches = 4
     try:
         quant_analyzer._perform_per_op_mse_loss(sim, results_dir="./tmp/")
         assert os.path.isfile("./tmp/per_op_mse_loss.html")
     finally:
         sim.session.close()
+        cpu_session.close()
+        if os.path.isdir("./tmp/"):
+            shutil.rmtree("./tmp/")
+
+def test_analyze(cpu_session):
+    """ test analyze() in Tensorflow quant analyzer"""
+    quant_analyzer = QuantAnalyzer(cpu_session, start_op_names=['conv2d_input'],
+                                   output_op_names=['keras_model/Softmax'],
+                                   forward_pass_callback=CallbackFunc(forward_pass_callback),
+                                   eval_callback=CallbackFunc(forward_pass_callback), use_cuda=False)
+    dataset_size = 128
+    batch_size = 32
+    input_data = np.random.rand(dataset_size, 16, 16, 3)
+    dataset = tf.data.Dataset.from_tensor_slices(input_data)
+    try:
+        quant_analyzer.analyze(results_dir='./tmp',
+                               unlabeled_dataset=dataset.batch(batch_size=batch_size),
+                               num_batches=4)
+        assert os.path.isfile("./tmp/per_op_quant_disabled.html")
+        assert os.path.isfile("./tmp/per_op_quant_enabled.html")
+        assert os.path.exists("./tmp/activations_pdf")
+        assert os.path.exists("./tmp/weights_pdf")
+        assert os.path.isfile("./tmp/min_max_ranges/weights.html")
+        assert os.path.isfile("./tmp/min_max_ranges/activations.html")
+        assert os.path.isfile("./tmp/per_op_mse_loss.html")
+    finally:
         cpu_session.close()
         if os.path.isdir("./tmp/"):
             shutil.rmtree("./tmp/")
