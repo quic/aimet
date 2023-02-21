@@ -1,1 +1,0 @@
-../reqs_pip_common_p36.txt

@@ -1,5 +1,0 @@
-cumm==0.2.8
-onnxruntime==1.10.0
-spconv==2.1.20
-torch==1.9.1+cpu -f https://download.pytorch.org/whl/torch_stable.html
-torchvision==0.10.1+cpu -f https://download.pytorch.org/whl/torch_stable.html

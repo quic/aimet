@@ -1,6 +1,0 @@
-bert-tensorflow
-holoviews==1.12.7
-numpy==1.19.5
-scikit-learn==0.21.0
-tensorflow-hub
-tensorflow-model-optimization

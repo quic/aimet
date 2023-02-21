@@ -1,8 +1,0 @@
-python3.6
-python3.6-dev
-python3-pip
-liblapacke
-liblapacke-dev
-wget
--y libjpeg8-dev
--y zlib1g-dev
