@@ -271,23 +271,19 @@ def test_quantsim_handling_folded_bn_layer():
     qsim = QuantizationSimModel(cle_applied_model, quant_scheme='tf', config_file="./data/quantsim_config.json")
 
     layers = qsim.model.layers
-    bn1, bn2 = layers[2], layers[6]
+    # Check that the BatchNormalization layers are removed
+    assert not isinstance(layers[2], tf.keras.layers.BatchNormalization)
+    assert not isinstance(layers[6], tf.keras.layers.BatchNormalization)
+    assert len(cle_applied_model.layers) == len(model.layers) - 2
+
     for layer in layers:
         if isinstance(layer, tf.keras.layers.InputLayer):
             continue
 
-        # Folded batch normalization layer
-        if layer in [bn1, bn2]:
-            for q in layer.output_quantizers:
-                assert not q.is_enabled()
-            for q in layer.param_quantizers:
-                assert not q.is_enabled()
-        # other layers follows default quantsim config rule
-        else:
-            for q in layer.output_quantizers:
-                assert q.is_enabled()
-            for q in layer.param_quantizers:
-                assert q.is_enabled()
+        for q in layer.output_quantizers:
+            assert q.is_enabled()
+        for q in layer.param_quantizers:
+            assert q.is_enabled()
 
     if os.path.exists("./data/quantsim_config.json"):
         os.remove("./data/quantsim_config.json")
@@ -330,7 +326,7 @@ def test_quantsim_with_specific_op_type_per_channel_quantization() -> None:
     qsim.compute_encodings(lambda m, _: m(dummy_input), None)
 
     layers = qsim.model.layers
-    conv1, conv2, conv3, dense = layers[1], layers[5], layers[8], layers[12]
+    conv1, conv2, conv3, dense = layers[1], layers[4], layers[6], layers[10]
 
     for conv_layer in [conv1, conv2, conv3]:
         # Conv type will follow default per_channel_quantization=True

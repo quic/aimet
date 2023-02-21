@@ -45,17 +45,19 @@ class TestQuantizerUtils:
     """Test Quantizer Utils"""
     def test_get_enabled_activation_quantizers(self):
         model = keras_functional_conv_net()
-        fold_all_batch_norms(model)
+        _, potential_new_model = fold_all_batch_norms(model)
+        model = potential_new_model if potential_new_model else model
         sim = QuantizationSimModel(model)
 
         enabled_quantizers = get_enabled_activation_quantizers(sim)
         # total 9 activation quantizers, one model input quantizer and 8 layer output quantizers
         #   are enabled as per default config file.
-        assert len(enabled_quantizers) == 7
+        assert len(enabled_quantizers) == 6
 
     def test_get_enabled_param_quantizers(self):
         model = keras_functional_conv_net()
-        fold_all_batch_norms(model)
+        _, potential_new_model = fold_all_batch_norms(model)
+        model = potential_new_model if potential_new_model else model
         sim = QuantizationSimModel(model)
 
         enabled_quantizers = get_enabled_param_quantizers(sim)

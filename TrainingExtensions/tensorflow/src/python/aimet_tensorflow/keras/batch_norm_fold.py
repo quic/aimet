@@ -38,10 +38,13 @@
 
 """ Utility for batch norm fold in tf 2.x """
 
-from typing import Tuple, Union, List, Dict, Set
+from typing import Optional, Tuple, Union, List, Dict, Set
 from enum import IntEnum
 import numpy as np
 import tensorflow as tf
+from tensorflow.python.keras.engine.functional import Functional
+from tensorflow.python.keras.layers.core import TFOpLambda
+
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.keras.utils import common
@@ -374,6 +377,123 @@ class PassThroughOp(tf.keras.layers.Layer):
         """
         return inputs
 
+# pylint: disable=too-many-branches
+def _delete_bn_from_functional(model: tf.keras.Model,
+                               bn_layers_to_remove: List[tf.keras.layers.BatchNormalization]) -> tf.keras.Model:
+    """
+    This function is used to remove ALL batch normalization layers from a functional model passed via the
+    bn_layers_to_remove parameter. Removing in place is not possible for functional models as the layers inbound and
+    outbound connections are immutable. This function returns a new model with the batch normalization layers removed.
+    param model: model to remove bn_layers from
+    param bn_layers_to_remove: list of batch normalization layers to remove from the model
+    """
+
+    # In order to do this, we first need to know the original models inbound and outbound connections to each layer.
+    # We then need to create a new model with the same inbound and outbound connections, but with the batch normalization
+    # layers removed. This is done by rerouting the inbound nodes of the batch normalization layers to the inbound nodes
+    # of the next layer. This can be seen in the following diagram:
+    #
+    # Original model flow ------------------------->
+    #   ______________        ______________        ______________
+    #  |             |       |             |       |             |
+    #  |    Conv     |  -X-> |  Batch Norm |  -X-> |    ReLU     |
+    #  |_____________|       |_____________|     ^ |_____________|
+    #  New model flow   \                       /
+    #                    \                     /
+    #                     \___________________/
+    #
+    #
+    #
+
+    # Step 1: Get the inbound and outbound connections for each layer in the model
+
+    # Auxiliary dictionary to describe the network graph
+    network_dict = {'input_layers_of': {}, 'new_output_tensor_of': {}}
+
+    # Set the input layers of each layer
+    for layer in model.layers:
+        for node in layer._outbound_nodes:  # pylint: disable=protected-access
+            layer_name = node.outbound_layer.name
+            if layer_name not in network_dict['input_layers_of']:
+                network_dict['input_layers_of'].update(
+                    {layer_name: [layer.name]})
+            else:
+                network_dict['input_layers_of'][layer_name].append(layer.name)
+
+    # Set the output tensor of the input layer
+    if isinstance(model.input, list):
+        # If the model has multiple inputs, we need to set the output tensor of each input layer
+        for inp in model.input:
+            network_dict['new_output_tensor_of'].update({inp.name: inp})
+    else:
+        network_dict['new_output_tensor_of'].update({model.layers[0].name: model.input})
+
+    # Step 2: Create a new model with the batch normalization layers removed by iterating through the layers in the model
+    # and using the inbound and outbound connections to rerouting around the batch normalization layers.
+
+    model_outputs = []
+    for layer in model.layers:
+        if isinstance(layer, tf.keras.layers.InputLayer):
+            continue
+
+        # Determine input tensors of the given layer
+        layer_input = [network_dict['new_output_tensor_of'][layer_aux]
+                       for layer_aux in network_dict['input_layers_of'][layer.name]]
+
+        if len(layer_input) == 1:
+            layer_input = layer_input[0]
+
+        # Reroute around batch normalization layers if the layer is in the list of layers to remove
+        if layer in bn_layers_to_remove:
+            logger.debug("Removing Batch Normalization layer %s", layer.name)
+
+            for outbound_node in layer._outbound_nodes:  # pylint: disable=protected-access
+                # Find and replace the Batch Normalization output layers input that holds the Batch Normalization layer
+                # node and replace it with the input layers of the Batch Normalization layer.
+                # For example, if ReLU's inputs are [conv1_bn] and conv1_bn's inputs are [conv1], then we replace
+                # ReLU's inputs with [conv1]
+
+                all_batch_norms_inbound_layers_names = \
+                    [inbound_node.inbound_layers.name for inbound_node in layer._inbound_nodes]  # pylint: disable=protected-access
+
+                # Go through all the outbound layers of the batch normalization layer and replace the batch normalization
+                # layer name with the input layer names of the batch normalization layer.
+                batch_norms_outbound_layers_new_inbound_layers_names = \
+                    [outlayer.replace(layer.name, *all_batch_norms_inbound_layers_names)
+                     for outlayer in network_dict['input_layers_of'][outbound_node.outbound_layer.name]]
+
+                network_dict['input_layers_of'].update(
+                    {outbound_node.outbound_layer.name: batch_norms_outbound_layers_new_inbound_layers_names})
+
+                # The above updates our dict for the mapping of the inputs but we need to also update what Keras thinks
+                # the inputs are. This is done by updating the inbound nodes of the output layer of the Batch Normalization.
+                # THIS IS ONLY FOR MAPPING THE INPUTS TO BUILD A NEW MODEL. The original models underlinig structure is
+                # not changed.
+                outbound_node.outbound_layer._inbound_nodes = layer.inbound_nodes  # pylint: disable=protected-access
+
+        # Otherwise, treat like a normal layer
+        else:
+            # Since we are rerouting around the batch normalization layers, we need to temporarily remove the inbound and
+            # outbound nodes of the batch normalization layers so that the model can be built correctly and not duplicate
+            # the non batch normalization layers inbound/outbound nodes.
+            layer._inbound_nodes = []  # pylint: disable=protected-access
+            # Special case for when there is a Lambda opertaion with multiple inputs. For example, x = y + z.
+            if isinstance(layer, TFOpLambda) and isinstance(layer_input, List):
+                x = layer(*layer_input)
+            else:
+                x = layer(layer_input)
+            layer._outbound_nodes = [] # pylint: disable=protected-access
+
+            # Set new output tensor (in this case, it will be the same as the original model)
+            network_dict['new_output_tensor_of'].update({layer.name: x})
+
+        # Save tensor in output list if it is output in the initial model
+        if layer.name in model.output_names:
+            model_outputs.append(x)
+
+    tf.keras.backend.clear_session() # clear session to not have tensor name conflicts
+    return tf.keras.Model(inputs=model.inputs, outputs=model_outputs)
+
 
 def _delete_bn_from_sequential(layer: tf.keras.layers.Layer,
                                bn: tf.keras.layers.BatchNormalization):
@@ -444,15 +564,19 @@ def _delete_bn_from_model_subclassing(module_to_name_map: Dict[tf.keras.layers.L
     op = PassThroughOp()
     setattr(parent_ref, module_name, op)
 
-
+# pylint: disable=inconsistent-return-statements
 def _delete_all_bns_from_model(model: (tf.keras.Model, tf.keras.layers.Layer),
-                               bn_layers: List[tf.keras.layers.BatchNormalization]):
+                               bn_layers: List[tf.keras.layers.BatchNormalization]) -> Optional[tf.keras.Model]:
     """
     Remove all bn layers
 
     :param model
     :param bn_layers: bn layers that should be removed
+    :return: new model with bn layers removed, if model is functional else None
     """
+
+    if isinstance(model, Functional) and not isinstance(model, tf.keras.Sequential) and bn_layers:
+        return _delete_bn_from_functional(model, bn_layers)
 
     module_to_name_map = common.module_to_name_map(model)
 
@@ -461,7 +585,6 @@ def _delete_all_bns_from_model(model: (tf.keras.Model, tf.keras.layers.Layer),
             _delete_bn_from_model_subclassing(module_to_name_map, bn_layer)
         else:
             _delete_bn_for_non_subclassed_model(model, bn_layer)
-
 
 def _find_all_batch_norms_to_fold(model: tf.keras.Model) -> List[PAIR_TYPE]:
     """
@@ -507,14 +630,19 @@ def fold_all_batch_norms(model: tf.keras.Model):
 
     bn_conv_linear_pairs = _find_all_batch_norms_to_fold(model)
 
-    fold_given_batch_norms(model, bn_conv_linear_pairs)
+    # Potential new model is returned in case the model is a functional model
+    potential_new_model = fold_given_batch_norms(model, bn_conv_linear_pairs)
+    model = potential_new_model if potential_new_model else model
 
     # When returning the pairs, we want the second element of the pair to be the BN
     pairs_to_return = []
     for bn, conv, _ in bn_conv_linear_pairs:
         pairs_to_return.append((bn, conv))
 
-    return pairs_to_return
+    logger.warning("A new model is returned with the Batch Normalizaiton layers removed for Keras models."
+                   "Please use this new model for the rest of the AIMET flow.")
+
+    return pairs_to_return, model
 
 #pylint: disable=protected-access
 def fold_all_batch_norms_to_scale(sim: QuantizationSimModel):
@@ -538,13 +666,15 @@ def fold_all_batch_norms_to_scale(sim: QuantizationSimModel):
     return pairs_to_return
 
 # pylint: disable=too-many-locals
-def fold_given_batch_norms(model: Union[tf.keras.Model, QuantizationSimModel], layer_pairs: List[PAIR_TYPE], is_fold_to_scale: bool = False):
+# pylint: disable=inconsistent-return-statements
+def fold_given_batch_norms(model: Union[tf.keras.Model, QuantizationSimModel], layer_pairs: List[PAIR_TYPE], is_fold_to_scale: bool = False) -> Optional[tf.keras.Model]:
     """
     Fold a given set of batch_norm layers into conv_linear layers
 
     :param model: keras fp32 model/quantized model to fold selected batchnorms
     :param layer_pairs: Tuple of conv, bn layers and is_batch_norm_second flag
     :param is_fold_to_scale: default is False,  when it is True, fold BN scaling factor into the per-channel quantization scaling factor of the preceding convolution
+    :return: new model with batch norm layers folded if model is a functional model, else None
     """
     if is_fold_to_scale:
         assert isinstance(model, QuantizationSimModel)
@@ -630,7 +760,7 @@ def fold_given_batch_norms(model: Union[tf.keras.Model, QuantizationSimModel], l
 
     if is_fold_to_scale:
         return
-    _delete_all_bns_from_model(model, list_of_bn_layers)
+    return _delete_all_bns_from_model(model, list_of_bn_layers)
 
 def _fold_pair_scale(sim: QuantizationSimModel, conv_linear: tf.keras.layers, bn_params: libpymo.BNParams()):
     """

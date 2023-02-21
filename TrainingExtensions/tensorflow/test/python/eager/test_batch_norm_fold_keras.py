@@ -178,6 +178,111 @@ class TestBatchNormFold(unittest.TestCase):
         self.assertFalse(isinstance(model.block2.bn1,tf.keras.layers.BatchNormalization))
         self.assertTrue(isinstance(model.block1.bn1, tf.keras.layers.BatchNormalization))
 
+    def test_bn_removal_functional(self):
+
+        inp = tf.keras.Input(shape=(6, 6, 3))
+        x = tf.keras.layers.Conv2D(3, 3)(inp)
+        x = tf.keras.layers.BatchNormalization(fused=True)(x)
+        x = tf.keras.layers.ReLU()(x)
+        x = tf.keras.layers.Conv2D(3, 3)(x)
+        x = tf.keras.layers.BatchNormalization(fused=True)(x)
+        x = tf.keras.layers.ReLU()(x)
+
+        model = tf.keras.Model(inputs=inp, outputs=x)
+
+        bn_layers = [model.layers[2], model.layers[5]]
+
+        new_model = _delete_all_bns_from_model(model, bn_layers)
+
+        for layer in new_model.layers:
+            self.assertFalse(isinstance(layer, tf.keras.layers.BatchNormalization))
+        self.assertTrue(len(new_model.layers) == len(model.layers) - 2)
+
+    def test_bn_removal_functional_with_sequantial_bns(self):
+
+        inp = tf.keras.Input(shape=(6, 6, 3))
+        x = tf.keras.layers.Conv2D(3, 3)(inp)
+        x = tf.keras.layers.BatchNormalization(fused=True)(x)
+        x = tf.keras.layers.BatchNormalization(fused=True)(x)
+        x = tf.keras.layers.ReLU()(x)
+        x = tf.keras.layers.Conv2D(3, 3)(x)
+        x = tf.keras.layers.BatchNormalization(fused=True)(x)
+        x = tf.keras.layers.ReLU()(x)
+
+        model = tf.keras.Model(inputs=inp, outputs=x)
+
+        bn_layers = [model.layers[2], model.layers[3], model.layers[6]]
+
+        new_model = _delete_all_bns_from_model(model, bn_layers)
+
+        for layer in new_model.layers:
+            self.assertFalse(isinstance(layer, tf.keras.layers.BatchNormalization))
+        self.assertTrue(len(new_model.layers) == len(model.layers) - 3)
+
+    def test_bn_removal_functional_two_paths(self):
+
+        inp = tf.keras.Input(shape=(6, 6, 3))
+
+        left = tf.keras.layers.Conv2D(3, 3)(inp)
+        left = tf.keras.layers.BatchNormalization(fused=True)(left)
+        left = tf.keras.layers.ReLU()(left)
+        left = tf.keras.layers.Conv2D(3, 3)(left)
+        left = tf.keras.layers.BatchNormalization(fused=True)(left)
+        left = tf.keras.layers.ReLU()(left)
+
+        right = tf.keras.layers.Conv2D(3, 3)(inp)
+        right = tf.keras.layers.BatchNormalization(fused=True)(right)
+        right = tf.keras.layers.ReLU()(right)
+        right = tf.keras.layers.Conv2D(3, 3)(right)
+        right = tf.keras.layers.BatchNormalization(fused=True)(right)
+        right = tf.keras.layers.ReLU()(right)
+
+        output = tf.keras.layers.concatenate([left, right])
+
+        model = tf.keras.Model(inputs=inp, outputs=output)
+
+        bn_layers = [layer for layer in model.layers if isinstance(layer, tf.keras.layers.BatchNormalization)]
+
+        new_model = _delete_all_bns_from_model(model, bn_layers)
+
+        for layer in new_model.layers:
+            self.assertFalse(isinstance(layer, tf.keras.layers.BatchNormalization))
+        self.assertTrue(len(new_model.layers) == len(model.layers) - len(bn_layers))
+
+    def test_bn_removal_functional_lambda(self):
+
+        inp = tf.keras.Input(shape=(6, 6, 3))
+
+        left = tf.keras.layers.Conv2D(3, 3)(inp)
+        left = tf.keras.layers.BatchNormalization(fused=True)(left)
+        left = tf.keras.layers.ReLU()(left)
+        left = tf.keras.layers.Conv2D(3, 3)(left)
+        left = tf.keras.layers.BatchNormalization(fused=True)(left)
+        left = tf.keras.layers.ReLU()(left)
+
+        right = tf.keras.layers.Conv2D(3, 3)(inp)
+        right = tf.keras.layers.BatchNormalization(fused=True)(right)
+        right = tf.keras.layers.ReLU()(right)
+        right = tf.keras.layers.Conv2D(3, 3)(right)
+        right = tf.keras.layers.BatchNormalization(fused=True)(right)
+        right = tf.keras.layers.ReLU()(right)
+
+        joined = left + right # lamda connection
+
+        main = tf.keras.layers.Conv2D(2, 2)(joined)
+        main = tf.keras.layers.BatchNormalization(fused=True)(main)
+        main = tf.keras.layers.ReLU()(main)
+
+        model = tf.keras.Model(inputs=inp, outputs=main)
+
+        bn_layers = [layer for layer in model.layers if isinstance(layer, tf.keras.layers.BatchNormalization)]
+
+        new_model = _delete_all_bns_from_model(model, bn_layers)
+
+        for layer in new_model.layers:
+            self.assertFalse(isinstance(layer, tf.keras.layers.BatchNormalization))
+        self.assertTrue(len(new_model.layers) == len(model.layers) - len(bn_layers))
+
     def test_bn_replacement_sequential(self):
 
         Block3 = tf.keras.Sequential()
@@ -1305,3 +1410,4 @@ class TestBatchNormFoldToScale(unittest.TestCase):
             qsim.compute_encodings(lambda m, _: m.predict(dummy_inputs), None)
 
         return qsim
+TestBatchNormFold().test_bn_removal_functional_lambda()
