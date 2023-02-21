@@ -1,7 +1,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2018-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -35,11 +35,13 @@
 # =============================================================================
 """ Utilities that are used for different AIMET PyTorch features """
 
+import importlib
 import itertools
 from typing import List, Tuple, Union, Dict, Callable, Any, Iterable
 import contextlib
 import os
 import pickle
+import sys
 import numpy as np
 import torch.nn
 import torch
@@ -395,6 +397,53 @@ def get_device(model):
     """
     return next(model.parameters()).device
 
+def match_model_settings(model_to_match: torch.nn.Module, model_to_set: torch.nn.Module):
+    """
+    Match training and device settings of the model_to_set with those of model_to_match.
+
+    :param model_to_match: Model to match settings for
+    :param model_to_set: Model to set
+    """
+    model_to_set.train(model_to_match.training)
+    if get_device(model_to_set) != get_device(model_to_match):
+        model_to_set.to(get_device(model_to_match))
+
+
+def load_pytorch_model(model_name: str, path: str, filename: str, load_state_dict: bool = False) -> torch.nn.Module:
+    """
+    Load the pytorch model from the given path and filename.
+    NOTE: The model can only be saved by saving the state dict. Attempting to serialize the entire model will result
+    in a mismatch between class types of the model defined and the class type that is imported programatically.
+
+    :param model_name: Name of model
+    :param path: Path where the pytorch model definition file is saved
+    :param filename: Filename of the pytorch model definition
+    :param load_state_dict: If True, load state dict with the given path and filename. The state dict file is expected
+        to end in '.pth'
+    :return: Imported pytorch model
+    """
+
+    model_path = os.path.join(path, filename + '.py')
+    if not os.path.exists(model_path):
+        logger.error('Unable to find model file at path %s', model_path)
+        raise AssertionError('Unable to find model file at path ' + model_path)
+
+    # Import model's module and instantiate model
+    spec = importlib.util.spec_from_file_location(filename, model_path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[model_name] = module
+    spec.loader.exec_module(module)
+    model = getattr(module, model_name)()
+
+    # Load state dict if necessary
+    if load_state_dict:
+        state_dict_path = os.path.join(path, filename + '.pth')
+        if not os.path.exists(state_dict_path):
+            logger.error('Unable to find state dict file at path %s', state_dict_path)
+            raise AssertionError('Unable to find state dict file at path ' + state_dict_path)
+        model.load_state_dict(torch.load(state_dict_path))
+
+    return model
 
 def is_leaf_module(module):
 
