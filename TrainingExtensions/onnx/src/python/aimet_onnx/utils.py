@@ -36,7 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Utility functions for ONNX """
-from typing import Dict, List, Union, Tuple
+from typing import Dict, List, Union, Tuple, Set
 
 import numpy as np
 import onnx
@@ -167,7 +167,7 @@ def get_ordered_dict_of_nodes(onnx_graph: onnx.onnx_pb.GraphProto) -> Dict:
     return ordered_dict
 
 
-def make_dummy_input(model: onnx_pb.ModelProto) -> Dict:
+def make_dummy_input(model: onnx_pb.ModelProto) -> Dict[str, np.ndarray]:
     """
     Create a dummy input based on the model input types and shapes
     :return: Dictionary of input_name : input array
@@ -196,7 +196,8 @@ def add_hook_to_get_activation(model: onnx_pb.ModelProto, name: str) -> onnx_pb.
     return val_info
 
 
-def remove_activation_hooks(model: onnx_pb.ModelProto, hooks: Union[List, onnx_pb.ValueInfoProto]):
+def remove_activation_hooks(model: onnx_pb.ModelProto,
+                            hooks: Union[List[onnx_pb.ValueInfoProto], onnx_pb.ValueInfoProto]):
     """
     Removes activation hooks from the model output
     :param model: The model from which to remove the hooks
@@ -208,21 +209,21 @@ def remove_activation_hooks(model: onnx_pb.ModelProto, hooks: Union[List, onnx_p
         model.graph.output.remove(hook)
 
 
-def get_graph_intermediate_activations(graph: onnx_pb.GraphProto):
+def get_graph_intermediate_activations(graph: onnx_pb.GraphProto) -> Set[str]:
     """
     Returns the names of all activations within a graph that are used as the input to another node
     :param graph: The graph for which to retrieve the activations
     :return: A list containing the names of all found activations
     """
-    param_names = []
+    param_names = set()
     for param in graph.initializer:
         if param.name not in param_names and param.name:
-            param_names.append(param.name)
-    activation_names = []
+            param_names.add(param.name)
+    activation_names = set()
     for node in graph.node:
         for name in node.input:
             if name not in activation_names and name not in param_names:
-                activation_names.append(name)
+                activation_names.add(name)
     return activation_names
 
 

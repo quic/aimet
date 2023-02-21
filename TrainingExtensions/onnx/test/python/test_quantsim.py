@@ -281,6 +281,5 @@ class TestQuantSim:
         for param in param_keys:
             param_encodings_keys = list(encoding_data["param_encodings"][param].keys())
             assert param_encodings_keys == ['bitwidth', 'dtype', 'is_symmetric', 'max', 'min', 'offset', 'scale']
-        reset_qc_quantize_op_dict()
 
 

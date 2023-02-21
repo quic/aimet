@@ -49,10 +49,8 @@ from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import encoding_version, extract_global_quantizer_args
 from aimet_common.utils import save_json_yaml
 from aimet_common import libpymo
-import onnxruntime as ort
 
 from aimet_onnx import utils
-from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode, qc_quantize_op_dict
 from aimet_onnx.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
 from aimet_common import libquant_info
@@ -141,7 +139,7 @@ class QuantizationSimModel:
         """
         Get the names of activations to quantize
         """
-        self.get_activation_dtypes()
+        self.fill_activation_dtypes()
         for node in self.model.nodes():
             if node.op_type not in op_types_to_ignore:
                 for name in node.output:
@@ -151,7 +149,7 @@ class QuantizationSimModel:
         for node in self.model.graph().input:
             name = node.name
             if name not in self.activation_names and name not in self.param_names and self._is_op_quantizable(name):
-                self.activation_names.append(node.name)
+                self.activation_names.append(name)
         for node in self.model.graph().output:
             if node.name in self.activation_names:
                 node.name += '_updated'
@@ -171,7 +169,7 @@ class QuantizationSimModel:
             return False
         return True
 
-    def get_activation_dtypes(self):
+    def fill_activation_dtypes(self):
         """
         Get the data type for each activation
         """
