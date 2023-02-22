@@ -49,7 +49,7 @@ def test_fold_batch_norms():
     conv_99 = model.layers[99]
     before_fold_weight = conv_99.get_weights()[0]
     before_fold_output = model(rand_inp)
-    conv_bn_pairs = fold_all_batch_norms(model)
+    conv_bn_pairs, model = fold_all_batch_norms(model)
     after_fold_weight = conv_99.get_weights()[0]
     after_fold_output = model(rand_inp)
 
@@ -64,7 +64,7 @@ def test_fold_batch_norms_mobile_net_v2():
     conv_151 = model.layers[151]
     before_fold_weight = conv_151.get_weights()[0]
     # before_fold_output = model(rand_inp)
-    conv_bn_pairs = fold_all_batch_norms(model)
+    conv_bn_pairs, model = fold_all_batch_norms(model)
     after_fold_weight = conv_151.get_weights()[0]
     # after_fold_output = model(rand_inp)
 
@@ -78,7 +78,7 @@ def test_fold_batch_norms_mobile_net_v2():
 def test_layer_group_search():
     model = tf.keras.applications.ResNet50(input_shape=(224, 224, 3))
 
-    _ = fold_all_batch_norms(model)
+    _, model = fold_all_batch_norms(model)
     graph_search_utils = GraphSearchUtils(model)
     layer_groups = graph_search_utils.find_layer_groups_to_scale()
 
@@ -143,14 +143,14 @@ def test_cross_layer_scaling_mobile_net_v2():
 
 
 def test_cross_layer_equalization_stepwise():
-    model = tf.keras.applications.ResNet50(input_shape=(224, 224, 3))
+    orig = tf.keras.applications.ResNet50(input_shape=(224, 224, 3))
 
-    folded_pairs = fold_all_batch_norms(model)
+    folded_pairs, model = fold_all_batch_norms(orig)
     bn_dict = {}
     for conv_or_linear, bn in folded_pairs:
         bn_dict[conv_or_linear] = bn
 
-    conv1, conv2, conv3 = model.layers[7], model.layers[10], model.layers[14]
+    conv1, conv2, conv3 = model.layers[6], model.layers[14], model.layers[11]
     w1, _ = conv1.get_weights()
     w2, _ = conv2.get_weights()
     w3, _ = conv3.get_weights()
