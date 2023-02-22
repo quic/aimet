@@ -65,7 +65,6 @@ if (ENABLE_CUDA)
     target_link_libraries(OnnxCppOps PUBLIC
             MoDlQuantization
             MoDlQuantizationCuda
-            cuda
             CUDA::cublas
             )
 else (ENABLE_CUDA)

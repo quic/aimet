@@ -296,6 +296,8 @@ class TestQuantSim:
         def onnx_callback(session, inputs):
             in_tensor = {'input': inputs}
             session.run(None, in_tensor)
+        np.random.seed(0)
+        torch.manual_seed(0)
 
         inputs = np.random.rand(128, 3, 32, 32).astype(np.float32)
         model = DummyModel()
@@ -311,9 +313,17 @@ class TestQuantSim:
         onnx_sim_gpu = QuantizationSimModel(onnx_model_gpu, use_cuda=True, quant_scheme=QuantScheme.post_training_tf_enhanced)
 
         onnx_sim_cpu.compute_encodings(onnx_callback, inputs)
-        onnx_sim_cpu.export('/tmp', 'onnx_sim_cpu')
         onnx_sim_gpu.compute_encodings(onnx_callback, inputs)
+        out_cpu = onnx_sim_cpu.session.run(None, {'input': inputs})[0]
+        out_gpu = onnx_sim_gpu.session.run(None, {'input': inputs})[0]
+        onnx_sim_cpu.export('/tmp', 'onnx_sim_cpu')
+
         onnx_sim_gpu.export('/tmp', 'onnx_sim_gpu')
+
+
+
+        assert(np.max(np.abs(out_cpu - out_gpu)) < 0.05)
+        print(np.max(np.abs(out_cpu - out_gpu)))
 
 
         with open('/tmp/onnx_sim_cpu.encodings') as f:

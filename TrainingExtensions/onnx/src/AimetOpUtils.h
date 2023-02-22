@@ -45,14 +45,12 @@
 #include <stdexcept>
 
 #ifdef ONNX_CUDA
-#include <cuda.h>
-#include <cuda_runtime.h>
 #include <cuda_runtime_api.h>
 #endif
 
 
 template <typename T>
-void copyInputTensorsToOutputTensors(const T* inTensor, size_t count, T* outTensor, bool useCuda);;
+void copyInputTensorsToOutputTensors(const T* inTensor, size_t count, T* outTensor, bool useCuda);
 
 
 template <typename T>
