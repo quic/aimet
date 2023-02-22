@@ -39,7 +39,9 @@
 
 import os
 from typing import Dict
-from onnx import helper, onnx_pb
+import numpy as np
+import onnx
+from onnx import helper, onnx_pb, mapping
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
 from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode
@@ -48,11 +50,18 @@ from aimet_common.quantsim import encoding_version, extract_global_quantizer_arg
 from aimet_common.utils import save_json_yaml
 from aimet_common import libpymo
 
+from aimet_onnx import utils
 from aimet_onnx.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
 from aimet_common import libquant_info
+from aimet_onnx.utils import make_dummy_input, add_hook_to_get_activation, remove_activation_hooks
 
 WORKING_DIR = '/tmp/quantsim/'
+
+op_types_to_ignore = ["branch", "Flatten", "Gather", "Reshape", "Shape", "Unsqueeze", "Squeeze", "Split",
+                      "Compress", "Tile", "Transpose", "Identity"]
+
+data_types_to_quantize = [np.float32]
 
 
 class QuantizationSimModel:
@@ -80,7 +89,9 @@ class QuantizationSimModel:
         :param use_cuda: True if using CUDA to run quantization op. False otherwise.
         :param config_file: Path to Configuration file for model quantizers
         """
-        self.model = ONNXModel(model)
+        self.model = model
+        if not isinstance(model, ONNXModel):
+            self.model = ONNXModel(model)
         self.qc_quantize_op_dict = {}
         self.connected_graph = ConnectedGraph(self.model)
         self._quant_scheme = quant_scheme
@@ -95,8 +106,9 @@ class QuantizationSimModel:
             self.providers = ['CPUExecutionProvider']
         self.param_names = []
         self.activation_names = []
+        self.activation_dtypes = {}
         self._get_param_names()
-        self._get_activation_names()
+        self._get_activations_to_quantize()
         self._add_quantization_nodes()
         self.session = self._build_session(self.providers)
 
@@ -119,21 +131,60 @@ class QuantizationSimModel:
         Get the names of params
         """
         for param in self.model.initializer():
-            if param.name not in self.param_names and param.name:
-                self.param_names.append(param.name)
+            if mapping.TENSOR_TYPE_TO_NP_TYPE[param.data_type] in data_types_to_quantize:
+                if param.name not in self.param_names and param.name:
+                    self.param_names.append(param.name)
 
-    def _get_activation_names(self):
+    def _get_activations_to_quantize(self):
         """
-        Get the names of activations
+        Get the names of activations to quantize
         """
+        self.fill_activation_dtypes()
         for node in self.model.nodes():
-            for name in node.input:
-                if name not in self.activation_names and name not in self.param_names:
-                    self.activation_names.append(name)
+            if node.op_type not in op_types_to_ignore:
+                for name in node.output:
+                    if name not in self.activation_names and name not in self.param_names and \
+                            self._is_op_quantizable(name):
+                        self.activation_names.append(name)
+        for node in self.model.graph().input:
+            name = node.name
+            if name not in self.activation_names and name not in self.param_names and self._is_op_quantizable(name):
+                self.activation_names.append(name)
         for node in self.model.graph().output:
-            if node.name not in self.activation_names and node.name not in self.param_names:
-                self.activation_names.append(node.name)
+            if node.name in self.activation_names:
                 node.name += '_updated'
+
+    def _is_op_quantizable(self, name: str) -> bool:
+        """
+        Checks whether the given activation should be quantized
+
+        :param name: Name of the activation
+        :return: True if the activation should be quantized
+        """
+        # Check if activation is used as an input to another node
+        if name not in self.activation_dtypes.keys():
+            return False
+        # Check activation datatype
+        elif self.activation_dtypes[name] not in data_types_to_quantize:
+            return False
+        return True
+
+    def fill_activation_dtypes(self):
+        """
+        Get the data type for each activation
+        """
+        activations = utils.get_graph_intermediate_activations(self.model.graph())
+        hooks = []
+        for name in activations:
+            hooks.append(add_hook_to_get_activation(self.model.model, name))
+        dummy_input = make_dummy_input(self.model.model)
+        sess = self._build_session(self.providers)
+        outputs = sess.run(None, dummy_input)
+        for idx in range(len(self.model.graph().output)):
+            act_name = self.model.graph().output[idx].name
+            dtype = outputs[idx].dtype
+            self.activation_dtypes[act_name] = dtype
+        remove_activation_hooks(self.model.model, hooks)
 
     def _add_quantization_nodes(self):
         """
@@ -147,13 +198,13 @@ class QuantizationSimModel:
         Insert quantization node for each param tensor
         """
         for name in self.param_names:
-            self.model.replace_input_of_all_nodes(name, name+'_qdq')
+            self.model.replace_input_of_all_nodes(name, name + '_qdq')
 
             quant_info = libquant_info.QcQuantizeInfo()
             custom_node = helper.make_node(
                 op_type='QcQuantizeOp',
                 inputs=[name],
-                outputs=[name+'_qdq'],
+                outputs=[name + '_qdq'],
                 name='QcQuantizeOp_' + name,
                 domain="aimet.customop",
                 op_name=name,
@@ -174,12 +225,12 @@ class QuantizationSimModel:
         Insert quantization node for each activation tensor
         """
         for name in self.activation_names:
-            self.model.replace_input_of_all_nodes(name, name+'_updated')
+            self.model.replace_input_of_all_nodes(name, name + '_updated')
             quant_info = libquant_info.QcQuantizeInfo()
             custom_node = helper.make_node(
                 op_type='QcQuantizeOp',
                 inputs=[name],
-                outputs=[name+'_updated'],
+                outputs=[name + '_updated'],
                 name='QcQuantizeOp_' + name,
                 domain="aimet.customop",
                 op_name=name,
@@ -251,6 +302,7 @@ class QuantizationSimModel:
         Export encodings to json and yaml file
         :param encoding_file_path: path to save the encoding files
         """
+
         def update_encoding_dict_entry_int(encoding_dict: Dict, op_name: str):
             encoding_dict[op_name] = {'min': self.qc_quantize_op_dict[name].encodings.min,
                                       'max': self.qc_quantize_op_dict[name].encodings.max,
@@ -259,6 +311,7 @@ class QuantizationSimModel:
                                       'bitwidth': self.qc_quantize_op_dict[name].encodings.bw,
                                       'is_symmetric': self.qc_quantize_op_dict[name].use_symmetric_encodings,
                                       'dtype': 'int'}
+
         param_encodings = {}
         for name in self.param_names:
             if self.qc_quantize_op_dict[name].enabled:

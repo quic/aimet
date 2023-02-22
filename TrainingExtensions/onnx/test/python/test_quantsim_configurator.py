@@ -54,7 +54,6 @@ class TestQuantSimConfig:
         assert sim.qc_quantize_op_dict['3'].enabled == False
         assert sim.qc_quantize_op_dict['4'].enabled == True
         assert sim.qc_quantize_op_dict['5'].enabled == True
-        assert sim.qc_quantize_op_dict['6'].enabled == True
         assert sim.qc_quantize_op_dict['output'].enabled == True
 
     def test_default_config(self):
@@ -83,7 +82,7 @@ class TestQuantSimConfig:
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
         sim = QuantizationSimModel(model, config_file='./data/quantsim_config.json')
-        for name in ['3', '4', '5', '6', 'output']:
+        for name in ['3', '4', '5', 'output']:
             assert sim.qc_quantize_op_dict[name].enabled == True
             assert sim.qc_quantize_op_dict[name].use_symmetric_encodings == False
 
