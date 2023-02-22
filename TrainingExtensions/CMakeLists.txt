@@ -94,7 +94,7 @@ add_custom_target(whl_prep_ln)
 
 
 set(whl_action_args_bdist_wheel --dist-dir ${WHL_PREP_DIR})
-set(whl_action_args_develop "")
+set(whl_action_args_develop "--no-deps")
 set(whl_action_args_install "")
 
 macro(whl_add_whl_action_target whl_name)

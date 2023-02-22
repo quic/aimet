@@ -99,7 +99,7 @@ def get_reqs_pip(cuda_version: str = "cpu", tf_verson: str = "", torch_version: 
         "scipy==1.8.1;python_version>='3.7'",
         "setuptools",
         "tqdm",
-        "transformers==4.11.3",
+        "transformers",
     ]
 
 
