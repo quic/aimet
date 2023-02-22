@@ -36,11 +36,11 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Utility functions for ONNX """
-from typing import Dict, List, Union, Tuple
+from typing import Dict, List, Union, Tuple, Set
 
 import numpy as np
 import onnx
-from onnx import onnx_pb, helper, numpy_helper
+from onnx import onnx_pb, helper, numpy_helper, mapping
 
 
 OP_TYPES_WITH_PARAMS = ['Conv', 'Gemm', 'ConvTranspose', 'BatchNormalization', 'MatMul', 'Transpose']
@@ -165,6 +165,66 @@ def get_ordered_dict_of_nodes(onnx_graph: onnx.onnx_pb.GraphProto) -> Dict:
     for node in onnx_graph.node:
         ordered_dict[node.name] = node
     return ordered_dict
+
+
+def make_dummy_input(model: onnx_pb.ModelProto) -> Dict[str, np.ndarray]:
+    """
+    Create a dummy input based on the model input types and shapes
+    :return: Dictionary of input_name : input array
+    """
+    input_dict = {}
+    for item in model.graph.input:
+        name = item.name
+        dtype = item.type.tensor_type.elem_type
+        shape = []
+        for dim in item.type.tensor_type.shape.dim:
+            shape.append(dim.dim_value)
+        input_dict[name] = np.random.randn(*shape).astype(mapping.TENSOR_TYPE_TO_NP_TYPE[dtype])
+    return input_dict
+
+
+def add_hook_to_get_activation(model: onnx_pb.ModelProto, name: str) -> onnx_pb.ValueInfoProto:
+    """
+    Adds a given activation to the model output
+    :param model: The model to add the hook to
+    :param name: The name of the activation
+    :return: ValueInfoProto for the given activation that has been appended to model.graph.output
+    """
+    val_info = onnx.helper.ValueInfoProto()
+    val_info.name = name
+    model.graph.output.append(val_info)
+    return val_info
+
+
+def remove_activation_hooks(model: onnx_pb.ModelProto,
+                            hooks: Union[List[onnx_pb.ValueInfoProto], onnx_pb.ValueInfoProto]):
+    """
+    Removes activation hooks from the model output
+    :param model: The model from which to remove the hooks
+    :param hooks: Value info or list of value infos to remove from the model output
+    """
+    if not isinstance(hooks, List):
+        hooks = [hooks]
+    for hook in hooks:
+        model.graph.output.remove(hook)
+
+
+def get_graph_intermediate_activations(graph: onnx_pb.GraphProto) -> Set[str]:
+    """
+    Returns the names of all activations within a graph that are used as the input to another node
+    :param graph: The graph for which to retrieve the activations
+    :return: A list containing the names of all found activations
+    """
+    param_names = set()
+    for param in graph.initializer:
+        if param.name not in param_names and param.name:
+            param_names.add(param.name)
+    activation_names = set()
+    for node in graph.node:
+        for name in node.input:
+            if name not in activation_names and name not in param_names:
+                activation_names.add(name)
+    return activation_names
 
 
 class ParamUtils:
