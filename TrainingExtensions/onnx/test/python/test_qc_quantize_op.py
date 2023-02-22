@@ -57,10 +57,7 @@ available_providers = [
     if provider not in {"TvmExecutionProvider", "TensorrtExecutionProvider"}
 ]
 
-if "CUDAExecutionProvider" in available_providers:
-    op_domain = "aimet.customop.cuda"
-else:
-    op_domain = "aimet.customop.cpu"
+op_domain = "aimet.customop.cpu"
 op_name = "QcQuantizeOp"
 
 def create_quant_info(encoding,

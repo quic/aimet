@@ -99,7 +99,7 @@ class TestQuantSim:
     def test_insert_quantize_op_nodes(self):
         """ Test to insert qc quantize op to the graph"""
         model = build_dummy_model()
-        sim = QuantizationSimModel(model)
+        sim = QuantizationSimModel(model, use_cuda=False)
         assert len(sim.model.nodes()) == 14
 
         node_ls = [node.op_type for node in sim.model.nodes()]
@@ -118,7 +118,7 @@ class TestQuantSim:
     def test_compute_encodings(self):
         """Test to perform compute encodings"""
         model = build_dummy_model()
-        sim = QuantizationSimModel(model)
+        sim = QuantizationSimModel(model, use_cuda=False)
 
         for quantizer in sim.qc_quantize_op_dict:
             sim.qc_quantize_op_dict[quantizer].enabled = True
@@ -145,7 +145,7 @@ class TestQuantSim:
             os.mkdir('./tmp')
         model = build_dummy_model()
         sim = QuantizationSimModel(model, default_activation_bw=16, default_param_bw=16,
-                                   quant_scheme=QuantScheme.post_training_tf)
+                                   quant_scheme=QuantScheme.post_training_tf, use_cuda=False)
 
         for quantizer in sim.qc_quantize_op_dict:
             sim.qc_quantize_op_dict[quantizer].enabled = True
@@ -174,7 +174,7 @@ class TestQuantSim:
         if not os.path.exists('/tmp'):
             os.mkdir('/tmp')
         model = build_dummy_model()
-        sim = QuantizationSimModel(model)
+        sim = QuantizationSimModel(model, use_cuda=False)
 
         for quantizer in sim.qc_quantize_op_dict:
             sim.qc_quantize_op_dict[quantizer].enabled = True
@@ -225,7 +225,7 @@ class TestQuantSim:
 
         onnx_model = load_model('/tmp/dummy_model.onnx')
 
-        onnx_sim = QuantizationSimModel(onnx_model)
+        onnx_sim = QuantizationSimModel(onnx_model, use_cuda=False)
 
         activation_encodings_map = {'12': '9', '15': '10', '21': '12', '24': '13', '27': '14', '30': '15',
                                     '34': '17', '38': '19', 't.1': 'input'}
@@ -259,7 +259,7 @@ class TestQuantSim:
 
     def test_single_residual(self):
         model = single_residual_model().model
-        sim = QuantizationSimModel(model)
+        sim = QuantizationSimModel(model, use_cuda=False)
         for quantizer in sim.qc_quantize_op_dict:
             sim.qc_quantize_op_dict[quantizer].enabled = True
 
