@@ -279,7 +279,7 @@ class AutoQuant:
         original_weight = model.get_weights()
         model = tf.keras.models.clone_model(model)
         model.set_weights(original_weight)
-        folded_pairs = fold_all_batch_norms(model)
+        folded_pairs, model = fold_all_batch_norms(model)
         return model, folded_pairs
 
     # pylint: disable=no-self-use

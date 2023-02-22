@@ -68,7 +68,7 @@ def cross_layer_equalization_auto_stepwise():
     model_for_cle, _ = replace_relu6_with_relu(model)
 
     # 2. Fold all batch norms
-    folded_pairs = fold_all_batch_norms(model_for_cle)
+    folded_pairs, model = fold_all_batch_norms(model_for_cle)
 
     bn_dict = {}
     for conv_or_linear, bn in folded_pairs:

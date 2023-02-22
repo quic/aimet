@@ -221,7 +221,7 @@ class QuantAnalyzer:
         :param config_file: Path to configuration file for model quantizers.
         :return: Quantsim model.
         """
-        _ = fold_all_batch_norms(self._model)
+        _, self.model = fold_all_batch_norms(self._model) # pylint: disable=attribute-defined-outside-init
         sim = QuantizationSimModel(self._model,
                                    quant_scheme=quant_scheme,
                                    rounding_mode=rounding_mode,

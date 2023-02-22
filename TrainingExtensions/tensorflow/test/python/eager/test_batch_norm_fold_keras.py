@@ -945,7 +945,7 @@ class TestBatchNormFold(unittest.TestCase):
 
         baseline_output = model(numpy_data)
 
-        fold_all_batch_norms(model)
+        _, model = fold_all_batch_norms(model)
         output_after_fold = model(numpy_data)
 
         self.assertTrue(np.allclose(baseline_output, output_after_fold, atol=1.e-4))
@@ -972,7 +972,7 @@ class TestBatchNormFold(unittest.TestCase):
         numpy_data = np.random.rand(1, w_shape[1], w_shape[2], w_shape[3]).astype(np.float32)
         baseline_output = model(numpy_data)
 
-        fold_all_batch_norms(model)
+        _, model = fold_all_batch_norms(model)
 
         output_after_fold = model(numpy_data)
 
@@ -997,9 +997,9 @@ class TestBatchNormFold(unittest.TestCase):
         baseline_output = model(numpy_data)
         weight_before_fold = model._layers[3].kernel.numpy()
 
-        fold_all_batch_norms(model)
+        _, model = fold_all_batch_norms(model)
         after_fold_output = model(numpy_data)
-        weight_after_fold = model._layers[3].kernel.numpy()
+        weight_after_fold = model._layers[2].kernel.numpy()
 
         # check that weight got updated
         self.assertFalse(np.allclose(weight_before_fold, weight_after_fold, atol=1e-4))
@@ -1045,7 +1045,7 @@ class TestBatchNormFold(unittest.TestCase):
         model = tf.keras.Model(inputs=inputs, outputs=outputs)
         mock_input = np.random.randn(1, 32, 32, 3)
         output_before_batchnorm_folding = model(mock_input)
-        fold_all_batch_norms(model)
+        _, model = fold_all_batch_norms(model)
         output_after_batchnorm_folding = model(mock_input)
 
         assert np.allclose(output_before_batchnorm_folding, output_after_batchnorm_folding, rtol=1e-2)
@@ -1059,7 +1059,7 @@ class TestBatchNormFold(unittest.TestCase):
         model = tf.keras.Model(inputs=inputs, outputs=outputs)
         mock_input = np.random.randn(1, 32, 32, 3)
         output_before_batchnorm_folding = model(mock_input)
-        fold_all_batch_norms(model)
+        _, model = fold_all_batch_norms(model)
         output_after_batchnorm_folding = model(mock_input)
 
         assert np.allclose(output_before_batchnorm_folding, output_after_batchnorm_folding, rtol=1e-2)
@@ -1410,4 +1410,3 @@ class TestBatchNormFoldToScale(unittest.TestCase):
             qsim.compute_encodings(lambda m, _: m.predict(dummy_inputs), None)
 
         return qsim
-TestBatchNormFold().test_bn_removal_functional_lambda()
