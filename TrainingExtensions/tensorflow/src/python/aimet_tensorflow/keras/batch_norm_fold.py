@@ -623,7 +623,7 @@ def _find_all_batch_norms_to_fold(model: tf.keras.Model) -> List[PAIR_TYPE]:
 
 
 def fold_all_batch_norms(model: tf.keras.Model) \
-        -> Tuple(List[Tuple(tf.keras.layers.BatchNormalization, LAYER_TYPE)], tf.keras.Model):
+        -> Tuple[List[Tuple[tf.keras.layers.BatchNormalization, LAYER_TYPE]], tf.keras.Model]:
     """
     Fold all batch_norm layers in a model into corresponding conv/linear layers
 
