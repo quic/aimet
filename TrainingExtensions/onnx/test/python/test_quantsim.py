@@ -289,10 +289,6 @@ class TestQuantSim:
         if not os.path.exists('/tmp'):
             os.mkdir('/tmp')
 
-        def pytorch_callback(model, inputs):
-            model.eval()
-            model(torch.as_tensor(inputs))
-
         def onnx_callback(session, inputs):
             in_tensor = {'input': inputs}
             session.run(None, in_tensor)
@@ -317,14 +313,10 @@ class TestQuantSim:
         out_cpu = onnx_sim_cpu.session.run(None, {'input': inputs})[0]
         out_gpu = onnx_sim_gpu.session.run(None, {'input': inputs})[0]
         onnx_sim_cpu.export('/tmp', 'onnx_sim_cpu')
-
         onnx_sim_gpu.export('/tmp', 'onnx_sim_gpu')
-
-
 
         assert(np.max(np.abs(out_cpu - out_gpu)) < 0.05)
         print(np.max(np.abs(out_cpu - out_gpu)))
-
 
         with open('/tmp/onnx_sim_cpu.encodings') as f:
             cpu_encodings = json.load(f)
