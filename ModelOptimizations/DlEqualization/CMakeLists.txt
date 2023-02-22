@@ -78,5 +78,5 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/DlEqualization
         DESTINATION ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu/include)
 
-whl_add_whl_prep_common_target(DlEqualization)
 add_subdirectory(test)
+whl_add_whl_prep_common_target(DlEqualization)
