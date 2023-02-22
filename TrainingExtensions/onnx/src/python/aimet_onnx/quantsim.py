@@ -39,22 +39,22 @@
 
 import os
 from typing import Dict
+
 import numpy as np
-import onnx
+import onnxruntime as ort
 from onnx import helper, onnx_pb, mapping
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
-import onnxruntime as ort
-from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode
+
+from aimet_common import libpymo
+from aimet_common import libquant_info
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import encoding_version, extract_global_quantizer_args
 from aimet_common.utils import save_json_yaml
-from aimet_common import libpymo
-
 from aimet_onnx import utils
-from aimet_onnx.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
-from aimet_common import libquant_info
+from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode
+from aimet_onnx.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_onnx.utils import make_dummy_input, add_hook_to_get_activation, remove_activation_hooks
 
 WORKING_DIR = '/tmp/quantsim/'
@@ -64,11 +64,6 @@ op_types_to_ignore = ["branch", "Flatten", "Gather", "Reshape", "Shape", "Unsque
 
 data_types_to_quantize = [np.float32]
 
-available_providers_without_tvm_and_tensorrt = [
-    provider
-    for provider in ort.get_available_providers()
-    if provider not in {"TvmExecutionProvider", "TensorrtExecutionProvider"}
-]
 
 class QuantizationSimModel:
     """ Creates a QuantizationSimModel model by adding quantization simulations ops to a given model """
