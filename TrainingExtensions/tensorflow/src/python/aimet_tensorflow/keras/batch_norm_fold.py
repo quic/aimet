@@ -621,11 +621,15 @@ def _find_all_batch_norms_to_fold(model: tf.keras.Model) -> List[PAIR_TYPE]:
 
     return valid_bn_conv_linear_pairs
 
-def fold_all_batch_norms(model: tf.keras.Model):
+
+def fold_all_batch_norms(model: tf.keras.Model) \
+        -> Tuple[List[Tuple[tf.keras.layers.BatchNormalization, LAYER_TYPE]], tf.keras.Model]:
     """
     Fold all batch_norm layers in a model into corresponding conv/linear layers
 
     :param model: model to find all batch norms for
+    :return: A tuple of List of conv/linear layers with associated bn op / activation info and a new model with the
+    Batch Normalization layers folded
     """
 
     bn_conv_linear_pairs = _find_all_batch_norms_to_fold(model)
@@ -639,7 +643,7 @@ def fold_all_batch_norms(model: tf.keras.Model):
     for bn, conv, _ in bn_conv_linear_pairs:
         pairs_to_return.append((bn, conv))
 
-    logger.warning("A new model is returned with the Batch Normalizaiton layers removed for Keras models."
+    logger.warning("A new model is returned with the Batch Normalization layers removed for Keras models. "
                    "Please use this new model for the rest of the AIMET flow.")
 
     return pairs_to_return, model
