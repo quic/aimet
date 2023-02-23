@@ -1026,9 +1026,9 @@ class _EvalSession: # pylint: disable=too-many-instance-attributes
             traceback.print_exception(exc_type, exc_val, exc_tb, file=buffer)
 
             if self._strict_validation:
-                self._log.write(buffer.getvalue())
+                print(buffer.getvalue())
             else:
-                self._log.write(
+                print(
                     "################################################################\n"
                     "################################################################\n"
                     "################################################################\n"
