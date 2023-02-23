@@ -200,6 +200,7 @@ RUN python3 -m pip --no-cache-dir install \
         wget && \
     python3 -m ipykernel.kernelspec
 
+# Remove onnxruntime install in order to use onnxruntime-gpu
 RUN python3 -m pip uninstall -y onnxruntime
 RUN python3 -m pip --no-cache-dir install onnxruntime-gpu
 
