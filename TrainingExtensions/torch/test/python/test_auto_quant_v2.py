@@ -728,15 +728,16 @@ class TestAutoQuant:
                         return 0.0
                 return mocks.eval_callback(model, _)
 
-            _apply_batchnorm_folding = AutoQuant._apply_batchnorm_folding
-            def apply_batchnorm_folding(self, *args, **kwargs):
+            _optimize = AutoQuant.optimize
+            def optimize(self, *args, **kwargs):
                 # Since all the other candidates (tf-tf, tfe-tfe, and tfe-percentile) yields zero accuracy,
                 # it is expected that tf-tfe is selected as the quant scheme for AutoQuant.
+                ret = _optimize(self, *args, **kwargs)
                 assert self._quantsim_params["quant_scheme"].param_quant_scheme == QuantScheme.post_training_tf_enhanced
                 assert self._quantsim_params["quant_scheme"].output_quant_scheme == QuantScheme.post_training_tf
-                return _apply_batchnorm_folding(self, *args, **kwargs)
+                return ret
 
-            with patch("aimet_torch.auto_quant_v2.AutoQuant._apply_batchnorm_folding", apply_batchnorm_folding):
+            with patch("aimet_torch.auto_quant_v2.AutoQuant.optimize", optimize):
                 auto_quant = AutoQuant(cpu_model,
                                        dummy_input,
                                        unlabeled_data_loader,
