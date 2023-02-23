@@ -600,6 +600,60 @@ class QuantizationSimModel:
                 quantizer_info.set_and_freeze_encoding_and_op_mode(encoding, op_mode)
                 _logger.info("Setting and freezing quantization encodings for parameter: %s", tensor_name)
 
+    def load_encodings_to_sim(self, encoding_path: str):
+        """
+        Set parameter and activation encodings from encodings JSON file
+        :param encoding_path: path from where to load encodings file
+        """
+        # Load parameter encodings file
+        with open(encoding_path) as json_file:
+            encodings = json.load(json_file)
+        param_encodings = encodings['param_encodings']
+        activation_encodings = encodings['activation_encodings']
+
+        for op_name, quantizer_info in self._param_quantizers.items():
+            quant_op = self.session.graph.get_operation_by_name(op_name)
+            tensor_name = quant_op.inputs[0].name
+            if tensor_name in param_encodings:
+                # Check if the quantizer is disabled
+                if not quantizer_info.enabled:
+                    _logger.info("Not loading encodings for parameter: %s as quantizer is disabled", tensor_name)
+                    continue
+                encoding_dict = param_encodings[tensor_name] if self.per_channel_quantization_enabled else \
+                    param_encodings[tensor_name][0]
+                encoding, is_symmetric = create_encoding_from_dict(encoding_dict)
+                bitwidth = encoding_dict[0].get('bitwidth') if self.per_channel_quantization_enabled else \
+                    encoding_dict.get('bitwidth')
+                quantizer_info.set_encodings_to_quantizer(bitwidth, is_symmetric, encoding,
+                                                          libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
+                _logger.info("Setting quantization encodings for parameter: %s", tensor_name)
+            else:
+                # Case where encoding is not present in the encoding file
+                # So we will disable the quantizer if its active
+                if quantizer_info.enabled:
+                    quantizer_info.enabled = False
+                    _logger.info("Encoding for parameter: %s not present thus disabling this quantizer.", tensor_name)
+
+        for op_name, quantizer_info in self._activation_quantizers.items():
+            quant_op = self.session.graph.get_operation_by_name(op_name)
+            tensor_name = quant_op.inputs[0].name
+            if tensor_name in activation_encodings:
+                # Check if the quantizer is disabled
+                if not quantizer_info.enabled:
+                    _logger.info("Not loading encodings for parameter: %s as quantizer is disabled", tensor_name)
+                    continue
+                encoding_dict = activation_encodings[tensor_name][0]
+                encoding, is_symmetric = create_encoding_from_dict(encoding_dict)
+                quantizer_info.set_encodings_to_quantizer(encoding_dict.get('bitwidth'), is_symmetric,
+                                                          encoding, libpymo.TensorQuantizerOpMode.quantizeDequantize)
+                _logger.info("Setting quantization encodings for activation: %s", tensor_name)
+            else:
+                # Case where encoding is not present in the encoding file
+                # So we will disable the quantizer if its active
+                if quantizer_info.enabled:
+                    quantizer_info.enabled = False
+                    _logger.info("Encoding for parameter: %s not present thus disabling this quantizer.", tensor_name)
+
     def _param_op_mode_after_analysis(self, quant_scheme) -> libpymo.TensorQuantizerOpMode:
         """
         Returns op mode to use for parameters after encodings have been computed
@@ -617,7 +671,7 @@ class QuantizationSimModel:
 
         return op_mode
 
-    def get_min_max_var_dict(self)-> Dict:
+    def get_min_max_var_dict(self) -> Dict:
         """
         Fetches all the min max variables in given Quantized graph.
         :return: dictionary of min/ max variable names to var mapping
@@ -630,7 +684,7 @@ class QuantizationSimModel:
 
         return variable_dict
 
-    def read_min_max(self, quant_op_name: str, variable_dict: Dict = None)-> (float, float):
+    def read_min_max(self, quant_op_name: str, variable_dict: Dict = None) -> (float, float):
         """
         Reads min and max params from quantize op
         :param quant_op_name: quantize op name to read min and max variables from.

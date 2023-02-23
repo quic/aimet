@@ -96,6 +96,8 @@ class PickleableTensorQuantizerState:
 
 
 class QuantizerInfo:
+    # pylint: disable=too-many-public-methods
+
     """
     Holds information about a given MO Quantizer object and active session
     """
@@ -597,3 +599,18 @@ class QuantizerInfo:
         assert len(readvariable_op.outputs) == 1
 
         return readvariable_op.outputs[0]
+
+    def set_encodings_to_quantizer(self, bitwidth: int, is_symmetric: bool, encoding: libpymo.TfEncoding,
+                                   opmode: libpymo.TensorQuantizerOpMode):
+        """
+        Helper Function to set encodings, bitwidth, opmode, symmetric flag and opmode to tensor quantizer
+        :param bitwidth: Bitwidth for the tensor quantizer
+        :param is_symmetric: True if symmetric encoding is used. False otherwise.
+        :param encoding: encodings which needs to be applied to the quantizer
+        :param opmode: operation mode for the quantizer
+        """
+
+        self.bitwidth = bitwidth
+        self.use_symmetric_encoding = is_symmetric
+        self.set_encoding(encoding)
+        self.set_op_mode(opmode)

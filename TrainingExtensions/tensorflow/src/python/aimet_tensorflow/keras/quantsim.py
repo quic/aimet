@@ -48,6 +48,7 @@ from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_common.quantsim import encoding_version, extract_global_quantizer_args
 from aimet_tensorflow.defs import AxisHandling
+import aimet_tensorflow.utils.quantsim as quantsim_utils
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.graphsearchtuils import GraphSearchUtils
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
@@ -493,6 +494,90 @@ class QuantizationSimModel(tf.keras.Model):
 
         for quant_wrapper in self.quant_wrappers():
             quant_wrapper.set_and_freeze_param_encoding(param_encodings)
+
+    def load_encodings_to_sim(self, encoding_file_path: str):
+        """
+        Loads the saved encodings to quant sim model
+
+        :param encoding_file_path: path from where to load encodings file
+        :return:
+        """
+        # pylint: disable=protected-access, too-many-branches, too-many-locals, too-many-statements
+        # Load encodings file
+        with open(encoding_file_path) as json_file:
+            encodings = json.load(json_file)
+
+        param_encodings = encodings['param_encodings']
+        activation_encodings = encodings['activation_encodings']
+
+        for wrapper in self.quant_wrappers():
+            for idx, input_quantizer in enumerate(wrapper.input_quantizers):
+                # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
+                # inbound_nodes parameter populated, so the name of the quantizer is used instead
+                if not wrapper._layer_to_wrap.inbound_nodes:
+                    tensor_name = "multi_head_attention/" + wrapper.name + "/" + input_quantizer.name
+                else:
+                    tensor_name = wrapper._layer_to_wrap.inbound_nodes[0].keras_inputs[idx].name
+
+                if tensor_name in activation_encodings:
+                    if not input_quantizer.is_enabled():
+                        _logger.info("Not loading encodings for quantizer: %s as it is disabled", tensor_name)
+                        continue
+                    encoding, is_symmetric = quantsim_utils.create_encoding_from_dict(activation_encodings[tensor_name][0])
+                    input_quantizer.tensor_quantizer.isEncodingValid = True
+                    input_quantizer.set_quantizer_encodings(encoding.bw, is_symmetric, encoding,
+                                                            libpymo.TensorQuantizerOpMode.quantizeDequantize)
+                    _logger.info("Setting encodings for : %s", tensor_name)
+                else:
+                    if input_quantizer.is_enabled():
+                        input_quantizer.disable()
+                        _logger.info("Encoding for quantizer: %s is not present thus disabling it.", tensor_name)
+
+            for idx, param_quantizer in enumerate(wrapper.param_quantizers):
+                param_name = wrapper._layer_to_wrap.weights[idx].name
+
+                if param_name in param_encodings:
+                    if not param_quantizer.is_enabled():
+                        _logger.info("Not loading encodings for parameter: %s as quantizer is disabled", param_name)
+                        continue
+                    if isinstance(param_quantizer, StaticGridPerChannelQuantizer):
+                        encoding, is_symmetric = quantsim_utils.create_encoding_from_dict(param_encodings[param_name])
+                        for tensor_quantizer in param_quantizer.tensor_quantizer:
+                            tensor_quantizer.isEncodingValid = True
+                        bw = encoding[0].bw
+                    else:
+                        encoding, is_symmetric = quantsim_utils.create_encoding_from_dict(param_encodings[param_name][0])
+                        param_quantizer.tensor_quantizer.isEncodingValid = True
+                        bw = encoding.bw
+                    param_quantizer.set_quantizer_encodings(bw, is_symmetric, encoding,
+                                                            libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
+                    _logger.info("Setting encodings for : %s", param_name)
+                else:
+                    if param_quantizer.is_enabled():
+                        param_quantizer.disable()
+                        _logger.info("Encoding for parameter: %s not present thus disabling this quantizer.", param_name)
+
+            for idx, output_quantizer in enumerate(wrapper.output_quantizers):
+                # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
+                # inbound_nodes parameter populated, so the name of the quantizer is used instead
+                if not wrapper._layer_to_wrap.inbound_nodes:
+                    tensor_name = "multi_head_attention/" + wrapper.name + "/" + output_quantizer.name
+                else:
+                    tensor_name = wrapper._layer_to_wrap.output.name
+
+                if tensor_name in activation_encodings:
+                    if not output_quantizer.is_enabled():
+                        _logger.info("Not loading encodings for quantizer: %s as it is disabled", tensor_name)
+                        continue
+                    encoding, is_symmetric = quantsim_utils.create_encoding_from_dict(activation_encodings[tensor_name][0])
+                    output_quantizer.tensor_quantizer.isEncodingValid = True
+                    output_quantizer.set_quantizer_encodings(encoding.bw, is_symmetric, encoding,
+                                                             libpymo.TensorQuantizerOpMode.quantizeDequantize)
+                    _logger.info("Setting encodings for : %s", tensor_name)
+                else:
+                    if output_quantizer.is_enabled():
+                        output_quantizer.disable()
+                        _logger.info("Encoding for quantizer: %s is not present thus disabling it.", tensor_name)
 
     def _param_op_mode_after_analysis(self, quant_scheme) -> libpymo.TensorQuantizerOpMode:
         """

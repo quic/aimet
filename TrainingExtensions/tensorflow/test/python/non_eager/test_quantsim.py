@@ -1170,6 +1170,257 @@ class TestQuantSim(unittest.TestCase):
             sim.session.close()
             del sim
 
+    def test_load_encodings(self):
+        """ Test load encodings functionality """
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            _ = keras_model()
+            init = tf.compat.v1.global_variables_initializer()
+
+        session = tf.compat.v1.Session()
+        session.run(init)
+
+        sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
+        param_encodings = {'conv2d/Conv2D/ReadVariableOp:0': [{'bitwidth': 4, 'is_symmetric': False,
+                                                               'max': 0.14584073424339294,
+                                                               'min': -0.12761062383651733,
+                                                               'offset': -7.0, 'scale': 0.01823008991777897}]}
+        activation_encodings = {"conv2d_1/Tanh:0": [
+            {
+                "bitwidth": 8,
+                "dtype": "int",
+                "is_symmetric": "False",
+                "max": 5.98828125,
+                "min": -7.78128125,
+                "offset": -144,
+                "scale": 0.05399828431372549
+            }
+        ]}
+
+        dummy_encodings = {"activation_encodings": activation_encodings,
+                           "param_encodings": param_encodings}
+
+        # export encodings to JSON file
+        encoding_file_path = os.path.join('./', 'dummy.encodings')
+        with open(encoding_file_path, 'w') as encoding_fp:
+            json.dump(dummy_encodings, encoding_fp, sort_keys=True, indent=4)
+
+        sim.load_encodings_to_sim(encoding_path='./dummy.encodings')
+
+        # Check if parameter quantizer encoding is set properly
+        quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
+        encoding = param_encodings['conv2d/Conv2D/ReadVariableOp:0'][0]
+
+        encoding_max = quantizer.get_variable_from_op(QuantizeOpIndices.encoding_max)
+        encoding_min = quantizer.get_variable_from_op(QuantizeOpIndices.encoding_min)
+
+        self.assertEqual(encoding_min, encoding.get('min'))
+        self.assertEqual(encoding_max, encoding.get('max'))
+        self.assertEqual(int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize), quantizer.get_op_mode())
+        self.assertEqual(quantizer.is_encoding_valid(), True)
+
+        # Check if activation quantizer encoding is set properly
+        quantizer = sim.quantizer_config('conv2d_1/Tanh_quantized')
+        encoding = activation_encodings['conv2d_1/Tanh:0'][0]
+
+        encoding_max = quantizer.get_variable_from_op(QuantizeOpIndices.encoding_max)
+        encoding_min = quantizer.get_variable_from_op(QuantizeOpIndices.encoding_min)
+
+        self.assertEqual(encoding_min, encoding.get('min'))
+        self.assertEqual(encoding_max, encoding.get('max'))
+        self.assertEqual(int(libpymo.TensorQuantizerOpMode.quantizeDequantize), quantizer.get_op_mode())
+        self.assertEqual(quantizer.is_encoding_valid(), True)
+
+        session.close()
+
+        # Delete encodings JSON file
+        if os.path.exists("./dummy.encodings"):
+            os.remove("./dummy.encodings")
+
+    def test_load_encodings_pcq(self):
+        """ Test load encodings functionality with PCQ """
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "True"
+                },
+                "params": {
+                    "is_quantized": "True",
+                    "is_symmetric": "True"
+                },
+                "per_channel_quantization": "True",
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open('./quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            _ = keras_model()
+            init = tf.compat.v1.global_variables_initializer()
+
+        session = tf.compat.v1.Session()
+        session.run(init)
+
+        sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'],
+                                   config_file='./quantsim_config.json')
+        param_encodings = {'conv2d_1/Conv2D/ReadVariableOp:0': [{'bitwidth': 4, 'is_symmetric': False,
+                                                                 'max': 0.14584073424339294,
+                                                                 'min': -0.12761062383651733,
+                                                                 'offset': -7.0, 'scale': 0.01823008991777897},
+                                                                {'bitwidth': 4, 'is_symmetric': False,
+                                                                 'max': 0.14584073424339294,
+                                                                 'min': -0.12761062383651733,
+                                                                 'offset': -7.0, 'scale': 0.01823008991777897},
+                                                                {'bitwidth': 4, 'is_symmetric': False,
+                                                                 'max': 0.14584073424339294,
+                                                                 'min': -0.12761062383651733,
+                                                                 'offset': -7.0, 'scale': 0.01823008991777897},
+                                                                {'bitwidth': 4, 'is_symmetric': False,
+                                                                 'max': 0.14584073424339294,
+                                                                 'min': -0.12761062383651733,
+                                                                 'offset': -7.0, 'scale': 0.01823008991777897}]}
+        activation_encodings = {"conv2d_1/Tanh:0": [
+            {
+                "bitwidth": 8,
+                "dtype": "int",
+                "is_symmetric": "False",
+                "max": 5.98828125,
+                "min": -7.78128125,
+                "offset": -144,
+                "scale": 0.05399828431372549
+            }
+        ]}
+
+        dummy_encodings = {"activation_encodings": activation_encodings,
+                           "param_encodings": param_encodings}
+
+        # export encodings to JSON file
+        encoding_file_path = os.path.join('./', 'dummy.encodings')
+        with open(encoding_file_path, 'w') as encoding_fp:
+            json.dump(dummy_encodings, encoding_fp, sort_keys=True, indent=4)
+
+        sim.load_encodings_to_sim(encoding_path='./dummy.encodings')
+
+        # Check if parameter quantizer encoding is set properly
+        quantizer = sim.quantizer_config('conv2d_1/Conv2D/ReadVariableOp_quantized')
+        encoding = param_encodings['conv2d_1/Conv2D/ReadVariableOp:0']
+
+        encoding_max = quantizer.get_variable_from_op(QuantizeOpIndices.encoding_max)
+        encoding_min = quantizer.get_variable_from_op(QuantizeOpIndices.encoding_min)
+
+        enc_min = [e.get('min') for e in encoding]
+        enc_max = [e.get('max') for e in encoding]
+        self.assertTrue(np.allclose(encoding_min, enc_min))
+        self.assertTrue(np.allclose(encoding_max, enc_max))
+        self.assertEqual(int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize), quantizer.get_op_mode())
+        self.assertEqual(quantizer.is_encoding_valid(), True)
+
+        # Check if activation quantizer encoding is set properly
+        quantizer = sim.quantizer_config('conv2d_1/Tanh_quantized')
+        encoding = activation_encodings['conv2d_1/Tanh:0'][0]
+
+        encoding_max = quantizer.get_variable_from_op(QuantizeOpIndices.encoding_max)
+        encoding_min = quantizer.get_variable_from_op(QuantizeOpIndices.encoding_min)
+
+        self.assertEqual(encoding_min, encoding.get('min'))
+        self.assertEqual(encoding_max, encoding.get('max'))
+        self.assertEqual(int(libpymo.TensorQuantizerOpMode.quantizeDequantize), quantizer.get_op_mode())
+        self.assertEqual(quantizer.is_encoding_valid(), True)
+
+        session.close()
+
+        # Delete encodings JSON file
+        if os.path.exists("./dummy.encodings"):
+            os.remove("./dummy.encodings")
+
+    def test_load_encodings_param_disabled(self):
+        """ Test load encodings functionality with PCQ """
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "True"
+                },
+                "params": {
+                    "is_quantized": "False",
+                    "is_symmetric": "True"
+                },
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open('./quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            _ = keras_model()
+            init = tf.compat.v1.global_variables_initializer()
+
+        session = tf.compat.v1.Session()
+        session.run(init)
+
+        sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'],
+                                   config_file='./quantsim_config.json')
+        param_encodings = {'conv2d_1/Conv2D/ReadVariableOp:0': [{'bitwidth': 4, 'is_symmetric': False,
+                                                               'max': 0.14584073424339294,
+                                                               'min': -0.12761062383651733,
+                                                               'offset': -7.0, 'scale': 0.01823008991777897}]}
+        activation_encodings = {"conv2d_1/Tanh:0": [
+            {
+                "bitwidth": 8,
+                "dtype": "int",
+                "is_symmetric": "False",
+                "max": 5.98828125,
+                "min": -7.78128125,
+                "offset": -144,
+                "scale": 0.05399828431372549
+            }
+        ]}
+
+        dummy_encodings = {"activation_encodings": activation_encodings,
+                           "param_encodings": param_encodings}
+
+        # export encodings to JSON file
+        encoding_file_path = os.path.join('./', 'dummy.encodings')
+        with open(encoding_file_path, 'w') as encoding_fp:
+            json.dump(dummy_encodings, encoding_fp, sort_keys=True, indent=4)
+
+        sim.load_encodings_to_sim(encoding_path='./dummy.encodings')
+
+        # Check if parameter quantizer encoding not set
+        quantizer = sim.quantizer_config('conv2d_1/Conv2D/ReadVariableOp_quantized')
+        self.assertEqual(int(libpymo.TensorQuantizerOpMode.passThrough), quantizer.get_op_mode())
+        self.assertEqual(quantizer.is_encoding_valid(), False)
+
+        # Check if activation quantizer encoding is set properly
+        quantizer = sim.quantizer_config('conv2d_1/Tanh_quantized')
+        encoding = activation_encodings['conv2d_1/Tanh:0'][0]
+
+        encoding_max = quantizer.get_variable_from_op(QuantizeOpIndices.encoding_max)
+        encoding_min = quantizer.get_variable_from_op(QuantizeOpIndices.encoding_min)
+
+        self.assertEqual(encoding_min, encoding.get('min'))
+        self.assertEqual(encoding_max, encoding.get('max'))
+        self.assertEqual(int(libpymo.TensorQuantizerOpMode.quantizeDequantize), quantizer.get_op_mode())
+        self.assertEqual(quantizer.is_encoding_valid(), True)
+
+        session.close()
+
+        # Delete encodings JSON file
+        if os.path.exists("./dummy.encodings"):
+            os.remove("./dummy.encodings")
+
     def test_set_and_freeze_param_encodings(self):
         """ Test set and freeze parameter encodings functionality """
         tf.compat.v1.reset_default_graph()

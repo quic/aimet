@@ -101,7 +101,7 @@ def _handle_conv2d_transpose(callback):
 class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
     """Tensor quantizer class containing the bare bones of a given Quantizer"""
 
-    # pylint: disable=too-many-arguments
+    # pylint: disable=too-many-arguments, too-many-instance-attributes
     # pylint: disable=unused-argument
     def __init__(self, layer: tf.keras.layers.Layer, name: str, op_mode: libpymo.TensorQuantizerOpMode,
                  quant_scheme: QuantScheme,
@@ -273,6 +273,21 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
         if self.quant_mode == libpymo.TensorQuantizerOpMode.passThrough.value:
             return tensor
         return self._call_handler(tensor)
+
+    def set_quantizer_encodings(self, bitwidth: int, is_symmetric: bool, encoding: libpymo.TfEncoding,
+                                opmode: libpymo.TensorQuantizerOpMode):
+        """
+        Helper Function to set encodings, bitwidth, opmode, symmetric flag and opmode to tensor quantizer
+        :param bitwidth: Bitwidth for the tensor quantizer
+        :param is_symmetric: True if symmetric encoding is used. False otherwise.
+        :param encoding: encodings which needs to be applied to the quantizer
+        :param opmode: operation mode for the quantizer
+        """
+        # pylint: disable  = attribute-defined-outside-init
+        self.use_symmetric_encodings = is_symmetric
+        self.bitwidth = bitwidth
+        self.encoding = encoding
+        self.quant_mode = opmode
 
 
 # pylint: disable=too-many-ancestors
