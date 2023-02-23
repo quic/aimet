@@ -652,15 +652,12 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
 
         :return: The best ptq result as a dictionary.
         """
-        # pylint: disable=too-many-branches
-
         with self.eval_manager.session("Prepare Model") as sess:
             fp32_model = sess.wrap(self._prepare_model)(self.fp32_model)
 
-        # Default quant scheme is not set. Choose quant scheme automatically.
-        if self._quantsim_params["quant_scheme"] is None:
-            with self.eval_manager.session("QuantScheme Selection") as sess:
-                self._quantsim_params["quant_scheme"] = sess.wrap(self._choose_default_quant_scheme)()
+        # Choose quant scheme automatically.
+        with self.eval_manager.session("QuantScheme Selection") as sess:
+            self._quantsim_params["quant_scheme"] = sess.wrap(self._choose_default_quant_scheme)()
 
         with self.eval_manager.session(f"W32 Evaluation") as sess:
             w32_eval_score = sess.wrap(sess.eval)(model=fp32_model, param_bw=32)
