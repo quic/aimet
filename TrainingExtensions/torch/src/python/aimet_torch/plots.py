@@ -174,7 +174,7 @@ def create_table_from_dataframe(dataframe, name_str):
     switch_backend()
     fig = plt.figure(figsize=(20, 20))
     fig.patch.set_visible(False)
-    plt.axis('off')
+    plt.axis('off') #[Updated pylint is req. for Python 3.8 positional args spec] pylint: disable=too-many-function-args
     plt.table(cellText=dataframe.values, colLabels=dataframe.columns, loc='top')
     fig.tight_layout()
 
