@@ -54,6 +54,7 @@ from test_models import BNAfterConv, BNBeforeConv, BNAfterDynamicMatMul, BNAfter
                         BNAfterLinear, BNBeforeLinear, BNBeforeFlattenLinear, BNBeforeConv1d, BNBeforeConvTranspose, \
                         MyModel, _convert_to_onnx_no_fold, _convert_to_onnx, initialize_bn_params, BNAfterConvTranspose1d
 
+providers = ['CPUExecutionProvider']
 
 def get_outputs_after_fold(model, test_data):
     onnx.checker.check_model(model.model)
@@ -65,8 +66,8 @@ def get_outputs_after_fold(model, test_data):
     folded_filename = './onnx_test_model_folded.onnx'
     onnx.save(model.model, folded_filename)
 
-    sess = rt.InferenceSession(filename)
-    fold_sess = rt.InferenceSession(folded_filename)
+    sess = rt.InferenceSession(filename, providers=providers)
+    fold_sess = rt.InferenceSession(folded_filename, providers=providers)
 
     input_name = sess.get_inputs()[0].name
     baseline_output = sess.run(None, {input_name: test_data})
