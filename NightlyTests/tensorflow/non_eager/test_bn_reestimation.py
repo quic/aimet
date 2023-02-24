@@ -137,7 +137,7 @@ class TestBNReEstimation:
         # model rewriter
         start_op_names = ["input_1"]
         end_op_names = ["predictions/Softmax"]
-        modify_sess_bn_mutable(sess, start_op_names, end_op_names, training_tf_placeholder=False)
+        sess = modify_sess_bn_mutable(sess, start_op_names, end_op_names, training_tf_placeholder=False)
 
         # PTQ
 

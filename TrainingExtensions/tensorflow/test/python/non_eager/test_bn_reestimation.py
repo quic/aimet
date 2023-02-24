@@ -233,7 +233,7 @@ class TestBNReEstimation:
         start_op_names = [inputs.op.name]
         end_op_names = [outputs.op.name]
 
-        modify_sess_bn_mutable(sess, start_op_names, end_op_names, training_tf_placeholder=False)
+        sess = modify_sess_bn_mutable(sess, start_op_names, end_op_names, training_tf_placeholder=False)
 
         sim = QuantizationSimModel(sess, start_op_names, end_op_names)
         def dummy_forward_pass(sess, args):
@@ -276,7 +276,7 @@ class TestBNReEstimation:
         start_op_names = [inputs.op.name]
         end_op_names = [outputs1.op.name, outputs2.op.name]
 
-        modify_sess_bn_mutable(sess, start_op_names, end_op_names, training_tf_placeholder=False)
+        sess = modify_sess_bn_mutable(sess, start_op_names, end_op_names, training_tf_placeholder=False)
 
         sim = QuantizationSimModel(sess, start_op_names, end_op_names)
 
