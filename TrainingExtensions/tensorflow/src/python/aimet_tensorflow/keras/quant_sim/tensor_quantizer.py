@@ -35,12 +35,9 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-# TODO: Need to break up file
-# pylint: disable=too-many-lines
 """ Tensor quantizer for tf 2 keras """
 import abc
 import functools
-from dataclasses import dataclass
 from typing import List, Optional, Tuple
 import tensorflow as tf
 import tensorflow.keras.backend as K
@@ -57,17 +54,6 @@ from aimet_tensorflow.keras.quant_sim.quantsim_straight_through_grad import qc_s
 import aimet_tensorflow.keras.utils.common as keras_common_utils
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
-
-@dataclass
-class TensorQuantizerState:
-    """
-    Class to store the state of a TensorQuantizer's underlying C++ TensorQuantizer objects. This is used,
-    Specifically to be able to seralize the state of the quantizer and restore it later
-    """
-    quant_scheme: QuantScheme
-    round_mode: str
-    use_strict_symmetric: bool
-    use_unsigned_symmetric: bool
 
 
 def _handle_conv2d_transpose(callback):
@@ -107,12 +93,9 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
                  quant_scheme: QuantScheme,
                  bitwidth: int, data_type: QuantizationDataType, is_symmetric: bool, **kwargs):
         super(TensorQuantizer, self).__init__(name=name)
-        # Used for config and serialization
-        self._name = name
         # Original layer is here to handle the case if the wrapped layer is a Conv2DTranspose and therefore
         # needs its tensor to be transposed before given to the QcPerChannelOp
         self._original_layer = layer
-
         self._quant_scheme = quant_scheme
         self._bitwidth = self.add_weight(name + '.bitwidth', dtype=tf.int8,
                                          initializer=tf.constant_initializer(bitwidth), trainable=False)
@@ -137,24 +120,6 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
         # - compute_encoding(), reset_quant_mode() will take no effect.
         # - Tensor quantizer cannot be disabled.
         self._is_encoding_frozen = False
-
-    def get_config(self):
-        """Returns the config of the TensorQuantizer class."""
-        return {
-            'name': self._name,
-            'quant_scheme': self._quant_scheme,
-            'bitwidth': self._bitwidth.numpy(),
-            'data_type': self.data_type,
-            'is_symmetric': self._is_symmetric.numpy(),
-            'is_encoding_valid': self._is_encoding_valid,
-            'is_encoding_frozen': self._is_encoding_frozen,
-            'enabled': not self._is_encoding_frozen
-        }
-
-    @classmethod
-    @abc.abstractclassmethod
-    def from_config(cls, config):
-        """Creates a TensorQuantizer object from its config."""
 
     @property
     def original_layer(self):
@@ -301,7 +266,7 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
 
         super(StaticGridPerTensorQuantizer, self).__init__(layer, name, op_mode, quant_scheme,
                                                            bitwidth, data_type, is_symmetric)
-        # Order of adding weights matters! Min then max always.
+
         self._encoding_min = self.add_weight(name + '.encoding_min', dtype=tf.float64, trainable=True,
                                              initializer=tf.constant_initializer(0.))
         self._encoding_max = self.add_weight(name + '.encoding_max', dtype=tf.float64, trainable=True,
@@ -311,53 +276,6 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
                                                          MAP_ROUND_MODE_TO_PYMO[round_mode])
         self._tensor_quantizer.setStrictSymmetric(use_strict_symmetric)
         self._tensor_quantizer.setUnsignedSymmetric(use_unsigned_symmetric)
-
-    def get_config(self):
-        """ Returns the config of the quantizer """
-        config = super(StaticGridPerTensorQuantizer, self).get_config()
-        tensor_quantizer_state = TensorQuantizerState(
-            self.tensor_quantizer.getQuantScheme(), self.tensor_quantizer.roundingMode,
-            self.tensor_quantizer.getStrictSymmetric(), self.tensor_quantizer.getUnsignedSymmetric())
-        config.update({
-            'tensor_quantizer': tensor_quantizer_state,
-            'encoding_min': self._encoding_min,
-            'encoding_max': self._encoding_max
-        })
-        return config
-
-    @classmethod
-    def from_config(cls, config):
-        """
-        Creates a quantizer from its config. First, the quantizer is created with only some of the attributes
-        such as the layer wrapped and the name. Once the object is created, we then set the rest of the attributes
-        """
-
-        tensor_quantizer_state = config.pop('tensor_quantizer')
-        round_mode = 'nearest' if tensor_quantizer_state.round_mode == libpymo.RoundingMode.ROUND_NEAREST \
-            else 'stochastic'
-        blank_initilizer = {'layer': config['layer_to_wrap'], 'name': config['name'], 'quant_scheme': config['quant_scheme'],
-                            'round_mode': round_mode, 'bitwidth': config['bitwidth'], 'data_type': config['data_type'],
-                            'is_symmetric': config['is_symmetric'],
-                            'use_strict_symmetric': tensor_quantizer_state.use_strict_symmetric,
-                            'use_unsigned_symmetric': tensor_quantizer_state.use_unsigned_symmetric,
-                            'enabled': config['enabled']}
-
-        rebuilt_quantizer = cls(**blank_initilizer)
-
-        rebuilt_tensor_quantizer = libpymo.TensorQuantizer(tensor_quantizer_state.quant_scheme,
-                                                           tensor_quantizer_state.round_mode)
-        rebuilt_tensor_quantizer.setStrictSymmetric(tensor_quantizer_state.use_strict_symmetric)
-        rebuilt_tensor_quantizer.setUnsignedSymmetric(tensor_quantizer_state.use_unsigned_symmetric)
-        rebuilt_tensor_quantizer.isEncodingValid = config['is_encoding_valid']
-
-        rebuilt_quantizer.tensor_quantizer = rebuilt_tensor_quantizer
-        # pylint: disable=protected-access
-        rebuilt_quantizer._encoding_min = config['encoding_min']
-        rebuilt_quantizer._encoding_max = config['encoding_max']
-        rebuilt_quantizer._is_encoding_frozen = config['is_encoding_frozen']
-        rebuilt_quantizer._is_encoding_valid = config['is_encoding_valid']
-
-        return rebuilt_quantizer
 
     @TensorQuantizer.quant_scheme.setter
     def quant_scheme(self, quant_scheme: QuantScheme):
@@ -373,11 +291,6 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
     def tensor_quantizer(self):
         """ Tensor quantizer getter """
         return self._tensor_quantizer
-
-    @tensor_quantizer.setter
-    def tensor_quantizer(self, tensor_quantizer):
-        """ Tensor quantizer setter """
-        self._tensor_quantizer = tensor_quantizer
 
     @property
     def use_strict_symmetric(self):
@@ -673,12 +586,10 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
                                                             bitwidth, data_type, is_symmetric)
 
         self.axis_handling = axis_handling.value
-        # Order of adding weights matters! Min then max always.
-        self._encoding_min = self.add_weight(name + '.encoding_min', dtype=tf.float64, trainable=True,
-                                             initializer=tf.constant_initializer(0.), shape=(num_output_channels,))
         self._encoding_max = self.add_weight(name + '.encoding_max', dtype=tf.float64, trainable=True,
                                              initializer=tf.constant_initializer(0.), shape=(num_output_channels,))
-
+        self._encoding_min = self.add_weight(name + '.encoding_min', dtype=tf.float64, trainable=True,
+                                             initializer=tf.constant_initializer(0.), shape=(num_output_channels,))
 
         tensor_quantizer_int64 = []
         tensor_quantizers = []
@@ -693,68 +604,6 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
 
         self._tensor_quantizer = tensor_quantizers
         self._tensor_quantizer_int64 = tensor_quantizer_int64
-
-    def get_config(self):
-        config = super(StaticGridPerChannelQuantizer, self).get_config()
-        tensor_quantizer_state = [
-            TensorQuantizerState(tensor_quantizer.getQuantScheme(), tensor_quantizer.roundingMode,
-                                 tensor_quantizer.getStrictSymmetric(), tensor_quantizer.getUnsignedSymmetric())
-            for tensor_quantizer in self.tensor_quantizer
-        ]
-
-        config.update({
-            'tensor_quantizer': tensor_quantizer_state,
-            'encoding_min': self._encoding_min,
-            'encoding_max': self._encoding_max,
-            'axis_handling': AxisHandling.LAST_AXIS if self.axis_handling == AxisHandling.LAST_AXIS.value else AxisHandling.LAST_TWO_AXES,
-            'num_output_channels': self._encoding_max.shape[0]
-        })
-        return config
-
-    @classmethod
-    def from_config(cls, config):
-        """
-        Creates a quantizer from its config. First, the quantizer is created with only some of the attributes
-        such as the layer wrapped and the name. Once the object is created, we then set the rest of the attributes
-        """
-
-        # Use first tensor quantizer to build blank initializer
-        tensor_quantizer_state = config['tensor_quantizer'][0]
-        round_mode = 'nearest' if tensor_quantizer_state.round_mode == libpymo.RoundingMode.ROUND_NEAREST \
-            else 'stochastic'
-        blank_initilizer = {'layer': config['layer_to_wrap'], 'name': config['name'], 'quant_scheme': config['quant_scheme'],
-                            'round_mode': round_mode, 'bitwidth': config['bitwidth'], 'data_type': config['data_type'],
-                            'is_symmetric': config['is_symmetric'],
-                            'use_strict_symmetric': tensor_quantizer_state.use_strict_symmetric,
-                            'use_unsigned_symmetric': tensor_quantizer_state.use_unsigned_symmetric,
-                            'enabled': config['enabled'], 'axis_handling': config['axis_handling'],
-                            'num_output_channels': config['num_output_channels']}
-
-        rebuilt_quantizer = cls(**blank_initilizer)
-
-        tensor_quantizer_state = config.pop('tensor_quantizer')
-
-        rebuilt_tensor_quantizers_int64 = []
-        rebuilt_tensor_quantizers = []
-        for current_tensor_quantizer_state in tensor_quantizer_state:
-            tensor_quantizer = libpymo.TensorQuantizer(current_tensor_quantizer_state.quant_scheme,
-                                                       current_tensor_quantizer_state.round_mode)
-            tensor_quantizer.setStrictSymmetric(current_tensor_quantizer_state.use_strict_symmetric)
-            tensor_quantizer.setUnsignedSymmetric(current_tensor_quantizer_state.use_unsigned_symmetric)
-            tensor_quantizer.isEncodingValid = config['is_encoding_valid']
-
-            rebuilt_tensor_quantizers.append(tensor_quantizer)
-            rebuilt_tensor_quantizers_int64.append(libpymo.PtrToInt64(tensor_quantizer))
-
-        rebuilt_quantizer.tensor_quantizer = rebuilt_tensor_quantizers
-        # pylint: disable=protected-access
-        rebuilt_quantizer._tensor_quantizer_int64 = rebuilt_tensor_quantizers_int64
-        rebuilt_quantizer._encoding_min = config['encoding_min']
-        rebuilt_quantizer._encoding_max = config['encoding_max']
-        rebuilt_quantizer._is_encoding_frozen = config['is_encoding_frozen']
-        rebuilt_quantizer._is_encoding_valid = config['is_encoding_valid']
-
-        return rebuilt_quantizer
 
     @TensorQuantizer.quant_scheme.setter
     def quant_scheme(self, quant_scheme: QuantScheme):
@@ -771,11 +620,6 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
     def tensor_quantizer(self):
         """ Tensor quantizer getter """
         return self._tensor_quantizer
-
-    @tensor_quantizer.setter
-    def tensor_quantizer(self, tensor_quantizer):
-        """ Tensor quantizer setter """
-        self._tensor_quantizer = tensor_quantizer
 
     @property
     def round_mode(self):
@@ -1025,10 +869,10 @@ class ParamPerChannelQuantizer(StaticGridPerChannelQuantizer):
 
     def enable(self):
         """
-        Enable the paramter tensor quantizer
-        If encoding is frozen, no need to do anything (and quant mode should already be set to quantizeDequantize,
-        instead of oneShotQuantizeDequantize)
-        """
+            Enable the paramter tensor quantizer
+            If encoding is frozen, no need to do anything (and quant mode should already be set to quantizeDequantize,
+            instead of oneShotQuantizeDequantize)
+            """
         if not self._is_encoding_frozen:
             self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.quantizeDequantize))
 

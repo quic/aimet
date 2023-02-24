@@ -46,7 +46,7 @@ import tensorflow as tf
 from tensorflow.python.keras.models import Sequential
 from tensorflow.python.keras.layers import Dense, Conv2D, BatchNormalization, Flatten, AvgPool2D, MaxPool2D
 from packaging import version
-if version.parse(tf.version.VERSION) < version.parse("2.0"):
+if version.parse(tf.version.VERSION) < version.parse("2.00"):
     import tensorflow.contrib.slim as slim
 
 
