@@ -165,7 +165,6 @@ RUN python3 -m pip --no-cache-dir install \
         'numpy<1.24,>=1.16.6' \
         onnx==1.12.0 \
         onnxsim \
-        onnxruntime-gpu \
         onnxruntime-extensions \
         opencv-python \
         Pillow==9.3.0 \
@@ -201,6 +200,10 @@ RUN python3 -m pip --no-cache-dir install \
         wget && \
     python3 -m ipykernel.kernelspec
 
+# Remove onnxruntime install in order to use onnxruntime-gpu
+RUN python3 -m pip uninstall -y onnxruntime
+RUN python3 -m pip --no-cache-dir install onnxruntime-gpu==1.13.1
+
 RUN cd /tmp && \
     wget https://github.com/Kitware/CMake/releases/download/v3.19.3/cmake-3.19.3-Linux-x86_64.sh && \
     mkdir /opt/cmake && \
@@ -212,11 +215,11 @@ RUN ln -s /opt/cmake/bin/cpack /usr/local/bin/cpack
 
 RUN mkdir /opt/onnxruntime && \
     cd /tmp && \
-    wget https://github.com/microsoft/onnxruntime/releases/download/v1.13.1/onnxruntime-linux-x64-cuda-1.13.1.tgz -O /tmp/onnxruntime-linux-x64-cuda-1.13.1.tgz > /dev/null && \
-    tar -C /opt/onnxruntime -xvf /tmp/onnxruntime-linux-x64-cuda-1.13.1.tgz > /dev/null && \
-    rm -rf /tmp/onnxruntime-linux-x64-cuda-1.13.1*
+    wget https://github.com/microsoft/onnxruntime/releases/download/v1.13.1/onnxruntime-linux-x64-gpu-1.13.1.tgz -O /tmp/onnxruntime-linux-x64-gpu-1.13.1.tgz > /dev/null && \
+    tar -C /opt/onnxruntime -xvf /tmp/onnxruntime-linux-x64-gpu-1.13.1.tgz > /dev/null && \
+    rm -rf /tmp/onnxruntime-linux-x64-gpu-1.13.1*
 
-RUN ln -s /opt/onnxruntime/onnxruntime-linux-x64-cuda-1.13.1 /usr/local/bin/onnxruntime_headers
+RUN ln -s /opt/onnxruntime/onnxruntime-linux-x64-gpu-1.13.1 /usr/local/bin/onnxruntime_headers
 
 ENV PATH=/usr/local/bin:$PATH
 
