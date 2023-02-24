@@ -18,6 +18,7 @@ AIMET Quantization for PyTorch Models provides the following functionality.
    - :ref:`Cross-Layer Equalization API<api-torch-cle>`: Post-training quantization technique to equalize layer parameters
    - :ref:`Bias Correction API<api-torch-bias-correction>`: Post-training quantization technique to correct shift in layer outputs due to quantization noise
    - :ref:`AutoQuant API<api-torch-auto-quant>`: Unified API that integrates the post-training quantization techniques provided by AIMET
+   - :ref:`BN Re-estimation APIs<api-torch-bn-reestimation>`: APIs that Re-estimate BN layers' statistics and fold the BN layers
 
 If a user wants to use Multi-GPU with CLE or QAT, they can refer to:
     - :ref:`Multi-GPU guidelines<api-torch-multi-gpu>`: Guidelines to use PyTorch DataParallel API with AIMET features
