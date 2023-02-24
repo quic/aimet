@@ -36,6 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Keras code example for bn_reestimation """
+# pylint: skip-file
 import json
 import os
 import tensorflow as tf
@@ -215,12 +216,25 @@ def load_fp32_model():
 
     # Load FP32 model
 
+    from tensorflow.compat.v1.keras.applications.resnet import ResNet50
 
+    tf.keras.backend.clear_session()
+    model = ResNet50(weights='imagenet', input_shape=(224, 224, 3))
+    sess = tf.keras.backend.get_session()
+
+    # Following lines are additional steps to make keras model work with AIMET.
+    from Examples.tensorflow.utils.add_computational_nodes_in_graph import add_image_net_computational_nodes_in_graph
+    add_image_net_computational_nodes_in_graph(sess, model.output.name, image_net_config.dataset['images_classes'])
+
+    input_op_names = [model.input.op.name]
+    output_op_names = [model.output.op.name]
+
+    return sess, input_op_names, output_op_names
 
     # End of Load FP32 model
 
 
-def pass_calibration_data(sim_model):
+def rewrite_batch_norm():
     """
     The User of the QuantizationSimModel API is expected to write this function based on their data set.
     This is not a working function and is provided only as a guideline.
@@ -322,14 +336,9 @@ def export_the_model(quant_sim, dummy_input):
 
 def bn_reestimation_example():
 
-    model, use_cuda = load_fp32_model()
+    tf_session, input_op_names, output_op_names = load_fp32_model()
 
-    if use_cuda:
-        device = torch.device("cuda")
-    else:
-        device = torch.device("cpu")
-
-    dummy_input = torch.rand(1, 3, 224, 224, device=device)    # Shape for each ImageNet sample is (3 channels) x (224 height) x (224 width)
+    rewrite_batch_norm()
 
     quant_sim = create_quant_sim(model, dummy_input, use_cuda)
 
