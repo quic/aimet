@@ -52,21 +52,22 @@ from aimet_onnx.meta.connectedgraph import ConnectedGraph
 
 from test_models import BNAfterConv, BNBeforeConv, BNAfterDynamicMatMul, BNAfterConvTranspose, BNAfterConv1d, \
                         BNAfterLinear, BNBeforeLinear, BNBeforeFlattenLinear, BNBeforeConv1d, BNBeforeConvTranspose, \
-                        MyModel, _convert_to_onnx_no_fold, _convert_to_onnx, initialize_bn_params
+                        MyModel, _convert_to_onnx_no_fold, _convert_to_onnx, initialize_bn_params, BNAfterConvTranspose1d
 
+providers = ['CPUExecutionProvider']
 
 def get_outputs_after_fold(model, test_data):
     onnx.checker.check_model(model.model)
     filename = './onnx_test_model.onnx'
     onnx.save(model.model, filename)
-    pairs = fold_all_batch_norms_to_weight(model.model)
-
+    conv_bn, bn_conv = fold_all_batch_norms_to_weight(model.model)
+    pairs = conv_bn + bn_conv
     onnx.checker.check_model(model.model)
     folded_filename = './onnx_test_model_folded.onnx'
     onnx.save(model.model, folded_filename)
 
-    sess = rt.InferenceSession(filename)
-    fold_sess = rt.InferenceSession(folded_filename)
+    sess = rt.InferenceSession(filename, providers=providers)
+    fold_sess = rt.InferenceSession(folded_filename, providers=providers)
 
     input_name = sess.get_inputs()[0].name
     baseline_output = sess.run(None, {input_name: test_data})
@@ -354,6 +355,23 @@ class TestBatchNormFold:
         initialize_bn_params(torch_model)
 
         input_shape = (2, 10, 24, 24)
+        test_data = np.random.randn(*input_shape).astype(np.float32)
+
+        model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
+        layers_orig = len(model.graph().node)
+        baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
+
+        assert pairs[0][0].name == "ConvTranspose_0"
+        assert len(model.graph().node) == layers_orig - 1
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
+
+    def test_fold_bn_after_transposed_conv1d(self):
+        torch.manual_seed(10)
+        torch_model = BNAfterConvTranspose1d()
+        torch_model.eval()
+        initialize_bn_params(torch_model)
+
+        input_shape = (2, 10, 24)
         test_data = np.random.randn(*input_shape).astype(np.float32)
 
         model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))

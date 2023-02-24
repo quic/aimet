@@ -43,6 +43,8 @@ import shutil
 import numpy as np
 import pytest
 import tensorflow as tf
+
+from aimet_common.defs import QuantScheme
 from aimet_tensorflow.keras.quant_analyzer import QuantAnalyzer
 
 from aimet_common.utils import CallbackFunc
@@ -166,7 +168,7 @@ class TestQuantAnalyzer:
                     "is_quantized": "False"
                 }
             },
-            "op_type": {},
+            "op_type": {"Gemm": {"per_channel_quantization": "False"}},
             "supergroups": [],
             "model_input": {},
             "model_output": {}
@@ -188,7 +190,162 @@ class TestQuantAnalyzer:
             quant_analyzer.export_per_layer_encoding_min_max_range(sim, results_dir="./tmp/")
             assert os.path.isfile("./tmp/min_max_ranges/activations.html")
             assert os.path.isfile("./tmp/min_max_ranges/conv2d_conv2d-kernel.html")
-            assert os.path.isfile("./tmp/min_max_ranges/dense_dense-kernel.html")
+            # Dense (Gemm) is disabled to per-channel quantization, it should be in weights.html
+            assert os.path.isfile("./tmp/min_max_ranges/weights.html")
+        finally:
+            if os.path.isdir("./tmp/"):
+                shutil.rmtree("./tmp/")
+
+    def test_export_per_layer_stats_histogram(self, clear_session):
+        """ test export_per_layer_stats_histogram() """
+        model = keras_functional_conv_net()
+
+        dummy_input = np.random.rand(1, 28, 28, 3)
+        sim = QuantizationSimModel(model)
+        sim.compute_encodings(forward_pass_func, dummy_input)
+
+        forward_pass_callback = CallbackFunc(forward_pass_func, dummy_input)
+        eval_callback = CallbackFunc(eval_func, dummy_input)
+        quant_analyzer = QuantAnalyzer(model, forward_pass_callback, eval_callback)
+        try:
+            quant_analyzer.export_per_layer_stats_histogram(sim, results_dir="./tmp/")
+
+            # Check if it is exported to correct html file.
+            assert os.path.exists("./tmp/activations_pdf")
+            assert os.path.exists("./tmp/weights_pdf")
+            assert os.path.isfile("./tmp/activations_pdf/conv2d_output_q0_0.html")
+            assert os.path.isfile("./tmp/activations_pdf/p_re_lu_output_q0_0.html")
+            assert os.path.isfile("./tmp/weights_pdf/conv2d/conv2d_conv2d-kernel_0.html")
+        finally:
+            if os.path.isdir("./tmp/"):
+                shutil.rmtree("./tmp/")
+
+    def test_export_per_layer_stats_histogram_multiple_activation_quantizers(self, clear_session):
+        """ test export_per_layer_stats_histogram() """
+        input1 = tf.keras.layers.Input(shape=(28, 28, 3))
+        input2 = tf.keras.layers.Input(shape=(28, 28, 3))
+        output = tf.keras.layers.Add()([input1, input2])
+        model = tf.keras.Model(inputs=(input1, input2), outputs=output)
+
+        dummy_input = np.random.rand(1, 28, 28, 3)
+        sim = QuantizationSimModel(model)
+        sim.compute_encodings(forward_pass_func, (dummy_input, dummy_input))
+
+        forward_pass_callback = CallbackFunc(forward_pass_func, dummy_input)
+        eval_callback = CallbackFunc(eval_func, dummy_input)
+        quant_analyzer = QuantAnalyzer(model, forward_pass_callback, eval_callback)
+        try:
+            quant_analyzer.export_per_layer_stats_histogram(sim, results_dir="./tmp/")
+
+            # Check if it is exported to correct html file.
+            assert os.path.exists("./tmp/activations_pdf")
+            assert os.path.isfile("./tmp/activations_pdf/add_input_q0_0.html")
+            assert os.path.isfile("./tmp/activations_pdf/add_input_q1_0.html")
+        finally:
+            if os.path.isdir("./tmp/"):
+                shutil.rmtree("./tmp/")
+
+    def test_export_per_layer_stats_histogram_per_channel(self, clear_session):
+        """ test export_per_layer_stats_histogram() for per channel quantization """
+        results_dir = os.path.abspath("./tmp/")
+        os.makedirs(results_dir, exist_ok=True)
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True"
+                },
+                "params": {
+                    "is_quantized": "True"
+                },
+                "per_channel_quantization": "True",
+            },
+            "params": {
+                "bias": {
+                    "is_quantized": "False"
+                }
+            },
+            "op_type": { "Gemm": { "per_channel_quantization": "False" } },
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+
+        with open("./tmp/quantsim_config.json", "w") as f:
+            json.dump(quantsim_config, f)
+
+        model = keras_sequential_conv_net()
+
+        dummy_input = np.random.rand(1, 28, 28, 3)
+        sim = QuantizationSimModel(model, config_file="./tmp/quantsim_config.json")
+        sim.compute_encodings(forward_pass_func, dummy_input)
+
+        forward_pass_callback = CallbackFunc(forward_pass_func, dummy_input)
+        eval_callback = CallbackFunc(eval_func, dummy_input)
+        quant_analyzer = QuantAnalyzer(model, forward_pass_callback, eval_callback)
+        try:
+            quant_analyzer.export_per_layer_stats_histogram(sim, results_dir="./tmp/")
+
+            # Check if it is exported to correct html file.
+            assert os.path.exists("./tmp/activations_pdf")
+            assert os.path.exists("./tmp/weights_pdf")
+            assert os.path.isfile("./tmp/activations_pdf/average_pooling2d_output_q0_0.html")
+            assert os.path.isfile("./tmp/weights_pdf/conv2d/conv2d_conv2d-kernel_0.html")
+            assert os.path.isfile("./tmp/weights_pdf/conv2d/conv2d_conv2d-kernel_1.html")
+            assert os.path.isfile("./tmp/weights_pdf/conv2d/conv2d_conv2d-kernel_2.html")
+            assert os.path.isfile("./tmp/weights_pdf/conv2d/conv2d_conv2d-kernel_3.html")
+        finally:
+            if os.path.isdir("./tmp/"):
+                shutil.rmtree("./tmp/")
+
+    def test_export_per_layer_mse_loss(self, clear_session):
+        """ test export_per_layer_mse_loss() """
+        model = keras_functional_conv_net()
+
+        dummy_input = np.random.rand(1, 28, 28, 3)
+        sim = QuantizationSimModel(model)
+        sim.compute_encodings(forward_pass_func, dummy_input)
+
+        forward_pass_callback = CallbackFunc(forward_pass_func, dummy_input)
+        eval_callback = CallbackFunc(eval_func, dummy_input)
+        quant_analyzer = QuantAnalyzer(model, forward_pass_callback, eval_callback)
+
+        unlabeled_dataset = tf.data.Dataset.from_tensor_slices(np.random.rand(32, 28, 28, 3)).batch(32)
+        quant_analyzer.enable_per_layer_mse_loss(unlabeled_dataset)
+        try:
+            quant_analyzer.export_per_layer_mse_loss(sim, results_dir="./tmp/")
+            assert os.path.isfile("./tmp/per_layer_mse_loss.html")
+        finally:
+            if os.path.isdir("./tmp/"):
+                shutil.rmtree("./tmp/")
+
+    def test_analyze(self, clear_session):
+        """ test end to end for analyze() method """
+        model = keras_functional_conv_net()
+
+        dummy_input = np.random.rand(1, 28, 28, 3)
+        sim = QuantizationSimModel(model)
+        sim.compute_encodings(forward_pass_func, dummy_input)
+
+        forward_pass_callback = CallbackFunc(forward_pass_func, dummy_input)
+        eval_callback = CallbackFunc(eval_func, dummy_input)
+        quant_analyzer = QuantAnalyzer(model, forward_pass_callback, eval_callback)
+
+        unlabeled_dataset = tf.data.Dataset.from_tensor_slices(np.random.rand(32, 28, 28, 3)).batch(32)
+        quant_analyzer.enable_per_layer_mse_loss(unlabeled_dataset)
+        try:
+            quant_analyzer.analyze(quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                   default_param_bw=8,
+                                   default_output_bw=8,
+                                   results_dir="./tmp/")
+
+            assert os.path.isfile("./tmp/per_layer_quant_disabled.html")
+            assert os.path.isfile("./tmp/per_layer_quant_enabled.html")
+            assert os.path.exists("./tmp/activations_pdf")
+            assert os.path.exists("./tmp/weights_pdf")
+            assert os.path.isfile("./tmp/min_max_ranges/weights.html")
+            assert os.path.isfile("./tmp/min_max_ranges/activations.html")
+            assert os.path.isfile("./tmp/per_layer_mse_loss.html")
         finally:
             if os.path.isdir("./tmp/"):
                 shutil.rmtree("./tmp/")

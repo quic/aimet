@@ -178,6 +178,111 @@ class TestBatchNormFold(unittest.TestCase):
         self.assertFalse(isinstance(model.block2.bn1,tf.keras.layers.BatchNormalization))
         self.assertTrue(isinstance(model.block1.bn1, tf.keras.layers.BatchNormalization))
 
+    def test_bn_removal_functional(self):
+
+        inp = tf.keras.Input(shape=(6, 6, 3))
+        x = tf.keras.layers.Conv2D(3, 3)(inp)
+        x = tf.keras.layers.BatchNormalization(fused=True)(x)
+        x = tf.keras.layers.ReLU()(x)
+        x = tf.keras.layers.Conv2D(3, 3)(x)
+        x = tf.keras.layers.BatchNormalization(fused=True)(x)
+        x = tf.keras.layers.ReLU()(x)
+
+        model = tf.keras.Model(inputs=inp, outputs=x)
+
+        bn_layers = [model.layers[2], model.layers[5]]
+
+        new_model = _delete_all_bns_from_model(model, bn_layers)
+
+        for layer in new_model.layers:
+            self.assertFalse(isinstance(layer, tf.keras.layers.BatchNormalization))
+        self.assertTrue(len(new_model.layers) == len(model.layers) - 2)
+
+    def test_bn_removal_functional_with_sequantial_bns(self):
+
+        inp = tf.keras.Input(shape=(6, 6, 3))
+        x = tf.keras.layers.Conv2D(3, 3)(inp)
+        x = tf.keras.layers.BatchNormalization(fused=True)(x)
+        x = tf.keras.layers.BatchNormalization(fused=True)(x)
+        x = tf.keras.layers.ReLU()(x)
+        x = tf.keras.layers.Conv2D(3, 3)(x)
+        x = tf.keras.layers.BatchNormalization(fused=True)(x)
+        x = tf.keras.layers.ReLU()(x)
+
+        model = tf.keras.Model(inputs=inp, outputs=x)
+
+        bn_layers = [model.layers[2], model.layers[3], model.layers[6]]
+
+        new_model = _delete_all_bns_from_model(model, bn_layers)
+
+        for layer in new_model.layers:
+            self.assertFalse(isinstance(layer, tf.keras.layers.BatchNormalization))
+        self.assertTrue(len(new_model.layers) == len(model.layers) - 3)
+
+    def test_bn_removal_functional_two_paths(self):
+
+        inp = tf.keras.Input(shape=(6, 6, 3))
+
+        left = tf.keras.layers.Conv2D(3, 3)(inp)
+        left = tf.keras.layers.BatchNormalization(fused=True)(left)
+        left = tf.keras.layers.ReLU()(left)
+        left = tf.keras.layers.Conv2D(3, 3)(left)
+        left = tf.keras.layers.BatchNormalization(fused=True)(left)
+        left = tf.keras.layers.ReLU()(left)
+
+        right = tf.keras.layers.Conv2D(3, 3)(inp)
+        right = tf.keras.layers.BatchNormalization(fused=True)(right)
+        right = tf.keras.layers.ReLU()(right)
+        right = tf.keras.layers.Conv2D(3, 3)(right)
+        right = tf.keras.layers.BatchNormalization(fused=True)(right)
+        right = tf.keras.layers.ReLU()(right)
+
+        output = tf.keras.layers.concatenate([left, right])
+
+        model = tf.keras.Model(inputs=inp, outputs=output)
+
+        bn_layers = [layer for layer in model.layers if isinstance(layer, tf.keras.layers.BatchNormalization)]
+
+        new_model = _delete_all_bns_from_model(model, bn_layers)
+
+        for layer in new_model.layers:
+            self.assertFalse(isinstance(layer, tf.keras.layers.BatchNormalization))
+        self.assertTrue(len(new_model.layers) == len(model.layers) - len(bn_layers))
+
+    def test_bn_removal_functional_lambda(self):
+
+        inp = tf.keras.Input(shape=(6, 6, 3))
+
+        left = tf.keras.layers.Conv2D(3, 3)(inp)
+        left = tf.keras.layers.BatchNormalization(fused=True)(left)
+        left = tf.keras.layers.ReLU()(left)
+        left = tf.keras.layers.Conv2D(3, 3)(left)
+        left = tf.keras.layers.BatchNormalization(fused=True)(left)
+        left = tf.keras.layers.ReLU()(left)
+
+        right = tf.keras.layers.Conv2D(3, 3)(inp)
+        right = tf.keras.layers.BatchNormalization(fused=True)(right)
+        right = tf.keras.layers.ReLU()(right)
+        right = tf.keras.layers.Conv2D(3, 3)(right)
+        right = tf.keras.layers.BatchNormalization(fused=True)(right)
+        right = tf.keras.layers.ReLU()(right)
+
+        joined = left + right # lamda connection
+
+        main = tf.keras.layers.Conv2D(2, 2)(joined)
+        main = tf.keras.layers.BatchNormalization(fused=True)(main)
+        main = tf.keras.layers.ReLU()(main)
+
+        model = tf.keras.Model(inputs=inp, outputs=main)
+
+        bn_layers = [layer for layer in model.layers if isinstance(layer, tf.keras.layers.BatchNormalization)]
+
+        new_model = _delete_all_bns_from_model(model, bn_layers)
+
+        for layer in new_model.layers:
+            self.assertFalse(isinstance(layer, tf.keras.layers.BatchNormalization))
+        self.assertTrue(len(new_model.layers) == len(model.layers) - len(bn_layers))
+
     def test_bn_replacement_sequential(self):
 
         Block3 = tf.keras.Sequential()
@@ -840,7 +945,7 @@ class TestBatchNormFold(unittest.TestCase):
 
         baseline_output = model(numpy_data)
 
-        fold_all_batch_norms(model)
+        _, model = fold_all_batch_norms(model)
         output_after_fold = model(numpy_data)
 
         self.assertTrue(np.allclose(baseline_output, output_after_fold, atol=1.e-4))
@@ -867,7 +972,7 @@ class TestBatchNormFold(unittest.TestCase):
         numpy_data = np.random.rand(1, w_shape[1], w_shape[2], w_shape[3]).astype(np.float32)
         baseline_output = model(numpy_data)
 
-        fold_all_batch_norms(model)
+        _, model = fold_all_batch_norms(model)
 
         output_after_fold = model(numpy_data)
 
@@ -892,9 +997,9 @@ class TestBatchNormFold(unittest.TestCase):
         baseline_output = model(numpy_data)
         weight_before_fold = model._layers[3].kernel.numpy()
 
-        fold_all_batch_norms(model)
+        _, model = fold_all_batch_norms(model)
         after_fold_output = model(numpy_data)
-        weight_after_fold = model._layers[3].kernel.numpy()
+        weight_after_fold = model._layers[2].kernel.numpy()
 
         # check that weight got updated
         self.assertFalse(np.allclose(weight_before_fold, weight_after_fold, atol=1e-4))
@@ -940,7 +1045,7 @@ class TestBatchNormFold(unittest.TestCase):
         model = tf.keras.Model(inputs=inputs, outputs=outputs)
         mock_input = np.random.randn(1, 32, 32, 3)
         output_before_batchnorm_folding = model(mock_input)
-        fold_all_batch_norms(model)
+        _, model = fold_all_batch_norms(model)
         output_after_batchnorm_folding = model(mock_input)
 
         assert np.allclose(output_before_batchnorm_folding, output_after_batchnorm_folding, rtol=1e-2)
@@ -954,7 +1059,7 @@ class TestBatchNormFold(unittest.TestCase):
         model = tf.keras.Model(inputs=inputs, outputs=outputs)
         mock_input = np.random.randn(1, 32, 32, 3)
         output_before_batchnorm_folding = model(mock_input)
-        fold_all_batch_norms(model)
+        _, model = fold_all_batch_norms(model)
         output_after_batchnorm_folding = model(mock_input)
 
         assert np.allclose(output_before_batchnorm_folding, output_after_batchnorm_folding, rtol=1e-2)

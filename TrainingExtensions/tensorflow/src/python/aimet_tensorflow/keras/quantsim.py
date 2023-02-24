@@ -48,6 +48,7 @@ from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_common.quantsim import encoding_version, extract_global_quantizer_args
 from aimet_tensorflow.defs import AxisHandling
+import aimet_tensorflow.utils.quantsim as quantsim_utils
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.graphsearchtuils import GraphSearchUtils
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
@@ -268,7 +269,7 @@ class QuantizationSimModel(tf.keras.Model):
         :param quantizer: Quantizer to get encoding info from
         :return: Dictionary or List of dictionaries containing encodings info for the tensor quantizer
         """
-        quantizer_encodings = [quantizer.encoding] if not isinstance(quantizer.encoding, List) else quantizer.encoding
+        quantizer_encodings = [quantizer.encoding] if not isinstance(quantizer, ParamPerChannelQuantizer) else quantizer.encoding
         return [
             {
                 'min': encoding.min,
@@ -293,7 +294,7 @@ class QuantizationSimModel(tf.keras.Model):
         param_encodings = {}
         for wrapper in self.quant_wrappers():
             for idx, input_quantizer in enumerate(wrapper.input_quantizers):
-                if input_quantizer.encoding is not None or input_quantizer.data_type == QuantizationDataType.float:
+                if input_quantizer.is_encoding_valid() or input_quantizer.data_type == QuantizationDataType.float:
                     # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
                     # inbound_nodes parameter populated, so the name of the quantizer is used instead
                     if not wrapper._layer_to_wrap.inbound_nodes:
@@ -303,12 +304,12 @@ class QuantizationSimModel(tf.keras.Model):
                     encoding_dict = self._get_encoding_dict_for_quantizer(input_quantizer)
                     activation_encodings[tensor_name] = encoding_dict
             for idx, param_quantizer in enumerate(wrapper.param_quantizers):
-                if param_quantizer.encoding is not None or param_quantizer.data_type == QuantizationDataType.float:
+                if param_quantizer.is_encoding_valid() or param_quantizer.data_type == QuantizationDataType.float:
                     param_name = wrapper._layer_to_wrap.weights[idx].name
                     encoding_dict = self._get_encoding_dict_for_quantizer(param_quantizer)
                     param_encodings[param_name] = encoding_dict
             for idx, output_quantizer in enumerate(wrapper.output_quantizers):
-                if output_quantizer.encoding is not None or output_quantizer.data_type == QuantizationDataType.float:
+                if output_quantizer.is_encoding_valid() or output_quantizer.data_type == QuantizationDataType.float:
                     # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
                     # inbound_nodes parameter populated, so the name of the quantizer is used instead
                     if not wrapper._layer_to_wrap.inbound_nodes:
@@ -322,6 +323,7 @@ class QuantizationSimModel(tf.keras.Model):
                           'param_encodings': param_encodings,
                           'quantizer_args': self.quant_args if hasattr(self, "quant_args") else {}}
         return encodings_dict
+
 
     def compute_encodings(self, forward_pass_callback, forward_pass_callback_args):
         """
@@ -384,6 +386,36 @@ class QuantizationSimModel(tf.keras.Model):
         model_path = os.path.join(path, filename_prefix)
         self._model_without_wrappers.save(model_path)
         self._model_without_wrappers.save(model_path + '.h5', save_format='h5')
+
+        custom_objects = custom_objects or {}
+        custom_objects['QcQuantizeWrapper'] = QcQuantizeWrapper
+        custom_objects['QcQuantizableMultiHeadAttention'] = QcQuantizableMultiHeadAttention
+
+        # Save the state of the model to later rebuild it after converting to a frozen pb. Freezing to a pb invalidates
+        # all Keras graphs. Meaning that the model needs to be rebuilt to allow users to still use sim.model after exporting.
+        quantsim_model_config = self.model.get_config()
+        quantsim_model_weights = self.model.get_weights()
+
+        # There could be some weights that are added on later on that are not attached to the model itself. For example,
+        # like the auto-quant tests. This function is used to get all the weights and their weight names. Unfortunately,
+        # unattached weights names do not have to be unique. For example, there could be multiple 'Variable:0's in the weights
+        # This function adds a special parsing character so that sets can be used to speed up computation for identifying missing
+        # weights when rebuilding.
+        SPECIAL_PARSE_CHAR = "@"
+        def get_model_weight_names_to_weights_dict():
+            dict_with_weights_to_return = {}
+            found_duplicates = {}
+            for w in self.model.weights:
+                if w.name in dict_with_weights_to_return:
+                    dict_with_weights_to_return[
+                        f"{w.name}{SPECIAL_PARSE_CHAR}{found_duplicates.get(w.name, 0) + 1}"] = w
+                    found_duplicates[w.name] = found_duplicates.get(w.name, 0) + 1
+                else:
+                    dict_with_weights_to_return[w.name] = w
+            return dict_with_weights_to_return
+
+        quantsim_model_weight_names_to_weights = get_model_weight_names_to_weights_dict()
+
         # Conversion of saved h5 model to pb model for consumption by SNPE/QNN]
         try:
             convert_h5_model_to_pb_model(f'{model_path}.h5', custom_objects=custom_objects)
@@ -391,6 +423,30 @@ class QuantizationSimModel(tf.keras.Model):
             _logger.error("Could not convert h5 to frozen pb. "
                           "Please call export() again with custom_objects defined.")
             raise
+
+        # The model is rebuilt in two steps here. First, the model is rebuilt using the from_config method to get the
+        # overall model structure back with the original layers wrapped and their quantizers correctly made. Then, that model
+        # is cloned via the clone_model method to ensure there is no shared state between the original model and the
+        # rebuilt model. Specifically, this cuts ties between the inbound/outbound nodes from the original model that were used to
+        # rebuild the model.
+        self.model = tf.keras.models.clone_model(tf.keras.Model.from_config(
+            quantsim_model_config, custom_objects=custom_objects))
+
+        # Second part of handling weights that might not be attached to the model. Here, we use the initial models weights
+        # found and manually add the missing weights while also getting back the original name.
+        if len(self.model.weights) != len(quantsim_model_weights):
+            model_weight_names = get_model_weight_names_to_weights_dict()
+
+            missing_weights = set(quantsim_model_weight_names_to_weights.keys()) - set(model_weight_names.keys())
+            for weight in missing_weights:
+                if not quantsim_model_weight_names_to_weights[weight].trainable:
+                    self.model.add_weight(''.join(weight.split(SPECIAL_PARSE_CHAR)[:-1]), # To get original name back
+                                          quantsim_model_weight_names_to_weights[weight].shape,
+                                          quantsim_model_weight_names_to_weights[weight].dtype,
+                                          quantsim_model_weight_names_to_weights[weight].initializer)
+
+        self.model.set_weights(quantsim_model_weights)
+
         encodings_dict = self.get_encodings_dict()
         encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
         save_json_yaml(encoding_file_path, encodings_dict)
@@ -438,6 +494,90 @@ class QuantizationSimModel(tf.keras.Model):
 
         for quant_wrapper in self.quant_wrappers():
             quant_wrapper.set_and_freeze_param_encoding(param_encodings)
+
+    def load_encodings_to_sim(self, encoding_file_path: str):
+        """
+        Loads the saved encodings to quant sim model
+
+        :param encoding_file_path: path from where to load encodings file
+        :return:
+        """
+        # pylint: disable=protected-access, too-many-branches, too-many-locals, too-many-statements
+        # Load encodings file
+        with open(encoding_file_path) as json_file:
+            encodings = json.load(json_file)
+
+        param_encodings = encodings['param_encodings']
+        activation_encodings = encodings['activation_encodings']
+
+        for wrapper in self.quant_wrappers():
+            for idx, input_quantizer in enumerate(wrapper.input_quantizers):
+                # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
+                # inbound_nodes parameter populated, so the name of the quantizer is used instead
+                if not wrapper._layer_to_wrap.inbound_nodes:
+                    tensor_name = "multi_head_attention/" + wrapper.name + "/" + input_quantizer.name
+                else:
+                    tensor_name = wrapper._layer_to_wrap.inbound_nodes[0].keras_inputs[idx].name
+
+                if tensor_name in activation_encodings:
+                    if not input_quantizer.is_enabled():
+                        _logger.info("Not loading encodings for quantizer: %s as it is disabled", tensor_name)
+                        continue
+                    encoding, is_symmetric = quantsim_utils.create_encoding_from_dict(activation_encodings[tensor_name][0])
+                    input_quantizer.tensor_quantizer.isEncodingValid = True
+                    input_quantizer.set_quantizer_encodings(encoding.bw, is_symmetric, encoding,
+                                                            libpymo.TensorQuantizerOpMode.quantizeDequantize)
+                    _logger.info("Setting encodings for : %s", tensor_name)
+                else:
+                    if input_quantizer.is_enabled():
+                        input_quantizer.disable()
+                        _logger.info("Encoding for quantizer: %s is not present thus disabling it.", tensor_name)
+
+            for idx, param_quantizer in enumerate(wrapper.param_quantizers):
+                param_name = wrapper._layer_to_wrap.weights[idx].name
+
+                if param_name in param_encodings:
+                    if not param_quantizer.is_enabled():
+                        _logger.info("Not loading encodings for parameter: %s as quantizer is disabled", param_name)
+                        continue
+                    if isinstance(param_quantizer, StaticGridPerChannelQuantizer):
+                        encoding, is_symmetric = quantsim_utils.create_encoding_from_dict(param_encodings[param_name])
+                        for tensor_quantizer in param_quantizer.tensor_quantizer:
+                            tensor_quantizer.isEncodingValid = True
+                        bw = encoding[0].bw
+                    else:
+                        encoding, is_symmetric = quantsim_utils.create_encoding_from_dict(param_encodings[param_name][0])
+                        param_quantizer.tensor_quantizer.isEncodingValid = True
+                        bw = encoding.bw
+                    param_quantizer.set_quantizer_encodings(bw, is_symmetric, encoding,
+                                                            libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
+                    _logger.info("Setting encodings for : %s", param_name)
+                else:
+                    if param_quantizer.is_enabled():
+                        param_quantizer.disable()
+                        _logger.info("Encoding for parameter: %s not present thus disabling this quantizer.", param_name)
+
+            for idx, output_quantizer in enumerate(wrapper.output_quantizers):
+                # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
+                # inbound_nodes parameter populated, so the name of the quantizer is used instead
+                if not wrapper._layer_to_wrap.inbound_nodes:
+                    tensor_name = "multi_head_attention/" + wrapper.name + "/" + output_quantizer.name
+                else:
+                    tensor_name = wrapper._layer_to_wrap.output.name
+
+                if tensor_name in activation_encodings:
+                    if not output_quantizer.is_enabled():
+                        _logger.info("Not loading encodings for quantizer: %s as it is disabled", tensor_name)
+                        continue
+                    encoding, is_symmetric = quantsim_utils.create_encoding_from_dict(activation_encodings[tensor_name][0])
+                    output_quantizer.tensor_quantizer.isEncodingValid = True
+                    output_quantizer.set_quantizer_encodings(encoding.bw, is_symmetric, encoding,
+                                                             libpymo.TensorQuantizerOpMode.quantizeDequantize)
+                    _logger.info("Setting encodings for : %s", tensor_name)
+                else:
+                    if output_quantizer.is_enabled():
+                        output_quantizer.disable()
+                        _logger.info("Encoding for quantizer: %s is not present thus disabling it.", tensor_name)
 
     def _param_op_mode_after_analysis(self, quant_scheme) -> libpymo.TensorQuantizerOpMode:
         """

@@ -41,27 +41,27 @@
 import os
 from typing import List, Tuple, Dict
 import tensorflow.compat.v1 as tf
-from bokeh import plotting
-from bokeh.models import ColumnDataSource, Band, Span
 from aimet_common.defs import QuantScheme
-from aimet_common.quant_analyzer import save_json, export_per_layer_sensitivity_analysis_plot, \
-    create_and_export_min_max_ranges_plot
+from aimet_common.quant_analyzer import save_json, export_per_layer_sensitivity_analysis_plot,\
+    create_and_export_min_max_ranges_plot, export_per_layer_mse_plot, export_stats_histogram_plot
 from aimet_common.utils import AimetLogger, CallbackFunc
 from aimet_tensorflow.common.operation import Op
+from aimet_tensorflow.utils.common import create_input_feed_dict, iterate_tf_dataset
 from aimet_tensorflow.quantizer_info import QuantizerInfo
 from aimet_tensorflow.quantsim import QuantizationSimModel
-
+from aimet_tensorflow import batch_norm_fold
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 DEFAULT_BOKEH_FIGURE_HEIGHT = 300
-
 
 class QuantAnalyzer:
     """
     QuantAnalyzer tool provides
         1) Model sensitivity to weight and activation quantization
         2) Per layer encoding (min - max range) and PDF analysis
-        3) per op sensitivity analysis
+        3) Per op sensitivity analysis
+        4) Per op MSE analysis
+
     """
 
     def __init__(self, session: tf.compat.v1.Session, start_op_names: List[str], output_op_names: List[str],
@@ -92,13 +92,18 @@ class QuantAnalyzer:
         self._use_cuda = use_cuda
         self._default_output_bw = None
         self._default_param_bw = None
+        self._unlabeled_dataset = None
+        self._num_batches = None
 
+    # pylint: disable=too-many-arguments
     def analyze(self,
                 quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
                 rounding_mode: str = 'nearest',
                 default_param_bw: int = 8,
                 default_output_bw: int = 8,
                 config_file: str = None,
+                unlabeled_dataset: tf.compat.v1.data.Dataset = None,
+                num_batches: int = None,
                 results_dir: str = "./tmp/"):
         """
         Analyze model for quantization and point out sensitive parts/hotspots of the model by performing
@@ -106,6 +111,7 @@ class QuantAnalyzer:
             2) export per layer encoding (min - max range)
             3) export per layer statistics histogram (PDF) when quant scheme is TF-Enhanced
             4) perform per op sensitivity analysis by enabling and disabling quant ops
+            5) per op MSE loss between fp32 and quantized output activations
 
         :param quant_scheme: Quantization Scheme, currently supported schemes are post_training_tf and
                post_training_tf_enhanced, defaults to post_training_tf_enhanced
@@ -114,10 +120,16 @@ class QuantAnalyzer:
         :param default_output_bw: bitwidth to use for activation tensors, defaults to 8
         :param config_file: Path to a config file to use to specify rules for placing quant ops in the model
         :param results_dir: Directory to save the results.
+        :param unlabeled_dataset: Unlabeled TF dataset
+                Used in per op MSE loss calculation
+        :param num_batches: Number of batches. Approximately 256 samples/images are recommended,
+                so if batch size of data loader is 64, then 4 number of batches leads to 256 samples/images
+                Used in per op MSE loss calculation
         """
+        self._unlabeled_dataset = unlabeled_dataset
+        self._num_batches = num_batches
         self._default_param_bw = default_param_bw
         self._default_output_bw = default_output_bw
-
         sim = self._create_quantsim_and_encodings(quant_scheme, rounding_mode, config_file)
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
@@ -138,6 +150,10 @@ class QuantAnalyzer:
         # Perform per op analysis by disabling each quant op (OPTION-2).
         self._perform_per_op_analysis_by_disabling_quant_ops(sim, results_dir)
 
+        # Perform per op MSE loss between fp32 and quantized output activations.
+        if self._unlabeled_dataset and self._num_batches:
+            self._perform_per_op_mse_loss(sim, results_dir)
+
     def _create_quantsim_and_encodings(self, quant_scheme: QuantScheme, rounding_mode: str,
                                        config_file: str) -> QuantizationSimModel:
         """"
@@ -148,7 +164,10 @@ class QuantAnalyzer:
         :param config_file: Path to a config file
         :return: Quantsim model
         """
-        quant_sim_model = QuantizationSimModel(session=self._session,
+        bn_folded_sess, _ = batch_norm_fold.fold_all_batch_norms(self._session, input_op_names=self._start_op_names,
+                                                                 output_op_names=self._output_op_names)
+        self._session = bn_folded_sess
+        quant_sim_model = QuantizationSimModel(session=bn_folded_sess,
                                                starting_op_names=self._start_op_names,
                                                output_op_names=self._output_op_names,
                                                quant_scheme=quant_scheme, rounding_mode=rounding_mode,
@@ -156,7 +175,6 @@ class QuantAnalyzer:
                                                default_param_bw=self._default_param_bw,
                                                use_cuda=self._use_cuda,
                                                config_file=config_file)
-
         quant_sim_model.compute_encodings(forward_pass_callback=self._forward_pass_callback.func,
                                           forward_pass_callback_args=self._forward_pass_callback.args)
 
@@ -236,13 +254,13 @@ class QuantAnalyzer:
 
         :param sim: Quantsim model.
         :param results_dir: Directory to save the results.
-        :return: layer wise eval score dictionary. dict[op_name] = eval_score
+        :return: op wise eval score dictionary. dict[op_name] = eval_score
         """
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
 
         _logger.info("\nOPTION-1:\nAll the quant ops are disabled.\n"
-                     "Starting per-layer analysis by enabling quant ops as per config file.")
+                     "Starting per-op analysis by enabling quant ops as per config file.")
         op_wise_eval_score_dict = self._perform_per_op_analysis(sim,
                                                                 disable_all_quantizers=True,
                                                                 enabled_before=True,
@@ -269,13 +287,13 @@ class QuantAnalyzer:
 
         :param sim: Quantsim model.
         :param results_dir: Directory to save the results.
-        :return: layer wise eval score dictionary. dict[op_name] = eval_score
+        :return: op wise eval score dictionary. dict[op_name] = eval_score
         """
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
 
         _logger.info("\nOPTION-2:\nAll the quant ops are enabled as per config file.\n"
-                     "Starting per-layer analysis by disabling quant ops.")
+                     "Starting per-op analysis by disabling quant ops.")
         op_wise_eval_score_dict = self._perform_per_op_analysis(sim,
                                                                 disable_all_quantizers=False,
                                                                 enabled_before=False,
@@ -295,14 +313,14 @@ class QuantAnalyzer:
                                  enabled_after: bool,
                                  ) -> Dict:
         """
-        Helper function for perform_per_layer_analysis_by_enabling_quant_ops() and
-        perform_per_layer_analysis_by_disabling_quant_ops()
+        Helper function for perform_per_op_analysis_by_enabling_quant_ops() and
+        perform_per_op_analysis_by_disabling_quant_ops()
 
         :param sim: Quantsim model.
-        :param disable_all_quantizers: Flag to disable all the quantizers before per-layer analysis.
+        :param disable_all_quantizers: Flag to disable all the quantizers before per-op analysis.
         :param enabled_before: Flag to set enabled for quantizers before computing encodings.
         :param enabled_after: Flag to set enabled for quantizers after computing encodings.
-        :return: layer wise eval score dictionary. dict[conn_graph_op] = eval_score.
+        :return: op wise eval score dictionary. dict[conn_graph_op] = eval_score.
         """
 
         enabled_quant_ops = self._get_enabled_quantizer_groups(sim)
@@ -330,6 +348,70 @@ class QuantAnalyzer:
                     self._enable_disable_quantizers(quantizer_group_list, enabled=True)
 
         return eval_score_dict
+
+    # pylint: disable=too-many-locals
+    def _perform_per_op_mse_loss(self,
+                                 sim: QuantizationSimModel,
+                                 results_dir: str,
+                                 ) -> Dict:
+        """
+        MSE loss computation between fp32 and quantized output activations for each op.
+        :param sim: Quantsim model.
+        :param results_dir: Directory to save the results.
+        :return op wise MSE loss. dict[op_name] = MSE loss.
+        """
+
+        results_dir = os.path.abspath(results_dir)
+        os.makedirs(results_dir, exist_ok=True)
+
+        # pylint: disable=protected-access
+        output_op_names = QuantizationSimModel._get_ops_to_quantize_activations_for(self._session.graph, sim.connected_graph)
+        mse_loss_dict = {}
+
+        for _, output_op_name in enumerate(output_op_names):
+            mse_loss_dict[output_op_name] = self._compute_mse_loss(sim, output_op_name)
+
+        export_per_layer_mse_plot(mse_loss_dict,
+                                  results_dir,
+                                  title="per_op_mse_loss")
+        save_json(mse_loss_dict, results_dir, title="per_op_mse_loss.json")
+        _logger.info("Exported per op MSE loss plot.")
+        return mse_loss_dict
+
+    def _compute_mse_loss(self, sim: QuantizationSimModel, output_op_name) -> float:
+        """
+        Compute MSE loss between fp32 and quantized output activations for each batch, add for
+        all the batches and return averaged mse loss.
+        :param sim: Quantsim model.
+        :param output_op_name: Output op name.
+        :return: MSE loss between fp32 and quantized output activations.
+        """
+        total = 0
+        loss = 0.0
+        mse_loss = tf.keras.losses.MeanSquaredError()
+        iterator = iterate_tf_dataset(self._unlabeled_dataset)
+        for _ in range(self._num_batches):
+            try:
+                model_inputs = next(iterator)
+            except StopIteration:
+                raise ValueError(f'Can not fetch {self._num_batches} batches from dataset')
+
+            # Collect output activation data from original op
+            feed_dict = create_input_feed_dict(self._session.graph, self._start_op_names, model_inputs)
+            orig_op = self._session.graph.get_operation_by_name(output_op_name)
+            orig_out_data = self._session.run(orig_op.outputs[0], feed_dict=feed_dict)
+
+            # Collect output activation data from quant sim op
+            feed_dict = create_input_feed_dict(sim.session.graph, self._start_op_names, model_inputs)
+            quant_op = sim.session.graph.get_operation_by_name(output_op_name)
+            quantized_out_data = sim.session.run(quant_op.outputs[0], feed_dict=feed_dict)
+
+            # Calculate MSE loss
+            mse = mse_loss(orig_out_data, quantized_out_data)
+            with tf.compat.v1.Session().as_default():
+                loss += mse.eval()
+            total += orig_out_data.shape[0]
+        return loss/total
 
     @staticmethod
     def _get_enabled_quantizer_groups(sim: QuantizationSimModel)-> Dict[Op, List[QuantizerInfo]]:
@@ -459,7 +541,8 @@ class QuantAnalyzer:
         create_and_export_min_max_ranges_plot(min_max_range_for_activations_dict,
                                               min_max_ranges_dir,
                                               title="activations")
-
+        save_json(min_max_range_for_weights_dict, min_max_ranges_dir, title="weights.json")
+        save_json(min_max_range_for_activations_dict, min_max_ranges_dir, title="activations.json")
         _logger.info("Exported per layer encoding min-max ranges.")
         return min_max_range_for_weights_dict, min_max_range_for_activations_dict
 
@@ -482,45 +565,4 @@ class QuantAnalyzer:
             encodings = [encodings]
 
         for index, (histogram, encoding) in enumerate(zip(histograms, encodings)):
-            self._export_stats_histogram_plot(histogram, encoding, results_dir,
-                                              title=f"{title}_{index}")
-
-    @staticmethod
-    def _export_stats_histogram_plot(histogram: List, encoding, results_dir: str, title: str) -> plotting.Figure:
-        """
-        Export histogram (PDF) of statistics with overlaying encoding min and max
-        values in html format.
-
-        :param histogram: List of buckets where each bucket is (xLeft, PDF).
-        :param encoding: Encoding.
-        :param results_dir: Directory to save the results.
-        :param title: Title of the plot.
-        :return: Histogram plot.
-        """
-        entries = []
-        pdfs = []
-        for entry, pdf in histogram:
-            entries.append(entry)
-            pdfs.append(pdf)
-
-        # Configure the output file to be saved.
-        filename = os.path.join(results_dir, f"{title}.html")
-        plotting.output_file(filename)
-        plot = plotting.figure(plot_height=DEFAULT_BOKEH_FIGURE_HEIGHT,
-                               title=title)
-        # Add line and underlying color for histogram.
-        plot_source = ColumnDataSource(data=dict(entries=entries, pdfs=pdfs))
-        plot.line("entries", "pdfs", source=plot_source, color="blue", legend="PDF")
-        band = Band(base='entries', upper='pdfs', source=plot_source, level='underlay', fill_color='blue')
-        plot.add_layout(band)
-
-        # Overlay encoding min and max values.
-        line = Span(location=encoding.min, dimension='height', line_color='green', line_dash='dashed')
-        plot.line([], [], line_dash='dashed', line_color="green", legend='MIN_VAL')
-        plot.add_layout(line)
-        line = Span(location=encoding.max, dimension='height', line_color='red', line_dash='dashed')
-        plot.line([], [], line_dash='dashed', line_color="red", legend='MAX_VAL')
-        plot.add_layout(line)
-
-        plotting.save(plot)
-        return plot
+            export_stats_histogram_plot(histogram, encoding, results_dir, title=f"{title}_{index}")

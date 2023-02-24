@@ -39,6 +39,7 @@
 """ Top level API for Adaptive Rounding - Post-Training Quantization (PTQ) """
 
 import os
+import itertools
 import json
 import shutil
 from typing import Tuple, Union, Dict, List, Callable, Any
@@ -72,13 +73,15 @@ class AdaroundParameters:
     Configuration parameters for Adaround
     """
     def __init__(self, data_loader: DataLoader, num_batches: int,
-                 default_num_iterations: int = 10000, default_reg_param: float = 0.01,
+                 default_num_iterations: int = None, default_reg_param: float = 0.01,
                  default_beta_range: Tuple = (20, 2), default_warm_start: float = 0.2,
                  forward_fn: Callable[[torch.nn.Module, Any], Any] = None):
         """
         :param data_loader: Data loader
-        :param num_batches: Number of batches
-        :param default_num_iterations: Number of iterations to adaround each layer. Default 10000
+        :param num_batches: Number of batches to be used for Adaround.
+         A commonly recommended value for this parameter is the smaller value among (1) len(data_loader) and (2) ceil(2000/batch_size)
+        :param default_num_iterations: Number of iterations to adaround each layer.
+         The default value is 10K for models with 8- or higher bit weights, and 15K for models with lower than 8 bit weights.
         :param default_reg_param: Regularization parameter, trading off between rounding loss vs reconstruction loss.
          Default 0.01
         :param default_beta_range: Start and stop beta parameter for annealing of rounding loss (start_beta, end_beta).
@@ -149,6 +152,33 @@ class Adaround:
         # Compute only param encodings
         cls._compute_param_encodings(quant_sim)
 
+        return cls._apply_adaround(quant_sim, model, dummy_input, params, path, filename_prefix)
+
+    @classmethod
+    def _apply_adaround(cls, quant_sim: QuantizationSimModel, model: torch.nn.Module,
+                        dummy_input: Union[torch.Tensor, Tuple], params: AdaroundParameters,
+                        path: str, filename_prefix: str) -> torch.nn.Module:
+        """
+        Returns model with optimized weight rounding of every module (Conv and Linear) and also saves the
+        corresponding quantization encodings to a separate JSON-formatted file that can then be imported by
+        QuantSim for inference or QAT
+
+        :param quant_sim: QuantizationSimModel object to optimize weight rounding.
+                          The activation quantizers are expected to have been disabled.
+        :param model: Original fp32 model from which quant_sim was created.
+        :param dummy_input: Dummy input to the model. Used to parse model graph. If the model has more than one input,
+                            pass a tuple. User is expected to place the tensors on the appropriate device.
+        :param params: Parameters for Adaround
+        :param path: path where to store parameter encodings
+        :param filename_prefix: Prefix to use for filename of the encodings file
+        :return: Model with Adarounded weights and saves corresponding parameter encodings JSON file at provided path
+        """
+
+        # Sanity check: All the input/output quantizers should be disabled
+        _, input_quantizers, output_quantizers = utils.get_all_quantizers(quant_sim.model)
+        for quantizer in itertools.chain(input_quantizers, output_quantizers):
+            assert not quantizer.enabled
+
         # Get the module - activation function pair using ConnectedGraph
         module_act_func_pair = connectedgraph_utils.get_module_act_func_pair(model, dummy_input)
 
@@ -162,7 +192,6 @@ class Adaround:
 
         SaveUtils.remove_quantization_wrappers(quant_sim.model)
         logger.info('Completed Adarounding Model')
-
         return quant_sim.model
 
     @classmethod
@@ -171,18 +200,35 @@ class Adaround:
         """
         Optimize weight rounding of every module (AdaroundSupportedModules) of model in sequential manner
         based on occurrence
-        :param model: The original, un quantized, model
-        :param quant_sim: Quant sim
+        :param model: Original fp32 model from which quant_sim was created.
+        :param quant_sim: QuantizationSimModel object to optimize weight rounding.
+                          The activation quantizers are expected to have been disabled.
         :param module_act_func_pair: Dictionary of module to immediate following activation function
         :param params: Adaround parameters
         :param dummy_input: Dummy input to the model
         """
+        # pylint: disable=too-many-locals
+
+        num_iterations = params.num_iterations
+
+        if num_iterations is None:
+            param_quantizers, _, _ = utils.get_all_quantizers(quant_sim.model)
+            lowest_weight_bw = min(
+                quantizer.bitwidth for quantizer in param_quantizers
+                if quantizer.enabled and quantizer.data_type == QuantizationDataType.int
+            )
+            # If the lowest wegith bitwidth is < 8, then set num_iterations to 15K by default
+            if lowest_weight_bw < 8:
+                num_iterations = 15000
+            else:
+                num_iterations = 10000
+
         try:
             # Cache model input data to WORKING_DIR
             cached_dataset = utils.CachedDataset(params.data_loader, params.num_batches, WORKING_DIR)
 
             # Optimization Hyper parameters
-            opt_params = AdaroundHyperParameters(params.num_iterations, params.reg_param, params.beta_range,
+            opt_params = AdaroundHyperParameters(num_iterations, params.reg_param, params.beta_range,
                                                  params.warm_start)
 
             # AdaRound must be applied to modules in the order of occurrence

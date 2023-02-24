@@ -56,7 +56,7 @@ import aimet_common.libpymo as libpymo      # pylint: disable=import-error
 from aimet_onnx.meta.connectedgraph import ConnectedGraph, WEIGHT_INDEX, BIAS_INDEX
 from aimet_onnx.meta.operations import Op
 from aimet_onnx.utils import transpose_tensor, ParamUtils, get_node_attribute
-from aimet_onnx.batch_norm_fold import BNLayer
+from aimet_onnx.batch_norm_fold import BNLayer, fold_all_batch_norms_to_weight
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -134,7 +134,8 @@ class CrossLayerScaling(CLS):
             weight = transpose_tensor(weight, (1, 0, 2, 3))
 
         layer_param.weight = numpy_helper.to_array(weight).reshape(-1)
-        layer_param.weightShape = np.array(weight.dims)
+        weight_shape = get_weight_dimensions(np.array(weight.dims))
+        layer_param.weightShape = weight_shape
 
     def _pack_params_for_conv(self,
                               cls_set,
@@ -264,7 +265,6 @@ class HighBiasFold(HBF):
         bias = ParamUtils.get_param(self._model.model, layer.get_module(), BIAS_INDEX)
         return not bias
 
-    #TODO
     def _populate_bn_params_in_libpymo_obj(self, prev_layer_bn_params: libpymo.BNParamsHighBiasFold,
                                            bn_layer: BNLayer):
         """
@@ -304,7 +304,7 @@ class HighBiasFold(HBF):
 
         curr_layer_params.bias = numpy_helper.to_array(bias).reshape(-1)
         curr_layer_params.weight = numpy_helper.to_array(weight).reshape(-1)
-        curr_layer_params.weightShape = np.array(weight.dims)
+        curr_layer_params.weightShape = get_weight_dimensions(np.array(weight.dims))
 
     def _update_bias_for_layer_from_libpymo_obj(self, layer_param: libpymo.LayerParams,
                                                 module: onnx_pb.NodeProto):
@@ -327,3 +327,35 @@ class HighBiasFold(HBF):
         """
         self._update_bias_for_layer_from_libpymo_obj(prev_layer_params, cls_pair_info.layer1.get_module())
         self._update_bias_for_layer_from_libpymo_obj(curr_layer_params, cls_pair_info.layer2.get_module())
+
+
+def get_weight_dimensions(weight_shape: np.array) -> np.array:
+    """
+    Returns a length 4 weight shape
+    :param weight_shape: shape of the weight tensor
+    """
+    dims = len(weight_shape)
+    if dims == 4:
+        return weight_shape
+    return np.append(weight_shape, [1 for _ in range(4 - dims)]).astype(int)
+
+
+def equalize_model(model: onnx_pb.ModelProto):
+    """
+    High-level API to perform Cross-Layer Equalization (CLE) on the given model. The model is equalized in place.
+
+    :param model: Model to equalize
+    """
+    conv_bn_pairs, _ = fold_all_batch_norms_to_weight(model)
+
+    bn_dict = {}
+    for conv_bn in conv_bn_pairs:
+        bn_dict[conv_bn[0].name] = conv_bn[1]
+
+    # perform cross-layer scaling on applicable layer sets
+    cls = CrossLayerScaling(model)
+    cls_set_info = cls.scale_model()
+
+    # high-bias fold
+    hbf = HighBiasFold(model)
+    hbf.bias_fold(cls_set_info, bn_dict)

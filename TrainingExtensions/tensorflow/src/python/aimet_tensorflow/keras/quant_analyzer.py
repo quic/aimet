@@ -44,9 +44,10 @@ import tensorflow as tf
 
 from aimet_common.defs import QuantScheme
 from aimet_common.quant_analyzer import export_per_layer_sensitivity_analysis_plot, save_json, \
-    create_and_export_min_max_ranges_plot
-from aimet_common.utils import CallbackFunc, AimetLogger
+    create_and_export_min_max_ranges_plot, export_stats_histogram_plot, export_per_layer_mse_plot
+from aimet_common.utils import CallbackFunc, AimetLogger, Spinner
 from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms
+from aimet_tensorflow.keras.graphsearchtuils import GraphSearchUtils
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import TensorQuantizer
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
@@ -99,6 +100,23 @@ def _get_enabled_quantizers(sorted_quant_wrappers: Dict[str, QcQuantizeWrapper])
     return enabled_quant_wrappers
 
 
+def _get_output_of_intermediate_layer(model: tf.keras.Model,
+                                      input_tensor: tf.Tensor,
+                                      layer_index: int) -> tf.Tensor:
+    """
+    Return output tensor from model extracted up to target intermediate layer
+
+    :param model: tf.keras.Model
+    :param input_tensor: Input tensor to feed
+    :param layer_index: Index of layer
+    :return: Output tensor from intermediate layer
+    """
+    layer_output = model.get_layer(index=layer_index).output
+    extracted_model = tf.keras.Model(inputs=model.inputs, outputs=layer_output)
+
+    return extracted_model(input_tensor)
+
+
 class QuantAnalyzer:
     """
     QuantAnalyzer tool provides
@@ -132,6 +150,7 @@ class QuantAnalyzer:
         self._model = model
         self._forward_pass_callback = forward_pass_callback
         self._eval_callback = eval_callback
+        self._unlabeled_dataset = None
 
     # pylint: disable=unused-argument, no-self-use
     def analyze(self,
@@ -178,6 +197,14 @@ class QuantAnalyzer:
         # Export encoding min-max range.
         self.export_per_layer_encoding_min_max_range(sim, results_dir)
 
+        # Export PDF of statistics
+        if quant_scheme == QuantScheme.post_training_tf_enhanced:
+            self.export_per_layer_stats_histogram(sim, results_dir)
+
+        # Export per layer MSE loss between fp32 and quantized output activations.
+        if self._unlabeled_dataset:
+            self.export_per_layer_mse_loss(sim, results_dir)
+
     def _create_quantsim_and_encodings(self,
                                        quant_scheme: QuantScheme,
                                        rounding_mode: str,
@@ -194,7 +221,7 @@ class QuantAnalyzer:
         :param config_file: Path to configuration file for model quantizers.
         :return: Quantsim model.
         """
-        _ = fold_all_batch_norms(self._model)
+        _, self._model = fold_all_batch_norms(self._model) # pylint: disable=attribute-defined-outside-init
         sim = QuantizationSimModel(self._model,
                                    quant_scheme=quant_scheme,
                                    rounding_mode=rounding_mode,
@@ -451,3 +478,132 @@ class QuantAnalyzer:
         save_json(min_max_range_for_activations_dict, min_max_ranges_dir, title="activations.json")
         _logger.info("Exported per layer encodings min-max ranges plot(s).")
         return min_max_range_for_weights_dict, min_max_range_for_activations_dict
+
+    def export_per_layer_stats_histogram(self, sim: QuantizationSimModel, results_dir: str) -> None:
+        """
+        NOTE: Not to invoke when quantization scheme is not TF-Enhanced.
+
+        Export histogram that represents a PDF of collected statistics by a quantizer for every
+        quant wrapper. After invoking this API, results_dir should have html files in following
+        format for every quantizers of quant wrappers.
+
+        -results_dir
+            -activations_pdf
+                name_{input/output}_{index}.html
+            -weights_pdf
+                -name
+                    param_name_{channel_index}.html
+
+        :param sim: Quantsim model.
+        :param results_dir: Directory to save the results.
+        """
+        weights_pdf_dir = os.path.join(results_dir, "weights_pdf")
+        activations_pdf_dir = os.path.join(results_dir, "activations_pdf")
+
+        for quant_wrapper in sim.quant_wrappers():
+            wrapped_layer_name = quant_wrapper.original_layer.name
+
+            for index, quantizer in enumerate(quant_wrapper.input_quantizers):
+                if quantizer.encoding:
+                    self._create_and_export_stats_histogram_plot(quantizer, activations_pdf_dir,
+                                                                 title=f"{wrapped_layer_name}_input_q{index}")
+
+            for index, quantizer in enumerate(quant_wrapper.output_quantizers):
+                if quantizer.encoding:
+                    self._create_and_export_stats_histogram_plot(quantizer, activations_pdf_dir,
+                                                                 title=f"{wrapped_layer_name}_output_q{index}")
+
+            for quantizer in quant_wrapper.param_quantizers:
+                if quantizer.encoding:
+                    # Keras parameter name usually contains slash (/) and it can cause incorrect file path when saving
+                    #   Replace slash (/) with dash (-) to avoid it
+                    param_name = quantizer.name.replace("/", "-")
+                    self._create_and_export_stats_histogram_plot(quantizer,
+                                                                 os.path.join(weights_pdf_dir, wrapped_layer_name),
+                                                                 title=f"{wrapped_layer_name}_{param_name}")
+        _logger.info("Exported per layer stats histogram plot(s).")
+
+    @staticmethod
+    def _create_and_export_stats_histogram_plot(quantizer: TensorQuantizer,
+                                                results_dir: str,
+                                                title: str) -> None:
+        """
+        For given quantizer, create and export histogram (PDF) of statistics in html format.
+
+        :param quantizer: Quantizer.
+        :param results_dir: Directory to save the results.
+        :param title: Title of the plot.
+        """
+        os.makedirs(results_dir, exist_ok=True)
+
+        histograms = quantizer.get_stats_histogram()
+        encodings = quantizer.encoding
+        if not isinstance(encodings, List):
+            encodings = [encodings]
+
+        for index, (histogram, encoding) in enumerate(zip(histograms, encodings)):
+            export_stats_histogram_plot(histogram, encoding, results_dir, title=f"{title}_{index}")
+
+    def export_per_layer_mse_loss(self,
+                                  sim: QuantizationSimModel,
+                                  results_dir: str) -> Dict[str, float]:
+        """
+        NOTE: Need to pass same model input data through both fp32 and quantsim model to
+        tap output activations of each layer.
+
+        Export MSE loss between fp32 and quantized output activations for each layer.
+        :param sim: Quantsim model.
+        :param results_dir: Directory to save the results.
+        :return layer wise MSE loss. dict[layer_name] = MSE loss.
+        """
+        results_dir = os.path.abspath(results_dir)
+        os.makedirs(results_dir, exist_ok=True)
+
+        mse_loss_dict = {}
+        with Spinner("Calculating per-layer MSE loss"):
+            for index, layer in enumerate(self._model.layers):
+                if isinstance(layer, tf.keras.layers.InputLayer) or \
+                        GraphSearchUtils.is_folded_batch_normalization(layer):
+                    continue
+
+                loss = self._compute_mse_loss(sim, index)
+                mse_loss_dict[layer.name] = loss
+
+        export_per_layer_mse_plot(mse_loss_dict,
+                                  results_dir,
+                                  title="per_layer_mse_loss")
+        save_json(mse_loss_dict, results_dir, title="per_layer_mse_loss.json")
+        _logger.info("Exported per layer MSE loss plot.")
+        return mse_loss_dict
+
+    def _compute_mse_loss(self,
+                          sim: QuantizationSimModel,
+                          index: int) -> float:
+        """
+        Compute MSE loss between fp32 and quantized output activations for each batch, add for
+        all the batches and return averaged mse loss.
+
+        :param sim: Quantsim model.
+        :param index: Index of layer
+        :return: MSE loss between fp32 and quantized output activations.
+        """
+        loss = 0.0
+        total = 0
+        mse = tf.keras.losses.MeanSquaredError()
+        for tensor in self._unlabeled_dataset:
+            quantized_output = _get_output_of_intermediate_layer(sim.model, tensor, index)
+            fp32_output = _get_output_of_intermediate_layer(self._model, tensor, index)
+
+            loss += mse(quantized_output, fp32_output).numpy()
+            total += tensor.shape[0]
+
+        return loss / total
+
+    def enable_per_layer_mse_loss(self, unlabeled_dataset: tf.data.Dataset) -> None:
+        """
+        Enable per layer MSE loss analysis.
+
+        :param unlabeled_dataset: tf.data.Dataset provided as input to the model
+            and used to calculate mse loss
+        """
+        self._unlabeled_dataset = unlabeled_dataset

@@ -42,10 +42,10 @@ import numpy as np
 from onnx import load_model
 from aimet_common.defs import QuantScheme
 from aimet_onnx.quantsim import QuantizationSimModel
-from aimet_onnx.qc_quantize_op import OpMode, reset_qc_quantize_op_dict
+from aimet_onnx.qc_quantize_op import OpMode
 from aimet_torch.quantsim import QuantizationSimModel as PtQuantizationSimModel
 from aimet_torch.examples.test_models import SingleResidual
-from test_models import build_dummy_model
+from test_models import build_dummy_model, single_residual_model
 
 
 class DummyModel(SingleResidual):
@@ -99,10 +99,10 @@ class TestQuantSim:
         """ Test to insert qc quantize op to the graph"""
         model = build_dummy_model()
         sim = QuantizationSimModel(model)
-        assert len(sim.model.nodes()) == 15
+        assert len(sim.model.nodes()) == 14
 
         node_ls = [node.op_type for node in sim.model.nodes()]
-        assert node_ls == ['Conv', 'Relu', 'MaxPool', 'Flatten', 'Gemm'] + ['QcQuantizeOp'] * 10
+        assert node_ls == ['Conv', 'Relu', 'MaxPool', 'Flatten', 'Gemm'] + ['QcQuantizeOp'] * 9
 
         # Check if qc quantize op node is correctly connect to the corresponding onnx node
         assert sim.model.find_node_by_name('QcQuantizeOp_input', [], sim.model.graph()).output[0] == \
@@ -110,10 +110,9 @@ class TestQuantSim:
         # Check if op_mode is set correctly for each qc quantize op node
         qc_quantize_op_dict = sim.get_qc_quantize_op()
         for name in sim.param_names:
-            assert qc_quantize_op_dict[name].op_mode == OpMode.one_shot_quantize_dequantize
+            assert qc_quantize_op_dict[name].op_mode == OpMode.oneShotQuantizeDequantize
         for name in sim.activation_names:
-            assert qc_quantize_op_dict[name].op_mode == OpMode.update_stats
-        reset_qc_quantize_op_dict()
+            assert qc_quantize_op_dict[name].op_mode == OpMode.updateStats
 
     def test_compute_encodings(self):
         """Test to perform compute encodings"""
@@ -124,7 +123,7 @@ class TestQuantSim:
             sim.qc_quantize_op_dict[quantizer].enabled = True
 
         for name, qc_op in sim.get_qc_quantize_op().items():
-            assert qc_op.tensor_quantizer.isEncodingValid is False
+            assert qc_op.quant_info.tensorQuantizerRef.isEncodingValid is False
 
         def callback(session, args):
             in_tensor = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
@@ -136,9 +135,8 @@ class TestQuantSim:
             assert qc_op.encodings.bw == 8
 
         for name, qc_op in sim.get_qc_quantize_op().items():
-            assert qc_op.tensor_quantizer.isEncodingValid is True
-            assert qc_op.op_mode == OpMode.quantize_dequantize or OpMode.one_shot_quantize_dequantize
-        reset_qc_quantize_op_dict()
+            assert qc_op.quant_info.tensorQuantizerRef.isEncodingValid is True
+            assert qc_op.op_mode == OpMode.quantizeDequantize or OpMode.oneShotQuantizeDequantize
 
     def test_export_model_with_quant_args(self):
         """Test to export encodings and model"""
@@ -189,7 +187,7 @@ class TestQuantSim:
         with open('/tmp/quant_sim_model.encodings', 'rb') as json_file:
             encoding_data = json.load(json_file)
         activation_keys = list(encoding_data["activation_encodings"].keys())
-        assert activation_keys == ['3', '4', '5', '6', 'input', 'output']
+        assert activation_keys == ['3', '4', '5', 'input', 'output']
         for act in activation_keys:
             act_encodings_keys = list(encoding_data["activation_encodings"][act].keys())
             assert act_encodings_keys == ['bitwidth', 'dtype', 'is_symmetric', 'max', 'min', 'offset', 'scale']
@@ -199,7 +197,6 @@ class TestQuantSim:
         for param in param_keys:
             param_encodings_keys = list(encoding_data["param_encodings"][param].keys())
             assert param_encodings_keys == ['bitwidth', 'dtype', 'is_symmetric', 'max', 'min', 'offset', 'scale']
-        reset_qc_quantize_op_dict()
 
     def test_compare_encodings_with_PT(self):
         """Test to compare encodings with PT"""
@@ -258,3 +255,31 @@ class TestQuantSim:
                    round(onnx_encodings['param_encodings'][name]['scale'], 4)
             assert pt_encodings['param_encodings'][name][0]['offset'] == \
                    onnx_encodings['param_encodings'][name]['offset']
+
+    def test_single_residual(self):
+        model = single_residual_model().model
+        sim = QuantizationSimModel(model)
+        for quantizer in sim.qc_quantize_op_dict:
+            sim.qc_quantize_op_dict[quantizer].enabled = True
+
+        def dummy_callback(session, args):
+            pass
+
+        sim.compute_encodings(dummy_callback, None)
+        sim.export('/tmp/', 'quant_sim_model')
+
+        with open('/tmp/quant_sim_model.encodings', 'rb') as json_file:
+            encoding_data = json.load(json_file)
+        activation_keys = list(encoding_data["activation_encodings"].keys())
+        assert activation_keys == ['20', '21', '24', '25', '26', '28', '29', '30', '31', '33', '34', '44', '47', 'input', 'output']
+        for act in activation_keys:
+            act_encodings_keys = list(encoding_data["activation_encodings"][act].keys())
+            assert act_encodings_keys == ['bitwidth', 'dtype', 'is_symmetric', 'max', 'min', 'offset', 'scale']
+
+        param_keys = list(encoding_data['param_encodings'].keys())
+        assert param_keys == ['45', '46', '48', '49', 'conv3.weight', 'conv4.bias', 'conv4.weight', 'fc.bias', 'fc.weight']
+        for param in param_keys:
+            param_encodings_keys = list(encoding_data["param_encodings"][param].keys())
+            assert param_encodings_keys == ['bitwidth', 'dtype', 'is_symmetric', 'max', 'min', 'offset', 'scale']
+
+

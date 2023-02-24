@@ -63,7 +63,7 @@ version = ''
 # The full version, including alpha/beta/rc tags
 release = ''
 if "SW_VERSION" in os.environ:
-    release = os.environ['SW_VERSION']
+    version = os.environ['SW_VERSION']
 else:    
     sys.exit("Unable to set version. SOFTWARE_VERSION is NOT defined.")
 
@@ -87,12 +87,14 @@ extensions = [
     'sphinx_autodoc_typehints',
     'sphinx.ext.autosectionlabel',
     'sphinx.ext.ifconfig',
-    'nbsphinx'
-    # 'rinoh.frontend.sphinx'
+    'nbsphinx',
+    'sphinx.ext.mathjax',
+    'sphinx.ext.intersphinx',
+    'sphinx.ext.viewcode'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['.templates']
+templates_path = ['_templates']
 
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
@@ -126,20 +128,26 @@ autosectionlabel_prefix_document = True
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'bizstyle'
-html_title = 'AI Model Efficiency Toolkit Documentation: ver ' + release
+html_theme = 'sphinx_rtd_theme'
+html_title = 'AI Model Efficiency Toolkit Documentation: ver ' + version
 html_logo = 'images/brain_logo.png'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
 #
-# html_theme_options = {}
+html_theme_options = {
+    'display_version': True,
+    'prev_next_buttons_location': 'both',
+    'collapse_navigation': False,
+    'sticky_navigation': True,
+    'navigation_depth': 4
+}
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['.static']
+html_static_path = ['_static']
 
 # Custom sidebar templates, must be a dictionary that maps document names
 # to template names.

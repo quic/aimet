@@ -38,3 +38,73 @@ find_package(Python3 COMPONENTS Interpreter)
 
 add_subdirectory(src/python)
 add_subdirectory(test)
+
+
+add_library(OnnxCppOps SHARED
+        src/QcQuantizeOp.h
+        src/AimetOpUtils.h
+        src/AimetOpUtils.cpp
+        src/QcQuantizeInfo.cpp
+        src/QcQuantizeInfo.h
+        src/QcQuantizeOp.cpp)
+
+
+find_path(ONNXRUNTIME_INC "onnxruntime_cxx_api.h" PATH_SUFFIXES onnxruntime_headers/include)
+
+
+target_include_directories(OnnxCppOps PRIVATE
+        ${ONNXRUNTIME_INC}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../common/include
+        )
+
+if (ENABLE_CUDA)
+    target_link_libraries(OnnxCppOps PUBLIC
+            MoDlQuantization
+            MoDlQuantizationCuda
+            CUDA::cublas
+            )
+else (ENABLE_CUDA)
+    target_link_libraries(OnnxCppOps PUBLIC
+            MoDlQuantization
+            )
+endif (ENABLE_CUDA)
+
+
+set_target_properties(OnnxCppOps PROPERTIES
+        OUTPUT_NAME "aimet_onnxrt_ops"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts/aimet_common"
+        )
+
+
+Python3_add_library(quant_info SHARED
+        src/QcQuantizeInfo.h
+        src/QcQuantizeInfo.cpp)
+
+
+if (ENABLE_CUDA)
+    target_link_libraries(quant_info
+            PUBLIC
+            MoDlQuantization
+            MoDlQuantizationCuda
+            CUDA::cublas
+            )
+
+else (ENABLE_CUDA)
+    target_link_libraries(quant_info
+            PUBLIC
+            MoDlQuantization
+            )
+
+endif (ENABLE_CUDA)
+
+
+set_target_properties(quant_info
+        PROPERTIES
+        OUTPUT_NAME "quant_info"
+        SUFFIX ".${Python3_SOABI}.so"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts/aimet_common/"
+        )
+
+install(TARGETS quant_info
+        LIBRARY DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_common
+        )

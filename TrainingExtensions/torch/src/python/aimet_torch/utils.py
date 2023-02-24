@@ -1,7 +1,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2018-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -35,11 +35,13 @@
 # =============================================================================
 """ Utilities that are used for different AIMET PyTorch features """
 
+import importlib
 import itertools
 from typing import List, Tuple, Union, Dict, Callable, Any, Iterable
 import contextlib
 import os
 import pickle
+import sys
 import numpy as np
 import torch.nn
 import torch
@@ -395,6 +397,53 @@ def get_device(model):
     """
     return next(model.parameters()).device
 
+def match_model_settings(model_to_match: torch.nn.Module, model_to_set: torch.nn.Module):
+    """
+    Match training and device settings of the model_to_set with those of model_to_match.
+
+    :param model_to_match: Model to match settings for
+    :param model_to_set: Model to set
+    """
+    model_to_set.train(model_to_match.training)
+    if get_device(model_to_set) != get_device(model_to_match):
+        model_to_set.to(get_device(model_to_match))
+
+
+def load_pytorch_model(model_name: str, path: str, filename: str, load_state_dict: bool = False) -> torch.nn.Module:
+    """
+    Load the pytorch model from the given path and filename.
+    NOTE: The model can only be saved by saving the state dict. Attempting to serialize the entire model will result
+    in a mismatch between class types of the model defined and the class type that is imported programatically.
+
+    :param model_name: Name of model
+    :param path: Path where the pytorch model definition file is saved
+    :param filename: Filename of the pytorch model definition
+    :param load_state_dict: If True, load state dict with the given path and filename. The state dict file is expected
+        to end in '.pth'
+    :return: Imported pytorch model
+    """
+
+    model_path = os.path.join(path, filename + '.py')
+    if not os.path.exists(model_path):
+        logger.error('Unable to find model file at path %s', model_path)
+        raise AssertionError('Unable to find model file at path ' + model_path)
+
+    # Import model's module and instantiate model
+    spec = importlib.util.spec_from_file_location(filename, model_path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[model_name] = module
+    spec.loader.exec_module(module)
+    model = getattr(module, model_name)()
+
+    # Load state dict if necessary
+    if load_state_dict:
+        state_dict_path = os.path.join(path, filename + '.pth')
+        if not os.path.exists(state_dict_path):
+            logger.error('Unable to find state dict file at path %s', state_dict_path)
+            raise AssertionError('Unable to find state dict file at path ' + state_dict_path)
+        model.load_state_dict(torch.load(state_dict_path))
+
+    return model
 
 def is_leaf_module(module):
 
@@ -569,7 +618,7 @@ def get_ordered_lists_of_conv_fc(model: torch.nn.Module, input_shapes: Tuple,
     return module_list
 
 
-def change_tensor_device_placement(tensor_data: Union[torch.tensor, List, Tuple], device: torch.device):
+def change_tensor_device_placement(tensor_data: Union[torch.Tensor, List, Tuple], device: torch.device):
     """
     Change the tensor_data's device placement
 
@@ -577,24 +626,12 @@ def change_tensor_device_placement(tensor_data: Union[torch.tensor, List, Tuple]
     :param device: device information
     :return: tensor_data with modified device placement
     """
-    assert isinstance(tensor_data, (torch.Tensor, list, tuple))
-
     if isinstance(tensor_data, torch.Tensor):
-        tensor_data = tensor_data.to(device=device)
+        return tensor_data.to(device=device)
 
-    elif isinstance(tensor_data, tuple):
-        # convert to list first
-        tensor_data = list(tensor_data)
-        # call the function recursively
-        tensor_data = change_tensor_device_placement(tensor_data, device)
-        # convert back to tuple
-        tensor_data = tuple(tensor_data)
-
-    else:
-        for index, item in enumerate(tensor_data):
-            # change the entry in-place
-            # and call the function recursively
-            tensor_data[index] = change_tensor_device_placement(item, device=device)
+    if isinstance(tensor_data, (tuple, list)):
+        cls = tuple if isinstance(tensor_data, tuple) else list
+        return cls(change_tensor_device_placement(x, device) for x in tensor_data)
 
     return tensor_data
 
@@ -783,3 +820,27 @@ def get_torch_tensortype_shape(torch_graph_output: torch._C.TensorType) -> Union
     if isinstance(torch_graph_output.type(), torch._C.TensorType):
         shape = torch_graph_output.type().sizes()
     return shape
+
+
+def get_all_quantizers(model: torch.nn.Module):
+    """
+    Get all the quantizers in the model
+    :param model: Root module
+    :returns: List of parameter, input, and output quantizers
+    """
+    from aimet_torch.qc_quantize_op import QcQuantizeWrapper
+    from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
+
+    param_quantizers = []
+    input_quantizers = []
+    output_quantizers = []
+
+    quant_wrappers = [
+        m for m in model.modules() if isinstance(m, (QcQuantizeWrapper, QcQuantizeRecurrent))
+    ]
+    for quant_wrapper in quant_wrappers:
+        param_quantizers.extend(quant_wrapper.param_quantizers.values())
+        input_quantizers.extend(quant_wrapper.input_quantizers)
+        output_quantizers.extend(quant_wrapper.output_quantizers)
+
+    return param_quantizers, input_quantizers, output_quantizers

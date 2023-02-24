@@ -54,7 +54,6 @@ from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_
 from aimet_common.utils import AimetLogger
 from aimet_torch import transformer_utils, onnx_utils
 from aimet_torch import utils, elementwise_ops
-from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.examples.test_models import TwoLayerBidirectionalLSTMModel, SingleLayerRNNModel, \
     ModelWithTwoInputs, SimpleConditional, RoiModel, InputOutputDictModel
 from aimet_torch.meta.connectedgraph import ConnectedGraph
@@ -62,7 +61,8 @@ from aimet_torch.onnx_utils import OnnxExportApiArgs
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, \
     StaticGridQuantWrapper, QcQuantizeOpMode, LearnedGridQuantWrapper
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
-from aimet_torch.quantsim import QuantizationSimModel, check_accumulator_overflow, load_encodings_to_sim
+from aimet_torch.quantsim import QuantizationSimModel, check_accumulator_overflow, load_encodings_to_sim, \
+    has_valid_encodings
 from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
@@ -709,10 +709,11 @@ class TestQuantizationSimStaticGrad:
 
         sim = QuantizationSimModel(model, dummy_input=dummy_input)
         assert 2 == len(sim.model.add.input_quantizers)
-        assert not sim.model.add.input_quantizers[0].enabled
-        assert not sim.model.add.input_quantizers[1].enabled
+        assert sim.model.add.input_quantizers[0].enabled
+        assert sim.model.add.input_quantizers[1].enabled
 
         sim.model.add.input_quantizers[1].enabled = True
+
 
         # Quantize
         sim.compute_encodings(forward_pass, None)
@@ -971,6 +972,33 @@ class TestQuantizationSimStaticGrad:
 
         print(sim.model.conv1.input_quantizers[0])
         print(sim.model.conv1.output_quantizers[0])
+
+
+    def test_inputs_shared_constant_intermediate_quantization(self):
+        """"""
+        model = Model_Inputs_Shared_Constant_Intermediate()
+
+        dummy_input = (torch.randn(1, 10, 10, 10), torch.randn(1, 10, 10, 10), torch.randn(1, 10, 10, 10))
+
+        def forward_pass(model, args):
+            model(*dummy_input)
+
+        sim = QuantizationSimModel(model, dummy_input=dummy_input)
+
+        sim.compute_encodings(forward_pass, None)
+
+        # check mul's first input quantizer is real input(enable) , second input is intermediate (disable)
+        assert sim.model.mul.input_quantizers[0].enabled
+        assert sim.model.mul.input_quantizers[1].enabled
+
+        # save encodings
+        input_names = ['a', 'b', 'c']
+
+        sim.export('./data/', 'Model_Inputs_Shared_Constant_Intermediate', dummy_input, onnx_export_args=OnnxExportApiArgs(input_names=input_names))
+        with open("./data/Model_Inputs_Shared_Constant_Intermediate.encodings", "r") as encodings_file:
+            activation_encoding_tensors = set(json.load(encodings_file)['activation_encodings'].keys())
+            assert set(input_names).issubset(activation_encoding_tensors)
+
 
     # -------------------------------------------
     def test_input_and_output_quantization(self):
@@ -2012,6 +2040,19 @@ class TestQuantizationSimStaticGrad:
         pretty_data = json.dumps(encodings, indent=2)
         print(pretty_data)
 
+        # verifying the encodings propagation is disabled if output quantizers are disabled.
+        sim = QuantizationSimModel(model, dummy_input)
+        sim.model.ps.output_quantizers[0].enabled = False
+        # Quantize
+        sim.compute_encodings(forward_pass, None)
+
+        # Save encodings again - now with propagate encodings flag enabled
+        sim.export('./data', 'encodings_propagation_quant_disabled', dummy_input, propagate_encodings=True)
+        with open('./data/encodings_propagation_quant_disabled.encodings') as f:
+            encodings = json.load(f)
+        assert len(encodings['activation_encodings']) == 1
+        assert 't.1' in encodings['activation_encodings']
+
     def test_encodings_propagation_lstm_model(self):
         """
         Test encodings are propagated correctly when more than
@@ -2258,6 +2299,34 @@ class TestQuantizationSimStaticGrad:
 
         assert sim.model.add.input_quantizers[0].encoding is not None
         assert sim.model.add.input_quantizers[1].encoding is not None
+
+    def test_has_valid_encodings(self):
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super(Model, self).__init__()
+                self.relu1 = torch.nn.ReLU()
+                self.conv = torch.nn.Conv2d(3, 8, (2, 2))
+                self.relu2 = torch.nn.ReLU()
+                self.unused_module = torch.nn.PReLU()
+
+            def forward(self, *inputs):
+                x = self.relu1(inputs[0])
+                x = self.conv(x)
+                x = self.relu2(x)
+                return x
+
+        model = Model()
+        model.eval()
+        qsim = QuantizationSimModel(model, dummy_input=torch.randn(1, 3, 8, 8))
+        modules = [qsim.model.relu1, qsim.model.conv, qsim.model.relu2, qsim.model.unused_module]
+        for m in modules:
+            assert not has_valid_encodings(m)
+        qsim.compute_encodings(lambda m, _: m(torch.randn(1, 3, 8, 8)), None)
+        for m in modules:
+            if m == qsim.model.unused_module:
+                assert not has_valid_encodings(m)
+            else:
+                assert has_valid_encodings(m)
 
 
 class TestQuantizationSimLearnedGrid:
@@ -3114,3 +3183,28 @@ class Clamp(torch.nn.Module):
         Forward-pass routine for add op
         """
         return x.clamp(0)
+
+
+class Model_Inputs_Shared_Constant_Intermediate(nn.Module):
+    def __init__(self):
+        super(Model_Inputs_Shared_Constant_Intermediate, self).__init__()
+        self.add1 = elementwise_ops.Add()
+        self.add2 = elementwise_ops.Add()
+        self.mul = elementwise_ops.Multiply()
+        self.tensor1 = torch.tensor([2.0])
+
+        self.relu1 = nn.ReLU()
+        self.relu2 = nn.ReLU()
+        self.relu3 = nn.ReLU()
+
+    def forward(self, a, b, c):
+        x = self.add1(a, self.tensor1)
+        y = self.add2(b, self.tensor1)
+        z = self.mul(c, x)
+
+        x = self.relu1(x)
+        y = self.relu2(y)
+        z = self.relu3(z)
+        return x, y, z
+
+

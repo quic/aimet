@@ -448,6 +448,7 @@ def _fold_given_auto_selected_batch_norms_scale(sim: QuantizationSimModel, layer
             batchnorm_tf_op = sess.graph.get_operation_by_name(pair[1].op.name)
             bn_quantizer_name = batchnorm_tf_op.name + "_quantized"
             conv_linear_tf_op = sess.graph.get_operation_by_name(pair[0].name)
+            conv_linear_quantizer_w_name = conv_linear_tf_op.inputs[1].op.inputs[0].op.name + "_quantized"
             assert batchnorm_tf_op.type in ['FusedBatchNormV3', 'Identity']
             #  check flag
             is_bias_valid = False
@@ -457,12 +458,14 @@ def _fold_given_auto_selected_batch_norms_scale(sim: QuantizationSimModel, layer
                     0].name
             else:
                 conv_linear_quantizer_a_name = conv_linear_tf_op.outputs[0].consumers()[0].name
-
+            conv_linear_quantizer_w = sim.quantizer_config(conv_linear_quantizer_w_name)
             conv_linear_quantizer_a = sim.quantizer_config(conv_linear_quantizer_a_name)
             assert isinstance(conv_linear_quantizer_a, aimet_tensorflow.quantizer_info.QuantizerInfo)
 
-            # Disable quantizers activation of conv
+            # Disable quantizers of conv
             conv_linear_quantizer_a.set_op_mode(int(libpymo.TensorQuantizerOpMode.passThrough))
+            conv_linear_quantizer_w.set_op_mode(int(libpymo.TensorQuantizerOpMode.passThrough))
+
 
             # Disable quantizers of batchnorms
             bn_quantizer = sim.quantizer_config(bn_quantizer_name)
@@ -487,6 +490,7 @@ def _fold_given_auto_selected_batch_norms_scale(sim: QuantizationSimModel, layer
                 numpy_weight_reshaped = np.reshape(weight_tensor.data, weight_tensor.shape).transpose((2, 3, 1, 0))
             WeightTensorUtils.update_tensor_for_sim_op(sess, conv_linear_tf_op, numpy_weight_reshaped)
             BiasUtils.update_bias_for_sim_op(sess, conv_linear_tf_op, np.reshape(bias, [weight_tensor.shape[0]]))
+            conv_linear_quantizer_w.set_op_mode(int(libpymo.TensorQuantizerOpMode.quantizeDequantize))
             _fold_pair_scale(sim, conv_linear_tf_op, bn_params)
             BNUtils.modify_bn_params_to_make_as_passthrough(sess, batchnorm_tf_op)
         # we edited the graph, so we should load and save for the metagraph associated with the session to be
