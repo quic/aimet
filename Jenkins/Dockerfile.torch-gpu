@@ -202,7 +202,7 @@ RUN python3 -m pip --no-cache-dir install \
 
 # Remove onnxruntime install in order to use onnxruntime-gpu
 RUN python3 -m pip uninstall -y onnxruntime
-RUN python3 -m pip --no-cache-dir install onnxruntime-gpu
+RUN python3 -m pip --no-cache-dir install onnxruntime-gpu==1.13.1
 
 RUN cd /tmp && \
     wget https://github.com/Kitware/CMake/releases/download/v3.19.3/cmake-3.19.3-Linux-x86_64.sh && \
