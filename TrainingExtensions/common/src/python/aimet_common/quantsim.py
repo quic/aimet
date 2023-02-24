@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2020-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2020-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -114,7 +114,11 @@ def calculate_delta_offset(min_val: Union[float, np.ndarray], max_val: Union[flo
         num_steps -= 1
 
     min_val, max_val = gate_min_max(min_val, max_val)
-    delta = (max_val - min_val) / num_steps
+
+    if use_symmetric_encodings:
+        delta = max_val / np.floor(num_steps / 2)
+    else:
+        delta = (max_val - min_val) / num_steps
 
     if isinstance(delta, np.ndarray):
         offset = np.around(min_val / delta)

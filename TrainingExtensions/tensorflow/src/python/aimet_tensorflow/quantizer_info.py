@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -45,7 +45,7 @@ import tensorflow as tf
 import numpy as np
 
 import aimet_common.libpymo as libpymo
-from aimet_common.defs import QuantScheme, QuantizationDataType
+from aimet_common.defs import QuantScheme, QuantizationDataType, RANGE_LEARNING_SCHEMES
 from aimet_common.quantsim import calculate_delta_offset
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 
@@ -102,15 +102,16 @@ class QuantizerInfo:
     Holds information about a given MO Quantizer object and active session
     """
     __slots__ = ['session', 'tensor_quantizer', 'quant_op_name', 'quantizer_type', '_is_encoding_frozen',
-                 'axis_handling']
+                 '_quant_scheme', 'axis_handling']
 
     def __init__(self, session: tf.compat.v1.Session, tensor_quantizer: libpymo.TensorQuantizer,
-                 quant_op_name: str, quantizer_type: QuantizerType, axis_handling=0):
+                 quant_op_name: str, quantizer_type: QuantizerType, quant_scheme: QuantScheme, axis_handling=0):
         self.session = session
         self.tensor_quantizer = tensor_quantizer
         self.quant_op_name = quant_op_name
         self.quantizer_type = quantizer_type
         self._is_encoding_frozen = False
+        self._quant_scheme = quant_scheme
         self.axis_handling = axis_handling
 
     def set_variable(self, var_name, value):
@@ -421,6 +422,23 @@ class QuantizerInfo:
         :param encoding: Encoding object in case of per-tensor flow
                          Encoding object array in case of per-channel flow
         """
+
+        # NOTE: In range learning symmetric quantization, we force encoding min/max to have symmetry
+        #   In other words, it behaves in strict symmetric way during range learning
+        #
+        # Without adjustment, min/max value in symmetric scheme will be
+        #   max = delta * floor(num_steps / 2)
+        #   min = -delta * floor(num_steps / 2) - delta => One more bin to represent
+        # With below logic,
+        #   max = delta * floor(num_steps / 2)
+        #   min = -delta * floor(num_steps / 2) = -max
+        #   which matches with strict symmetric scheme
+        def adjust_encoding_min(e_min: float, e_max: float) -> float:
+            if self._quant_scheme in RANGE_LEARNING_SCHEMES and self.use_symmetric_encoding:
+                return -e_max
+
+            return e_min
+
         if not self._is_encoding_frozen and self.data_type == QuantizationDataType.int:
             encoding_min_var = self.quant_op_name + '_encoding_min'
             encoding_max_var = self.quant_op_name + '_encoding_max'
@@ -431,13 +449,18 @@ class QuantizerInfo:
                 encoding_max = []
                 for index, tensor_quantizer in enumerate(self.tensor_quantizer):
                     tensor_quantizer.isEncodingValid = True
-                    encoding_min.append(encoding[index].min)
+
+                    adjusted_enc_min = adjust_encoding_min(encoding[index].min,
+                                                           encoding[index].max)
+
+                    encoding_min.append(adjusted_enc_min)
                     encoding_max.append(encoding[index].max)
                 self.set_variable(encoding_min_var, encoding_min)
                 self.set_variable(encoding_max_var, encoding_max)
             else:
                 self.tensor_quantizer.isEncodingValid = True
-                self.set_variable(encoding_min_var, encoding.min)
+                adjusted_enc_min = adjust_encoding_min(encoding.min, encoding.max)
+                self.set_variable(encoding_min_var, adjusted_enc_min)
                 self.set_variable(encoding_max_var, encoding.max)
 
 
@@ -454,7 +477,17 @@ class QuantizerInfo:
             encoding.bw = bitwidth
             encoding.delta, encoding.offset = calculate_delta_offset(min_val, max_val, bitwidth,
                                                                      is_symmetric, use_strict_symmetric)
-            return  encoding
+
+            # NOTE: Since we proceeded to strict symmetric way during the range learning
+            #   we need to calibrate min and offset when the actual value is needed
+            # Before calibrating, encoding holds encoding_min == -encoding_max which is symmetric
+            #   we will add one more bin to both encoding_min and offset to get non-strict symmetric encoding
+            if self._quant_scheme in RANGE_LEARNING_SCHEMES and \
+                    is_symmetric and not use_strict_symmetric:
+                encoding.min -= encoding.delta
+                encoding.offset -= 1
+
+            return encoding
 
         if self.is_encoding_valid():
             encoding_min = self.get_variable_from_op(QuantizeOpIndices.encoding_min)
