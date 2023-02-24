@@ -43,6 +43,7 @@ import aimet_common.libpymo as libpymo
 from aimet_common.libpymo import TensorQuantizerOpMode
 from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO
 from aimet_common import libquant_info
+from aimet_common.defs import QuantizationDataType
 
 
 OpMode = TensorQuantizerOpMode
@@ -80,6 +81,7 @@ class QcQuantizeOp:
         self.use_symmetric_encodings = use_symmetric_encodings
         self.use_cuda = use_cuda
         self.enabled = True
+        self.dtype = QuantizationDataType.int
 
     def _build_tensor_quantizer(self):
         return libpymo.TensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[self.quant_scheme],
