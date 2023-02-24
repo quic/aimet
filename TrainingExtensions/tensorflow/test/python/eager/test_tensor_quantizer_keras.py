@@ -52,17 +52,17 @@ def test_set_encodings():
 
     # Create encoding and set
     encoding = libpymo.TfEncoding()
-    encoding.min = 0.0
+    encoding.min = -30.0
     encoding.max = 30.0
     encoding.bw = 4
     quantizer.encoding = encoding
     quant_encoding = quantizer.encoding
 
     assert quantizer._is_encoding_valid
-    assert quant_encoding.min == 0.0
+    assert quant_encoding.min == -30.0
     assert quant_encoding.max == 30.0
-    assert np.allclose(quant_encoding.delta, 2.142857142857143, rtol=0.01)
-    assert quant_encoding.offset == 0
+    assert np.allclose(quant_encoding.delta, 4.285714285714286, rtol=0.01)
+    assert quant_encoding.offset == -7
 
 
 def test_tensor_quantizer_freeze_encodings():
