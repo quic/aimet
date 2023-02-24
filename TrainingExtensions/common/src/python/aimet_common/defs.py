@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -78,6 +78,9 @@ MAP_QUANT_SCHEME_TO_PYMO = {QuantScheme.post_training_tf: libpymo.QuantizationMo
                                 libpymo.QuantizationMode.QUANTIZATION_PERCENTILE}
 MAP_ROUND_MODE_TO_PYMO = {'nearest': libpymo.RoundingMode.ROUND_NEAREST,
                           'stochastic': libpymo.RoundingMode.ROUND_STOCHASTIC}
+
+RANGE_LEARNING_SCHEMES = {QuantScheme.training_range_learning_with_tf_init,
+                          QuantScheme.training_range_learning_with_tf_enhanced_init}
 
 
 class ActivationType(Enum):

@@ -1,7 +1,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2020-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -46,7 +46,7 @@ import tensorflow as tf
 from packaging import version
 
 import aimet_common.libpymo as libpymo
-from aimet_common.defs import QuantScheme, QuantizationDataType
+from aimet_common.defs import QuantScheme, QuantizationDataType, RANGE_LEARNING_SCHEMES
 from aimet_common.quantsim import encoding_version
 from aimet_tensorflow import graph_editor
 from aimet_tensorflow.quantsim import QuantizationSimModel, check_accumulator_overflow
@@ -2592,3 +2592,181 @@ class TestQuantSimRangeLearning:
 
         sess.close()
         sim.session.close()
+
+    @pytest.mark.cuda
+    @pytest.mark.parametrize(
+        "quant_scheme",
+        [QuantScheme.post_training_tf, QuantScheme.training_range_learning_with_tf_init,
+         QuantScheme.post_training_tf_enhanced, QuantScheme.training_range_learning_with_tf_enhanced_init]
+    )
+    def test_initialization_and_export_non_strict_symmetric(self, quant_scheme) -> None:
+        """
+        Test initial encoding min/max and result of export value
+            under non-strict symmetric per-tensor quantization
+        """
+        tf.compat.v1.reset_default_graph()
+        with tf.device("/gpu:0"):
+            inputs = tf.keras.Input(shape=(32, 32, 4,))
+            conv_op = tf.keras.layers.Conv2D(2, (3, 3),
+                                             kernel_initializer=tf.random_uniform_initializer(-1, 2),
+                                             bias_initializer="random_uniform",
+                                             padding="SAME")(inputs)
+            relu_op = tf.nn.relu(conv_op)
+            reshape = tf.keras.layers.Flatten()(relu_op)
+            _ = tf.keras.layers.Dense(10, bias_initializer="random_uniform")(reshape)
+
+        sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
+        initialize_uninitialized_vars(sess)
+
+        sim = QuantizationSimModel(sess, ["input_1"], ["dense/BiasAdd"],
+                                   use_cuda=True, quant_scheme=quant_scheme)
+
+        def dummy_forward_pass(_sess, _):
+            model_output = _sess.graph.get_tensor_by_name("dense/BiasAdd_quantized:0")
+            model_input = _sess.graph.get_tensor_by_name("input_1:0")
+            shape = model_input.shape
+            dummy_input = np.random.randn(1, shape[1], shape[2], shape[3])
+            _sess.run(model_output, feed_dict={model_input: dummy_input})
+
+        conv2d_weight_quant_op = sim.session.graph.get_operation_by_name("conv2d/Conv2D/ReadVariableOp_quantized")
+
+        # Enable input
+        sim.compute_encodings(dummy_forward_pass, None)
+        initialized_encoding_min = sim.session.run(conv2d_weight_quant_op.inputs[QuantizeOpIndices.encoding_min])
+        initialized_encoding_max = sim.session.run(conv2d_weight_quant_op.inputs[QuantizeOpIndices.encoding_max])
+
+        if quant_scheme in RANGE_LEARNING_SCHEMES:
+            # range learning scheme calibrates min value. encoding_min == -encoding_max
+            assert initialized_encoding_min == -initialized_encoding_max
+        else:
+            # post_training scheme doesn't calibrate min value. encoding_min == -encoding_max - delta
+            assert initialized_encoding_min != -initialized_encoding_max
+
+        sim.export("/tmp/", "quant_sim_model")
+        with open("/tmp/quant_sim_model.encodings") as json_file:
+            encoding_data = json.load(json_file)
+
+            param_encodings = encoding_data["param_encodings"]
+            for encodings in param_encodings.values():
+                for encoding_info in encodings:
+                    encoding_min = encoding_info["min"]
+                    encoding_max = encoding_info["max"]
+                    scale = encoding_info["scale"]
+                    offset = encoding_info["offset"]
+
+                    # Default HTP config is non-strict symmetric when parameter quantization
+                    # Non-strict symmetric should have
+                    # encoding_min == -encoding_max - scale (one more bin)
+                    # offset as -128
+                    if quant_scheme in RANGE_LEARNING_SCHEMES:
+                        assert encoding_min == -encoding_max - scale
+                    else:
+                        # In post training scheme case, it doesn't seem to match exactly due to floating point arithmetic
+                        assert np.isclose(encoding_min, -encoding_max - scale)
+                    assert offset == -128
+                    assert np.isclose(encoding_min, scale * offset, atol=1e-6)
+                    assert np.isclose(encoding_max, encoding_min + scale * 255, atol=1e-6)
+
+    @pytest.mark.cuda
+    @pytest.mark.parametrize(
+        "quant_scheme",
+        [QuantScheme.post_training_tf, QuantScheme.training_range_learning_with_tf_init,
+         QuantScheme.post_training_tf_enhanced, QuantScheme.training_range_learning_with_tf_enhanced_init]
+    )
+    def test_initialization_and_export_non_strict_symmetric_per_channel(self, quant_scheme) -> None:
+        """
+        Test initial encoding min/max and result of export value
+            under non-strict symmetric per-channel quantization
+        """
+        tf.compat.v1.reset_default_graph()
+        quantsim_config = {
+            "defaults": {
+                "ops": {"is_output_quantized": "True"},
+                "params": {
+                    "is_quantized": "True",
+                    "is_symmetric": "True"
+                },
+                "strict_symmetric": "False",
+                "per_channel_quantization": "True"
+            },
+            "params": {"bias": {"is_quantized": "False"}},
+            "op_type": {
+                "Squeeze": {"is_output_quantized": "False"},
+                "Pad": {"is_output_quantized": "False"},
+                "Mean": {"is_output_quantized": "False"},
+                "Gemm": {"per_channel_quantization": "False"}
+            },
+            "supergroups": [
+                {"op_list": ["Conv", "Relu"]},
+                {"op_list": ["Conv", "Clip"]},
+                {"op_list": ["Add", "Relu"]},
+                {"op_list": ["Gemm", "Relu"]}
+            ],
+            "model_input": {"is_input_quantized": "True"},
+            "model_output": {}
+        }
+        with open("./quantsim_config.json", "w") as f:
+            json.dump(quantsim_config, f)
+
+        with tf.device("/gpu:0"):
+            inputs = tf.keras.Input(shape=(32, 32, 4,))
+            conv_op = tf.keras.layers.Conv2D(2, (3, 3),
+                                             kernel_initializer=tf.random_uniform_initializer(-1, 2),
+                                             bias_initializer="random_uniform",
+                                             padding="SAME")(inputs)
+            relu_op = tf.nn.relu(conv_op)
+            reshape = tf.keras.layers.Flatten()(relu_op)
+            _ = tf.keras.layers.Dense(10, bias_initializer="random_uniform")(reshape)
+
+        sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
+        initialize_uninitialized_vars(sess)
+
+        sim = QuantizationSimModel(sess, ["input_1"], ["dense/BiasAdd"],
+                                   use_cuda=True, quant_scheme=quant_scheme,
+                                   config_file='./quantsim_config.json')
+
+        def dummy_forward_pass(_sess, _):
+            model_output = _sess.graph.get_tensor_by_name("dense/BiasAdd_quantized:0")
+            model_input = _sess.graph.get_tensor_by_name("input_1:0")
+            shape = model_input.shape
+            dummy_input = np.random.randn(1, shape[1], shape[2], shape[3])
+            _sess.run(model_output, feed_dict={model_input: dummy_input})
+
+        conv2d_weight_quant_op = sim.session.graph.get_operation_by_name("conv2d/Conv2D/ReadVariableOp_quantized")
+
+        # Enable input
+        sim.compute_encodings(dummy_forward_pass, None)
+        initialized_encoding_min = sim.session.run(conv2d_weight_quant_op.inputs[QuantizeOpIndices.encoding_min])
+        initialized_encoding_max = sim.session.run(conv2d_weight_quant_op.inputs[QuantizeOpIndices.encoding_max])
+
+        if quant_scheme in RANGE_LEARNING_SCHEMES:
+            # range learning scheme calibrates min value. encoding_min == -encoding_max
+            assert all(initialized_encoding_min == -initialized_encoding_max)
+        else:
+            # post_training scheme doesn't calibrate min value. encoding_min == -encoding_max - delta
+            assert not all(initialized_encoding_min == -initialized_encoding_max)
+
+        sim.export("/tmp/", "quant_sim_model")
+        with open("/tmp/quant_sim_model.encodings") as json_file:
+            encoding_data = json.load(json_file)
+
+            param_encodings = encoding_data["param_encodings"]
+            for encodings in param_encodings.values():
+                for encoding_info in encodings:
+                    encoding_min = encoding_info["min"]
+                    encoding_max = encoding_info["max"]
+                    scale = encoding_info["scale"]
+                    offset = encoding_info["offset"]
+
+                    # Default HTP config is non-strict symmetric when parameter quantization
+                    # Non-strict symmetric should have
+                    # encoding_min == -encoding_max - scale (one more bin)
+                    # offset as -128
+                    if quant_scheme in RANGE_LEARNING_SCHEMES:
+                        assert encoding_min == -encoding_max - scale
+                    else:
+                        # In post training scheme case, it doesn't seem to match exactly due to floating point arithmetic
+                        assert np.isclose(encoding_min, -encoding_max - scale)
+                    assert offset == -128
+                    assert np.isclose(encoding_min, scale * offset, atol=1e-6)
+                    assert np.isclose(encoding_max, encoding_min + scale * 255, atol=1e-6)

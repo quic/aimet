@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2020-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2020-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -48,7 +48,7 @@ from packaging import version
 
 import aimet_common.libpymo as libpymo
 import aimet_common.libaimet_tf_ops as qcops
-from aimet_common.defs import QuantScheme, QuantizationDataType
+from aimet_common.defs import QuantScheme, QuantizationDataType, RANGE_LEARNING_SCHEMES
 from aimet_common.quantsim import calculate_delta_offset, encoding_version, validate_quantsim_inputs, \
     recompute_grid_params, extract_global_quantizer_args
 from aimet_common.quant_utils import get_conv_accum_bounds
@@ -719,8 +719,29 @@ class QuantizationSimModel:
             min_val, max_val = self.read_min_max(quant_op_name, variable_dict)
             # if per channel quantization is enabled, then min and max are numpy arrays, and this function gates the array
             op_bitwidth = int(self._get_op_variable_value(quant_op, QuantizeOpIndices.bit_width))
+
+            use_symmetric_encoding_tensor = self._get_op_variable_value(quant_op, QuantizeOpIndices.use_symmetric_encoding)
+            use_symmetric_encoding = bool(use_symmetric_encoding_tensor)
+            use_strict_symmetric = self._quantsim_configurator.quantsim_configs["defaults"].get("strict_symmetric", False)
+
             delta, offset = calculate_delta_offset(min_val, max_val, op_bitwidth,
-                                                   use_symmetric_encodings=False, use_strict_symmetric=False)
+                                                   use_symmetric_encodings=use_symmetric_encoding,
+                                                   use_strict_symmetric=use_strict_symmetric)
+
+            # NOTE: Since we proceeded to strict symmetric way during the range learning
+            #   we need to calibrate min and offset when the actual value is needed
+            # Before calibrating, encoding holds encoding_min == -encoding_max which is symmetric
+            #   we will add one more bin to both encoding_min and offset to get non-strict symmetric encoding
+            if self._quant_scheme in RANGE_LEARNING_SCHEMES and \
+                    use_symmetric_encoding and not use_strict_symmetric:
+
+                # NOTE: min_val is float or np.ndarray type, both type support -= operation
+                min_val -= delta
+                if isinstance(offset, list):
+                    offset = [o - 1 for o in offset]
+                else:
+                    offset -= 1
+
             # Min and max will be numpy arrays, so to make them JSON serializable
             if self.per_channel_quantization_enabled and isinstance(min_val, np.ndarray):
                 min_val = min_val.tolist()
@@ -731,8 +752,6 @@ class QuantizationSimModel:
                 max_val = [max_val]
                 delta = [delta]
                 offset = [offset]
-            is_symmetric = str(self._get_op_variable_value(quant_op,
-                                                           QuantizeOpIndices.use_symmetric_encoding))
 
             tensor_name = quant_op.inputs[0].name
             if quant_op.type in ['QcQuantizePerChannel'] and 'EagerPyFunc' in tensor_name:
@@ -742,7 +761,7 @@ class QuantizationSimModel:
                                            'scale': delta[idx],
                                            'offset': offset[idx],
                                            'bitwidth': op_bitwidth,
-                                           'is_symmetric': is_symmetric,
+                                           'is_symmetric': str(use_symmetric_encoding_tensor),
                                            'dtype': 'int'} for idx in range(len(min_val))]
 
         param_encodings = {}
@@ -1265,7 +1284,8 @@ class QuantizationSimModel:
                                            name=quant_op_name + '_data_type', trainable=False, dtype=tf.bool)
 
             # Add to quantizer dict
-            quantizer_info = QuantizerInfo(self.session, tensor_quantizer, quant_op_name, quantizer_type, axis_handling)
+            quantizer_info = QuantizerInfo(self.session, tensor_quantizer, quant_op_name, quantizer_type,
+                                           self._quant_scheme, axis_handling)
             quantizer_dict[quant_op_name] = quantizer_info
 
             self.session.run([op_mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
