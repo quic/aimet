@@ -63,6 +63,9 @@ AIMET Quantization Features
         - :ref:`Cross-Layer Equalization<ug-post-training-quantization>`:
             Equalizes weight ranges in consecutive layers.
 
+    - :ref:`BN Re-estimation<ug-bn-reestimation>`:
+        Re-estimates Batch Norm layer statistics before folding the Batch Norm layers.
+
     - :ref:`Bias Correction<ug-post-training-quantization>` [Deprecated]:
         Bias Correction is considered deprecated. It is advised to use AdaRound instead.
 
