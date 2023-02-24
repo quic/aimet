@@ -38,6 +38,9 @@
 """ This file contains unit tests for testing cross layer scaling feature of CLE """
 
 import os
+
+from aimet_tensorflow.utils import graph_saver
+
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import unittest
 import pytest
@@ -47,14 +50,14 @@ import json
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Conv2D, BatchNormalization, Flatten, AvgPool2D, MaxPool2D
 from aimet_tensorflow.batch_norm_fold import fold_all_batch_norms, find_all_batch_norms_to_fold, \
-    fold_all_batch_norms_to_scale
+    fold_all_batch_norms_to_scale, _get_weight_tensor_transpose_reshape
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.examples.test_models import tf_slim_basic_model
 from aimet_tensorflow.utils.graph import update_keras_bn_ops_trainable_flag
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils
-
+import aimet_common.libpymo as libpymo
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
 
@@ -809,6 +812,39 @@ def get_sim_model_depthwise_conv_Identity():
 
 class TestTrainingExtensionBnFoldToScale:
     """ Test methods for BatchNormFold with QuantizationSimModel"""
+
+    def test_read_float_conv_weights_on_qsim(self):
+        """
+        test__get_weight_tensor_transpose_reshape on quantized model
+        """
+        sim, _ = get_sim_model_conv2d_FusedBatchNormV3()
+
+        sim.export("/tmp/", "sim_model")
+        new_sess = graph_saver.load_model_from_meta(meta_path=os.path.join("/tmp/", 'sim_model.meta'))
+        bn_conv_linear_pairs = find_all_batch_norms_to_fold(new_sess, ['input_1'], ['Relu'])
+
+        sess = sim.session
+        with sess.graph.as_default():
+            for pair in bn_conv_linear_pairs:
+                conv_linear_tf_op = sess.graph.get_operation_by_name(pair[0].name)
+                conv_linear_quantizer_w_name = conv_linear_tf_op.inputs[1].op.inputs[0].op.name + "_quantized"
+                conv_linear_quantizer_w = sim.quantizer_config(conv_linear_quantizer_w_name)
+                weight_tensor_quantized = _get_weight_tensor_transpose_reshape(sess, conv_linear_tf_op)
+                isinstance(weight_tensor_quantized, libpymo.TensorParams)
+                # Disable quantizers of conv weight
+                conv_linear_quantizer_w.set_op_mode(int(libpymo.TensorQuantizerOpMode.passThrough))
+                weight_tensor_float = _get_weight_tensor_transpose_reshape(sess, conv_linear_tf_op)
+                isinstance(weight_tensor_float, libpymo.TensorParams)
+                assert not np.allclose(np.array(weight_tensor_quantized.data),np.array(weight_tensor_float.data))
+                # Enable quantizers of conv weight
+                conv_linear_quantizer_w.set_op_mode(int(libpymo.TensorQuantizerOpMode.quantizeDequantize))
+                weight_tensor_quantized_restore = _get_weight_tensor_transpose_reshape(sess, conv_linear_tf_op)
+                isinstance(weight_tensor_quantized_restore, libpymo.TensorParams)
+                assert np.allclose(np.array(weight_tensor_quantized.data), np.array(weight_tensor_quantized_restore.data))
+
+        sim.session.close()
+
+
     def test_batch_norm_fold_scale_conv2d_FusedBatchNormV3(self):
         """
         test_batch_norm_fold_scale for conv2d_FusedBatchNormV3
