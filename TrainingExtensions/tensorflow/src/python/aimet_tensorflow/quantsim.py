@@ -390,8 +390,9 @@ class QuantizationSimModel:
         :return: None
 
         """
-        # Recompute encodings before export for parameters
-        self._compute_and_set_parameter_encodings()
+        # this is required to update the encoding for last iteration of backward pass for QAT 1.0 only
+        if self._quant_scheme in [QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced]:
+            self._compute_and_set_parameter_encodings()
         # save session without quant nodes
         if orig_sess is not None:
             with orig_sess.graph.as_default():

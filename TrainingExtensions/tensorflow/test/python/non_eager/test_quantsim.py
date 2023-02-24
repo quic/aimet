@@ -1743,6 +1743,116 @@ class TestQuantSim(unittest.TestCase):
         assert new_relu.inputs[0] == orig_param_tensor
         assert quantized_param_tensor.op.inputs[0] == orig_param_tensor
 
+    def test_sim_export_side_effect_qat_with_training_loop(self):
+        """
+        Test to validate gradient is updating for param quantizer ops
+        with bias add skipped
+        """
+
+        tf.compat.v1.reset_default_graph()
+        tf.compat.v1.set_random_seed(0)
+        np.random.seed(0)
+        with tf.device('/cpu:0'):
+            inputs = tf.keras.Input(shape=(32, 32, 1,))
+            conv_op = tf.keras.layers.Conv2D(1, (2, 2),
+                                             kernel_initializer=tf.random_uniform_initializer(-1, 2),
+                                             bias_initializer='random_uniform',
+                                             padding='SAME')(inputs)
+            relu_op = tf.nn.relu(conv_op)
+            reshape = tf.keras.layers.Flatten()(relu_op)
+            _ = tf.keras.layers.Dense(10)(reshape)
+
+        sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
+        initialize_uninitialized_vars(sess)
+
+        # create quantsim model without config file
+        sim = QuantizationSimModel(sess, ['input_1'], ['dense/BiasAdd'], use_cuda=False,
+                                   quant_scheme=QuantScheme.post_training_tf_enhanced)
+
+        for quant_op_name in sim._param_quantizers.keys():
+            print(sim._param_quantizers[quant_op_name])
+
+        for quant_op_name in sim._activation_quantizers.keys():
+            print(sim._activation_quantizers[quant_op_name])
+
+        def dummy_forward_pass(sess, args):
+            model_output = sess.graph.get_tensor_by_name('dense/MatMul:0')
+            model_input = sess.graph.get_tensor_by_name('input_1:0')
+            shape = model_input.shape
+            dummy_input = np.random.randn(1, shape[1], shape[2], shape[3])
+            sess.run(model_output, feed_dict={model_input: dummy_input})
+
+        conv2d_weight_quant_op = sim.session.graph.get_operation_by_name('conv2d/Conv2D/ReadVariableOp_quantized')
+        relu_output_quant_op = sim.session.graph.get_operation_by_name('Relu_quantized')
+
+        # enable input
+        sim.compute_encodings(dummy_forward_pass, None)
+
+        inp_tensor = sim.session.graph.get_tensor_by_name('input_1:0')
+        np.random.seed(0)
+        w_shape = inp_tensor.shape
+        batches = 32
+        inp_data = np.random.rand(batches, w_shape[1], w_shape[2], w_shape[3])
+        logits = sim.session.graph.get_tensor_by_name('dense/MatMul:0')
+
+        labels = np.random.randint(10, size=batches)
+        one_hot_labels = np.eye(10)[labels]
+
+        with sim.session.graph.as_default():
+            var_list = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES)
+            labels_placeholder = tf.compat.v1.placeholder(tf.float32, [None, 10], name='labels')
+            loss = tf.compat.v1.losses.softmax_cross_entropy(onehot_labels=labels_placeholder, logits=logits)
+
+            update_ops = []
+            global_step = tf.compat.v1.train.create_global_step()
+            initialize_uninitialized_vars(sim.session)
+
+            optimizer = tf.compat.v1.train.GradientDescentOptimizer(learning_rate=1e-3)
+            gradients = optimizer.compute_gradients(loss, var_list)
+
+            sim.compute_encodings(dummy_forward_pass, None)
+            grad_updates = optimizer.apply_gradients(gradients, global_step=global_step)
+            update_ops.append(grad_updates)
+            update_op = tf.group(*update_ops)
+
+            conv_inp_tensor = conv2d_weight_quant_op.inputs[0]
+
+            weights_before_train = sim.session.run(conv2d_weight_quant_op.inputs[0])
+
+            with tf.control_dependencies([update_op]):
+                train_op = tf.identity(loss, name='train_op')
+
+            # start training
+            _ = sim.session.run(train_op, feed_dict={inp_tensor: inp_data, labels_placeholder: one_hot_labels})
+
+            weights_after_train = sim.session.run(conv2d_weight_quant_op.inputs[0])
+
+            assert not np.allclose(weights_before_train, weights_after_train, atol=1e-6)
+
+            baseline_output = sim.session.run(logits, feed_dict={inp_tensor: inp_data})
+
+            baseline_encodings = {}
+            for k, v in sim._param_quantizers.items():
+                if v.enabled and v.data_type == QuantizationDataType.int:
+                    baseline_encodings[k] = v.get_encoding()
+
+            sim.export('/tmp', 'quant_sim_model')
+            after_sim_export_output = sim.session.run(logits, feed_dict={inp_tensor: inp_data})
+
+            after_sim_export_encodings = {}
+            for k, v in sim._param_quantizers.items():
+                if v.enabled and v.data_type == QuantizationDataType.int:
+                    after_sim_export_encodings[k] = v.get_encoding()
+
+            for k, v in after_sim_export_encodings.items():
+                assert (baseline_encodings[k].max != after_sim_export_encodings[k].max) or (baseline_encodings[k].min != after_sim_export_encodings[k].min)
+
+            assert np.allclose(baseline_output, after_sim_export_output)
+
+        sess.close()
+        sim.session.close()
+
+
 class TestQuantSimRangeLearning:
     """ Test methods for Quantization Simulation """
 
@@ -2472,6 +2582,13 @@ class TestQuantSimRangeLearning:
             assert encoding_max_before_train != encoding_max_after_train
             assert relu_output_encoding_min_before_train != relu_output_encoding_min_after_train
             assert relu_output_encoding_max_before_train != relu_output_encoding_max_after_train
+
+
+            baseline = sim.session.run(logits, feed_dict={inp_tensor: inp_data})
+            sim.export('/tmp', 'quant_sim_model')
+            after_sim_export = sim.session.run(logits, feed_dict={inp_tensor: inp_data})
+            assert np.allclose(baseline, after_sim_export)
+
 
         sess.close()
         sim.session.close()
