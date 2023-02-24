@@ -151,7 +151,7 @@ RUN python3 -m pip --no-cache-dir install \
         numpy==1.19.5 \
         onnx==1.12.0 \
         onnxsim \
-        onnxruntime \
+        onnxruntime==1.10.0 \
         onnxruntime-extensions \
         opencv-python \
         Pillow==9.3.0 \
@@ -202,11 +202,11 @@ RUN ln -s /opt/cmake/bin/cpack /usr/local/bin/cpack
 
 RUN mkdir /opt/onnxruntime && \
     cd /tmp && \
-    wget https://github.com/microsoft/onnxruntime/releases/download/v1.13.1/onnxruntime-linux-x64-1.13.1.tgz -O /tmp/onnxruntime-linux-x64-1.13.1.tgz > /dev/null && \
-    tar -C /opt/onnxruntime -xvf /tmp/onnxruntime-linux-x64-1.13.1.tgz > /dev/null && \
-    rm -rf /tmp/onnxruntime-linux-x64-1.13.1*
+    wget https://github.com/microsoft/onnxruntime/releases/download/v1.10.0/onnxruntime-linux-x64-1.10.0.tgz -O /tmp/onnxruntime-linux-x64-1.10.0.tgz > /dev/null && \
+    tar -C /opt/onnxruntime -xvf /tmp/onnxruntime-linux-x64-1.10.0.tgz > /dev/null && \
+    rm -rf /tmp/onnxruntime-linux-x64-1.10.0*
 
-RUN ln -s /opt/onnxruntime/onnxruntime-linux-x64-1.13.1 /usr/local/bin/onnxruntime_headers
+RUN ln -s /opt/onnxruntime/onnxruntime-linux-x64-1.10.0 /usr/local/bin/onnxruntime_headers
 
 ENV PATH=/usr/local/bin:$PATH
 
