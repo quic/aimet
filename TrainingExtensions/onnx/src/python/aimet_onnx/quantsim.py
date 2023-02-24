@@ -103,7 +103,7 @@ class QuantizationSimModel:
         self._use_cuda = use_cuda
         if 'CUDAExecutionProvider' not in ort.get_available_providers():
             self._use_cuda = False
-        if use_cuda:
+        if self._use_cuda:
             self._op_domain = "aimet.customop.cuda"
             self.providers = [('CUDAExecutionProvider', {'device_id': device}), 'CPUExecutionProvider']
         else:
