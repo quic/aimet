@@ -150,6 +150,7 @@ def reestimate_bn_stats(sim: QuantizationSimModel, start_op_names: List[str],
                         bn_num_batches: int = 100) -> Handle:
     """
     top level api for end user directly call for eval()
+
     :param sim: tf quantized model
     :param start_op_names: List of starting op names of the model
     :param output_op_names: List of output op names of the model

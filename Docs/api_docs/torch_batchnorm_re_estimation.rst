@@ -45,12 +45,6 @@ For this example, we are going to load a pretrained ResNet18 model from torchvis
 2. For how to enable Per Channel Quantization, please see :doc:`here<../user_guide/quantization_configuration>`
 
 
-
-.. literalinclude:: ../torch_code_examples/bn_reestimation_example.py
-    :language: python
-    :start-after: # preparing dataset start
-    :end-before: # preparing dataset end
-
 **Step 3. Perform QAT**
 
 .. literalinclude:: ../torch_code_examples/bn_reestimation_example.py
