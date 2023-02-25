@@ -126,12 +126,9 @@ import torch.cuda
 
 # End of PyTorch imports
 
-
-
+# Load FP32 model and prepare it
 
 def load_fp32_model():
-
-    # Load FP32 model and prepare it
 
     import torchvision
     from torchvision.models import resnet18
@@ -201,7 +198,8 @@ def create_quant_sim(model, dummy_input, use_cuda):
                                quant_scheme=QuantScheme.training_range_learning_with_tf_init,
                                dummy_input=dummy_input,
                                default_output_bw=8,
-                               default_param_bw=8)
+                               default_param_bw=8,
+                               config_file=config_file_path)
 
     sim.compute_encodings(forward_pass_callback=pass_calibration_data,
                           forward_pass_callback_args=use_cuda)
