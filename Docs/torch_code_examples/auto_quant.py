@@ -1,9 +1,9 @@
-# /usr/bin/env python3.6
+# /usr/bin/env python3.8
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -38,7 +38,6 @@
 
 """ Code example for AutoQuant """
 
-# Step 0. Import statements
 import random
 from typing import Optional
 
@@ -48,7 +47,6 @@ from torchvision import models, datasets, transforms
 
 from aimet_torch.adaround.adaround_weight import AdaroundParameters
 from aimet_torch.auto_quant import AutoQuant
-# End step 0
 
 # Step 1. Define constants and helper functions
 EVAL_DATASET_SIZE = 5000
@@ -64,7 +62,6 @@ def _create_sampled_data_loader(dataset, num_samples):
     return DataLoader(dataset,
                       sampler=_subset_samplers[num_samples],
                       batch_size=BATCH_SIZE)
-# End step 1
 
 # Step 2. Prepare model and dataset
 fp32_model = models.resnet18(pretrained=True).eval()
@@ -80,7 +77,6 @@ eval_dataset = datasets.FakeData(size=EVAL_DATASET_SIZE,
                                  image_size=input_shape[1:],
                                  num_classes=1000,
                                  transform=transform)
-# End step 2
 
 # Step 3. Prepare unlabeled dataset
 # NOTE: In the actual use cases, the users should implement this part to serve
@@ -98,7 +94,6 @@ class UnlabeledDatasetWrapper(Dataset):
 
 unlabeled_dataset = UnlabeledDatasetWrapper(eval_dataset)
 unlabeled_data_loader = _create_sampled_data_loader(unlabeled_dataset, CALIBRATION_DATASET_SIZE)
-# End step 3
 
 # Step 4. Prepare eval callback
 # NOTE: In the actual use cases, the users should implement this part to serve
@@ -115,24 +110,22 @@ def eval_callback(model: torch.nn.Module, num_samples: Optional[int] = None) -> 
         num_correct_predictions += torch.sum(predictions.cpu() == labels)
 
     return int(num_correct_predictions) / num_samples
-# End step 4
 
 # Step 5. Create AutoQuant object
 auto_quant = AutoQuant(allowed_accuracy_drop=0.01,
                        unlabeled_dataset_iterable=unlabeled_data_loader,
                        eval_callback=eval_callback)
-# End step 5
 
 # Step 6. (Optional) Set adaround params
 ADAROUND_DATASET_SIZE = 2000
 adaround_data_loader = _create_sampled_data_loader(unlabeled_dataset, ADAROUND_DATASET_SIZE)
 adaround_params = AdaroundParameters(adaround_data_loader, num_batches=len(adaround_data_loader))
 auto_quant.set_adaround_params(adaround_params)
-# End step 6
 
 # Step 7. Run AutoQuant
 model, accuracy, encoding_path =\
     auto_quant.apply(fp32_model.cuda(),
                      dummy_input_on_cpu=dummy_input.cpu(),
                      dummy_input_on_gpu=dummy_input.cuda())
-# End step 7
+
+print(f"- Quantized Accuracy (after optimization):  {optimized_accuracy:.4f}")

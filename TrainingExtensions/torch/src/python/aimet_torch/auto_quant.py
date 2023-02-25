@@ -78,8 +78,10 @@ NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION = None
 
 class AutoQuant:
     """
-     WARNING:
-       auto_quant.py/AutoQuant will be deprecated. Please import AutoQuant from auto_quant_v2.py instead
+    .. warning::
+        :class:`auto_quant.AutoQuant <aimet_torch.auto_quant.AutoQuant>` is deprecated and
+        will be replaced with :class:`auto_quant_v2.AutoQuant <aimet_torch.auto_quant_v2.AutoQuant>`
+        in the later versions.
 
     Integrate and apply post-training quantization techniques.
 
