@@ -278,23 +278,26 @@ def run_hook_for_layers_with_given_input(model: torch.nn.Module,
     if module_type_for_attaching_hook:
         # if needed, filter by module types specified by caller
         modules = [module for module in modules if isinstance(module, module_type_for_attaching_hook)]
-    for module in modules:
-        hooks.append(module.register_forward_hook(hook))
 
-    # ------------------------------------------------
-    # Run forward pass to execute the hook functions
-    # ------------------------------------------------
-    with in_eval_mode(model), torch.no_grad():
-        if isinstance(input_tensor, (list, tuple)):
-            _ = model(*input_tensor)
-        else:
-            _ = model(input_tensor)
+    try:
+        for module in modules:
+            hooks.append(module.register_forward_hook(hook))
 
-    # --------------------------
-    # Remove all hooks we added
-    # --------------------------
-    for h in hooks:
-        h.remove()
+        # ------------------------------------------------
+        # Run forward pass to execute the hook functions
+        # ------------------------------------------------
+        with in_eval_mode(model), torch.no_grad():
+            if isinstance(input_tensor, (list, tuple)):
+                _ = model(*input_tensor)
+            else:
+                _ = model(input_tensor)
+
+    finally:
+        # --------------------------
+        # Remove all hooks we added
+        # --------------------------
+        for h in hooks:
+            h.remove()
 
 
 def to_numpy(tensor: torch.Tensor):
