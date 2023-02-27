@@ -1029,6 +1029,30 @@ class Quantize(torch.autograd.Function):
     """
     Custom gradient function for STE
     """
+    @staticmethod
+    def _per_tensor_quantize(tensor, tensor_quantizer, round_mode):
+        # pylint:disable = protected-access
+        shift_to_signed = False
+        if tensor_quantizer.use_symmetric_encodings and tensor_quantizer.encoding.offset < 0:
+            shift_to_signed = True
+        quantized_tensor = tensor_quantizer._cppOp[0].quantize(tensor, tensor_quantizer.encoding, round_mode,
+                                                               tensor.is_cuda, shift_to_signed)
+        return quantized_tensor
+
+    @staticmethod
+    def _per_channel_quantize(tensor, tensor_quantizer, round_mode):
+        quantized_tensors = []
+        # TODO: handle unsigned symmetric case
+        shift_to_signed = bool(tensor_quantizer.use_symmetric_encodings)
+        # pylint:disable = protected-access
+        for index, op in enumerate(tensor_quantizer._cppOp):
+            curr_encoding = tensor_quantizer._encoding[index]
+            # pylint:disable = protected-access
+            tensor_slice = tensor.select(tensor_quantizer._ch_axis, index).contiguous(memory_format=torch.contiguous_format)
+            computed_tensor = op.quantize(tensor_slice, curr_encoding, round_mode, tensor.is_cuda, shift_to_signed)
+            quantized_tensors.append(computed_tensor)
+        quantized_tensor = torch.stack(tuple(quantized_tensors), dim=tensor_quantizer._ch_axis)
+        return quantized_tensor
 
     # pylint:disable = arguments-differ
     @staticmethod
@@ -1042,11 +1066,10 @@ class Quantize(torch.autograd.Function):
         """
         if tensor_quantizer.enabled:
             # pylint:disable = protected-access
-            shift_to_signed = False
-            if tensor_quantizer.use_symmetric_encodings and tensor_quantizer.encoding.offset < 0:
-                shift_to_signed = True
-            quantized_tensor = tensor_quantizer._cppOp[0].quantize(tensor, tensor_quantizer.encoding, round_mode,
-                                                                   tensor.is_cuda, shift_to_signed)
+            if isinstance(tensor_quantizer, StaticGridPerChannelQuantizer):
+                quantized_tensor = Quantize._per_channel_quantize(tensor, tensor_quantizer, round_mode)
+            else:
+                quantized_tensor = Quantize._per_tensor_quantize(tensor, tensor_quantizer, round_mode)
         else:
             quantized_tensor = tensor
 
