@@ -39,7 +39,6 @@
 import unittest.mock
 import copy
 import numpy as np
-import json
 
 import aimet_common.libpymo as libpymo
 
@@ -47,14 +46,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as functional
 
-import aimet_torch.examples.mnist_torch_model as mnist_model
+import models.mnist_torch_model as mnist_model
 from aimet_torch import bias_correction
 from aimet_torch.utils import to_numpy, create_fake_data_loader
 from aimet_torch.cross_layer_equalization import get_ordered_list_of_conv_modules
 from aimet_torch.bias_correction import find_all_conv_bn_with_activation
 from aimet_torch import quantsim as qsim
-from aimet_torch.examples.mobilenet import MockMobileNetV11 as MockMobileNetV1
-from aimet_torch.examples.test_models import TransposedConvModel
+from models.mobilenet import MockMobileNetV11 as MockMobileNetV1
+from models.test_models import TransposedConvModel
 from aimet_common.defs import QuantScheme
 
 

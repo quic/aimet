@@ -48,7 +48,7 @@ import pickle
 import wget
 import torch
 from transformers import BertTokenizer
-from aimet_torch.examples import mnist_torch_model
+from models import mnist_torch_model
 from aimet_common.utils import AimetLogger
 import subprocess
 

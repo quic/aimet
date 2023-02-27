@@ -57,7 +57,7 @@ from torch.utils.data import DataLoader
 
 from aimet_common.defs import QuantScheme
 from aimet_torch import elementwise_ops
-from aimet_torch.examples.test_models import ModelWithFunctionalReLU, SingleResidual, ModelWithDuplicateReLU, \
+from models.test_models import ModelWithFunctionalReLU, SingleResidual, ModelWithDuplicateReLU, \
     ConcatModel
 from aimet_torch.quantsim import QuantizationSimModel, QuantParams
 from aimet_torch.utils import create_fake_data_loader

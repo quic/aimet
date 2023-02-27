@@ -53,7 +53,6 @@ from aimet_torch.compress import ModelCompressor
 from aimet_torch.quantsim import QuantizationSimModel
 
 # Both compression and quantization related imports
-from aimet_torch.examples import mnist_torch_model
 
 
 def evaluate_model(model: torch.nn.Module, eval_iterations: int, use_cuda: bool = False) -> float:
