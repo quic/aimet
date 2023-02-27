@@ -257,6 +257,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         num_samples = min(len(self.data_loader.dataset), 2000)
         batch_size = self.data_loader.batch_size or 1
         num_batches = math.ceil(num_samples / batch_size)
+        num_batches = min(num_batches, len(self.data_loader))
         self.adaround_params = AdaroundParameters(self.data_loader, num_batches)
 
         self._export_kwargs = dict(
