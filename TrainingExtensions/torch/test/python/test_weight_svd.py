@@ -53,7 +53,7 @@ from aimet_common import cost_calculator as cc
 from aimet_common.defs import LayerCompRatioPair
 from aimet_common.utils import AimetLogger
 import aimet_torch.svd.svd_intf_defs_deprecated
-from aimet_torch.examples import mnist_torch_model as mnist_model
+from models import mnist_torch_model as mnist_model
 from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 from aimet_torch import pymo_utils
 from aimet_torch.svd import layer_selector_deprecated as ls, svd as svd_intf, svd_impl as s

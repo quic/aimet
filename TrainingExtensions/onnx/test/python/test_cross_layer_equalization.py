@@ -49,12 +49,12 @@ from aimet_onnx.cross_layer_equalization import get_ordered_list_of_conv_modules
 from aimet_onnx.utils import ParamUtils
 from aimet_onnx.batch_norm_fold import fold_all_batch_norms_to_weight
 
-import test_models
+from models import models_for_tests
 
 
 class TestCLS:
     def test_graph_search_utils_single_residual_model(self):
-        model = test_models.single_residual_model()
+        model = models_for_tests.single_residual_model()
         connected_graph = ConnectedGraph(model)
         ordered_module_list = get_ordered_list_of_conv_modules(connected_graph.starting_ops)
         graph_search_utils = GraphSearchUtils(connected_graph, ordered_module_list, cls_supported_layer_types, cls_supported_activation_types)
@@ -63,7 +63,7 @@ class TestCLS:
         assert ordered_layer_groups_names == ['Conv_3', 'Conv_5']
 
     def test_find_cls_sets_depthwise_model(self):
-        model = test_models.depthwise_conv_model()
+        model = models_for_tests.depthwise_conv_model()
 
         connected_graph = ConnectedGraph(model)
         ordered_module_list = get_ordered_list_of_conv_modules(connected_graph.starting_ops)
@@ -80,7 +80,7 @@ class TestCLS:
         assert cls_sets_names == [('Conv_0', 'Conv_2', 'Conv_4'), ('Conv_4', 'Conv_6', 'Conv_8'), ('Conv_8', 'Conv_10', 'Conv_12'), ('Conv_12', 'Conv_14', 'Conv_16'), ('Conv_16', 'Conv_18', 'Conv_20'), ('Conv_20', 'Conv_22', 'Conv_24'), ('Conv_24', 'Conv_26', 'Conv_28'), ('Conv_28', 'Conv_30', 'Conv_32')]
 
     def test_find_cls_sets_resnet_model(self):
-        model = test_models.single_residual_model()
+        model = models_for_tests.single_residual_model()
 
         connected_graph = ConnectedGraph(model)
         ordered_module_list = get_ordered_list_of_conv_modules(connected_graph.starting_ops)
@@ -97,7 +97,7 @@ class TestCLS:
         assert cls_sets_names == [('Conv_3', 'Conv_5')]
 
     def test_scale_model_residual(self):
-        model = test_models.single_residual_model()
+        model = models_for_tests.single_residual_model()
 
         input_shape = (1, 3, 32, 32)
         test_data = np.random.randn(*input_shape).astype(np.float32)
@@ -114,7 +114,7 @@ class TestCLS:
         assert np.allclose(np.amax(np.abs(weight_3), axis=(1, 2, 3)), np.amax(np.abs(weight_5), axis=(0, 2, 3)))
 
     def test_scale_model_tranposed_conv(self):
-        model = test_models.transposed_conv_model_without_bn()
+        model = models_for_tests.transposed_conv_model_without_bn()
         input_shape = (10,10,4,4)
         test_data = np.random.randn(*input_shape).astype(np.float32)
         session = _build_session(model)
@@ -130,7 +130,7 @@ class TestCLS:
         assert np.allclose(np.amax(np.abs(weight_3), axis=(0, 2, 3)), np.amax(np.abs(weight_5), axis=(1, 2, 3)))
 
     def test_scale_model_depthwise(self):
-        model = test_models.depthwise_conv_model()
+        model = models_for_tests.depthwise_conv_model()
         input_shape = (1, 3, 224, 224)
         test_data = np.random.randn(*input_shape).astype(np.float32)
         session = _build_session(model)
@@ -142,7 +142,7 @@ class TestCLS:
         assert len(cls_set_infos) == 8
 
     def test_cle(self):
-        model = test_models.my_model_with_bns()
+        model = models_for_tests.my_model_with_bns()
         input_shape = (2, 10, 24, 24)
         test_data = np.random.randn(*input_shape).astype(np.float32)
         session = _build_session(model)
@@ -153,8 +153,8 @@ class TestCLS:
 
     def test_cle_conv1D_model(self):
         x = torch.randn((2, 10, 24))
-        model = test_models.BNAfterConv1d()
-        model = test_models._convert_to_onnx_no_fold(model, x)
+        model = models_for_tests.BNAfterConv1d()
+        model = models_for_tests._convert_to_onnx_no_fold(model, x)
         input_shape = (2, 10, 24)
         test_data = np.random.randn(*input_shape).astype(np.float32)
         session = _build_session(model)
@@ -165,8 +165,8 @@ class TestCLS:
 
     def test_cle_transpose1D_model(self):
         x = torch.randn((2, 10, 24))
-        model = test_models.BNAfterConvTranspose1d()
-        model = test_models._convert_to_onnx_no_fold(model, x)
+        model = models_for_tests.BNAfterConvTranspose1d()
+        model = models_for_tests._convert_to_onnx_no_fold(model, x)
         input_shape = (2, 10, 24)
         test_data = np.random.randn(*input_shape).astype(np.float32)
         session = _build_session(model)
@@ -180,7 +180,7 @@ class TestHighBiasFold:
     """ Test methods for HighBiasFold"""
 
     def test_find_high_bias_fold(self):
-        model = test_models.my_model_with_bns()
+        model = models_for_tests.my_model_with_bns()
 
         conv_bn_pairs, bn_conv_pairs = fold_all_batch_norms_to_weight(model.model)
         bn_dict = {}

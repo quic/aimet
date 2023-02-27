@@ -52,7 +52,7 @@ from aimet_torch.batch_norm_fold import (
     _find_all_batch_norms_to_fold,
     _is_valid_bn_fold,
 )
-from aimet_torch.examples.test_models import TransposedConvModel
+from models.test_models import TransposedConvModel
 from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.model_preparer import prepare_model

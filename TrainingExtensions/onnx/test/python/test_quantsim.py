@@ -44,8 +44,8 @@ from aimet_common.defs import QuantScheme
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.qc_quantize_op import OpMode
 from aimet_torch.quantsim import QuantizationSimModel as PtQuantizationSimModel
-from aimet_torch.examples.test_models import SingleResidual
-from test_models import build_dummy_model, single_residual_model
+from models.models_for_tests import SingleResidual
+from models.models_for_tests import build_dummy_model, single_residual_model
 
 
 class DummyModel(SingleResidual):

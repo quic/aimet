@@ -38,13 +38,13 @@
 import json
 import os
 from aimet_onnx.quantsim import QuantizationSimModel
-import test_models
+from models import models_for_tests
 
 
 class TestQuantSimConfig:
     """Tests for applying config to QuantizationSimModel"""
     def test_qs_config_dummy_model(self):
-        model = test_models.build_dummy_model()
+        model = models_for_tests.build_dummy_model()
         sim = QuantizationSimModel(model)
         assert sim.qc_quantize_op_dict['conv_w'].enabled == True
         assert sim.qc_quantize_op_dict['conv_b'].enabled == False
@@ -57,7 +57,7 @@ class TestQuantSimConfig:
         assert sim.qc_quantize_op_dict['output'].enabled == True
 
     def test_default_config(self):
-        model = test_models.build_dummy_model()
+        model = models_for_tests.build_dummy_model()
 
         quantsim_config = {
             "defaults": {
@@ -87,7 +87,7 @@ class TestQuantSimConfig:
             assert sim.qc_quantize_op_dict[name].use_symmetric_encodings == False
 
     def test_param_config(self):
-        model = test_models.build_dummy_model()
+        model = models_for_tests.build_dummy_model()
 
         quantsim_config = {
             "defaults": {
@@ -127,7 +127,7 @@ class TestQuantSimConfig:
             assert sim.qc_quantize_op_dict[name].use_symmetric_encodings == True
 
     def test_op_level_config_and_model_output(self):
-        model = test_models.build_dummy_model()
+        model = models_for_tests.build_dummy_model()
 
         quantsim_config = {
             "defaults": {
@@ -172,7 +172,7 @@ class TestQuantSimConfig:
         assert sim.qc_quantize_op_dict['output'].enabled == True
 
     def test_config_for_model_input(self):
-        model = test_models.build_dummy_model()
+        model = models_for_tests.build_dummy_model()
 
         quantsim_config = {
             "defaults": {
@@ -197,7 +197,7 @@ class TestQuantSimConfig:
 
     def test_parse_config_file_supergroups(self):
         """ Test that supergroup quantization parameters are set correctly when using json config file """
-        model = test_models.build_dummy_model()
+        model = models_for_tests.build_dummy_model()
 
         quantsim_config = {
             "defaults": {
@@ -242,7 +242,7 @@ class TestQuantSimConfig:
 
     def test_parse_config_file_symmetric_modes(self):
         """ Test that model output quantization parameters are set correctly when using json config file """
-        model = test_models.build_dummy_model()
+        model = models_for_tests.build_dummy_model()
 
         quantsim_config = {
             "defaults":

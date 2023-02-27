@@ -39,9 +39,8 @@ import pytest
 import json
 import os
 import torch
-import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme, QuantizationDataType, QuantDtypeBwInfo, SupportedKernelsAction
-from aimet_torch.examples.test_models import SingleResidual, QuantSimTinyModel, MultiInput, SingleResidualWithModuleAdd, \
+from models.test_models import SingleResidual, QuantSimTinyModel, MultiInput, SingleResidualWithModuleAdd, \
     SingleResidualWithAvgPool
 from aimet_torch.quantsim import QuantizationSimModel
 import aimet_torch.quantsim
