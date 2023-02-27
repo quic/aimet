@@ -49,7 +49,13 @@ class PythonClsImpl(ClsImpl):
     This class implements the CLS algorithm using Python version while following the base Implementation interface.
     """
     def scale_cls_set_with_depthwise_layers(self, cls_set: ClsSet) -> [np.ndarray, np.ndarray]:
+        """
+        API to invoke equalize layer params for depth wise separable layers(update for weights and bias is in place)
 
+        :param cls_set: Consecutive Conv layers whose weights and biases need to be equalized.
+                        Second Conv layer is a depth-wise conv and third conv layer is point-wise conv
+        :return: Scaling factors S_12 and S_23 : numpy arrays
+        """
         weight_0 = cls_set[0].weight.detach()
         weight_0 = self._transpose_tensor_in_common_format(cls_set[0], weight_0)
         weight_0 = self._make_4d_tensor(cls_set[0], weight_0)
@@ -62,8 +68,12 @@ class PythonClsImpl(ClsImpl):
         weight_2 = self._transpose_tensor_in_common_format(cls_set[2], weight_2)
         weight_2 = self._make_4d_tensor(cls_set[2], weight_2)
 
-        bias_0 = cls_set[0].bias.detach()
-        bias_1 = cls_set[1].bias.detach()
+        bias_0 = None
+        if cls_set[0].bias is not None:
+            bias_0 = cls_set[0].bias.detach()
+        bias_1 = None
+        if cls_set[1].bias is not None:
+            bias_1 = cls_set[1].bias.detach()
 
         max_0 = self._get_tensor_max(weight_0, (1, 2, 3))
         max_1 = self._get_tensor_max(weight_1, (1, 2, 3))
@@ -82,7 +92,12 @@ class PythonClsImpl(ClsImpl):
         return s_12.numpy(), s_23.numpy()
 
     def scale_cls_set_with_conv_layers(self, cls_set: ClsSet) -> np.ndarray:
+        """
+        API to invoke equalize layer params for regular conv layers (update for weights and bias is in place)
 
+        :param cls_set: Consecutive Conv layers Tuple whose weights and biases need to be equalized
+        :return: Scaling factor S_12 for each conv layer pair: numpy array
+        """
         weight_0 = cls_set[0].weight.detach()
         weight_0 = self._transpose_tensor_in_common_format(cls_set[0], weight_0)
         weight_0 = self._make_4d_tensor(cls_set[0], weight_0)
@@ -91,7 +106,9 @@ class PythonClsImpl(ClsImpl):
         weight_1 = self._transpose_tensor_in_common_format(cls_set[1], weight_1)
         weight_1 = self._make_4d_tensor(cls_set[1], weight_1)
 
-        bias_0 = cls_set[0].bias.detach()
+        bias_0 = None
+        if cls_set[0].bias is not None:
+            bias_0 = cls_set[0].bias.detach()
 
         max_0 = self._get_tensor_max(weight_0, (1, 2, 3))
         max_1 = self._get_tensor_max(weight_1, (0, 2, 3))

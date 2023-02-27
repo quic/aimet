@@ -64,6 +64,7 @@ ScaleFactor = Union[np.ndarray, Tuple[np.ndarray]]
 
 cls_supported_layers = (torch.nn.Conv2d, torch.nn.ConvTranspose2d, torch.nn.Conv1d, torch.nn.ConvTranspose1d)
 cls_supported_activations = (torch.nn.ReLU, torch.nn.PReLU)
+use_python_only_impl = False
 
 
 class ClsLayerType(Enum):
@@ -352,7 +353,6 @@ class CrossLayerScaling:
     """
     Code to apply the cross-layer-scaling technique to a model
     """
-    python_only: bool = False
 
     @staticmethod
     def scale_cls_sets(cls_sets: List[ClsSet]) -> List[ScaleFactor]:
@@ -384,7 +384,7 @@ class CrossLayerScaling:
                 module.cpu()
 
         # Pick implementation version (either MO (c++) or python) depending on the user provided flag.
-        cls_impl = PythonClsImpl() if CrossLayerScaling.python_only else MoClsImpl()
+        cls_impl = PythonClsImpl() if use_python_only_impl else MoClsImpl()
         if len(cls_set) == 3:
             scale_factor = cls_impl.scale_cls_set_with_depthwise_layers(cls_set)
         else:
@@ -412,7 +412,7 @@ class CrossLayerScaling:
                 on_gpu = True
                 module.cpu()
 
-        cls_impl = PythonClsImpl() if CrossLayerScaling.python_only else MoClsImpl()
+        cls_impl = PythonClsImpl() if use_python_only_impl else MoClsImpl()
         scaling_factor = cls_impl.scale_cls_set_with_conv_layers(cls_set)
 
         if on_gpu:
@@ -438,7 +438,7 @@ class CrossLayerScaling:
                 on_gpu = True
                 module.cpu()
 
-        cls_impl = PythonClsImpl() if CrossLayerScaling.python_only else MoClsImpl()
+        cls_impl = PythonClsImpl() if use_python_only_impl else MoClsImpl()
         scaling_factors = cls_impl.scale_cls_set_with_depthwise_layers(cls_set)
 
         if on_gpu:
@@ -486,23 +486,17 @@ class CrossLayerScaling:
         return cls_set_info_list
 
     @staticmethod
-    def scale_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]],
-                    dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None,
-                    python_only: bool = False) -> List[ClsSetInfo]:
+    def scale_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]], dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None) -> List[ClsSetInfo]:
         """
         Uses cross-layer scaling to scale all applicable layers in the given model
 
         :param model: Model to scale
         :param input_shapes: Input shape for the model (can be one or multiple inputs)
-        :param dummy_input: Dummy input to the model. Used to parse model graph. User is expected to place
-         the tensors on the appropriate device.
-        :param python_only: Enable python only version of CLE algorithm. If set to False, MO (c++) version
-         is used. Default is False.
+        :param dummy_input: Dummy input to the model. Used to parse model graph. User is expected to place the tensors on the appropriate device.
         :return: CLS information for each CLS set
         """
         if isinstance(model, torch.nn.DataParallel):
-            return CrossLayerScaling.scale_model(model.module, input_shapes,
-                                                 dummy_input=dummy_input, python_only=python_only)
+            return CrossLayerScaling.scale_model(model.module, input_shapes, dummy_input=dummy_input)
         device = get_device(model)
         model.cpu()
 
@@ -517,7 +511,6 @@ class CrossLayerScaling:
             cls_sets += cls_set
 
         # Scale the CLS sets
-        CrossLayerScaling.python_only = python_only
         scale_factors = CrossLayerScaling.scale_cls_sets(cls_sets)
 
         # Find if there were relu activations between layers of each cls set
@@ -541,15 +534,12 @@ class HighBiasFold:
 
     @classmethod
     def bias_fold(cls, cls_set_info_list: List[ClsSetInfo],
-                  bn_layers: Dict[Union[torch.nn.Conv2d, torch.nn.ConvTranspose2d], torch.nn.BatchNorm2d],
-                  python_only: bool = False):
+                  bn_layers: Dict[Union[torch.nn.Conv2d, torch.nn.ConvTranspose2d], torch.nn.BatchNorm2d]):
         """
         Folds bias values greater than 3 * sigma to next layer's bias
 
         :param cls_set_info_list: List of info elements for each cls set
         :param bn_layers: Key: Conv/Linear layer Value: Corresponding folded BN layer
-        :param python_only: Enable python only version of CLE algorithm. If set to False, MO (c++) version is
-         used. Default is False.
         :return: None
         """
         if not bn_layers:
@@ -564,20 +554,18 @@ class HighBiasFold:
                     continue
 
                 # Pick an implementation version based on user provided flag.
-                hbf_impl = PythonHbfImpl() if python_only else MoHbfImpl()
+                hbf_impl = PythonHbfImpl() if use_python_only_impl else MoHbfImpl()
                 hbf_impl.bias_fold(cls_pair_info, bn_layers)
 
 
 def equalize_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]],
-                   dummy_input: Union[torch.Tensor, Tuple] = None, python_only: bool = False):
+                   dummy_input: Union[torch.Tensor, Tuple] = None):
     """
     High-level API to perform Cross-Layer Equalization (CLE) on the given model. The model is equalized in place.
 
     :param model: Model to equalize
     :param input_shapes: Shape of the input (can be a tuple or a list of tuples if multiple inputs)
     :param dummy_input: A dummy input to the model. Can be a Tensor or a Tuple of Tensors
-    :param python_only: Enable python only version of CLE algorithm. If set to False, MO (c++) version is
-     used. Default is False.
     :return: None
     """
     if dummy_input is None:
@@ -591,7 +579,7 @@ def equalize_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple
         input_shapes = dummy_input.shape
 
     if isinstance(model, torch.nn.DataParallel):
-        equalize_model(model.module, input_shapes, dummy_input=dummy_input, python_only=python_only)
+        equalize_model(model.module, input_shapes, dummy_input)
     else:
         # Place model and dummy input on the cpu.
         device = get_device(model)
@@ -601,14 +589,14 @@ def equalize_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple
         # fold batchnorm layers and perform CLE on the folded model.
         folded_pairs = fold_all_batch_norms(model, input_shapes, dummy_input=dummy_input)
         equalize_bn_folded_model(model, input_shapes, folded_pairs,
-                                 dummy_input=dummy_input, python_only=python_only)
+                                 dummy_input=dummy_input)
 
         model.to(device=device)
 
 def equalize_bn_folded_model(model: torch.nn.Module,
                              input_shapes: Union[Tuple, List[Tuple]],
                              folded_pairs: List[Tuple[torch.nn.Module, torch.nn.BatchNorm2d]],
-                             dummy_input: Union[torch.Tensor, Tuple] = None, python_only: bool = False
+                             dummy_input: Union[torch.Tensor, Tuple] = None
                              ):
     """
     Perform Cross-Layer Scaling (CLS) and High Bias Folding (HBF) on a batchnorm-folded model.
@@ -616,16 +604,12 @@ def equalize_bn_folded_model(model: torch.nn.Module,
 
     :param model: Batchnorm-folded model to equalize
     :param input_shapes: Shape of the input (can be a tuple or a list of tuples if multiple inputs)
-    :param dummy_input: Dummy input to the model. Used to parse model graph. User is expected to place the tensors
-     on the appropriate device.
+    :param dummy_input: Dummy input to the model. Used to parse model graph. User is expected to place the tensors on the appropriate device.
     :param folded_pairs: List of pairs of folded layers
-    :param python_only: Enable python only version of CLE algorithm. If set to False, MO (c++) version is
-     used. Default is False.
     :return: None
     """
     if isinstance(model, torch.nn.DataParallel):
-        equalize_bn_folded_model(model.module, input_shapes, folded_pairs,
-                                 dummy_input=dummy_input, python_only=python_only)
+        equalize_bn_folded_model(model.module, input_shapes, folded_pairs, dummy_input=dummy_input)
     else:
         device = get_device(model)
         model.cpu()
@@ -637,9 +621,9 @@ def equalize_bn_folded_model(model: torch.nn.Module,
         utils.replace_modules_of_type1_with_type2(model, torch.nn.ReLU6, torch.nn.ReLU)
 
         # perform cross-layer scaling on applicable layer sets
-        cls_set_info_list = CrossLayerScaling.scale_model(model, input_shapes,
-                                                          dummy_input=dummy_input, python_only=python_only)
+        cls_set_info_list = CrossLayerScaling.scale_model(model, input_shapes, dummy_input=dummy_input)
+
         # high-bias fold
-        HighBiasFold.bias_fold(cls_set_info_list, bn_dict, python_only=python_only)
+        HighBiasFold.bias_fold(cls_set_info_list, bn_dict)
 
         model.to(device=device)
