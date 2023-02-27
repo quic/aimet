@@ -51,14 +51,12 @@ from torch.optim import lr_scheduler
 from aimet_common.defs import QuantScheme
 from aimet_torch.quantsim import QuantizationSimModel
 
-from aimet_torch.examples.imagenet_dataloader import ImageNetDataLoader
+from TrainingExtensions.torch.test.python.aimet_torch.models.imagenet_dataloader import ImageNetDataLoader
 from aimet_torch.utils import IterFirstX
-from aimet_torch.examples.supervised_classification_pipeline import create_stand_alone_supervised_classification_evaluator,\
+from models.supervised_classification_pipeline import create_stand_alone_supervised_classification_evaluator,\
     create_supervised_classification_trainer
 from aimet_torch.bn_reestimation import reestimate_bn_stats
 from aimet_torch.batch_norm_fold import fold_all_batch_norms_to_scale
-from torch.nn.modules.batchnorm import _BatchNorm
-
 
 two_class_image_dir = './data/tiny-imagenet-2'
 image_size = 224

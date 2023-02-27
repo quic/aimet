@@ -45,7 +45,7 @@ from torchvision import models
 from aimet_torch import batch_norm_fold
 from aimet_torch.cross_layer_equalization import CrossLayerScaling, HighBiasFold, equalize_model
 from aimet_torch import visualize_model
-from aimet_torch.examples.mobilenet import MobileNetV2
+from models.mobilenet import MobileNetV2
 
 
 class TestCrossLayerEqualization(unittest.TestCase):

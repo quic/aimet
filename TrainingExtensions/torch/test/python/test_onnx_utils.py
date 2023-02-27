@@ -50,7 +50,7 @@ from aimet_common.utils import AimetLogger
 from aimet_torch import onnx_utils
 import onnx
 
-from aimet_torch.examples.test_models import RoiModel, InputOutputDictModel
+from models.test_models import RoiModel, InputOutputDictModel
 
 
 class OutOfOrderModel(torch.nn.Module):

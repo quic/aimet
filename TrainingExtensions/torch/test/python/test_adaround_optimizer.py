@@ -53,7 +53,7 @@ from aimet_torch.utils import to_numpy, create_fake_data_loader, compute_encodin
     create_encoding_from_dict, CachedDataset
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QuantScheme
-from aimet_torch.examples.test_models import TinyModel
+from models.test_models import TinyModel
 from aimet_torch.adaround.adaround_weight import Adaround
 from aimet_torch.adaround.adaround_loss import AdaroundLoss
 from aimet_torch.adaround.adaround_optimizer import AdaroundOptimizer

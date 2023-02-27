@@ -45,7 +45,7 @@ import torch.nn as nn
 import torch.nn.functional as functional
 
 from aimet_torch.utils import create_fake_data_loader
-from aimet_torch.examples.test_models import MultiInput
+from models.test_models import MultiInput
 from aimet_torch.data_subsampler import DataSubSampler
 
 

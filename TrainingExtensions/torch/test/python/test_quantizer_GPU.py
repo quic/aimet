@@ -47,7 +47,8 @@ import torch.nn as nn
 from aimet_torch.quantsim import QuantizationSimModel, QuantScheme
 from aimet_torch import elementwise_ops
 from aimet_common.utils import AimetLogger
-import aimet_torch.examples.mnist_torch_model as mnist_model
+from models import mnist_torch_model
+
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
@@ -112,7 +113,7 @@ class QuantizerCpuGpu(unittest.TestCase):
         start_time = time.time()
 
         # create model on CPU
-        model_cpu = mnist_model.Net().to('cpu').eval()
+        model_cpu = mnist_torch_model.Net().to('cpu').eval()
 
         model_gpu = copy.deepcopy(model_cpu).to('cuda')
         cpu_sim_model = QuantizationSimModel(model_cpu, quant_scheme='tf', in_place=True,

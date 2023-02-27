@@ -53,7 +53,7 @@ from aimet_common.utils import round_up_to_multiplicity, round_down_to_multiplic
 from aimet_torch import utils, elementwise_ops
 
 from aimet_torch.quantsim import QuantizationSimModel
-from aimet_torch.examples.test_models import TinyModel, MultiInput, ModelWithReusedNodes, SingleResidual
+from models.test_models import TinyModel, MultiInput, ModelWithReusedNodes, SingleResidual
 
 
 class TestTrainingExtensionsUtils(unittest.TestCase):
