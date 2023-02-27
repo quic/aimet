@@ -44,7 +44,7 @@ import numpy as np
 import copy
 
 from aimet_torch.quantsim import QuantizationSimModel, load_checkpoint, save_checkpoint
-import aimet_torch.examples.mnist_torch_model as mnist_model
+import models.mnist_torch_model as mnist_model
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
 from aimet_common.defs import QuantScheme, QuantizationDataType
 path = str('../data')

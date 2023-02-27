@@ -38,7 +38,6 @@
 
 import pytest
 import copy
-import unittest
 import numpy as np
 import torch
 import torch.nn as nn
@@ -48,9 +47,9 @@ import aimet_torch.bias_correction
 import aimet_torch.layer_selector
 from aimet_torch import bias_correction
 from aimet_torch.quantsim import QuantParams
-from aimet_torch.examples.mobilenet import MobileNetV2
+from models.mobilenet import MobileNetV2
 from aimet_torch import batch_norm_fold
-from aimet_torch.examples.imagenet_dataloader import ImageNetDataLoader
+from TrainingExtensions.torch.test.python.aimet_torch.models.imagenet_dataloader import ImageNetDataLoader
 
 
 def evaluate(model, early_stopping_iterations, use_cuda):

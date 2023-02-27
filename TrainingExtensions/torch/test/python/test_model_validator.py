@@ -43,7 +43,7 @@ import torch.nn.functional as F
 from aimet_torch import utils
 from aimet_torch.model_validator.model_validator import ModelValidator
 from aimet_torch.model_validator import validation_checks
-from aimet_torch.examples import test_models
+from models import test_models
 from aimet_torch.meta import connectedgraph_utils
 from aimet_torch.model_preparer import prepare_model
 from aimet_torch import elementwise_ops

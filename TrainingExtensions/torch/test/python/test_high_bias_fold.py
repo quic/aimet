@@ -45,7 +45,7 @@ import numpy as np
 
 from aimet_torch.cross_layer_equalization import HighBiasFold, ClsSetInfo
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
-from aimet_torch.examples.test_models import TransposedConvModel
+from models.test_models import TransposedConvModel
 
 
 class TestTrainingExtensionHighBiasFold(unittest.TestCase):

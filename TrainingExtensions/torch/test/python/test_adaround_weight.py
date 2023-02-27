@@ -51,7 +51,7 @@ from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import calculate_delta_offset
 from aimet_torch.utils import create_fake_data_loader, create_rand_tensors_given_shapes, get_device
-from aimet_torch.examples.test_models import TinyModel
+from models.test_models import TinyModel
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QcQuantizeOpMode
 from aimet_torch.adaround.adaround_weight import Adaround, AdaroundOptimizer, AdaroundParameters

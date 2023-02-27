@@ -46,7 +46,7 @@ import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
-from aimet_torch.examples.test_models import TinyModel
+from models.test_models import TinyModel
 from aimet_torch.utils import create_fake_data_loader
 from aimet_torch.adaround.activation_sampler import ActivationSampler
 from aimet_torch.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer

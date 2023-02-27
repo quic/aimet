@@ -49,9 +49,6 @@ from aimet_torch.cross_layer_equalization import equalize_model
 from aimet_torch import utils
 
 # Bias Correction related imports
-from aimet_torch import bias_correction
-from aimet_torch.quantsim import QuantParams
-from aimet_torch.examples.mobilenet import MobileNetV2
 
 
 def cross_layer_equalization_manual():
@@ -159,7 +156,6 @@ def cross_layer_equalization_auto_step_by_step():
 
 def bias_correction_empirical():
     # Load the model empirical
-    from aimet_torch.examples.mobilenet import MobileNetV2
     model = MobileNetV2()
     model.eval()
 
@@ -187,7 +183,6 @@ def bias_correction_analytical_and_empirical():
     batch_size = 64
 
     # Load the model analytical_empirical
-    from aimet_torch.examples.mobilenet import MobileNetV2
     model = MobileNetV2()
     model.eval()
 

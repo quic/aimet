@@ -49,7 +49,7 @@ from aimet_common.utils import AimetLogger
 from aimet_torch.utils import create_rand_tensors_given_shapes, create_fake_data_loader, get_device
 from aimet_torch.layer_database import Layer, LayerDatabase
 from aimet_torch.channel_pruning.channel_pruner import InputChannelPruner, ChannelPruningCostCalculator
-from aimet_torch.examples import mnist_torch_model as mnist_model
+from models import mnist_torch_model
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
@@ -200,7 +200,7 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
 
     def test_calculate_spatial_svd_cost_all_layers(self):
 
-        model = mnist_model.Net().to("cpu")
+        model = mnist_torch_model.Net().to("cpu")
         print(model)
 
         input_shape = (1, 1, 28, 28)
@@ -227,7 +227,7 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
 
     def test_calculate_spatial_svd_cost_all_layers_given_ranks(self):
 
-        model = mnist_model.Net().to("cpu")
+        model = mnist_torch_model.Net().to("cpu")
 
         input_shape = (1, 1, 28, 28)
         dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
@@ -295,7 +295,7 @@ class TestTrainingExtensionsWeightSvdCostCalculator(unittest.TestCase):
 
     def test_calculate_weight_svd_cost_all_layers(self):
 
-        model = mnist_model.Net().to("cpu")
+        model = mnist_torch_model.Net().to("cpu")
         print(model)
 
         input_shape = (1, 1, 28, 28)
@@ -323,7 +323,7 @@ class TestTrainingExtensionsChannelPruningCostCalculator(unittest.TestCase):
 
     def test_calculate_channel_pruning_cost_all_layers(self):
 
-        model = mnist_model.Net().to("cpu")
+        model = mnist_torch_model.Net().to("cpu")
         print(model)
 
         input_shape = (1, 1, 28, 28)

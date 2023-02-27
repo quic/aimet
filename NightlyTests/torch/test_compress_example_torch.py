@@ -62,10 +62,9 @@ import aimet_torch.svd.svd_intf_defs_deprecated
 import aimet_torch.utils
 from aimet_torch.compress import ModelCompressor
 from aimet_torch.defs import ModuleCompRatioPair, ChannelPruningParameters
-from aimet_torch.examples import mnist_torch_model
-from aimet_torch.examples import mnist_torch_model as mnist_model
-from aimet_torch.examples.imagenet_dataloader import ImageNetDataLoader
-from aimet_torch.examples.supervised_classification_pipeline import \
+from models import mnist_torch_model
+from TrainingExtensions.torch.test.python.aimet_torch.models.imagenet_dataloader import ImageNetDataLoader
+from models.supervised_classification_pipeline import \
     create_stand_alone_supervised_classification_evaluator
 from aimet_torch.svd import svd as svd_intf
 from aimet_torch.utils import IterFirstX
@@ -511,7 +510,7 @@ class SvdAcceptanceTests(unittest.TestCase):
         # load trained MNIST model
         model = torch.load(os.path.join('./', 'data', 'mnist_trained_on_CPU.pth'))
 
-        compressed_model, stats = svd_intf.Svd.compress_model(model=model, run_model=mnist_model.evaluate,
+        compressed_model, stats = svd_intf.Svd.compress_model(model=model, run_model=mnist_torch_model.evaluate,
                                                               run_model_iterations=1, input_shape=(1, 1, 28, 28),
                                                               compression_type=aimet_torch.svd.svd_intf_defs_deprecated.CompressionTechnique.svd,
                                                               cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.mac,
@@ -543,7 +542,7 @@ class SvdAcceptanceTests(unittest.TestCase):
 
         params = aimet_torch.defs.SpatialSvdParameters(aimet_torch.defs.SpatialSvdParameters.Mode.auto, auto_params,
                                                        multiplicity=1)
-        results = ModelCompressor.compress_model(model, mnist_model.evaluate, 10, input_shape,
+        results = ModelCompressor.compress_model(model, mnist_torch_model.evaluate, 10, input_shape,
                                                  aimet_common.defs.CompressionScheme.spatial_svd,
                                                  cost_metric=aimet_common.defs.CostMetric.mac, parameters=params,
                                                  trainer=Trainer(), visualization_url=None)

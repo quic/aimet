@@ -50,9 +50,10 @@ import torch
 from aimet_onnx.batch_norm_fold import _find_conv_bn_pairs, find_all_batch_norms_to_fold, fold_all_batch_norms_to_weight
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
 
-from test_models import BNAfterConv, BNBeforeConv, BNAfterDynamicMatMul, BNAfterConvTranspose, BNAfterConv1d, \
+from models.models_for_tests import BNAfterConv, BNBeforeConv, BNAfterDynamicMatMul, BNAfterConvTranspose, BNAfterConv1d, \
                         BNAfterLinear, BNBeforeLinear, BNBeforeFlattenLinear, BNBeforeConv1d, BNBeforeConvTranspose, \
-                        MyModel, _convert_to_onnx_no_fold, _convert_to_onnx, initialize_bn_params, BNAfterConvTranspose1d
+                        MyModel, _convert_to_onnx_no_fold, _convert_to_onnx, initialize_bn_params,  \
+                        BNAfterConvTranspose1d
 
 providers = ['CPUExecutionProvider']
 

@@ -38,12 +38,12 @@
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops
 from aimet_common.connected_graph.connectedgraph import get_ordered_ops
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
-import test_models
+from models import models_for_tests
 
 
 class TestConnectedGraph:
     def test_simple_model(self):
-        model = test_models.build_dummy_model()
+        model = models_for_tests.build_dummy_model()
         cg = ConnectedGraph(model)
         ops = cg.get_all_ops()
         assert len(ops) == 5
@@ -54,7 +54,7 @@ class TestConnectedGraph:
                 'conv_w', 'conv_b', 'fc_w', 'fc_b'] == [product for product in products]
 
     def test_single_residual_model(self):
-        model = test_models.single_residual_model()
+        model = models_for_tests.single_residual_model()
         conn_graph = ConnectedGraph(model)
         assert len(conn_graph.get_all_ops()) == 21
         products = conn_graph.get_all_products()
@@ -66,7 +66,7 @@ class TestConnectedGraph:
         assert conn_graph._branch_count == 2
 
     def test_multi_inputs_model(self):
-        model = test_models.multi_input_model()
+        model = models_for_tests.multi_input_model()
         conn_graph = ConnectedGraph(model)
         assert len(conn_graph.get_all_ops()) == 15
 
@@ -79,7 +79,7 @@ class TestConnectedGraph:
         assert len(input_ops) == 2
 
     def test_transposed_conv_model(self):
-        model = test_models.transposed_conv_model()
+        model = models_for_tests.transposed_conv_model()
         conn_graph = ConnectedGraph(model)
         assert len(conn_graph.get_all_ops()) == 5
 
@@ -93,7 +93,7 @@ class TestConnectedGraph:
                 'bn2.running_var'}.issubset({product for product in products})
 
     def test_concat_model(self):
-        model = test_models.concat_model()
+        model = models_for_tests.concat_model()
         conn_graph = ConnectedGraph(model)
         ops = conn_graph.get_all_ops()
         assert len(ops) == 11
@@ -103,7 +103,7 @@ class TestConnectedGraph:
         assert conn_graph._branch_count == 1
 
     def test_hierarchical_model(self):
-        model = test_models.hierarchical_model()
+        model = models_for_tests.hierarchical_model()
         conn_graph = ConnectedGraph(model)
         ops = conn_graph.get_all_ops()
         assert len(ops) == 95

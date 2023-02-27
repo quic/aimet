@@ -36,9 +36,11 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 import onnx
-import test_models
+
 import aimet_onnx.utils as utils
 from aimet_onnx.utils import ParamUtils
+
+from models import models_for_tests
 
 
 class TestUtils:
@@ -49,7 +51,7 @@ class TestUtils:
         """
         Test remove nodes by given type
         """
-        model = test_models.build_dummy_model()
+        model = models_for_tests.build_dummy_model()
         node_ls = [node.op_type for node in model.graph.node]
         assert node_ls == ['Conv', 'Relu', 'MaxPool', 'Flatten', 'Gemm']
         # Remove first layer of dummy model
@@ -67,7 +69,7 @@ class TestUtils:
         """
         Test replace op type of nodes with given op type
         """
-        model = test_models.build_dummy_model()
+        model = models_for_tests.build_dummy_model()
         node_ls = [node.op_type for node in model.graph.node]
         assert node_ls == ['Conv', 'Relu', 'MaxPool', 'Flatten', 'Gemm']
 
@@ -79,7 +81,7 @@ class TestUtils:
         """
         Test get weights
         """
-        model = test_models.build_dummy_model()
+        model = models_for_tests.build_dummy_model()
         for node in model.graph.initializer:
             assert node.raw_data == utils.get_weights(node.name, model.graph)
 
@@ -87,7 +89,7 @@ class TestUtils:
         """
         Test get nodes with ordered
         """
-        model = test_models.build_dummy_model()
+        model = models_for_tests.build_dummy_model()
         node_dict = utils.get_ordered_dict_of_nodes(model.graph)
         node_keys = list(node_dict.keys())
 
@@ -96,7 +98,7 @@ class TestUtils:
             assert node_dict[node.name] == node
 
     def test_weight_utils(self):
-        model = test_models.build_dummy_model()
+        model = models_for_tests.build_dummy_model()
         for node in model.graph.node:
             if node.op_type == 'Conv':
                 weights = ParamUtils.get_param(model, node, 1)
@@ -119,7 +121,7 @@ class TestUtils:
                 assert bias.name == 'fc_b'
 
     def test_utils_transposed_conv_model(self):
-        model = test_models.transposed_conv_model()
+        model = models_for_tests.transposed_conv_model()
         model = model.model
         for node in model.graph.node:
             if node.op_type == 'ConvTranspose':
@@ -137,7 +139,7 @@ class TestUtils:
         """
         Test remove node from model
         """
-        model = test_models.build_dummy_model()
+        model = models_for_tests.build_dummy_model()
         node_ls = [node.op_type for node in model.graph.node]
         assert node_ls == ['Conv', 'Relu', 'MaxPool', 'Flatten', 'Gemm']
         gemm_node = model.graph.node[-1]
@@ -152,7 +154,7 @@ class TestUtils:
         """
         Test get attribute value from node
         """
-        model = test_models.build_dummy_model()
+        model = models_for_tests.build_dummy_model()
         conv_layer = model.graph.node[0]
         assert utils.get_node_attribute(conv_layer, "pads") == [1, 1, 1, 1]
         assert utils.get_node_attribute(conv_layer, "kernel_shape") == [3, 3]

@@ -42,10 +42,9 @@ import unittest.mock
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision.models
 
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
-from aimet_torch.examples import test_models
+from models import test_models
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.meta import connectedgraph_utils
 from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
