@@ -34,7 +34,7 @@
 #  SPDX-License-Identifier: BSD-3-Clause
 #
 #  @@-COPYRIGHT-END-@@
-
+import json
 import onnx
 import pytest
 import torch
@@ -43,9 +43,10 @@ from onnx import numpy_helper
 from torchvision import models
 
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
+from aimet_torch.examples.test_models import MultiInput
 
 from aimet_torch.quantsim import QuantizationSimModel
-from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer
+from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
 from aimet_torch.weight_padding_utils import recompute_scale, recompute_encodings, weight_pad, WeightPaddingParams
 
 
@@ -120,7 +121,72 @@ class TestWeightPadUtils:
         for val in quant_output:
             assert val % 16 == 0
 
-    def test_weight_pad_in_place(self):
+    def test_weight_pad_in_place_per_channel(self):
+        model = MultiInput()
+        model.eval()
+        dummy_input = (torch.rand(1, 3, 32, 32), torch.rand(1, 3, 20, 20))
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "True",
+                    "is_symmetric": "True"
+                },
+                "per_channel_quantization": "True",
+            },
+            "params": {
+                "bias": {
+                    "is_quantized": "False"
+                },
+            },
+            "op_type": {
+                "Conv": {
+                    "per_channel_quantization": "True"
+                },
+                "Gemm": {
+                    "per_channel_quantization": "True"
+                }
+            },
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+
+
+        sim = QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                   config_file='./data/quantsim_config.json',
+                                   default_param_bw=16, default_output_bw=16)
+        sim.compute_encodings(evaluate, dummy_input)
+
+        # confirms that per channel quantization is applied
+        for name, module in sim.quant_wrappers():
+            if 'weight' in module.param_quantizers:
+                assert isinstance(module.param_quantizers['weight'], StaticGridPerChannelQuantizer)
+
+        # populate bitwidths per layer in dict
+        bw_dict = dict()
+        for layer_name, layer in sim.quant_wrappers():
+            bw_dict[layer_name] = WeightPaddingParams(simulated_bw=12, target_kernel_bw=16)
+
+        weight_pad(sim, bw_dict)
+
+        # confirm that all weights are properly padded in place
+        for layer_name, layer in sim.quant_wrappers():
+            param_quant_dict = layer.param_quantizers
+            if 'weight' in param_quant_dict:
+                layer_weights = layer._module_to_wrap.weight
+                quant_tensor = param_quant_dict['weight'].quantize(layer_weights,MAP_ROUND_MODE_TO_PYMO['nearest'])
+                numpy_arr = quant_tensor.detach().numpy()
+                for val in numpy_arr.flatten():
+                    assert val % 16 == 0
+
+    def test_weight_pad_in_place_per_tensor(self):
         model = models.resnet50(pretrained=True)
         dummy_input = torch.randn(1, 3, 224, 224)
         sim = QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced,
@@ -149,7 +215,7 @@ class TestWeightPadUtils:
                 for val in numpy_arr.flatten():
                     assert val % 16 == 0
 
-    def test_weight_pad_export(self):
+    def test_weight_pad_export_per_tensor(self):
         model = models.resnet50(pretrained=True)
         dummy_input = torch.randn(1, 3, 224, 224)
         sim = QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced,
@@ -164,7 +230,7 @@ class TestWeightPadUtils:
 
         # perform weight pad and export
         weight_pad(sim, bw_dict)
-        sim.export('./data/', 'weight_pad_model', dummy_input)
+        sim.export('./data/', 'weight_pad_model_per_tensor', dummy_input)
 
         quant_dict = dict()
         for layer_name, layer in sim.quant_wrappers():
@@ -173,7 +239,7 @@ class TestWeightPadUtils:
                 quant_dict[layer_name + ".weight"] = param_quant_dict['weight']
 
         # confirm exported ONNX model has padded weights
-        onnx_model = onnx.load('./data/weight_pad_model.onnx')
+        onnx_model = onnx.load('./data/weight_pad_model_per_tensor.onnx')
 
         for node in onnx_model.graph.initializer:
             if "weight" in node.name:
@@ -183,6 +249,81 @@ class TestWeightPadUtils:
                 if not quantizer.enabled:
                     continue
 
+                quant_weights = quantizer.quantize(weights, round_mode=MAP_ROUND_MODE_TO_PYMO['nearest'])
+
+                numpy_arr = quant_weights.detach().numpy()
+                for val in numpy_arr.flatten():
+                    assert val % 16 == 0
+
+    def test_weight_pad_export_per_channel(self):
+        model = MultiInput()
+        model.eval()
+        dummy_input = (torch.rand(1, 3, 32, 32), torch.rand(1, 3, 20, 20))
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "True",
+                    "is_symmetric": "True"
+                },
+                "per_channel_quantization": "True",
+            },
+            "params": {
+                "bias": {
+                    "is_quantized": "False"
+                },
+            },
+            "op_type": {
+                "Conv": {
+                    "per_channel_quantization": "True"
+                },
+                "Gemm": {
+                    "per_channel_quantization": "True"
+                }
+            },
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+
+        sim = QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                   config_file='./data/quantsim_config.json',
+                                   default_param_bw=16, default_output_bw=16)
+        sim.compute_encodings(evaluate, dummy_input)
+
+        # confirms that per channel quantization is applied
+        for name, module in sim.quant_wrappers():
+            if 'weight' in module.param_quantizers:
+                assert isinstance(module.param_quantizers['weight'], StaticGridPerChannelQuantizer)
+
+        # populate bitwidths per layer in dict
+        bw_dict = dict()
+        for layer_name, layer in sim.quant_wrappers():
+            bw_dict[layer_name] = WeightPaddingParams(simulated_bw=12, target_kernel_bw=16)
+
+        # perform weight pad and export
+        weight_pad(sim, bw_dict)
+        sim.export('./data/', 'weight_pad_model_per_channel', dummy_input)
+
+        quant_dict = dict()
+        for layer_name, layer in sim.quant_wrappers():
+            param_quant_dict = layer.param_quantizers
+            if 'weight' in param_quant_dict:
+                quant_dict[layer_name + ".weight"] = param_quant_dict['weight']
+
+        # confirm exported ONNX model has padded weights
+        onnx_model = onnx.load('./data/weight_pad_model_per_channel.onnx')
+
+        for node in onnx_model.graph.initializer:
+            if "weight" in node.name:
+                weights = torch.Tensor(numpy_helper.to_array(node))
+                quantizer = quant_dict[node.name]
                 quant_weights = quantizer.quantize(weights, round_mode=MAP_ROUND_MODE_TO_PYMO['nearest'])
 
                 numpy_arr = quant_weights.detach().numpy()
