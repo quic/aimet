@@ -283,6 +283,38 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         """
         return self.eval_callback(model, NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION)
 
+    def run_inference(self) -> Tuple[QuantizationSimModel, float]:
+        '''
+        Creates a quantization model and performs inference
+
+        :return: QuantizationSimModel, model accuracy as float
+        '''
+        with self.eval_manager.session("Prepare Model") as sess:
+            model = sess.wrap(self._prepare_model)(self.fp32_model)
+
+        # Batchnorm Folding
+        with self.eval_manager.session("Batchnorm Folding", ptq=True) as sess:
+            model, _ = sess.wrap(self._apply_batchnorm_folding)(model)
+            if sess.ptq_result is None:
+                sess.set_ptq_result(model=model,
+                                    applied_techniques=["batchnorm_folding"],
+                                    export_kwargs=self._export_kwargs)
+
+            return self._create_quantsim_and_encodings(sess.ptq_result.load_model()),\
+                    sess.ptq_result.accuracy
+
+    def optimize(self, allowed_accuracy_drop: float = 0.0) -> Tuple[torch.nn.Module, float, str]:
+        """
+        Integrate and apply post-training quantization techniques.
+
+        :param allowed_accuracy_drop: Maximum allowed accuracy drop
+        :return: Tuple of (best model, eval score, encoding path)
+        """
+        result = self._optimize_helper(self._optimize_main, allowed_accuracy_drop)
+        return result["model"],\
+               result["accuracy"],\
+               result["encoding_path"]
+
     def set_adaround_params(self, adaround_params: AdaroundParameters) -> None:
         """
         Set Adaround parameters.
@@ -510,38 +542,6 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
 
         return model, adaround_encoding_path
 
-    def run_inference(self) -> Tuple[QuantizationSimModel, float]:
-        '''
-        Creates a quantization model and performs inference
-
-        :return: QuantizationSimModel, model accuracy as float
-        '''
-        with self.eval_manager.session("Prepare Model") as sess:
-            model = sess.wrap(self._prepare_model)(self.fp32_model)
-
-        # Batchnorm Folding
-        with self.eval_manager.session("Batchnorm Folding", ptq=True) as sess:
-            model, _ = sess.wrap(self._apply_batchnorm_folding)(model)
-            if sess.ptq_result is None:
-                sess.set_ptq_result(model=model,
-                                    applied_techniques=["batchnorm_folding"],
-                                    export_kwargs=self._export_kwargs)
-
-            return self._create_quantsim_and_encodings(sess.ptq_result.load_model()),\
-                    sess.ptq_result.accuracy
-
-    def optimize(self, allowed_accuracy_drop: float = 0.0) -> Tuple[torch.nn.Module, float, str]:
-        """
-        Integrate and apply post-training quantization techniques.
-
-        :param allowed_accuracy_drop: Maximum allowed accuracy drop
-        :return: Tuple of (best model, eval score, encoding path)
-        """
-        result = self._optimize_helper(self._optimize_main, allowed_accuracy_drop)
-        return result["model"],\
-               result["accuracy"],\
-               result["encoding_path"]
-
     def _optimize_helper(
             self,
             optimize_fn: Callable,
@@ -586,15 +586,22 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         finally:
             self.eval_manager.export_diagnostics()
 
-    def get_quant_scheme_candidates(self):
+    def get_quant_scheme_candidates(self) -> Tuple[_QuantSchemePair, ...]:
         """
-        Return candidates for quant scheme search
+        Return the candidates for quant scheme search.
+        During :meth:`~AutoQuant.optimize`, the candidate with the highest accuracy
+        will be selected among them.
+
+        :return: Candidates for quant scheme search
         """
         return self._quant_scheme_candidates
 
-    def set_quant_scheme_candidates(self, candidates):
+    def set_quant_scheme_candidates(self, candidates: Tuple[_QuantSchemePair, ...]):
         """
-        Set candidates for quant scheme search
+        Set candidates for quant scheme search.
+        During :meth:`~AutoQuant.optimize`, the candidate with the highest accuracy
+        will be selected among them.
+
         :param candidates: Candidates for quant scheme search
         """
         self._quant_scheme_candidates = copy.copy(candidates)

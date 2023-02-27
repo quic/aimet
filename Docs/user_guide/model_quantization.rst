@@ -54,7 +54,7 @@ AIMET Quantization Features
     Post-training quantization techniques help a model improve quantized accuracy without needing to re-train.
 
     - :ref:`AutoQuant<ug-auto-quant>`:
-        AIMET provies an API that integrates the post-training quantization techniques described below. AutoQuant is
+        AIMET provides an API that integrates the post-training quantization techniques described below. AutoQuant is
         recommended for PTQ. If desired, individual techniques can be invoked using standalone feature specific APIs.
 
         - :ref:`Adaptive Rounding (AdaRound)<ug-adaround>`:

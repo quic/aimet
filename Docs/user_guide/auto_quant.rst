@@ -20,9 +20,19 @@ summary, the AutoQuant feature saves time and automates the quantization of the 
 Workflow
 ========
 
-AutoQuant includes 1) batch norm folding, 2) cross-layer equalization, and 3) AdaRound.
+Before entering the optimization workflow, AutoQuant performs the following preparation steps:
+
+    1) Check the validity of the model and convert it into an AIMET quantization-friendly format (denoted as `Prepare Model` below).
+    2) Select the best-performing quantization scheme for the given model (denoted as `QuantScheme Selection` below)
+
+After the prepration steps, AutoQuant mainly consists of the following three stages:
+
+    1) BatchNorm folding
+    2) :ref:`Cross-Layer Equalization <ug-post-training-quantization>`
+    3) :ref:`AdaRound <ug-adaround>`
+
 These techniques are applied in a best-effort manner until the model meets the allowed accuracy drop.
 If applying AutoQuant fails to satisfy the evaluation goal, AutoQuant will return the model to which the best combination
 of the above techniques is applied.
 
-    .. image:: ../images/auto_quant_flowchart.png
+    .. image:: ../images/auto_quant_v2_flowchart.png

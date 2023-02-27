@@ -16,70 +16,24 @@ For an end-to-end notebook showing how to use PyTorch AutoQuant, please see :doc
 
 Top-level API
 =============
+.. autoclass:: aimet_torch.auto_quant_v2.AutoQuant
+    :members:
+    :member-order: bysource
+
 .. autoclass:: aimet_torch.auto_quant.AutoQuant
     :members:
 
 Code Examples
-=============
+===============
+.. literalinclude:: ../torch_code_examples/auto_quant_v2.py
+    :language: python
+    :lines: 41-
+    :emphasize-lines: 74-78,86-
 
-**Required imports**
+.. note::
+   To use :class:`auto_quant.AutoQuant <aimet_torch.auto_quant.AutoQuant>` (will be deprecated), apply the following code changes to step 5 and 7.
 
 .. literalinclude:: ../torch_code_examples/auto_quant.py
     :language: python
-    :start-after: # Step 0. Import statements
-    :end-before: # End step 0
-
-**Define constants and helper functions**
-
-.. literalinclude:: ../torch_code_examples/auto_quant.py
-    :language: python
-    :start-after: # Step 1. Define constants and helper functions
-    :end-before: # End step 1
-
-**Prepare model and dataset**
-
-.. literalinclude:: ../torch_code_examples/auto_quant.py
-    :language: python
-    :start-after: # Step 2. Prepare model and dataset
-    :end-before: # End step 2
-
-**Prepare unlabeled dataset**
-
-.. literalinclude:: ../torch_code_examples/auto_quant.py
-    :language: python
-    :start-after: # Step 3. Prepare unlabeled dataset
-    :end-before: # End step 3
-
-**Prepare eval callback**
-
-.. literalinclude:: ../torch_code_examples/auto_quant.py
-    :language: python
-    :start-after: # Step 4. Prepare eval callback
-    :end-before: # End step 4
-
-**Create AutoQuant object**
-
-.. literalinclude:: ../torch_code_examples/auto_quant.py
-    :language: python
-    :start-after: # Step 5. Create AutoQuant object
-    :end-before: # End step 5
-
-**(Optional) Set Adaround parameters**
-
-For setting the num_batches parameter, use the following guideline.
-The number of batches is used to evaluate the model while calculating the quantization encodings.
-Typically we want AdaRound to use around 2000 samples.
-For example, if the batch size is 32, num_batches is 64.
-If the batch size you are using is different, adjust the num_batches accordingly.
-
-.. literalinclude:: ../torch_code_examples/auto_quant.py
-    :language: python
-    :start-after: # Step 6. (Optional) Set adaround params
-    :end-before: # End step 6
-
-**Run AutoQuant**
-
-.. literalinclude:: ../torch_code_examples/auto_quant.py
-    :language: python
-    :start-after: # Step 7. Run AutoQuant
-    :end-before: # End step 7
+    :lines: 114-
+    :emphasize-lines: 1-4,12-
