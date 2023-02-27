@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -46,7 +46,7 @@ from torch.utils.data import Dataset, DataLoader, SubsetRandomSampler
 from torchvision import models, datasets, transforms
 
 from aimet_torch.adaround.adaround_weight import AdaroundParameters
-from aimet_torch.auto_quant import AutoQuant
+from aimet_torch.auto_quant_v2 import AutoQuant
 
 # Step 1. Define constants and helper functions
 EVAL_DATASET_SIZE = 5000
@@ -112,9 +112,10 @@ def eval_callback(model: torch.nn.Module, num_samples: Optional[int] = None) -> 
     return int(num_correct_predictions) / num_samples
 
 # Step 5. Create AutoQuant object
-auto_quant = AutoQuant(allowed_accuracy_drop=0.01,
-                       unlabeled_dataset_iterable=unlabeled_data_loader,
-                       eval_callback=eval_callback)
+auto_quant = AutoQuant(fp32_model.cuda(),
+                       dummy_input.cuda(),
+                       unlabeled_data_loader,
+                       eval_callback)
 
 # Step 6. (Optional) Set adaround params
 ADAROUND_DATASET_SIZE = 2000
@@ -123,9 +124,8 @@ adaround_params = AdaroundParameters(adaround_data_loader, num_batches=len(adaro
 auto_quant.set_adaround_params(adaround_params)
 
 # Step 7. Run AutoQuant
-model, accuracy, encoding_path =\
-    auto_quant.apply(fp32_model.cuda(),
-                     dummy_input_on_cpu=dummy_input.cpu(),
-                     dummy_input_on_gpu=dummy_input.cuda())
+sim, initial_accuracy = auto_quant.run_inference()
+model, optimized_accuracy, encoding_path = auto_quant.optimize(allowed_accuracy_drop=0.01)
 
+print(f"- Quantized Accuracy (before optimization): {initial_accuracy:.4f}")
 print(f"- Quantized Accuracy (after optimization):  {optimized_accuracy:.4f}")
