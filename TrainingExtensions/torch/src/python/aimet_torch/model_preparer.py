@@ -92,7 +92,9 @@ functional_with_kwargs = {
     'mul'           : elementwise_ops.Multiply,
     'div'           : elementwise_ops.Divide,
     'truediv'       : elementwise_ops.Divide,
+    'floordiv'      : elementwise_ops.FloorDivide,
     'matmul'        : elementwise_ops.MatMul,
+    'exp'           : elementwise_ops.Exponential,
 }
 
 
@@ -112,6 +114,11 @@ functional_with_args_kwargs = {
     'max_pool2d'                : elementwise_ops.MaxPool2d,
     'max_pool2d_with_indices'   : elementwise_ops.MaxPool2d,
     'adaptive_avg_pool2d'       : elementwise_ops.AdaptiveAvgPool2d,
+    'avg_pool2d'                : elementwise_ops.AvgPool2d,
+    'norm'                      : elementwise_ops.Norm,
+    'chunk'                     : elementwise_ops.Chunk,
+    'batch_norm'                : elementwise_ops.BatchNorm,
+    'group_norm'                : elementwise_ops.GroupNorm,
 }
 
 

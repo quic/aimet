@@ -86,6 +86,17 @@ class Divide(torch.nn.Module):
         return torch.div(x, y)
 
 
+class FloorDivide(torch.nn.Module):
+    """ Floor Divide module for a functional floor divide"""
+    # pylint:disable=arguments-differ
+    @staticmethod
+    def forward(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        """
+        Forward-pass routine for floor divide op
+        """
+        return torch.floor_divide(x, y)
+
+
 class Concat(torch.nn.Module):
     """ Concat module for a functional concat"""
     def __init__(self, axis: int = 0):
@@ -162,3 +173,53 @@ class AdaptiveAvgPool2d(torch.nn.Module):
         Forward-pass routine for adaptive_avg_pool2d op
         """
         return torch.nn.functional.adaptive_avg_pool2d(*args, **kwargs)
+
+
+class AvgPool2d(torch.nn.Module):
+    """ AvgPool2d module for a functional avg_pool2d"""
+    @staticmethod
+    def forward(*args, **kwargs) -> torch.Tensor:
+        """
+        Forward-pass routine for avg_pool2d op
+        """
+        return torch.nn.functional.avg_pool2d(*args, **kwargs)
+
+
+class Norm(torch.nn.Module):
+    """ AvgPool2d module for a functional norm"""
+    @staticmethod
+    def forward(*args, **kwargs) -> torch.Tensor:
+        """
+        Forward-pass routine for norm op
+        """
+        return torch.norm(*args, **kwargs)
+
+
+class Chunk(torch.nn.Module):
+    """ Chunk module for a functional chunk"""
+    @staticmethod
+    def forward(*args, **kwargs) -> torch.Tensor:
+        """
+        Forward-pass routine for chunk op
+        """
+        return torch.chunk(*args, **kwargs)
+
+
+class BatchNorm(torch.nn.Module):
+    """ BatchNorm module for a functional batchnorm"""
+    @staticmethod
+    def forward(*args, **kwargs) -> torch.Tensor:
+        """
+        Forward-pass routine for batchnorm op
+        """
+        return torch.nn.functional.batch_norm(*args, **kwargs)
+
+
+class GroupNorm(torch.nn.Module):
+    """ GroupNorm module for a functional groupnorm"""
+    @staticmethod
+    def forward(*args, **kwargs) -> torch.Tensor:
+        """
+        Forward-pass routine for groupnorm op
+        """
+        return torch.nn.functional.group_norm(*args, **kwargs)
