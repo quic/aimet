@@ -120,7 +120,7 @@ python3 -m pip install --no-cache-dir Pillow-SIMD==7.0.0.post3
 *Optional*: Replace the onnxruntime package with onnxruntime-gpu:
 ```bash
 python3 -m pip uninstall -y onnxruntime
-python3 -m pip install --no-cache-dir onnxruntime-gpu==1.13.1
+python3 -m pip install --no-cache-dir onnxruntime-gpu==1.13.1 # Note: use version 1.10.0 for python 3.6 builds
 ```
 
 ### Post installation steps
