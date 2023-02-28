@@ -44,7 +44,7 @@ from torchvision import models
 
 import aimet_torch.svd.svd_intf_defs_deprecated
 from aimet_torch.svd import svd as svd_intf
-from TrainingExtensions.torch.test.python.aimet_torch.models.imagenet_dataloader import ImageNetDataLoader
+from models.imagenet_dataloader import ImageNetDataLoader
 from aimet_torch.utils import IterFirstX
 from models.supervised_classification_pipeline import create_stand_alone_supervised_classification_evaluator
 

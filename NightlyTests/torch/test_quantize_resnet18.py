@@ -51,7 +51,7 @@ from torch.optim import lr_scheduler
 from aimet_common.defs import QuantScheme
 from aimet_torch.quantsim import QuantizationSimModel
 
-from TrainingExtensions.torch.test.python.aimet_torch.models.imagenet_dataloader import ImageNetDataLoader
+from models.imagenet_dataloader import ImageNetDataLoader
 from aimet_torch.utils import IterFirstX
 from models.supervised_classification_pipeline import create_stand_alone_supervised_classification_evaluator,\
     create_supervised_classification_trainer

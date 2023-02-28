@@ -49,7 +49,7 @@ from aimet_torch import bias_correction
 from aimet_torch.quantsim import QuantParams
 from models.mobilenet import MobileNetV2
 from aimet_torch import batch_norm_fold
-from TrainingExtensions.torch.test.python.aimet_torch.models.imagenet_dataloader import ImageNetDataLoader
+from models.imagenet_dataloader import ImageNetDataLoader
 
 
 def evaluate(model, early_stopping_iterations, use_cuda):
