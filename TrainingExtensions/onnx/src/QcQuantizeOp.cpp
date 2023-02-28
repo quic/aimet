@@ -173,7 +173,7 @@ void QcQuantizeKernel::Compute(OrtKernelContext* context)
     {
         allocator = &_allocator;
         auto stream = reinterpret_cast<cudaStream_t>(api_.KernelContext_GetGPUComputeStream(context));
-        cudaStreamSynchronize(stream);
+        cudaDeviceSynchronize();
     }
 #endif
     modeSpecificActionInt(input_data, size, result, quant_info->tensorQuantizerRef, op_mode, encoding,
