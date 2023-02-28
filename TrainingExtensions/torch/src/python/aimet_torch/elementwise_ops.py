@@ -42,6 +42,30 @@ import torch
 import torch.nn
 
 
+def forward_function_wrapper(functional):
+    @staticmethod
+    def forward(*args, **kwargs) -> torch.Tensor:
+        """
+        Forward-pass routine for the functional op
+        """
+        return functional(*args, **kwargs)
+    return forward
+
+def create_wrapper_module(class_name, functional):
+    WrappedModule = type(class_name, (torch.nn.Module,), dict(forward=forward_function_wrapper(functional)))
+    return WrappedModule
+
+# Modules with args and kwargs
+Interpolate = create_wrapper_module('Interpolate', torch.nn.functional.interpolate)
+MaxPool2d = create_wrapper_module('MaxPool2d', torch.nn.functional.max_pool2d)
+AdaptiveAvgPool2d = create_wrapper_module('AdaptiveAvgPool2d', torch.nn.functional.adaptive_avg_pool2d)
+AvgPool2d = create_wrapper_module('AvgPool2d', torch.nn.functional.avg_pool2d)
+Norm = create_wrapper_module('Norm', torch.norm)
+Chunk = create_wrapper_module('Chunk', torch.chunk)
+BatchNorm = create_wrapper_module('BatchNorm', torch.nn.functional.batch_norm)
+GroupNorm = create_wrapper_module('GroupNorm', torch.nn.functional.group_norm)
+
+
 class Add(torch.nn.Module):
     """ Add module for a functional add"""
     # pylint:disable=arguments-differ
@@ -122,16 +146,6 @@ class MatMul(torch.nn.Module):
         return torch.matmul(x, y)
 
 
-class Interpolate(torch.nn.Module):
-    """ Interpolate module for a functional interpolate"""
-    @staticmethod
-    def forward(*args, **kwargs) -> torch.Tensor:
-        """
-        Forward-pass routine for interpolate op
-        """
-        return torch.nn.functional.interpolate(*args, **kwargs)
-
-
 class DynamicConv2d(torch.nn.Module):
     """ Conv2d module for a functional conv2d"""
     def __init__(self, stride=1, padding=0, dilation=1, groups=1):
@@ -153,73 +167,3 @@ class Exponential(torch.nn.Module):
         Forward-pass routine for exponential op
         """
         return torch.exp(x)
-
-
-class MaxPool2d(torch.nn.Module):
-    """ MaxPool2d module for a functional MaxPool2d"""
-    @staticmethod
-    def forward(*args, **kwargs) -> torch.Tensor:
-        """
-        Forward-pass routine for MaxPool2d op
-        """
-        return torch.nn.functional.max_pool2d(*args, **kwargs)
-
-
-class AdaptiveAvgPool2d(torch.nn.Module):
-    """ AdaptiveAvgPool2d module for a functional adaptive_avg_pool2d"""
-    @staticmethod
-    def forward(*args, **kwargs) -> torch.Tensor:
-        """
-        Forward-pass routine for adaptive_avg_pool2d op
-        """
-        return torch.nn.functional.adaptive_avg_pool2d(*args, **kwargs)
-
-
-class AvgPool2d(torch.nn.Module):
-    """ AvgPool2d module for a functional avg_pool2d"""
-    @staticmethod
-    def forward(*args, **kwargs) -> torch.Tensor:
-        """
-        Forward-pass routine for avg_pool2d op
-        """
-        return torch.nn.functional.avg_pool2d(*args, **kwargs)
-
-
-class Norm(torch.nn.Module):
-    """ AvgPool2d module for a functional norm"""
-    @staticmethod
-    def forward(*args, **kwargs) -> torch.Tensor:
-        """
-        Forward-pass routine for norm op
-        """
-        return torch.norm(*args, **kwargs)
-
-
-class Chunk(torch.nn.Module):
-    """ Chunk module for a functional chunk"""
-    @staticmethod
-    def forward(*args, **kwargs) -> torch.Tensor:
-        """
-        Forward-pass routine for chunk op
-        """
-        return torch.chunk(*args, **kwargs)
-
-
-class BatchNorm(torch.nn.Module):
-    """ BatchNorm module for a functional batchnorm"""
-    @staticmethod
-    def forward(*args, **kwargs) -> torch.Tensor:
-        """
-        Forward-pass routine for batchnorm op
-        """
-        return torch.nn.functional.batch_norm(*args, **kwargs)
-
-
-class GroupNorm(torch.nn.Module):
-    """ GroupNorm module for a functional groupnorm"""
-    @staticmethod
-    def forward(*args, **kwargs) -> torch.Tensor:
-        """
-        Forward-pass routine for groupnorm op
-        """
-        return torch.nn.functional.group_norm(*args, **kwargs)
