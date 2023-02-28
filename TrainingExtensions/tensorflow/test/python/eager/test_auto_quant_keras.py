@@ -51,6 +51,10 @@ from aimet_tensorflow.keras.auto_quant import AutoQuant
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 
+from aimet_common.utils import AimetLogger
+import logging
+
+AimetLogger.set_level_for_all_areas(logging.DEBUG)
 
 @pytest.fixture(scope="function")
 def model():
@@ -155,10 +159,10 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc):
     class _QuantizationSimModel(QuantizationSimModel):
         def __init__(self, model, quant_scheme: Union[QuantScheme, str] = 'tf_enhanced', rounding_mode: str = 'nearest',
                      default_output_bw: int = 8, default_param_bw: int = 8, in_place: bool = False,
-                     config_file: str = None):
+                     config_file: str = None, default_data_type: QuantizationDataType = QuantizationDataType.int):
 
             super(_QuantizationSimModel, self).__init__(model, quant_scheme, rounding_mode, default_output_bw,
-                                                        default_param_bw, in_place, config_file)
+                                                        default_param_bw, in_place, config_file, default_data_type)
 
             self._model_without_wrappers = model
             if not in_place:
