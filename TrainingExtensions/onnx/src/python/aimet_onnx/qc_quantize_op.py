@@ -78,7 +78,7 @@ class QcQuantizeOp:
         self.encodings = encodings
         self.use_symmetric_encodings = use_symmetric_encodings
         self.enabled = True
-        self.dtype = QuantizationDataType.int
+        self.data_type = QuantizationDataType.int
 
     def _build_tensor_quantizer(self):
         return libpymo.TensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[self.quant_scheme],
