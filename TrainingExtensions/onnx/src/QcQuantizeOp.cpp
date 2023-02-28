@@ -172,7 +172,6 @@ void QcQuantizeKernel::Compute(OrtKernelContext* context)
     if (useCuda)
     {
         allocator = &_allocator;
-        auto stream = reinterpret_cast<cudaStream_t>(api_.KernelContext_GetGPUComputeStream(context));
         cudaDeviceSynchronize();
     }
 #endif
