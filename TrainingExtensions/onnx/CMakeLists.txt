@@ -75,6 +75,10 @@ set_target_properties(OnnxCppOps PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts/aimet_common"
         )
 
+install(TARGETS OnnxCppOps
+        LIBRARY DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_common
+        )
+
 
 Python3_add_library(quant_info SHARED
         src/QcQuantizeInfo.h
