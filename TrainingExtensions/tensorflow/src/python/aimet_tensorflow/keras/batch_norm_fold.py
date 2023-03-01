@@ -409,17 +409,7 @@ def _delete_bn_from_functional(model: tf.keras.Model,
     OUTBOUND_TENSORS = 'outbound_tensors'
 
     # Step 1: Get the inbound and outbound connections for each layer in the model
-    model_layer_connections = OrderedDict()
-    model_layer_connections[INBOUND_NODES] = OrderedDict()
-    model_layer_connections[OUTBOUND_TENSORS] = OrderedDict()
-
-    for current_layer in model.layers:
-        for outbound_node in current_layer.outbound_nodes:
-            outbound_layers_name = outbound_node.outbound_layer.name
-
-            model_layer_connections[INBOUND_NODES][outbound_layers_name] = [
-                *model_layer_connections[INBOUND_NODES].get(outbound_layers_name, []), current_layer.name
-            ]
+    network_dict = WeightTensorUtils.get_weight_tensor_layer_mapping(model)
 
     if isinstance(model.input, list):
         # If the model has multiple inputs, we need to set the output tensor of each input layer
