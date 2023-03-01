@@ -37,9 +37,21 @@
 # =============================================================================
 """Weight tensor utility"""
 import typing
+from collections import OrderedDict
+from enum import Enum
 import numpy as np
 import tensorflow as tf
+from tensorflow.python.keras.engine.keras_tensor import KerasTensor
 
+
+class NetworkDictProperities(Enum):
+    """
+    Enum class for network dictionary keys and it's type
+    """
+    INPUT_LAYERS_OF = 'input_layers_of'
+    NEW_OUTPUT_TENSOR_OF = 'new_output_tensor_of'
+    NETWORK_DICT_TYPE = typing.OrderedDict[typing.OrderedDict[str, typing.List[str]],
+                                           typing.OrderedDict[str, typing.Union[KerasTensor, typing.List[KerasTensor]]]]
 
 class WeightTensorUtils:
     """
@@ -109,3 +121,40 @@ class WeightTensorUtils:
         param_tensors = layer.get_weights()
         weight_tensor = param_tensors[0]
         return np.amax(np.abs(weight_tensor), axis=axis)
+
+    @staticmethod
+    def get_weight_tensor_layer_mapping(model: tf.keras.Model) -> typing.Dict:
+        """
+        Get the mapping of weight tensor and layer
+        :param model: TensorFlow model
+        :return: Mapping of weight tensor and layer
+        """
+        # Auxiliary dictionary to describe the network graph
+        network_dict = OrderedDict()
+        network_dict[NetworkDictProperities.INPUT_LAYERS_OF.value] = OrderedDict()
+        network_dict[NetworkDictProperities.NEW_OUTPUT_TENSOR_OF.value] = OrderedDict()
+
+        # Set the input layers of each layer
+        for layer in model.layers:
+            for node in layer._outbound_nodes:  # pylint: disable=protected-access
+                layer_name = node.outbound_layer.name
+                if layer_name not in network_dict[NetworkDictProperities.INPUT_LAYERS_OF.value]:
+                    network_dict[NetworkDictProperities.INPUT_LAYERS_OF.value].update(
+                        {layer_name: [layer.name]})
+                else:
+                    network_dict[NetworkDictProperities.INPUT_LAYERS_OF.value][layer_name].append(layer.name)
+
+        return network_dict
+    
+    @staticmethod
+    def merge_network_dicts(network_dict1: typing.Dict, network_dict2: typing.Dict) -> typing.Dict:
+        """
+        Merge two network dictionaries
+        :param network_dict1: Network dictionary 1
+        :param network_dict2: Network dictionary 2
+        :return: Merged network dictionary
+        """
+        for key in network_dict1:
+            network_dict1[key].update(network_dict2[key])
+
+        return network_dict1
