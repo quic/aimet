@@ -38,7 +38,7 @@
 
 """ Implementation to automatically prepare keras models for AIMET by converting them to a functional model """
 
-from typing import Dict, List, Union
+from typing import Any, Dict, List, Union
 import re
 import numpy as np
 
@@ -165,17 +165,16 @@ def _set_prepared_models_input_layer(model: tf.keras.Model, network_dict, input_
     try:
         if isinstance(model.input, list):
             for inp in model.input:
-                network_dict[NetworkDictProperities.NEW_OUTPUT_TENSOR_OF.value].update({inp.name: inp})
+                network_dict[NetworkDictProperties.NEW_OUTPUT_TENSOR_OF.value].update({inp.name: inp})
         else:
-            network_dict[NetworkDictProperities.NEW_OUTPUT_TENSOR_OF.value].update({model.input.name: model.input})
+            network_dict[NetworkDictProperties.NEW_OUTPUT_TENSOR_OF.value].update({model.input.name: model.input})
     except AttributeError:
         # For models that are not connected
         logger.info("Model is not connected. Setting input layer to input layer passed in.")
-        network_dict[NetworkDictProperities.INPUT_LAYERS_OF.value].update({model.layers[0].name: [input_layer.name]})
-        network_dict[NetworkDictProperities.NEW_OUTPUT_TENSOR_OF.value].update({input_layer.name: input_layer})
+        network_dict[NetworkDictProperties.INPUT_LAYERS_OF.value].update({model.layers[0].name: [input_layer.name]})
+        network_dict[NetworkDictProperties.NEW_OUTPUT_TENSOR_OF.value].update({input_layer.name: input_layer})
 
-# TODO: model_outputs type?? and network_dict
-def _get_layer_input(layer: tf.keras.layers.Layer, network_dict: Dict) -> tf.keras.layers.Layer:
+def _get_layer_input(layer: tf.keras.layers.Layer, network_dict: NetworkDictProperties.NETWORK_DICT_TYPE.value) -> tf.keras.layers.Layer:
     """
     Helper function to get the input layer of a layer. This function will recursively call itself if the layer is a
     subclassed layer.
@@ -183,8 +182,8 @@ def _get_layer_input(layer: tf.keras.layers.Layer, network_dict: Dict) -> tf.ker
     :return: The input layer of the layer
     """
     try:
-        layer_input = [network_dict[NetworkDictProperities.NEW_OUTPUT_TENSOR_OF.value][layer_aux]
-                    for layer_aux in network_dict[NetworkDictProperities.INPUT_LAYERS_OF.value][layer.name]]
+        layer_input = [network_dict[NetworkDictProperties.NEW_OUTPUT_TENSOR_OF.value][layer_aux]
+                    for layer_aux in network_dict[NetworkDictProperties.INPUT_LAYERS_OF.value][layer.name]]
 
         if len(layer_input) == 1:
             layer_input = layer_input[0]
@@ -193,6 +192,48 @@ def _get_layer_input(layer: tf.keras.layers.Layer, network_dict: Dict) -> tf.ker
 
     return layer_input
 
+
+def _get_call_args(
+        layer: tf.keras.layers.Layer, 
+        network_dict: NetworkDictProperties.NETWORK_DICT_TYPE.value) -> List[
+        Union[KerasTensor, List[KerasTensor],
+              Any]]:
+    """
+    Helper function to get the call arguments of a layer. This function will recursively call itself if the layer is a
+    subclassed layer.
+    :param layer: The layer to get the call arguments of
+    :return: The call arguments of the layer
+    """
+    def _is_keras_tensor_input(arg: Any) -> bool:
+        if arg is not None:
+            if isinstance(arg, List):
+                return all(isinstance(x, KerasTensor) for x in arg)
+            else:
+                return isinstance(arg, KerasTensor)
+        return False    
+
+    original_call_args = network_dict[NetworkDictProperties.CALL_ARGS_OF.value][layer.name]
+    call_args = []
+    keras_tensor_found_flag = False
+    for arg in original_call_args:
+        if _is_keras_tensor_input(arg):
+            if keras_tensor_found_flag:
+                continue
+            layer_input = _get_layer_input(layer, network_dict)
+            if isinstance(layer_input, list):
+                call_args.extend(layer_input)
+            else:
+                call_args.append(layer_input)
+            keras_tensor_found_flag = True
+        else:
+            call_args.append(arg)
+    # keras_tensors_only = True
+    # for arg in original_call_args:
+    #     if not _is_keras_tensor_input(arg):
+    #         keras_tensors_only = False
+    #     call_args.append(arg)
+    # return call_args
+    return call_args
 
 def _update_output_tensors_in_network_dict(
         layer: tf.keras.layers.Layer, new_output_tensor: KerasTensor, model: tf.keras.Model, network_dict: Dict,
@@ -203,7 +244,7 @@ def _update_output_tensors_in_network_dict(
     :param network_dict: The network dictionary
     """
     # Set new output tensor (in this case, it will be the same as the original model)
-    network_dict[NetworkDictProperities.NEW_OUTPUT_TENSOR_OF.value].update({layer.name: new_output_tensor})
+    network_dict[NetworkDictProperties.NEW_OUTPUT_TENSOR_OF.value].update({layer.name: new_output_tensor})
     # Save tensor in output list if it is output in the initial model
     if model.output_names and layer.name in model.output_names and model.name is not _TEMP_MODEL_NAME:
         logger.debug("Layer '%s' added as output layer", layer.name)
@@ -215,7 +256,7 @@ def _get_most_recently_added_output_tensor(network_dict: Dict) -> KerasTensor:
     :param network_dict: The network dictionary
     :return: The most recently added output tensor
     """
-    return next(reversed(network_dict[NetworkDictProperities.NEW_OUTPUT_TENSOR_OF.value].items()))[-1]
+    return next(reversed(network_dict[NetworkDictProperties.NEW_OUTPUT_TENSOR_OF.value].items()))[-1]
 
 
 def _handle_subclassed_layer(layer: tf.keras.layers.Layer, layer_input: KerasTensor, network_dict: Dict,
@@ -229,27 +270,32 @@ def _handle_subclassed_layer(layer: tf.keras.layers.Layer, layer_input: KerasTen
     :param model_outputs: The list of model outputs
     :return: The output tensor of the layer
     """
-    logger.debug("Subclass layer \'%s\' found. Extracting layers.", layer.name)
+    logger.debug("Subclass layer '%s' found. Extracting layers.", layer.name)
     # Converts CamelCase to snake_case of subclassed layers class name
-    class_names.append(_get_class_names_in_model(layer)[0])
+    class_names.extend(_get_class_names_in_model(layer))
 
     # Create a model based on the subclassed layer.
     # This is done with the layer input from the network dictionary.
     # 1) The input layer is used to create the temporary functional model
     # 2) The input layer is used in the subclass layers call function as a symbolic tensor to get internal layers
-    temp_model = tf.keras.Model(inputs=[layer_input],
-                                outputs=layer.call(layer_input, training=False),
+    temp_input = tf.keras.layers.Input(shape=layer_input.shape[1:], name=layer_input.name + "_temp_input")
+    temp_model = tf.keras.Model(inputs=[temp_input],
+                                outputs=layer.call(temp_input, training=False),
                                 name=_TEMP_MODEL_NAME)
-    logger.debug("Model created for layer %s", layer.name)
+    logger.debug("Model created for layer '%s'", layer.name)
     temp_model.summary(print_fn=logger.debug)
 
     # Get the network dictionary for the temporary model and merge it with the network dictionary for the
     # functional model. This is done so we can keep track of the sublayers and their inputs and outputs.
     temp_model_network_dict = WeightTensorUtils.get_weight_tensor_layer_mapping(temp_model)
+    for layers_name, input_tensor_name in temp_model_network_dict[NetworkDictProperties.INPUT_LAYERS_OF.value].items():
+        for idx, current_input_name in enumerate(input_tensor_name):
+            if current_input_name == temp_model.input.name:
+                temp_model_network_dict[NetworkDictProperties.INPUT_LAYERS_OF.value][layers_name][idx] = layer_input.name
     network_dict = WeightTensorUtils.merge_network_dicts(network_dict, temp_model_network_dict)
 
-    _prepare_model_helper(temp_model, class_names=class_names,
-                            network_dict=network_dict, model_outputs=model_outputs)
+    return _prepare_model_helper(temp_model, class_names=class_names,
+                                 network_dict=network_dict, model_outputs=model_outputs)
 
     # The output of the top level subclass layer will be the most recently added output tensor that was added
     # to the network dictionary in the recursive call above. This is used as it's output tensor also, to continue
@@ -268,9 +314,7 @@ def _handle_subclassed_layer(layer: tf.keras.layers.Layer, layer_input: KerasTen
     #  |_____________|       |_____________|       |_____________|
     #
 
-    return _get_most_recently_added_output_tensor(network_dict)
-
-def _handle_functional_model(model: Functional, layer_input: KerasTensor, network_dict: Dict) -> \
+def _handle_functional_model(model: Functional, layer_input: KerasTensor, network_dict: Dict, class_names: List[str]) -> \
         Union[KerasTensor, List[KerasTensor]]:
     """
     Helper function to handle functional models. This function will create a new output tensor for the Functional model 
@@ -286,7 +330,7 @@ def _handle_functional_model(model: Functional, layer_input: KerasTensor, networ
     _set_prepared_models_input_layer(model, temp_model_network_dict, layer_input)
     network_dict = WeightTensorUtils.merge_network_dicts(network_dict, temp_model_network_dict)
 
-    class_names = _get_class_names_in_model(model)
+    class_names = class_names.append(_get_class_names_in_model(model))
 
     model_outputs = []
     _prepare_model_helper(model, class_names=class_names,
@@ -298,7 +342,9 @@ def _handle_functional_model(model: Functional, layer_input: KerasTensor, networ
 
     return temp_model.call(layer_input)
 
-def _handle_normal_keras_layer(layer: tf.keras.layers.Layer, layer_input: KerasTensor) -> KerasTensor:
+
+def _handle_normal_keras_layer(layer: tf.keras.layers.Layer, layer_input: KerasTensor,
+                               network_dict: NetworkDictProperties.NETWORK_DICT_TYPE.value) -> KerasTensor:
     """
     Helper function to handle normal keras layers. This function will create a new output tensor for the layer
     and return it.
@@ -306,13 +352,10 @@ def _handle_normal_keras_layer(layer: tf.keras.layers.Layer, layer_input: KerasT
     :param layer_input: The input tensor to the layer
     :return: The output tensor of the layer
     """
-    layer._inbound_nodes = []  # pylint: disable=protected-access
-    # Special case for when there is a Lambda opertaion with multiple inputs. For example, x = y + z.
-    if isinstance(layer, TFOpLambda) and isinstance(layer_input, List):
-        new_output_tensor = layer(*layer_input)
-    else:
-        new_output_tensor = layer(layer_input)
-    layer._outbound_nodes = [] # pylint: disable=protected-access
+    if layer.name == 'tf.__operators__.add':
+        print()
+    call_args = _get_call_args(layer, network_dict)
+    new_output_tensor = layer(*call_args)
     return new_output_tensor
 
 def _prepare_model_helper(
@@ -328,6 +371,7 @@ def _prepare_model_helper(
     """
 
     for current_layer in model.layers:
+        logger.debug("Processing layer '%s'", current_layer.name)
         # Skip input layer
         if isinstance(current_layer, tf.keras.layers.InputLayer):
             continue
@@ -340,15 +384,15 @@ def _prepare_model_helper(
 
         # If a functional model is found, then we unwrap the model and recursively call the prepare model helper
         elif _is_functional_model(current_layer):
-            new_output_tensor = _handle_functional_model(current_layer, layer_input, network_dict)
+            new_output_tensor = _handle_functional_model(current_layer, layer_input, network_dict, class_names)
 
         # If a normally defined layer is found, add it to the functional model
         else:
-            new_output_tensor = _handle_normal_keras_layer(current_layer, layer_input)
+            new_output_tensor = _handle_normal_keras_layer(current_layer, layer_input, network_dict)
 
         _update_output_tensors_in_network_dict(current_layer, new_output_tensor, model, network_dict, model_outputs)
 
-    return
+    return new_output_tensor
 
 def _get_prepared_model(original_model: tf.keras.Model, input_layer: tf.keras.layers.Layer, class_names: List[str]) \
         -> tf.keras.Model:
@@ -383,7 +427,7 @@ def prepare_model(original_model: tf.keras.Model,
     """
     logger.debug("Preparing model for AIMET. Original model architecture")
     original_model.summary(print_fn=logger.debug)
-
+    # testing(original_model)
     input_layer = _format_input_layer(original_model, input_layer)
 
     # Used to fix weight names at end of unwrapping
@@ -402,3 +446,4 @@ def prepare_model(original_model: tf.keras.Model,
     _set_functional_models_weights(original_model, model_to_return, class_names)
 
     return model_to_return
+    
