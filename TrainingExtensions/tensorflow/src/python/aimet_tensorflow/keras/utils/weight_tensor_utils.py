@@ -44,12 +44,13 @@ import tensorflow as tf
 from tensorflow.python.keras.engine.keras_tensor import KerasTensor
 
 
-class NetworkDictProperities(Enum):
+class NetworkDictProperties(Enum):
     """
     Enum class for network dictionary keys and it's type
     """
     INPUT_LAYERS_OF = 'input_layers_of'
     NEW_OUTPUT_TENSOR_OF = 'new_output_tensor_of'
+    CALL_ARGS_OF = 'call_args'
     NETWORK_DICT_TYPE = typing.OrderedDict[typing.OrderedDict[str, typing.List[str]],
                                            typing.OrderedDict[str, typing.Union[KerasTensor, typing.List[KerasTensor]]]]
 
@@ -131,18 +132,23 @@ class WeightTensorUtils:
         """
         # Auxiliary dictionary to describe the network graph
         network_dict = OrderedDict()
-        network_dict[NetworkDictProperities.INPUT_LAYERS_OF.value] = OrderedDict()
-        network_dict[NetworkDictProperities.NEW_OUTPUT_TENSOR_OF.value] = OrderedDict()
+        network_dict[NetworkDictProperties.INPUT_LAYERS_OF.value] = OrderedDict()
+        network_dict[NetworkDictProperties.NEW_OUTPUT_TENSOR_OF.value] = OrderedDict()
+        network_dict[NetworkDictProperties.CALL_ARGS_OF.value] = OrderedDict()
 
         # Set the input layers of each layer
         for layer in model.layers:
             for node in layer._outbound_nodes:  # pylint: disable=protected-access
                 layer_name = node.outbound_layer.name
-                if layer_name not in network_dict[NetworkDictProperities.INPUT_LAYERS_OF.value]:
-                    network_dict[NetworkDictProperities.INPUT_LAYERS_OF.value].update(
+                if layer_name not in network_dict[NetworkDictProperties.INPUT_LAYERS_OF.value]:
+                    network_dict[NetworkDictProperties.INPUT_LAYERS_OF.value].update(
                         {layer_name: [layer.name]})
                 else:
-                    network_dict[NetworkDictProperities.INPUT_LAYERS_OF.value][layer_name].append(layer.name)
+                    network_dict[NetworkDictProperties.INPUT_LAYERS_OF.value][layer_name].append(layer.name)
+
+                network_dict[NetworkDictProperties.CALL_ARGS_OF.value].update(
+                    {node.layer.name: node.call_args})
+
 
         return network_dict
     
