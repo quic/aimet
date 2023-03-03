@@ -93,7 +93,7 @@ void quantizeDequantize(const CPUDevice& d, TTypes<float>::ConstMatrix inputs,
     const auto clampedTensor         = inputs.chip<1>(channel).cwiseMax(min).cwiseMin(max);
     const auto tensor = (clampedTensor * invScale).round() + offset;
     outputs.chip<1>(channel) = (tensor - offset) * scale;
-};
+}
 
 void quantizeDequantizePerChannel(const CPUDevice& d, TTypes<float>::ConstMatrix inputs, TTypes<float>::Matrix outputs,
                            Tensor* encodingMinTensor, Tensor* encodingMaxTensor, Tensor* encodingScaleTensor,
