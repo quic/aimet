@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2018-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2018-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -532,7 +532,8 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
             shadow_params[name] = param.detach().clone()
 
             param_quantizer = self.param_quantizers[name]
-            if param_quantizer.enabled:
+
+            if param_quantizer.enabled and param_quantizer.bitwidth != 32:
 
                 # If we are in training mode with quant-sim nodes, then we want to calculate encodings for the
                 # parameters in every pass
@@ -784,18 +785,28 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
         # Gating input encodings
         for index, input_quantizer in enumerate(self.input_quantizers):
             if input_quantizer.enabled:
+                if input_quantizer.bitwidth == 32 or input_quantizer.data_type == QuantizationDataType.float:
+                    # No gating necessary
+                    continue
                 _apply_logic(getattr(self, 'input' + str(index) + '_encoding_min'),
                              getattr(self, 'input' + str(index) + '_encoding_max'))
 
         # Gating output encodings
         for index, output_quantizer in enumerate(self.output_quantizers):
             if output_quantizer.enabled:
+                if output_quantizer.bitwidth == 32 or output_quantizer.data_type == QuantizationDataType.float:
+                    # No gating necessary
+                    continue
                 _apply_logic(getattr(self, 'output' + str(index) + '_encoding_min'),
                              getattr(self, 'output' + str(index) + '_encoding_max'))
 
         # Gating for parameters
         for name, _ in self._module_to_wrap.named_parameters():
             if self.param_quantizers[name].enabled:
+                if self.param_quantizers[name].bitwidth == 32 or \
+                        self.param_quantizers[name].data_type == QuantizationDataType.float:
+                    # No gating necessary
+                    continue
                 _apply_logic(getattr(self, name + '_encoding_min'),
                              getattr(self, name + '_encoding_max'))
 
@@ -932,10 +943,17 @@ class SteGatingFuncForParameters(torch.autograd.Function):
 
         def calc_param_grad(name: str, param: torch.nn.Parameter):
             """
-            Calculates parameter gradient
+            Updates param.grad if ste gating is necessary.
+
+            :param name: Name of parameter
+            :param: Parameter value to calculate grad with
             """
-            if quant_wrapper_ref.param_quantizers[name].enabled and param.grad is not None and \
-                    quant_wrapper_ref.param_quantizers[name].data_type == QuantizationDataType.int:
+            if quant_wrapper_ref.param_quantizers[name].bitwidth == 32 or \
+                    quant_wrapper_ref.param_quantizers[name].data_type == QuantizationDataType.float:
+                # No gating necessary, leave param.grad as is
+                return
+
+            if quant_wrapper_ref.param_quantizers[name].enabled and param.grad is not None:
                 param_quantizer = quant_wrapper_ref.param_quantizers[name]
 
                 if isinstance(param_quantizer.encoding, list):

@@ -543,17 +543,34 @@ class QuantizationSimModel:
             - use_symmetric_encodings
             - use_strict_symmetric
             - use_unsigned_symmetric
+
         :param post_training_module: StaticGridQuantWrapper wrapped module
         :param device: device on which model is present
         :return: trainable_module: QcTrainable wrapper module
         """
-        def _copy_quantizer_attributes(new_quantizer, old_quantizer):
+        def _copy_quantizer_attributes(new_quantizer: LearnedGridTensorQuantizer,
+                                       old_quantizer: StaticGridTensorQuantizer):
             """
+            Copy quantizer attributes from old quantizer to new quantizer.
+
             :param new_quantizer: New quantizer
             :param old_quantizer: Old quantizer
             """
             new_quantizer.enabled = old_quantizer.enabled
             new_quantizer.bitwidth = old_quantizer.bitwidth
+            new_quantizer.data_type = old_quantizer.data_type
+
+            new_quantizer.use_symmetric_encodings = old_quantizer.use_symmetric_encodings
+            new_quantizer.use_strict_symmetric = old_quantizer.use_strict_symmetric
+            new_quantizer.use_unsigned_symmetric = old_quantizer.use_unsigned_symmetric
+            # NOTE: Set is_unsigned_symmetric to False for learned grid quantizers
+            # This is for the purpose of preventing unsigned symmetric operation
+            #   during QAT 2.0 range learning
+            new_quantizer.is_unsigned_symmetric = False
+
+            if new_quantizer.data_type == QuantizationDataType.float or new_quantizer.bitwidth == 32:
+                new_quantizer.encoding = None
+                return
 
             # NOTE: Before copying encoding, we do below logic to keep symmetry for range learning
             # Without below logic, min/max value in symmetric scheme will be
@@ -589,13 +606,6 @@ class QuantizationSimModel:
                     old_quantizer.encoding.offset = -math.ceil(half_num_steps)
 
             new_quantizer.encoding = old_quantizer.encoding
-            new_quantizer.use_symmetric_encodings = old_quantizer.use_symmetric_encodings
-            new_quantizer.use_strict_symmetric = old_quantizer.use_strict_symmetric
-            new_quantizer.use_unsigned_symmetric = old_quantizer.use_unsigned_symmetric
-            # NOTE: Set is_unsigned_symmetric to False for learned grid quantizers
-            # This is for the purpose of preventing unsigned symmetric operation
-            #   during QAT 2.0 range learning
-            new_quantizer.is_unsigned_symmetric = False
 
         # pylint: disable=protected-access
         module = post_training_module._module_to_wrap

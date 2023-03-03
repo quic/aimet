@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2020-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2020-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -47,7 +47,7 @@ import aimet_common.AimetTensorQuantizer as AimetTensorQuantizer
 import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_common.quantsim import is_non_strict_symmetric
-from aimet_common.utils import AimetLogger
+from aimet_common.utils import AimetLogger, log_with_error_and_assert_if_false
 import aimet_torch.quantsim_straight_through_grad as grad_fn
 from aimet_torch.quantsim_straight_through_grad import IntermediateResult
 from aimet_torch.fp_quantization import fp8_quantizer, INIT_MAP
@@ -62,13 +62,14 @@ class TensorQuantizer:
     input to a layer or an output from a layer.
     """
 
-    def __init__(self, bitwidth: int, round_mode: str, quant_scheme: QuantScheme,
+    def __init__(self, bitwidth: int, round_mode: libpymo.RoundingMode, quant_scheme: QuantScheme,
                  use_symmetric_encodings: bool, enabled_by_default: bool,
                  data_type: QuantizationDataType = QuantizationDataType.int):
         """
         Constructor
+
         :param bitwidth: Quantization bitwidth
-        :param round_mode: Rounding mode (e.g. Nearest)
+        :param round_mode: Rounding mode (e.g. libpymo.RoundingMode.ROUND_NEAREST)
         :param quant_scheme: Quantization scheme (e.g. Range Learning)
         :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
         :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
@@ -129,12 +130,14 @@ class StaticGridTensorQuantizer(TensorQuantizer):
     Simulates quantization for the given tensor post training.
     """
 
-    def __init__(self, bitwidth: int, round_mode: str, quant_scheme: QuantScheme, use_symmetric_encodings: bool,
-                 enabled_by_default: bool, data_type: QuantizationDataType = QuantizationDataType.int):
+    def __init__(self, bitwidth: int, round_mode: libpymo.RoundingMode, quant_scheme: QuantScheme,
+                 use_symmetric_encodings: bool, enabled_by_default: bool,
+                 data_type: QuantizationDataType = QuantizationDataType.int):
         """
         Constructor
+
         :param bitwidth: Quantization bitwidth
-        :param round_mode: Rounding mode (e.g. Nearest)
+        :param round_mode: Rounding mode (e.g. libpymo.RoundingMode.ROUND_NEAREST)
         :param quant_scheme: Quantization scheme (e.g. tf, tf_enhanced)
         :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
         :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
@@ -205,6 +208,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
     def quant_scheme(self) -> QuantScheme:
         """
         Property to get quant_scheme
+
         :return: QuantScheme
         """
         return self._quant_scheme
@@ -215,6 +219,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         Property to set quant_scheme. When changing quantization schemes, it is necessary to re-instantiate the
         underlying C++ op (there is no way currently to set quant-scheme post instantiation for these objects). This
         will also automatically clear any accumulated statistics - which is a good side-effect.
+
         :param quant_scheme: Quantization scheme (see enum)
         """
         self._quant_scheme = quant_scheme
@@ -226,6 +231,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
     def encoding(self) -> Union[None, libpymo.TfEncoding, List[libpymo.TfEncoding]]:
         """
         Property to get encoding.
+
         :return: One (per-tensor) or list of many (per-channel) encoding(s).
         """
         return self._encoding
@@ -234,6 +240,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
     def encoding(self, encoding) -> None:
         """
         Property to set encoding.
+
         :param encoding: One (per-tensor) or list of many (per-channel) encoding(s).
         """
         if self._is_encoding_frozen:
@@ -243,11 +250,13 @@ class StaticGridTensorQuantizer(TensorQuantizer):
 
     def compute_encoding(self):
         """
-        Compute the quantization encoding for this tensor
+        Compute the quantization encoding for this quantizer. In the case of bw=32 or fp16, this is skipped.
         """
         if self.enabled and not self._is_encoding_frozen:
             self._encoding = []
-            if self.data_type == QuantizationDataType.float:
+            if self.bitwidth == 32:
+                self._encoding = None
+            elif self.data_type == QuantizationDataType.float:
                 if self.bitwidth == 16:
                     self._encoding = None
                 elif self.bitwidth == 8:
@@ -281,9 +290,10 @@ class StaticGridTensorQuantizer(TensorQuantizer):
                     _logger.error('At least one encoding for a multi-encoding quantizer is invalid.')
                     assert not (not self.enabled and self._encoding)
 
-    def quantize_dequantize(self, tensor, round_mode):
+    def quantize_dequantize(self, tensor: torch.Tensor, round_mode: libpymo.RoundingMode) -> torch.Tensor:
         """
         Quantize-dequantize the tensor, using the saved encoding for this tensor
+
         :param tensor: Tensor to quantize-dequantize
         :param round_mode: Rounding mode
         :return: Resulting tensor
@@ -292,9 +302,10 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         output = output.clone()
         return output
 
-    def quantize(self, tensor, round_mode):
+    def quantize(self, tensor: torch.Tensor, round_mode: libpymo.RoundingMode) -> torch.Tensor:
         """
         Quantize the tensor, using the saved encoding for this tensor
+
         :param tensor: Tensor to quantize
         :param round_mode: Rounding mode
         :return: Resulting tensor
@@ -366,12 +377,14 @@ class StaticGridPerTensorQuantizer(StaticGridTensorQuantizer):
     Simulates quantization for the given tensor using a per-tensor scale/offset
     """
 
-    def __init__(self, bitwidth: int, round_mode: str, quant_scheme: QuantScheme, use_symmetric_encodings: bool,
-                 enabled_by_default: bool, data_type: QuantizationDataType = QuantizationDataType.int):
+    def __init__(self, bitwidth: int, round_mode: libpymo.RoundingMode, quant_scheme: QuantScheme,
+                 use_symmetric_encodings: bool, enabled_by_default: bool,
+                 data_type: QuantizationDataType = QuantizationDataType.int):
         """
         Constructor
+
         :param bitwidth: Quantization bitwidth
-        :param round_mode: Rounding mode (e.g. Nearest)
+        :param round_mode: Rounding mode (e.g. libpymo.RoundingMode.ROUND_NEAREST)
         :param quant_scheme: Quantization scheme (e.g. tf, tf_enhanced)
         :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
         :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
@@ -386,6 +399,7 @@ class StaticGridPerTensorQuantizer(StaticGridTensorQuantizer):
     def encoding(self) -> Union[None, libpymo.TfEncoding]:
         """
         Property to get encoding.
+
         :return: Encoding.
         """
         if self._encoding:
@@ -397,6 +411,7 @@ class StaticGridPerTensorQuantizer(StaticGridTensorQuantizer):
     def encoding(self, encoding: Union[libpymo.TfEncoding, List[libpymo.TfEncoding]]) -> None:
         """
         Property to set encoding.
+
         :param encoding: Encoding.
         """
         if self._is_encoding_frozen:
@@ -406,12 +421,15 @@ class StaticGridPerTensorQuantizer(StaticGridTensorQuantizer):
         else:
             self._encoding = [encoding]
 
-    def update_encoding_stats(self, tensor):
+    def update_encoding_stats(self, tensor: torch.Tensor):
         """
-        Update the stats for computing encoding
+        Update the stats for computing encodings. In the case of bw=32 or fp16, this is skipped.
+
         :param tensor: Tensor to use for updating the encodings stats
         """
         if self.enabled and not self._is_encoding_frozen:
+            if self.bitwidth == 32:
+                return
             if self.data_type == QuantizationDataType.float:
                 if self.bitwidth == 8:
                     maxval = INIT_MAP[self.quant_scheme](tensor, self, False).to(tensor.device)
@@ -431,13 +449,14 @@ class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
     """
 
     # pylint: disable=too-many-arguments
-    def __init__(self, bitwidth: int, round_mode: str, quant_scheme: QuantScheme, use_symmetric_encodings: bool,
-                 num_channels: int, enabled_by_default: bool, ch_axis: int = 0,
+    def __init__(self, bitwidth: int, round_mode: libpymo.RoundingMode, quant_scheme: QuantScheme,
+                 use_symmetric_encodings: bool, num_channels: int, enabled_by_default: bool, ch_axis: int = 0,
                  data_type: QuantizationDataType = QuantizationDataType.int):
         """
         Constructor
+
         :param bitwidth: Quantization bitwidth
-        :param round_mode: Rounding mode (e.g. Nearest)
+        :param round_mode: Rounding mode (e.g. libpymo.RoundingMode.ROUND_NEAREST)
         :param quant_scheme: Quantization scheme (e.g. tf, tf_enhanced)
         :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
         :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
@@ -454,6 +473,7 @@ class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
     def encoding(self) -> Union[None, List[libpymo.TfEncoding]]:
         """
         Property to get encoding.
+
         :return: List of Encoding(s).
         """
         return self._encoding
@@ -462,6 +482,7 @@ class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
     def encoding(self, encoding: List[libpymo.TfEncoding]) -> None:
         """
         Property to set encoding.
+
         :param encoding: List of Encoding(s).
         """
         if self._is_encoding_frozen:
@@ -474,12 +495,15 @@ class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
         """ Return private member _ch_axis """
         return self._ch_axis
 
-    def update_encoding_stats(self, tensor):
+    def update_encoding_stats(self, tensor: torch.Tensor):
         """
-        Update the stats for computing encoding
+        Update the stats for computing encodings. In the case of fp16 or int with bw=32, this is skipped.
+
         :param tensor: Tensor to use for updating the encodings stats
         """
         if self.enabled and not self._is_encoding_frozen:
+            if self.bitwidth == 32:
+                return
             if self.data_type == QuantizationDataType.float:
                 if self.bitwidth == 8:
                     maxval = INIT_MAP[self.quant_scheme](tensor, self, True).to(tensor.device)
@@ -502,12 +526,13 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
     initialized and then "learnt" during training
     """
     # pylint: disable=too-many-instance-attributes
-    def __init__(self, bitwidth: int, round_mode: str, quant_scheme: QuantScheme, use_symmetric_encodings: bool,
-                 enabled_by_default: bool, data_type: QuantizationDataType):
+    def __init__(self, bitwidth: int, round_mode: libpymo.RoundingMode, quant_scheme: QuantScheme,
+                 use_symmetric_encodings: bool, enabled_by_default: bool, data_type: QuantizationDataType):
         """
         Constructor
+
         :param bitwidth: Quantization bitwidth
-        :param round_mode: Rounding mode (e.g. Nearest)
+        :param round_mode: Rounding mode (e.g. libpymo.RoundingMode.ROUND_NEAREST)
         :param quant_scheme: Quantization scheme (e.g. Range Learning)
         :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
         :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
@@ -533,7 +558,8 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
                     use_strict_symmetric: bool,
                     device: Union[torch.device, str]) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        compute bounds n and p params given bitwidth and use_symmetric_encoding flag
+        Compute bounds n and p params given bitwidth and use_symmetric_encoding flag.
+
         :param bitwidth: bitwidth configured
         :param use_symmetric_encoding: boolean flag indicates symmetric/asymmetric encoding
         :param use_strict_symmetric: boolean flag indicates strict or not when symmetric encoding
@@ -580,6 +606,9 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
             return None
 
         encodings = self.encoding
+        if not encodings:
+            return None
+
         if isinstance(encodings, libpymo.TfEncoding):
             encodings = [encodings]
 
@@ -617,10 +646,13 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         NOTE: encoding.getter first compute updated encoding and then return it.
 
         Property to get learned (up-to-date) encoding computed from encoding min and max parameters.
+
         :return: encoding(s).
         """
         # pylint:disable=protected-access
         if self.enabled:
+            if self.bitwidth == 32 or self.data_type == QuantizationDataType.float:
+                return None
             encoding = self._compute_updated_encoding()
             return encoding
 
@@ -630,11 +662,14 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
     def encoding(self, encoding: Union[libpymo.TfEncoding, List[libpymo.TfEncoding]]):
         """
         Property to set encoding.
-        encoding.setter also sets encoding min and max parameters and recompute
-        p and n tensors.
+        encoding.setter also sets encoding min and max parameters and recompute p and n tensors.
+
         :param encoding: encodings.
         """
         if self.enabled:
+            if self.bitwidth == 32 or self.data_type == QuantizationDataType.float:
+                return
+
             if encoding is None:
                 raise RuntimeError("Encodings cannot be None if Quantizer is enabled.")
 
@@ -678,36 +713,41 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
 
         return stream.getvalue()
 
-    def compute_scaling_offset(self, encoding_min: torch.Tensor, encoding_max: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def compute_scaling_offset(self, encoding_min: Union[None, torch.Tensor], encoding_max: Union[None, torch.Tensor]) \
+            -> Tuple[Union[None, torch.Tensor], Union[None, torch.Tensor]]:
         """
-        Computes scaling and offset for a given tensor using encoding min and max
+        Computes scaling and offset for a given tensor using encoding min and max. If min and max are None, which is the
+        case if the tensor quantizer has bitwidth = 32 or is fp16, return None for scaling and offset.
+
         :param encoding_min: encoding min of a tensor
         :param encoding_max: encoding max of a tensor
-        :return:
+        :return: Calculated scaling and offset, or None if min/max is None
         """
-        scaling, offset, _ = grad_fn.get_computed_encodings(self.bitwidth, encoding_min, encoding_max, self.use_symmetric_encodings,
-                                                            self.use_strict_symmetric, self.is_unsigned_symmetric)
+        if encoding_min is None or encoding_max is None:
+            return None, None
+        scaling, offset, _ = grad_fn.get_computed_encodings(self.bitwidth, encoding_min, encoding_max,
+                                                            self.use_symmetric_encodings, self.use_strict_symmetric,
+                                                            self.is_unsigned_symmetric)
         return scaling, offset
 
     def quantize_dequantize(self, tensor: torch.Tensor, encoding_min: torch.nn.Parameter,
                             encoding_max: torch.nn.Parameter) -> torch.Tensor:
         """
         Quantize-dequantize the tensor, using the saved encoding for this tensor
+
         :param tensor: Tensor to quantize-dequantize
         :param encoding_min: minimum value of encoding for tensor
         :param encoding_max: maximum value of encoding for tensor
         :return: Quantized-dequantized tensor
         """
         if self.enabled:
-            if encoding_max is None or encoding_min is None:
-                raise RuntimeError("Forward pass used for compute_encodings differs from forward pass used during "
-                                   "training")
             tensor = QuantizeDequantizeFunc.apply(tensor, encoding_min, encoding_max, self)
         return tensor
 
     def _compute_updated_encoding(self) -> Union[libpymo.TfEncoding, List[libpymo.TfEncoding]]:
         """
         Computes updated encoding from encoding min and max parameters.
+
         :return: Up-to-date (learned) encoding(s).
         """
         # pylint:disable=protected-access
@@ -742,9 +782,10 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
 
         return encodings
 
-    def _set_encoding_min_max_parameters(self, encodings: Union[libpymo.TfEncoding, List[libpymo.TfEncoding]]) -> None:
+    def _set_encoding_min_max_parameters(self, encodings: Union[libpymo.TfEncoding, List[libpymo.TfEncoding]]):
         """
         Set encoding min and max parameters.
+
         :param encodings: Encoding(s).
         """
         # pylint: disable=protected-access
@@ -800,10 +841,21 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
     @staticmethod
     def forward(ctx, tensor: torch.Tensor, encoding_min: torch.nn.Parameter,
                 encoding_max: torch.nn.Parameter, tensor_quantizer: LearnedGridTensorQuantizer) -> torch.Tensor:
+        ctx.tensor_quantizer = tensor_quantizer
+        if tensor_quantizer.bitwidth == 32:
+            return tensor
+        if tensor_quantizer.data_type == QuantizationDataType.float:
+            log_with_error_and_assert_if_false(tensor_quantizer.bitwidth == 16, _logger,
+                                               'Only bitwidth 16 is supported in LearnedGridTensorQuantizer forward'
+                                               'pass')
+            quantized_tensor = tensor.half()
+            quantized_tensor = quantized_tensor.float()
+            return quantized_tensor
+        if encoding_max is None or encoding_min is None:
+            raise RuntimeError("Forward pass used for compute_encodings differs from forward pass used during "
+                               "training")
         x_dequant, intermediate_result = grad_fn.calculate_forward_pass(tensor, tensor_quantizer,
                                                                         encoding_min, encoding_max)
-
-        ctx.channel_axis = tensor_quantizer.channel_axis
         ctx.is_symmetric = intermediate_result.is_symmetric
         ctx.is_unsigned = intermediate_result.is_unsigned
         ctx.save_for_backward(tensor, intermediate_result.x_quant,
@@ -817,8 +869,12 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
     def backward(ctx, grad):
         # pylint: disable=too-many-locals
         # Retrieve saved tensors for gradient calculation
+        tensor_quantizer = ctx.tensor_quantizer
+        if tensor_quantizer.bitwidth == 32 or tensor_quantizer.data_type == QuantizationDataType.float:
+            return grad, None, None, None
+
         tensor, x_quant, delta, offset, encoding_min, encoding_max, mask_tensor, num_steps = ctx.saved_tensors
-        channel_axis = ctx.channel_axis
+        channel_axis = tensor_quantizer.channel_axis
         is_symmetric = ctx.is_symmetric
         is_unsigned = ctx.is_unsigned
 
@@ -840,9 +896,10 @@ class ParameterQuantizer(torch.autograd.Function):
     def compute_gradients(tensor: torch.Tensor,
                           grad: torch.Tensor,
                           intermediate_result: IntermediateResult,
-                          channel_axis: int):
+                          channel_axis: int) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Compute gradients of encoding min/max
+
         :param tensor: Given tensor
         :param grad: Gradient using which other gradients will be calculated
         :param intermediate_result: Intermediate result from forward pass
@@ -859,9 +916,9 @@ class ParameterQuantizer(torch.autograd.Function):
     def quantize_parameters(trainable_wrapper, encoding_params: List):
         """
         Quantizes layer parameters
+
         :param trainable_wrapper: LearnedGridQuantWrapper
         :param encoding_params: encoding min and max defined as torch parameters
-        :return: original layer parameters values
         """
         # pylint:disable = protected-access
         for index, named_param in enumerate(trainable_wrapper.get_named_parameters()):
@@ -882,9 +939,10 @@ class ParameterQuantizer(torch.autograd.Function):
                 param.data = param_quantizer.quantize_dequantize(param_tensor, encoding_min, encoding_max)
 
     @staticmethod
-    def backward_pass_for_parameters(trainable_wrapper):
+    def backward_pass_for_parameters(trainable_wrapper) -> List[Union[None, torch.Tensor]]:
         """
-        Calls custom gradient computation for each parameter
+        Calls custom gradient computation for each parameter.
+
         :param trainable_wrapper: LearnedGridQuantWrapper
         :return: Encoding min max params as list
         """
@@ -892,13 +950,17 @@ class ParameterQuantizer(torch.autograd.Function):
         for name, param in trainable_wrapper.get_named_parameters():
             param_quantizer = trainable_wrapper.param_quantizers[name]
             if param_quantizer.enabled and param.grad is not None:
+                if param_quantizer.bitwidth == 32 or param_quantizer.data_type == QuantizationDataType.float:
+                    return [None, None]
+
                 encoding_min = getattr(trainable_wrapper, f"{name}_encoding_min")
                 encoding_max = getattr(trainable_wrapper, f"{name}_encoding_max")
 
-                _, intermediate_result = grad_fn.calculate_forward_pass(param, param_quantizer, encoding_min, encoding_max)
-                param_encoding_min_grad, param_encoding_max_grad = ParameterQuantizer.compute_gradients(param, param.grad,
-                                                                                                        intermediate_result,
-                                                                                                        param_quantizer.channel_axis)
+                _, intermediate_result = grad_fn.calculate_forward_pass(param, param_quantizer, encoding_min,
+                                                                        encoding_max)
+                param_encoding_min_grad, param_encoding_max_grad = \
+                    ParameterQuantizer.compute_gradients(param, param.grad, intermediate_result,
+                                                         param_quantizer.channel_axis)
                 param_encoding_grads.append(param_encoding_min_grad)
                 param_encoding_grads.append(param_encoding_max_grad)
             elif param_quantizer.enabled:
@@ -983,15 +1045,17 @@ class QuantizeDequantize(torch.autograd.Function):
 
     # pylint:disable = arguments-differ
     @staticmethod
-    def forward(ctx, tensor, tensor_quantizer, round_mode):
+    def forward(ctx, tensor: torch.Tensor, tensor_quantizer: TensorQuantizer, round_mode: libpymo.RoundingMode) -> \
+            torch.Tensor:
         """
-        Quantize-dequantize the tensor, using the saved encoding for this tensor
+        Quantize-dequantize the tensor, using the saved encoding for this tensor.
+
         :param tensor: Tensor to quantize-dequantize
         :param tensor_quantizer: Reference to the tensor quantizer
         :param round_mode: Rounding mode
         :return: Resulting tensor
         """
-        if tensor_quantizer.enabled:
+        if tensor_quantizer.enabled and tensor_quantizer.bitwidth != 32:
             if isinstance(tensor_quantizer, StaticGridPerChannelQuantizer):
                 quantized_tensor = QuantizeDequantize._per_channel_quantize_dequantize(tensor, tensor_quantizer,
                                                                                        round_mode)
@@ -1010,7 +1074,8 @@ class QuantizeDequantize(torch.autograd.Function):
     @staticmethod
     def backward(ctx, output_grad):
         tensor_quantizer = ctx.tensor_quantizer
-        if tensor_quantizer.enabled and tensor_quantizer.data_type == QuantizationDataType.int:
+        if tensor_quantizer.enabled and tensor_quantizer.data_type == QuantizationDataType.int and \
+                tensor_quantizer.bitwidth != 32:
             tensor = ctx.saved_tensors
             # pylint: disable=protected-access
             if isinstance(tensor_quantizer, StaticGridPerChannelQuantizer):
@@ -1056,29 +1121,34 @@ class Quantize(torch.autograd.Function):
 
     # pylint:disable = arguments-differ
     @staticmethod
-    def forward(ctx, tensor, tensor_quantizer, round_mode):
+    def forward(ctx, tensor: torch.Tensor, tensor_quantizer: TensorQuantizer, round_mode: libpymo.RoundingMode) -> \
+            torch.Tensor:
         """
-        Quantize the tensor, using the saved encoding for this tensor
+        Quantize the tensor, using the saved encoding for this tensor.
+
         :param tensor: Tensor to quantize
         :param tensor_quantizer: Reference to the tensor quantizer
         :param round_mode: Rounding mode
         :return: Resulting tensor
         """
-        if tensor_quantizer.enabled:
-            # pylint:disable = protected-access
-            if isinstance(tensor_quantizer, StaticGridPerChannelQuantizer):
-                quantized_tensor = Quantize._per_channel_quantize(tensor, tensor_quantizer, round_mode)
-            else:
-                quantized_tensor = Quantize._per_tensor_quantize(tensor, tensor_quantizer, round_mode)
+        log_with_error_and_assert_if_false(tensor_quantizer.enabled, _logger,
+                                           'Tensor quantizer must be enabled to perform quantize only.')
+        log_with_error_and_assert_if_false(tensor_quantizer.data_type == QuantizationDataType.int, _logger,
+                                           'Tensor quantizer must be performing integer quantization to perform '
+                                           'quantize only.')
+        log_with_error_and_assert_if_false(tensor_quantizer.bitwidth != 32, _logger,
+                                           'Tensor quantizer bitwidth must be < 32 to perform quantize only.')
+        log_with_error_and_assert_if_false(tensor_quantizer.encoding is not None, _logger,
+                                           'Tensor quantizer encoding must be valid to perform quantize only.')
+
+        # pylint:disable = protected-access
+        if isinstance(tensor_quantizer, StaticGridPerChannelQuantizer):
+            quantized_tensor = Quantize._per_channel_quantize(tensor, tensor_quantizer, round_mode)
         else:
-            quantized_tensor = tensor
+            quantized_tensor = Quantize._per_tensor_quantize(tensor, tensor_quantizer, round_mode)
 
-        ctx.save_for_backward(quantized_tensor)
-
-        ctx.tensor_quantizer = tensor_quantizer
         return quantized_tensor
 
     @staticmethod
-    def backward(ctx, output_grad):
-        _logger.error('Backward pass for quantize only not implemented')
-        raise AssertionError('Backward pass for quantize only not implemented')
+    def backward(ctx, _output_grad):
+        log_with_error_and_assert_if_false(False, _logger, 'Backward pass for quantize only not implemented')

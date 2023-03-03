@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2018-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2018-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -187,6 +187,17 @@ class AimetLogger(metaclass=SingletonType):
         for area in AimetLogger.LogAreas:
             AimetLogger.set_area_logger_level(area, level)
 
+def log_with_error_and_assert_if_false(condition: bool, logger: logging.Logger, error_msg: str):
+    """
+    If condition is false, log an error and assert with the same error message.
+
+    :param condition: Condition to check
+    :param logger: Logger to log error with
+    :param error_msg: Error message string
+    """
+    if not condition:
+        logger.error(error_msg)
+        assert condition, error_msg
 
 def round_up_to_multiplicity(multiplicity: int, num: int, max_allowable_num: int):
     """
