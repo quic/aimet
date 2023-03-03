@@ -2372,6 +2372,60 @@ class TestQuantizationSimLearnedGrid:
         assert isinstance(sim.model.fc1, LearnedGridQuantWrapper)
 
     @pytest.mark.cuda
+    @pytest.mark.parametrize('device', ['cpu', 'cuda:0'])
+    def test_range_learning_with_fp16_and_bw_32_quantizers(self, device):
+        model = SmallMnistNoDropout()
+        model.eval()
+        model.to(device)
+        dummy_input = torch.randn(1, 1, 28, 28).to(device)
+
+        sim = QuantizationSimModel(model, dummy_input=dummy_input,
+                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init)
+        sim.model.conv2.param_quantizers['weight'].data_type = QuantizationDataType.float
+        sim.model.conv2.param_quantizers['weight'].bitwidth = 16
+        sim.model.relu2.output_quantizers[0].bitwidth = 32
+        sim.compute_encodings(lambda m, _: m(dummy_input), None)
+
+        assert sim.model.conv2.param_quantizers['weight'].encoding is None
+        assert sim.model.relu2.output_quantizers[0].encoding is None
+
+        sim.model.train()
+        output = sim.model(copy.deepcopy(dummy_input))
+        loss = output.flatten().sum()
+
+        orig_conv1_weight = sim.model.conv1._module_to_wrap.weight.clone().detach()
+        orig_conv1_encoding_max = sim.model.conv1.param_quantizers['weight'].encoding.max
+        orig_conv2_weight = sim.model.conv2._module_to_wrap.weight.clone().detach()
+        loss.backward()
+
+        optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.05, momentum=0.5)
+        optimizer.step()
+
+        new_conv1_weight = sim.model.conv1._module_to_wrap.weight.clone().detach()
+        new_conv1_encoding_max = sim.model.conv1.param_quantizers['weight'].encoding.max
+        new_conv2_weight = sim.model.conv2._module_to_wrap.weight.clone().detach()
+        assert not torch.equal(orig_conv1_weight, new_conv1_weight)
+        assert orig_conv1_encoding_max != new_conv1_encoding_max
+        assert not torch.equal(orig_conv2_weight, new_conv2_weight)
+
+        sim.export('./data', 'rl_with_fp16_and_bw_32', dummy_input=dummy_input.to('cpu'))
+        with open('./data/rl_with_fp16_and_bw_32_torch.encodings') as json_file:
+            encoding_data = json.load(json_file)
+            assert encoding_data['param_encodings']['conv2.weight'][0] == {'bitwidth': 16, 'dtype': 'float'}
+            assert 'relu2' not in encoding_data['activation_encodings']
+            assert len(encoding_data['activation_encodings']) == 5
+
+        for filepath in ['./data/rl_with_fp16_and_bw_32_torch.encodings.yaml',
+                         './data/rl_with_fp16_and_bw_32.encodings.yaml',
+                         './data/rl_with_fp16_and_bw_32_torch.encodings',
+                         './data/rl_with_fp16_and_bw_32.encodings',
+                         './data/rl_with_fp16_and_bw_32.pth',
+                         './data/rl_with_fp16_and_bw_32.onnx']:
+            if os.path.exists(filepath):
+                os.remove(filepath)
+
+
+    @pytest.mark.cuda
     def test_multi_gpu_qat(self):
         """"""
         seed = 1
