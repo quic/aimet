@@ -235,6 +235,22 @@ void generateInvScale(Tensor* encodingScaleTensor, Tensor* encodingInvScaleTenso
     }
 }
 
+void UpdateEncodingTensorsForChannel(const DlQuantization::TfEncoding &encoding, int channelIdx, Tensor* encodingMinTensor,
+                                     Tensor* encodingMaxTensor, Tensor* encodingScaleTensor, Tensor* encodingOffsetTensor)
+{
+    // Given the encoding, fill it in the encoding tensors at channelIdx
+    // Assumes channelIdx is within bounds
+    double* encodingMin = encodingMinTensor->flat<double>().data();
+    double* encodingMax = encodingMaxTensor->flat<double>().data();
+    double* encodingScale = encodingScaleTensor->flat<double>().data();
+    double* encodingOffset = encodingOffsetTensor->flat<double>().data();
+
+    encodingMin[channelIdx] = encoding.min;
+    encodingMax[channelIdx] = encoding.max;
+    encodingScale[channelIdx] = encoding.delta;
+    encodingOffset[channelIdx] = encoding.offset;
+}
+
 template <typename D>
 void copyConstTensorToNonConstTensor(const D& d, const Tensor* constTensor, Tensor* nonConstTensor)
 {
@@ -387,6 +403,34 @@ public:
                     allocator = &_allocator;
 #endif
 
+                    // allocate tensors for scale and offset. By default, TF would allocate tensors in the device
+                    // where the op is currently executing in. To always allocate on the Host, additional argument
+                    // of type AllocatorAttributes needs to be passed. The object should be set to be allocated on
+                    // host and also made GPU compatible.
+                    Tensor encodingMinTensor, encodingMaxTensor, encodingScaleTensor, encodingOffsetTensor, encodingInvScaleTensor;
+                    AllocatorAttributes attr;
+                    attr.set_on_host(true);
+#if GOOGLE_CUDA
+                    attr.set_gpu_compatible(true);
+#endif
+
+                    OP_REQUIRES_OK(context, context->allocate_temp(DT_DOUBLE, encodingMinTensorConst->shape(),
+                                    &encodingMinTensor, attr));
+                    OP_REQUIRES_OK(context, context->allocate_temp(DT_DOUBLE, encodingMinTensorConst->shape(),
+                                    &encodingMaxTensor, attr));
+                    OP_REQUIRES_OK(context, context->allocate_temp(DT_DOUBLE, encodingMinTensorConst->shape(),
+                                    &encodingScaleTensor, attr));
+                    OP_REQUIRES_OK(context, context->allocate_temp(DT_DOUBLE, encodingMinTensorConst->shape(),
+                                    &encodingOffsetTensor, attr));
+                    OP_REQUIRES_OK(context, context->allocate_temp(DT_DOUBLE, encodingMinTensorConst->shape(),
+                                    &encodingInvScaleTensor, attr));
+
+                    // min/max tensors need to be made non-const because they will be modified
+                    copyConstTensorToNonConstTensor(context->eigen_device<Device>(), encodingMinTensorConst,
+                                                    &encodingMinTensor);
+                    copyConstTensorToNonConstTensor(context->eigen_device<Device>(), encodingMaxTensorConst,
+                                                    &encodingMaxTensor);
+
                     if (opModeEnum == DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize)
                     {
                         for (int channel = 0; channel < numChannels; channel++)
@@ -400,41 +444,25 @@ public:
                                                                                                   quantizerAddr++,
                                                                                                   bitwidth, useSymmetricEncoding,
                                                                                                   allocator);
-
-                            quantizeDequantize(context->eigen_device<Device>(), inTensorTwoDim, encodings, outTensorTwoDim,
-                                               channel);
+                            UpdateEncodingTensorsForChannel(encodings, channel, &encodingMinTensor, &encodingMaxTensor,
+                                                            &encodingScaleTensor, &encodingOffsetTensor);
                         }
                     }
                     else if (opModeEnum == DlQuantization::TensorQuantizerOpMode::quantizeDequantize)
                     {
-                        // allocate tensors for scale and offset. By default, TF would allocate tensors in the device
-                        // where the op is currently executing in. To always allocate on the Host, additional argument
-                        // of type AllocatorAttributes needs to be passed. The object should be set to be allocated on
-                        // host and also made GPU compatible.
-                        Tensor encodingMinTensor, encodingMaxTensor, encodingScaleTensor, encodingOffsetTensor, encodingInvScaleTensor;
-                        AllocatorAttributes attr;
-                        attr.set_on_host(true);
-#if GOOGLE_CUDA
-                        attr.set_gpu_compatible(true);
-#endif
-
-                        OP_REQUIRES_OK(context, context->allocate_temp(DT_DOUBLE, encodingMinTensorConst->shape(), &encodingMinTensor, attr));
-                        OP_REQUIRES_OK(context, context->allocate_temp(DT_DOUBLE, encodingMinTensorConst->shape(), &encodingMaxTensor, attr));
-                        OP_REQUIRES_OK(context, context->allocate_temp(DT_DOUBLE, encodingMinTensorConst->shape(), &encodingScaleTensor, attr));
-                        OP_REQUIRES_OK(context, context->allocate_temp(DT_DOUBLE, encodingMinTensorConst->shape(), &encodingOffsetTensor, attr));
-                        OP_REQUIRES_OK(context, context->allocate_temp(DT_DOUBLE, encodingMinTensorConst->shape(), &encodingInvScaleTensor, attr));
-
-                        // min/max tensors need to be made non-const because they will be modified
-                        copyConstTensorToNonConstTensor(context->eigen_device<Device>(), encodingMinTensorConst, &encodingMinTensor);
-                        copyConstTensorToNonConstTensor(context->eigen_device<Device>(), encodingMaxTensorConst, &encodingMaxTensor);
 
                         generatePerChannelScaleOffset(&encodingMinTensor, &encodingMaxTensor, bitwidth,
                                                       &encodingScaleTensor, &encodingOffsetTensor);
-                        generateInvScale(&encodingScaleTensor, &encodingInvScaleTensor);
-                        quantizeDequantizePerChannel(context->eigen_device<Device>(), inTensorTwoDim, outTensorTwoDim,
-                                              &encodingMinTensor, &encodingMaxTensor, &encodingScaleTensor,
-                                              &encodingOffsetTensor, &encodingInvScaleTensor);
                     }
+                    else
+                    {
+                        printf("unsupported mode\n");
+                        assert(0);
+                    }
+                    generateInvScale(&encodingScaleTensor, &encodingInvScaleTensor);
+                    quantizeDequantizePerChannel(context->eigen_device<Device>(), inTensorTwoDim, outTensorTwoDim,
+                                                 &encodingMinTensor, &encodingMaxTensor, &encodingScaleTensor,
+                                                 &encodingOffsetTensor, &encodingInvScaleTensor);
                 }
                 else if (numDimensionsTensor == 1)
                 {
