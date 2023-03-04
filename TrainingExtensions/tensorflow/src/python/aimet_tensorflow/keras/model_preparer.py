@@ -215,7 +215,11 @@ def _get_layer_input(layer: tf.keras.layers.Layer, network_dict: NetworkDictProp
         if len(layer_input) == 1:
             layer_input = layer_input[0]
     except KeyError:
-        raise ValueError("Could not find input layer for layer: " + layer.name + ".")
+        layer_input = _get_most_recently_added_output_tensor(network_dict)
+        network_dict[NetworkDictProperties.INPUT_LAYERS_OF.value].update({layer.name: [layer_input.name]})
+        logger.warning(
+            f"Could not find input tensor for layer: '{layer.name}'. Using '{layer_input.name}' as input, the most recent output tensor.")
+
 
     return layer_input
 
@@ -239,7 +243,12 @@ def _get_call_args(
                 return isinstance(arg, KerasTensor) or isinstance(arg, tf.Tensor)
         return False
 
-    original_call_args = network_dict[NetworkDictProperties.CALL_ARGS_OF.value][layer.name]
+    try:
+        original_call_args = network_dict[NetworkDictProperties.CALL_ARGS_OF.value][layer.name]
+    except KeyError:
+        logger.warning(f"Could not find call args for layer: '{layer.name}'. Using keras tensor only as input.")
+        return [_get_layer_input(layer, network_dict)]
+
     call_args = []
     keras_tensor_found_flag = False
     for arg in original_call_args:
@@ -431,9 +440,13 @@ def _get_prepared_model(original_model: tf.keras.Model, input_layer: tf.keras.la
     _prepare_model_helper(original_model, class_names, network_dict, model_outputs)
 
     # If the model outputs are empty, then we need to get the most recently added output tensor. This is the case
-    # when a model might be sparse and not fully connected.
-    # TODO: Need??
-    model_outputs = _get_most_recently_added_output_tensor(network_dict) if not model_outputs else model_outputs
+    # when a model might be sparse and not fully connected or when a Functional model is inside an inherited model.
+    if not model_outputs:
+        logger.warning("No model outputs found. This usually occurs when a models is made by inheritting from "
+                       "'tf.keras.Model' and placing a Functional model inside. "
+                       "Using most recently added output tensor as prepared models output.")
+        model_outputs = _get_most_recently_added_output_tensor(network_dict)
+
     return tf.keras.Model(inputs=input_layer, outputs=model_outputs)
 
 
