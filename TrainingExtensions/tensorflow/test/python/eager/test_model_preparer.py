@@ -467,7 +467,7 @@ def test_keras_text_classification_example_model_to_functional():
     verify_functional_model(functional_model,
                             original_model,
                             random_input,
-                            number_of_layers_in_model=20)
+                            number_of_layers_in_model=21)
 
     # NOTE: No testing of the ConnectedGraph since Embedding, MultiHeadAttention, and Lambda layers are not
     # supported by the ConnectedGraph at this time.
