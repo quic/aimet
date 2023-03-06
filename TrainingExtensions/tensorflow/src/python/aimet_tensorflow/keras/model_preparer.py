@@ -191,17 +191,17 @@ def _set_prepared_models_input_layer(
     try:
         if isinstance(model.input, list):
             for inp in model.input:
-                network_dict[NetworkDictProperties.NEW_OUTPUT_TENSOR_OF.value].update({inp.name: inp})
+                network_dict[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value].update({inp.name: inp})
         else:
-            network_dict[NetworkDictProperties.NEW_OUTPUT_TENSOR_OF.value].update({model.input.name: model.input})
+            network_dict[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value].update({model.input.name: model.input})
     except AttributeError:
         # For models that are not connected
         logger.info("Model is not connected. Setting input layer to input layer passed in.")
-        network_dict[NetworkDictProperties.INPUT_LAYERS_OF.value].update({model.layers[0].name: [input_layer.name]})
-        network_dict[NetworkDictProperties.NEW_OUTPUT_TENSOR_OF.value].update({input_layer.name: input_layer})
+        network_dict[ModelLayerConnectionsProperties.INBOUND_NODES.value].update({model.layers[0].name: [input_layer.name]})
+        network_dict[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value].update({input_layer.name: input_layer})
 
 
-def _get_layer_input(layer: tf.keras.layers.Layer, network_dict: NetworkDictProperties.NETWORK_DICT_TYPE.value) -> tf.keras.layers.Layer:
+def _get_layer_input(layer: tf.keras.layers.Layer, network_dict: ModelLayerConnectionsProperties.NETWORK_DICT_TYPE.value) -> tf.keras.layers.Layer:
     """
     Helper function to get the input layer of a layer. This function will recursively call itself if the layer is a
     subclassed layer.
@@ -209,16 +209,17 @@ def _get_layer_input(layer: tf.keras.layers.Layer, network_dict: NetworkDictProp
     :return: The input layer of the layer
     """
     try:
-        layer_input = [network_dict[NetworkDictProperties.NEW_OUTPUT_TENSOR_OF.value][layer_aux]
-                       for layer_aux in network_dict[NetworkDictProperties.INPUT_LAYERS_OF.value][layer.name]]
+        layer_input = [network_dict[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value][layer_aux]
+                       for layer_aux in network_dict[ModelLayerConnectionsProperties.INBOUND_NODES.value][layer.name]]
 
         if len(layer_input) == 1:
             layer_input = layer_input[0]
     except KeyError:
         layer_input = _get_most_recently_added_output_tensor(network_dict)
-        network_dict[NetworkDictProperties.INPUT_LAYERS_OF.value].update({layer.name: [layer_input.name]})
+        network_dict[ModelLayerConnectionsProperties.INBOUND_NODES.value].update({layer.name: [layer_input.name]})
         logger.warning(
-            f"Could not find input tensor for layer: '{layer.name}'. Using '{layer_input.name}' as input, the most recent output tensor.")
+            "Could not find input tensor for layer: %s. Using %s as input, the most recent output tensor.", layer.name,
+            layer_input.name)
 
 
     return layer_input
@@ -226,9 +227,7 @@ def _get_layer_input(layer: tf.keras.layers.Layer, network_dict: NetworkDictProp
 
 def _get_call_args(
         layer: tf.keras.layers.Layer,
-        network_dict: NetworkDictProperties.NETWORK_DICT_TYPE.value) -> List[
-        Union[KerasTensor, List[KerasTensor],
-              Any]]:
+        network_dict: ModelLayerConnectionsProperties.NETWORK_DICT_TYPE.value) -> List[Union[KerasTensor, List[KerasTensor], Any]]:
     """
     Helper function to get the call arguments of a layer. This function will recursively call itself if the layer is a
     subclassed layer.
@@ -239,14 +238,13 @@ def _get_call_args(
         if arg is not None:
             if isinstance(arg, List):
                 return all(isinstance(x, KerasTensor) for x in arg) or all(isinstance(x, tf.Tensor) for x in arg)
-            else:
-                return isinstance(arg, KerasTensor) or isinstance(arg, tf.Tensor)
+            return isinstance(arg, (KerasTensor, tf.Tensor))
         return False
 
     try:
-        original_call_args = network_dict[NetworkDictProperties.CALL_ARGS_OF.value][layer.name]
+        original_call_args = network_dict[ModelLayerConnectionsProperties.CALL_ARGS_OF.value][layer.name]
     except KeyError:
-        logger.warning(f"Could not find call args for layer: '{layer.name}'. Using keras tensor only as input.")
+        logger.warning("Could not find call args for layer: '%s'. Using keras tensor only as input.", layer.name)
         return [_get_layer_input(layer, network_dict)]
 
     call_args = []
@@ -279,19 +277,19 @@ def _update_output_tensors_in_network_dict(
     # if isinstance(layer, TFOpLambda):
     if layer.name != new_output_tensor.name:
         new_name = new_output_tensor.name
-        old_name_of_inputs = network_dict[NetworkDictProperties.INPUT_LAYERS_OF.value].pop(layer.name)
-        network_dict[NetworkDictProperties.INPUT_LAYERS_OF.value].update({new_name: old_name_of_inputs})
+        old_name_of_inputs = network_dict[ModelLayerConnectionsProperties.INBOUND_NODES.value].pop(layer.name)
+        network_dict[ModelLayerConnectionsProperties.INBOUND_NODES.value].update({new_name: old_name_of_inputs})
 
         # replace values in network_dict[NetworkDictProperties.INPUT_LAYERS_OF.value] with new_name
-        for _, value in network_dict[NetworkDictProperties.INPUT_LAYERS_OF.value].items():
+        for _, value in network_dict[ModelLayerConnectionsProperties.INBOUND_NODES.value].items():
             if layer.name in value:
                 idx = value.index(layer.name)
                 value[idx] = new_name
 
-        network_dict[NetworkDictProperties.NEW_OUTPUT_TENSOR_OF.value].update({new_name: new_output_tensor})
+        network_dict[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value].update({new_name: new_output_tensor})
     else:
         # Set new output tensor (in this case, it will be the same as the original model)
-        network_dict[NetworkDictProperties.NEW_OUTPUT_TENSOR_OF.value].update({layer.name: new_output_tensor})
+        network_dict[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value].update({layer.name: new_output_tensor})
     # Save tensor in output list if it is output in the initial model
     if model.output_names and layer.name in model.output_names and model.name is not _TEMP_MODEL_NAME:
         logger.debug("Layer '%s' added as output layer", layer.name)
@@ -304,7 +302,7 @@ def _get_most_recently_added_output_tensor(network_dict: Dict) -> KerasTensor:
     :param network_dict: The network dictionary
     :return: The most recently added output tensor
     """
-    return next(reversed(network_dict[NetworkDictProperties.NEW_OUTPUT_TENSOR_OF.value].items()))[-1]
+    return next(reversed(network_dict[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value].items()))[-1]
 
 
 def _get_temporary_model(layer: tf.keras.layers.Layer, layer_input: tf.keras.layers.Layer) -> tf.keras.Model:
@@ -324,7 +322,7 @@ def _get_temporary_model(layer: tf.keras.layers.Layer, layer_input: tf.keras.lay
 
 
 def _update_temporary_network_dicts_input_tensors(
-        temp_model_network_dict: NetworkDictProperties.NETWORK_DICT_TYPE.value, temp_model: tf.keras.Model,
+        temp_model_network_dict: ModelLayerConnectionsProperties.NETWORK_DICT_TYPE.value, temp_model: tf.keras.Model,
         layer_input: tf.keras.layers.Layer):
     """
     Helper function to update the input tensors of the temporary network dictionary
@@ -332,10 +330,10 @@ def _update_temporary_network_dicts_input_tensors(
     :param temp_model: The temporary model
     :param layer_input: The input layer of the layer
     """
-    for layers_name, input_tensor_name in temp_model_network_dict[NetworkDictProperties.INPUT_LAYERS_OF.value].items():
+    for layers_name, input_tensor_name in temp_model_network_dict[ModelLayerConnectionsProperties.INBOUND_NODES.value].items():
         for idx, current_input_name in enumerate(input_tensor_name):
             if current_input_name == temp_model.input.name:
-                temp_model_network_dict[NetworkDictProperties.INPUT_LAYERS_OF.value][layers_name][idx] = layer_input.name
+                temp_model_network_dict[ModelLayerConnectionsProperties.INBOUND_NODES.value][layers_name][idx] = layer_input.name
 
 
 def _handle_nested_layer(
@@ -376,7 +374,7 @@ def _handle_nested_layer(
 
 
 def _handle_normal_keras_layer(
-        layer: tf.keras.layers.Layer, network_dict: NetworkDictProperties.NETWORK_DICT_TYPE.value) -> KerasTensor:
+        layer: tf.keras.layers.Layer, network_dict: ModelLayerConnectionsProperties.NETWORK_DICT_TYPE.value) -> KerasTensor:
     """
     Helper function to handle normal keras layers. This function will create a new output tensor for the layer
     and return it.
