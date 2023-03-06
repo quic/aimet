@@ -44,12 +44,12 @@ import tensorflow as tf
 from tensorflow.python.keras.engine.keras_tensor import KerasTensor
 
 
-class NetworkDictProperties(Enum):
+class ModelLayerConnectionsProperties(Enum):
     """
-    Enum class for network dictionary keys and it's type
+    Enum class for model layer connections dict keys and it's type
     """
-    INPUT_LAYERS_OF = 'input_layers_of'
-    NEW_OUTPUT_TENSOR_OF = 'new_output_tensor_of'
+    INBOUND_NODES = 'inbound_nodes'
+    OUTPUT_TENSORS = 'output_tensors'
     CALL_ARGS_OF = 'call_args'
     NETWORK_DICT_TYPE = typing.OrderedDict[typing.OrderedDict[str, typing.List[str]],
                                            typing.OrderedDict[str, typing.Union[KerasTensor, typing.List[KerasTensor]]]]
@@ -131,27 +131,32 @@ class WeightTensorUtils:
         :return: Mapping of weight tensor and layer
         """
         # Auxiliary dictionary to describe the network graph
-        network_dict = OrderedDict()
-        network_dict[NetworkDictProperties.INPUT_LAYERS_OF.value] = OrderedDict()
-        network_dict[NetworkDictProperties.NEW_OUTPUT_TENSOR_OF.value] = OrderedDict()
-        network_dict[NetworkDictProperties.CALL_ARGS_OF.value] = OrderedDict()
-
-        # Set the input layers of each layer
-        for layer in model.layers:
-            for node in layer._outbound_nodes:  # pylint: disable=protected-access
-                layer_name = node.outbound_layer.name
-                if layer_name not in network_dict[NetworkDictProperties.INPUT_LAYERS_OF.value]:
-                    network_dict[NetworkDictProperties.INPUT_LAYERS_OF.value].update(
-                        {layer_name: [layer.name]})
-                else:
-                    network_dict[NetworkDictProperties.INPUT_LAYERS_OF.value][layer_name].append(layer.name)
-
-                network_dict[NetworkDictProperties.CALL_ARGS_OF.value].update(
-                    {node.layer.name: node.call_args})
+        model_layer_connections = OrderedDict()
+        model_layer_connections[ModelLayerConnectionsProperties.INBOUND_NODES.value] = OrderedDict()
+        model_layer_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value] = OrderedDict()
+        model_layer_connections[ModelLayerConnectionsProperties.CALL_ARGS_OF.value] = OrderedDict()
 
 
-        return network_dict
-    
+        for current_layer in model.layers:
+            for outbound_node in current_layer.outbound_nodes:
+                outbound_layers_name = outbound_node.outbound_layer.name
+
+                # Get the inbound nodes for a given outbound layer
+                model_layer_connections[ModelLayerConnectionsProperties.INBOUND_NODES.value].update(
+                    {
+                        outbound_layers_name: [
+                            *model_layer_connections[ModelLayerConnectionsProperties.INBOUND_NODES.value].get(outbound_layers_name, []), current_layer.name
+                        ]
+                    }
+                )
+
+                # Get call args for a given layer
+                model_layer_connections[ModelLayerConnectionsProperties.CALL_ARGS_OF.value].update(
+                    {outbound_node.layer.name: outbound_node.call_args}
+                )
+
+        return model_layer_connections
+
     @staticmethod
     def merge_network_dicts(network_dict1: typing.Dict, network_dict2: typing.Dict) -> typing.Dict:
         """
