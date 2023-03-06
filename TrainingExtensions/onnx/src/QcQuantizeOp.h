@@ -46,11 +46,15 @@
 #include "QcQuantizeInfo.h"
 #include <DlQuantization/TensorQuantizerOpFacade.h>
 
+#ifdef ONNX_CUDA
+#include <cuda_runtime_api.h>
+#endif
+
 
 struct QcQuantizeKernel
 {
 public:
-    QcQuantizeKernel(const OrtApi* api, const OrtKernelInfo* info);
+    QcQuantizeKernel(const OrtApi* api, const OrtKernelInfo* info, bool useCuda);
 
     void Compute(OrtKernelContext* context);
 
@@ -58,6 +62,7 @@ private:
     const OrtKernelInfo* info_;
     Ort::CustomOpApi api_;
     struct QcQuantizeInfo* quant_info;
+    bool useCuda;
 };
 
 
@@ -69,7 +74,22 @@ struct QcQuantizeOp : Ort::CustomOpBase<QcQuantizeOp, QcQuantizeKernel>
     static ONNXTensorElementDataType GetInputType(size_t index);
     static size_t GetOutputTypeCount();
     static ONNXTensorElementDataType GetOutputType(size_t index);
+    const char* GetExecutionProviderType() const;
 };
+
+
+#ifdef ONNX_CUDA
+struct QcQuantizeOpGPU : Ort::CustomOpBase<QcQuantizeOpGPU, QcQuantizeKernel>
+{
+    static void* CreateKernel(const OrtApi& api, const OrtKernelInfo* info);
+    static const char* GetName();
+    static size_t GetInputTypeCount();
+    static ONNXTensorElementDataType GetInputType(size_t index);
+    static size_t GetOutputTypeCount();
+    static ONNXTensorElementDataType GetOutputType(size_t index);
+    const char* GetExecutionProviderType() const;
+};
+#endif
 
 
 extern "C" ORT_EXPORT OrtStatus* ORT_API_CALL RegisterCustomOps(OrtSessionOptions* options, const OrtApiBase* api);

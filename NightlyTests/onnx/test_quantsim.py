@@ -43,12 +43,14 @@ from onnx import load_model
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_common.defs import QuantScheme
 from aimet_torch.quantsim import QuantizationSimModel as PtQuantizationSimModel
+import pytest
 
 WORKING_DIR = '/tmp/quantsim'
 
 
 class TestQuantizeAcceptance:
     """ Acceptance test for AIMET ONNX """
+    @pytest.mark.cuda
     def test_quantize_resnet18(self):
         """ Test for E2E quantization """
         np.random.seed(0)
