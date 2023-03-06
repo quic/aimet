@@ -66,7 +66,28 @@
 #include <mutex>
 #include <vector>
 
-static const char* c_OpDomain = "aimet.customop";
+static const char* c_OpDomain = "aimet.customop.cpu";
+static const char* c_OpDomainGPU = "aimet.customop.cuda";
+
+
+#ifdef ONNX_CUDA
+class OnnxCudaAllocator: public DlQuantization::IAllocator
+{
+public:
+    void* allocateRaw(size_t bytes) override
+    {
+        void* ptr;
+        cudaMalloc(&ptr, bytes);
+        return ptr;
+    }
+
+    void deleteRaw(void *ptr) override
+    {
+        cudaFree(ptr);
+    }
+};
+static OnnxCudaAllocator _allocator;
+#endif
 
 // Code reuse from onnxruntime start:
 // Source: https://github.com/microsoft/onnxruntime/blob/861125ccbc0853b2761bbc268841342550a4ff58/onnxruntime/test/testdata/custom_op_library/custom_op_library.cc#L19-L46
@@ -115,7 +136,8 @@ static const QcQuantizeOp c_QcQuantizeOp;
 // Code reuse from onnxruntime end
 
 
-QcQuantizeKernel::QcQuantizeKernel(const OrtApi* api, const OrtKernelInfo* info) : api_(*api), info_(info)
+QcQuantizeKernel::QcQuantizeKernel(const OrtApi* api, const OrtKernelInfo* info, bool useCuda) :
+    api_(*api), info_(info), useCuda(useCuda)
 {
     quant_info =
         reinterpret_cast<struct QcQuantizeInfo*>(api_.KernelInfoGetAttribute<std::int64_t>(info_, "quant_info"));
@@ -146,14 +168,21 @@ void QcQuantizeKernel::Compute(OrtKernelContext* context)
     api_.ReleaseTensorTypeAndShapeInfo(output_info);
 
     DlQuantization::IAllocator* allocator = nullptr;
+#ifdef ONNX_CUDA
+    if (useCuda)
+    {
+        allocator = &_allocator;
+        cudaDeviceSynchronize();
+    }
+#endif
     modeSpecificActionInt(input_data, size, result, quant_info->tensorQuantizerRef, op_mode, encoding,
-                          quant_info->useSymmetricEncoding, allocator);
+                          quant_info->useSymmetricEncoding, allocator, useCuda);
 }
 
 
 void* QcQuantizeOp::CreateKernel(const OrtApi& api, const OrtKernelInfo* info)
 {
-    return new QcQuantizeKernel(&api, info);
+    return new QcQuantizeKernel(&api, info, false);
 };
 
 
@@ -186,6 +215,53 @@ ONNXTensorElementDataType QcQuantizeOp::GetOutputType(size_t /*index*/)
     return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
 };
 
+const char* QcQuantizeOp::GetExecutionProviderType() const
+{
+    return "CPUExecutionProvider";
+};
+
+#ifdef ONNX_CUDA
+void* QcQuantizeOpGPU::CreateKernel(const OrtApi& api, const OrtKernelInfo* info)
+{
+    return new QcQuantizeKernel(&api, info, true);
+};
+
+
+const char* QcQuantizeOpGPU::GetName()
+{
+    return "QcQuantizeOp";
+};
+
+
+size_t QcQuantizeOpGPU::GetInputTypeCount()
+{
+    return 1;
+};
+
+
+ONNXTensorElementDataType QcQuantizeOpGPU::GetInputType(size_t /*index*/)
+{
+    return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
+};
+
+
+size_t QcQuantizeOpGPU::GetOutputTypeCount()
+{
+    return 1;
+};
+
+
+ONNXTensorElementDataType QcQuantizeOpGPU::GetOutputType(size_t /*index*/)
+{
+    return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
+};
+
+const char* QcQuantizeOpGPU::GetExecutionProviderType() const
+{
+    return "CUDAExecutionProvider";
+};
+#endif
+
 
 
 
@@ -205,6 +281,22 @@ OrtStatus* ORT_API_CALL RegisterCustomOps(OrtSessionOptions* options, const OrtA
     {
         return status;
     }
+
+#ifdef ONNX_CUDA
+    OrtCustomOpDomain* cuda_domain = nullptr;
+    static const QcQuantizeOpGPU c_QcQuantizeOpGPU;
+    if (auto status = ortApi->CreateCustomOpDomain(c_OpDomainGPU, &cuda_domain))
+    {
+        return status;
+    }
+
+    AddOrtCustomOpDomainToContainer(cuda_domain, ortApi);
+    if (auto status = ortApi->CustomOpDomain_Add(cuda_domain, &c_QcQuantizeOpGPU))
+    {
+        return status;
+    }
+    ortApi->AddCustomOpDomain(options, cuda_domain);
+#endif
 
     return ortApi->AddCustomOpDomain(options, domain);
 }

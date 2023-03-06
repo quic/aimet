@@ -58,8 +58,7 @@ class QcQuantizeOp:
                  rounding_mode: str = 'nearest',
                  encodings: Union[libpymo.TfEncoding, None] = None,
                  op_mode: Union[OpMode, None] = None,
-                 bitwidth: int = 8, use_symmetric_encodings: bool = False,
-                 use_cuda: bool = False):
+                 bitwidth: int = 8, use_symmetric_encodings: bool = False):
         """
         Args:
             quant_info: libquant_info.QcQuantizeInfo object holding quantization parameters passed to the C++ op
@@ -69,7 +68,6 @@ class QcQuantizeOp:
             op_mode: QcQuantizeOp mode (e.g. update_stats)
             bitwidth: Quantization bitwidth
             use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
-            use_cuda: True if using CUDA to run quantization op. False otherwise.
         """
         self.quant_info = quant_info
         self.quant_scheme = quant_scheme
@@ -79,9 +77,8 @@ class QcQuantizeOp:
         self.bitwidth = bitwidth
         self.encodings = encodings
         self.use_symmetric_encodings = use_symmetric_encodings
-        self.use_cuda = use_cuda
         self.enabled = True
-        self.dtype = QuantizationDataType.int
+        self.data_type = QuantizationDataType.int
 
     def _build_tensor_quantizer(self):
         return libpymo.TensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[self.quant_scheme],

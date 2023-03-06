@@ -44,18 +44,21 @@
 #include <cstdint>
 #include <stdexcept>
 
+#ifdef ONNX_CUDA
+#include <cuda_runtime_api.h>
+#endif
+
 
 template <typename T>
-void copyInputTensorsToOutputTensors(const T* inTensor, size_t count, T* outTensor);
+void copyInputTensorsToOutputTensors(const T* inTensor, size_t count, T* outTensor, bool useCuda);
 
 
 template <typename T>
 void modeSpecificActionInt(const T* inTensor, size_t count, T* outTensor,
                            DlQuantization::TensorQuantizerOpFacade* tensorQuantizer,
                            const DlQuantization::TensorQuantizerOpMode opMode, DlQuantization::TfEncoding* encoding,
-                           const bool useSymmetricEncoding, DlQuantization::IAllocator* allocator)
+                           const bool useSymmetricEncoding, DlQuantization::IAllocator* allocator, bool useCuda)
 {
-    bool useCuda = false;   // Hard code as false until GPU support added
 
     switch (opMode)
     {
@@ -77,7 +80,7 @@ void modeSpecificActionInt(const T* inTensor, size_t count, T* outTensor,
     case DlQuantization::TensorQuantizerOpMode::updateStats:
     {
         tensorQuantizer->updateStats(inTensor, count, useCuda, allocator);
-        copyInputTensorsToOutputTensors(inTensor, count, outTensor);
+        copyInputTensorsToOutputTensors(inTensor, count, outTensor, useCuda);
         break;
     }
     case DlQuantization::TensorQuantizerOpMode::quantizeDequantize:
@@ -88,7 +91,7 @@ void modeSpecificActionInt(const T* inTensor, size_t count, T* outTensor,
     }
     case DlQuantization::TensorQuantizerOpMode::passThrough:
     {
-        copyInputTensorsToOutputTensors(inTensor, count, outTensor);
+        copyInputTensorsToOutputTensors(inTensor, count, outTensor, useCuda);
         break;
     }
     default:

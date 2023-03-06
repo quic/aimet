@@ -39,21 +39,22 @@
 
 import os
 from typing import Dict
+
 import numpy as np
-import onnx
+import onnxruntime as ort
 from onnx import helper, onnx_pb, mapping
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
-from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode
+
+from aimet_common import libpymo
+from aimet_common import libquant_info
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import encoding_version, extract_global_quantizer_args
 from aimet_common.utils import save_json_yaml
-from aimet_common import libpymo
-
 from aimet_onnx import utils
-from aimet_onnx.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
-from aimet_common import libquant_info
+from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode
+from aimet_onnx.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_onnx.utils import make_dummy_input, add_hook_to_get_activation, remove_activation_hooks
 
 WORKING_DIR = '/tmp/quantsim/'
@@ -75,8 +76,8 @@ class QuantizationSimModel:
                  rounding_mode: str = 'nearest',
                  default_param_bw: int = 8,
                  default_activation_bw: int = 8,
-                 use_symmetric_encodings: bool = False, use_cuda: bool = False,
-                 config_file: str = None):
+                 use_symmetric_encodings: bool = False, use_cuda: bool = True,
+                 device: int = 0, config_file: str = None):
         """
         Constructor
 
@@ -100,9 +101,13 @@ class QuantizationSimModel:
         self._default_activation_bw = default_activation_bw
         self._use_symmetric_encodings = use_symmetric_encodings
         self._use_cuda = use_cuda
-        if use_cuda:
-            self.providers = ["CUDAExecutionProvider"]
+        if 'CUDAExecutionProvider' not in ort.get_available_providers():
+            self._use_cuda = False
+        if self._use_cuda:
+            self._op_domain = "aimet.customop.cuda"
+            self.providers = [('CUDAExecutionProvider', {'device_id': device}), 'CPUExecutionProvider']
         else:
+            self._op_domain = "aimet.customop.cpu"
             self.providers = ['CPUExecutionProvider']
         self.param_names = []
         self.activation_names = []
@@ -206,7 +211,7 @@ class QuantizationSimModel:
                 inputs=[name],
                 outputs=[name + '_qdq'],
                 name='QcQuantizeOp_' + name,
-                domain="aimet.customop",
+                domain=self._op_domain,
                 op_name=name,
                 quant_info=libpymo.PtrToInt64(quant_info),
             )
@@ -217,8 +222,8 @@ class QuantizationSimModel:
                                                           encodings=None,
                                                           op_mode=OpMode.oneShotQuantizeDequantize,
                                                           bitwidth=self._default_param_bw,
-                                                          use_symmetric_encodings=self._use_symmetric_encodings,
-                                                          use_cuda=self._use_cuda)
+                                                          use_symmetric_encodings=self._use_symmetric_encodings
+                                                          )
 
     def _insert_activation_quantization_nodes(self):
         """
@@ -232,7 +237,7 @@ class QuantizationSimModel:
                 inputs=[name],
                 outputs=[name + '_updated'],
                 name='QcQuantizeOp_' + name,
-                domain="aimet.customop",
+                domain=self._op_domain,
                 op_name=name,
                 quant_info=libpymo.PtrToInt64(quant_info)
             )
@@ -243,8 +248,8 @@ class QuantizationSimModel:
                                                           encodings=None,
                                                           op_mode=OpMode.updateStats,
                                                           bitwidth=self._default_activation_bw,
-                                                          use_symmetric_encodings=self._use_symmetric_encodings,
-                                                          use_cuda=self._use_cuda)
+                                                          use_symmetric_encodings=self._use_symmetric_encodings
+                                                          )
 
     def _build_session(self, providers):
         """
@@ -294,8 +299,7 @@ class QuantizationSimModel:
         forward_pass_callback(self.session, forward_pass_callback_args)
         for op_name, qc_op in self.qc_quantize_op_dict.items():
             qc_op.compute_encodings()
-            if op_name in self.activation_names:
-                qc_op.op_mode = OpMode.quantizeDequantize
+            qc_op.op_mode = OpMode.quantizeDequantize
 
     def _export_encodings(self, encoding_file_path):
         """
