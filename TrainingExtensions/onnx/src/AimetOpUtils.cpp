@@ -39,11 +39,22 @@
 #include "AimetOpUtils.h"
 
 template <typename T>
-void copyInputTensorsToOutputTensors(const T* inTensor, size_t count, T* outTensor)
+void copyInputTensorsToOutputTensors(const T* inTensor, size_t count, T* outTensor, bool useCuda)
 {
     // copy input_tensor to output_tensor
-    std::copy(inTensor, inTensor + count, outTensor);
+    if (useCuda)
+    {
+#ifdef ONNX_CUDA
+        cudaMemcpy(outTensor, inTensor, count * sizeof(float), cudaMemcpyDeviceToDevice);
+#else
+        throw std::runtime_error("Not compiled for GPU mode.");
+#endif
+    }
+    else
+    {
+        std::copy(inTensor, inTensor + count, outTensor);
+    }
 }
 
 
-template void copyInputTensorsToOutputTensors(const float* inTensor, size_t count, float* outTensor);
+template void copyInputTensorsToOutputTensors(const float* inTensor, size_t count, float* outTensor, bool useCuda);

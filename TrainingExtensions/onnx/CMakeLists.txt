@@ -58,6 +58,10 @@ target_include_directories(OnnxCppOps PRIVATE
         )
 
 if (ENABLE_CUDA)
+    target_compile_options(OnnxCppOps
+            PRIVATE
+            -DONNX_CUDA=1
+            )
     target_link_libraries(OnnxCppOps PUBLIC
             MoDlQuantization
             MoDlQuantizationCuda
