@@ -38,6 +38,7 @@
 
 """ Utility for batch norm fold in tf 2.x """
 
+from collections import OrderedDict
 from typing import Optional, Tuple, Union, List, Dict, Set
 from enum import IntEnum
 import numpy as np
@@ -405,90 +406,90 @@ def _delete_bn_from_functional(model: tf.keras.Model,
     #
     #
 
+    INBOUND_NODES = 'inbound_nodes'
+    OUTBOUND_TENSORS = 'outbound_tensors'
+
     # Step 1: Get the inbound and outbound connections for each layer in the model
+    model_layer_connections = OrderedDict()
+    model_layer_connections[INBOUND_NODES] = OrderedDict()
+    model_layer_connections[OUTBOUND_TENSORS] = OrderedDict()
 
-    # Auxiliary dictionary to describe the network graph
-    network_dict = {'input_layers_of': {}, 'new_output_tensor_of': {}}
+    for current_layer in model.layers:
+        for outbound_node in current_layer.outbound_nodes:
+            outbound_layers_name = outbound_node.outbound_layer.name
 
-    # Set the input layers of each layer
-    for layer in model.layers:
-        for node in layer._outbound_nodes:  # pylint: disable=protected-access
-            layer_name = node.outbound_layer.name
-            if layer_name not in network_dict['input_layers_of']:
-                network_dict['input_layers_of'].update(
-                    {layer_name: [layer.name]})
-            else:
-                network_dict['input_layers_of'][layer_name].append(layer.name)
+            model_layer_connections[INBOUND_NODES][outbound_layers_name] = [
+                *model_layer_connections[INBOUND_NODES].get(outbound_layers_name, []), current_layer.name
+            ]
 
-    # Set the output tensor of the input layer
     if isinstance(model.input, list):
         # If the model has multiple inputs, we need to set the output tensor of each input layer
         for inp in model.input:
-            network_dict['new_output_tensor_of'].update({inp.name: inp})
+            model_layer_connections[OUTBOUND_TENSORS].update({inp.name: inp})
     else:
-        network_dict['new_output_tensor_of'].update({model.layers[0].name: model.input})
+        model_layer_connections[OUTBOUND_TENSORS].update({model.layers[0].name: model.input})
 
     # Step 2: Create a new model with the batch normalization layers removed by iterating through the layers in the model
     # and using the inbound and outbound connections to rerouting around the batch normalization layers.
 
     model_outputs = []
-    for layer in model.layers:
-        if isinstance(layer, tf.keras.layers.InputLayer):
+    for current_layer in model.layers:
+        if isinstance(current_layer, tf.keras.layers.InputLayer):
             continue
 
         # Determine input tensors of the given layer
-        layer_input = [network_dict['new_output_tensor_of'][layer_aux]
-                       for layer_aux in network_dict['input_layers_of'][layer.name]]
+        layer_input = [model_layer_connections[OUTBOUND_TENSORS][layer_aux]
+                       for layer_aux in model_layer_connections[INBOUND_NODES][current_layer.name]]
 
-        if len(layer_input) == 1:
-            layer_input = layer_input[0]
+
+        layer_input = layer_input[0] if len(layer_input) == 1 else layer_input
 
         # Reroute around batch normalization layers if the layer is in the list of layers to remove
-        if layer in bn_layers_to_remove:
-            logger.debug("Removing Batch Normalization layer %s", layer.name)
+        if current_layer in bn_layers_to_remove:
+            logger.debug("Removing Batch Normalization layer %s", current_layer.name)
 
-            for outbound_node in layer._outbound_nodes:  # pylint: disable=protected-access
+            for outbound_node in current_layer._outbound_nodes:  # pylint: disable=protected-access
                 # Find and replace the Batch Normalization output layers input that holds the Batch Normalization layer
                 # node and replace it with the input layers of the Batch Normalization layer.
                 # For example, if ReLU's inputs are [conv1_bn] and conv1_bn's inputs are [conv1], then we replace
                 # ReLU's inputs with [conv1]
 
                 all_batch_norms_inbound_layers_names = \
-                    [inbound_node.inbound_layers.name for inbound_node in layer._inbound_nodes]  # pylint: disable=protected-access
+                    [inbound_node.inbound_layers.name for inbound_node in current_layer._inbound_nodes]  # pylint: disable=protected-access
 
                 # Go through all the outbound layers of the batch normalization layer and replace the batch normalization
                 # layer name with the input layer names of the batch normalization layer.
                 batch_norms_outbound_layers_new_inbound_layers_names = \
-                    [outlayer.replace(layer.name, *all_batch_norms_inbound_layers_names)
-                     for outlayer in network_dict['input_layers_of'][outbound_node.outbound_layer.name]]
+                    [outlayer.replace(current_layer.name, *all_batch_norms_inbound_layers_names)
+                     for outlayer in model_layer_connections[INBOUND_NODES][outbound_node.outbound_layer.name]]
 
-                network_dict['input_layers_of'].update(
+                model_layer_connections[INBOUND_NODES].update(
                     {outbound_node.outbound_layer.name: batch_norms_outbound_layers_new_inbound_layers_names})
 
                 # The above updates our dict for the mapping of the inputs but we need to also update what Keras thinks
                 # the inputs are. This is done by updating the inbound nodes of the output layer of the Batch Normalization.
                 # THIS IS ONLY FOR MAPPING THE INPUTS TO BUILD A NEW MODEL. The original models underlinig structure is
                 # not changed.
-                outbound_node.outbound_layer._inbound_nodes = layer.inbound_nodes  # pylint: disable=protected-access
+                outbound_node.outbound_layer._inbound_nodes = current_layer.inbound_nodes  # pylint: disable=protected-access
 
         # Otherwise, treat like a normal layer
         else:
             # Since we are rerouting around the batch normalization layers, we need to temporarily remove the inbound and
             # outbound nodes of the batch normalization layers so that the model can be built correctly and not duplicate
             # the non batch normalization layers inbound/outbound nodes.
-            layer._inbound_nodes = []  # pylint: disable=protected-access
+            current_layer._inbound_nodes = []  # pylint: disable=protected-access
             # Special case for when there is a Lambda opertaion with multiple inputs. For example, x = y + z.
-            if isinstance(layer, TFOpLambda) and isinstance(layer_input, List):
-                x = layer(*layer_input)
+            if isinstance(current_layer, TFOpLambda) and isinstance(layer_input, List):
+                x = current_layer(*layer_input)
             else:
-                x = layer(layer_input)
-            layer._outbound_nodes = [] # pylint: disable=protected-access
+                x = current_layer(layer_input)
+            current_layer._outbound_nodes = [] # pylint: disable=protected-access
 
             # Set new output tensor (in this case, it will be the same as the original model)
-            network_dict['new_output_tensor_of'].update({layer.name: x})
+            model_layer_connections[OUTBOUND_TENSORS].update({current_layer.name: x})
 
         # Save tensor in output list if it is output in the initial model
-        if layer.name in model.output_names:
+        if current_layer.name in model.output_names:
             model_outputs.append(x)
 
     tf.keras.backend.clear_session() # clear session to not have tensor name conflicts
