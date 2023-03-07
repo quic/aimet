@@ -148,7 +148,7 @@ RUN python3 -m pip --no-cache-dir install \
         mock \
         nbsphinx \
         'numpy<1.24,>=1.16.6' \
-        onnx==1.12.0 \
+        onnx==1.10.0 \
         onnxsim \
         onnxruntime==1.10.0 \
         onnxruntime-extensions \
