@@ -402,21 +402,15 @@ def _delete_bn_from_functional(model: tf.keras.Model,
     #
     #
 
-    def wrapped_bn_layer_in_bns_to_remove(layer: tf.keras.layers.Layer) -> bool:
-        return isinstance(layer, QcQuantizeWrapper) and layer._layer_to_wrap in bn_layers_to_remove
-
-    INBOUND_NODES = 'inbound_nodes'
-    OUTBOUND_TENSORS = 'outbound_tensors'
-
     # Step 1: Get the inbound and outbound connections for each layer in the model
     network_dict = WeightTensorUtils.get_weight_tensor_layer_mapping(model)
 
     if isinstance(model.input, list):
         # If the model has multiple inputs, we need to set the output tensor of each input layer
         for inp in model.input:
-            model_layer_connections[OUTBOUND_TENSORS].update({inp.name: inp})
+            network_dict[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value].update({inp.name: inp})
     else:
-        model_layer_connections[OUTBOUND_TENSORS].update({model.layers[0].name: model.input})
+        network_dict[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value].update({model.layers[0].name: model.input})
 
     # Step 2: Create a new model with the batch normalization layers removed by iterating through the layers in the model
     # and using the inbound and outbound connections to rerouting around the batch normalization layers.
@@ -426,8 +420,8 @@ def _delete_bn_from_functional(model: tf.keras.Model,
             continue
 
         # Determine input tensors of the given layer
-        layer_input = [model_layer_connections[OUTBOUND_TENSORS][layer_aux]
-                       for layer_aux in model_layer_connections[INBOUND_NODES][current_layer.name]]
+        layer_input = [network_dict[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value][layer_aux]
+                       for layer_aux in network_dict[ModelLayerConnectionsProperties.INBOUND_NODES.value][layer.name]]
 
 
         layer_input = layer_input[0] if len(layer_input) == 1 else layer_input
@@ -448,10 +442,10 @@ def _delete_bn_from_functional(model: tf.keras.Model,
                 # Go through all the outbound layers of the batch normalization layer and replace the batch normalization
                 # layer name with the input layer names of the batch normalization layer.
                 batch_norms_outbound_layers_new_inbound_layers_names = \
-                    [outlayer.replace(current_layer.name, *all_batch_norms_inbound_layers_names)
-                     for outlayer in model_layer_connections[INBOUND_NODES][outbound_node.outbound_layer.name]]
+                    [outlayer.replace(layer.name, *all_batch_norms_inbound_layers_names)
+                     for outlayer in network_dict[ModelLayerConnectionsProperties.INBOUND_NODES.value][outbound_node.outbound_layer.name]]
 
-                model_layer_connections[INBOUND_NODES].update(
+                network_dict[ModelLayerConnectionsProperties.INBOUND_NODES.value].update(
                     {outbound_node.outbound_layer.name: batch_norms_outbound_layers_new_inbound_layers_names})
 
                 # The above updates our dict for the mapping of the inputs but we need to also update what Keras thinks
@@ -474,7 +468,7 @@ def _delete_bn_from_functional(model: tf.keras.Model,
             current_layer._outbound_nodes = [] # pylint: disable=protected-access
 
             # Set new output tensor (in this case, it will be the same as the original model)
-            model_layer_connections[OUTBOUND_TENSORS].update({current_layer.name: x})
+            network_dict[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value].update({layer.name: x})
 
         # Save tensor in output list if it is output in the initial model
         if current_layer.name in model.output_names:
