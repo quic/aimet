@@ -39,6 +39,7 @@
 """ Optimization code to fold batch-norm layers """
 
 import contextlib
+import math
 from typing import List, Tuple, Union, Dict, Iterable
 import numpy as np
 import torch
@@ -85,7 +86,7 @@ def _expand_shape_to_4d(weight_tensor: libpymo.TensorParams):
     """ Expand the shape of the weight into 4d.  """
     dims = len(weight_tensor.shape)
 
-    if dims > 4:
+    if dims > 5:
         raise RuntimeError
 
     if dims == 4:
@@ -93,7 +94,12 @@ def _expand_shape_to_4d(weight_tensor: libpymo.TensorParams):
 
     else:
         orig_shape = weight_tensor.shape
-        _4d_shape = np.append(orig_shape, [1 for _ in range(4-dims)]).astype(int)
+        if dims < 4:
+            # If we have less dimensions, we add 1s to make 4 dimensions
+            _4d_shape = np.append(orig_shape, [1 for _ in range(4-dims)]).astype(int)
+        else:
+            # If we have more dimensions, we concatenate all the dimensions beyond 3 into one dimension
+            _4d_shape = np.array(orig_shape[:3] + [math.prod(orig_shape[3:])])
 
         try:
             weight_tensor.shape = _4d_shape
@@ -136,15 +142,11 @@ def _call_mo_batch_norm_fold(weight: torch.Tensor,
         with _expand_shape_to_4d(weight_tensor):
             _bias = libpymo.fold(bn_params, weight_tensor, bias_tensor, is_bias_valid, fold_backward)
 
-        bias.copy_(
-            torch.tensor(_bias, device=bias.device, dtype=bias.dtype).reshape_as(bias)
-        )
+        bias.copy_(torch.tensor(_bias, device=bias.device, dtype=bias.dtype)
+                   .reshape_as(bias))
 
-        weight.copy_(
-            torch.tensor(weight_tensor.data,
-                         device=weight.device,
-                         dtype=weight.dtype).reshape_as(weight)
-        )
+        weight.copy_(torch.tensor(weight_tensor.data, device=weight.device, dtype=weight.dtype)
+                     .reshape_as(weight))
 
 
 class _BatchNormFoldingNotSupported(RuntimeError):
@@ -434,7 +436,7 @@ def _is_valid_bn_fold(conv: LayerType, fold_backward: bool) -> bool:
     valid = True
     if not fold_backward:
         # Cannot fold BN -> Conv with padding. AIMET does not support forward folding to grouped or DW Conv
-        if isinstance(conv, (torch.nn.Conv2d, torch.nn.Conv1d)):
+        if isinstance(conv, (torch.nn.Conv2d, torch.nn.Conv1d, torch.nn.Conv3d)):
             valid &= all(item == 0 for item in conv.padding)
             valid &= conv.groups == 1
         # AIMET does not support forward folding to ConvTranspose
@@ -545,6 +547,8 @@ def _find_all_conv_bn_with_activation(connected_graph: ConnectedGraph) -> Dict:
                                                    action=layer_select_handler))
         patterns_with_callbacks.append(PatternType(pattern=[op_type, 'BatchNormalization'],
                                                    action=layer_select_handler))
+    patterns_with_callbacks.append(PatternType(pattern=['Conv3d', 'BatchNorm3d'], action=layer_select_handler))
+    patterns_with_callbacks.append(PatternType(pattern=['BatchNorm3d', 'Conv3d'], action=layer_select_handler))
 
     # create graph searcher instance with connected graph and patterns to search
     graph_searcher = GraphSearcher(connected_graph, patterns_with_callbacks)
