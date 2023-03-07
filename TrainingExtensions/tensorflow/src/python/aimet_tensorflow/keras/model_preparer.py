@@ -43,13 +43,14 @@ import re
 import numpy as np
 
 import tensorflow as tf
+from tensorflow.python.keras.engine.base_layer_utils import is_subclassed
 from tensorflow.python.keras.engine.keras_tensor import KerasTensor
 from tensorflow.python.keras.engine.functional import Functional
 from tensorflow.python.keras.layers.core import TFOpLambda
 
 from aimet_tensorflow.keras.utils.model_transform_utils import replace_separable_conv_with_depthwise_pointwise
 from aimet_common.utils import AimetLogger
-logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ModelPreparer)
+_logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ModelPreparer)
 
 regex_for_camel_case_to_snake_case = re.compile(r'(?<!^)(?=[A-Z])')
 _TEMP_MODEL_NAME = "temp_aimet_intermediate_model"
@@ -109,14 +110,14 @@ def _set_functional_models_weights(
     try:
         functional_model.set_weights(weights_in_correct_order)
     except ValueError:
-        logger.error(
+        _logger.error(
             "Could not copy weights from original model to functional model. This can occur when "
             "custom sublayers are defined not in the same order as the sublayers call method. Please ensure that the "
             "sublayers internal layers are defined in the same order as the sublayers call method.")
         raise
 
-    logger.debug("Functional model weights copied.")
-    logger.info("Model prepared for AIMET in Functional API format.")
+    _logger.debug("Functional model weights copied.")
+    _logger.info("Model prepared for AIMET in Functional API format.")
 
 
 def _format_input_layer(original_model: tf.keras.Model,
@@ -133,7 +134,7 @@ def _format_input_layer(original_model: tf.keras.Model,
         input_layer = original_model.layers[0].input
 
     except AttributeError:
-        logger.info("Input layer not found. Using input layer passed in.")
+        _logger.info("Input layer not found. Using input layer passed in.")
         if input_layer is None:
             raise ValueError("The top layer of this model is subclassed. Please provide an input layer via the "
                              "\'input_layer\' parameter.")
@@ -151,16 +152,7 @@ def _is_nested_layer(layer: tf.keras.layers.Layer) -> bool:
     :param layer: The layer to check
     :return: True if the layer is a nested layer, False otherwise
     """
-    return _is_subclass_layer(layer) or _is_functional_model(layer) or _is_sequential_model(layer)
-
-
-def _is_subclass_layer(layer: tf.keras.layers.Layer) -> bool:
-    """
-    Checks if the given layer is a subclassed layer
-    :param layer: The layer to check
-    :return: True if the layer is a subclassed layer, False otherwise
-    """
-    return layer.submodules and "tensorflow.python.keras" not in layer.__module__
+    return is_subclassed(layer) or _is_functional_model(layer) or _is_sequential_model(layer)
 
 
 def _is_functional_model(layer: tf.keras.layers.Layer) -> bool:
@@ -182,26 +174,29 @@ def _is_sequential_model(layer: tf.keras.layers.Layer) -> bool:
 
 
 def _set_prepared_models_input_layer(
-        model: tf.keras.Model, network_dict, input_layer: tf.keras.layers.InputLayer) -> None:
+        model: tf.keras.Model, model_layers_connections, input_layer: tf.keras.layers.InputLayer) -> None:
     """
     This function sets the input layer of the model to the input layer of the functional model
     :param model: The original model
-    :param network_dict: The network dictionary
+    :param model_layers_connections: The model layers connections dictionary
     """
     try:
         if isinstance(model.input, list):
             for inp in model.input:
-                network_dict[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value].update({inp.name: inp})
+                model_layers_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value].update({inp.name: inp})
         else:
-            network_dict[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value].update({model.input.name: model.input})
+            model_layers_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value].update(
+                {model.input.name: model.input})
     except AttributeError:
         # For models that are not connected
-        logger.info("Model is not connected. Setting input layer to input layer passed in.")
-        network_dict[ModelLayerConnectionsProperties.INBOUND_NODES.value].update({model.layers[0].name: [input_layer.name]})
-        network_dict[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value].update({input_layer.name: input_layer})
+        _logger.info("Model is not connected. Setting input layer to input layer passed in.")
+        model_layers_connections[ModelLayerConnectionsProperties.INBOUND_NODES.value].update(
+            {model.layers[0].name: [input_layer.name]})
+        model_layers_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value].update(
+            {input_layer.name: input_layer})
 
 
-def _get_layer_input(layer: tf.keras.layers.Layer, network_dict: ModelLayerConnectionsProperties.NETWORK_DICT_TYPE.value) -> tf.keras.layers.Layer:
+def _get_layer_input(layer: tf.keras.layers.Layer, model_layers_connections: ModelLayerConnectionsProperties.TYPE.value) -> tf.keras.layers.Layer:
     """
     Helper function to get the input layer of a layer. This function will recursively call itself if the layer is a
     subclassed layer.
@@ -209,51 +204,60 @@ def _get_layer_input(layer: tf.keras.layers.Layer, network_dict: ModelLayerConne
     :return: The input layer of the layer
     """
     try:
-        layer_input = [network_dict[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value][layer_aux]
-                       for layer_aux in network_dict[ModelLayerConnectionsProperties.INBOUND_NODES.value][layer.name]]
+        layer_input = [model_layers_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value][layer_aux]
+                       for layer_aux in model_layers_connections[ModelLayerConnectionsProperties.INBOUND_NODES.value][layer.name]]
 
         if len(layer_input) == 1:
             layer_input = layer_input[0]
     except KeyError:
-        layer_input = _get_most_recently_added_output_tensor(network_dict)
-        network_dict[ModelLayerConnectionsProperties.INBOUND_NODES.value].update({layer.name: [layer_input.name]})
-        logger.warning(
+        layer_input = _get_most_recently_added_output_tensor(model_layers_connections)
+        model_layers_connections[ModelLayerConnectionsProperties.INBOUND_NODES.value].update({layer.name: [layer_input.name]})
+        _logger.warning(
             "Could not find input tensor for layer: %s. Using %s as input, the most recent output tensor.", layer.name,
             layer_input.name)
-
 
     return layer_input
 
 
+def _is_keras_tensor_input(arg: Any) -> bool:
+    """
+    Helper function to check if some argument is a valid Keras tensor
+    :param arg: The argument in question
+    :return: True if it is valid, False if not
+    """
+    if arg is not None:
+        if isinstance(arg, List):
+            return all(isinstance(x, KerasTensor) for x in arg) or all(isinstance(x, tf.Tensor) for x in arg)
+        return isinstance(arg, (KerasTensor, tf.Tensor))
+    return False
+
+
 def _get_call_args(
         layer: tf.keras.layers.Layer,
-        network_dict: ModelLayerConnectionsProperties.NETWORK_DICT_TYPE.value) -> List[Union[KerasTensor, List[KerasTensor], Any]]:
+        model_layers_connections: ModelLayerConnectionsProperties.TYPE.value) -> List[Union[KerasTensor, List[KerasTensor], Any]]:
     """
-    Helper function to get the call arguments of a layer. This function will recursively call itself if the layer is a
-    subclassed layer.
+    Helper function to get the call arguments of a layer.
     :param layer: The layer to get the call arguments of
     :return: The call arguments of the layer
     """
-    def _is_keras_tensor_input(arg: Any) -> bool:
-        if arg is not None:
-            if isinstance(arg, List):
-                return all(isinstance(x, KerasTensor) for x in arg) or all(isinstance(x, tf.Tensor) for x in arg)
-            return isinstance(arg, (KerasTensor, tf.Tensor))
-        return False
+    def _is_tf_tensor(arg: Any) -> bool:
+        return isinstance(arg, tf.Tensor)
 
     try:
-        original_call_args = network_dict[ModelLayerConnectionsProperties.CALL_ARGS_OF.value][layer.name]
+        original_call_args = model_layers_connections[ModelLayerConnectionsProperties.CALL_ARGS.value][layer.name]
     except KeyError:
-        logger.warning("Could not find call args for layer: '%s'. Using keras tensor only as input.", layer.name)
-        return [_get_layer_input(layer, network_dict)]
+        _logger.warning("Could not find call args for layer: '%s'. Using keras tensor only as input.", layer.name)
+        return [_get_layer_input(layer, model_layers_connections)]
 
     call_args = []
     keras_tensor_found_flag = False
     for arg in original_call_args:
         if _is_keras_tensor_input(arg):
             if keras_tensor_found_flag:
+                if _is_tf_tensor(arg):
+                    call_args.append(arg)
                 continue
-            layer_input = _get_layer_input(layer, network_dict)
+            layer_input = _get_layer_input(layer, model_layers_connections)
             if isinstance(layer_input, list):
                 call_args.extend(layer_input)
             else:
@@ -266,43 +270,68 @@ def _get_call_args(
     return call_args
 
 
-def _update_output_tensors_in_network_dict(
-        layer: tf.keras.layers.Layer, new_output_tensor: KerasTensor, model: tf.keras.Model, network_dict: Dict,
-        model_outputs: List[KerasTensor]) -> None:
+def _get_call_kwargs(
+        layer: tf.keras.layers.Layer,
+        model_layers_connections: ModelLayerConnectionsProperties.TYPE.value) -> List[Union[KerasTensor, List[KerasTensor], Any]]:
     """
-    Helper function to update the output tensors in the network dictionary
+    Helper function to get call keyword arguments for a given layer.
+    :param layer: The layer to get the call keyword arguments of
+    :return: The call keyword arguments of the layer
+    """
+    if original_call_kwargs := model_layers_connections[ModelLayerConnectionsProperties.CALL_KWARGS.value][layer.name]:
+        call_kwargs = {}
+        for key, value in original_call_kwargs.items():
+            # The Keras tensor is already in the call args, so we don't need to add it again. call_kwargs are for
+            # keyword arguments that are not Keras tensors such as 'axis', 'training', etc.
+            if _is_keras_tensor_input(value):
+                continue
+            else:
+                call_kwargs[key] = value
+    else:
+        _logger.debug("No kwargs for layer: '%s'", layer.name)
+        return {}
+    return call_kwargs
+
+
+def _update_output_tensors_in_model_layers_connections(
+        layer: tf.keras.layers.Layer, new_output_tensor: KerasTensor, model: tf.keras.Model,
+        model_layers_connections: ModelLayerConnectionsProperties.TYPE.value, model_outputs: List[KerasTensor]) -> None:
+    """
+    Helper function to update the output tensors in the model layers connections dictionary
     :param layer: The layer to update the output tensors of
-    :param network_dict: The network dictionary
+    :param model_layers_connections: The model layers connections dictionary
     """
-    # if isinstance(layer, TFOpLambda):
     if layer.name != new_output_tensor.name:
         new_name = new_output_tensor.name
-        old_name_of_inputs = network_dict[ModelLayerConnectionsProperties.INBOUND_NODES.value].pop(layer.name)
-        network_dict[ModelLayerConnectionsProperties.INBOUND_NODES.value].update({new_name: old_name_of_inputs})
+        old_name_of_inputs = model_layers_connections[ModelLayerConnectionsProperties.INBOUND_NODES.value].pop(
+            layer.name)
+        model_layers_connections[ModelLayerConnectionsProperties.INBOUND_NODES.value].update(
+            {new_name: old_name_of_inputs})
 
-        # replace values in network_dict[NetworkDictProperties.INPUT_LAYERS_OF.value] with new_name
-        for _, value in network_dict[ModelLayerConnectionsProperties.INBOUND_NODES.value].items():
+        # replace values in model_layers_connections[NetworkDictProperties.INBOUND_NODES.value] with new_name
+        for _, value in model_layers_connections[ModelLayerConnectionsProperties.INBOUND_NODES.value].items():
             if layer.name in value:
                 idx = value.index(layer.name)
                 value[idx] = new_name
 
-        network_dict[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value].update({new_name: new_output_tensor})
+        model_layers_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value].update({new_name: new_output_tensor})
     else:
         # Set new output tensor (in this case, it will be the same as the original model)
-        network_dict[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value].update({layer.name: new_output_tensor})
+        model_layers_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value].update(
+            {layer.name: new_output_tensor})
     # Save tensor in output list if it is output in the initial model
     if model.output_names and layer.name in model.output_names and model.name is not _TEMP_MODEL_NAME:
-        logger.debug("Layer '%s' added as output layer", layer.name)
+        _logger.debug("Layer '%s' added as output layer", layer.name)
         model_outputs.append(new_output_tensor)
 
 
-def _get_most_recently_added_output_tensor(network_dict: Dict) -> KerasTensor:
+def _get_most_recently_added_output_tensor(model_layers_connections: Dict) -> KerasTensor:
     """
-    Helper function to get the most recently added output tensor from the network dictionary
-    :param network_dict: The network dictionary
+    Helper function to get the most recently added output tensor from the model layers connections
+    :param model_layers_connections: The model layers connections
     :return: The most recently added output tensor
     """
-    return next(reversed(network_dict[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value].items()))[-1]
+    return next(reversed(model_layers_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value].items()))[-1]
 
 
 def _get_temporary_model(layer: tf.keras.layers.Layer, layer_input: tf.keras.layers.Layer) -> tf.keras.Model:
@@ -315,77 +344,88 @@ def _get_temporary_model(layer: tf.keras.layers.Layer, layer_input: tf.keras.lay
     temp_model = tf.keras.Model(inputs=[temp_input],
                                 outputs=layer.call(temp_input, training=False),
                                 name=_TEMP_MODEL_NAME)
-    logger.debug("Model created for layer '%s'", layer.name)
-    temp_model.summary(print_fn=logger.debug)
+    _logger.debug("Model created for layer '%s'", layer.name)
+    temp_model.summary(print_fn=_logger.debug)
 
     return temp_model
 
 
-def _update_temporary_network_dicts_input_tensors(
-        temp_model_network_dict: ModelLayerConnectionsProperties.NETWORK_DICT_TYPE.value, temp_model: tf.keras.Model,
+def _update_temporary_model_layers_connections_inbound_nodes(
+        temp_model_model_layers_connections: ModelLayerConnectionsProperties.TYPE.value, temp_model: tf.keras.Model,
         layer_input: tf.keras.layers.Layer):
     """
-    Helper function to update the input tensors of the temporary network dictionary
-    :param temp_model_network_dict: The temporary network dictionary
+    Helper function to update the input tensors of the temporary model layers connections dictionary
+    :param temp_model_model_layer_connections: The temporary model layers connections dictionary
     :param temp_model: The temporary model
     :param layer_input: The input layer of the layer
     """
-    for layers_name, input_tensor_name in temp_model_network_dict[ModelLayerConnectionsProperties.INBOUND_NODES.value].items():
+    for layers_name, input_tensor_name in temp_model_model_layers_connections[
+            ModelLayerConnectionsProperties.INBOUND_NODES.value].items():
         for idx, current_input_name in enumerate(input_tensor_name):
             if current_input_name == temp_model.input.name:
-                temp_model_network_dict[ModelLayerConnectionsProperties.INBOUND_NODES.value][layers_name][idx] = layer_input.name
+                temp_model_model_layers_connections[ModelLayerConnectionsProperties.INBOUND_NODES.value][layers_name][
+                    idx] = layer_input.name
 
 
 def _handle_nested_layer(
-        layer: tf.keras.layers.Layer, network_dict: Dict, class_names: List[str],
+        layer: tf.keras.layers.Layer, model_layers_connections: Dict, class_names: List[str],
         model_outputs: List[KerasTensor]) -> KerasTensor:
     """
     Helper function to handle subclassed layers
     :param layer: The layer to handle
-    :param network_dict: The network dictionary
     :param class_names: The list of class names
     :param model_outputs: The list of model outputs
     :return: The output tensor of the layer
     """
-    logger.debug("Subclass layer '%s' found. Extracting layers.", layer.name)
+    _logger.debug("Subclass layer '%s' found. Extracting layers.", layer.name)
     # Converts CamelCase to snake_case of subclassed layers class name
     class_names.extend(_get_class_names_in_model(layer))
 
     # Create a model based on the subclassed layer.
-    # This is done with the layer input from the network dictionary.
+    # This is done with the layer input from the model layers connections dictionary.
     # 1) The input layer is used to create the temporary functional model
     # 2) The input layer is used in the subclass layers call function as a symbolic tensor to get internal layers
-    layer_input = _get_layer_input(layer, network_dict)
+    layer_input = _get_layer_input(layer, model_layers_connections)
     if _is_functional_model(layer) or _is_sequential_model(layer):
         # Unwrapping the functional or sequential model with an extra step of cloning the model to remove external nodes
         temp_model = tf.keras.models.clone_model(_get_temporary_model(layer, layer_input))
     else:
         temp_model = _get_temporary_model(layer, layer_input)
 
-    # Get the network dictionary for the temporary model and merge it with the network dictionary for the
+    # Get the model layers connections dictionary for the temporary model and merge it with the model layers connections dictionary for the
     # functional model. This is done so we can keep track of the sublayers and their inputs and outputs.
-    temp_model_network_dict = WeightTensorUtils.get_weight_tensor_layer_mapping(temp_model)
-    _update_temporary_network_dicts_input_tensors(temp_model_network_dict, temp_model, layer_input)
+    temp_model_model_layers_connections = WeightTensorUtils.get_weight_tensor_layer_mapping(temp_model)
+    _update_temporary_model_layers_connections_inbound_nodes(
+        temp_model_model_layers_connections, temp_model, layer_input)
 
-    network_dict = WeightTensorUtils.merge_network_dicts(network_dict, temp_model_network_dict)
+    model_layers_connections = WeightTensorUtils.merge_model_layers_connections(
+        model_layers_connections, temp_model_model_layers_connections)
 
     return _prepare_model_helper(temp_model, class_names=class_names,
-                                 network_dict=network_dict, model_outputs=model_outputs)
+                                 model_layers_connections=model_layers_connections, model_outputs=model_outputs)
 
 
-def _handle_normal_keras_layer(
-        layer: tf.keras.layers.Layer, network_dict: ModelLayerConnectionsProperties.NETWORK_DICT_TYPE.value) -> KerasTensor:
+def _handle_normal_keras_layer(layer: tf.keras.layers.Layer,
+                               model_layers_connections: ModelLayerConnectionsProperties.TYPE.value) -> KerasTensor:
     """
     Helper function to handle normal keras layers. This function will create a new output tensor for the layer
     and return it.
     :param layer: The layer to create the output tensor for
-    :param network_dict: The network dictionary
+    :param model_layers_connections: The models layer connections
     :return: The output tensor of the layer
     """
-    call_args = _get_call_args(layer, network_dict)
+    call_args = _get_call_args(layer, model_layers_connections)
 
     if isinstance(layer, TFOpLambda):
-        new_output_tensor = layer.call(*call_args)
+        if call_kwargs := _get_call_kwargs(layer, model_layers_connections):
+            # Special case for 'tf.concat' that takes a list of inputs with kwargs attached
+            # may need to update in the future...
+            if 'concat' in layer.name:
+                new_output_tensor = layer.call([*call_args], **call_kwargs)
+            else:
+                new_output_tensor = layer.call(*call_args, **call_kwargs)
+        else:
+            new_output_tensor = layer.call(*call_args)
     else:
         new_output_tensor = layer(*call_args)
 
@@ -394,7 +434,7 @@ def _handle_normal_keras_layer(
 
 def _prepare_model_helper(
         model: tf.keras.Model, class_names: List[str],
-        network_dict, model_outputs: List[KerasTensor]) -> tf.keras.layers.Layer:
+        model_layers_connections, model_outputs: List[KerasTensor]) -> tf.keras.layers.Layer:
     """
     Helper function to recursively prepare a model. This function will be recursively called if a subclassed layer is
     found. This function will extract the layers from the subclassed layer and add them to the functional model.
@@ -404,7 +444,7 @@ def _prepare_model_helper(
     :return: The last layer of the model
     """
     for current_layer in model.layers:
-        logger.debug("Processing layer '%s'", current_layer.name)
+        _logger.debug("Processing layer '%s'", current_layer.name)
         # Skip input layers
         if isinstance(current_layer, tf.keras.layers.InputLayer):
             continue
@@ -412,11 +452,13 @@ def _prepare_model_helper(
         # If the current layer either a subclassed layer, sequential model or functional model, we need to extract the
         # layers from the subclassed layer and add them to the functional model.
         if _is_nested_layer(current_layer):
-            new_output_tensor = _handle_nested_layer(current_layer, network_dict, class_names, model_outputs)
+            new_output_tensor = _handle_nested_layer(
+                current_layer, model_layers_connections, class_names, model_outputs)
         else:
-            new_output_tensor = _handle_normal_keras_layer(current_layer, network_dict)
+            new_output_tensor = _handle_normal_keras_layer(current_layer, model_layers_connections)
 
-        _update_output_tensors_in_network_dict(current_layer, new_output_tensor, model, network_dict, model_outputs)
+        _update_output_tensors_in_model_layers_connections(
+            current_layer, new_output_tensor, model, model_layers_connections, model_outputs)
 
     return new_output_tensor
 
@@ -431,21 +473,34 @@ def _get_prepared_model(original_model: tf.keras.Model, input_layer: tf.keras.la
     :param class_names: The names of the classes that the original model was subclassed from
     :return: The prepared model
     """
-    network_dict = WeightTensorUtils.get_weight_tensor_layer_mapping(original_model)
-    _set_prepared_models_input_layer(original_model, network_dict, input_layer)
+    model_layers_connections = WeightTensorUtils.get_weight_tensor_layer_mapping(original_model)
+    _set_prepared_models_input_layer(original_model, model_layers_connections, input_layer)
 
     model_outputs = []
-    _prepare_model_helper(original_model, class_names, network_dict, model_outputs)
+    _prepare_model_helper(original_model, class_names, model_layers_connections, model_outputs)
 
     # If the model outputs are empty, then we need to get the most recently added output tensor. This is the case
     # when a model might be sparse and not fully connected or when a Functional model is inside an inherited model.
     if not model_outputs:
-        logger.warning("No model outputs found. This usually occurs when a models is made by inheritting from "
-                       "'tf.keras.Model' and placing a Functional model inside. "
-                       "Using most recently added output tensor as prepared models output.")
-        model_outputs = _get_most_recently_added_output_tensor(network_dict)
+        _logger.warning("No model outputs found. This usually occurs when a models is made by inheritting from "
+                        "'tf.keras.Model' and placing a Functional model inside. "
+                        "Using most recently added output tensor as prepared models output.")
+        model_outputs = _get_most_recently_added_output_tensor(model_layers_connections)
 
     return tf.keras.Model(inputs=input_layer, outputs=model_outputs)
+
+
+def _model_has_nested_layers(model: tf.keras.Model) -> bool:
+    """
+    Helper function to check if a model is needed to be prepared or not based on if the model has nested layers such as
+    subclass, functional, or sequential.
+    :param model: The model to check
+    :return: If the model needs to be prepared or not
+    """
+    for layer in model.layers:
+        if _is_nested_layer(layer):
+            return True
+    return False
 
 
 def prepare_model(original_model: tf.keras.Model,
@@ -457,9 +512,14 @@ def prepare_model(original_model: tf.keras.Model,
     :param input_layer: The input layer to be used for the new model. By default, the input layer is set to None. If the
     beginning portion of the model is subclassed, then the input layer must be passed in.
     """
-    logger.debug("Preparing model for AIMET. Original model architecture")
-    original_model.summary(print_fn=logger.debug)
-    # testing(original_model)
+
+    # Initial check to see if preparing model is necessary
+    if not _model_has_nested_layers(original_model):
+        _logger.debug("Model does not contain any nested layers. Original model being returned.")
+        return original_model
+
+    _logger.debug("Preparing model for AIMET. Original model architecture")
+    original_model.summary(print_fn=_logger.debug)
     input_layer = _format_input_layer(original_model, input_layer)
 
     # Used to fix weight names at end of unwrapping
