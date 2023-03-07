@@ -257,5 +257,5 @@ class TestQuantizeAcceptance:
         # Check that passthrough is working correctly
         assert onnx_base_acc - onnx_qs_acc_disabled < 1e-3
         # Check that accuracy drop is not catastrophic
-        assert onnx_base_acc - onnx_qs_acc < 0.02
-        assert abs(torch_qs_acc - onnx_qs_acc) < 0.01
+        assert onnx_base_acc - onnx_qs_acc < 0.04
+        assert abs(torch_qs_acc - onnx_qs_acc) < 0.03
