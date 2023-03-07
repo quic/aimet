@@ -148,9 +148,9 @@ RUN python3 -m pip --no-cache-dir install \
         mock \
         nbsphinx \
         'numpy<1.24,>=1.16.6' \
-        onnx==1.12.0 \
+        onnx==1.10.0 \
         onnxsim \
-        onnxruntime==1.13.1 \
+        onnxruntime==1.10.0 \
         onnxruntime-extensions \
         opencv-python \
         Pillow==9.3.0 \
@@ -196,12 +196,9 @@ RUN ln -s /opt/cmake/bin/ctest /usr/local/bin/ctest
 RUN ln -s /opt/cmake/bin/cpack /usr/local/bin/cpack
 
 RUN mkdir /opt/onnxruntime && \
-    cd /tmp && \
-    wget https://github.com/microsoft/onnxruntime/releases/download/v1.13.1/onnxruntime-linux-x64-1.13.1.tgz -O /tmp/onnxruntime-linux-x64-1.13.1.tgz > /dev/null && \
-    tar -C /opt/onnxruntime -xvf /tmp/onnxruntime-linux-x64-1.13.1.tgz > /dev/null && \
-    rm -rf /tmp/onnxruntime-linux-x64-1.13.1*
-
-RUN ln -s /opt/onnxruntime/onnxruntime-linux-x64-1.13.1 /usr/local/bin/onnxruntime_headers
+    export ONNXRUNTIME_VER=$(python3 -c 'import onnxruntime; print(onnxruntime.__version__)') && \
+    wget -qO- "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VER}/onnxruntime-linux-x64-${ONNXRUNTIME_VER}.tgz" | tar xvz --strip-components 1 -C /opt/onnxruntime && \
+    ln -s /opt/onnxruntime /usr/local/bin/onnxruntime_headers
 
 ENV PATH=/usr/local/bin:$PATH
 
