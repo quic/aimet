@@ -471,3 +471,13 @@ def test_keras_text_classification_example_model_to_functional():
 
     # NOTE: No testing of the ConnectedGraph since Embedding, MultiHeadAttention, and Lambda layers are not
     # supported by the ConnectedGraph at this time.
+
+def test_non_nested_layered_model():
+    original_model = conv_functional()
+    random_input = np.random.rand(32, *original_model.input_shape[1:])
+    _ = original_model(random_input)
+
+    functional_model = prepare_model(original_model)
+
+    assert original_model == functional_model, \
+        "Prepare model did not give back the original model. This model does not need to be prepared."

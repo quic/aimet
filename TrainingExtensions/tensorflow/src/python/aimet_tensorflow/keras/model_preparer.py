@@ -38,7 +38,7 @@
 
 """ Implementation to automatically prepare keras models for AIMET by converting them to a functional model """
 
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Set, Union
 import re
 import numpy as np
 
@@ -58,7 +58,7 @@ _TEMP_MODEL_NAME = "temp_aimet_intermediate_model"
 
 def _get_original_models_weights_in_functional_model_order(original_model: tf.keras.Model,
                                                            functional_model: tf.keras.Model,
-                                                           class_names: List[str]) -> np.ndarray:
+                                                           class_names: Set[str]) -> np.ndarray:
     """
     Map the original model's weights to the functional model's weights
     :param original_model: The original model
@@ -96,7 +96,7 @@ def _get_original_models_weights_in_functional_model_order(original_model: tf.ke
 
 
 def _set_functional_models_weights(
-        original_model: tf.keras.Model, functional_model: tf.keras.Model, class_names) -> None:
+        original_model: tf.keras.Model, functional_model: tf.keras.Model, class_names: Set[str]) -> None:
     """
     Set the functional model's weights to the original model's weights in the correct order
     :param original_model: The original model
@@ -129,7 +129,6 @@ def _format_input_layer(original_model: tf.keras.Model,
     :param input_layer: The input layer to be used for the functional model
     :return: The input layer, the previous layer,
     """
-
     try:
         input_layer = original_model.layers[0].input
 
@@ -142,8 +141,13 @@ def _format_input_layer(original_model: tf.keras.Model,
     return input_layer
 
 
-def _get_class_names_in_model(model: tf.keras.Model) -> List[str]:
-    return [regex_for_camel_case_to_snake_case.sub("_", model.__class__.__name__).lower()]
+def _get_class_names_in_model(model: tf.keras.Model) -> Set[str]:
+    """
+    Helper function to get the class name for a nested layer.
+    :param model: the 'layer' or 'model' to get the class name
+    :return: The class name
+    """
+    return {regex_for_camel_case_to_snake_case.sub("_", model.__class__.__name__).lower()}
 
 
 def _is_nested_layer(layer: tf.keras.layers.Layer) -> bool:
@@ -198,9 +202,9 @@ def _set_prepared_models_input_layer(
 
 def _get_layer_input(layer: tf.keras.layers.Layer, model_layers_connections: ModelLayerConnectionsProperties.TYPE.value) -> tf.keras.layers.Layer:
     """
-    Helper function to get the input layer of a layer. This function will recursively call itself if the layer is a
-    subclassed layer.
+    Helper function to get the input layer of a layer.
     :param layer: The layer to get the input layer of
+    :param model_layers_connections: The model layers connections dict
     :return: The input layer of the layer
     """
     try:
@@ -238,6 +242,7 @@ def _get_call_args(
     """
     Helper function to get the call arguments of a layer.
     :param layer: The layer to get the call arguments of
+    :param model_layers_connections: The model layers connections dict
     :return: The call arguments of the layer
     """
     def _is_tf_tensor(arg: Any) -> bool:
@@ -276,6 +281,7 @@ def _get_call_kwargs(
     """
     Helper function to get call keyword arguments for a given layer.
     :param layer: The layer to get the call keyword arguments of
+    :param model_layers_connections: The model layers connections dict
     :return: The call keyword arguments of the layer
     """
     if original_call_kwargs := model_layers_connections[ModelLayerConnectionsProperties.CALL_KWARGS.value][layer.name]:
@@ -299,7 +305,10 @@ def _update_output_tensors_in_model_layers_connections(
     """
     Helper function to update the output tensors in the model layers connections dictionary
     :param layer: The layer to update the output tensors of
+    :param new_output_tensor: The new output tensor to update with
+    :param model: The model currently being checked. Used to add model ouputs
     :param model_layers_connections: The model layers connections dictionary
+    :param model_outputs: A list tracking the currently being checked models output tensors
     """
     if layer.name != new_output_tensor.name:
         new_name = new_output_tensor.name
@@ -325,10 +334,10 @@ def _update_output_tensors_in_model_layers_connections(
         model_outputs.append(new_output_tensor)
 
 
-def _get_most_recently_added_output_tensor(model_layers_connections: Dict) -> KerasTensor:
+def _get_most_recently_added_output_tensor(model_layers_connections: ModelLayerConnectionsProperties.TYPE.value) -> KerasTensor:
     """
     Helper function to get the most recently added output tensor from the model layers connections
-    :param model_layers_connections: The model layers connections
+    :param model_layers_connections: The model layers connections dictionary
     :return: The most recently added output tensor
     """
     return next(reversed(model_layers_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value].items()))[-1]
@@ -339,6 +348,7 @@ def _get_temporary_model(layer: tf.keras.layers.Layer, layer_input: tf.keras.lay
     Helper function to create a temporary functional model from a layer
     :param layer: The layer to create the temporary model from
     :param layer_input: The input layer of the layer
+    :return: The temporary model
     """
     temp_input = tf.keras.layers.Input(shape=layer_input.shape[1:], name=layer_input.name + "_temp_input")
     temp_model = tf.keras.Model(inputs=[temp_input],
@@ -352,7 +362,7 @@ def _get_temporary_model(layer: tf.keras.layers.Layer, layer_input: tf.keras.lay
 
 def _update_temporary_model_layers_connections_inbound_nodes(
         temp_model_model_layers_connections: ModelLayerConnectionsProperties.TYPE.value, temp_model: tf.keras.Model,
-        layer_input: tf.keras.layers.Layer):
+        layer_input: tf.keras.layers.Layer) -> None:
     """
     Helper function to update the input tensors of the temporary model layers connections dictionary
     :param temp_model_model_layer_connections: The temporary model layers connections dictionary
@@ -368,18 +378,19 @@ def _update_temporary_model_layers_connections_inbound_nodes(
 
 
 def _handle_nested_layer(
-        layer: tf.keras.layers.Layer, model_layers_connections: Dict, class_names: List[str],
+        layer: tf.keras.layers.Layer, model_layers_connections: Dict, class_names: Set[str],
         model_outputs: List[KerasTensor]) -> KerasTensor:
     """
     Helper function to handle subclassed layers
     :param layer: The layer to handle
+    :param model_layers_connections: The model layers connections dictionary
     :param class_names: The list of class names
     :param model_outputs: The list of model outputs
     :return: The output tensor of the layer
     """
     _logger.debug("Subclass layer '%s' found. Extracting layers.", layer.name)
     # Converts CamelCase to snake_case of subclassed layers class name
-    class_names.extend(_get_class_names_in_model(layer))
+    class_names.update(_get_class_names_in_model(layer))
 
     # Create a model based on the subclassed layer.
     # This is done with the layer input from the model layers connections dictionary.
@@ -411,7 +422,7 @@ def _handle_normal_keras_layer(layer: tf.keras.layers.Layer,
     Helper function to handle normal keras layers. This function will create a new output tensor for the layer
     and return it.
     :param layer: The layer to create the output tensor for
-    :param model_layers_connections: The models layer connections
+    :param model_layers_connections: The models layer connections dictionary
     :return: The output tensor of the layer
     """
     call_args = _get_call_args(layer, model_layers_connections)
@@ -426,6 +437,9 @@ def _handle_normal_keras_layer(layer: tf.keras.layers.Layer,
                 new_output_tensor = layer.call(*call_args, **call_kwargs)
         else:
             new_output_tensor = layer.call(*call_args)
+    # Special case for "Merge" layers that take a list of inputs such as "tf.keras.layers.Concatenate" and "tf.keras.layers.Add"
+    elif isinstance(layer, MergeLayersParentClass):
+        new_output_tensor = layer(call_args)
     else:
         new_output_tensor = layer(*call_args)
 
@@ -433,7 +447,7 @@ def _handle_normal_keras_layer(layer: tf.keras.layers.Layer,
 
 
 def _prepare_model_helper(
-        model: tf.keras.Model, class_names: List[str],
+        model: tf.keras.Model, class_names: Set[str],
         model_layers_connections, model_outputs: List[KerasTensor]) -> tf.keras.layers.Layer:
     """
     Helper function to recursively prepare a model. This function will be recursively called if a subclassed layer is
@@ -441,10 +455,12 @@ def _prepare_model_helper(
     Otherwise, it will add the layer to the functional model.
     :param model: The model to prepare
     :param class_names: The names of the classes that the original model was subclassed from
+    :param model_layers_connections: The model layers connections dict
+    :param model_outputs: The list tracking the models output tensors
     :return: The last layer of the model
     """
     for current_layer in model.layers:
-        _logger.debug("Processing layer '%s'", current_layer.name)
+        _logger.debug("Processing layer: '%s'", current_layer.name)
         # Skip input layers
         if isinstance(current_layer, tf.keras.layers.InputLayer):
             continue
@@ -463,7 +479,7 @@ def _prepare_model_helper(
     return new_output_tensor
 
 
-def _get_prepared_model(original_model: tf.keras.Model, input_layer: tf.keras.layers.Layer, class_names: List[str]) \
+def _get_prepared_model(original_model: tf.keras.Model, input_layer: tf.keras.layers.Layer, class_names: Set[str]) \
         -> tf.keras.Model:
     """
     Function to get the prepared model. This function sets up the input layer and calls the helper function to
@@ -504,13 +520,14 @@ def _model_has_nested_layers(model: tf.keras.Model) -> bool:
 
 
 def prepare_model(original_model: tf.keras.Model,
-                  input_layer: Union[tf.keras.layers.InputLayer, List[tf.keras.layers.InputLayer]] = None):
+                  input_layer: Union[tf.keras.layers.InputLayer, List[tf.keras.layers.InputLayer]] = None) -> tf.keras.Model:
     """
     This function prepares a Keras model before continuing on with AIMET. Specifically, it will convert the model into
     a purely Functional API model and copy over the original models weights.
     :param original_model: The original model to be prepared
     :param input_layer: The input layer to be used for the new model. By default, the input layer is set to None. If the
     beginning portion of the model is subclassed, then the input layer must be passed in.
+    :return: The prepared model if needed, or the original model
     """
 
     # Initial check to see if preparing model is necessary
@@ -535,6 +552,7 @@ def prepare_model(original_model: tf.keras.Model,
     model_to_return.summary(print_fn=logger.debug)
 
     # Copying over weights from original model to functional model
+    _logger.debug("Final class_names: %s", class_names)
     _set_functional_models_weights(original_model, model_to_return, class_names)
 
     return model_to_return
