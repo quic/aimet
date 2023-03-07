@@ -50,9 +50,10 @@ class ModelLayerConnectionsProperties(Enum):
     """
     INBOUND_NODES = 'inbound_nodes'
     OUTPUT_TENSORS = 'output_tensors'
-    CALL_ARGS_OF = 'call_args'
-    NETWORK_DICT_TYPE = typing.OrderedDict[typing.OrderedDict[str, typing.List[str]],
-                                           typing.OrderedDict[str, typing.Union[KerasTensor, typing.List[KerasTensor]]]]
+    CALL_ARGS = 'call_args'
+    CALL_KWARGS = 'call_kwargs'
+    TYPE = typing.OrderedDict[typing.OrderedDict[str, typing.List[str]],
+                              typing.OrderedDict[str, typing.Union[KerasTensor, typing.List[KerasTensor]]]]
 
 class WeightTensorUtils:
     """
@@ -130,12 +131,12 @@ class WeightTensorUtils:
         :param model: TensorFlow model
         :return: Mapping of weight tensor and layer
         """
-        # Auxiliary dictionary to describe the network graph
+        # Dictionary for mapping layers weight tensors input, outputs, and call arguments
         model_layer_connections = OrderedDict()
         model_layer_connections[ModelLayerConnectionsProperties.INBOUND_NODES.value] = OrderedDict()
         model_layer_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value] = OrderedDict()
-        model_layer_connections[ModelLayerConnectionsProperties.CALL_ARGS_OF.value] = OrderedDict()
-
+        model_layer_connections[ModelLayerConnectionsProperties.CALL_ARGS.value] = OrderedDict()
+        model_layer_connections[ModelLayerConnectionsProperties.CALL_KWARGS.value] = OrderedDict()
 
         for current_layer in model.layers:
             for outbound_node in current_layer.outbound_nodes:
@@ -150,22 +151,25 @@ class WeightTensorUtils:
                     }
                 )
 
-                # Get call args for a given layer
-                model_layer_connections[ModelLayerConnectionsProperties.CALL_ARGS_OF.value].update(
+                # Get call args and kwargs for a given layer
+                model_layer_connections[ModelLayerConnectionsProperties.CALL_ARGS.value].update(
                     {outbound_node.layer.name: outbound_node.call_args}
+                )
+                model_layer_connections[ModelLayerConnectionsProperties.CALL_KWARGS.value].update(
+                    {outbound_node.layer.name: outbound_node.call_kwargs}
                 )
 
         return model_layer_connections
 
     @staticmethod
-    def merge_network_dicts(network_dict1: typing.Dict, network_dict2: typing.Dict) -> typing.Dict:
+    def merge_model_layers_connections(model_layers_connections1: typing.Dict, model_layers_connections2: typing.Dict) -> typing.Dict:
         """
         Merge two network dictionaries
-        :param network_dict1: Network dictionary 1
-        :param network_dict2: Network dictionary 2
+        :param model_layers_connections1: The model layer connection dictionary 1
+        :param model_layers_connections2: The model layer connection dictionary 2
         :return: Merged network dictionary
         """
-        for key in network_dict1:
-            network_dict1[key].update(network_dict2[key])
+        for key in model_layers_connections1:
+            model_layers_connections1[key].update(model_layers_connections2[key])
 
-        return network_dict1
+        return model_layers_connections1
