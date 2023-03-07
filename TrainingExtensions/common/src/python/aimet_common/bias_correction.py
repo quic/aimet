@@ -94,9 +94,9 @@ class ConvBnPatternHandler:
         activation_type = ActivationType.no_activation
         conv_op = None
         bn_op = None
-        convolution_types = ['Conv1d', 'Conv2D', 'DepthwiseConv2dNative', 'Conv', 'ConvTranspose']
+        convolution_types = ['Conv1d', 'Conv2D', 'DepthwiseConv2dNative', 'Conv', 'ConvTranspose', 'Conv3d']
         linear_types = ['Dense', 'Gemm', 'MatMul']
-        bn_types = ['FusedBatchNormV3', 'FusedBatchNorm', 'BatchNormalization']
+        bn_types = ['FusedBatchNormV3', 'FusedBatchNorm', 'BatchNormalization', 'BatchNorm3d']
 
         for op in op_subset:
             if op.type in convolution_types + linear_types:

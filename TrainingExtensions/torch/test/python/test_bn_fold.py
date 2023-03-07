@@ -52,7 +52,7 @@ from aimet_torch.batch_norm_fold import (
     _find_all_batch_norms_to_fold,
     _is_valid_bn_fold,
 )
-from models.test_models import TransposedConvModel
+from models.test_models import TransposedConvModel, Conv3dModel, Conv3dModel1
 from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.model_preparer import prepare_model
@@ -1660,3 +1660,41 @@ class TestTrainingExtensionBnFoldToScale:
 
         with pytest.raises(RuntimeError):
             fold_given_batch_norms(model, layer_list)
+
+    def test_bn_fold_conv3d_fold_backward(self):
+
+        torch.random.manual_seed(10)
+        model = Conv3dModel()
+        inp = torch.randn(1, 3, 24, 24, 24)
+        model.bn1.weight.data = torch.randn(model.bn1.weight.shape)
+        model.bn2.weight.data = torch.randn(model.bn2.weight.shape)
+
+        # eval
+        model = model.eval()
+        orig_out = model(inp)
+        _ = fold_all_batch_norms(model, input_shapes=(1, 3, 24, 24, 24), dummy_input=inp)
+        new_out = model(inp)
+
+        assert torch.allclose(orig_out, new_out, atol=1e-5)
+        bn_modules = [m for m in model.modules() if isinstance(m, torch.nn.BatchNorm3d)]
+        assert not bn_modules
+
+    def test_bn_fold_conv3d_fold_forward(self):
+
+        torch.random.manual_seed(10)
+        model = Conv3dModel1()
+        inp = torch.randn(1, 3, 24, 24, 24)
+        model.bn1.weight.data = torch.randn(model.bn1.weight.shape)
+        model.bn2.weight.data = torch.randn(model.bn2.weight.shape)
+
+        # eval
+        model = model.eval()
+        orig_out = model(inp)
+        _ = fold_all_batch_norms(model, input_shapes=(1, 3, 24, 24, 24), dummy_input=inp)
+        new_out = model(inp)
+
+        assert torch.allclose(orig_out, new_out, atol=1e-5)
+        bn_modules = [m for m in model.modules() if isinstance(m, torch.nn.BatchNorm3d)]
+        assert len(bn_modules) == 1
+        assert isinstance(model.bn1, torch.nn.Identity)
+        assert isinstance(model.bn2, torch.nn.BatchNorm3d)
