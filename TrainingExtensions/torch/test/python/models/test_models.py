@@ -1052,3 +1052,53 @@ class Float32AndInt64InputModel(nn.Module):
         return self.add(f_00, f_01)
 
 
+class Conv3dModel(nn.Module):
+
+    def __init__(self):
+        super(Conv3dModel, self).__init__()
+
+        self.conv1 = nn.Conv3d(3, 6, 3)
+        self.bn1 = nn.BatchNorm3d(6)
+        self.relu1 = nn.ReLU()
+
+        self.conv2 = nn.Conv3d(6, 8, 3)
+        self.bn2 = nn.BatchNorm3d(8)
+        self.relu2 = nn.ReLU()
+
+    def forward(self, inp):
+
+        out = self.conv1(inp)
+        out = self.bn1(out)
+        out = self.relu1(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu2(out)
+
+        return out
+
+
+class Conv3dModel1(nn.Module):
+
+    def __init__(self):
+        super(Conv3dModel1, self).__init__()
+
+        self.conv1 = nn.Conv3d(3, 6, 3)
+        self.relu1 = nn.ReLU()
+        self.bn1 = nn.BatchNorm3d(6)
+
+        self.conv2 = nn.Conv3d(6, 8, 3)
+        self.relu2 = nn.ReLU()
+        self.bn2 = nn.BatchNorm3d(8)
+
+    def forward(self, inp):
+
+        out = self.conv1(inp)
+        out = self.relu1(out)
+        out = self.bn1(out)
+
+        out = self.conv2(out)
+        out = self.relu2(out)
+        out = self.bn2(out)
+
+        return out
