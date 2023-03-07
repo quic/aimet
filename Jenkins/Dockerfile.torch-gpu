@@ -165,6 +165,7 @@ RUN python3 -m pip --no-cache-dir install \
         'numpy<1.24,>=1.16.6' \
         onnx==1.10.0 \
         onnxsim \
+        onnxruntime==1.10.0 \
         onnxruntime-extensions \
         opencv-python \
         Pillow==9.3.0 \
@@ -199,10 +200,6 @@ RUN python3 -m pip --no-cache-dir install \
         transformers==4.11.3 \
         wget && \
     python3 -m ipykernel.kernelspec
-
-# Remove onnxruntime install in order to use onnxruntime-gpu
-RUN python3 -m pip uninstall -y onnxruntime
-RUN python3 -m pip --no-cache-dir install onnxruntime-gpu==1.10.0
 
 RUN cd /tmp && \
     wget https://github.com/Kitware/CMake/releases/download/v3.19.3/cmake-3.19.3-Linux-x86_64.sh && \
@@ -257,6 +254,11 @@ RUN python3 -m pip install git-pylint-commit-hook osqp
 RUN python3 -m pip install holoviews==1.12.7 netron jsonschema pandas
 
 RUN python3 -m pip install bokeh==1.2.0 hvplot==0.4.0
+
+# Remove onnxruntime install and replace with onnxruntime-gpu
+RUN export ONNXRUNTIME_VER=$(python3 -c 'import onnxruntime; print(onnxruntime.__version__)') && \
+    python3 -m pip uninstall -y onnxruntime && \
+    python3 -m pip --no-cache-dir install onnxruntime-gpu==$ONNXRUNTIME_VER
 
 # Remove existing Pillow & Pillow-SIMD and replace with correct version of Pillow-SIMD.
 RUN python3 -m pip uninstall -y Pillow Pillow-SIMD
