@@ -327,7 +327,7 @@ class TestQcQuantizeOp:
 
         quant_info_gpu = libquant_info.QcQuantizeInfo()
         quant_node_gpu = helper.make_node(op_name, inputs=['input'], outputs=['output'],
-                                      domain="aimet.customop.cuda", quant_info=libpymo.PtrToInt64(quant_info_gpu))
+                                      domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info_gpu))
         model_gpu = create_model_from_node(quant_node_gpu, input_arr.shape)
         session_gpu = build_session(model_gpu, available_providers)
         qc_op_gpu = QcQuantizeOp(quant_info=quant_info_gpu,

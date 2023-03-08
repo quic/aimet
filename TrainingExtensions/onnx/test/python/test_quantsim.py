@@ -40,6 +40,7 @@ import os
 import torch
 import numpy as np
 from onnx import load_model
+import onnxruntime as ort
 import pytest
 from aimet_common.defs import QuantScheme
 from aimet_onnx.quantsim import QuantizationSimModel
@@ -310,8 +311,8 @@ class TestQuantSim:
 
         for node in onnx_sim_gpu.model.graph().node:
             if node.op_type == "QcQuantizeOp":
-                # Note: this check will fail if onnxruntime-gpu is not correctly installed
-                assert node.domain == "aimet.customop.cuda"
+                if 'CUDAExecutionProvider' in ort.get_available_providers():
+                    assert node.domain == "aimet.customop.cuda"
         for node in onnx_sim_cpu.model.graph().node:
             if node.op_type == "QcQuantizeOp":
                 assert node.domain == "aimet.customop.cpu"
