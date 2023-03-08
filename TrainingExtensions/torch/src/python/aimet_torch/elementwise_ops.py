@@ -38,6 +38,7 @@
 
 """ Modules for functional elementwise ops """
 
+from typing import Callable
 import torch
 import torch.nn
 

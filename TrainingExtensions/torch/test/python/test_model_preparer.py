@@ -1533,8 +1533,8 @@ class TestFX:
                 super().__init__()
                 self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2)
                 self.conv2 = torch.nn.Conv2d(4, 4, kernel_size=2, stride=2, padding=2)
-                self.rm = torch.tensor([1.0,1.0,1.0,1.0], requires_grad=False)
-                self.rv = torch.tensor([0.0,0.0,0.0,0.0], requires_grad=False)
+                self.rm = torch.tensor([1.0, 1.0, 1.0, 1.0], requires_grad=False)
+                self.rv = torch.tensor([0.0, 0.0, 0.0, 0.0], requires_grad=False)
 
             def forward(self, x):
                 x = self.conv1(x)
