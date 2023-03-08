@@ -43,7 +43,8 @@ import torch
 import torch.nn
 
 
-def forward_function_wrapper(functional):
+def forward_function_wrapper(functional: str) -> Callable:
+    """ Wrapper function returning forward pass function"""
     @staticmethod
     def forward(*args, **kwargs) -> torch.Tensor:
         """
@@ -52,11 +53,12 @@ def forward_function_wrapper(functional):
         return functional(*args, **kwargs)
     return forward
 
-def create_wrapper_module(class_name, functional):
-    WrappedModule = type(class_name, (torch.nn.Module,), dict(forward=forward_function_wrapper(functional)))
-    return WrappedModule
+def create_wrapper_module(class_name: str, functional: str) -> type:
+    """ Wrapper function returning module class for a functional op"""
+    wrapped_module = type(class_name, (torch.nn.Module,), dict(forward=forward_function_wrapper(functional)))
+    return wrapped_module
 
-# Modules with args and kwargs
+
 Interpolate = create_wrapper_module('Interpolate', torch.nn.functional.interpolate)
 MaxPool2d = create_wrapper_module('MaxPool2d', torch.nn.functional.max_pool2d)
 AdaptiveAvgPool2d = create_wrapper_module('AdaptiveAvgPool2d', torch.nn.functional.adaptive_avg_pool2d)
