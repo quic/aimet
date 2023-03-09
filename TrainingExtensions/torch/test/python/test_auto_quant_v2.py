@@ -245,15 +245,19 @@ def assert_applied_techniques(
 
 FP32_ACC = .8
 W32_ACC = FP32_ACC # Assume W32 accuracy is equal to FP32 accuracy
+RAW_QUANTSIM_ACC = 0.1
 
 
 @contextlib.contextmanager
-def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc, fp32_acc=None, w32_acc=None):
+def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc, fp32_acc=None, w32_acc=None, raw_quantsim_acc=None):
     if fp32_acc is None:
         fp32_acc = FP32_ACC
 
     if w32_acc is None:
         w32_acc = W32_ACC
+
+    if raw_quantsim_acc is None:
+        raw_quantsim_acc = RAW_QUANTSIM_ACC
 
     const_true = torch.tensor(True, dtype=torch.bool)
 
@@ -285,7 +289,9 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc, fp32_acc=None, w3
             # W32 evaluation for early exit. Return W32 accuracy
             return w32_acc
 
-        acc = bn_folded_acc
+        acc = raw_quantsim_acc
+        if model.applied_bn_folding:
+            acc = bn_folded_acc
         if model.applied_cle:
             acc = cle_acc
         if model.applied_adaround:
@@ -317,6 +323,20 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc, fp32_acc=None, w3
 
 
 class TestAutoQuant:
+    def test_auto_quant_run_inference(self, cpu_model, dummy_input, unlabeled_data_loader):
+        bn_folded_acc = .5
+
+        with patch_ptq_techniques(
+            bn_folded_acc, None, None
+        ) as mocks:
+            with create_tmp_directory() as results_dir:
+                auto_quant = AutoQuant(cpu_model,
+                                       dummy_input,
+                                       unlabeled_data_loader,
+                                       mocks.eval_callback,
+                                       results_dir=results_dir)
+                auto_quant.run_inference()
+
     @pytest.mark.parametrize(
         "bn_folded_acc, cle_acc, adaround_acc",
         itertools.permutations([.5, .6, .7])
@@ -498,7 +518,57 @@ class TestAutoQuant:
             # If strict_validation is False, AutoQuant ignores the errors and proceed. 
             auto_quant.optimize()
 
-    def test_auto_quant_fallback(
+    def test_auto_quant_inference_fallback(
+        self, cpu_model, dummy_input, unlabeled_data_loader,
+    ):
+        class _Exception(Exception):
+            pass
+
+        def error_fn(*_, **__):
+            raise _Exception
+
+        bn_folded_acc = .4
+        raw_quantsim_acc = bn_folded_acc + 1e-5
+        with patch_ptq_techniques(
+            bn_folded_acc, None, None, raw_quantsim_acc=raw_quantsim_acc
+        ) as mocks:
+            with create_tmp_directory() as results_dir:
+                auto_quant = AutoQuant(cpu_model,
+                                       dummy_input,
+                                       unlabeled_data_loader,
+                                       mocks.eval_callback,
+                                       results_dir=results_dir,
+                                       strict_validation=False)
+                with patch("aimet_torch.auto_quant_v2.prepare_model", side_effect=error_fn):
+                    # If prepare_model fails, should return BN folding results
+                    _, acc = auto_quant.run_inference()
+                    assert acc == bn_folded_acc
+
+                auto_quant = AutoQuant(cpu_model,
+                                       dummy_input,
+                                       unlabeled_data_loader,
+                                       mocks.eval_callback,
+                                       results_dir=results_dir,
+                                       strict_validation=False)
+                with patch("aimet_torch.auto_quant_v2.ModelValidator.validate_model", side_effect=error_fn):
+                    # If validate_model fails, should return BN folding results
+                    _, acc = auto_quant.run_inference()
+                    assert acc == bn_folded_acc
+
+                auto_quant = AutoQuant(cpu_model,
+                                       dummy_input,
+                                       unlabeled_data_loader,
+                                       mocks.eval_callback,
+                                       results_dir=results_dir,
+                                       strict_validation=False)
+                with patch("aimet_torch.auto_quant_v2.prepare_model", side_effect=error_fn),\
+                    patch("aimet_torch.auto_quant_v2.ModelValidator.validate_model", side_effect=error_fn),\
+                    patch("aimet_torch.auto_quant_v2.fold_all_batch_norms", side_effect=error_fn):
+                    # If all of prepare_model, validate_model, and BN folding fail, should return raw quantsim model
+                    _, acc = auto_quant.run_inference()
+                    assert acc == raw_quantsim_acc
+
+    def test_auto_quant_optimize_fallback(
         self, cpu_model, dummy_input, unlabeled_data_loader,
     ):
         class _Exception(Exception):

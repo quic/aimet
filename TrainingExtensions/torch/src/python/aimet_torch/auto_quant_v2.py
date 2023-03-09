@@ -306,6 +306,8 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
 
         :return: QuantizationSimModel, model accuracy as float
         '''
+        model = self.fp32_model
+
         with self.eval_manager.session("Prepare Model") as sess:
             model = sess.wrap(self._prepare_model)(self.fp32_model)
 
@@ -317,8 +319,16 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
                                     applied_techniques=["batchnorm_folding"],
                                     export_kwargs=self._export_kwargs)
 
-            return self._create_quantsim_and_encodings(sess.ptq_result.load_model()),\
-                    sess.ptq_result.accuracy
+        sim = self._create_quantsim_and_encodings(model)
+
+        if sess.ptq_result is None:
+            # BN folding failed. Need to measure the eval score
+            acc = self._evaluate_model_performance(sim.model)
+        else:
+            # BN folding success. No need to measure the eval score again
+            acc = sess.ptq_result.accuracy
+
+        return sim, acc
 
     def optimize(self, allowed_accuracy_drop: float = 0.0) -> Tuple[torch.nn.Module, float, str]:
         """
