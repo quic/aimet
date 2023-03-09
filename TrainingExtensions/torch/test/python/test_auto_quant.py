@@ -239,16 +239,13 @@ class TestAutoQuant:
             allowed_accuracy_drop, bn_folded_acc, cle_acc, adaround_acc,
         )
 
-    @pytest.mark.parametrize(
-        "bn_folded_acc, cle_acc, adaround_acc",
-        itertools.permutations([50., 60., 70.])
-    )
-    @pytest.mark.parametrize("allowed_accuracy_drop", [5., 15.])
     @pytest.mark.cuda
     def test_auto_quant_gpu(
             self, gpu_model, dummy_input, unlabeled_data_loader,
-            allowed_accuracy_drop, bn_folded_acc, cle_acc, adaround_acc,
     ):
+        bn_folded_acc, cle_acc, adaround_acc = 50., 60., 70.
+        allowed_accuracy_drop = 15.
+
         self._test_auto_quant(
             gpu_model, dummy_input, unlabeled_data_loader,
             allowed_accuracy_drop, bn_folded_acc, cle_acc, adaround_acc,
