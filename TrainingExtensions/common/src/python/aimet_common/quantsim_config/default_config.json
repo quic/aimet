@@ -44,6 +44,9 @@
       "op_list": ["Conv", "Relu"]
     },
     {
+      "op_list": ["ConvTranspose", "Relu"]
+    },
+    {
       "op_list": ["Conv", "Clip"]
     },
     {
