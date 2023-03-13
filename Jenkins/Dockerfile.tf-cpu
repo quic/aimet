@@ -143,7 +143,7 @@ RUN python3 -m pip --no-cache-dir install \
         jupyter \
         keras==2.2.4 \
         lmdb==0.95 \
-        nbsphinx \
+        nbsphinx==0.8.12 \
         numpy==1.19.5 \
         onnx==1.10.0 \
         opencv-python \

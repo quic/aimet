@@ -161,7 +161,7 @@ RUN python3 -m pip --no-cache-dir install \
         lmdb==1.2.1 \
         matplotlib>=3 \
         mock \
-        nbsphinx \
+        nbsphinx==0.8.12 \
         'numpy<1.24,>=1.16.6' \
         onnx==1.10.0 \
         onnxsim \
