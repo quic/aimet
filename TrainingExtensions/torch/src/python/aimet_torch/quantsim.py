@@ -70,7 +70,7 @@ from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 # Types of modules which cannot be quantized
-unquantizable_modules = (QcQuantizeWrapper, QcQuantizeStandAloneBase, QcQuantizeRecurrent, torch.nn.Identity)
+unquantizable_modules = (QcQuantizeWrapper, QcQuantizeStandAloneBase, QcQuantizeRecurrent, torch.nn.Identity, torch.nn.Embedding)
 
 # If a torch module type is in this dictionary, call the corresponding quantized module constructor instead of wrapping
 # it with QcQuantizeWrapper.
