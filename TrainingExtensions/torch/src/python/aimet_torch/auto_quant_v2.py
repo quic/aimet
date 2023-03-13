@@ -90,6 +90,22 @@ class _QuantSchemePair:
     param_percentile: Optional[float] = None
     output_percentile: Optional[float] = None
 
+    def __str__(self):
+        def scheme_to_str(quant_scheme, percentile):
+            if quant_scheme == QuantScheme.post_training_percentile:
+                return f"{percentile}%ile"
+            if quant_scheme in (QuantScheme.post_training_tf,
+                                QuantScheme.training_range_learning_with_tf_init):
+                return "tf"
+            if quant_scheme in (QuantScheme.post_training_tf_enhanced,
+                                QuantScheme.training_range_learning_with_tf_enhanced_init):
+                return "tf-enhanced"
+            raise ValueError
+
+        param_str = scheme_to_str(self.param_quant_scheme, self.param_percentile)
+        output_str = scheme_to_str(self.output_quant_scheme, self.output_percentile)
+        return f"W@{param_str} / A@{output_str}"
+
 
 _QUANT_SCHEME_CANDIDATES = (
     # Weight:     tf
@@ -616,7 +632,9 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
                 output_quant_scheme=pair.output_quant_scheme,
                 output_percentile=pair.output_percentile,
             )
-            return self._evaluate_model_performance(sim.model)
+            eval_score = self._evaluate_model_performance(sim.model)
+            _logger.info("Evaluation finished: %s (eval score: %f)", pair, eval_score)
+            return eval_score
 
         param_bw = self._quantsim_params["param_bw"]
         output_bw = self._quantsim_params["output_bw"]
@@ -669,15 +687,17 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
 
         with self.eval_manager.session(f"W32 Evaluation") as sess:
             w32_eval_score = sess.wrap(sess.eval)(model=fp32_model, param_bw=32)
+            _logger.info("Evaluation finished: W32A%d (eval score: %f)",
+                         self._quantsim_params["output_bw"], w32_eval_score)
 
             # Early exit
             if w32_eval_score < target_acc:
                 _logger.info(
-                    "W32 eval score (%f) is lower "
+                    "W32A%d eval score (%f) is lower "
                     "than the target eval score (%f). This means it is unlikely that "
                     "the target eval score can be met using PTQ techniques. "
                     "Please consider finetuning the model using range learning.",
-                    w32_eval_score, target_acc
+                    self._quantsim_params["output_bw"], w32_eval_score, target_acc
                 )
 
                 # Since AutoQuant pipeline exited early, all the return values are set to None
