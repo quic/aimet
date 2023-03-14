@@ -167,17 +167,14 @@ Replace Pillow with Pillow-SIMD
     python3 -m pip install --no-cache-dir Pillow-SIMD==7.0.0.post3
 
 Replace onnxruntime with onnxruntime-gpu
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-**NOTE:**
-
-    #. Do this ONLY for the PyTorch GPU package.
-    #. For python 3.6 builds, instead use onnxruntime-gpu==1.10.0
+**NOTE:** Do this ONLY for the PyTorch GPU package.
 
 .. code-block::
 
     python3 -m pip uninstall -y onnxruntime
-    python3 -m pip install --no-cache-dir onnxruntime-gpu==1.13.1
+    python3 -m pip install --no-cache-dir onnxruntime-gpu==1.10.0
 
 Post installation steps
 ~~~~~~~~~~~~~~~~~~~~~~~~
