@@ -21,32 +21,38 @@ The following table has links to browsable versions of the notebooks for differe
 **Model Quantization Examples**
 
 .. list-table::
-   :widths: 40 12 12 12
+   :widths: 40 12 12 12 12
    :header-rows: 1
 
    * - Features
      - PyTorch
      - TensorFlow
      - Keras
-   * - Quantization-Aware Training (QAT)
+     - ONNX
+   * - Quantsim / Quantization-Aware Training (QAT)
      - `Link <../Examples/torch/quantization/qat.ipynb>`_
      - `Link <../Examples/tensorflow/quantization/qat.ipynb>`_
      -
+     - `Link <../Examples/onnx/quantization/quantsim.ipynb>`_  (no training)
    * - QAT with Range Learning
      - `Link <../Examples/torch/quantization/qat_range_learning.ipynb>`_
      - `Link <../Examples/tensorflow/quantization/qat_range_learning.ipynb>`_
+     -
      -
    * - Cross-Layer Equalization (CLE)
      - `Link <../Examples/torch/quantization/cle_bc.ipynb>`_
      - `Link <../Examples/tensorflow/quantization/cle_bc.ipynb>`_
      - `Link <../Examples/tensorflow/quantization/keras/quantsim_cle.ipynb>`_
+     -
    * - Adaptive Rounding (AdaRound)
      - `Link <../Examples/torch/quantization/adaround.ipynb>`_
      - `Link <../Examples/tensorflow/quantization/adaround.ipynb>`_
      - `Link <../Examples/tensorflow/quantization/keras/adaround.ipynb>`_
+     -
    * - AutoQuant
      - `Link <../Examples/torch/quantization/autoquant.ipynb>`_
      - `Link <../Examples/tensorflow/quantization/autoquant.ipynb>`_
+     -
      -
 
 |
