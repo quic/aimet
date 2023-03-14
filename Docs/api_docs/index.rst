@@ -9,9 +9,9 @@ and quantize ML models. The resulting models returned by AIMET can be further tr
 to dramatically improve accuracy lost due to quantization and compression.
 
 AIMET is designed to work generically on any user-provided model. At present, AIMET supports
-TensorFlow, Keras, and PyTorch training frameworks.
+TensorFlow, Keras, PyTorch, and ONNX frameworks.
 
-Please follow the links below to see AIMET APIs for either PyTorch, TensorFlow, or Keras.
+Please follow the links below to see AIMET APIs for either PyTorch, TensorFlow, Keras, or ONNX.
 
 .. note:: AIMET Keras API requires Tensorflow 2.4 or later.
 
@@ -32,6 +32,12 @@ Please follow the links below to see AIMET APIs for either PyTorch, TensorFlow, 
    :maxdepth: 2
 
    AIMET APIs for Keras<keras>
+
+.. toctree::
+   :titlesonly:
+   :maxdepth: 2
+
+   AIMET APIs for ONNX<onnx>
 
 |
 |
