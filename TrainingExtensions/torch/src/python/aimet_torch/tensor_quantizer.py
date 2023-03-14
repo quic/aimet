@@ -40,6 +40,7 @@
 import functools
 import io
 from typing import List, Union, Tuple, Optional
+import abc
 
 import torch
 
@@ -112,21 +113,14 @@ class TensorQuantizer:
         return None
 
     @property
-    def encoding_min_max_fixed_vals(self):
+    def encoding_min_max_fixed_vals(self) -> Optional[Tuple[float, float]]:
         """ Accessor to self._encoding_min_max_fixed_vals """
         return self._encoding_min_max_fixed_vals
 
     @encoding_min_max_fixed_vals.setter
-    def encoding_min_max_fixed_vals(self, min_max_vals: Tuple[float, float]):
+    @abc.abstractmethod
+    def encoding_min_max_fixed_vals(self, min_max_vals: Optional[Tuple[float, float]]):
         """ self._encoding_min_max_fixed_vals setter """
-        if min_max_vals is not None:
-            log_with_error_and_assert_if_false(isinstance(min_max_vals, tuple), _logger, 'Min max vals must be a tuple')
-            log_with_error_and_assert_if_false(len(min_max_vals) == 2, _logger, 'Min max vals must be a tuple of two '
-                                                                                'values')
-            log_with_error_and_assert_if_false(min_max_vals[0] < min_max_vals[1], _logger,
-                                               'Min value ' + str(min_max_vals[0]) + ' is not less than max val ' +
-                                               str(min_max_vals[1]))
-        self._encoding_min_max_fixed_vals = min_max_vals
 
 
 class PickableState:
@@ -266,6 +260,20 @@ class StaticGridTensorQuantizer(TensorQuantizer):
             raise RuntimeError("Encoding can be set only when it is not frozen.")
 
         self._encoding = encoding
+
+
+    @TensorQuantizer.encoding_min_max_fixed_vals.setter
+    def encoding_min_max_fixed_vals(self, min_max_vals: Tuple[float, float]):
+        """ self._encoding_min_max_fixed_vals setter """
+        log_with_error_and_assert_if_false(isinstance(min_max_vals, tuple), _logger, 'Min max vals must be a tuple')
+        log_with_error_and_assert_if_false(len(min_max_vals) == 2, _logger, 'Min max vals must be a tuple of two '
+                                                                            'values')
+        log_with_error_and_assert_if_false(min_max_vals[0] < min_max_vals[1], _logger,
+                                           'Min value ' + str(min_max_vals[0]) + ' is not less than max val ' +
+                                           str(min_max_vals[1]))
+        if self.quant_scheme != QuantScheme.post_training_tf:
+            self.quant_scheme = QuantScheme.post_training_tf
+        self._encoding_min_max_fixed_vals = min_max_vals
 
     def compute_encoding(self):
         """
@@ -459,9 +467,6 @@ class StaticGridPerTensorQuantizer(StaticGridTensorQuantizer):
                     self.encoding = ec
             else:
                 if self.encoding_min_max_fixed_vals is not None:
-                    if self.quant_scheme != QuantScheme.post_training_tf:
-                        self.quant_scheme = QuantScheme.post_training_tf
-
                     # pylint: disable=unsubscriptable-object
                     tensor = torch.tensor([self.encoding_min_max_fixed_vals[0],
                                            self.encoding_min_max_fixed_vals[1]])
@@ -505,7 +510,7 @@ class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
         return self._encoding
 
     @encoding.setter
-    def encoding(self, encoding: List[libpymo.TfEncoding]) -> None:
+    def encoding(self, encoding: List[libpymo.TfEncoding]):
         """
         Property to set encoding.
 
@@ -541,9 +546,6 @@ class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
                     self.encoding = ecs
             else:
                 if self.encoding_min_max_fixed_vals is not None:
-                    if self.quant_scheme != QuantScheme.post_training_tf:
-                        self.quant_scheme = QuantScheme.post_training_tf
-
                     # pylint: disable=unsubscriptable-object
                     tensor = torch.tensor([self.encoding_min_max_fixed_vals[0],
                                            self.encoding_min_max_fixed_vals[1]])
@@ -729,6 +731,11 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         Accessor to self._ch_axis
         """
         return self._ch_axis
+
+    @TensorQuantizer.encoding_min_max_fixed_vals.setter
+    def encoding_min_max_fixed_vals(self, min_max_vals: Optional[Tuple[float, float]]):
+        """ self._encoding_min_max_fixed_vals setter """
+        self._encoding_min_max_fixed_vals = min_max_vals
 
     def __str__(self):
         stream = io.StringIO(newline='\n')
