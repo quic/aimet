@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2020-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -94,6 +94,9 @@ public:
      * Compute the encoding for this tensor using stats collected so far
      */
     virtual TfEncoding computeEncoding(unsigned int bitwidth, bool useSymmetricEncoding) = 0;
+
+    virtual bool getStrictSymmetric() = 0;
+    virtual bool getUnsignedSymmetric() = 0;
 
 
 };
