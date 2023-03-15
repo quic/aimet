@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2020-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2020-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -161,7 +161,22 @@ void modeSpecificActionInt(const D& d, const T* inTensor, size_t count, T* outTe
     }
     case DlQuantization::TensorQuantizerOpMode::quantizeDequantize:
     {
-        tensorQuantizer->quantizeDequantize(inTensor, count, outTensor, encodingMin, encodingMax, bitwidth, useCuda);
+        // This is a complex check: here is the explanation
+        // If min < 0, then unsigned symmetric mode is immaterial
+        // Also if user explicitly requested to disable unsigned-symmetric mode, then we use regular symmetric
+        if (useSymmetricEncoding && ((encodingMin < 0.0) || (!tensorQuantizer->getUnsignedSymmetric())))
+        {
+            encodingMin = -encodingMax;
+            if (!tensorQuantizer->getStrictSymmetric())
+            {
+                double numSteps = pow(2, bitwidth) - 1;
+                unsigned int numPositiveSteps = std::floor(numSteps / 2);
+                double delta = encodingMax / numPositiveSteps;
+                encodingMin -= delta;
+            }
+        }
+        tensorQuantizer->quantizeDequantize(inTensor, count, outTensor, encodingMin, encodingMax, bitwidth,
+                                            useCuda);
         break;
     }
     case DlQuantization::TensorQuantizerOpMode::passThrough:
