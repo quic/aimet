@@ -53,5 +53,6 @@ PYBIND11_MODULE(libquant_info, m)
         .def_readwrite("opMode", &QcQuantizeInfo::opMode)
         .def_readwrite("name", &QcQuantizeInfo::name)
         .def_readwrite("enabled", &QcQuantizeInfo::enabled)
-        .def_readwrite("useSymmetricEncoding", &QcQuantizeInfo::useSymmetricEncoding);
+        .def_readwrite("useSymmetricEncoding", &QcQuantizeInfo::useSymmetricEncoding)
+        .def_readwrite("isIntDataType", &QcQuantizeInfo::isIntDataType);
 }

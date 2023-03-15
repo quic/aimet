@@ -37,13 +37,11 @@
 # =============================================================================
 """ Custom QcQuantizeOp to quantize weights and activations using ONNXRuntime """
 
-import os
 from typing import Union
 import aimet_common.libpymo as libpymo
 from aimet_common.libpymo import TensorQuantizerOpMode
-from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO
+from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantizationDataType
 from aimet_common import libquant_info
-from aimet_common.defs import QuantizationDataType
 
 
 OpMode = TensorQuantizerOpMode
@@ -78,7 +76,29 @@ class QcQuantizeOp:
         self.encodings = encodings
         self.use_symmetric_encodings = use_symmetric_encodings
         self.enabled = True
-        self.data_type = QuantizationDataType.int
+        self._data_type = QuantizationDataType.int
+
+    @property
+    def data_type(self) -> QuantizationDataType:
+        """
+        Returns the data type for quantization
+
+        :return: Quantization data type
+        """
+        return self._data_type
+
+    @data_type.setter
+    def data_type(self, data_type: QuantizationDataType):
+        """
+        Sets the quantization data type field in the op and sets isIntDataType inside quantizer_info to true or false
+        based on the data type
+
+        :param data_type: Quantization data type
+        """
+        self._data_type = data_type
+        self.quant_info.isIntDataType = False
+        if data_type == QuantizationDataType.int:
+            self.quant_info.isIntDataType = True
 
     def _build_tensor_quantizer(self):
         return libpymo.TensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[self.quant_scheme],

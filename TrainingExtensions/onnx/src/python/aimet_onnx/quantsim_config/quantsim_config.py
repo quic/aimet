@@ -114,6 +114,8 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         # Disable all quantizers
         self._disable_all_quantizers()
         self._set_quantsim_configs()
+        self._override_param_bw_dtype(self._param_names, self._default_data_type, self._default_param_bw)
+        self._override_act_bw_dtype(self._activation_names, self._default_data_type, self._default_output_bw)
 
     def _map_quantizers_to_ops(self) -> Dict[str, OpToQuantizers]:
         """
@@ -171,7 +173,10 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         :param data_type: data type as QuantizationDataType
         :return:
         """
-        raise NotImplementedError
+        for param_name in quantizer_data:
+            if param_name in self._quant_ops_dict:
+                self._quant_ops_dict[param_name].data_type = data_type
+                self._quant_ops_dict[param_name].bitwidth = bitwidth
 
     def _override_act_bw_dtype(self, quantizer_data, data_type: QuantizationDataType, bitwidth: int):
         """
@@ -181,7 +186,10 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         :param data_type: data type as QuantizationDataType
         :return:
         """
-        raise NotImplementedError
+        for act_name in quantizer_data:
+            if act_name in self._quant_ops_dict:
+                self._quant_ops_dict[act_name].data_type = data_type
+                self._quant_ops_dict[act_name].bitwidth = bitwidth
 
     def _override_default_act_bw_dtype(self, data_type: QuantizationDataType, bitwidth: int):
         """
