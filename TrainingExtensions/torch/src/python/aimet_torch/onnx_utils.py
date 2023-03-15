@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2017-2020, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2017-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -501,7 +501,7 @@ class OnnxSaver:
 
     @classmethod
     def _create_onnx_model(cls, dummy_input, is_conditional: bool, module_marker_map,
-                           onnx_export_args: OnnxExportApiArgs, pt_model: torch.nn.Module,
+                           onnx_export_args: Union[OnnxExportApiArgs, dict], pt_model: torch.nn.Module,
                            working_dir: str, add_all_markers: bool) -> Tuple[onnx.NodeProto, Optional[onnx.NodeProto]]:
         """
         creates an onnx model with markers at all module-levels if not successful falls back to marker at leaf only.
@@ -970,6 +970,7 @@ class OnnxSaver:
                     OnnxSaver._populate_start_and_end_marker_maps(start_marker_map, end_marker_map, subnode)
 
     @classmethod
+    # pylint: disable=too-many-locals
     def _create_onnx_model_with_markers(cls, dummy_input, pt_model, working_dir, onnx_export_args, is_conditional,
                                         module_marker_map, add_all_markers) -> \
             onnx.ModelProto:
@@ -992,16 +993,19 @@ class OnnxSaver:
         temp_file = os.path.join(working_dir,
                                  'temp_onnx_model_with_markers.onnx' if not add_all_markers else
                                  'temp_onnx_model_with_all_markers.onnx')
+        if isinstance(onnx_export_args, OnnxExportApiArgs):
+            export_args = onnx_export_args.kwargs
+        else:
+            export_args = onnx_export_args
 
         if is_conditional:
             with aimet_torch.utils.in_eval_mode(model), torch.no_grad():
                 dummy_output = model(*dummy_input)
             scripted_model = torch.jit.script(model)
-            torch.onnx.export(scripted_model, dummy_input, temp_file, example_outputs=dummy_output,
-                              enable_onnx_checker=False, **onnx_export_args.kwargs)
+            torch.onnx.export(scripted_model, dummy_input, temp_file, example_outputs=dummy_output, **export_args)
         else:
-            torch.onnx.export(model, dummy_input, temp_file, enable_onnx_checker=False,
-                              **onnx_export_args.kwargs)
+            torch.onnx.export(model, dummy_input, temp_file,
+                              **export_args)
 
         return cls.load_simply_onnx_model(temp_file)
 
