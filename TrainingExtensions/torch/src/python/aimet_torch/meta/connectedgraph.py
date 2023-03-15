@@ -140,6 +140,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         'view',
         'narrow',
         'reshape',
+        'reshape_as',
         'mean',
         'index_select',
         'slice',
@@ -153,7 +154,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         'copy',
         'clone',
         'index',
-        'ScalarImplicit'
+        'ScalarImplicit',
+        'transpose'
     }
 
     # Graph nodes for which which we will treat as passthrough and not represent with an Op

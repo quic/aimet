@@ -1447,7 +1447,7 @@ class TestFX:
         assert hasattr(prepared, "custom")
 
     def test_fx_with_max_pool2d_indices(self):
-        """ test torch fx with adaptive_avg_pool2d """
+        """ test torch fx with max_pool2d """
         class ModelWithMaxPool2d(torch.nn.Module):
             def __init__(self):
                 super().__init__()
@@ -1491,3 +1491,81 @@ class TestFX:
         assert _find_functional_name_for_node("cat_123_1") == "cat"
         assert _find_functional_name_for_node("relu6_123") == "relu6"
         assert _find_functional_name_for_node("123_relu6_123") is None # Not a valid name.
+
+    def test_fx_with_chunk(self):
+        """ test torch fx with chunk """
+        class ModelWithChunk(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2)
+                self.conv2 = torch.nn.Conv2d(2, 4, kernel_size=2, stride=2, padding=2)
+
+            def forward(self, x):
+                x = self.conv1(x)
+                x1, x2 = x.chunk(2, dim=1)
+                x2 = self.conv2(x2)
+                return x1, x2
+
+        input_shape = (1, 3, 64, 64)
+        dummy_input = torch.randn(input_shape)
+        model = ModelWithChunk().eval()
+        model_transformed = prepare_model(model)
+
+        # Compare both outputs.
+        assert torch.equal(model_transformed(dummy_input)[0], model(dummy_input)[0])
+        assert torch.equal(model_transformed(dummy_input)[1], model(dummy_input)[1])
+
+        # Verify that the modules are added correctly
+        assert isinstance(model_transformed.module_chunk, elementwise_ops.Chunk)
+
+        # Verify Quantization workflow.
+        sim = QuantizationSimModel(model_transformed, dummy_input=dummy_input)
+        sim.compute_encodings(evaluate, forward_pass_callback_args=dummy_input)
+
+        # Quantizer enabled for both outputs of Chunk
+        assert sim.model.module_chunk.output_quantizers[0].enabled
+        assert sim.model.module_chunk.output_quantizers[1].enabled
+
+    def test_fx_with_functional_batchnorm(self):
+        """ test torch fx with function batchnorm """
+        class ModelWithFunctionalBN(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2)
+                self.conv2 = torch.nn.Conv2d(4, 4, kernel_size=2, stride=2, padding=2)
+                self.rm = torch.tensor([1.0, 1.0, 1.0, 1.0], requires_grad=False)
+                self.rv = torch.tensor([0.0, 0.0, 0.0, 0.0], requires_grad=False)
+
+            def forward(self, x):
+                x = self.conv1(x)
+                x = torch.nn.functional.batch_norm(x, running_mean=self.rm, running_var=self.rv)
+                x = self.conv2(x)
+                x = torch.nn.functional.batch_norm(x, running_mean=self.rm, running_var=self.rv, momentum=0.2, eps=1e-4)
+                return x
+
+        input_shape = (1, 3, 64, 64)
+        dummy_input = torch.randn(input_shape)
+        model = ModelWithFunctionalBN().eval()
+        model_transformed = prepare_model(model)
+        model(dummy_input)
+
+        # Compare output.
+        assert torch.equal(model_transformed(dummy_input), model(dummy_input))
+
+        # Verify that the modules are added correctly
+        assert isinstance(model_transformed.module_batch_norm, elementwise_ops.BatchNorm)
+        assert isinstance(model_transformed.module_batch_norm_1, elementwise_ops.BatchNorm)
+
+        # Verify Quantization workflow.
+        sim = QuantizationSimModel(model_transformed, dummy_input=dummy_input)
+        sim.compute_encodings(evaluate, forward_pass_callback_args=dummy_input)
+
+        # Quantizer enabled for output
+        assert sim.model.module_batch_norm.output_quantizers[0].enabled
+        assert sim.model.module_batch_norm_1.output_quantizers[0].enabled
+
+        # Apply Batchnorm folding
+        fold_all_batch_norms(model_transformed, input_shape)
+
+        # Compare output after bnf
+        assert torch.equal(model_transformed(dummy_input)[0], model(dummy_input)[0])
