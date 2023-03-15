@@ -48,10 +48,11 @@ from collections.abc import Iterable
 import json
 import torch
 import onnx
+from packaging import version
 
 import aimet_common
 import aimet_common.libpymo as libpymo
-from aimet_common.utils import AimetLogger, save_json_yaml
+from aimet_common.utils import AimetLogger, save_json_yaml, log_with_error_and_assert_if_false
 from aimet_common.defs import QuantScheme, QuantizationDataType, SupportedKernelsAction, QuantDtypeBwInfo
 from aimet_common.quantsim import encoding_version, validate_quantsim_inputs, extract_global_quantizer_args
 from aimet_common.quant_utils import get_conv_accum_bounds
@@ -90,8 +91,8 @@ SUPPORTED_KERNELS_ACTION = SupportedKernelsAction.warn_on_error
 DROPOUT_TYPES = (torch.nn.Dropout, torch.nn.Dropout2d, torch.nn.Dropout3d)
 
 
-def _get_encoding_by_quantizer(quantizer: Union[StaticGridTensorQuantizer,
-                                                LearnedGridTensorQuantizer]) -> Optional[Union[libpymo.TfEncoding, List[libpymo.TfEncoding]]]:
+def _get_encoding_by_quantizer(quantizer: Union[StaticGridTensorQuantizer, LearnedGridTensorQuantizer]) \
+        -> Optional[Union[libpymo.TfEncoding, List[libpymo.TfEncoding]]]:
     """
     Retrieve encoding object by quantizer type (StaticGridTensorQuantizer or LearnedGridTensorQuantizer)
     In particular, LearnedGridTensorQuantizer should use get_effective_encoding to achieve true encoding
@@ -146,7 +147,7 @@ class QuantizationSimModel:
                  in_place: bool = False, config_file: str = None,
                  default_data_type: QuantizationDataType = QuantizationDataType.int):
         """
-        Constructor
+        Constructor for QuantizationSimModel.
 
         :param model: Model to add simulation ops to
         :param dummy_input: Dummy input to the model. Used to parse model graph. If the model has more than one input,
@@ -355,12 +356,12 @@ class QuantizationSimModel:
         self._percentile_value = percentile_value
 
     def export(self, path: str, filename_prefix: str, dummy_input: Union[torch.Tensor, Tuple],
-               onnx_export_args: Union[OnnxExportApiArgs, None] = OnnxExportApiArgs(),
-               propagate_encodings: bool = False):
+               onnx_export_args: Optional[Union[OnnxExportApiArgs, Dict]] = None, propagate_encodings: bool = False,
+               export_to_torchscript: bool = False):
         """
         This method exports out the quant-sim model so it is ready to be run on-target.
 
-        Specifically, the following are saved
+        Specifically, the following are saved:
 
         1. The sim-model is exported to a regular PyTorch model without any simulation ops
         2. The quantization encodings are exported to a separate JSON-formatted file that can
@@ -373,13 +374,13 @@ class QuantizationSimModel:
         :param filename_prefix: Prefix to use for filenames of the model pth and encodings files
         :param dummy_input: Dummy input to the model. Used to parse model graph. It is required for the dummy_input to
                 be placed on CPU.
-        :param onnx_export_args: optional export argument with onnx specific overrides if not provide export via
-                torchscript graph
+        :param onnx_export_args: Optional export argument with onnx specific overrides provided as a dictionary or
+            OnnxExportApiArgs object. If not provided, defaults to "opset_version" = None, "input_names" = None,
+            "output_names" = None, and for torch version < 1.10.0, "enable_onnx_checker" = False.
         :param propagate_encodings: If True, encoding entries for intermediate ops (when one PyTorch ops results in
                 multiple ONNX nodes) are filled with the same BW and data_type as the output tensor for that series of
-                ops.
-        :return: None
-
+                ops. Defaults to False.
+        :param export_to_torchscript: If True, export to torchscript. Export to onnx otherwise. Defaults to False.
         """
         # save the quantized model and encodings
         model_filename = filename_prefix + '.pth'
@@ -392,17 +393,23 @@ class QuantizationSimModel:
 
         torch.save(model_to_export, model_path)
 
-        if onnx_export_args is None:
+        if export_to_torchscript:
             self.export_torch_script_model_and_encodings(path, filename_prefix, model_to_export, self.model,
                                                          dummy_input, self._excluded_layer_names)
-        elif isinstance(onnx_export_args, OnnxExportApiArgs):
+        else:
+            if onnx_export_args is None:
+                onnx_export_args = {'opset_version': None,
+                                    'input_names': None,
+                                    'output_names': None}
+                if version.parse(torch.__version__) < version.parse("1.10.0") and isinstance(onnx_export_args, dict):
+                    onnx_export_args['enable_onnx_checker'] = False
+            log_with_error_and_assert_if_false(isinstance(onnx_export_args, (OnnxExportApiArgs, dict)),
+                                               logger,
+                                               f'unsupported opt_args type={type(onnx_export_args)}')
             self.export_onnx_model_and_encodings(path, filename_prefix, model_to_export, self.model,
                                                  dummy_input, onnx_export_args, propagate_encodings,
-                                                 self._module_marker_map, self._is_conditional, self._excluded_layer_names,
-                                                 quantizer_args=self.quant_args)
-        else:
-
-            raise ValueError(f'unsupported opt_args type={type(onnx_export_args)}')
+                                                 self._module_marker_map, self._is_conditional,
+                                                 self._excluded_layer_names, quantizer_args=self.quant_args)
 
     @staticmethod
     def export_torch_script_model_and_encodings(path: str, filename_prefix: str,
@@ -439,7 +446,7 @@ class QuantizationSimModel:
     @staticmethod
     def export_onnx_model_and_encodings(path: str, filename_prefix: str, original_model: torch.nn.Module,
                                         sim_model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple],
-                                        onnx_export_args: OnnxExportApiArgs, propagate_encodings: bool,
+                                        onnx_export_args: Union[OnnxExportApiArgs, dict], propagate_encodings: bool,
                                         module_marker_map: Dict[torch.nn.Module, torch.Tensor] = None,
                                         is_conditional: bool = False, excluded_layer_names: List = None,
                                         quantizer_args: Dict = None):
@@ -464,8 +471,6 @@ class QuantizationSimModel:
         # pylint: disable=too-many-locals
         if module_marker_map is None:
             module_marker_map = {}
-        if onnx_export_args is None:
-            onnx_export_args = OnnxExportApiArgs()
         # Save model to onnx
         onnx_path = os.path.join(path, filename_prefix + '.onnx')
 
