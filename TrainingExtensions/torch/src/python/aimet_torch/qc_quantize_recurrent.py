@@ -37,6 +37,8 @@
 
 """ Custom PyTorch Op for quantizing weights and activations for Recurrent Layers """
 # pylint: disable=too-many-lines
+import contextlib
+from collections import defaultdict
 from typing import Tuple, List, Union, Dict
 import torch
 from torch.nn.utils.rnn import PackedSequence, pad_packed_sequence, pack_padded_sequence
@@ -45,8 +47,9 @@ from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_
 from aimet_common.utils import AimetLogger
 from aimet_torch.defs import OpToIOTensors
 from aimet_torch.qc_quantize_op import QcQuantizeOpMode, tensor_quantizer_factory
-from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer
-
+from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, initialize_learned_grid_quantizer_attributes, \
+    LearnedGridTensorQuantizer, set_encoding_min_max_gating_threshold, ParameterQuantizer
+from aimet_torch.utils import get_device
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -145,7 +148,11 @@ class QcQuantizeRecurrent(torch.nn.Module):
         self._clone_module_params(module_to_quantize)
         self.module_to_quantize = module_to_quantize
 
-        round_mode = MAP_ROUND_MODE_TO_PYMO[round_mode]
+        self._round_mode = MAP_ROUND_MODE_TO_PYMO[round_mode]
+        self._weight_bw = weight_bw
+        self._activation_bw = activation_bw
+        self._is_symmetric = is_symmetric
+        self._data_type = data_type
 
         self._grouped_quantizers = {}
         self._param_quantizers = {}
@@ -153,24 +160,24 @@ class QcQuantizeRecurrent(torch.nn.Module):
 
         hasCellState: bool = isinstance(self.module_to_quantize, torch.nn.LSTM)
         outputs = ['h_l{}', 'c_l{}'] if hasCellState else ['h_l{}']
-        self._output_quantizers = self._create_activation_quantizers(outputs, activation_bw, round_mode,
+        self._output_quantizers = self._create_activation_quantizers(outputs, activation_bw, self._round_mode,
                                                                      quant_scheme, is_symmetric, data_type)
 
         inputs = ['input_l{}', 'initial_h_l{}', 'initial_c_l{}'] if hasCellState else ['input_l{}', 'initial_h_l{}']
-        self._input_quantizers = self._create_activation_quantizers(inputs, activation_bw, round_mode,
+        self._input_quantizers = self._create_activation_quantizers(inputs, activation_bw, self._round_mode,
                                                                     quant_scheme, is_symmetric, data_type)
 
-        self._create_param_quantizers(weight_bw, round_mode, quant_scheme, is_symmetric, data_type)
+        self._create_param_quantizers(weight_bw, self._round_mode, quant_scheme, is_symmetric, data_type)
         self._set_default_eai_quantizer_state()
 
         # flag to control if initial hidden state quantization during analysis should be done post computation
         # the reason for forcing this sequence is that in TF Enhanced mode, when initial_h and ht are grouped, the
         # initial_h tensor at times is substantial different from subsequent ht causing the quantizer initialization
         # to be sub-optimal.
-        self._reorder_initial_h_c_stats_update = QcQuantizeRecurrent.is_initial_h_c_stats_update_reordered()
+        self._reorder_initial_h_c_stats_update = QcQuantizeRecurrent._is_initial_h_c_stats_update_reordered()
 
     @staticmethod
-    def is_initial_h_c_stats_update_reordered() -> bool:
+    def _is_initial_h_c_stats_update_reordered() -> bool:
         """
         :return: True if initial_h quantization analysis requires re-ordering
         """
@@ -192,6 +199,11 @@ class QcQuantizeRecurrent(torch.nn.Module):
         return None
 
     # property decorator is used for all the quantizer sets to keep the dictionary entries static post construction
+
+    @property
+    def device(self):
+        """ Return device of the underlying RNN layer """
+        return get_device(self.module_to_quantize)
 
     @property
     def grouped_quantizers(self):
@@ -401,46 +413,57 @@ class QcQuantizeRecurrent(torch.nn.Module):
         self.enable_input_quantizers(enabled)
         self.enable_output_quantizers(enabled)
 
-    def _quantize_dequantize_params(self) -> Dict[str, torch.Tensor]:
+    @contextlib.contextmanager
+    def _quantize_dequantize_params(self, inputs=None) -> Dict[str, torch.Tensor]:
         """
         Quantizes and dequantizes a parameter
         @returns A dictionary of parameters (with quantization noise if enabled.)
         """
-        params = dict()
+        quantized_params = dict()
+        shadow_params = {name: param.detach().clone()  for name, param in self.named_parameters(recurse=False)}
 
-        for param_quantizer in self._grouped_param_quantizers:
-            if self.training or param_quantizer.encoding is None:
-                param_quantizer.reset_encoding_stats()
+        if self._mode != QcQuantizeOpMode.LEARN_ENCODINGS:
+            quantizer_param_map = defaultdict(list)
+            for name, param in self.named_parameters(recurse=False):
+                quantizer_param_map[self._param_quantizers[name]].append((name, param))
 
-        grouped_param_to_quantize_dequantize = {}
-        # Quantize the parameters, if present
-        for name, param in self.named_parameters(recurse=False):
-
-            data = param.clone()
-            param_quantizer = self._param_quantizers[name]
-
-            # If we are in training mode with quant-sim nodes,
-            # then we want to calculate encodings for the parameters in every pass
-            if self.training or param_quantizer.encoding is None:
-                if param_quantizer in self._grouped_param_quantizers:
-                    param_quantizer.update_encoding_stats(data)
-                    grouped_param_to_quantize_dequantize[name] = param
-                    continue
-                else:
+            for param_quantizer, param_list in quantizer_param_map.items():
+                # If we are in training mode with quant-sim nodes,
+                # then we want to calculate encodings for the parameters in every pass
+                if self.training or param_quantizer.encoding is None:
                     param_quantizer.reset_encoding_stats()
-                    param_quantizer.update_encoding_stats(data)
+                    for _, param in param_list:
+                        param_quantizer.update_encoding_stats(param.data)
                     param_quantizer.compute_encoding()
 
-            params[name] = self._param_quantize_dequantize(data, param_quantizer)
+                for name, param in param_list:
+                    quantized_params[name] = param.data = self._param_quantize_dequantize(param.clone(), param_quantizer)
+        else:
+            encoding_list_for_params = []
+            for name, _ in self.get_named_parameters():
+                # Create a list of encoding parameters for params
+                quantizer = self.param_quantizers[name]
+                if quantizer.enabled:
+                    # if param uses a group quantizer remap to group quantizer min/max encoding params.
+                    if quantizer in self._grouped_quantizers.values():
+                        name, *_ = [n for n, q in self._grouped_quantizers.items() if q == quantizer]
+                    encoding_list_for_params.append(getattr(self, name + '_encoding_min'))
+                    encoding_list_for_params.append(getattr(self, name + '_encoding_max'))
 
-        for param_quantizer in self._grouped_param_quantizers:
-            if self.training or param_quantizer.encoding is None:
-                param_quantizer.compute_encoding()
+            # Quantize the parameters
+            inputs = ParameterQuantizer.apply(inputs, self, *encoding_list_for_params)
 
-        for name, param in grouped_param_to_quantize_dequantize.items():
-            params[name] = self._param_quantize_dequantize(param.clone(), self._param_quantizers[name])
+            # clone() the outputs of Custom function to avoid incorrect gradient calculation for in-place modification
+            # of view (view is created since Custom function's forward return input as-is)
+            inputs = inputs.clone()
+            quantized_params = {name: param.clone() for name, param in self.named_parameters(recurse=False)
+                                if '_encoding_' not in name}
 
-        return params
+        yield quantized_params, inputs
+
+        for name, param in self.named_parameters(recurse=False):
+            if name in shadow_params:
+                param.data.copy_(shadow_params[name].data)
 
     def _param_quantize_dequantize(self, data: torch.Tensor, param_quantizer: StaticGridPerTensorQuantizer) -> \
             torch.Tensor:
@@ -472,6 +495,13 @@ class QcQuantizeRecurrent(torch.nn.Module):
 
         return encodings
 
+    def get_named_parameters(self):
+        """
+        Yields parameter name and parameter
+        """
+        for name, _ in self.module_to_quantize.named_parameters():
+            yield name, getattr(self, name)
+
     def compute_encoding(self):
         """
         Compute the quantization encoding for this layer
@@ -479,8 +509,104 @@ class QcQuantizeRecurrent(torch.nn.Module):
         """
         for input_quantizer in self._input_quantizers.values():
             input_quantizer.compute_encoding()
+
+        for quantizer in self.param_quantizers.values():
+            # NOTE: If quantizer.enabled is True but quantizer.encoding is None,
+            # quantizer.compute_encoding() will set quantizer.enabled to False.
+            # Otherwise, quantizer.compute_encodings() is equivalent to no-op.
+            quantizer.compute_encoding()
+
         for output_quantizer in self._output_quantizers.values():
             output_quantizer.compute_encoding()
+
+    def construct_and_initialize_trainable_quantizers(self, quant_scheme):
+        """
+        Copies following tensor quantizer attributes from StaticGridQuantWrapper to LearnedGridQuantWrapper
+        to avoid any mismatch.
+            - enabled
+            - bitwidth
+            - encoding
+            - use_symmetric_encodings
+            - use_strict_symmetric
+            - use_unsigned_symmetric
+
+        :param quant_scheme: StaticGridQuantWrapper wrapped module
+        :return: trainable_module: QcTrainable wrapper module
+        """
+        # Copy user settable attributes for outputs
+
+        def _create_trainable_quantizer(bw, name, quantizer):
+            """ create trainable quantizer from static grid quantizer. """
+            # Initialize trainable parameters to None
+            self.register_parameter(f'{name}_encoding_min', None)
+            self.register_parameter(f'{name}_encoding_max', None)
+            # Pass name of tensor quantizer and reference of Wrapper to tensor quantizer
+            # Input quantizer
+            new_quantizer = tensor_quantizer_factory(bw, self._round_mode,
+                                                     quant_scheme,
+                                                     self._is_symmetric,
+                                                     enabled_by_default=True,
+                                                     data_type=self._data_type)
+            new_quantizer.name = name
+            new_quantizer.wrapper_ref = self
+            new_quantizer.device = self.device
+            initialize_learned_grid_quantizer_attributes(new_quantizer, quantizer)
+            return new_quantizer
+
+        new_grouped_quantizers = {name: _create_trainable_quantizer(self._activation_bw, name, quantizer)
+                                  for name, quantizer in self._grouped_quantizers.items()}
+
+        def create_trainable_quantizer(bw, name, quantizer):
+            """ create trainable quantizer if not part of a group else reuse the group quantizer. """
+            if quantizer in self._grouped_quantizers.values():
+                group_names = [n for n, q in self._grouped_quantizers.items() if q == quantizer]
+                assert len(group_names) == 1
+                # creating a param min/max references to the shared group min/max parameters.
+                setattr(self, f'{name}_encoding_min', getattr(self, f'{group_names[0]}_encoding_min'))
+                setattr(self, f'{name}_encoding_max', getattr(self, f'{group_names[0]}_encoding_max'))
+                return new_grouped_quantizers[group_names[0]]
+
+            return _create_trainable_quantizer(bw, name, quantizer)
+
+
+        self._input_quantizers = {name: create_trainable_quantizer(self._activation_bw, name, quantizer)
+                                  for name, quantizer in self.input_quantizers.items()}
+        self._output_quantizers = {name: create_trainable_quantizer(self._activation_bw, name, quantizer)
+                                   for name, quantizer in self.output_quantizers.items()}
+        self._param_quantizers = {name: create_trainable_quantizer(self._weight_bw, name, quantizer)
+                                  for name, quantizer in self._param_quantizers.items()}
+
+        self._grouped_quantizers = new_grouped_quantizers
+        self._mode = QcQuantizeOpMode.LEARN_ENCODINGS
+
+    def _apply_gating_logic(self):
+        """ ensure min/max encoding is numerically consistent for quantization if not floor/ceil as needed"""
+        if self._mode != QcQuantizeOpMode.LEARN_ENCODINGS:
+            return
+
+        applied_quantizers = set()
+        def apply_logic(name, quantizer):
+            if quantizer in self._grouped_quantizers.values():
+                if quantizer in applied_quantizers:
+                    return
+
+                name, *_ = [n for n, q in self._grouped_quantizers.items() if q == quantizer]
+
+            if quantizer.enabled:
+                if quantizer.bitwidth == 32 or quantizer.data_type == QuantizationDataType.float:
+                    return
+                set_encoding_min_max_gating_threshold(
+                    getattr(self, name + '_encoding_min'),
+                    getattr(self, name + '_encoding_max'))
+                applied_quantizers.add(quantizer)
+
+        for name, quantizer in self.input_quantizers.items():
+            apply_logic(name, quantizer)
+        for name, quantizer in self.output_quantizers.items():
+            apply_logic(name, quantizer)
+        for name, quantizer in self._param_quantizers.items():
+            apply_logic(name, quantizer)
+
 
     def get_activation_param_quantizers_for_onnx_tensors(self,
                                                          io_tensor_map: Union[OpToIOTensors, List[OpToIOTensors]]) -> \
@@ -561,7 +687,7 @@ class QcQuantizeRecurrent(torch.nn.Module):
                 if quantizer.enabled:
                     activations_quantizer_map[outputs[index]] = quantizer
 
-    def _quantize_activation(self, tensor_quantizer: StaticGridPerTensorQuantizer,
+    def _quantize_activation(self, tensor_quantizer: Union[StaticGridPerTensorQuantizer, LearnedGridTensorQuantizer],
                              tensors_to_quantize: Union[List[torch.Tensor], torch.Tensor]) -> \
             Union[List[torch.Tensor], torch.Tensor]:
         """
@@ -595,6 +721,11 @@ class QcQuantizeRecurrent(torch.nn.Module):
                 else:
                     round_mode = libpymo.RoundingMode.ROUND_NEAREST
                 output = tensor_quantizer.quantize_dequantize(input_tensor, round_mode)
+
+            elif self._mode is QcQuantizeOpMode.LEARN_ENCODINGS:
+                encoding_min = getattr(self, tensor_quantizer.name + '_encoding_min')
+                encoding_max = getattr(self, tensor_quantizer.name + '_encoding_max')
+                output = tensor_quantizer.quantize_dequantize(input_tensor, encoding_min, encoding_max)
 
             else:
                 output = input_tensor
@@ -683,6 +814,9 @@ class QcQuantizeRecurrent(torch.nn.Module):
         :param hx: initial hidden state Tensor
         :return: output tensor and hidden state tensor -- (RNN,GRU) or Tensor Tuple(LSTM)
         """
+
+        self._apply_gating_logic()
+
         inputs, packed_sequence_info = _get_inputs_and_packed_sequence_info(inputs, self.batch_first)
 
         # if input is set to batch first, reformat to set timestep as to first dim, followed by batch
@@ -694,77 +828,76 @@ class QcQuantizeRecurrent(torch.nn.Module):
         stacked_hx = []
         output = []
 
-        quantized_params = self._quantize_dequantize_params()
+        with self._quantize_dequantize_params(inputs) as (quantized_params, _inputs):
+            for layer in range(self.num_layers):
+                # Quantize the inputs
+                quantized_input = self._quantize_activation(self._input_quantizers['input_l{}'.format(layer)], _inputs)
 
-        for layer in range(self.num_layers):
-            # Quantize the inputs
-            quantized_input = self._quantize_activation(self._input_quantizers['input_l{}'.format(layer)], inputs)
+                output = []
+                reverse_pass_output = []
+                for direction in range(self.num_directions):
+                    permutation = None if not packed_sequence_info else packed_sequence_info.unsorted_indices
+                    update_initial_hx_encoding_stats, initial_hx = \
+                        self._intialize_quantize_hidden_state(batches, _inputs, layer, hx, permutation=permutation)
+                    cell_hx = initial_hx
 
-            output = []
-            reverse_pass_output = []
-            for direction in range(self.num_directions):
-                permutation = None if not packed_sequence_info else packed_sequence_info.unsorted_indices
-                update_initial_hx_encoding_stats, initial_hx = \
-                    self._intialize_quantize_hidden_state(batches, inputs, layer, hx, permutation=permutation)
-                cell_hx = initial_hx
+                    param = [quantized_params[p] for p in self._get_param_names(direction, layer)]
+                    weight_ih, weight_hh, *bias = param
+                    bias_ih, bias_hh = bias if bias else (None, None)
 
-                param = [quantized_params[p] for p in self._get_param_names(direction, layer)]
-                weight_ih, weight_hh, *bias = param
-                bias_ih, bias_hh = bias if bias else (None, None)
+                    if direction == 1:
+                        quantized_input = _get_flipped_input_for_reverse_pass(quantized_input, packed_sequence_info, steps)
 
-                if direction == 1:
-                    quantized_input = _get_flipped_input_for_reverse_pass(quantized_input, packed_sequence_info, steps)
+                    for iteration in range(steps):
 
-                for iteration in range(steps):
+                        new_cell_hx = self.rnn_impl_map[self.mode](quantized_input[iteration],
+                                                                   cell_hx,
+                                                                   weight_ih,
+                                                                   weight_hh,
+                                                                   bias_ih,
+                                                                   bias_hh)
 
-                    new_cell_hx = self.rnn_impl_map[self.mode](quantized_input[iteration],
-                                                               cell_hx,
-                                                               weight_ih,
-                                                               weight_hh,
-                                                               bias_ih,
-                                                               bias_hh)
+                        # Replace rows in the hidden state corresponding to valid inputs in the batch
+                        cell_hx = _replace_appropriate_hidden_state_rows(cell_hx, new_cell_hx, packed_sequence_info,
+                                                                         iteration, batches)
+                        # Quantize the outputs
+                        cell_hx = self._quantize_hidden_cell_state(layer, cell_hx)
 
-                    # Replace rows in the hidden state corresponding to valid inputs in the batch
-                    cell_hx = _replace_appropriate_hidden_state_rows(cell_hx, new_cell_hx, packed_sequence_info,
-                                                                     iteration, batches)
-                    # Quantize the outputs
-                    cell_hx = self._quantize_hidden_cell_state(layer, cell_hx)
+                        if direction == 0:
+                            output.append(cell_hx[0] if isinstance(cell_hx, tuple) else cell_hx)
+                        else:
+                            if not reverse_pass_output:
+                                reverse_pass_output = [None] * (steps * batches)
+                            _fill_appropriate_rows_in_reverse_pass_output(reverse_pass_output,
+                                                                          packed_sequence_info,
+                                                                          steps,
+                                                                          batches,
+                                                                          iteration,
+                                                                          cell_hx)
+                    stacked_hx.append(cell_hx)
+                    if update_initial_hx_encoding_stats:
+                        self._update_encoding_stats_with_initial_hidden_state(initial_hx, layer)
 
-                    if direction == 0:
-                        output.append(cell_hx[0] if isinstance(cell_hx, tuple) else cell_hx)
-                    else:
-                        if not reverse_pass_output:
-                            reverse_pass_output = [None] * (steps * batches)
-                        _fill_appropriate_rows_in_reverse_pass_output(reverse_pass_output,
-                                                                      packed_sequence_info,
-                                                                      steps,
-                                                                      batches,
-                                                                      iteration,
-                                                                      cell_hx)
-                stacked_hx.append(cell_hx)
-                if update_initial_hx_encoding_stats:
-                    self.update_encoding_stats_with_initial_hidden_state(initial_hx, layer)
+                    if reverse_pass_output:
+                        _concatenate_output_with_reverse_pass_output(output, reverse_pass_output, self.hidden_size, steps,
+                                                                     batches, _inputs.device)
 
-                if reverse_pass_output:
-                    _concatenate_output_with_reverse_pass_output(output, reverse_pass_output, self.hidden_size, steps,
-                                                                 batches, inputs.device)
+                # convert a list output tensors to a single tensor
+                output = torch.stack(output)
 
-            # convert a list output tensors to a single tensor
-            output = torch.stack(output)
+                # if configured for more than one layer, the quantized output is fed back as input to next layer
+                if self.num_layers > 1:
+                    _inputs = output
 
-            # if configured for more than one layer, the quantized output is fed back as input to next layer
-            if self.num_layers > 1:
-                inputs = output
+            # if input is set to batch first, reformat to set batch back to first dim
+            if self.batch_first:
+                output = output.permute(1, 0, 2)
 
-        # if input is set to batch first, reformat to set batch back to first dim
-        if self.batch_first:
-            output = output.permute(1, 0, 2)
-
-        output, stacked_hx = _reformat_output_and_stacked_hx_for_packed_sequence(output,
-                                                                                 stacked_hx,
-                                                                                 self.batch_first,
-                                                                                 packed_sequence_info)
-        hx = QcQuantizeRecurrent._format_hx_output(stacked_hx)
+            output, stacked_hx = _reformat_output_and_stacked_hx_for_packed_sequence(output,
+                                                                                     stacked_hx,
+                                                                                     self.batch_first,
+                                                                                     packed_sequence_info)
+            hx = QcQuantizeRecurrent._format_hx_output(stacked_hx)
 
         return output, hx
 
@@ -828,9 +961,9 @@ class QcQuantizeRecurrent(torch.nn.Module):
     def flatten_parameters(self):
         """ In case models call flatten_parameters on the recurrent module, this will effectively serve as a no-op. """
 
-    def update_encoding_stats_with_initial_hidden_state(self,
-                                                        cell_hx: Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]],
-                                                        layer_index: int):
+    def _update_encoding_stats_with_initial_hidden_state(self,
+                                                         cell_hx: Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]],
+                                                         layer_index: int):
         """ update encoding stats for initial hidden (and cell) state
         :param cell_hx:  hidden (and cell) state tensor
         :param layer_index:  layer index

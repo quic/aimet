@@ -50,9 +50,8 @@ from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
 from aimet_torch.custom import custom_tensor_utils
 from aimet_torch import utils
-from aimet_torch.tensor_factory_utils import constant_tensor_factory
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer, TensorQuantizer, \
-    LearnedGridTensorQuantizer, ParameterQuantizer
+    LearnedGridTensorQuantizer, ParameterQuantizer, set_encoding_min_max_gating_threshold
 import aimet_torch.quantsim_straight_through_grad as ste
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -65,6 +64,7 @@ class QcQuantizeOpMode(Enum):
     PASSTHROUGH = 1
     ANALYSIS = 2
     ACTIVE = 3
+    LEARN_ENCODINGS = 4
 
 
 QUANTIZER_TYPE_INPUT = 'input'
@@ -775,21 +775,15 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
         """
         Apply gating logic.
         """
-        def _apply_logic(encoding_min, encoding_max):
-            zero_tensor = constant_tensor_factory(0., encoding_min.device)
-            eps_tensor = constant_tensor_factory(1e-5, encoding_min.device)
-            encoding_min.data = torch.minimum(zero_tensor, encoding_min.data)
-            encoding_max.data = torch.maximum(zero_tensor, encoding_max.data)
-            encoding_max.data = torch.maximum(encoding_max.data, encoding_min.data + eps_tensor)
-
         # Gating input encodings
         for index, input_quantizer in enumerate(self.input_quantizers):
             if input_quantizer.enabled:
                 if input_quantizer.bitwidth == 32 or input_quantizer.data_type == QuantizationDataType.float:
                     # No gating necessary
                     continue
-                _apply_logic(getattr(self, 'input' + str(index) + '_encoding_min'),
-                             getattr(self, 'input' + str(index) + '_encoding_max'))
+                set_encoding_min_max_gating_threshold(
+                    getattr(self, 'input' + str(index) + '_encoding_min'),
+                    getattr(self, 'input' + str(index) + '_encoding_max'))
 
         # Gating output encodings
         for index, output_quantizer in enumerate(self.output_quantizers):
@@ -797,8 +791,9 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
                 if output_quantizer.bitwidth == 32 or output_quantizer.data_type == QuantizationDataType.float:
                     # No gating necessary
                     continue
-                _apply_logic(getattr(self, 'output' + str(index) + '_encoding_min'),
-                             getattr(self, 'output' + str(index) + '_encoding_max'))
+                set_encoding_min_max_gating_threshold(
+                    getattr(self, 'output' + str(index) + '_encoding_min'),
+                    getattr(self, 'output' + str(index) + '_encoding_max'))
 
         # Gating for parameters
         for name, _ in self._module_to_wrap.named_parameters():
@@ -807,8 +802,9 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
                         self.param_quantizers[name].data_type == QuantizationDataType.float:
                     # No gating necessary
                     continue
-                _apply_logic(getattr(self, name + '_encoding_min'),
-                             getattr(self, name + '_encoding_max'))
+                set_encoding_min_max_gating_threshold(
+                    getattr(self, name + '_encoding_min'),
+                    getattr(self, name + '_encoding_max'))
 
     def forward(self, *inputs):
         """
