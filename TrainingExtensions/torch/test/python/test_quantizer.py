@@ -822,7 +822,7 @@ class TestQuantizationSimStaticGrad:
         # Quantize
         sim.compute_encodings(forward_pass, None)
 
-        sim.export('./data/', 'resnet50', dummy_input, onnx_export_args=None)
+        sim.export('./data/', 'resnet50', dummy_input, export_to_torchscript=True)
         with open('./data/resnet50.encodings') as json_file:
             encoding_data = json.load(json_file)
 
