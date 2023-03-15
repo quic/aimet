@@ -41,13 +41,13 @@
 import os
 import io
 import copy
-import math
 import pickle
 from typing import Tuple, List, Union, Dict, Callable, Set, Optional
 from collections.abc import Iterable
 import json
 import torch
 import onnx
+from packaging import version
 
 import aimet_common
 import aimet_common.libpymo as libpymo
@@ -59,7 +59,8 @@ from aimet_common.quant_utils import get_conv_accum_bounds
 from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_torch.qc_quantize_op import QcQuantizeStandAloneBase, QcQuantizeWrapper, QcQuantizeOpMode, \
     StaticGridQuantWrapper, LearnedGridQuantWrapper, QUANTIZER_TYPE_INPUT, QUANTIZER_TYPE_OUTPUT
-from aimet_torch.tensor_quantizer import StaticGridTensorQuantizer, LearnedGridTensorQuantizer
+from aimet_torch.tensor_quantizer import StaticGridTensorQuantizer, LearnedGridTensorQuantizer, \
+    initialize_learned_grid_quantizer_attributes
 from aimet_torch import torchscript_utils, utils, transformer_utils
 from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs, CustomMarker
 from aimet_torch.meta.connectedgraph import ConnectedGraph
@@ -228,7 +229,7 @@ class QuantizationSimModel:
         :return:
         """
 
-        def pp_quantizer(stream, quantizer, prefix_string):
+        def print_quantizer_state(stream, quantizer, prefix_string):
             if quantizer.enabled:
                 stream.write(f'  {prefix_string}: bw={quantizer.bitwidth}, '
                              f'encoding-present={bool(quantizer.encoding)}\n')
@@ -245,24 +246,29 @@ class QuantizationSimModel:
         stream.write("Quantized Model Report\n")
         stream.write("-------------------------\n")
 
-        wrappers = [(name, module) for name, module in self.model.named_modules()
-                    if isinstance(module, QcQuantizeWrapper)]
-
-        for name, wrapper in wrappers:
+        for layer_name, layer in self._get_qc_quantized_layers(self.model):
             stream.write('----------------------------------------------------------\n')
-            stream.write('Layer: {}\n'.format(name))
+            stream.write('Layer: {}\n'.format(layer_name))
 
             # Inputs
-            for index, quantizer in enumerate(wrapper.input_quantizers):
-                pp_quantizer(stream, quantizer, prefix_string=f"Input[{index}]")
+            if isinstance(layer.input_quantizers, dict):
+                for name, quantizer in layer.input_quantizers.items():
+                    print_quantizer_state(stream, quantizer, prefix_string=f"Input[{name}]")
+            else:
+                for index, quantizer in enumerate(layer.input_quantizers):
+                    print_quantizer_state(stream, quantizer, prefix_string=f"Input[{index}]")
 
             # Params
-            for param_name, quantizer in wrapper.param_quantizers.items():
-                pp_quantizer(stream, quantizer, prefix_string=f"Param[{param_name}]")
+            for param_name, quantizer in layer.param_quantizers.items():
+                print_quantizer_state(stream, quantizer, prefix_string=f"Param[{param_name}]")
 
             # Outputs
-            for index, quantizer in enumerate(wrapper.output_quantizers):
-                pp_quantizer(stream, quantizer, prefix_string=f"Output[{index}]")
+            if isinstance(layer.output_quantizers, dict):
+                for name, quantizer in layer.output_quantizers.items():
+                    print_quantizer_state(stream, quantizer, prefix_string=f"Output[{name}]")
+            else:
+                for index, quantizer in enumerate(layer.output_quantizers):
+                    print_quantizer_state(stream, quantizer, prefix_string=f"Output[{index}]")
 
         return stream.getvalue()
 
@@ -397,7 +403,11 @@ class QuantizationSimModel:
                                                          dummy_input, self._excluded_layer_names)
         else:
             if onnx_export_args is None:
-                onnx_export_args = OnnxExportApiArgs()
+                onnx_export_args = {'opset_version': None,
+                                    'input_names': None,
+                                    'output_names': None}
+                if version.parse(torch.__version__) < version.parse("1.10.0") and isinstance(onnx_export_args, dict):
+                    onnx_export_args['enable_onnx_checker'] = False
             log_with_error_and_assert_if_false(isinstance(onnx_export_args, (OnnxExportApiArgs, dict)),
                                                logger,
                                                f'unsupported opt_args type={type(onnx_export_args)}')
@@ -528,6 +538,10 @@ class QuantizationSimModel:
                 quantized_module = self._construct_and_initialize_trainable_wrapper(module_ref, device)
                 setattr(model, module_name, quantized_module)
 
+            elif isinstance(module_ref, QcQuantizeRecurrent):
+                # Set Recurrent layer for training mode
+                module_ref.construct_and_initialize_trainable_quantizers(self._quant_scheme)
+
             # Recursively call children modules if present
             if not utils.is_leaf_module(module_ref):
                 self._replace_quantization_wrapper(module_ref, device)
@@ -548,65 +562,6 @@ class QuantizationSimModel:
         :param device: device on which model is present
         :return: trainable_module: QcTrainable wrapper module
         """
-        def _copy_quantizer_attributes(new_quantizer: LearnedGridTensorQuantizer,
-                                       old_quantizer: StaticGridTensorQuantizer):
-            """
-            Copy quantizer attributes from old quantizer to new quantizer.
-
-            :param new_quantizer: New quantizer
-            :param old_quantizer: Old quantizer
-            """
-            new_quantizer.enabled = old_quantizer.enabled
-            new_quantizer.bitwidth = old_quantizer.bitwidth
-            new_quantizer.data_type = old_quantizer.data_type
-
-            new_quantizer.use_symmetric_encodings = old_quantizer.use_symmetric_encodings
-            new_quantizer.use_strict_symmetric = old_quantizer.use_strict_symmetric
-            new_quantizer.use_unsigned_symmetric = old_quantizer.use_unsigned_symmetric
-            # NOTE: Set is_unsigned_symmetric to False for learned grid quantizers
-            # This is for the purpose of preventing unsigned symmetric operation
-            #   during QAT 2.0 range learning
-            new_quantizer.is_unsigned_symmetric = False
-            new_quantizer.encoding_min_max_fixed_vals = old_quantizer.encoding_min_max_fixed_vals
-
-            if new_quantizer.data_type == QuantizationDataType.float or new_quantizer.bitwidth == 32:
-                new_quantizer.encoding = None
-                return
-
-            # NOTE: Before copying encoding, we do below logic to keep symmetry for range learning
-            # Without below logic, min/max value in symmetric scheme will be
-            #   max = delta * floor(num_steps / 2)
-            #   min = -delta * floor(num_steps / 2) - delta => One more bin to represent
-            # With below logic,
-            #   max = delta * floor(num_steps / 2)
-            #   min = -delta * floor(num_steps / 2) = -max
-            #   which matches with strict symmetric scheme
-            if old_quantizer.enabled and \
-                    old_quantizer.use_symmetric_encodings and \
-                    not old_quantizer.is_unsigned_symmetric:
-                if isinstance(old_quantizer.encoding, list):
-                    for encoding in old_quantizer.encoding:
-                        encoding.min = -encoding.max
-                else:
-                    old_quantizer.encoding.min = -old_quantizer.encoding.max
-
-            # NOTE: In range learning, we do calculation with non-strict symmetric way
-            #   even if unsigned symmetric conditions are satisfied
-            # Make the min value symmetric with max, and update the corresponding delta and offset
-            if old_quantizer.enabled and old_quantizer.is_unsigned_symmetric:
-                num_steps = 2 ** old_quantizer.bitwidth - 1
-                half_num_steps = num_steps / 2
-                if isinstance(old_quantizer.encoding, list):
-                    for encoding in old_quantizer.encoding:
-                        encoding.min = -encoding.max
-                        encoding.delta = encoding.max / math.floor(half_num_steps)
-                        encoding.offset = -math.ceil(half_num_steps)
-                else:
-                    old_quantizer.encoding.min = -old_quantizer.encoding.max
-                    old_quantizer.encoding.delta = old_quantizer.encoding.max / math.floor(half_num_steps)
-                    old_quantizer.encoding.offset = -math.ceil(half_num_steps)
-
-            new_quantizer.encoding = old_quantizer.encoding
 
         # pylint: disable=protected-access
         module = post_training_module._module_to_wrap
@@ -621,18 +576,18 @@ class QuantizationSimModel:
                                                    data_type=QuantizationDataType.int)
         # Copy user settable attributes for outputs
         for index, quantizer in enumerate(post_training_module.output_quantizers):
-            _copy_quantizer_attributes(trainable_module.output_quantizers[index], quantizer)
+            initialize_learned_grid_quantizer_attributes(trainable_module.output_quantizers[index], quantizer)
             if trainable_module.output_quantizers[index].encoding_min_max_fixed_vals is not None:
                 trainable_module.output_quantizers[index].freeze_encoding()
         # Copy user settable attributes for inputs
         for index, quantizer in enumerate(post_training_module.input_quantizers):
-            _copy_quantizer_attributes(trainable_module.input_quantizers[index], quantizer)
+            initialize_learned_grid_quantizer_attributes(trainable_module.input_quantizers[index], quantizer)
             if trainable_module.input_quantizers[index].encoding_min_max_fixed_vals is not None:
                 trainable_module.input_quantizers[index].freeze_encoding()
         # Copy user settable attributes for params
         for name, quantizer in post_training_module.param_quantizers.items():
             learned_grid_quantizer = trainable_module.param_quantizers[name]
-            _copy_quantizer_attributes(learned_grid_quantizer, quantizer)
+            initialize_learned_grid_quantizer_attributes(learned_grid_quantizer, quantizer)
             if learned_grid_quantizer.encoding_min_max_fixed_vals is not None:
                 learned_grid_quantizer.freeze_encoding()
 
