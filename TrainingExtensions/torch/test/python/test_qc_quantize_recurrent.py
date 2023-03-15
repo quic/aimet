@@ -34,9 +34,13 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
+import json
+import os
 import unittest
 import copy
+
+import onnx
+import pytest
 import torch
 import tempfile
 from torch.nn.utils.rnn import pack_padded_sequence
@@ -44,7 +48,10 @@ from torch.nn.utils.rnn import pack_padded_sequence
 import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.utils import AimetLogger
+from aimet_torch.qc_quantize_op import QcQuantizeOpMode
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
+from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
@@ -95,9 +102,9 @@ class TestQcQuantizeRecurrentOp(unittest.TestCase):
                  input_shape=(5, 3, 4),
                  valid_hx=True),
 
-#        TestCase(test_name="rnn_multilayer_batch_first",
-#                 model=torch.nn.RNN(input_size=4, hidden_size=5, num_layers=3, batch_first=True),
-#                 input_shape=(3, 5, 4)),
+        TestCase(test_name="rnn_multilayer_batch_first",
+                 model=torch.nn.RNN(input_size=4, hidden_size=5, num_layers=3, batch_first=True),
+                 input_shape=(3, 5, 4)),
 
         TestCase(test_name="rnn_bidirectional",
                  model=torch.nn.RNN(input_size=4, hidden_size=5, num_layers=1, bidirectional=True),
@@ -240,7 +247,9 @@ class TestQcQuantizeRecurrentOp(unittest.TestCase):
         loss.backward()
         for name, param in quant_op.module_to_quantize.named_parameters():
             self.assertTrue(param.grad is None)
-            self.assertTrue(getattr(quant_op, name).grad is not None)
+            quant_param = getattr(quant_op, name)
+            self.assertTrue(quant_param.grad is not None)
+            self.assertTrue(torch.allclose(param.data, quant_param.data))
         optimizer.step()
         for name, param in original_model.named_parameters():
             # check if custom param have been updated
@@ -485,3 +494,91 @@ class TestQcQuantizeRecurrentOp(unittest.TestCase):
 
         for tc in TestQcQuantizeRecurrentOp.testcases:
             self.verify_packed_sequence_inputs(tc)
+
+class GruModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.gru1 = torch.nn.GRU(input_size=4, hidden_size=4, num_layers=1, bias=True)
+        self.gru2 = torch.nn.GRU(input_size=4, hidden_size=4, num_layers=1, bias=True)
+
+    def forward(self, *x):
+        output, h = self.gru1(*x)
+        return self.gru2(output, h)
+
+@pytest.mark.parametrize('learned_grid', [False, True])
+def test_qc_rnn_learned_grid_mode(tmp_path, learned_grid):
+    """
+    Unit test to validate Quantize Recurrent Op default(eAI) configuration for LSTM
+    """
+    torch.manual_seed(0)
+    model = GruModel()
+
+    input_shape = (4, 3, 4)
+    dummy_input = (torch.rand(input_shape, requires_grad=True).to('cpu'),
+                   torch.rand((1,3,4), requires_grad=True).to('cpu'))
+    quant_scheme = QuantScheme.training_range_learning_with_tf_enhanced_init if learned_grid \
+        else QuantScheme.post_training_tf_enhanced
+
+
+    sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=quant_scheme)
+    sim.model.train()
+    for module in [ sim.model.gru1, sim.model.gru2]:
+        for input_quantizer in module.input_quantizers.values():
+            input_quantizer.enabled = True
+        for name, param in module.named_parameters(recurse=False):
+            module.param_quantizers[name].enabled = True
+        for output_quantizer in module.output_quantizers.values():
+            output_quantizer.enabled = True
+
+    def forward_pass(model, args):
+        model.eval()
+        with torch.no_grad():
+            output = model(*dummy_input)
+        return output
+
+    print(sim)
+    # Generate Quantize encodings
+    sim.compute_encodings(forward_pass, None)
+    print(sim)
+    if learned_grid:
+        assert sim.model.gru1._mode == QcQuantizeOpMode.LEARN_ENCODINGS
+        assert sim.model.gru2._mode == QcQuantizeOpMode.LEARN_ENCODINGS
+        assert all(isinstance(q, LearnedGridTensorQuantizer)
+                   for module in [sim.model.gru1, sim.model.gru2]
+                   for quantizers in [ module.input_quantizers.values(),
+                                       module.param_quantizers.values(),
+                                       module.output_quantizers.values()]
+                   for q in quantizers)
+
+    # for name, _ in sim.model.gru.input_quantizers(): check for _encoding min/max params
+
+    params = {f'{i}.{name}': param.data for i, module in enumerate([sim.model.gru1, sim.model.gru2])
+              for name, param in module.named_parameters(recurse=False)}
+
+    optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.05, momentum=0.5)
+
+    # train the model w/ few random inputs.
+    for i in range(10):
+        dummy_input = (torch.rand(input_shape, requires_grad=True).to('cpu'),
+                       torch.rand((1, 3, 4), requires_grad=True).to('cpu'))
+        o_qc_rnn, h_qc_rnn = sim.model(*dummy_input)
+        # creating a fake loss function with sum of output
+        loss = o_qc_rnn.flatten().sum() + h_qc_rnn.flatten().sum()
+        loss.backward()
+        optimizer.step()
+    learned_params = {f'{i}.{name}': param.data for i, module in enumerate([sim.model.gru1, sim.model.gru2])
+                      for name, param in module.named_parameters(recurse=False)}
+
+    for name in params:
+        assert not torch.equal(params[name], learned_params[name])
+
+    sim.export(tmp_path, "gru_learned", dummy_input)
+    onnx_model = onnx.load(os.path.join(tmp_path,'gru_learned.onnx'))
+    for node in onnx_model.graph.node:
+        if node.op_type == 'GRU':
+            with open(os.path.join(tmp_path, "gru_learned.encodings"), "r") as encodings_file:
+                encodings = json.load(encodings_file)
+                encoding_tensors = set([*encodings['activation_encodings'].keys(), *encodings['param_encodings']])
+                assert set([*node.input, *node.output]) - encoding_tensors  == {''} # ignore the sequence len tensor
+
+

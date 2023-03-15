@@ -39,6 +39,7 @@
 # pylint: disable=too-many-lines
 import functools
 import io
+import math
 from typing import List, Union, Tuple, Optional
 import abc
 
@@ -52,7 +53,7 @@ from aimet_common.utils import AimetLogger, log_with_error_and_assert_if_false
 import aimet_torch.quantsim_straight_through_grad as grad_fn
 from aimet_torch.quantsim_straight_through_grad import IntermediateResult
 from aimet_torch.fp_quantization import fp8_quantizer, INIT_MAP
-
+from aimet_torch.tensor_factory_utils import constant_tensor_factory
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -1196,3 +1197,78 @@ class Quantize(torch.autograd.Function):
     @staticmethod
     def backward(ctx, _output_grad):
         log_with_error_and_assert_if_false(False, _logger, 'Backward pass for quantize only not implemented')
+
+
+def initialize_learned_grid_quantizer_attributes(new_quantizer: LearnedGridTensorQuantizer,
+                                                 old_quantizer: StaticGridTensorQuantizer):
+    """
+    Copy quantizer attributes from old quantizer to new quantizer.
+
+    :param new_quantizer: New quantizer
+    :param old_quantizer: Old quantizer
+    """
+    new_quantizer.enabled = old_quantizer.enabled
+    new_quantizer.bitwidth = old_quantizer.bitwidth
+    new_quantizer.data_type = old_quantizer.data_type
+
+    new_quantizer.use_symmetric_encodings = old_quantizer.use_symmetric_encodings
+    new_quantizer.use_strict_symmetric = old_quantizer.use_strict_symmetric
+    new_quantizer.use_unsigned_symmetric = old_quantizer.use_unsigned_symmetric
+    # NOTE: Set is_unsigned_symmetric to False for learned grid quantizers
+    # This is for the purpose of preventing unsigned symmetric operation
+    #   during QAT 2.0 range learning
+    new_quantizer.is_unsigned_symmetric = False
+    new_quantizer.encoding_min_max_fixed_vals = old_quantizer.encoding_min_max_fixed_vals
+
+    if new_quantizer.data_type == QuantizationDataType.float or new_quantizer.bitwidth == 32:
+        new_quantizer.encoding = None
+        return
+
+    # NOTE: Before copying encoding, we do below logic to keep symmetry for range learning
+    # Without below logic, min/max value in symmetric scheme will be
+    #   max = delta * floor(num_steps / 2)
+    #   min = -delta * floor(num_steps / 2) - delta => One more bin to represent
+    # With below logic,
+    #   max = delta * floor(num_steps / 2)
+    #   min = -delta * floor(num_steps / 2) = -max
+    #   which matches with strict symmetric scheme
+    if old_quantizer.enabled and \
+            old_quantizer.use_symmetric_encodings and \
+            not old_quantizer.is_unsigned_symmetric:
+        if isinstance(old_quantizer.encoding, list):
+            for encoding in old_quantizer.encoding:
+                encoding.min = -encoding.max
+        else:
+            old_quantizer.encoding.min = -old_quantizer.encoding.max
+
+    # NOTE: In range learning, we do calculation with non-strict symmetric way
+    #   even if unsigned symmetric conditions are satisfied
+    # Make the min value symmetric with max, and update the corresponding delta and offset
+    if old_quantizer.enabled and old_quantizer.is_unsigned_symmetric:
+        num_steps = 2 ** old_quantizer.bitwidth - 1
+        half_num_steps = num_steps / 2
+        if isinstance(old_quantizer.encoding, list):
+            for encoding in old_quantizer.encoding:
+                encoding.min = -encoding.max
+                encoding.delta = encoding.max / math.floor(half_num_steps)
+                encoding.offset = -math.ceil(half_num_steps)
+        else:
+            old_quantizer.encoding.min = -old_quantizer.encoding.max
+            old_quantizer.encoding.delta = old_quantizer.encoding.max / math.floor(half_num_steps)
+            old_quantizer.encoding.offset = -math.ceil(half_num_steps)
+
+    new_quantizer.encoding = old_quantizer.encoding
+
+
+def set_encoding_min_max_gating_threshold(encoding_min: torch.nn.Parameter, encoding_max: torch.nn.Parameter):
+    """
+    the encoding min and max parameter are trainable and may adjust to be out of order i.e. min > max. The
+    tensor are adjusted for ceiled or floored around 0..
+    :param encoding_min: trainable Parameter holding encoding min value.
+    :param encoding_max: trainable Parameter holding encoding max value.
+    """
+    zero_tensor = constant_tensor_factory(0., encoding_min.device)
+    eps_tensor = constant_tensor_factory(1e-5, encoding_min.device)
+    encoding_min.data = torch.minimum(zero_tensor, encoding_min.data)
+    encoding_max.data = torch.maximum(zero_tensor, encoding_max.data)
+    encoding_max.data = torch.maximum(encoding_max.data, encoding_min.data + eps_tensor)
