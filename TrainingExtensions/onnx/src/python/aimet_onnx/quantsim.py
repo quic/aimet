@@ -48,7 +48,7 @@ from onnxruntime.quantization.onnx_quantizer import ONNXModel
 
 from aimet_common import libpymo
 from aimet_common import libquant_info
-from aimet_common.defs import QuantScheme
+from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.quantsim import encoding_version, extract_global_quantizer_args
 from aimet_common.utils import save_json_yaml
 from aimet_onnx import utils
@@ -77,7 +77,7 @@ class QuantizationSimModel:
                  default_param_bw: int = 8,
                  default_activation_bw: int = 8,
                  use_symmetric_encodings: bool = False, use_cuda: bool = True,
-                 device: int = 0, config_file: str = None):
+                 device: int = 0, config_file: str = None, default_data_type: QuantizationDataType = QuantizationDataType.int):
         """
         Constructor
 
@@ -89,6 +89,10 @@ class QuantizationSimModel:
         :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
         :param use_cuda: True if using CUDA to run quantization op. False otherwise.
         :param config_file: Path to Configuration file for model quantizers
+        :param default_data_type: Default data type to use for quantizing all layer inputs, outputs and parameters.
+                                 Possible options are QuantizationDataType.int and QuantizationDataType.float.
+                                 Note that the mode default_data_type=QuantizationDataType.float is only supported with
+                                 default_output_bw=16 and default_param_bw=16
         """
         self.model = model
         if not isinstance(model, ONNXModel):
@@ -99,6 +103,7 @@ class QuantizationSimModel:
         self._rounding_mode = rounding_mode
         self._default_param_bw = default_param_bw
         self._default_activation_bw = default_activation_bw
+        self._default_quantization_data_type = default_data_type
         self._use_symmetric_encodings = use_symmetric_encodings
         self._use_cuda = use_cuda
         if 'CUDAExecutionProvider' not in ort.get_available_providers():
@@ -123,10 +128,12 @@ class QuantizationSimModel:
     def _add_configuration_(self, config_file: str):
         """
         Add configuration based on config file
+
         :param config_file: Path to Configuration file for model quantizers
         """
         quantsim_configurator = QuantSimConfigurator(self.model, self.connected_graph, config_file,
-                                                     self._default_activation_bw, self._default_param_bw)
+                                                     self._default_activation_bw, self._default_param_bw,
+                                                     self._default_quantization_data_type)
         quantsim_configurator.configure_quantizers(self.qc_quantize_op_dict, self.param_names, self.activation_names)
 
         return quantsim_configurator
