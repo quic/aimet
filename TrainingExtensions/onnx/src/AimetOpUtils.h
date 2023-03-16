@@ -43,7 +43,6 @@
 #include <DlQuantization/TensorQuantizerOpFacade.h>
 #include <cstdint>
 #include <stdexcept>
-
 #ifdef ONNX_CUDA
 #include <cuda_runtime_api.h>
 #endif
@@ -87,6 +86,40 @@ void modeSpecificActionInt(const T* inTensor, size_t count, T* outTensor,
     {
         tensorQuantizer->quantizeDequantize(inTensor, count, outTensor, encoding->min, encoding->max, encoding->bw,
                                             useCuda);
+        break;
+    }
+    case DlQuantization::TensorQuantizerOpMode::passThrough:
+    {
+        copyInputTensorsToOutputTensors(inTensor, count, outTensor, useCuda);
+        break;
+    }
+    default:
+    {
+        throw std::exception();
+    }
+    }
+}
+
+template <typename T>
+void modeSpecificActionFloat(const T* inTensor, size_t count, T* outTensor,
+                           const DlQuantization::TensorQuantizerOpMode opMode,
+                           DlQuantization::IAllocator* allocator, bool useCuda)
+{
+    switch (opMode)
+    {
+    case DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize:
+    {
+        copyInputTensorsToOutputTensors(inTensor, count, outTensor, useCuda);
+        break;
+    }
+    case DlQuantization::TensorQuantizerOpMode::updateStats:
+    {
+        copyInputTensorsToOutputTensors(inTensor, count, outTensor, useCuda);
+        break;
+    }
+    case DlQuantization::TensorQuantizerOpMode::quantizeDequantize:
+    {
+        copyInputTensorsToOutputTensors(inTensor, count, outTensor, useCuda);
         break;
     }
     case DlQuantization::TensorQuantizerOpMode::passThrough:
