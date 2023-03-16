@@ -64,11 +64,11 @@ else:
 op_name = "QcQuantizeOp"
 
 def create_quant_info(encoding,
-                    tensor_quantizer,
-                    opMode,
-                    useSymmetricEncoding=False,
-                    enabled=True,
-                    bitwidth=8):
+                      tensor_quantizer,
+                      opMode,
+                      useSymmetricEncoding=False,
+                      enabled=True,
+                      bitwidth=8):
     quant_info = libquant_info.QcQuantizeInfo()
     encoding.bw = bitwidth
     quant_info.encoding = encoding
@@ -76,6 +76,7 @@ def create_quant_info(encoding,
     quant_info.useSymmetricEncoding = useSymmetricEncoding
     quant_info.enabled = enabled
     quant_info.tensorQuantizerRef = libpymo.PtrToInt64(tensor_quantizer)
+    quant_info.isIntDataType = True
     return quant_info
 
 
@@ -121,7 +122,7 @@ class TestQcQuantizeOp:
         session = build_session(model, available_providers)
         session.run(None, {'input': input_arr})
         encodings = tensor_quantizer.computeEncoding(cpp_encodings.bw,
-                                                         quant_info.useSymmetricEncoding)
+                                                     quant_info.useSymmetricEncoding)
         print("Encoding returned: min={}, max={}, offset={}. delta={}, bw={}"
               .format(encodings.min, encodings.max, encodings.offset, encodings.delta, encodings.bw))
         assert encodings is not None
@@ -131,18 +132,19 @@ class TestQcQuantizeOp:
 
         input_arr = np.asarray([[[[-7, -5, -3, 0, .1, 2.5]]]]).astype(np.float32)
         quant_info = libquant_info.QcQuantizeInfo()
+        quant_info.isIntDataType = True
         quant_node = helper.make_node(op_name, inputs=['input'], outputs=['output'],
                                       domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
         model = create_model_from_node(quant_node, input_arr.shape)
         session = build_session(model, available_providers)
         qc_op = QcQuantizeOp(quant_info=quant_info,
-                     quant_scheme=QuantScheme.post_training_tf,
-                     rounding_mode='nearest',
-                     encodings=None,
-                     op_mode=OpMode.oneShotQuantizeDequantize,
-                     bitwidth=8,
-                     use_symmetric_encodings=False,
-                     )
+                             quant_scheme=QuantScheme.post_training_tf,
+                             rounding_mode='nearest',
+                             encodings=None,
+                             op_mode=OpMode.oneShotQuantizeDequantize,
+                             bitwidth=8,
+                             use_symmetric_encodings=False,
+                             )
 
         encodings = libpymo.TfEncoding()
         encodings.bw = 8
@@ -162,18 +164,19 @@ class TestQcQuantizeOp:
         input_arr = np.asarray([[[[-7, -5, -3, 0, .1, 2.5]]]]).astype(np.float32)
         input_arr2 = np.random.randn(*input_arr.shape).astype(np.float32) * 10
         quant_info = libquant_info.QcQuantizeInfo()
+        quant_info.isIntDataType = True
         quant_node = helper.make_node(op_name, inputs=['input'], outputs=['output'],
                                       domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
         model = create_model_from_node(quant_node, input_arr.shape)
         session = build_session(model, available_providers)
         qc_op = QcQuantizeOp(quant_info=quant_info,
-                     quant_scheme=QuantScheme.post_training_tf,
-                     rounding_mode='nearest',
-                     encodings=None,
-                     op_mode=OpMode.updateStats,
-                     bitwidth=8,
-                     use_symmetric_encodings=False,
-                     )
+                             quant_scheme=QuantScheme.post_training_tf,
+                             rounding_mode='nearest',
+                             encodings=None,
+                             op_mode=OpMode.updateStats,
+                             bitwidth=8,
+                             use_symmetric_encodings=False,
+                             )
 
         session.run(None, {'input': input_arr})[0]
         qc_op.compute_encodings()
@@ -190,27 +193,28 @@ class TestQcQuantizeOp:
 
         input_arr = np.random.randn(2, 3, 5, 1).astype(np.float32)
         quant_info = libquant_info.QcQuantizeInfo()
+        quant_info.isIntDataType = True
         quant_node = helper.make_node(op_name, inputs=['input'], outputs=['output'],
                                       domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
         model = create_model_from_node(quant_node, input_arr.shape)
         session = build_session(model, available_providers)
         qc_op = QcQuantizeOp(quant_info=quant_info,
-                     quant_scheme=QuantScheme.post_training_tf,
-                     rounding_mode='nearest',
-                     encodings=None,
-                     op_mode=OpMode.oneShotQuantizeDequantize,
-                     bitwidth=8,
-                     use_symmetric_encodings=False,
-                     )
+                             quant_scheme=QuantScheme.post_training_tf,
+                             rounding_mode='nearest',
+                             encodings=None,
+                             op_mode=OpMode.oneShotQuantizeDequantize,
+                             bitwidth=8,
+                             use_symmetric_encodings=False,
+                             )
 
         quantizer = libpymo.TensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
-                                       MAP_ROUND_MODE_TO_PYMO['nearest'])
+                                            MAP_ROUND_MODE_TO_PYMO['nearest'])
         out_tensor = np.zeros(input_arr.shape).astype(np.float32)
         # Perform one-shot quant-dequant in python
         quantizer.updateStats(input_arr, False)
         enc = quantizer.computeEncoding(8, False)
         quantizer.quantizeDequantize(input_arr.copy(), out_tensor, enc.min,
-                                                 enc.max, 8, False)
+                                     enc.max, 8, False)
 
         output = session.run(None, {'input': input_arr})[0]
         assert quant_info.encoding.max == enc.max
@@ -226,13 +230,13 @@ class TestQcQuantizeOp:
         model = create_model_from_node(quant_node, input_arr.shape)
         session = build_session(model, available_providers)
         qc_op = QcQuantizeOp(quant_info=quant_info,
-                     quant_scheme=QuantScheme.post_training_tf,
-                     rounding_mode='nearest',
-                     encodings=None,
-                     op_mode=OpMode.oneShotQuantizeDequantize,
-                     bitwidth=8,
-                     use_symmetric_encodings=False,
-                     )
+                             quant_scheme=QuantScheme.post_training_tf,
+                             rounding_mode='nearest',
+                             encodings=None,
+                             op_mode=OpMode.oneShotQuantizeDequantize,
+                             bitwidth=8,
+                             use_symmetric_encodings=False,
+                             )
 
         output_oneshot = session.run(None, {'input': input_arr})[0]
 
@@ -257,12 +261,12 @@ class TestQcQuantizeOp:
         model = create_model_from_node(quant_node, input_arr.shape)
         session = build_session(model, available_providers)
         qc_op = QcQuantizeOp(quant_info=quant_info,
-                     quant_scheme=QuantScheme.post_training_tf,
-                     rounding_mode='nearest',
-                     op_mode=OpMode.oneShotQuantizeDequantize,
-                     bitwidth=8,
-                     use_symmetric_encodings=True,
-                     )
+                             quant_scheme=QuantScheme.post_training_tf,
+                             rounding_mode='nearest',
+                             op_mode=OpMode.oneShotQuantizeDequantize,
+                             bitwidth=8,
+                             use_symmetric_encodings=True,
+                             )
         output_oneshot = session.run(None, {'input': input_arr})
 
         encodings = libpymo.TfEncoding()
@@ -285,12 +289,12 @@ class TestQcQuantizeOp:
         model = create_model_from_node(quant_node, input_arr.shape)
         session = build_session(model, available_providers)
         qc_op = QcQuantizeOp(quant_info=quant_info,
-                     quant_scheme=QuantScheme.post_training_tf,
-                     rounding_mode='nearest',
-                     op_mode=OpMode.oneShotQuantizeDequantize,
-                     bitwidth=8,
-                     use_symmetric_encodings=True,
-                     )
+                             quant_scheme=QuantScheme.post_training_tf,
+                             rounding_mode='nearest',
+                             op_mode=OpMode.oneShotQuantizeDequantize,
+                             bitwidth=8,
+                             use_symmetric_encodings=True,
+                             )
 
         qc_op.use_unsigned_symmetric = True
 
@@ -313,29 +317,29 @@ class TestQcQuantizeOp:
         input_arr = np.asarray([[[[0, 1.2, 1.5, 4.0, 4.9, 5.3]]]]).astype(np.float32)
         quant_info_cpu = libquant_info.QcQuantizeInfo()
         quant_node_cpu = helper.make_node(op_name, inputs=['input'], outputs=['output'],
-                                      domain="aimet.customop.cpu", quant_info=libpymo.PtrToInt64(quant_info_cpu))
+                                          domain="aimet.customop.cpu", quant_info=libpymo.PtrToInt64(quant_info_cpu))
         model_cpu = create_model_from_node(quant_node_cpu, input_arr.shape)
         session_cpu = build_session(model_cpu, available_providers)
         qc_op_cpu = QcQuantizeOp(quant_info=quant_info_cpu,
-                     quant_scheme=QuantScheme.post_training_tf,
-                     rounding_mode='nearest',
-                     op_mode=OpMode.oneShotQuantizeDequantize,
-                     bitwidth=8,
-                     use_symmetric_encodings=True)
+                                 quant_scheme=QuantScheme.post_training_tf,
+                                 rounding_mode='nearest',
+                                 op_mode=OpMode.oneShotQuantizeDequantize,
+                                 bitwidth=8,
+                                 use_symmetric_encodings=True)
 
         output_cpu = session_cpu.run(None, {'input': input_arr})
 
         quant_info_gpu = libquant_info.QcQuantizeInfo()
         quant_node_gpu = helper.make_node(op_name, inputs=['input'], outputs=['output'],
-                                      domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info_gpu))
+                                          domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info_gpu))
         model_gpu = create_model_from_node(quant_node_gpu, input_arr.shape)
         session_gpu = build_session(model_gpu, available_providers)
         qc_op_gpu = QcQuantizeOp(quant_info=quant_info_gpu,
-                     quant_scheme=QuantScheme.post_training_tf,
-                     rounding_mode='nearest',
-                     op_mode=OpMode.oneShotQuantizeDequantize,
-                     bitwidth=8,
-                     use_symmetric_encodings=True)
+                                 quant_scheme=QuantScheme.post_training_tf,
+                                 rounding_mode='nearest',
+                                 op_mode=OpMode.oneShotQuantizeDequantize,
+                                 bitwidth=8,
+                                 use_symmetric_encodings=True)
 
 
         output_gpu = session_gpu.run(None, {'input': input_arr})
@@ -348,12 +352,12 @@ class TestQcQuantizeOp:
         quant_node = helper.make_node(op_name, inputs=['input'], outputs=['output'],
                                       domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
         qc_op = QcQuantizeOp(quant_info=quant_info,
-                     quant_scheme=QuantScheme.post_training_tf,
-                     rounding_mode='nearest',
-                     op_mode=OpMode.oneShotQuantizeDequantize,
-                     bitwidth=8,
-                     use_symmetric_encodings=True,
-                     )
+                             quant_scheme=QuantScheme.post_training_tf,
+                             rounding_mode='nearest',
+                             op_mode=OpMode.oneShotQuantizeDequantize,
+                             bitwidth=8,
+                             use_symmetric_encodings=True,
+                             )
         qc_op.use_strict_symmetric = True
         assert quant_info.tensorQuantizerRef.getStrictSymmetric() == True
 
