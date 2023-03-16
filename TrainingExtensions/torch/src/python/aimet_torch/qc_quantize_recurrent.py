@@ -893,6 +893,7 @@ def _get_flipped_input_for_reverse_pass(inputs: torch.Tensor, packed_sequence_in
     # 10 7 4 1 X
     # 8  5 2 X X
     inputs = torch.flip(inputs, [0])
+    # Clone the tensor to avoid runtime error since input tensor and written-to tensor shares the same memory location.
     inputs_copy = inputs.clone()
     if packed_sequence_info:
         sorted_lens = packed_sequence_info.sorted_sequence_lens

@@ -646,7 +646,7 @@ class TestOnnxUtils:
 
     @pytest.mark.skipif(Version(torch.__version__) < Version('1.10.0'),
                         reason="Need Pytorch1.10.0 https://github.com/pytorch/pytorch/pull/60244")
-    def est_set_node_name_for_large_model(self):
+    def test_set_node_name_for_large_model(self):
         class LargeModel(torch.nn.Module):
             def __init__(self):
                 super(LargeModel, self).__init__()
