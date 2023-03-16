@@ -776,7 +776,8 @@ class TestOnnxUtils:
 
         model = Net()
 
-        # Add an empty dictionary to not treat as named arguments - see torch.onnx.export() API for more details.
+        # Add an empty dictionary as the last element to not treat as named arguments.
+        # see torch.onnx.export() API for more details.
         dummy_input = (
             {'a': torch.randn(1, 10, 10, 10),
              'b': torch.randn(1, 10, 10, 10),
@@ -824,7 +825,8 @@ class TestOnnxUtils:
 
         model = Net()
 
-        # Add an empty dictionary to not treat as named arguments - see torch.onnx.export() API for more details.
+        # Add an empty dictionary as the last element to not treat as named arguments.
+        # see torch.onnx.export() API for more details.
         dummy_input = (
             {'a': torch.randn(1, 10, 10, 10),
              'b': torch.randn(1, 10, 10, 10),

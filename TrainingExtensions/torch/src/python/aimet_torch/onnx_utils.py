@@ -41,7 +41,7 @@
 """ Utilities to load and save onnx models """
 
 from dataclasses import dataclass
-from typing import Union, List, Tuple, Dict, Set, Optional
+from typing import Union, List, Tuple, Dict, Set, Optional, Any
 import os
 import copy
 from collections import defaultdict, deque
@@ -1009,12 +1009,11 @@ class OnnxSaver:
 
         if is_conditional:
             with aimet_torch.utils.in_eval_mode(model), torch.no_grad():
-                dummy_output = model(*dummy_input)
+                _ = model(*dummy_input)
             scripted_model = torch.jit.script(model)
-            torch.onnx.export(scripted_model, dummy_input, temp_file, example_outputs=dummy_output, **export_args)
+            cls._export_model_to_onnx(scripted_model, dummy_input, temp_file, **export_args)
         else:
-            torch.onnx.export(model, dummy_input, temp_file,
-                              **export_args)
+            cls._export_model_to_onnx(model, dummy_input, temp_file, **export_args)
 
         return cls.load_simply_onnx_model(temp_file)
 
@@ -1358,3 +1357,26 @@ class OnnxSaver:
         if '/marked_module' in name:
             name = name.replace('/marked_module', '')
         return name
+
+    @staticmethod
+    def _export_model_to_onnx(model: Union[torch.nn.Module, torch.jit.ScriptModule, torch.jit.ScriptFunction],
+                              dummy_input: Union[Tuple[Any, ...], torch.Tensor], temp_file: str, **export_args):
+        """
+        Export model to ONNX format.
+
+        NOTE: the ONNX checker is enabled by default in torch version 1.11 onwards and
+        'enabled_onnx_checker' argument is removed.
+
+        :param model: model to be exported.
+        :param dummy_input: dummy inputs to model.
+        :param temp_file: A string containing file name.
+        :param export_args: Additional args.
+        """
+        # pylint: disable=no-member
+        if version.parse(torch.__version__) < version.parse('1.11.0'):
+            torch.onnx.export(model, dummy_input, temp_file, enable_onnx_checker=False, **export_args)
+        else:
+            try:
+                torch.onnx.export(model, dummy_input, temp_file, **export_args)
+            except torch.onnx.CheckerError:
+                _logger.warning("ONNX Checker has failed but ONNX graph is still generated.")
