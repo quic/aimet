@@ -855,3 +855,23 @@ def get_all_quantizers(model: torch.nn.Module):
         output_quantizers.extend(quant_wrapper.output_quantizers)
 
     return param_quantizers, input_quantizers, output_quantizers
+
+
+@contextlib.contextmanager
+def disable_all_quantizers(model: torch.nn.Module):
+    """
+    Temporarily disable all quantizers in the model within with-as block.
+    :param model: Root module
+    """
+    param_quantizers, input_quantizers, output_quantizers = get_all_quantizers(model)
+    all_quantizers = param_quantizers + input_quantizers + output_quantizers
+
+    active_quantizers = set(quantizer for quantizer in all_quantizers if quantizer.enabled)
+
+    try:
+        for quantizer in active_quantizers:
+            quantizer.enabled = False
+        yield
+    finally:
+        for quantizer in active_quantizers:
+            quantizer.enabled = True
