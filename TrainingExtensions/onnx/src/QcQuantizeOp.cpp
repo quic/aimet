@@ -175,8 +175,12 @@ void QcQuantizeKernel::Compute(OrtKernelContext* context)
         cudaDeviceSynchronize();
     }
 #endif
-    modeSpecificActionInt(input_data, size, result, quant_info->tensorQuantizerRef, op_mode, encoding,
-                          quant_info->useSymmetricEncoding, allocator, useCuda);
+
+    if (quant_info->isIntDataType)
+        modeSpecificActionInt(input_data, size, result, quant_info->tensorQuantizerRef, op_mode, encoding,
+                              quant_info->useSymmetricEncoding, allocator, useCuda);
+    else
+        modeSpecificActionFloat(input_data, size, result, op_mode, allocator, useCuda);
 }
 
 
