@@ -37,23 +37,9 @@
 # =============================================================================
 """Weight tensor utility"""
 import typing
-from collections import OrderedDict
-from enum import Enum
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.keras.engine.keras_tensor import KerasTensor
 
-
-class ModelLayerConnectionsProperties(Enum):
-    """
-    Enum class for model layer connections dict keys and it's type
-    """
-    INBOUND_NODES = 'inbound_nodes'
-    OUTPUT_TENSORS = 'output_tensors'
-    CALL_ARGS = 'call_args'
-    CALL_KWARGS = 'call_kwargs'
-    TYPE = typing.OrderedDict[typing.OrderedDict[str, typing.List[str]],
-                              typing.OrderedDict[str, typing.Union[KerasTensor, typing.List[KerasTensor]]]]
 
 class WeightTensorUtils:
     """
@@ -123,53 +109,3 @@ class WeightTensorUtils:
         param_tensors = layer.get_weights()
         weight_tensor = param_tensors[0]
         return np.amax(np.abs(weight_tensor), axis=axis)
-
-    @staticmethod
-    def get_weight_tensor_layer_mapping(model: tf.keras.Model) -> typing.Dict:
-        """
-        Get the mapping of weight tensor and layer
-        :param model: TensorFlow model
-        :return: Mapping of weight tensor and layer
-        """
-        # Dictionary for mapping layers weight tensors input, outputs, and call arguments
-        model_layer_connections = OrderedDict()
-        model_layer_connections[ModelLayerConnectionsProperties.INBOUND_NODES.value] = OrderedDict()
-        model_layer_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS.value] = OrderedDict()
-        model_layer_connections[ModelLayerConnectionsProperties.CALL_ARGS.value] = OrderedDict()
-        model_layer_connections[ModelLayerConnectionsProperties.CALL_KWARGS.value] = OrderedDict()
-
-        for current_layer in model.layers:
-            for outbound_node in current_layer.outbound_nodes:
-                outbound_layers_name = outbound_node.outbound_layer.name
-
-                # Get the inbound nodes for a given outbound layer
-                model_layer_connections[ModelLayerConnectionsProperties.INBOUND_NODES.value].update(
-                    {
-                        outbound_layers_name: [
-                            *model_layer_connections[ModelLayerConnectionsProperties.INBOUND_NODES.value].get(outbound_layers_name, []), current_layer.name
-                        ]
-                    }
-                )
-
-                # Get call args and kwargs for a given layer
-                model_layer_connections[ModelLayerConnectionsProperties.CALL_ARGS.value].update(
-                    {outbound_node.layer.name: outbound_node.call_args}
-                )
-                model_layer_connections[ModelLayerConnectionsProperties.CALL_KWARGS.value].update(
-                    {outbound_node.layer.name: outbound_node.call_kwargs}
-                )
-
-        return model_layer_connections
-
-    @staticmethod
-    def merge_model_layers_connections(model_layers_connections1: typing.Dict, model_layers_connections2: typing.Dict) -> typing.Dict:
-        """
-        Merge two network dictionaries
-        :param model_layers_connections1: The model layer connection dictionary 1
-        :param model_layers_connections2: The model layer connection dictionary 2
-        :return: Merged network dictionary
-        """
-        for key in model_layers_connections1:
-            model_layers_connections1[key].update(model_layers_connections2[key])
-
-        return model_layers_connections1
