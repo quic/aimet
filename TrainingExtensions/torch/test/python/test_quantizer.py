@@ -2016,7 +2016,7 @@ class TestQuantizationSimStaticGrad:
         assert sim.model.roberta_block.mask_add.output_quantizers[0].encoding.bw == 8
         assert sim.model.gpt_block.mask_add.output_quantizers[0].encoding.bw == 8
 
-    @pytest.mark.skipif(version.parse(torch.__version__) > version.parse('1.9.0'),
+    @pytest.mark.skipif(version.parse(torch.__version__) > version.parse('1.10.0'),
                         reason="number of exported encodings for activation differs")
     def test_encodings_propagation_simple_model(self):
         """
@@ -2070,7 +2070,7 @@ class TestQuantizationSimStaticGrad:
         assert len(encodings['activation_encodings']) == 1
         assert 't.1' in encodings['activation_encodings']
 
-    @pytest.mark.skipif(version.parse(torch.__version__) > version.parse('1.9.0'),
+    @pytest.mark.skipif(version.parse(torch.__version__) > version.parse('1.10.0'),
                         reason="number of exported encodings for activation differs")
     def test_encodings_propagation_lstm_model(self):
         """
@@ -3106,7 +3106,7 @@ class TestQuantizationSimLearnedGrid:
                 assert '.'.join(name.split('.')[:-1]) in module_names
         onnx.checker.check_model(onnx_model)
 
-    @pytest.mark.skipif(version.parse(torch.__version__) > version.parse('1.9.0'),
+    @pytest.mark.skipif(version.parse(torch.__version__) > version.parse('1.10.0'),
                         reason="number of exported encodings for activation differs")
     def test_quant_roi_model(self):
         roi_model = RoiModel(height=7, width=7, scale=0.25)

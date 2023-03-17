@@ -1002,19 +1002,8 @@ class OnnxSaver:
         temp_file = os.path.join(working_dir,
                                  'temp_onnx_model_with_markers.onnx' if not add_all_markers else
                                  'temp_onnx_model_with_all_markers.onnx')
-        if isinstance(onnx_export_args, OnnxExportApiArgs):
-            export_args = onnx_export_args.kwargs
-        else:
-            export_args = onnx_export_args
 
-        if is_conditional:
-            with aimet_torch.utils.in_eval_mode(model), torch.no_grad():
-                _ = model(*dummy_input)
-            scripted_model = torch.jit.script(model)
-            cls._export_model_to_onnx(scripted_model, dummy_input, temp_file, **export_args)
-        else:
-            cls._export_model_to_onnx(model, dummy_input, temp_file, **export_args)
-
+        cls._export_model_to_onnx(model, dummy_input, temp_file, is_conditional, onnx_export_args)
         return cls.load_simply_onnx_model(temp_file)
 
     @classmethod
@@ -1360,23 +1349,44 @@ class OnnxSaver:
 
     @staticmethod
     def _export_model_to_onnx(model: Union[torch.nn.Module, torch.jit.ScriptModule, torch.jit.ScriptFunction],
-                              dummy_input: Union[Tuple[Any, ...], torch.Tensor], temp_file: str, **export_args):
+                              dummy_input: Union[Tuple[Any, ...], torch.Tensor], temp_file: str, is_conditional: bool,
+                              onnx_export_args: OnnxExportApiArgs):
         """
         Export model to ONNX format.
 
-        NOTE: the ONNX checker is enabled by default in torch version 1.11 onwards and
-        'enabled_onnx_checker' argument is removed.
+        NOTE:
+        1) the ONNX checker is enabled by default in torch version 1.11 onwards and
+        'enabled_onnx_checker' argument is removed. thus, added try - except block to avoid onnx checker related
+         errors if any.
+
+        2) when torch.onnx.export() is called with ScriptModule/ScriptFunction, 'example_outputs' arg is required
+        to set so that the type and shape of the outputs can be captured without executing the model.
+        In torch version 1.11 onwards, 'example_outputs' is also removed and determined internally inside the export
+        function.
 
         :param model: model to be exported.
         :param dummy_input: dummy inputs to model.
         :param temp_file: A string containing file name.
-        :param export_args: Additional args.
+        :param is_conditional: True if model is a conditional model, False otherwise
+        :param onnx_export_args: Additional kwargs.
         """
+        # TODO: remove logic to support for older versions once we upgrade.
         # pylint: disable=no-member
+        kwargs = onnx_export_args.kwargs
+        if is_conditional:
+            with aimet_torch.utils.in_eval_mode(model), torch.no_grad():
+                dummy_output = model(*dummy_input)
+            model = torch.jit.script(model)
+            kwargs.update({'example_outputs': dummy_output})
+
         if version.parse(torch.__version__) < version.parse('1.11.0'):
-            torch.onnx.export(model, dummy_input, temp_file, enable_onnx_checker=False, **export_args)
+            kwargs.update({'enable_onnx_checker': False})
+            torch.onnx.export(model, dummy_input, temp_file, **kwargs)
         else:
             try:
-                torch.onnx.export(model, dummy_input, temp_file, **export_args)
+                remove_kwargs = ['enable_onnx_checker', 'example_outputs']
+                for key in remove_kwargs:
+                    kwargs.pop(key, None)
+                torch.onnx.export(model, dummy_input, temp_file, **kwargs)
             except torch.onnx.CheckerError:
                 _logger.warning("ONNX Checker has failed but ONNX graph is still generated.")
