@@ -2016,8 +2016,6 @@ class TestQuantizationSimStaticGrad:
         assert sim.model.roberta_block.mask_add.output_quantizers[0].encoding.bw == 8
         assert sim.model.gpt_block.mask_add.output_quantizers[0].encoding.bw == 8
 
-    @pytest.mark.skipif(version.parse(torch.__version__) > version.parse('1.10.0'),
-                        reason="number of exported encodings for activation differs")
     def test_encodings_propagation_simple_model(self):
         """
         Test encodings are propagated correctly when more than
@@ -2039,20 +2037,16 @@ class TestQuantizationSimStaticGrad:
         # Save encodings
         sim.export('./data', 'encodings_propagation_false', dummy_input)
         with open('./data/encodings_propagation_false.encodings') as f:
-            encodings = json.load(f)
-        assert len(encodings['activation_encodings']) == 2
-        assert 't.1' in encodings['activation_encodings']
-        assert '7' in encodings['activation_encodings']
+            encodings = json.load(f)['activation_encodings']
+            encodings = [{key: val} for key, val in encodings.items() if 'scale' in val[0]]
+            assert len(encodings) == 2
 
         # Save encodings again - now with propagate encodings flag enabled
         sim.export('./data', 'encodings_propagation_true', dummy_input, propagate_encodings=True)
         with open('./data/encodings_propagation_true.encodings') as f:
-            encodings = json.load(f)
-        assert len(encodings['activation_encodings']) == 4
-        assert '3' in encodings['activation_encodings']
-        assert 'min' not in encodings['activation_encodings']['3']
-        assert '4' in encodings['activation_encodings']
-        assert 'min' not in encodings['activation_encodings']['4']
+            encodings = json.load(f)['activation_encodings']
+            encodings = [{key: val} for key, val in encodings.items() if 'scale' in val[0]]
+            assert len(encodings) == 2
 
         pretty_data = json.dumps(encodings, indent=2)
         print(pretty_data)
@@ -2066,12 +2060,10 @@ class TestQuantizationSimStaticGrad:
         # Save encodings again - now with propagate encodings flag enabled
         sim.export('./data', 'encodings_propagation_quant_disabled', dummy_input, propagate_encodings=True)
         with open('./data/encodings_propagation_quant_disabled.encodings') as f:
-            encodings = json.load(f)
-        assert len(encodings['activation_encodings']) == 1
-        assert 't.1' in encodings['activation_encodings']
+            encodings = json.load(f)['activation_encodings']
+            encodings = [{key: val} for key, val in encodings.items() if 'scale' in val[0]]
+            assert len(encodings) == 1
 
-    @pytest.mark.skipif(version.parse(torch.__version__) > version.parse('1.10.0'),
-                        reason="number of exported encodings for activation differs")
     def test_encodings_propagation_lstm_model(self):
         """
         Test encodings are propagated correctly when more than
@@ -2099,10 +2091,11 @@ class TestQuantizationSimStaticGrad:
         # Save encodings again - now with propagate encodings flag enabled
         sim.export('./data', 'encodings_propagation_true', dummy_input, propagate_encodings=True)
         with open('./data/encodings_propagation_true.encodings') as f:
-            encodings = json.load(f)
-        assert len(encodings['activation_encodings']) == 25
-        # assert '3' in encodings['activation_encodings']
-        # assert '4' in encodings['activation_encodings']
+            encodings = json.load(f)['activation_encodings']
+            # Only eight entry should have min, max, delta and offset, remaining entries should be propagated
+            # with bitwidth and dtype.
+            encodings = [{key: val} for key, val in encodings.items() if 'scale' in val[0]]
+            assert len(encodings) == 8
 
         pretty_data = json.dumps(encodings, indent=2)
         print(pretty_data)
@@ -3106,8 +3099,6 @@ class TestQuantizationSimLearnedGrid:
                 assert '.'.join(name.split('.')[:-1]) in module_names
         onnx.checker.check_model(onnx_model)
 
-    @pytest.mark.skipif(version.parse(torch.__version__) > version.parse('1.10.0'),
-                        reason="number of exported encodings for activation differs")
     def test_quant_roi_model(self):
         roi_model = RoiModel(height=7, width=7, scale=0.25)
         x = torch.rand(1, 1, 6, 6)
@@ -3129,8 +3120,11 @@ class TestQuantizationSimLearnedGrid:
 
         with open('./data/roi_model.encodings') as json_file:
             encodings = json.load(json_file)['activation_encodings']
-            assert set(['5', '6', '7', '9', '11',]).issubset(encodings.keys())
-            assert 'scale' in encodings['11'][0]
+
+            # Only one entry should have min, max, delta and offset, remaining entries should be propagated
+            # with bitwidth and dtype.
+            encodings = [{key: val} for key, val in encodings.items() if 'scale' in val[0]]
+            assert len(encodings) == 1
 
     def test_attributes_mismatch_after_manual_change(self):
         """ Test to enusre that the attributes for quantizers are correctly set when modified manually """
