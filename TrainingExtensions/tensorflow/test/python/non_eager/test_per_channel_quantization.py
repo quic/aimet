@@ -1,7 +1,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -34,12 +34,14 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-import pytest
-import unittest
-import random
-import numpy as np
-import time
 import os
+import random
+import time
+import unittest
+
+import numpy as np
+import pytest
+
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import json
 import tensorflow as tf
@@ -1493,6 +1495,205 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
         sim.session.close()
         new_sess.close()
         del sim
+
+    def test_qc_quantize_op_gradient_computation_asymmetric(self):
+        """
+        test to validate tensorflow custom gradient computation when enabling symmetric quantization
+        against golden test data (in this case : an equivalent Pytorch test with auto grad)
+        """
+
+        graph = tf.Graph()
+        config = tf.compat.v1.ConfigProto(log_device_placement=False)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
+
+        with graph.as_default():
+            # placeholder for the input
+            with tf.device("/device:CPU:0"):
+                num_output_channels = 3
+                inp = tf.compat.v1.placeholder(tf.float32, shape=[1, 1, 2, num_output_channels], name='input')
+                # Assuming 3 output channels
+                tensor_quantizer_int64 = [None] * num_output_channels
+                tensor_quantizers = [None] * num_output_channels
+                # Create a tensor_quantizer per channel
+                for i in range(num_output_channels):
+                    tensor_quantizer = libpymo.TensorQuantizer(libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                                                               libpymo.RoundingMode.ROUND_NEAREST)
+
+                    tensor_quantizers[i] = tensor_quantizer
+                    val = libpymo.PtrToInt64(tensor_quantizer)
+                    tensor_quantizer_int64[i] = val
+
+                tensor_quant_ref = tf.Variable(tensor_quantizer_int64, trainable=False, dtype=tf.int64)
+
+                en_min = [-1.0, -2.5, -3.5]
+                en_max = [1.0, 2.5, 3.5]
+                encoding_min = tf.Variable(en_min,
+                                           trainable=True, dtype=tf.double)
+                encoding_max = tf.Variable(en_max,
+                                           trainable=True, dtype=tf.double)
+
+                bit_width = tf.Variable(initial_value=8, trainable=False, dtype=tf.int8)
+                use_symmetric_encoding = tf.Variable(initial_value=False, trainable=False, dtype=tf.bool)
+                is_int_data_type = tf.Variable(initial_value=True, trainable=False, dtype=tf.bool)
+
+                mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize),
+                                       trainable=False, dtype=tf.int32)
+                # axis handling for getting number of channels.
+                axis_handling = tf.Variable(initial_value=AxisHandling.LAST_AXIS.value, trainable=False, dtype=tf.int32)
+                is_training = tf.keras.backend.learning_phase()
+
+                sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
+                          encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer,
+                          is_int_data_type.initializer, axis_handling.initializer])
+
+                with graph.gradient_override_map(
+                        {"QcQuantizePerChannel": "QcQuantizePerChannelRangeLearningCustomGradient"}):
+                    pass_through_op_output = zero_out_module.qc_quantize_per_channel(name='quant_op', in_tensor=inp,
+                                                                                     op_mode=mode_var,
+                                                                                     tensor_quantizer_reference=tensor_quant_ref,
+                                                                                     encoding_min=encoding_min,
+                                                                                     encoding_max=encoding_max,
+                                                                                     bit_width=bit_width,
+                                                                                     use_symmetric_encoding=use_symmetric_encoding,
+                                                                                     is_int_data_type=is_int_data_type,
+                                                                                     axis_handling=axis_handling,
+                                                                                     is_training=is_training)
+
+                pass_through_op = graph.get_operation_by_name("quant_op")
+
+        inp_tensor = sess.graph.get_tensor_by_name('input:0')
+        inp_data = np.ones((1, 1, 2, num_output_channels))
+
+        inp_data[:, :, :, 0] *= 1.5
+        inp_data[:, :, :, 2] *= 4
+
+        # get the output data @todo match these
+        tensor_quantizer.isEncodingValid = True
+        mode_var.load(int(libpymo.TensorQuantizerOpMode.quantizeDequantize), sess)
+
+        actual_fake_quant_output = np.around(sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data}), 4)
+        expected_fake_quant_output = [[1.0039, 1.0039], [1.0000, 1.0000], [3.4863, 3.4863]]
+
+        with graph.as_default():
+            grads = tf.gradients(pass_through_op_output, [inp_tensor,
+                                                          pass_through_op.inputs[QuantizeOpIndices.encoding_min],
+                                                          pass_through_op.inputs[QuantizeOpIndices.encoding_max]])
+            _, actual_encoding_min_grad, actual_encoding_max_grad = sess.run(grads, feed_dict={inp_tensor: inp_data})
+
+            expected_encoding_max_grad = [2.0039, 0.0000, 1.9961]
+            expected_encoding_min_grad = [-0.0039, 0.0000, 0.0039]
+
+            actual_encoding_max_grad = np.around(actual_encoding_max_grad, 4)
+            actual_encoding_min_grad = np.around(actual_encoding_min_grad, 4)
+
+            for expected, actual in zip(expected_encoding_max_grad, actual_encoding_max_grad):
+                self.assertAlmostEqual(expected, actual)
+
+            for expected, actual in zip(expected_encoding_min_grad, actual_encoding_min_grad):
+                self.assertAlmostEqual(expected, actual)
+
+        sess.close()
+
+    def test_qc_quantize_op_gradient_computation_symmetric(self):
+        """
+        test to validate tensorflow custom gradient computation when enabling symmetric quantization
+        against golden test data (in this case : an equivalent Pytorch test with auto grad)
+        """
+
+        graph = tf.Graph()
+        config = tf.compat.v1.ConfigProto(log_device_placement=False)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
+
+        with graph.as_default():
+            # placeholder for the input
+            with tf.device("/device:CPU:0"):
+                num_output_channels = 3
+                inp = tf.compat.v1.placeholder(tf.float32, shape=[1, 1, 2, num_output_channels], name='input')
+                # Assuming 3 output channels
+                tensor_quantizer_int64 = [None] * num_output_channels
+                tensor_quantizers = [None] * num_output_channels
+                # Create a tensor_quantizer per channel
+                for i in range(num_output_channels):
+                    tensor_quantizer = libpymo.TensorQuantizer(libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                                                               libpymo.RoundingMode.ROUND_NEAREST)
+
+                    tensor_quantizers[i] = tensor_quantizer
+                    val = libpymo.PtrToInt64(tensor_quantizer)
+                    tensor_quantizer_int64[i] = val
+
+                tensor_quant_ref = tf.Variable(tensor_quantizer_int64, trainable=False, dtype=tf.int64)
+
+                en_min = [-1.0, -2.5, -3.5]
+                en_max = [1.0, 2.5, 3.5]
+                encoding_min = tf.Variable(en_min,
+                                           trainable=True, dtype=tf.double)
+                encoding_max = tf.Variable(en_max,
+                                           trainable=True, dtype=tf.double)
+
+                bit_width = tf.Variable(initial_value=8, trainable=False, dtype=tf.int8)
+                use_symmetric_encoding = tf.Variable(initial_value=True, trainable=False, dtype=tf.bool)
+                is_int_data_type = tf.Variable(initial_value=True, trainable=False, dtype=tf.bool)
+
+                mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize),
+                                       trainable=False, dtype=tf.int32)
+                # axis handling for getting number of channels.
+                axis_handling = tf.Variable(initial_value=AxisHandling.LAST_AXIS.value, trainable=False, dtype=tf.int32)
+                is_training = tf.keras.backend.learning_phase()
+
+                sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
+                          encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer,
+                          is_int_data_type.initializer, axis_handling.initializer])
+
+                with graph.gradient_override_map(
+                        {"QcQuantizePerChannel": "QcQuantizePerChannelRangeLearningCustomGradient"}):
+                    pass_through_op_output = zero_out_module.qc_quantize_per_channel(name='quant_op', in_tensor=inp,
+                                                                                     op_mode=mode_var,
+                                                                                     tensor_quantizer_reference=tensor_quant_ref,
+                                                                                     encoding_min=encoding_min,
+                                                                                     encoding_max=encoding_max,
+                                                                                     bit_width=bit_width,
+                                                                                     use_symmetric_encoding=use_symmetric_encoding,
+                                                                                     is_int_data_type=is_int_data_type,
+                                                                                     axis_handling=axis_handling,
+                                                                                     is_training=is_training)
+
+                pass_through_op = graph.get_operation_by_name("quant_op")
+
+        inp_tensor = sess.graph.get_tensor_by_name('input:0')
+        inp_data = np.ones((1, 1, 2, num_output_channels))
+
+        inp_data[:, :, :, 0] *= 1.5
+        inp_data[:, :, :, 2] *= 4
+
+        # get the output data @todo match these
+        tensor_quantizer.isEncodingValid = True
+        mode_var.load(int(libpymo.TensorQuantizerOpMode.quantizeDequantize), sess)
+
+        actual_fake_quant_output = np.around(sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data}), 4)
+        expected_fake_quant_output = [[1.0000, 1.0000], [1.0039, 1.0039], [3.5000, 3.5000]]
+
+        with graph.as_default():
+            grads = tf.gradients(pass_through_op_output, [inp_tensor,
+                                                          pass_through_op.inputs[QuantizeOpIndices.encoding_min],
+                                                          pass_through_op.inputs[QuantizeOpIndices.encoding_max]])
+            _, actual_encoding_min_grad, actual_encoding_max_grad = sess.run(grads, feed_dict={inp_tensor: inp_data})
+
+            expected_encoding_max_grad = [2.0000, 0.0031, 2.0000]
+            expected_encoding_min_grad = [-2.0000, -0.0031, -2.0000]
+
+            actual_encoding_max_grad = np.around(actual_encoding_max_grad, 4)
+            actual_encoding_min_grad = np.around(actual_encoding_min_grad, 4)
+
+            for expected, actual in zip(expected_encoding_max_grad, actual_encoding_max_grad):
+                self.assertAlmostEqual(expected, actual)
+
+            for expected, actual in zip(expected_encoding_min_grad, actual_encoding_min_grad):
+                self.assertAlmostEqual(expected, actual)
+
+            for expected, actual in zip(actual_encoding_max_grad, actual_encoding_min_grad):
+                self.assertAlmostEqual(expected, -actual)
+
+        sess.close()
 
 
 def save_config_file_for_per_channel_quantization():

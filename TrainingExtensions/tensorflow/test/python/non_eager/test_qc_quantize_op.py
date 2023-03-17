@@ -33,10 +33,11 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
-import pytest
-import numpy as np
 import os
+
+import numpy as np
+import pytest
+
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import tensorflow as tf
 import aimet_common.libpymo as libpymo
@@ -734,9 +735,6 @@ class TestTrainingExtensionsQcQuantizeOpGradient:
         """
         test to validate tensorflow quantize op straight through estimator gradient computation
         """
-
-        from aimet_tensorflow import quantsim_straight_through_grad
-
         graph = tf.Graph()
         config = tf.compat.v1.ConfigProto(log_device_placement=False)
         sess = tf.compat.v1.Session(graph=graph, config=config)
@@ -928,5 +926,87 @@ class TestTrainingExtensionsQcQuantizeOpGradient:
             expected_enc_max_after_train = 5.000057220458984
             assert np.allclose(tf_enc_min_after_train, expected_enc_min_after_train, atol=1e-6)
             assert np.allclose(tf_enc_max_after_train, expected_enc_max_after_train, atol=1e-6)
+
+        sess.close()
+
+    @pytest.mark.parametrize(
+        "use_symmetric_flag, is_strict_symmetric, expected_encoding_min_grad, expected_encoding_max_grad",
+        [
+            (False, False, 2.991931438, 3.008068085),
+            (True, False, 0.027988523, -0.027988523),
+        ]
+    )
+    def test_qc_quantize_op_gradient_computation_with_various_flag(self,
+                                                                   use_symmetric_flag,
+                                                                   is_strict_symmetric,
+                                                                   expected_encoding_min_grad,
+                                                                   expected_encoding_max_grad):
+        """
+        test to validate tensorflow custom gradient computation
+        against golden test data (in this case : an equivalent Pytorch test with auto grad)
+        """
+
+        graph = tf.Graph()
+        config = tf.compat.v1.ConfigProto(log_device_placement=False)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
+
+        with graph.as_default():
+            # placeholder for the input
+            with tf.device("/device:CPU:0"):
+                inp = tf.compat.v1.placeholder(tf.float32, shape=[4, 2], name='input')
+                tensor_quantizer = libpymo.TensorQuantizer(libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                                                           libpymo.RoundingMode.ROUND_NEAREST)
+
+                tensor_quantizer_val = libpymo.PtrToInt64(tensor_quantizer)
+                tensor_quant_ref = tf.Variable(initial_value=tensor_quantizer_val, trainable=False, dtype=tf.int64)
+
+                mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize),
+                                       trainable=False, dtype=tf.int32)
+
+                # fix min max and bitwidth to be used
+                encoding_min = tf.Variable(initial_value=-5.0, trainable=True, dtype=tf.double)
+                encoding_max = tf.Variable(initial_value=5.0, trainable=True, dtype=tf.double)
+                bit_width = tf.Variable(initial_value=8, trainable=False, dtype=tf.int8)
+                use_symmetric_encoding = tf.Variable(initial_value=use_symmetric_flag, trainable=False, dtype=tf.bool)
+                is_int_data_type = tf.Variable(initial_value=True, trainable=False, dtype=tf.bool)
+
+                sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
+                          encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer,
+                          is_int_data_type.initializer])
+
+                with graph.gradient_override_map(
+                        {"QcQuantize": "QcQuantizeRangeLearningCustomGradient"}):
+                    pass_through_op_output = zero_out_module.qc_quantize(name="quant_op", in_tensor=inp,
+                                                                         op_mode=mode_var,
+                                                                         tensor_quantizer_reference=tensor_quant_ref,
+                                                                         encoding_min=encoding_min,
+                                                                         encoding_max=encoding_max,
+                                                                         bit_width=bit_width,
+                                                                         use_symmetric_encoding=use_symmetric_encoding,
+                                                                         is_int_data_type=is_int_data_type)
+
+                pass_through_op = graph.get_operation_by_name("quant_op")
+
+        inp_tensor = sess.graph.get_tensor_by_name("input:0")
+        # fixed input data used
+        inp_data = [[7.4581, -6.4829], [1.3125, 5.6150], [-6.4521, 10.7882], [2.5676, -7.7524]]
+
+        # get the output data @todo match these
+        tensor_quantizer.isEncodingValid = True
+        mode_var.load(int(libpymo.TensorQuantizerOpMode.quantizeDequantize), sess)
+
+        with graph.as_default():
+            grads = tf.gradients(pass_through_op_output, [inp_tensor,
+                                                          pass_through_op.inputs[
+                                                              QuantizeOpIndices.encoding_min],
+                                                          pass_through_op.inputs[
+                                                              QuantizeOpIndices.encoding_max]])
+            _, actual_encoding_min_grad, actual_encoding_max_grad = sess.run(grads, feed_dict={inp_tensor: inp_data})
+
+            assert np.allclose(expected_encoding_max_grad, actual_encoding_max_grad)
+            assert np.allclose(expected_encoding_min_grad, actual_encoding_min_grad)
+
+            if use_symmetric_flag:
+                assert np.allclose(actual_encoding_min_grad, -actual_encoding_max_grad)
 
         sess.close()
