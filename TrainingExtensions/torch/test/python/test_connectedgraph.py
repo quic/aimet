@@ -696,7 +696,7 @@ class TestConnectedGraphUtils(unittest.TestCase):
 
         # 1) Conv2d
         dummy_input = torch.randn(1, 3, 4, 4)
-        conv = torch.nn.Conv2d(3, 3, 2)
+        conv = torch.nn.Conv2d(3, 3, 2).eval()
         print(conv.__class__)
         trace = torch.jit.trace(conv, dummy_input)
         nodes = ConnectedGraph._find_aten_nodes_in_forward_pass(trace)
@@ -704,14 +704,14 @@ class TestConnectedGraphUtils(unittest.TestCase):
 
         # 2) ReLU
         dummy_input = torch.randn(1, 3, 4, 4)
-        relu = torch.nn.ReLU(inplace=True)
+        relu = torch.nn.ReLU(inplace=True).eval()
         trace = torch.jit.trace(relu, dummy_input)
         nodes = ConnectedGraph._find_aten_nodes_in_forward_pass(trace)
         assert len(nodes) == 1
 
         # 3) BatchNorm2d
         dummy_input = torch.randn(1, 3, 4, 4)
-        bn = torch.nn.BatchNorm2d(3)
+        bn = torch.nn.BatchNorm2d(3).eval()
         trace = torch.jit.trace(bn, dummy_input)
         nodes = ConnectedGraph._find_aten_nodes_in_forward_pass(trace)
         assert len(nodes) == 1

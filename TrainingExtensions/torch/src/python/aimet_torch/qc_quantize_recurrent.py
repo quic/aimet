@@ -893,13 +893,14 @@ def _get_flipped_input_for_reverse_pass(inputs: torch.Tensor, packed_sequence_in
     # 10 7 4 1 X
     # 8  5 2 X X
     inputs = torch.flip(inputs, [0])
+    # Clone the tensor to avoid runtime error since input tensor and written-to tensor shares the same memory location.
+    inputs_copy = inputs.clone()
     if packed_sequence_info:
         sorted_lens = packed_sequence_info.sorted_sequence_lens
         for i, sequence_length in enumerate(sorted_lens):
             if sequence_length < steps:
-                inputs[:, i][:sequence_length] = \
-                    inputs[:, i][steps - sequence_length:]
-    return inputs
+                inputs_copy[:, i][:sequence_length] = inputs[:, i][steps - sequence_length:]
+    return inputs_copy
 
 
 def _replace_appropriate_hidden_state_rows(hidden_state: Union[Tuple[torch.Tensor, torch.Tensor]],
