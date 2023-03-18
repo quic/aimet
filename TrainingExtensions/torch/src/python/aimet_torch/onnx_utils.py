@@ -41,7 +41,7 @@
 """ Utilities to load and save onnx models """
 
 from dataclasses import dataclass
-from typing import Union, List, Tuple, Dict, Set, Optional
+from typing import Union, List, Tuple, Dict, Set, Optional, Any
 import os
 import copy
 from collections import defaultdict, deque
@@ -581,7 +581,10 @@ class OnnxSaver:
                 break
 
             if pt_module_name is not None and '#' not in leaf_only_node.name and leaf_only_node.name != pt_module_name:
-                leaf_only_node.name = f'{pt_module_name}.{leaf_only_node.name}'
+                if 'marked_module' in leaf_only_node.name:
+                    leaf_only_node.name = cls._get_updated_name(leaf_only_node.name)
+                else:
+                    leaf_only_node.name = f'{pt_module_name}.{leaf_only_node.name}'
 
             i += 1
 
@@ -834,26 +837,32 @@ class OnnxSaver:
                 ini.name = name
 
     @classmethod
-    def _remove_marked_module_string_from_node_input_names(cls, onnx_graph):
+    def _remove_marked_module_string_from_node_inp_out_names(cls, onnx_graph):
         """
-        Remove 'marked_module' from all node input names. Also recursively updates subgraph node input names.
-        :param onnx_graph: Onnx graph containing nodes and subgraphs to modify
+        Remove 'marked_module' from all node's input and output names. Also, recursively updates subgraph node's
+        input and output names.
+
+        Examples:
+        PyTorch version 1.9:
+        1) 'layer1.marked_module.0.marked_module.conv2.marked_module.weight' --> 'layer1.0.conv2.weight'
+
+        PyTorch version 1.9 onwards:
+        1) '/layer1/marked_module/0/marked_module/conv2/marked_module/Conv_output_0' --> /layer1/0/conv2/Conv_output_0
+        2) '/layer1/0/relu/marked_module_1/Relu_output_0' --> '/layer1/0/relu_1/Relu_output_0'
+
+        :param onnx_graph: Onnx graph containing nodes and subgraph to modify
         """
         for node in onnx_graph.node:
-            indices_to_replace = []
-            for index, inp_tensor in enumerate(node.input):
-                if 'marked_module' in inp_tensor:
-                    indices_to_replace.append(index)
+            for index, param_name in enumerate(node.input):
+                node.input[index] = cls._get_updated_name(param_name)
 
-            for index in indices_to_replace:
-                param_name = node.input[index]
-                node.input.remove(param_name)
-                node.input.insert(index, param_name.replace('marked_module.', ''))
+            for index, param_name in enumerate(node.output):
+                node.output[index] = cls._get_updated_name(param_name)
 
         for node in onnx_graph.node:
             for attribute in node.attribute:
                 if getattr(attribute, 'g', None) is not None:
-                    cls._remove_marked_module_string_from_node_input_names(attribute.g)
+                    cls._remove_marked_module_string_from_node_inp_out_names(attribute.g)
 
     @classmethod
     def _fix_param_names(cls, onnx_model):
@@ -865,7 +874,7 @@ class OnnxSaver:
         cls._remove_marked_module_string_from_initializer_names(onnx_model)
 
         # Change the references to initializers in each node
-        cls._remove_marked_module_string_from_node_input_names(onnx_model.graph)
+        cls._remove_marked_module_string_from_node_inp_out_names(onnx_model.graph)
 
     @classmethod
     def _remove_detached_nodes_from_onnx_graph(cls, onnx_graph: onnx.GraphProto):
@@ -993,20 +1002,8 @@ class OnnxSaver:
         temp_file = os.path.join(working_dir,
                                  'temp_onnx_model_with_markers.onnx' if not add_all_markers else
                                  'temp_onnx_model_with_all_markers.onnx')
-        if isinstance(onnx_export_args, OnnxExportApiArgs):
-            export_args = onnx_export_args.kwargs
-        else:
-            export_args = onnx_export_args
 
-        if is_conditional:
-            with aimet_torch.utils.in_eval_mode(model), torch.no_grad():
-                dummy_output = model(*dummy_input)
-            scripted_model = torch.jit.script(model)
-            torch.onnx.export(scripted_model, dummy_input, temp_file, example_outputs=dummy_output, **export_args)
-        else:
-            torch.onnx.export(model, dummy_input, temp_file,
-                              **export_args)
-
+        cls._export_model_to_onnx(model, dummy_input, temp_file, is_conditional, onnx_export_args)
         return cls.load_simply_onnx_model(temp_file)
 
     @classmethod
@@ -1334,3 +1331,62 @@ class OnnxSaver:
         cls._collate_io_tensors_for_multi_layer_recurrent_nodes(onnx_model, node_to_io_tensor_name_map)
 
         return node_to_io_tensor_name_map, valid_param_set
+
+    @staticmethod
+    def _get_updated_name(name: str) -> str:
+        """
+        Remove 'marked_module' from given name.
+        :param name: Name.
+        :return: Updated name.
+        """
+        if 'marked_module.' in name:
+            name = name.replace('marked_module.', '')
+        if 'marked_module/' in name:
+            name = name.replace('marked_module/', '')
+        if '/marked_module' in name:
+            name = name.replace('/marked_module', '')
+        return name
+
+    @staticmethod
+    def _export_model_to_onnx(model: Union[torch.nn.Module, torch.jit.ScriptModule, torch.jit.ScriptFunction],
+                              dummy_input: Union[Tuple[Any, ...], torch.Tensor], temp_file: str, is_conditional: bool,
+                              onnx_export_args: OnnxExportApiArgs):
+        """
+        Export model to ONNX format.
+
+        NOTE:
+        1) the ONNX checker is enabled by default in torch version 1.11 onwards and
+        'enabled_onnx_checker' argument is removed. thus, added try - except block to avoid onnx checker related
+         errors if any.
+
+        2) when torch.onnx.export() is called with ScriptModule/ScriptFunction, 'example_outputs' arg is required
+        to set so that the type and shape of the outputs can be captured without executing the model.
+        In torch version 1.11 onwards, 'example_outputs' is also removed and determined internally inside the export
+        function.
+
+        :param model: model to be exported.
+        :param dummy_input: dummy inputs to model.
+        :param temp_file: A string containing file name.
+        :param is_conditional: True if model is a conditional model, False otherwise
+        :param onnx_export_args: Additional kwargs.
+        """
+        # TODO: remove logic to support for older versions once we upgrade.
+        # pylint: disable=no-member
+        kwargs = onnx_export_args.kwargs
+        if is_conditional:
+            with aimet_torch.utils.in_eval_mode(model), torch.no_grad():
+                dummy_output = model(*dummy_input)
+            model = torch.jit.script(model)
+            kwargs.update({'example_outputs': dummy_output})
+
+        if version.parse(torch.__version__) < version.parse('1.11.0'):
+            kwargs.update({'enable_onnx_checker': False})
+            torch.onnx.export(model, dummy_input, temp_file, **kwargs)
+        else:
+            try:
+                remove_kwargs = ['enable_onnx_checker', 'example_outputs']
+                for key in remove_kwargs:
+                    kwargs.pop(key, None)
+                torch.onnx.export(model, dummy_input, temp_file, **kwargs)
+            except torch.onnx.CheckerError:
+                _logger.warning("ONNX Checker has failed but ONNX graph is still generated.")
