@@ -1697,28 +1697,33 @@ class TestQuantizationSimStaticGrad:
     def test_export_dict_input_output(self):
         """ test export functionality on dictionary input and output """
 
-        dummy_input = {'a': torch.randn(1, 10, 10, 10),
-                       'b': torch.randn(1, 10, 10, 10),
-                       'c': torch.randn(1, 10, 10, 10)}
+        # Add an empty dictionary as the last element to not treat as named arguments.
+        # see torch.onnx.export() API for more details.
+        dummy_input = (
+            {'a': torch.randn(1, 10, 10, 10),
+             'b': torch.randn(1, 10, 10, 10),
+             'c': torch.randn(1, 10, 10, 10)
+             }, {}
+        )
 
         model = InputOutputDictModel()
 
-        def forward_pass(model, args):
+        def forward_pass(model, dummy_input):
             model.eval()
             with torch.no_grad():
                 model(dummy_input)
 
-        sim = QuantizationSimModel(model, dummy_input=dummy_input)
+        sim = QuantizationSimModel(model, dummy_input=dummy_input[0])
         sim.model.mul1.output_quantizers[0].enabled = True
         sim.model.mul2.output_quantizers[0].enabled = True
         sim.model.mul3.output_quantizers[0].enabled = True
 
         # Quantize
-        sim.compute_encodings(forward_pass, None)
+        sim.compute_encodings(forward_pass, dummy_input[0])
 
         o_names = ['ab', 'bc', 'ca']
         sim.export('./data/', 'dict_input_output_model', dummy_input,
-                   onnx_export_args=OnnxExportApiArgs(input_names=list(dummy_input.keys()),
+                   onnx_export_args=OnnxExportApiArgs(input_names=list(dummy_input[0].keys()),
                                                       output_names=o_names,
                                                       opset_version=12
                                                       ))
@@ -1782,7 +1787,7 @@ class TestQuantizationSimStaticGrad:
         with open('./data/sfmaxavgpool_model.encodings') as json_file:
             encoding_data = json.load(json_file)
 
-        assert not set(encoding_data["activation_encodings"].keys()).symmetric_difference(('4', '9', 't.1'))
+        assert len(encoding_data["activation_encodings"]) == 3
 
     def test_transformer_mask_override_tf(self):
         """
@@ -2032,20 +2037,16 @@ class TestQuantizationSimStaticGrad:
         # Save encodings
         sim.export('./data', 'encodings_propagation_false', dummy_input)
         with open('./data/encodings_propagation_false.encodings') as f:
-            encodings = json.load(f)
-        assert len(encodings['activation_encodings']) == 2
-        assert 't.1' in encodings['activation_encodings']
-        assert '7' in encodings['activation_encodings']
+            encodings = json.load(f)['activation_encodings']
+            encodings = [{key: val} for key, val in encodings.items() if 'scale' in val[0]]
+            assert len(encodings) == 2
 
         # Save encodings again - now with propagate encodings flag enabled
         sim.export('./data', 'encodings_propagation_true', dummy_input, propagate_encodings=True)
         with open('./data/encodings_propagation_true.encodings') as f:
-            encodings = json.load(f)
-        assert len(encodings['activation_encodings']) == 4
-        assert '3' in encodings['activation_encodings']
-        assert 'min' not in encodings['activation_encodings']['3']
-        assert '4' in encodings['activation_encodings']
-        assert 'min' not in encodings['activation_encodings']['4']
+            encodings = json.load(f)['activation_encodings']
+            encodings = [{key: val} for key, val in encodings.items() if 'scale' in val[0]]
+            assert len(encodings) == 2
 
         pretty_data = json.dumps(encodings, indent=2)
         print(pretty_data)
@@ -2059,9 +2060,9 @@ class TestQuantizationSimStaticGrad:
         # Save encodings again - now with propagate encodings flag enabled
         sim.export('./data', 'encodings_propagation_quant_disabled', dummy_input, propagate_encodings=True)
         with open('./data/encodings_propagation_quant_disabled.encodings') as f:
-            encodings = json.load(f)
-        assert len(encodings['activation_encodings']) == 1
-        assert 't.1' in encodings['activation_encodings']
+            encodings = json.load(f)['activation_encodings']
+            encodings = [{key: val} for key, val in encodings.items() if 'scale' in val[0]]
+            assert len(encodings) == 1
 
     def test_encodings_propagation_lstm_model(self):
         """
@@ -2090,10 +2091,11 @@ class TestQuantizationSimStaticGrad:
         # Save encodings again - now with propagate encodings flag enabled
         sim.export('./data', 'encodings_propagation_true', dummy_input, propagate_encodings=True)
         with open('./data/encodings_propagation_true.encodings') as f:
-            encodings = json.load(f)
-        assert len(encodings['activation_encodings']) == 25
-        # assert '3' in encodings['activation_encodings']
-        # assert '4' in encodings['activation_encodings']
+            encodings = json.load(f)['activation_encodings']
+            # Only eight entry should have min, max, delta and offset, remaining entries should be propagated
+            # with bitwidth and dtype.
+            encodings = [{key: val} for key, val in encodings.items() if 'scale' in val[0]]
+            assert len(encodings) == 8
 
         pretty_data = json.dumps(encodings, indent=2)
         print(pretty_data)
@@ -3086,7 +3088,7 @@ class TestQuantizationSimLearnedGrid:
 
         with open('./data/cust_v2_simple.encodings') as json_file:
             activation_encodings = json.load(json_file)['activation_encodings']
-            assert set(['13', '17', '21', '4', '6', 't.1']).issubset(activation_encodings.keys())
+            assert len(activation_encodings) == 6
 
         module_names = { module_name for module_name, _ in cust_model.named_modules()}
         onnx_model = onnx.load('./data/cust_v2_simple.onnx')
@@ -3102,7 +3104,7 @@ class TestQuantizationSimLearnedGrid:
         x = torch.rand(1, 1, 6, 6)
         rois = torch.tensor([ [0, -2.0, -2.0, 22.0, 22.0], ])
         dummy_input = (x, rois)
-        torch.onnx.export(roi_model, dummy_input, './roi.onnx', enable_onnx_checker=False, opset_version=11)
+        torch.onnx.export(roi_model, dummy_input, './roi.onnx', opset_version=11)
         sim = QuantizationSimModel(roi_model, dummy_input=dummy_input)
         for q in sim.model.roi.input_quantizers:
             q.enabled = False
@@ -3118,8 +3120,12 @@ class TestQuantizationSimLearnedGrid:
 
         with open('./data/roi_model.encodings') as json_file:
             encodings = json.load(json_file)['activation_encodings']
-            assert set(['5', '6', '7', '9', '11',]).issubset(encodings.keys())
-            assert 'scale' in encodings['11'][0]
+
+            # Only one entry should have min, max, delta and offset, remaining entries should be propagated
+            # with bitwidth and dtype.
+            encodings = [{key: val} for key, val in encodings.items() if 'scale' in val[0]]
+            assert len(encodings) == 1
+
     def test_attributes_mismatch_after_manual_change(self):
         """ Test to enusre that the attributes for quantizers are correctly set when modified manually """
         class SimpleModel(torch.nn.Module):

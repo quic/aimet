@@ -41,7 +41,8 @@ import os
 import json
 import tempfile
 import unittest
-
+import pytest
+from packaging import version
 import onnx
 import torch
 import numpy as np
@@ -581,6 +582,6 @@ class TestQuantizationSimTransformers(unittest.TestCase):
             # verify that MHA layers are named in onnx export.
             onnx_path= os.path.join(tmpdir, 'transformer.onnx')
             onnx_model = onnx.load(onnx_path)
-            mha_names = { '.'.join(n.name.split('#')[0].split('.')[:-1]) for n in onnx_model.graph.node  if 'self_attn' in n.name }
+            mha_names = { '.'.join(n.name.split('#')[0].split('.')[:-1]) for n in onnx_model.graph.node
+                          if 'self_attn.' in n.name }
             assert len(mha_names) == default_num_decoder_layers + num_encoder_layers
-

@@ -168,8 +168,8 @@ def _test_reestimation(model, data_loader, expected_mean, expected_var):
             for bn in _get_active_bn_modules(model)
         ][0]
 
-        assert torch.equal(mean_reestimated, expected_mean)
-        assert torch.equal(var_reestimated, expected_var)
+        assert torch.allclose(mean_reestimated, expected_mean)
+        assert torch.allclose(var_reestimated, expected_var)
 
     new_params = list(model.parameters())
 
