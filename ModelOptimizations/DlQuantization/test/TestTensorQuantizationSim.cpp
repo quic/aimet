@@ -428,3 +428,23 @@ TEST(TestTensorQuantizationSim, SanityTestFillEncodingInfo)
     EXPECT_DOUBLE_EQ(encoding.min, expectedEncodingMin);
     EXPECT_DOUBLE_EQ(encoding.max, expectedEncodingMax);
 }
+
+TEST(TestTensorQuantizationSim, SanityTestFillEncodingInfoNumStepsChange)
+{
+    DlQuantization::TfEncoding encoding = DlQuantization::TfEncoding();
+    encoding.min    = -5;
+    encoding.max    = 5;
+    encoding.delta  = DlQuantization::computeDelta(encoding.min, encoding.max, 7);
+    encoding.offset = DlQuantization::computeOffset(encoding.min, encoding.delta);
+    encoding.bw     = 3;
+
+    DlQuantization::TensorQuantizationSim<float> sim;
+
+    sim.fillEncodingInfo(encoding, encoding.bw, encoding.min, encoding.max);
+
+    double expectedEncodingMin = -5;
+    double expectedEncodingMax = 5;
+
+    EXPECT_DOUBLE_EQ(encoding.min, expectedEncodingMin);
+    EXPECT_DOUBLE_EQ(encoding.max, expectedEncodingMax);
+}
