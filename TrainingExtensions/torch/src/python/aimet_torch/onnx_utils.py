@@ -319,7 +319,7 @@ class OnnxSaver:
     @classmethod
     def set_node_names(cls, onnx_model_path: str, pytorch_model: torch.nn.Module,
                        dummy_input: Union[torch.Tensor, Tuple], is_conditional=False, module_marker_map=None,
-                       onnx_export_args: OnnxExportApiArgs = None):
+                       onnx_export_args: Optional[Union[OnnxExportApiArgs, dict]] = None):
         """
         This utility loads a given onnx model file and set the names of all the nodes (ops) to equivalent
         pytorch module names given the corresponding pytorch model.
@@ -528,7 +528,7 @@ class OnnxSaver:
     def _update_non_leaf_pytorch_modules_onnx_nodes_names(cls, pt_model: torch.nn.Module,
                                                           dummy_input,
                                                           working_dir: str,
-                                                          onnx_export_args: OnnxExportApiArgs,
+                                                          onnx_export_args: Union[OnnxExportApiArgs, dict],
                                                           is_conditional: bool,
                                                           module_marker_map,
                                                           onnx_model_all_marker: Optional[onnx.ModelProto],
@@ -1350,7 +1350,7 @@ class OnnxSaver:
     @staticmethod
     def _export_model_to_onnx(model: Union[torch.nn.Module, torch.jit.ScriptModule, torch.jit.ScriptFunction],
                               dummy_input: Union[Tuple[Any, ...], torch.Tensor], temp_file: str, is_conditional: bool,
-                              onnx_export_args: OnnxExportApiArgs):
+                              onnx_export_args: Union[OnnxExportApiArgs, dict]):
         """
         Export model to ONNX format.
 
@@ -1372,7 +1372,11 @@ class OnnxSaver:
         """
         # TODO: remove logic to support for older versions once we upgrade.
         # pylint: disable=no-member
-        kwargs = onnx_export_args.kwargs
+        if isinstance(onnx_export_args, OnnxExportApiArgs):
+            kwargs = onnx_export_args.kwargs
+        else:
+            kwargs = onnx_export_args
+
         if is_conditional:
             with aimet_torch.utils.in_eval_mode(model), torch.no_grad():
                 dummy_output = model(*dummy_input)
