@@ -36,6 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 import contextlib
+import copy
 import os
 import logging
 from collections import defaultdict
@@ -597,7 +598,8 @@ class TestOnnxUtils:
         if os.path.exists(onnx_path):
             os.remove(onnx_path)
 
-    def test_set_node_name_for_matmul_add_linear(self):
+    @pytest.mark.parametrize("export_args", [None, {"opset_version": 12}])
+    def test_set_node_name_for_matmul_add_linear(self, export_args):
         """
         Test that node names are set correctly for linear ops turned into matmul/add in onnx.
         """
@@ -613,7 +615,7 @@ class TestOnnxUtils:
         model = Linear()
         # Using an input to linear op with dimension != 2 causes torch to use matmul->add instead of gemm op
         onnx_path = './data/MyModel.onnx'
-        onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input=torch.randn(1, 1, 3))
+        onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input=torch.randn(1, 1, 3), onnx_export_args=copy.deepcopy(export_args))
         onnx_model = onnx.load(onnx_path)
         expected_node_names = ['linear', 'linear#1.end']
 
@@ -627,7 +629,7 @@ class TestOnnxUtils:
             assert name in valid_param_set
 
         # Check that gemm still works as expected
-        onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input=torch.randn(1, 3))
+        onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input=torch.randn(1, 3), onnx_export_args=copy.deepcopy(export_args))
         onnx_model = onnx.load(onnx_path)
 
         actual_node_names = [node.name for node in onnx_model.graph.node]
