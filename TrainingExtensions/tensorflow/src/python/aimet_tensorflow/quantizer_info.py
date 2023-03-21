@@ -46,7 +46,7 @@ import numpy as np
 
 import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme, QuantizationDataType, RANGE_LEARNING_SCHEMES
-from aimet_common.quantsim import calculate_delta_offset
+from aimet_common.quantsim import calculate_delta_offset, compute_min_max_given_delta_offset
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 
 
@@ -472,21 +472,11 @@ class QuantizerInfo:
         def _create_encoding_object(min_val, max_val, bitwidth, is_symmetric, use_strict_symmetric):
             """ Creates a libpymo encoding object """
             encoding = libpymo.TfEncoding()
-            encoding.min = min_val
-            encoding.max = max_val
             encoding.bw = bitwidth
             encoding.delta, encoding.offset = calculate_delta_offset(min_val, max_val, bitwidth,
                                                                      is_symmetric, use_strict_symmetric)
-
-            # NOTE: Since we proceeded to strict symmetric way during the range learning
-            #   we need to calibrate min and offset when the actual value is needed
-            # Before calibrating, encoding holds encoding_min == -encoding_max which is symmetric
-            #   we will add one more bin to both encoding_min and offset to get non-strict symmetric encoding
-            if self._quant_scheme in RANGE_LEARNING_SCHEMES and \
-                    is_symmetric and not use_strict_symmetric:
-                encoding.min -= encoding.delta
-                encoding.offset -= 1
-
+            encoding.min, encoding.max = compute_min_max_given_delta_offset(encoding.delta, encoding.offset, bitwidth,
+                                                                            is_symmetric, use_strict_symmetric)
             return encoding
 
         if self.is_encoding_valid():

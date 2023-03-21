@@ -1181,7 +1181,7 @@ class TestQuantSim(unittest.TestCase):
         session.run(init)
 
         sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
-        param_encodings = {'conv2d/Conv2D/ReadVariableOp:0': [{'bitwidth': 4, 'is_symmetric': False,
+        param_encodings = {'conv2d/Conv2D/ReadVariableOp:0': [{'bitwidth': 4, 'is_symmetric': "False",
                                                                'max': 0.14584073424339294,
                                                                'min': -0.12761062383651733,
                                                                'offset': -7.0, 'scale': 0.01823008991777897}]}
@@ -1213,9 +1213,11 @@ class TestQuantSim(unittest.TestCase):
 
         encoding_max = quantizer.get_variable_from_op(QuantizeOpIndices.encoding_max)
         encoding_min = quantizer.get_variable_from_op(QuantizeOpIndices.encoding_min)
+        use_symmetric_encoding = quantizer.get_variable_from_op(QuantizeOpIndices.use_symmetric_encoding)
 
         self.assertEqual(encoding_min, encoding.get('min'))
         self.assertEqual(encoding_max, encoding.get('max'))
+        self.assertEqual(use_symmetric_encoding, encoding.get('is_symmetric') == "True")
         self.assertEqual(int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize), quantizer.get_op_mode())
         self.assertEqual(quantizer.is_encoding_valid(), True)
 
@@ -1225,9 +1227,11 @@ class TestQuantSim(unittest.TestCase):
 
         encoding_max = quantizer.get_variable_from_op(QuantizeOpIndices.encoding_max)
         encoding_min = quantizer.get_variable_from_op(QuantizeOpIndices.encoding_min)
+        use_symmetric_encoding = quantizer.get_variable_from_op(QuantizeOpIndices.use_symmetric_encoding)
 
         self.assertEqual(encoding_min, encoding.get('min'))
         self.assertEqual(encoding_max, encoding.get('max'))
+        self.assertEqual(use_symmetric_encoding, encoding.get('is_symmetric') == "True")
         self.assertEqual(int(libpymo.TensorQuantizerOpMode.quantizeDequantize), quantizer.get_op_mode())
         self.assertEqual(quantizer.is_encoding_valid(), True)
 
@@ -1270,19 +1274,19 @@ class TestQuantSim(unittest.TestCase):
 
         sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'],
                                    config_file='./quantsim_config.json')
-        param_encodings = {'conv2d_1/Conv2D/ReadVariableOp:0': [{'bitwidth': 4, 'is_symmetric': False,
+        param_encodings = {'conv2d_1/Conv2D/ReadVariableOp:0': [{'bitwidth': 4, 'is_symmetric': 'False',
                                                                  'max': 0.14584073424339294,
                                                                  'min': -0.12761062383651733,
                                                                  'offset': -7.0, 'scale': 0.01823008991777897},
-                                                                {'bitwidth': 4, 'is_symmetric': False,
+                                                                {'bitwidth': 4, 'is_symmetric': 'False',
                                                                  'max': 0.14584073424339294,
                                                                  'min': -0.12761062383651733,
                                                                  'offset': -7.0, 'scale': 0.01823008991777897},
-                                                                {'bitwidth': 4, 'is_symmetric': False,
+                                                                {'bitwidth': 4, 'is_symmetric': 'False',
                                                                  'max': 0.14584073424339294,
                                                                  'min': -0.12761062383651733,
                                                                  'offset': -7.0, 'scale': 0.01823008991777897},
-                                                                {'bitwidth': 4, 'is_symmetric': False,
+                                                                {'bitwidth': 4, 'is_symmetric': 'False',
                                                                  'max': 0.14584073424339294,
                                                                  'min': -0.12761062383651733,
                                                                  'offset': -7.0, 'scale': 0.01823008991777897}]}
@@ -1432,7 +1436,7 @@ class TestQuantSim(unittest.TestCase):
         session.run(init)
 
         sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
-        param_encodings = {'conv2d/Conv2D/ReadVariableOp:0': [{'bitwidth': 4, 'is_symmetric': False,
+        param_encodings = {'conv2d/Conv2D/ReadVariableOp:0': [{'bitwidth': 4, 'is_symmetric': 'False',
                                                                'max': 0.14584073424339294,
                                                                'min': -0.12761062383651733,
                                                                'offset': -7.0, 'scale': 0.01823008991777897}]}
