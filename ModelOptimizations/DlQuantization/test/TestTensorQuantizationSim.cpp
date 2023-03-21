@@ -39,6 +39,7 @@
 #include <gtest/gtest.h>
 #include <vector>
 
+#include "trim_functions.hpp"
 #include <TensorQuantizationSim.h>
 
 
@@ -406,4 +407,44 @@ TEST(TestTensorQuantizationSim, SanityTestWith32BitQuantizeOnlySigned)
 
     std::vector<float> expectedOutput = {-2147483648};
     EXPECT_FLOAT_EQ(outputTensor[0], expectedOutput[0]);
+}
+
+TEST(TestTensorQuantizationSim, SanityTestFillEncodingInfo)
+{
+    DlQuantization::TfEncoding encoding = DlQuantization::TfEncoding();
+    encoding.min    = -5;
+    encoding.max    = 10;
+    encoding.delta  = DlQuantization::computeDelta(encoding.min, encoding.max, 7);
+    encoding.offset = DlQuantization::computeOffset(encoding.min, encoding.delta);
+    encoding.bw     = 3;
+
+    DlQuantization::TensorQuantizationSim<float> sim;
+
+    sim.fillEncodingInfo(encoding, encoding.bw, encoding.min, encoding.max);
+
+    double expectedEncodingMin = -4.2857142857142857142857142857142;
+    double expectedEncodingMax = 10.714285714285714285714285714286;
+
+    EXPECT_DOUBLE_EQ(encoding.min, expectedEncodingMin);
+    EXPECT_DOUBLE_EQ(encoding.max, expectedEncodingMax);
+}
+
+TEST(TestTensorQuantizationSim, SanityTestFillEncodingInfoNumStepsChange)
+{
+    DlQuantization::TfEncoding encoding = DlQuantization::TfEncoding();
+    encoding.min    = -5;
+    encoding.max    = 5;
+    encoding.delta  = DlQuantization::computeDelta(encoding.min, encoding.max, 7);
+    encoding.offset = DlQuantization::computeOffset(encoding.min, encoding.delta);
+    encoding.bw     = 3;
+
+    DlQuantization::TensorQuantizationSim<float> sim;
+
+    sim.fillEncodingInfo(encoding, encoding.bw, encoding.min, encoding.max);
+
+    double expectedEncodingMin = -5;
+    double expectedEncodingMax = 5;
+
+    EXPECT_DOUBLE_EQ(encoding.min, expectedEncodingMin);
+    EXPECT_DOUBLE_EQ(encoding.max, expectedEncodingMax);
 }
