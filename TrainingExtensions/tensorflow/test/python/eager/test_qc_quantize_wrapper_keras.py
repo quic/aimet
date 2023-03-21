@@ -211,7 +211,7 @@ def test_freeze_encodings():
     assert weight_min != weight_min_2
     param_name = wrapper._layer_to_wrap.weights[0].name
     wrapper.set_and_freeze_param_encoding({param_name: [{'bitwidth': 4, 'max': 30.0, 'min': 0.0, 'offset': 0,
-                                                         'scale': 2.0, 'is_symmetric': False}]})
+                                                         'scale': 2.0, 'is_symmetric': 'False'}]})
     wrapper(test_inp)
     wrapper.param_quantizers[0].compute_encoding()
     weight_min_3 = wrapper.param_quantizers[0].encoding.min

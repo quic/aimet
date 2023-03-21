@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2020-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2020-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -41,7 +41,7 @@ from typing import List, Dict, Union
 import tensorflow as tf
 
 import aimet_common.libpymo as libpymo
-from aimet_common.utils import AimetLogger
+from aimet_common.utils import AimetLogger, log_with_error_and_assert_if_false
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.common.operation import Op
 from aimet_tensorflow.common import core
@@ -261,8 +261,14 @@ def create_encoding_from_dict(encoding_dict: dict) -> (Union[libpymo.TfEncoding,
 
     # make a distinction between the per-channel and per-tensor flow
     if isinstance(encoding_dict, List):
-        is_symmetric = encoding_dict[0].get('is_symmetric')
+        log_with_error_and_assert_if_false(encoding_dict[0].get('is_symmetric') in ['True', 'False'],
+                                           _logger,
+                                           f'Unexpected value for is_symmetric: {encoding_dict[0].get("is_symmetric")}')
+        is_symmetric = encoding_dict[0].get('is_symmetric') == 'True'
         return _create_tf_encoding_factory(encoding_dict), is_symmetric
-    is_symmetric = encoding_dict.get('is_symmetric')
+    log_with_error_and_assert_if_false(encoding_dict.get('is_symmetric') in ['True', 'False'],
+                                       _logger,
+                                       f'Unexpected value for is_symmetric: {encoding_dict.get("is_symmetric")}')
+    is_symmetric = encoding_dict.get('is_symmetric') == 'True'
     encoding_dict = [encoding_dict]
     return _create_tf_encoding_factory(encoding_dict)[0], is_symmetric

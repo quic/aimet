@@ -101,7 +101,8 @@ def calculate_delta_offset(min_val: Union[float, np.ndarray], max_val: Union[flo
                            use_symmetric_encodings: bool, use_strict_symmetric: bool) \
         -> Union[Tuple[float, float], Tuple[List, List]]:
     """
-    calculates delta and offset given min and max.
+    Calculates delta and offset given min and max.
+
     :param min_val: min encoding value
     :param max_val: max encoding value
     :param bitwidth: bitwidth used for quantization
@@ -115,20 +116,47 @@ def calculate_delta_offset(min_val: Union[float, np.ndarray], max_val: Union[flo
 
     min_val, max_val = gate_min_max(min_val, max_val)
 
-    if use_symmetric_encodings:
-        delta = max_val / np.floor(num_steps / 2)
+    # Use only max val to compute delta in the case of signed symmetric
+    if use_symmetric_encodings and min_val < 0:
+        num_positive_steps = np.floor(num_steps / 2)
+        delta = max_val / num_positive_steps
+        offset = -num_positive_steps
+        if not use_strict_symmetric:
+            offset -= 1
+        if isinstance(delta, np.ndarray):
+            delta = delta.tolist()
+            offset = [offset] * len(delta)
     else:
         delta = (max_val - min_val) / num_steps
-
-    if isinstance(delta, np.ndarray):
-        offset = np.around(min_val / delta)
-        delta = delta.tolist()
-        offset = offset.tolist()
-    else:
-        offset = round(min_val / delta)
+        if isinstance(delta, np.ndarray):
+            offset = np.around(min_val / delta)
+            delta = delta.tolist()
+            offset = offset.tolist()
+        else:
+            offset = round(min_val / delta)
 
     return delta, offset
 
+def compute_min_max_given_delta_offset(delta: Union[float, np.ndarray], offset: Union[float, np.ndarray],
+                                       bitwidth: int, use_symmetric_encodings: bool, use_strict_symmetric: bool) -> \
+        Tuple[Union[float, np.ndarray], Union[float, np.ndarray]]:
+    """
+    Compute min and max given delta and offset.
+
+    :param delta: Delta to compute with
+    :param offset: Offset to compute with
+    :param bitwidth: Bitwidth for finding number of steps
+    :param use_symmetric_encodings: True if symmetric, False otherwise
+    :param use_strict_symmetric: True if using strict symmetric, False otherwise
+    :return: Tuple of computed min and max values
+    """
+    num_steps = 2 ** bitwidth - 1
+    if use_symmetric_encodings and use_strict_symmetric:
+        num_steps -= 1
+
+    min_val = delta * offset
+    max_val = (num_steps + offset) * delta
+    return min_val, max_val
 
 def recompute_grid_params(current_encoding: libpymo.TfEncoding, bitwidth: int,
                           use_symmetric_encoding: bool) -> libpymo.TfEncoding:
