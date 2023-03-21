@@ -72,6 +72,10 @@ void TensorQuantizationSim<DTYPE>::generateScaleOffset(double &encodingMin, doub
     // compute offset and delta on the fly
     encodingScale = computeDelta(encodingMin, encodingMax, numSteps);
     encodingOffset = computeOffset(encodingMin, encodingScale);
+
+    // recalculate the encoding.min and encoding.max based on the new delta and offset
+    encodingMin = encodingOffset * encodingScale;
+    encodingMax = encodingScale * numSteps + encodingMin;
 }
 
 template <typename DTYPE>
@@ -83,6 +87,7 @@ void TensorQuantizationSim<DTYPE>::fillEncodingInfo(TfEncoding& encoding, uint8_
     encoding.min = encodingMin;
     encoding.max = encodingMax;
     generateScaleOffset(encoding.min, encoding.max, bw, encoding.delta, encoding.offset);
+
 }
 
 template <typename DTYPE>

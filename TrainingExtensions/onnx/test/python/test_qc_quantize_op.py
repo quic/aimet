@@ -155,7 +155,7 @@ class TestQcQuantizeOp:
         output = session.run(None, {'input': input_arr})[0]
 
         assert np.max(output) <= 1.1
-        assert np.min(output) >= -5
+        assert np.min(output) >= -5.1
 
     def test_update_stats_quantize_dequantize(self):
 
