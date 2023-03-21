@@ -49,7 +49,7 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets, transforms
 
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEME_TO_PYMO
-from aimet_common.utils import AimetLogger
+from aimet_common.utils import AimetLogger, log_with_error_and_assert_if_false
 import aimet_common.libpymo as libpymo
 
 
@@ -673,7 +673,10 @@ def create_encoding_from_dict(encoding_dict: dict) -> (libpymo.TfEncoding, bool)
     encoding.min = encoding_dict.get('min')
     encoding.delta = encoding_dict.get('scale')
     encoding.offset = encoding_dict.get('offset')
-    is_symmetric = eval(encoding_dict.get('is_symmetric'))  # pylint: disable=eval-used
+    log_with_error_and_assert_if_false(encoding_dict.get('is_symmetric') in ['True', 'False'],
+                                       logger,
+                                       f'Unexpected value for is_symmetric: {encoding_dict.get("is_symmetric")}')
+    is_symmetric = encoding_dict.get('is_symmetric') == 'True'
     return encoding, is_symmetric
 
 

@@ -45,8 +45,9 @@ import tensorflow.keras.backend as K
 import aimet_common.libpymo as libpymo
 import aimet_common.libaimet_tf_ops as qcops
 
-from aimet_common.defs import MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantScheme, QuantizationDataType
-from aimet_common.quantsim import calculate_delta_offset
+from aimet_common.defs import MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantScheme, QuantizationDataType, \
+    RANGE_LEARNING_SCHEMES
+from aimet_common.quantsim import calculate_delta_offset, compute_min_max_given_delta_offset
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.quantsim import AxisHandling
 from aimet_tensorflow.keras.quant_sim.quantsim_straight_through_grad import qc_straight_through_estimator_grad, \
@@ -249,7 +250,7 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
         :param opmode: operation mode for the quantizer
         """
         # pylint: disable  = attribute-defined-outside-init
-        self.use_symmetric_encodings = is_symmetric
+        self.is_symmetric = is_symmetric
         self.bitwidth = bitwidth
         self.encoding = encoding
         self.quant_mode = opmode
@@ -340,11 +341,14 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
         if self._is_encoding_valid:
             encodings = libpymo.TfEncoding()
             # pylint: disable = protected-access
-            encodings.min = tf.keras.backend.get_value(self._encoding_min)
-            encodings.max = tf.keras.backend.get_value(self._encoding_max)
-            encodings.delta, encodings.offset = calculate_delta_offset(encodings.min, encodings.max,
+            encodings_min = tf.keras.backend.get_value(self._encoding_min)
+            encodings_max = tf.keras.backend.get_value(self._encoding_max)
+            encodings.delta, encodings.offset = calculate_delta_offset(encodings_min, encodings_max,
                                                                        self.bitwidth, self.is_symmetric,
                                                                        self.use_strict_symmetric)
+            encodings.min, encodings.max = compute_min_max_given_delta_offset(encodings.delta, encodings.offset,
+                                                                              self.bitwidth, self.is_symmetric,
+                                                                              self.use_strict_symmetric)
             encodings.bw = self.bitwidth
             return encodings
         return None
@@ -389,8 +393,12 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
                 self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.quantizeDequantize))
             else:
                 if self._tensor_quantizer.isEncodingValid:
-                    self._encoding_min.assign(encoding.min)
+                    if self._quant_scheme in RANGE_LEARNING_SCHEMES and self.is_symmetric and encoding.min != 0:
+                        self._encoding_min.assign(-encoding.max)
+                    else:
+                        self._encoding_min.assign(encoding.min)
                     self._encoding_max.assign(encoding.max)
+
                     if self.quant_mode == int(libpymo.TensorQuantizerOpMode.updateStats):
                         self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.quantizeDequantize))
                     self._is_encoding_valid = True
@@ -688,6 +696,10 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
                 encoding.delta, encoding.offset = calculate_delta_offset(encoding.min, encoding.max,
                                                                          self.bitwidth, self.is_symmetric,
                                                                          all_use_strict_symmetric[idx])
+
+                encoding.min, encoding.max = compute_min_max_given_delta_offset(encoding.delta, encoding.offset,
+                                                                                self.bitwidth, self.is_symmetric,
+                                                                                all_use_strict_symmetric[idx])
                 encoding.bw = self.bitwidth
 
             return all_tf_encoding_objects
@@ -733,7 +745,11 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
                 # TODO: remove last two parameters after fixing PyModelOptimizations
                 encoding = tensor_quantizer.computeEncoding(self.bitwidth, self.is_symmetric)
                 if tensor_quantizer.isEncodingValid:
-                    self._encoding_min[i].assign(encoding.min)
+                    # In the case of range learning signed symmetric, set min = max for symmetric updates.
+                    if self._quant_scheme in RANGE_LEARNING_SCHEMES and self.is_symmetric and encoding.min != 0:
+                        self._encoding_min[i].assign(-encoding.max)
+                    else:
+                        self._encoding_min[i].assign(encoding.min)
                     self._encoding_max[i].assign(encoding.max)
                     if self.quant_mode == int(libpymo.TensorQuantizerOpMode.updateStats):
                         self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.quantizeDequantize))

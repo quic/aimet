@@ -48,8 +48,8 @@ from packaging import version
 
 import aimet_common.libpymo as libpymo
 import aimet_common.libaimet_tf_ops as qcops
-from aimet_common.defs import QuantScheme, QuantizationDataType, RANGE_LEARNING_SCHEMES
-from aimet_common.quantsim import calculate_delta_offset, encoding_version, validate_quantsim_inputs, \
+from aimet_common.defs import QuantScheme, QuantizationDataType
+from aimet_common.quantsim import encoding_version, validate_quantsim_inputs, \
     recompute_grid_params, extract_global_quantizer_args
 from aimet_common.quant_utils import get_conv_accum_bounds
 from aimet_common.utils import AimetLogger, save_json_yaml
@@ -701,9 +701,11 @@ class QuantizationSimModel:
         return self.session.run([min_var, max_var])
 
     def _export_encodings(self, encoding_file_path: str):
+        """
+        Export encodings to the given file path.
 
-        variable_dict = self.get_min_max_var_dict()
-
+        :param encoding_file_path: File path to export encodings to
+        """
         def update_encoding_dict_entry_float(encoding_dict: Dict, op_name: str):
             quant_op = self.session.graph.get_operation_by_name(op_name)
             op_bitwidth = int(self._get_op_variable_value(quant_op, QuantizeOpIndices.bit_width))
@@ -714,44 +716,25 @@ class QuantizationSimModel:
             encoding_dict[tensor_name] = [{'dtype': 'float',
                                            'bitwidth': op_bitwidth}]
 
-        def update_encoding_dict_entry_int(encoding_dict: Dict, quant_op_name: str):
-            quant_op = self.session.graph.get_operation_by_name(quant_op_name)
-            min_val, max_val = self.read_min_max(quant_op_name, variable_dict)
-            # if per channel quantization is enabled, then min and max are numpy arrays, and this function gates the array
-            op_bitwidth = int(self._get_op_variable_value(quant_op, QuantizeOpIndices.bit_width))
-
-            use_symmetric_encoding_tensor = self._get_op_variable_value(quant_op, QuantizeOpIndices.use_symmetric_encoding)
+        def update_encoding_dict_entry_int(encoding_dict: Dict, quantizer_info: QuantizerInfo):
+            encoding = quantizer_info.get_encoding()
+            quant_op = self.session.graph.get_operation_by_name(quantizer_info.quant_op_name)
+            use_symmetric_encoding_tensor = self._get_op_variable_value(quant_op,
+                                                                        QuantizeOpIndices.use_symmetric_encoding)
             use_symmetric_encoding = bool(use_symmetric_encoding_tensor)
-            use_strict_symmetric = self._quantsim_configurator.quantsim_configs["defaults"].get("strict_symmetric", False)
-
-            delta, offset = calculate_delta_offset(min_val, max_val, op_bitwidth,
-                                                   use_symmetric_encodings=use_symmetric_encoding,
-                                                   use_strict_symmetric=use_strict_symmetric)
-
-            # NOTE: Since we proceeded to strict symmetric way during the range learning
-            #   we need to calibrate min and offset when the actual value is needed
-            # Before calibrating, encoding holds encoding_min == -encoding_max which is symmetric
-            #   we will add one more bin to both encoding_min and offset to get non-strict symmetric encoding
-            if self._quant_scheme in RANGE_LEARNING_SCHEMES and \
-                    use_symmetric_encoding and not use_strict_symmetric:
-
-                # NOTE: min_val is float or np.ndarray type, both type support -= operation
-                min_val -= delta
-                if isinstance(offset, list):
-                    offset = [o - 1 for o in offset]
-                else:
-                    offset -= 1
 
             # Min and max will be numpy arrays, so to make them JSON serializable
-            if self.per_channel_quantization_enabled and isinstance(min_val, np.ndarray):
-                min_val = min_val.tolist()
-                max_val = max_val.tolist()
+            if self.per_channel_quantization_enabled and isinstance(encoding, list):
+                min_val = [enc.min for enc in encoding]
+                max_val = [enc.max for enc in encoding]
+                delta = [enc.delta for enc in encoding]
+                offset = [enc.offset for enc in encoding]
             else:
                 # Wrap single min/max value in a list to support list comprehension
-                min_val = [min_val]
-                max_val = [max_val]
-                delta = [delta]
-                offset = [offset]
+                min_val = [encoding.min]
+                max_val = [encoding.max]
+                delta = [encoding.delta]
+                offset = [encoding.offset]
 
             tensor_name = quant_op.inputs[0].name
             if quant_op.type in ['QcQuantizePerChannel'] and 'EagerPyFunc' in tensor_name:
@@ -759,9 +742,9 @@ class QuantizationSimModel:
             encoding_dict[tensor_name] = [{'min': min_val[idx],
                                            'max': max_val[idx],
                                            'scale': delta[idx],
-                                           'offset': offset[idx],
-                                           'bitwidth': op_bitwidth,
-                                           'is_symmetric': str(use_symmetric_encoding_tensor),
+                                           'offset': int(offset[idx]),
+                                           'bitwidth': int(quantizer_info.bitwidth),
+                                           'is_symmetric': str(use_symmetric_encoding),
                                            'dtype': 'int'} for idx in range(len(min_val))]
 
         param_encodings = {}
@@ -771,7 +754,7 @@ class QuantizationSimModel:
             else:
                 if not quantizer_info.is_encoding_valid():
                     continue
-                update_encoding_dict_entry_int(param_encodings, quant_op_name)
+                update_encoding_dict_entry_int(param_encodings, self._param_quantizers[quant_op_name])
 
         activation_encodings = {}
         for quant_op_name, quantizer_info in self._activation_quantizers.items():
@@ -780,7 +763,7 @@ class QuantizationSimModel:
             else:
                 if not quantizer_info.is_encoding_valid():
                     continue
-                update_encoding_dict_entry_int(activation_encodings, quant_op_name)
+                update_encoding_dict_entry_int(activation_encodings, self._activation_quantizers[quant_op_name])
 
         encodings_dict = {'version': encoding_version,
                           'activation_encodings': activation_encodings,

@@ -46,7 +46,7 @@ from aimet_common.libpymo import TfEncoding
 from packaging import version
 from tensorflow import keras
 
-from aimet_common.defs import QuantScheme
+from aimet_common.defs import QuantScheme, RANGE_LEARNING_SCHEMES
 from aimet_tensorflow.examples.test_models import keras_model
 from aimet_tensorflow.keras.cross_layer_equalization import equalize_model
 from aimet_tensorflow.keras.quant_sim.qc_mha_wrapper import QcQuantizableMultiHeadAttention
@@ -426,8 +426,9 @@ def test_range_learning():
         qsim.export('./data', 'dense_functional')
         with open("./data/dense_functional.encodings", "r") as encodings_file:
             encodings = json.load(encodings_file)
-        assert encodings['activation_encodings']['dense/BiasAdd:0'][0]['max'] == \
-               running_dense_output_quantizer_encoding_max
+        assert np.allclose(encodings['activation_encodings']['dense/BiasAdd:0'][0]['max'],
+                           running_dense_output_quantizer_encoding_max,
+                           atol=encodings['activation_encodings']['dense/BiasAdd:0'][0]['scale'])
 
 def test_assert_on_reused_layer():
     if version.parse(tf.version.VERSION) >= version.parse("2.00"):
@@ -649,17 +650,17 @@ def test_load_encodings():
     model = keras_model()
 
     sim = QuantizationSimModel(model)
-    param_encodings = {'conv2d_1/kernel:0': [{'bitwidth': 4, 'is_symmetric': False,
-                                                           'max': 0.14584073424339294,
-                                                           'min': -0.12761062383651733,
-                                                           'offset': -7.0, 'scale': 0.01823008991777897}]}
+    param_encodings = {'conv2d_1/kernel:0': [{'bitwidth': 4, 'is_symmetric': "False",
+                                              'max': 0.14584073424339294,
+                                              'min': -0.12761062383651733,
+                                              'offset': -7.0, 'scale': 0.01823008991777897}]}
     activation_encodings = {"conv2d_1/Tanh:0": [
         {
             "bitwidth": 8,
             "dtype": "int",
             "is_symmetric": "False",
-            "max": 5.98828125,
-            "min": -7.78128125,
+            "max": 5.99380955882352939,
+            "min": -7.77575294117647056,
             "offset": -144,
             "scale": 0.05399828431372549
         }
@@ -680,14 +681,20 @@ def test_load_encodings():
     # For param
     expected_encoding = param_encodings['conv2d_1/kernel:0'][0]
     actual_encoding   = extracted_encoding["param_encodings"]['conv2d_1/kernel:0'][0]
-    assert actual_encoding.get('min') == expected_encoding.get('min')
-    assert actual_encoding.get('max') == expected_encoding.get('max')
+    assert actual_encoding.get('bitwidth') == expected_encoding.get('bitwidth')
+    assert actual_encoding.get('offset') == expected_encoding.get('offset')
+    assert actual_encoding.get('is_symmetric') == expected_encoding.get('is_symmetric')
+    assert np.allclose(actual_encoding.get('min'), expected_encoding.get('min'), atol=1e-5)
+    assert np.allclose(actual_encoding.get('max'), expected_encoding.get('max'), atol=1e-5)
 
     # For activation
     expected_encoding = activation_encodings["conv2d_1/Tanh:0"][0]
     actual_encoding   = extracted_encoding["activation_encodings"]["conv2d_1/Tanh:0"][0]
-    assert actual_encoding.get('min') == expected_encoding.get('min')
-    assert actual_encoding.get('max') == expected_encoding.get('max')
+    assert actual_encoding.get('bitwidth') == expected_encoding.get('bitwidth')
+    assert actual_encoding.get('offset') == expected_encoding.get('offset')
+    assert actual_encoding.get('is_symmetric') == expected_encoding.get('is_symmetric')
+    assert np.allclose(actual_encoding.get('min'), expected_encoding.get('min'), atol=1e-5)
+    assert np.allclose(actual_encoding.get('max'), expected_encoding.get('max'), atol=1e-5)
 
 
     # Delete encodings JSON file
@@ -722,7 +729,7 @@ def test_load_encodings_with_disabled_param():
     model = keras_model()
 
     sim = QuantizationSimModel(model,config_file='./quantsim_config.json')
-    param_encodings = {'conv2d_1/kernel:0': [{'bitwidth': 4, 'is_symmetric': False,
+    param_encodings = {'conv2d_1/kernel:0': [{'bitwidth': 4, 'is_symmetric': "False",
                                               'max': 0.14584073424339294,
                                               'min': -0.12761062383651733,
                                               'offset': -7.0, 'scale': 0.01823008991777897}]}
@@ -731,8 +738,8 @@ def test_load_encodings_with_disabled_param():
             "bitwidth": 8,
             "dtype": "int",
             "is_symmetric": "False",
-            "max": 5.98828125,
-            "min": -7.78128125,
+            "max": 5.99380955882352939,
+            "min": -7.77575294117647056,
             "offset": -144,
             "scale": 0.05399828431372549
         }
@@ -762,8 +769,11 @@ def test_load_encodings_with_disabled_param():
     # For activation
     expected_encoding = activation_encodings["conv2d_1/Tanh:0"][0]
     actual_encoding   = extracted_encoding["activation_encodings"]["conv2d_1/Tanh:0"][0]
-    assert actual_encoding.get('min') == expected_encoding.get('min')
-    assert actual_encoding.get('max') == expected_encoding.get('max')
+    assert actual_encoding.get('bitwidth') == expected_encoding.get('bitwidth')
+    assert actual_encoding.get('offset') == expected_encoding.get('offset')
+    assert actual_encoding.get('is_symmetric') == expected_encoding.get('is_symmetric')
+    assert np.allclose(actual_encoding.get('min'), expected_encoding.get('min'), atol=1e-5)
+    assert np.allclose(actual_encoding.get('max'), expected_encoding.get('max'), atol=1e-5)
 
 
     # Delete encodings JSON file
@@ -798,20 +808,20 @@ def test_load_encodings_pcq():
 
     model = keras_model()
 
-    sim = QuantizationSimModel(model,config_file='./quantsim_config.json')
-    param_encodings = {'conv2d_1/kernel:0': [{'bitwidth': 4, 'is_symmetric': False,
+    sim = QuantizationSimModel(model, config_file='./quantsim_config.json')
+    param_encodings = {'conv2d_1/kernel:0': [{'bitwidth': 4, 'is_symmetric': "False",
                                               'max': 0.14584073424339294,
                                               'min': -0.12761062383651733,
                                               'offset': -7.0, 'scale': 0.01823008991777897},
-                                             {'bitwidth': 4, 'is_symmetric': False,
+                                             {'bitwidth': 4, 'is_symmetric': "False",
                                               'max': 0.14584073424339294,
                                               'min': -0.12761062383651733,
                                               'offset': -7.0, 'scale': 0.01823008991777897},
-                                             {'bitwidth': 4, 'is_symmetric': False,
+                                             {'bitwidth': 4, 'is_symmetric': "False",
                                               'max': 0.14584073424339294,
                                               'min': -0.12761062383651733,
                                               'offset': -7.0, 'scale': 0.01823008991777897},
-                                             {'bitwidth': 4, 'is_symmetric': False,
+                                             {'bitwidth': 4, 'is_symmetric': "False",
                                               'max': 0.14584073424339294,
                                               'min': -0.12761062383651733,
                                               'offset': -7.0, 'scale': 0.01823008991777897}]}
@@ -820,8 +830,8 @@ def test_load_encodings_pcq():
             "bitwidth": 8,
             "dtype": "int",
             "is_symmetric": "False",
-            "max": 5.98828125,
-            "min": -7.78128125,
+            "max": 5.99380955882352939,
+            "min": -7.77575294117647056,
             "offset": -144,
             "scale": 0.05399828431372549
         }
@@ -843,16 +853,170 @@ def test_load_encodings_pcq():
     expected_encoding = param_encodings['conv2d_1/kernel:0']
     actual_encoding   = extracted_encoding["param_encodings"]['conv2d_1/kernel:0']
     for i in range(4):
-        assert actual_encoding[i].get('min') == expected_encoding[i].get('min')
-        assert actual_encoding[i].get('max') == expected_encoding[i].get('max')
+        assert actual_encoding[i].get('bitwidth') == expected_encoding[i].get('bitwidth')
+        assert actual_encoding[i].get('offset') == expected_encoding[i].get('offset')
+        assert actual_encoding[i].get('is_symmetric') == expected_encoding[i].get('is_symmetric')
+        assert np.allclose(actual_encoding[i].get('min'), expected_encoding[i].get('min'), atol=1e-5)
+        assert np.allclose(actual_encoding[i].get('max'), expected_encoding[i].get('max'), atol=1e-5)
 
     # For activation
     expected_encoding = activation_encodings["conv2d_1/Tanh:0"][0]
     actual_encoding   = extracted_encoding["activation_encodings"]["conv2d_1/Tanh:0"][0]
-    assert actual_encoding.get('min') == expected_encoding.get('min')
-    assert actual_encoding.get('max') == expected_encoding.get('max')
+    assert actual_encoding.get('bitwidth') == expected_encoding.get('bitwidth')
+    assert actual_encoding.get('offset') == expected_encoding.get('offset')
+    assert actual_encoding.get('is_symmetric') == expected_encoding.get('is_symmetric')
+    assert np.allclose(actual_encoding.get('min'), expected_encoding.get('min'), atol=1e-5)
+    assert np.allclose(actual_encoding.get('max'), expected_encoding.get('max'), atol=1e-5)
 
 
     # Delete encodings JSON file
     if os.path.exists("./dummy.encodings"):
         os.remove("./dummy.encodings")
+
+@pytest.mark.cuda
+@pytest.mark.parametrize(
+    "quant_scheme",
+    [QuantScheme.post_training_tf, QuantScheme.training_range_learning_with_tf_init,
+     QuantScheme.post_training_tf_enhanced, QuantScheme.training_range_learning_with_tf_enhanced_init]
+)
+def test_initialization_and_export_non_strict_symmetric(quant_scheme) -> None:
+    """
+    Test initial encoding min/max and result of export value
+        under non-strict symmetric per-tensor quantization
+    """
+    tf.compat.v1.reset_default_graph()
+
+    model = tf.keras.Sequential([
+        tf.keras.layers.Conv2D(2, (3, 3), input_shape=(32, 32, 4,)),
+        tf.keras.layers.ReLU(),
+        tf.keras.layers.Flatten(),
+        tf.keras.layers.Dense(2, activation='softmax', name="keras_model")])
+
+    sim = QuantizationSimModel(model, quant_scheme=quant_scheme)
+
+    # Enable input
+    sim.compute_encodings(lambda m, _: m(np.random.randn(1, 32, 32, 4)), None)
+    conv_op = sim.layers[1]
+    initialized_encoding_min = tf.keras.backend.get_value(conv_op.param_quantizers[0].encoding_min)
+    initialized_encoding_max = tf.keras.backend.get_value(conv_op.param_quantizers[0].encoding_max)
+
+    if quant_scheme in RANGE_LEARNING_SCHEMES:
+        # range learning scheme calibrates min value. encoding_min == -encoding_max
+        assert initialized_encoding_min == -initialized_encoding_max
+    else:
+        # post_training scheme doesn't calibrate min value. encoding_min == -encoding_max - delta
+        assert initialized_encoding_min != -initialized_encoding_max
+
+    sim.export("/tmp/", "quant_sim_model")
+    with open("/tmp/quant_sim_model.encodings") as json_file:
+        encoding_data = json.load(json_file)
+
+        param_encodings = encoding_data["param_encodings"]
+        for encodings in param_encodings.values():
+            for encoding_info in encodings:
+                encoding_min = encoding_info["min"]
+                encoding_max = encoding_info["max"]
+                scale = encoding_info["scale"]
+                offset = encoding_info["offset"]
+
+                # Default HTP config is non-strict symmetric when parameter quantization
+                # Non-strict symmetric should have
+                # encoding_min == -encoding_max - scale (one more bin)
+                # offset as -128
+                if quant_scheme in RANGE_LEARNING_SCHEMES:
+                    assert encoding_min == -encoding_max - scale
+                else:
+                    # In post training scheme case, it doesn't seem to match exactly due to floating point arithmetic
+                    assert np.isclose(encoding_min, -encoding_max - scale)
+                assert offset == -128
+                assert np.isclose(encoding_min, scale * offset, atol=1e-6)
+                assert np.isclose(encoding_max, encoding_min + scale * 255, atol=1e-6)
+
+@pytest.mark.cuda
+@pytest.mark.parametrize(
+    "quant_scheme",
+    [QuantScheme.post_training_tf, QuantScheme.training_range_learning_with_tf_init,
+     QuantScheme.post_training_tf_enhanced, QuantScheme.training_range_learning_with_tf_enhanced_init]
+)
+def test_initialization_and_export_non_strict_symmetric_per_channel(quant_scheme) -> None:
+    """
+    Test initial encoding min/max and result of export value
+        under non-strict symmetric per-channel quantization
+    """
+    tf.compat.v1.reset_default_graph()
+    quantsim_config = {
+        "defaults": {
+            "ops": {"is_output_quantized": "True"},
+            "params": {
+                "is_quantized": "True",
+                "is_symmetric": "True"
+            },
+            "strict_symmetric": "False",
+            "per_channel_quantization": "True"
+        },
+        "params": {"bias": {"is_quantized": "False"}},
+        "op_type": {
+            "Squeeze": {"is_output_quantized": "False"},
+            "Pad": {"is_output_quantized": "False"},
+            "Mean": {"is_output_quantized": "False"},
+            "Gemm": {"per_channel_quantization": "False"}
+        },
+        "supergroups": [
+            {"op_list": ["Conv", "Relu"]},
+            {"op_list": ["Conv", "Clip"]},
+            {"op_list": ["Add", "Relu"]},
+            {"op_list": ["Gemm", "Relu"]}
+        ],
+        "model_input": {"is_input_quantized": "True"},
+        "model_output": {}
+    }
+    with open("./quantsim_config.json", "w") as f:
+        json.dump(quantsim_config, f)
+
+    tf.compat.v1.reset_default_graph()
+
+    model = tf.keras.Sequential([
+        tf.keras.layers.Conv2D(2, (3, 3), input_shape=(32, 32, 4,)),
+        tf.keras.layers.ReLU(),
+        tf.keras.layers.Flatten(),
+        tf.keras.layers.Dense(2, activation='softmax', name="keras_model")])
+
+    sim = QuantizationSimModel(model, quant_scheme=quant_scheme, config_file='./quantsim_config.json')
+
+    # Enable input
+    sim.compute_encodings(lambda m, _: m(np.random.randn(1, 32, 32, 4)), None)
+    conv_op = sim.layers[1]
+    initialized_encoding_min = tf.keras.backend.get_value(conv_op.param_quantizers[0].encoding_min)
+    initialized_encoding_max = tf.keras.backend.get_value(conv_op.param_quantizers[0].encoding_max)
+
+    if quant_scheme in RANGE_LEARNING_SCHEMES:
+        # range learning scheme calibrates min value. encoding_min == -encoding_max
+        assert all(initialized_encoding_min == -initialized_encoding_max)
+    else:
+        # post_training scheme doesn't calibrate min value. encoding_min == -encoding_max - delta
+        assert not all(initialized_encoding_min == -initialized_encoding_max)
+
+    sim.export("/tmp/", "quant_sim_model")
+    with open("/tmp/quant_sim_model.encodings") as json_file:
+        encoding_data = json.load(json_file)
+
+        param_encodings = encoding_data["param_encodings"]
+        for encodings in param_encodings.values():
+            for encoding_info in encodings:
+                encoding_min = encoding_info["min"]
+                encoding_max = encoding_info["max"]
+                scale = encoding_info["scale"]
+                offset = encoding_info["offset"]
+
+                # Default HTP config is non-strict symmetric when parameter quantization
+                # Non-strict symmetric should have
+                # encoding_min == -encoding_max - scale (one more bin)
+                # offset as -128
+                if quant_scheme in RANGE_LEARNING_SCHEMES:
+                    assert encoding_min == -encoding_max - scale
+                else:
+                    # In post training scheme case, it doesn't seem to match exactly due to floating point arithmetic
+                    assert np.isclose(encoding_min, -encoding_max - scale)
+                assert offset == -128
+                assert np.isclose(encoding_min, scale * offset, atol=1e-6)
+                assert np.isclose(encoding_max, encoding_min + scale * 255, atol=1e-6)
