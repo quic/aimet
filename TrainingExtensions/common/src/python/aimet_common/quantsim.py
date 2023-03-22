@@ -35,10 +35,9 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
 """ Common utility for Quantization """
 
-from typing import Union, Tuple, List, Dict
+from typing import Union, Tuple, Dict
 import numpy as np
 
 from aimet_common.defs import QuantScheme, QuantizationDataType
@@ -97,9 +96,8 @@ def is_non_strict_symmetric(use_symmetric_encodings: bool,
            not is_unsigned_symmetric
 
 
-def calculate_delta_offset(min_val: Union[float, np.ndarray], max_val: Union[float, np.ndarray], bitwidth: int,
-                           use_symmetric_encodings: bool, use_strict_symmetric: bool) \
-        -> Union[Tuple[float, float], Tuple[List, List]]:
+def calculate_delta_offset(min_val: float, max_val: float, bitwidth: int, use_symmetric_encodings: bool,
+                           use_strict_symmetric: bool) -> Tuple[float, int]:
     """
     Calculates delta and offset given min and max.
 
@@ -123,23 +121,14 @@ def calculate_delta_offset(min_val: Union[float, np.ndarray], max_val: Union[flo
         offset = -num_positive_steps
         if not use_strict_symmetric:
             offset -= 1
-        if isinstance(delta, np.ndarray):
-            delta = delta.tolist()
-            offset = [offset] * len(delta)
     else:
         delta = (max_val - min_val) / num_steps
-        if isinstance(delta, np.ndarray):
-            offset = np.around(min_val / delta)
-            delta = delta.tolist()
-            offset = offset.tolist()
-        else:
-            offset = round(min_val / delta)
+        offset = round(min_val / delta)
 
     return delta, offset
 
-def compute_min_max_given_delta_offset(delta: Union[float, np.ndarray], offset: Union[float, np.ndarray],
-                                       bitwidth: int, use_symmetric_encodings: bool, use_strict_symmetric: bool) -> \
-        Tuple[Union[float, np.ndarray], Union[float, np.ndarray]]:
+def compute_min_max_given_delta_offset(delta: float, offset: int, bitwidth: int, use_symmetric_encodings: bool,
+                                       use_strict_symmetric: bool) -> Tuple[float, float]:
     """
     Compute min and max given delta and offset.
 

@@ -719,9 +719,6 @@ class QuantizationSimModel:
         def update_encoding_dict_entry_int(encoding_dict: Dict, quantizer_info: QuantizerInfo):
             encoding = quantizer_info.get_encoding()
             quant_op = self.session.graph.get_operation_by_name(quantizer_info.quant_op_name)
-            use_symmetric_encoding_tensor = self._get_op_variable_value(quant_op,
-                                                                        QuantizeOpIndices.use_symmetric_encoding)
-            use_symmetric_encoding = bool(use_symmetric_encoding_tensor)
 
             # Min and max will be numpy arrays, so to make them JSON serializable
             if self.per_channel_quantization_enabled and isinstance(encoding, list):
@@ -744,7 +741,7 @@ class QuantizationSimModel:
                                            'scale': delta[idx],
                                            'offset': int(offset[idx]),
                                            'bitwidth': int(quantizer_info.bitwidth),
-                                           'is_symmetric': str(use_symmetric_encoding),
+                                           'is_symmetric': str(quantizer_info.use_symmetric_encoding),
                                            'dtype': 'int'} for idx in range(len(min_val))]
 
         param_encodings = {}
