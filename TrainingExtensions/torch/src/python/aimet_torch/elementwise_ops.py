@@ -79,7 +79,7 @@ Exponential = create_wrapper_module('Exponential', torch.exp)
 Chunk = create_wrapper_module('Chunk', torch.chunk)
 
 
-# modules operations under torch.nn.functional package
+# modules for operations under torch.nn.functional package
 Interpolate = create_wrapper_module('Interpolate', torch.nn.functional.interpolate)
 MaxPool2d = create_wrapper_module('MaxPool2d', torch.nn.functional.max_pool2d)
 AdaptiveAvgPool2d = create_wrapper_module('AdaptiveAvgPool2d', torch.nn.functional.adaptive_avg_pool2d)

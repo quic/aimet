@@ -155,10 +155,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         'clone',
         'index',
         'ScalarImplicit',
-        'transpose'
+        'transpose',
+        'expand',
+        'DictConstruct'
     }
 
-    # Graph nodes for which which we will treat as passthrough and not represent with an Op
+    # Graph nodes for which we will treat as passthrough and not represent with an Op
     passthrough_graph_nodes = [
         "Int",       # aten::Int
         "t",         # aten::t

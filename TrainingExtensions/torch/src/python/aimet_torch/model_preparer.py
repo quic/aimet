@@ -307,7 +307,7 @@ def prepare_model(model: torch.nn.Module, modules_to_exclude: List[torch.nn.Modu
         traced_model = _trace_model(model, modules_to_exclude, concrete_args)
 
     # Prepare model and perform checks to make sure the graph is well-formed.
-    _prepare_helper(traced_model)
+    _prepare_traced_model(traced_model)
     return traced_model
 
 
@@ -337,9 +337,9 @@ def _trace_model(model: torch.nn.Module, modules_to_exclude: Optional[List[torch
     return symbolic_traced_model
 
 
-def _prepare_helper(traced_model: torch.fx.GraphModule):
+def _prepare_traced_model(traced_model: torch.fx.GraphModule):
     """
-    Helper for prepare_model().
+    Helper for prepare_model(). This prepares the given traced_model in-place.
 
     :param traced_model: Symbolically traced model.
     """
