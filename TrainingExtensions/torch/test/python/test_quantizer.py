@@ -2287,10 +2287,21 @@ class TestQuantizationSimStaticGrad:
         del sim
 
     def test_nested_input(self):
+        class Add(torch.nn.Module):
+            """ Add module for a functional add"""
+
+            # pylint:disable=arguments-differ
+            @staticmethod
+            def forward(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+                """
+                Forward-pass routine for add op
+                """
+                return x + y
+
         class Model(nn.Module):
             def __init__(self):
                 super().__init__()
-                self.add = elementwise_ops.Add()
+                self.add = Add()
 
             def forward(self, x, y):
                 return self.add(x, y)
