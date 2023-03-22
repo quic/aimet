@@ -36,7 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-""" Modules for functional with stateless APIs """
+""" Custom modules for functional operations defined under torch and torch.nn.functional packages """
 
 from typing import Callable, Any
 import torch
@@ -70,23 +70,59 @@ def create_wrapper_module(class_name: str, functional: Callable) -> Callable:
     return wrapped_module
 
 
+# modules for operations under torch package
+Divide = create_wrapper_module('Divide', torch.div)
+FloorDivide = create_wrapper_module('FloorDivide', torch.floor_divide)
+MatMul = create_wrapper_module('MatMul', torch.matmul)
+Norm = create_wrapper_module('Norm', torch.norm)
+Exponential = create_wrapper_module('Exponential', torch.exp)
+Chunk = create_wrapper_module('Chunk', torch.chunk)
+
+
+# modules operations under torch.nn.functional package
 Interpolate = create_wrapper_module('Interpolate', torch.nn.functional.interpolate)
 MaxPool2d = create_wrapper_module('MaxPool2d', torch.nn.functional.max_pool2d)
 AdaptiveAvgPool2d = create_wrapper_module('AdaptiveAvgPool2d', torch.nn.functional.adaptive_avg_pool2d)
 AvgPool2d = create_wrapper_module('AvgPool2d', torch.nn.functional.avg_pool2d)
-Norm = create_wrapper_module('Norm', torch.norm)
-Chunk = create_wrapper_module('Chunk', torch.chunk)
 BatchNorm = create_wrapper_module('BatchNorm', torch.nn.functional.batch_norm)
 GroupNorm = create_wrapper_module('GroupNorm', torch.nn.functional.group_norm)
-Add = create_wrapper_module('Add', torch.add)
-Subtract = create_wrapper_module('Subtract', torch.sub)
-Multiply = create_wrapper_module('Multiply', torch.mul)
-Divide = create_wrapper_module('Divide', torch.div)
-FloorDivide = create_wrapper_module('FloorDivide', torch.floor_divide)
-MatMul = create_wrapper_module('MatMul', torch.matmul)
-Exponential = create_wrapper_module('Exponential', torch.exp)
 
 
+# following modules are for overloaded operators like +, - and *
+class Add(torch.nn.Module):
+    """ Add module for a functional add"""
+    # pylint:disable=arguments-differ
+    @staticmethod
+    def forward(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        """
+        Forward-pass routine for add op
+        """
+        return x + y
+
+
+class Subtract(torch.nn.Module):
+    """ Subtract module for a functional subtract"""
+    # pylint:disable=arguments-differ
+    @staticmethod
+    def forward(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        """
+        Forward-pass routine for subtract op
+        """
+        return x - y
+
+
+class Multiply(torch.nn.Module):
+    """ Multiply module for a functional multiply"""
+    # pylint:disable=arguments-differ
+    @staticmethod
+    def forward(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        """
+        Forward-pass routine for multiply op
+        """
+        return x * y
+
+
+# modules for functional requiring special handling
 class Concat(torch.nn.Module):
     """ Concat module for a functional concat"""
     def __init__(self, axis: int = 0):
