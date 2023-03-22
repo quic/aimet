@@ -70,10 +70,8 @@ def create_wrapper_module(class_name: str, functional: Callable) -> Callable:
     return wrapped_module
 
 
-# modules for operations under torch package
-Add = create_wrapper_module('Add', torch.add)
+# modules for functional operations under torch package
 Subtract = create_wrapper_module('Subtract', torch.sub)
-Multiply = create_wrapper_module('Multiply', torch.mul)
 Divide = create_wrapper_module('Divide', torch.div)
 FloorDivide = create_wrapper_module('FloorDivide', torch.floor_divide)
 MatMul = create_wrapper_module('MatMul', torch.matmul)
@@ -82,13 +80,37 @@ Exponential = create_wrapper_module('Exponential', torch.exp)
 Chunk = create_wrapper_module('Chunk', torch.chunk)
 
 
-# modules for operations under torch.nn.functional package
+# modules for functional operations defined under torch.nn.functional package
 Interpolate = create_wrapper_module('Interpolate', torch.nn.functional.interpolate)
 MaxPool2d = create_wrapper_module('MaxPool2d', torch.nn.functional.max_pool2d)
 AdaptiveAvgPool2d = create_wrapper_module('AdaptiveAvgPool2d', torch.nn.functional.adaptive_avg_pool2d)
 AvgPool2d = create_wrapper_module('AvgPool2d', torch.nn.functional.avg_pool2d)
 BatchNorm = create_wrapper_module('BatchNorm', torch.nn.functional.batch_norm)
 GroupNorm = create_wrapper_module('GroupNorm', torch.nn.functional.group_norm)
+
+
+# following modules are for overloaded operators like + and *,
+# which can operate other than torch.Tensor datatype.
+class Add(torch.nn.Module):
+    """ Add module for a functional add"""
+    # pylint:disable=arguments-differ
+    @staticmethod
+    def forward(x: Any, y: Any) -> Any:
+        """
+        Forward-pass routine for add op
+        """
+        return x + y
+
+
+class Multiply(torch.nn.Module):
+    """ Multiply module for a functional multiply"""
+    # pylint:disable=arguments-differ
+    @staticmethod
+    def forward(x: Any, y: Any) -> Any:
+        """
+        Forward-pass routine for multiply op
+        """
+        return x * y
 
 
 # modules for functional requiring special handling
