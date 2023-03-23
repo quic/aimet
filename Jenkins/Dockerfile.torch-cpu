@@ -171,8 +171,8 @@ RUN python3 -m pip --no-cache-dir install \
         scipy==1.8.1 \
         spconv==2.1.20 \
         sphinx==2.1.1 \
-        sphinx-jinja==1.1.1 \
         sphinx-autodoc-typehints==1.6.0 \
+        sphinx-jinja==1.1.1 \
         sphinx-rtd-theme \
         tensorboard==2.4.0 \
         tensorboardX==2.4 \
@@ -191,10 +191,14 @@ RUN cd /tmp && \
     mkdir /opt/cmake && \
     sh cmake-3.19.3-Linux-x86_64.sh --prefix=/opt/cmake --skip-license
 
+# Delete any old cmake versions that MAY have been installed earlier
+RUN rm /usr/local/bin/cmake /usr/local/bin/ctest /usr/local/bin/cpack | true
+
 RUN ln -s /opt/cmake/bin/cmake /usr/local/bin/cmake
 RUN ln -s /opt/cmake/bin/ctest /usr/local/bin/ctest
 RUN ln -s /opt/cmake/bin/cpack /usr/local/bin/cpack
 
+# Onnxruntime C/C++ package needed to create custom C++ onnx ops for quantsim
 RUN mkdir /opt/onnxruntime && \
     export ONNXRUNTIME_VER=$(python3 -c 'import onnxruntime; print(onnxruntime.__version__)') && \
     wget -qO- "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VER}/onnxruntime-linux-x64-${ONNXRUNTIME_VER}.tgz" | tar xvz --strip-components 1 -C /opt/onnxruntime && \
