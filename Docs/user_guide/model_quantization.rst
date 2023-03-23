@@ -157,10 +157,6 @@ processing. If QAT is used, users will need to call .export() on the QuantSim ob
 CLE are used, users will need to first create a QuantSim object from the modified model, and then call .export() on the
 QuantSim object.
 
-**5. Running on SNPE/QNN**
-
-TODO: Include command for running model on target
-
 Debugging Guidelines
 ----------------------
 Applying AIMET Quantization features may involve some trial and error in order to find the best optimizations to apply
