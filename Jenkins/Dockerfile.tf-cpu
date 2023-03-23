@@ -183,6 +183,9 @@ RUN cd /tmp && \
     mkdir /opt/cmake && \
     sh cmake-3.19.3-Linux-x86_64.sh --prefix=/opt/cmake --skip-license
 
+# Delete any old cmake versions that MAY have been installed earlier
+RUN rm /usr/local/bin/cmake /usr/local/bin/ctest /usr/local/bin/cpack | true
+
 RUN ln -s /opt/cmake/bin/cmake /usr/local/bin/cmake
 RUN ln -s /opt/cmake/bin/ctest /usr/local/bin/ctest
 RUN ln -s /opt/cmake/bin/cpack /usr/local/bin/cpack
