@@ -574,7 +574,7 @@ class TestBatchNormFold(unittest.TestCase):
         initialize_uninitialized_vars(sess)
         start_op_names = ["input_1"]
         output_op_names = ["keras_model_functional/Softmax"]
-        pairs = find_all_batch_norms_to_fold(sess, start_op_names, output_op_names, return_bn_conn_op=True)
+        pairs, _ = find_all_batch_norms_to_fold(sess, start_op_names, output_op_names, return_bn_conn_op=True)
         conv, bn, fold_backward = pairs[0]
         assert not fold_backward
         assert bn.type == 'FusedBatchNormV3'
