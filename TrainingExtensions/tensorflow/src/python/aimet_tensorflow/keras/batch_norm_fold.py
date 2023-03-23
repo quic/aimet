@@ -403,14 +403,14 @@ def _delete_bn_from_functional(model: tf.keras.Model,
     #
 
     # Step 1: Get the inbound and outbound connections for each layer in the model
-    network_dict = ModelLayerConnections.get_model_layers_connection_properties(model)
+    model_layer_connections = ModelLayerConnections.get_model_layers_connection_properties(model)
 
     if isinstance(model.input, list):
         # If the model has multiple inputs, we need to set the output tensor of each input layer
         for inp in model.input:
-            network_dict[ModelLayerConnectionsProperties.OUTPUT_TENSORS].update({inp.name: inp})
+            model_layer_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS].update({inp.name: inp})
     else:
-        network_dict[ModelLayerConnectionsProperties.OUTPUT_TENSORS].update({model.layers[0].name: model.input})
+        model_layer_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS].update({model.layers[0].name: model.input})
 
     # Step 2: Create a new model with the batch normalization layers removed by iterating through the layers in the model
     # and using the inbound and outbound connections to rerouting around the batch normalization layers.
@@ -420,8 +420,8 @@ def _delete_bn_from_functional(model: tf.keras.Model,
             continue
 
         # Determine input tensors of the given layer
-        layer_input = [network_dict[ModelLayerConnectionsProperties.OUTPUT_TENSORS][layer_aux]
-                       for layer_aux in network_dict[ModelLayerConnectionsProperties.INBOUND_NODES][layer.name]]
+        layer_input = [model_layer_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS][layer_aux]
+                       for layer_aux in model_layer_connections[ModelLayerConnectionsProperties.INBOUND_NODES][current_layer.name]]
 
 
         layer_input = layer_input[0] if len(layer_input) == 1 else layer_input
@@ -442,15 +442,15 @@ def _delete_bn_from_functional(model: tf.keras.Model,
                 # Go through all the outbound layers of the batch normalization layer and replace the batch normalization
                 # layer name with the input layer names of the batch normalization layer.
                 batch_norms_outbound_layers_new_inbound_layers_names = \
-                    [outlayer.replace(layer.name, *all_batch_norms_inbound_layers_names)
-                     for outlayer in network_dict[ModelLayerConnectionsProperties.INBOUND_NODES][outbound_node.outbound_layer.name]]
+                    [outlayer.replace(current_layer.name, *all_batch_norms_inbound_layers_names)
+                     for outlayer in model_layer_connections[ModelLayerConnectionsProperties.INBOUND_NODES][outbound_node.outbound_layer.name]]
 
-                network_dict[ModelLayerConnectionsProperties.INBOUND_NODES].update(
+                model_layer_connections[ModelLayerConnectionsProperties.INBOUND_NODES].update(
                     {outbound_node.outbound_layer.name: batch_norms_outbound_layers_new_inbound_layers_names})
 
-                # The above updates our dict for the mapping of the inputs but we need to also update what Keras thinks
+                # The above updates our dict for the mapping of the inputs, but we need to also update what Keras thinks
                 # the inputs are. This is done by updating the inbound nodes of the output layer of the Batch Normalization.
-                # THIS IS ONLY FOR MAPPING THE INPUTS TO BUILD A NEW MODEL. The original models underlinig structure is
+                # THIS IS ONLY FOR MAPPING THE INPUTS TO BUILD A NEW MODEL. The original models underlying structure is
                 # not changed.
                 outbound_node.outbound_layer._inbound_nodes = current_layer.inbound_nodes  # pylint: disable=protected-access
 
@@ -468,7 +468,7 @@ def _delete_bn_from_functional(model: tf.keras.Model,
             current_layer._outbound_nodes = [] # pylint: disable=protected-access
 
             # Set new output tensor (in this case, it will be the same as the original model)
-            network_dict[ModelLayerConnectionsProperties.OUTPUT_TENSORS].update({layer.name: x})
+            model_layer_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS].update({current_layer.name: x})
 
         # Save tensor in output list if it is output in the initial model
         if current_layer.name in model.output_names:

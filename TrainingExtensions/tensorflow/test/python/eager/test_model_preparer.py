@@ -413,7 +413,7 @@ def test_conv_times_three_subclass_to_functional():
     # Therefore, we get the original model's weights and sort them in the order of the actual
     # architecture and use those weights to compare to the functional model's weights.
     model_weights_in_correct_order = _get_original_models_weights_in_functional_model_order(
-        original_model, functional_model, class_names=["conv_times_three", "two_convs"])
+        original_model, functional_model, class_names={"conv_times_three", "two_convs"})
 
     compare_weights(model_weights_in_correct_order, functional_model.get_weights())
     verify_functional_model(functional_model,
@@ -462,7 +462,7 @@ def test_keras_text_classification_example_model_to_functional():
     # Therefore, we get the original model's weights and sort them in the order of the actual
     # architecture and use those weights to compare to the functional model's weights.
     model_weights_in_correct_order = _get_original_models_weights_in_functional_model_order(
-        original_model, functional_model, class_names=["token_and_position_embedding", "transformer_block"])
+        original_model, functional_model, class_names={"token_and_position_embedding", "transformer_block"})
     compare_weights(model_weights_in_correct_order, functional_model.get_weights())
     verify_functional_model(functional_model,
                             original_model,
