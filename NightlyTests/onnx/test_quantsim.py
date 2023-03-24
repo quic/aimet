@@ -43,10 +43,11 @@ import torch
 from onnx import load_model
 from torchvision import models
 
+from aimet_onnx.utils import make_dummy_input
 from aimet_common.defs import QuantScheme
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_torch.quantsim import QuantizationSimModel as PtQuantizationSimModel
-from torch_utils import _get_cifar10_data_loaders, train_cifar10
+from torch_utils import get_cifar10_data_loaders, train_cifar10
 
 WORKING_DIR = '/tmp/quantsim'
 
@@ -104,10 +105,16 @@ class TestQuantizeAcceptance:
 
         torch.onnx.export(model, torch.as_tensor(inputs), os.path.join(WORKING_DIR, 'resnet18.onnx'),
                           training=torch.onnx.TrainingMode.PRESERVE,
-                          input_names=['input'], output_names=['output'])
+                          input_names=['input'], output_names=['output'],
+                          dynamic_axes={
+                              'input': {0: 'batch_size'},
+                              'output': {0: 'batch_size'},
+                          }
+                          )
 
         onnx_model = load_model(os.path.join(WORKING_DIR, 'resnet18.onnx'))
-        sim = QuantizationSimModel(onnx_model, quant_scheme=QuantScheme.post_training_tf, default_param_bw=8,
+        dummy_input = make_dummy_input(onnx_model)
+        sim = QuantizationSimModel(onnx_model, dummy_input, quant_scheme=QuantScheme.post_training_tf, default_param_bw=8,
                                    default_activation_bw=8)
 
         def dummy_forward_pass_onnx(session, _):
@@ -131,15 +138,20 @@ class TestQuantizeAcceptance:
             model.to(device)
 
         train_cifar10(model, 2)
-        train_loader, val_loader = _get_cifar10_data_loaders()
+        train_loader, val_loader = get_cifar10_data_loaders(drop_last=False)
 
         torch.onnx.export(model, torch.rand(batch_size, 3, 32, 32).cuda(), os.path.join(WORKING_DIR, 'resnet18.onnx'),
                           training=torch.onnx.TrainingMode.PRESERVE,
-                          input_names=['input'], output_names=['output'])
+                          input_names=['input'], output_names=['output'],
+                          dynamic_axes={
+                              'input': {0: 'batch_size'},
+                              'output': {0: 'batch_size'},
+                          }
+                          )
 
         onnx_model = load_model(os.path.join(WORKING_DIR, 'resnet18.onnx'))
-
-        sim = QuantizationSimModel(onnx_model, quant_scheme=QuantScheme.post_training_tf, default_param_bw=8,
+        dummy_input = make_dummy_input(onnx_model)
+        sim = QuantizationSimModel(onnx_model, dummy_input, quant_scheme=QuantScheme.post_training_tf, default_param_bw=8,
                                    default_activation_bw=8, use_cuda=True)
 
         def onnx_callback(session, iters):

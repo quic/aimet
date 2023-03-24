@@ -167,7 +167,7 @@ def get_ordered_dict_of_nodes(onnx_graph: onnx.onnx_pb.GraphProto) -> Dict:
     return ordered_dict
 
 
-def make_dummy_input(model: onnx_pb.ModelProto) -> Dict[str, np.ndarray]:
+def make_dummy_input(model: onnx_pb.ModelProto, dynamic_size: int = 1) -> Dict[str, np.ndarray]:
     """
     Create a dummy input based on the model input types and shapes
     :return: Dictionary of input_name : input array
@@ -178,7 +178,10 @@ def make_dummy_input(model: onnx_pb.ModelProto) -> Dict[str, np.ndarray]:
         dtype = item.type.tensor_type.elem_type
         shape = []
         for dim in item.type.tensor_type.shape.dim:
-            shape.append(dim.dim_value)
+            if dim.dim_param:
+                shape.append(dynamic_size)
+            else:
+                shape.append(dim.dim_value)
         input_dict[name] = np.random.randn(*shape).astype(mapping.TENSOR_TYPE_TO_NP_TYPE[dtype])
     return input_dict
 

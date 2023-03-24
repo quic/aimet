@@ -45,9 +45,10 @@ import pytest
 from aimet_common.defs import QuantScheme
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.qc_quantize_op import OpMode
+from aimet_onnx.utils import make_dummy_input
 from aimet_torch.quantsim import QuantizationSimModel as PtQuantizationSimModel
 from models.models_for_tests import SingleResidual
-from models.models_for_tests import build_dummy_model, single_residual_model
+from models.models_for_tests import build_dummy_model, single_residual_model, BNAfterConv
 
 
 class DummyModel(SingleResidual):
@@ -100,7 +101,8 @@ class TestQuantSim:
     def test_insert_quantize_op_nodes(self):
         """ Test to insert qc quantize op to the graph"""
         model = build_dummy_model()
-        sim = QuantizationSimModel(model)
+        dummy_input = make_dummy_input(model)
+        sim = QuantizationSimModel(model, dummy_input)
         assert len(sim.model.nodes()) == 14
 
         node_ls = [node.op_type for node in sim.model.nodes()]
@@ -116,10 +118,29 @@ class TestQuantSim:
         for name in sim.activation_names:
             assert qc_quantize_op_dict[name].op_mode == OpMode.updateStats
 
+    def test_create_quantsim_dynamic_batch_size(self):
+        """ Test to insert qc quantize op to the graph"""
+        model = BNAfterConv()
+        inputs = torch.randn((2, 10, 24, 24))
+        torch.onnx.export(model, inputs, '/tmp/dummy_model.onnx',
+                          training=torch.onnx.TrainingMode.PRESERVE,
+                          input_names=['input'], output_names=['output'],
+                          dynamic_axes={
+                              'input': {0: 'batch_size'},
+                              'output': {0: 'batch_size'},
+                          })
+
+        onnx_model = load_model('/tmp/dummy_model.onnx')
+
+        dummy_input = make_dummy_input(onnx_model)
+        sim = QuantizationSimModel(onnx_model, dummy_input)
+        sim.session.run(None, dummy_input)
+
     def test_compute_encodings(self):
         """Test to perform compute encodings"""
         model = build_dummy_model()
-        sim = QuantizationSimModel(model)
+        dummy_input = make_dummy_input(model)
+        sim = QuantizationSimModel(model, dummy_input)
 
         for quantizer in sim.qc_quantize_op_dict:
             sim.qc_quantize_op_dict[quantizer].enabled = True
@@ -145,7 +166,9 @@ class TestQuantSim:
         if not os.path.exists('./tmp'):
             os.mkdir('./tmp')
         model = build_dummy_model()
-        sim = QuantizationSimModel(model, default_activation_bw=16, default_param_bw=16,
+        dummy_input = make_dummy_input(model)
+
+        sim = QuantizationSimModel(model, dummy_input, default_activation_bw=16, default_param_bw=16,
                                    quant_scheme=QuantScheme.post_training_tf)
 
         for quantizer in sim.qc_quantize_op_dict:
@@ -175,7 +198,8 @@ class TestQuantSim:
         if not os.path.exists('/tmp'):
             os.mkdir('/tmp')
         model = build_dummy_model()
-        sim = QuantizationSimModel(model)
+        dummy_input = make_dummy_input(model)
+        sim = QuantizationSimModel(model, dummy_input)
 
         for quantizer in sim.qc_quantize_op_dict:
             sim.qc_quantize_op_dict[quantizer].enabled = True
@@ -226,7 +250,8 @@ class TestQuantSim:
 
         onnx_model = load_model('/tmp/dummy_model.onnx')
 
-        onnx_sim = QuantizationSimModel(onnx_model)
+        dummy_input = make_dummy_input(onnx_model)
+        onnx_sim = QuantizationSimModel(onnx_model, dummy_input)
 
         activation_encodings_map = {'12': '9', '15': '10', '21': '12', '24': '13', '27': '14', '30': '15',
                                     '34': '17', '38': '19', 't.1': 'input'}
@@ -260,7 +285,8 @@ class TestQuantSim:
 
     def test_single_residual(self):
         model = single_residual_model().model
-        sim = QuantizationSimModel(model, use_cuda=False)
+        dummy_input = make_dummy_input(model)
+        sim = QuantizationSimModel(model, dummy_input, use_cuda=False)
         for quantizer in sim.qc_quantize_op_dict:
             sim.qc_quantize_op_dict[quantizer].enabled = True
 
@@ -306,8 +332,9 @@ class TestQuantSim:
         onnx_model_cpu = load_model('/tmp/dummy_model.onnx')
         onnx_model_gpu = load_model('/tmp/dummy_model.onnx')
 
-        onnx_sim_cpu = QuantizationSimModel(onnx_model_cpu, use_cuda=False, quant_scheme=QuantScheme.post_training_tf_enhanced)
-        onnx_sim_gpu = QuantizationSimModel(onnx_model_gpu, use_cuda=True, quant_scheme=QuantScheme.post_training_tf_enhanced)
+        dummy_input = make_dummy_input(onnx_model_cpu)
+        onnx_sim_cpu = QuantizationSimModel(onnx_model_cpu, dummy_input, use_cuda=False, quant_scheme=QuantScheme.post_training_tf_enhanced)
+        onnx_sim_gpu = QuantizationSimModel(onnx_model_gpu, dummy_input, use_cuda=True, quant_scheme=QuantScheme.post_training_tf_enhanced)
 
         for node in onnx_sim_gpu.model.graph().node:
             if node.op_type == "QcQuantizeOp":
