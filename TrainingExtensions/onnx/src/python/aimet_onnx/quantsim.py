@@ -83,6 +83,7 @@ class QuantizationSimModel:
         Constructor
 
         :param model: ONNX model or path to model
+        :param dummy_input: Dummy input to the model. If None, will attempt to auto-generate a dummy input
         :param quant_scheme: Quantization scheme (e.g. QuantScheme.post_training_tf)
         :param rounding_mode: Rounding mode (e.g. nearest)
         :param default_param_bw: Quantization bitwidth for parameter
@@ -153,6 +154,7 @@ class QuantizationSimModel:
     def _get_activations_to_quantize(self, dummy_input: Dict[str, np.ndarray]):
         """
         Get the names of activations to quantize
+
         :param dummy_input: Sample input to be run through the model
         """
         self.fill_activation_dtypes(dummy_input)
@@ -185,6 +187,7 @@ class QuantizationSimModel:
     def fill_activation_dtypes(self, dummy_input: Dict[str, np.ndarray]):
         """
         Get the data type for each activation
+
         :param dummy_input: Sample input to run through the model
         """
         activations = utils.get_graph_intermediate_activations(self.model.graph())
@@ -262,6 +265,7 @@ class QuantizationSimModel:
     def _build_session(self, providers):
         """
         Build and return onnxruntime inference session
+
         :param providers: providers to execute onnxruntime
         """
         sess_options = SessionOptions()
@@ -285,6 +289,7 @@ class QuantizationSimModel:
     def save_model_graph(self, filename_prefix: str):
         """
         Save model to given path
+
         :param filename_prefix: filename to save the onnx model
         """
         if not os.path.exists(WORKING_DIR):
@@ -312,6 +317,7 @@ class QuantizationSimModel:
     def _export_encodings(self, encoding_file_path):
         """
         Export encodings to json and yaml file
+
         :param encoding_file_path: path to save the encoding files
         """
 
@@ -344,6 +350,7 @@ class QuantizationSimModel:
     def _remove_nodes_and_save_model(self, file_path):
         """
         Remove quantization nodes and save model to file
+
         :param file_path: path to save onnx model
         """
         nodes_to_remove = []
@@ -363,6 +370,7 @@ class QuantizationSimModel:
     def export(self, path: str, filename_prefix: str):
         """
         Compute encodings and export to files
+
         :param path: dir to save encoding files
         :param filename_prefix: filename to save encoding files
         """

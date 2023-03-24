@@ -37,7 +37,6 @@
 # =============================================================================
 import json
 import os
-from aimet_onnx.utils import make_dummy_input
 from aimet_onnx.quantsim import QuantizationSimModel
 from models import models_for_tests
 
@@ -46,7 +45,7 @@ class TestQuantSimConfig:
     """Tests for applying config to QuantizationSimModel"""
     def test_qs_config_dummy_model(self):
         model = models_for_tests.build_dummy_model()
-        sim = QuantizationSimModel(model, make_dummy_input(model), use_cuda=False)
+        sim = QuantizationSimModel(model, use_cuda=False)
         assert sim.qc_quantize_op_dict['conv_w'].enabled == True
         assert sim.qc_quantize_op_dict['conv_b'].enabled == False
         assert sim.qc_quantize_op_dict['fc_w'].enabled == True
@@ -82,7 +81,7 @@ class TestQuantSimConfig:
             os.makedirs('./data')
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
-        sim = QuantizationSimModel(model, make_dummy_input(model), config_file='./data/quantsim_config.json', use_cuda=False)
+        sim = QuantizationSimModel(model, config_file='./data/quantsim_config.json', use_cuda=False)
         for name in ['3', '4', '5', 'output']:
             assert sim.qc_quantize_op_dict[name].enabled == True
             assert sim.qc_quantize_op_dict[name].use_symmetric_encodings == False
@@ -118,7 +117,7 @@ class TestQuantSimConfig:
             os.makedirs('./data')
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
-        sim = QuantizationSimModel(model, make_dummy_input(model), config_file='./data/quantsim_config.json', use_cuda=False)
+        sim = QuantizationSimModel(model, config_file='./data/quantsim_config.json', use_cuda=False)
         for name in ['conv_w', 'fc_w']:
             assert sim.qc_quantize_op_dict[name].enabled == True
             assert sim.qc_quantize_op_dict[name].use_symmetric_encodings == True
@@ -164,7 +163,7 @@ class TestQuantSimConfig:
             os.makedirs('./data')
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
-        sim = QuantizationSimModel(model, make_dummy_input(model), config_file='./data/quantsim_config.json', use_cuda=False)
+        sim = QuantizationSimModel(model, config_file='./data/quantsim_config.json', use_cuda=False)
 
         assert sim.qc_quantize_op_dict['conv_w'].enabled == True
         assert sim.qc_quantize_op_dict['conv_w'].use_symmetric_encodings == False
@@ -193,7 +192,7 @@ class TestQuantSimConfig:
             os.makedirs('./data')
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
-        sim = QuantizationSimModel(model, make_dummy_input(model), config_file='./data/quantsim_config.json', use_cuda=False)
+        sim = QuantizationSimModel(model, config_file='./data/quantsim_config.json', use_cuda=False)
         assert sim.qc_quantize_op_dict['input'].enabled == True
 
     def test_parse_config_file_supergroups(self):
@@ -229,7 +228,7 @@ class TestQuantSimConfig:
             os.makedirs('./data')
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
-        sim = QuantizationSimModel(model, make_dummy_input(model), config_file='./data/quantsim_config.json', use_cuda=False)
+        sim = QuantizationSimModel(model, config_file='./data/quantsim_config.json', use_cuda=False)
 
         # 3 in conv output, 4 is relu output (even though it was not touched with Conv, relu pattern, it was disabled for
         # relu maxpool pattern
@@ -267,7 +266,7 @@ class TestQuantSimConfig:
             os.makedirs('./data')
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
-        sim = QuantizationSimModel(model, make_dummy_input(model), config_file='./data/quantsim_config.json', use_cuda=False)
+        sim = QuantizationSimModel(model, config_file='./data/quantsim_config.json', use_cuda=False)
 
         for quantizer in sim.qc_quantize_op_dict.values():
             assert quantizer.use_strict_symmetric == True
