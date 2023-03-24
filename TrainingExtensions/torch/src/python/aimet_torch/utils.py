@@ -49,7 +49,7 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets, transforms
 
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEME_TO_PYMO
-from aimet_common.utils import AimetLogger, log_with_error_and_assert_if_false
+from aimet_common.utils import AimetLogger, Handle, log_with_error_and_assert_if_false
 import aimet_common.libpymo as libpymo
 
 
@@ -857,10 +857,11 @@ def get_all_quantizers(model: torch.nn.Module):
     return param_quantizers, input_quantizers, output_quantizers
 
 
-@contextlib.contextmanager
 def disable_all_quantizers(model: torch.nn.Module):
     """
-    Temporarily disable all quantizers in the model within with-as block.
+    Temporarily disable all quantizers in the model within with-as block, or permanently disable
+    without employing context manager.
+
     :param model: Root module
     """
     param_quantizers, input_quantizers, output_quantizers = get_all_quantizers(model)
@@ -868,10 +869,14 @@ def disable_all_quantizers(model: torch.nn.Module):
 
     active_quantizers = set(quantizer for quantizer in all_quantizers if quantizer.enabled)
 
+    def cleanup():
+        for quantizer in active_quantizers:
+            quantizer.enabled = True
+
     try:
         for quantizer in active_quantizers:
             quantizer.enabled = False
-        yield
-    finally:
-        for quantizer in active_quantizers:
-            quantizer.enabled = True
+        return Handle(cleanup)
+    except:
+        cleanup()
+        raise
