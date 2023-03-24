@@ -661,6 +661,28 @@ class MiniModel(torch.nn.Module):
         with self.assertRaises(AssertionError):
             _ = utils.load_pytorch_model('MiniModel', './data', 'mini_model', load_state_dict=False)
 
+    def test_disable_all_quantizers(self):
+        model = TinyModel().to(device="cpu")
+        dummy_input = torch.rand(1, 3, 32, 32)
+        sim = QuantizationSimModel(model, dummy_input=dummy_input)
+
+        all_quantizers = sum(utils.get_all_quantizers(sim.model), start=[])
+        active_quantizers = set(quantizer for quantizer in all_quantizers if quantizer.enabled)
+
+        # Disable all the quantizers within with-as block
+        with utils.disable_all_quantizers(sim.model):
+            for quantizer in all_quantizers:
+                assert not quantizer.enabled
+
+        # Check the function disables quantizers temporarily
+        for quantizer in active_quantizers:
+            assert quantizer.enabled
+
+        # Disable all the quantizers without employing context manager
+        utils.disable_all_quantizers(sim.model)
+        for quantizer in all_quantizers:
+            assert not quantizer.enabled
+
 def _assert_mode_recursive(root: torch.nn.Module, training: bool):
     for module in root.modules():
         assert module.training == training
