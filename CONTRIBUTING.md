@@ -35,7 +35,7 @@ Contributors should develop on [their own fork](https://help.github.com/en/githu
 ## Setup
 Go to https://github.com/quic/aimet and fork the repo using [these instructions](https://help.github.com/en/github/getting-started-with-github/fork-a-repo).
 
-Follow the [Requirements](docker_install.md#requirements) and [Setup](docker_install.md#setup-the-environment) sections in [docker_install.md](docker_install.md). Then return to this page.
+Follow the [Requirements](packaging/docker_install.md#requirements) and [Setup](packaging/docker_install.md#setup-the-environment) sections in [docker_install.md](packaging/docker_install.md). Then return to this page.
 
 ## Get code
 [Sync your fork](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/syncing-a-fork) with the latest from the upstream repository.
