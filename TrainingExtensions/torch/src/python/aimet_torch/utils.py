@@ -857,12 +857,13 @@ def get_all_quantizers(model: torch.nn.Module):
     return param_quantizers, input_quantizers, output_quantizers
 
 
-def disable_all_quantizers(model: torch.nn.Module):
+def disable_all_quantizers(model: torch.nn.Module) -> Handle:
     """
     Temporarily disable all quantizers in the model within with-as block, or permanently disable
     without employing context manager.
 
     :param model: Root module
+    :returns: Handle that enable all quantizers in the model upon handle.remove().
     """
     param_quantizers, input_quantizers, output_quantizers = get_all_quantizers(model)
     all_quantizers = param_quantizers + input_quantizers + output_quantizers
