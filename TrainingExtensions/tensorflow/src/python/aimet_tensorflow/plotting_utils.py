@@ -42,7 +42,6 @@ import math
 import holoviews as hv
 import numpy as np
 import pandas as pd
-import torch
 from bokeh import plotting
 from bokeh.layouts import row
 from bokeh.models import HoverTool, WheelZoomTool, ColumnDataSource, Span, TableColumn, DataTable
@@ -72,22 +71,6 @@ def get_weights(conv_module, sess):
     axis_1_length = np.prod(numpy_weight.shape[1:])
     reshaped_weights = numpy_weight.reshape(int(axis_0_length), int(axis_1_length))
     return reshaped_weights
-
-
-def map_all_module_weights_to_data_frame(model, sess):
-    """
-    Returns a python dictionary mapping each conv and linear module in the input model to a data frame of its weights.
-
-    :param model: pytorch model
-    :return: python dictionary
-    """
-    module_weights_map = {}
-    for name, module in model.named_modules():
-        if isinstance(module, (torch.nn.modules.conv.Conv2d, torch.nn.modules.linear.Linear)):
-            module_weights = get_weights(module, sess)
-            module_weights_data_frame = pd.DataFrame(module_weights)
-            module_weights_map[name] = module_weights_data_frame
-    return module_weights_map
 
 
 def style(p):
