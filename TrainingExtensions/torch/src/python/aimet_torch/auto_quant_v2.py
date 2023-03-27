@@ -516,11 +516,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         :return: Output model and folded pairs.
         """
         model = copy.deepcopy(model)
-        if isinstance(self.dummy_input, torch.Tensor):
-            input_shape = tuple(self.dummy_input.shape)
-        else:
-            input_shape = [tuple(x.shape) for x in self.dummy_input]
-        folded_pairs = fold_all_batch_norms(model, input_shape)
+        folded_pairs = fold_all_batch_norms(model, None, self.dummy_input)
         return model, folded_pairs
 
     @cache.mark("cle")
