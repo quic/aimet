@@ -272,11 +272,7 @@ class AutoQuant:
         :return: Output model and folded pairs.
         """
         model = copy.deepcopy(model)
-        if isinstance(dummy_input, torch.Tensor):
-            input_shape = tuple(dummy_input.shape)
-        else:
-            input_shape = [tuple(x.shape) for x in dummy_input]
-        folded_pairs = fold_all_batch_norms(model, input_shape)
+        folded_pairs = fold_all_batch_norms(model, None, dummy_input)
         return model, folded_pairs
 
     @cache.mark("cle")
