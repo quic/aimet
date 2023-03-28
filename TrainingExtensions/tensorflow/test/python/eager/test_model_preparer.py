@@ -298,7 +298,10 @@ def verify_functional_model(functional_model, original_model,
     :param random_input: a random input to the model
     """
     # Verify the functional model produces the same output as the original model
-    np.testing.assert_array_equal(functional_model(random_input).numpy(), original_model(random_input).numpy())
+    try:
+        np.testing.assert_array_equal(functional_model(random_input).numpy(), original_model(random_input).numpy())
+    except AttributeError:
+        tf.assert_equal(functional_model(random_input), original_model(random_input))
     assert len(functional_model.layers) == number_of_layers_in_model, \
         f"Expected {number_of_layers_in_model} layers in functional model, but got {len(functional_model.layers)}"
 
@@ -481,3 +484,47 @@ def test_non_nested_layered_model():
 
     assert original_model == functional_model, \
         "Prepare model did not give back the original model. This model does not need to be prepared."
+
+def test_multi_output():
+    class TestMultiOut(tf.keras.layers.Layer):
+        def __init__(self, **kwargs) -> None:
+            super().__init__(name='test_multi_out')
+
+        def call(self, inputs, **kwargs):
+            out1 = inputs * 2.0
+            out2 = inputs * 3.0
+            return [out1, out2]
+
+    encoder_input = tf.keras.Input(shape=(28, 28, 1), name="img")
+    x = tf.keras.layers.Conv2D(16, 3, activation="relu")(encoder_input)
+    out = TestMultiOut()(x)
+
+    original_model = tf.keras.Model(inputs=encoder_input, outputs=out)
+    random_input = np.random.rand(1, *original_model.input_shape[1:])
+    _ = original_model(random_input)
+
+    functional_model = prepare_model(original_model)
+    model_weights_in_correct_order = _get_original_models_weights_in_functional_model_order(
+        original_model, functional_model, class_names={'test_multi_out', 'functional'})
+    compare_weights(model_weights_in_correct_order, functional_model.get_weights())
+
+    verify_functional_model(functional_model,
+                            original_model,
+                            random_input,
+                            number_of_layers_in_model=4)
+
+def test_multi_output_only_lambda():
+    encoder_input = tf.keras.Input(shape=(28, 28, 1), name="img")
+    x = tf.keras.layers.Conv2D(16, 3, activation="relu")(encoder_input)
+    x0, x1 = tf.split(x, [8, 8], 3)
+    x1a = x1 * 2.0
+    out = tf.concat([x0, x1a], 3)
+
+    original_model = tf.keras.Model(inputs=encoder_input, outputs=out)
+    random_input = np.random.rand(1, *original_model.input_shape[1:])
+    _ = original_model(random_input)
+
+    functional_model = prepare_model(original_model)
+
+    assert functional_model == original_model, "The original model does not contain any nested layers. \
+        The original model should be returned."
