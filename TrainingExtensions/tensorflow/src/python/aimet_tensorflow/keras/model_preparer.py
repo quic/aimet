@@ -59,7 +59,6 @@ _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ModelPreparer)
 
 regex_for_camel_case_to_snake_case = re.compile(r'(?<!^)(?=[A-Z])')
 _TEMP_MODEL_NAME = "temp_aimet_intermediate_model"
-_SAVE_OUTPUTS = False
 
 def _get_original_models_weights_in_functional_model_order(original_model: tf.keras.Model,
                                                            functional_model: tf.keras.Model,
@@ -127,8 +126,9 @@ def _set_functional_models_weights(original_model: tf.keras.Model, functional_mo
     _logger.info("Model prepared for AIMET in Functional API format.")
 
 
-def _format_input_layer(original_model: tf.keras.Model, input_layer: Union[
-    tf.keras.layers.InputLayer, List[tf.keras.layers.InputLayer]] = None) -> tf.keras.layers.Layer:
+def _format_input_layer(original_model: tf.keras.Model,
+                        input_layer: Union[tf.keras.layers.InputLayer, List[tf.keras.layers.InputLayer]] = None) \
+                            -> tf.keras.layers.Layer:
     """
     This function formats the input layer by either using the original models input layer or the user provided input layer.
     This function will also raise an error if the model needs a defined input layer to be prepared for AIMET.
@@ -399,8 +399,7 @@ def _update_temporary_model_layers_connections_inbound_nodes(
     :param temp_model: The temporary model
     :param layer_input: The input layer of the layer
     """
-    for layers_name, input_tensor_name in temp_model_model_layers_connections[
-        ModelLayerConnectionsProperties.INBOUND_NODES].items():
+    for layers_name, input_tensor_name in temp_model_model_layers_connections[ModelLayerConnectionsProperties.INBOUND_NODES].items():
         for idx, current_input_name in enumerate(input_tensor_name):
             if current_input_name == temp_model.input.name:
                 temp_model_model_layers_connections[ModelLayerConnectionsProperties.INBOUND_NODES][layers_name][
@@ -427,20 +426,16 @@ def _handle_nested_layer(layer: tf.keras.layers.Layer, model_layers_connections:
     # 1) The input layer is used to create the temporary functional model
     # 2) The input layer is used in the nested layers call function as a symbolic tensor to get internal layers
     layer_input = _get_layer_input(layer, model_layers_connections)
-    if _is_functional_model(layer) or _is_sequential_model(layer):
-        # Unwrapping the functional or sequential model with an extra step of cloning the model to remove external nodes
-        temp_model = tf.keras.models.clone_model(_get_temporary_model(layer, layer_input))
-    else:
-        temp_model = _get_temporary_model(layer, layer_input)
+    temp_model = tf.keras.models.clone_model(_get_temporary_model(layer, layer_input))
 
     # Get the model layers connections dictionary for the temporary model and merge it with the model layers connections dictionary for the
     # functional model. This is done, so we can keep track of the sublayer and their inputs and outputs.
     temp_model_model_layers_connections = ModelLayerConnections.get_model_layers_connection_properties(temp_model)
-    _update_temporary_model_layers_connections_inbound_nodes(
-        temp_model_model_layers_connections, temp_model, layer_input)
+    _update_temporary_model_layers_connections_inbound_nodes(temp_model_model_layers_connections,
+                                                             temp_model, layer_input)
 
-    model_layers_connections = ModelLayerConnections.merge_model_layers_connections(
-        model_layers_connections, temp_model_model_layers_connections)
+    model_layers_connections = ModelLayerConnections.merge_model_layers_connections(model_layers_connections,
+                                                                                    temp_model_model_layers_connections)
 
     return _prepare_model_helper(temp_model,
                                  class_names,
@@ -511,9 +506,9 @@ def _prepare_model_helper(model: tf.keras.Model, class_names: Set[str],
                                                      original_models_last_layer)
             # If we are at the end of the original model, we want the model_outputs to be the end model outputs
             if current_layer == original_models_last_layer:
-                _logger.debug("Last layer was a nested layer. \
-                               Using temp model's output from _handle_nested_layer as model_output")
-                return
+                _logger.debug("Last layer was a nested layer. "
+                              "Using temp model's output from _handle_nested_layer as model_output")
+                continue
             model_outputs.clear()
         else:
             new_output_tensor = _handle_normal_keras_layer(current_layer, model_layers_connections)
@@ -573,8 +568,9 @@ def _model_has_nested_layers(model: tf.keras.Model) -> bool:
     return False
 
 
-def prepare_model(original_model: tf.keras.Model, input_layer: Union[
-    tf.keras.layers.InputLayer, List[tf.keras.layers.InputLayer]] = None) -> tf.keras.Model:
+def prepare_model(original_model: tf.keras.Model,
+                  input_layer: Union[tf.keras.layers.InputLayer, List[tf.keras.layers.InputLayer]] = None) \
+                    -> tf.keras.Model:
     """
     This function prepares a Keras model before continuing on with AIMET. Specifically, it will convert the model into
     a purely Functional API model and copy over the original models weights.
