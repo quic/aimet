@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -345,9 +345,9 @@ class Adaround:
         encoding_dict[tensor_name] = [{'min': enc.min,
                                        'max': enc.max,
                                        'scale': enc.delta,
-                                       'offset': enc.offset,
+                                       'offset': int(enc.offset),
                                        'bitwidth': enc.bw,
-                                       'is_symmetric': is_symmetric} for enc in encoding]
+                                       'is_symmetric': str(is_symmetric)} for enc in encoding]
 
     @staticmethod
     def get_is_symmetric_flag_for_op_param(configs: ConfigDictType, tf_op_type: str, param_name: str,

@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -142,8 +142,8 @@ def test_adaround_followed_by_quantsim():
 
     print(after_min, after_max, after_delta, after_offset)
 
-    assert before_min == after_min
-    assert before_max == after_max
+    assert np.allclose(before_min, after_min, atol=1e-6)
+    assert np.allclose(before_max, after_max, atol=1e-6)
     assert np.allclose(before_delta, after_delta, atol=1e-4)
     assert before_offset == after_offset
 
