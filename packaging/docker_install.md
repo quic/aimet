@@ -19,7 +19,7 @@ This page provides instructions to build, install and use the AIMET software in 
 ## Requirements
 The AIMET package requires the following host platform setup:
 - 64-bit Intel x86-compatible processor
-- Linux Ubuntu: 18.04 LTS
+- Linux Ubuntu: 20.04 LTS
 - bash command shell
 - For GPU variants:
   - Nvidia GPU card (Compute capability 5.2 or later)
@@ -78,7 +78,7 @@ mkdir build && cd build
 # To include tensorflow, use -DENABLE_TENSORFLOW=ON. To exclude tensorflow, use -DENABLE_TENSORFLOW=OFF.
 cmake .. -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DENABLE_CUDA=ON -DENABLE_TORCH=ON -DENABLE_TENSORFLOW=ON
 
-make -j8 
+make -j8
 ```
 
 After a successful build, install the package using the following instructions:
@@ -154,7 +154,7 @@ docker run --rm -it -u $(id -u ${USER}):$(id -g ${USER}) \
 > **NOTE**
 * Feel free to modify the above `docker run` command based on the environment and filesystem on your host machine.
 * If nvidia-docker 2.0 is installed, then add `--gpus all` to the `docker run` commands in order to enable GPU access inside the docker container.
-* If nvidia-docker 1.0 is installed, then replace `docker run` with `nvidia-docker run` in order to enable GPU access inside the docker container. 
+* If nvidia-docker 1.0 is installed, then replace `docker run` with `nvidia-docker run` in order to enable GPU access inside the docker container.
 * Port forwarding needs to be done in order to run the Visualization APIs from docker container. This can be achieved by running the docker container as follows:
 
 ```bash
@@ -164,7 +164,7 @@ docker run -p ${port_id}:${port_id} --rm -it -u $(id -u ${USER}):$(id -g ${USER}
   -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro \
   -v ${HOME}:${HOME} -v ${WORKSPACE}:${WORKSPACE} \
   -v "/local/mnt/workspace":"/local/mnt/workspace" \
-  --entrypoint /bin/bash -w ${WORKSPACE} --hostname ${docker_container_name} ${docker_image_name} 
+  --entrypoint /bin/bash -w ${WORKSPACE} --hostname ${docker_container_name} ${docker_image_name}
 ```
 
 ### Build and launch docker using script
