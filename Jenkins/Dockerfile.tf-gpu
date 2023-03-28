@@ -186,6 +186,7 @@ RUN python3 -m pip --no-cache-dir install \
         tensorflow-hub \
         tensorflow-model-optimization \
         tensorlayer==2.2.1 \
+        torchvision==0.14.1 \
         timm==0.3.1 \
         tqdm \
         transformers==4.11.3 \
