@@ -567,6 +567,7 @@ class QuantizationSimModel:
             # This is for the purpose of preventing unsigned symmetric operation
             #   during QAT 2.0 range learning
             new_quantizer.is_unsigned_symmetric = False
+            new_quantizer.encoding_min_max_fixed_vals = old_quantizer.encoding_min_max_fixed_vals
 
             if new_quantizer.data_type == QuantizationDataType.float or new_quantizer.bitwidth == 32:
                 new_quantizer.encoding = None
@@ -621,13 +622,19 @@ class QuantizationSimModel:
         # Copy user settable attributes for outputs
         for index, quantizer in enumerate(post_training_module.output_quantizers):
             _copy_quantizer_attributes(trainable_module.output_quantizers[index], quantizer)
+            if trainable_module.output_quantizers[index].encoding_min_max_fixed_vals is not None:
+                trainable_module.output_quantizers[index].freeze_encoding()
         # Copy user settable attributes for inputs
         for index, quantizer in enumerate(post_training_module.input_quantizers):
             _copy_quantizer_attributes(trainable_module.input_quantizers[index], quantizer)
+            if trainable_module.input_quantizers[index].encoding_min_max_fixed_vals is not None:
+                trainable_module.input_quantizers[index].freeze_encoding()
         # Copy user settable attributes for params
         for name, quantizer in post_training_module.param_quantizers.items():
             learned_grid_quantizer = trainable_module.param_quantizers[name]
             _copy_quantizer_attributes(learned_grid_quantizer, quantizer)
+            if learned_grid_quantizer.encoding_min_max_fixed_vals is not None:
+                learned_grid_quantizer.freeze_encoding()
 
         return trainable_module
 

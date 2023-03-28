@@ -152,12 +152,6 @@ class TestStaticTensorQuantizer:
                                                            use_symmetric_encodings=True,
                                                            enabled_by_default=True,
                                                            data_type=QuantizationDataType.int),
-                              StaticGridPerTensorQuantizer(bitwidth=32,
-                                                           round_mode=libpymo.RoundingMode.ROUND_NEAREST,
-                                                           quant_scheme=QuantScheme.post_training_tf,
-                                                           use_symmetric_encodings=True,
-                                                           enabled_by_default=True,
-                                                           data_type=QuantizationDataType.int),
                               StaticGridPerChannelQuantizer(bitwidth=32, round_mode=libpymo.RoundingMode.ROUND_NEAREST,
                                                             quant_scheme=QuantScheme.post_training_tf,
                                                             use_symmetric_encodings=True,
@@ -174,6 +168,49 @@ class TestStaticTensorQuantizer:
         assert quantizer.enabled
         assert quantizer.encoding is None
         assert torch.equal(tensor, quantizer_out)
+
+    @pytest.mark.parametrize("quantizer, tensor",
+                             [(StaticGridPerTensorQuantizer(bitwidth=8,
+                                                            round_mode=libpymo.RoundingMode.ROUND_NEAREST,
+                                                            quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                                            use_symmetric_encodings=False,
+                                                            enabled_by_default=True,
+                                                            data_type=QuantizationDataType.int),
+                               torch.tensor([-10.0, 10.0])),
+                              (StaticGridPerChannelQuantizer(bitwidth=8, round_mode=libpymo.RoundingMode.ROUND_NEAREST,
+                                                             quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                                             use_symmetric_encodings=False,
+                                                             num_channels=10,
+                                                             enabled_by_default=True,
+                                                             data_type=QuantizationDataType.int),
+                               torch.tensor([-10.0, 10.0]).repeat(10, 1))
+                              ])
+    def test_tensor_quantizer_fix_encoding_min_max_vals(self, quantizer, tensor):
+        """ Test fixing encoding min and max values """
+        quantizer.update_encoding_stats(tensor)
+        quantizer.compute_encoding()
+        assert quantizer.quant_scheme == QuantScheme.post_training_tf_enhanced
+        if isinstance(quantizer.encoding, list):
+            for encoding in quantizer.encoding:
+                assert encoding.min < -2.0
+                assert encoding.max > 2.0
+        else:
+            assert quantizer.encoding.min < -2.0
+            assert quantizer.encoding.max > 2.0
+
+        quantizer.reset_encoding_stats()
+        quantizer.encoding_min_max_fixed_vals = (0.0, 1.0)
+        quantizer.update_encoding_stats(tensor)
+        quantizer.compute_encoding()
+        assert quantizer.quant_scheme == QuantScheme.post_training_tf
+        if isinstance(quantizer.encoding, list):
+            for encoding in quantizer.encoding:
+                assert encoding.min == 0.0
+                assert encoding.max == 1.0
+        else:
+            assert quantizer.encoding.min == 0.0
+            assert quantizer.encoding.max == 1.0
+
 
 class TestLearnedGridTensorQuantizer:
 

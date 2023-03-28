@@ -2426,6 +2426,35 @@ class TestQuantizationSimLearnedGrid:
             if os.path.exists(filepath):
                 os.remove(filepath)
 
+    @pytest.mark.cuda
+    @pytest.mark.parametrize('device', ['cpu', 'cuda:0'])
+    def test_learned_grid_with_fixed_encoding_min_max_vars(self, device):
+        model = SmallMnistNoDropout()
+        model.eval()
+        model.to(device)
+        dummy_input = torch.randn(1, 1, 28, 28).to(device)
+
+        sim = QuantizationSimModel(model, dummy_input=dummy_input,
+                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init)
+        sim.model.conv1.enable_per_channel_quantization()
+        sim.model.relu1.output_quantizers[0].encoding_min_max_fixed_vals = (-5.0, 5.0)
+        sim.model.conv1.param_quantizers['weight'].encoding_min_max_fixed_vals = (-10.0, 10.0)
+        sim.compute_encodings(lambda m, _: m(dummy_input), None)
+
+        assert sim.model.relu1.output_quantizers[0].is_encoding_frozen
+
+        # Min and max will not be exactly what is specified due to 0 needing to be quantizable
+        assert sim.model.relu1.output_quantizers[0].encoding.min > -5.5
+        assert sim.model.relu1.output_quantizers[0].encoding.min < -4.5
+        assert sim.model.relu1.output_quantizers[0].encoding.max > 4.5
+        assert sim.model.relu1.output_quantizers[0].encoding.max < 5.5
+
+        assert sim.model.conv1.param_quantizers['weight'].is_encoding_frozen
+        for encoding in sim.model.conv1.param_quantizers['weight'].encoding:
+            assert encoding.min > -10.5
+            assert encoding.min < -9.5
+            assert encoding.max > 9.5
+            assert encoding.max < 10.5
 
     @pytest.mark.cuda
     def test_multi_gpu_qat(self):

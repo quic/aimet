@@ -40,6 +40,7 @@
 import functools
 import io
 from typing import List, Union, Tuple, Optional
+import abc
 
 import torch
 
@@ -56,6 +57,7 @@ from aimet_torch.fp_quantization import fp8_quantizer, INIT_MAP
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 
+# pylint: disable=too-many-instance-attributes
 class TensorQuantizer:
     """
     Base class for Simulation of quantization for a given tensor. This tensor can be a parameter in the model or an
@@ -92,6 +94,7 @@ class TensorQuantizer:
         self.bitwidth = bitwidth
         self.enabled = enabled_by_default
         self.data_type = data_type
+        self._encoding_min_max_fixed_vals = None
         self._is_encoding_frozen = False
 
     @property
@@ -108,6 +111,16 @@ class TensorQuantizer:
     def channel_axis(self):
         """ Returns channel axis, default None unless for per-channel quantizers """
         return None
+
+    @property
+    def encoding_min_max_fixed_vals(self) -> Optional[Tuple[float, float]]:
+        """ Accessor to self._encoding_min_max_fixed_vals """
+        return self._encoding_min_max_fixed_vals
+
+    @encoding_min_max_fixed_vals.setter
+    @abc.abstractmethod
+    def encoding_min_max_fixed_vals(self, min_max_vals: Optional[Tuple[float, float]]):
+        """ self._encoding_min_max_fixed_vals setter """
 
 
 class PickableState:
@@ -247,6 +260,20 @@ class StaticGridTensorQuantizer(TensorQuantizer):
             raise RuntimeError("Encoding can be set only when it is not frozen.")
 
         self._encoding = encoding
+
+
+    @TensorQuantizer.encoding_min_max_fixed_vals.setter
+    def encoding_min_max_fixed_vals(self, min_max_vals: Tuple[float, float]):
+        """ self._encoding_min_max_fixed_vals setter """
+        log_with_error_and_assert_if_false(isinstance(min_max_vals, tuple), _logger, 'Min max vals must be a tuple')
+        log_with_error_and_assert_if_false(len(min_max_vals) == 2, _logger, 'Min max vals must be a tuple of two '
+                                                                            'values')
+        log_with_error_and_assert_if_false(min_max_vals[0] < min_max_vals[1], _logger,
+                                           'Min value ' + str(min_max_vals[0]) + ' is not less than max val ' +
+                                           str(min_max_vals[1]))
+        if self.quant_scheme != QuantScheme.post_training_tf:
+            self.quant_scheme = QuantScheme.post_training_tf
+        self._encoding_min_max_fixed_vals = min_max_vals
 
     def compute_encoding(self):
         """
@@ -439,6 +466,10 @@ class StaticGridPerTensorQuantizer(StaticGridTensorQuantizer):
                     ec.min = -ec.max
                     self.encoding = ec
             else:
+                if self.encoding_min_max_fixed_vals is not None:
+                    # pylint: disable=unsubscriptable-object
+                    tensor = torch.tensor([self.encoding_min_max_fixed_vals[0],
+                                           self.encoding_min_max_fixed_vals[1]])
                 for op in self._cppOp:
                     op.updateStats(tensor, tensor.is_cuda)
 
@@ -479,7 +510,7 @@ class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
         return self._encoding
 
     @encoding.setter
-    def encoding(self, encoding: List[libpymo.TfEncoding]) -> None:
+    def encoding(self, encoding: List[libpymo.TfEncoding]):
         """
         Property to set encoding.
 
@@ -514,10 +545,18 @@ class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
                         ec.min = -ec.max
                     self.encoding = ecs
             else:
-                for channel_idx, op in enumerate(self._cppOp):
-                    tensor_slice = tensor.select(self._ch_axis, channel_idx).contiguous(
-                        memory_format=torch.contiguous_format)
-                    op.updateStats(tensor_slice, tensor.is_cuda)
+                if self.encoding_min_max_fixed_vals is not None:
+                    # pylint: disable=unsubscriptable-object
+                    tensor = torch.tensor([self.encoding_min_max_fixed_vals[0],
+                                           self.encoding_min_max_fixed_vals[1]])
+
+                    for op in self._cppOp:
+                        op.updateStats(tensor, tensor.is_cuda)
+                else:
+                    for channel_idx, op in enumerate(self._cppOp):
+                        tensor_slice = tensor.select(self._ch_axis, channel_idx).contiguous(
+                            memory_format=torch.contiguous_format)
+                        op.updateStats(tensor_slice, tensor.is_cuda)
 
 
 class LearnedGridTensorQuantizer(TensorQuantizer):
@@ -693,6 +732,11 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         """
         return self._ch_axis
 
+    @TensorQuantizer.encoding_min_max_fixed_vals.setter
+    def encoding_min_max_fixed_vals(self, min_max_vals: Optional[Tuple[float, float]]):
+        """ self._encoding_min_max_fixed_vals setter """
+        self._encoding_min_max_fixed_vals = min_max_vals
+
     def __str__(self):
         stream = io.StringIO(newline='\n')
         stream.write('LearnedGrid TensorQuantizer:\n')
@@ -820,7 +864,7 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         # TODO: refactor to not call internal state of wrapper.
         params = self.wrapper_ref._parameters
 
-        if not params[enc_min_param] and not params[enc_max_param]:
+        if params[enc_min_param] is None and params[enc_max_param] is None:
             raise RuntimeError("Encoding can be frozen only when it is not None.")
 
         self._is_encoding_frozen = True
