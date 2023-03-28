@@ -1,7 +1,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -37,21 +37,21 @@
 # Docker image file to build and test AIMET for Tensorflow in a GPU environment
 
 ARG REGISTRY
-FROM ${REGISTRY}nvidia/cuda:11.0.3-cudnn8-devel-ubuntu18.04
+FROM ${REGISTRY}nvidia/cuda:11.1.1-cudnn8-devel-ubuntu20.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=DontWarn
 
 # Please see here for more information on these steps:
-# https://forums.developer.nvidia.com/t/gpg-error-http-developer-download-nvidia-com-compute-cuda-repos-ubuntu1804-x86-64/212904
+# https://forums.developer.nvidia.com/t/gpg-error-http-developer-download-nvidia-com-compute-cuda-repos-ubuntu2004-x86-64/212904
 ## The additional steps are to fix this error and eliminate/reduce some warnings:
-## Failed to fetch https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/Packages.gz Hash Sum mismatch
+## Failed to fetch https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/Packages.gz Hash Sum mismatch
 RUN mv /etc/apt/sources.list.d/cuda.list /etc/apt/sources.list.d/cuda.list.orig && \
     apt-get update > /dev/null && \
     apt-get install -y --no-install-recommends apt-utils && \
     apt-key del --no-tty 7fa2af80 && \
-    apt-key adv --no-tty --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/3bf863cc.pub && \
-    apt-key adv --no-tty --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/7fa2af80.pub && \
+    apt-key adv --no-tty --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/3bf863cc.pub && \
+    apt-key adv --no-tty --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/7fa2af80.pub && \
     apt-get update > /dev/null && \
     rm -rf /var/lib/apt/lists/*
 
@@ -99,12 +99,6 @@ RUN apt-get update -y > /dev/null && \
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1
 # Set python 3.8 as the default python
 RUN update-alternatives --set python3 /usr/bin/python3.8
-
-# Python 2 pip installation
-RUN apt-get update && apt-get install -y python-pip && rm -rf /var/lib/apt/lists/* && \
-    python2.7 -m pip --no-cache-dir install --upgrade \
-        pip==20.3.4 \
-        restkit
 
 # Upgrade Python3 pip and install some more packages
 RUN python3 -m pip --no-cache-dir install --upgrade \
@@ -268,7 +262,7 @@ RUN python3 -m pip uninstall -y Pillow Pillow-SIMD
 RUN python3 -m pip --no-cache-dir install Pillow-SIMD==9.0.0.post1
 
 RUN apt-get update && apt-get install -y gnupg2
-RUN wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key|sudo apt-key add - && echo "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-11 main" >> /etc/apt/sources.list
+RUN wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key|sudo apt-key add - && echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-11 main" >> /etc/apt/sources.list
 RUN apt-get update --fix-missing -y && apt upgrade -y && apt-get install -y clang-11 clang-format clang-tidy-11 && \
    rm -rf /var/lib/apt/lists/*
 
