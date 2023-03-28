@@ -44,6 +44,8 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.keras.engine.functional import Functional
 from tensorflow.python.keras.layers.core import TFOpLambda
+
+from aimet_tensorflow.keras.utils.model_transform_utils import replace_separable_conv_with_depthwise_pointwise
 from aimet_common.utils import AimetLogger
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ModelPreparer)
 
@@ -210,6 +212,7 @@ def prepare_model(original_model: tf.keras.Model,
 
     # Cloning model to remove any references to the original model
     model_to_return = tf.keras.models.clone_model(functional_model)
+    model_to_return, _ = replace_separable_conv_with_depthwise_pointwise(model_to_return)
     logger.debug("Functional model architecture created")
     model_to_return.summary(print_fn=logger.debug)
 
