@@ -39,7 +39,7 @@ cmake_minimum_required(VERSION 3.19)
 
 project(aimet)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O0 -ggdb -fPIC -D_GLIBCXX_USE_CXX11_ABI=0")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O0 -ggdb -fPIC -D_GLIBCXX_USE_CXX11_ABI=0 -DPYBIND11_BUILD_ABI=\\\"_cxxabi1011\\\"")
 set(AIMET_INSTALL_DIR ${CMAKE_BINARY_DIR}/staging/universal)
 
 if(NOT DEFINED AIMET_PYTHONPATH)

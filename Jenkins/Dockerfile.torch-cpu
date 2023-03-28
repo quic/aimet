@@ -1,7 +1,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -37,7 +37,7 @@
 # Docker image file to build and test AIMET for PyTorch in a CPU environment
 
 ARG REGISTRY
-FROM ${REGISTRY}ubuntu:bionic as target
+FROM ${REGISTRY}ubuntu:focal
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -84,12 +84,6 @@ RUN apt-get update -y > /dev/null && \
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1
 # Set python 3.8 as the default python
 RUN update-alternatives --set python3 /usr/bin/python3.8
-
-# Python 2 pip installation
-RUN apt-get update && apt-get install -y python-pip && rm -rf /var/lib/apt/lists/* && \
-    python2.7 -m pip --no-cache-dir install --upgrade \
-        pip==20.3.4 \
-        restkit
 
 # Upgrade Python3 pip and install some more packages
 RUN python3 -m pip --no-cache-dir install --upgrade \
@@ -250,7 +244,8 @@ RUN python3 -m pip uninstall -y Pillow Pillow-SIMD
 RUN python3 -m pip --no-cache-dir install Pillow-SIMD==9.0.0.post1
 
 RUN apt-get update && apt-get install -y gnupg2
-RUN wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key|sudo apt-key add - && echo "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-11 main" >> /etc/apt/sources.list
+# Downloaded from https://apt.llvm.org/
+RUN wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key|sudo apt-key add - && echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-11 main" >> /etc/apt/sources.list
 RUN apt-get update --fix-missing -y && apt upgrade -y && apt-get install -y clang-11 clang-format clang-tidy-11 && \
    rm -rf /var/lib/apt/lists/*
 

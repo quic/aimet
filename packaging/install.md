@@ -1,5 +1,5 @@
 # AIMET Installation and Setup
-This page provides instructions to install AIMET package on ***Ubuntu 18.04 LTS with Nvidia GPU*** (see [system requirements]( docker_install.md#requirements)). Please follow the instructions in the order provided, unless specified otherwise.
+This page provides instructions to install AIMET package on ***Ubuntu 20.04 LTS with Nvidia GPU*** (see [system requirements]( docker_install.md#requirements)). Please follow the instructions in the order provided, unless specified otherwise.
 
 - [Installation](#installation)
     - [Install prerequisite packages](#install-prerequisite-packages)
@@ -11,7 +11,7 @@ This page provides instructions to install AIMET package on ***Ubuntu 18.04 LTS 
 
 ## Installation
 
-> **_NOTE:_**  
+> **_NOTE:_**
  1. Please pre-pend the "apt-get install" and "pip3 install" commands with "sudo -H" as appropriate.
  2. These instructions assume that pip packages will be installed in the path: /usr/local/lib/python3.8/dist-packages. If that is not the case, please modify it accordingly.
 
@@ -31,23 +31,23 @@ Prepare the environment for installation of GPU packages as follows:
 > _NOTE:_ Please visit [this page](https://developer.nvidia.com/cuda-11.1.1-download-archive) to obtain the exact and up-to-date installation instructions for your environment.
 
 ```bash
-wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/cuda-ubuntu1804.pin
-mv cuda-ubuntu1804.pin /etc/apt/preferences.d/cuda-repository-pin-600
-wget https://developer.download.nvidia.com/compute/cuda/11.1.1/local_installers/cuda-repo-ubuntu1804-11-1-local_11.1.1-455.32.00-1_amd64.deb
-dpkg -i cuda-repo-ubuntu1804-11-1-local_11.1.1-455.32.00-1_amd64.deb
-apt-key add /var/cuda-repo-ubuntu1804-11-1-local/7fa2af80.pub
-echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64 /" > /etc/apt/sources.list.d/cuda.list
-echo "deb https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1804/x86_64 /" > /etc/apt/sources.list.d/nvidia-ml.list
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin
+mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600
+wget https://developer.download.nvidia.com/compute/cuda/11.1.1/local_installers/cuda-repo-ubuntu2004-11-1-local_11.1.1-455.32.00-1_amd64.deb
+dpkg -i cuda-repo-ubuntu2004-11-1-local_11.1.1-455.32.00-1_amd64.deb
+apt-key add /var/cuda-repo-ubuntu2004-11-1-local/7fa2af80.pub
+echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64 /" > /etc/apt/sources.list.d/cuda.list
+echo "deb https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu2004/x86_64 /" > /etc/apt/sources.list.d/nvidia-ml.list
 apt-get update
 apt-get -y install cuda
 
-wget http://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1804/x86_64/nvidia-machine-learning-repo-ubuntu1804_1.0.0-1_amd64.deb
-apt-get --assume-yes install ./nvidia-machine-learning-repo-ubuntu1804_1.0.0-1_amd64.deb
+wget http://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu2004/x86_64/nvidia-machine-learning-repo-ubuntu2004_1.0.0-1_amd64.deb
+apt-get --assume-yes install ./nvidia-machine-learning-repo-ubuntu2004_1.0.0-1_amd64.deb
 apt-get update
 ```
 
 ### Install AIMET packages
-Go to https://github.com/quic/aimet/releases and identify the release tag of the package you want to install. 
+Go to https://github.com/quic/aimet/releases and identify the release tag of the package you want to install.
 
 Set the `<variant_string>` to ONE of the following depending on your desired variant
 - For the PyTorch GPU variant, use `"torch_gpu"`
@@ -122,7 +122,7 @@ python3 -m pip install --no-cache-dir Pillow-SIMD==7.0.0.post3
 Replace the onnxruntime package with onnxruntime-gpu as follows:
 ```bash
 python3 -m pip uninstall -y onnxruntime
-python3 -m pip install --no-cache-dir onnxruntime-gpu==1.10.0 
+python3 -m pip install --no-cache-dir onnxruntime-gpu==1.10.0
 ```
 
 ### Post installation steps
