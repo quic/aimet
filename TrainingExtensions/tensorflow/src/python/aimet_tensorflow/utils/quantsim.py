@@ -261,11 +261,31 @@ def create_encoding_from_dict(encoding_dict: dict) -> (Union[libpymo.TfEncoding,
 
     # make a distinction between the per-channel and per-tensor flow
     if isinstance(encoding_dict, List):
+        # Inserting logic to loop through encoding dict is_symmetric fields and replace boolean values with string
+        # 'True' or 'False' values. AdaRound exported parameter encodings were mistakenly exporting boolean values
+        # instead of string values like QuantSim export does.
+        # AdaRound exported encodings are fixed in the same commit to export string values now, but this logic is put
+        # in place temporarily to preserve backwards compatibility with older AdaRound exported encodings. It can be
+        # removed after some time once users have fully switched to using the string exported is_symmetric flag.
+        for enc_dict in encoding_dict:
+            if isinstance(enc_dict.get('is_symmetric'), bool):
+                enc_dict['is_symmetric'] = str(enc_dict['is_symmetric'])
+
         log_with_error_and_assert_if_false(encoding_dict[0].get('is_symmetric') in ['True', 'False'],
                                            _logger,
                                            f'Unexpected value for is_symmetric: {encoding_dict[0].get("is_symmetric")}')
         is_symmetric = encoding_dict[0].get('is_symmetric') == 'True'
         return _create_tf_encoding_factory(encoding_dict), is_symmetric
+
+    # Inserting logic to loop through encoding dict is_symmetric fields and replace boolean values with string
+    # 'True' or 'False' values. AdaRound exported parameter encodings were mistakenly exporting boolean values
+    # instead of string values like QuantSim export does.
+    # AdaRound exported encodings are fixed in the same commit to export string values now, but this logic is put
+    # in place temporarily to preserve backwards compatibility with older AdaRound exported encodings. It can be
+    # removed after some time once users have fully switched to using the string exported is_symmetric flag.
+    if isinstance(encoding_dict.get('is_symmetric'), bool):
+        encoding_dict['is_symmetric'] = str(encoding_dict['is_symmetric'])
+
     log_with_error_and_assert_if_false(encoding_dict.get('is_symmetric') in ['True', 'False'],
                                        _logger,
                                        f'Unexpected value for is_symmetric: {encoding_dict.get("is_symmetric")}')

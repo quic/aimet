@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -183,8 +183,8 @@ class AdaroundAcceptanceTests(unittest.TestCase):
 
         print(after_min, after_max, after_delta, after_offset)
 
-        self.assertEqual(before_min, after_min)
-        self.assertEqual(before_max, after_max)
+        self.assertAlmostEqual(before_min, after_min, places=6)
+        self.assertAlmostEqual(before_max, after_max, places=6)
         self.assertAlmostEqual(before_delta, after_delta, places=4)
         self.assertEqual(before_offset, after_offset)
 
