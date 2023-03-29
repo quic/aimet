@@ -55,7 +55,7 @@ from aimet_common.utils import AimetLogger
 from aimet_torch import transformer_utils, onnx_utils
 from aimet_torch import utils, elementwise_ops
 from models.test_models import TwoLayerBidirectionalLSTMModel, SingleLayerRNNModel, \
-    ModelWithTwoInputs, SimpleConditional, RoiModel, InputOutputDictModel
+    ModelWithTwoInputs, SimpleConditional, RoiModel, InputOutputDictModel, Conv3dModel
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.onnx_utils import OnnxExportApiArgs
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, \
@@ -3308,6 +3308,54 @@ class TestQuantizationSimLearnedGrid:
         if os.path.exists(results_dir):
             shutil.rmtree(results_dir)
 
+    def test_quantsim_conv3d_tf_int8_eval_train(self):
+
+        torch.random.manual_seed(10)
+        model = Conv3dModel()
+        dummy_input = torch.randn(1, 3, 24, 24, 24)
+        sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=QuantScheme.post_training_tf,
+                                   default_param_bw=8, default_output_bw=8)
+        sim.compute_encodings(evaluate, dummy_input)
+        print(sim)
+        optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.05, momentum=0.5)
+
+        # Test inference
+        sim.model.eval()
+        with torch.no_grad():
+            output = sim.model(dummy_input)
+
+        # Test one iteration of training
+        sim.model.train()
+        output = sim.model(dummy_input)
+
+        output = output.sum()
+        output.backward()
+        optimizer.step()
+
+    def test_quantsim_conv3d_tf_fp16_eval_train(self):
+
+        torch.random.manual_seed(10)
+        model = Conv3dModel()
+        dummy_input = torch.randn(1, 3, 24, 24, 24)
+        sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=QuantScheme.post_training_tf,
+                                   default_param_bw=16, default_output_bw=16,
+                                   default_data_type=QuantizationDataType.float)
+        sim.compute_encodings(evaluate, dummy_input)
+        print(sim)
+        optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.05, momentum=0.5)
+
+        # Test inference
+        sim.model.eval()
+        with torch.no_grad():
+            output = sim.model(dummy_input)
+
+        # Test one iteration of training
+        sim.model.train()
+        output = sim.model(dummy_input)
+
+        output = output.sum()
+        output.backward()
+        optimizer.step()
 
 class CustModelV1Simple(torch.nn.Module):
     def __init__(self):
