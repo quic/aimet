@@ -71,7 +71,8 @@ class ImageNetTrainer:
                                                 is_training=True, num_workers=num_workers,
                                                 num_samples_per_class=num_train_samples_per_class).data_loader
 
-        self._evaluator = ImageNetEvaluator(images_dir=images_dir, image_size=image_size, batch_size=batch_size)
+        self._evaluator = ImageNetEvaluator(images_dir=images_dir, image_size=image_size, batch_size=batch_size, 
+                                            num_workers=num_workers)
 
     def _train_loop(self, model: nn.Module, criterion: torch.nn.modules.loss, optimizer: torch.optim,
                     max_iterations: int, current_epoch: int, max_epochs: int,
@@ -113,7 +114,7 @@ class ImageNetTrainer:
                 # compute model output
                 output = model(images)
                 loss = criterion(output, target)
-                avg_loss += loss
+                avg_loss += loss.item()
 
                 # compute gradient and do SGD step
                 optimizer.zero_grad()
