@@ -170,6 +170,9 @@ def get_ordered_dict_of_nodes(onnx_graph: onnx.onnx_pb.GraphProto) -> Dict:
 def make_dummy_input(model: onnx_pb.ModelProto, dynamic_size: int = 1) -> Dict[str, np.ndarray]:
     """
     Create a dummy input based on the model input types and shapes
+
+    :param model: Model to create an input for
+    :param dynamic_size: Dimension size to use for dynamic axes
     :return: Dictionary of input_name : input array
     """
     input_dict = {}
