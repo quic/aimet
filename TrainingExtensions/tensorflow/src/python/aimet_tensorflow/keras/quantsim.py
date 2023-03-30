@@ -37,6 +37,7 @@
 # =============================================================================
 """ Quantsim for Keras """
 
+from dataclasses import dataclass
 import json
 import os
 from typing import Union, Dict, Tuple, Optional, List
@@ -53,6 +54,7 @@ from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.graphsearchtuils import GraphSearchUtils
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
 from aimet_tensorflow.keras.quant_sim.qc_mha_wrapper import QcQuantizableMultiHeadAttention
+from aimet_tensorflow.keras.quant_sim.rebuild_quantsim_model import RebuiltQuantSimModelFactory
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import TensorQuantizer, ActivationTensorQuantizer, \
     ParamPerTensorQuantizer, StaticGridPerChannelQuantizer, ParamPerChannelQuantizer
 from aimet_tensorflow.keras.quantsim_config.quantsim_config import QuantSimConfigurator, INPUT_QUANTIZERS, \
@@ -65,6 +67,19 @@ unquantizable_modules = (tf.keras.layers.InputLayer, QcQuantizeWrapper)
 substitutable_modules = {
     tf.keras.layers.MultiHeadAttention: QcQuantizableMultiHeadAttention
 }
+
+@dataclass
+class QuantizationSimModelParams:
+    """
+    Data class that holds parameters for QuantizationSimModel. Used specifically to rebuild after converting to TF frozen pb
+    """
+    quant_scheme: Union[QuantScheme, str] = 'tf_enhanced'
+    rounding_mode: str = 'nearest'
+    default_output_bw: int = 8
+    default_param_bw: int = 8
+    in_place: bool = False
+    config_file: str = None
+    default_data_type: QuantizationDataType = QuantizationDataType.int
 
 # pylint: disable=too-many-ancestors
 class QuantizationSimModel(tf.keras.Model):
@@ -113,6 +128,9 @@ class QuantizationSimModel(tf.keras.Model):
                                                      default_output_bw, default_param_bw, default_data_type)
         self.quant_args = extract_global_quantizer_args(quant_scheme, self._quantsim_configurator)
         self._disable_quantizers_in_folded_batchnorm()
+
+        self._params = QuantizationSimModelParams(quant_scheme, rounding_mode, default_output_bw, default_param_bw,
+                                                  in_place, config_file, default_data_type)
 
     def _validate_model(self):
         """
@@ -385,13 +403,22 @@ class QuantizationSimModel(tf.keras.Model):
         model_path = os.path.join(path, filename_prefix)
         self._model_without_wrappers.save(model_path)
         self._model_without_wrappers.save(model_path + '.h5', save_format='h5')
-        # Conversion of saved h5 model to pb model for consumption by SNPE/QNN]
+
+        # Save the state of the model to later rebuild it after converting to a frozen pb. Freezing to a pb invalidates
+        # all Keras graphs. Meaning that the model needs to be rebuilt to allow users to still use sim.model after exporting.
+        rebuilt_quantsim_model_worker = RebuiltQuantSimModelFactory(self.model, self._model_without_wrappers, self._params)
+
+        # Conversion of saved h5 model to pb model for consumption by SNPE/QNN
         try:
             convert_h5_model_to_pb_model(f'{model_path}.h5', custom_objects=custom_objects)
         except ValueError:
             _logger.error("Could not convert h5 to frozen pb. "
                           "Please call export() again with custom_objects defined.")
             raise
+
+        # Rebuild the model after converting to a frozen pb
+        rebuilt_quantsim_model_worker.rebuild_model()
+        self.model = rebuilt_quantsim_model_worker.rebuilt_model
 
         encodings_dict = self.get_encodings_dict()
         encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
