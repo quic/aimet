@@ -365,7 +365,7 @@ class TestQuantSim(unittest.TestCase):
         param_quantizers = sim._param_quantizers.values()
 
         for quant_info in activation_quantizers or param_quantizers:
-            assert quant_info.quant_scheme == QuantScheme.post_training_percentile
+            assert quant_info.quant_scheme == libpymo.QuantizationMode.QUANTIZATION_PERCENTILE
 
 
     def test_compute_encodings_cpu_model_fp16(self):
