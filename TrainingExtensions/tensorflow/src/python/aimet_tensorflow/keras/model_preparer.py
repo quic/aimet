@@ -380,7 +380,7 @@ def _get_temporary_model(layer: tf.keras.layers.Layer, layer_input: tf.keras.lay
     :return: The temporary model
     """
 
-    def _verify_weights(original_layer_weights: Set[tf.Variable], temp_model_weights: Set[tf.Variable]):
+    def verify_weights(original_layer_weights: Set[tf.Variable], temp_model_weights: Set[tf.Variable]):
         if missing_weights := original_layer_weights.difference(temp_model_weights):
             raise  ValueError(f"""
 The number of weights in the temporary model for unwrapping layer '{layer.name}' does not match the
@@ -399,8 +399,7 @@ This is the call function that is causing this error:
     _logger.debug("Model created for layer '%s'", layer.name)
     temp_model.summary(print_fn=_logger.debug)
 
-    _verify_weights({w.name for w in layer.weights},
-                    {w.name for w in temp_model.weights})
+    verify_weights({w.name for w in layer.weights}, {w.name for w in temp_model.weights})
 
     return temp_model
 
@@ -613,10 +612,10 @@ def prepare_model(original_model: tf.keras.Model,
     prepared_model = _get_prepared_model(original_model, input_layer, class_names)
 
     # Cloning model to remove any references to the original model
-    model_to_return = tf.keras.models.clone_model(functional_model)
+    K.clear_session() # To avoid name conflicts
+    model_to_return = tf.keras.models.clone_model(prepared_model)
     model_to_return, _ = replace_separable_conv_with_depthwise_pointwise(model_to_return)
-    logger.debug("Functional model architecture created")
-    model_to_return.summary(print_fn=logger.debug)
+    model_to_return.summary(print_fn=_logger.debug)
 
     # Copying over weights from original model to functional model
     _logger.debug("Final class_names: %s", class_names)

@@ -442,7 +442,7 @@ def test_conv_times_three_subclass_to_functional():
     assert isinstance(output_ops[0].get_module(), type(original_model.layers[-1]))
 
 
-@pytest.mark.skip("Issues with Lambda layers in the ConnectedGraph")
+
 def test_multi_math_operations_subclass_to_functional():
     input_layer = tf.keras.Input(shape=(32, 32, 1))
     output = MultiMathOperations()(input_layer)
