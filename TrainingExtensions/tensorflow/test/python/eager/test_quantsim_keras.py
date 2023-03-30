@@ -1211,7 +1211,22 @@ def test_quant_scheme_percentile():
         for quantizer in output_quantizers:
             quantizer.quant_scheme = QuantScheme.post_training_percentile
             quantizer.set_percentile_value(99.99)
+            assert np.allclose(quantizer.get_percentile_value(), 99.99)
 
-        assert 0 == 0
+
+
+def test_quant_scheme_percentile_setting_using_str():
+    """
+    This test case ensures that the quantization is working fine with percentile scheme
+    :return:
+    """
+    if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+        model = dense_functional()
+
+        qsim = QuantizationSimModel(model, quant_scheme="percentile", default_param_bw=16, default_output_bw=16 )
+        inp_quatizer, paramater_quantizer, output_quantizers = qsim._get_quantizer_list()
+
+        for quantizer in inp_quatizer + paramater_quantizer + output_quantizers:
+            assert quantizer.quant_scheme == QuantScheme.post_training_percentile
 
 

@@ -228,7 +228,9 @@ class QuantizationSimModel:
 
     def set_percentile_value(self, percentile_value: float):
         """
-        Set the percentile value to be used while computing encodings
+        Set the percentile value to be used while computing encodings for quantizers having percentile quant scheme.
+
+        :param percentile_value: Percentile value to set
         """
         if percentile_value < 90 or percentile_value > 100:
             raise ValueError("Percentile value must be in range [90, 100]")

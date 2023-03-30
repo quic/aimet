@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -506,13 +506,25 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
     def set_percentile_value(self, percentile: float):
         """
         Sets the percentile value to the tensor quantizer only in case of percentile quant scheme
+
         :param percentile: Percentile value to set
-        :return:
         """
         if self._quant_scheme != QuantScheme.post_training_percentile:
             raise RuntimeError("set_percentile_value() can be invoked only when quantization scheme is Percentile.")
 
         self.tensor_quantizer.setPercentileValue(percentile)
+
+    def get_percentile_value(self) -> float:
+        """
+        Fetches the percentile value to the tensor quantizer only in case of percentile quant scheme.
+
+        :return Percentile value of the quantizer
+        """
+        if self._quant_scheme != QuantScheme.post_training_percentile:
+            raise RuntimeError("get_percentile_value() can be invoked only when quantization scheme is Percentile.")
+
+        return self.tensor_quantizer.getPercentileValue()
+
 
 
 # pylint: disable=too-many-ancestors
@@ -878,13 +890,25 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
     def set_percentile_value(self, percentile: float):
         """
         Sets the percentile value to the tensor quantizer only in case of percentile quant scheme
+
         :param percentile: Percentile value to set
-        :return:
         """
         if self._quant_scheme != QuantScheme.post_training_percentile:
             raise RuntimeError("set_percentile_value() can be invoked only when quantization scheme is Percentile.")
         for quantizer in self.tensor_quantizer:
             quantizer.setPercentileValue(percentile)
+
+    def get_percentile_value(self) -> List[float]:
+        """
+        Fetches the percentile value to the tensor quantizer only in case of percentile quant scheme.
+
+        :return Percentile value of the quantizer
+        """
+
+        if self._quant_scheme != QuantScheme.post_training_percentile:
+            raise RuntimeError("set_percentile_value() can be invoked only when quantization scheme is Percentile.")
+
+        return [quantizer.getPercentileValue() for quantizer in self.tensor_quantizer]
 
 # pylint: disable=too-many-ancestors
 class ParamPerChannelQuantizer(StaticGridPerChannelQuantizer):

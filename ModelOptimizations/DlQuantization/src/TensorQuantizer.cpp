@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2020 - 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2020 - 2023, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -236,6 +236,15 @@ void TensorQuantizer::setPercentileValue(float percentile)
     if (_quantScheme == DlQuantization::QuantizationMode::QUANTIZATION_PERCENTILE) {
         _encodingAnalyzer->setPercentileValue(percentile);
     }
+}
+
+float TensorQuantizer::getPercentileValue()
+{
+    if (_quantScheme == DlQuantization::QuantizationMode::QUANTIZATION_PERCENTILE) {
+        return _encodingAnalyzer->getPercentileValue();
+    }
+    else
+        throw std::runtime_error("Percentile Value only exists in case of percentile quant scheme.");
 }
 
 void TensorQuantizer::generatePerChannelEncodings(const float* input, const std::vector<uint32_t>& inputShape,

@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -173,16 +173,18 @@ class QuantizationSimModel(tf.keras.Model):
 
     def set_percentile_value(self, percentile_value: float):
         """
-        Set the percentile value to be used while computing encodings
+        Set the percentile value to be used while computing encodings for quantizers having percentile quant scheme.
+
+        :param percentile_value: Percentile value to be set to
         """
         if percentile_value < 90 or percentile_value > 100:
             raise ValueError("Percentile value must be in range [90, 100]")
         self._percentile_value = percentile_value
 
-        if self.quant_scheme == QuantScheme.post_training_percentile:
-            # Set the percentile value to the activation quantizers:
-            input_quantizers, _, output_quantizers = self._get_quantizer_list()
-            for quantizer in input_quantizers  + output_quantizers:
+        # Set the percentile value to the activation quantizers
+        input_quantizers, _, output_quantizers = self._get_quantizer_list()
+        for quantizer in input_quantizers + output_quantizers:
+            if quantizer.quant_scheme == QuantScheme.post_training_percentile:
                 quantizer.set_percentile_value(self._percentile_value)
 
     def _initialize_quantsim_configurator(self, quant_scheme: Union[QuantScheme, str], rounding_mode: str,

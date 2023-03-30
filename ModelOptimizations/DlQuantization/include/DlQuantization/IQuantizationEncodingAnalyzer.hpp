@@ -111,6 +111,18 @@ public:
         // This method is applicable only for TfPercentileEncodingAnalyzer.
         assert(0);
     }
+
+    /**
+     * @brief Fecth the percentile value
+     *
+     * @return percentile value of the encoding analyzer.
+     */
+    virtual float getPercentileValue()
+    {
+        // TODO - check if there is a better way to do this.
+        // This method is applicable only for TfPercentileEncodingAnalyzer.
+        assert(0);
+    }
 };
 
 

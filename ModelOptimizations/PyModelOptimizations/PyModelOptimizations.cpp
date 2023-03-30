@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2020 - 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2020 - 2023, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -169,6 +169,7 @@ PYBIND11_MODULE(libpymo, m)
         .def("getUnsignedSymmetric", &DlQuantization::PyTensorQuantizer::getUnsignedSymmetric)
         .def("getStatsHistogram", &DlQuantization::PyTensorQuantizer::getStatsHistogram)
         .def("setPercentileValue", &DlQuantization::PyTensorQuantizer::setPercentileValue)
+        .def("getPercentileValue", &DlQuantization::PyTensorQuantizer::getPercentileValue)
         .def("computePartialEncoding", &DlQuantization::PyTensorQuantizer::computePartialEncoding)
         .def_readwrite("roundingMode", &DlQuantization::PyTensorQuantizer::roundingMode)
         .def_readwrite("isEncodingValid", &DlQuantization::PyTensorQuantizer::isEncodingValid);
