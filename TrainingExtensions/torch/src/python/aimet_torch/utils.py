@@ -408,8 +408,12 @@ def match_model_settings(model_to_match: torch.nn.Module, model_to_set: torch.nn
     :param model_to_set: Model to set
     """
     model_to_set.train(model_to_match.training)
-    if get_device(model_to_set) != get_device(model_to_match):
-        model_to_set.to(get_device(model_to_match))
+    try:
+        if get_device(model_to_set) != get_device(model_to_match):
+            model_to_set.to(get_device(model_to_match))
+    except StopIteration:
+        # If there are no parameters in the model, get_device will have nothing to iterate over
+        pass
 
 
 def load_pytorch_model(model_name: str, path: str, filename: str, load_state_dict: bool = False) -> torch.nn.Module:
