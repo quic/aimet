@@ -123,6 +123,7 @@ class QuantizationSimModel(tf.keras.Model):
                                                                              default_output_bw, default_param_bw,
                                                                              default_data_type, config_file)
         self.quant_scheme = quant_scheme
+        self._percentile_value = 100  # default percentile value
         self.per_channel_quantization_enabled = self._quantsim_configurator.per_channel_quantization_flag
         self.model = self._add_quantization_wrappers(quant_scheme, rounding_mode,
                                                      default_output_bw, default_param_bw, default_data_type)
@@ -148,6 +149,41 @@ class QuantizationSimModel(tf.keras.Model):
                          f'Layers with multiple inbound nodes: {multiple_inbound_node_layers}')
             _logger.error(error_msg)
             raise NotImplementedError(error_msg)
+
+    def _get_quantizer_list(self) -> Tuple[List, List, List]:
+        """
+        Method to provide a list of input, output and parameter quantizers
+        :return: Three lists containing input, paramater and output quantizers respectively
+        """
+        input_quantizers = []
+        parameter_quantizers = []
+        output_quantizers = []
+
+        for wrapper in self.quant_wrappers():
+            for quantizer in wrapper.input_quantizers:
+                input_quantizers.append(quantizer)
+
+            for quantizer in wrapper.param_quantizers:
+                parameter_quantizers.append(quantizer)
+
+            for quantizer in wrapper.output_quantizers:
+                output_quantizers.append(quantizer)
+
+        return input_quantizers, parameter_quantizers, output_quantizers
+
+    def set_percentile_value(self, percentile_value: float):
+        """
+        Set the percentile value to be used while computing encodings
+        """
+        if percentile_value < 90 or percentile_value > 100:
+            raise ValueError("Percentile value must be in range [90, 100]")
+        self._percentile_value = percentile_value
+
+        if self.quant_scheme == QuantScheme.post_training_percentile:
+            # Set the percentile value to the activation quantizers:
+            input_quantizers, _, output_quantizers = self._get_quantizer_list()
+            for quantizer in input_quantizers  + output_quantizers:
+                quantizer.set_percentile_value(self._percentile_value)
 
     def _initialize_quantsim_configurator(self, quant_scheme: Union[QuantScheme, str], rounding_mode: str,
                                           default_output_bw: int, default_param_bw: int,

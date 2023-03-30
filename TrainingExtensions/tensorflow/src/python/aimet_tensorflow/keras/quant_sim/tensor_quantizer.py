@@ -503,6 +503,17 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
         histograms = [self.tensor_quantizer.getStatsHistogram()]
         return histograms
 
+    def set_percentile_value(self, percentile: float):
+        """
+        Sets the percentile value to the tensor quantizer only in case of percentile quant scheme
+        :param percentile: Percentile value to set
+        :return:
+        """
+        if self._quant_scheme != QuantScheme.post_training_percentile:
+            raise RuntimeError("set_percentile_value() can be invoked only when quantization scheme is Percentile.")
+
+        self.tensor_quantizer.setPercentileValue(percentile)
+
 
 # pylint: disable=too-many-ancestors
 class ParamPerTensorQuantizer(StaticGridPerTensorQuantizer):
@@ -864,6 +875,16 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
         histograms = [quantizer.getStatsHistogram() for quantizer in self.tensor_quantizer]
         return histograms
 
+    def set_percentile_value(self, percentile: float):
+        """
+        Sets the percentile value to the tensor quantizer only in case of percentile quant scheme
+        :param percentile: Percentile value to set
+        :return:
+        """
+        if self._quant_scheme != QuantScheme.post_training_percentile:
+            raise RuntimeError("set_percentile_value() can be invoked only when quantization scheme is Percentile.")
+        for quantizer in self.tensor_quantizer:
+            quantizer.setPercentileValue(percentile)
 
 # pylint: disable=too-many-ancestors
 class ParamPerChannelQuantizer(StaticGridPerChannelQuantizer):

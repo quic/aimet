@@ -320,6 +320,32 @@ class TestQuantSim(unittest.TestCase):
         sim.session.close()
         del sim
 
+    def test_percentile_quant_scheme(self):
+        """
+        Create QuantSim for a CPU model and check that quantizers have been added to the graph
+        """
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+            model.summary()
+
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+        sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], quant_scheme=QuantScheme.post_training_tf ,use_cuda=False)
+        activation_quantizers = sim._activation_quantizers.values()
+        with pytest.raises(RuntimeError):
+            for quant_info in activation_quantizers:
+                quant_info.set_percentile_value(99.99)
+
+        for quant_info in activation_quantizers:
+            quant_info.quant_scheme = QuantScheme.post_training_percentile
+            quant_info.set_percentile_value(99.99)
+
+        assert 0 == 0
+
     def test_compute_encodings_cpu_model_fp16(self):
         """
         Create QuantSim for a CPU model and test that activation encodings are computed

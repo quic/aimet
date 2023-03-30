@@ -229,6 +229,15 @@ std::vector<std::tuple<double, double>> TensorQuantizer::getStatsHistogram()
     auto histogram = _encodingAnalyzer->getStatsHistogram();
     return histogram;
 }
+
+void TensorQuantizer::setPercentileValue(float percentile)
+{
+    // Set percentile value only when quant scheme is percentile.
+    if (_quantScheme == DlQuantization::QuantizationMode::QUANTIZATION_PERCENTILE) {
+        _encodingAnalyzer->setPercentileValue(percentile);
+    }
+}
+
 void TensorQuantizer::generatePerChannelEncodings(const float* input, const std::vector<uint32_t>& inputShape,
                                                   uint32_t axis, std::vector<TfEncoding>& encodings, uint32_t bw,
                                                   std::vector<std::vector<float>>& splits,
