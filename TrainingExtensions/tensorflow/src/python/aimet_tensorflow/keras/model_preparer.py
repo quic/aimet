@@ -37,7 +37,7 @@
 # =============================================================================
 
 """ Implementation to automatically prepare keras models for AIMET by converting them to a functional model """
-
+import inspect
 from typing import Any, Dict, List, Set, Union
 import re
 import numpy as np
@@ -379,12 +379,28 @@ def _get_temporary_model(layer: tf.keras.layers.Layer, layer_input: tf.keras.lay
     :param layer_input: The input layer of the layer
     :return: The temporary model
     """
+
+    def _verify_weights(original_layer_weights: Set[tf.Variable], temp_model_weights: Set[tf.Variable]):
+        if missing_weights := original_layer_weights.difference(temp_model_weights):
+            raise  ValueError(f"""
+The number of weights in the temporary model for unwrapping layer '{layer.name}' does not match the
+number of weights of the original layer. The missing weight(s) are {missing_weights}. This occurs when the Keras Symbolic tensor
+passed into the layers call function does not interact with a layer defined inside of the nested layer. Please refer to
+the documentation for more information.
+
+This is the call function that is causing this error:
+{inspect.getsource(layer.call)}
+""")
+
     temp_input = tf.keras.layers.Input(shape=layer_input.shape[1:], name=layer_input.name + "_temp_input")
     temp_model = tf.keras.Model(inputs=[temp_input],
                                 outputs=layer.call(temp_input, training=False),
                                 name=_TEMP_MODEL_NAME)
     _logger.debug("Model created for layer '%s'", layer.name)
     temp_model.summary(print_fn=_logger.debug)
+
+    _verify_weights({w.name for w in layer.weights},
+                    {w.name for w in temp_model.weights})
 
     return temp_model
 
