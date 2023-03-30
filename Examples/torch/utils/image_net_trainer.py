@@ -71,7 +71,7 @@ class ImageNetTrainer:
                                                 is_training=True, num_workers=num_workers,
                                                 num_samples_per_class=num_train_samples_per_class).data_loader
 
-        self._evaluator = ImageNetEvaluator(images_dir=images_dir, image_size=image_size, batch_size=batch_size, 
+        self._evaluator = ImageNetEvaluator(images_dir=images_dir, image_size=image_size, batch_size=batch_size,
                                             num_workers=num_workers)
 
     def _train_loop(self, model: nn.Module, criterion: torch.nn.modules.loss, optimizer: torch.optim,
