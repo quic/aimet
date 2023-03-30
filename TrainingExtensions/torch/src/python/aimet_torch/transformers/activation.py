@@ -432,10 +432,46 @@ class QuantizableMultiheadAttention(nn.MultiheadAttention):
             return attn_output, None
 
 
-def create_quantizable_multihead_attention(module) -> QuantizableMultiheadAttention:
+def create_quantizable_multihead_attention(module: torch.nn.MultiheadAttention) -> QuantizableMultiheadAttention:
     """
     Create QuantizableMultiheadAttention using existing torch.nn.MultiheadAttention module
     :param module: Existing torch.nn.MultiheadAttention module
     :return: Newly created QuantizableMultiheadAttention module
     """
-    return QuantizableMultiheadAttention(module.embed_dim, module.num_heads)
+    # inspect MHA if bias is required.
+    bias = module.in_proj_bias is not None
+
+    # if bias k/v parameter exist set quantizable MHA to create 3 separate bias tensors as expected.
+    add_bias_kv = module.bias_k is not None and module.bias_v is not None
+
+    q_MHA = QuantizableMultiheadAttention(embed_dim=module.embed_dim, num_heads=module.num_heads,
+                                          dropout=module.dropout, bias=bias, add_bias_kv=add_bias_kv,
+                                          add_zero_attn=module.add_zero_attn, kdim=module.kdim, vdim=module.vdim,
+                                          batch_first=module.batch_first)
+
+    # copy over weight and bias tensors
+    with torch.no_grad():
+        if module.in_proj_weight is not None:
+            weights_q, weights_k, weights_v = torch.chunk(module.in_proj_weight.data, 3, dim=0)
+        else:
+            weights_q = module.q_proj_weight.data
+            weights_k = module.k_proj_weight.data
+            weights_v = module.v_proj_weight.data
+        q_MHA.linear_Q.weight.copy_(weights_q)
+        q_MHA.linear_K.weight.copy_(weights_k)
+        q_MHA.linear_V.weight.copy_(weights_v)
+
+        q_MHA.out_proj.weight.copy_(module.out_proj.weight.data)
+
+        if bias:
+            bias_q, bias_k, bias_v = torch.chunk(module.in_proj_bias.data, 3, dim=0)
+            if add_bias_kv:
+                bias_k = q_MHA.linear_K.bias.copy_(module.bias_k.data)
+                bias_v = q_MHA.linear_V.bias.copy_(module.bias_v.data)
+            q_MHA.linear_K.bias.copy_(bias_k)
+            q_MHA.linear_V.bias.copy_(bias_v)
+            q_MHA.linear_Q.bias.copy_(bias_q)
+
+            q_MHA.out_proj.bias.copy_(module.out_proj.bias.data)
+
+    return q_MHA
