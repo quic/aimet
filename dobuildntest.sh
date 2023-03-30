@@ -286,6 +286,11 @@ if [ $run_prep -eq 1 ]; then
             python_src_path_endings+=("Examples/torch/quantization")
             python_src_path_endings+=("Examples/torch/utils")
             pycov_dir_endings+=("TrainingExtensions/torch/src/python:TrainingExtensions/torch/test")
+
+            python_src_path_endings+=("TrainingExtensions/onnx/src/python/aimet_onnx")
+            python_src_path_endings+=("Examples/onnx/quantization")
+            python_src_path_endings+=("Examples/onnx/utils")
+            pycov_dir_endings+=("TrainingExtensions/onnx/src/python:TrainingExtensions/onnx/test")
         fi
     else
         # For default variant, add both tensorflow and/or torch paths
@@ -295,13 +300,17 @@ if [ $run_prep -eq 1 ]; then
         python_src_path_endings+=("TrainingExtensions/torch/src/python/aimet_torch")
         pycov_dir_endings+=("TrainingExtensions/torch/src/python:TrainingExtensions/torch/test")
 
+        python_src_path_endings+=("TrainingExtensions/onnx/src/python/aimet_onnx")
+        pycov_dir_endings+=("TrainingExtensions/onnx/src/python:TrainingExtensions/onnx/test")
+
         python_src_path_endings+=("Examples/torch/compression")
         python_src_path_endings+=("Examples/torch/quantization")
         python_src_path_endings+=("Examples/torch/utils")
         python_src_path_endings+=("Examples/tensorflow/compression")
         python_src_path_endings+=("Examples/tensorflow/quantization")
         python_src_path_endings+=("Examples/tensorflow/utils")
-
+        python_src_path_endings+=("Examples/onnx/quantization")
+        python_src_path_endings+=("Examples/onnx/utils")
     fi
 
     # Populate an array of python src paths for use in later stages
