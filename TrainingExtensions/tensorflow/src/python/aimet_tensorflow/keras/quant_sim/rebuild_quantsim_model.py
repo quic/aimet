@@ -76,7 +76,7 @@ class RebuiltQuantSimModelFactory:
         """
         :return: True if the rebuilt model is None
         """
-        assert self.rebuilt_model is not None, "rebuilt_model is None. Pplease call rebuild_model first."
+        assert self.rebuilt_model is not None, "rebuilt_model is None. Please call rebuild_model first."
 
     @staticmethod
     def get_model_weight_names_to_weight_values_dict(model: tf.keras.Model) -> Dict[str, tf.Variable]:
@@ -86,6 +86,7 @@ class RebuiltQuantSimModelFactory:
         unattached weights names do not have to be unique. For example, there could be multiple 'Variable:0's in the weights
         This function adds a special parsing character so that sets can be used to speed up computation for identifying missing
         weights when rebuilding.
+
         :param model: The model to get the weights from
         :return: A dictionary of weight names to weights
         """
@@ -100,7 +101,7 @@ class RebuiltQuantSimModelFactory:
                 dict_with_weights_to_return[w.name] = w
         return dict_with_weights_to_return
 
-    def _copy_original_models_quantizer_properties_to_rebuilt_models_quantizers(self) -> None:
+    def _copy_original_models_quantizer_properties_to_rebuilt_models_quantizers(self):
         """
         Moves over the original models quantizer properties and sets them on the rebuilt model. Specifically, the enabled,
         and is_encoding_valid properties are copied over for both the python and C++ side of the quantizer.
@@ -110,6 +111,7 @@ class RebuiltQuantSimModelFactory:
         def get_tensor_quantizer_in_list(quantizer: _VARIATIONS_OF_TENSOR_QUANTIZERS_TYPES) -> List[TensorQuantizer]:
             """
             Helper function to get the tensor quantizer(s) in a list
+
             :param quantizer: The quantizer to return as is or in a list
             :return: list of tensor quantizer(s)
             """
@@ -119,6 +121,7 @@ class RebuiltQuantSimModelFactory:
                                          rebuilt_quantizers: _VARIATIONS_OF_TENSOR_QUANTIZERS_TYPES):
             """
             Helper function to assign the quantizer properties
+
             :param original_quantizers: The original quantizers
             :param rebuilt_quantizers: The rebuilt quantizers
             """
@@ -132,10 +135,11 @@ class RebuiltQuantSimModelFactory:
                 for rebuilt_tq, original_tq in zip(rebuilt_tensor_quantizer, original_tensor_quantizer):
                     rebuilt_tq.isEncodingValid = original_tq.isEncodingValid
 
-        def assert_number_of_quantizers_match(
-                which_quantizer: str, original_layer: QcQuantizeWrapper, rebuilt_layer: QcQuantizeWrapper) -> None:
+        def assert_number_of_quantizers_match(which_quantizer: str, original_layer: QcQuantizeWrapper,
+                                              rebuilt_layer: QcQuantizeWrapper):
             """
             Helper function to assert the number of quantizers match
+
             :param which_quantizer: The quantizer type
             :param original_layer: The original layer
             :param rebuilt_layer: The rebuilt layer
@@ -156,7 +160,7 @@ class RebuiltQuantSimModelFactory:
                 assert_number_of_quantizers_match('param', original_layer, rebuilt_layer)
                 assign_quantizers_properties(original_layer.param_quantizers, rebuilt_layer.param_quantizers)
 
-    def _assign_weights_not_connected_to_model(self) -> None:
+    def _assign_weights_not_connected_to_model(self):
         """
         This function adds weights that are not connected to the model to the rebuilt model
         """
@@ -185,10 +189,11 @@ class RebuiltQuantSimModelFactory:
         original model. This will ensure that the weights are the same as the original model. We then copy over the
         quantizer properties from the original model to the rebuilt model. This will ensure that the quantizer
         properties are the same as the original model.
+
         :param original_quantsim_model_weights: The weights of the original model
         :return: The rebuilt model
         """
-        from aimet_tensorflow.keras.quantsim import QuantizationSimModel # import here to avoid circular import
+        from aimet_tensorflow.keras.quantsim import QuantizationSimModel # Import here to avoid circular import
         tf.keras.backend.clear_session()  # Clear the session to avoid naming issues
 
         self.rebuilt_model = QuantizationSimModel(self.original_model_without_wrappers,
