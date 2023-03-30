@@ -36,7 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ contains unit tests to validate transformer quantization support """
-
+import copy
 import os
 import json
 import tempfile
@@ -58,6 +58,7 @@ from aimet_torch import utils
 from aimet_torch.quantsim import libpymo
 from aimet_torch.quantsim_config import quantsim_config as qsim_config
 from aimet_torch.model_preparer import prepare_pt_transformer_for_quantsim
+from aimet_torch.transformers.utils import get_quantizable_pt_transformer_model
 
 
 def generate_custom_quantsim_config(file_path: str):
@@ -467,6 +468,7 @@ class TestQuantizationSimTransformers(unittest.TestCase):
             for i in range(1, len(outputs)):
                 self.assertTrue(np.allclose(outputs[0].detach().numpy(), outputs[i].detach()))
 
+
     def test_pt_ops_with_modules(self):
         """
         Test that validates auto replacement of PT MHA with quantizable MHA
@@ -585,3 +587,59 @@ class TestQuantizationSimTransformers(unittest.TestCase):
             mha_names = { '.'.join(n.name.split('#')[0].split('.')[:-1]) for n in onnx_model.graph.node
                           if 'self_attn.' in n.name }
             assert len(mha_names) == default_num_decoder_layers + num_encoder_layers
+
+@pytest.fixture
+def seed_torch_random_variable():
+    seed = 10
+    np.random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+
+@pytest.mark.parametrize("bias", [False, True])
+@pytest.mark.parametrize("pretrained", [True, False])
+def test_conversion_to_quantizable_mha(bias, pretrained, seed_torch_random_variable):
+    """ verify conversion to custom MHA (quantizable version) """
+
+    embed_dim, num_heads, batch_size, seq_size = 128, 8, 32, 27
+
+    key = torch.rand(seq_size, batch_size, embed_dim)
+    query = torch.rand(seq_size, batch_size, embed_dim)
+    value = torch.rand(seq_size, batch_size, embed_dim)
+
+
+    class Net(nn.Module):
+        def __init__(self):
+            super(Net, self).__init__()
+            self.nn_mha = nn.MultiheadAttention(embed_dim, num_heads, bias=bias)
+
+        def forward(self, *x):
+            return self.nn_mha(*x)
+
+    model = Net()
+
+    if pretrained:
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.05, momentum=0.5)
+        # train to update  and generate non-zero bias tensors
+        for i in range(5):
+            attn_outputs, _ = model(torch.rand(seq_size, batch_size, embed_dim), #Q
+                                    torch.rand(seq_size, batch_size, embed_dim), #K
+                                    torch.rand(seq_size, batch_size, embed_dim) #V
+                                    )
+            loss = attn_outputs.flatten().sum()
+            loss.backward()
+            optimizer.step()
+
+    model.eval()
+    nn_outputs = model(query, key, value)
+
+    model_q_mha = copy.deepcopy(model)
+    get_quantizable_pt_transformer_model(model_q_mha)
+    model_q_mha.eval()
+    nncq_outputs = model_q_mha(query, key, value)
+
+    for i,(exp, act) in enumerate(zip(nn_outputs, nncq_outputs)):
+        assert torch.allclose(exp, act)
