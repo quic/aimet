@@ -56,7 +56,9 @@ quant_scheme_to_libpymo = {QuantScheme.post_training_tf: libpymo.QuantizationMod
                            QuantScheme.training_range_learning_with_tf_init:
                                libpymo.QuantizationMode.QUANTIZATION_TF,
                            QuantScheme.training_range_learning_with_tf_enhanced_init:
-                               libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED}
+                               libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                           QuantScheme.post_training_percentile:
+                               libpymo.QuantizationMode.QUANTIZATION_PERCENTILE}
 
 
 class QuantizerType(Enum):
@@ -329,6 +331,37 @@ class QuantizerInfo:
         if not self._is_encoding_frozen:
             var_name = self.quant_op_name + '_op_mode'
             self.set_variable(var_name, int(op_mode))
+
+    def set_percentile_value(self, percentile: float):
+        """
+        Sets the percentile value to the tensor quantizer only in case of percentile quant scheme.
+
+        :param percentile: Percentile value to set
+        """
+        if self.quant_scheme != libpymo.QuantizationMode.QUANTIZATION_PERCENTILE:
+            raise RuntimeError("set_percentile_value() can be invoked only when quantization scheme is Percentile.")
+
+        if isinstance(self.tensor_quantizer, list):
+            for tensor_quantizer in self.tensor_quantizer:
+                tensor_quantizer.setPercentileValue(percentile)
+        else:
+            self.tensor_quantizer.setPercentileValue(percentile)
+
+    def get_percentile_value(self):
+        """
+        Fetches the percentile value to the tensor quantizer only in case of percentile quant scheme.
+
+        :return Percentile value of the quantizer
+        """
+        if self.quant_scheme != libpymo.QuantizationMode.QUANTIZATION_PERCENTILE:
+            raise RuntimeError("get_percentile_value() can be invoked only when quantization scheme is Percentile.")
+
+        if isinstance(self.tensor_quantizer, list):
+            percentile_values = [tensor_quantizer.getPercentileValue() for tensor_quantizer in self.tensor_quantizer]
+        else:
+            percentile_values = self.tensor_quantizer.getPercentileValue()
+
+        return percentile_values
 
     @property
     def enabled(self) -> bool:

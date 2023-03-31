@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -68,6 +68,8 @@ class QuantizerSettings:
                 quant_scheme = QuantScheme.post_training_tf
             elif quant_scheme == 'tf_enhanced':
                 quant_scheme = QuantScheme.post_training_tf_enhanced
+            elif quant_scheme == "percentile":
+                quant_scheme = QuantScheme.post_training_percentile
             else:
                 error_msg = f'Unsupported quant scheme: {quant_scheme}'
                 _logger.error(error_msg)

@@ -161,7 +161,8 @@ class QuantizationSimModel:
 
         if isinstance(quant_scheme, str):
             quant_scheme_lookup = {'tf': QuantScheme.post_training_tf,
-                                   'tf_enhanced': QuantScheme.post_training_tf_enhanced}
+                                   'tf_enhanced': QuantScheme.post_training_tf_enhanced,
+                                   'percentile': QuantScheme.post_training_percentile}
             quant_scheme = quant_scheme_lookup[quant_scheme]
         self._quant_scheme = quant_scheme
         self._rounding_mode = rounding_mode
@@ -170,6 +171,7 @@ class QuantizationSimModel:
         self._activation_quantizers = {}
         self._default_output_bw = default_output_bw
         self._default_param_bw = default_param_bw
+        self._percentile_value = 100  # default percentile value
         self._op_to_quant_ops_dict = {}
         self.connected_graph = ConnectedGraph(self.session.graph, starting_op_names, output_op_names)
 
@@ -223,6 +225,21 @@ class QuantizationSimModel:
 
         _logger.error('Could not find  Quantizer for given op {%s} ', quant_op_name)
         return None
+
+    def set_percentile_value(self, percentile_value: float):
+        """
+        Set the percentile value to be used while computing encodings for quantizers having percentile quant scheme.
+
+        :param percentile_value: Percentile value to set
+        """
+        if percentile_value < 90 or percentile_value > 100:
+            raise ValueError("Percentile value must be in range [90, 100]")
+        self._percentile_value = percentile_value
+
+        if self._quant_scheme == QuantScheme.post_training_percentile:
+            # Set the percentile value to the activation quantizers:
+            for quant_info in self._activation_quantizers.values():
+                quant_info.set_percentile_value(self._percentile_value)
 
     def get_supported_kernels(self) -> Dict:
         """

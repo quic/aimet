@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -205,6 +205,12 @@ template <typename DTYPE>
 void PercentileEncodingAnalyzer<DTYPE>::setPercentileValue(float percentile)
 {
     this->_percentile = percentile;
+}
+
+template <typename DTYPE>
+float PercentileEncodingAnalyzer<DTYPE>::getPercentileValue()
+{
+    return this->_percentile;
 }
 
 // Explicit instantiations
