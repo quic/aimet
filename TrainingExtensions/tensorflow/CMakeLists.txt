@@ -170,12 +170,12 @@ add_custom_target(whl_prep_cp_tensorflow
     COMMAND ${CMAKE_COMMAND} -E make_directory ${WHL_PREP_AIMET_TENSORFLOW_DIR}
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:TrainingExtensionsTf> ${WHL_PREP_AIMET_TENSORFLOW_DIR}/$<TARGET_FILE_NAME:TrainingExtensionsTf>
     COMMAND ${PATCHELF_EXE} --set-rpath '$$ORIGIN:$ORIGIN/../../tensorflow:$$ORIGIN/../../tensorflow/python' ${WHL_PREP_AIMET_TENSORFLOW_DIR}/$<TARGET_FILE_NAME:TrainingExtensionsTf>
-    DEPENDS TrainingExtensionsTf
+    DEPENDS TrainingExtensionsTf TfTrainingExtensionCppTest
 )
 add_custom_target(whl_prep_ln_tensorflow
     COMMAND ${CMAKE_COMMAND} -E make_directory ${WHL_PREP_AIMET_TENSORFLOW_DIR}
     COMMAND ${CMAKE_COMMAND} -E create_symlink $<TARGET_FILE:TrainingExtensionsTf> ${WHL_PREP_AIMET_TENSORFLOW_DIR}/$<TARGET_FILE_NAME:TrainingExtensionsTf>
-    DEPENDS TrainingExtensionsTf
+    DEPENDS TrainingExtensionsTf TfTrainingExtensionCppTest
 )
 add_dependencies(whl_prep_cp whl_prep_cp_tensorflow)
 add_dependencies(whl_prep_ln whl_prep_ln_tensorflow)
