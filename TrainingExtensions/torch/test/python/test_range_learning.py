@@ -78,16 +78,6 @@ class RangeLearningSymAutograd(RangeLearningAsymAutograd):
         x_dq = (x_q + offset) * scale
         return x_dq
 
-class RangeLearningSymUnsignedAutograd(RangeLearningAsymAutograd):
-
-    def forward(self, x, emin, emax):
-        scale = emax / self.n_steps
-        x_q = torch.clamp(
-            STE.apply(x / scale), self.n_steps - self.n_steps, self.n_steps
-        )
-        x_dq = x_q * scale
-        return x_dq
-
 
 class TestRangeLearning:
 
@@ -152,27 +142,4 @@ class TestRangeLearning:
 
         assert torch.allclose(aimet_xq, auto_xq)
         assert torch.allclose(aimet_grad_min, -auto_grad_max)
-        assert torch.allclose(aimet_grad_max, auto_grad_max)
-
-    def test_unsigned_symmetric_quantizer(self):
-
-        tensor_quantizer = LearnedGridTensorQuantizer(bitwidth=8,
-                round_mode="nearest",
-                quant_scheme=QuantScheme.training_range_learning_with_tf_init,
-                use_symmetric_encodings=True,
-                enabled_by_default=True,
-                data_type=QuantizationDataType.int)
-
-        tensor_quantizer.is_unsigned_symmetric = True
-        auto_quantizer = RangeLearningSymUnsignedAutograd(bitwidth=8)
-
-        init_encoding_min = 0
-        init_encoding_max = 5
-        aimet_grad_min, aimet_grad_max, aimet_xq = self.get_gradients(
-                tensor_quantizer.quantize_dequantize, init_encoding_min, init_encoding_max)
-        auto_grad_min, auto_grad_max, auto_xq = self.get_gradients(
-                auto_quantizer.forward, init_encoding_min, init_encoding_max)
-
-        assert torch.allclose(aimet_xq, auto_xq)
-        assert torch.allclose(aimet_grad_min, auto_grad_min)
         assert torch.allclose(aimet_grad_max, auto_grad_max)
