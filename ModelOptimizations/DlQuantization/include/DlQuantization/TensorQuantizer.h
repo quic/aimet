@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2020 - 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2020 - 2023, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -218,6 +218,21 @@ public:
      * @param splits    Slices of the input tensor along the axis
      * @param splitShape The shape of each input slice
      */
+
+    /**
+     * @brief Sets the specified percentile value for the encoding analyzer
+     *
+     * @param percentile Percentile value to set.
+     */
+    void setPercentileValue(float percentile);
+
+    /**
+     * @brief Fetches the percentile value for the encoding analyzer
+     *
+     * @return Percentile value of the encoding analyzer.
+     */
+    float getPercentileValue();
+
     void generatePerChannelEncodings(const float* input, const std::vector<uint32_t> &inputShape, uint32_t axis,
                                      std::vector<TfEncoding> &encodings, uint32_t bw, std::vector<std::vector<float>> &splits,
                                      std::vector<uint32_t> &splitShape, bool useCuda);

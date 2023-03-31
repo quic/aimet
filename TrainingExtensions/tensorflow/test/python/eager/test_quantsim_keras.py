@@ -1193,3 +1193,40 @@ def test_initialization_and_export_non_strict_symmetric_per_channel(quant_scheme
                 assert offset == -128
                 assert np.isclose(encoding_min, scale * offset, atol=1e-6)
                 assert np.isclose(encoding_max, encoding_min + scale * 255, atol=1e-6)
+
+def test_quant_scheme_percentile():
+    """
+    This test case ensures that the quantization is working fine with percentile scheme
+    :return:
+    """
+    if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+        model = dense_functional()
+
+        qsim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf, default_param_bw=16, default_output_bw=16 )
+        _, _, output_quantizers = qsim._get_quantizer_list()
+        with pytest.raises(RuntimeError):
+            for quantizer in output_quantizers:
+                quantizer.set_percentile_value(99.99)
+
+        for quantizer in output_quantizers:
+            quantizer.quant_scheme = QuantScheme.post_training_percentile
+            quantizer.set_percentile_value(99.99)
+            assert np.allclose(quantizer.get_percentile_value(), 99.99)
+
+
+
+def test_quant_scheme_percentile_setting_using_str():
+    """
+    This test case ensures that the quantization is working fine with percentile scheme
+    :return:
+    """
+    if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+        model = dense_functional()
+
+        qsim = QuantizationSimModel(model, quant_scheme="percentile", default_param_bw=16, default_output_bw=16 )
+        inp_quatizer, paramater_quantizer, output_quantizers = qsim._get_quantizer_list()
+
+        for quantizer in inp_quatizer + paramater_quantizer + output_quantizers:
+            assert quantizer.quant_scheme == QuantScheme.post_training_percentile
+
+
