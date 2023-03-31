@@ -55,6 +55,9 @@ else ()
 endif ()
 
 if (NOT OPENCV_FOUND)
+  # Aimet requires opencv which might not be installed since it is not part of neither
+  # reqs_dep_*.txt nor reqs_pip_*.txt. Download and compile opencv for user only if
+  # opencv is not found.
   set(BUILD_LIST        "core" CACHE INTERNAL "[OpenCV] ")
   set(WITH_LAPACK       ON  CACHE INTERNAL "[OpenCV] ")
   set(BUILD_SHARED_LIBS OFF CACHE INTERNAL "[OpenCV] ")
@@ -80,12 +83,34 @@ if (NOT OPENCV_FOUND)
 
   FetchContent_Declare(
     opencv
-    # GIT_REPOSITORY https://github.com/opencv/opencv.git
-    GIT_REPOSITORY GIT_REPOSITORY file://${CMAKE_CURRENT_SOURCE_DIR}/opencv
+    GIT_REPOSITORY https://github.com/opencv/opencv.git
     GIT_TAG        4.6.0
+    GIT_SHALLOW    TRUE
   )
   FetchContent_MakeAvailable(opencv)
   set(OPENCV_LINK_LIBRARIES opencv_core PARENT_SCOPE)
   get_target_property(OPENCV_INCLUDE_DIRS opencv_core INCLUDE_DIRECTORIES)
   set(OPENCV_INCLUDE_DIRS ${OPENCV_INCLUDE_DIRS} PARENT_SCOPE)
+endif()
+
+if (ENABLE_TORCH)
+  # Aimet ONNX extension requires headers for onnxruntime which might not be installed
+  # since they are not part of neither reqs_dep_*.txt nor reqs_pip_*.txt.
+  # Download and install onnxruntime headers for user only if onnxruntime package is installed
+  # and onnxruntime_cxx_api.h can't be found in /opt/onnxruntime
+  execute_process(
+    COMMAND ${Python3_EXECUTABLE} "-c" "import onnxruntime; print(onnxruntime.__version__)"
+      RESULT_VARIABLE ONNXRUNTIME_NOT_FOUND
+      OUTPUT_VARIABLE ONNXRUNTIME_VERSION
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+  file(GLOB_RECURSE ONNXRUNTIME_HEADER_PATH  "/opt/onnxruntime/*onnxruntime_cxx_api.h")
+  if (ONNXRUNTIME_NOT_FOUND EQUAL 0 AND NOT ONNXRUNTIME_HEADER_PATH)
+    FetchContent_Declare(
+      onnxruntime_headers
+      URL https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}.tgz
+    )
+    FetchContent_MakeAvailable(onnxruntime_headers)
+    set(CMAKE_INCLUDE_PATH "${CMAKE_INCLUDE_PATH};${onnxruntime_headers_SOURCE_DIR}/include" PARENT_SCOPE)
+  endif()
 endif()

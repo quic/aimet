@@ -40,10 +40,12 @@ macro(whl_add_whl_prep_common_target name)
     add_custom_target(whl_prep_cp_common_${name}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${WHL_PREP_AIMET_COMMON_DIR}/x86_64-linux-gnu/include
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/include/${name} ${WHL_PREP_AIMET_COMMON_DIR}/x86_64-linux-gnu/include/${name}
+        DEPENDS Mo${name}Test
     )
     add_custom_target(whl_prep_ln_common_${name}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${WHL_PREP_AIMET_COMMON_DIR}/x86_64-linux-gnu/include
         COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/include/${name} ${WHL_PREP_AIMET_COMMON_DIR}/x86_64-linux-gnu/include/${name}
+        DEPENDS Mo${name}Test
     )
 endmacro()
 

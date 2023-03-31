@@ -376,6 +376,7 @@ class Adaround:
                     cls._update_param_encodings_dict(quant_module, name, param_encodings)
 
         # export encodings to JSON file
+        os.makedirs(os.path.abspath(path), exist_ok=True)
         encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
         with open(encoding_file_path, 'w') as encoding_fp:
             json.dump(param_encodings, encoding_fp, sort_keys=True, indent=4)

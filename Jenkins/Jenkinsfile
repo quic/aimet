@@ -491,6 +491,108 @@ pipeline {
                 } // stage("extra")
             }
         }
+        stage('Matrix') {
+            matrix {
+                axes {
+                    axis {
+                        name 'ML_FMWORK'
+                        values 'tf-torch', 'torch', 'tf'
+                    }
+                    axis {
+                        name 'PROC_TYPE'
+                        values 'cpu', 'gpu'
+                    }
+                }
+                excludes {
+                    exclude {
+                        axis {
+                            name 'ML_FMWORK'
+                            values 'tf-torch'
+                        }
+                        axis {
+                            name 'PROC_TYPE'
+                            values 'gpu'
+                        }
+                    }
+                }
+                stages {
+                    stage('Editable mode') {
+                        agent { label "docker-build-aimet-pr-${PROC_TYPE}" }
+                        environment {
+                            AIMET_VARIANT="${ML_FMWORK}-${PROC_TYPE}"
+                            DOCKER_CMD='docker run --rm $([[ "$PROC_TYPE" == "gpu" ]] && echo "--gpus all") -u "$(id -u):$(id -g)" -v $PWD:$PWD -w $PWD -e AIMET_VARIANT $DOCKER_IMAGE '
+                            DOCKER_IMAGE="aimet-dev-docker:${AIMET_VARIANT}"
+                        }
+                        stages {
+                            stage('Build or fetch docker image') {
+                                steps {
+                                    script {
+                                        if (AIMET_PREBUILT_DOCKER_IMAGE_URL && ! pullRequest.files.any { f -> f.getFilename().contains('Jenkins/') }) {
+                                            env.DOCKER_IMAGE = "${AIMET_PREBUILT_DOCKER_IMAGE_URL}/${env.DOCKER_IMAGE}"
+                                            sh "docker pull ${env.DOCKER_IMAGE}"
+                                        } else {
+                                            env.DOCKER_IMAGE = "${env.DOCKER_IMAGE}.${CHANGE_ID}"
+                                            sh "docker build -f Jenkins/Dockerfile.${AIMET_VARIANT} -t ${docker_image} ./Jenkins"
+                                        }
+                                        echo "Will use a ${env.DOCKER_IMAGE} docker image"
+                                    }
+                                }
+                            }
+                            stage('Test onnxruntime installation') {
+                                when { expression { AIMET_VARIANT =~ 'torch' } }
+                                steps {
+                                    script {
+                                        def onnxruntime_version = sh(returnStdout: true, script: "${env.DOCKER_CMD} find /opt /usr -path '*onnxruntime*' -name VERSION_NUMBER -exec cat {} \\;").trim()
+                                        def onnxruntime_headers_version = sh(returnStdout: true, script: "${env.DOCKER_CMD} python3 -c 'import onnxruntime; print(onnxruntime.__version__)'").trim()
+                                        assert "${onnxruntime_version}" == "${onnxruntime_headers_version}" : "Onnxruntime setup is inconsistent (onnxruntime_version: ${onnxruntime_version}, onnxruntime_headers_version: ${onnxruntime_headers_version})"
+                                    }
+                                }
+                            }
+                            stage('Install aimet in editable') {
+                                steps {
+                                    script {
+                                        def docker_script = 'python3 -m venv --system-site-packages --clear $PWD/venv ' +
+                                            '&& source $PWD/venv/bin/activate ' +
+                                            '&& python3 -m pip install --upgrade pip setuptools ' +
+                                            '&& cmake -S . -B ./build-$AIMET_VARIANT ' +
+                                                '-DENABLE_CUDA=$([[ "$AIMET_VARIANT" =~ "gpu" ]] &&  echo 1 || echo 0) ' +
+                                                '-DENABLE_TORCH=$([[ "$AIMET_VARIANT" =~ "torch" ]] && echo 1 || echo 0) ' +
+                                                '-DENABLE_TENSORFLOW=$([[ "$AIMET_VARIANT" =~ "tf" ]] && echo 1 || echo 0) ' +
+                                            '&& cmake --build ./build-$AIMET_VARIANT --target whl_develop'
+                                        sh "${env.DOCKER_CMD} bash -c '${docker_script}'"
+                                    }
+                                }
+                            }
+                            stage('Check aimet installation') {
+                                steps {
+                                    script {
+                                        def docker_script = 'source $PWD/venv/bin/activate ' +
+                                            '&& (python3 -m pip show AimetCommon) ' +
+                                            '&& ([[ "$AIMET_VARIANT" =~ "torch" ]] && python3 -m pip show AimetTorch || true) ' +
+                                            '&& ([[ "$AIMET_VARIANT" =~ "tf" ]]    && python3 -m pip show AimetTensorflow || true) '
+                                        sh "${env.DOCKER_CMD} bash -c '${docker_script}'"
+                                    }
+                                }
+                            }
+                            stage('Unit tests in editable mode') {
+                                steps {
+                                    script {
+                                        def docker_script = 'TORCH_HOME=build-$AIMET_VARIANT/torch_cache cmake --build ./build-$AIMET_VARIANT --target test'
+                                        sh "${env.DOCKER_CMD} bash -c '${docker_script}'"
+                                    }
+                                }
+                            }
+                        }
+                        post {
+                            always {
+                                archiveArtifacts artifacts: 'build-*/Testing/**/LastTest.log', fingerprint: true
+                                junit allowEmptyResults: true, testResults: 'build-*/**/*_test_output.xml'
+                            }
+                        }
+                    }
+                }
+            }
+        } // stage('Matrix')
     }
     post {
         always {
