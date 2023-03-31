@@ -196,7 +196,7 @@ class QuantizeAcceptanceTests(unittest.TestCase):
         quantized_model_accuracy = model_eval(model=sim.model, early_stopping_iterations=None)
 
         print("Quantized model accuracy=", quantized_model_accuracy)
-        self.assertGreaterEqual(quantized_model_accuracy, 0.5)
+        assert quantized_model_accuracy >= 0.5
 
     #TODO @pytest.mark.cuda
     @pytest.mark.skip(reason="test fails with new versions of pytorch-ignite (0.4.4)")
