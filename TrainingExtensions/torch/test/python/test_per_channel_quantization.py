@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -463,11 +463,10 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
         torch.manual_seed(0)
         tensor_quantizer = LearnedGridTensorQuantizer(bitwidth=8, round_mode='nearest',
                                                       quant_scheme=QuantScheme.training_range_learning_with_tf_init,
-                                                      use_symmetric_encodings=True,
+                                                      use_symmetric_encodings=False,
                                                       enabled_by_default=True,
                                                       data_type=QuantizationDataType.int)
         tensor_quantizer._ch_axis = 0
-        tensor_quantizer.is_unsigned_symmetric = True
 
         encoding_min = torch.nn.Parameter(torch.FloatTensor([0.0, 0.0, 0.0]))
         encoding_max = torch.nn.Parameter(torch.FloatTensor([1.0, 2.5, 3.5]))
@@ -486,7 +485,7 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
         loss = quant_dequantized_output.sum()
         loss.backward()
         optimizer.step()
-        assert encoding_min.grad is None
+        assert encoding_min.grad is not None
         assert encoding_max.grad is not None
         assert len(encoding_max) == len(encoding_max.grad)
 

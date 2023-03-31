@@ -365,7 +365,6 @@ def symmetric_gradients(tensor: torch.Tensor,
     return grad_tensor, -grad_encoding_max, grad_encoding_max
 
 
-# pylint:disable=too-many-locals
 def calculate_gradients(tensor: torch.Tensor,
                         grad: torch.Tensor,
                         intermediate_result: IntermediateResult,
@@ -378,14 +377,10 @@ def calculate_gradients(tensor: torch.Tensor,
     :param channel_axis: Channel axis
     :return: Gradients with respect to tensor, gradients of encoding min and max
     """
-    is_symmetric = intermediate_result.is_symmetric
-    is_unsigned = intermediate_result.is_unsigned
+    if intermediate_result.is_symmetric:
+        return symmetric_gradients(tensor, grad, intermediate_result, channel_axis)
 
-    if not is_symmetric:
-        return asymmetric_gradients(tensor, grad, intermediate_result, channel_axis)
-
-    return unsigned_symmetric_gradients(tensor, grad, intermediate_result, channel_axis) if is_unsigned else \
-        symmetric_gradients(tensor, grad, intermediate_result, channel_axis)
+    return asymmetric_gradients(tensor, grad, intermediate_result, channel_axis)
 
 
 class RoundStraightThrough(torch.autograd.Function):
