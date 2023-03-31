@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2019-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2019-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -106,6 +106,18 @@ public:
      * @param percentile Percentile value to be used while adjusting min and max
      */
     virtual void setPercentileValue(float percentile)
+    {
+        // TODO - check if there is a better way to do this.
+        // This method is applicable only for TfPercentileEncodingAnalyzer.
+        assert(0);
+    }
+
+    /**
+     * @brief Fecth the percentile value
+     *
+     * @return percentile value of the encoding analyzer.
+     */
+    virtual float getPercentileValue()
     {
         // TODO - check if there is a better way to do this.
         // This method is applicable only for TfPercentileEncodingAnalyzer.
