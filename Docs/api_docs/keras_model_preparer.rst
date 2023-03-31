@@ -81,6 +81,10 @@ Limitations
 ===========
 The AIMET Keras ModelPreparer API has the following limitations:
 
+* If the model starts with a subclassed layer, the AIMET Keras ModelPreparer API will need an Keras Input Layer as input.
+  This is becuase the Keras Functional API requires an Input Layer as the first layer in the model. The AIMET Keras ModelPreparer API
+  will raise an exception if the model starts with a subclassed layer and an Input Layer is not provided as input.
+
 * The AIMET Keras ModelPreparer API is able to convert subclass layers that have arthmetic experssion in their call function.
   However, this API and Keras, will convert these operations to TFOPLambda layers which are not currently supported by AIMET Keras Quantization API. 
   If possible, it is recommended to have the subclass layers call function resemble the Keras Functional API layers.
@@ -92,7 +96,29 @@ The AIMET Keras ModelPreparer API has the following limitations:
             x = self.conv_2(x)
             return x
 
-* If the model starts with a subclassed layer, the AIMET Keras ModelPreparer API will need an Keras Input Layer as input.
-  This is becuase the Keras Functional API requires an Input Layer as the first layer in the model. The AIMET Keras ModelPreparer API
-  will raise an exception if the model starts with a subclassed layer and an Input Layer is not provided as input.
+* Subclass layers are pieces of Python code in contrast to typical Functional or Sequential models are static graphs of layers. 
+  Due to this, the subclass layers do not have this same attribute and can cause some issues during the model preparer. 
+  The model preparer utilizes the :code:`call` function of a subclass layer to trace out the layers defined inside of it. 
+  To do this, a Keras Symbolic Tensor is passed through. If this symbolic tensor does not “touch” all parts of the layers 
+  defined inside, this can cause missing layers/weights when preparing the model. In the example below we can see that 
+  in the first call function, we would run into this error. The Keras Symbolic Tensor represented with variable :code:`x`, does 
+  not pass through the :code:`position`'s variable at any point. This results in the weight for self.pos_emb to be missing in 
+  the final prepared model. In contrast, the second call function has the input layer go through the entirety of the 
+  layers and allows the model preparer to pick up all the internal weights and layers.::
+
+    def call(self, x, **kwargs):
+        positions = tf.range(start=0, limit=self.static_patch_count, delta=1)
+        positions = self.pos_emb(positions)
+        x = self.token_emb(x)
+        x = x + positions
+        return x
+
+    def call(self, x, **kwargs):
+        maxlen = tf.shape( x )[-1]
+        positions = tf.range(start=0, limit=maxlen, delta=1)
+        positions = self.pos_emb(positions)
+        x = self.token_emb( x )
+        x = x + positions
+        return x
+
   
