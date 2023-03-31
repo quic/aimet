@@ -82,6 +82,7 @@ class QuantizationSimModelParams:
     default_data_type: QuantizationDataType = QuantizationDataType.int
 
 # pylint: disable=too-many-ancestors
+# pylint: disable=too-many-instance-attributes
 class QuantizationSimModel(tf.keras.Model):
     """
     Implements mechanism to add quantization simulations ops to a model. This allows for off-target simulation of
