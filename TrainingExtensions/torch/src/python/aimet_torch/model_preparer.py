@@ -44,11 +44,11 @@ from typing import Any, Optional, Dict, Union, List
 import torch
 import torch.fx
 from aimet_common.utils import AimetLogger
-from aimet_torch.utils import get_device
+from aimet_torch.utils import in_eval_mode
 
 import aimet_torch.elementwise_ops as elementwise_ops
 
-logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
+logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ModelPreparer)
 
 # this is a map of torch.nn.functional type to corresponding module type
 functional_op_to_module_map = {
@@ -56,11 +56,8 @@ functional_op_to_module_map = {
     torch.nn.functional.gelu: torch.nn.GELU
 }
 
-# In this map, function's corresponding torch.nn.Module(__init__()) requires either
-# only keyword arguments or no arguments. Argument(s) should not be inferred dynamically. For example,
-# 1). torch.nn.ReLU takes inplace=False as keyword argument (torch.nn.ReLU(inplace=False)).
-# 2). elementwise_ops.Add module does not require any argument (elementwise_ops.Add()).
-functional_with_kwargs = {
+# In this functional --> module map, corresponding model is of type torch.nn and stateful.
+functional_with_stateful_api = {
     'relu'          : torch.nn.ReLU,
     'relu6'         : torch.nn.ReLU6,
     'hardtanh'      : torch.nn.Hardtanh,
@@ -86,15 +83,6 @@ functional_with_kwargs = {
     'sigmoid'       : torch.nn.Sigmoid,
     'hardsigmoid'   : torch.nn.Hardsigmoid,
     'silu'          : torch.nn.SiLU,
-    'add'           : elementwise_ops.Add,
-    'subtract'      : elementwise_ops.Subtract,
-    'sub'           : elementwise_ops.Subtract,
-    'mul'           : elementwise_ops.Multiply,
-    'div'           : elementwise_ops.Divide,
-    'truediv'       : elementwise_ops.Divide,
-    'floordiv'      : elementwise_ops.FloorDivide,
-    'matmul'        : elementwise_ops.MatMul,
-    'exp'           : elementwise_ops.Exponential,
 }
 
 
@@ -104,12 +92,17 @@ functional_with_special_handling = {
     'conv2d'        : torch.nn.Conv2d,
 }
 
-
-# In this map, function requires both keyword and positional arguments and also
-# support dynamically inferred argument(s). For example,
-# 1.) Functional interpolate takes both positional and keyword arguments and arguments can be inferred dynamically.
-#   torch.nn.functional.interpolate(x, size=(x.size(2),  x.size(3)))
-functional_with_args_kwargs = {
+# In this functional --> module map, corresponding custom module is of type torch.nn and uses stateless API.
+functional_with_stateless_api = {
+    'add'                       : elementwise_ops.Add,
+    'subtract'                  : elementwise_ops.Subtract,
+    'sub'                       : elementwise_ops.Subtract,
+    'mul'                       : elementwise_ops.Multiply,
+    'div'                       : elementwise_ops.Divide,
+    'truediv'                   : elementwise_ops.Divide,
+    'floordiv'                  : elementwise_ops.FloorDivide,
+    'matmul'                    : elementwise_ops.MatMul,
+    'exp'                       : elementwise_ops.Exponential,
     'interpolate'               : elementwise_ops.Interpolate,
     'max_pool2d'                : elementwise_ops.MaxPool2d,
     'max_pool2d_with_indices'   : elementwise_ops.MaxPool2d,
@@ -122,12 +115,12 @@ functional_with_args_kwargs = {
 }
 
 
-def conv2d_create_node(symbolic_traced_model: torch.fx.GraphModule, module_name: str, node: torch.fx.node) \
+def conv2d_create_node(traced_model: torch.fx.GraphModule, module_name: str, node: torch.fx.node) \
         -> torch.fx.node:
     """
     Create the node to be inserted in the graph model.
 
-    :param symbolic_traced_model: Symbolically traced model
+    :param traced_model: Symbolically traced model
     :param module_name: Qualified module name in symbolic_traced_model hierarchy corresponding to new node
     :param node: Current node in the graph after which new node will be inserted
     :return: torch.fx.node to be inserted in the graph
@@ -150,11 +143,11 @@ def conv2d_create_node(symbolic_traced_model: torch.fx.GraphModule, module_name:
         else:
             break
 
-    with symbolic_traced_model.graph.inserting_after(node):
-        if isinstance(getattr(symbolic_traced_model, module_name), elementwise_ops.DynamicConv2d):
-            new_node = symbolic_traced_model.graph.call_module(module_name, args=tuple(input_tensor))
+    with traced_model.graph.inserting_after(node):
+        if isinstance(getattr(traced_model, module_name), elementwise_ops.DynamicConv2d):
+            new_node = traced_model.graph.call_module(module_name, args=tuple(input_tensor))
         else:
-            new_node = symbolic_traced_model.graph.call_module(module_name, args=tuple([input_tensor[0]]))
+            new_node = traced_model.graph.call_module(module_name, args=tuple([input_tensor[0]]))
         return new_node
 
 
@@ -246,21 +239,21 @@ def get_node_attr(node: torch.fx.node):
     return fetch_attr(node.target)
 
 
-def concat_create_node(symbolic_traced_model: torch.fx.GraphModule, module_name: str, node: torch.fx.node) \
+def concat_create_node(traced_model: torch.fx.GraphModule, module_name: str, node: torch.fx.node) \
         -> torch.fx.node:
     """
     Create the node to be inserted in the graph model.
 
-    :param symbolic_traced_model: Symbolically traced model
+    :param traced_model: Symbolically traced model
     :param module_name: Qualified module name in symbolic_traced_model hierarchy corresponding to new node
     :param node: Current node in the graph after which new node will be inserted
     :return: torch.fx.node to be inserted in the graph
     """
 
-    with symbolic_traced_model.graph.inserting_after(node):
+    with traced_model.graph.inserting_after(node):
         # call_module only accepts tuple as args but node.args[0] can be a list. Convert it into a tuple
         # If node.args[0] is already a tuple, tuple() will do nothing
-        new_node = symbolic_traced_model.graph.call_module(module_name, args=tuple(node.args[0]))
+        new_node = traced_model.graph.call_module(module_name, args=tuple(node.args[0]))
         return new_node
 
 
@@ -300,7 +293,7 @@ def prepare_model(model: torch.nn.Module, modules_to_exclude: List[torch.nn.Modu
     """
     Prepare and modify the pytorch model for AIMET features using torch.FX symbolic tracing API.
 
-    1. Replace torch.nn.functional by torch.nn.Module
+    1. Replace torch.nn.functional by module of type torch.nn.Module
     2. Create new independent torch.nn.Module instances for reused/duplicate module
 
     :param model: pytorch Model to be modified.
@@ -310,17 +303,12 @@ def prepare_model(model: torch.nn.Module, modules_to_exclude: List[torch.nn.Modu
      torch.fx.symbolic_trace API in detail.
     :return: Modified pytorch Model
     """
-    model.eval()
-    device = get_device(model)
-    symbolic_traced_model = _trace_model(model, modules_to_exclude, concrete_args)
+    with in_eval_mode(model):
+        traced_model = _trace_model(model, modules_to_exclude, concrete_args)
 
     # Prepare model and perform checks to make sure the graph is well-formed.
-    _prepare_helper(symbolic_traced_model)
-    _verify_symbolic_traced_model(symbolic_traced_model)
-
-    symbolic_traced_model.eval()
-    symbolic_traced_model.to(device)
-    return symbolic_traced_model
+    _prepare_traced_model(traced_model)
+    return traced_model
 
 
 def _trace_model(model: torch.nn.Module, modules_to_exclude: Optional[List[torch.nn.Module]],
@@ -349,16 +337,16 @@ def _trace_model(model: torch.nn.Module, modules_to_exclude: Optional[List[torch
     return symbolic_traced_model
 
 
-def _prepare_helper(symbolic_traced_model: torch.fx.GraphModule):
+def _prepare_traced_model(traced_model: torch.fx.GraphModule):
     """
-    Helper for prepare_model().
+    Helper for prepare_model(). This prepares the given traced_model in-place.
 
-    :param symbolic_traced_model: Symbolically traced model.
+    :param traced_model: Symbolically traced model.
     """
     unique_nodes = set()
 
     # Modify the symbolically traced model by iterating over all the nodes
-    for node in symbolic_traced_model.graph.nodes:
+    for node in traced_model.graph.nodes:
 
         # Create new module for functional nodes
         if node.op in ['call_function', 'call_method']:
@@ -367,26 +355,27 @@ def _prepare_helper(symbolic_traced_model: torch.fx.GraphModule):
                 # Instantiate new module for functional node
                 new_module = _create_module_for_functional_node(node, functional_name)
                 new_nodule_name = 'module_' + node.name
-                setattr(symbolic_traced_model, new_nodule_name, new_module)
+                setattr(traced_model, new_nodule_name, new_module)
                 # Create the node for new module in the graph
-                _create_node_for_new_module(symbolic_traced_model, node, new_nodule_name, functional_name)
+                _create_node_for_new_module(traced_model, node, new_nodule_name, functional_name)
                 logger.info("Functional         : Adding new module for node: {%s} ", node.name)
 
         # Create new module for reused/duplicate nodes
         elif node.target in unique_nodes:
             if node.op == 'call_module':
                 # Instantiate new module for reused node
-                new_module = _create_module_for_reused_node(node, symbolic_traced_model)
+                new_module = _create_module_for_reused_node(node, traced_model)
                 new_nodule_name = 'module_' + node.name
-                setattr(symbolic_traced_model, new_nodule_name, new_module)
+                setattr(traced_model, new_nodule_name, new_module)
                 # Create the node for new module in the graph
-                _create_node_for_new_module(symbolic_traced_model, node, new_nodule_name)
+                _create_node_for_new_module(traced_model, node, new_nodule_name)
                 logger.info("Reused/Duplicate   : Adding new module for node: {%s} ", node.name)
         else:
             unique_nodes.add(node.target)
 
+    _verify_traced_model(traced_model)
 
-def _verify_symbolic_traced_model(symbolic_traced_model: torch.fx.GraphModule):
+def _verify_traced_model(symbolic_traced_model: torch.fx.GraphModule):
     """
     Does some checks to make sure the graph is well-formed and recompile the forward() method of symbolic_traced
     model from its graph
@@ -397,31 +386,31 @@ def _verify_symbolic_traced_model(symbolic_traced_model: torch.fx.GraphModule):
     symbolic_traced_model.recompile()
 
 
-def _create_node_for_new_module(symbolic_traced_model: torch.fx.GraphModule, node: torch.fx.node,
+def _create_node_for_new_module(traced_model: torch.fx.GraphModule, node: torch.fx.node,
                                 module_name: str, functional_name: str = None):
     """
     Insert 'call module' node into graph and replace all the uses of 'node' with newly added node and erase the
     old node from graph
-    :param symbolic_traced_model: Symbolically traced model
+    :param traced_model: Symbolically traced model
     :param node: Current node in the graph after which new node will be inserted
     :param module_name: Qualified module name in symbolic_traced_model hierarchy corresponding to new node
     :param functional_name: Original functional name
     :return: None
     """
-    with symbolic_traced_model.graph.inserting_after(node):
+    with traced_model.graph.inserting_after(node):
         if functional_name:
             if functional_name in functional_with_special_handling.keys():
-                new_node = special_handler_functions[functional_name]['node_fn'](symbolic_traced_model, module_name, node)
-            elif functional_name in functional_with_args_kwargs.keys():
+                new_node = special_handler_functions[functional_name]['node_fn'](traced_model, module_name, node)
+            elif functional_name in functional_with_stateless_api.keys():
                 merged_args = _merge_args_and_kwargs(node)
-                new_node = symbolic_traced_model.graph.call_module(module_name, args=tuple(merged_args))
+                new_node = traced_model.graph.call_module(module_name, args=tuple(merged_args))
             else:
-                new_node = symbolic_traced_model.graph.call_module(module_name, args=node.args)
+                new_node = traced_model.graph.call_module(module_name, args=node.args)
         else:
-            new_node = symbolic_traced_model.graph.call_module(module_name, args=node.args)
+            new_node = traced_model.graph.call_module(module_name, args=node.args)
 
         node.replace_all_uses_with(new_node)
-    symbolic_traced_model.graph.erase_node(node)
+    traced_model.graph.erase_node(node)
 
 
 def _find_functional_name_for_node(node_name: str) -> Union[str, None]:
@@ -431,7 +420,7 @@ def _find_functional_name_for_node(node_name: str) -> Union[str, None]:
     :param node_name: torch.fx Node name
     :return: corresponding functional name if found, else None
     """
-    combined_lookup = {**functional_with_kwargs, **functional_with_special_handling, **functional_with_args_kwargs}
+    combined_lookup = {**functional_with_stateful_api, **functional_with_special_handling, **functional_with_stateless_api}
 
     # Functional operations with similar names are differentiated using "_count" suffix
     # when symbolically traced. For example, two add operations will have name 'add' and 'add_1'.
@@ -454,15 +443,15 @@ def _create_module_for_functional_node(node: torch.fx.node, functional_name: str
     :return: New module
     """
     # Instantiate new module from lookup
-    if functional_name in functional_with_kwargs.keys():
-        module = functional_with_kwargs[functional_name]()
+    if functional_name in functional_with_stateful_api.keys():
+        module = functional_with_stateful_api[functional_name]()
         # Set the parameters for module from node.kwargs
         for key, value in node.kwargs.items():
             setattr(module, key, value)
     elif functional_name in functional_with_special_handling.keys():
         module = special_handler_functions[functional_name]['module_fn'](node)
-    elif functional_name in functional_with_args_kwargs.keys():
-        module = functional_with_args_kwargs[functional_name]()
+    elif functional_name in functional_with_stateless_api.keys():
+        module = functional_with_stateless_api[functional_name]()
     else:
         raise ValueError("Unsupported module: {}".format(functional_name))
     return module

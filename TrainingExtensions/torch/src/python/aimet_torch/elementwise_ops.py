@@ -36,94 +36,84 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-""" Modules for functional elementwise ops """
+""" Custom modules for functional operations defined under torch and torch.nn.functional packages """
 
-from typing import Callable
+from typing import Callable, Any
 import torch
 import torch.nn
 
 
-def forward_function_wrapper(functional: str) -> Callable:
-    """ Wrapper function returning forward pass function"""
+def forward_function_wrapper(functional: Callable) -> Any:
+    """
+    Wrapper function returning forward method for given functional operation.
+
+    :param functional: torch.nn.functional
+    :return: forward method
+    """
     @staticmethod
-    def forward(*args, **kwargs) -> torch.Tensor:
+    def forward(*args, **kwargs) -> Any:
         """
-        Forward-pass routine for the functional op
+        Forward-pass routine for the functional operation.
         """
         return functional(*args, **kwargs)
     return forward
 
-def create_wrapper_module(class_name: str, functional: str) -> type:
-    """ Wrapper function returning module class for a functional op"""
-    wrapped_module = type(class_name, (torch.nn.Module,), dict(forward=forward_function_wrapper(functional)))
+def create_wrapper_module(class_name: str, functional: Callable) -> Callable:
+    """
+    Dynamically create wrapper module for a functional operation.
+
+    :param class_name: Name of the class.
+    :param functional: Functional operation.
+    :return: Module.
+    """
+    wrapped_module = type(class_name, (torch.nn.Module,), {'forward': forward_function_wrapper(functional)})
     return wrapped_module
 
 
+# modules for functional operations under torch package
+Subtract = create_wrapper_module('Subtract', torch.sub)
+Divide = create_wrapper_module('Divide', torch.div)
+FloorDivide = create_wrapper_module('FloorDivide', torch.floor_divide)
+MatMul = create_wrapper_module('MatMul', torch.matmul)
+Norm = create_wrapper_module('Norm', torch.norm)
+Exponential = create_wrapper_module('Exponential', torch.exp)
+Chunk = create_wrapper_module('Chunk', torch.chunk)
+
+
+# modules for functional operations defined under torch.nn.functional package
 Interpolate = create_wrapper_module('Interpolate', torch.nn.functional.interpolate)
 MaxPool2d = create_wrapper_module('MaxPool2d', torch.nn.functional.max_pool2d)
 AdaptiveAvgPool2d = create_wrapper_module('AdaptiveAvgPool2d', torch.nn.functional.adaptive_avg_pool2d)
 AvgPool2d = create_wrapper_module('AvgPool2d', torch.nn.functional.avg_pool2d)
-Norm = create_wrapper_module('Norm', torch.norm)
-Chunk = create_wrapper_module('Chunk', torch.chunk)
 BatchNorm = create_wrapper_module('BatchNorm', torch.nn.functional.batch_norm)
 GroupNorm = create_wrapper_module('GroupNorm', torch.nn.functional.group_norm)
 
 
+# following modules are for overloaded operators like + and *,
+# which can operate other than torch.Tensor datatype.
 class Add(torch.nn.Module):
     """ Add module for a functional add"""
     # pylint:disable=arguments-differ
     @staticmethod
-    def forward(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    def forward(x: Any, y: Any) -> Any:
         """
         Forward-pass routine for add op
         """
         return x + y
 
 
-class Subtract(torch.nn.Module):
-    """ Subtract module for a functional subtract"""
-    # pylint:disable=arguments-differ
-    @staticmethod
-    def forward(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        """
-        Forward-pass routine for subtract op
-        """
-        return x - y
-
-
 class Multiply(torch.nn.Module):
     """ Multiply module for a functional multiply"""
     # pylint:disable=arguments-differ
     @staticmethod
-    def forward(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    def forward(x: Any, y: Any) -> Any:
         """
         Forward-pass routine for multiply op
         """
         return x * y
 
 
-class Divide(torch.nn.Module):
-    """ Divide module for a functional divide"""
-    # pylint:disable=arguments-differ
-    @staticmethod
-    def forward(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        """
-        Forward-pass routine for divide op
-        """
-        return torch.div(x, y)
-
-
-class FloorDivide(torch.nn.Module):
-    """ Floor Divide module for a functional floor divide"""
-    # pylint:disable=arguments-differ
-    @staticmethod
-    def forward(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        """
-        Forward-pass routine for floor divide op
-        """
-        return torch.floor_divide(x, y)
-
-
+# modules for functional requiring special handling
 class Concat(torch.nn.Module):
     """ Concat module for a functional concat"""
     def __init__(self, axis: int = 0):
@@ -138,17 +128,6 @@ class Concat(torch.nn.Module):
         return torch.cat(x, dim=self._axis)
 
 
-class MatMul(torch.nn.Module):
-    """ MatMul module for a functional matmul"""
-    # pylint:disable=arguments-differ
-    @staticmethod
-    def forward(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        """
-        Forward-pass routine for matmul op
-        """
-        return torch.matmul(x, y)
-
-
 class DynamicConv2d(torch.nn.Module):
     """ Conv2d module for a functional conv2d"""
     def __init__(self, stride=1, padding=0, dilation=1, groups=1):
@@ -160,13 +139,3 @@ class DynamicConv2d(torch.nn.Module):
         Forward-pass routine for conv2d op
         """
         return torch.nn.functional.conv2d(x, weight, bias, self.stride, self.padding, self.dilation, self.groups)
-
-
-class Exponential(torch.nn.Module):
-    """ Exponential module for a functional exponential"""
-    @staticmethod
-    def forward(x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward-pass routine for exponential op
-        """
-        return torch.exp(x)

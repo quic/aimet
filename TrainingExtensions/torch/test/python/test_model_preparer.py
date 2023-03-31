@@ -46,6 +46,7 @@ import copy
 import numpy as np
 import onnx
 import torch
+from packaging.version import Version
 pytest.importorskip("torch", minversion="1.8") # Skip tests in this file if minimum torch version is not met
 import torch.fx
 torch.fx.wrap('len')
@@ -59,9 +60,10 @@ from aimet_common.defs import QuantScheme
 from aimet_torch import elementwise_ops
 from models.test_models import ModelWithFunctionalReLU, SingleResidual, ModelWithDuplicateReLU, \
     ConcatModel
+from aimet_torch.model_validator.model_validator import ModelValidator
 from aimet_torch.quantsim import QuantizationSimModel, QuantParams
-from aimet_torch.utils import create_fake_data_loader
-from aimet_torch.model_preparer import prepare_model, _find_functional_name_for_node
+from aimet_torch.utils import create_fake_data_loader, get_device
+from aimet_torch.model_preparer import prepare_model, _find_functional_name_for_node, _prepare_traced_model
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.cross_layer_equalization import  equalize_model
 from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
@@ -236,6 +238,8 @@ class TestFX:
 
         # 8 duplicate ReLUs are replaced by new ReLUs in modified model
         assert original_model_relu_count + 8 == modified_model_relu_count
+        assert get_device(model) == get_device(model_transformed)
+        assert model.training == model_transformed.training
 
     def test_fx_with_functional_relu_quantsim(self):
         """
@@ -1569,3 +1573,29 @@ class TestFX:
 
         # Compare output after bnf
         assert torch.equal(model_transformed(dummy_input)[0], model(dummy_input)[0])
+
+    @pytest.mark.skipif(Version(torch.__version__) < Version('1.10.0'), reason="torch1.13.1 is required.")
+    def test_fx_with_vit(self):
+        from transformers import ViTModel, ViTConfig
+        from transformers.utils.fx import symbolic_trace
+
+        # Set the strict flag to False so that torch.jit.trace can be successful.
+        from aimet_torch.meta import connectedgraph
+        connectedgraph.jit_trace_args.update({"strict": False})
+
+        model = ViTModel(ViTConfig())
+        dummy_input = torch.randn(1, 3, 224, 224)
+
+        traced_model = symbolic_trace(model, ["pixel_values"])
+        _prepare_traced_model(traced_model)
+
+        with torch.no_grad():
+            outputs = model(dummy_input)
+            outputs2 = traced_model(dummy_input)
+
+        # Verify bit-exact outputs.
+        assert torch.equal(dict(outputs)["last_hidden_state"], outputs2["last_hidden_state"])
+        assert torch.equal(dict(outputs)["pooler_output"], outputs2["pooler_output"])
+
+        # Verify that validator checks pass.
+        assert ModelValidator.validate_model(traced_model, dummy_input)
