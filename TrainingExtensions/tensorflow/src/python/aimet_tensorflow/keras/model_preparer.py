@@ -598,7 +598,9 @@ def prepare_model(original_model: tf.keras.Model,
 
     # Initial check to see if preparing model is necessary
     if not _model_has_nested_layers(original_model):
-        _logger.debug("Model does not contain any nested layers. Original model being returned.")
+        _logger.debug("Model does not contain any nested layers. "
+                      "Returning original model after going through 'replace_separable_conv_with_depthwise_pointwise.")
+        model_to_return, _ = replace_separable_conv_with_depthwise_pointwise(original_model)
         return original_model
 
     _logger.debug("Preparing model for AIMET. Original model architecture")
@@ -614,7 +616,11 @@ def prepare_model(original_model: tf.keras.Model,
     # Cloning model to remove any references to the original model
     K.clear_session() # To avoid name conflicts
     model_to_return = tf.keras.models.clone_model(prepared_model)
+
+    # Extra prepare step to replace Separable Conv's with Depthwise Pointwise pattern if the prepared model
+    # had any in the original models nested layers.
     model_to_return, _ = replace_separable_conv_with_depthwise_pointwise(model_to_return)
+
     model_to_return.summary(print_fn=_logger.debug)
 
     # Copying over weights from original model to functional model
