@@ -35,22 +35,37 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-""" Utility for rules to check architecture. """
+"""
+Utility for rules to check architecture.
+Node checks should follow :param node: :return bool:.
+Pattern checks should follow :param connected_graph: :return list[ops]:
+"""
 
-from typing import Dict
+from typing import Dict, List
 import torch
 
 from aimet_common.utils import AimetLogger
+
+from aimet_torch.meta.connectedgraph import ConnectedGraph
+from aimet_torch.batch_norm_fold import find_standalone_batchnorm_ops
+
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
-def get_check_dict()-> Dict:
+def get_node_check_dict()-> Dict:
     """
-    Get dictionary for arch check.
+    Get dictionary for node checks.
     :return check_dicts: {check target type: list of checks}.
     """
     check_dicts = {torch.nn.modules.conv.Conv2d: [_check_conv_channel_32_base,
                                                   _check_conv_channel_larger_than_32]}
     return check_dicts
+
+def get_pattern_check_list()-> List:
+    """
+    Get a list of pattern checks.
+    :return: List of pattern checks.
+    """
+    return [_check_batch_norm_fold]
 
 def _check_conv_channel_32_base(node: torch.nn.Module)-> bool:
     """
@@ -71,3 +86,13 @@ def _check_conv_channel_larger_than_32(node: torch.nn.Module)-> bool:
     if node.in_channels >= 32 and node.out_channels >= 32:
         return True
     return False
+
+def _check_batch_norm_fold(connected_graph: ConnectedGraph) -> List:
+    """
+    Pattern checker: return all standalone batchnorms.
+    :param connected_graph: Connected_graph object.
+    :return: List of stand alone (not foldable) batch norms in connected_graph.
+    """
+    stand_alone_bn_ops = find_standalone_batchnorm_ops(connected_graph)
+
+    return list(stand_alone_bn_ops)
