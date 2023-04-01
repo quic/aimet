@@ -40,7 +40,7 @@
 
 import contextlib
 import math
-from typing import List, Tuple, Union, Dict, Iterable
+from typing import List, Tuple, Union, Dict, Iterable, Set
 import numpy as np
 import torch
 import torch.nn
@@ -49,7 +49,7 @@ from torch.nn.modules.conv import _ConvTransposeNd
 
 import aimet_common.libpymo as libpymo
 
-from aimet_common.bias_correction import ConvBnPatternHandler
+from aimet_common.bias_correction import ConvBnPatternHandler, CONV_OP_TYPES, LINEAR_OP_TYPES, BN_OP_TYPES
 from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.graph_searcher import GraphSearcher
 from aimet_common.utils import AimetLogger
@@ -376,39 +376,50 @@ def find_all_batch_norms_to_fold(model, input_shapes, dummy_input: Union[torch.T
     :return: List of pairs of bn and layers to fold bn into
     """
     device = utils.get_device(model)
-    inp_tensor_list = utils.create_rand_tensors_given_shapes(input_shapes, device)
-    connected_graph = ConnectedGraph(model, inp_tensor_list)
-    conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model, input_shapes, connected_graph, dummy_input)
+    if dummy_input is not None:
+        connected_graph = ConnectedGraph(model, dummy_input)
+    else:
+        device = utils.get_device(model)
+        inp_tensor_list = utils.create_rand_tensors_given_shapes(input_shapes, device)
+        connected_graph = ConnectedGraph(model, inp_tensor_list)
+
+    conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(connected_graph)
     return conv_bn_pairs + bn_conv_pairs
 
 
-def _find_all_batch_norms_to_fold(
-        model: torch.nn.Module,
-        input_shapes: Union[Tuple, List[Tuple]],
-        connected_graph: ConnectedGraph,
-        dummy_input: Union[torch.Tensor, Tuple] = None
-) -> Tuple[List[Tuple[LayerType, BatchNormType]],
-           List[Tuple[BatchNormType, LayerType]]]:
+def _find_all_batch_norms_to_fold(connected_graph: ConnectedGraph) -> Tuple[
+        List[Tuple[LayerType, BatchNormType]], List[Tuple[BatchNormType, LayerType]]]:
     """
     Find all possible batch norm layers that can be folded. And returns a list of pairs such that (bn, layer)
     means bn will be forward-folded into layer and (layer, bn) means bn will be backward-folded into layer
-    :param model: Model to search
-    :param input_shapes: Input shapes to use for the model (can be one or multiple inputs)
     :param connected_graph: Connected graph associated with the model.
-    :param dummy_input: A dummy input to the model. Can be a Tensor or a Tuple of Tensors
     :return: A list of (layer, bn) pairs and a list of (bn, layer) pairs,
              where `bn` can be folded into to `layer`.
     """
-    conv_linear_bn_activation_info_dict = _find_all_conv_bn_with_activation(connected_graph)
+    conv_bn_pairs, bn_conv_pairs, _ = _find_foldable_bn_pair_and_bn_picked_for_folding(connected_graph)
+    return conv_bn_pairs, bn_conv_pairs
+
+def _find_foldable_bn_pair_and_bn_picked_for_folding(connected_graph: ConnectedGraph) -> Tuple[
+        List[Tuple[LayerType, BatchNormType]], List[Tuple[BatchNormType, LayerType]], Set]:
+    """
+    Find all possible batch norm layers that can be folded. And returns a list of pairs such that (bn, layer)
+    means bn will be forward-folded into layer and (layer, bn) means bn will be backward-folded into layer
+    :param connected_graph: Connected graph associated with the model.
+    :return: A list of (layer, bn) pairs and a list of (bn, layer) pairs,
+             where `bn` can be folded into to `layer`.
+             A set of bn ops which can be folded in to immediate convs.
+    """
+    conv_linear_bn_activation_info_dict = find_all_conv_bn_with_activation_in_graph(connected_graph)
 
     # To mark BN's already picked for backward folding
     bn_picked_for_folding = set()
 
-    ordered_conv_fc_nodes = utils.get_ordered_lists_of_conv_fc(model, input_shapes, dummy_input)
+    _conv_linear_optypes = CONV_OP_TYPES + LINEAR_OP_TYPES
+    ordered_conv_fc_modules = [op.get_module() for op in connected_graph.ordered_ops if op.type in _conv_linear_optypes]
 
     conv_bn_pairs = []
     # Backward fold is given priority over Forward fold
-    for _, module in ordered_conv_fc_nodes:
+    for module in ordered_conv_fc_modules:
         if module in conv_linear_bn_activation_info_dict.keys() and _is_valid_bn_fold(module, True):
             bn_info = conv_linear_bn_activation_info_dict[module]
             if bn_info.output_bn and bn_info.output_bn not in bn_picked_for_folding:
@@ -416,15 +427,26 @@ def _find_all_batch_norms_to_fold(
                 bn_picked_for_folding.add(bn_info.output_bn)
 
     bn_conv_pairs = []
-    for _, module in ordered_conv_fc_nodes:
+    for module in ordered_conv_fc_modules:
         if module in conv_linear_bn_activation_info_dict.keys() and _is_valid_bn_fold(module, False):
             bn_info = conv_linear_bn_activation_info_dict[module]
             if bn_info.input_bn and bn_info.input_bn not in bn_picked_for_folding:
                 bn_conv_pairs.append((bn_info.input_bn.get_module(), module))
                 bn_picked_for_folding.add(bn_info.input_bn)
 
-    return conv_bn_pairs, bn_conv_pairs
+    return conv_bn_pairs, bn_conv_pairs, bn_picked_for_folding
 
+def find_standalone_batchnorm_ops(connected_graph: ConnectedGraph)->set:
+    """
+    Find all batchnorms ops can not be folded.
+    :param connected_graph: Connected graph associated with the model.
+    :return stand_alone_bn_ops: Set of batchnorm ops can not be folded.
+    """
+    _, _, bn_picked_for_folding = _find_foldable_bn_pair_and_bn_picked_for_folding(connected_graph)
+    bn_ops = {op for op in connected_graph.get_all_ops().values() if op.type in BN_OP_TYPES}
+    stand_alone_bn_ops = bn_ops - bn_picked_for_folding
+
+    return stand_alone_bn_ops
 
 def _is_valid_bn_fold(conv: LayerType, fold_backward: bool) -> bool:
     """
@@ -470,7 +492,7 @@ def fold_all_batch_norms_to_weight(
     else:
         inp_tensor_list = dummy_input
     connected_graph = ConnectedGraph(model, inp_tensor_list)
-    conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model, input_shapes, connected_graph, dummy_input)
+    conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(connected_graph)
 
     _fold_given_batch_norms(model, conv_bn_pairs, bn_conv_pairs)
 
@@ -482,14 +504,12 @@ fold_all_batch_norms = fold_all_batch_norms_to_weight
 
 def fold_all_batch_norms_to_scale(
         sim: QuantizationSimModel,
-        input_shapes: Union[Tuple, List[Tuple]],
 ) -> List[Tuple[QcQuantizeWrapper, QcQuantizeWrapper]]:
     """
     Fold all batch_norm layers in a model into the quantization scale parameter
     of the corresponding conv layers
 
     :param sim: QuantizationSimModel
-    :param input_shapes: Input shapes for the model (can be one or multiple inputs)
     :return: A list of pairs of layers [(Conv/Linear, BN layer that got folded)]
     """
     # pylint: disable=protected-access
@@ -503,7 +523,7 @@ def fold_all_batch_norms_to_scale(
         quant_wrapper._module_to_wrap: quant_wrapper
         for _, quant_wrapper in sim.quant_wrappers()
     }
-    conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model, input_shapes, connected_graph)
+    conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(connected_graph)
     conv_bn_pairs = [
         (quant_wrappers[conv], quant_wrappers[bn]) for conv, bn in conv_bn_pairs
     ]
@@ -526,10 +546,10 @@ def find_all_conv_bn_with_activation(model: torch.nn.Module, input_shape: Tuple)
     device = utils.get_device(model)
     inp_tensor_list = utils.create_rand_tensors_given_shapes(input_shape, device)
     connected_graph = ConnectedGraph(model, inp_tensor_list)
-    return _find_all_conv_bn_with_activation(connected_graph)
+    return find_all_conv_bn_with_activation_in_graph(connected_graph)
 
 
-def _find_all_conv_bn_with_activation(connected_graph: ConnectedGraph) -> Dict:
+def find_all_conv_bn_with_activation_in_graph(connected_graph: ConnectedGraph) -> Dict:
     """
     Uses searcher to find preceding and next bn layers for a conv/linear layer
     :param connected_graph: ConnectedGraph object.
