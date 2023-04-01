@@ -45,16 +45,182 @@ from aimet_torch.arch_checker.arch_checker import ArchChecker
 from aimet_torch.arch_checker.arch_checker_rules import TorchActivations
 from aimet_torch.arch_checker.constants import ArchCheckerReportConstants as report_const
 
+class Model_inter_pad_with_BN(torch.nn.Module):
+    """
+    Conv -> Activation -> BN -> Conv
+    Model for testing intermediate padding check.
+    Expects input of shape (batch_size, 3, 32, 32)
+    4 cases are included:
+    1) conv1(pad) conv2(pad) -> failed
+    2) conv1      conv2(pad) -> pass
+    3) conv1(pad) conv2      -> pass
+    4) conv1      conv2      -> pass
+    """
+    def __init__(self):
+        super(Model_inter_pad_with_BN, self).__init__()
+        self.except_shape = (2, 3, 32, 32)
 
+        # conv2 has intermediate paddings
+        self.conv1 = torch.nn.Conv2d(3, 32, kernel_size=2, stride=2, padding=2, bias=False)
+        self.relu1 = torch.nn.ReLU()
+        self.bn1 = torch.nn.BatchNorm2d(32)
+        self.conv2 = torch.nn.Conv2d(32, 32, kernel_size=2, stride=2, padding=2, bias=False)
+
+        # conv4 has no intermediate paddings since conv3 has no paddings
+        self.conv3 = torch.nn.Conv2d(32, 32, kernel_size=2, stride=2, padding=0, bias=False)
+        self.relu2 = torch.nn.ReLU()
+        self.bn2 = torch.nn.BatchNorm2d(32)
+        self.conv4 = torch.nn.Conv2d(32, 32, kernel_size=2, stride=2, padding=2, bias=False)
+
+        # conv6 has no intermediate paddings
+        self.conv5 = torch.nn.Conv2d(32, 32, kernel_size=2, padding=2, bias=False)
+        self.relu3 = torch.nn.ReLU()
+        self.bn3 = torch.nn.BatchNorm2d(32)
+        self.conv6 = torch.nn.Conv2d(32, 32, kernel_size=2, padding=0, bias=False)
+
+        # conv7 has no intermediate paddings
+        self.conv7 = torch.nn.Conv2d(32, 32, kernel_size=2, padding=0, bias=False)
+        self.relu4 = torch.nn.ReLU()
+        self.bn4 = torch.nn.BatchNorm2d(32)
+        self.conv8 = torch.nn.Conv2d(32, 32, kernel_size=2, padding=0, bias=False)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.relu1(x)
+        x = self.bn1(x)
+        x = self.conv2(x)
+
+        x = self.conv3(x)
+        x = self.relu2(x)
+        x = self.bn2(x)
+        x = self.conv4(x)
+
+        x = self.conv5(x)
+        x = self.relu3(x)
+        x = self.bn3(x)
+        x = self.conv6(x)
+
+        x = self.conv7(x)
+        x = self.relu4(x)
+        x = self.bn4(x)
+        x = self.conv8(x)
+
+        return x
+
+class Model_inter_pad_without_BN(torch.nn.Module):
+    """
+    Conv -> Activation -> Conv
+    Model for testing intermediate padding check.
+    Expects input of shape (batch_size, 3, 32, 32)
+    4 cases are included:
+    1) conv1(pad) conv2(pad) -> failed
+    2) conv1      conv2(pad) -> pass
+    3) conv1(pad) conv2      -> pass
+    4) conv1      conv2      -> pass
+    """
+    def __init__(self):
+        super(Model_inter_pad_without_BN, self).__init__()
+        self.except_shape = (2, 3, 32, 32)
+
+        # conv2 has intermediate paddings
+        self.conv1 = torch.nn.Conv2d(3, 32, kernel_size=2, stride=2, padding=2, bias=False)
+        self.relu1 = torch.nn.ReLU()
+        self.conv2 = torch.nn.Conv2d(32, 32, kernel_size=2, stride=2, padding=2, bias=False)
+
+        # conv4 has no intermediate paddings since conv3 has no paddings
+        self.conv3 = torch.nn.Conv2d(32, 32, kernel_size=2, stride=2, padding=0, bias=False)
+        self.relu2 = torch.nn.ReLU()
+        self.conv4 = torch.nn.Conv2d(32, 32, kernel_size=2, stride=2, padding=2, bias=False)
+
+        # conv6 has no intermediate paddings
+        self.conv5 = torch.nn.Conv2d(32, 32, kernel_size=2, padding=2, bias=False)
+        self.relu3 = torch.nn.ReLU()
+        self.conv6 = torch.nn.Conv2d(32, 32, kernel_size=2, padding=0, bias=False)
+
+        # conv7 has no intermediate paddings
+        self.conv7 = torch.nn.Conv2d(32, 32, kernel_size=2, padding=0, bias=False)
+        self.relu4 = torch.nn.ReLU()
+        self.conv8 = torch.nn.Conv2d(32, 32, kernel_size=2, padding=0, bias=False)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.relu1(x)
+        x = self.conv2(x)
+
+        x = self.conv3(x)
+        x = self.relu2(x)
+        x = self.conv4(x)
+
+        x = self.conv5(x)
+        x = self.relu3(x)
+        x = self.conv6(x)
+
+        x = self.conv7(x)
+        x = self.relu4(x)
+        x = self.conv8(x)
+
+        return x
+
+class Model_inter_pad_act_type(torch.nn.Module):
+    """
+    Conv -> Activation -> Conv
+    Model for testing intermediate padding check.
+    Expects input of shape (batch_size, 3, 32, 32)
+    Support type: ("Relu", "Tanh", "HardSwish")
+    """
+    def __init__(self):
+        super(Model_inter_pad_act_type, self).__init__()
+        self.except_shape = (2, 3, 32, 32)
+
+        # relu is supported type. conv2 has intermediate paddings
+        self.conv1 = torch.nn.Conv2d(3, 32, kernel_size=2, stride=2, padding=2, bias=False)
+        self.relu = torch.nn.ReLU()
+        self.conv2 = torch.nn.Conv2d(32, 32, kernel_size=2, stride=2, padding=2, bias=False)
+
+        # tanh is supported type. conv4 has intermediate paddings
+        self.conv3 = torch.nn.Conv2d(32, 32, kernel_size=2, stride=2, padding=2, bias=False)
+        self.tanh = torch.nn.Tanh()
+        self.conv4 = torch.nn.Conv2d(32, 32, kernel_size=2, stride=2, padding=2, bias=False)
+
+        # hardswich is supported type. conv6 has intermediate paddings
+        self.conv5 = torch.nn.Conv2d(32, 32, kernel_size=2, padding=2, bias=False)
+        self.hardswich = torch.nn.Hardswish()
+        self.conv6 = torch.nn.Conv2d(32, 32, kernel_size=2, padding=2, bias=False)
+
+        # prelu is not supported type. conv8 has intermediate paddings
+        self.conv7 = torch.nn.Conv2d(32, 32, kernel_size=2, padding=2, bias=False)
+        self.prelu = torch.nn.PReLU()
+        self.conv8 = torch.nn.Conv2d(32, 32, kernel_size=2, padding=2, bias=False)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.relu(x)
+        x = self.conv2(x)
+
+        x = self.conv3(x)
+        x = self.tanh(x)
+        x = self.conv4(x)
+
+        x = self.conv5(x)
+        x = self.hardswich(x)
+        x = self.conv6(x)
+
+        x = self.conv7(x)
+        x = self.prelu(x)
+        x = self.conv8(x)
+
+        return x
 
 class Model(torch.nn.Module):
     """
-    Model that uses functional modules instead of nn.Modules.
-    Expects input of shape (1, 3, 32, 32)
+    Model for testing general arch_checker.
+    Expects input of shape (batch_size, 3, 32, 32)
     """
     def __init__(self):
         super(Model, self).__init__()
-        self.conv1 = torch.nn.Conv2d(10, 32, kernel_size=2, stride=2, padding=2, bias=False)
+        self.except_shape = (2, 3, 32, 32)
+
+        self.conv1 = torch.nn.Conv2d(3, 32, kernel_size=2, stride=2, padding=2, bias=False)
         self.bn1 = torch.nn.BatchNorm2d(32)
         self.relu1 = torch.nn.ReLU()
 
@@ -68,7 +234,7 @@ class Model(torch.nn.Module):
         self.bn3 = torch.nn.BatchNorm2d(20)
         self.bn4 = torch.nn.BatchNorm2d(20)
 
-        self.fc1 = torch.nn.Linear(1280, 10)
+        self.fc1 = torch.nn.Linear(320, 10)
         self.prelu = torch.nn.PReLU()
         self.silu = torch.nn.SiLU()
 
@@ -102,7 +268,34 @@ class Model(torch.nn.Module):
 class TestArchChecker():
     """ Class for testing arch (architechture) checker. """
     model = Model()
-    dummy_input = utils.create_rand_tensors_given_shapes((2, 10, 64, 64), utils.get_device(model))
+    dummy_input = utils.create_rand_tensors_given_shapes(model.except_shape, utils.get_device(model))
+
+    def test_intermediate_padding(self):
+        # Test sequence: Conv -> Activation -> BN -> Conv
+        model = Model_inter_pad_with_BN()
+        arch_checker_report = ArchChecker.check_model_arch(model, self.dummy_input)
+        assert "_check_intermediate_padding" in arch_checker_report.raw_report["Model_inter_pad_with_BN.conv2"].failed_checks
+        assert "Model_inter_pad_with_BN.conv4" not in arch_checker_report.raw_report
+        assert "Model_inter_pad_with_BN.conv6" not in arch_checker_report.raw_report
+        assert "Model_inter_pad_with_BN.conv8" not in arch_checker_report.raw_report
+        arch_checker_report.reset_raw_report()
+
+        # Test sequence: Conv -> Activation -> Conv
+        model = Model_inter_pad_without_BN()
+        arch_checker_report = ArchChecker.check_model_arch(model, self.dummy_input)
+        assert "_check_intermediate_padding" in arch_checker_report.raw_report["Model_inter_pad_without_BN.conv2"].failed_checks
+        assert "Model_inter_pad_without_BN.conv4" not in arch_checker_report.raw_report
+        assert "Model_inter_pad_without_BN.conv6" not in arch_checker_report.raw_report
+        assert "Model_inter_pad_without_BN.conv8" not in arch_checker_report.raw_report
+        arch_checker_report.reset_raw_report()
+
+        model = Model_inter_pad_act_type()
+        arch_checker_report = ArchChecker.check_model_arch(model, self.dummy_input)
+        assert "_check_intermediate_padding" in arch_checker_report.raw_report["Model_inter_pad_act_type.conv2"].failed_checks
+        assert "_check_intermediate_padding" in arch_checker_report.raw_report["Model_inter_pad_act_type.conv4"].failed_checks
+        assert "_check_intermediate_padding" in arch_checker_report.raw_report["Model_inter_pad_act_type.conv6"].failed_checks
+        assert "Model_inter_pad_act_type.conv8" not in arch_checker_report.raw_report
+        arch_checker_report.reset_raw_report()
 
     def test_arch_checker_report(self):
         """ Test exported functions in ArchCheckerReport Class. """
@@ -187,7 +380,7 @@ class TestArchChecker():
         assert len(csv_file) == 1
         assert csv_file[0][1:] == report_const.OUTPUT_CSV_HEADER
         os.remove(new_export_path)
-        
+        arch_checker_report.reset_raw_report()
 
     def test_check_arch(self):
         """ Test check_arch function with self defined model."""
@@ -222,6 +415,7 @@ class TestArchChecker():
         # bn3 and bn4 has a split between conv4, can not be folded
         assert "_check_batch_norm_fold" in arch_checker_report.raw_report['Model.bn3'].failed_checks
         assert "_check_batch_norm_fold" in arch_checker_report.raw_report['Model.bn4'].failed_checks
+        arch_checker_report.reset_raw_report()
 
     def test_add_node_check(self):
         """
@@ -250,6 +444,7 @@ class TestArchChecker():
         # 'relu1'node is ReLU not Conv2d, so failed the _relu_is_Conv2d test.
         assert _temp_check_relu_is_conv2d.__name__ in arch_checker_report.raw_report['Model.relu1'].failed_checks
         assert "_activation_checks" not in arch_checker_report.raw_report['Model.relu1'].failed_checks
+        arch_checker_report.reset_raw_report()
 
     def test_add_pattern_check(self):
         """
@@ -271,3 +466,4 @@ class TestArchChecker():
         assert _temp_check_get_all_bns.__name__ in arch_checker_report.raw_report['Model.bn2'].failed_checks
         assert _temp_check_get_all_bns.__name__ in arch_checker_report.raw_report['Model.bn3'].failed_checks
         assert _temp_check_get_all_bns.__name__ in arch_checker_report.raw_report['Model.bn4'].failed_checks
+        arch_checker_report.reset_raw_report()
