@@ -58,8 +58,7 @@ def get_node_check_dict()-> Dict:
     """
     check_dicts = {torch.nn.modules.conv.Conv2d: [_check_conv_channel_32_base,
                                                   _check_conv_channel_larger_than_32],
-                   torch.nn.modules.activation.SiLU: [_activation_checks],
-                   torch.nn.modules.activation.PReLU: [_activation_checks]}
+                   TorchActivations: [_activation_checks],}
     return check_dicts
 
 def get_pattern_check_list()-> List:
@@ -112,3 +111,18 @@ def _check_batch_norm_fold(connected_graph: ConnectedGraph) -> List:
     stand_alone_bn_ops = find_standalone_batchnorm_ops(connected_graph)
 
     return list(stand_alone_bn_ops)
+
+class CheckType(type):
+    """ Metaclass to overwrite __instancecheck__. """
+    def __instancecheck__(cls, obj):
+        return cls._test(obj)
+
+# A type class to put all torch activations together.
+# pylint: disable=too-few-public-methods
+class TorchActivations(metaclass=CheckType):
+    """ Type class for all torch activations. """
+    @classmethod
+    def _test(cls, module):
+        if module.__module__ == 'torch.nn.modules.activation':
+            return True
+        return False
