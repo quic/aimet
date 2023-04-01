@@ -57,7 +57,9 @@ def get_node_check_dict()-> Dict:
     :return check_dicts: {check target type: list of checks}.
     """
     check_dicts = {torch.nn.modules.conv.Conv2d: [_check_conv_channel_32_base,
-                                                  _check_conv_channel_larger_than_32]}
+                                                  _check_conv_channel_larger_than_32],
+                   torch.nn.modules.activation.SiLU: [_activation_checks],
+                   torch.nn.modules.activation.PReLU: [_activation_checks]}
     return check_dicts
 
 def get_pattern_check_list()-> List:
@@ -86,6 +88,20 @@ def _check_conv_channel_larger_than_32(node: torch.nn.Module)-> bool:
     if node.in_channels >= 32 and node.out_channels >= 32:
         return True
     return False
+
+def _activation_checks(node: torch.nn.Module)-> bool:
+    """
+    Common checkes for all torch activations.
+    Prelu and swish (SiLU) degenerates the quantization performance.
+    :param node: torch node to be checked.
+    :return True if not a activation with bad bad quantization performance activations function.
+    """
+    _degenerating_activation_tuple = (torch.nn.modules.activation.SiLU,
+                                      torch.nn.modules.activation.PReLU)
+
+    if isinstance(node, _degenerating_activation_tuple):
+        return False
+    return True
 
 def _check_batch_norm_fold(connected_graph: ConnectedGraph) -> List:
     """
