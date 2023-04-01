@@ -60,4 +60,6 @@ class ArchCheckerReportConstants:
                                        DF_RECOMM:"Try use Hard SiLU (hardswish) instaed."}},
         "_check_batch_norm_fold": {DF_ISSUE: "The batch norm layer cannot be folded to immediate conv/linear layer. Quantizing standalone BN can lead to performance degeneration.",
                                    DF_RECOMM: "Try remove the standalone BN or move the BN adjacent to Conv."},
+        "_check_intermediate_padding": {DF_ISSUE: "This convolution includes intermediate padding that degenerates performance.",
+                                        DF_RECOMM: "Try move all padding to the first convolution in the sequence: [Conv -> Activation -> (Optionally) BN -> Conv]."}
     }

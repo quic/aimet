@@ -37,7 +37,7 @@
 
 """ Utility for checking model architechture prior to using AIMET feature. """
 import os
-from typing import Dict, List, Union, Set, Tuple
+from typing import Dict, List, Union, Set, Tuple, Callable
 import pandas as pd
 
 from aimet_torch.meta.operation import Op
@@ -46,6 +46,18 @@ from aimet_torch.arch_checker.constants import ArchCheckerReportConstants as rep
 from aimet_common.utils import AimetLogger
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
+
+class PatternHandler():
+    """ Object to handle pattern checkes. """
+    def __init__(self, check: Callable):
+        self.check = check
+
+    def __call__(self, *args, **kwargs):
+        """
+        Run pattern check on PatternType_object, op_subset.
+        """
+        _, op_subset = args
+        self.check(op_subset)
 
 class NodeErrorReportObject:
     """ Error report object for each op. """
