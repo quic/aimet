@@ -49,8 +49,8 @@ from aimet_torch.batch_norm_fold import (
     fold_given_batch_norms,
     fold_all_batch_norms,
     fold_all_batch_norms_to_scale,
-    _find_all_batch_norms_to_fold,
     _is_valid_bn_fold,
+    _find_all_batch_norms_to_fold,
 )
 from models.test_models import TransposedConvModel, Conv3dModel, Conv3dModel1
 from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
@@ -630,7 +630,7 @@ class TestTrainingExtensionBnFold:
         input_shape = (2, 10, 24, 24)
         connected_graph = ConnectedGraph(model,
                                          create_rand_tensors_given_shapes(input_shape, get_device(model)))
-        conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model, input_shape, connected_graph)
+        conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(connected_graph)
         assert len(conv_bn_pairs) == len(bn_conv_pairs) == 1
         assert (model.conv1, model.bn1) in conv_bn_pairs
         assert (model.bn2, model.conv3) in bn_conv_pairs
@@ -661,7 +661,7 @@ class TestTrainingExtensionBnFold:
 
         connected_graph = ConnectedGraph(model,
                                          create_rand_tensors_given_shapes(inp_shapes, get_device(model)))
-        conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model, inp_shapes, connected_graph)
+        conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(connected_graph)
         assert len(conv_bn_pairs) == 2
         assert not bn_conv_pairs
         assert (model.conv1, model.bn1) in conv_bn_pairs
@@ -1146,7 +1146,7 @@ class TestTrainingExtensionBnFoldToScale:
 
         baseline_output = model(random_input)
 
-        fold_all_batch_norms_to_scale(sim, (2, 10, 24, 24))
+        fold_all_batch_norms_to_scale(sim)
 
         output_after_fold = model(random_input)
 
@@ -1196,7 +1196,7 @@ class TestTrainingExtensionBnFoldToScale:
         assert model.bn1.param_quantizers["weight"].enabled
         assert model.relu1.output_quantizers[0].enabled
 
-        fold_all_batch_norms_to_scale(sim, (2, 10, 24, 24))
+        fold_all_batch_norms_to_scale(sim)
         # Folding BatchNorm to transposed depthwise convolution is not supported
         assert isinstance(model.bn1._module_to_wrap, torch.nn.BatchNorm2d)
 
@@ -1460,7 +1460,7 @@ class TestTrainingExtensionBnFoldToScale:
         model = sim.model
 
         baseline_output = model(random_input)
-        folded_pairs = fold_all_batch_norms_to_scale(sim, (10, 10, 4, 4))
+        folded_pairs = fold_all_batch_norms_to_scale(sim)
         output_after_fold = model(random_input)
 
         assert isinstance(model.bn1._module_to_wrap, torch.nn.Identity)
@@ -1479,7 +1479,7 @@ class TestTrainingExtensionBnFoldToScale:
         sim = quantsim(model, torch.randn((2, 10, 24, 24)))
 
         with pytest.raises(RuntimeError):
-            fold_all_batch_norms_to_scale(sim, (2, 10, 24, 24))
+            fold_all_batch_norms_to_scale(sim)
 
     def test_fold_auto_mode_with_bn_after_Conv1d_layer(self):
         class MyModel(torch.nn.Module):
@@ -1511,7 +1511,7 @@ class TestTrainingExtensionBnFoldToScale:
         baseline_output = model(random_input)
         orig_bn = model.bn1
 
-        bn_pairs = fold_all_batch_norms_to_scale(sim, (2, 10, 32))
+        bn_pairs = fold_all_batch_norms_to_scale(sim)
         output_after_fold = model(random_input)
 
         assert isinstance(model.bn1._module_to_wrap, torch.nn.Identity)
@@ -1626,7 +1626,7 @@ class TestTrainingExtensionBnFoldToScale:
         assert model.bn1.param_quantizers["weight"].enabled
 
         with pytest.raises(RuntimeError):
-            fold_all_batch_norms_to_scale(sim, (2, 10, 32))
+            fold_all_batch_norms_to_scale(sim)
 
     def test_fold_bn_before_Conv1d_no_bias(self):
 
