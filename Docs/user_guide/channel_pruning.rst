@@ -4,6 +4,7 @@ AIMET Channel Pruning
 
 Channel Pruning is a model compression technique that reduces less-important input channels from layers in a given model. Currently AIMET supports Channel Pruning of Conv2d layers.
 
+For more background details about Channel Pruning, please refer to He, Yihui, Xiangyu Zhang, and Jian Sun. Channel pruning for accelerating very deep neural networks.
 
 
 Overall Procedure
