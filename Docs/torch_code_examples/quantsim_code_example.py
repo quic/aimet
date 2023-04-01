@@ -46,12 +46,13 @@ import torch.cuda
 # End of PyTorch imports
 
 
-def pass_calibration_data(sim_model):
+def pass_calibration_data(sim_model, args=None):
     """
     The User of the QuantizationSimModel API is expected to write this function based on their data set.
     This is not a working function and is provided only as a guideline.
 
     :param sim_model:
+    :param args: other arguments for the forwards
     :return:
     """
 
@@ -112,11 +113,11 @@ def quantize_and_finetune_example():
     # User action required
     # The following line of code illustrates that the model is getting finetuned.
     # Replace the following finetune() unction with your pipeline's finetune() function.
-    ImageNetDataPipeline.finetune(sim.model, epochs=1, learning_rate=5e-7, learning_rate_schedule=[5, 10],
+    ImageNetDataPipeline.finetune(quant_sim.model, epochs=1, learning_rate=5e-7, learning_rate_schedule=[5, 10],
                                   use_cuda=use_cuda)
 
     # Determine simulated accuracy
-    accuracy = ImageNetDataPipeline.evaluate(sim.model, use_cuda)
+    accuracy = ImageNetDataPipeline.evaluate(quant_sim.model, use_cuda)
     print(accuracy)
 
     # Export the model
