@@ -157,7 +157,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         'ScalarImplicit',
         'transpose',
         'expand',
-        'DictConstruct'
+        'expand_as',
+        'DictConstruct',
+        'eq',
+        'ne',
+        'split',
+        'chunk'
     }
 
     # Graph nodes for which we will treat as passthrough and not represent with an Op
