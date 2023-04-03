@@ -470,6 +470,8 @@ class StaticGridPerTensorQuantizer(StaticGridTensorQuantizer):
                     tensor = torch.tensor([self.encoding_min_max_fixed_vals[0],
                                            self.encoding_min_max_fixed_vals[1]])
                 for op in self._cppOp:
+                    if tensor.dtype == torch.float16:
+                        tensor = tensor.to(torch.float32)
                     op.updateStats(tensor, tensor.is_cuda)
 
 
@@ -1064,12 +1066,17 @@ class QuantizeDequantize(torch.autograd.Function):
         perform quantization followed by dequantization. Else call the custom function to
         get the new tensor
         """
+
         # pylint:disable = protected-access
         if tensor_quantizer.data_type == QuantizationDataType.float:
             quantized_tensor = QuantizeDequantize._quantize_float(tensor, tensor_quantizer, False)
         else:
+            dtype = tensor.dtype
+            tensor = tensor.to(torch.float32)
             quantized_tensor = tensor_quantizer._cppOp[0].quantizeDequantize(tensor, tensor_quantizer.encoding,
                                                                              round_mode, tensor.is_cuda)
+            quantized_tensor = quantized_tensor.to(dtype)
+
         return quantized_tensor
 
     @staticmethod
