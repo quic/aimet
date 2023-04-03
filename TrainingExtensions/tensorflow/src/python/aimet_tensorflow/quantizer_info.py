@@ -157,9 +157,10 @@ class QuantizerInfo:
         Sets the bitwidth in the Quantize op
         :param bitwidth: value to be assigned to bitwidth variable
         """
-        var_name = self.quant_op_name + '_bit_width'
-        self.set_variable(var_name, bitwidth)
-        self._invalidate_tensor_quantizer_encodings()
+        if not self._is_encoding_frozen:
+            var_name = self.quant_op_name + '_bit_width'
+            self.set_variable(var_name, bitwidth)
+            self._invalidate_tensor_quantizer_encodings()
 
     @property
     def data_type(self) -> QuantizationDataType:
@@ -183,10 +184,11 @@ class QuantizerInfo:
         :param data_type: data type of type QuantizationDataType
         """
 
-        if self.session.graph.get_operation_by_name(self.quant_op_name).type == 'QcQuantize':
-            var_name = self.quant_op_name + '_data_type'
-            self.set_variable(var_name, data_type == QuantizationDataType.int)
-            self._invalidate_tensor_quantizer_encodings()
+        if  self.session.graph.get_operation_by_name(self.quant_op_name).type == 'QcQuantize':
+            if not self._is_encoding_frozen:
+                var_name = self.quant_op_name + '_data_type'
+                self.set_variable(var_name, data_type == QuantizationDataType.int)
+                self._invalidate_tensor_quantizer_encodings()
         else:
             # only QcQuantize op supports QuantizationDataType.float. All other ops(QcQuantizePerChannelOp,
             # QcQuantizeRecurrentParamOp) dont support fp16 yet. if data_type is equal to QuantizationDataType.int, then
@@ -396,7 +398,8 @@ class QuantizerInfo:
 
         if op_mode is not None:
             # update the isEncodingValid state to False
-            self._invalidate_tensor_quantizer_encodings()
+            if not self._is_encoding_frozen:
+                self._invalidate_tensor_quantizer_encodings()
             var_name = self.quant_op_name + '_op_mode'
             self.set_variable(var_name, op_mode)
 
