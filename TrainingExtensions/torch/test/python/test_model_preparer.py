@@ -1628,40 +1628,6 @@ class TestFX:
         assert _find_functional_name_for_node("relu6_123") == "relu6"
         assert _find_functional_name_for_node("123_relu6_123") is None # Not a valid name.
 
-    def test_fx_with_chunk(self):
-        """ test torch fx with chunk """
-        class ModelWithChunk(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2)
-                self.conv2 = torch.nn.Conv2d(2, 4, kernel_size=2, stride=2, padding=2)
-
-            def forward(self, x):
-                x = self.conv1(x)
-                x1, x2 = x.chunk(2, dim=1)
-                x2 = self.conv2(x2)
-                return x1, x2
-
-        input_shape = (1, 3, 64, 64)
-        dummy_input = torch.randn(input_shape)
-        model = ModelWithChunk().eval()
-        model_transformed = prepare_model(model)
-
-        # Compare both outputs.
-        assert torch.equal(model_transformed(dummy_input)[0], model(dummy_input)[0])
-        assert torch.equal(model_transformed(dummy_input)[1], model(dummy_input)[1])
-
-        # Verify that the modules are added correctly
-        assert isinstance(model_transformed.module_chunk, elementwise_ops.Chunk)
-
-        # Verify Quantization workflow.
-        sim = QuantizationSimModel(model_transformed, dummy_input=dummy_input)
-        sim.compute_encodings(evaluate, forward_pass_callback_args=dummy_input)
-
-        # Quantizer enabled for both outputs of Chunk
-        assert sim.model.module_chunk.output_quantizers[0].enabled
-        assert sim.model.module_chunk.output_quantizers[1].enabled
-
     def test_fx_with_functional_batchnorm(self):
         """ test torch fx with function batchnorm """
         class ModelWithFunctionalBN(torch.nn.Module):
@@ -1731,3 +1697,48 @@ class TestFX:
 
         # Verify that validator checks pass.
         assert ModelValidator.validate_model(traced_model, dummy_input)
+
+    @pytest.mark.skipif(Version(torch.__version__) < Version('1.10.0'), reason="torch1.13.1 is required.")
+    def test_fx_with_bert_large(self):
+        from transformers import BertForQuestionAnswering
+        from transformers.utils.fx import symbolic_trace
+
+        # Set the strict flag to False so that torch.jit.trace can be successful.
+        from aimet_torch.meta import connectedgraph
+        connectedgraph.jit_trace_args.update({"strict": False})
+
+        model = BertForQuestionAnswering.from_pretrained('bert-large-uncased-whole-word-masking-finetuned-squad', return_dict=False)
+        input_shape = (1,128)
+        input_ids = torch.randint(1, input_shape)
+        attention_mask = torch.randint(1, input_shape)
+        token_type_ids = torch.randint(1, input_shape)
+        dummy_input = [input_ids, attention_mask, token_type_ids]
+
+        traced_model = symbolic_trace(model, ["input_ids", "attention_mask", "token_type_ids"])
+        _prepare_traced_model(traced_model)
+
+        with torch.no_grad():
+            outputs = model(*dummy_input)
+            outputs2 = traced_model(*dummy_input)
+
+        # Verify bit-exact outputs.
+        assert torch.equal(outputs[0], outputs2[0])
+        assert torch.equal(outputs[1], outputs2[1])
+
+        # Verify that validator checks pass.
+        assert ModelValidator.validate_model(traced_model, dummy_input)
+
+        # Verify with Quantization workflow.
+        sim = QuantizationSimModel(traced_model, dummy_input=dummy_input)
+        sim.compute_encodings(evaluate, forward_pass_callback_args=dummy_input)
+        sim.model(*dummy_input)
+
+        # Verify Quantsim Export workflow.
+        results_dir = os.path.abspath('./data/verify_sim_export/')
+        os.makedirs(results_dir, exist_ok=True)
+
+        try:
+            sim.export(results_dir, filename_prefix='prepared_model', dummy_input=tuple(dummy_input))
+        finally:
+            if os.path.isdir(results_dir):
+                shutil.rmtree(results_dir)

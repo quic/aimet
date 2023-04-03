@@ -109,10 +109,15 @@ functional_with_stateless_api = {
     'adaptive_avg_pool2d'       : elementwise_ops.AdaptiveAvgPool2d,
     'avg_pool2d'                : elementwise_ops.AvgPool2d,
     'norm'                      : elementwise_ops.Norm,
-    'chunk'                     : elementwise_ops.Chunk,
     'batch_norm'                : elementwise_ops.BatchNorm,
     'group_norm'                : elementwise_ops.GroupNorm,
-    'mean'                      : elementwise_ops.Mean
+    'mean'                      : elementwise_ops.Mean,
+    'pow'                       : elementwise_ops.Pow,
+    'where'                     : elementwise_ops.Where,
+    'addmm'                     : elementwise_ops.AddMM,
+    'bmm'                       : elementwise_ops.Bmm,
+    'cumsum'                    : elementwise_ops.CumSum,
+    'masked_fill'               : elementwise_ops.MaskedFill,
 }
 
 
