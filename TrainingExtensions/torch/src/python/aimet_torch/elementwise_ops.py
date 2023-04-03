@@ -77,7 +77,6 @@ FloorDivide = create_wrapper_module('FloorDivide', torch.floor_divide)
 MatMul = create_wrapper_module('MatMul', torch.matmul)
 Norm = create_wrapper_module('Norm', torch.norm)
 Exponential = create_wrapper_module('Exponential', torch.exp)
-Chunk = create_wrapper_module('Chunk', torch.chunk)
 Erf = create_wrapper_module('Erf', torch.erf)
 Sqrt = create_wrapper_module('Sqrt', torch.sqrt)
 Maximum = create_wrapper_module('Maximum', torch.maximum)
@@ -89,6 +88,10 @@ GreaterEqual = create_wrapper_module('GreaterEqual', torch.ge)
 LessEqual = create_wrapper_module('LessEqual', torch.le)
 NotEqual = create_wrapper_module('NotEqual', torch.ne)
 Equal = create_wrapper_module('Equal', torch.eq)
+AddMM = create_wrapper_module('AddMM', torch.addmm)
+Bmm = create_wrapper_module('Bmm', torch.bmm)
+CumSum = create_wrapper_module('CumSum', torch.cumsum)
+MaskedFill = create_wrapper_module('MaskedFill', torch.Tensor.masked_fill_)
 
 
 # modules for functional operations defined under torch.nn.functional package
@@ -151,3 +154,14 @@ class DynamicConv2d(torch.nn.Module):
         Forward-pass routine for conv2d op
         """
         return torch.nn.functional.conv2d(x, weight, bias, self.stride, self.padding, self.dilation, self.groups)
+
+
+class Pow(torch.nn.Module):
+    """ Pow module for a functional pow"""
+    # pylint:disable=arguments-differ
+    @staticmethod
+    def forward(x: Any, y: Any) -> Any:
+        """
+        Forward-pass routine for Pow op
+        """
+        return x ** y
