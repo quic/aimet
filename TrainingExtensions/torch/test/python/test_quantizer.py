@@ -321,6 +321,98 @@ class ConvReluModel(torch.nn.Module):
         return self.relu(self.conv(inputs))
 
 
+class CustModelV1Simple(torch.nn.Module):
+    def __init__(self):
+        super(CustModelV1Simple, self).__init__()
+        self.cust = CustomOp()
+
+    def forward(self, x):
+        k1, k2 = self.cust(x)
+        return k1, k2
+
+
+class CustomOp(torch.nn.Module):
+    """
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.size = 8
+        self.mul1 = elementwise_ops.Multiply()
+        self.mul2 = elementwise_ops.Multiply()
+
+    def forward(self, x):
+        y = self.mul1(x, self.size)
+        z = self.mul2(x, 5)
+        return y, z
+
+
+class CustModelV2Simple(torch.nn.Module):
+    def __init__(self):
+        super(CustModelV2Simple, self).__init__()
+        self.cust = CustomOpV2()
+
+    def forward(self, x):
+        k1, k2, k3, k4, k5 = self.cust(x)
+        return k1, k2, k3, k4, k5
+
+
+class CustomOpV2(torch.nn.Module):
+    """
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.size = 8
+        self.mul = elementwise_ops.Multiply()
+        self.add = elementwise_ops.Add()
+        self.sub = elementwise_ops.Subtract()
+        self.clamp = Clamp()
+
+    def forward(self, x):
+        y = self.mul(x, self.size)
+        z = x * 5 # functional op
+        a = self.clamp(z)
+        b = self.add(y, z)
+        c = self.sub(y, z)
+        return y, z, a, b, c
+
+
+class Clamp(torch.nn.Module):
+    """ Custom module for a functional clamp"""
+
+    # pylint:disable=arguments-differ
+    @staticmethod
+    def forward(x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward-pass routine for add op
+        """
+        return x.clamp(0)
+
+
+class Model_Inputs_Shared_Constant_Intermediate(nn.Module):
+    def __init__(self):
+        super(Model_Inputs_Shared_Constant_Intermediate, self).__init__()
+        self.add1 = elementwise_ops.Add()
+        self.add2 = elementwise_ops.Add()
+        self.mul = elementwise_ops.Multiply()
+        self.tensor1 = torch.tensor([2.0])
+
+        self.relu1 = nn.ReLU()
+        self.relu2 = nn.ReLU()
+        self.relu3 = nn.ReLU()
+
+    def forward(self, a, b, c):
+        x = self.add1(a, self.tensor1)
+        y = self.add2(b, self.tensor1)
+        z = self.mul(c, x)
+
+        x = self.relu1(x)
+        y = self.relu2(y)
+        z = self.relu3(z)
+        return x, y, z
+
+
 class TestQuantizationSimStaticGrad:
     def test_is_leaf_module_positive(self):
         """With an actual leaf module"""
@@ -3367,95 +3459,117 @@ class TestQuantizationSimLearnedGrid:
         output.backward()
         optimizer.step()
 
-class CustModelV1Simple(torch.nn.Module):
-    def __init__(self):
-        super(CustModelV1Simple, self).__init__()
-        self.cust = CustomOp()
+    def test_fp16_model_sim_creation_cpu(self):
+        class DummyModel(nn.Module):
+            def __init__(self):
+                super(DummyModel, self).__init__()
+                self.fc1 = nn.Linear(320, 50)
+                self.relu1 = nn.ReLU()
+                self.fc2 = nn.Linear(50, 10)
+                self.relu2 = nn.ReLU()
 
-    def forward(self, x):
-        k1, k2 = self.cust(x)
-        return k1, k2
+            def forward(self, x):
+                x = x.view(-1, 320)
+                x = self.fc1(x)
+                x = x.float()
+                x = self.relu1(x)
+                x = x.half()
+                x = self.fc2(x)
+                x = x.float()
+                x = self.relu2(x)
+                x = x.half()
+                return x
 
+        model = DummyModel().half()
+        dummy_input = torch.rand(1, 20, 4, 4).half()
 
-class CustomOp(torch.nn.Module):
-    """
-    """
+        model(dummy_input)
 
-    def __init__(self):
-        super().__init__()
-        self.size = 8
-        self.mul1 = elementwise_ops.Multiply()
-        self.mul2 = elementwise_ops.Multiply()
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
+                                   dummy_input=dummy_input)
 
-    def forward(self, x):
-        y = self.mul1(x, self.size)
-        z = self.mul2(x, 5)
-        return y, z
+        def dummy_forward(model, _):
+            model(dummy_input)
 
+        sim.compute_encodings(dummy_forward, None)
+        print(sim.model)
+        dummy_forward(sim.model, None)
 
-class CustModelV2Simple(torch.nn.Module):
-    def __init__(self):
-        super(CustModelV2Simple, self).__init__()
-        self.cust = CustomOpV2()
+    @pytest.mark.cuda
+    def test_fp16_model_sim_creation_gpu(self):
+        class DummyModelHalf(nn.Module):
+            def __init__(self):
+                super(DummyModelHalf, self).__init__()
+                self.fc1 = nn.Linear(320, 50)
+                self.relu1 = nn.ReLU()
+                self.fc2 = nn.Linear(50, 10)
+                self.relu2 = nn.ReLU()
 
-    def forward(self, x):
-        k1, k2, k3, k4, k5 = self.cust(x)
-        return k1, k2, k3, k4, k5
+            def forward(self, x):
+                x = x.view(-1, 320)
+                x = self.fc1(x)
+                x = x.float()
+                x = self.relu1(x)
+                x = x.half()
+                x = self.fc2(x)
+                x = x.float()
+                x = self.relu2(x)
+                x = x.half()
+                return x
 
+        class DummyModel(nn.Module):
+            def __init__(self):
+                super(DummyModel, self).__init__()
+                self.fc1 = nn.Linear(320, 50)
+                self.relu1 = nn.ReLU()
+                self.fc2 = nn.Linear(50, 10)
+                self.relu2 = nn.ReLU()
 
-class CustomOpV2(torch.nn.Module):
-    """
-    """
+            def forward(self, x):
+                x = x.view(-1, 320)
+                x = self.fc1(x)
+                x = self.relu1(x)
+                x = self.fc2(x)
+                x = self.relu2(x)
+                return x
 
-    def __init__(self):
-        super().__init__()
-        self.size = 8
-        self.mul = elementwise_ops.Multiply()
-        self.add = elementwise_ops.Add()
-        self.sub = elementwise_ops.Subtract()
-        self.clamp = Clamp()
+        import time
 
-    def forward(self, x):
-        y = self.mul(x, self.size)
-        z = x * 5 # functional op
-        a = self.clamp(z)
-        b = self.add(y, z)
-        c = self.sub(y, z)
-        return y, z, a, b, c
+        def run_half():
+            model = DummyModel().cuda().half()
+            dummy_input = torch.rand(1, 20, 4, 4).half().cuda()
+            sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
+                                       dummy_input=dummy_input)
 
+            def dummy_forward(model, _):
+                for _ in range(100):
+                    model(dummy_input)
 
-class Clamp(torch.nn.Module):
-    """ Custom module for a functional clamp"""
+            before = time.time()
+            # sim.compute_encodings(dummy_forward, None)
+            # dummy_forward(sim.model, None)
+            dummy_forward(model, None)
+            after = time.time()
+            print(after - before)
 
-    # pylint:disable=arguments-differ
-    @staticmethod
-    def forward(x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward-pass routine for add op
-        """
-        return x.clamp(0)
+        def run_float():
+            model = DummyModel().cuda()
+            dummy_input = torch.rand(1, 20, 4, 4).cuda()
+            sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
+                                       dummy_input=dummy_input)
 
+            def dummy_forward(model, _):
+                for _ in range(100):
+                    model(dummy_input)
 
-class Model_Inputs_Shared_Constant_Intermediate(nn.Module):
-    def __init__(self):
-        super(Model_Inputs_Shared_Constant_Intermediate, self).__init__()
-        self.add1 = elementwise_ops.Add()
-        self.add2 = elementwise_ops.Add()
-        self.mul = elementwise_ops.Multiply()
-        self.tensor1 = torch.tensor([2.0])
+            before = time.time()
+            # sim.compute_encodings(dummy_forward, None)
+            # dummy_forward(sim.model, None)
+            dummy_forward(model, None)
+            after = time.time()
+            print(after - before)
 
-        self.relu1 = nn.ReLU()
-        self.relu2 = nn.ReLU()
-        self.relu3 = nn.ReLU()
-
-    def forward(self, a, b, c):
-        x = self.add1(a, self.tensor1)
-        y = self.add2(b, self.tensor1)
-        z = self.mul(c, x)
-
-        x = self.relu1(x)
-        y = self.relu2(y)
-        z = self.relu3(z)
-        return x, y, z
-
-
+        run_half()
+        run_half()
+        run_float()
+        run_float()
