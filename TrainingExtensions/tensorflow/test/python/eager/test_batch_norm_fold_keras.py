@@ -43,8 +43,8 @@ import unittest
 import tensorflow as tf
 import numpy as np
 from aimet_tensorflow.keras.utils import common
-from aimet_tensorflow.keras.batch_norm_fold import _delete_all_bns_from_model, _find_possible_convs_linears_bn, _get_ordered_conv_linears, _find_all_batch_norms_to_fold, fold_all_batch_norms
-from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms_to_scale
+from aimet_tensorflow.keras.batch_norm_fold import _delete_all_bns_from_model, _find_possible_convs_linears_bn, \
+    _get_ordered_conv_linears, _find_all_batch_norms_to_fold, fold_all_batch_norms, fold_all_batch_norms_to_scale, fold_given_batch_norms
 from aimet_tensorflow.keras.utils.op.batchnorm import BNUtils
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 from aimet_common.defs import QuantScheme
@@ -179,7 +179,6 @@ class TestBatchNormFold(unittest.TestCase):
         self.assertTrue(isinstance(model.block1.bn1, tf.keras.layers.BatchNormalization))
 
     def test_bn_removal_functional(self):
-
         inp = tf.keras.Input(shape=(6, 6, 3))
         x = tf.keras.layers.Conv2D(3, 3)(inp)
         x = tf.keras.layers.BatchNormalization(fused=True)(x)
@@ -199,7 +198,6 @@ class TestBatchNormFold(unittest.TestCase):
         self.assertTrue(len(new_model.layers) == len(model.layers) - 2)
 
     def test_bn_removal_functional_with_sequantial_bns(self):
-
         inp = tf.keras.Input(shape=(6, 6, 3))
         x = tf.keras.layers.Conv2D(3, 3)(inp)
         x = tf.keras.layers.BatchNormalization(fused=True)(x)
@@ -220,7 +218,6 @@ class TestBatchNormFold(unittest.TestCase):
         self.assertTrue(len(new_model.layers) == len(model.layers) - 3)
 
     def test_bn_removal_functional_two_paths(self):
-
         inp = tf.keras.Input(shape=(6, 6, 3))
 
         left = tf.keras.layers.Conv2D(3, 3)(inp)
@@ -282,6 +279,27 @@ class TestBatchNormFold(unittest.TestCase):
         for layer in new_model.layers:
             self.assertFalse(isinstance(layer, tf.keras.layers.BatchNormalization))
         self.assertTrue(len(new_model.layers) == len(model.layers) - len(bn_layers))
+        
+    def test_bn_removal_quantsim_model():
+        inp = tf.keras.Input(shape=(6, 6, 3))
+        x = tf.keras.layers.Conv2D(3, 3)(inp)
+        x = tf.keras.layers.BatchNormalization(fused=True)(x)
+        x = tf.keras.layers.ReLU()(x)
+        x = tf.keras.layers.Conv2D(3, 3)(x)
+        x = tf.keras.layers.BatchNormalization(fused=True)(x)
+        x = tf.keras.layers.ReLU()(x)
+
+        model = tf.keras.Model(inputs=inp, outputs=x)
+
+        bn_layers = [model.layers[2], model.layers[5]]
+
+        sim = QuantizationSimModel(model)
+        
+        new_model = _delete_all_bns_from_model(sim, bn_layers)
+
+        # for layer in new_model.layers:
+        #     self.assertFalse(isinstance(layer, tf.keras.layers.BatchNormalization))
+        # self.assertTrue(len(new_model.layers) == len(model.layers) - 2)
 
     def test_bn_replacement_sequential(self):
 
@@ -1410,3 +1428,4 @@ class TestBatchNormFoldToScale(unittest.TestCase):
             qsim.compute_encodings(lambda m, _: m.predict(dummy_inputs), None)
 
         return qsim
+TestBatchNormFold.test_bn_removal_quantsim_model()

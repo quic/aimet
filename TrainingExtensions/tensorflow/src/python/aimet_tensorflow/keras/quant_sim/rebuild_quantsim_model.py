@@ -37,8 +37,9 @@
 # =============================================================================
 """ Rebuilt QuantSim Model For Keras """
 from typing import Dict, List, Union
-
+from collections import OrderedDict
 import tensorflow as tf
+import numpy as np
 
 from aimet_common.utils import AimetLogger
 
@@ -56,20 +57,17 @@ class RebuiltQuantSimModelFactory:
     This use case occurs during exporting of the model.
     """
 
-    def __init__(self, original_quantsim_model: tf.keras.Model, original_model_without_wrappers: tf.keras.Model, original_quantsim_params: Dict):
+    def __init__(self, original_quantsim_model: tf.keras.Model):
         """
         :param original_quantsim_model: The original quantsim model
-        :param original_quantsim_params: The original quantsim params
-        :param original_model_without_wrappers: The original model without wrappers
-        :param original_quantsim_model_weights: The original quantsim model weights
         """
         self.original_quantsim_model = original_quantsim_model
-        self.original_quantsim_params = original_quantsim_params
-        self.original_model_without_wrappers = original_model_without_wrappers
+        self.original_quantsim_params = original_quantsim_model._params
+        self.original_model_without_wrappers = original_quantsim_model._model_without_wrappers
         self.original_quantsim_model_weights = original_quantsim_model.get_weights()
 
         self.original_quantsim_model_weight_names_to_weights = \
-            RebuiltQuantSimModelFactory.get_model_weight_names_to_weight_values_dict(original_quantsim_model)
+            RebuiltQuantSimModelFactory._get_model_weight_names_to_weight_values_dict(original_quantsim_model)
         self.rebuilt_model = None
 
     def _assert_rebuilt_model_is_not_none(self):
@@ -79,7 +77,7 @@ class RebuiltQuantSimModelFactory:
         assert self.rebuilt_model is not None, "rebuilt_model is None. Please call rebuild_model first."
 
     @staticmethod
-    def get_model_weight_names_to_weight_values_dict(model: tf.keras.Model) -> Dict[str, tf.Variable]:
+    def _get_model_weight_names_to_weight_values_dict(model: tf.keras.Model) -> Dict[str, tf.Variable]:
         """
         There could be some weights that are added on later on that are not attached to the model itself. For example,
         like the auto-quant tests. This function is used to get all the weights and their weight names. Unfortunately,
@@ -90,8 +88,8 @@ class RebuiltQuantSimModelFactory:
         :param model: The model to get the weights from
         :return: A dictionary of weight names to weights
         """
-        dict_with_weights_to_return = {}
-        found_duplicates = {}
+        dict_with_weights_to_return = OrderedDict()
+        found_duplicates = OrderedDict()
         for w in model.weights:
             if w.name in dict_with_weights_to_return:
                 dict_with_weights_to_return[
@@ -167,7 +165,7 @@ class RebuiltQuantSimModelFactory:
         self._assert_rebuilt_model_is_not_none()
 
         if len(self.rebuilt_model.weights) != len(self.original_quantsim_model_weights):
-            model_weight_names = RebuiltQuantSimModelFactory.get_model_weight_names_to_weight_values_dict(self.rebuilt_model)
+            model_weight_names = RebuiltQuantSimModelFactory._get_model_weight_names_to_weight_values_dict(self.rebuilt_model)
 
             missing_weights = set(self.original_quantsim_model_weight_names_to_weights.keys()) - set(model_weight_names.keys())
             _logger.debug('Found %d weights that are not connected to the model', len(missing_weights))
@@ -198,6 +196,43 @@ class RebuiltQuantSimModelFactory:
 
         self.rebuilt_model = QuantizationSimModel(self.original_model_without_wrappers,
                                                   **self.original_quantsim_params.__dict__).model
+        
+        self._finish_rebuilding_model()
+
+    def rebuild_model_for_bn_reestimation(self, model_without_wrappers_with_bn_folded: tf.keras.Model) -> tf.keras.Model:
+        """
+        The function is specifically for rebuilding the Quantization Sim Model after Batch Normalization re-estimation.
+        This function will use the original Quantization Sim Model along with the pass in original model with the Batch
+        Normalization layers now folded. With these two, the Quantization Sim Model will be rebuilt keeping only the 
+        original layers defined in the model_without_wrappers_with_bn_folded.
+        
+        :param model_without_wrappers_with_bn_folded: The original model with the Batch Normalization layers folded
+        :return: A rebuilt Quantization Sim Model keeping only the original layers from model_without_wrappers_with_bn_folded
+        """
+        from aimet_tensorflow.keras.quantsim import QuantizationSimModel # Import here to avoid circular import
+        tf.keras.backend.clear_session()  # Clear the session to avoid naming issues
+
+        self.rebuilt_model = QuantizationSimModel(model_without_wrappers_with_bn_folded,
+                                                  **self.original_quantsim_params.__dict__).model
+        rebuilt_quantsim_model_weight_names_to_weights = \
+                    RebuiltQuantSimModelFactory._get_model_weight_names_to_weight_values_dict(self.rebuilt_model)
+
+        # TODO: Move encoding values to conv? or use what Conv has???
+        weights_to_port_over = []
+        for weight_name, weight in self.original_quantsim_model_weight_names_to_weights.items():
+            if weight_name in rebuilt_quantsim_model_weight_names_to_weights:
+                weights_to_port_over.append(weight)
+
+        self.original_quantsim_model_weights = weights_to_port_over
+
+        self._finish_rebuilding_model()
+        
+    def _finish_rebuilding_model(self):
+
+        # DELETE ME, for testing
+        for i, (a, b) in enumerate(zip(self.original_quantsim_model_weights, self.rebuilt_model.get_weights())):
+            np.testing.assert_array_equal(a.shape, b.shape)
+
         self._assign_weights_not_connected_to_model()
         self.rebuilt_model.set_weights(self.original_quantsim_model_weights)
         self._copy_original_models_quantizer_properties_to_rebuilt_models_quantizers()
