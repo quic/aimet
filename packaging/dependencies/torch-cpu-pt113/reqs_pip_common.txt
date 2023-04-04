@@ -1,1 +1,16 @@
-../reqs_pip_common.txt
+bokeh==1.2.0
+dataclasses
+h5py==2.10.0
+hvplot==0.4.0
+Jinja2==3.0.3
+jsonschema
+osqp
+pandas==1.4.3
+progressbar2
+protobuf
+pybind11
+PyYAML
+scipy==1.8.1
+setuptools
+tqdm
+transformers==4.11.3
