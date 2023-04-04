@@ -7,7 +7,7 @@ jsonschema
 osqp
 pandas==1.4.3
 progressbar2
-protobuf==3.20.1
+protobuf
 pybind11
 PyYAML
 scipy==1.8.1
