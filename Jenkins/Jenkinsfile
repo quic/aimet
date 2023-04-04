@@ -507,7 +507,7 @@ pipeline {
                     exclude {
                         axis {
                             name 'ML_FMWORK'
-                            //TODO Temporarily skip torch-gpu variant due to known docker build failures
+                            //TODO Temporarily skip torch-gpu variant in editable mode due to known docker build failures
                             values 'tf-torch', 'torch'
                         }
                         axis {
@@ -587,7 +587,7 @@ pipeline {
                         }
                         post {
                             always {
-                                archiveArtifacts artifacts: 'build-*/Testing/**/LastTest.log', fingerprint: true
+                                archiveArtifacts artifacts: 'build-*/Testing/**/LastTest.log', fingerprint: true, allowEmptyArchive: true
                                 junit allowEmptyResults: true, testResults: 'build-*/**/*_test_output.xml'
                             }
                         }
