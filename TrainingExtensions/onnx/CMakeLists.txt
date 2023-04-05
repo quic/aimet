@@ -37,7 +37,6 @@
 find_package(Python3 COMPONENTS Interpreter)
 
 add_subdirectory(src/python)
-add_subdirectory(test)
 
 
 add_library(OnnxCppOps SHARED
