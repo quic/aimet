@@ -57,17 +57,17 @@ class RebuiltQuantSimModelFactory:
     This use case occurs during exporting of the model.
     """
 
-    def __init__(self, original_quantsim_model: tf.keras.Model):
+    def __init__(self, original_quantsim: tf.keras.Model): # UPDATE
         """
-        :param original_quantsim_model: The original quantsim model
+        :param original_quantsim_model: The original QuantizationSimModel
         """
-        self.original_quantsim_model = original_quantsim_model
-        self.original_quantsim_params = original_quantsim_model._params
-        self.original_model_without_wrappers = original_quantsim_model._model_without_wrappers
-        self.original_quantsim_model_weights = original_quantsim_model.get_weights()
+        self.original_quantsim_model         = original_quantsim.model
+        self.original_quantsim_params        = original_quantsim._params
+        self.original_model_without_wrappers = original_quantsim._model_without_wrappers
+        self.original_quantsim_model_weights = original_quantsim.model.get_weights()
 
         self.original_quantsim_model_weight_names_to_weights = \
-            RebuiltQuantSimModelFactory._get_model_weight_names_to_weight_values_dict(original_quantsim_model)
+            RebuiltQuantSimModelFactory._get_model_weight_names_to_weight_values_dict(original_quantsim.model)
         self.rebuilt_model = None
 
     def _assert_rebuilt_model_is_not_none(self):
@@ -218,20 +218,26 @@ class RebuiltQuantSimModelFactory:
                     RebuiltQuantSimModelFactory._get_model_weight_names_to_weight_values_dict(self.rebuilt_model)
 
         # TODO: Move encoding values to conv? or use what Conv has???
-        weights_to_port_over = []
-        for weight_name, weight in self.original_quantsim_model_weight_names_to_weights.items():
-            if weight_name in rebuilt_quantsim_model_weight_names_to_weights:
-                weights_to_port_over.append(weight)
+        # weights_to_port_over = []
+        # for weight_name, weight in self.original_quantsim_model_weight_names_to_weights.items():
+        #     if weight_name in rebuilt_quantsim_model_weight_names_to_weights:
+        #         weights_to_port_over.append(weight)
 
-        self.original_quantsim_model_weights = weights_to_port_over
+        # self.original_quantsim_model_weights = weights_to_port_over
+
+        # weights_to_port_over = []
+        # for layer in self.original_quantsim_model.layers:
+        #     for weight in layer.weights:
+        #         if weight.name in self.original_quantsim_model_weight_names_to_weights:
+        #             weights_to_port_over.append()
 
         self._finish_rebuilding_model()
         
     def _finish_rebuilding_model(self):
 
         # DELETE ME, for testing
-        for i, (a, b) in enumerate(zip(self.original_quantsim_model_weights, self.rebuilt_model.get_weights())):
-            np.testing.assert_array_equal(a.shape, b.shape)
+        # for i, (a, b) in enumerate(zip(self.original_quantsim_model_weights, self.rebuilt_model.get_weights())):
+        #     np.testing.assert_array_equal(a.shape, b.shape)
 
         self._assign_weights_not_connected_to_model()
         self.rebuilt_model.set_weights(self.original_quantsim_model_weights)

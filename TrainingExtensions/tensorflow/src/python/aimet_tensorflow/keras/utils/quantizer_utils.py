@@ -36,9 +36,9 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """Quantizer utility"""
-from typing import List
+from typing import List, Optional, Union
 
-from aimet_tensorflow.keras.quant_sim.tensor_quantizer import TensorQuantizer
+from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ParamPerChannelQuantizer, ParamPerTensorQuantizer, TensorQuantizer
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 
 
@@ -89,3 +89,16 @@ def enable_disable_quantizers(quantizers: List[TensorQuantizer],
     else:
         for quantizer in quantizers:
             quantizer.disable()
+
+def get_wrappers_weight_or_bias_quantizer(param_quantizers, get_bias=False) -> \
+    Optional[Union[ParamPerTensorQuantizer, ParamPerChannelQuantizer]]:
+    """
+    Helper function to get a given wrappers weight or bias quantizer
+    """
+    weight_to_find = 'bias' if get_bias else 'kernel'
+    for quantizer in param_quantizers:
+        if weight_to_find in quantizer._name: # pylint: disable=protected-access
+            return quantizer
+
+    if weight_to_find == 'kernel':
+        raise AttributeError(f"Unable to find kernel quantizer.")

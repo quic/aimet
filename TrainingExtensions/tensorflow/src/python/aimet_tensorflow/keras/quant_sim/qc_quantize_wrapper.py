@@ -313,18 +313,16 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
             if is_call_training_mode:
                 self._shadow_params = {k:v for k, v in self._shadow_params.items()  if "gamma:0" in k  or "beta:0" in k}
 
-        self._quantize_params()
+        with self._quantize_params():
+            # Special logic for +, -, *, / operators which become lambda layers with kwarg inputs
+            if self._is_lambda_operator_layer and 'y' in kwargs and len(self.input_quantizers) == 2:
+                inputs = self._quantize_activation(inputs, [self.input_quantizers[0]], True)
+                kwargs['y'] = self._quantize_activation(kwargs['y'], [self.input_quantizers[1]], True)
+            else:
+                inputs = self._quantize_activation(inputs, self.input_quantizers, True)
+            outputs = self._layer_to_wrap(inputs, *args, **kwargs)
+            outputs = self._quantize_activation(outputs, self.output_quantizers, False)
 
-        # Special logic for +, -, *, / operators which become lambda layers with kwarg inputs
-        if self._is_lambda_operator_layer and 'y' in kwargs and len(self.input_quantizers) == 2:
-            inputs = self._quantize_activation(inputs, [self.input_quantizers[0]], True)
-            kwargs['y'] = self._quantize_activation(kwargs['y'], [self.input_quantizers[1]], True)
-        else:
-            inputs = self._quantize_activation(inputs, self.input_quantizers, True)
-        outputs = self._layer_to_wrap(inputs, *args, **kwargs)
-        outputs = self._quantize_activation(outputs, self.output_quantizers, False)
-
-        self._restore_shadow_params()
         return outputs
 
     @contextlib.contextmanager

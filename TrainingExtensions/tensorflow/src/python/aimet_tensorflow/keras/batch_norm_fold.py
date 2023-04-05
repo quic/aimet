@@ -45,7 +45,7 @@ import tensorflow as tf
 import tensorflow.keras.backend as K
 from tensorflow.python.keras.engine.functional import Functional
 from tensorflow.python.keras.layers.core import TFOpLambda
-from aimet_common.defs import QuantScheme
+from aimet_common.defs import QuantScheme, MAP_ROUND_MODE_TO_PYMO, MAP_QUANT_SCHEME_TO_PYMO
 
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
@@ -55,6 +55,7 @@ from aimet_tensorflow.keras.utils import common
 from aimet_tensorflow.keras.utils.op.batchnorm import BNUtils
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 from aimet_tensorflow.keras.quant_sim.rebuild_quantsim_model import RebuiltQuantSimModelFactory
+from aimet_tensorflow.keras.utils.quantizer_utils import get_wrappers_weight_or_bias_quantizer
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
@@ -66,23 +67,24 @@ LayerType = Union[
 ]
 _supported_layers = LayerType.__args__
 
-PAIR_TYPE = Union[Tuple[LayerType, tf.keras.layers.BatchNormalization, bool],
+PairType = Union[Tuple[LayerType, tf.keras.layers.BatchNormalization, bool],
                   Tuple[tf.keras.layers.BatchNormalization, LayerType, bool]]
 
 BatchNormType = tf.keras.layers.BatchNormalization
 _supported_batchnorms = BatchNormType
 
 # Todo: search for more types of convolution
-LINEAR_TYPE = tf.keras.layers.Dense
-CONV_TYPE = tf.keras.layers.Conv2D
-FLATTEN_TYPE = Union[tf.keras.layers.Flatten, tf.keras.layers.Reshape]
+LinearType = tf.keras.layers.Dense
+ConvType = tf.keras.layers.Conv2D
+FlattenType = Union[tf.keras.layers.Flatten, tf.keras.layers.Reshape]
 
-
+MAP_PYMO_TO_ROUND_MODE   = {v: k for k, v in MAP_ROUND_MODE_TO_PYMO.items()  }
+MAP_PYMO_TO_QUANT_SCHEME = {v: k for k, v in MAP_QUANT_SCHEME_TO_PYMO.items()}
 def _check_layer_to_find_pattern(cur_layer: tf.keras.layers.Layer,
-                                 conv_linear_with_bn_dict: Dict[Union[CONV_TYPE, LINEAR_TYPE],
+                                 conv_linear_with_bn_dict: Dict[Union[ConvType, LinearType],
                                                                 List[Union[None, BatchNormType]]],
                                  layer_out_node_ref: Dict,
-                                 has_seen: List[Union[None, CONV_TYPE, BatchNormType, FLATTEN_TYPE]]):
+                                 has_seen: List[Union[None, ConvType, BatchNormType, FlattenType]]):
     """
     find all paths in the model considering all inputs.
 
@@ -96,7 +98,7 @@ def _check_layer_to_find_pattern(cur_layer: tf.keras.layers.Layer,
     """
 
     # pylint: disable=too-many-branches
-    if isinstance(cur_layer, CONV_TYPE):
+    if isinstance(cur_layer, ConvType):
         if has_seen[1] is not None:
             conv_linear_with_bn_dict[cur_layer] = [has_seen[1], None]
             has_seen[1] = None
@@ -120,7 +122,7 @@ def _check_layer_to_find_pattern(cur_layer: tf.keras.layers.Layer,
                 has_seen[1] = None
         if has_seen[0]:
             has_seen[0] = None
-    elif isinstance(cur_layer, LINEAR_TYPE):
+    elif isinstance(cur_layer, LinearType):
         if has_seen[1] is not None and has_seen[2] is not None:
             conv_linear_with_bn_dict[cur_layer] = [has_seen[1], None]
         has_seen[2] = None
@@ -195,7 +197,7 @@ def _get_ordered_layers(node_layer_map: Dict,
 
 
 def _get_ordered_conv_linears(node_layer_map: Dict,
-                              layer_out_node_map: Dict) -> List[Union[CONV_TYPE, LINEAR_TYPE]]:
+                              layer_out_node_map: Dict) -> List[Union[ConvType, LinearType]]:
     """
     helper to select a list of conv_linears in the order of occurence
 
@@ -216,9 +218,9 @@ def _get_ordered_conv_linears(node_layer_map: Dict,
 
 def _fill_conv_linear_bn_dict(cur_layer: tf.keras.layers.Layer, node_layer_ref: Dict,
                               layer_out_node_ref: Dict,
-                              has_seen: List[Union[None, CONV_TYPE, BatchNormType, FLATTEN_TYPE]],
+                              has_seen: List[Union[None, ConvType, BatchNormType, FlattenType]],
                               visited_layer: Set[tf.keras.layers.Layer],
-                              conv_linear_with_bn_dict: Dict[Union[CONV_TYPE, LINEAR_TYPE],
+                              conv_linear_with_bn_dict: Dict[Union[ConvType, LinearType],
                                                              List[Union[None, BatchNormType]]]):
     """
     fill conv_linear_bn_dict for the model
@@ -252,7 +254,7 @@ def _fill_conv_linear_bn_dict(cur_layer: tf.keras.layers.Layer, node_layer_ref: 
 
 
 def _find_possible_convs_linears_bn(node_layer_map: Dict, layer_out_node_map: Dict)\
-        -> Dict[Union[CONV_TYPE, LINEAR_TYPE], List[Union[None, BatchNormType]]]:
+        -> Dict[Union[ConvType, LinearType], List[Union[None, BatchNormType]]]:
     """
     find all possible convs_linears_bn by traversing all paths in the model considering all inputs
 
@@ -611,7 +613,7 @@ def _delete_all_bns_from_model(model: Union[tf.keras.Model, tf.keras.layers.Laye
         else:
             _delete_bn_for_non_subclassed_model(model, bn_layer)
 
-def _find_all_batch_norms_to_fold(model: tf.keras.Model) -> List[PAIR_TYPE]:
+def _find_all_batch_norms_to_fold(model: tf.keras.Model) -> List[PairType]:
     """
     uses searcher to choose layers for bias correction
 
@@ -672,11 +674,13 @@ def fold_all_batch_norms(model: tf.keras.Model) \
     return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs], model
 
 #pylint: disable=protected-access
-def fold_all_batch_norms_to_scale(sim: QuantizationSimModel):
+def fold_all_batch_norms_to_scale(sim: QuantizationSimModel) -> List[Tuple[QcQuantizeWrapper, QcQuantizeWrapper]]:
     """
-    Fold all batch_norm layers in a model into corresponding conv/linear layers
+    Fold all batch_norm layers in a model into the quantization scale parameter
+    of the corresponding conv layers
 
     :param sim: quantized keras model to fold all batch norms
+    :return: A list of pairs of layers [(Conv/Linear, BN layer that got folded)]
     """
 
     assert sim.model is not None
@@ -700,11 +704,11 @@ def fold_all_batch_norms_to_scale(sim: QuantizationSimModel):
 
     return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs]
 
-def fold_given_batch_norms(model: Union[tf.keras.Model, QuantizationSimModel], layer_pairs: List[PAIR_TYPE]) -> Optional[tf.keras.Model]:
+def fold_given_batch_norms(model: Union[tf.keras.Model, QuantizationSimModel], layer_pairs: List[PairType]) -> Optional[tf.keras.Model]:
     """
     Fold a given set of batch_norm layers into conv_linear layers
 
-    :param model: keras fp32 model/quantized model to fold selected batchnorms
+    :param model: Either a Keras Model or a QuantizationSimModel
     :param layer_pairs: Tuple of conv, bn layers and is_batch_norm_second flag
     :return: new model with batch norm layers folded if model is a functional model, else None
     """
@@ -722,7 +726,7 @@ def fold_given_batch_norms(model: Union[tf.keras.Model, QuantizationSimModel], l
             layer = layer._layer_to_wrap
         return isinstance(layer, _supported_layers)
 
-    for x, y, _ in layer_pairs:
+    for x, y in layer_pairs:
         if is_batchnorm(x):
             assert is_conv_linear(y)
             bn = x
@@ -750,7 +754,7 @@ def _fold_given_batch_norms(model: Union[tf.keras.Model, QuantizationSimModel],
     """
     for bn, conv in bn_conv_pairs:
         if isinstance(conv, QcQuantizeWrapper):
-            raise RuntimeError(f"Forward folding to scale is not possible. Got {conv}")
+            raise RuntimeError(f"Forward folding to scale is not possible. Got {conv.name}")
 
     bn_layers = []
 
@@ -791,22 +795,11 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
     :param bn_wrapper: QcQuantizeWrapper that wraps the Batch Norm layer
     """
 
-    def get_conv_wrappers_weight_or_bias_quantizer(param_quantizers, get_bias=False) -> \
-        Optional[Union[ParamPerTensorQuantizer, ParamPerChannelQuantizer]]:
-
-        weight_to_find = 'bias' if get_bias else 'kernel'
-        for quantizer in param_quantizers:
-            if weight_to_find in quantizer._name:
-                return quantizer
-
-        if weight_to_find == 'kernel':
-            raise RuntimeError(f"Unable to find {weight_to_find} quantizer for conv layer {conv_wrapper._layer_to_wrap}.")
-
     conv = conv_wrapper._layer_to_wrap
     bn = bn_wrapper._layer_to_wrap
 
-    weight_quantizer = get_conv_wrappers_weight_or_bias_quantizer(conv_wrapper.param_quantizers)
-    bias_quantizer   = get_conv_wrappers_weight_or_bias_quantizer(conv_wrapper.param_quantizers, get_bias=True)
+    weight_quantizer = get_wrappers_weight_or_bias_quantizer(conv_wrapper.param_quantizers)
+    bias_quantizer   = get_wrappers_weight_or_bias_quantizer(conv_wrapper.param_quantizers, get_bias=True)
 
     # Checking QuantScheme as aimet_tensorflow.keras does not have LearnedGridTensorQuantizer
     if weight_quantizer.quant_scheme not in [QuantScheme.training_range_learning_with_tf_init,
@@ -814,7 +807,7 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
         raise _BatchNormFoldingNotSupported(
             "BatchNorm folding to scale supports training_range_learning_with_tf_init or "
             "training_range_learning_with_tf_enhanced_init only. "
-            f"got {type(weight_quantizer)}"
+            f"got {weight_quantizer.quant_scheme}"
         )
 
     output_quantizer = conv_wrapper.output_quantizers[0]
@@ -839,7 +832,7 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
         encodings = [encodings]
 
 
-    with conv_wrapper._quantize_params():
+    with bn_wrapper._quantize_params():
         _fold_to_weight(conv, bn, fold_backward=True)
 
         gamma = bn.gamma
@@ -864,7 +857,7 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
     # Copy batchnorm's output quantizers to conv output quantizers
     for conv_output_quantizer, bn_output_quantizer in \
             zip(conv_wrapper.output_quantizers, bn_wrapper.output_quantizers):
-        # "Enabling" the conv_output_quantizer to whatever bn's output_quantizer is through quant_mode
+        # "Enabling" the conv_output_quantizer by setting it's quant_mode to bn's output_quantizer's quant_mode.
         # if the quant_mode is "libpymo.TensorQuantizerOpMode.passThrough" then it is not enabled.
         conv_output_quantizer.quant_mode = bn_output_quantizer.quant_mode
 
@@ -880,18 +873,19 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
         bn_output_quantizer.disable()
 
     if bias_quantizer is None:
-        # Add bias quantizer?
         bias_quantizer = ParamPerTensorQuantizer(weight_quantizer._original_layer,
-                                                 weight_quantizer.name,
+                                                 weight_quantizer._name,
                                                  weight_quantizer.quant_scheme,
                                                  weight_quantizer.round_mode,
                                                  weight_quantizer.bitwidth,
                                                  weight_quantizer.data_type,
                                                  weight_quantizer.is_symmetric,
                                                  weight_quantizer.use_strict_symmetric,
-                                                 weight_quantizer.use_unsigned_symmetric,
-                                                 enabled=False)
+                                                 weight_quantizer.use_unsigned_symmetric)
         conv_wrapper.param_quantizers.append(bias_quantizer)
+
+    # TODO: Remove and support deleting BN's in QuantSim models
+    BNUtils.modify_bn_params_to_make_as_passthrough(bn)
 
 def _fold_to_weight(conv_linear: LayerType, bn: BatchNormType, fold_backward: bool):
     """
