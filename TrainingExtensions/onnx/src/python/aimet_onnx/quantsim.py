@@ -310,9 +310,11 @@ class QuantizationSimModel:
             If set to None, forward_pass_callback will be invoked with no parameters.
         """
         forward_pass_callback(self.session, forward_pass_callback_args)
-        for _, qc_op in self.qc_quantize_op_dict.items():
-            qc_op.compute_encodings()
-            qc_op.op_mode = OpMode.quantizeDequantize
+        for op_name, qc_op in self.qc_quantize_op_dict.items():
+            if qc_op.data_type == QuantizationDataType.int:
+                qc_op.compute_encodings()
+            if op_name in self.activation_names:
+                qc_op.op_mode = OpMode.quantizeDequantize
 
     def _export_encodings(self, encoding_file_path):
         """
@@ -322,13 +324,19 @@ class QuantizationSimModel:
         """
 
         def update_encoding_dict_entry_int(encoding_dict: Dict, op_name: str):
-            encoding_dict[op_name] = {'min': self.qc_quantize_op_dict[name].encodings.min,
-                                      'max': self.qc_quantize_op_dict[name].encodings.max,
-                                      'scale': self.qc_quantize_op_dict[name].encodings.delta,
-                                      'offset': self.qc_quantize_op_dict[name].encodings.offset,
-                                      'bitwidth': self.qc_quantize_op_dict[name].encodings.bw,
-                                      'is_symmetric': self.qc_quantize_op_dict[name].use_symmetric_encodings,
-                                      'dtype': 'int'}
+            qc_quantize_op = self.qc_quantize_op_dict[op_name]
+            if qc_quantize_op.data_type == QuantizationDataType.int:
+                encoding_dict[op_name] = {'min': qc_quantize_op.encodings.min, 'max': qc_quantize_op.encodings.max,
+                                          'scale': qc_quantize_op.encodings.delta,
+                                          'offset': qc_quantize_op.encodings.offset,
+                                          'bitwidth': qc_quantize_op.encodings.bw,
+                                          'is_symmetric': qc_quantize_op.use_symmetric_encodings,
+                                          'dtype': 'int'}
+            else:
+                encoding_dict[op_name] = {'bitwidth': qc_quantize_op.encodings.bw,
+                                          'is_symmetric': qc_quantize_op.use_symmetric_encodings,
+                                          'dtype': 'float'}
+
 
         param_encodings = {}
         for name in self.param_names:

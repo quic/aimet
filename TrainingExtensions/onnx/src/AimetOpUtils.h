@@ -39,8 +39,10 @@
 #ifndef AIMET_MAIN_AIMETOPUTILS_H
 #define AIMET_MAIN_AIMETOPUTILS_H
 
+#include "DlQuantization/TensorQuantizerOpFacade.h"
+#include "DlQuantization/Quantization.hpp"
+#include "DlQuantization/Fp16Quantization.hpp"
 
-#include <DlQuantization/TensorQuantizerOpFacade.h>
 #include <cstdint>
 #include <stdexcept>
 #ifdef ONNX_CUDA
@@ -105,11 +107,14 @@ void modeSpecificActionFloat(const T* inTensor, size_t count, T* outTensor,
                            const DlQuantization::TensorQuantizerOpMode opMode,
                            DlQuantization::IAllocator* allocator, bool useCuda)
 {
+    auto mode_cpu_gpu = DlQuantization::COMP_MODE_CPU;
+    if(useCuda)
+        mode_cpu_gpu = DlQuantization::COMP_MODE_GPU;
     switch (opMode)
     {
     case DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize:
     {
-        copyInputTensorsToOutputTensors(inTensor, count, outTensor, useCuda);
+        DlQuantization::quantizeDequantizeFP16(inTensor, count, outTensor, mode_cpu_gpu);
         break;
     }
     case DlQuantization::TensorQuantizerOpMode::updateStats:
@@ -119,7 +124,7 @@ void modeSpecificActionFloat(const T* inTensor, size_t count, T* outTensor,
     }
     case DlQuantization::TensorQuantizerOpMode::quantizeDequantize:
     {
-        copyInputTensorsToOutputTensors(inTensor, count, outTensor, useCuda);
+        DlQuantization::quantizeDequantizeFP16(inTensor, count, outTensor, mode_cpu_gpu);
         break;
     }
     case DlQuantization::TensorQuantizerOpMode::passThrough:

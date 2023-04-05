@@ -159,6 +159,30 @@ class TestQcQuantizeOp:
         assert np.max(output) <= 1.1
         assert np.min(output) >= -5.1
 
+    def test_quantize_dequantize_fp16(self):
+
+        input_arr = np.asarray([[[[-7, -5, -3, 0, .1, 2.5]]]]).astype(np.float32)
+        intermediate_output = input_arr.astype(np.float16)
+        fp32_array = intermediate_output.astype(np.float32)
+        quant_info = libquant_info.QcQuantizeInfo()
+        quant_node = helper.make_node(op_name, inputs=['input'], outputs=['output'],
+                                      domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
+        model = create_model_from_node(quant_node, input_arr.shape)
+        session = build_session(model, available_providers)
+        qc_op = QcQuantizeOp(quant_info=quant_info,
+                             quant_scheme=QuantScheme.post_training_tf,
+                             rounding_mode='nearest',
+                             encodings=None,
+                             op_mode=OpMode.oneShotQuantizeDequantize,
+                             bitwidth=8,
+                             use_symmetric_encodings=False,
+                             )
+
+        qc_op.op_mode = OpMode.quantizeDequantize
+        output = session.run(None, {'input': input_arr})[0]
+
+        assert np.allclose(output, fp32_array)
+
     def test_update_stats_quantize_dequantize(self):
 
         input_arr = np.asarray([[[[-7, -5, -3, 0, .1, 2.5]]]]).astype(np.float32)
@@ -331,7 +355,7 @@ class TestQcQuantizeOp:
 
         quant_info_gpu = libquant_info.QcQuantizeInfo()
         quant_node_gpu = helper.make_node(op_name, inputs=['input'], outputs=['output'],
-                                          domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info_gpu))
+                                          domain="aimet.customop.cuda", quant_info=libpymo.PtrToInt64(quant_info_gpu))
         model_gpu = create_model_from_node(quant_node_gpu, input_arr.shape)
         session_gpu = build_session(model_gpu, available_providers)
         qc_op_gpu = QcQuantizeOp(quant_info=quant_info_gpu,

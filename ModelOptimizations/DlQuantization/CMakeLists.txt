@@ -67,6 +67,7 @@ add_library(MoDlQuantization STATIC
       src/TensorQuantizationSimForPython.cpp
       src/TensorQuantizer.cpp
       src/GraphQuantizer.cpp
+      src/Fp16Quantization.cpp
 
       include/DlQuantization/IQuantizer.hpp
       include/DlQuantization/Quantization.hpp
@@ -76,7 +77,9 @@ add_library(MoDlQuantization STATIC
       include/DlQuantization/EncodingAnalyzerForPython.h
       include/DlQuantization/TensorQuantizationSimForPython.h
       include/DlQuantization/TensorQuantizer.h
-      include/DlQuantization/GraphQuantizer.h )
+      include/DlQuantization/GraphQuantizer.h
+      include/DlQuantization/Fp16Quantization.hpp )
+
 
 if (ENABLE_CUDA)
 target_compile_options(MoDlQuantization
@@ -89,6 +92,9 @@ target_include_directories(MoDlQuantization
       PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
       )
+
+find_package(Eigen3 REQUIRED)
+include_directories(${EIGEN3_INCLUDE_DIR})
 
 target_link_libraries(MoDlQuantization
       PUBLIC PYBIND11

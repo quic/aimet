@@ -46,6 +46,7 @@ RUN apt-get update > /dev/null && \
         ssh \
         sudo \
         wget \
+        libeigen3-dev \
         xterm \
         xauth > /dev/null && \
         rm -rf /var/lib/apt/lists/*
