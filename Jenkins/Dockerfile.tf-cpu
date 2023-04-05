@@ -38,7 +38,7 @@
 ARG REGISTRY
 FROM ${REGISTRY}ubuntu:bionic
 ARG REGISTRY
-RUN echo ${ARG REGISTRY}
+RUN echo ${REGISTRY}
 
 ARG DEBIAN_FRONTEND=noninteractive
 
