@@ -36,6 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Qc Quantize wrapper for tf 2 keras """
+import contextlib
 from typing import Union, List, Dict
 import tensorflow as tf
 
@@ -326,18 +327,23 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         self._restore_shadow_params()
         return outputs
 
+    @contextlib.contextmanager
     def _quantize_params(self):
         """ Quantize parameters """
+        try:
+            idx_param_quantizer = 0
+            for idx, param in enumerate(self._layer_to_wrap.weights):
+                # check and break  if idx_param_quantizer is out of range (Batchnorm fold will update bias tensor, even in case there was no existing bias add op in given conv2D op, use_bias=False)
+                if idx_param_quantizer == len(self.param_quantizers):
+                    break
+                if self._layer_to_wrap.weights[idx].dtype in QUANT_ALLOWED_DTYPES:
+                    quantized_param = self.param_quantizers[idx_param_quantizer](param)
+                    self._layer_to_wrap.weights[idx].assign(quantized_param)
+                    idx_param_quantizer = idx_param_quantizer + 1
+            yield
 
-        idx_param_quantizer = 0
-        for idx, param in enumerate(self._layer_to_wrap.weights):
-            # check and break  if idx_param_quantizer is out of range (Batchnorm fold will update bias tensor, even in case there was no existing bias add op in given conv2D op, use_bias=False)
-            if idx_param_quantizer == len(self.param_quantizers):
-                break
-            if self._layer_to_wrap.weights[idx].dtype in QUANT_ALLOWED_DTYPES:
-                quantized_param = self.param_quantizers[idx_param_quantizer](param)
-                self._layer_to_wrap.weights[idx].assign(quantized_param)
-                idx_param_quantizer = idx_param_quantizer + 1
+        finally:
+            self._restore_shadow_params()
 
     def _quantize_activation(self, activation: Union[tf.Tensor, List],
                              quantizers: List[ActivationTensorQuantizer],
