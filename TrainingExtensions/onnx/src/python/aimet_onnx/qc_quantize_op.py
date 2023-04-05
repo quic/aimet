@@ -51,10 +51,10 @@ class QcQuantizeOp:
     """ A custom quantization operation to perform using ONNXRuntime """
 
     # pylint: disable=too-many-arguments
+    # pylint: disable=too-many-instance-attributes
     def __init__(self, quant_info: libquant_info.QcQuantizeInfo,
                  quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
                  rounding_mode: str = 'nearest',
-                 encodings: Union[libpymo.TfEncoding, None] = None,
                  op_mode: Union[OpMode, None] = None,
                  bitwidth: int = 8, use_symmetric_encodings: bool = False):
         """
@@ -62,7 +62,6 @@ class QcQuantizeOp:
             quant_info: libquant_info.QcQuantizeInfo object holding quantization parameters passed to the C++ op
             quant_scheme: Quantization scheme (e.g. QuantScheme.post_training_tf)
             rounding_mode: Rounding mode (e.g. nearest)
-            encodings: libpymo.TfEncoding object with min, max, offset, delta, bw
             op_mode: QcQuantizeOp mode (e.g. update_stats)
             bitwidth: Quantization bitwidth
             use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
@@ -73,7 +72,7 @@ class QcQuantizeOp:
         self.set_tensor_quantizer(self._build_tensor_quantizer())
         self.op_mode = op_mode
         self.bitwidth = bitwidth
-        self.encodings = encodings
+        self._encoding = None
         self.use_symmetric_encodings = use_symmetric_encodings
         self.enabled = True
         self._data_type = QuantizationDataType.int
@@ -246,5 +245,5 @@ class QcQuantizeOp:
         Compute and return encodings of each tensor quantizer
         """
         self.encodings = self._tensor_quantizer.computeEncoding(self.bitwidth,
-                                                               self.use_symmetric_encodings)
+                                                                self.use_symmetric_encodings)
         return self.encodings
