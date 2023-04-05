@@ -38,8 +38,6 @@
 
 ARG REGISTRY
 FROM ${REGISTRY}ubuntu:bionic as target
-ARG REGISTRY
-RUN echo $REGISTRY
 
 ARG DEBIAN_FRONTEND=noninteractive
 

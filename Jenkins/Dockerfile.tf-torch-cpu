@@ -37,8 +37,6 @@
 # Docker image file to build and test AIMET for both Tensorflow and PyTorch in a CPU environment
 ARG REGISTRY
 FROM ${REGISTRY}ubuntu:bionic
-ARG REGISTRY
-RUN echo ${REGISTRY}
 
 ARG DEBIAN_FRONTEND=noninteractive
 

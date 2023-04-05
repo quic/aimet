@@ -231,11 +231,10 @@ if [ -n "$USE_LINARO" ]; then
 else
     echo -e "*** Building docker image${loading_symbol} ***\n"
     pushd ${dockerfile_path}
+    DOCKER_BUILD_CMD="docker build -t ${docker_image_name} -f ${docker_file} ."
     if [[ ${ALTERNATIVE_DOCKER_REGISTRY} ]];
     then
-        DOCKER_BUILD_CMD="docker build -t ${docker_image_name} -f ${docker_file} . --build-arg REGISTRY=${ALTERNATIVE_DOCKER_REGISTRY}"
-    else
-        DOCKER_BUILD_CMD="docker build -t ${docker_image_name} -f ${docker_file} ."
+        DOCKER_BUILD_CMD+=" --build-arg REGISTRY=${ALTERNATIVE_DOCKER_REGISTRY}"
     fi
     if [ $interactive_mode -eq 1 ] && [ $dry_run -eq 1 ]; then
         echo ${DOCKER_BUILD_CMD}
