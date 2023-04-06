@@ -46,7 +46,7 @@ import torch.cuda
 # End of PyTorch imports
 
 
-def pass_calibration_data(sim_model, args=None):
+def pass_calibration_data(sim_model, forward_pass_args=None):
     """
     The User of the QuantizationSimModel API is expected to write this function based on their data set.
     This is not a working function and is provided only as a guideline.
