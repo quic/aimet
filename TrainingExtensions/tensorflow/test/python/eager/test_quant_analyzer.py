@@ -72,7 +72,6 @@ def clear_session() -> None:
 
 
 class TestQuantAnalyzer:
-    # UPDATE
     def test_perform_per_layer_analysis_by_enabling_quant_wrappers(self):
         """ test perform per layer analysis by enabling quant wrappers """
         model = keras_functional_conv_net()
@@ -90,7 +89,7 @@ class TestQuantAnalyzer:
             layer_wise_eval_score_dict = \
                 quant_analyzer.perform_per_layer_analysis_by_enabling_quant_wrappers(sim, results_dir="./tmp/")
             assert type(layer_wise_eval_score_dict) == dict
-            assert len(layer_wise_eval_score_dict) == 6
+            assert len(layer_wise_eval_score_dict) == 7
 
             # test whether layer_wise_eval_score_dict consists of correct keys (module names).
             for quant_wrapper_name in layer_wise_eval_score_dict.keys():
@@ -102,7 +101,6 @@ class TestQuantAnalyzer:
             if os.path.isdir("./tmp/"):
                 shutil.rmtree("./tmp/")
 
-    # UPDATE??
     def test_perform_per_layer_analysis_by_disabling_quant_wrappers(self):
         """ test perform per layer analysis by disabling quant wrappers """
         model = keras_functional_conv_net()
@@ -119,7 +117,7 @@ class TestQuantAnalyzer:
             layer_wise_eval_score_dict = \
                 quant_analyzer.perform_per_layer_analysis_by_disabling_quant_wrappers(sim, results_dir="./tmp/")
             assert type(layer_wise_eval_score_dict) == dict
-            assert len(layer_wise_eval_score_dict) == 6
+            assert len(layer_wise_eval_score_dict) == 7
 
             # test whether layer_wise_eval_score_dict consists of correct keys (module names).
             for quant_wrapper_name in layer_wise_eval_score_dict.keys():

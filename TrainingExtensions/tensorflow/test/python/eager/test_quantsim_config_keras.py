@@ -41,6 +41,7 @@ import tensorflow as tf
 from tensorflow.keras.layers import InputLayer
 
 from aimet_common.defs import QuantScheme, QuantizationDataType
+from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ParamPerChannelQuantizer, ParamPerTensorQuantizer
 from aimet_tensorflow.keras.quantsim_config.quantsim_config import QuantSimConfigurator, INPUT_QUANTIZERS, \
@@ -159,7 +160,6 @@ class TestQuantSimConfig:
         assert len(layer_to_affected_tensor_quantizers_dict[dense1][3]) == 1
 
     def test_parse_config_file_defaults(self):
-        # UPDATE
         """
         Test that default quantization parameters are set correctly when using json config file
         """
@@ -185,6 +185,9 @@ class TestQuantSimConfig:
             json.dump(quantsim_config, f)
 
         model = single_residual()
+        # Added because QuantSimConfigurator will change Batch Norm Conv patterns that are foldable for Bn Reestimation.
+        # Here we fold those potential Batch Norms before going to the configurator.
+        _, model = fold_all_batch_norms(model)
         connected_graph = ConnectedGraph(model)
         quant_sim_configurator = QuantSimConfigurator(connected_graph, QuantScheme.post_training_tf_enhanced,
                                                       "nearest", 8, 8, QuantizationDataType.int, "./data/quantsim_config.json")
@@ -314,7 +317,6 @@ class TestQuantSimConfig:
         if os.path.exists("./data/quantsim_config.json"):
             os.remove("./data/quantsim_config.json")
 
-    # UPDATE
     def test_parse_config_file_op_type(self):
         """
         Test that op specific quantization parameters are set correctly when using json config file
@@ -353,6 +355,9 @@ class TestQuantSimConfig:
             json.dump(quantsim_config, f)
 
         model = single_residual()
+        # Added because QuantSimConfigurator will change Batch Norm Conv patterns that are foldable for Bn Reestimation.
+        # Here we fold those potential Batch Norms before going to the configurator.
+        _, model = fold_all_batch_norms(model)
         connected_graph = ConnectedGraph(model)
         quant_sim_configurator = QuantSimConfigurator(connected_graph, QuantScheme.post_training_tf_enhanced,
                                                       "nearest", 8, 8, QuantizationDataType.int, "./data/quantsim_config.json")
@@ -384,7 +389,6 @@ class TestQuantSimConfig:
         if os.path.exists("./data/quantsim_config.json"):
             os.remove("./data/quantsim_config.json")
 
-    # UPDATE
     def test_parse_config_file_op_type_conflict_case(self):
         """
         Test that op specific quantization parameters are set correctly when using json config file
@@ -398,7 +402,7 @@ class TestQuantSimConfig:
             "params": {},
             "op_type": {
                 "Conv": {
-                    "is_input_quantized": "True",
+                    "is_input_quantized": "False", # RuntimeError should happen from here
                     "is_output_quantized": "False"
                 },
                 "BatchNormalization": {
@@ -413,6 +417,9 @@ class TestQuantSimConfig:
             json.dump(quantsim_config, f)
 
         model = single_residual()
+        # Added because QuantSimConfigurator will change Batch Norm Conv patterns that are foldable for Bn Reestimation.
+        # Here we fold those potential Batch Norms before going to the configurator.
+        _, model = fold_all_batch_norms(model)
         connected_graph = ConnectedGraph(model)
 
         with pytest.raises(RuntimeError):
@@ -637,5 +644,3 @@ class TestQuantSimConfig:
 
         if os.path.exists("./data/quantsim_config.json"):
             os.remove("./data/quantsim_config.json")
-
-TestQuantSimConfig().test_parse_config_file_defaults()

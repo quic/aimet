@@ -129,7 +129,6 @@ class QuantizationSimModel(tf.keras.Model):
         self.model = self._add_quantization_wrappers(quant_scheme, rounding_mode,
                                                      default_output_bw, default_param_bw, default_data_type)
         self.quant_args = extract_global_quantizer_args(quant_scheme, self._quantsim_configurator)
-        # self._disable_quantizers_in_folded_batchnorm()
 
         self._params = QuantizationSimModelParams(quant_scheme, rounding_mode, default_output_bw, default_param_bw,
                                                   in_place, config_file, default_data_type)
