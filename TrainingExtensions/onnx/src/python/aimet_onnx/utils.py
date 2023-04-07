@@ -182,8 +182,10 @@ def make_dummy_input(model: onnx_pb.ModelProto, dynamic_size: int = 1) -> Dict[s
         shape = []
         for dim in item.type.tensor_type.shape.dim:
             if dim.dim_param:
+                # Evaluates true if axis is dynamic. We set the size of dynamic axes to dynamic_size
                 shape.append(dynamic_size)
             else:
+                # Else, axis has a fixed dimension size stored in dim.dim_value
                 shape.append(dim.dim_value)
         input_dict[name] = np.random.randn(*shape).astype(mapping.TENSOR_TYPE_TO_NP_TYPE[dtype])
     return input_dict
