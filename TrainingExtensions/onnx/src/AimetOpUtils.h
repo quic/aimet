@@ -41,7 +41,7 @@
 
 #include "OnnxOpUtils.h"
 #include "QuantizeDequantizeUtils.hpp"
-#include <DlQuantization/TensorQuantizer.h>
+#include "DlQuantization/TensorQuantizer.h"
 #include "DlQuantization/TensorQuantizerOpFacade.h"
 #include "DlQuantization/Quantization.hpp"
 #include "DlQuantization/Fp16Quantization.hpp"

@@ -37,7 +37,7 @@
 //==============================================================================
 
 #include "QcQuantizeInfo.h"
-#include <DlQuantization/Quantization.hpp>
+#include "DlQuantization/Quantization.hpp"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 

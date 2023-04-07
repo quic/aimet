@@ -36,6 +36,8 @@
 
 find_package(Python3 COMPONENTS Interpreter)
 
+find_path(ONNXRUNTIME_INC "onnxruntime_cxx_api.h" PATH_SUFFIXES onnxruntime_headers/include)
+
 add_subdirectory(src/python)
 add_subdirectory(test)
 
@@ -57,8 +59,6 @@ add_library(OnnxCppOps SHARED
         src/QuantizeDequantizeUtils.cu
         )
 
-
-find_path(ONNXRUNTIME_INC "onnxruntime_cxx_api.h" PATH_SUFFIXES onnxruntime_headers/include)
 
 find_package(Eigen3 REQUIRED)
 include_directories(${EIGEN3_INCLUDE_DIR})

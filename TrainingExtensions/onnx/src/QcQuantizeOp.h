@@ -44,7 +44,6 @@
 #undef ORT_API_MANUAL_INIT
 
 #include "QcQuantizeInfo.h"
-#include <DlQuantization/TensorQuantizerOpFacade.h>
 
 #ifdef ONNX_CUDA
 #include <cuda_runtime_api.h>

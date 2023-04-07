@@ -41,12 +41,8 @@
 #include "AimetOpUtils.h"
 #include "cuda_runtime_api.h"
 #include <gtest/gtest.h>
-#include <limits>
-#include <DlQuantization/Quantization.hpp>
-#include <DlQuantization/QuantizerFactory.hpp>
-#include "OnnxOpUtils.h"
-#include <DlQuantization/TensorQuantizerOpFacade.h>
-#include <DlQuantization/TensorQuantizer.h>
+#include "DlQuantization/Quantization.hpp"
+#include "DlQuantization/TensorQuantizer.h"
 #include <cmath>
 
 double computeDelta(double encodingMin, double encodingMax, double numSteps)
@@ -301,8 +297,6 @@ TEST(TestOnnxTensorOps, PerChannelQuantDequantTranspose)
 
 TEST(TestOnnxTensorOps, PerChannelQuantDequantCPU)
 {
-    OnnxCudaAllocator _allocator;
-    OnnxCudaAllocator* allocator = &_allocator;
     const int ch_out = 4;
     const int ch_in = 6;
     const int k = 1;
@@ -324,16 +318,16 @@ TEST(TestOnnxTensorOps, PerChannelQuantDequantCPU)
         encodings.push_back(enc);
         encodings[i]->max = 3.81;
         encodings[i]->min = -3.84;
+        encodings[i]->delta = 0.03;
         encodings[i]->bw = 8;
     }
     encodings[3]->bw = 8;
     encodings[3]->max = 6.35;
     encodings[3]->min = -6.4;
+    encodings[3]->delta = 0.05;
     DlQuantization::TensorQuantizer tensorQuant = DlQuantization::TensorQuantizer(DlQuantization::QuantizationMode::QUANTIZATION_TF, DlQuantization::RoundingMode::ROUND_NEAREST);
     tensorQuant.setStrictSymmetric(false);
     tensorQuant.setUnsignedSymmetric(false);
-    bool useSymmetricEncoding = false;
-    DlQuantization::TensorQuantizer* tensorQuantizerReference = &tensorQuant;
 
     int axis = 0;
 
@@ -341,8 +335,6 @@ TEST(TestOnnxTensorOps, PerChannelQuantDequantCPU)
     float result[ch_out][ch_in][k][k];
     quantizeDequantizePerChannelCPU((float*)data,(float*) result, dimensions, axis, encodings);
 
-    ;
-    cudaDeviceSynchronize();
     for (int c_o = 0; c_o < ch_out; c_o++){
         for (int c_i = 0; c_i < ch_in; c_i++){
             for (int i = 0; i < k; i++){

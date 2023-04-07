@@ -40,8 +40,7 @@
 #define AIMET_QUANTIZEDEQUANTIZEUTILS_HPP
 
 #include "OnnxOpUtils.h"
-#include <DlQuantization/TensorQuantizer.h>
-#include <DlQuantization/TensorQuantizerOpFacade.h>
+#include "DlQuantization/TensorQuantizer.h"
 #include <cstdint>
 #include <stdexcept>
 #include <vector>
