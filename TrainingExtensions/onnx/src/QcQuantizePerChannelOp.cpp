@@ -96,6 +96,10 @@ void QcQuantizePerChannelKernel::Compute(OrtKernelContext* context)
         modeSpecificActionPerChannelInt(input_data, size, result, axis, dimensions, quant_info->tensorQuantizerRef,
                                         op_mode, encodings, quant_info->useSymmetricEncoding, allocator, useCuda);
     }
+    else
+    {
+        modeSpecificActionFloat(input_data, size, result, op_mode, allocator, useCuda);
+    }
 }
 
 
