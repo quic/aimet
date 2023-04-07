@@ -512,7 +512,7 @@ pipeline {
                         }
                         axis {
                             name 'PROC_TYPE'
-                            values 'gpu'
+                            values 'gpu', 'cpu'
                         }
                     }
                 }
@@ -528,8 +528,8 @@ pipeline {
                             stage('Build or fetch docker image') {
                                 steps {
                                     script {
-                                        if (AIMET_PREBUILT_DOCKER_IMAGE_URL && ! pullRequest.files.any { f -> f.getFilename().contains('Jenkins/') }) {
-                                            env.DOCKER_IMAGE = "${AIMET_PREBUILT_DOCKER_IMAGE_URL}/${env.DOCKER_IMAGE}"
+                                        if (${env.AIMET_PREBUILT_DOCKER_IMAGE_URL} && ! pullRequest.files.any { f -> f.getFilename().contains('Jenkins/') }) {
+                                            env.DOCKER_IMAGE = "${env.AIMET_PREBUILT_DOCKER_IMAGE_URL}/${env.DOCKER_IMAGE}"
                                             sh "docker pull ${env.DOCKER_IMAGE}"
                                         } else {
                                             env.DOCKER_IMAGE = "${env.DOCKER_IMAGE}.${CHANGE_ID}"
