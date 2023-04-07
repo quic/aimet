@@ -533,7 +533,11 @@ pipeline {
                                             sh "docker pull ${env.DOCKER_IMAGE}"
                                         } else {
                                             env.DOCKER_IMAGE = "${env.DOCKER_IMAGE}.${CHANGE_ID}"
-                                            sh "docker build -f Jenkins/Dockerfile.${AIMET_VARIANT} -t ${docker_image} ./Jenkins"
+                                            extra_arg=""
+                                            if (ALTERNATIVE_DOCKER_REGISTRY) {
+                                                extra_arg="--build-arg REGISTRY=${ALTERNATIVE_DOCKER_REGISTRY}"
+                                            }
+                                            sh "docker build -f Jenkins/Dockerfile.${AIMET_VARIANT} -t ${docker_image} ./Jenkins ${extra_arg}"
                                         }
                                         echo "Will use a ${env.DOCKER_IMAGE} docker image"
                                     }
