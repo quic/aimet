@@ -55,7 +55,7 @@ from aimet_tensorflow.keras.utils import common
 from aimet_tensorflow.keras.utils.op.batchnorm import BNUtils
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 from aimet_tensorflow.keras.quant_sim.rebuild_quantsim_model import RebuiltQuantSimModelFactory
-from aimet_tensorflow.keras.utils.quantizer_utils import get_wrappers_weight_or_bias_quantizer
+from aimet_tensorflow.keras.utils.quantizer_utils import get_wrappers_bias_quantizer, get_wrappers_weight_quantizer
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
@@ -663,11 +663,6 @@ def fold_all_batch_norms(model: tf.keras.Model) \
     potential_new_model = _fold_given_batch_norms(model, conv_bn_pairs, bn_conv_pairs)
     model = potential_new_model if potential_new_model else model
 
-    # When returning the pairs, we want the second element of the pair to be the BN
-    pairs_to_return = []
-    for bn, conv in bn_conv_pairs:
-        pairs_to_return.append((bn, conv))
-
     _logger.warning("A new model is returned with the Batch Normalization layers removed for Keras models. "
                     "Please use this new model for the rest of the AIMET flow.")
 
@@ -798,8 +793,8 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
     conv = conv_wrapper._layer_to_wrap
     bn = bn_wrapper._layer_to_wrap
 
-    weight_quantizer = get_wrappers_weight_or_bias_quantizer(conv_wrapper.param_quantizers)
-    bias_quantizer   = get_wrappers_weight_or_bias_quantizer(conv_wrapper.param_quantizers, get_bias=True)
+    weight_quantizer = get_wrappers_weight_quantizer(conv_wrapper.param_quantizers)
+    bias_quantizer   = get_wrappers_bias_quantizer(conv_wrapper.param_quantizers)
 
     # Checking QuantScheme as aimet_tensorflow.keras does not have LearnedGridTensorQuantizer
     if weight_quantizer.quant_scheme not in [QuantScheme.training_range_learning_with_tf_init,
@@ -831,6 +826,11 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
     if isinstance(encodings, libpymo.TfEncoding):
         encodings = [encodings]
 
+    # Grouped convs?
+    # if conv.groups != 1:
+    #     raise _BatchNormFoldingNotSupported(
+    #         "BatchNorm folding to scale is not supported for grouped "
+    #     )
 
     with bn_wrapper._quantize_params():
         _fold_to_weight(conv, bn, fold_backward=True)
@@ -857,9 +857,7 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
     # Copy batchnorm's output quantizers to conv output quantizers
     for conv_output_quantizer, bn_output_quantizer in \
             zip(conv_wrapper.output_quantizers, bn_wrapper.output_quantizers):
-        # "Enabling" the conv_output_quantizer by setting it's quant_mode to bn's output_quantizer's quant_mode.
-        # if the quant_mode is "libpymo.TensorQuantizerOpMode.passThrough" then it is not enabled.
-        conv_output_quantizer.quant_mode = bn_output_quantizer.quant_mode
+        conv_output_quantizer.enable() if bn_output_quantizer.is_enabled() else conv_output_quantizer.disable()
 
         if bn_output_quantizer.encoding is not None:
             encoding = libpymo.TfEncoding()
@@ -869,19 +867,27 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
             encoding.offset = bn_output_quantizer.encoding.offset
             encoding.bw     = bn_output_quantizer.encoding.bw
             conv_output_quantizer.encoding = encoding
-
+            
+            tensor_quantizers = conv_output_quantizer._tensor_quantizer if isinstance(conv_output_quantizer._tensor_quantizer, List) else [conv_output_quantizer._tensor_quantizer]
+            for tensor_quantizer in tensor_quantizers:
+                tensor_quantizer.isEncodingValid = True
+            
         bn_output_quantizer.disable()
 
     if bias_quantizer is None:
         bias_quantizer = ParamPerTensorQuantizer(weight_quantizer._original_layer,
                                                  weight_quantizer._name,
                                                  weight_quantizer.quant_scheme,
-                                                 weight_quantizer.round_mode,
+                                                 MAP_PYMO_TO_ROUND_MODE[weight_quantizer.round_mode],
                                                  weight_quantizer.bitwidth,
                                                  weight_quantizer.data_type,
                                                  weight_quantizer.is_symmetric,
                                                  weight_quantizer.use_strict_symmetric,
-                                                 weight_quantizer.use_unsigned_symmetric)
+                                                 weight_quantizer.use_unsigned_symmetric,
+                                                 enabled=False)
+        tensor_quantizers = bias_quantizer._tensor_quantizer if isinstance(bias_quantizer._tensor_quantizer, List) else [bias_quantizer._tensor_quantizer]
+        for tensor_quantizer in tensor_quantizers:
+            tensor_quantizer.isEncodingValid = True
         conv_wrapper.param_quantizers.append(bias_quantizer)
 
     # TODO: Remove and support deleting BN's in QuantSim models

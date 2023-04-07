@@ -52,7 +52,7 @@ from aimet_tensorflow.keras.batch_norm_fold import _delete_all_bns_from_model, _
 from aimet_tensorflow.keras.utils.op.batchnorm import BNUtils
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 from aimet_common.defs import QuantScheme
-from aimet_tensorflow.keras.utils.quantizer_utils import get_wrappers_weight_or_bias_quantizer
+from aimet_tensorflow.keras.utils.quantizer_utils import get_wrappers_weight_quantizer
 
 np.random.seed(0)
 tf.random.set_seed(0)
@@ -1122,7 +1122,7 @@ quantsim_config_map = {
     # "strict_symmetric": strict_symmetric_quantsim_config,
 }
 
-def quantsim(model, dummy_input, quantsim_config=None):
+def create_quantsim_model_and_compute_encodings(model, dummy_input, quantsim_config=None):
     config_file_path = "/tmp/quantsim_config.json"
     
     quantsim_config = quantsim_config or symmetric_quantsim_config
@@ -1154,7 +1154,7 @@ class TestBatchNormFoldToScale:
         tf.keras.backend.clear_session()
         yield
 
-    def test_fold_before_conv_no_bias(self):
+    def test_fold_bn_before_conv_no_bias(self):
         input_shape = (20, 4, 4, 10)
 
         inp = tf.keras.Input(input_shape[1:])
@@ -1168,14 +1168,12 @@ class TestBatchNormFoldToScale:
         random_input = np.random.rand(*input_shape)
         _ = model(random_input)
 
-        sim = quantsim(model, random_input)
+        sim = create_quantsim_model_and_compute_encodings(model, random_input)
         model = sim.model
 
         # Check quantizers are enabled/disabled properly
-        # TODO: Currently there is a bug in QuatizationSimModel that needs to be fixed
-        # AIMET-2467
-        # assert model.layers[3].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[3].param_quantizers[0]).is_enabled()
+        assert model.layers[3].output_quantizers[0].is_enabled()
+        assert np.all(np.vectorize(lambda x: x.is_enabled())(get_wrappers_weight_quantizer(model.layers[3].param_quantizers)))
 
         layer_list = [(model.layers[3], model.layers[-1])]
 
@@ -1196,14 +1194,12 @@ class TestBatchNormFoldToScale:
         random_input = np.random.rand(*input_shape)
         _ = model(random_input)
 
-        sim = quantsim(model, random_input)
+        sim = create_quantsim_model_and_compute_encodings(model, random_input)
         model = sim.model
 
         # Check quantizers are enabled/disabled properly
-        # TODO: Currently there is a bug in QuatizationSimModel that needs to be fixed
-        # AIMET-2467
-        # assert model.layers[3].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[3].param_quantizers).is_enabled()
+        assert model.layers[3].output_quantizers[0].is_enabled()
+        assert np.all(np.vectorize(lambda x: x.is_enabled())(get_wrappers_weight_quantizer(model.layers[3].param_quantizers)))
 
         layer_list = [(model.layers[3], model.layers[-1])]
 
@@ -1224,17 +1220,15 @@ class TestBatchNormFoldToScale:
         random_input = np.random.rand(*input_shape)
         _ = model(random_input)
 
-        sim = quantsim(model, random_input)
+        sim = create_quantsim_model_and_compute_encodings(model, random_input)
         model = sim.model
 
         # Check quantizers are enabled/disabled properly
-        # TODO: Currently there is a bug in QuatizationSimModel that needs to be fixed
-        # AIMET-2467
-        # assert not model.layers[1].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[1].param_quantizers).is_enabled()
-        # assert not model.layers[2].output_quantizers[0].is_enabled()
-        # assert not get_wrappers_weight_or_bias_quantizer(model.layers[2].param_quantizers).is_enabled()
-        # assert model.layers[-1].output_quantizers[0].is_enabled()
+        assert not model.layers[1].output_quantizers[0].is_enabled()
+        assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
+        assert not model.layers[2].output_quantizers[0].is_enabled()
+        assert not np.all(np.vectorize(lambda x: x.is_enabled())(get_wrappers_weight_quantizer(model.layers[2].param_quantizers)))
+        assert model.layers[-1].output_quantizers[0].is_enabled()
 
         baseline_output = model(random_input)
 
@@ -1249,11 +1243,10 @@ class TestBatchNormFoldToScale:
         # for wrapper in model.layers[1:]:
         #     assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
 
-        #Check quantizsers
-        # TODO: See above message
-        # assert not model.layers[1].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[1].param_quantizers).is_enabled()
-        # assert model.layers[-1].output_quantizers[0].is_enabled()
+        #Check quantizers
+        assert not model.layers[1].output_quantizers[0].is_enabled()
+        assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
+        assert model.layers[-1].output_quantizers[0].is_enabled()
 
         relu_output_encoding = model.layers[-1].output_quantizers[0].encoding
         delta = float((relu_output_encoding.max - relu_output_encoding.min)/255)
@@ -1272,17 +1265,15 @@ class TestBatchNormFoldToScale:
         random_input = np.random.rand(*input_shape)
         _ = model(random_input)
 
-        sim = quantsim(model, random_input)
+        sim = create_quantsim_model_and_compute_encodings(model, random_input)
         model = sim.model
 
         # Check quantizers are enabled/disabled properly
-        # TODO: Currently there is a bug in QuatizationSimModel that needs to be fixed
-        # AIMET-2467
-        # assert not model.layers[1].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[1].param_quantizers).is_enabled()
-        # assert not model.layers[2].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[2].param_quantizers).is_enabled()
-        # assert model.layers[-1].output_quantizers[0].is_enabled()
+        assert not model.layers[1].output_quantizers[0].is_enabled()
+        assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
+        assert not model.layers[2].output_quantizers[0].is_enabled()
+        assert not np.all(np.vectorize(lambda x: x.is_enabled())(get_wrappers_weight_quantizer(model.layers[2].param_quantizers)))
+        assert model.layers[-1].output_quantizers[0].is_enabled()
 
         baseline_output = model(random_input)
 
@@ -1295,11 +1286,10 @@ class TestBatchNormFoldToScale:
         # for wrapper in model.layers[1:]:
         #     assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
 
-        # Check quantizsers
-        # TODO: See above message
-        # assert not model.layers[1].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[1].param_quantizers).is_enabled()
-        # assert model.layers[-1].output_quantizers[0].is_enabled()
+        # Check quantizers
+        assert not model.layers[1].output_quantizers[0].is_enabled()
+        assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
+        assert model.layers[-1].output_quantizers[0].is_enabled()
 
         relu_output_encoding = model.layers[-1].output_quantizers[0].encoding
         delta = float((relu_output_encoding.max - relu_output_encoding.min)/255)
@@ -1309,7 +1299,7 @@ class TestBatchNormFoldToScale:
         input_shape = (2, 24, 24, 10)
 
         inp = tf.keras.Input(input_shape[1:])
-        x   = tf.keras.layers.Conv2DTranspose(10, 3)(inp)
+        x   = tf.keras.layers.DepthwiseConv2D(10, 3, groups=10)(inp)
         x   = tf.keras.layers.BatchNormalization()(x)
         x   = tf.keras.layers.ReLU()(x)
 
@@ -1318,17 +1308,15 @@ class TestBatchNormFoldToScale:
         random_input = np.random.rand(*input_shape)
         _ = model(random_input)
 
-        sim = quantsim(model, random_input)
+        sim = create_quantsim_model_and_compute_encodings(model, random_input)
         model = sim.model
 
         # Check quantizers are enabled/disabled properly
-        # TODO: Currently there is a bug in QuatizationSimModel that needs to be fixed
-        # AIMET-2467
-        # assert not model.layers[1].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[1].param_quantizers).is_enabled()
-        # assert not model.layers[2].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[2].param_quantizers).is_enabled()
-        # assert model.layers[-1].output_quantizers[0].is_enabled()
+        assert model.layers[1].output_quantizers[0].is_enabled()
+        assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
+        assert model.layers[2].output_quantizers[0].is_enabled()
+        assert np.all(np.vectorize(lambda x: x.is_enabled())(get_wrappers_weight_quantizer(model.layers[2].param_quantizers)))
+        assert model.layers[-1].output_quantizers[0].is_enabled()
 
         fold_all_batch_norms_to_scale(sim)
 
@@ -1337,11 +1325,10 @@ class TestBatchNormFoldToScale:
         # for wrapper in model.layers[1:]:
         #     assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
 
-        # Check quantizsers
-        # TODO: See above message
-        # assert not model.layers[1].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[1].param_quantizers).is_enabled()
-        # assert model.layers[-1].output_quantizers[0].is_enabled()
+        # Check quantizers
+        assert model.layers[1].output_quantizers[0].is_enabled()
+        assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
+        assert model.layers[-1].output_quantizers[0].is_enabled()
 
     def test_fold_bn_after_conv_with_bias(self):
         input_shape = (2, 24, 24, 10)
@@ -1355,17 +1342,15 @@ class TestBatchNormFoldToScale:
 
         random_input = np.random.rand(*input_shape)
 
-        sim = quantsim(model, random_input)
+        sim = create_quantsim_model_and_compute_encodings(model, random_input)
         model = sim.model
 
         # Check quantizers are enabled/disabled properly
-        # TODO: Currently there is a bug in QuatizationSimModel that needs to be fixed
-        # AIMET-2467
-        # assert not model.layers[1].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[1].param_quantizers).is_enabled()
-        # assert not model.layers[2].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[2].param_quantizers).is_enabled()
-        # assert model.layers[-1].output_quantizers[0].is_enabled()
+        assert not model.layers[1].output_quantizers[0].is_enabled()
+        assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
+        assert not model.layers[2].output_quantizers[0].is_enabled()
+        assert not np.all(np.vectorize(lambda x: x.is_enabled())(get_wrappers_weight_quantizer(model.layers[2].param_quantizers)))
+        assert model.layers[-1].output_quantizers[0].is_enabled()
 
         baseline_output = model(random_input)
 
@@ -1380,11 +1365,10 @@ class TestBatchNormFoldToScale:
         # for wrapper in model.layers[1:]:
         #     assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
 
-        # Check quantizsers
-        # TODO: See above message
-        # assert not model.layers[1].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[1].param_quantizers).is_enabled()
-        # assert model.layers[-1].output_quantizers[0].is_enabled()
+        # Check quantizers
+        assert not model.layers[1].output_quantizers[0].is_enabled()
+        assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
+        assert model.layers[-1].output_quantizers[0].is_enabled()
 
         relu_output_encoding = model.layers[-1].output_quantizers[0].encoding
         delta = float((relu_output_encoding.max - relu_output_encoding.min)/255)
@@ -1402,16 +1386,14 @@ class TestBatchNormFoldToScale:
         random_input = np.random.rand(*input_shape)
         _ = model(random_input)
 
-        sim = quantsim(model, random_input)
+        sim = create_quantsim_model_and_compute_encodings(model, random_input)
         model = sim
 
         # Check quantizers are enabled/disabled properly
-        # TODO: Currently there is a bug in QuatizationSimModel that needs to be fixed
-        # AIMET-2467
-        # assert model.layers[2].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[2].param_quantizers).is_enabled()
-        # assert model.layers[1].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[1].param_quantizers).is_enabled()
+        assert model.layers[2].output_quantizers[0].is_enabled()
+        assert np.all(np.vectorize(lambda x: x.is_enabled())(get_wrappers_weight_quantizer(model.layers[2].param_quantizers)))
+        assert model.layers[1].output_quantizers[0].is_enabled()
+        assert np.all(np.vectorize(lambda x: x.is_enabled())(get_wrappers_weight_quantizer(model.layers[1].param_quantizers)))
 
         layer_list = [(model.layers[1], model.layers[2])]
 
@@ -1430,16 +1412,14 @@ class TestBatchNormFoldToScale:
         random_input = np.random.rand(*input_shape)
         _ = model(random_input)
 
-        sim = quantsim(model, random_input)
+        sim = create_quantsim_model_and_compute_encodings(model, random_input)
         model = sim
 
         # Check quantizers are enabled/disabled properly
-        # TODO: Currently there is a bug in QuatizationSimModel that needs to be fixed
-        # AIMET-2467
-        # assert model.layers[2].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[2].param_quantizers).is_enabled()
-        # assert model.layers[1].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[1].param_quantizers).is_enabled()
+        assert model.layers[2].output_quantizers[0].is_enabled()
+        assert np.all(np.vectorize(lambda x: x.is_enabled())(get_wrappers_weight_quantizer(model.layers[2].param_quantizers)))
+        assert model.layers[1].output_quantizers[0].is_enabled()
+        assert np.all(np.vectorize(lambda x: x.is_enabled())(get_wrappers_weight_quantizer(model.layers[1].param_quantizers)))
 
         layer_list = [(model.layers[1], model.layers[2])]
 
@@ -1458,16 +1438,14 @@ class TestBatchNormFoldToScale:
         random_input = np.random.rand(*input_shape)
         _ = model(random_input)
 
-        sim = quantsim(model, random_input)
+        sim = create_quantsim_model_and_compute_encodings(model, random_input)
         model = sim.model
 
         # Check quantizers are enabled/disabled properly
-        # TODO: Currently there is a bug in QuatizationSimModel that needs to be fixed
-        # AIMET-2467
-        # assert not model.layers[1].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[1].param_quantizers).is_enabled()
-        # assert model.layers[2].output_quantizers[0].is_enabled()
-        # assert not get_wrappers_weight_or_bias_quantizer(model.layers[2].param_quantizers).is_enabled()
+        assert not model.layers[1].output_quantizers[0].is_enabled()
+        assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
+        assert model.layers[2].output_quantizers[0].is_enabled()
+        assert not np.all(np.vectorize(lambda x: x.is_enabled())(get_wrappers_weight_quantizer(model.layers[2].param_quantizers)))
 
         baseline_output = model(random_input)
 
@@ -1483,10 +1461,11 @@ class TestBatchNormFoldToScale:
         #     assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
 
         # TODO: See message above
-        # assert model.layers[1].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[1].param_quantizers).is_enabled()
-        # assert not model.layers[2].output_quantizers[0].is_enabled()
-        # assert not get_wrappers_weight_or_bias_quantizer(model.layers[2].param_quantizers).is_enabled()
+        assert model.layers[1].output_quantizers[0].is_enabled()
+        assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
+        assert not model.layers[2].output_quantizers[0].is_enabled()
+        assert not np.all(np.vectorize(lambda x: x.is_enabled())(get_wrappers_weight_quantizer(model.layers[2].param_quantizers)))
+
 
         # Check batchnorm's output encoding is coped to fc's output encoding
         fc_output_encoding = model.layers[1].output_quantizers[0].encoding
@@ -1505,16 +1484,15 @@ class TestBatchNormFoldToScale:
         random_input = np.random.rand(*input_shape)
         _ = model(random_input)
 
-        sim = quantsim(model, random_input)
+        sim = create_quantsim_model_and_compute_encodings(model, random_input)
         model = sim.model
 
         # Check quantizers are enabled/disabled properly
-        # TODO: Currently there is a bug in QuatizationSimModel that needs to be fixed
-        # AIMET-2467
-        # assert not model.layers[1].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[1].param_quantizers).is_enabled()
-        # assert model.layers[2].output_quantizers[0].is_enabled()
-        # assert not get_wrappers_weight_or_bias_quantizer(model.layers[2].param_quantizers).is_enabled()
+        assert not model.layers[1].output_quantizers[0].is_enabled()
+        assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
+        assert model.layers[2].output_quantizers[0].is_enabled()
+        assert not np.all(np.vectorize(lambda x: x.is_enabled())(get_wrappers_weight_quantizer(model.layers[2].param_quantizers)))
+
 
         baseline_output = model(random_input)
 
@@ -1530,10 +1508,11 @@ class TestBatchNormFoldToScale:
         #     assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
 
         # TODO: See message above
-        # assert model.layers[1].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[1].param_quantizers).is_enabled()
-        # assert not model.layers[2].output_quantizers[0].is_enabled()
-        # assert not get_wrappers_weight_or_bias_quantizer(model.layers[2].param_quantizers).is_enabled()
+        assert model.layers[1].output_quantizers[0].is_enabled()
+        assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
+        assert not model.layers[2].output_quantizers[0].is_enabled()
+        assert not np.all(np.vectorize(lambda x: x.is_enabled())(get_wrappers_weight_quantizer(model.layers[2].param_quantizers)))
+
 
         # Check batchnorm's output encoding is coped to fc's output encoding
         fc_output_encoding = model.layers[1].output_quantizers[0].encoding
@@ -1545,7 +1524,7 @@ class TestBatchNormFoldToScale:
         random_input = np.random.rand(10, *model.input_shape[1:])
         _ = model(random_input)
 
-        sim = quantsim(model, random_input)
+        sim = create_quantsim_model_and_compute_encodings(model, random_input)
         model = sim.model
 
         baseline_output = model(random_input)
@@ -1586,7 +1565,7 @@ class TestBatchNormFoldToScale:
         random_input = np.random.rand(*input_shape)
         _ = model(random_input)
 
-        sim = quantsim(model, random_input)
+        sim = create_quantsim_model_and_compute_encodings(model, random_input)
 
         with pytest.raises(RuntimeError):
             fold_all_batch_norms_to_scale(sim)
@@ -1603,16 +1582,15 @@ class TestBatchNormFoldToScale:
         random_input = np.random.rand(*input_shape)
         _ = model(random_input)
 
-        sim = quantsim(model, random_input)
+        sim = create_quantsim_model_and_compute_encodings(model, random_input)
         model = sim.model
 
         # Check quantizers are enabled/disabled properly
-        # TODO: Currently there is a bug in QuatizationSimModel that needs to be fixed
-        # AIMET-2467
-        # assert not model.layers[1].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[1].param_quantizers).is_enabled()
-        # assert model.layers[2].output_quantizers[0].is_enabled()
-        # assert not get_wrappers_weight_or_bias_quantizer(model.layers[2].param_quantizers).is_enabled()
+        assert not model.layers[1].output_quantizers[0].is_enabled()
+        assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
+        assert model.layers[2].output_quantizers[0].is_enabled()
+        assert not np.all(np.vectorize(lambda x: x.is_enabled())(get_wrappers_weight_quantizer(model.layers[2].param_quantizers)))
+
 
         baseline_output = model(random_input)
         bn_pairs = fold_all_batch_norms_to_scale(sim)
@@ -1624,8 +1602,8 @@ class TestBatchNormFoldToScale:
         #     assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
 
         # Check quantizers are enabled/disabled proeprly
-        # assert model.layers[1].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[1].param_quantizers).is_enabled()
+        assert model.layers[1].output_quantizers[0].is_enabled()
+        assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
 
         conv_output_encoding = model.layers[1].output_quantizers[0].encoding
         delta = float((conv_output_encoding.max - conv_output_encoding.min)/255)
@@ -1644,16 +1622,15 @@ class TestBatchNormFoldToScale:
         random_input = np.random.rand(*input_shape)
         _ = model(random_input)
 
-        sim = quantsim(model, random_input)
+        sim = create_quantsim_model_and_compute_encodings(model, random_input)
         model = sim.model
 
         # Check quantizers are enabled/disabled properly
-        # TODO: Currently there is a bug in QuatizationSimModel that needs to be fixed
-        # AIMET-2467
-        # assert not model.layers[1].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[1].param_quantizers).is_enabled()
-        # assert model.layers[2].output_quantizers[0].is_enabled()
-        # assert not get_wrappers_weight_or_bias_quantizer(model.layers[2].param_quantizers).is_enabled()
+        assert not model.layers[1].output_quantizers[0].is_enabled()
+        assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
+        assert model.layers[2].output_quantizers[0].is_enabled()
+        assert not np.all(np.vectorize(lambda x: x.is_enabled())(get_wrappers_weight_quantizer(model.layers[2].param_quantizers)))
+
 
         baseline_output = model(random_input)
         layer_list = [(model.layers[1], model.layers[2])]
@@ -1666,8 +1643,8 @@ class TestBatchNormFoldToScale:
         #     assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
 
         # Check quantizers are enabled/disabled proeprly
-        # assert model.layers[1].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[1].param_quantizers).is_enabled()
+        assert model.layers[1].output_quantizers[0].is_enabled()
+        assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
 
         conv_output_encoding = model.layers[1].output_quantizers[0].encoding
         delta = float((conv_output_encoding.max - conv_output_encoding.min)/255)
@@ -1685,16 +1662,15 @@ class TestBatchNormFoldToScale:
         random_input = np.random.rand(*input_shape)
         _ = model(random_input)
 
-        sim = quantsim(model, random_input)
+        sim = create_quantsim_model_and_compute_encodings(model, random_input)
         model = sim.model
 
         # Check quantizers are enabled/disabled properly
-        # TODO: Currently there is a bug in QuatizationSimModel that needs to be fixed
-        # AIMET-2467
-        # assert model.layers[2].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[2].param_quantizers).is_enabled()
-        # assert model.layers[1].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[1].param_quantizers).is_enabled()
+        assert model.layers[2].output_quantizers[0].is_enabled()
+        assert np.all(np.vectorize(lambda x: x.is_enabled())(get_wrappers_weight_quantizer(model.layers[2].param_quantizers)))
+
+        assert model.layers[1].output_quantizers[0].is_enabled()
+        assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
 
         with pytest.raises(RuntimeError):
             fold_all_batch_norms_to_scale(sim)
@@ -1711,16 +1687,15 @@ class TestBatchNormFoldToScale:
         random_input = np.random.rand(*input_shape)
         _ = model(random_input)
 
-        sim = quantsim(model, random_input)
+        sim = create_quantsim_model_and_compute_encodings(model, random_input)
         model = sim.model
 
         # Check quantizers are enabled/disabled properly
-        # TODO: Currently there is a bug in QuatizationSimModel that needs to be fixed
-        # AIMET-2467
-        # assert model.layers[2].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[2].param_quantizers).is_enabled()
-        # assert model.layers[1].output_quantizers[0].is_enabled()
-        # assert get_wrappers_weight_or_bias_quantizer(model.layers[1].param_quantizers).is_enabled()
+        assert model.layers[2].output_quantizers[0].is_enabled()
+        assert np.all(np.vectorize(lambda x: x.is_enabled())(get_wrappers_weight_quantizer(model.layers[2].param_quantizers)))
+
+        assert model.layers[1].output_quantizers[0].is_enabled()
+        assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
 
         layer_list = [(model.layers[1], model.layers[2])]
 
@@ -1782,3 +1757,5 @@ class TestBatchNormFoldToScale:
         # TODO
         # for wrapper in model.layers[1:]:
         #     assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
+
+TestBatchNormFoldToScale().test_fold_bn_after_linear_layer_no_bias()

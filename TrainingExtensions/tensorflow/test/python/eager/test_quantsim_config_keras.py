@@ -159,6 +159,7 @@ class TestQuantSimConfig:
         assert len(layer_to_affected_tensor_quantizers_dict[dense1][3]) == 1
 
     def test_parse_config_file_defaults(self):
+        # UPDATE
         """
         Test that default quantization parameters are set correctly when using json config file
         """
@@ -313,6 +314,7 @@ class TestQuantSimConfig:
         if os.path.exists("./data/quantsim_config.json"):
             os.remove("./data/quantsim_config.json")
 
+    # UPDATE
     def test_parse_config_file_op_type(self):
         """
         Test that op specific quantization parameters are set correctly when using json config file
@@ -382,6 +384,7 @@ class TestQuantSimConfig:
         if os.path.exists("./data/quantsim_config.json"):
             os.remove("./data/quantsim_config.json")
 
+    # UPDATE
     def test_parse_config_file_op_type_conflict_case(self):
         """
         Test that op specific quantization parameters are set correctly when using json config file
@@ -634,3 +637,5 @@ class TestQuantSimConfig:
 
         if os.path.exists("./data/quantsim_config.json"):
             os.remove("./data/quantsim_config.json")
+
+TestQuantSimConfig().test_parse_config_file_defaults()

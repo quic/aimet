@@ -72,6 +72,7 @@ def clear_session() -> None:
 
 
 class TestQuantAnalyzer:
+    # UPDATE
     def test_perform_per_layer_analysis_by_enabling_quant_wrappers(self):
         """ test perform per layer analysis by enabling quant wrappers """
         model = keras_functional_conv_net()
@@ -101,6 +102,7 @@ class TestQuantAnalyzer:
             if os.path.isdir("./tmp/"):
                 shutil.rmtree("./tmp/")
 
+    # UPDATE??
     def test_perform_per_layer_analysis_by_disabling_quant_wrappers(self):
         """ test perform per layer analysis by disabling quant wrappers """
         model = keras_functional_conv_net()
@@ -213,7 +215,6 @@ class TestQuantAnalyzer:
             # Check if it is exported to correct html file.
             assert os.path.exists("./tmp/activations_pdf")
             assert os.path.exists("./tmp/weights_pdf")
-            assert os.path.isfile("./tmp/activations_pdf/conv2d_output_q0_0.html")
             assert os.path.isfile("./tmp/activations_pdf/p_re_lu_output_q0_0.html")
             assert os.path.isfile("./tmp/weights_pdf/conv2d/conv2d_conv2d-kernel_0.html")
         finally:

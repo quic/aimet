@@ -37,6 +37,7 @@
 # =============================================================================
 """ Utilities for parsing and applying quantsim configurations from json config file """
 from typing import List, Tuple, Dict, Union
+import tensorflow as tf
 
 from tensorflow.keras import layers
 
@@ -53,7 +54,7 @@ from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as
 from aimet_common.utils import AimetLogger
 import aimet_tensorflow.keras.utils.common as keras_common_utils
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
-from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QuantizerSettings
+from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQuantizer, ParamPerTensorQuantizer, \
     ParamPerChannelQuantizer
 from aimet_tensorflow.utils.constants import QUANT_ALLOWED_DTYPES
@@ -421,18 +422,73 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         Set supergroup specific configurations (fourth level of specificity in configuration file)
         :param supergroups_configs: Configurations for supergroups
         """
+        
+        def find_scale_foldable_bns(cg):
+            """
+            Find Batch Norms that can be folded to scale
+            """
+            conv_bn_pairs = []
+            
+            def handler(_, op_list):
+                conv, bn = op_list
+                conv_module = conv.get_module()
+                #Transposed depthwise convolutions are not supported for batchnorm folding
+                if isinstance(conv_module, layers.DepthwiseConv2D) and conv_module.groups != 1:
+                    return
+                conv_bn_pairs.append((conv, bn))
+        
+            patterns_with_callbacks = []
+            conv_types = ['Conv', 'ConvTranspose'] # TODO: Add Conv1d when supported on Keras
+            linear_types = ['Gemm']
+            
+            for op_type in conv_types + linear_types:
+                patterns_with_callbacks.append(PatternType(pattern=[op_type, 'BatchNormalization'],
+                                                           action=handler))
+ 
+            # Create graph searcher instance with connected graph and patterns to search
+            graph_searcher = GraphSearcher(cg, patterns_with_callbacks)
+            graph_searcher.find_all_patterns_in_graph_apply_actions()
+            return conv_bn_pairs
+
+        conv_bn_pairs = find_scale_foldable_bns(self._connected_graph)
+        foldable_bns = [bn for _, bn in conv_bn_pairs]
+
         patterns_with_callbacks = []
         for supergroup_config in supergroups_configs:
             callback = SupergroupConfigCallback(self._layer_to_config_dict)
             op_list = supergroup_config[ConfigDictKeys.OP_LIST]
-            patterns_with_callbacks.append(
-                PatternType(pattern=op_list, action=callback))
+            patterns_with_callbacks.append(PatternType(pattern=op_list, action=callback))
 
         if patterns_with_callbacks:
-            graph_searcher = GraphSearcher(
-                self._connected_graph, patterns_with_callbacks)
-            graph_searcher.find_all_patterns_in_graph_apply_actions()
+            graph_searcher = GraphSearcher(self._connected_graph, patterns_with_callbacks)
+            graph_searcher.find_all_patterns_in_graph_apply_actions(ignore=foldable_bns)
 
+        def fuse_config(conv: Op, bn: Op):
+            """
+            Fuse configs of conv and bn
+            
+            If conv output quantizers is enabled, disable it and enable output quantizer of BN instead
+            so that we fold batch norm to conv
+            """
+            conv_layer = conv.get_module()
+            bn_layer = bn.get_module()
+
+            if conv_layer not in self._layer_to_config_dict:
+                return
+
+            if bn_layer not in self._layer_to_config_dict:
+                return
+
+            self._layer_to_config_dict[bn_layer][ConfigDictKeys.IS_INPUT_QUANTIZED][SETTING] = False
+            self._layer_to_config_dict[bn_layer][ConfigDictKeys.PARAMS][ConfigDictKeys.IS_QUANTIZED][SETTING] = False
+
+            self._layer_to_config_dict[bn_layer][ConfigDictKeys.IS_OUTPUT_QUANTIZED][SETTING] = \
+                self._layer_to_config_dict[conv_layer][ConfigDictKeys.IS_OUTPUT_QUANTIZED][SETTING]
+            self._layer_to_config_dict[conv_layer][ConfigDictKeys.IS_OUTPUT_QUANTIZED][SETTING] = False
+
+        for conv, bn in conv_bn_pairs:
+            fuse_config(conv, bn)
+            
     def _set_model_input_configs(self, model_input_configs: ConfigType):
         """
         Set model input specific configurations (fifth level of specificity in configuration file)

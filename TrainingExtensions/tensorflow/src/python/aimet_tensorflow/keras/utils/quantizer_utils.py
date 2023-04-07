@@ -38,6 +38,8 @@
 """Quantizer utility"""
 from typing import List, Optional, Union
 
+import tensorflow as tf
+
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ParamPerChannelQuantizer, ParamPerTensorQuantizer, TensorQuantizer
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 
@@ -90,15 +92,47 @@ def enable_disable_quantizers(quantizers: List[TensorQuantizer],
         for quantizer in quantizers:
             quantizer.disable()
 
-def get_wrappers_weight_or_bias_quantizer(param_quantizers, get_bias=False) -> \
-    Optional[Union[ParamPerTensorQuantizer, ParamPerChannelQuantizer]]:
+def get_wrappers_weight_quantizer(param_quantizers: Union[List[ParamPerTensorQuantizer], List[ParamPerChannelQuantizer]]) -> \
+    Optional[Union[ParamPerTensorQuantizer, ParamPerChannelQuantizer,
+                   List[ParamPerTensorQuantizer], List[ParamPerChannelQuantizer]]]:
     """
-    Helper function to get a given wrappers weight or bias quantizer
+    Helper function to get a given wrappers weight quantizer
+    
+    :param param_quantizers: Quantizers to check
     """
-    weight_to_find = 'bias' if get_bias else 'kernel'
+    if isinstance(param_quantizers[0]._original_layer, tf.keras.layers.BatchNormalization):
+        quantizers_to_return = []
+        for quantizer in param_quantizers:
+            # To align with Torch side
+             if "gamma" in quantizer.name or "beta" in quantizer.name:
+                 quantizers_to_return.append(quantizer)
+        
+        if not quantizers_to_return:
+            raise AttributeError("Unable to find gamma and beta quantizers.")
+        return quantizers_to_return
+    
     for quantizer in param_quantizers:
-        if weight_to_find in quantizer._name: # pylint: disable=protected-access
+        if 'kernel' in quantizer._name: # pylint: disable=protected-access
             return quantizer
 
-    if weight_to_find == 'kernel':
-        raise AttributeError(f"Unable to find kernel quantizer.")
+    raise AttributeError(f"Unable to find kernel quantizer.")
+
+def get_wrappers_bias_quantizer(param_quantizers: Union[List[ParamPerTensorQuantizer], List[ParamPerChannelQuantizer]]) -> \
+        Optional[Union[ParamPerTensorQuantizer, ParamPerChannelQuantizer,
+                   List[ParamPerTensorQuantizer], List[ParamPerChannelQuantizer]]]:
+    """
+    Helper function to get a given wrappers bias quantizer
+    """
+    if isinstance(param_quantizers[0]._original_layer, tf.keras.layers.BatchNormalization):
+        quantizers_to_return = []
+        for quantizer in param_quantizers:
+            # To align with Torch side
+             if "moving_mean" in quantizer.name or "moving_var" in quantizer.name:
+                 quantizers_to_return.append(quantizer)
+
+        if not quantizers_to_return:
+            raise AttributeError("Unable to find moving_mean and moving_variance.")
+
+    for quantizer in param_quantizers:
+        if 'bias' in quantizer._name:
+            return quantizer
