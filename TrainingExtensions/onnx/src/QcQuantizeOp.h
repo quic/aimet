@@ -92,7 +92,4 @@ struct QcQuantizeOpGPU : Ort::CustomOpBase<QcQuantizeOpGPU, QcQuantizeKernel>
 #endif
 
 
-extern "C" ORT_EXPORT OrtStatus* ORT_API_CALL RegisterCustomOps(OrtSessionOptions* options, const OrtApiBase* api);
-
-
 #endif   // AIMET_MAIN_QCQUANTIZEOP_H

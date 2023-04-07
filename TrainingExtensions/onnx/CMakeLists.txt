@@ -44,9 +44,18 @@ add_library(OnnxCppOps SHARED
         src/QcQuantizeOp.h
         src/AimetOpUtils.h
         src/AimetOpUtils.cpp
+        src/RegisterCustomOps.h
+        src/RegisterCustomOps.cpp
         src/QcQuantizeInfo.cpp
         src/QcQuantizeInfo.h
-        src/QcQuantizeOp.cpp)
+        src/QcQuantizeOp.cpp
+        src/QcQuantizePerChannelOp.h
+        src/QcQuantizePerChannelOp.cpp
+        src/OnnxOpUtils.h
+        src/QuantizeDequantizeUtils.hpp
+        src/QuantizeDequantizeUtils.cpp
+        src/QuantizeDequantizeUtils.cu
+        )
 
 
 find_path(ONNXRUNTIME_INC "onnxruntime_cxx_api.h" PATH_SUFFIXES onnxruntime_headers/include)

@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -36,22 +36,21 @@
 //
 //==============================================================================
 
-#include "QcQuantizeOp.h"
+
 #include "AimetOpUtils.h"
+#include "QcQuantizePerChannelOp.h"
 
 
-#include <cmath>
-#include <mutex>
-#include <vector>
+using namespace std;
 
 
 #ifdef ONNX_CUDA
-static OnnxCudaAllocator _allocator;
+static OnnxCudaAllocator cuda_allocator;
 #endif
+static OnnxCpuAllocator cpu_allocator;
 
 
-
-QcQuantizeKernel::QcQuantizeKernel(const OrtApi* api, const OrtKernelInfo* info, bool useCuda) :
+QcQuantizePerChannelKernel::QcQuantizePerChannelKernel(const OrtApi* api, const OrtKernelInfo* info, bool useCuda) :
     api_(*api), info_(info), useCuda(useCuda)
 {
     quant_info =
@@ -59,7 +58,7 @@ QcQuantizeKernel::QcQuantizeKernel(const OrtApi* api, const OrtKernelInfo* info,
 }
 
 
-void QcQuantizeKernel::Compute(OrtKernelContext* context)
+void QcQuantizePerChannelKernel::Compute(OrtKernelContext* context)
 {
     // Setup inputs
     const OrtValue* input = api_.KernelContext_GetInput(context, 0);
@@ -71,9 +70,10 @@ void QcQuantizeKernel::Compute(OrtKernelContext* context)
     OrtTensorTypeAndShapeInfo* output_info = api_.GetTensorTypeAndShape(output);
     size_t size                            = api_.GetTensorShapeElementCount(output_info);
 
-    DlQuantization::TfEncoding* encoding = quant_info->encoding[0];
-
+    vector<DlQuantization::TfEncoding*> encodings = quant_info->encoding;
     DlQuantization::TensorQuantizerOpMode op_mode = quant_info->opMode;
+    int axis                                      = quant_info->channelAxis;
+
     // Disable unused quantizers
     if (!quant_info->enabled)
     {
@@ -82,100 +82,100 @@ void QcQuantizeKernel::Compute(OrtKernelContext* context)
 
     api_.ReleaseTensorTypeAndShapeInfo(output_info);
 
-    DlQuantization::IAllocator* allocator = nullptr;
+    DlQuantization::IAllocator* allocator = &cpu_allocator;
 #ifdef ONNX_CUDA
     if (useCuda)
     {
-        allocator = &_allocator;
+        allocator = &cuda_allocator;
         cudaDeviceSynchronize();
     }
 #endif
 
     if (quant_info->isIntDataType)
-        modeSpecificActionInt(input_data, size, result, quant_info->tensorQuantizerRef[0], op_mode, encoding,
-                              quant_info->useSymmetricEncoding, allocator, useCuda);
-    else
-        modeSpecificActionFloat(input_data, size, result, op_mode, allocator, useCuda);
+    {
+        modeSpecificActionPerChannelInt(input_data, size, result, axis, dimensions, quant_info->tensorQuantizerRef,
+                                        op_mode, encodings, quant_info->useSymmetricEncoding, allocator, useCuda);
+    }
 }
 
 
-void* QcQuantizeOp::CreateKernel(const OrtApi& api, const OrtKernelInfo* info)
+void* QcQuantizePerChannelOp::CreateKernel(const OrtApi& api, const OrtKernelInfo* info)
 {
-    return new QcQuantizeKernel(&api, info, false);
+    return new QcQuantizePerChannelKernel(&api, info, false);
 };
 
 
-const char* QcQuantizeOp::GetName()
+const char* QcQuantizePerChannelOp::GetName()
 {
-    return "QcQuantizeOp";
+    return "QcQuantizePerChannelOp";
 };
 
 
-size_t QcQuantizeOp::GetInputTypeCount()
-{
-    return 1;
-};
-
-
-ONNXTensorElementDataType QcQuantizeOp::GetInputType(size_t /*index*/)
-{
-    return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
-};
-
-
-size_t QcQuantizeOp::GetOutputTypeCount()
+size_t QcQuantizePerChannelOp::GetInputTypeCount()
 {
     return 1;
 };
 
 
-ONNXTensorElementDataType QcQuantizeOp::GetOutputType(size_t /*index*/)
+ONNXTensorElementDataType QcQuantizePerChannelOp::GetInputType(size_t /*index*/)
 {
     return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
 };
 
-const char* QcQuantizeOp::GetExecutionProviderType() const
+
+size_t QcQuantizePerChannelOp::GetOutputTypeCount()
+{
+    return 1;
+};
+
+
+ONNXTensorElementDataType QcQuantizePerChannelOp::GetOutputType(size_t /*index*/)
+{
+    return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
+};
+
+const char* QcQuantizePerChannelOp::GetExecutionProviderType() const
 {
     return "CPUExecutionProvider";
 };
 
 #ifdef ONNX_CUDA
-void* QcQuantizeOpGPU::CreateKernel(const OrtApi& api, const OrtKernelInfo* info)
+void* QcQuantizePerChannelOpGPU::CreateKernel(const OrtApi& api, const OrtKernelInfo* info)
 {
-    return new QcQuantizeKernel(&api, info, true);
+    return new QcQuantizePerChannelKernel(&api, info, true);
 };
 
 
-const char* QcQuantizeOpGPU::GetName()
+const char* QcQuantizePerChannelOpGPU::GetName()
 {
-    return "QcQuantizeOp";
+    return "QcQuantizePerChannelOp";
 };
 
 
-size_t QcQuantizeOpGPU::GetInputTypeCount()
-{
-    return 1;
-};
-
-
-ONNXTensorElementDataType QcQuantizeOpGPU::GetInputType(size_t /*index*/)
-{
-    return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
-};
-
-
-size_t QcQuantizeOpGPU::GetOutputTypeCount()
+size_t QcQuantizePerChannelOpGPU::GetInputTypeCount()
 {
     return 1;
 };
 
 
-ONNXTensorElementDataType QcQuantizeOpGPU::GetOutputType(size_t /*index*/)
+ONNXTensorElementDataType QcQuantizePerChannelOpGPU::GetInputType(size_t /*index*/)
 {
     return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
 };
 
-const char* QcQuantizeOpGPU::GetExecutionProviderType() const
+
+size_t QcQuantizePerChannelOpGPU::GetOutputTypeCount()
+{
+    return 1;
+};
+
+
+ONNXTensorElementDataType QcQuantizePerChannelOpGPU::GetOutputType(size_t /*index*/)
+{
+    return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
+};
+
+const char* QcQuantizePerChannelOpGPU::GetExecutionProviderType() const
 {
     return "CUDAExecutionProvider";
 };

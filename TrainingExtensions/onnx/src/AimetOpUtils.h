@@ -39,6 +39,9 @@
 #ifndef AIMET_MAIN_AIMETOPUTILS_H
 #define AIMET_MAIN_AIMETOPUTILS_H
 
+#include "OnnxOpUtils.h"
+#include "QuantizeDequantizeUtils.hpp"
+#include <DlQuantization/TensorQuantizer.h>
 #include "DlQuantization/TensorQuantizerOpFacade.h"
 #include "DlQuantization/Quantization.hpp"
 #include "DlQuantization/Fp16Quantization.hpp"
@@ -51,6 +54,39 @@
 #include <cuda_runtime_api.h>
 #endif
 
+#ifdef ONNX_CUDA
+class OnnxCudaAllocator : public DlQuantization::IAllocator
+{
+public:
+    void* allocateRaw(size_t bytes) override
+    {
+        void* ptr;
+        cudaMalloc(&ptr, bytes);
+        return ptr;
+    }
+
+    void deleteRaw(void* ptr) override
+    {
+        cudaFree(ptr);
+    }
+};
+#endif
+
+class OnnxCpuAllocator : public DlQuantization::IAllocator
+{
+public:
+    void* allocateRaw(size_t bytes) override
+    {
+        void* ptr;
+        ptr = malloc(bytes);
+        return ptr;
+    }
+
+    void deleteRaw(void* ptr) override
+    {
+        free(ptr);
+    }
+};
 
 template <typename T>
 void copyInputTensorsToOutputTensors(const T* inTensor, size_t count, T* outTensor, bool useCuda);
@@ -60,7 +96,7 @@ void quantizeDequantizeFp16Cpu(const float* in, int cnt, float* out);
 
 template <typename T>
 void modeSpecificActionInt(const T* inTensor, size_t count, T* outTensor,
-                           DlQuantization::TensorQuantizerOpFacade* tensorQuantizer,
+                           DlQuantization::TensorQuantizer* tensorQuantizer,
                            const DlQuantization::TensorQuantizerOpMode opMode, DlQuantization::TfEncoding* encoding,
                            const bool useSymmetricEncoding, DlQuantization::IAllocator* allocator, bool useCuda)
 {
@@ -92,6 +128,72 @@ void modeSpecificActionInt(const T* inTensor, size_t count, T* outTensor,
     {
         tensorQuantizer->quantizeDequantize(inTensor, count, outTensor, encoding->min, encoding->max, encoding->bw,
                                             useCuda);
+        break;
+    }
+    case DlQuantization::TensorQuantizerOpMode::passThrough:
+    {
+        copyInputTensorsToOutputTensors(inTensor, count, outTensor, useCuda);
+        break;
+    }
+    default:
+    {
+        throw std::exception();
+    }
+    }
+}
+
+
+template <typename T>
+void modeSpecificActionPerChannelInt(const T* inTensor, size_t count, T* outTensor, int axis, OrtTensorDimensions& dims,
+                                     std::vector<DlQuantization::TensorQuantizer*>& tensorQuantizers,
+                                     const DlQuantization::TensorQuantizerOpMode opMode,
+                                     std::vector<DlQuantization::TfEncoding*>& encodings,
+                                     const bool useSymmetricEncoding, DlQuantization::IAllocator* allocator,
+                                     bool useCuda)
+{
+    size_t num_channels = dims[axis];
+    size_t channel_size = count / num_channels;
+    T* channel_buffer;
+
+    switch (opMode)
+    {
+    case DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize:
+    {
+        channel_buffer = (T*) allocator->allocateRaw(sizeof(T) * channel_size);
+        for (int ch = 0; ch < num_channels; ch++)
+        {
+            auto tensorQuantizer = tensorQuantizers[ch];
+
+            sliceTensorAlongAxis(inTensor, dims, axis, ch, channel_buffer, useCuda);
+            tensorQuantizer->resetEncodingStats();
+            tensorQuantizer->updateStats(channel_buffer, channel_size, useCuda, allocator);
+            DlQuantization::TfEncoding initial_encoding =
+                tensorQuantizer->computeEncoding(encodings[ch]->bw, useSymmetricEncoding);
+            encodings[ch]->min    = initial_encoding.min;
+            encodings[ch]->max    = initial_encoding.max;
+            encodings[ch]->offset = initial_encoding.offset;
+            encodings[ch]->delta  = initial_encoding.delta;
+        }
+        quantizeDequantizePerChannel(inTensor, dims, axis, outTensor, encodings, tensorQuantizers, useCuda, allocator);
+        allocator->deleteRaw(channel_buffer);
+        break;
+    }
+    case DlQuantization::TensorQuantizerOpMode::updateStats:
+    {
+        channel_buffer = (T*) allocator->allocateRaw(sizeof(T) * channel_size);
+        for (int ch = 0; ch < num_channels; ch++)
+        {
+            auto tensorQuantizer = tensorQuantizers[ch];
+            sliceTensorAlongAxis(inTensor, dims, axis, ch, channel_buffer, useCuda);
+            tensorQuantizer->updateStats(channel_buffer, channel_size, useCuda, allocator);
+        }
+        allocator->deleteRaw(channel_buffer);
+        copyInputTensorsToOutputTensors(inTensor, count, outTensor, useCuda);
+        break;
+    }
+    case DlQuantization::TensorQuantizerOpMode::quantizeDequantize:
+    {
+        quantizeDequantizePerChannel(inTensor, dims, axis, outTensor, encodings, tensorQuantizers, useCuda, allocator);
         break;
     }
     case DlQuantization::TensorQuantizerOpMode::passThrough:

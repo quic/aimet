@@ -36,34 +36,63 @@
 //
 //==============================================================================
 
-#pragma once
+#ifndef QC_QUANTIZE_PER_CHANNEL_OP_H
+#define QC_QUANTIZE_PER_CHANNEL_OP_H
 
-#include <DlQuantization/IQuantizationEncodingAnalyzer.hpp>
+#define ORT_API_MANUAL_INIT
+#include "onnxruntime_cxx_api.h"
+#undef ORT_API_MANUAL_INIT
+
+#include "QcQuantizeInfo.h"
+#include <DlQuantization/ITensorQuantizationSim.h>
+#include <DlQuantization/Quantization.hpp>
 #include <DlQuantization/QuantizerFactory.hpp>
 #include <DlQuantization/TensorQuantizer.h>
-#include <string>
+#include <DlQuantization/TensorQuantizerOpFacade.h>
+
+#ifdef ONNX_CUDA
+#include <cuda_runtime_api.h>
+#endif
 
 
-struct QcQuantizeInfo
+struct QcQuantizePerChannelKernel
 {
-    void set_tensor_quantizer(std::vector<uint64_t>& addr)
-    {
-        tensorQuantizerRef = std::vector<DlQuantization::TensorQuantizer*>();
-        for(uint64_t i : addr){
-            tensorQuantizerRef.push_back(reinterpret_cast<DlQuantization::TensorQuantizer*>(i));
-        }
-    }
-    std::vector<DlQuantization::TensorQuantizer*> get_tensor_quantizer()
-    {
-        return tensorQuantizerRef;
-    }
+public:
+    QcQuantizePerChannelKernel(const OrtApi* api, const OrtKernelInfo* info, bool useCuda);
 
-    std::vector<DlQuantization::TensorQuantizer*> tensorQuantizerRef;
-    std::vector<DlQuantization::TfEncoding*> encoding;
-    DlQuantization::TensorQuantizerOpMode opMode;
-    bool useSymmetricEncoding;
-    bool enabled;
-    bool isIntDataType;
-    int channelAxis;
-    std::string name;
+    void Compute(OrtKernelContext* context);
+
+private:
+    const OrtKernelInfo* info_;
+    Ort::CustomOpApi api_;
+    struct QcQuantizeInfo* quant_info;
+    bool useCuda;
 };
+
+
+struct QcQuantizePerChannelOp : Ort::CustomOpBase<QcQuantizePerChannelOp, QcQuantizePerChannelKernel>
+{
+    static void* CreateKernel(const OrtApi& api, const OrtKernelInfo* info);
+    static const char* GetName();
+    static size_t GetInputTypeCount();
+    static ONNXTensorElementDataType GetInputType(size_t index);
+    static size_t GetOutputTypeCount();
+    static ONNXTensorElementDataType GetOutputType(size_t index);
+    const char* GetExecutionProviderType() const;
+};
+
+
+#ifdef ONNX_CUDA
+struct QcQuantizePerChannelOpGPU : Ort::CustomOpBase<QcQuantizePerChannelOpGPU, QcQuantizePerChannelKernel>
+{
+    static void* CreateKernel(const OrtApi& api, const OrtKernelInfo* info);
+    static const char* GetName();
+    static size_t GetInputTypeCount();
+    static ONNXTensorElementDataType GetInputType(size_t index);
+    static size_t GetOutputTypeCount();
+    static ONNXTensorElementDataType GetOutputType(size_t index);
+    const char* GetExecutionProviderType() const;
+};
+#endif
+
+#endif   // QC_QUANTIZE_PER_CHANNEL_OP_H

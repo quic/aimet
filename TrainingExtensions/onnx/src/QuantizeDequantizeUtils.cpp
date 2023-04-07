@@ -36,34 +36,42 @@
 //
 //==============================================================================
 
-#pragma once
+#include "QuantizeDequantizeUtils.hpp"
 
-#include <DlQuantization/IQuantizationEncodingAnalyzer.hpp>
-#include <DlQuantization/QuantizerFactory.hpp>
-#include <DlQuantization/TensorQuantizer.h>
-#include <string>
-
-
-struct QcQuantizeInfo
+template <typename DTYPE>
+void quantizeDequantizePerChannelCPU(const DTYPE* inTensor, DTYPE* outTensor, std::vector<int64_t>& dims, int axis,
+                                     std::vector<DlQuantization::TfEncoding*>& encodings)
 {
-    void set_tensor_quantizer(std::vector<uint64_t>& addr)
+    int64_t channels = dims[axis];
+    int64_t num_el   = 1;
+    for (long dim: dims)
     {
-        tensorQuantizerRef = std::vector<DlQuantization::TensorQuantizer*>();
-        for(uint64_t i : addr){
-            tensorQuantizerRef.push_back(reinterpret_cast<DlQuantization::TensorQuantizer*>(i));
+        num_el *= dim;
+    }
+
+    int64_t innerDims = 1;
+    for (int i = 0; i < dims.size(); i++)
+    {
+        if (i > axis)
+        {
+            innerDims *= dims[i];
         }
     }
-    std::vector<DlQuantization::TensorQuantizer*> get_tensor_quantizer()
-    {
-        return tensorQuantizerRef;
-    }
 
-    std::vector<DlQuantization::TensorQuantizer*> tensorQuantizerRef;
-    std::vector<DlQuantization::TfEncoding*> encoding;
-    DlQuantization::TensorQuantizerOpMode opMode;
-    bool useSymmetricEncoding;
-    bool enabled;
-    bool isIntDataType;
-    int channelAxis;
-    std::string name;
-};
+    for (long idx = 0; idx < num_el; idx++)
+    {
+        int64_t chanIdx = (idx / innerDims) % channels;
+        DTYPE delta = encodings[chanIdx]->delta;
+
+        // Saturate
+        DTYPE out = fmax(fmin(inTensor[idx], encodings[chanIdx]->max), encodings[chanIdx]->min);
+        // Scale
+        out = out / delta;
+        // Round
+        out = roundf(out) * delta;
+        outTensor[idx] = out;
+    }
+}
+
+template void quantizeDequantizePerChannelCPU(const float* inTensor, float* outTensor, std::vector<int64_t>& dims,
+                                              int axis, std::vector<DlQuantization::TfEncoding*>& encodings);

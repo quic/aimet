@@ -36,34 +36,19 @@
 //
 //==============================================================================
 
-#pragma once
+#ifndef AIMET_REGISTERCUSTOMOPS_H
+#define AIMET_REGISTERCUSTOMOPS_H
 
-#include <DlQuantization/IQuantizationEncodingAnalyzer.hpp>
-#include <DlQuantization/QuantizerFactory.hpp>
-#include <DlQuantization/TensorQuantizer.h>
-#include <string>
+#define ORT_API_MANUAL_INIT
+#include "onnxruntime_cxx_api.h"
+#undef ORT_API_MANUAL_INIT
+
+#include "OnnxOpUtils.h"
+#include "QcQuantizeOp.h"
+#include "QcQuantizePerChannelOp.h"
 
 
-struct QcQuantizeInfo
-{
-    void set_tensor_quantizer(std::vector<uint64_t>& addr)
-    {
-        tensorQuantizerRef = std::vector<DlQuantization::TensorQuantizer*>();
-        for(uint64_t i : addr){
-            tensorQuantizerRef.push_back(reinterpret_cast<DlQuantization::TensorQuantizer*>(i));
-        }
-    }
-    std::vector<DlQuantization::TensorQuantizer*> get_tensor_quantizer()
-    {
-        return tensorQuantizerRef;
-    }
+extern "C" ORT_EXPORT OrtStatus* ORT_API_CALL RegisterCustomOps(OrtSessionOptions* options, const OrtApiBase* api);
 
-    std::vector<DlQuantization::TensorQuantizer*> tensorQuantizerRef;
-    std::vector<DlQuantization::TfEncoding*> encoding;
-    DlQuantization::TensorQuantizerOpMode opMode;
-    bool useSymmetricEncoding;
-    bool enabled;
-    bool isIntDataType;
-    int channelAxis;
-    std::string name;
-};
+
+#endif   // AIMET_REGISTERCUSTOMOPS_H
