@@ -138,7 +138,7 @@ def quant_analyzer_example():
 
     # Approximately 256 images/samples are recommended for MSE loss analysis. So, if the dataset
     # has batch_size of 64, then 4 number of batches leads to 256 images/samples.
-    quant_analyzer.enable_per_layer_mse_loss(unlabeled_dataset=unlabeled_dataset)
+    quant_analyzer.enable_per_layer_mse_loss(unlabeled_dataset=unlabeled_dataset, num_batches=4)
     # End step 4
 
     # Step 5. Run QuantAnalyzer
