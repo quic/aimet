@@ -184,7 +184,7 @@ def find_all_batch_norms_to_fold(sess: tf.compat.v1.Session, start_op_names: Uni
             elif bn_info.input_bn:
                 if bn_info.input_bn not in marked_bn_set:
                     if return_bn_conn_op:
-                        bn_conv_linear_pairs.append((conv_linear_op, bn_info.output_bn, True))
+                        bn_conv_linear_pairs.append((conv_linear_op, bn_info.input_bn, True))
                     else:
                         bn_conv_linear_pairs.append((conv_linear_op, bn_info.input_bn.get_tf_op_with_io_tensor(), False))
                     marked_bn_set.add(bn_info.input_bn)

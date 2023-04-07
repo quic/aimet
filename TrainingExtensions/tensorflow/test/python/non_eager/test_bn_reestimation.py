@@ -35,17 +35,11 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
 import pytest
-import logging
 import os
-
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-
-import argparse
 import logging
-from typing import List, Callable, Any
-
-import json
 import numpy as np
 import tensorflow as tf
 
@@ -294,8 +288,7 @@ class TestBNReEstimation:
 
 
     def _reestimate_and_compare_results(self, sess_sim, sess_fp32, bn_re_restimation_dataset, bn_num_batches, input_ops_name, output_ops_name):
-        bn_mean_var_tf_var_list, bn_momentum_tf_var_list, bn_training_tf_var_list = _get_all_tf_bn_vars_list(
-            sess_sim, input_ops_name, output_ops_name)
+        bn_mean_var_tf_var_list, bn_momentum_tf_var_list, bn_training_tf_var_list = _get_all_tf_bn_vars_list(sess_sim)
 
         model_inputs= sess_sim.session.graph.get_tensor_by_name(input_ops_name[0] + ':0')
 
