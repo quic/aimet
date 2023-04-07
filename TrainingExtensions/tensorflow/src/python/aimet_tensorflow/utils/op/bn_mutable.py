@@ -85,6 +85,7 @@ def modify_sess_bn_mutable(sess: tf.compat.v1.Session,
     """
     conn_graph = ConnectedGraph(sess.graph, start_op_names, output_op_names)
     bn_ops = tuple(get_active_bn_ops(conn_graph))
+    graph_def = sess.graph.as_graph_def()
 
     with sess.graph.as_default():
         if training_tf_placeholder:
@@ -103,7 +104,6 @@ def modify_sess_bn_mutable(sess: tf.compat.v1.Session,
             gamma_init = tf.compat.v1.constant_initializer(gamma, dtype=tf.float32)
 
             # Get momentum and epsilon. Since both are compiled inside the graph, use graph_def.
-            graph_def = sess.graph.as_graph_def()
             epsilon = _get_bn_epsilon(graph_def, bn_op)
             momentum = _get_bn_momentum(graph_def, bn_op)
             momentum_var = tf.Variable(momentum, trainable=False, name=new_bn_name + _BN_MOMENTUM_NAME)
