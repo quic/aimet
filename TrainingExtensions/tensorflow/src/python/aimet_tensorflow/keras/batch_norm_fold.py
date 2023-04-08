@@ -39,22 +39,19 @@
 """ Utility for batch norm fold in tf 2.x """
 from collections import OrderedDict
 from typing import Iterable, Optional, Tuple, Union, List, Dict, Set
-from enum import IntEnum
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
 from tensorflow.python.keras.engine.functional import Functional
 from tensorflow.python.keras.layers.core import TFOpLambda
-from aimet_common.defs import QuantScheme, MAP_ROUND_MODE_TO_PYMO, MAP_QUANT_SCHEME_TO_PYMO
+from aimet_common.defs import QuantScheme, MAP_ROUND_MODE_TO_PYMO
 
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper
-from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ParamPerChannelQuantizer, ParamPerTensorQuantizer
+from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ParamPerTensorQuantizer
 from aimet_tensorflow.keras.utils import common
-from aimet_tensorflow.keras.utils.op.batchnorm import BNUtils
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
-from aimet_tensorflow.keras.quant_sim.rebuild_quantsim_model import RebuiltQuantSimModelFactory
 from aimet_tensorflow.keras.utils.quantizer_utils import get_wrappers_bias_quantizer, get_wrappers_weight_quantizer
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
@@ -68,7 +65,7 @@ LayerType = Union[
 _supported_layers = LayerType.__args__
 
 PairType = Union[Tuple[LayerType, tf.keras.layers.BatchNormalization, bool],
-                  Tuple[tf.keras.layers.BatchNormalization, LayerType, bool]]
+                 Tuple[tf.keras.layers.BatchNormalization, LayerType, bool]]
 
 BatchNormType = tf.keras.layers.BatchNormalization
 _supported_batchnorms = BatchNormType
@@ -78,8 +75,7 @@ LinearType = tf.keras.layers.Dense
 ConvType = tf.keras.layers.Conv2D
 FlattenType = Union[tf.keras.layers.Flatten, tf.keras.layers.Reshape]
 
-MAP_PYMO_TO_ROUND_MODE   = {v: k for k, v in MAP_ROUND_MODE_TO_PYMO.items()  }
-MAP_PYMO_TO_QUANT_SCHEME = {v: k for k, v in MAP_QUANT_SCHEME_TO_PYMO.items()}
+MAP_PYMO_TO_ROUND_MODE = {v: k for k, v in MAP_ROUND_MODE_TO_PYMO.items()}
 def _check_layer_to_find_pattern(cur_layer: tf.keras.layers.Layer,
                                  conv_linear_with_bn_dict: Dict[Union[ConvType, LinearType],
                                                                 List[Union[None, BatchNormType]]],
@@ -377,34 +373,14 @@ class PassThroughOp(tf.keras.layers.Layer):
         """
         return inputs
 
-def _delete_all_bn_from_quantization_sim_model(sim_model: QuantizationSimModel,
-                                               bn_layers_to_remove: List[tf.keras.layers.BatchNormalization]) -> QuantizationSimModel:
-    """
-    This function will remove ALL batch normalization layers passed in via the bn_layers_to_remove parameter in the 
-    Quantization Sim Model (sim_model). This function will also move any output quantizers from the batch norm being removed 
-    to it's conv pair. This use case is specific the batch normalization reestimation.
-    
-    :param sim_model: The Quantization Sim Model to remove batch normalization layers from
-    :param bn_layers_to_remove: The list of batch normalization layers to remove
-    :return: A Quantization Sim Model with the provided batch normalization layers removed
-    """
-    # Call below function on original model, then modify rebuild_model???
-    rebuilt_quantsim_model_worker = RebuiltQuantSimModelFactory(sim_model)
-
-    original_model_without_wrappers_with_bn_folded = _delete_bn_from_functional(sim_model._model_without_wrappers, bn_layers_to_remove) # pylint: disable=protected-access
-
-    rebuilt_quantsim_model_worker.rebuild_model_for_bn_reestimation(original_model_without_wrappers_with_bn_folded)
-    _logger.debug("Batch Normalization layers removed from QuantizationSimModel.")
-
-
-# pylint: disable=too-many-branches
+# pylint: disable=too-many-branches, protected-access
 def _delete_bn_from_functional(model: tf.keras.Model,
                                bn_layers_to_remove: List[tf.keras.layers.BatchNormalization]) -> tf.keras.Model:
     """
     This function is used to remove ALL batch normalization layers from a functional model passed via the
     bn_layers_to_remove parameter. Removing in place is not possible for functional models as the layers inbound and
     outbound connections are immutable. This function returns a new model with the batch normalization layers removed.
-    
+
     :param model: Model to remove bn_layers from
     :param bn_layers_to_remove: List of batch normalization layers to remove from the model
     :return: A new model with the batch normalization layers removed
@@ -427,7 +403,8 @@ def _delete_bn_from_functional(model: tf.keras.Model,
     #
     #
 
-    bn_layers_to_remove_names = [layer.name for layer in bn_layers_to_remove]
+    def wrapped_bn_layer_in_bns_to_remove(layer: tf.keras.layers.Layer) -> bool:
+        return isinstance(layer, QcQuantizeWrapper) and layer._layer_to_wrap in bn_layers_to_remove
 
     INBOUND_NODES = 'inbound_nodes'
     OUTBOUND_TENSORS = 'outbound_tensors'
@@ -454,7 +431,6 @@ def _delete_bn_from_functional(model: tf.keras.Model,
 
     # Step 2: Create a new model with the batch normalization layers removed by iterating through the layers in the model
     # and using the inbound and outbound connections to rerouting around the batch normalization layers.
-
     model_outputs = []
     for current_layer in model.layers:
         if isinstance(current_layer, tf.keras.layers.InputLayer):
@@ -468,7 +444,7 @@ def _delete_bn_from_functional(model: tf.keras.Model,
         layer_input = layer_input[0] if len(layer_input) == 1 else layer_input
 
         # Reroute around batch normalization layers if the layer is in the list of layers to remove
-        if current_layer in bn_layers_to_remove or current_layer.name in bn_layers_to_remove_names:
+        if current_layer in bn_layers_to_remove or wrapped_bn_layer_in_bns_to_remove(current_layer):
             _logger.debug("Removing Batch Normalization layer %s", current_layer.name)
 
             for outbound_node in current_layer._outbound_nodes:  # pylint: disable=protected-access
@@ -478,7 +454,7 @@ def _delete_bn_from_functional(model: tf.keras.Model,
                 # ReLU's inputs with [conv1]
 
                 all_batch_norms_inbound_layers_names = \
-                    [inbound_node.inbound_layers.name for inbound_node in current_layer._inbound_nodes]  # pylint: disable=protected-access
+                    [inbound_node.inbound_layers.name for inbound_node in current_layer._inbound_nodes]
 
                 # Go through all the outbound layers of the batch normalization layer and replace the batch normalization
                 # layer name with the input layer names of the batch normalization layer.
@@ -598,20 +574,20 @@ def _delete_all_bns_from_model(model: Union[tf.keras.Model, tf.keras.layers.Laye
     :param bn_layers: bn layers that should be removed
     :return: new model with bn layers removed, if model is functional else None
     """
+    if bn_layers:
+        # if model_contains_only_quantize_wrappers(model):
+        #     return _delete_all_bn_from_quantization_sim_model(model, bn_layers)
 
-    # if isinstance(model, QuantizationSimModel):
-    #     return _delete_all_bn_from_quantization_sim_model(model, bn_layers)
+        if isinstance(model, Functional) and not isinstance(model, tf.keras.Sequential):
+            return _delete_bn_from_functional(model, bn_layers)
 
-    if isinstance(model, Functional) and not isinstance(model, tf.keras.Sequential) and bn_layers:
-        return _delete_bn_from_functional(model, bn_layers)
+        module_to_name_map = common.module_to_name_map(model)
 
-    module_to_name_map = common.module_to_name_map(model)
-
-    for bn_layer in bn_layers:
-        if bn_layer in module_to_name_map:
-            _delete_bn_from_model_subclassing(module_to_name_map, bn_layer)
-        else:
-            _delete_bn_for_non_subclassed_model(model, bn_layer)
+        for bn_layer in bn_layers:
+            if bn_layer in module_to_name_map:
+                _delete_bn_from_model_subclassing(module_to_name_map, bn_layer)
+            else:
+                _delete_bn_for_non_subclassed_model(model, bn_layer)
 
 def _find_all_batch_norms_to_fold(model: tf.keras.Model) -> List[PairType]:
     """
@@ -668,14 +644,15 @@ def fold_all_batch_norms(model: tf.keras.Model) \
 
     return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs], model
 
-#pylint: disable=protected-access
-def fold_all_batch_norms_to_scale(sim: QuantizationSimModel) -> List[Tuple[QcQuantizeWrapper, QcQuantizeWrapper]]:
+# pylint: disable=protected-access
+def fold_all_batch_norms_to_scale(sim: QuantizationSimModel) -> \
+    Tuple[List[Tuple[QcQuantizeWrapper, QcQuantizeWrapper]], tf.keras.Model]:
     """
     Fold all batch_norm layers in a model into the quantization scale parameter
     of the corresponding conv layers
 
     :param sim: quantized keras model to fold all batch norms
-    :return: A list of pairs of layers [(Conv/Linear, BN layer that got folded)]
+    :return: A list of pairs of layers [(Conv/Linear, BN layer that got folded)] and the bn folded model
     """
 
     assert sim.model is not None
@@ -695,9 +672,10 @@ def fold_all_batch_norms_to_scale(sim: QuantizationSimModel) -> List[Tuple[QcQua
         (quant_wrappers[bn], quant_wrappers[conv]) for bn, conv in bn_conv_pairs
     ]
 
-    _fold_given_batch_norms(sim.model, conv_bn_pairs, bn_conv_pairs)
+    bn_fold_model = _fold_given_batch_norms(sim.model, conv_bn_pairs, bn_conv_pairs)
+    bn_fold_model = bn_fold_model if bn_fold_model else sim.model
 
-    return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs]
+    return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs], bn_fold_model
 
 def fold_given_batch_norms(model: Union[tf.keras.Model, QuantizationSimModel], layer_pairs: List[PairType]) -> Optional[tf.keras.Model]:
     """
@@ -789,7 +767,7 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
     :param conv_wrapper: QcQuantizeWrapper that wraps conv or linear layer
     :param bn_wrapper: QcQuantizeWrapper that wraps the Batch Norm layer
     """
-
+    # pylint: disable=protected-access, bad-whitespace, too-many-statements, too-many-locals
     conv = conv_wrapper._layer_to_wrap
     bn = bn_wrapper._layer_to_wrap
 
@@ -826,12 +804,6 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
     if isinstance(encodings, libpymo.TfEncoding):
         encodings = [encodings]
 
-    # Grouped convs?
-    # if conv.groups != 1:
-    #     raise _BatchNormFoldingNotSupported(
-    #         "BatchNorm folding to scale is not supported for grouped "
-    #     )
-
     with bn_wrapper._quantize_params():
         _fold_to_weight(conv, bn, fold_backward=True)
 
@@ -857,7 +829,10 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
     # Copy batchnorm's output quantizers to conv output quantizers
     for conv_output_quantizer, bn_output_quantizer in \
             zip(conv_wrapper.output_quantizers, bn_wrapper.output_quantizers):
-        conv_output_quantizer.enable() if bn_output_quantizer.is_enabled() else conv_output_quantizer.disable()
+        if bn_output_quantizer.is_enabled():
+            conv_output_quantizer.enable()
+        else:
+            conv_output_quantizer.disable()
 
         if bn_output_quantizer.encoding is not None:
             encoding = libpymo.TfEncoding()
@@ -867,11 +842,11 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
             encoding.offset = bn_output_quantizer.encoding.offset
             encoding.bw     = bn_output_quantizer.encoding.bw
             conv_output_quantizer.encoding = encoding
-            
+
             tensor_quantizers = conv_output_quantizer._tensor_quantizer if isinstance(conv_output_quantizer._tensor_quantizer, List) else [conv_output_quantizer._tensor_quantizer]
             for tensor_quantizer in tensor_quantizers:
                 tensor_quantizer.isEncodingValid = True
-            
+
         bn_output_quantizer.disable()
 
     if bias_quantizer is None:
@@ -889,9 +864,6 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
         for tensor_quantizer in tensor_quantizers:
             tensor_quantizer.isEncodingValid = True
         conv_wrapper.param_quantizers.append(bias_quantizer)
-
-    # TODO: Remove and support deleting BN's in QuantSim models
-    BNUtils.modify_bn_params_to_make_as_passthrough(bn)
 
 def _fold_to_weight(conv_linear: LayerType, bn: BatchNormType, fold_backward: bool):
     """
@@ -938,7 +910,7 @@ def _fold_to_weight(conv_linear: LayerType, bn: BatchNormType, fold_backward: bo
     if not is_bias_valid:
         conv_linear.use_bias = True
         conv_linear.bias = conv_linear.add_weight(name="bias",
-                                                    shape=(weight_tensor.shape[0],),
-                                                    dtype=conv_linear.dtype,
-                                                    trainable=True)
+                                                  shape=(weight_tensor.shape[0],),
+                                                  dtype=conv_linear.dtype,
+                                                  trainable=True)
     conv_linear.set_weights([numpy_weight_reshaped.data, numpy_bias_reshaped])

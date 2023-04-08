@@ -1147,8 +1147,6 @@ def create_quantsim_model_and_compute_encodings(model, dummy_input, quantsim_con
             pass
 
 class TestBatchNormFoldToScale:
-    # @pytest.mark.parametrize("config", quantsim_config_map.keys())
-
     @pytest.fixture(autouse=True)
     def clear_sessions(self):
         tf.keras.backend.clear_session()
@@ -1234,14 +1232,13 @@ class TestBatchNormFoldToScale:
 
         layer_list = [(model.layers[1], model.layers[2])]
 
-        fold_given_batch_norms(model, layer_list)
+        model = fold_given_batch_norms(model, layer_list)
 
         output_after_fold = model(random_input)
 
         # Check bn is deleted
-        # TODO
-        # for wrapper in model.layers[1:]:
-        #     assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
+        for wrapper in model.layers[1:]:
+            assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
 
         #Check quantizers
         assert not model.layers[1].output_quantizers[0].is_enabled()
@@ -1277,14 +1274,14 @@ class TestBatchNormFoldToScale:
 
         baseline_output = model(random_input)
 
-        fold_all_batch_norms_to_scale(sim)
+        _, sim.model = fold_all_batch_norms_to_scale(sim)
+        model = sim.model
 
         output_after_fold = model(random_input)
 
         #Check bn is deleted
-        # TODO
-        # for wrapper in model.layers[1:]:
-        #     assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
+        for wrapper in model.layers[1:]:
+            assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
 
         # Check quantizers
         assert not model.layers[1].output_quantizers[0].is_enabled()
@@ -1318,12 +1315,8 @@ class TestBatchNormFoldToScale:
         assert np.all(np.vectorize(lambda x: x.is_enabled())(get_wrappers_weight_quantizer(model.layers[2].param_quantizers)))
         assert model.layers[-1].output_quantizers[0].is_enabled()
 
-        fold_all_batch_norms_to_scale(sim)
-
-        #Check bn is deleted
-        # TODO
-        # for wrapper in model.layers[1:]:
-        #     assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
+        _, sim.model = fold_all_batch_norms_to_scale(sim)
+        model = sim.model
 
         # Check quantizers
         assert model.layers[1].output_quantizers[0].is_enabled()
@@ -1356,14 +1349,13 @@ class TestBatchNormFoldToScale:
 
         layer_list = [(model.layers[1], model.layers[2])]
 
-        fold_given_batch_norms(model, layer_list)
+        model = fold_given_batch_norms(model, layer_list)
 
         output_after_fold = model(random_input)
 
         # Check bn is deleted
-        # TODO
-        # for wrapper in model.layers[1:]:
-        #     assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
+        for wrapper in model.layers[1:]:
+            assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
 
         # Check quantizers
         assert not model.layers[1].output_quantizers[0].is_enabled()
@@ -1451,21 +1443,16 @@ class TestBatchNormFoldToScale:
 
         layer_list = [(model.layers[1], model.layers[2])]
 
-        fold_given_batch_norms(model, layer_list)
+        model = fold_given_batch_norms(model, layer_list)
 
         output_after_fold = model(random_input)
 
         # Check bn is deleted
-        # TODO
-        # for wrapper in model.layers[1:]:
-        #     assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
+        for wrapper in model.layers[1:]:
+            assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
 
-        # TODO: See message above
         assert model.layers[1].output_quantizers[0].is_enabled()
         assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
-        assert not model.layers[2].output_quantizers[0].is_enabled()
-        assert not np.all(np.vectorize(lambda x: x.is_enabled())(get_wrappers_weight_quantizer(model.layers[2].param_quantizers)))
-
 
         # Check batchnorm's output encoding is coped to fc's output encoding
         fc_output_encoding = model.layers[1].output_quantizers[0].encoding
@@ -1493,25 +1480,20 @@ class TestBatchNormFoldToScale:
         assert model.layers[2].output_quantizers[0].is_enabled()
         assert not np.all(np.vectorize(lambda x: x.is_enabled())(get_wrappers_weight_quantizer(model.layers[2].param_quantizers)))
 
-
         baseline_output = model(random_input)
 
         layer_list = [(model.layers[1], model.layers[2])]
 
-        fold_given_batch_norms(model, layer_list)
+        model = fold_given_batch_norms(model, layer_list)
 
         output_after_fold = model(random_input)
 
         # Check bn is deleted
-        # TODO
-        # for wrapper in model.layers[1:]:
-        #     assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
+        for wrapper in model.layers[1:]:
+            assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
 
-        # TODO: See message above
         assert model.layers[1].output_quantizers[0].is_enabled()
         assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
-        assert not model.layers[2].output_quantizers[0].is_enabled()
-        assert not np.all(np.vectorize(lambda x: x.is_enabled())(get_wrappers_weight_quantizer(model.layers[2].param_quantizers)))
 
 
         # Check batchnorm's output encoding is coped to fc's output encoding
@@ -1528,15 +1510,15 @@ class TestBatchNormFoldToScale:
         model = sim.model
 
         baseline_output = model(random_input)
-        folded_pairs = fold_all_batch_norms_to_scale(sim)
+        folded_pairs, sim.model = fold_all_batch_norms_to_scale(sim)
+        model = sim.model
         output_after_fold = model(random_input)
 
         # Check bn is deleted
-        # TODO
-        # for wrapper in model.layers[1:]:
-        #     assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
+        for wrapper in model.layers[1:]:
+            assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
 
-        conv2_output_encoding = model.layers[4].output_quantizers[0].encoding
+        conv2_output_encoding = model.layers[3].output_quantizers[0].encoding
         delta = float((conv2_output_encoding.max - conv2_output_encoding.min)/255)
         assert np.allclose(baseline_output, output_after_fold, atol=delta) # Allow 1-tick difference
         assert len(folded_pairs) == 2
@@ -1593,13 +1575,13 @@ class TestBatchNormFoldToScale:
 
 
         baseline_output = model(random_input)
-        bn_pairs = fold_all_batch_norms_to_scale(sim)
+        bn_pairs, sim.model = fold_all_batch_norms_to_scale(sim)
+        model = sim.model
         output_after_fold = model(random_input)
 
         # Check bn is deleted
-        # TODO
-        # for wrapper in model.layers[1:]:
-        #     assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
+        for wrapper in model.layers[1:]:
+            assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
 
         # Check quantizers are enabled/disabled proeprly
         assert model.layers[1].output_quantizers[0].is_enabled()
@@ -1634,13 +1616,12 @@ class TestBatchNormFoldToScale:
 
         baseline_output = model(random_input)
         layer_list = [(model.layers[1], model.layers[2])]
-        fold_given_batch_norms(model, layer_list)
+        model = fold_given_batch_norms(model, layer_list)
         output_after_fold = model(random_input)
 
         # Check bn is deleted
-        # TODO
-        # for wrapper in model.layers[1:]:
-        #     assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
+        for wrapper in model.layers[1:]:
+            assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
 
         # Check quantizers are enabled/disabled proeprly
         assert model.layers[1].output_quantizers[0].is_enabled()
@@ -1726,9 +1707,8 @@ class TestBatchNormFoldToScale:
         assert np.allclose(baseline_output, output_after_fold, atol=1e-5)
 
         # Check bn is deleted
-        # TODO
-        # for wrapper in model.layers[1:]:
-        #     assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
+        for wrapper in model.layers[1:]:
+            assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
 
     @pytest.mark.skip("Conv3D not found in possible layers")
     def test_bn_fold_conv3d_fold_forward(self):
@@ -1748,14 +1728,11 @@ class TestBatchNormFoldToScale:
         _ = model(random_input)
 
         baseline_output = model(random_input)
-        _ = fold_all_batch_norms(model)
+        _, model = fold_all_batch_norms(model)
         output_after_fold = model(random_input)
 
         assert np.allclose(baseline_output, output_after_fold, atol=1e-5)
 
         # Check bn is deleted
-        # TODO
-        # for wrapper in model.layers[1:]:
-        #     assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
-
-TestBatchNormFoldToScale().test_fold_bn_after_linear_layer_no_bias()
+        for wrapper in model.layers[1:]:
+            assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)

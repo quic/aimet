@@ -38,7 +38,9 @@
 """Quantizer utility"""
 from typing import List, Optional, Union
 
+import numpy as np
 import tensorflow as tf
+from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper
 
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ParamPerChannelQuantizer, ParamPerTensorQuantizer, TensorQuantizer
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
@@ -92,47 +94,63 @@ def enable_disable_quantizers(quantizers: List[TensorQuantizer],
         for quantizer in quantizers:
             quantizer.disable()
 
+# pylint: disable=protected-access
 def get_wrappers_weight_quantizer(param_quantizers: Union[List[ParamPerTensorQuantizer], List[ParamPerChannelQuantizer]]) -> \
-    Optional[Union[ParamPerTensorQuantizer, ParamPerChannelQuantizer,
-                   List[ParamPerTensorQuantizer], List[ParamPerChannelQuantizer]]]:
+    Union[ParamPerTensorQuantizer, ParamPerChannelQuantizer, List[ParamPerTensorQuantizer], List[ParamPerChannelQuantizer]]:
     """
-    Helper function to get a given wrappers weight quantizer
-    
-    :param param_quantizers: Quantizers to check
+    Helper function to get a given wrappers weight quantizer. Raises an AttributeError if not found.
+
+    :param param_quantizers: ParamQuantizers to check.
+    :return: The weight quantizer.
     """
     if isinstance(param_quantizers[0]._original_layer, tf.keras.layers.BatchNormalization):
         quantizers_to_return = []
         for quantizer in param_quantizers:
             # To align with Torch side
-             if "gamma" in quantizer.name or "beta" in quantizer.name:
-                 quantizers_to_return.append(quantizer)
-        
+            if "gamma" in quantizer.name or "beta" in quantizer.name:
+                quantizers_to_return.append(quantizer)
+
         if not quantizers_to_return:
             raise AttributeError("Unable to find gamma and beta quantizers.")
         return quantizers_to_return
-    
+
     for quantizer in param_quantizers:
-        if 'kernel' in quantizer._name: # pylint: disable=protected-access
+        if 'kernel' in quantizer._name:
             return quantizer
 
     raise AttributeError(f"Unable to find kernel quantizer.")
 
+# pylint: disable=protected-access
 def get_wrappers_bias_quantizer(param_quantizers: Union[List[ParamPerTensorQuantizer], List[ParamPerChannelQuantizer]]) -> \
-        Optional[Union[ParamPerTensorQuantizer, ParamPerChannelQuantizer,
-                   List[ParamPerTensorQuantizer], List[ParamPerChannelQuantizer]]]:
+    Optional[Union[ParamPerTensorQuantizer, ParamPerChannelQuantizer, List[ParamPerTensorQuantizer], List[ParamPerChannelQuantizer]]]:
     """
-    Helper function to get a given wrappers bias quantizer
+    Helper function to get a given wrappers bias quantizer, if it's available. Will raise an AttributeError for Batch
+    Normalization layers if moving_mean and moving_variance are not found.
+
+    :param param_quantizers: The ParamQuantizers to check.
+    :return: The bias quantizer.
     """
     if isinstance(param_quantizers[0]._original_layer, tf.keras.layers.BatchNormalization):
         quantizers_to_return = []
         for quantizer in param_quantizers:
             # To align with Torch side
-             if "moving_mean" in quantizer.name or "moving_var" in quantizer.name:
-                 quantizers_to_return.append(quantizer)
+            if "moving_mean" in quantizer.name or "moving_var" in quantizer.name:
+                quantizers_to_return.append(quantizer)
 
         if not quantizers_to_return:
             raise AttributeError("Unable to find moving_mean and moving_variance.")
+        return quantizers_to_return
 
     for quantizer in param_quantizers:
         if 'bias' in quantizer._name:
             return quantizer
+
+def model_contains_only_quantize_wrappers(model: tf.keras.Model) -> bool:
+    """
+    Helper function to determine if a given model only contains quantize wrappers (besides InputLayers).
+
+    :param model: The model to check.
+    :return: Boolean result if the model only contains quantize wrappers
+    """
+
+    return np.all(np.vectorize(lambda x: isinstance(x, (tf.keras.layers.InputLayer, QcQuantizeWrapper)))(model.layers))
