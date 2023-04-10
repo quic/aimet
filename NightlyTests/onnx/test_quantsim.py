@@ -140,8 +140,6 @@ class TestQuantizeAcceptance:
 
         model = models.resnet18(pretrained=False)
 
-        # model = model.to(torch.device('cuda'))
-
         # layers_to_ignore = [model.conv1]
         sim_pt = PtQuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf, default_param_bw=16,
                                         default_output_bw=16, dummy_input=torch.as_tensor(inputs),

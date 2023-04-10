@@ -46,16 +46,16 @@ namespace DlQuantization
 
 using namespace std;
 
-    void quantizeDequantizeFP16(const float* in, int cnt, float* out, ComputationMode mode_cpu_gpu)
+    void quantizeDequantizeFp16(const float* in, int cnt, float* out, ComputationMode mode_cpu_gpu)
     {
         switch (mode_cpu_gpu)
         {
         case COMP_MODE_CPU:
-            quantizeDequantizeFP16Cpu(in, cnt, out);
+            quantizeDequantizeFp16Cpu(in, cnt, out);
             break;
         case COMP_MODE_GPU:
     #ifdef GPU_QUANTIZATION_ENABLED
-           quantizeDequantizeFP16Gpu(in, cnt, out);
+           quantizeDequantizeFp16Gpu(in, cnt, out);
     #else
             throw runtime_error("Not compiled for GPU mode.");
     #endif

@@ -50,7 +50,7 @@ namespace DlQuantization
      * @param out pointer to the output tensor
      * @param mode_cpu_gpu Enum to check if we are using CPU or GPU
      */
-    void quantizeDequantizeFP16(const float* in, int cnt, float* out, ComputationMode mode_cpu_gpu);
+    void quantizeDequantizeFp16(const float* in, int cnt, float* out, ComputationMode mode_cpu_gpu);
 
 }
 

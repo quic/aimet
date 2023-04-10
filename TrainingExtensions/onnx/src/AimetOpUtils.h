@@ -113,20 +113,12 @@ void modeSpecificActionFloat(const T* inTensor, size_t count, T* outTensor,
     switch (opMode)
     {
     case DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize:
+    case DlQuantization::TensorQuantizerOpMode::quantizeDequantize:
     {
-        DlQuantization::quantizeDequantizeFP16(inTensor, count, outTensor, mode_cpu_gpu);
+        DlQuantization::quantizeDequantizeFp16(inTensor, count, outTensor, mode_cpu_gpu);
         break;
     }
     case DlQuantization::TensorQuantizerOpMode::updateStats:
-    {
-        copyInputTensorsToOutputTensors(inTensor, count, outTensor, useCuda);
-        break;
-    }
-    case DlQuantization::TensorQuantizerOpMode::quantizeDequantize:
-    {
-        DlQuantization::quantizeDequantizeFP16(inTensor, count, outTensor, mode_cpu_gpu);
-        break;
-    }
     case DlQuantization::TensorQuantizerOpMode::passThrough:
     {
         copyInputTensorsToOutputTensors(inTensor, count, outTensor, useCuda);

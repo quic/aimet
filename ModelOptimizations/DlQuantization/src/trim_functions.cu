@@ -86,7 +86,7 @@ void quantizeDequantizeGpu(const DTYPE* in, int cnt, const TfEncoding& encoding,
 }
 
 
-__global__ void quantizeDequantizeFP16Kernel(const float* in, int cnt, float* out)
+__global__ void quantizeDequantizeFp16Kernel(const float* in, int cnt, float* out)
 {
     CUDA_KERNEL_LOOP(i, cnt)
     {
@@ -95,9 +95,9 @@ __global__ void quantizeDequantizeFP16Kernel(const float* in, int cnt, float* ou
 }
 
 
-void quantizeDequantizeFP16Gpu(const float* in, int cnt, float* out)
+void quantizeDequantizeFp16Gpu(const float* in, int cnt, float* out)
 {
-    quantizeDequantizeFP16Kernel<<<CUDA_NUM_BLOCKS(cnt), CUDA_NUM_THREADS>>>(in, cnt, out);
+    quantizeDequantizeFp16Kernel<<<CUDA_NUM_BLOCKS(cnt), CUDA_NUM_THREADS>>>(in, cnt, out);
 }
 
 

@@ -309,6 +309,11 @@ class QuantizationSimModel:
             of data samples to use. Or could be a tuple of parameters or an object representing something more complex.
             If set to None, forward_pass_callback will be invoked with no parameters.
         """
+        for op_name, qc_op in self.qc_quantize_op_dict.items():
+            qc_op.reset_encoding_stats()
+            if op_name in self.activation_names:
+                qc_op.op_mode = OpMode.updateStats
+
         forward_pass_callback(self.session, forward_pass_callback_args)
         for op_name, qc_op in self.qc_quantize_op_dict.items():
             if qc_op.data_type == QuantizationDataType.int:
@@ -334,7 +339,6 @@ class QuantizationSimModel:
                                           'dtype': 'int'}
             else:
                 encoding_dict[op_name] = {'bitwidth': qc_quantize_op.encodings.bw,
-                                          'is_symmetric': qc_quantize_op.use_symmetric_encodings,
                                           'dtype': 'float'}
 
 

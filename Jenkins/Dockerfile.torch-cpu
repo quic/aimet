@@ -50,7 +50,6 @@ RUN apt-get update > /dev/null && \
         sudo \
         wget \
         xterm \
-        libeigen3-dev \
         xauth > /dev/null && \
         rm -rf /var/lib/apt/lists/*
 
@@ -108,6 +107,7 @@ RUN apt-get update > /dev/null && \
         less \
         libavcodec-dev \
         libavformat-dev \
+        libeigen3-dev \
         libgtest-dev \
         libgtk2.0-dev \
         libsox-dev \

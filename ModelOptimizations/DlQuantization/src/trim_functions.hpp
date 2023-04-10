@@ -53,9 +53,9 @@ template <typename DTYPE>
 void quantizeDequantize(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, ComputationMode mode_cpu_gpu,
                         RoundingMode rounding_mode);
 
-void quantizeDequantizeFP16Cpu(const float* in, int cnt, float* out);
+void quantizeDequantizeFp16Cpu(const float* in, int cnt, float* out);
 
-void quantizeDequantizeFP16Gpu(const float* in, int cnt, float* out);
+void quantizeDequantizeFp16Gpu(const float* in, int cnt, float* out);
 
 
 template <typename DTYPE>

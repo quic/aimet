@@ -189,7 +189,7 @@ void quantizeDequantizeCpu(const DTYPE* in, int cnt, const TfEncoding& encoding,
 }
 
 
-void quantizeDequantizeFP16Cpu(const float* in, int cnt, float* out)
+void quantizeDequantizeFp16Cpu(const float* in, int cnt, float* out)
 {
     for (int i = 0; i < cnt; ++i)
     {
