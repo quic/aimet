@@ -200,6 +200,7 @@ class QcQuantizeOp:
             self._tensor_quantizer.isEncodingValid = False
         else:
             self._tensor_quantizer.isEncodingValid = True
+        # pylint: disable=attribute-defined-outside-init
         self._encoding = encoding
         self.quant_info.encoding = encoding
         self.quant_info.encoding.bw = self.bitwidth
@@ -247,5 +248,5 @@ class QcQuantizeOp:
         Compute and return encodings of each tensor quantizer
         """
         self.encodings = self._tensor_quantizer.computeEncoding(self.bitwidth,
-                                                               self.use_symmetric_encodings)
+                                                                self.use_symmetric_encodings)
         return self.encodings
