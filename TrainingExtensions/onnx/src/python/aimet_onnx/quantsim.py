@@ -41,8 +41,8 @@ import os
 from typing import Dict
 
 import numpy as np
-import onnxruntime as ort
 from onnx import helper, onnx_pb, mapping
+import onnxruntime as ort
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
 
@@ -174,10 +174,7 @@ class QuantizationSimModel:
         :return: True if the activation should be quantized
         """
         # Check if activation is used as an input to another node
-        if name not in self.activation_dtypes.keys():
-            return False
-        # Check activation datatype
-        elif self.activation_dtypes[name] not in data_types_to_quantize:
+        if name not in self.activation_dtypes.keys() or self.activation_dtypes[name] not in data_types_to_quantize:
             return False
         return True
 
@@ -304,7 +301,7 @@ class QuantizationSimModel:
             If set to None, forward_pass_callback will be invoked with no parameters.
         """
         forward_pass_callback(self.session, forward_pass_callback_args)
-        for op_name, qc_op in self.qc_quantize_op_dict.items():
+        for _, qc_op in self.qc_quantize_op_dict.items():
             qc_op.compute_encodings()
             qc_op.op_mode = OpMode.quantizeDequantize
 

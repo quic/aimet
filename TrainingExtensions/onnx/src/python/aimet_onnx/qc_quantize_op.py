@@ -51,6 +51,7 @@ class QcQuantizeOp:
     """ A custom quantization operation to perform using ONNXRuntime """
 
     # pylint: disable=too-many-arguments
+    # pylint: disable=too-many-instance-attributes
     def __init__(self, quant_info: libquant_info.QcQuantizeInfo,
                  quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
                  rounding_mode: str = 'nearest',
@@ -199,6 +200,7 @@ class QcQuantizeOp:
             self._tensor_quantizer.isEncodingValid = False
         else:
             self._tensor_quantizer.isEncodingValid = True
+        # pylint: disable=attribute-defined-outside-init
         self._encoding = encoding
         self.quant_info.encoding = encoding
         self.quant_info.encoding.bw = self.bitwidth
@@ -246,5 +248,5 @@ class QcQuantizeOp:
         Compute and return encodings of each tensor quantizer
         """
         self.encodings = self._tensor_quantizer.computeEncoding(self.bitwidth,
-                                                               self.use_symmetric_encodings)
+                                                                self.use_symmetric_encodings)
         return self.encodings
