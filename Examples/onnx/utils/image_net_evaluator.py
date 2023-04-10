@@ -43,7 +43,6 @@ import logging
 
 import progressbar
 import torch
-from torch import nn
 import onnxruntime as ort
 
 from Examples.common.utils import accuracy
