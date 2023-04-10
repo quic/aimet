@@ -13,4 +13,4 @@ PyYAML
 scipy==1.8.1
 setuptools
 tqdm
-transformers==4.27.2
+transformers==4.27.4
