@@ -78,6 +78,7 @@ class QcQuantizeOp:
         self.use_symmetric_encodings = use_symmetric_encodings
         self.enabled = True
         self._data_type = QuantizationDataType.int
+        self.quant_info.usePerChannelMode = False
 
     @property
     def data_type(self) -> QuantizationDataType:

@@ -64,6 +64,7 @@ struct QcQuantizeInfo
     bool useSymmetricEncoding;
     bool enabled;
     bool isIntDataType;
+    bool usePerChannelMode;
     int channelAxis;
     std::string name;
 };

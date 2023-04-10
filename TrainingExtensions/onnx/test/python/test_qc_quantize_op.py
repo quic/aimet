@@ -62,7 +62,7 @@ if "CUDAExecutionProvider" in available_providers:
 else:
     op_domain = "aimet.customop.cpu"
 op_name = "QcQuantizeOp"
-per_channel_op_name = "QcQuantizePerChannelOp"
+per_channel_op_name = "QcQuantizeOp"
 
 def create_quant_info(encoding,
                       tensor_quantizer,
@@ -78,6 +78,7 @@ def create_quant_info(encoding,
     quant_info.enabled = enabled
     quant_info.tensorQuantizerRef = [libpymo.PtrToInt64(tensor_quantizer)]
     quant_info.isIntDataType = True
+    quant_info.usePerChannelMode = False
     return quant_info
 
 def create_per_channel_quant_info(encoding,
@@ -97,6 +98,7 @@ def create_per_channel_quant_info(encoding,
     quant_info.tensorQuantizerRef = [libpymo.PtrToInt64(item) for item in tensor_quantizer]
     quant_info.channelAxis = ch_idx
     quant_info.isIntDataType = True
+    quant_info.usePerChannelMode = True
     return quant_info
 
 
@@ -440,6 +442,7 @@ class TestQcQuantizeOp:
 
         quant_node = helper.make_node(op_name, inputs=['input'], outputs=['output'],
                                       domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
+        quant_info.usePerChannelMode = False
         per_tensor_model = create_model_from_node(quant_node, input_arr.take(indices=0, axis=quant_axis).shape)
         session = build_session(per_tensor_model, available_providers)
         # Run each channel through a per-tensor quantizer
@@ -449,11 +452,12 @@ class TestQcQuantizeOp:
             expected_output_arr.append(np.expand_dims(output, quant_axis))
         expected_output_arr = np.concatenate(expected_output_arr, axis=quant_axis)
 
+        quant_info.usePerChannelMode = True
         per_channel_quant_node = helper.make_node(per_channel_op_name, inputs=['input'], outputs=['output'],
                                                   domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
-        per_tensor_model = create_model_from_node(per_channel_quant_node, input_arr.shape)
+        per_channel_model = create_model_from_node(per_channel_quant_node, input_arr.shape)
         # Run the entire tensor through the per-channel quantizer
-        session = build_session(per_tensor_model, available_providers)
+        session = build_session(per_channel_model, available_providers)
         output_per_channel = session.run(None, {'input': input_arr})[0]
         assert np.allclose(output_per_channel, expected_output_arr)
 

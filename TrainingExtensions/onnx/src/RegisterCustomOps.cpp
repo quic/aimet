@@ -58,11 +58,6 @@ OrtStatus* ORT_API_CALL RegisterCustomOps(OrtSessionOptions* options, const OrtA
     {
         return status;
     }
-    static const QcQuantizePerChannelOp c_QcQuantizePerChannelOp;
-    if (auto status = ortApi->CustomOpDomain_Add(domain, &c_QcQuantizePerChannelOp))
-    {
-        return status;
-    }
 
 #ifdef ONNX_CUDA
     OrtCustomOpDomain* cuda_domain = nullptr;
@@ -74,11 +69,6 @@ OrtStatus* ORT_API_CALL RegisterCustomOps(OrtSessionOptions* options, const OrtA
     AddOrtCustomOpDomainToContainer(cuda_domain, ortApi);
     static const QcQuantizeOpGPU c_QcQuantizeOpGPU;
     if (auto status = ortApi->CustomOpDomain_Add(cuda_domain, &c_QcQuantizeOpGPU))
-    {
-        return status;
-    }
-    static const QcQuantizePerChannelOpGPU c_QcQuantizePerChannelOpGPU;
-    if (auto status = ortApi->CustomOpDomain_Add(cuda_domain, &c_QcQuantizePerChannelOpGPU))
     {
         return status;
     }

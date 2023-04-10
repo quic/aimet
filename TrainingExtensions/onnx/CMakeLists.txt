@@ -51,8 +51,6 @@ add_library(OnnxCppOps SHARED
         src/QcQuantizeInfo.cpp
         src/QcQuantizeInfo.h
         src/QcQuantizeOp.cpp
-        src/QcQuantizePerChannelOp.h
-        src/QcQuantizePerChannelOp.cpp
         src/OnnxOpUtils.h
         src/QuantizeDequantizeUtils.hpp
         src/QuantizeDequantizeUtils.cpp

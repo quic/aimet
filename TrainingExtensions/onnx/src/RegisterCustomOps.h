@@ -45,7 +45,6 @@
 
 #include "OnnxOpUtils.h"
 #include "QcQuantizeOp.h"
-#include "QcQuantizePerChannelOp.h"
 
 
 extern "C" ORT_EXPORT OrtStatus* ORT_API_CALL RegisterCustomOps(OrtSessionOptions* options, const OrtApiBase* api);

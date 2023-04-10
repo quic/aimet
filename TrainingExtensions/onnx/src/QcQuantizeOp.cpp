@@ -48,7 +48,7 @@
 #ifdef ONNX_CUDA
 static OnnxCudaAllocator _allocator;
 #endif
-
+static OnnxCpuAllocator cpu_allocator;
 
 
 QcQuantizeKernel::QcQuantizeKernel(const OrtApi* api, const OrtKernelInfo* info, bool useCuda) :
@@ -71,7 +71,7 @@ void QcQuantizeKernel::Compute(OrtKernelContext* context)
     OrtTensorTypeAndShapeInfo* output_info = api_.GetTensorTypeAndShape(output);
     size_t size                            = api_.GetTensorShapeElementCount(output_info);
 
-    DlQuantization::TfEncoding* encoding = quant_info->encoding[0];
+    std::vector<DlQuantization::TfEncoding*> encodings = quant_info->encoding;
 
     DlQuantization::TensorQuantizerOpMode op_mode = quant_info->opMode;
     // Disable unused quantizers
@@ -82,7 +82,7 @@ void QcQuantizeKernel::Compute(OrtKernelContext* context)
 
     api_.ReleaseTensorTypeAndShapeInfo(output_info);
 
-    DlQuantization::IAllocator* allocator = nullptr;
+    DlQuantization::IAllocator* allocator = &cpu_allocator;
 #ifdef ONNX_CUDA
     if (useCuda)
     {
@@ -92,10 +92,24 @@ void QcQuantizeKernel::Compute(OrtKernelContext* context)
 #endif
 
     if (quant_info->isIntDataType)
-        modeSpecificActionInt(input_data, size, result, quant_info->tensorQuantizerRef[0], op_mode, encoding,
-                              quant_info->useSymmetricEncoding, allocator, useCuda);
+    {
+        if (quant_info->usePerChannelMode)
+        {
+            int axis = quant_info->channelAxis;
+            modeSpecificActionPerChannelInt(input_data, size, result, axis, dimensions, quant_info->tensorQuantizerRef,
+                                            op_mode, encodings, quant_info->useSymmetricEncoding, allocator, useCuda);
+        }
+        else
+        {
+            modeSpecificActionInt(input_data, size, result, quant_info->tensorQuantizerRef[0], op_mode, encodings[0],
+                                  quant_info->useSymmetricEncoding, allocator, useCuda);
+        }
+
+    }
     else
+    {
         modeSpecificActionFloat(input_data, size, result, op_mode, allocator, useCuda);
+    }
 }
 
 
