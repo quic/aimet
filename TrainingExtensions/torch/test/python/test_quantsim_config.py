@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2020-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -39,6 +39,7 @@ import pytest
 import json
 import os
 import torch
+import numpy as np
 from aimet_common.defs import QuantScheme, QuantizationDataType, QuantDtypeBwInfo, SupportedKernelsAction
 from models.test_models import SingleResidual, QuantSimTinyModel, MultiInput, SingleResidualWithModuleAdd, \
     SingleResidualWithAvgPool
@@ -2453,3 +2454,58 @@ class TestQuantsimConfig:
         qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
+
+    def test_encoding_constraints(self):
+        """ Test encoding constraints setting """
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "False",
+                    "is_symmetric": "True"
+                }
+            },
+            "params": {},
+            "op_type": {
+                "Softmax": {
+                    "encoding_constraints": {
+                        "min": -5.0,
+                        "max": 5.0
+                    },
+                }
+            },
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+
+        class SoftmaxModel(torch.nn.Module):
+            def __init__(self):
+                super(SoftmaxModel, self).__init__()
+                self.softmax = torch.nn.Softmax()
+
+            def forward(self, inp):
+                x = self.softmax(inp)
+                return x
+
+        model = SoftmaxModel()
+        dummy_input = torch.tensor([0.5, 0.5])
+        for config_file in [None, "./data/quantsim_config.json"]:
+            qsim = QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                        config_file=config_file)
+            qsim.compute_encodings(lambda m, _: m(dummy_input), None)
+            if not config_file:
+                assert qsim.model.softmax.output_quantizers[0].quant_scheme == QuantScheme.post_training_tf_enhanced
+                assert qsim.model.softmax.output_quantizers[0].encoding.min == 0.0
+                assert np.allclose(qsim.model.softmax.output_quantizers[0].encoding.max, 0.5, atol=1e-2)
+            else:
+                assert qsim.model.softmax.output_quantizers[0].quant_scheme == QuantScheme.post_training_tf
+                assert np.allclose(qsim.model.softmax.output_quantizers[0].encoding.min, -5.0, atol=1e-1)
+                assert np.allclose(qsim.model.softmax.output_quantizers[0].encoding.max, 5.0, atol=1e-1)

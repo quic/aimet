@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2020 - 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2020-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -539,10 +539,13 @@ def get_setting_type(setting_name: str) -> str:
     :param setting_name: Name of the setting to change
     :return: String corresponding to the type of setting that is specified by setting_name.
     """
+
     if setting_name in [ConfigDictKeys.IS_INPUT_QUANTIZED, ConfigDictKeys.IS_OUTPUT_QUANTIZED]:
         return ConfigDictKeys.IS_QUANTIZED
     if setting_name == ConfigDictKeys.IS_SYMMETRIC:
         return ConfigDictKeys.IS_SYMMETRIC
+    if setting_name == ConfigDictKeys.ENCODING_CONSTRAINTS:
+        return ConfigDictKeys.ENCODING_CONSTRAINTS
     error_msg = f'Unrecognized quantizer setter name {setting_name}'
     logger.error(error_msg)
     raise AssertionError(error_msg)

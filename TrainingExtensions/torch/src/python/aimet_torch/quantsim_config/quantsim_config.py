@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2020, 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2020-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -37,10 +37,10 @@
 # =============================================================================
 """ Utilities for parsing and applying quantsim configurations from json config file """
 from abc import abstractmethod
-from typing import Dict, List, Tuple, Set
+from typing import Dict, List, Tuple, Set, Union
 import torch
 
-from aimet_common.utils import AimetLogger
+from aimet_common.utils import AimetLogger, log_with_error_and_assert_if_false
 from aimet_common.graph_searcher import GraphSearcher
 from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.connected_graph.operation import Op
@@ -422,6 +422,9 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         if ConfigDictKeys.IS_SYMMETRIC in op_config:
             _modify_tensor_quantizers(input_output_tensor_quantizers, ConfigDictKeys.IS_SYMMETRIC,
                                       op_config[ConfigDictKeys.IS_SYMMETRIC], modified_tensor_quantizers)
+        if ConfigDictKeys.ENCODING_CONSTRAINTS in op_config:
+            _modify_tensor_quantizers(input_output_tensor_quantizers, ConfigDictKeys.ENCODING_CONSTRAINTS,
+                                      op_config[ConfigDictKeys.ENCODING_CONSTRAINTS], modified_tensor_quantizers)
 
         # Will only see this in the op_type section, not default
         if ConfigDictKeys.PARAMS in op_config:
@@ -697,7 +700,8 @@ def _set_config_for_param(param_quantizer: TensorQuantizer, param_config: Config
 
 
 def _modify_tensor_quantizers(input_output_tensor_quantizers: TensorQuantizersTupleType, setting_name: str,
-                              quantizer_setting: bool, modified_tensor_quantizers: Dict[TensorQuantizer, Set]):
+                              quantizer_setting: Union[dict, bool],
+                              modified_tensor_quantizers: Dict[TensorQuantizer, Set]):
     """
     Modify the appropriate tensor quantizers for the given quantizer setting.  If a tensor quantizer has already been
     modified, compare the old setting with the new setting and assert if the settings conflict.
@@ -721,16 +725,22 @@ def _modify_tensor_quantizers(input_output_tensor_quantizers: TensorQuantizersTu
             # Tensor quantizer's setting has already been modified
             if setting_name in [ConfigDictKeys.IS_INPUT_QUANTIZED, ConfigDictKeys.IS_OUTPUT_QUANTIZED]:
                 current_setting = tensor_quantizer.enabled
-            else:
+            elif setting_name == ConfigDictKeys.IS_SYMMETRIC:
                 current_setting = tensor_quantizer.use_symmetric_encodings
-            if current_setting != quantizer_setting:
-                logger.error('Conflicting tensor quantizer settings for symmetric encodings')
-                raise AssertionError('Conflicting tensor quantizer settings for symmetric encodings')
+            else:
+                current_setting = {ConfigDictKeys.MIN: tensor_quantizer.encoding_min_max_fixed_vals[0],
+                                   ConfigDictKeys.MAX: tensor_quantizer.encoding_min_max_fixed_vals[1]}
+            log_with_error_and_assert_if_false(current_setting == quantizer_setting,
+                                               logger,
+                                               f'Conflicting tensor quantizer settings for {setting_name}')
         else:
             if setting_name in [ConfigDictKeys.IS_INPUT_QUANTIZED, ConfigDictKeys.IS_OUTPUT_QUANTIZED]:
                 tensor_quantizer.enabled = quantizer_setting
-            else:
+            elif setting_name == ConfigDictKeys.IS_SYMMETRIC:
                 tensor_quantizer.use_symmetric_encodings = quantizer_setting
+            elif setting_name == ConfigDictKeys.ENCODING_CONSTRAINTS:
+                tensor_quantizer.encoding_min_max_fixed_vals = (quantizer_setting[ConfigDictKeys.MIN],
+                                                                quantizer_setting[ConfigDictKeys.MAX])
             if tensor_quantizer not in modified_tensor_quantizers:
                 modified_tensor_quantizers[tensor_quantizer] = {setting_type}
             else:
@@ -764,6 +774,8 @@ def _get_tensor_quantizers_to_modify(input_output_tensor_quantizers: TensorQuant
     if setting_name == ConfigDictKeys.IS_SYMMETRIC:
         # Will modify all input and output quantizers in the False case
         return input_false_list + output_false_list
+    if setting_name == ConfigDictKeys.ENCODING_CONSTRAINTS:
+        return output_true_list
     error_msg = f'Encountered unrecognized case for setting name {setting_name}, setting value {quantizer_setting}'
     logger.error(error_msg)
     raise AssertionError(error_msg)

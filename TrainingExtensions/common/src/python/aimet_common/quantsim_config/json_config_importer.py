@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2020-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -79,6 +79,9 @@ class ConfigDictKeys:
     PARAM = "param"
     BITWIDTH = "bitwidth"
     HW_VERSION = "hw_version"
+    ENCODING_CONSTRAINTS = "encoding_constraints"
+    MIN = "min"
+    MAX = "max"
 
 
 class JsonConfigImporter:
