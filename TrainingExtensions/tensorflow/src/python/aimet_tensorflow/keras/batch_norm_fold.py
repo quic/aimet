@@ -575,9 +575,6 @@ def _delete_all_bns_from_model(model: Union[tf.keras.Model, tf.keras.layers.Laye
     :return: new model with bn layers removed, if model is functional else None
     """
     if bn_layers:
-        # if model_contains_only_quantize_wrappers(model):
-        #     return _delete_all_bn_from_quantization_sim_model(model, bn_layers)
-
         if isinstance(model, Functional) and not isinstance(model, tf.keras.Sequential):
             return _delete_bn_from_functional(model, bn_layers)
 

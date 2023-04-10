@@ -37,7 +37,6 @@
 # =============================================================================
 """ Utilities for parsing and applying quantsim configurations from json config file """
 from typing import List, Tuple, Dict, Union
-import tensorflow as tf
 
 from tensorflow.keras import layers
 
@@ -54,7 +53,7 @@ from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as
 from aimet_common.utils import AimetLogger
 import aimet_tensorflow.keras.utils.common as keras_common_utils
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
-from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
+from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QuantizerSettings
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQuantizer, ParamPerTensorQuantizer, \
     ParamPerChannelQuantizer
 from aimet_tensorflow.utils.constants import QUANT_ALLOWED_DTYPES
@@ -422,29 +421,29 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         Set supergroup specific configurations (fourth level of specificity in configuration file)
         :param supergroups_configs: Configurations for supergroups
         """
-        
+
         def find_scale_foldable_bns(cg):
             """
             Find Batch Norms that can be folded to scale
             """
             conv_bn_pairs = []
-            
+
             def handler(_, op_list):
                 conv, bn = op_list
                 conv_module = conv.get_module()
-                #Transposed depthwise convolutions are not supported for batchnorm folding
+                # Transposed depthwise convolutions are not supported for batchnorm folding
                 if isinstance(conv_module, layers.DepthwiseConv2D) and conv_module.groups != 1:
                     return
                 conv_bn_pairs.append((conv, bn))
-        
+
             patterns_with_callbacks = []
-            conv_types = ['Conv', 'ConvTranspose'] # TODO: Add Conv1d when supported on Keras
+            conv_types = ['Conv', 'ConvTranspose']  # TODO: Add Conv1d when supported on Keras
             linear_types = ['Gemm']
-            
+
             for op_type in conv_types + linear_types:
                 patterns_with_callbacks.append(PatternType(pattern=[op_type, 'BatchNormalization'],
                                                            action=handler))
- 
+
             # Create graph searcher instance with connected graph and patterns to search
             graph_searcher = GraphSearcher(cg, patterns_with_callbacks)
             graph_searcher.find_all_patterns_in_graph_apply_actions()
@@ -466,7 +465,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         def fuse_config(conv: Op, bn: Op):
             """
             Fuse configs of conv and bn
-            
+
             If conv output quantizers is enabled, disable it and enable output quantizer of BN instead
             so that we fold batch norm to conv
             """
@@ -488,7 +487,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
 
         for conv, bn in conv_bn_pairs:
             fuse_config(conv, bn)
-            
+
     def _set_model_input_configs(self, model_input_configs: ConfigType):
         """
         Set model input specific configurations (fifth level of specificity in configuration file)

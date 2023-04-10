@@ -141,9 +141,12 @@ def get_wrappers_bias_quantizer(param_quantizers: Union[List[ParamPerTensorQuant
             raise AttributeError("Unable to find moving_mean and moving_variance.")
         return quantizers_to_return
 
+    # Bias weight might not be present. For example, if a user has made a Conv2D layer with no bias.
+    # i.e. tf.keras.layers.Conv2D(10, 2, use_bias=False)
     for quantizer in param_quantizers:
         if 'bias' in quantizer._name:
             return quantizer
+    return None
 
 def model_contains_only_quantize_wrappers(model: tf.keras.Model) -> bool:
     """

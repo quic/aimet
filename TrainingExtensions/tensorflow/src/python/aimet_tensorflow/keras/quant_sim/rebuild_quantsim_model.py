@@ -55,7 +55,7 @@ class RebuiltQuantSimModelFactory:
     Rebuilt QuantSim Model For Keras. Specifically used to rebuild a QuantSim model after it has been converted to a frozen pb.
     This use case occurs during exporting of the model.
     """
-
+    # pylint: disable=bad-whitespace, protected-access
     def __init__(self, original_quantsim: tf.keras.Model): # UPDATE
         """
         :param original_quantsim_model: The original QuantizationSimModel
