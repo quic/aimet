@@ -342,7 +342,7 @@ class TestAutoQuant:
             with create_tmp_directory() as results_dir:
                 auto_quant = AutoQuant(model = model,
                                        eval_callback=mocks.eval_callback,
-                                       unlabeled_dataset = unlabeled_dataset,
+                                       dataset = unlabeled_dataset,
                                        results_dir=results_dir)
                 auto_quant.run_inference()
 
@@ -361,7 +361,7 @@ class TestAutoQuant:
             with create_tmp_directory() as results_dir:
                 auto_quant = AutoQuant(model = model,
                                        eval_callback = mocks.eval_callback,
-                                       unlabeled_dataset = unlabeled_dataset,
+                                       dataset = unlabeled_dataset,
                                        results_dir=results_dir)
                 self._do_test_optimize_auto_quant(
                     auto_quant, allowed_accuracy_drop,
@@ -414,7 +414,7 @@ class TestAutoQuant:
             ) as mocks:
                 auto_quant = AutoQuant(model = model,
                           eval_callback = mocks.eval_callback,
-                          unlabeled_dataset = unlabeled_dataset,
+                          dataset = unlabeled_dataset,
                           results_dir=results_dir)
                 output_model, acc, encoding_path = auto_quant.optimize(allowed_accuracy_drop)
 
@@ -477,7 +477,7 @@ class TestAutoQuant:
             with patch("aimet_tensorflow.keras.auto_quant_v2.AutoQuant.optimize", optimize):
                 auto_quant = AutoQuant(model = model,
                                        eval_callback = eval_callback,
-                                       unlabeled_dataset = unlabeled_dataset)
+                                       dataset = unlabeled_dataset)
                 auto_quant.optimize(allowed_accuracy_drop)
 
     def test_set_additional_params(self, model, unlabeled_dataset):
@@ -488,7 +488,7 @@ class TestAutoQuant:
         with patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc) as mocks:
             auto_quant = AutoQuant(model = model,
                       eval_callback = mocks.eval_callback,
-                      unlabeled_dataset = unlabeled_dataset)
+                                   dataset = unlabeled_dataset)
             adaround_params = AdaroundParameters(unlabeled_dataset, 1)
             auto_quant.set_adaround_params(adaround_params)
             self._do_test_optimize_auto_quant(

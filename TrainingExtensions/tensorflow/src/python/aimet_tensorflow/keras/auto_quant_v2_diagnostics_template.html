@@ -83,21 +83,9 @@
 
   <body>
     <svg  xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600">
-      <g transform="translate(128 20) rotate(90)">
-        <path {{edge_prepare_model_in}} stroke-linecap="square" d="M0 0 h35"/>
-        <polygon {{edge_prepare_model_in}} class="arrow-tip" points="24,7.5 24,-7.5 40,0"/>
-      </g>
-
-      <g transform="translate(60 60)">
-        <rect id='node_prepare_model' {{node_prepare_model}}/>
-        <text class="node-label">
-          <tspan x="25" y="25">Prepare Model</tspan>
-        </text>
-      </g>
-
       <g transform="translate(128 100) rotate(90)">
-        <path {{edge_prepare_model_out}} stroke-linecap="square" d="M0 0 h43"/>
-        <polygon {{edge_prepare_model_out}} class="arrow-tip" points="32,7.5 32,-7.5 48,0"/>
+        <path {{edge_quant_scheme_selection_in}} stroke-linecap="square" d="M0 0 h43"/>
+        <polygon {{edge_quant_scheme_selection_in}} class="arrow-tip" points="32,7.5 32,-7.5 48,0"/>
       </g>
 
       <g transform="translate(60 150)">

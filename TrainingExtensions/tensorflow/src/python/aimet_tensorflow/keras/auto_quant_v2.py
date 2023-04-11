@@ -129,7 +129,7 @@ _QUANT_SCHEME_CANDIDATES = (
 )
 
 def _validate_inputs(model: tf.keras.Model, # pylint: disable=too-many-arguments
-                     unlabeled_dataset: tf.data.Dataset,
+                     dataset: tf.data.Dataset,
                      eval_callback: Callable[[tf.keras.Model], float],
                      results_dir: str,
                      strict_validation: bool,
@@ -140,7 +140,7 @@ def _validate_inputs(model: tf.keras.Model, # pylint: disable=too-many-arguments
     """
     Confirms inputs are of the correct type
     :param model: Model to be quantized
-    :param unlabeled_dataset: A collection that iterates over an unlabeled dataset,
+    :param dataset: A collection that iterates over an unlabeled dataset,
         used for computing encodings
     :param eval_callback: Function that calculates the evaluation score
     :param results_dir: Directory to save the results of PTQ techniques
@@ -156,9 +156,9 @@ def _validate_inputs(model: tf.keras.Model, # pylint: disable=too-many-arguments
     if not isinstance(model, tf.keras.Model):
         raise ValueError('Model must be of type tf.keras.Model, not ' + str(type(model).__name__))
 
-    if not isinstance(unlabeled_dataset, tf.data.Dataset):
+    if not isinstance(dataset, tf.data.Dataset):
         raise ValueError('data_loader must be of type tf.data.Dataset, not ' + str(
-            type(unlabeled_dataset).__name__))
+            type(dataset).__name__))
 
     if not isinstance(eval_callback, Callable):
         raise ValueError('eval_callback must be of type Callable, not ' +
@@ -193,7 +193,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
     def __init__(self, # pylint: disable=too-many-arguments, too-many-locals
                  model: tf.keras.Model,
                  eval_callback: Callable[[tf.keras.Model], float],
-                 unlabeled_dataset: tf.data.Dataset,
+                 dataset: tf.data.Dataset,
                  param_bw: int = 8,
                  output_bw: int = 8,
                  quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
@@ -205,7 +205,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         '''
         :param model: Model to be quantized. Assumes model is on the correct device
         :param eval_callback: Function that calculates the evaluation score
-        :param unlabeled_dataset: A collection that iterates over an unlabeled dataset,
+        :param dataset: A collection that iterates over an unlabeled dataset,
             used for computing encodings
         :param param_bw: Parameter bitwidth
         :param output_bw: Output bitwidth
@@ -220,10 +220,10 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
             This may produce unideal or unintuitive results.
         '''
 
-        _validate_inputs(model, unlabeled_dataset, eval_callback, results_dir, strict_validation, \
+        _validate_inputs(model, dataset, eval_callback, results_dir, strict_validation, \
                          quant_scheme, param_bw, output_bw, rounding_mode)
         self.fp32_model = model
-        self._unlabeled_dataset = unlabeled_dataset
+        self.data_loader = dataset
         self.eval_callback = eval_callback
 
         self._quantsim_params = dict(
@@ -241,7 +241,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
             self.cache_dir = None
 
         def forward_pass_callback(model, _: Any = None):
-            for input_data in tqdm(self._unlabeled_dataset):
+            for input_data in tqdm(self.data_loader):
                 model(input_data)
 
         self.forward_pass_callback = forward_pass_callback
@@ -249,7 +249,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         # Use at most 2000 samples for AdaRound.
         batch_size = None
         num_samples = 0
-        for data in self._unlabeled_dataset:
+        for data in self.data_loader:
             num_samples += len(data)
             if not batch_size:
                 batch_size = len(data)
@@ -257,9 +257,9 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
                 break
         batch_size = batch_size or 1
         num_batches = math.ceil(num_samples / batch_size)
-        num_batches = min(num_batches, len(self._unlabeled_dataset))
+        num_batches = min(num_batches, len(self.data_loader))
 
-        self.adaround_params = AdaroundParameters(self._unlabeled_dataset,
+        self.adaround_params = AdaroundParameters(self.data_loader,
                                                   num_batches)
         self.eval_manager = _EvalManager(
             quantsim_factory=self._create_quantsim_and_encodings,
@@ -320,7 +320,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         """
         Set Adaround parameters.
         If this method is not called explicitly by the user, AutoQuant will use
-        `unlabeled_dataset` (passed to `__init__`) for Adaround.
+        `dataset` (passed to `__init__`) for Adaround.
 
         :param adaround_params: Adaround parameters.
         """
@@ -1031,7 +1031,6 @@ def _build_flowchart_metadata(result: Mapping) -> Dict: # pylint: disable=too-ma
     :param result: Result of AutoQuant with the following format:
 
         result := {
-            "prepare_model": _stage_result,
             "quantscheme_selection": _stage_result,
             "w32_evaluation": _stage_result,
             "ptq_techniques" [
@@ -1055,6 +1054,9 @@ def _build_flowchart_metadata(result: Mapping) -> Dict: # pylint: disable=too-ma
     """
     metadata = defaultdict(str)
 
+    metadata.update(
+        edge_quant_scheme_selection_in='data-visited="true"',
+    )
     if "quantscheme_selection" in result:
         status = result['quantscheme_selection']['status']
         metadata.update(
