@@ -1276,38 +1276,6 @@ class TestBatchNormFoldToScale:
         delta = float((relu_output_encoding.max - relu_output_encoding.min)/255)
         assert np.allclose(baseline_output, output_after_fold, atol=delta)  # Allow 1-tick difference
 
-    def test_fold_bn_after_transposed_conv_depthwise(self):
-        input_shape = (2, 24, 24, 10)
-
-        inp = tf.keras.Input(input_shape[1:])
-        x = tf.keras.layers.DepthwiseConv2D(10, 3, groups=10)(inp)
-        x = tf.keras.layers.BatchNormalization()(x)
-        x = tf.keras.layers.ReLU()(x)
-
-        model = tf.keras.Model(inputs=[inp], outputs=[x])
-
-        random_input = np.random.rand(*input_shape)
-        _ = model(random_input)
-
-        sim = create_quantsim_model_and_compute_encodings(model, random_input)
-        model = sim.model
-
-        # Check quantizers are enabled/disabled properly
-        assert model.layers[1].output_quantizers[0].is_enabled()
-        assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
-        assert model.layers[2].output_quantizers[0].is_enabled()
-        assert np.all(np.vectorize(lambda x: x.is_enabled())(
-            get_wrappers_weight_quantizer(model.layers[2].param_quantizers)))
-        assert model.layers[-1].output_quantizers[0].is_enabled()
-
-        _, sim.model = fold_all_batch_norms_to_scale(sim)
-        model = sim.model
-
-        # Check quantizers
-        assert model.layers[1].output_quantizers[0].is_enabled()
-        assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
-        assert model.layers[-1].output_quantizers[0].is_enabled()
-
     def test_fold_bn_after_conv_with_bias(self):
         input_shape = (2, 24, 24, 10)
 

@@ -51,7 +51,6 @@ from aimet_common.utils import AimetLogger
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ParamPerTensorQuantizer
 from aimet_tensorflow.keras.utils import common
-from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 from aimet_tensorflow.keras.utils.quantizer_utils import get_wrappers_bias_quantizer, get_wrappers_weight_quantizer
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
@@ -565,16 +564,17 @@ def _delete_bn_from_model_subclassing(module_to_name_map: Dict[tf.keras.layers.L
     setattr(parent_ref, module_name, op)
 
 # pylint: disable=inconsistent-return-statements
-def _delete_all_bns_from_model(model: Union[tf.keras.Model, tf.keras.layers.Layer, QuantizationSimModel],
+def _delete_all_bns_from_model(model: Union[tf.keras.Model, tf.keras.layers.Layer],
                                bn_layers: List[tf.keras.layers.BatchNormalization]) -> Optional[tf.keras.Model]:
     """
-    Remove all bn layers
+    Remove all bn layers for a given model.
 
-    :param model
+    :param model: Model to have the bn layers removed from
     :param bn_layers: bn layers that should be removed
     :return: new model with bn layers removed, if model is functional else None
     """
     if bn_layers:
+        # QuantizationSimModel's model will fall into this case.
         if isinstance(model, Functional) and not isinstance(model, tf.keras.Sequential):
             return _delete_bn_from_functional(model, bn_layers)
 
@@ -642,7 +642,7 @@ def fold_all_batch_norms(model: tf.keras.Model) \
     return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs], model
 
 # pylint: disable=protected-access
-def fold_all_batch_norms_to_scale(sim: QuantizationSimModel) -> \
+def fold_all_batch_norms_to_scale(sim: tf.keras.Model) -> \
     Tuple[List[Tuple[QcQuantizeWrapper, QcQuantizeWrapper]], tf.keras.Model]:
     """
     Fold all batch_norm layers in a model into the quantization scale parameter
@@ -674,11 +674,11 @@ def fold_all_batch_norms_to_scale(sim: QuantizationSimModel) -> \
 
     return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs], bn_fold_model
 
-def fold_given_batch_norms(model: Union[tf.keras.Model, QuantizationSimModel], layer_pairs: List[PairType]) -> Optional[tf.keras.Model]:
+def fold_given_batch_norms(model: tf.keras.Model, layer_pairs: List[PairType]) -> Optional[tf.keras.Model]:
     """
     Fold a given set of batch_norm layers into conv_linear layers
 
-    :param model: Either a Keras Model or a QuantizationSimModel
+    :param model: Either a Keras Model or a QuantizationSimModel's model
     :param layer_pairs: Tuple of conv, bn layers and is_batch_norm_second flag
     :return: new model with batch norm layers folded if model is a functional model, else None
     """
@@ -711,9 +711,9 @@ def fold_given_batch_norms(model: Union[tf.keras.Model, QuantizationSimModel], l
 
     return _fold_given_batch_norms(model, conv_bn_paris, bn_conv_pairs)
 
-def _fold_given_batch_norms(model: Union[tf.keras.Model, QuantizationSimModel],
+def _fold_given_batch_norms(model: tf.keras.Model,
                             conv_bn_pairs: Iterable[Tuple[tf.keras.layers.Layer, tf.keras.layers.Layer]],
-                            bn_conv_pairs: Iterable[Tuple[tf.keras.layers.Layer, tf.keras.layers.Layer]]) ->\
+                            bn_conv_pairs: Iterable[Tuple[tf.keras.layers.Layer, tf.keras.layers.Layer]]) -> \
                                 Optional[tf.keras.Model]:
     """
     Fold a given set of batch_norm layers into conv layers

@@ -430,15 +430,11 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
 
             def handler(_, op_list):
                 conv, bn = op_list
-                conv_module = conv.get_module()
-                # Transposed depthwise convolutions are not supported for batchnorm folding
-                if isinstance(conv_module, layers.DepthwiseConv2D) and conv_module.groups != 1:
-                    return
                 conv_bn_pairs.append((conv, bn))
 
             patterns_with_callbacks = []
             conv_types = ['Conv', 'ConvTranspose']  # TODO: Add Conv1d when supported on Keras
-            linear_types = ['Gemm']
+            linear_types = ['Gemm', 'MatMul']
 
             for op_type in conv_types + linear_types:
                 patterns_with_callbacks.append(PatternType(pattern=[op_type, 'BatchNormalization'],
