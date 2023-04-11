@@ -43,7 +43,7 @@ import torch.nn as nn
 import numpy as np
 import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme
-from aimet_torch.elementwise_ops import Add, Subtract, Multiply, Divide, Concat, MatMul
+from aimet_torch.elementwise_ops import Add, Subtract, Multiply, Divide, Concat, MatMul, Erf, Sqrt
 from aimet_torch.quantsim import QuantizationSimModel
 
 
@@ -311,3 +311,34 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         assert not sim.model.mul.input_quantizers[0].encoding
         assert not sim.model.mul.input_quantizers[1].encoding
         assert sim.model.mul.output_quantizers[0].encoding
+
+    def test_erf_op(self):
+        """
+        Test gaussian error function
+        """
+        model = Model3(Erf())
+        inputs = torch.tensor([0, -1., 10.])
+
+        custom_module_out = model(inputs)
+        original_module_out = torch.erf(inputs)
+        assert np.allclose(custom_module_out, original_module_out)
+
+    def test_erf_with_other_ops(self):
+        """
+        Test erf combined with other ops
+        """
+        class ErfWithOtherOpsModel(nn.Module):
+            def __init__(self):
+                super(ErfWithOtherOpsModel, self).__init__()
+                self.erf = Erf()
+                self.sqrt = Sqrt()
+
+            def forward(self, *inputs):
+                return inputs[0] / 2 * (1 + self.erf(inputs[0] / self.sqrt(torch.tensor(2))))
+
+        model = ErfWithOtherOpsModel()
+        dummy_input = torch.randn(2)
+
+        combined_ops_output = model(dummy_input)
+        gelu_output = torch.nn.GELU()(dummy_input)
+        assert np.allclose(combined_ops_output, gelu_output)
