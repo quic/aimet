@@ -45,9 +45,10 @@ import pytest
 from aimet_common.defs import QuantScheme
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.qc_quantize_op import OpMode
+from aimet_onnx.utils import make_dummy_input
 from aimet_torch.quantsim import QuantizationSimModel as PtQuantizationSimModel
 from models.models_for_tests import SingleResidual
-from models.models_for_tests import build_dummy_model, single_residual_model
+from models.models_for_tests import build_dummy_model, single_residual_model, BNAfterConv
 
 
 class DummyModel(SingleResidual):
@@ -100,7 +101,8 @@ class TestQuantSim:
     def test_insert_quantize_op_nodes(self):
         """ Test to insert qc quantize op to the graph"""
         model = build_dummy_model()
-        sim = QuantizationSimModel(model)
+        dummy_input = make_dummy_input(model)
+        sim = QuantizationSimModel(model, dummy_input)
         assert len(sim.model.nodes()) == 14
 
         node_ls = [node.op_type for node in sim.model.nodes()]
@@ -115,6 +117,24 @@ class TestQuantSim:
             assert qc_quantize_op_dict[name].op_mode == OpMode.oneShotQuantizeDequantize
         for name in sim.activation_names:
             assert qc_quantize_op_dict[name].op_mode == OpMode.updateStats
+
+    def test_create_quantsim_dynamic_batch_size(self):
+        """ Test to insert qc quantize op to the graph"""
+        model = BNAfterConv()
+        inputs = torch.randn((2, 10, 24, 24))
+        torch.onnx.export(model, inputs, '/tmp/dummy_model.onnx',
+                          training=torch.onnx.TrainingMode.PRESERVE,
+                          input_names=['input'], output_names=['output'],
+                          dynamic_axes={
+                              'input': {0: 'batch_size'},
+                              'output': {0: 'batch_size'},
+                          })
+
+        onnx_model = load_model('/tmp/dummy_model.onnx')
+
+        dummy_input = make_dummy_input(onnx_model)
+        sim = QuantizationSimModel(onnx_model, dummy_input)
+        sim.session.run(None, dummy_input)
 
     def test_compute_encodings(self):
         """Test to perform compute encodings"""

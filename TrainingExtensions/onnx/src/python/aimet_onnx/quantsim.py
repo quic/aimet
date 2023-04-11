@@ -72,6 +72,7 @@ class QuantizationSimModel:
     # pylint: disable=too-many-instance-attributes
     def __init__(self,
                  model: onnx_pb.ModelProto,
+                 dummy_input: Dict[str, np.ndarray] = None,
                  quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
                  rounding_mode: str = 'nearest',
                  default_param_bw: int = 8,
@@ -82,6 +83,7 @@ class QuantizationSimModel:
         Constructor
 
         :param model: ONNX model or path to model
+        :param dummy_input: Dummy input to the model. If None, will attempt to auto-generate a dummy input
         :param quant_scheme: Quantization scheme (e.g. QuantScheme.post_training_tf)
         :param rounding_mode: Rounding mode (e.g. nearest)
         :param default_param_bw: Quantization bitwidth for parameter
@@ -97,6 +99,8 @@ class QuantizationSimModel:
         self.model = model
         if not isinstance(model, ONNXModel):
             self.model = ONNXModel(model)
+        if not dummy_input:
+            dummy_input = make_dummy_input(self.model.model)
         self.qc_quantize_op_dict = {}
         self.connected_graph = ConnectedGraph(self.model)
         self._quant_scheme = quant_scheme
@@ -118,7 +122,7 @@ class QuantizationSimModel:
         self.activation_names = []
         self.activation_dtypes = {}
         self._get_param_names()
-        self._get_activations_to_quantize()
+        self._get_activations_to_quantize(dummy_input)
         self._add_quantization_nodes()
         self.session = self._build_session(self.providers)
 
@@ -147,11 +151,13 @@ class QuantizationSimModel:
                 if param.name not in self.param_names and param.name:
                     self.param_names.append(param.name)
 
-    def _get_activations_to_quantize(self):
+    def _get_activations_to_quantize(self, dummy_input: Dict[str, np.ndarray]):
         """
         Get the names of activations to quantize
+
+        :param dummy_input: Sample input to be run through the model
         """
-        self.fill_activation_dtypes()
+        self.fill_activation_dtypes(dummy_input)
         for node in self.model.nodes():
             if node.op_type not in op_types_to_ignore:
                 for name in node.output:
@@ -178,15 +184,16 @@ class QuantizationSimModel:
             return False
         return True
 
-    def fill_activation_dtypes(self):
+    def fill_activation_dtypes(self, dummy_input: Dict[str, np.ndarray]):
         """
         Get the data type for each activation
+
+        :param dummy_input: Sample input to run through the model
         """
         activations = utils.get_graph_intermediate_activations(self.model.graph())
         hooks = []
         for name in activations:
             hooks.append(add_hook_to_get_activation(self.model.model, name))
-        dummy_input = make_dummy_input(self.model.model)
         sess = self._build_session(self.providers)
         outputs = sess.run(None, dummy_input)
         for idx in range(len(self.model.graph().output)):
@@ -258,6 +265,7 @@ class QuantizationSimModel:
     def _build_session(self, providers):
         """
         Build and return onnxruntime inference session
+
         :param providers: providers to execute onnxruntime
         """
         sess_options = SessionOptions()
@@ -281,6 +289,7 @@ class QuantizationSimModel:
     def save_model_graph(self, filename_prefix: str):
         """
         Save model to given path
+
         :param filename_prefix: filename to save the onnx model
         """
         if not os.path.exists(WORKING_DIR):
@@ -308,6 +317,7 @@ class QuantizationSimModel:
     def _export_encodings(self, encoding_file_path):
         """
         Export encodings to json and yaml file
+
         :param encoding_file_path: path to save the encoding files
         """
 
@@ -340,6 +350,7 @@ class QuantizationSimModel:
     def _remove_nodes_and_save_model(self, file_path):
         """
         Remove quantization nodes and save model to file
+
         :param file_path: path to save onnx model
         """
         nodes_to_remove = []
@@ -359,6 +370,7 @@ class QuantizationSimModel:
     def export(self, path: str, filename_prefix: str):
         """
         Compute encodings and export to files
+
         :param path: dir to save encoding files
         :param filename_prefix: filename to save encoding files
         """

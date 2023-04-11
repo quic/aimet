@@ -39,6 +39,7 @@
 
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_common.defs import QuantScheme
+import numpy as np
 
 
 def pass_calibration_data(session):
@@ -74,7 +75,10 @@ def pass_calibration_data(session):
 
 def quantize_model():
     onnx_model = Model()
-    sim = QuantizationSimModel(onnx_model, quant_scheme=QuantScheme.post_training_tf,
+    input_shape = (1, 3, 224, 224)
+    dummy_data = np.random.randn(*input_shape).astype(np.float32)
+    dummy_input = {'input' : dummy_data}
+    sim = QuantizationSimModel(onnx_model, dummy_input, quant_scheme=QuantScheme.post_training_tf,
                                rounding_mode='nearest', default_param_bw=8, default_activation_bw=8,
                                use_symmetric_encodings=False, use_cuda=False)
 

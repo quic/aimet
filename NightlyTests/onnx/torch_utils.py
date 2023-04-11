@@ -44,7 +44,7 @@ from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
 
 
-def _get_cifar10_data_loaders(batch_size=64, num_workers=4, drop_last=True):
+def get_cifar10_data_loaders(batch_size=64, num_workers=4, drop_last=True):
     train_set = torchvision.datasets.CIFAR10("./data/CIFAR10", train=True, download=True,
                                              transform=torchvision.transforms.ToTensor())
     val_set = torchvision.datasets.CIFAR10("./data/CIFAR10", train=False, download=True,
@@ -90,7 +90,7 @@ def train_cifar10(model: torch.nn.Module, epochs):
     :param model: PyTorch model to train
     :param epochs: Number of epochs to train
     """
-    train_loader, _ = _get_cifar10_data_loaders()
+    train_loader, _ = get_cifar10_data_loaders()
     base_lr = 0.0001
     max_lr = 0.06
     momentum = 0.9
