@@ -85,7 +85,6 @@ cache = Cache()
 # The number of samples to be used for performance evaluation.
 # NOTE: None means "all".
 NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION = None
-NUM_SAMPLES_FOR_ENCODING_COMPUTATION = 500
 
 
 @dataclass(frozen=True)
@@ -145,7 +144,7 @@ _QUANT_SCHEME_CANDIDATES = (
 def _validate_inputs(session: tf.compat.v1.Session,  # pylint: disable=too-many-arguments, too-many-branches
                      starting_op_names: List[str],
                      output_op_names: List[str],
-                     data_loader: tf.compat.v1.data.Dataset,
+                     dataset: tf.compat.v1.data.Dataset,
                      eval_callback: Callable[[tf.compat.v1.Session], float],
                      results_dir: str,
                      strict_validation: bool,
@@ -157,7 +156,7 @@ def _validate_inputs(session: tf.compat.v1.Session,  # pylint: disable=too-many-
     Confirms inputs are of the correct type
 
     :param model: Model to be quantized
-    :param data_loader: A collection that iterates over an unlabeled dataset, used for computing encodings
+    :param dataset: A collection that iterates over an unlabeled dataset, used for computing encodings
     :param eval_callback: Function that calculates the evaluation score
     :param results_dir: Directory to save the results of PTQ techniques
     :param strict_validation: Flag set to True by default. When False, AutoQuant will proceed with execution and try to handle errors internally if possible. This may produce unideal or unintuitive results.
@@ -169,7 +168,7 @@ def _validate_inputs(session: tf.compat.v1.Session,  # pylint: disable=too-many-
     if not isinstance(session, tf.compat.v1.Session):
         raise ValueError('Model seesion must be of type tf.compat.v1.Session, not ' + str(type(session).__name__))
 
-    if isinstance(starting_op_names, List):
+    if isinstance(starting_op_names, (List, Tuple)):
         for name in starting_op_names:
             if not isinstance(name, str):
                 raise ValueError(
@@ -177,7 +176,7 @@ def _validate_inputs(session: tf.compat.v1.Session,  # pylint: disable=too-many-
     else:
         raise ValueError('starting_op_names must be of type List of str, not ' + str(type(starting_op_names).__name__))
 
-    if isinstance(output_op_names, List):
+    if isinstance(output_op_names, (List, Tuple)):
         for name in output_op_names:
             if not isinstance(name, str):
                 raise ValueError(
@@ -185,10 +184,9 @@ def _validate_inputs(session: tf.compat.v1.Session,  # pylint: disable=too-many-
     else:
         raise ValueError('output_op_names must be of type List of str, not ' + str(type(output_op_names).__name__))
 
-
-    if not isinstance(data_loader, tf.compat.v1.data.Dataset):
+    if not isinstance(dataset, tf.compat.v1.data.Dataset):
         raise ValueError('data_loader must be of type DataLoader, not ' + str(
-            type(data_loader).__name__))
+            type(dataset).__name__))
 
     if not isinstance(eval_callback, Callable):
         raise ValueError('eval_callback must be of type Callable, not ' + str(type(eval_callback).__name__))
@@ -250,9 +248,8 @@ class AutoQuant:  # pylint: disable=too-many-instance-attributes
         self.fp32_model = session
         self.starting_op_names = starting_op_names
         self.output_op_names = output_op_names
-        self.data_loader = dataset
+        self.dataset = dataset
         self.eval_callback = eval_callback
-        self._num_samples_for_encoding_computation = NUM_SAMPLES_FOR_ENCODING_COMPUTATION
 
         self._quantsim_params = dict(
             param_bw=param_bw,
@@ -268,27 +265,27 @@ class AutoQuant:  # pylint: disable=too-many-instance-attributes
         else:
             self.cache_dir = None
 
-        def forward_pass_callback(sess: tf.compat.v1.Session, _: Any = None):
+        def forward_pass_callback(sess: tf.compat.v1.Session, _: Any = None) -> None:
             output_ops = [
                 sess.graph.get_operation_by_name(op_name)
                 for op_name in output_op_names
             ]
 
             count = 0
-            iterator = iterate_tf_dataset(self.data_loader)
+            iterator = iterate_tf_dataset(self.dataset)
             for inputs in tqdm(iterator):
                 feed_dict = create_input_feed_dict(sess.graph, starting_op_names, inputs)
                 sess.run(output_ops, feed_dict=feed_dict)
                 count += len(inputs)
-                if count >= self._num_samples_for_encoding_computation:
-                    break
+
+            return
 
         self.forward_pass_callback = forward_pass_callback
 
         self.eval_callback = eval_callback
 
         # get the number of batches and length of the dataloader provided by user
-        iterator = iterate_tf_dataset(self.data_loader)
+        iterator = iterate_tf_dataset(self.dataset)
         batch_size = None
         data_count = 0
         for inputs in iterator:
@@ -307,7 +304,7 @@ class AutoQuant:  # pylint: disable=too-many-instance-attributes
         num_samples = min(self._unlabeled_dataset_length, 2000)
         batch_size = batch_size
         num_batches = math.floor(num_samples / batch_size)
-        self.adaround_params = AdaroundParameters(self.data_loader, num_batches)
+        self.adaround_params = AdaroundParameters(self.dataset, num_batches)
 
         self.eval_manager = _EvalManager(
             quantsim_factory=self._create_quantsim_and_encodings,
@@ -338,7 +335,7 @@ class AutoQuant:  # pylint: disable=too-many-instance-attributes
 
         # Batchnorm Folding
         with self.eval_manager.session("Batchnorm Folding", ptq=True) as sess:
-            model, _ = sess.wrap(self._apply_batchnorm_folding)(model)
+            model, _ = self._apply_batchnorm_folding(model)
 
         sim = self._create_quantsim_and_encodings(model)
         if sess.ptq_result is None:
@@ -371,20 +368,12 @@ class AutoQuant:  # pylint: disable=too-many-instance-attributes
         """
         Set Adaround parameters.
         If this method is not called explicitly by the user, AutoQuant will use
-        `data_loader` (passed to `__init__`) for Adaround.
+        `dataset` (passed to `__init__`) for Adaround.
 
         :param adaround_params: Adaround parameters.
         """
         self.adaround_params = adaround_params
 
-    def set_num_samples_for_encoding_comoputation(self, num: int) -> None:
-        """
-        Set the number of samples to be used for encoding computation.
-        By default it uses `NUM_SAMPLES_FOR_ENCODING_COMPUTATION`
-
-        :param num: Number of samples to be set for the encoding computation.
-        """
-        self._num_samples_for_encoding_computation = num
 
     def _create_quantsim_and_encodings(  # pylint: disable=too-many-arguments, too-many-locals, too-many-branches, protected-access
             self,
@@ -704,10 +693,10 @@ class AutoQuant:  # pylint: disable=too-many-instance-attributes
         # Choose quant scheme automatically.
 
         with self.eval_manager.session("QuantScheme Selection") as sess:
-            self._quantsim_params["quant_scheme"] = sess.wrap(self._choose_default_quant_scheme)()
+            self._quantsim_params["quant_scheme"] = self._choose_default_quant_scheme()
 
         with self.eval_manager.session(f"W32 Evaluation") as sess:
-            w32_eval_score = sess.wrap(sess.eval)(sess=fp32_model, param_bw=32)
+            w32_eval_score = sess.eval(sess=fp32_model, param_bw=32)
             _logger.info("Evaluation finished: W32A%d (eval score: %f)",
                          self._quantsim_params["output_bw"], w32_eval_score)
 
@@ -733,7 +722,7 @@ class AutoQuant:  # pylint: disable=too-many-instance-attributes
 
         # Batchnorm Folding
         with self.eval_manager.session("Batchnorm Folding", ptq=True) as sess:
-            model, _ = sess.wrap(self._apply_batchnorm_folding)(fp32_model)
+            model, _ = self._apply_batchnorm_folding(fp32_model)
             if sess.ptq_result is None:
                 sess.set_ptq_result(model=model,
                                     applied_techniques=["batchnorm_folding"])
@@ -745,7 +734,7 @@ class AutoQuant:  # pylint: disable=too-many-instance-attributes
 
         # Cross-Layer Equalization
         with self.eval_manager.session("Cross-Layer Equalization", ptq=True) as sess:
-            model = sess.wrap(self._apply_cross_layer_equalization)(fp32_model)
+            model = self._apply_cross_layer_equalization(fp32_model)
             if sess.ptq_result is None:
                 sess.set_ptq_result(model=model,
                                     applied_techniques=["cross_layer_equalization"])
