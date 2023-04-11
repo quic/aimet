@@ -40,29 +40,15 @@
 #include "trim_functions.hpp"
 #include <stdexcept>
 
-
 namespace DlQuantization
 {
 
-using namespace std;
-
-    void quantizeDequantizeFp16(const float* in, int cnt, float* out, ComputationMode mode_cpu_gpu)
+    void quantizeDequantizeFp16Gpu(const float* in, int cnt, float* out)
     {
-        switch (mode_cpu_gpu)
-        {
-        case COMP_MODE_CPU:
-            quantizeDequantizeFp16Cpu(in, cnt, out);
-            break;
-        case COMP_MODE_GPU:
-    #ifdef GPU_QUANTIZATION_ENABLED
-           quantizeDequantizeFp16Gpu(in, cnt, out);
-    #else
-            throw runtime_error("Not compiled for GPU mode.");
-    #endif
-            break;
-        default:
-            throw runtime_error("Unknown computation mode.");
-            break;
-        }
+         #ifdef GPU_QUANTIZATION_ENABLED
+                quantizeDequantizeFp16ForGPU(in, cnt, out);
+         #else
+                throw std::runtime_error("Not compiled for GPU mode.");
+         #endif
     }
 }

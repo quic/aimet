@@ -42,6 +42,8 @@
 #include "DlQuantization/TensorQuantizerOpFacade.h"
 #include "DlQuantization/Quantization.hpp"
 #include "DlQuantization/Fp16Quantization.hpp"
+#include "Eigen/Core"
+#include "Eigen/src/Core/arch/CUDA/Half.h"
 
 #include <cstdint>
 #include <stdexcept>
@@ -52,6 +54,8 @@
 
 template <typename T>
 void copyInputTensorsToOutputTensors(const T* inTensor, size_t count, T* outTensor, bool useCuda);
+
+void quantizeDequantizeFp16Cpu(const float* in, int cnt, float* out);
 
 
 template <typename T>
@@ -107,15 +111,17 @@ void modeSpecificActionFloat(const T* inTensor, size_t count, T* outTensor,
                            const DlQuantization::TensorQuantizerOpMode opMode,
                            DlQuantization::IAllocator* allocator, bool useCuda)
 {
-    auto mode_cpu_gpu = DlQuantization::COMP_MODE_CPU;
-    if(useCuda)
-        mode_cpu_gpu = DlQuantization::COMP_MODE_GPU;
     switch (opMode)
     {
     case DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize:
     case DlQuantization::TensorQuantizerOpMode::quantizeDequantize:
     {
-        DlQuantization::quantizeDequantizeFp16(inTensor, count, outTensor, mode_cpu_gpu);
+        if(useCuda)
+        {
+           DlQuantization::quantizeDequantizeFp16Gpu(inTensor, count, outTensor);
+        }
+        else
+            quantizeDequantizeFp16Cpu(inTensor, count, outTensor);
         break;
     }
     case DlQuantization::TensorQuantizerOpMode::updateStats:

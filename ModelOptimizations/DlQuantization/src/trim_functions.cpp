@@ -47,8 +47,6 @@
 #include <vector>
 #include <functional>
 #include "DlQuantization/Quantization.hpp"
-#include "Eigen/Core"
-#include "Eigen/src/Core/arch/CUDA/Half.h"
 #include "trim_functions.hpp"
 
 namespace DlQuantization
@@ -185,15 +183,6 @@ void quantizeDequantizeCpu(const DTYPE* in, int cnt, const TfEncoding& encoding,
                                 encoding.delta, encoding.offset,
                                 rounding_mode);
         dequantizeValueCpu<DTYPE>(&out[i], encoding.delta, encoding.offset);
-    }
-}
-
-
-void quantizeDequantizeFp16Cpu(const float* in, int cnt, float* out)
-{
-    for (int i = 0; i < cnt; ++i)
-    {
-        *(out + i) = Eigen::half_impl::half_to_float(Eigen::half_impl::float_to_half_rtne(*(in + i)));
     }
 }
 

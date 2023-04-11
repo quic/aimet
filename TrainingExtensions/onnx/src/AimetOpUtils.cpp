@@ -57,4 +57,13 @@ void copyInputTensorsToOutputTensors(const T* inTensor, size_t count, T* outTens
 }
 
 
+void quantizeDequantizeFp16Cpu(const float* in, int cnt, float* out)
+{
+    for (int i = 0; i < cnt; ++i)
+    {
+        *(out + i) = Eigen::half_impl::half_to_float(Eigen::half_impl::float_to_half_rtne(*(in + i)));
+    }
+}
+
+
 template void copyInputTensorsToOutputTensors(const float* inTensor, size_t count, float* outTensor, bool useCuda);

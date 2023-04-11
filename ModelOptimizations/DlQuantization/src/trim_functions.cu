@@ -95,7 +95,7 @@ __global__ void quantizeDequantizeFp16Kernel(const float* in, int cnt, float* ou
 }
 
 
-void quantizeDequantizeFp16Gpu(const float* in, int cnt, float* out)
+void quantizeDequantizeFp16ForGPU(const float* in, int cnt, float* out)
 {
     quantizeDequantizeFp16Kernel<<<CUDA_NUM_BLOCKS(cnt), CUDA_NUM_THREADS>>>(in, cnt, out);
 }
