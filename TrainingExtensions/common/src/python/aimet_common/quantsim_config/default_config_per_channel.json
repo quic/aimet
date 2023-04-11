@@ -43,6 +43,10 @@
     "LayerNorm":
     {
       "per_channel_quantization": "False"
+    },
+    "Gather":
+    {
+      "is_output_quantized": "False"
     }
   },
 

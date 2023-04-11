@@ -35,6 +35,10 @@
     "Mean":
     {
       "is_output_quantized": "False"
+    },
+    "Gather":
+    {
+      "is_output_quantized": "False"
     }
   },
 
