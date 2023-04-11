@@ -659,7 +659,7 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
         round_mode = self._tensor_quantizer[0].roundingMode
         for tensor_quantizer in self._tensor_quantizer:
             assert tensor_quantizer.roundingMode == round_mode, \
-                f"Not all libpymo.TensorQuantizer's have the same round_mode. \
+                f"Not all libpymo.TensorQuantizer's have the same round_mode for original layer {self._original_layer.name}. \
                     Expected: {round_mode}. Got {tensor_quantizer.roundingMode}"
         return round_mode
 
@@ -680,7 +680,7 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
         use_strict_symmetric = self._tensor_quantizer[0].getStrictSymmetric()
         for tensor_quantizer in self._tensor_quantizer:
             assert tensor_quantizer.getStrictSymmetric() == use_strict_symmetric, \
-                f"Not all libpymo.TensorQuantizer's have the same strictSymmetric setting. \
+                f"Not all libpymo.TensorQuantizer's have the same strictSymmetric setting for original layer {self._original_layer.name}. \
                     Expected: {use_strict_symmetric}. Got {tensor_quantizer.getStrictSymmetric()}"
         return use_strict_symmetric
 
@@ -701,7 +701,7 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
         use_unsigned_symmetric = self._tensor_quantizer[0].getUnsignedSymmetric()
         for tensor_quantizer in self._tensor_quantizer:
             assert tensor_quantizer.getUnsignedSymmetric() == use_unsigned_symmetric, \
-                f"Not all libpymo.TensorQuantizer's have the same unsignedSymmetric setting. \
+                f"Not all libpymo.TensorQuantizer's have the same unsignedSymmetric setting for original layer {self._original_layer.name}. \
                     Expected: {use_unsigned_symmetric}. Got {tensor_quantizer.getUnsignedSymmetric()}"
         return use_unsigned_symmetric
 
