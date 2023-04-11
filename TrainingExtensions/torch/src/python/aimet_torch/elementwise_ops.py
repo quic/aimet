@@ -78,6 +78,8 @@ MatMul = create_wrapper_module('MatMul', torch.matmul)
 Norm = create_wrapper_module('Norm', torch.norm)
 Exponential = create_wrapper_module('Exponential', torch.exp)
 Chunk = create_wrapper_module('Chunk', torch.chunk)
+Erf = create_wrapper_module('Erf', torch.erf)
+Sqrt = create_wrapper_module('Sqrt', torch.sqrt)
 
 
 # modules for functional operations defined under torch.nn.functional package
