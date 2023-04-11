@@ -278,7 +278,6 @@ class AutoQuant:  # pylint: disable=too-many-instance-attributes
                 sess.run(output_ops, feed_dict=feed_dict)
                 count += len(inputs)
 
-            return
 
         self.forward_pass_callback = forward_pass_callback
 
