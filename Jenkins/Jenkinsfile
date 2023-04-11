@@ -507,12 +507,11 @@ pipeline {
                     exclude {
                         axis {
                             name 'ML_FMWORK'
-                            //TODO Temporarily skip all gpu variants in editable mode due to known docker build failures
-                            values 'tf-torch', 'torch', 'tf'
+                            values 'tf-torch'
                         }
                         axis {
                             name 'PROC_TYPE'
-                            values 'gpu', 'cpu'
+                            values 'gpu'
                         }
                     }
                 }
