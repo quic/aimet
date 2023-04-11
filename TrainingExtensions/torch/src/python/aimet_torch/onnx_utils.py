@@ -101,13 +101,14 @@ map_torch_types_to_onnx = {
     nn.Flatten: ['Flatten'],
     nn.Softmax: ['Softmax'],
     nn.Tanh: ['Tanh'],
+    nn.Embedding: ['Gather'],
     nn.Softplus: ['Softplus'],
     nn.Hardswish: ['HardSwish'],
     elementwise_ops.Add: ['Add'],
     elementwise_ops.Subtract: ['Sub'],
     elementwise_ops.Multiply: ['Mul'],
     elementwise_ops.Divide: ['Div'],
-    elementwise_ops.Concat: ['Concat']
+    elementwise_ops.Concat: ['Concat'],
 }
 
 # Maps pytorch functional op string names to corresponding onnx types.
