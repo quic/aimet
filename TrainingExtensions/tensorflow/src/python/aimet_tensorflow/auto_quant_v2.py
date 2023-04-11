@@ -220,7 +220,7 @@ class AutoQuant:  # pylint: disable=too-many-instance-attributes
             session: tf.compat.v1.Session,
             starting_op_names: List[str],
             output_op_names: List[str],
-            data_loader: tf.compat.v1.data.Dataset,
+            dataset: tf.compat.v1.data.Dataset,
             eval_callback: Callable[[tf.compat.v1.Session], float],
             param_bw: int = 8,
             output_bw: int = 8,
@@ -232,7 +232,7 @@ class AutoQuant:  # pylint: disable=too-many-instance-attributes
             strict_validation: bool = True) -> None:
         """
         :param session: Model to be quantized. Assumes model is on the correct device
-        :param data_loader: A collection that iterates over an unlabeled dataset, used for computing encodings
+        :param dataset: A collection that iterates over an unlabeled dataset, used for computing encodings
         :param eval_callback: Function that calculates the evaluation score
         :param param_bw: Parameter bitwidth
         :param output_bw: Output bitwidth
@@ -244,13 +244,13 @@ class AutoQuant:  # pylint: disable=too-many-instance-attributes
         :param strict_validation: Flag set to True by default.hen False, AutoQuant will proceed with execution and handle errors internally if possible. This may produce unideal or unintuitive results.
         """
 
-        _validate_inputs(session, starting_op_names, output_op_names, data_loader, eval_callback, results_dir,
+        _validate_inputs(session, starting_op_names, output_op_names, dataset, eval_callback, results_dir,
                          strict_validation, quant_scheme, param_bw, output_bw, rounding_mode)
 
         self.fp32_model = session
         self.starting_op_names = starting_op_names
         self.output_op_names = output_op_names
-        self.data_loader = data_loader
+        self.data_loader = dataset
         self.eval_callback = eval_callback
         self._num_samples_for_encoding_computation = NUM_SAMPLES_FOR_ENCODING_COMPUTATION
 
