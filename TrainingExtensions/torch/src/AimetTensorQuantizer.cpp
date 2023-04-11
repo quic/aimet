@@ -120,10 +120,11 @@ public:
     at::Tensor quantizeDequantize(at::Tensor input, DlQuantization::TfEncoding& encoding,
                                   DlQuantization::RoundingMode roundingMode, bool use_cuda)
     {
-        // Allocate an output tensor as the same shape as the input
-        at::Tensor output = input;
-
+        // Create an empty output tensor based on the dimension and options of input
         at::IntArrayRef sizes  = input.sizes();
+        at::Tensor output = at::empty(sizes, input.options());
+
+
         size_t inputTensorSize = 1;
         for (auto size: sizes)
             inputTensorSize *= size;
@@ -137,10 +138,10 @@ public:
     at::Tensor quantize(at::Tensor input, DlQuantization::TfEncoding& encoding,
                         DlQuantization::RoundingMode roundingMode, bool use_cuda, bool shiftToSigned)
     {
-        // Allocate an output tensor as the same shape as the input
-        at::Tensor output = input;
-
+        // Create an empty output tensor based on the dimension and options of input
         at::IntArrayRef sizes  = input.sizes();
+        at::Tensor output = at::empty(sizes, input.options());
+
         size_t inputTensorSize = 1;
         for (auto size: sizes)
             inputTensorSize *= size;
