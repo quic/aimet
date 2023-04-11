@@ -166,7 +166,7 @@ def keras_applications_mobilenet_v2():
     return model
 
 
-def model_with_legacy_bn_layers(training_as_placeholder):
+def model_with_legacy_bn_layers(training_as_placeholder, is_fused):
     """ Model with legacy Batch norm layers """
     training = True
     if training_as_placeholder:
@@ -174,21 +174,21 @@ def model_with_legacy_bn_layers(training_as_placeholder):
 
     inputs = tf.keras.Input(shape=(32, 32, 3,))
     x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-    layer = normalization_layers.BatchNormalization(momentum=.3, epsilon=.65)
+    layer = normalization_layers.BatchNormalization(momentum=.3, epsilon=.65, fused=is_fused)
     x = layer.apply(x, training=training)
     x = tf.keras.layers.Conv2D(16, (2, 2))(x)
     with tf.compat.v1.variable_scope("foo"):
         with tf.compat.v1.variable_scope("bar"):
-            layer = normalization_layers.BatchNormalization(momentum=.4, epsilon=.25)
+            layer = normalization_layers.BatchNormalization(momentum=.4, epsilon=.25, fused=is_fused)
     x = layer.apply(x, training=training)
     x = tf.nn.relu(x)
-    layer = normalization_layers.BatchNormalization(momentum=.5, epsilon=.35)
+    layer = normalization_layers.BatchNormalization(momentum=.5, epsilon=.35, fused=is_fused)
     x = layer.apply(x, training=False)
     x = tf.keras.layers.Flatten()(x)
     outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
 
 
-def model_with_compat_bn_layers(training_as_placeholder):
+def model_with_compat_bn_layers(training_as_placeholder, is_fused):
     """ Model with compat Batch norm layers """
     training = True
     if training_as_placeholder:
@@ -196,18 +196,18 @@ def model_with_compat_bn_layers(training_as_placeholder):
 
     inputs = tf.keras.Input(shape=(32, 32, 3,))
     x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-    x = tf.compat.v1.layers.batch_normalization(x, momentum=.3, epsilon=.65, training=training)
+    x = tf.compat.v1.layers.batch_normalization(x, momentum=.3, epsilon=.65, training=training, fused=is_fused)
     x = tf.keras.layers.Conv2D(16, (2, 2))(x)
     with tf.compat.v1.variable_scope("foo"):
         with tf.compat.v1.variable_scope("bar"):
-            x = tf.compat.v1.layers.batch_normalization(x, momentum=.4, epsilon=.25, training=training)
+            x = tf.compat.v1.layers.batch_normalization(x, momentum=.4, epsilon=.25, training=training, fused=is_fused)
     x = tf.nn.relu(x)
-    x = tf.compat.v1.layers.batch_normalization(x, momentum=.5, epsilon=.35, training=False)
+    x = tf.compat.v1.layers.batch_normalization(x, momentum=.5, epsilon=.35, training=False, fused=is_fused)
     x = tf.keras.layers.Flatten()(x)
     outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
 
 
-def model_with_keras_bn_layers(training_as_placeholder):
+def model_with_keras_bn_layers(training_as_placeholder, is_fused):
     """ Model with keras Batch norm layers """
     training = True
     if training_as_placeholder:
@@ -215,68 +215,134 @@ def model_with_keras_bn_layers(training_as_placeholder):
 
     inputs = tf.keras.Input(shape=(32, 32, 3,))
     x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x)
+    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65, fused=is_fused)(x)
     x = tf.keras.layers.Conv2D(16, (2, 2))(x)
     with tf.compat.v1.variable_scope("foo"):
         with tf.compat.v1.variable_scope("bar"):
-            x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25)(x, training=training)
+            x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25, fused=is_fused)(x, training=training)
     x = tf.nn.relu(x)
-    x = tf.keras.layers.BatchNormalization(momentum=.5, epsilon=.35)(x, training=False)
+    x = tf.keras.layers.BatchNormalization(momentum=.5, epsilon=.35, fused=is_fused)(x, training=False)
     x = tf.keras.layers.Flatten()(x)
     outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
     return model
 
 
-def model_with_keras_bn_layers_is_training_bool(is_training):
+def model_with_keras_bn_layers_is_training_bool(is_training, is_fused):
     """ Model with keras Batch norm layers and is_training flag as boolean. """
 
     inputs = tf.keras.Input(shape=(32, 32, 3,))
     x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x, is_training)
+    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65, fused=is_fused)(x, is_training)
     x = tf.keras.layers.Conv2D(16, (2, 2))(x)
     with tf.compat.v1.variable_scope("foo"):
         with tf.compat.v1.variable_scope("bar"):
-            x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25)(x, is_training)
+            x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25, fused=is_fused)(x, is_training)
     x = tf.nn.relu(x)
-    x = tf.keras.layers.BatchNormalization(momentum=.5, epsilon=.35)(x, is_training)
+    x = tf.keras.layers.BatchNormalization(momentum=.5, epsilon=.35, fused=is_fused)(x, is_training)
     x = tf.keras.layers.Flatten()(x)
     outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
     return model
 
 
-def model_with_legacy_bn_layers_is_training_bool(is_training):
+def model_with_legacy_bn_layers_is_training_bool(is_training, is_fused):
     """ Model with legacy Batch norm layers """
     inputs = tf.keras.Input(shape=(32, 32, 3,))
     x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-    layer = normalization_layers.BatchNormalization(momentum=.3, epsilon=.65)
+    layer = normalization_layers.BatchNormalization(momentum=.3, epsilon=.65, fused=is_fused)
     x = layer.apply(x, training=is_training)
     x = tf.keras.layers.Conv2D(16, (2, 2))(x)
     with tf.compat.v1.variable_scope("foo"):
         with tf.compat.v1.variable_scope("bar"):
-            layer = normalization_layers.BatchNormalization(momentum=.4, epsilon=.25)
+            layer = normalization_layers.BatchNormalization(momentum=.4, epsilon=.25, fused=is_fused)
     x = layer.apply(x, training=is_training)
     x = tf.nn.relu(x)
-    layer = normalization_layers.BatchNormalization(momentum=.5, epsilon=.35)
+    layer = normalization_layers.BatchNormalization(momentum=.5, epsilon=.35, fused=is_fused)
     x = layer.apply(x, training=is_training)
     x = tf.keras.layers.Flatten()(x)
     outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
 
 
-def model_with_compat_bn_layers_is_training_bool(is_training):
+def model_with_compat_bn_layers_is_training_bool(is_training, is_fused):
     """ Model with compat Batch norm layers """
     inputs = tf.keras.Input(shape=(32, 32, 3,))
     x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-    x = tf.compat.v1.layers.batch_normalization(x, momentum=.3, epsilon=.65, training=is_training)
+    x = tf.compat.v1.layers.batch_normalization(x, momentum=.3, epsilon=.65, training=is_training, fused=is_fused)
     x = tf.keras.layers.Conv2D(16, (2, 2))(x)
     with tf.compat.v1.variable_scope("foo"):
         with tf.compat.v1.variable_scope("bar"):
-            x = tf.compat.v1.layers.batch_normalization(x, momentum=.4, epsilon=.25, training=is_training)
+            x = tf.compat.v1.layers.batch_normalization(x, momentum=.4, epsilon=.25, training=is_training, fused=is_fused)
     x = tf.nn.relu(x)
-    x = tf.compat.v1.layers.batch_normalization(x, momentum=.5, epsilon=.35, training=is_training)
+    x = tf.compat.v1.layers.batch_normalization(x, momentum=.5, epsilon=.35, training=is_training, fused=is_fused)
     x = tf.keras.layers.Flatten()(x)
     outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
+
+
+def _verify_utilities_to_read_bn_params_stats_epsilon_momentum(session, start_op_names, output_op_names):
+    """
+    Verify utilities to read BN statistics (mean, var), params(gamma, beta), epsilon and momentum.
+    """
+    graph_def = session.graph.as_graph_def()
+    conn_graph = ConnectedGraph(session.graph, start_op_names, output_op_names)
+    bn_ops = tuple(get_active_bn_ops(conn_graph))
+    assert len(bn_ops) == 3
+
+    assert np.isclose(_get_bn_momentum(graph_def, bn_ops[0]), 0.3)
+    assert np.isclose(_get_bn_momentum(graph_def, bn_ops[1]), 0.4)
+    assert np.isclose(_get_bn_momentum(graph_def, bn_ops[2]), 0.99)
+
+    assert np.isclose(round(_get_bn_epsilon(graph_def, bn_ops[0]), 2), 0.65)
+    assert np.isclose(round(_get_bn_epsilon(graph_def, bn_ops[1]), 2), 0.25)
+    assert np.isclose(round(_get_bn_epsilon(graph_def, bn_ops[2]), 2), 0.35)
+
+    assert all(isinstance(x, np.ndarray) for x in _get_bn_stats_and_params(session, bn_ops[0]))
+    assert all(isinstance(x, np.ndarray) for x in _get_bn_stats_and_params(session, bn_ops[1]))
+    assert all(isinstance(x, np.ndarray) for x in _get_bn_stats_and_params(session, bn_ops[2]))
+
+    for bn_op in bn_ops:
+        mean, var, gamma, beta = _get_bn_stats_and_params(session, bn_op)
+        assert np.all(mean == 0)
+        assert np.all(var == 1)
+        assert np.all(gamma == 1)
+        assert np.all(beta == 0)
+
+
+def _verify_utilities_to_set_momentum_and_is_training(updated_sess, start_op_names, output_op_names):
+    """
+    Verify utilities to read and then set momentum and is_training variables.
+    """
+    conn_graph = ConnectedGraph(updated_sess.graph, start_op_names, output_op_names)
+    bn_ops = tuple(get_active_bn_ops(conn_graph))
+
+    assert len(bn_ops) == 3
+    assert np.isclose(updated_sess.run(_get_bn_momentum_var(updated_sess, bn_ops[0])), 0.3)
+    assert np.isclose(updated_sess.run(_get_bn_momentum_var(updated_sess, bn_ops[1])), 0.4)
+    assert np.isclose(updated_sess.run(_get_bn_momentum_var(updated_sess, bn_ops[2])), 0.99)
+
+    # all BNs are in inference mode.
+    for bn_op in bn_ops:
+        assert not updated_sess.run(_get_bn_is_training_var(updated_sess, bn_op))
+
+    # set BNs momentum=0
+    for bn_op in bn_ops:
+        momentum_var = _get_bn_momentum_var(updated_sess, bn_op)
+        _set_var(updated_sess, momentum_var, 0)
+
+    # set BNs in training mode
+    for bn_op in bn_ops:
+        is_training_var = _get_bn_is_training_var(updated_sess, bn_op)
+        _set_var(updated_sess, is_training_var, True)
+
+    # all BNs momentum should be 0
+    assert np.isclose(updated_sess.run(_get_bn_momentum_var(updated_sess, bn_ops[0])), 0)
+    assert np.isclose(updated_sess.run(_get_bn_momentum_var(updated_sess, bn_ops[1])), 0)
+    assert np.isclose(updated_sess.run(_get_bn_momentum_var(updated_sess, bn_ops[2])), 0)
+
+    # all BNs should be in training mode
+    assert updated_sess.run(_get_bn_is_training_var(updated_sess, bn_ops[0]))
+    assert updated_sess.run(_get_bn_is_training_var(updated_sess, bn_ops[1]))
+    assert updated_sess.run(_get_bn_is_training_var(updated_sess, bn_ops[2]))
 
 
 class TestBnMutable:
@@ -1075,54 +1141,31 @@ class TestBnMutable:
 
     @pytest.mark.cuda
     @pytest.mark.parametrize("training_as_placeholder", [True, False])
+    @pytest.mark.parametrize("is_fused", [True, False])
     @pytest.mark.parametrize("model", [model_with_keras_bn_layers, model_with_compat_bn_layers,
                                        model_with_legacy_bn_layers])
-    def test_to_get_bn_params_stats_momentum_epsilon(self, model, training_as_placeholder):
-        """ Verify to get BN params, stats, momentum and epsilon with keras Batch norm layers """
+    def test_to_get_bn_params_stats_momentum_epsilon(self, model, training_as_placeholder, is_fused):
+        """ Verify to get BN params, stats, momentum and epsilon """
         tf.compat.v1.reset_default_graph()
         device = '/gpu:0'
         with tf.device(device):
-            _ = model(training_as_placeholder)
+            _ = model(training_as_placeholder, is_fused)
         graph = tf.compat.v1.get_default_graph()
-        graph_def = graph.as_graph_def()
         sess = tf.compat.v1.Session(graph=graph)
         initialize_uninitialized_vars(sess)
         start_op_names = ["input_1"]
         output_op_names = ["keras_model_functional/Softmax"]
-
-        conn_graph = ConnectedGraph(sess.graph, start_op_names, output_op_names)
-        bn_ops = tuple(get_active_bn_ops(conn_graph))
-
-        assert len(bn_ops) == 3
-
-        assert np.isclose(_get_bn_momentum(graph_def, bn_ops[0]), 0.3)
-        assert np.isclose(_get_bn_momentum(graph_def, bn_ops[1]), 0.4)
-        assert np.isclose(_get_bn_momentum(graph_def, bn_ops[2]), 0.99)
-
-        assert np.isclose(round(_get_bn_epsilon(graph_def, bn_ops[0]), 2), 0.65)
-        assert np.isclose(round(_get_bn_epsilon(graph_def, bn_ops[1]), 2), 0.25)
-        assert np.isclose(round(_get_bn_epsilon(graph_def, bn_ops[2]), 2), 0.35)
-
-        assert all(isinstance(x, np.ndarray) for x in _get_bn_stats_and_params(sess, bn_ops[0]))
-        assert all(isinstance(x, np.ndarray) for x in _get_bn_stats_and_params(sess, bn_ops[1]))
-        assert all(isinstance(x, np.ndarray) for x in _get_bn_stats_and_params(sess, bn_ops[2]))
-
-        for bn_op in bn_ops:
-            mean, var, gamma, beta = _get_bn_stats_and_params(sess, bn_op)
-            assert np.all(mean == 0)
-            assert np.all(var == 1)
-            assert np.all(gamma == 1)
-            assert np.all(beta == 0)
-
+        _verify_utilities_to_read_bn_params_stats_epsilon_momentum(sess, start_op_names, output_op_names)
         sess.close()
 
     @pytest.mark.cuda
     @pytest.mark.parametrize("is_training", [True, False])
+    @pytest.mark.parametrize("is_fused", [True, False])
     @pytest.mark.parametrize("model", [model_with_keras_bn_layers_is_training_bool,
                                        model_with_compat_bn_layers_is_training_bool,
                                        model_with_legacy_bn_layers_is_training_bool])
-    def test_modify_sess_bn_mutable(self, model, is_training):
-        """ Verify modify_sess_bn_mutable() API with BNs in inference mode """
+    def test_modify_sess_bn_mutable(self, model, is_training, is_fused):
+        """ Verify modify_sess_bn_mutable() API with BNs in train/inference mode """
         def _get_inp_out_tensor(session, inp_tensor_name, out_tensor_name):
             inp_tensor = session.graph.get_tensor_by_name(inp_tensor_name[0] + ':0')
             out_tensor = session.graph.get_tensor_by_name(out_tensor_name[0] + ':0')
@@ -1131,7 +1174,7 @@ class TestBnMutable:
         tf.compat.v1.reset_default_graph()
         device = '/gpu:0'
         with tf.device(device):
-            model(is_training)
+            model(is_training, is_fused)
         graph = tf.compat.v1.get_default_graph()
         sess = tf.compat.v1.Session(graph=graph)
 
@@ -1163,15 +1206,16 @@ class TestBnMutable:
 
     @pytest.mark.cuda
     @pytest.mark.parametrize("training_as_placeholder", [True, False])
+    @pytest.mark.parametrize("is_fused", [True, False])
     @pytest.mark.parametrize("model", [model_with_keras_bn_layers,
                                        model_with_legacy_bn_layers,
                                        model_with_compat_bn_layers])
-    def test_get_and_set_bn_momentum_and_is_training_var(self, model, training_as_placeholder):
+    def test_get_and_set_bn_momentum_and_is_training_var(self, model, training_as_placeholder, is_fused):
         """ Verify get and set momentum and is_training variables """
         tf.compat.v1.reset_default_graph()
         device = '/gpu:0'
         with tf.device(device):
-            model(training_as_placeholder)
+            model(training_as_placeholder, is_fused)
         graph = tf.compat.v1.get_default_graph()
         sess = tf.compat.v1.Session(graph=graph)
 
@@ -1180,37 +1224,7 @@ class TestBnMutable:
         output_op_names = ["keras_model_functional/Softmax"]
 
         updated_sess = modify_sess_bn_mutable(sess, start_op_names, output_op_names)
-        conn_graph = ConnectedGraph(updated_sess.graph, start_op_names, output_op_names)
-        bn_ops = tuple(get_active_bn_ops(conn_graph))
-
-        assert len(bn_ops) == 3
-        assert np.isclose(updated_sess.run(_get_bn_momentum_var(updated_sess, bn_ops[0])), 0.3)
-        assert np.isclose(updated_sess.run(_get_bn_momentum_var(updated_sess, bn_ops[1])), 0.4)
-        assert np.isclose(updated_sess.run(_get_bn_momentum_var(updated_sess, bn_ops[2])), 0.99)
-
-        # all BNs are in inference mode.
-        for bn_op in bn_ops:
-            assert not updated_sess.run(_get_bn_is_training_var(updated_sess, bn_op))
-
-        # set BNs momentum=0
-        for bn_op in bn_ops:
-            momentum_var = _get_bn_momentum_var(updated_sess, bn_op)
-            _set_var(updated_sess, momentum_var, 0)
-
-        # set BNs in training mode
-        for bn_op in bn_ops:
-            is_training_var = _get_bn_is_training_var(updated_sess, bn_op)
-            _set_var(updated_sess, is_training_var, True)
-
-        # all BNs momentum should be 0
-        assert np.isclose(updated_sess.run(_get_bn_momentum_var(updated_sess, bn_ops[0])), 0)
-        assert np.isclose(updated_sess.run(_get_bn_momentum_var(updated_sess, bn_ops[1])), 0)
-        assert np.isclose(updated_sess.run(_get_bn_momentum_var(updated_sess, bn_ops[2])), 0)
-
-        # all BNs should be in training mode
-        assert updated_sess.run(_get_bn_is_training_var(updated_sess, bn_ops[0]))
-        assert updated_sess.run(_get_bn_is_training_var(updated_sess, bn_ops[1]))
-        assert updated_sess.run(_get_bn_is_training_var(updated_sess, bn_ops[2]))
+        _verify_utilities_to_set_momentum_and_is_training(updated_sess, start_op_names, output_op_names)
 
         sess.close()
         updated_sess.close()

@@ -57,6 +57,7 @@ from aimet_tensorflow.utils.graph import update_keras_bn_ops_trainable_flag
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils
+from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 import aimet_common.libpymo as libpymo
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
@@ -473,6 +474,25 @@ class TestBatchNormFold(unittest.TestCase):
         sess = tf.compat.v1.keras.backend.get_session()
         new_sess, folded_bn_conv_pairs = fold_all_batch_norms(sess, "conv2d_input", 'keras_model/Softmax')
         self.assertTrue(len(folded_bn_conv_pairs) == 2)
+
+    def test_fold_forward(self):
+        """ test to check fold_backward flag """
+        tf.compat.v1.reset_default_graph()
+        inputs = tf.keras.Input(shape=(32, 32, 3,))
+        x = tf.keras.layers.BatchNormalization()(inputs)
+        x = tf.keras.layers.Flatten()(x)
+        outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
+        tf.keras.Model(inputs=inputs, outputs=outputs)
+        graph = tf.compat.v1.get_default_graph()
+        sess = tf.compat.v1.Session(graph=graph)
+        initialize_uninitialized_vars(sess)
+        start_op_names = ["input_1"]
+        output_op_names = ["keras_model_functional/Softmax"]
+        pairs = find_all_batch_norms_to_fold(sess, start_op_names, output_op_names, return_bn_conn_op=True)
+        conv, bn, fold_backward = pairs[0]
+        assert not fold_backward
+        assert bn.type == 'FusedBatchNormV3'
+        sess.close()
 
 
 def get_sim_model_conv2d_FusedBatchNormV3():

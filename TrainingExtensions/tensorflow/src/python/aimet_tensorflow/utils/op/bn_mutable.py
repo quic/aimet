@@ -46,7 +46,6 @@ from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.common.operation import Op
-from aimet_tensorflow.utils.constants import BNOpParamType
 
 _DEFAULT_BN_MOMENTUM = 0.99
 _DEFAULT_BN_EPSILON = 0.001
@@ -108,6 +107,9 @@ def modify_sess_bn_mutable(sess: tf.compat.v1.Session,
             momentum = _get_bn_momentum(graph_def, bn_op)
             momentum_var = tf.Variable(momentum, trainable=False, name=new_bn_name + _BN_MOMENTUM_NAME)
 
+            # Get is_fused flag.
+            is_fused = bool(bn_op.type == 'FusedBatchNormV3')
+
             tf_op = bn_op.get_tf_op_with_io_tensor()
             new_bn = tf.compat.v1.layers.batch_normalization(tf_op.in_tensor,
                                                              epsilon=epsilon,
@@ -118,6 +120,7 @@ def modify_sess_bn_mutable(sess: tf.compat.v1.Session,
                                                              moving_variance_initializer=var_init,
                                                              name=new_bn_name,
                                                              training=bn_training,
+                                                             fused=is_fused
                                                              )
             graph_editor.reroute_ts(ts0=new_bn, ts1=tf_op.out_tensor)
             graph_editor.detach_inputs(tf_op.op)
@@ -129,13 +132,13 @@ def modify_sess_bn_mutable(sess: tf.compat.v1.Session,
 
 def get_active_bn_ops(connected_graph: ConnectedGraph):
     """
-    Get all the active Batch norm ops for given Connected graph object.
+    Get all the active Batch norm ops (Fused and un-fused) from given Connected graph object.
 
     :param connected_graph: Connected graph.
     :return:
     """
     for conn_graph_op in connected_graph.get_all_ops().values():
-        if conn_graph_op.type == 'FusedBatchNormV3':
+        if conn_graph_op.type in ['FusedBatchNormV3', 'BatchNorm']:
             bn_conn_graph_op = conn_graph_op
             yield bn_conn_graph_op
 
@@ -157,37 +160,40 @@ def _get_bn_stats_and_params(session: tf.compat.v1.Session, bn_op: Op) \
         mean, var, gamma, beta = session.run(bn_stats_and_params)
     return mean, var, gamma, beta
 
+
 def _get_bn_stats_var(session: tf.compat.v1.Session, bn_conn_graph_op: Op) -> List[tf.Variable]:
     """
     Get BN statistics (mean, variance) variables for given batch norm op.
+    NOTE: BN op's inputs[3] and inputs[4] corresponds to moving_mean and moving_variance respectively.
 
     :param session: TensorFlow session.
     :param bn_conn_graph_op: Batch norm op.
     :return: BN statistics (mean, variance)
     """
-    moving_mean = str(bn_conn_graph_op.inputs[BNOpParamType.moving_mean]) + ':0'
-    moving_var = str(bn_conn_graph_op.inputs[BNOpParamType.moving_variance]) + ':0'
-
+    stats_var_names = [str(bn_conn_graph_op.inputs[3]) + ':0', str(bn_conn_graph_op.inputs[4]) + ':0']
     with session.graph.as_default():
-        var = [var for var in tf.compat.v1.global_variables() if var.name == moving_mean or var.name == moving_var]
-    assert len(var) == 2, "Unable to get the BN statics (mean, var) variables for given BN op: %s" % bn_conn_graph_op.name
+        var = [var for param_var_name in stats_var_names for var in tf.compat.v1.global_variables() if
+               var.name == param_var_name]
+    assert len(
+        var) == 2, "Unable to get the BN params (mean, variance) variables for given BN op: %s" % bn_conn_graph_op.name
     return var
 
 
 def _get_bn_params_var(session: tf.compat.v1.Session, bn_conn_graph_op: Op) -> List[tf.Variable]:
     """
-    Get BN params (weight, bias) variables for given batch norm op.
+    Get BN params (gamma, beta) variables for given batch norm op.
+    NOTE: BN op's inputs[2] and inputs[1] corresponds to gamma and beta respectively.
 
     :param session: TensorFlow session.
     :param bn_conn_graph_op: Batch norm op.
-    :return: BN statistics
+    :return: BN statistics (gamma, beta)
     """
-    weight = str(bn_conn_graph_op.inputs[BNOpParamType.gamma]) + ':0'
-    bias = str(bn_conn_graph_op.inputs[BNOpParamType.beta]) + ':0'
-
+    param_var_names = [str(bn_conn_graph_op.inputs[2]) + ':0', str(bn_conn_graph_op.inputs[1]) + ':0']
     with session.graph.as_default():
-        var = [var for var in tf.compat.v1.global_variables() if var.name == weight or var.name == bias]
-    assert len(var) == 2, "Unable to get the BN params (weight, bias) variables for given BN op: %s" % bn_conn_graph_op.name
+        var = [var for param_var_name in param_var_names for var in tf.compat.v1.global_variables() if
+               var.name == param_var_name]
+    assert len(
+        var) == 2, "Unable to get the BN params (gamma, beta) variables for given BN op: %s" % bn_conn_graph_op.name
     return var
 
 
@@ -221,8 +227,8 @@ def _get_bn_is_training_var(session: tf.compat.v1.Session, bn_conn_graph_op: Op)
     :param bn_conn_graph_op: Batch norm op.
     :return: BN statistics
     """
-    is_training_tensor = bn_conn_graph_op.internal_ops[1].inputs[0].op.inputs[0]
-
+    if_op = [tf_op for tf_op in bn_conn_graph_op.internal_ops if tf_op.type == 'If'][0]
+    is_training_tensor = if_op.inputs[0].op.inputs[0]
     with session.graph.as_default():
         is_training_var = [var for var in tf.compat.v1.global_variables() if var.name == is_training_tensor.name]
 
@@ -247,53 +253,135 @@ def _get_bn_momentum(graph_def: tf.Graph, bn_conn_graph_op: Op) -> float:
     """
     Get the BN momentum from graph_def protobuf.
 
-    NOTE: momentum is only needed during training and not during inference.
+    NOTE: momentum is only needed during training and not during inference. If the BN is in inference mode, default
+    momentum is returned.
 
     :param graph_def: A protobuf containing the graph operations.
     :param bn_conn_graph_op: BN op.
     :return: momentum
     """
     momentum = None
+    if bn_conn_graph_op.type == 'FusedBatchNormV3':
+        momentum = _get_momentum_fused_bn(graph_def, bn_conn_graph_op)
+    elif bn_conn_graph_op.type == 'BatchNorm':
+        momentum = _get_momentum_for_un_fused_bn(graph_def, bn_conn_graph_op)
+    if momentum is None:
+        momentum = _DEFAULT_BN_MOMENTUM
 
+    return momentum
+
+
+def _get_momentum_for_un_fused_bn(graph_def: tf.Graph, bn_conn_graph_op: Op) -> Union[None, float]:
+    """
+    Get momentum for un fused BN. There are categories.
+
+    1) keras BN layers - momentum should be found under graph_def.library.function
+    2) compat and legacy BN layers - momentum should be found under graph_def.node
+
+    :param graph_def: A protobuf containing the graph operations.
+    :param bn_conn_graph_op:  BN op.
+    :return: momentum
+    """
+    momentum = None
+    bn_op_name = bn_conn_graph_op.name.replace("/", "_") + '_cond_2_true'
+    for func in graph_def.library.function:
+        if func.signature.name.startswith(bn_op_name):
+            decay = func.node_def[0].attr['value'].tensor.float_val[0]
+            momentum = 1 - decay
+            break
+    bn_op_name = bn_conn_graph_op.name + '/AssignMovingAvg/decay'
+    for node in graph_def.node:
+        if bn_op_name == node.name:
+            decay = node.attr['value'].tensor.float_val[0]
+            momentum = 1 - decay
+            break
+
+    return momentum
+
+
+def _get_momentum_fused_bn(graph_def: tf.Graph, bn_conn_graph_op: Op) -> Union[None, float]:
+    """
+    Get momentum for fused BN. There are categories.
+
+    1) keras BN layers - momentum should be found under graph_def.library.function
+    2) compat and legacy BN layers - momentum should be found under graph_def.node
+
+    :param graph_def: A protobuf containing the graph operations.
+    :param bn_conn_graph_op: BN op.
+    :return: momentum
+    """
+    momentum = None
     bn_op_name = bn_conn_graph_op.name.replace("/", "_") + '_cond_1_true'
     for func in graph_def.library.function:
         if func.signature.name.startswith(bn_op_name):
             momentum = func.node_def[0].attr['value'].tensor.float_val[0]
             break
-
     bn_op_name = bn_conn_graph_op.name + '/Const'
     for node in graph_def.node:
         if bn_op_name == node.name:
             momentum = node.attr['value'].tensor.float_val[0]
             break
 
-    if momentum is None:
-        momentum = _DEFAULT_BN_MOMENTUM
     return momentum
 
 
 def _get_bn_epsilon(graph_def: tf.Graph, bn_conn_graph_op: Op) -> float:
     """
-    Get the epsilon from graph_def protobuf.
+    Get the BN epsilon from graph_def protobuf.
 
     :param graph_def: A protobuf containing the graph operations.
     :param bn_conn_graph_op: BN op.
     :return: epsilon.
     """
     epsilon = None
+    if bn_conn_graph_op.type == 'FusedBatchNormV3':
+        epsilon = _get_epsilon_for_fused_bn(graph_def, bn_conn_graph_op)
 
+    elif bn_conn_graph_op.type == 'BatchNorm':
+        epsilon = _get_epsilon_for_un_fused_bn(graph_def, bn_conn_graph_op)
+
+    if epsilon is None:
+        epsilon = _DEFAULT_BN_EPSILON
+    return epsilon
+
+
+def _get_epsilon_for_un_fused_bn(graph_def: tf.Graph, bn_conn_graph_op: Op) -> Union[None, float]:
+    """
+    Get epsilon for un fused BN. Single category applicable to all keras, legacy and compat un fused BNs.
+
+    :param graph_def: A protobuf containing the graph operations.
+    :param bn_conn_graph_op: BN op.
+    :return:
+    """
+    epsilon = None
+    bn_op_name = bn_conn_graph_op.name + '/batchnorm/add/y'
+    for node in graph_def.node:
+        if bn_op_name == node.name:
+            epsilon = node.attr['value'].tensor.float_val[0]
+            break
+    return epsilon
+
+
+def _get_epsilon_for_fused_bn(graph_def: tf.Graph, bn_conn_graph_op: Op) -> Union[None, float]:
+    """
+    Get epsilon for fused BN. There are two categories.
+
+    1) keras BN layers - momentum should be found under graph_def.library.function
+    2) compat and legacy BN layers - momentum should be found under graph_def.node
+
+    :param graph_def: A protobuf containing the graph operations.
+    :param bn_conn_graph_op: BN op.
+    :return:
+    """
+    epsilon = None
     bn_op_name = bn_conn_graph_op.name.replace("/", "_") + '_cond_true'
     for func in graph_def.library.function:
         if func.signature.name.startswith(bn_op_name):
             epsilon = [node.attr['epsilon'].f for node in func.node_def if node.op == "FusedBatchNormV3"][0]
             break
-
     bn_op_name = bn_conn_graph_op.name + '/FusedBatchNormV3'
     for node in graph_def.node:
         if bn_op_name == node.name and node.op == "FusedBatchNormV3":
             epsilon = node.attr['epsilon'].f
             break
-
-    if epsilon is None:
-        epsilon = _DEFAULT_BN_EPSILON
     return epsilon

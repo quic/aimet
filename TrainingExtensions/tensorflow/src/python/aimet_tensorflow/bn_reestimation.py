@@ -70,7 +70,7 @@ def _get_all_tf_bn_vars_list(sim: QuantizationSimModel) -> Tuple:
 
     for bn_conn_graph_op in bn_conn_graph_ops:
         tf_op = bn_conn_graph_op.internal_ops[0]
-        assert tf_op.type in ['Identity']
+        assert tf_op.type in ['Identity'], 'Fused Batch Norm with training tensor is only supported.'
         bn_mean_tf_var_name = tf_op.inputs[0].op.inputs[3].name
         bn_var_tf_var_name = tf_op.inputs[0].op.inputs[4].name
 
@@ -88,17 +88,14 @@ def _get_all_tf_bn_vars_list(sim: QuantizationSimModel) -> Tuple:
     momentum_tf_var_list = []
 
     for v in tf_global_vars:
-        for tf_var_name in mean_var_tf_var_name_list:
-            if v.name == tf_var_name:
-                mean_var_tf_var_list.append(v)
+        if v.name in mean_var_tf_var_name_list:
+            mean_var_tf_var_list.append(v)
 
-        for tf_momentum_name in momentum_tf_var_name_list:
-            if v.name == tf_momentum_name:
-                momentum_tf_var_list.append(v)
+        if v.name in momentum_tf_var_name_list:
+            momentum_tf_var_list.append(v)
 
-        for tf_traning_name in training_tf_var_name_list:
-            if v.name == tf_traning_name:
-                training_tf_var_list.append(v)
+        if v.name in training_tf_var_name_list:
+            training_tf_var_list.append(v)
 
     return mean_var_tf_var_list, momentum_tf_var_list, training_tf_var_list
 
