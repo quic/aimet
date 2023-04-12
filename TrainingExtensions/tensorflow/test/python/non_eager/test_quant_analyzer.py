@@ -47,7 +47,6 @@ import tensorflow as tf
 from aimet_tensorflow.examples.test_models import keras_model
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.quant_analyzer import QuantAnalyzer, CallbackFunc
-from aimet_tensorflow.utils.common import iterate_tf_dataset
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
@@ -106,7 +105,7 @@ def test_export_per_layer_stats_histogram(cpu_session):
         assert os.path.exists("./tmp/activations_pdf")
         assert os.path.exists("./tmp/weights_pdf")
         assert os.path.isfile("./tmp/activations_pdf/conv2d_input_quantized_0.html")
-        assert os.path.isfile("./tmp/activations_pdf/conv2d_BiasAdd_quantized_0.html")
+        assert os.path.isfile("./tmp/activations_pdf/batch_normalization_cond_Identity_quantized_0.html")
         assert os.path.isfile("./tmp/weights_pdf/conv2d_Conv2D_ReadVariableOp_quantized/"
                               "conv2d_Conv2D_ReadVariableOp_quantized_0.html")
     finally:
@@ -156,7 +155,7 @@ def test_export_per_layer_stats_histogram_per_channel(cpu_session):
         # Check if it is exported to correct html file.
         assert os.path.exists("./tmp/activations_pdf")
         assert os.path.exists("./tmp/weights_pdf")
-        assert os.path.isfile("./tmp/activations_pdf/conv2d_BiasAdd_quantized_0.html")
+        assert os.path.isfile("./tmp/activations_pdf/batch_normalization_cond_Identity_quantized_0.html")
         assert os.path.isfile("./tmp/weights_pdf/conv2d_Conv2D_ReadVariableOp_quantized/"
                               "conv2d_Conv2D_ReadVariableOp_quantized_0.html")
         assert os.path.isfile("./tmp/weights_pdf/conv2d_Conv2D_ReadVariableOp_quantized/"
@@ -257,9 +256,9 @@ def test_get_enabled_activation_quantizers(cpu_session):
     sim = QuantizationSimModel(cpu_session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
     sim.compute_encodings(forward_pass_callback, None)
     enabled_quantizers = sim.get_enabled_activation_quantizers()
-    # total 9 activation quantizers are enabled as per default config file.
+    # total 8 activation quantizers are enabled as per default config file.
     try:
-        assert len(enabled_quantizers) == 9
+        assert len(enabled_quantizers) == 8
     finally:
         sim.session.close()
         cpu_session.close()
