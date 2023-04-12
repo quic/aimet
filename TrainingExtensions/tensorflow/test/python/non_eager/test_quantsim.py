@@ -1199,11 +1199,12 @@ class TestQuantSim(unittest.TestCase):
             sim.compute_encodings(dummy_forward_func, None)
 
             for name, quant_info in sim._activation_quantizers.items():
+                print(name, quant_info.get_op_mode(), quant_info.tensor_quantizer.isEncodingValid)
                 if name in ['keras_model_functional/Softmax_quantized', 'keras_model_functional/BiasAdd_quantized']:
                     # Check that quantizers after op evaluated in compute_encodings are in passThrough (3) mode
                     self.assertEqual(quant_info.get_op_mode(), 3)
                     self.assertFalse(quant_info.tensor_quantizer.isEncodingValid)
-                elif name in ['scope_1/conv2d_3/BiasAdd_quantized']:
+                elif name in ['scope_1/conv2d_3/BiasAdd_quantized', 'conv2d/BiasAdd_quantized']:
                     # Check that passThrough quantizers remain as passThrough (3)
                     self.assertEqual(quant_info.get_op_mode(), 3)
                     self.assertFalse(quant_info.tensor_quantizer.isEncodingValid)
