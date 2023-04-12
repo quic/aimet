@@ -44,6 +44,7 @@ import torch.nn
 # Import AIMET specific modules
 from aimet_common.defs import AdaroundConstants, QuantizationDataType, QuantScheme
 from aimet_torch.tensor_quantizer import TensorQuantizer
+from aimet_torch.quantsim_straight_through_grad import broadcast_to_tensor
 
 class AdaroundTensorQuantizer(TensorQuantizer):
     """
@@ -114,38 +115,15 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         """
         assert self.encoding, 'Encoding needs to be set before Adaround the weight tensor.'
 
-        def _broadcast_to_tensor(encoding, ch_axis):
-            """
-            This helper method takes n-dimension tensor and a 1-dimension encoding. And the encoding is broad-casted to
-            match the n-dimensional tensor
-            :param encoding: Encoding 1-dimensional tensor to broadcast
-            :return: Broad-casted tensor
-            """
-            shape = list(tensor.shape)
-            encoding = torch.Tensor(encoding).to(tensor.device)  # convert encoding to a tensor
-
-            # Original tensor shape is OIHW/IOHW, we change the shape to IHWO. Encoding (which is of shape O) can naturally
-            # broadcast to this shape
-            # This will work if the original tensor shape was any dimensions as long as the first dimension matches the
-            # encoding tensor shape
-            num_channels = shape.pop(ch_axis)
-            encoding = encoding * torch.ones(shape + [num_channels]).to(tensor.device)
-
-            # we permute the resulting tensor back to OIHW/IOHW shape
-            permute_dims = list(range(len(shape)))
-            permute_dims.insert(ch_axis, len(shape))
-            encoding = encoding.permute(permute_dims)
-
-            return encoding
-
         if isinstance(self.encoding, list):
             delta = [enc.delta for enc in self.encoding]                # pylint: disable=not-an-iterable
-            broadcasted_delta = _broadcast_to_tensor(delta, self._ch_axis)
             offset = [enc.offset for enc in self.encoding]              # pylint: disable=not-an-iterable
-            broadcasted_offset = _broadcast_to_tensor(offset, self._ch_axis)
         else:
-            broadcasted_delta = self.encoding.delta
-            broadcasted_offset = self.encoding.offset
+            delta = self.encoding.delta
+            offset = self.encoding.offset
+
+        broadcasted_delta = broadcast_to_tensor(tensor, delta, self._ch_axis)
+        broadcasted_offset = broadcast_to_tensor(tensor, offset, self._ch_axis)
 
         # alpha is the "V" parameter in Equation 2 of the Systems HLD which is defined as a FP32 tensor of the
         # same shape as the weight tensor
