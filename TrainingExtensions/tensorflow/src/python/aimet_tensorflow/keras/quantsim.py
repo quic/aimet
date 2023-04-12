@@ -568,6 +568,11 @@ class QuantizationSimModel(tf.keras.Model):
                         param_quantizer.disable()
                         _logger.info("Encoding for parameter: %s not present thus disabling this quantizer.", param_name)
 
+            # Loading encodings means that compute encodings was called. Therefore, these two lines set the correct
+            # op mode for the correct quant scheme and if the quantization was per channel or not.
+            op_mode = self._param_op_mode_after_analysis(self.quant_scheme)
+            self._set_op_mode_parameters(op_mode)
+
             for idx, output_quantizer in enumerate(wrapper.output_quantizers):
                 # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
                 # inbound_nodes parameter populated, so the name of the quantizer is used instead
