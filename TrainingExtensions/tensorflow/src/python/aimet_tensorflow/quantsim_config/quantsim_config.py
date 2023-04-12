@@ -38,6 +38,7 @@
 """ Utilities for parsing and applying quantsim configurations from json config file """
 
 from typing import List, Dict, Tuple, Set, Union
+import itertools
 import tensorflow as tf
 from packaging import version
 
@@ -47,6 +48,7 @@ from aimet_common.quantsim_config.json_config_importer import DefaultsType, OpTy
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
 from aimet_common.defs import QuantizationDataType, QuantDtypeBwInfo
 from aimet_common.graph_searcher import GraphSearcher
+from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as AimetCommonQuantSimConfigurator
 from aimet_common.quantsim_config.quantsim_config import SupergroupConfigCallback as AimetCommonSupergroupConfigCallback
 from aimet_common.quantsim_config.quantsim_config import get_setting_type, OnnxConnectedGraphTypeMapper,\
@@ -56,7 +58,6 @@ from aimet_tensorflow.quantizer_info import QuantizerInfo
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.common.operation import Op
 from aimet_tensorflow.utils.common import update_variables_with_values, onnx_tf_conn_graph_type_pairs
-
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 QuantizerListType = Tuple[List[tf.Operation], List[tf.Operation]]
@@ -356,6 +357,33 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         Set supergroup specific configurations (fourth level of specificity in configuration file)
         :param supergroups_configs: Configurations for supergroups
         """
+        def find_scale_foldable_bns(cg):
+            """
+            Find batchnorms that can be folded to scale
+            """
+            conv_bn_pairs = []
+
+            def handler(_, op_list):
+                conv, bn = op_list
+                conv_bn_pairs.append((conv, bn))
+
+            patterns_with_callbacks = []
+            conv_types = ['Conv2D', 'DepthwiseConv2dNative']
+            linear_types = ['Dense', 'MatMul']
+            conv_linear_types = conv_types + linear_types
+            bn_types = ['FusedBatchNormV3', 'BatchNorm']
+
+            for combination in itertools.product(conv_linear_types, bn_types):
+                patterns_with_callbacks.append(PatternType(pattern=list(combination), action=handler))
+
+            # create graph searcher instance with connected graph and patterns to search
+            graph_searcher = GraphSearcher(cg, patterns_with_callbacks)
+            graph_searcher.find_all_patterns_in_graph_apply_actions()
+            return conv_bn_pairs
+
+        conv_bn_pairs = find_scale_foldable_bns(self._conn_graph)
+        foldable_bns = [bn for _, bn in conv_bn_pairs]
+
         patterns_with_callbacks = []
         for supergroup_config in supergroups_configs:
             callback = SupergroupConfigCallback(self._sess, self._op_to_quant_ops_dict)
@@ -365,7 +393,40 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
 
         if patterns_with_callbacks:
             graph_searcher = GraphSearcher(self._conn_graph, patterns_with_callbacks)
-            graph_searcher.find_all_patterns_in_graph_apply_actions()
+            graph_searcher.find_all_patterns_in_graph_apply_actions(ignore=foldable_bns)
+
+        def fuse_config(conv: Op, bn: Op):
+            """
+            Fuse configs of conv and bn
+            If conv activation quantizer is enabled, disable it and enable activation quantizer of BN instead
+            so that we can fold batch norm to conv.
+
+            Example 1. If "conv-relu" is specified a supergroup and there is a "conv-bn-relu" sequence in the model.
+            In this case, disable both param and activation quantizers of bn, because after bn is folded into conv,
+            the remaining conv-relu sequence will be executed as a single operation on the target device.
+
+            Example 2. If there is a "conv-bn" sequence in the model. In this case, we should disable the param
+            quantizer of bn and output quantizer of conv, as bn can't be folded into conv if there's an intermediate
+            output quantizer inbetween.
+
+            NOTE: quantizers are not added to BN's params in TF. No need to disable them explicitly.
+            """
+            if conv not in self._op_to_quant_ops_dict:
+                return
+
+            if bn not in self._op_to_quant_ops_dict:
+                return
+
+            _, conv_act_quantize_op = self._op_to_quant_ops_dict[conv]
+            _, bn_act_quantize_op = self._op_to_quant_ops_dict[bn]
+
+            conv_quantize_info = self._activation_quantizer_dict[conv_act_quantize_op.name]
+            bn_quantize_info = self._activation_quantizer_dict[bn_act_quantize_op.name]
+            bn_quantize_info.enabled = conv_quantize_info.enabled
+            conv_quantize_info.enabled = False
+
+        for conv, bn in conv_bn_pairs:
+            fuse_config(conv, bn)
 
     def _set_model_input_configs(self, model_input_configs: ConfigType):
         """

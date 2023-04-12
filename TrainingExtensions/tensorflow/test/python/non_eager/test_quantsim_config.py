@@ -58,7 +58,7 @@ tf.compat.v1.disable_eager_execution()
 
 # pylint: disable=protected-access
 # pylint: disable=too-many-locals
-class TestQuantsimConfig(unittest.TestCase):
+class TestQuantsimConfig:
     """ Class containing unit tests for quantsim config feature """
 
     def test_empty_config_file(self):
@@ -88,12 +88,12 @@ class TestQuantsimConfig(unittest.TestCase):
         sim = QuantizationSimModel(sess, ['input_1'], ['single_residual/Softmax'],
                                    config_file='./quantsim_config.json')
         all_quantize_ops = [op for op in sim.session.graph.get_operations() if op.type == 'QcQuantize']
-        self.assertTrue(all_quantize_ops is not None)
+        assert all_quantize_ops is not None
         for op in all_quantize_ops:
             is_symmetric_tensor = op.inputs[QuantizeOpIndices.use_symmetric_encoding]
             op_mode_tensor = op.inputs[QuantizeOpIndices.op_mode]
-            self.assertEqual(sim.session.run(is_symmetric_tensor), False)
-            self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
+            assert not sim.session.run(is_symmetric_tensor)
+            assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.passThrough)
         if os.path.exists('./quantsim_config.json'):
             os.remove('./quantsim_config.json')
         sess.close()
@@ -169,23 +169,21 @@ class TestQuantsimConfig(unittest.TestCase):
             op = sim.session.graph.get_operation_by_name(op_name)
             is_symmetric_tensor = op.inputs[QuantizeOpIndices.use_symmetric_encoding]
             op_mode_tensor = op.inputs[QuantizeOpIndices.op_mode]
-            self.assertEqual(sim.session.run(is_symmetric_tensor), True)
-            self.assertEqual(sim.session.run(op_mode_tensor),
-                             int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize))
-            self.assertFalse(sim._param_quantizers[op_name].use_unsigned_symmetric)
-            self.assertFalse(sim._param_quantizers[op_name].use_strict_symmetric)
-            self.assertEqual(sim.session.run(op_mode_tensor),
-                             int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize))
+            assert sim.session.run(is_symmetric_tensor)
+            assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
+            assert not sim._param_quantizers[op_name].use_unsigned_symmetric
+            assert not sim._param_quantizers[op_name].use_strict_symmetric
+            assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
 
         for op_name in activation_quantizers:
             op = sim.session.graph.get_operation_by_name(op_name)
             is_symmetric_tensor = op.inputs[QuantizeOpIndices.use_symmetric_encoding]
             op_mode_tensor = op.inputs[QuantizeOpIndices.op_mode]
             if 'input_1' in op_name:
-                self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
+                assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.passThrough)
             else:
-                self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
-            self.assertEqual(sim.session.run(is_symmetric_tensor), False)
+                assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.updateStats)
+            assert not sim.session.run(is_symmetric_tensor)
 
         if os.path.exists('./quantsim_config.json'):
             os.remove('./quantsim_config.json')
@@ -262,21 +260,24 @@ class TestQuantsimConfig(unittest.TestCase):
             op = sim.session.graph.get_operation_by_name(op_name)
             is_symmetric_tensor = op.inputs[QuantizeOpIndices.use_symmetric_encoding]
             op_mode_tensor = op.inputs[QuantizeOpIndices.op_mode]
-            self.assertEqual(sim.session.run(is_symmetric_tensor), True)
-            self.assertEqual(sim.session.run(op_mode_tensor),
-                             int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize))
-            self.assertFalse(sim._param_quantizers[op_name].use_unsigned_symmetric)
-            self.assertFalse(sim._param_quantizers[op_name].use_strict_symmetric)
+            assert sim.session.run(is_symmetric_tensor)
+            assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
+            assert not sim._param_quantizers[op_name].use_unsigned_symmetric
+            assert not sim._param_quantizers[op_name].use_strict_symmetric
 
         for op_name in activation_quantizers:
             op = sim.session.graph.get_operation_by_name(op_name)
             is_symmetric_tensor = op.inputs[QuantizeOpIndices.use_symmetric_encoding]
             op_mode_tensor = op.inputs[QuantizeOpIndices.op_mode]
-            if 'input_1' in op_name:
-                self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
+            print(op_name, '->', sim.session.run(op_mode_tensor))
+            activation_quantizers_in_passthrough = ['input_1_quantized',
+                                                    'conv2d/BiasAdd_quantized',
+                                                    'conv2d_3/BiasAdd_quantized']
+            if op_name in activation_quantizers_in_passthrough:
+                assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.passThrough)
             else:
-                self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
-            self.assertEqual(sim.session.run(is_symmetric_tensor), False)
+                assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.updateStats)
+            assert not sim.session.run(is_symmetric_tensor)
 
         if os.path.exists('./quantsim_config.json'):
             os.remove('./quantsim_config.json')
@@ -339,16 +340,14 @@ class TestQuantsimConfig(unittest.TestCase):
             op = sim.session.graph.get_operation_by_name(param_quantizer)
             is_symmetric_tensor = op.inputs[QuantizeOpIndices.use_symmetric_encoding]
             op_mode_tensor = op.inputs[QuantizeOpIndices.op_mode]
-            self.assertEqual(sim.session.run(op_mode_tensor),
-                             int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize))
-            self.assertEqual(sim.session.run(is_symmetric_tensor), False)
+            assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
+            assert not sim.session.run(is_symmetric_tensor)
         for param_quantizer in bias_quantizers:
             op = sim.session.graph.get_operation_by_name(param_quantizer)
             is_symmetric_tensor = op.inputs[QuantizeOpIndices.use_symmetric_encoding]
             op_mode_tensor = op.inputs[QuantizeOpIndices.op_mode]
-            self.assertEqual(sim.session.run(op_mode_tensor),
-                             int(pymo.TensorQuantizerOpMode.passThrough))
-            self.assertEqual(sim.session.run(is_symmetric_tensor), True)
+            assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.passThrough)
+            assert sim.session.run(is_symmetric_tensor)
 
         sess.close()
         sim.session.close()
@@ -404,12 +403,12 @@ class TestQuantsimConfig(unittest.TestCase):
         sim = QuantizationSimModel(sess, ['input_1'], ['single_residual/Softmax'],
                                    config_file='./quantsim_config.json')
         for q_config in sim._param_quantizers.values():
-            self.assertTrue(q_config.use_strict_symmetric)
-            self.assertTrue(q_config.use_unsigned_symmetric)
+            assert q_config.use_strict_symmetric
+            assert q_config.use_unsigned_symmetric
 
         for q_config in sim._activation_quantizers.values():
-            self.assertTrue(q_config.use_strict_symmetric)
-            self.assertTrue(q_config.use_unsigned_symmetric)
+            assert q_config.use_strict_symmetric
+            assert q_config.use_unsigned_symmetric
 
         activation_quantizers = [
             'conv2d/BiasAdd_quantized',
@@ -453,9 +452,9 @@ class TestQuantsimConfig(unittest.TestCase):
                                         'conv2d_3/BiasAdd_quantized',
                                         'Relu_2_quantized',
                                         'average_pooling2d/AvgPool_quantized']:
-                self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
+                assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.updateStats)
             else:
-                self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
+                assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.passThrough)
         for weight_quantizer in weight_quantizers:
             is_symmetric_tensor = sim.session.graph.get_tensor_by_name(weight_quantizer +
                                                                             '_use_symmetric_encoding:0')
@@ -466,14 +465,12 @@ class TestQuantsimConfig(unittest.TestCase):
                                     'conv2d_3/BiasAdd/ReadVariableOp_quantized',
                                     'conv2d_4/BiasAdd/ReadVariableOp_quantized',
                                     'single_residual/BiasAdd/ReadVariableOp_quantized']:
-                self.assertEqual(sim.session.run(op_mode_tensor),
-                                 int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize))
-                self.assertEqual(sim.session.run(is_symmetric_tensor), True)
+                assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
+                assert sim.session.run(is_symmetric_tensor)
             else:
 
-                self.assertEqual(sim.session.run(op_mode_tensor),
-                                 int(pymo.TensorQuantizerOpMode.passThrough))
-                self.assertEqual(sim.session.run(is_symmetric_tensor), False)
+                assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.passThrough)
+                assert not sim.session.run(is_symmetric_tensor)
 
         if os.path.exists('./quantsim_config.json'):
             os.remove('./quantsim_config.json')
@@ -532,12 +529,12 @@ class TestQuantsimConfig(unittest.TestCase):
         sim = QuantizationSimModel(sess, ['input_1'], ['single_residual/Softmax'],
                                    config_file='./quantsim_config.json')
         for q_config in sim._param_quantizers.values():
-            self.assertTrue(q_config.use_strict_symmetric)
-            self.assertTrue(q_config.use_unsigned_symmetric)
+            assert q_config.use_strict_symmetric
+            assert q_config.use_unsigned_symmetric
 
         for q_config in sim._activation_quantizers.values():
-            self.assertTrue(q_config.use_strict_symmetric)
-            self.assertTrue(q_config.use_unsigned_symmetric)
+            assert q_config.use_strict_symmetric
+            assert q_config.use_unsigned_symmetric
 
         activation_quantizers = [
             'conv2d/BiasAdd_quantized',
@@ -576,15 +573,15 @@ class TestQuantsimConfig(unittest.TestCase):
             op = sim.session.graph.get_operation_by_name(activation_quantizer)
             op_mode_tensor = op.inputs[QuantizeOpIndices.op_mode]
             if activation_quantizer in ['input_1_quantized',
-                                        'conv2d/BiasAdd_quantized',
+                                        'batch_normalization/FusedBatchNormV3_quantized',
                                         'max_pooling2d/MaxPool_quantized',
                                         'conv2d_2/BiasAdd_quantized',
-                                        'conv2d_3/BiasAdd_quantized',
+                                        'batch_normalization_1/FusedBatchNormV3_quantized',
                                         'Relu_2_quantized',
                                         'average_pooling2d/AvgPool_quantized']:
-                self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
+                assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.updateStats)
             else:
-                self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
+                assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.passThrough)
         for weight_quantizer in weight_quantizers:
             op = sim.session.graph.get_operation_by_name(weight_quantizer)
             is_symmetric_tensor = op.inputs[QuantizeOpIndices.use_symmetric_encoding]
@@ -595,14 +592,11 @@ class TestQuantsimConfig(unittest.TestCase):
                                     'conv2d_3/BiasAdd/ReadVariableOp_quantized',
                                     'conv2d_4/BiasAdd/ReadVariableOp_quantized',
                                     'single_residual/BiasAdd/ReadVariableOp_quantized']:
-                self.assertEqual(sim.session.run(op_mode_tensor),
-                                 int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize))
-                self.assertEqual(sim.session.run(is_symmetric_tensor), True)
+                assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
+                assert sim.session.run(is_symmetric_tensor)
             else:
-
-                self.assertEqual(sim.session.run(op_mode_tensor),
-                                 int(pymo.TensorQuantizerOpMode.passThrough))
-                self.assertEqual(sim.session.run(is_symmetric_tensor), False)
+                assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.passThrough)
+                assert not sim.session.run(is_symmetric_tensor)
 
         if os.path.exists('./quantsim_config.json'):
             os.remove('./quantsim_config.json')
@@ -678,9 +672,9 @@ class TestQuantsimConfig(unittest.TestCase):
                                         'Add_quantized',
                                         'conv2d_4/BiasAdd_quantized'
                                         ]:
-                self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
+                assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.passThrough)
             else:
-                self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
+                assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.updateStats)
 
         if os.path.exists('./quantsim_config.json'):
             os.remove('./quantsim_config.json')
@@ -762,9 +756,9 @@ class TestQuantsimConfig(unittest.TestCase):
                            'Add_quantized',
                            'conv2d_4/BiasAdd_quantized'
                            ]:
-                self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
+                assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.passThrough)
             else:
-                self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
+                assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.updateStats)
 
         if os.path.exists('./quantsim_config.json'):
             os.remove('./quantsim_config.json')
@@ -801,7 +795,7 @@ class TestQuantsimConfig(unittest.TestCase):
 
         quantize_op = sim.session.graph.get_operation_by_name('input_1_quantized')
         op_mode_tensor = quantize_op.inputs[QuantizeOpIndices.op_mode]
-        self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
+        assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.updateStats)
 
         if os.path.exists('./quantsim_config.json'):
             os.remove('./quantsim_config.json')
@@ -840,7 +834,7 @@ class TestQuantsimConfig(unittest.TestCase):
 
         sim = QuantizationSimModel(sess, ['input_1'], ['single_residual/Softmax'],
                                    config_file='./quantsim_config.json')
-        self.assertEqual(sim.per_channel_quantization_enabled, True)
+        assert sim.per_channel_quantization_enabled
         if os.path.exists('./quantsim_config.json'):
             os.remove('./quantsim_config.json')
         sess.close()
@@ -877,7 +871,7 @@ class TestQuantsimConfig(unittest.TestCase):
 
         quantize_op = sim.session.graph.get_operation_by_name('single_residual/Softmax_quantized')
         op_mode_tensor = quantize_op.inputs[QuantizeOpIndices.op_mode]
-        self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
+        assert sim.session.run(op_mode_tensor) == int(pymo.TensorQuantizerOpMode.updateStats)
 
         if os.path.exists('./quantsim_config.json'):
             os.remove('./quantsim_config.json')
@@ -1000,21 +994,21 @@ class TestQuantsimConfig(unittest.TestCase):
                                    config_file=config_file)
 
         conv2d_weight_quantizer = 'conv2d/Conv2D/ReadVariableOp_quantized'
-        self.assertTrue(sim._param_quantizers[conv2d_weight_quantizer].enabled)
-        self.assertEqual(sim._param_quantizers[conv2d_weight_quantizer].bitwidth, 8)
-        self.assertEqual(sim._param_quantizers[conv2d_weight_quantizer].data_type, QuantizationDataType.int)
+        assert sim._param_quantizers[conv2d_weight_quantizer].enabled
+        assert sim._param_quantizers[conv2d_weight_quantizer].bitwidth == 8
+        assert sim._param_quantizers[conv2d_weight_quantizer].data_type == QuantizationDataType.int
         conv2d_bias_quantizer = 'conv2d/BiasAdd/ReadVariableOp_quantized'
-        self.assertFalse(sim._param_quantizers[conv2d_bias_quantizer].enabled)
-        self.assertEqual(sim._param_quantizers[conv2d_bias_quantizer].bitwidth, 8)
-        self.assertEqual(sim._param_quantizers[conv2d_bias_quantizer].data_type, QuantizationDataType.int)
+        assert not sim._param_quantizers[conv2d_bias_quantizer].enabled
+        assert sim._param_quantizers[conv2d_bias_quantizer].bitwidth == 8
+        assert sim._param_quantizers[conv2d_bias_quantizer].data_type == QuantizationDataType.int
         conv2d_output_quantizer = 'conv2d/Relu_quantized'
-        self.assertTrue(sim._activation_quantizers[conv2d_output_quantizer].enabled)
-        self.assertEqual(sim._activation_quantizers[conv2d_output_quantizer].bitwidth, 8)
-        self.assertEqual(sim._activation_quantizers[conv2d_output_quantizer].data_type, QuantizationDataType.int)
+        assert sim._activation_quantizers[conv2d_output_quantizer].enabled
+        assert sim._activation_quantizers[conv2d_output_quantizer].bitwidth == 8
+        assert sim._activation_quantizers[conv2d_output_quantizer].data_type == QuantizationDataType.int
         max_pooling_output_quantizer = 'max_pooling2d/MaxPool_quantized'
-        self.assertTrue(sim._activation_quantizers[max_pooling_output_quantizer].enabled)
-        self.assertEqual(sim._activation_quantizers[max_pooling_output_quantizer].bitwidth, 8)
-        self.assertEqual(sim._activation_quantizers[max_pooling_output_quantizer].data_type, QuantizationDataType.int)
+        assert sim._activation_quantizers[max_pooling_output_quantizer].enabled
+        assert sim._activation_quantizers[max_pooling_output_quantizer].bitwidth == 8
+        assert sim._activation_quantizers[max_pooling_output_quantizer].data_type == QuantizationDataType.int
 
         # remove test config created
         qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
@@ -1136,21 +1130,21 @@ class TestQuantsimConfig(unittest.TestCase):
                                    config_file=config_file)
 
         conv2d_weight_quantizer = 'conv2d/Conv2D/ReadVariableOp_quantized'
-        self.assertTrue(sim._param_quantizers[conv2d_weight_quantizer].enabled)
-        self.assertEqual(sim._param_quantizers[conv2d_weight_quantizer].bitwidth, 16)
-        self.assertEqual(sim._param_quantizers[conv2d_weight_quantizer].data_type, QuantizationDataType.float)
+        assert sim._param_quantizers[conv2d_weight_quantizer].enabled
+        assert sim._param_quantizers[conv2d_weight_quantizer].bitwidth == 16
+        assert sim._param_quantizers[conv2d_weight_quantizer].data_type == QuantizationDataType.float
         conv2d_bias_quantizer = 'conv2d/BiasAdd/ReadVariableOp_quantized'
-        self.assertFalse(sim._param_quantizers[conv2d_bias_quantizer].enabled)
-        self.assertEqual(sim._param_quantizers[conv2d_bias_quantizer].bitwidth, 16)
-        self.assertEqual(sim._param_quantizers[conv2d_bias_quantizer].data_type, QuantizationDataType.float)
+        assert not sim._param_quantizers[conv2d_bias_quantizer].enabled
+        assert sim._param_quantizers[conv2d_bias_quantizer].bitwidth == 16
+        assert sim._param_quantizers[conv2d_bias_quantizer].data_type == QuantizationDataType.float
         conv2d_output_quantizer = 'conv2d/Relu_quantized'
-        self.assertTrue(sim._activation_quantizers[conv2d_output_quantizer].enabled)
-        self.assertEqual(sim._activation_quantizers[conv2d_output_quantizer].bitwidth, 16)
-        self.assertEqual(sim._activation_quantizers[conv2d_output_quantizer].data_type, QuantizationDataType.float)
+        assert sim._activation_quantizers[conv2d_output_quantizer].enabled
+        assert sim._activation_quantizers[conv2d_output_quantizer].bitwidth == 16
+        assert sim._activation_quantizers[conv2d_output_quantizer].data_type == QuantizationDataType.float
         max_pooling_output_quantizer = 'max_pooling2d/MaxPool_quantized'
-        self.assertTrue(sim._activation_quantizers[max_pooling_output_quantizer].enabled)
-        self.assertEqual(sim._activation_quantizers[max_pooling_output_quantizer].bitwidth, 16)
-        self.assertEqual(sim._activation_quantizers[max_pooling_output_quantizer].data_type, QuantizationDataType.float)
+        assert sim._activation_quantizers[max_pooling_output_quantizer].enabled
+        assert sim._activation_quantizers[max_pooling_output_quantizer].bitwidth == 16
+        assert sim._activation_quantizers[max_pooling_output_quantizer].data_type == QuantizationDataType.float
 
         # remove test config created
         qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
@@ -1256,9 +1250,11 @@ class TestQuantsimConfig(unittest.TestCase):
                                            quantsim_output_bw=8, quantsim_param_bw=8,
                                            quantsim_data_type=QuantizationDataType.int)
 
-        qsim_dtype_bw = QuantDtypeBwInfo(act_dtype=QuantizationDataType.int, act_bw=8, param_dtype=QuantizationDataType.int, param_bw=8)
-
-        self.assertTrue(qsim_config.check_correctness_of_dtype_bw_rules(qsim_dtype_bw))
+        qsim_dtype_bw = QuantDtypeBwInfo(act_dtype=QuantizationDataType.int,
+                                         act_bw=8,
+                                         param_dtype=QuantizationDataType.int,
+                                         param_bw=8)
+        assert qsim_config.check_correctness_of_dtype_bw_rules(qsim_dtype_bw)
 
         # remove test config created
         if os.path.exists(config_file):
@@ -1358,7 +1354,10 @@ class TestQuantsimConfig(unittest.TestCase):
                                            quantsim_output_bw=8, quantsim_param_bw=8,
                                            quantsim_data_type=QuantizationDataType.int)
 
-        qsim_dtype_bw = QuantDtypeBwInfo(act_dtype=QuantizationDataType.int, act_bw=8, param_dtype=QuantizationDataType.int, param_bw=8)
+        qsim_dtype_bw = QuantDtypeBwInfo(act_dtype=QuantizationDataType.int,
+                                         act_bw=8,
+                                         param_dtype=QuantizationDataType.int,
+                                         param_bw=8)
         exception_raised = False
         try:
             qsim_config.check_correctness_of_dtype_bw_rules(qsim_dtype_bw)
@@ -1461,8 +1460,10 @@ class TestQuantsimConfig(unittest.TestCase):
                                            quantsim_output_bw=8, quantsim_param_bw=8,
                                            quantsim_data_type=QuantizationDataType.int)
 
-        qsim_dtype_bw = QuantDtypeBwInfo(act_dtype=QuantizationDataType.int, act_bw=8, param_dtype=QuantizationDataType.int, param_bw=8)
-
+        qsim_dtype_bw = QuantDtypeBwInfo(act_dtype=QuantizationDataType.int,
+                                         act_bw=8,
+                                         param_dtype=QuantizationDataType.int,
+                                         param_bw=8)
         exception_raised = False
         try:
             qsim_config.check_correctness_of_dtype_bw_rules(qsim_dtype_bw)
@@ -1594,21 +1595,21 @@ class TestQuantsimConfig(unittest.TestCase):
         # is not same as default quantsim bw and dtype(int 4/int4), apply default overrides (int8/ int8).
 
         conv2d_weight_quantizer = 'conv2d/Conv2D/ReadVariableOp_quantized'
-        self.assertTrue(sim._param_quantizers[conv2d_weight_quantizer].enabled)
-        self.assertEqual(sim._param_quantizers[conv2d_weight_quantizer].bitwidth, 16)
-        self.assertEqual(sim._param_quantizers[conv2d_weight_quantizer].data_type, QuantizationDataType.float)
+        assert sim._param_quantizers[conv2d_weight_quantizer].enabled
+        assert sim._param_quantizers[conv2d_weight_quantizer].bitwidth == 16
+        assert sim._param_quantizers[conv2d_weight_quantizer].data_type == QuantizationDataType.float
         conv2d_bias_quantizer = 'conv2d/BiasAdd/ReadVariableOp_quantized'
-        self.assertFalse(sim._param_quantizers[conv2d_bias_quantizer].enabled)
-        self.assertEqual(sim._param_quantizers[conv2d_bias_quantizer].bitwidth, 16)
-        self.assertEqual(sim._param_quantizers[conv2d_bias_quantizer].data_type, QuantizationDataType.float)
+        assert not sim._param_quantizers[conv2d_bias_quantizer].enabled
+        assert sim._param_quantizers[conv2d_bias_quantizer].bitwidth == 16
+        assert sim._param_quantizers[conv2d_bias_quantizer].data_type == QuantizationDataType.float
         conv2d_output_quantizer = 'conv2d/Relu_quantized'
-        self.assertTrue(sim._activation_quantizers[conv2d_output_quantizer].enabled)
-        self.assertEqual(sim._activation_quantizers[conv2d_output_quantizer].bitwidth, 8)
-        self.assertEqual(sim._activation_quantizers[conv2d_output_quantizer].data_type, QuantizationDataType.int)
+        assert sim._activation_quantizers[conv2d_output_quantizer].enabled
+        assert sim._activation_quantizers[conv2d_output_quantizer].bitwidth == 8
+        assert sim._activation_quantizers[conv2d_output_quantizer].data_type == QuantizationDataType.int
         max_pooling_output_quantizer = 'max_pooling2d/MaxPool_quantized'
-        self.assertTrue(sim._activation_quantizers[max_pooling_output_quantizer].enabled)
-        self.assertEqual(sim._activation_quantizers[max_pooling_output_quantizer].bitwidth, 8)
-        self.assertEqual(sim._activation_quantizers[max_pooling_output_quantizer].data_type, QuantizationDataType.int)
+        assert sim._activation_quantizers[max_pooling_output_quantizer].enabled
+        assert sim._activation_quantizers[max_pooling_output_quantizer].bitwidth == 8
+        assert sim._activation_quantizers[max_pooling_output_quantizer].data_type == QuantizationDataType.int
 
         # remove test config created
         qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
@@ -1828,26 +1829,178 @@ class TestQuantsimConfig(unittest.TestCase):
         # LayerNorm params should be set to FP 16, while output is maintained at quantsim defaults (int8)
         ln_output_name = 'layer_normalization/batchnorm/add_1_quantized'
         ln_output_quantinfo = sim._activation_quantizers[ln_output_name]
-        self.assertEqual(ln_output_quantinfo.bitwidth, 8)
-        self.assertEqual(ln_output_quantinfo.data_type, QuantizationDataType.int)
+        assert ln_output_quantinfo.bitwidth == 8
+        assert ln_output_quantinfo.data_type == QuantizationDataType.int
 
         beta_name = 'layer_normalization/batchnorm/ReadVariableOp_quantized'
         beta_quantinfo = sim._param_quantizers[beta_name]
-        self.assertEqual(beta_quantinfo.bitwidth, 16)
-        self.assertEqual(beta_quantinfo.data_type, QuantizationDataType.float)
+        assert beta_quantinfo.bitwidth == 16
+        assert beta_quantinfo.data_type == QuantizationDataType.float
         gamma_name = 'layer_normalization/batchnorm/mul/ReadVariableOp_quantized'
         gamma_quantinfo = sim._param_quantizers[gamma_name]
-        self.assertEqual(gamma_quantinfo.bitwidth, 16)
-        self.assertEqual(gamma_quantinfo.data_type, QuantizationDataType.float)
+        assert gamma_quantinfo.bitwidth == 16
+        assert gamma_quantinfo.data_type == QuantizationDataType.float
 
         # gelu output should be retained at quantsim defaults (int8) although it has supported_kernels = FP16
         # as this op doesn't have params
         gelu_name = 'conv2d/Gelu/mul_1_quantized'
         gelu_quantinfo = sim._activation_quantizers[gelu_name]
-        self.assertEqual(gelu_quantinfo.bitwidth, 8)
-        self.assertEqual(gelu_quantinfo.data_type, QuantizationDataType.int)
+        assert gelu_quantinfo.bitwidth == 8
+        assert gelu_quantinfo.data_type == QuantizationDataType.int
 
         # remove test config created
         qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
         if os.path.exists(config_file):
             os.remove(config_file)
+
+    @pytest.mark.cuda
+    @pytest.mark.parametrize("is_fused", [True, False])
+    def test_find_foldable_bns_with_conv_bn_relu_sequence(self, is_fused):
+        """ verify find_foldable_bn() with conv + bn + relu sequence """
+        tf.compat.v1.reset_default_graph()
+        def model(is_fused):
+            """ Model with keras Batch norm layers and is_training flag as boolean. """
+
+            inputs = tf.keras.Input(shape=(32, 32, 3,))
+            x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+            x = tf.keras.layers.BatchNormalization(fused=is_fused)(x)
+            x = tf.nn.relu(x)
+            outputs = tf.keras.layers.Flatten()(x)
+            model = tf.keras.Model(inputs=inputs, outputs=outputs)
+            return model
+
+        device = '/gpu:0'
+        with tf.device(device):
+            _ = model(is_fused)
+        sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
+        initialize_uninitialized_vars(sess)
+        start_op_names = ["input_1"]
+        output_op_names = ["flatten/Reshape"]
+
+        sim = QuantizationSimModel(sess, start_op_names, output_op_names)
+
+        # Check quantizers are enabled/disabled properly
+        conv_act_quantizer_info = sim.quantizer_config('conv2d/BiasAdd_quantized')
+        assert not conv_act_quantizer_info.enabled
+        conv_param_quantizer_info = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
+        assert conv_param_quantizer_info.enabled
+        if is_fused:
+            bn_act_quantizer_info = sim.quantizer_config('batch_normalization/cond/Identity_quantized')
+        else:
+            bn_act_quantizer_info = sim.quantizer_config('batch_normalization/batchnorm/add_1_quantized')
+        assert not bn_act_quantizer_info.enabled
+        relu_act_quantizer_info = sim.quantizer_config('Relu_quantized')
+        assert relu_act_quantizer_info.enabled
+
+        sess.close()
+        sim.session.close()
+
+    @pytest.mark.cuda
+    @pytest.mark.parametrize("is_fused", [True, False])
+    def test_find_foldable_bns_with_conv_bn_sequence(self, is_fused):
+        """ verify find_foldable_bn() with conv + bn sequence """
+        tf.compat.v1.reset_default_graph()
+        def model(is_fused):
+            inputs = tf.keras.Input(shape=(32, 32, 3,))
+            x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+            x = tf.keras.layers.BatchNormalization(fused=is_fused)(x)
+            outputs = tf.keras.layers.Flatten()(x)
+            model = tf.keras.Model(inputs=inputs, outputs=outputs)
+            return model
+
+        device = '/gpu:0'
+        with tf.device(device):
+            _ = model(is_fused)
+        sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
+        initialize_uninitialized_vars(sess)
+        start_op_names = ["input_1"]
+        output_op_names = ["flatten/Reshape"]
+
+        sim = QuantizationSimModel(sess, start_op_names, output_op_names)
+
+        # Check quantizers are enabled/disabled properly
+        conv_act_quantizer_info = sim.quantizer_config('conv2d/BiasAdd_quantized')
+        assert not conv_act_quantizer_info.enabled
+        conv_param_quantizer_info = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
+        assert conv_param_quantizer_info.enabled
+        if is_fused:
+            bn_act_quantizer_info = sim.quantizer_config('batch_normalization/cond/Identity_quantized')
+        else:
+            bn_act_quantizer_info = sim.quantizer_config('batch_normalization/batchnorm/add_1_quantized')
+        assert bn_act_quantizer_info.enabled
+
+        sess.close()
+        sim.session.close()
+
+    @pytest.mark.cuda
+    def test_find_foldable_bns_with_linear_bn_sequence(self):
+        """ verify find_foldable_bn() with linear + bn sequence """
+        tf.compat.v1.reset_default_graph()
+        def model():
+            inputs = tf.keras.Input(shape=(20,))
+            x = tf.keras.layers.Dense(50)(inputs)
+            x = tf.keras.layers.BatchNormalization()(x)
+            outputs = tf.keras.layers.Flatten()(x)
+            model = tf.keras.Model(inputs=inputs, outputs=outputs)
+            return model
+
+        device = '/gpu:0'
+        with tf.device(device):
+            _ = model()
+        sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
+        initialize_uninitialized_vars(sess)
+        start_op_names = ["input_1"]
+        output_op_names = ["flatten/Reshape"]
+
+        sim = QuantizationSimModel(sess, start_op_names, output_op_names)
+
+        # Check quantizers are enabled/disabled properly
+        linear_act_quantizer_info = sim.quantizer_config('dense/BiasAdd_quantized')
+        assert not linear_act_quantizer_info.enabled
+        linear_param_quantizer_info = sim.quantizer_config('dense/MatMul/ReadVariableOp_quantized')
+        assert linear_param_quantizer_info.enabled
+        bn_act_quantizer_info = sim.quantizer_config('batch_normalization/batchnorm/add_1_quantized')
+        assert bn_act_quantizer_info.enabled
+
+        sess.close()
+        sim.session.close()
+
+    @pytest.mark.cuda
+    @pytest.mark.parametrize("is_fused", [True, False])
+    def test_find_foldable_bns_with_depthwise_bn_relu_sequence(self, is_fused):
+        """ verify find_foldable_bn() with depthwise + bn + relu sequence """
+        tf.compat.v1.reset_default_graph()
+        def model(is_fused):
+            inputs = tf.keras.Input(shape=(32, 32, 3,))
+            x = tf.keras.layers.DepthwiseConv2D(32, (3, 3))(inputs)
+            x = tf.keras.layers.BatchNormalization(fused=is_fused)(x)
+            x = tf.nn.relu(x)
+            outputs = tf.keras.layers.Flatten()(x)
+            model = tf.keras.Model(inputs=inputs, outputs=outputs)
+            return model
+
+        device = '/gpu:0'
+        with tf.device(device):
+            _ = model(is_fused)
+        sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
+        initialize_uninitialized_vars(sess)
+        start_op_names = ["input_1"]
+        output_op_names = ["flatten/Reshape"]
+
+        sim = QuantizationSimModel(sess, start_op_names, output_op_names)
+
+        # Check quantizers are enabled/disabled properly
+        depthwise_act_quantizer_info = sim.quantizer_config('depthwise_conv2d/BiasAdd_quantized')
+        assert not depthwise_act_quantizer_info.enabled
+        depthwise_param_quantizer_info = sim.quantizer_config('depthwise_conv2d/depthwise/ReadVariableOp_quantized')
+        assert depthwise_param_quantizer_info.enabled
+        if is_fused:
+            bn_act_quantizer_info = sim.quantizer_config('batch_normalization/cond/Identity_quantized')
+        else:
+            bn_act_quantizer_info = sim.quantizer_config('batch_normalization/batchnorm/add_1_quantized')
+        assert not bn_act_quantizer_info.enabled
+        relu_act_quantizer_info = sim.quantizer_config('Relu_quantized')
+        assert relu_act_quantizer_info.enabled
+
+        sess.close()
+        sim.session.close()
