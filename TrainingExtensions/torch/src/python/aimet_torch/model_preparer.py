@@ -89,7 +89,7 @@ functional_with_stateful_api = {
 # Function that requires special transformation.
 functional_with_special_handling = {
     'cat'           : elementwise_ops.Concat,
-    'conv2d'        : torch.nn.Conv2d,
+    'conv2d'        : torch.nn.Conv2d
 }
 
 # In this functional --> module map, corresponding custom module is of type torch.nn and uses stateless API.
@@ -112,6 +112,7 @@ functional_with_stateless_api = {
     'chunk'                     : elementwise_ops.Chunk,
     'batch_norm'                : elementwise_ops.BatchNorm,
     'group_norm'                : elementwise_ops.GroupNorm,
+    'mean'                      : elementwise_ops.Mean
 }
 
 
@@ -256,7 +257,6 @@ def concat_create_node(traced_model: torch.fx.GraphModule, module_name: str, nod
         new_node = traced_model.graph.call_module(module_name, args=tuple(node.args[0]))
         return new_node
 
-
 def concat_create_module(node: torch.fx.node) -> torch.nn.Module:
     """
     Create the replacement module.
@@ -280,13 +280,11 @@ def concat_create_module(node: torch.fx.node) -> torch.nn.Module:
 
     return module
 
-
 special_handler_functions = {
     # Special handling functions for creating node and module
     'cat': {'node_fn': concat_create_node, 'module_fn': concat_create_module},
     'conv2d': {'node_fn': conv2d_create_node, 'module_fn': conv2d_create_module}
 }
-
 
 def prepare_model(model: torch.nn.Module, modules_to_exclude: List[torch.nn.Module] = None,
                   concrete_args: Optional[Dict[str, Any]] = None) -> torch.fx.GraphModule:

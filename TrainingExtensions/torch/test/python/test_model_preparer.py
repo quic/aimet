@@ -1095,6 +1095,138 @@ class TestFX:
         quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
         assert quant_sim.model.module_cat.output_quantizers[0].enabled == True
 
+    def verify_mean_op(self, model):
+        """
+        Utiliy function for verification of mean op
+        """
+        input_shape = (1, 3, 8, 8)
+        input_tensor = [torch.randn(*input_shape)]
+        model = model().eval()
+        model_transformed = prepare_model(model)
+        print(model_transformed)
+
+        assert torch.allclose(model_transformed(*input_tensor),
+                              model(*input_tensor))
+
+        assert isinstance(model_transformed.module_mean, elementwise_ops.Mean)
+
+        quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
+        assert quant_sim.model.module_mean.output_quantizers[0].enabled == True
+
+    def test_fx_with_elementwise_mean_dim_as_args_keepdim_as_kwargs(self):
+        """
+        test torch fx with elementwise op - torch.mean with dim as args and keepdim as kwargs
+        """
+        class ModelWithMeanOp(torch.nn.Module):
+            def __init__(self):
+                super(ModelWithMeanOp, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+
+            def forward(self, *inputs):
+                x1 = self.conv1(inputs[0])
+                x = x1.mean(1, keepdim=True)
+                return x
+
+        self.verify_mean_op(ModelWithMeanOp)
+
+    def test_fx_with_elementwise_mean_dim_as_kwargs_keepdim_as_kwargs(self):
+        """
+        test torch fx with elementwise op - torch.mean with dim as kwrgs and keepdim as kwargs
+        """
+        class ModelWithMeanOp(torch.nn.Module):
+            def __init__(self):
+                super(ModelWithMeanOp, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+
+            def forward(self, *inputs):
+                x1 = self.conv1(inputs[0])
+                x = x1.mean(dim=1, keepdim=True)
+                return x
+
+        self.verify_mean_op(ModelWithMeanOp)
+
+    def test_fx_with_elementwise_mean_dim_as_args(self):
+        """
+        test torch fx with elementwise op - torch.mean with dim as args
+        """
+        class ModelWithMeanOp(torch.nn.Module):
+            def __init__(self):
+                super(ModelWithMeanOp, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+
+            def forward(self, *inputs):
+                x1 = self.conv1(inputs[0])
+                x = x1.mean(1)
+                return x
+
+        self.verify_mean_op(ModelWithMeanOp)
+
+    def test_fx_with_elementwise_mean_dim_as_args_keepdim_as_args(self):
+        """
+        test torch fx with elementwise op - torch.mean with dim as args and keepdim as args
+        """
+        class ModelWithMeanOp(torch.nn.Module):
+            def __init__(self):
+                super(ModelWithMeanOp, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+
+            def forward(self, *inputs):
+                x1 = self.conv1(inputs[0])
+                x = x1.mean(0, False)
+                return x
+
+        self.verify_mean_op(ModelWithMeanOp)
+
+    def test_fx_with_elementwise_mean(self):
+        """
+        test torch fx with elementwise op - torch.mean
+        """
+        class ModelWithMeanOp(torch.nn.Module):
+            def __init__(self):
+                super(ModelWithMeanOp, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+
+            def forward(self, *inputs):
+                x1 = self.conv1(inputs[0])
+                x = x1.mean()
+                return x
+
+        self.verify_mean_op(ModelWithMeanOp)
+
+    def test_fx_with_mean_op(self):
+        """
+        test torch fx with elementwise op - torch.mean
+        """
+        class ModelWithMeanOp(torch.nn.Module):
+
+            def __init__(self):
+                super(ModelWithMeanOp, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+
+            def forward(self, *inputs):
+                x1 = self.conv1(inputs[0])
+                x = torch.mean(x1)
+                return x
+
+        self.verify_mean_op(ModelWithMeanOp)
+
+    def test_fx_with_mean_dim_as_args_keepdim_as_args(self):
+        """
+        test torch fx with elementwise op - torch.mean with dim args and keepdim as kwargs
+        """
+        class ModelWithMeanOp(torch.nn.Module):
+
+            def __init__(self):
+                super(ModelWithMeanOp, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+
+            def forward(self, *inputs):
+                x1 = self.conv1(inputs[0])
+                x = torch.mean(x1, (2,3), keepdim=True)
+                return x
+
+        self.verify_mean_op(ModelWithMeanOp)
+
     def test_fx_with_elementwise_scalar_add(self):
         """
         test torch fx with elementwise op - Scalar torch.add
