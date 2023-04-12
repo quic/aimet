@@ -80,6 +80,15 @@ Exponential = create_wrapper_module('Exponential', torch.exp)
 Chunk = create_wrapper_module('Chunk', torch.chunk)
 Erf = create_wrapper_module('Erf', torch.erf)
 Sqrt = create_wrapper_module('Sqrt', torch.sqrt)
+Maximum = create_wrapper_module('Maximum', torch.maximum)
+Minimum = create_wrapper_module('Minimum', torch.minimum)
+Where = create_wrapper_module('Where', torch.where)
+Greater = create_wrapper_module('Greater', torch.gt)
+Less = create_wrapper_module('Less', torch.lt)
+GreaterEqual = create_wrapper_module('GreaterEqual', torch.ge)
+LessEqual = create_wrapper_module('LessEqual', torch.le)
+NotEqual = create_wrapper_module('NotEqual', torch.ne)
+Equal = create_wrapper_module('Equal', torch.eq)
 
 
 # modules for functional operations defined under torch.nn.functional package
