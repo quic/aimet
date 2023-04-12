@@ -38,8 +38,7 @@
 
 """ TF Code to fold batch-norm layers """
 
-from typing import List, Tuple, Union
-import os
+from typing import List, Tuple, Union, Set
 import numpy as np
 import tensorflow as tf
 
@@ -47,7 +46,6 @@ import aimet_tensorflow
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.common.operation import OpWithMetaInfoType, Op
 from aimet_tensorflow.quantsim import QuantizationSimModel
-from aimet_tensorflow.utils import graph_saver
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils
 from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
@@ -59,8 +57,7 @@ from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.utils import AimetLogger
 import aimet_common.libpymo as libpymo
 
-
-logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.CrosslayerEqualization)
+logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.BatchNormFolding)
 
 # save required information for performing bn fold on candidate bns as
 # <PairTypes> that includes :
@@ -68,6 +65,7 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.CrosslayerEqualization
 # OpWithMetaInfoType : bn op will store the input and output tensors along with tf.Operation
 # bool : Flag indicating if bn op can be folded upstream or downstream.
 PairType = Tuple[tf.Operation, Union[OpWithMetaInfoType, Op], bool]
+
 
 def _conv_bn_select_custom_pattern_init():
     """
@@ -113,25 +111,12 @@ def _conv_bn_select_custom_pattern_init():
     return patterns_with_callbacks, layer_select_handler
 
 
-def _find_conv_bn_pairs(model, start_op_names: Union[List[str], str],
-                        output_op_names: Union[List[str], str]):
+def _find_conv_bn_pairs(conn_graph: ConnectedGraph):
     """
     uses searcher to choose convs/ linears with bn and activation info.
-    :param model: tf.compat.v1.Session type
-    :param start_op_names: list of strings with names of starting ops in the model
-    :param output_op_names: List of output op names of the model, used to help ConnectedGraph determine valid ops
-    (to ignore training ops for example).
+    :param conn_graph: tf.compat.v1.Session type
     :return: dictionary of conv/linear layers with associated bn op / activation info
     """
-
-    if isinstance(start_op_names, str):
-        start_op_names = [start_op_names]
-
-    if isinstance(output_op_names, str):
-        output_op_names = [output_op_names]
-
-    conn_graph = ConnectedGraph(model.graph, start_op_names, output_op_names)
-
     # create a list of patterns and corresponding handlers or actions to be applied for selecting
     # layers for bias correction.
     # layer_select_handler is an instance of custom handler created for bias correction.
@@ -159,40 +144,15 @@ def find_all_batch_norms_to_fold(sess: tf.compat.v1.Session, start_op_names: Uni
 
     :return: List of conv/linear layers with associated bn op / activation info
     """
+    if isinstance(start_op_names, str):
+        start_op_names = [start_op_names]
 
-    convs_linears_bn_activation_info_dict = _find_conv_bn_pairs(sess, start_op_names, output_op_names)
+    if isinstance(output_op_names, str):
+        output_op_names = [output_op_names]
 
-    # get all ordered convs/ linears and skip gradient ops
-    ordered_conv_linears = get_ordered_conv_linears(sess, start_op_names, output_op_names)
-
-    # get the in out tensor for bns found, we need this on TF to remove the bns after fold.
-    bn_conv_linear_pairs = []
-
-    # track BNs added for fold
-    marked_bn_set = set()
-
-    for conv_linear_op in ordered_conv_linears:
-        if conv_linear_op in convs_linears_bn_activation_info_dict.keys():
-            bn_info = convs_linears_bn_activation_info_dict[conv_linear_op]
-            if bn_info.output_bn:
-                if bn_info.output_bn not in marked_bn_set:
-                    fold_backward = True
-                    if return_bn_conn_op:
-                        bn_conv_linear_pairs.append((conv_linear_op, bn_info.output_bn, fold_backward))
-                    else:
-                        bn_conv_linear_pairs.append((conv_linear_op, bn_info.output_bn.get_tf_op_with_io_tensor(),
-                                                     fold_backward))
-                    marked_bn_set.add(bn_info.output_bn)
-            elif bn_info.input_bn:
-                if bn_info.input_bn not in marked_bn_set:
-                    fold_backward = False
-                    if return_bn_conn_op:
-                        bn_conv_linear_pairs.append((conv_linear_op, bn_info.input_bn, fold_backward))
-                    else:
-                        bn_conv_linear_pairs.append((conv_linear_op, bn_info.input_bn.get_tf_op_with_io_tensor(),
-                                                     fold_backward))
-                    marked_bn_set.add(bn_info.input_bn)
-
+    conn_graph = ConnectedGraph(sess.graph, start_op_names, output_op_names)
+    bn_conv_linear_pairs, _ = _find_all_batch_norms_to_fold(conn_graph, start_op_names, output_op_names,
+                                                            return_bn_conn_op)
     return bn_conv_linear_pairs
 
 
@@ -274,18 +234,12 @@ def _fold_given_auto_selected_batch_norms(sess: tf.compat.v1.Session, layer_pair
     :param layer_pairs: pair of conv and bn layers
     :return: new session with updated graph
     """
-
     with sess.graph.as_default():
-
         for pair in layer_pairs:
-
             conv_linear, batchnorm, is_batch_norm_second = pair
-
             assert conv_linear.type in ['Conv2D', 'DepthwiseConv2dNative', 'MatMul']
-
             #  check flag
             is_bias_valid = False
-
             if not BiasUtils.is_bias_none(conv_linear):
                 is_bias_valid = True
 
@@ -384,7 +338,6 @@ def fold_all_batch_norms(sess: tf.compat.v1.Session, input_op_names: Union[str, 
     :return: A new session with edited graph and a list of pairs of layers [(Conv/Linear, BN layer that got folded)]
 
     """
-
     # check for valid types
     if not isinstance(input_op_names, (str, List)):
         logger.error('start op names must be passed as a string or a List of strings')
@@ -412,40 +365,32 @@ def fold_all_batch_norms(sess: tf.compat.v1.Session, input_op_names: Union[str, 
 
     return after_fold_sess, pairs_to_return
 
-def fold_all_batch_norms_to_scale(sim: QuantizationSimModel, input_op_names: Union[str, List[str]],
-                                  output_op_names: Union[str, List[str]]):
+def fold_all_batch_norms_to_scale(sim: QuantizationSimModel,
+                                  starting_op_names: List[str],
+                                  output_op_names: List[str]):
     """
-    Fold all batch_norm layers in a model into corresponding conv layers
+    Fold all batch_norm layers in a model into the quantization scale parameter
+    of the corresponding conv layers
 
     :param sim: tf quantized model
-    :param input_op_names: Name of the starting op in the given graph or a list of names in case of multi-input model
-    :param output_op_names: List of output op names of the model, used to help ConnectedGraph determine valid ops
-           (to ignore training ops for example).  If None, all ops in the model are considered valid.
-    :return: A new session with edited graph and a list of pairs of layers [(Conv/Linear, BN layer that got folded)]
-
+    :param starting_op_names: List of starting op names of the model
+    :param output_op_names: List of output op names of the model
     """
-    # check for valid types
-    if not isinstance(input_op_names, (str, List)):
-        logger.error('start op names must be passed as a string or a List of strings')
-    # if passed start op name is only a string - create a list for connected graph
-    if isinstance(input_op_names, str):
-        input_op_names = [input_op_names]
-    # if passed output op name is only a string - create a list for connected graph
-    if isinstance(output_op_names, str):
-        output_op_names = [output_op_names]
+    assert sim.session is not None
+    assert sim.connected_graph is not None
 
-    sim.export("/tmp/", "sim_model")
-    new_sess = graph_saver.load_model_from_meta(meta_path=os.path.join("/tmp/", 'sim_model.meta'))
-    bn_conv_linear_pairs = find_all_batch_norms_to_fold(new_sess, input_op_names, output_op_names)
+    connected_graph = sim.connected_graph
+    bn_conv_linear_pairs, _ = _find_all_batch_norms_to_fold(connected_graph, starting_op_names, output_op_names)
     _fold_given_auto_selected_batch_norms_scale(sim, bn_conv_linear_pairs)
+
 
 def _fold_given_auto_selected_batch_norms_scale(sim: QuantizationSimModel, layer_pairs: List[PairType]):
     """
      Fold a given set of batch_norm layers into conv layers
+
     :param sim: tf quantized model
     :param layer_pairs: layer_pairs: pair of conv and bn layers
     """
-
     sess = sim.session
     with sess.graph.as_default():
         for pair in layer_pairs:
@@ -503,7 +448,6 @@ def _fold_given_auto_selected_batch_norms_scale(sim: QuantizationSimModel, layer
     sim.session = after_fold_sess
 
 
-
 def _fold_pair_scale(sim: QuantizationSimModel, conv_linear_tf_op: tf.Operation, bn_params: libpymo.BNParams()):
     """
      Fold a batch_norm layer into conv_linear's scale
@@ -528,3 +472,51 @@ def _fold_pair_scale(sim: QuantizationSimModel, conv_linear_tf_op: tf.Operation,
             new_encoding.bw = old_encoding.bw
             new_encodings.append(new_encoding)
         conv_linear_quantizer_weights.set_encoding(new_encodings)
+
+
+def _find_all_batch_norms_to_fold(conn_graph: ConnectedGraph,
+                                  start_op_names: List[str],
+                                  output_op_names: List[str],
+                                  return_bn_conn_op: bool = False) -> Tuple[List, Set]:
+    """
+    Find all possible batch norm layers that can be folded. And returns a list of pairs such that (bn, layer)
+    means bn will be forward-folded into layer and (layer, bn) means bn will be backward-folded into layer
+
+    :param conn_graph: Connected graph associated with the model.
+    :return: A list of (layer, bn) pairs and a list of (bn, layer) pairs,
+             where `bn` can be folded into to `layer',
+             A set of bn ops which can be folded.
+    """
+    conv_linear_bn_activation_info_dict = _find_conv_bn_pairs(conn_graph)
+
+    # get all ordered conv/linear ops
+    ordered_conv_linear_op = get_ordered_conv_linears(conn_graph.graph, start_op_names, output_op_names)
+
+    # get the in out tensor for bns found, we need this on TF to remove the bns after fold.
+    bn_conv_linear_pairs = []
+
+    # track BNs added for fold
+    bn_picked_for_folding = set()
+
+    for conv_linear_op in ordered_conv_linear_op:
+        if conv_linear_op in conv_linear_bn_activation_info_dict.keys():
+            bn_info = conv_linear_bn_activation_info_dict[conv_linear_op]
+            if bn_info.output_bn:
+                if bn_info.output_bn not in bn_picked_for_folding:
+                    fold_backward = True
+                    if return_bn_conn_op:
+                        bn_conv_linear_pairs.append((conv_linear_op, bn_info.output_bn, fold_backward))
+                    else:
+                        bn_conv_linear_pairs.append((conv_linear_op, bn_info.output_bn.get_tf_op_with_io_tensor(),
+                                                     fold_backward))
+                    bn_picked_for_folding.add(bn_info.output_bn)
+            elif bn_info.input_bn:
+                if bn_info.input_bn not in bn_picked_for_folding:
+                    fold_backward = False
+                    if return_bn_conn_op:
+                        bn_conv_linear_pairs.append((conv_linear_op, bn_info.input_bn, fold_backward))
+                    else:
+                        bn_conv_linear_pairs.append((conv_linear_op, bn_info.input_bn.get_tf_op_with_io_tensor(),
+                                                     fold_backward))
+                    bn_picked_for_folding.add(bn_info.input_bn)
+    return bn_conv_linear_pairs, bn_picked_for_folding

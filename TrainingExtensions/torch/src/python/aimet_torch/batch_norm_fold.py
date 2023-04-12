@@ -62,7 +62,7 @@ from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer
 
-_logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.BatchNormFoldiing)
+_logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.BatchNormFolding)
 
 
 LayerType = Union[
