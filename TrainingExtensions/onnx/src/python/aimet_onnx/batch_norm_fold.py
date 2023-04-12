@@ -54,7 +54,7 @@ from aimet_onnx.meta.connectedgraph import WEIGHT_INDEX, BIAS_INDEX, RUNNING_MEA
 from aimet_onnx.meta.operations import Op
 from aimet_onnx.utils import get_node_attribute, remove_node, transpose_tensor, ParamUtils
 
-logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.BatchNormFoldiing)
+logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.BatchNormFolding)
 
 ConvType = ['Conv', 'ConvTranspose']
 LinearType = ['Gemm', 'MatMul']

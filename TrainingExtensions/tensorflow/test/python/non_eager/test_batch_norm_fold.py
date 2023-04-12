@@ -880,7 +880,7 @@ class TestTrainingExtensionBnFoldToScale:
         sim_relu_in = sim.session.run(sim_relu_op.inputs[0], feed_dict={sim_conv_op.inputs[0]: numpy_data})
         sim_relu_out = sim.session.run(sim_relu_op.outputs[0], feed_dict={sim_conv_op.inputs[0]: numpy_data})
 
-        fold_all_batch_norms_to_scale(sim, "input_1", 'Relu')
+        fold_all_batch_norms_to_scale(sim, ["input_1"], ['Relu'])
 
         new_conv_op = sim.session.graph.get_operation_by_name('conv2d/Conv2D')
         new_conv_op_add = sim.session.graph.get_operation_by_name('conv2d/BiasAdd')
@@ -914,7 +914,7 @@ class TestTrainingExtensionBnFoldToScale:
         sim_relu_in = sim.session.run(sim_relu_op.inputs[0], feed_dict={sim_conv_op.inputs[0]: numpy_data})
         sim_relu_out = sim.session.run(sim_relu_op.outputs[0], feed_dict={sim_conv_op.inputs[0]: numpy_data})
 
-        fold_all_batch_norms_to_scale(sim, "input_1", 'Relu')
+        fold_all_batch_norms_to_scale(sim, ["input_1"], ['Relu'])
 
         new_conv_op = sim.session.graph.get_operation_by_name('conv2d/Conv2D')
 
@@ -942,7 +942,7 @@ class TestTrainingExtensionBnFoldToScale:
         sim_relu_in = sim.session.run(sim_relu_op.inputs[0], feed_dict={sim_conv_op.inputs[0]: numpy_data})
         sim_relu_out = sim.session.run(sim_relu_op.outputs[0], feed_dict={sim_conv_op.inputs[0]: numpy_data})
 
-        fold_all_batch_norms_to_scale(sim, "input_1", 'Relu')
+        fold_all_batch_norms_to_scale(sim, ["input_1"], ['Relu'])
 
         new_conv_op = sim.session.graph.get_operation_by_name('depthwise_conv2d/depthwise')
         new_conv_op_add = sim.session.graph.get_operation_by_name('depthwise_conv2d/BiasAdd')
@@ -983,7 +983,7 @@ class TestTrainingExtensionBnFoldToScale:
 
         sim_relu_out = sim.session.run(sim_relu_op.outputs[0], feed_dict={sim_conv_op.inputs[0]: numpy_data})
 
-        fold_all_batch_norms_to_scale(sim, "input_1", 'Relu')
+        fold_all_batch_norms_to_scale(sim, ["input_1"], ['Relu'])
 
         new_conv_op = sim.session.graph.get_operation_by_name('conv2d/Conv2D')
         new_bn_op = sim.session.graph.get_operation_by_name("batch_normalization/cond/Identity")
@@ -1024,7 +1024,7 @@ class TestTrainingExtensionBnFoldToScale:
         sim_relu_in = sim.session.run(sim_relu_op.inputs[0], feed_dict={sim_conv_op.inputs[0]: numpy_data})
         sim_relu_out = sim.session.run(sim_relu_op.outputs[0], feed_dict={sim_conv_op.inputs[0]: numpy_data})
 
-        fold_all_batch_norms_to_scale(sim, "input_1", 'Relu')
+        fold_all_batch_norms_to_scale(sim, ["input_1"], ['Relu'])
 
         new_conv_op = sim.session.graph.get_operation_by_name('depthwise_conv2d/depthwise')
         new_bn_op = sim.session.graph.get_operation_by_name("batch_normalization/cond/Identity")
