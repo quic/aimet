@@ -89,7 +89,7 @@ class TestQuantAnalyzer:
             layer_wise_eval_score_dict = \
                 quant_analyzer.perform_per_layer_analysis_by_enabling_quant_wrappers(sim, results_dir="./tmp/")
             assert type(layer_wise_eval_score_dict) == dict
-            assert len(layer_wise_eval_score_dict) == 6
+            assert len(layer_wise_eval_score_dict) == 7
 
             # test whether layer_wise_eval_score_dict consists of correct keys (module names).
             for quant_wrapper_name in layer_wise_eval_score_dict.keys():
@@ -117,7 +117,7 @@ class TestQuantAnalyzer:
             layer_wise_eval_score_dict = \
                 quant_analyzer.perform_per_layer_analysis_by_disabling_quant_wrappers(sim, results_dir="./tmp/")
             assert type(layer_wise_eval_score_dict) == dict
-            assert len(layer_wise_eval_score_dict) == 6
+            assert len(layer_wise_eval_score_dict) == 7
 
             # test whether layer_wise_eval_score_dict consists of correct keys (module names).
             for quant_wrapper_name in layer_wise_eval_score_dict.keys():
@@ -213,7 +213,6 @@ class TestQuantAnalyzer:
             # Check if it is exported to correct html file.
             assert os.path.exists("./tmp/activations_pdf")
             assert os.path.exists("./tmp/weights_pdf")
-            assert os.path.isfile("./tmp/activations_pdf/conv2d_output_q0_0.html")
             assert os.path.isfile("./tmp/activations_pdf/p_re_lu_output_q0_0.html")
             assert os.path.isfile("./tmp/weights_pdf/conv2d/conv2d_conv2d-kernel_0.html")
         finally:

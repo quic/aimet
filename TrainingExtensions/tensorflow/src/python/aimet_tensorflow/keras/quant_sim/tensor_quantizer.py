@@ -655,7 +655,13 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
     @property
     def round_mode(self):
         """ Rounding mode for each tensor quantizer """
-        return [tensor_quantizer.roundingMode for tensor_quantizer in self._tensor_quantizer]
+        # All the tensor quantizers have the same roundingMode.
+        round_mode = self._tensor_quantizer[0].roundingMode
+        for tensor_quantizer in self._tensor_quantizer:
+            assert tensor_quantizer.roundingMode == round_mode, \
+                f"Not all libpymo.TensorQuantizer's have the same round_mode for original layer {self._original_layer.name}. \
+                    Expected: {round_mode}. Got {tensor_quantizer.roundingMode}"
+        return round_mode
 
     @round_mode.setter
     def round_mode(self, round_mode: str):
@@ -670,7 +676,13 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
     @property
     def use_strict_symmetric(self):
         """ Use strict symmetric getter """
-        return [tensor_quantizer.getStrictSymmetric() for tensor_quantizer in self._tensor_quantizer]
+        # All the tensor quantizers have the same strictSymmetric.
+        use_strict_symmetric = self._tensor_quantizer[0].getStrictSymmetric()
+        for tensor_quantizer in self._tensor_quantizer:
+            assert tensor_quantizer.getStrictSymmetric() == use_strict_symmetric, \
+                f"Not all libpymo.TensorQuantizer's have the same strictSymmetric setting for original layer {self._original_layer.name}. \
+                    Expected: {use_strict_symmetric}. Got {tensor_quantizer.getStrictSymmetric()}"
+        return use_strict_symmetric
 
     @use_strict_symmetric.setter
     def use_strict_symmetric(self, use_strict_symmetric: bool):
@@ -685,7 +697,13 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
     @property
     def use_unsigned_symmetric(self):
         """ Use unsigned symmetric getter """
-        return [tensor_quantizer.getUnsignedSymmetric() for tensor_quantizer in self._tensor_quantizer]
+        # All the tensor quantizers have the same unsignedSymmetric.
+        use_unsigned_symmetric = self._tensor_quantizer[0].getUnsignedSymmetric()
+        for tensor_quantizer in self._tensor_quantizer:
+            assert tensor_quantizer.getUnsignedSymmetric() == use_unsigned_symmetric, \
+                f"Not all libpymo.TensorQuantizer's have the same unsignedSymmetric setting for original layer {self._original_layer.name}. \
+                    Expected: {use_unsigned_symmetric}. Got {tensor_quantizer.getUnsignedSymmetric()}"
+        return use_unsigned_symmetric
 
     @use_unsigned_symmetric.setter
     def use_unsigned_symmetric(self, use_unsigned_symmetric: bool):
@@ -710,19 +728,20 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
             # Create all encoding objects upfront and then update each one's properties
             all_tf_encoding_objects = list(libpymo.TfEncoding() for _ in range(total_number_of_encodings))
 
-            # Get all use_strict_symmetric values up front, otherwise we create the list each call
-            all_use_strict_symmetric = self.use_strict_symmetric
+            # Get all use_strict_symmetric up front, we loop through all the tensorQuantizers to validate they have the
+            # same setting. Here, we call it once to reduce computation.
+            use_strict_symmetric = self.use_strict_symmetric
 
             for idx, encoding in enumerate(all_tf_encoding_objects):
                 encoding.min = all_keras_backend_encoding_mins[idx]
                 encoding.max = all_keras_backend_encoding_maxs[idx]
                 encoding.delta, encoding.offset = calculate_delta_offset(encoding.min, encoding.max,
                                                                          self.bitwidth, self.is_symmetric,
-                                                                         all_use_strict_symmetric[idx])
+                                                                         use_strict_symmetric)
 
                 encoding.min, encoding.max = compute_min_max_given_delta_offset(encoding.delta, encoding.offset,
                                                                                 self.bitwidth, self.is_symmetric,
-                                                                                all_use_strict_symmetric[idx])
+                                                                                use_strict_symmetric)
                 encoding.bw = self.bitwidth
 
             return all_tf_encoding_objects

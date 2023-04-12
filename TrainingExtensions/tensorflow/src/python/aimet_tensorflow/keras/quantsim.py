@@ -129,7 +129,6 @@ class QuantizationSimModel(tf.keras.Model):
         self.model = self._add_quantization_wrappers(quant_scheme, rounding_mode,
                                                      default_output_bw, default_param_bw, default_data_type)
         self.quant_args = extract_global_quantizer_args(quant_scheme, self._quantsim_configurator)
-        self._disable_quantizers_in_folded_batchnorm()
 
         self._params = QuantizationSimModelParams(quant_scheme, rounding_mode, default_output_bw, default_param_bw,
                                                   in_place, config_file, default_data_type)
@@ -445,7 +444,7 @@ class QuantizationSimModel(tf.keras.Model):
 
         # Save the state of the model to later rebuild it after converting to a frozen pb. Freezing to a pb invalidates
         # all Keras graphs. Meaning that the model needs to be rebuilt to allow users to still use sim.model after exporting.
-        rebuilt_quantsim_model_worker = RebuiltQuantSimModelFactory(self.model, self._model_without_wrappers, self._params)
+        rebuilt_quantsim_model_worker = RebuiltQuantSimModelFactory(self)
 
         # Conversion of saved h5 model to pb model for consumption by SNPE/QNN
         try:
