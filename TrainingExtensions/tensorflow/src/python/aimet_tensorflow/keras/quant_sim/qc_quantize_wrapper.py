@@ -413,5 +413,9 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         """
         Restore saved parameters
         """
+        # For the case where we have replace a Batch Norm with an Identity
+        if not self._layer_to_wrap.weights:
+            return
+
         for idx, param in enumerate(self._shadow_params.values()):
             self._layer_to_wrap.weights[idx].assign(param)
