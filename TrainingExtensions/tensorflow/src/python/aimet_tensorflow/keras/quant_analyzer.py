@@ -151,6 +151,7 @@ class QuantAnalyzer:
         self._forward_pass_callback = forward_pass_callback
         self._eval_callback = eval_callback
         self._unlabeled_dataset = None
+        self._num_batches = None
 
     # pylint: disable=unused-argument, no-self-use
     def analyze(self,
@@ -202,7 +203,7 @@ class QuantAnalyzer:
             self.export_per_layer_stats_histogram(sim, results_dir)
 
         # Export per layer MSE loss between fp32 and quantized output activations.
-        if self._unlabeled_dataset:
+        if self._unlabeled_dataset and self._num_batches:
             self.export_per_layer_mse_loss(sim, results_dir)
 
     def _create_quantsim_and_encodings(self,
@@ -590,7 +591,7 @@ class QuantAnalyzer:
         loss = 0.0
         total = 0
         mse = tf.keras.losses.MeanSquaredError()
-        for tensor in self._unlabeled_dataset:
+        for tensor in self._unlabeled_dataset.take(self._num_batches):
             quantized_output = _get_output_of_intermediate_layer(sim.model, tensor, index)
             fp32_output = _get_output_of_intermediate_layer(self._model, tensor, index)
 
@@ -599,11 +600,13 @@ class QuantAnalyzer:
 
         return loss / total
 
-    def enable_per_layer_mse_loss(self, unlabeled_dataset: tf.data.Dataset) -> None:
+    def enable_per_layer_mse_loss(self, unlabeled_dataset: tf.data.Dataset, num_batches: int) -> None:
         """
         Enable per layer MSE loss analysis.
 
         :param unlabeled_dataset: tf.data.Dataset provided as input to the model
             and used to calculate mse loss
+        :param num_batches: Maximum number of batches to be used for MSE loss calculation
         """
         self._unlabeled_dataset = unlabeled_dataset
+        self._num_batches = num_batches

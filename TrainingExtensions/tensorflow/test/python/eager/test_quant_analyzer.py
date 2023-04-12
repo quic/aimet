@@ -310,7 +310,7 @@ class TestQuantAnalyzer:
         quant_analyzer = QuantAnalyzer(model, forward_pass_callback, eval_callback)
 
         unlabeled_dataset = tf.data.Dataset.from_tensor_slices(np.random.rand(32, 28, 28, 3)).batch(32)
-        quant_analyzer.enable_per_layer_mse_loss(unlabeled_dataset)
+        quant_analyzer.enable_per_layer_mse_loss(unlabeled_dataset, num_batches=4)
         try:
             quant_analyzer.export_per_layer_mse_loss(sim, results_dir="./tmp/")
             assert os.path.isfile("./tmp/per_layer_mse_loss.html")
@@ -331,7 +331,7 @@ class TestQuantAnalyzer:
         quant_analyzer = QuantAnalyzer(model, forward_pass_callback, eval_callback)
 
         unlabeled_dataset = tf.data.Dataset.from_tensor_slices(np.random.rand(32, 28, 28, 3)).batch(32)
-        quant_analyzer.enable_per_layer_mse_loss(unlabeled_dataset)
+        quant_analyzer.enable_per_layer_mse_loss(unlabeled_dataset, num_batches=4)
         try:
             quant_analyzer.analyze(quant_scheme=QuantScheme.post_training_tf_enhanced,
                                    default_param_bw=8,
