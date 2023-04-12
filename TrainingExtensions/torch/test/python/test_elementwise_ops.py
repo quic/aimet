@@ -43,7 +43,8 @@ import torch.nn as nn
 import numpy as np
 import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme
-from aimet_torch.elementwise_ops import Add, Subtract, Multiply, Divide, Concat, MatMul, Erf, Sqrt
+from aimet_torch.elementwise_ops import Add, Subtract, Multiply, Divide, Concat, MatMul, Erf, Sqrt, \
+    Greater, Less, GreaterEqual, LessEqual, NotEqual, Equal, Where
 from aimet_torch.quantsim import QuantizationSimModel
 
 
@@ -342,3 +343,73 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         combined_ops_output = model(dummy_input)
         gelu_output = torch.nn.GELU()(dummy_input)
         assert np.allclose(combined_ops_output, gelu_output)
+
+    def test_greater_op(self):
+        torch.manual_seed(10)
+        model = Model(Greater())
+        input1 = torch.rand((5, 10, 10, 20))
+        input2 = torch.rand((5, 10, 10, 20))
+        out = model(input1, input2)
+        out1 = torch.gt(input1, input2)
+        self.assertTrue(np.allclose(out, out1))
+        self.assertEqual(input1.shape, out.shape)
+
+    def test_less_op(self):
+        torch.manual_seed(10)
+        model = Model(Less())
+        input1 = torch.rand((5, 10, 10, 20))
+        input2 = torch.rand((5, 10, 10, 20))
+        out = model(input1, input2)
+        out1 = torch.lt(input1, input2)
+        self.assertTrue(np.allclose(out, out1))
+        self.assertEqual(input1.shape, out.shape)
+
+    def test_greater_equal_op(self):
+        torch.manual_seed(10)
+        model = Model(GreaterEqual())
+        input1 = torch.rand((5, 10, 10, 20))
+        input2 = torch.rand((5, 10, 10, 20))
+        out = model(input1, input2)
+        out1 = torch.ge(input1, input2)
+        self.assertTrue(np.allclose(out, out1))
+        self.assertEqual(input1.shape, out.shape)
+
+    def test_less_equal_op(self):
+        torch.manual_seed(10)
+        model = Model(LessEqual())
+        input1 = torch.rand((5, 10, 10, 20))
+        input2 = torch.rand((5, 10, 10, 20))
+        out = model(input1, input2)
+        out1 = torch.le(input1, input2)
+        self.assertTrue(np.allclose(out, out1))
+        self.assertEqual(input1.shape, out.shape)
+
+    def test_not_equal_op(self):
+        torch.manual_seed(10)
+        model = Model(NotEqual())
+        input1 = torch.rand((5, 10, 10, 20))
+        input2 = torch.rand((5, 10, 10, 20))
+        out = model(input1, input2)
+        out1 = torch.ne(input1, input2)
+        self.assertTrue(np.allclose(out, out1))
+        self.assertEqual(input1.shape, out.shape)
+
+    def test_equal_op(self):
+        torch.manual_seed(10)
+        model = Model(Equal())
+        input1 = torch.rand((5, 10, 10, 20))
+        input2 = torch.rand((5, 10, 10, 20))
+        out = model(input1, input2)
+        out1 = torch.eq(input1, input2)
+        self.assertTrue(np.allclose(out, out1))
+        self.assertEqual(input1.shape, out.shape)
+
+    def test_where_op(self):
+        torch.manual_seed(10)
+        model = Model3(Where())
+        input1 = torch.rand((5, 10, 10, 20))
+        input2 = torch.rand((5, 10, 10, 20))
+        out = model(input1 > input2, input1, input2)
+        out1 = torch.where(input1 > input2, input1, input2)
+        self.assertTrue(np.allclose(out, out1))
+        self.assertEqual(input1.shape, out.shape)
