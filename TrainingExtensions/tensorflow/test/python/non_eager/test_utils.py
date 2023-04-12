@@ -488,7 +488,7 @@ class TestTrainingExtensionsTfUtils(unittest.TestCase):
 
         # check if we get ordered list
         input_op = conv_op.inputs[0].op.name
-        selected_ops = get_ordered_conv_linears(sess, [input_op], ['Relu_1'])
+        selected_ops = get_ordered_conv_linears(sess.graph, [input_op], ['Relu_1'])
 
         self.assertEqual(2, len(selected_ops))
         conv_op = sess.graph.get_operation_by_name('conv2d/Conv2D')

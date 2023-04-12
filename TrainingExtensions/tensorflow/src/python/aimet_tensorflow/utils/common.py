@@ -260,17 +260,17 @@ def get_ordered_ops(graph: tf.Graph, starting_op_names: List[str], output_op_nam
     return ordered_ops
 
 
-def get_ordered_conv_linears(sess: tf.compat.v1.Session, input_op_names: List[str], output_op_names: List[str]) \
+def get_ordered_conv_linears(graph: tf.Graph, input_op_names: List[str], output_op_names: List[str]) \
         -> List[tf.Operation]:
     """
     helper to select a list of candidate layers for bias correction
-    :param sess: active tensorflow session as tf.compat.v1.Session type
+    :param graph: active tensorflow session as tf.compat.v1.Session type
     :param input_op_names: list of input op names
     :param output_op_names: List of output op names of the model, used to help determine valid ops
     :return: List of conv/linear layer names
     """
     # get ordered operations list in TF graph
-    list_of_ordered_ops = get_ordered_ops(sess.graph, input_op_names, output_op_names)
+    list_of_ordered_ops = get_ordered_ops(graph, input_op_names, output_op_names)
 
     # look for conv layers
     ordered_convs = []

@@ -131,7 +131,7 @@ class AimetLogger(metaclass=SingletonType):
         Nas = 'Nas'
         NasPipeline = 'NasPipeline'
         DeviceFramework = 'DeviceFramework'
-        BatchNormFoldiing = "BatchNormFolding"
+        BatchNormFolding = "BatchNormFolding"
         ModelPreparer = "ModelPreparer"
 
     def __init__(self):

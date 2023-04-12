@@ -519,7 +519,7 @@ class BiasCorrection:
         corrected_model = save_and_load_graph('./temp_meta_path', reference_model)
 
         # get all ordered convs/ linears and skip gradient ops
-        ordered_conv_linears = get_ordered_conv_linears(reference_model, bias_correct_params.input_op_names,
+        ordered_conv_linears = get_ordered_conv_linears(reference_model.graph, bias_correct_params.input_op_names,
                                                         bias_correct_params.output_op_names)
 
         # Get conv2D, depthwise with preceding BN ops info for analytical bias correction
