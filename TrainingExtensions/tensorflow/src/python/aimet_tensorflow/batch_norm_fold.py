@@ -176,17 +176,21 @@ def find_all_batch_norms_to_fold(sess: tf.compat.v1.Session, start_op_names: Uni
             bn_info = convs_linears_bn_activation_info_dict[conv_linear_op]
             if bn_info.output_bn:
                 if bn_info.output_bn not in marked_bn_set:
+                    fold_backward = True
                     if return_bn_conn_op:
-                        bn_conv_linear_pairs.append((conv_linear_op, bn_info.output_bn, True))
+                        bn_conv_linear_pairs.append((conv_linear_op, bn_info.output_bn, fold_backward))
                     else:
-                        bn_conv_linear_pairs.append((conv_linear_op, bn_info.output_bn.get_tf_op_with_io_tensor(), True))
+                        bn_conv_linear_pairs.append((conv_linear_op, bn_info.output_bn.get_tf_op_with_io_tensor(),
+                                                     fold_backward))
                     marked_bn_set.add(bn_info.output_bn)
             elif bn_info.input_bn:
                 if bn_info.input_bn not in marked_bn_set:
+                    fold_backward = False
                     if return_bn_conn_op:
-                        bn_conv_linear_pairs.append((conv_linear_op, bn_info.output_bn, True))
+                        bn_conv_linear_pairs.append((conv_linear_op, bn_info.input_bn, fold_backward))
                     else:
-                        bn_conv_linear_pairs.append((conv_linear_op, bn_info.input_bn.get_tf_op_with_io_tensor(), False))
+                        bn_conv_linear_pairs.append((conv_linear_op, bn_info.input_bn.get_tf_op_with_io_tensor(),
+                                                     fold_backward))
                     marked_bn_set.add(bn_info.input_bn)
 
     return bn_conv_linear_pairs

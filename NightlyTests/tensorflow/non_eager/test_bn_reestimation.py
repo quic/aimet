@@ -249,8 +249,7 @@ class TestBNReEstimation:
 
 
     def _reestimate_and_compare_results(self, sess_sim, sess_fp32, bn_re_restimation_dataset, bn_num_batches, input_op, output_op):
-        bn_mean_var_tf_var_list, bn_momentum_tf_var_list, bn_training_tf_var_list = _get_all_tf_bn_vars_list(
-            sess_sim, [input_op], [output_op])
+        bn_mean_var_tf_var_list, bn_momentum_tf_var_list, bn_training_tf_var_list = _get_all_tf_bn_vars_list(sess_sim)
 
         model_input = sess_sim.session.graph.get_tensor_by_name(input_op + ':0')
         model_output = sess_sim.session.graph.get_tensor_by_name(output_op + ':0')
