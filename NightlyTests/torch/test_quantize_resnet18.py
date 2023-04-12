@@ -360,7 +360,7 @@ class QuantizeAcceptanceTests(unittest.TestCase):
                                 num_batches=100,
                                 forward_fn=forward_fn)
 
-        fold_all_batch_norms_to_scale(sim, dummy_input.shape)
+        fold_all_batch_norms_to_scale(sim)
 
         sim.export('./data/', 'resnet18_per_channel_quant', dummy_input.cpu())
         with open("./data/resnet18_per_channel_quant.encodings", "r") as encodings_file:
