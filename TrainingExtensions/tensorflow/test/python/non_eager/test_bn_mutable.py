@@ -36,23 +36,18 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-import unittest
 import pytest
-import logging
 import os
-
 import logging
-import json
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.ops import variable_scope
 from tensorflow.python.layers import normalization as normalization_layers
 
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
-from aimet_tensorflow.utils.op.bn_mutable import modify_model_bn_mutable, modify_sess_bn_mutable
-from aimet_tensorflow.batch_norm_fold import find_all_batch_norms_to_fold
+from aimet_tensorflow.utils.op.bn_mutable import modify_model_bn_mutable, modify_sess_bn_mutable, _get_bn_momentum,\
+    get_active_bn_ops, _get_bn_epsilon, _get_bn_momentum_var, _get_bn_stats_and_params, _set_var, _get_bn_is_training_var
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.utils.common import create_input_feed_dict
 
@@ -79,7 +74,7 @@ def slim_mutable_bn_model(training_as_placeholder=False):
         inputs = tf.keras.Input(shape=(32, 32, 3,))
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
 
-        layer = normalization_layers.BatchNormalization(name="old1", epsilon = 1e-05)
+        layer = normalization_layers.BatchNormalization(name="old1", epsilon = 1e-05, momentum=0.3)
         bn_op = layer.apply(conv_op, training=bn_training)
 
         relu0 = tf.nn.relu(bn_op)
@@ -171,7 +166,187 @@ def keras_applications_mobilenet_v2():
     return model
 
 
-class TestBnMutable(unittest.TestCase):
+def model_with_legacy_bn_layers(training_as_placeholder, is_fused):
+    """ Model with legacy Batch norm layers """
+    training = True
+    if training_as_placeholder:
+        training = tf.compat.v1.placeholder_with_default(True, shape=())
+
+    inputs = tf.keras.Input(shape=(32, 32, 3,))
+    x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+    layer = normalization_layers.BatchNormalization(momentum=.3, epsilon=.65, fused=is_fused)
+    x = layer.apply(x, training=training)
+    x = tf.keras.layers.Conv2D(16, (2, 2))(x)
+    with tf.compat.v1.variable_scope("foo"):
+        with tf.compat.v1.variable_scope("bar"):
+            layer = normalization_layers.BatchNormalization(momentum=.4, epsilon=.25, fused=is_fused)
+    x = layer.apply(x, training=training)
+    x = tf.nn.relu(x)
+    layer = normalization_layers.BatchNormalization(momentum=.5, epsilon=.35, fused=is_fused)
+    x = layer.apply(x, training=False)
+    x = tf.keras.layers.Flatten()(x)
+    outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
+
+
+def model_with_compat_bn_layers(training_as_placeholder, is_fused):
+    """ Model with compat Batch norm layers """
+    training = True
+    if training_as_placeholder:
+        training = tf.compat.v1.placeholder_with_default(True, shape=())
+
+    inputs = tf.keras.Input(shape=(32, 32, 3,))
+    x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+    x = tf.compat.v1.layers.batch_normalization(x, momentum=.3, epsilon=.65, training=training, fused=is_fused)
+    x = tf.keras.layers.Conv2D(16, (2, 2))(x)
+    with tf.compat.v1.variable_scope("foo"):
+        with tf.compat.v1.variable_scope("bar"):
+            x = tf.compat.v1.layers.batch_normalization(x, momentum=.4, epsilon=.25, training=training, fused=is_fused)
+    x = tf.nn.relu(x)
+    x = tf.compat.v1.layers.batch_normalization(x, momentum=.5, epsilon=.35, training=False, fused=is_fused)
+    x = tf.keras.layers.Flatten()(x)
+    outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
+
+
+def model_with_keras_bn_layers(training_as_placeholder, is_fused):
+    """ Model with keras Batch norm layers """
+    training = True
+    if training_as_placeholder:
+        training = tf.compat.v1.placeholder_with_default(True, shape=())
+
+    inputs = tf.keras.Input(shape=(32, 32, 3,))
+    x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65, fused=is_fused)(x)
+    x = tf.keras.layers.Conv2D(16, (2, 2))(x)
+    with tf.compat.v1.variable_scope("foo"):
+        with tf.compat.v1.variable_scope("bar"):
+            x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25, fused=is_fused)(x, training=training)
+    x = tf.nn.relu(x)
+    x = tf.keras.layers.BatchNormalization(momentum=.5, epsilon=.35, fused=is_fused)(x, training=False)
+    x = tf.keras.layers.Flatten()(x)
+    outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+    return model
+
+
+def model_with_keras_bn_layers_is_training_bool(is_training, is_fused):
+    """ Model with keras Batch norm layers and is_training flag as boolean. """
+
+    inputs = tf.keras.Input(shape=(32, 32, 3,))
+    x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65, fused=is_fused)(x, is_training)
+    x = tf.keras.layers.Conv2D(16, (2, 2))(x)
+    with tf.compat.v1.variable_scope("foo"):
+        with tf.compat.v1.variable_scope("bar"):
+            x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25, fused=is_fused)(x, is_training)
+    x = tf.nn.relu(x)
+    x = tf.keras.layers.BatchNormalization(momentum=.5, epsilon=.35, fused=is_fused)(x, is_training)
+    x = tf.keras.layers.Flatten()(x)
+    outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+    return model
+
+
+def model_with_legacy_bn_layers_is_training_bool(is_training, is_fused):
+    """ Model with legacy Batch norm layers """
+    inputs = tf.keras.Input(shape=(32, 32, 3,))
+    x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+    layer = normalization_layers.BatchNormalization(momentum=.3, epsilon=.65, fused=is_fused)
+    x = layer.apply(x, training=is_training)
+    x = tf.keras.layers.Conv2D(16, (2, 2))(x)
+    with tf.compat.v1.variable_scope("foo"):
+        with tf.compat.v1.variable_scope("bar"):
+            layer = normalization_layers.BatchNormalization(momentum=.4, epsilon=.25, fused=is_fused)
+    x = layer.apply(x, training=is_training)
+    x = tf.nn.relu(x)
+    layer = normalization_layers.BatchNormalization(momentum=.5, epsilon=.35, fused=is_fused)
+    x = layer.apply(x, training=is_training)
+    x = tf.keras.layers.Flatten()(x)
+    outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
+
+
+def model_with_compat_bn_layers_is_training_bool(is_training, is_fused):
+    """ Model with compat Batch norm layers """
+    inputs = tf.keras.Input(shape=(32, 32, 3,))
+    x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+    x = tf.compat.v1.layers.batch_normalization(x, momentum=.3, epsilon=.65, training=is_training, fused=is_fused)
+    x = tf.keras.layers.Conv2D(16, (2, 2))(x)
+    with tf.compat.v1.variable_scope("foo"):
+        with tf.compat.v1.variable_scope("bar"):
+            x = tf.compat.v1.layers.batch_normalization(x, momentum=.4, epsilon=.25, training=is_training, fused=is_fused)
+    x = tf.nn.relu(x)
+    x = tf.compat.v1.layers.batch_normalization(x, momentum=.5, epsilon=.35, training=is_training, fused=is_fused)
+    x = tf.keras.layers.Flatten()(x)
+    outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
+
+
+def _verify_utilities_to_read_bn_params_stats_epsilon_momentum(session, start_op_names, output_op_names):
+    """
+    Verify utilities to read BN statistics (mean, var), params(gamma, beta), epsilon and momentum.
+    """
+    graph_def = session.graph.as_graph_def()
+    conn_graph = ConnectedGraph(session.graph, start_op_names, output_op_names)
+    bn_ops = tuple(get_active_bn_ops(conn_graph))
+    assert len(bn_ops) == 3
+
+    assert np.isclose(_get_bn_momentum(graph_def, bn_ops[0]), 0.3)
+    assert np.isclose(_get_bn_momentum(graph_def, bn_ops[1]), 0.4)
+    assert np.isclose(_get_bn_momentum(graph_def, bn_ops[2]), 0.99)
+
+    assert np.isclose(round(_get_bn_epsilon(graph_def, bn_ops[0]), 2), 0.65)
+    assert np.isclose(round(_get_bn_epsilon(graph_def, bn_ops[1]), 2), 0.25)
+    assert np.isclose(round(_get_bn_epsilon(graph_def, bn_ops[2]), 2), 0.35)
+
+    assert all(isinstance(x, np.ndarray) for x in _get_bn_stats_and_params(session, bn_ops[0]))
+    assert all(isinstance(x, np.ndarray) for x in _get_bn_stats_and_params(session, bn_ops[1]))
+    assert all(isinstance(x, np.ndarray) for x in _get_bn_stats_and_params(session, bn_ops[2]))
+
+    for bn_op in bn_ops:
+        mean, var, gamma, beta = _get_bn_stats_and_params(session, bn_op)
+        assert np.all(mean == 0)
+        assert np.all(var == 1)
+        assert np.all(gamma == 1)
+        assert np.all(beta == 0)
+
+
+def _verify_utilities_to_set_momentum_and_is_training(updated_sess, start_op_names, output_op_names):
+    """
+    Verify utilities to read and then set momentum and is_training variables.
+    """
+    conn_graph = ConnectedGraph(updated_sess.graph, start_op_names, output_op_names)
+    bn_ops = tuple(get_active_bn_ops(conn_graph))
+
+    assert len(bn_ops) == 3
+    assert np.isclose(updated_sess.run(_get_bn_momentum_var(updated_sess, bn_ops[0])), 0.3)
+    assert np.isclose(updated_sess.run(_get_bn_momentum_var(updated_sess, bn_ops[1])), 0.4)
+    assert np.isclose(updated_sess.run(_get_bn_momentum_var(updated_sess, bn_ops[2])), 0.99)
+
+    # all BNs are in inference mode.
+    for bn_op in bn_ops:
+        assert not updated_sess.run(_get_bn_is_training_var(updated_sess, bn_op))
+
+    # set BNs momentum=0
+    for bn_op in bn_ops:
+        momentum_var = _get_bn_momentum_var(updated_sess, bn_op)
+        _set_var(updated_sess, momentum_var, 0)
+
+    # set BNs in training mode
+    for bn_op in bn_ops:
+        is_training_var = _get_bn_is_training_var(updated_sess, bn_op)
+        _set_var(updated_sess, is_training_var, True)
+
+    # all BNs momentum should be 0
+    assert np.isclose(updated_sess.run(_get_bn_momentum_var(updated_sess, bn_ops[0])), 0)
+    assert np.isclose(updated_sess.run(_get_bn_momentum_var(updated_sess, bn_ops[1])), 0)
+    assert np.isclose(updated_sess.run(_get_bn_momentum_var(updated_sess, bn_ops[2])), 0)
+
+    # all BNs should be in training mode
+    assert updated_sess.run(_get_bn_is_training_var(updated_sess, bn_ops[0]))
+    assert updated_sess.run(_get_bn_is_training_var(updated_sess, bn_ops[1]))
+    assert updated_sess.run(_get_bn_is_training_var(updated_sess, bn_ops[2]))
+
+
+class TestBnMutable:
+
     def test_modify_sess_bn_mutable_with_v1_slim_bn_model(self):
         slim_mutable_bn_model()
         sess = tf.compat.v1.Session()
@@ -181,15 +356,13 @@ class TestBnMutable(unittest.TestCase):
         dummy_val = np.random.randn(1, 32, 32, 3)
 
         conn_graph_old = ConnectedGraph(sess.graph, input_op_names, output_op_names)
-
-        self.assertEqual(len(conn_graph_old.get_all_ops()), 7)
+        assert len(conn_graph_old.get_all_ops()) == 7
 
         # Fetch conn graph op of batchnorm layers
         bn1_old = conn_graph_old.get_op_from_module_name('foo/old1/cond/Identity')
         bn2_old = conn_graph_old.get_op_from_module_name('foo/old2/cond/Identity')
-
-        self.assertEqual(bn1_old.type, 'FusedBatchNormV3')
-        self.assertEqual(bn2_old.type, 'FusedBatchNormV3')
+        assert bn1_old.type == 'FusedBatchNormV3'
+        assert bn2_old.type == 'FusedBatchNormV3'
 
         # Fetch outputs of batchnorms
         bn1_old_tensor = bn1_old.get_module().outputs[0]
@@ -199,8 +372,6 @@ class TestBnMutable(unittest.TestCase):
         relu_old_tensor = sess.graph.get_tensor_by_name('foo/Relu_1:0')
         bn1_old_output, bn2_old_output, relu_old_output = sess.run([bn1_old_tensor, bn2_old_tensor, relu_old_tensor],
                                                                    feed_dict={input_old_tensor: dummy_val})
-
-
         # get old batchnorms status
         bn_old1_op = sess.graph.get_operation_by_name(bn1_old.get_module().name)
         bn_old2_op = sess.graph.get_operation_by_name(bn2_old.get_module().name)
@@ -222,18 +393,16 @@ class TestBnMutable(unittest.TestCase):
                       old1_mean_read_var, old2_mean_read_var, old1_var_read_var, old2_var_read_var])
 
         # Modify batchnorm of sess
-        sess = modify_sess_bn_mutable(sess, input_op_names, output_op_names)
-
-
+        sess = modify_sess_bn_mutable(sess, input_op_names, output_op_names, training_tf_placeholder=True)
         conn_graph_new = ConnectedGraph(sess.graph, input_op_names, output_op_names)
-        self.assertEqual(len(conn_graph_new.get_all_ops()), 7)
+        assert len(conn_graph_new.get_all_ops()) == 7
 
         # Check if bn layer with modified_bn_old1 and modified_bn_old2 is created correctly
         bn1_new = conn_graph_new.get_op_from_module_name('foo/old1_modified/cond/Identity')
         bn2_new = conn_graph_new.get_op_from_module_name('foo/old2_modified/cond/Identity')
 
-        self.assertEqual(bn1_new.type, 'FusedBatchNormV3')
-        self.assertEqual(bn2_new.type, 'FusedBatchNormV3')
+        assert bn1_new.type == 'FusedBatchNormV3'
+        assert bn2_new.type, 'FusedBatchNormV3'
 
         # get new batchnorms status
         bn1_new_op = sess.graph.get_operation_by_name(bn1_new.get_module().name)
@@ -254,25 +423,25 @@ class TestBnMutable(unittest.TestCase):
                      new1_mean_read_var, new2_mean_read_var, new1_var_read_var, new2_var_read_var])
 
         # Compare parameters of old and new batchnorms
-        self.assertTrue(np.allclose(new1_beta, old1_beta))
-        self.assertTrue(np.allclose(new2_beta, old2_beta))
-        self.assertTrue(np.allclose(new1_gamma, old1_gamma))
-        self.assertTrue(np.allclose(new2_gamma, old2_gamma))
-        self.assertTrue(np.allclose(new1_mean, old1_mean))
-        self.assertTrue(np.allclose(new2_mean, old2_mean))
-        self.assertTrue(np.allclose(new1_var, old1_var))
-        self.assertTrue(np.allclose(new2_var, old2_var))
+        assert np.allclose(new1_beta, old1_beta)
+        assert np.allclose(new2_beta, old2_beta)
+        assert np.allclose(new1_gamma, old1_gamma)
+        assert np.allclose(new2_gamma, old2_gamma)
+        assert np.allclose(new1_mean, old1_mean)
+        assert np.allclose(new2_mean, old2_mean)
+        assert np.allclose(new1_var, old1_var)
+        assert np.allclose(new2_var, old2_var)
 
         training_tf_placeholder = set()
         for bn in [bn1_new, bn2_new]:
             # Check if training flag of batchnorm is replaced to placeholder
             bn_training = BNUtils.get_training(bn.get_module())
-            self.assertEqual(bn_training.op.type, 'PlaceholderWithDefault')
+            assert bn_training.op.type == 'PlaceholderWithDefault'
             training_tf_placeholder.add(bn_training)
 
             # Check if momentum is replaced to tf.Variable
             bn_momentum = BNUtils.get_momentum(bn.get_module())
-            self.assertEqual(bn_momentum.type, 'VarHandleOp')
+            assert bn_momentum.type == 'VarHandleOp'
 
             # Check if assign moving avg exists
             assign_moving_avg_op = BNUtils.get_assign_moving_avg_op(bn.get_module())
@@ -281,7 +450,7 @@ class TestBnMutable(unittest.TestCase):
             assert assign_moving_avg_1_op.type == 'AssignSubVariableOp'
 
         # Make sure there is only one training tf placeholder
-        self.assertEqual(len(training_tf_placeholder), 1)
+        assert len(training_tf_placeholder) == 1
 
         bn1_new_tensor = bn1_new.get_module().outputs[0]
         bn2_new_tensor = bn2_new.get_module().outputs[0]
@@ -295,10 +464,10 @@ class TestBnMutable(unittest.TestCase):
                                                                    feed_dict=feed_dict)
 
         # Compare if outputs of old and new batchnorms are equivalent
-        self.assertTrue(np.allclose(bn1_new_output, bn1_old_output, atol=1.e-4))
-        self.assertTrue(np.allclose(bn2_new_output, bn2_old_output, atol=1.e-4))
-        self.assertTrue(np.allclose(relu_new_output, relu_old_output, atol=1.e-4))
-
+        assert np.allclose(bn1_new_output, bn1_old_output, atol=1.e-4)
+        assert np.allclose(bn2_new_output, bn2_old_output, atol=1.e-4)
+        assert np.allclose(relu_new_output, relu_old_output, atol=1.e-4)
+        sess.close()
 
     def test_modify_sess_bn_mutable_with_v1_bn_model(self):
         v1_bn_model()
@@ -310,14 +479,14 @@ class TestBnMutable(unittest.TestCase):
         dummy_val = np.random.randn(1, 32, 32, 3)
 
         conn_graph_old = ConnectedGraph(sess.graph, input_op_names, output_op_names)
-        self.assertEqual(len(conn_graph_old.get_all_ops()), 7)
+        assert len(conn_graph_old.get_all_ops()) == 7
 
         # Fetch conn graph op of batchnorm layers
         bn1_old = conn_graph_old.get_op_from_module_name('old1/FusedBatchNormV3')
         bn2_old = conn_graph_old.get_op_from_module_name('old2/FusedBatchNormV3')
 
-        self.assertEqual(bn1_old.type, 'FusedBatchNormV3')
-        self.assertEqual(bn2_old.type, 'FusedBatchNormV3')
+        assert bn1_old.type == 'FusedBatchNormV3'
+        assert bn2_old.type == 'FusedBatchNormV3'
 
         # Fetch outputs of batchnorms
         bn1_old_tensor = bn1_old.get_module().outputs[0]
@@ -328,28 +497,28 @@ class TestBnMutable(unittest.TestCase):
                                                                    feed_dict={input_old_tensor: dummy_val})
 
         # Modify batchnorm of sess
-        sess = modify_sess_bn_mutable(sess, input_op_names, output_op_names)
+        sess = modify_sess_bn_mutable(sess, input_op_names, output_op_names, training_tf_placeholder=True)
 
         conn_graph_new = ConnectedGraph(sess.graph, input_op_names, output_op_names)
-        self.assertEqual(len(conn_graph_new.get_all_ops()), 7)
+        assert len(conn_graph_new.get_all_ops()) == 7
 
         # Check if bn layer with modified_bn_old1 and modified_bn_old2 is created correctly
         bn1_new = conn_graph_new.get_op_from_module_name('old1_modified/cond/Identity')
         bn2_new = conn_graph_new.get_op_from_module_name('old2_modified/cond/Identity')
 
-        self.assertEqual(bn1_new.type, 'FusedBatchNormV3')
-        self.assertEqual(bn2_new.type, 'FusedBatchNormV3')
+        assert bn1_new.type == 'FusedBatchNormV3'
+        assert bn2_new.type == 'FusedBatchNormV3'
 
         training_tf_placeholder = set()
         for bn in [bn1_new, bn2_new]:
             # Check if training flag of batchnorm is replaced to placeholder
             bn_training = BNUtils.get_training(bn.get_module())
-            self.assertEqual(bn_training.op.type, 'PlaceholderWithDefault')
+            assert bn_training.op.type == 'PlaceholderWithDefault'
             training_tf_placeholder.add(bn_training)
 
             # Check if momentum is replaced to tf.Variable
             bn_momentum = BNUtils.get_momentum(bn.get_module())
-            self.assertEqual(bn_momentum.type, 'VarHandleOp')
+            assert bn_momentum.type == 'VarHandleOp'
 
             # Check if assign moving avg exists
             assign_moving_avg_op = BNUtils.get_assign_moving_avg_op(bn.get_module())
@@ -358,7 +527,7 @@ class TestBnMutable(unittest.TestCase):
             assert assign_moving_avg_1_op.type == 'AssignSubVariableOp'
 
         # Make sure there is only one training tf placeholder
-        self.assertEqual(len(training_tf_placeholder), 1)
+        assert len(training_tf_placeholder) == 1
 
         bn1_new_tensor = bn1_new.get_module().outputs[0]
         bn2_new_tensor = bn2_new.get_module().outputs[0]
@@ -372,9 +541,9 @@ class TestBnMutable(unittest.TestCase):
                                                                    feed_dict=feed_dict)
 
         # Compare if outputs of old and new batchnorms are equivalent
-        self.assertTrue(np.allclose(bn1_new_output, bn1_old_output, atol=1.e-4))
-        self.assertTrue(np.allclose(bn2_new_output, bn2_old_output, atol=1.e-4))
-        self.assertTrue(np.allclose(relu_new_output, relu_old_output, atol=1.e-4))
+        assert np.allclose(bn1_new_output, bn1_old_output, atol=1.e-4)
+        assert np.allclose(bn2_new_output, bn2_old_output, atol=1.e-4)
+        assert np.allclose(relu_new_output, relu_old_output, atol=1.e-4)
 
         # Compare parameters of old and new batchnorms
         for bn_new, bn_old in zip([bn1_new.get_module().name, bn2_new.get_module().name],
@@ -395,10 +564,10 @@ class TestBnMutable(unittest.TestCase):
                 sess.run([new_beta_read_var, old_beta_read_var, new_gamma_read_var, old_gamma_read_var,
                          new_mean_read_var, old_mean_read_var, new_var_read_var, old_var_read_var])
 
-            self.assertTrue(np.allclose(new_beta, old_beta))
-            self.assertTrue(np.allclose(new_gamma, old_gamma))
-            self.assertTrue(np.allclose(new_mean, old_mean))
-            self.assertTrue(np.allclose(new_var, old_var))
+            assert np.allclose(new_beta, old_beta)
+            assert np.allclose(new_gamma, old_gamma)
+            assert np.allclose(new_mean, old_mean)
+            assert np.allclose(new_var, old_var)
 
     def test_modify_sess_bn_mutable_with_keras_bn_model(self):
         keras_bn_model()
@@ -410,14 +579,13 @@ class TestBnMutable(unittest.TestCase):
         dummy_val = np.random.randn(1, 32, 32, 3)
 
         conn_graph_old = ConnectedGraph(sess.graph, input_op_names, output_op_names)
-        self.assertEqual(len(conn_graph_old.get_all_ops()), 7)
+        assert len(conn_graph_old.get_all_ops()) == 7
 
         # Fetch conn graph op of batchnorm layers
         bn1_old = conn_graph_old.get_op_from_module_name('old1/cond/Identity')
         bn2_old = conn_graph_old.get_op_from_module_name('old2/cond/Identity')
-
-        self.assertEqual(bn1_old.type, 'FusedBatchNormV3')
-        self.assertEqual(bn2_old.type, 'FusedBatchNormV3')
+        assert bn1_old.type == 'FusedBatchNormV3'
+        assert bn2_old.type == 'FusedBatchNormV3'
 
         # Fetch outputs of batchnorms
         training_tensor = sess.graph.get_tensor_by_name('keras_learning_phase:0')
@@ -428,30 +596,29 @@ class TestBnMutable(unittest.TestCase):
         bn1_old_output, bn2_old_output, relu_old_output = sess.run([bn1_old_tensor, bn2_old_tensor, relu_old_tensor],
                                                                    feed_dict={input_old_tensor: dummy_val,
                                                                               training_tensor: False})
-
         # Modify batchnorm of sess
-        sess = modify_sess_bn_mutable(sess, input_op_names, output_op_names)
+        sess = modify_sess_bn_mutable(sess, input_op_names, output_op_names, training_tf_placeholder=True)
 
         conn_graph_new = ConnectedGraph(sess.graph, input_op_names, output_op_names)
-        self.assertEqual(len(conn_graph_new.get_all_ops()), 7)
+        assert len(conn_graph_new.get_all_ops()) == 7
 
         # Check if bn layer with modified_bn_old1 and modified_bn_old2 is created correctly
         bn1_new = conn_graph_new.get_op_from_module_name('old1_modified/cond/Identity')
         bn2_new = conn_graph_new.get_op_from_module_name('old2_modified/cond/Identity')
 
-        self.assertEqual(bn1_new.type, 'FusedBatchNormV3')
-        self.assertEqual(bn2_new.type, 'FusedBatchNormV3')
+        assert bn1_new.type == 'FusedBatchNormV3'
+        assert bn2_new.type == 'FusedBatchNormV3'
 
         training_tf_placeholder = set()
         for bn in [bn1_new, bn2_new]:
             # Check if training flag of batchnorm is replaced to placeholder
             bn_training = BNUtils.get_training(bn.get_module())
-            self.assertEqual(bn_training.op.type, 'PlaceholderWithDefault')
+            assert bn_training.op.type == 'PlaceholderWithDefault'
             training_tf_placeholder.add(bn_training)
 
             # Check if momentum is replaced to tf.Variable
             bn_momentum = BNUtils.get_momentum(bn.get_module())
-            self.assertEqual(bn_momentum.type, 'VarHandleOp')
+            assert bn_momentum.type == 'VarHandleOp'
 
             # Check if assign moving avg exists
             assign_moving_avg_op = BNUtils.get_assign_moving_avg_op(bn.get_module())
@@ -460,7 +627,7 @@ class TestBnMutable(unittest.TestCase):
             assert assign_moving_avg_1_op.type == 'AssignSubVariableOp'
 
         # Make sure there is only one training tf placeholder
-        self.assertEqual(len(training_tf_placeholder), 1)
+        assert len(training_tf_placeholder) == 1
 
         bn1_new_tensor = bn1_new.get_module().outputs[0]
         bn2_new_tensor = bn2_new.get_module().outputs[0]
@@ -474,9 +641,9 @@ class TestBnMutable(unittest.TestCase):
                                                                    feed_dict=feed_dict)
 
         # Compare if outputs of old and new batchnorms are equivalent
-        self.assertTrue(np.allclose(bn1_new_output, bn1_old_output, atol=1.e-4))
-        self.assertTrue(np.allclose(bn2_new_output, bn2_old_output, atol=1.e-4))
-        self.assertTrue(np.allclose(relu_new_output, relu_old_output, atol=1.e-4))
+        assert np.allclose(bn1_new_output, bn1_old_output, atol=1.e-4)
+        assert np.allclose(bn2_new_output, bn2_old_output, atol=1.e-4)
+        assert np.allclose(relu_new_output, relu_old_output, atol=1.e-4)
 
         # Compare parameters of old and new batchnorms
         for bn_new, bn_old in zip([bn1_new.get_module().name, bn2_new.get_module().name],
@@ -497,10 +664,10 @@ class TestBnMutable(unittest.TestCase):
                 sess.run([new_beta_read_var, old_beta_read_var, new_gamma_read_var, old_gamma_read_var,
                           new_mean_read_var, old_mean_read_var, new_var_read_var, old_var_read_var])
 
-            self.assertTrue(np.allclose(new_beta, old_beta))
-            self.assertTrue(np.allclose(new_gamma, old_gamma))
-            self.assertTrue(np.allclose(new_mean, old_mean))
-            self.assertTrue(np.allclose(new_var, old_var))
+            assert np.allclose(new_beta, old_beta)
+            assert np.allclose(new_gamma, old_gamma)
+            assert np.allclose(new_mean, old_mean)
+            assert np.allclose(new_var, old_var)
 
     def test_modify_sess_bn_mutable_bn_training_is_tfvar_with_v1_bn_model(self):
         v1_bn_model()
@@ -512,14 +679,14 @@ class TestBnMutable(unittest.TestCase):
         dummy_val = np.random.randn(1, 32, 32, 3)
 
         conn_graph_old = ConnectedGraph(sess.graph, input_op_names, output_op_names)
-        self.assertEqual(len(conn_graph_old.get_all_ops()), 7)
+        assert len(conn_graph_old.get_all_ops()) == 7
 
         # Fetch conn graph op of batchnorm layers
         bn1_old = conn_graph_old.get_op_from_module_name('old1/FusedBatchNormV3')
         bn2_old = conn_graph_old.get_op_from_module_name('old2/FusedBatchNormV3')
 
-        self.assertEqual(bn1_old.type, 'FusedBatchNormV3')
-        self.assertEqual(bn2_old.type, 'FusedBatchNormV3')
+        assert bn1_old.type == 'FusedBatchNormV3'
+        assert bn2_old.type == 'FusedBatchNormV3'
 
         # Fetch outputs of batchnorms
         bn1_old_tensor = bn1_old.get_module().outputs[0]
@@ -533,25 +700,25 @@ class TestBnMutable(unittest.TestCase):
         sess = modify_sess_bn_mutable(sess, input_op_names, output_op_names, training_tf_placeholder=False)
 
         conn_graph_new = ConnectedGraph(sess.graph, input_op_names, output_op_names)
-        self.assertEqual(len(conn_graph_new.get_all_ops()), 7)
+        assert len(conn_graph_new.get_all_ops()) == 7
 
         # Check if bn layer with modified_bn_old1 and modified_bn_old2 is created correctly
         bn1_new = conn_graph_new.get_op_from_module_name('old1_modified/cond/Identity')
         bn2_new = conn_graph_new.get_op_from_module_name('old2_modified/cond/Identity')
 
-        self.assertEqual(bn1_new.type, 'FusedBatchNormV3')
-        self.assertEqual(bn2_new.type, 'FusedBatchNormV3')
+        assert bn1_new.type == 'FusedBatchNormV3'
+        assert bn2_new.type == 'FusedBatchNormV3'
 
         training_tf_var = set()
         for bn in [bn1_new, bn2_new]:
             # Check if training flag of batchnorm is replaced to placeholder
             bn_training = BNUtils.get_training(bn.get_module())
-            self.assertEqual(bn_training.op.type, 'ReadVariableOp')
+            assert bn_training.op.type == 'ReadVariableOp'
             training_tf_var.add(bn_training.op.inputs[0])
 
             # Check if momentum is replaced to tf.Variable
             bn_momentum = BNUtils.get_momentum(bn.get_module())
-            self.assertEqual(bn_momentum.type, 'VarHandleOp')
+            assert bn_momentum.type == 'VarHandleOp'
 
             # Check if assign moving avg exists
             assign_moving_avg_op = BNUtils.get_assign_moving_avg_op(bn.get_module())
@@ -560,7 +727,7 @@ class TestBnMutable(unittest.TestCase):
             assert assign_moving_avg_1_op.type == 'AssignSubVariableOp'
 
         # Make sure there is only one training tf var
-        self.assertEqual(len(training_tf_var), 1)
+        assert len(training_tf_var) == 1
 
         bn1_new_tensor = bn1_new.get_module().outputs[0]
         bn2_new_tensor = bn2_new.get_module().outputs[0]
@@ -573,9 +740,9 @@ class TestBnMutable(unittest.TestCase):
                                                                    feed_dict=feed_dict)
 
         # Compare if outputs of old and new batchnorms are equivalent
-        self.assertTrue(np.allclose(bn1_new_output, bn1_old_output, atol=1.e-4))
-        self.assertTrue(np.allclose(bn2_new_output, bn2_old_output, atol=1.e-4))
-        self.assertTrue(np.allclose(relu_new_output, relu_old_output, atol=1.e-4))
+        assert np.allclose(bn1_new_output, bn1_old_output, atol=1.e-4)
+        assert np.allclose(bn2_new_output, bn2_old_output, atol=1.e-4)
+        assert np.allclose(relu_new_output, relu_old_output, atol=1.e-4)
 
         # Compare parameters of old and new batchnorms
         for bn_new, bn_old in zip([bn1_new.get_module().name, bn2_new.get_module().name],
@@ -596,10 +763,10 @@ class TestBnMutable(unittest.TestCase):
                 sess.run([new_beta_read_var, old_beta_read_var, new_gamma_read_var, old_gamma_read_var,
                           new_mean_read_var, old_mean_read_var, new_var_read_var, old_var_read_var])
 
-            self.assertTrue(np.allclose(new_beta, old_beta))
-            self.assertTrue(np.allclose(new_gamma, old_gamma))
-            self.assertTrue(np.allclose(new_mean, old_mean))
-            self.assertTrue(np.allclose(new_var, old_var))
+            assert np.allclose(new_beta, old_beta)
+            assert np.allclose(new_gamma, old_gamma)
+            assert np.allclose(new_mean, old_mean)
+            assert np.allclose(new_var, old_var)
 
     def test_modify_sess_bn_mutable_bn_training_is_tfvar_with_keras_bn_model(self):
         keras_bn_model()
@@ -611,14 +778,14 @@ class TestBnMutable(unittest.TestCase):
         dummy_val = np.random.randn(1, 32, 32, 3)
 
         conn_graph_old = ConnectedGraph(sess.graph, input_op_names, output_op_names)
-        self.assertEqual(len(conn_graph_old.get_all_ops()), 7)
+        assert len(conn_graph_old.get_all_ops()) == 7
 
         # Fetch conn graph op of batchnorm layers
         bn1_old = conn_graph_old.get_op_from_module_name('old1/cond/Identity')
         bn2_old = conn_graph_old.get_op_from_module_name('old2/cond/Identity')
 
-        self.assertEqual(bn1_old.type, 'FusedBatchNormV3')
-        self.assertEqual(bn2_old.type, 'FusedBatchNormV3')
+        assert bn1_old.type == 'FusedBatchNormV3'
+        assert bn2_old.type == 'FusedBatchNormV3'
 
         # Fetch outputs of batchnorms
         training_tensor = sess.graph.get_tensor_by_name('keras_learning_phase:0')
@@ -634,25 +801,25 @@ class TestBnMutable(unittest.TestCase):
         sess = modify_sess_bn_mutable(sess, input_op_names, output_op_names, training_tf_placeholder=False)
 
         conn_graph_new = ConnectedGraph(sess.graph, input_op_names, output_op_names)
-        self.assertEqual(len(conn_graph_new.get_all_ops()), 7)
+        assert len(conn_graph_new.get_all_ops()) == 7
 
         # Check if bn layer with modified_bn_old1 and modified_bn_old2 is created correctly
         bn1_new = conn_graph_new.get_op_from_module_name('old1_modified/cond/Identity')
         bn2_new = conn_graph_new.get_op_from_module_name('old2_modified/cond/Identity')
 
-        self.assertEqual(bn1_new.type, 'FusedBatchNormV3')
-        self.assertEqual(bn2_new.type, 'FusedBatchNormV3')
+        assert bn1_new.type == 'FusedBatchNormV3'
+        assert bn2_new.type == 'FusedBatchNormV3'
 
         training_tf_var = set()
         for bn in [bn1_new, bn2_new]:
             # Check if training flag of batchnorm is replaced to placeholder
             bn_training = BNUtils.get_training(bn.get_module())
-            self.assertEqual(bn_training.op.type, 'ReadVariableOp')
+            assert bn_training.op.type == 'ReadVariableOp'
             training_tf_var.add(bn_training.op.inputs[0])
 
             # Check if momentum is replaced to tf.Variable
             bn_momentum = BNUtils.get_momentum(bn.get_module())
-            self.assertEqual(bn_momentum.type, 'VarHandleOp')
+            assert bn_momentum.type == 'VarHandleOp'
 
             # Check if assign moving avg exists
             assign_moving_avg_op = BNUtils.get_assign_moving_avg_op(bn.get_module())
@@ -661,7 +828,7 @@ class TestBnMutable(unittest.TestCase):
             assert assign_moving_avg_1_op.type == 'AssignSubVariableOp'
 
         # Make sure there is only one training tf var
-        self.assertEqual(len(training_tf_var), 1)
+        assert len(training_tf_var) == 1
 
         bn1_new_tensor = bn1_new.get_module().outputs[0]
         bn2_new_tensor = bn2_new.get_module().outputs[0]
@@ -674,9 +841,9 @@ class TestBnMutable(unittest.TestCase):
                                                                    feed_dict=feed_dict)
 
         # Compare if outputs of old and new batchnorms are equivalent
-        self.assertTrue(np.allclose(bn1_new_output, bn1_old_output, atol=1.e-4))
-        self.assertTrue(np.allclose(bn2_new_output, bn2_old_output, atol=1.e-4))
-        self.assertTrue(np.allclose(relu_new_output, relu_old_output, atol=1.e-4))
+        assert np.allclose(bn1_new_output, bn1_old_output, atol=1.e-4)
+        assert np.allclose(bn2_new_output, bn2_old_output, atol=1.e-4)
+        assert np.allclose(relu_new_output, relu_old_output, atol=1.e-4)
 
         # Compare parameters of old and new batchnorms
         for bn_new, bn_old in zip([bn1_new.get_module().name, bn2_new.get_module().name],
@@ -697,10 +864,10 @@ class TestBnMutable(unittest.TestCase):
                 sess.run([new_beta_read_var, old_beta_read_var, new_gamma_read_var, old_gamma_read_var,
                           new_mean_read_var, old_mean_read_var, new_var_read_var, old_var_read_var])
 
-            self.assertTrue(np.allclose(new_beta, old_beta))
-            self.assertTrue(np.allclose(new_gamma, old_gamma))
-            self.assertTrue(np.allclose(new_mean, old_mean))
-            self.assertTrue(np.allclose(new_var, old_var))
+            assert np.allclose(new_beta, old_beta)
+            assert np.allclose(new_gamma, old_gamma)
+            assert np.allclose(new_mean, old_mean)
+            assert np.allclose(new_var, old_var)
 
     def test_modify_sess_bn_mutable_with_v1_bn_model_with_is_training_as_placeholder(self):
         v1_bn_model(training_as_placeholder=True)
@@ -712,14 +879,14 @@ class TestBnMutable(unittest.TestCase):
         dummy_val = np.random.randn(1, 32, 32, 3)
 
         conn_graph_old = ConnectedGraph(sess.graph, input_op_names, output_op_names)
-        self.assertEqual(len(conn_graph_old.get_all_ops()), 7)
+        assert len(conn_graph_old.get_all_ops()) == 7
 
         # Fetch conn graph op of batchnorm layers
         bn1_old = conn_graph_old.get_op_from_module_name('old1/cond/Identity')
         bn2_old = conn_graph_old.get_op_from_module_name('old2/cond/Identity')
 
-        self.assertEqual(bn1_old.type, 'FusedBatchNormV3')
-        self.assertEqual(bn2_old.type, 'FusedBatchNormV3')
+        assert bn1_old.type == 'FusedBatchNormV3'
+        assert bn2_old.type == 'FusedBatchNormV3'
 
         # Fetch outputs of batchnorms
         bn1_old_tensor = bn1_old.get_module().outputs[0]
@@ -730,28 +897,28 @@ class TestBnMutable(unittest.TestCase):
                                                                    feed_dict={input_old_tensor: dummy_val})
 
         # Modify batchnorm of sess
-        sess = modify_sess_bn_mutable(sess, input_op_names, output_op_names)
+        sess = modify_sess_bn_mutable(sess, input_op_names, output_op_names, training_tf_placeholder=True)
 
         conn_graph_new = ConnectedGraph(sess.graph, input_op_names, output_op_names)
-        self.assertEqual(len(conn_graph_new.get_all_ops()), 7)
+        assert len(conn_graph_new.get_all_ops()) == 7
 
         # Check if bn layer with modified_bn_old1 and modified_bn_old2 is created correctly
         bn1_new = conn_graph_new.get_op_from_module_name('old1_modified/cond/Identity')
         bn2_new = conn_graph_new.get_op_from_module_name('old2_modified/cond/Identity')
 
-        self.assertEqual(bn1_new.type, 'FusedBatchNormV3')
-        self.assertEqual(bn2_new.type, 'FusedBatchNormV3')
+        assert bn1_new.type == 'FusedBatchNormV3'
+        assert bn2_new.type == 'FusedBatchNormV3'
 
         training_tf_placeholder = set()
         for bn in [bn1_new, bn2_new]:
             # Check if training flag of batchnorm is replaced to placeholder
             bn_training = BNUtils.get_training(bn.get_module())
-            self.assertEqual(bn_training.op.type, 'PlaceholderWithDefault')
+            assert bn_training.op.type == 'PlaceholderWithDefault'
             training_tf_placeholder.add(bn_training)
 
             # Check if momentum is replaced to tf.Variable
             bn_momentum = BNUtils.get_momentum(bn.get_module())
-            self.assertEqual(bn_momentum.type, 'VarHandleOp')
+            assert bn_momentum.type == 'VarHandleOp'
 
             # Check if assign moving avg exists
             assign_moving_avg_op = BNUtils.get_assign_moving_avg_op(bn.get_module())
@@ -760,7 +927,7 @@ class TestBnMutable(unittest.TestCase):
             assert assign_moving_avg_1_op.type == 'AssignSubVariableOp'
 
         # Make sure there is only one training tf placeholder
-        self.assertEqual(len(training_tf_placeholder), 1)
+        assert len(training_tf_placeholder) == 1
 
         bn1_new_tensor = bn1_new.get_module().outputs[0]
         bn2_new_tensor = bn2_new.get_module().outputs[0]
@@ -773,9 +940,9 @@ class TestBnMutable(unittest.TestCase):
         bn1_new_output, bn2_new_output, relu_new_output = sess.run([bn1_new_tensor, bn2_new_tensor, relu_new_tensor], feed_dict=feed_dict)
 
         # Compare if outputs of old and new batchnorms are equivalent
-        self.assertTrue(np.allclose(bn1_new_output, bn1_old_output, atol=1.e-4))
-        self.assertTrue(np.allclose(bn2_new_output, bn2_old_output, atol=1.e-4))
-        self.assertTrue(np.allclose(relu_new_output, relu_old_output, atol=1.e-4))
+        assert np.allclose(bn1_new_output, bn1_old_output, atol=1.e-4)
+        assert np.allclose(bn2_new_output, bn2_old_output, atol=1.e-4)
+        assert np.allclose(relu_new_output, relu_old_output, atol=1.e-4)
 
         # Compare parameters of old and new batchnorms
         for bn_new, bn_old in zip([bn1_new.get_module().name, bn2_new.get_module().name],
@@ -796,10 +963,10 @@ class TestBnMutable(unittest.TestCase):
                 sess.run([new_beta_read_var, old_beta_read_var, new_gamma_read_var, old_gamma_read_var,
                           new_mean_read_var, old_mean_read_var, new_var_read_var, old_var_read_var])
 
-            self.assertTrue(np.allclose(new_beta, old_beta))
-            self.assertTrue(np.allclose(new_gamma, old_gamma))
-            self.assertTrue(np.allclose(new_mean, old_mean))
-            self.assertTrue(np.allclose(new_var, old_var))
+            assert np.allclose(new_beta, old_beta)
+            assert np.allclose(new_gamma, old_gamma)
+            assert np.allclose(new_mean, old_mean)
+            assert np.allclose(new_var, old_var)
 
     def test_modify_sess_bn_mutable_with_keras_model_with_is_training_as_placeholder(self):
         keras_bn_model(training_as_placeholder=True)
@@ -811,14 +978,14 @@ class TestBnMutable(unittest.TestCase):
         dummy_val = np.random.randn(1, 32, 32, 3)
 
         conn_graph_old = ConnectedGraph(sess.graph, input_op_names, output_op_names)
-        self.assertEqual(len(conn_graph_old.get_all_ops()), 7)
+        assert len(conn_graph_old.get_all_ops()) == 7
 
         # Fetch conn graph op of batchnorm layers
         bn1_old = conn_graph_old.get_op_from_module_name('old1/cond/Identity')
         bn2_old = conn_graph_old.get_op_from_module_name('old2/cond/Identity')
 
-        self.assertEqual(bn1_old.type, 'FusedBatchNormV3')
-        self.assertEqual(bn2_old.type, 'FusedBatchNormV3')
+        assert bn1_old.type == 'FusedBatchNormV3'
+        assert bn2_old.type == 'FusedBatchNormV3'
 
         # Fetch outputs of batchnorms
         bn1_old_tensor = bn1_old.get_module().outputs[0]
@@ -829,28 +996,28 @@ class TestBnMutable(unittest.TestCase):
                                                                    feed_dict={input_old_tensor: dummy_val})
 
         # Modify batchnorm of sess
-        sess = modify_sess_bn_mutable(sess, input_op_names, output_op_names)
+        sess = modify_sess_bn_mutable(sess, input_op_names, output_op_names, training_tf_placeholder=True)
 
         conn_graph_new = ConnectedGraph(sess.graph, input_op_names, output_op_names)
-        self.assertEqual(len(conn_graph_new.get_all_ops()), 7)
+        assert len(conn_graph_new.get_all_ops()) == 7
 
         # Check if bn layer with modified_bn_old1 and modified_bn_old2 is created correctly
         bn1_new = conn_graph_new.get_op_from_module_name('old1_modified/cond/Identity')
         bn2_new = conn_graph_new.get_op_from_module_name('old2_modified/cond/Identity')
 
-        self.assertEqual(bn1_new.type, 'FusedBatchNormV3')
-        self.assertEqual(bn2_new.type, 'FusedBatchNormV3')
+        assert bn1_new.type == 'FusedBatchNormV3'
+        assert bn2_new.type == 'FusedBatchNormV3'
 
         training_tf_placeholder = set()
         for bn in [bn1_new, bn2_new]:
             # Check if training flag of batchnorm is replaced to placeholder
             bn_training = BNUtils.get_training(bn.get_module())
-            self.assertEqual(bn_training.op.type, 'PlaceholderWithDefault')
+            assert bn_training.op.type == 'PlaceholderWithDefault'
             training_tf_placeholder.add(bn_training)
 
             # Check if momentum is replaced to tf.Variable
             bn_momentum = BNUtils.get_momentum(bn.get_module())
-            self.assertEqual(bn_momentum.type, 'VarHandleOp')
+            assert bn_momentum.type == 'VarHandleOp'
 
             # Check if assign moving avg exists
             assign_moving_avg_op = BNUtils.get_assign_moving_avg_op(bn.get_module())
@@ -859,7 +1026,7 @@ class TestBnMutable(unittest.TestCase):
             assert assign_moving_avg_1_op.type == 'AssignSubVariableOp'
 
         # Make sure there is only one training tf placeholder
-        self.assertEqual(len(training_tf_placeholder), 1)
+        assert len(training_tf_placeholder) == 1
 
         bn1_new_tensor = bn1_new.get_module().outputs[0]
         bn2_new_tensor = bn2_new.get_module().outputs[0]
@@ -873,9 +1040,9 @@ class TestBnMutable(unittest.TestCase):
                                                                    feed_dict=feed_dict)
 
         # Compare if outputs of old and new batchnorms are equivalent
-        self.assertTrue(np.allclose(bn1_new_output, bn1_old_output, atol=1.e-4))
-        self.assertTrue(np.allclose(bn2_new_output, bn2_old_output, atol=1.e-4))
-        self.assertTrue(np.allclose(relu_new_output, relu_old_output, atol=1.e-4))
+        assert np.allclose(bn1_new_output, bn1_old_output, atol=1.e-4)
+        assert np.allclose(bn2_new_output, bn2_old_output, atol=1.e-4)
+        assert np.allclose(relu_new_output, relu_old_output, atol=1.e-4)
 
         # Compare parameters of old and new batchnorms
         for bn_new, bn_old in zip([bn1_new.get_module().name, bn2_new.get_module().name],
@@ -896,10 +1063,10 @@ class TestBnMutable(unittest.TestCase):
                 sess.run([new_beta_read_var, old_beta_read_var, new_gamma_read_var, old_gamma_read_var,
                           new_mean_read_var, old_mean_read_var, new_var_read_var, old_var_read_var])
 
-            self.assertTrue(np.allclose(new_beta, old_beta))
-            self.assertTrue(np.allclose(new_gamma, old_gamma))
-            self.assertTrue(np.allclose(new_mean, old_mean))
-            self.assertTrue(np.allclose(new_var, old_var))
+            assert np.allclose(new_beta, old_beta)
+            assert np.allclose(new_gamma, old_gamma)
+            assert np.allclose(new_mean, old_mean)
+            assert np.allclose(new_var, old_var)
 
     def test_modify_model_bn_mutable_with_keras_bn_model(self):
         model = keras_bn_model()
@@ -971,3 +1138,122 @@ class TestBnMutable(unittest.TestCase):
             update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
         assert update_ops == []
         return
+
+    @pytest.mark.cuda
+    @pytest.mark.parametrize("training_as_placeholder", [True, False])
+    @pytest.mark.parametrize("is_fused", [True, False])
+    @pytest.mark.parametrize("model", [model_with_keras_bn_layers, model_with_compat_bn_layers,
+                                       model_with_legacy_bn_layers])
+    def test_to_get_bn_params_stats_momentum_epsilon(self, model, training_as_placeholder, is_fused):
+        """ Verify to get BN params, stats, momentum and epsilon """
+        tf.compat.v1.reset_default_graph()
+        device = '/gpu:0'
+        with tf.device(device):
+            _ = model(training_as_placeholder, is_fused)
+        graph = tf.compat.v1.get_default_graph()
+        sess = tf.compat.v1.Session(graph=graph)
+        initialize_uninitialized_vars(sess)
+        start_op_names = ["input_1"]
+        output_op_names = ["keras_model_functional/Softmax"]
+        _verify_utilities_to_read_bn_params_stats_epsilon_momentum(sess, start_op_names, output_op_names)
+        sess.close()
+
+    @pytest.mark.cuda
+    @pytest.mark.parametrize("is_training", [True, False])
+    @pytest.mark.parametrize("is_fused", [True, False])
+    @pytest.mark.parametrize("model", [model_with_keras_bn_layers_is_training_bool,
+                                       model_with_compat_bn_layers_is_training_bool,
+                                       model_with_legacy_bn_layers_is_training_bool])
+    def test_modify_sess_bn_mutable(self, model, is_training, is_fused):
+        """ Verify modify_sess_bn_mutable() API with BNs in train/inference mode """
+        def _get_inp_out_tensor(session, inp_tensor_name, out_tensor_name):
+            inp_tensor = session.graph.get_tensor_by_name(inp_tensor_name[0] + ':0')
+            out_tensor = session.graph.get_tensor_by_name(out_tensor_name[0] + ':0')
+            return inp_tensor, out_tensor
+
+        tf.compat.v1.reset_default_graph()
+        device = '/gpu:0'
+        with tf.device(device):
+            model(is_training, is_fused)
+        graph = tf.compat.v1.get_default_graph()
+        sess = tf.compat.v1.Session(graph=graph)
+
+        initialize_uninitialized_vars(sess)
+        start_op_names = ["input_1"]
+        output_op_names = ["keras_model_functional/Softmax"]
+        dummy_input = np.random.randn(1, 32, 32, 3)
+        input_tensor, output_tensor = _get_inp_out_tensor(sess, start_op_names, output_op_names)
+        output_before = sess.run(output_tensor, feed_dict={input_tensor: dummy_input})
+
+        updated_sess = modify_sess_bn_mutable(sess, start_op_names, output_op_names)
+
+        # Since, BNs are by default in inference mode after modify_sess_bn_mutable() API, set it to training mode.
+        if is_training:
+            conn_graph = ConnectedGraph(updated_sess.graph, start_op_names, output_op_names)
+            bn_ops = tuple(get_active_bn_ops(conn_graph))
+            for bn_op in bn_ops:
+                is_training_var = _get_bn_is_training_var(updated_sess, bn_op)
+                _set_var(updated_sess, is_training_var, True)
+
+        input_tensor, output_tensor = _get_inp_out_tensor(updated_sess, start_op_names, output_op_names)
+        output_after = updated_sess.run(output_tensor, feed_dict={input_tensor: dummy_input})
+
+        # outputs should be bit-exact.
+        assert np.array_equal(output_before, output_after)
+
+        sess.close()
+        updated_sess.close()
+
+    @pytest.mark.cuda
+    @pytest.mark.parametrize("training_as_placeholder", [True, False])
+    @pytest.mark.parametrize("is_fused", [True, False])
+    @pytest.mark.parametrize("model", [model_with_keras_bn_layers,
+                                       model_with_legacy_bn_layers,
+                                       model_with_compat_bn_layers])
+    def test_get_and_set_bn_momentum_and_is_training_var(self, model, training_as_placeholder, is_fused):
+        """ Verify get and set momentum and is_training variables """
+        tf.compat.v1.reset_default_graph()
+        device = '/gpu:0'
+        with tf.device(device):
+            model(training_as_placeholder, is_fused)
+        graph = tf.compat.v1.get_default_graph()
+        sess = tf.compat.v1.Session(graph=graph)
+
+        initialize_uninitialized_vars(sess)
+        start_op_names = ["input_1"]
+        output_op_names = ["keras_model_functional/Softmax"]
+
+        updated_sess = modify_sess_bn_mutable(sess, start_op_names, output_op_names)
+        _verify_utilities_to_set_momentum_and_is_training(updated_sess, start_op_names, output_op_names)
+
+        sess.close()
+        updated_sess.close()
+
+    @pytest.mark.cuda
+    def test_keras_mobilenetv2(self):
+        """ Verify utility with Keras MobilenetV2 model """
+
+        tf.compat.v1.reset_default_graph()
+        device = '/gpu:0'
+        with tf.device(device):
+            model = keras_applications_mobilenet_v2()
+        graph = model.inputs[0].graph
+        graph_def = graph.as_graph_def()
+        sess = tf.compat.v1.Session(graph=graph)
+        initialize_uninitialized_vars(sess)
+        starting_op_names = ['input_1']
+        output_op_names = ['predictions/Softmax']
+        conn_graph = ConnectedGraph(sess.graph, starting_op_names, output_op_names)
+        bn_ops = tuple(get_active_bn_ops(conn_graph))
+
+        # all the BNs are instantiated with momentum=0.999, epsilon=1e-3, mean=0, variance=1, gamma=1, beta=0
+        for bn_op in bn_ops:
+            assert np.isclose(_get_bn_momentum(graph_def, bn_op), 0.999)
+            assert np.isclose(_get_bn_epsilon(graph_def, bn_op), 1e-3)
+            mean, var, gamma, beta = _get_bn_stats_and_params(sess, bn_op)
+            assert np.all(mean == 0)
+            assert np.all(var == 1)
+            assert np.all(gamma == 1)
+            assert np.all(beta == 0)
+
+        sess.close()

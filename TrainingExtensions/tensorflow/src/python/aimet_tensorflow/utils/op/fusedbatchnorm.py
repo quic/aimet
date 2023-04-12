@@ -835,14 +835,22 @@ class BNUtils:
             types are beta, gamma, moving_mean or moving_variance)
         :return: param read tensor
         """
-
         if param_type not in vars(constants.BNOpParamType).values():
             assert 0, 'Error, get_bn_param_using_name() invalid param type requested'
 
-        # name of the fused bn contains bn_name/FusedBatchNormV3 or
-        # bn_name/cond/FusedBatchNormV3_1
-        # we need only the bn_name to make param tensor names
-        op_name = bn_op.name.split('/')[0]
+        # Remove the appropriate patterns to get param_tensor.
+        un_fused_bn_pattern = '/batchnorm/mul_1'
+        fused_bn_is_training_bool_pattern = '/FusedBatchNormV3'
+        fused_bn_is_training_placeholder_pattern = '/cond/Identity'
+
+        op_name = bn_op.name
+        if bn_op.type == 'Mul' and un_fused_bn_pattern in bn_op.name:
+            op_name = bn_op.name.replace(un_fused_bn_pattern, '')
+        elif bn_op.type == 'Identity' and fused_bn_is_training_placeholder_pattern in bn_op.name:
+            op_name = bn_op.name.replace(fused_bn_is_training_placeholder_pattern, '')
+        elif bn_op.type == 'FusedBatchNormV3' and fused_bn_is_training_bool_pattern in bn_op.name:
+            op_name = bn_op.name.replace(fused_bn_is_training_bool_pattern, '')
+
         param_tensor_name = op_name + constants.BN_OP_PARAM_NAME_SUFFIX[param_type]
         param_tensor = graph.get_tensor_by_name(param_tensor_name)
 
