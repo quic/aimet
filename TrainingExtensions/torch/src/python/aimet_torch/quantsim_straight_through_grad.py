@@ -75,22 +75,19 @@ def broadcast_to_tensor(tensor, encoding, ch_axis):
     :return: Broad-casted tensor
     """
     if not isinstance(encoding, torch.Tensor):
-        encoding = torch.Tensor(encoding).to(tensor.device)  # convert encoding to a tensor
+        encoding = torch.tensor(encoding).to(tensor.device)  # convert encoding to a tensor
 
-    # Original tensor shape is OIHW/IOHW, we change the shape to IHWO. Encoding (which is of shape O) can naturally
-    # broadcast to this shape
-    # This will work if the original tensor shape was any dimensions as long as the first dimension matches the
-    # encoding tensor shape
-    shape = list(tensor.shape)
-    num_channels = shape.pop(ch_axis)
-    encoding = encoding * torch.ones(shape + [num_channels]).to(tensor.device)
+    assert len(encoding.shape) <= 1 # Should be 1-dimensional tensor
 
-    # we permute the resulting tensor back to OIHW/IOHW shape
-    permute_dims = list(range(len(shape)))
-    permute_dims.insert(ch_axis, len(shape))
-    encoding = encoding.permute(permute_dims)
+    if encoding.numel() == 1:
+        return encoding
 
-    return encoding
+    # Shape of encoding should match the channel dimension of the input
+    assert encoding.numel() == tensor.shape[ch_axis]
+
+    shape = tuple(dim if axis == ch_axis else 1
+                  for axis, dim in enumerate(tensor.shape))
+    return encoding.view(shape)
 
 
 def compute_dloss_by_dx(x, grad, encoding_min, encoding_max, ch_axis=0):
@@ -103,16 +100,8 @@ def compute_dloss_by_dx(x, grad, encoding_min, encoding_max, ch_axis=0):
     :param ch_axis: Channel axis to use for per-channel quant
     :return: gradient w.r.t input
     """
-
-    # Broadcast the encoding min and max tensors if they were single dimensioned. If they were scalars, the
-    # broadcast is automatic and more optimal in runtime, so we skip calling the helper above
-    if isinstance(encoding_max, list) and len(x.shape) > 1:
-        encoding_max = broadcast_to_tensor(x, encoding_max, ch_axis)
-
-    if isinstance(encoding_min, list) and len(x.shape) > 1:
-        encoding_min = broadcast_to_tensor(x, encoding_min, ch_axis)
-    else:
-        encoding_min = torch.Tensor([encoding_min]).to(x.device)
+    encoding_max = broadcast_to_tensor(x, encoding_max, ch_axis)
+    encoding_min = broadcast_to_tensor(x, encoding_min, ch_axis)
 
     # compute dloss_by_dx = dq_by_dx * grad
     inner_cond = torch.where(torch.le(x, encoding_max),  # condition to check per value
@@ -190,10 +179,8 @@ def _compute_variables_for_range_learning(tensor: torch.Tensor,
     """
     delta, offset, num_steps = get_computed_encodings(bitwidth, encoding_min, encoding_max,
                                                       use_symmetric_encodings, use_strict_symmetric, is_unsigned_symmetric)
-    # broadcasting
-    if len(encoding_min) > 1:
-        delta = broadcast_to_tensor(tensor, delta, channel_axis)
-        offset = broadcast_to_tensor(tensor, offset, channel_axis)
+    delta = broadcast_to_tensor(tensor, delta, channel_axis)
+    offset = broadcast_to_tensor(tensor, offset, channel_axis)
 
     return delta, offset, num_steps
 
