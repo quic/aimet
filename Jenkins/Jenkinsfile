@@ -72,10 +72,14 @@ pipeline {
                                     }
                                     sh "bash -l -c \"git clone ${env.REPO_OR_FORK_URL} -b ${env.CHANGE_BRANCH} commit_checks_repo\""
                                     if ("${env.QCInternalValidation}" == "true") {
+                                        if (didDockerFileChange("tf-gpu")) {
+                                            env.USE_LINARO=""
+                                        }
                                         withCredentials([usernameColonPassword(credentialsId: 'neoci-pat', variable: 'USERPASS')]) {
                                             sh "AIMET_VARIANT=\"tf-gpu\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${env.USE_LINARO} ${env.PREBUILT_DOCKER_IMAGE_URL}\""
                                         }
                                     } else {
+                                        env.USE_LINARO=""
                                         sh "AIMET_VARIANT=\"tf-gpu\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${env.USE_LINARO} ${env.PREBUILT_DOCKER_IMAGE_URL}\""
                                     }
                                 }
@@ -611,6 +615,19 @@ pipeline {
     }
 }
 
+def didDockerFileChange(aimet_variant) {
+    def changedFiles = pullRequest.files.collect {
+        it.getFilename()
+    }
+    print changedFiles
+    if (changedFiles.contains("Jenkins/Dockerfile.${aimet_variant}".toString())) {
+        print "Jenkins/Dockerfile.${aimet_variant} changed in PR, so building docker image locally."
+        return true
+    }
+    print "Jenkins/Dockerfile.${aimet_variant} NOT changed in PR, so using pre-built docker image."
+    return false
+}
+
 def runStage(aimet_variant, options) {
 
     echo "*** Running stage ${options} for ${aimet_variant} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
@@ -622,13 +639,10 @@ def runStage(aimet_variant, options) {
 
     }
     else {
-        def changedFiles = pullRequest.files.collect {
-            it.getFilename()
+        if (didDockerFileChange(env.aimet_variant)) {
+            env.USE_LINARO=""
         }
-        print changedFiles
-        if (!changedFiles.contains("Jenkins/Dockerfile.${aimet_variant}".toString())) {
-           print "Jenkins/Dockerfile.${aimet_variant} not found in changed file list, so using Linaro Docker image for ${aimet_variant}"
-        }
+        echo "*** with linaro option as ${env.USE_LINARO} ***"
         sh """
             AIMET_VARIANT=${aimet_variant} bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -e AIMET_VARIANT ${options} ${env.USE_LINARO} ${env.PREBUILT_DOCKER_IMAGE_URL}"
         """
@@ -637,12 +651,15 @@ def runStage(aimet_variant, options) {
 
 def callAimetExtra(target_branch) {
     echo target_branch
+    if (didDockerFileChange("tf-gpu") || didDockerFileChange("tf-cpu") || didDockerFileChange("torch-gpu") || didDockerFileChange("torch-cpu")) {
+            env.USE_LINARO=""
+        }
     if (target_branch != "develop") {
         echo "Running AIMET additional stages on ${CHANGE_TARGET} branch ..."
-        build job: "AIMET-Extra", parameters: [string(name: 'AIMET_GIT_COMMIT', value: "${CHANGE_BRANCH}"), string(name: 'PROJECT_BRANCH', value: target_branch)]
+        build job: "AIMET-Extra", parameters: [string(name: 'AIMET_GIT_COMMIT', value: "${CHANGE_BRANCH}"), string(name: 'PROJECT_BRANCH', value: target_branch), string(name: 'USE_LINARO', value: "${env.USE_LINARO}")]
     }    else {
         echo "Running AIMET additional stages on develop branch ..."
-        build job: "AIMET-Extra", parameters: [string(name: 'AIMET_GIT_COMMIT', value: "${CHANGE_BRANCH}")]
+        build job: "AIMET-Extra", parameters: [string(name: 'AIMET_GIT_COMMIT', value: "${CHANGE_BRANCH}"), string(name: 'USE_LINARO', value: "${env.USE_LINARO}")]
     }
 }
 
