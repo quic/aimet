@@ -238,3 +238,19 @@ def tiny_conv_net():
     outputs = tf.keras.layers.Dense(10)(x)
 
     return tf.keras.Model(inputs=inputs, outputs=outputs)
+
+
+def transposed_conv_model():
+    """
+    Transposed Conv Model
+    """
+
+    inp = tf.keras.Input((4, 4, 10))
+    x   = tf.keras.layers.Conv2DTranspose(10, 3)(inp)
+    x   = tf.keras.layers.BatchNormalization()(x)
+
+    x   = tf.keras.layers.ReLU()(x)
+    x   = tf.keras.layers.Conv2DTranspose(10, 3)(x)
+    x   = tf.keras.layers.BatchNormalization()(x)
+
+    return tf.keras.Model(inputs=[inp], outputs=[x])
