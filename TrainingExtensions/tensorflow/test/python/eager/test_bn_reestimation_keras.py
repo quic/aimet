@@ -38,6 +38,7 @@
 
 """ bn_reestimation for Keras Unit Test Cases """
 
+import pytest
 import tensorflow as tf
 import numpy as np
 from packaging import version
@@ -81,6 +82,7 @@ def _reestimate_and_compare_results(model, dataset):
 def test_bn_reestimation():
     """
     Test batchnorm reestimation
+    TODO remove me?
     """
     tf.keras.backend.clear_session()
     np.random.seed(0)
@@ -104,3 +106,79 @@ def test_bn_reestimation():
     qsim.compute_encodings(lambda m, _: m.predict(dummy_inputs+1), None)
     qsim.model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3), loss=tf.keras.losses.MeanSquaredError())
     _reestimate_and_compare_results(qsim.model, dataset)
+
+@pytest.mark.parametrize("fused", [False, True])
+@pytest.mark.parametrize("quantize", [False, True])
+def test_bn_reestimation_computation(fused, quantize):
+    """
+    Test batchnorm reestimation computation w/ and w/o Quantsim
+    """
+    tf.keras.backend.clear_session()
+    np.random.seed(0)
+
+    inputs = tf.keras.Input(shape=(224, 224, 3,))
+    x = tf.keras.layers.BatchNormalization(fused=fused)(inputs)
+    y = tf.keras.layers.BatchNormalization(fused=fused)(2 * inputs)
+    outputs = x + y
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+    dummy_input = np.random.randn(1, 224, 224, 3).astype(np.float32)
+    if not quantize:
+        _ = model(dummy_input, training=True)
+    else:
+        qsim = QuantizationSimModel(model)
+        qsim.compute_encodings(lambda m, _: m.predict(dummy_input), None)
+        qsim.model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3), loss=tf.keras.losses.MeanSquaredError())
+        model = qsim.model
+
+    def get_mean_var(data: np.ndarray):
+        return data.mean(axis=(0,1,2)), \
+               np.mean([x.var(axis=(0, 1, 2)) for x in np.split(data, num_batch, axis=0)], axis=0)
+
+    bn1, bn2 = model.layers[2], model.layers[3]
+    if quantize:
+        #disable all quantizer upto BN
+        for layer in [bn1, bn2]:
+            layer.input_quantizers[0].disable()
+            layer.output_quantizers[0].disable()
+            for i in range(4):
+                layer.param_quantizers[i].disable()
+        mul = model.layers[1]
+        mul.input_quantizers[0].disable()
+        mul.output_quantizers[0].disable()
+
+        bn1 = bn1.submodules[0]
+        bn2 = bn2.submodules[0]
+
+    # creating a dummy dataset along with expected stats for randomly generated input tensor
+    batch_size = 4
+    num_batch = 4
+    input_data = np.random.randn(batch_size * num_batch, 224, 224, 3).astype(np.float32)
+    dataset = tf.data.Dataset.from_tensor_slices(input_data)
+    dataset = dataset.batch(batch_size=batch_size)
+    expected_values = {
+        bn1.name : get_mean_var(input_data),
+        bn2.name:  get_mean_var(input_data * 2),
+    }
+
+    bn_layers = _get_bn_submodules(model)
+    bn_mean_ori = {layer.name: layer.moving_mean.numpy() for layer in bn_layers}
+    bn_var_ori = {layer.name: layer.moving_variance.numpy() for layer in bn_layers}
+    bn_momentum_ori = {layer.name: layer.momentum for layer in bn_layers}
+
+    with reestimate_bn_stats(model, dataset, num_batch):
+        # check re_estimation mean, var, momentum
+        for i, layer in enumerate(bn_layers):
+            assert layer.momentum == 0
+            bn_mean_est, bn_var_est = layer.moving_mean.numpy(), layer.moving_variance.numpy()
+            bn_mean_exp, bn_var_exp = expected_values[layer.name]
+            assert np.allclose(bn_var_est, bn_var_exp, rtol=1e-04)
+            assert np.allclose(bn_mean_est, bn_mean_exp, rtol=1e-04)
+
+    # check restored  mean, var, momentum
+    bn_mean_restored = {layer.name: layer.moving_mean.numpy() for layer in bn_layers}
+    bn_var_restored = {layer.name: layer.moving_variance.numpy() for layer in bn_layers}
+    bn_momentum_restored = {layer.name: layer.momentum for layer in bn_layers}
+
+    assert all(np.allclose(bn_mean_ori[key], bn_mean_restored[key]) for key in bn_mean_ori)
+    assert all(np.allclose(bn_var_ori[key], bn_var_restored[key]) for key in bn_var_ori)
+    assert (bn_momentum_ori == bn_momentum_restored)
