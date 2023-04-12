@@ -185,7 +185,7 @@ def _validate_inputs(session: tf.compat.v1.Session,  # pylint: disable=too-many-
         raise ValueError('output_op_names must be of type List of str, not ' + str(type(output_op_names).__name__))
 
     if not isinstance(dataset, tf.compat.v1.data.Dataset):
-        raise ValueError('data_loader must be of type DataLoader, not ' + str(
+        raise ValueError('dataset must be of type DataLoader, not ' + str(
             type(dataset).__name__))
 
     if not isinstance(eval_callback, Callable):
@@ -297,10 +297,8 @@ class AutoQuant:  # pylint: disable=too-many-instance-attributes
             if data_count >= 2000:
                 break
 
-        self._unlabeled_dataset_length = data_count
-
         # Use at most 2000 samples for AdaRound.
-        num_samples = min(self._unlabeled_dataset_length, 2000)
+        num_samples = min(data_count, 2000)
         batch_size = batch_size
         num_batches = math.floor(num_samples / batch_size)
         self.adaround_params = AdaroundParameters(self.dataset, num_batches)
@@ -525,9 +523,6 @@ class AutoQuant:  # pylint: disable=too-many-instance-attributes
     def _apply_adaround(
             self,
             sess: tf.compat.v1.Session
-            # starting_op_names: List[str],
-            # output_op_names: List[str],
-            # results_dir: str,
     ) -> Tuple[tf.compat.v1.Session, str]:
         """
         Apply adaround.
