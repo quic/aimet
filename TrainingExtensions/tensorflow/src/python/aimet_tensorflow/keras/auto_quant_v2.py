@@ -157,7 +157,7 @@ def _validate_inputs(model: tf.keras.Model, # pylint: disable=too-many-arguments
         raise ValueError('Model must be of type tf.keras.Model, not ' + str(type(model).__name__))
 
     if not isinstance(dataset, tf.data.Dataset):
-        raise ValueError('data_loader must be of type tf.data.Dataset, not ' + str(
+        raise ValueError('dataset must be of type tf.data.Dataset, not ' + str(
             type(dataset).__name__))
 
     if not isinstance(eval_callback, Callable):
@@ -223,7 +223,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         _validate_inputs(model, dataset, eval_callback, results_dir, strict_validation, \
                          quant_scheme, param_bw, output_bw, rounding_mode)
         self.fp32_model = model
-        self.data_loader = dataset
+        self.dataset = dataset
         self.eval_callback = eval_callback
 
         self._quantsim_params = dict(
@@ -241,25 +241,22 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
             self.cache_dir = None
 
         def forward_pass_callback(model, _: Any = None):
-            for input_data in tqdm(self.data_loader):
+            for input_data in tqdm(self.dataset):
                 model(input_data)
 
         self.forward_pass_callback = forward_pass_callback
 
         # Use at most 2000 samples for AdaRound.
         batch_size = None
-        num_samples = 0
-        for data in self.data_loader:
-            num_samples += len(data)
+        for data in self.dataset:
             if not batch_size:
                 batch_size = len(data)
-            if num_samples >= 2000:
                 break
         batch_size = batch_size or 1
-        num_batches = math.ceil(num_samples / batch_size)
-        num_batches = min(num_batches, len(self.data_loader))
+        num_batches = math.ceil(2000 / batch_size)
+        num_batches = min(num_batches, len(self.dataset))
 
-        self.adaround_params = AdaroundParameters(self.data_loader,
+        self.adaround_params = AdaroundParameters(self.dataset,
                                                   num_batches)
         self.eval_manager = _EvalManager(
             quantsim_factory=self._create_quantsim_and_encodings,
