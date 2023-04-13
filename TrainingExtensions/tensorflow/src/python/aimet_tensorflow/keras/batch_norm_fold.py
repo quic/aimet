@@ -37,7 +37,6 @@
 # =============================================================================
 
 """ Utility for batch norm fold in tf 2.x """
-from collections import OrderedDict
 from typing import Iterable, Optional, Tuple, Union, List, Dict, Set
 import numpy as np
 import tensorflow as tf
@@ -50,7 +49,9 @@ import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ParamPerTensorQuantizer
+from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 from aimet_tensorflow.keras.utils import common
+from aimet_tensorflow.keras.utils.model_connection_utils import ModelLayerConnections, ModelLayerConnectionsProperties
 from aimet_tensorflow.keras.utils.quantizer_utils import get_wrappers_bias_quantizer, get_wrappers_weight_quantizer
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
@@ -401,6 +402,8 @@ def _delete_bn_from_functional(model: tf.keras.Model,
     #
     #
     #
+    def wrapped_bn_layer_in_bns_to_remove(layer: tf.keras.layers.Layer) -> bool:
+        return isinstance(layer, QcQuantizeWrapper) and layer._layer_to_wrap in bn_layers_to_remove
 
     # Step 1: Get the inbound and outbound connections for each layer in the model
     model_layer_connections = ModelLayerConnections.get_model_layers_connection_properties(model)
@@ -626,13 +629,13 @@ def fold_all_batch_norms(model: tf.keras.Model) \
     return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs], model
 
 # pylint: disable=protected-access
-def fold_all_batch_norms_to_scale(sim: tf.keras.Model) -> \
+def fold_all_batch_norms_to_scale(sim: QuantizationSimModel) -> \
     Tuple[List[Tuple[QcQuantizeWrapper, QcQuantizeWrapper]], tf.keras.Model]:
     """
     Fold all batch_norm layers in a model into the quantization scale parameter
     of the corresponding conv layers
 
-    :param sim: quantized keras model to fold all batch norms
+    :param sim: QuantizationSimModel to be folded
     :return: A list of pairs of layers [(Conv/Linear, BN layer that got folded)] and the bn folded model
     """
 
