@@ -184,8 +184,8 @@ def _validate_inputs(session: tf.compat.v1.Session,  # pylint: disable=too-many-
     else:
         raise ValueError('output_op_names must be of type List of str, not ' + str(type(output_op_names).__name__))
 
-    if not isinstance(dataset, tf.compat.v1.data.Dataset):
-        raise ValueError('dataset must be of type DataLoader, not ' + str(
+    if not isinstance(dataset, tf.data.Dataset):
+        raise ValueError('dataset must be of type Dataset, not ' + str(
             type(dataset).__name__))
 
     if not isinstance(eval_callback, Callable):
@@ -283,7 +283,7 @@ class AutoQuant:  # pylint: disable=too-many-instance-attributes
 
         self.eval_callback = eval_callback
 
-        # get the number of batches and length of the dataloader provided by user
+        # get the number of batches and length of the dataset provided by user
         iterator = iterate_tf_dataset(self.dataset)
         batch_size = None
         data_count = 0
@@ -292,7 +292,7 @@ class AutoQuant:  # pylint: disable=too-many-instance-attributes
                 batch_size = len(inputs)
             data_count += len(inputs)
 
-            # Break early if more than 2K samples are there in the dataloader as we are using
+            # Break early if more than 2K samples are there in the dataset as we are using
             # only 2K samples at max for adaround.
             if data_count >= 2000:
                 break
