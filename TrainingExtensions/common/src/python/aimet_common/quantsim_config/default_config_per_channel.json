@@ -39,6 +39,10 @@
     "Gemm":
     {
       "per_channel_quantization": "False"
+    },
+    "LayerNorm":
+    {
+      "per_channel_quantization": "False"
     }
   },
 
