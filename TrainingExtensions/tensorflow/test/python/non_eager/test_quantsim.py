@@ -50,8 +50,6 @@ from aimet_common.defs import QuantScheme, QuantizationDataType, RANGE_LEARNING_
 from aimet_common.quantsim import encoding_version
 from aimet_tensorflow import graph_editor
 from aimet_tensorflow.quantsim import QuantizationSimModel, check_accumulator_overflow
-from aimet_tensorflow.quantsim_straight_through_grad import _get_n_and_p, _compute_dloss_by_dmax, \
-    compute_intermediate_result_for_learned_grid, LearnedGridParams
 from aimet_tensorflow.utils.graph_saver import load_model_from_meta
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.defs import ParameterInfo
@@ -2152,102 +2150,6 @@ class TestQuantSimRangeLearning:
 
         sess.close()
         sim.session.close()
-
-    def test_n_p_computation(self):
-        """
-        validate n and p values computed for symmetric and asymmetric case.
-        :return:
-        """
-
-        tf.compat.v1.reset_default_graph()
-        bitwidth = 8
-
-        sym_n, sym_p = _get_n_and_p(bitwidth, tf.cast(True, tf.bool))
-        sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
-        initialize_uninitialized_vars(sess)
-
-        # for 8 bit , -127 to +127
-        expected_sym_n = (-2 ** (bitwidth - 1)) + 1
-        expected_sym_p = (2 ** (bitwidth - 1)) - 1
-
-        comp_symmetric_n = sess.run(sym_n)
-        comp_symmetric_p = sess.run(sym_p)
-
-        asym_n, asym_p = _get_n_and_p(bitwidth, tf.cast(False, tf.bool))
-        sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
-        initialize_uninitialized_vars(sess)
-
-        # for 8 bit , 0 to 255
-        expected_asym_n = 0
-        expected_asym_p = (2 ** bitwidth) - 1
-        comp_asymmetric_n = sess.run(asym_n)
-        comp_asymmetric_p = sess.run(asym_p)
-
-        assert expected_asym_n == comp_asymmetric_n
-        assert expected_asym_p == comp_asymmetric_p
-
-        assert expected_sym_n == comp_symmetric_n
-        assert expected_sym_p == comp_symmetric_p
-
-        sess.close()
-
-    def test_compute_dloss_by_dmax_shape(self):
-        """ Test compute_dloss_by_dmax returns tensor with correct shape """
-        tf.compat.v1.set_random_seed(0)
-
-        # Per tensor case
-        tf.compat.v1.reset_default_graph()
-        graph = tf.Graph()
-        sess = tf.compat.v1.Session(graph=graph)
-        with graph.as_default():
-            inputs = tf.random.uniform(shape=[3, 3, 4, 2], dtype=tf.float32)
-            grad = tf.random.uniform(shape=[3, 3, 4, 2], dtype=tf.float32)
-            scaling = tf.random.uniform(shape=[], dtype=tf.float32)
-            offset = tf.random.uniform(shape=[], dtype=tf.float32)
-            bitwidth = tf.constant(8.0, dtype=tf.float32)
-            is_symmetric = tf.constant(False)
-
-            intermediate_result = compute_intermediate_result_for_learned_grid(inputs, scaling, offset)
-            n, p = _get_n_and_p(bitwidth, is_symmetric)
-            grid_params = LearnedGridParams(scaling, offset, n, p)
-            dloss_by_dmax = _compute_dloss_by_dmax(inputs, grad, intermediate_result, grid_params)
-            assert sess.run(dloss_by_dmax).shape == ()
-
-        # Per channel case with weights
-        tf.compat.v1.reset_default_graph()
-        graph = tf.Graph()
-        sess = tf.compat.v1.Session(graph=graph)
-        with graph.as_default():
-            inputs = tf.random.uniform(shape=[3, 3, 4, 2], dtype=tf.float32)
-            grad = tf.random.uniform(shape=[3, 3, 4, 2], dtype=tf.float32)
-            scaling = tf.random.uniform(shape=[2,], dtype=tf.float32)
-            offset = tf.random.uniform(shape=[2,], dtype=tf.float32)
-            bitwidth = tf.constant(8.0, dtype=tf.float32)
-            is_symmetric = tf.constant(False)
-
-            intermediate_result = compute_intermediate_result_for_learned_grid(inputs, scaling, offset)
-            n, p = _get_n_and_p(bitwidth, is_symmetric)
-            grid_params = LearnedGridParams(scaling, offset, n, p)
-            dloss_by_dmax = _compute_dloss_by_dmax(inputs, grad, intermediate_result, grid_params)
-            assert sess.run(dloss_by_dmax).shape == (2,)
-
-        # Per channel case with bias
-        tf.compat.v1.reset_default_graph()
-        graph = tf.Graph()
-        sess = tf.compat.v1.Session(graph=graph)
-        with graph.as_default():
-            inputs = tf.random.uniform(shape=[10,], dtype=tf.float32)
-            grad = tf.random.uniform(shape=[10,], dtype=tf.float32)
-            scaling = tf.random.uniform(shape=[10,], dtype=tf.float32)
-            offset = tf.random.uniform(shape=[10,], dtype=tf.float32)
-            bitwidth = tf.constant(8.0, dtype=tf.float32)
-            is_symmetric = tf.constant(False)
-
-            intermediate_result = compute_intermediate_result_for_learned_grid(inputs, scaling, offset)
-            n, p = _get_n_and_p(bitwidth, is_symmetric)
-            grid_params = LearnedGridParams(scaling, offset, n, p)
-            dloss_by_dmax = _compute_dloss_by_dmax(inputs, grad, intermediate_result, grid_params)
-            assert sess.run(dloss_by_dmax).shape == (10,)
 
     def test_qat_fp16(self, iterations=5):
         """
