@@ -180,6 +180,28 @@ public:
         }
     }
 
+    std::tuple<at::Tensor, at::Tensor> makeDeltaOffsetTensor(at::Tensor input, std::vector<DlQuantization::TfEncoding> encodings, int numChannel)
+    {
+        int encodingTensorSize = 2 * numChannel;
+
+        std::vector<float> encoding_vector(encodingTensorSize);
+        for(int i = 0; i < numChannel; i++)
+        {
+            encoding_vector[i] = encodings[i].delta;
+            encoding_vector[i + numChannel] = encodings[i].offset;
+        }
+
+        // Create encoding tensors
+        auto options = at::TensorOptions().dtype(at::kFloat).device(at::kCPU).requires_grad(false);
+        at::Tensor encoding_tensor = torch::from_blob(encoding_vector.data(), {2, numChannel}, options).to(input.device());
+        if(encoding_tensor.device().type() == at::kCPU)
+        {
+            encoding_tensor = encoding_tensor.clone();
+        }
+
+        return std::make_tuple(encoding_tensor[0], encoding_tensor[1]);
+    }
+
 private:
     bool _isEncodingValid;
     DlQuantization::QuantizationMode _quantizationScheme;
@@ -198,5 +220,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
         .def("getEncoding", &AimetTensorQuantizer::getEncoding)
         .def("resetEncodingStats", &AimetTensorQuantizer::resetEncodingStats)
         .def("getStatsHistogram", &AimetTensorQuantizer::getStatsHistogram)
-        .def("setPercentileValue", &AimetTensorQuantizer::setPercentileValue);
+        .def("setPercentileValue", &AimetTensorQuantizer::setPercentileValue)
+        .def("makeDeltaOffsetTensor", &AimetTensorQuantizer::makeDeltaOffsetTensor);
 }
