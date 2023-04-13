@@ -98,7 +98,7 @@ def gpu_session():
 
 
 @pytest.fixture(scope="session")
-def unlabeled_data_loader():
+def unlabeled_dataset():
     dummy_inputs = tf.random.normal((4, 28, 28, 3))
     dataset = tf.compat.v1.data.Dataset.from_tensor_slices(dummy_inputs)
     dataset = dataset.batch(2)
@@ -381,7 +381,7 @@ ending_ops =['conv2d_1/BiasAdd']
 
 class TestAutoQuant:
 
-    def test_auto_quant_run_inference(self, sess, unlabeled_data_loader):
+    def test_auto_quant_run_inference(self, sess, unlabeled_dataset):
         bn_folded_acc = .5
 
         with patch_ptq_techniques(
@@ -391,7 +391,7 @@ class TestAutoQuant:
                 auto_quant = AutoQuant(sess,
                                        starting_ops,
                                        ending_ops,
-                                       unlabeled_data_loader,
+                                       unlabeled_dataset,
                                        mocks.eval_callback,
                                        results_dir=results_dir)
                 auto_quant.run_inference()
@@ -402,25 +402,25 @@ class TestAutoQuant:
     )
     @pytest.mark.parametrize("allowed_accuracy_drop", [.05, .15])
     def test_auto_quant_cpu(
-            self, sess, unlabeled_data_loader,
+            self, sess, unlabeled_dataset,
             allowed_accuracy_drop, bn_folded_acc, cle_acc, adaround_acc,
     ):
         self._test_auto_quant(
-            sess, unlabeled_data_loader,
+            sess, unlabeled_dataset,
             allowed_accuracy_drop, bn_folded_acc, cle_acc, adaround_acc,
         )
 
     @pytest.mark.cuda
-    def test_auto_quant_gpu(self, gpu_session, unlabeled_data_loader):
+    def test_auto_quant_gpu(self, gpu_session, unlabeled_dataset):
         bn_folded_acc, cle_acc, adaround_acc = .5, .6, .7
         allowed_accuracy_drop = .15
 
         self._test_auto_quant(
-            gpu_session,  unlabeled_data_loader,
+            gpu_session,  unlabeled_dataset,
             allowed_accuracy_drop, bn_folded_acc, cle_acc, adaround_acc,
         )
 
-    def test_consecutive_calls(self, sess, unlabeled_data_loader):
+    def test_consecutive_calls(self, sess, unlabeled_dataset):
         bn_folded_acc, cle_acc, adaround_acc = .5, .6, .7
 
         with patch_ptq_techniques(
@@ -430,7 +430,7 @@ class TestAutoQuant:
                 auto_quant = AutoQuant(sess,
                                        starting_ops,
                                        ending_ops,
-                                       unlabeled_data_loader,
+                                       unlabeled_dataset,
                                        mocks.eval_callback,
                                        results_dir=results_dir)
 
@@ -449,7 +449,7 @@ class TestAutoQuant:
                 auto_quant = AutoQuant(sess,
                                        starting_ops,
                                        ending_ops,
-                                       unlabeled_data_loader,
+                                       unlabeled_dataset,
                                        mocks.eval_callback,
                                        results_dir=results_dir)
 
@@ -473,7 +473,7 @@ class TestAutoQuant:
                 assert mocks.equalize_model.call_count == 3
 
     def _test_auto_quant(
-            self, sess, unlabeled_data_loader,
+            self, sess, unlabeled_dataset,
             allowed_accuracy_drop, bn_folded_acc, cle_acc, adaround_acc,
     ):
         with patch_ptq_techniques(
@@ -483,7 +483,7 @@ class TestAutoQuant:
                 auto_quant = AutoQuant(sess,
                                        starting_ops,
                                        ending_ops,
-                                       unlabeled_data_loader,
+                                       unlabeled_dataset,
                                        mocks.eval_callback,
                                        results_dir=results_dir)
                 self._do_test_optimize_auto_quant(
@@ -506,45 +506,48 @@ class TestAutoQuant:
             auto_quant.results_dir,
         )
 
-    def test_auto_quant_invalid_input(self, sess, unlabeled_data_loader):
+    def test_auto_quant_invalid_input(self, sess, unlabeled_dataset):
         with pytest.raises(ValueError):
-            AutoQuant(None,  starting_ops, ending_ops, unlabeled_data_loader, lambda: None)
+            AutoQuant(None,  starting_ops, ending_ops, unlabeled_dataset, lambda: None)
 
         with pytest.raises(ValueError):
-            AutoQuant(sess, None, None, unlabeled_data_loader, lambda: None)
+            AutoQuant(sess, None, None, unlabeled_dataset, lambda: None)
 
         with pytest.raises(ValueError):
             AutoQuant(sess,  starting_ops, ending_ops, None, lambda: None)
 
         with pytest.raises(ValueError):
-            AutoQuant(sess,  starting_ops, ending_ops, unlabeled_data_loader, None)
+            AutoQuant(sess,  starting_ops, ending_ops, unlabeled_dataset, None)
 
         with pytest.raises(ValueError):
-            AutoQuant(sess,  starting_ops, ending_ops, unlabeled_data_loader, lambda: None, results_dir=None)
+            AutoQuant(sess,  starting_ops, ending_ops, unlabeled_dataset, lambda: None, results_dir=None)
 
         with pytest.raises(ValueError):
-            AutoQuant(sess,  starting_ops, ending_ops, unlabeled_data_loader, lambda: None, strict_validation=None)
+            AutoQuant(sess,  starting_ops, ending_ops, unlabeled_dataset, lambda: None, strict_validation=None)
 
         # Bitwidth < 4 or bitwidth > 32
         with pytest.raises(ValueError):
-            AutoQuant(sess,  starting_ops, ending_ops, unlabeled_data_loader, lambda: None, param_bw=2)
+            AutoQuant(sess,  starting_ops, ending_ops, unlabeled_dataset, lambda: None, param_bw=2)
 
         with pytest.raises(ValueError):
-            AutoQuant(sess,  starting_ops, ending_ops, unlabeled_data_loader, lambda: None, param_bw=64)
+            AutoQuant(sess,  starting_ops, ending_ops, unlabeled_dataset, lambda: None, param_bw=64)
 
         with pytest.raises(ValueError):
-            AutoQuant(sess,  starting_ops, ending_ops, unlabeled_data_loader, lambda: None, output_bw=2)
+            AutoQuant(sess,  starting_ops, ending_ops, unlabeled_dataset, lambda: None, output_bw=2)
 
         with pytest.raises(ValueError):
-            AutoQuant(sess,  starting_ops, ending_ops, unlabeled_data_loader, lambda: None, output_bw=64)
+            AutoQuant(sess,  starting_ops, ending_ops, unlabeled_dataset, lambda: None, output_bw=64)
 
-        auto_quant = AutoQuant(sess,  starting_ops, ending_ops, unlabeled_data_loader, lambda: None)
+        auto_quant = AutoQuant(sess,  starting_ops, ending_ops, unlabeled_dataset, lambda: None)
         # Allowed accuracy drop < 0
         with pytest.raises(ValueError):
             _ = auto_quant.optimize(-1.0)
 
+        # Should accept ZipDataset
+        auto_quant = AutoQuant(sess,  starting_ops, ending_ops, unlabeled_dataset.enumerate(), lambda: None)
+
     def test_auto_quant_inference_fallback(
-            self, sess, unlabeled_data_loader,
+            self, sess, unlabeled_dataset,
     ):
         class _Exception(Exception):
             pass
@@ -561,7 +564,7 @@ class TestAutoQuant:
                 auto_quant = AutoQuant(sess,
                                        starting_ops,
                                        ending_ops,
-                                       unlabeled_data_loader,
+                                       unlabeled_dataset,
                                        mocks.eval_callback,
                                        results_dir=results_dir,
                                        strict_validation=False)
@@ -572,7 +575,7 @@ class TestAutoQuant:
                     assert np.allclose(acc, raw_quantsim_acc)
 
     def test_auto_quant_optimize_fallback(
-            self, sess, unlabeled_data_loader,
+            self, sess, unlabeled_dataset,
     ):
         class _Exception(Exception):
             pass
@@ -588,7 +591,7 @@ class TestAutoQuant:
                 auto_quant = AutoQuant(sess,
                                        starting_ops,
                                        ending_ops,
-                                       unlabeled_data_loader,
+                                       unlabeled_dataset,
                                        mocks.eval_callback,
                                        results_dir=results_dir,
                                        strict_validation=False)
@@ -609,7 +612,7 @@ class TestAutoQuant:
                 auto_quant = AutoQuant(sess,
                                        starting_ops,
                                        ending_ops,
-                                       unlabeled_data_loader,
+                                       unlabeled_dataset,
                                        mocks.eval_callback,
                                        results_dir=results_dir,
                                        strict_validation=False)
@@ -629,7 +632,7 @@ class TestAutoQuant:
                 auto_quant = AutoQuant(sess,
                                        starting_ops,
                                        ending_ops,
-                                       unlabeled_data_loader,
+                                       unlabeled_dataset,
                                        mocks.eval_callback,
                                        results_dir=results_dir,
                                        strict_validation=False)
@@ -649,7 +652,7 @@ class TestAutoQuant:
                 auto_quant = AutoQuant(sess,
                                        starting_ops,
                                        ending_ops,
-                                       unlabeled_data_loader,
+                                       unlabeled_dataset,
                                        mocks.eval_callback,
                                        results_dir=results_dir,
                                        strict_validation=False)
@@ -671,7 +674,7 @@ class TestAutoQuant:
                 auto_quant = AutoQuant(sess,
                                        starting_ops,
                                        ending_ops,
-                                       unlabeled_data_loader,
+                                       unlabeled_dataset,
                                        mocks.eval_callback,
                                        results_dir=results_dir,
                                        strict_validation=True)
@@ -688,7 +691,7 @@ class TestAutoQuant:
                             'node_adaround': _NOT_VISITED,
                         })
 
-    def test_auto_quant_early_exit(self, sess, unlabeled_data_loader):
+    def test_auto_quant_early_exit(self, sess, unlabeled_dataset):
         allowed_accuracy_drop = 0.1
         w32_acc = FP32_ACC - (allowed_accuracy_drop * 2)
 
@@ -699,7 +702,7 @@ class TestAutoQuant:
                 auto_quant = AutoQuant(sess,
                                        starting_ops,
                                        ending_ops,
-                                       unlabeled_data_loader,
+                                       unlabeled_dataset,
                                        mocks.eval_callback,
                                        results_dir=results_dir)
                 output_model, acc, encoding_path = auto_quant.optimize(allowed_accuracy_drop)
@@ -720,7 +723,7 @@ class TestAutoQuant:
 
 
 
-    def test_set_additional_params(self, sess, unlabeled_data_loader):
+    def test_set_additional_params(self, sess, unlabeled_dataset):
         allowed_accuracy_drop = 0
         bn_folded_acc = .1
         cle_acc = .2
@@ -730,9 +733,9 @@ class TestAutoQuant:
             auto_quant = AutoQuant(sess,
                                    starting_ops,
                                    ending_ops,
-                                   unlabeled_data_loader,
+                                   unlabeled_dataset,
                                    mocks.eval_callback)
-            adaround_params = AdaroundParameters(unlabeled_data_loader, 1)
+            adaround_params = AdaroundParameters(unlabeled_dataset, 1)
             auto_quant.set_adaround_params(adaround_params)
 
 
