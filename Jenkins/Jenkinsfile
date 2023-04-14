@@ -582,8 +582,7 @@ pipeline {
                                 steps {
                                     script {
                                         def docker_script = 'TORCH_HOME=build-$AIMET_VARIANT/torch_cache cmake --build ./build-$AIMET_VARIANT --target test'
-                                        //TODO Temporarily skip unit tests in editable mode due to unresolved failures
-                                        //*** sh "${env.DOCKER_CMD} bash -c '${docker_script}'"
+                                        sh "${env.DOCKER_CMD} bash -c '${docker_script}'"
                                     }
                                 }
                             }
