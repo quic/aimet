@@ -370,6 +370,7 @@ def calculate_gradients(tensor: torch.Tensor,
     return asymmetric_gradients(tensor, grad, intermediate_result, channel_axis)
 
 
+# pylint: disable=abstract-method
 class RoundStraightThrough(torch.autograd.Function):
     """
     Defining gradient of rounding function as pass-through since round is a non-linearity
