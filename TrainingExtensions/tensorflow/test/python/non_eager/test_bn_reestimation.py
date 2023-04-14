@@ -328,3 +328,55 @@ class TestBNReEstimation:
         assert is_two_dict_close_numpy_array(bn_mean_var_ori, bn_mean_var_restored)
         assert is_two_dict_close_float(bn_momentum_ori, bn_momentum_restored)
         assert is_two_dict_close_bool(bn_training_ori, bn_training_restored)
+
+    @pytest.mark.cuda
+    def test_verify_mean_variance_between_fused_unfused_bn(self):
+        """ Verify moving_mean and moving_variance between fused and unfused BN (momentum = 0.0) """
+        tf.compat.v1.reset_default_graph()
+        np.random.seed(0)
+        device = '/gpu:0'
+        with tf.device(device):
+            inputs = tf.keras.Input(shape=(224, 224, 1,))
+            dummy_input = np.random.randn(1, 224, 224, 1).astype(np.float32)
+            is_training = tf.compat.v1.placeholder_with_default(False, (), 'is_training')
+            y_fused = tf.compat.v1.layers.batch_normalization(inputs, momentum=0.0, fused=True,
+                                                              training=is_training)
+            y_non_fused = tf.compat.v1.layers.batch_normalization(inputs, momentum=0.0, fused=False,
+                                                                  training=is_training)
+            update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
+            with tf.control_dependencies(update_ops):
+                y_fused = tf.compat.v1.identity(y_fused)
+                y_non_fused = tf.compat.v1.identity(y_non_fused)
+
+        graph = tf.compat.v1.get_default_graph()
+        sess = tf.compat.v1.Session(graph=graph)
+        initialize_uninitialized_vars(sess)
+        inp_tensor = sess.graph.get_tensor_by_name('input_1' + ':0')
+
+        # train mode (Both fused and non-fused are in train mode)]
+        for _ in range(10):
+            y_fused_out = sess.run(y_fused, feed_dict={inp_tensor: dummy_input, is_training: True})
+            y_non_fused_out = sess.run(y_non_fused, feed_dict={inp_tensor: dummy_input, is_training: True})
+        assert np.allclose(y_fused_out, y_non_fused_out)
+
+        # inference mode (Both fused and non-fused are in inference mode)
+        y_fused_out = sess.run(y_fused, feed_dict={inp_tensor: dummy_input, is_training: False})
+        y_non_fused_out = sess.run(y_non_fused, feed_dict={inp_tensor: dummy_input, is_training: False})
+        assert np.allclose(y_fused_out, y_non_fused_out, rtol=1e-04)
+
+        # compare moving mean and variance
+        with sess.graph.as_default():
+            global_vars = [var for var in tf.compat.v1.global_variables()]
+        fused_moving_mean = sess.run(
+            [var for var in global_vars if var.name == 'batch_normalization/moving_mean:0'][0])
+        fused_moving_var = sess.run(
+            [var for var in global_vars if var.name == 'batch_normalization/moving_variance:0'][0])
+        non_fused_moving_mean = sess.run(
+            [var for var in global_vars if var.name == 'batch_normalization_1/moving_mean:0'][0])
+        non_fused_moving_var = sess.run(
+            [var for var in global_vars if var.name == 'batch_normalization_1/moving_variance:0'][0])
+
+        assert np.allclose(fused_moving_mean, non_fused_moving_mean, rtol=1e-04)
+        assert np.allclose(fused_moving_var, dummy_input.var(axis=(0, 1, 2)), rtol=1e-04)
+        assert np.allclose(non_fused_moving_var, dummy_input.var(axis=(0, 1, 2)), rtol=1e-04)
+        sess.close()

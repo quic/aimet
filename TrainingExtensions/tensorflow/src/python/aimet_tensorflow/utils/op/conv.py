@@ -93,7 +93,6 @@ class WeightTensorUtils:
         :param op: tf operation to extract weight tensor from
         :return : weight tensor sa tf.Tensor type
         """
-
         wt_tensor_index = WeightTensorUtils.get_tensor_index_in_given_op(op)
         wt_var_read_op = op.inputs[wt_tensor_index].op
 
@@ -107,13 +106,16 @@ class WeightTensorUtils:
         """
         get weight kernel in the op as a readVariableOp tensor
         we need to evaluate this to get weights (not get_wt_tensor)
-        :param op: tf operation to extract weight tensor from
-        :return : weight tensor as  ReadVariableOp tensor
-        """
 
+        :param op: tf operation to extract weight tensor from
+        :return : weight tensor as ReadVariableOp tensor
+        """
         wt_tensor_index = WeightTensorUtils.get_tensor_index_in_given_op(op)
         get_wt_as_read_var_tensor = op.inputs[wt_tensor_index]
+        if get_wt_as_read_var_tensor.op.type in ['QcQuantize', 'QcQuantizePerChannel']:
+            get_wt_as_read_var_tensor = get_wt_as_read_var_tensor.op.inputs[0]
 
+        assert get_wt_as_read_var_tensor.op.type in ['ReadVariableOp', 'Const']
         return get_wt_as_read_var_tensor
 
     @staticmethod
@@ -124,31 +126,9 @@ class WeightTensorUtils:
         :param op: tf operation to extract weight tensor from.
         :return : weight tensor as numpy array type, if found in the given op
         """
-
         wt_tensor = WeightTensorUtils.get_wt_as_read_var_tensor(op)
         numpy_data = sess.run(wt_tensor)
         return numpy_data
-
-    @staticmethod
-    def update_tensor_for_sim_op(sess: tf.compat.v1.Session, op: tf.Operation, tensor_as_numpy_array):
-        """
-        updated existing weight tensor variable in given op with new value.
-        :param sess: active tf.compat.v1.Session
-        :param op: op for which the weight tensor is to be updated
-        :param tensor_as_numpy_array: new weight tensor as numpy array
-        :return: None
-        """
-        # validate the shapes are same
-        assert WeightTensorUtils.get_tensor_shape(op) == tensor_as_numpy_array.shape
-        # update the weight tensor
-        with sess.graph.as_default():
-            wt_tensor_index = WeightTensorUtils.get_tensor_index_in_given_op(op)
-            wt_var_read_op = op.inputs[wt_tensor_index].op.inputs[0].op
-            wt_tensor = wt_var_read_op.inputs[constants.OP_VAR_WEIGHT_INDEX]
-            assert wt_tensor is not None, ('Error, no weight tensor found for this op', op.name)
-            wt_as_var = [var for var in tf.compat.v1.global_variables() if var.name == wt_tensor.name][0]
-            wt_as_var.load(tensor_as_numpy_array, sess)
-
 
     @staticmethod
     def update_tensor_for_op(sess: tf.compat.v1.Session, op: tf.Operation, tensor_as_numpy_array):
@@ -159,17 +139,24 @@ class WeightTensorUtils:
         :param tensor_as_numpy_array: new weight tensor as numpy array
         :return: None
         """
-
         # validate the shapes are same
         assert WeightTensorUtils.get_tensor_shape(op) == tensor_as_numpy_array.shape
 
         # update the weight tensor
         with sess.graph.as_default():
-            wt_tensor = WeightTensorUtils.get_wt_tensor(op)
+            wt_tensor_index = WeightTensorUtils.get_tensor_index_in_given_op(op)
+            wt_var_read_op = op.inputs[wt_tensor_index].op
+
+            # If weight's ReadVariableOp is quantized, then find the correct ReadVariableOp.
+            if wt_var_read_op.type in ['QcQuantize', 'QcQuantizePerChannel']:
+                wt_tensor = wt_var_read_op.inputs[0].op.inputs[constants.OP_VAR_WEIGHT_INDEX]
+            else:
+                wt_tensor = wt_var_read_op.inputs[constants.OP_VAR_WEIGHT_INDEX]
             assert wt_tensor is not None, ('Error, no weight tensor found for this op', op.name)
+
             # use tensor name to lookup var type associated with it
             wt_as_var = [var for var in tf.compat.v1.global_variables() if var.name == wt_tensor.name][0]
-            wt_as_var.load(tensor_as_numpy_array, sess)
+            sess.run(tf.compat.v1.assign(wt_as_var, tensor_as_numpy_array))
 
 
 class BiasUtils:
@@ -190,21 +177,20 @@ class BiasUtils:
 
     @ staticmethod
     def insert_bias_add_op(sess: tf.compat.v1.Session, conv_op_out_tensor: tf.Tensor,
-                           new_bias_tensor: tf.Variable, bias_name="bias_value") -> None:
+                           new_bias_tensor: tf.Variable, bias_name="bias_value"):
         """
         Insert bias-add op to given conv op.
+
+        Note : Higher level API needs to perform a save and load to get updated session after usage of this API.
+
         :param sess: model as tf.compat.v1.Session
         :param conv_op_out_tensor: output of conv op that should feed into the new bias op as tf.Tensor
         :param new_bias_tensor:  bias tensor to be added as tf.Variable
         :param bias_name: name string for the bias op
-        :return: None ,
-        Note : Higher level api needs to perform a save and load to get updated session after usage of this api
         """
-
         assert conv_op_out_tensor is not None, 'Error, insert_bias_add_op() : conv op output tensor must be provided'
         with sess.graph.as_default():
             if conv_op_out_tensor.consumers():
-
                 consumer_list = []
                 for consumer in conv_op_out_tensor.consumers():
                     consumer_list.append(consumer)
@@ -252,23 +238,32 @@ class BiasUtils:
     def _create_bias_add_op_and_insert(sess: tf.compat.v1.Session, conv_op: tf.Operation, new_bias_var: tf.Variable,
                                        bias_name="bias_value") -> None:
         """
-        creates and adds a bias_add op to conv op
+        creates and adds a bias_add op to conv op. If conv op is followed by quantized op, adds bias_add after
+        conv_quantized op.
+
+        Two cases:
+        1) conv -> (newly added bias)
+        2) conv -> conv_quantized -> (newly added bias)
+
         :param sess: active tf.compat.v1.Session
         :param conv_op: Convolution op
         :param new_bias_var: bias variable
         :param bias_name: an optional string for bias name
-        :return: None
         """
-
         assert conv_op.type in ['Conv2D', 'DepthwiseConv2dNative', 'MatMul']
 
         with sess.graph.as_default():
             if conv_op.outputs:
                 bias_index_in_op = BiasUtils.get_bias_index_in_given_op(conv_op)
-                conv_op_out_tensor = conv_op.outputs[bias_index_in_op]
+                following_op = conv_op.outputs[bias_index_in_op].consumers()[0]
+                if following_op.type in ['QcQuantize']:
+                    conv_op_out_tensor = following_op.outputs[bias_index_in_op]
+                    assert conv_op_out_tensor.op.type in ['QcQuantize']
+                else:
+                    conv_op_out_tensor = conv_op.outputs[bias_index_in_op]
+                    assert conv_op_out_tensor.op.type in ['Conv2D', 'DepthwiseConv2dNative', 'MatMul']
                 sess.run(tf.compat.v1.variables_initializer([new_bias_var]))
-                BiasUtils.insert_bias_add_op(sess, conv_op_out_tensor, new_bias_var,
-                                             bias_name)
+                BiasUtils.insert_bias_add_op(sess, conv_op_out_tensor, new_bias_var, bias_name)
 
     @staticmethod
     def get_bias_index_in_given_op(input_op: tf.Operation) -> int:
@@ -427,37 +422,6 @@ class BiasUtils:
                 bias_as_var.load(bias_as_numpy_array, sess)
 
     @staticmethod
-    def update_bias_for_sim_op(sess: tf.compat.v1.Session, op: tf.Operation, bias_as_numpy_array,
-                               bias_name="bias_value"):
-        """
-        update existing bias in given op with new bias value
-        creates and adds new bias if it does not exist.
-        Note :
-        Caller needs to perform a load and save of the graph
-        if this api is invoked for an op without existing bias.
-        :param sess: TensorFlow session
-        :param op:op for which the bias is to be updated
-        :param bias_as_numpy_array: new bias as a numpy array
-        :param bias_name: optional name can be specified by user
-        :return: None
-        """
-        with sess.graph.as_default():
-            if not BiasUtils.is_bias_none(op):
-                bias_quant_op = BiasUtils.get_bias_tensor(op)
-                bias_tensor_as_read_var_quant_op_input = bias_quant_op.op.inputs[0]
-                # assert len(bias_tensor_as_read_var_op_input.op.inputs) == 1
-                bias_tensor = bias_tensor_as_read_var_quant_op_input.op.inputs[constants.OP_BIAS_INDICES[op.type]]
-                assert BiasUtils.get_shape(op)[0] == bias_as_numpy_array.size
-                # use tensor name to lookup var type associated with it
-                assert bias_tensor is not None, ('Error, bias tensor lookup failed for op ', op.name)
-                bias_as_var = [var for var in tf.compat.v1.global_variables() if var.name == bias_tensor.name][0]
-                bias_as_var.load(bias_as_numpy_array, sess)
-            else:
-                # _create_bias_add_op_and_insert
-                new_bias_var = tf.Variable(initial_value=bias_as_numpy_array, name=bias_name, dtype=tf.float32)
-                BiasUtils._create_bias_add_op_and_insert(sess, op, new_bias_var, bias_name)
-
-    @staticmethod
     def update_bias_for_op(sess: tf.compat.v1.Session, op: tf.Operation, bias_as_numpy_array,
                            bias_name="bias_value"):
         """
@@ -472,17 +436,21 @@ class BiasUtils:
         :param bias_name: optional name can be specified by user
         :return: None
         """
-
         with sess.graph.as_default():
             if not BiasUtils.is_bias_none(op):
                 bias_tensor_as_read_var_op_input = BiasUtils.get_bias_tensor(op)
+                # If bias's ReadVariableOp is quantized, then find the correct ReadVariableOp.
+                if bias_tensor_as_read_var_op_input.op.type in ['QcQuantize', 'QcQuantizePerChannel']:
+                    bias_tensor_as_read_var_op_input = bias_tensor_as_read_var_op_input.op.inputs[0]
+                assert bias_tensor_as_read_var_op_input.op.type == 'ReadVariableOp'
                 assert len(bias_tensor_as_read_var_op_input.op.inputs) == 1
+
                 bias_tensor = bias_tensor_as_read_var_op_input.op.inputs[constants.OP_BIAS_INDICES[op.type]]
                 assert BiasUtils.get_shape(op)[0] == bias_as_numpy_array.size
                 # use tensor name to lookup var type associated with it
                 assert bias_tensor is not None, ('Error, bias tensor lookup failed for op ', op.name)
                 bias_as_var = [var for var in tf.compat.v1.global_variables() if var.name == bias_tensor.name][0]
-                bias_as_var.load(bias_as_numpy_array, sess)
+                sess.run(tf.compat.v1.assign(bias_as_var, bias_as_numpy_array))
             else:
                 # _create_bias_add_op_and_insert
                 new_bias_var = tf.Variable(initial_value=bias_as_numpy_array, name=bias_name, dtype=tf.float32)
@@ -720,9 +688,8 @@ def get_weight_tensor_with_shape(model: tf.compat.v1.Session, input_op: tf.Opera
     :param input_op: input op as tf.Operation type
     :return: weight and shape of tensor extracted from given op
     """
-
+    assert input_op.type in ['DepthwiseConv2dNative', 'MatMul', 'Conv2D']
     with model.graph.as_default():
-
         weight_tensor = WeightTensorUtils.get_tensor_as_numpy_data(model, input_op)
 
         # Conv2d weight shape in TensorFlow  [kh, kw, Nic, Noc]
