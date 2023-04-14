@@ -122,9 +122,9 @@ if (ENABLE_TENSORFLOW)
 endif(ENABLE_TENSORFLOW)
 
 if (ENABLE_TORCH)
-    if (NOT "${TORCH_VERSION}" STREQUAL "1.13.1+cu116")
+    if (NOT ${TORCH_VERSION} MATCHES "1.13.1.*")
         add_subdirectory(onnx)
-    endif (NOT "${TORCH_VERSION}" STREQUAL "1.13.1+cu116")
+    endif (NOT ${TORCH_VERSION} MATCHES "1.13.1.*")
     add_subdirectory(torch)
 endif(ENABLE_TORCH)
 
