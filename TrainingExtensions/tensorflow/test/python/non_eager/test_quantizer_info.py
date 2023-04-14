@@ -132,7 +132,7 @@ class TestQuantizerInfo(unittest.TestCase):
 
         # Freeze encoding before computing it
         quantizer.freeze_encoding()
-        self.assertRaises(AssertionError, lambda: quantizer.compute_encoding(8, False))
+        assert not quantizer.compute_encoding(8, False)
 
         session.close()
 
@@ -148,8 +148,7 @@ class TestQuantizerInfo(unittest.TestCase):
 
         sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
         quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
-
-        self.assertRaises(AssertionError, lambda: quantizer.get_encoding())
+        assert not quantizer.get_encoding()
 
         session.close()
 

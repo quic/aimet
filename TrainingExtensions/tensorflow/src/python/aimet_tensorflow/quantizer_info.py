@@ -500,7 +500,7 @@ class QuantizerInfo:
                 self.set_variable(encoding_max_var, encoding.max)
 
 
-    def get_encoding(self) -> libpymo.TfEncoding:
+    def get_encoding(self) -> Union[None, libpymo.TfEncoding, List[libpymo.TfEncoding]]:
         """
         Get encoding if valid else raise error
         :return: encoding
@@ -530,10 +530,8 @@ class QuantizerInfo:
             else:
                 encoding = _create_encoding_object(encoding_min, encoding_max, bitwidth, self.use_symmetric_encoding,
                                                    self.use_strict_symmetric)
-        else:
-            raise AssertionError('Compute encoding or Set encoding must be invoked before')
-
-        return encoding
+            return encoding
+        return None
 
     def freeze_encoding(self):
         """
