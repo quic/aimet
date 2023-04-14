@@ -871,7 +871,7 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         params[enc_max_param].requires_grad = False
 
 
-
+# pylint: disable=abstract-method
 class QuantizeDequantizeFunc(torch.autograd.Function):
     """
     This functional is created explicitly for reducing the amount of intermediate tensors that would need to be
@@ -931,6 +931,7 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
         return tensor_grad, tensor_encoding_min_grad, tensor_encoding_max_grad, None
 
 
+# pylint: disable=abstract-method
 class ParameterQuantizer(torch.autograd.Function):
     """
     Helper class for simulating quantization for parameters for learned-grid quant wrappers
@@ -1038,6 +1039,7 @@ class ParameterQuantizer(torch.autograd.Function):
         return (*output_grad, None, *param_encoding_grads)
 
 
+# pylint: disable=abstract-method
 class QuantizeDequantize(torch.autograd.Function):
     """
     Custom gradient function for STE
@@ -1133,6 +1135,7 @@ class QuantizeDequantize(torch.autograd.Function):
         return grad, None, None
 
 
+# pylint: disable=abstract-method
 class Quantize(torch.autograd.Function):
     """
     Custom gradient function for STE
