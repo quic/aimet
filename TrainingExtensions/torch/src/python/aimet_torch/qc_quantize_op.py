@@ -914,6 +914,7 @@ class QcQuantizeStandalone(QcQuantizeStandAloneBase):
         self.output_quantizers[0].compute_encoding()
 
 
+# pylint: disable=abstract-method
 class SteGatingFuncForParameters(torch.autograd.Function):
     """
     Custom gradient function for STE
