@@ -527,16 +527,16 @@ pipeline {
                             stage('Build or fetch docker image') {
                                 steps {
                                     script {
-                                        if (${env.AIMET_PREBUILT_DOCKER_IMAGE_URL} && ! pullRequest.files.any { f -> f.getFilename().contains('Jenkins/') }) {
+                                        if (env.AIMET_PREBUILT_DOCKER_IMAGE_URL && ! pullRequest.files.any { f -> f.getFilename().contains('Jenkins/') }) {
                                             env.DOCKER_IMAGE = "${env.AIMET_PREBUILT_DOCKER_IMAGE_URL}/${env.DOCKER_IMAGE}"
                                             sh "docker pull ${env.DOCKER_IMAGE}"
                                         } else {
                                             env.DOCKER_IMAGE = "${env.DOCKER_IMAGE}.${CHANGE_ID}"
-                                            extra_arg=""
+                                            def build_args = "-f Jenkins/Dockerfile.${AIMET_VARIANT} -t ${env.DOCKER_IMAGE}"
                                             if (ALTERNATIVE_DOCKER_REGISTRY) {
-                                                extra_arg="--build-arg REGISTRY=${ALTERNATIVE_DOCKER_REGISTRY}"
+                                                build_args = build_args + " --build-arg REGISTRY=${ALTERNATIVE_DOCKER_REGISTRY}"
                                             }
-                                            sh "docker build -f Jenkins/Dockerfile.${AIMET_VARIANT} -t ${docker_image} ./Jenkins ${extra_arg}"
+                                            sh "docker build ${build_args} ./Jenkins"
                                         }
                                         echo "Will use a ${env.DOCKER_IMAGE} docker image"
                                     }
