@@ -92,6 +92,9 @@ AddMM = create_wrapper_module('AddMM', torch.addmm)
 Bmm = create_wrapper_module('Bmm', torch.bmm)
 CumSum = create_wrapper_module('CumSum', torch.cumsum)
 MaskedFill = create_wrapper_module('MaskedFill', torch.Tensor.masked_fill_)
+Mean = create_wrapper_module('Mean', torch.mean)
+Sum = create_wrapper_module('Sum', torch.sum)
+Prod = create_wrapper_module('Prod', torch.prod)
 
 
 # modules for functional operations defined under torch.nn.functional package
@@ -101,7 +104,6 @@ AdaptiveAvgPool2d = create_wrapper_module('AdaptiveAvgPool2d', torch.nn.function
 AvgPool2d = create_wrapper_module('AvgPool2d', torch.nn.functional.avg_pool2d)
 BatchNorm = create_wrapper_module('BatchNorm', torch.nn.functional.batch_norm)
 GroupNorm = create_wrapper_module('GroupNorm', torch.nn.functional.group_norm)
-Mean = create_wrapper_module('Mean', torch.mean)
 
 
 # following modules are for overloaded operators like + and *,
