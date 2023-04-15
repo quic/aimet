@@ -280,65 +280,6 @@ def model_with_compat_bn_layers_is_training_bool(is_training, is_fused):
     outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
 
 
-def model_with_legacy_bn_layers_with_name_scope(training_as_placeholder, is_fused):
-    """ Model with legacy Batch norm layers using tf.name_scope instead tf.compat.v1.variable_scope """
-    training = True
-    if training_as_placeholder:
-        training = tf.compat.v1.placeholder_with_default(True, shape=())
-
-    inputs = tf.keras.Input(shape=(32, 32, 3,))
-    x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-    layer = normalization_layers.BatchNormalization(momentum=.3, epsilon=.65, fused=is_fused)
-    x = layer.apply(x, training=training)
-    x = tf.keras.layers.Conv2D(16, (2, 2))(x)
-    with tf.name_scope("foo/bar"):
-        layer = normalization_layers.BatchNormalization(momentum=.4, epsilon=.25, fused=is_fused)
-    x = layer.apply(x, training=training)
-    x = tf.nn.relu(x)
-    layer = normalization_layers.BatchNormalization(momentum=.5, epsilon=.35, fused=is_fused)
-    x = layer.apply(x, training=False)
-    x = tf.keras.layers.Flatten()(x)
-    outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
-
-
-def model_with_compat_bn_layers_with_name_scope(training_as_placeholder, is_fused):
-    """ Model with compat Batch norm layers using tf.name_scope instead tf.compat.v1.variable_scope"""
-    training = True
-    if training_as_placeholder:
-        training = tf.compat.v1.placeholder_with_default(True, shape=())
-
-    inputs = tf.keras.Input(shape=(32, 32, 3,))
-    x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-    # x = tf.compat.v1.layers.batch_normalization(x, momentum=.3, epsilon=.65, training=training, fused=is_fused)
-    # x = tf.keras.layers.Conv2D(16, (2, 2))(x)
-    with tf.name_scope("foo"):
-        x = tf.compat.v1.layers.batch_normalization(x, momentum=.4, epsilon=.25, training=training, fused=is_fused)
-    x = tf.nn.relu(x)
-    # x = tf.compat.v1.layers.batch_normalization(x, momentum=.5, epsilon=.35, training=False, fused=is_fused)
-    x = tf.keras.layers.Flatten()(x)
-    outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
-
-
-def model_with_keras_bn_layers_with_name_scope(training_as_placeholder, is_fused):
-    """ Model with keras Batch norm layers using tf.name_scope instead tf.compat.v1.variable_scope"""
-    training = True
-    if training_as_placeholder:
-        training = tf.compat.v1.placeholder_with_default(True, shape=())
-
-    inputs = tf.keras.Input(shape=(32, 32, 3,))
-    x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65, fused=is_fused)(x)
-    x = tf.keras.layers.Conv2D(16, (2, 2))(x)
-    with tf.name_scope("foo/bar"):
-        x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25, fused=is_fused)(x, training=training)
-    x = tf.nn.relu(x)
-    x = tf.keras.layers.BatchNormalization(momentum=.5, epsilon=.35, fused=is_fused)(x, training=False)
-    x = tf.keras.layers.Flatten()(x)
-    outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
-    model = tf.keras.Model(inputs=inputs, outputs=outputs)
-    return model
-
-
 def _verify_utilities_to_read_bn_params_stats_epsilon_momentum(session, start_op_names, output_op_names):
     """
     Verify utilities to read BN statistics (mean, var), params(gamma, beta), epsilon and momentum.
