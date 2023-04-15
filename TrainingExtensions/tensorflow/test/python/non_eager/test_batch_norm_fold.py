@@ -1057,3 +1057,148 @@ class TestTrainingExtensionBnFoldToScale:
 
         sess.close()
         sim.session.close()
+
+    @pytest.mark.cuda
+    @pytest.mark.parametrize("is_training_variable", [True, False])
+    def test_fold_conv_no_bias_compat_bn(self, is_training_variable):
+        """
+        test conv (no bias) + bn (compat) sequence
+        """
+        np.random.seed(43)
+        tf.compat.v1.reset_default_graph()
+        tf.random.set_seed(43)
+        def model():
+            """ Model with conv (no bias) + bn (compat) sequence """
+            training = tf.Variable(False, name='bn_training_var') if is_training_variable else False
+            inputs = tf.keras.Input(shape=(24, 24, 10,))
+            x = tf.keras.layers.Conv2D(10, (3, 3), use_bias=False)(inputs)
+            x = tf.compat.v1.layers.batch_normalization(x, training=training,
+                                                        beta_initializer=tf.random_normal_initializer(),
+                                                        gamma_initializer=tf.random_normal_initializer(),
+                                                        moving_mean_initializer=tf.random_normal_initializer(),
+                                                        moving_variance_initializer=tf.random_uniform_initializer(0))
+            _ = tf.keras.layers.Flatten()(x)
+
+        device = '/gpu:0'
+        with tf.device(device):
+            model()
+        sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
+        initialize_uninitialized_vars(sess)
+
+        start_op_names = ["input_1"]
+        output_op_names = ["flatten/Reshape"]
+        dummy_input = np.random.randn(1, 24, 24, 10)
+        sim = quantsim(sess, start_op_names, output_op_names, dummy_input)
+
+        # Check quantizers are enabled/disabled properly
+        conv_a_quantizer = sim.quantizer_config('conv2d/Conv2D_quantized')
+        conv_w_quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
+        if is_training_variable:
+            bn_a_quantizer = sim.quantizer_config('batch_normalization/cond/Identity_quantized')
+        else:
+            bn_a_quantizer = sim.quantizer_config('batch_normalization/FusedBatchNormV3_quantized')
+
+        assert not conv_a_quantizer.enabled
+        assert conv_w_quantizer.enabled
+        assert bn_a_quantizer.enabled
+        bn_output_encoding = bn_a_quantizer.get_encoding()
+
+        input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
+        baseline_output = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
+
+        fold_all_batch_norms_to_scale(sim, start_op_names, output_op_names)
+
+        input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
+        output_after_fold = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
+
+        # Check quantizers are enabled/disabled properly
+        assert conv_a_quantizer.enabled
+        assert conv_w_quantizer.enabled
+        assert not bn_a_quantizer.enabled
+
+        # Check batchnorm's output encoding is copied to conv's output encoding
+        conv_output_encoding = conv_a_quantizer.get_encoding()
+        assert conv_output_encoding.max == bn_output_encoding.max and \
+               conv_output_encoding.min == bn_output_encoding.min and \
+               conv_output_encoding.delta == bn_output_encoding.delta and \
+               conv_output_encoding.offset == bn_output_encoding.offset and \
+               conv_output_encoding.bw == bn_output_encoding.bw
+
+        delta = float((conv_output_encoding.max - conv_output_encoding.min) / 255)
+        assert np.allclose(baseline_output, output_after_fold, atol=delta)  # Allow 1-tick difference
+
+        sess.close()
+        sim.session.close()
+
+    @pytest.mark.cuda
+    @pytest.mark.parametrize("is_training_variable", [True, False])
+    def test_fold_conv_with_bias_compat_bn(self, is_training_variable):
+        """
+        test conv + bn (compat) sequence
+        """
+        np.random.seed(43)
+        tf.compat.v1.reset_default_graph()
+        tf.random.set_seed(43)
+        def model():
+            """ Model with conv (with bias) + bn (compat) sequence """
+            training = tf.Variable(False, name='bn_training_var') if is_training_variable else False
+            inputs = tf.keras.Input(shape=(24, 24, 10,))
+            x = tf.keras.layers.Conv2D(10, (3, 3))(inputs)
+            x = tf.compat.v1.layers.batch_normalization(x, training=training,
+                                                        beta_initializer=tf.random_normal_initializer(),
+                                                        gamma_initializer=tf.random_normal_initializer(),
+                                                        moving_mean_initializer=tf.random_normal_initializer(),
+                                                        moving_variance_initializer=tf.random_uniform_initializer(0))
+            _ = tf.keras.layers.Flatten()(x)
+
+        device = '/gpu:0'
+        with tf.device(device):
+            model()
+        sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
+        initialize_uninitialized_vars(sess)
+
+        start_op_names = ["input_1"]
+        output_op_names = ["flatten/Reshape"]
+        dummy_input = np.random.randn(1, 24, 24, 10)
+        sim = quantsim(sess, start_op_names, output_op_names, dummy_input)
+
+        # Check quantizers are enabled/disabled properly
+        conv_a_quantizer = sim.quantizer_config('conv2d/BiasAdd_quantized')
+        conv_w_quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
+        if is_training_variable:
+            bn_a_quantizer = sim.quantizer_config('batch_normalization/cond/Identity_quantized')
+        else:
+            bn_a_quantizer = sim.quantizer_config('batch_normalization/FusedBatchNormV3_quantized')
+
+        assert not conv_a_quantizer.enabled
+        assert conv_w_quantizer.enabled
+        assert bn_a_quantizer.enabled
+        bn_output_encoding = bn_a_quantizer.get_encoding()
+
+        input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
+        baseline_output = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
+
+        fold_all_batch_norms_to_scale(sim, start_op_names, output_op_names)
+
+        input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
+        output_after_fold = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
+
+        # Check quantizers are enabled/disabled properly
+        assert conv_a_quantizer.enabled
+        assert conv_w_quantizer.enabled
+        assert not bn_a_quantizer.enabled
+
+        # Check batchnorm's output encoding is copied to conv's output encoding
+        conv_output_encoding = conv_a_quantizer.get_encoding()
+        assert conv_output_encoding.max == bn_output_encoding.max and \
+               conv_output_encoding.min == bn_output_encoding.min and \
+               conv_output_encoding.delta == bn_output_encoding.delta and \
+               conv_output_encoding.offset == bn_output_encoding.offset and \
+               conv_output_encoding.bw == bn_output_encoding.bw
+
+        conv_output_encoding = conv_a_quantizer.get_encoding()
+        delta = float((conv_output_encoding.max - conv_output_encoding.min) / 255)
+        assert np.allclose(baseline_output, output_after_fold, atol=delta)  # Allow 1-tick difference
+
+        sess.close()
+        sim.session.close()

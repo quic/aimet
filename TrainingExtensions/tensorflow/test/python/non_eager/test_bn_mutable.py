@@ -47,7 +47,8 @@ from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
 from aimet_tensorflow.utils.op.bn_mutable import modify_model_bn_mutable, modify_sess_bn_mutable, _get_bn_momentum,\
-    get_active_bn_ops, _get_bn_epsilon, _get_bn_momentum_var, _get_bn_stats_and_params, _set_var, _get_bn_is_training_var
+    get_active_bn_ops, _get_bn_epsilon, _get_bn_momentum_var, _get_bn_stats_and_params, _set_var,\
+    _get_bn_is_training_var, _get_info_using_read_variable_op_tensor, _get_info_using_global_var
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.utils.common import create_input_feed_dict
 
@@ -180,7 +181,7 @@ def model_with_legacy_bn_layers(training_as_placeholder, is_fused):
     with tf.compat.v1.variable_scope("foo"):
         with tf.compat.v1.variable_scope("bar"):
             layer = normalization_layers.BatchNormalization(momentum=.4, epsilon=.25, fused=is_fused)
-    x = layer.apply(x, training=training)
+            x = layer.apply(x, training=training)
     x = tf.nn.relu(x)
     layer = normalization_layers.BatchNormalization(momentum=.5, epsilon=.35, fused=is_fused)
     x = layer.apply(x, training=False)
@@ -279,6 +280,65 @@ def model_with_compat_bn_layers_is_training_bool(is_training, is_fused):
     outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
 
 
+def model_with_legacy_bn_layers_with_name_scope(training_as_placeholder, is_fused):
+    """ Model with legacy Batch norm layers using tf.name_scope instead tf.compat.v1.variable_scope """
+    training = True
+    if training_as_placeholder:
+        training = tf.compat.v1.placeholder_with_default(True, shape=())
+
+    inputs = tf.keras.Input(shape=(32, 32, 3,))
+    x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+    layer = normalization_layers.BatchNormalization(momentum=.3, epsilon=.65, fused=is_fused)
+    x = layer.apply(x, training=training)
+    x = tf.keras.layers.Conv2D(16, (2, 2))(x)
+    with tf.name_scope("foo/bar"):
+        layer = normalization_layers.BatchNormalization(momentum=.4, epsilon=.25, fused=is_fused)
+    x = layer.apply(x, training=training)
+    x = tf.nn.relu(x)
+    layer = normalization_layers.BatchNormalization(momentum=.5, epsilon=.35, fused=is_fused)
+    x = layer.apply(x, training=False)
+    x = tf.keras.layers.Flatten()(x)
+    outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
+
+
+def model_with_compat_bn_layers_with_name_scope(training_as_placeholder, is_fused):
+    """ Model with compat Batch norm layers using tf.name_scope instead tf.compat.v1.variable_scope"""
+    training = True
+    if training_as_placeholder:
+        training = tf.compat.v1.placeholder_with_default(True, shape=())
+
+    inputs = tf.keras.Input(shape=(32, 32, 3,))
+    x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+    # x = tf.compat.v1.layers.batch_normalization(x, momentum=.3, epsilon=.65, training=training, fused=is_fused)
+    # x = tf.keras.layers.Conv2D(16, (2, 2))(x)
+    with tf.name_scope("foo"):
+        x = tf.compat.v1.layers.batch_normalization(x, momentum=.4, epsilon=.25, training=training, fused=is_fused)
+    x = tf.nn.relu(x)
+    # x = tf.compat.v1.layers.batch_normalization(x, momentum=.5, epsilon=.35, training=False, fused=is_fused)
+    x = tf.keras.layers.Flatten()(x)
+    outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
+
+
+def model_with_keras_bn_layers_with_name_scope(training_as_placeholder, is_fused):
+    """ Model with keras Batch norm layers using tf.name_scope instead tf.compat.v1.variable_scope"""
+    training = True
+    if training_as_placeholder:
+        training = tf.compat.v1.placeholder_with_default(True, shape=())
+
+    inputs = tf.keras.Input(shape=(32, 32, 3,))
+    x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65, fused=is_fused)(x)
+    x = tf.keras.layers.Conv2D(16, (2, 2))(x)
+    with tf.name_scope("foo/bar"):
+        x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25, fused=is_fused)(x, training=training)
+    x = tf.nn.relu(x)
+    x = tf.keras.layers.BatchNormalization(momentum=.5, epsilon=.35, fused=is_fused)(x, training=False)
+    x = tf.keras.layers.Flatten()(x)
+    outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+    return model
+
+
 def _verify_utilities_to_read_bn_params_stats_epsilon_momentum(session, start_op_names, output_op_names):
     """
     Verify utilities to read BN statistics (mean, var), params(gamma, beta), epsilon and momentum.
@@ -343,6 +403,12 @@ def _verify_utilities_to_set_momentum_and_is_training(updated_sess, start_op_nam
     assert updated_sess.run(_get_bn_is_training_var(updated_sess, bn_ops[0]))
     assert updated_sess.run(_get_bn_is_training_var(updated_sess, bn_ops[1]))
     assert updated_sess.run(_get_bn_is_training_var(updated_sess, bn_ops[2]))
+
+
+def _get_inp_out_tensor(session, inp_tensor_name, out_tensor_name):
+    inp_tensor = session.graph.get_tensor_by_name(inp_tensor_name[0] + ':0')
+    out_tensor = session.graph.get_tensor_by_name(out_tensor_name[0] + ':0')
+    return inp_tensor, out_tensor
 
 
 class TestBnMutable:
@@ -1166,11 +1232,6 @@ class TestBnMutable:
                                        model_with_legacy_bn_layers_is_training_bool])
     def test_modify_sess_bn_mutable(self, model, is_training, is_fused):
         """ Verify modify_sess_bn_mutable() API with BNs in train/inference mode """
-        def _get_inp_out_tensor(session, inp_tensor_name, out_tensor_name):
-            inp_tensor = session.graph.get_tensor_by_name(inp_tensor_name[0] + ':0')
-            out_tensor = session.graph.get_tensor_by_name(out_tensor_name[0] + ':0')
-            return inp_tensor, out_tensor
-
         tf.compat.v1.reset_default_graph()
         device = '/gpu:0'
         with tf.device(device):
@@ -1256,4 +1317,168 @@ class TestBnMutable:
             assert np.all(gamma == 1)
             assert np.all(beta == 0)
 
+        sess.close()
+
+    @pytest.mark.cuda
+    @pytest.mark.parametrize("use_name_scope", [True, False])
+    def test_legacy_bn_with_name_scope(self, use_name_scope):
+        """ Verify legacy BN with tf.name_scope() """
+        tf.compat.v1.reset_default_graph()
+        device = '/gpu:0'
+        with tf.device(device):
+            inputs = tf.keras.Input(shape=(32, 32, 3,))
+            x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+            if use_name_scope:
+                with tf.name_scope('foo/bar'):
+                    layer = normalization_layers.BatchNormalization(epsilon=1e-5, momentum=0.0)
+                    x = layer.apply(x)
+            else:
+                with tf.compat.v1.variable_scope('foo/bar'):
+                    layer = normalization_layers.BatchNormalization(epsilon=1e-5, momentum=0.0)
+                    x = layer.apply(x)
+            x = tf.nn.relu(x)
+            _ = tf.keras.layers.Flatten()(x)
+        graph = tf.compat.v1.get_default_graph()
+        sess = tf.compat.v1.Session(graph=graph)
+        initialize_uninitialized_vars(sess)
+        start_op_names = ['input_1']
+        output_op_names = ['flatten/Reshape']
+        input_tensor, output_tensor = _get_inp_out_tensor(sess, start_op_names, output_op_names)
+        dummy_input = np.random.randn(1, 32, 32, 3)
+        output_before = sess.run(output_tensor, feed_dict={input_tensor: dummy_input})
+
+        updated_sess = modify_sess_bn_mutable(sess, start_op_names, output_op_names)
+        input_tensor, output_tensor = _get_inp_out_tensor(updated_sess, start_op_names, output_op_names)
+        output_after = updated_sess.run(output_tensor, feed_dict={input_tensor: dummy_input})
+
+        # outputs should be bit-exact.
+        assert np.array_equal(output_before, output_after)
+
+        sess.close()
+        updated_sess.close()
+
+    @pytest.mark.cuda
+    @pytest.mark.parametrize("use_name_scope", [True, False])
+    def test_keras_bn_with_name_scope(self, use_name_scope):
+        """ Verify keras BN with tf.name_scope() """
+        tf.compat.v1.reset_default_graph()
+        device = '/gpu:0'
+        with tf.device(device):
+            inputs = tf.keras.Input(shape=(32, 32, 3,))
+            x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+            if use_name_scope:
+                with tf.name_scope('foo'):
+                    with tf.name_scope('bar'):
+                        x = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.0)(x)
+            else:
+                with tf.compat.v1.variable_scope("foo"):
+                    with tf.compat.v1.variable_scope("bar"):
+                        x = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.0)(x)
+            x = tf.nn.relu(x)
+            _ = tf.keras.layers.Flatten()(x)
+        graph = tf.compat.v1.get_default_graph()
+        sess = tf.compat.v1.Session(graph=graph)
+        initialize_uninitialized_vars(sess)
+        start_op_names = ['input_1']
+        output_op_names = ['flatten/Reshape']
+        input_tensor, output_tensor = _get_inp_out_tensor(sess, start_op_names, output_op_names)
+        dummy_input = np.random.randn(1, 32, 32, 3)
+        output_before = sess.run(output_tensor, feed_dict={input_tensor: dummy_input})
+
+        updated_sess = modify_sess_bn_mutable(sess, start_op_names, output_op_names)
+        input_tensor, output_tensor = _get_inp_out_tensor(updated_sess, start_op_names, output_op_names)
+        output_after = updated_sess.run(output_tensor, feed_dict={input_tensor: dummy_input})
+
+        # outputs should be bit-exact.
+        assert np.array_equal(output_before, output_after)
+
+        sess.close()
+        updated_sess.close()
+
+    @pytest.mark.cuda
+    @pytest.mark.parametrize("use_name_scope", [True, False])
+    def test_compat_bn_with_name_scope(self, use_name_scope):
+        """ Verify compat BN with tf.name_scope() """
+        tf.compat.v1.reset_default_graph()
+        device = '/gpu:0'
+        with tf.device(device):
+            inputs = tf.keras.Input(shape=(32, 32, 3,))
+            x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+            if use_name_scope:
+                with tf.name_scope('foo/bar'):
+                    x = tf.compat.v1.layers.batch_normalization(x, epsilon=1e-5, momentum=0.0)
+            else:
+                with tf.compat.v1.variable_scope("foo"):
+                    with tf.compat.v1.variable_scope("bar"):
+                        x = tf.compat.v1.layers.batch_normalization(x, epsilon=1e-5, momentum=0.0)
+            x = tf.nn.relu(x)
+            _ = tf.keras.layers.Flatten()(x)
+        graph = tf.compat.v1.get_default_graph()
+        sess = tf.compat.v1.Session(graph=graph)
+        initialize_uninitialized_vars(sess)
+        start_op_names = ['input_1']
+        output_op_names = ['flatten/Reshape']
+        input_tensor, output_tensor = _get_inp_out_tensor(sess, start_op_names, output_op_names)
+        dummy_input = np.random.randn(1, 32, 32, 3)
+        output_before = sess.run(output_tensor, feed_dict={input_tensor: dummy_input})
+
+        updated_sess = modify_sess_bn_mutable(sess, start_op_names, output_op_names)
+        input_tensor, output_tensor = _get_inp_out_tensor(updated_sess, start_op_names, output_op_names)
+        output_after = updated_sess.run(output_tensor, feed_dict={input_tensor: dummy_input})
+
+        # outputs should be bit-exact.
+        assert np.array_equal(output_before, output_after)
+
+        sess.close()
+        updated_sess.close()
+
+    @pytest.mark.cuda
+    def test_different_lookup_approaches_to_get_bn_stats_params(self):
+        """ Verify to get BN params, stats, momentum and epsilon """
+        tf.compat.v1.reset_default_graph()
+        device = '/gpu:0'
+        with tf.device(device):
+            inputs = tf.keras.Input(shape=(32, 32, 3,))
+            x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+            x = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.0,
+                                                   beta_initializer = tf.random_normal_initializer(),
+                                                   gamma_initializer = tf.random_normal_initializer(),
+                                                   moving_mean_initializer = tf.random_normal_initializer(),
+                                                   moving_variance_initializer = tf.random_uniform_initializer(0))(x)
+            x = tf.keras.layers.Conv2D(16, (2, 2))(x)
+            with tf.compat.v1.variable_scope("foo"):
+                with tf.compat.v1.variable_scope("bar"):
+                    layer = normalization_layers.BatchNormalization(epsilon=1e-5, momentum=0.0,
+                                                                    beta_initializer = tf.random_normal_initializer(),
+                                                                    gamma_initializer = tf.random_normal_initializer(),
+                                                                    moving_mean_initializer = tf.random_normal_initializer(),
+                                                                    moving_variance_initializer = tf.random_uniform_initializer(0))
+                    x = layer.apply(x)
+            x = tf.nn.relu(x)
+            with tf.compat.v1.variable_scope("foo1"):
+                with tf.compat.v1.variable_scope("bar1"):
+                    x = tf.compat.v1.layers.batch_normalization(x, epsilon=1e-5, momentum=0.0,
+                                                                beta_initializer = tf.random_normal_initializer(),
+                                                                gamma_initializer = tf.random_normal_initializer(),
+                                                                moving_mean_initializer = tf.random_normal_initializer(),
+                                                                moving_variance_initializer = tf.random_uniform_initializer(0))
+            x = tf.keras.layers.Flatten()(x)
+            _ = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
+
+        graph = tf.compat.v1.get_default_graph()
+        sess = tf.compat.v1.Session(graph=graph)
+        initialize_uninitialized_vars(sess)
+        start_op_names = ["input_1"]
+        output_op_names = ["keras_model_functional/Softmax"]
+
+        conn_graph = ConnectedGraph(sess.graph, start_op_names, output_op_names)
+        bn_ops = tuple(get_active_bn_ops(conn_graph))
+        assert len(bn_ops) == 3
+        for bn_op in bn_ops:
+            mean_0, var_0, gamma_0, beta_0 = _get_info_using_global_var(sess, bn_op)
+            mean_1, var_1, gamma_1, beta_1 = _get_info_using_read_variable_op_tensor(sess, bn_op)
+            assert np.array_equal(mean_0, mean_1)
+            assert np.array_equal(var_0, var_1)
+            assert np.array_equal(gamma_0, gamma_1)
+            assert np.array_equal(beta_0, beta_1)
         sess.close()
