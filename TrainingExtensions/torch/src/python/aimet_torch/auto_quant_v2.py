@@ -254,7 +254,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
                     if isinstance(input_data, torch.Tensor):
                         model(input_data)
                     else:
-                        assert isinstance(input_data, (tuple, list))
+                        assert isinstance(input_data, tuple) or isinstance(input_data, list)
                         model(*input_data)
 
         self.forward_pass_callback = forward_pass_callback
