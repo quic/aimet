@@ -67,6 +67,7 @@ pipeline {
                                 echo 'Running commit checks...'
                                 script{
                                     env.REPO_OR_FORK_URL = "${REPO_URL}"
+                                    using_linaro=env.USE_LINARO
                                     if (env.CHANGE_FORK != null) {
                                         env.REPO_OR_FORK_URL = "https://github.com/${env.CHANGE_FORK}/aimet"
                                     }
@@ -74,15 +75,15 @@ pipeline {
                                     if ("${env.QCInternalValidation}" == "true") {
                                         if (didDockerFileChange("tf-gpu")) {
                                             // setting USE LINARO value to EMPTY to rebuild docker image
-                                            env.USE_LINARO=""
+                                            using_linaro=""
                                         }
                                         withCredentials([usernameColonPassword(credentialsId: 'neoci-pat', variable: 'USERPASS')]) {
-                                            sh "AIMET_VARIANT=\"tf-gpu\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${env.USE_LINARO} ${env.PREBUILT_DOCKER_IMAGE_URL}\""
+                                            sh "AIMET_VARIANT=\"tf-gpu\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${using_linaro} ${env.PREBUILT_DOCKER_IMAGE_URL}\""
                                         }
                                     } else {
                                         // setting USE LINARO value to EMPTY to rebuild docker image
-                                        env.USE_LINARO=""
-                                        sh "AIMET_VARIANT=\"tf-gpu\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${env.USE_LINARO} ${env.PREBUILT_DOCKER_IMAGE_URL}\""
+                                        using_linaro=""
+                                        sh "AIMET_VARIANT=\"tf-gpu\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${using_linaro} ${env.PREBUILT_DOCKER_IMAGE_URL}\""
                                     }
                                 }
                                 sh "bash -l -c \"rm -rf commit_checks_repo\""
@@ -633,7 +634,7 @@ def didDockerFileChange(aimet_variant) {
 def runStage(aimet_variant, options) {
 
     echo "*** Running stage ${options} for ${aimet_variant} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
-
+    using_linaro=env.USE_LINARO
     if (aimet_variant == "default") {
         sh """
             bash -l -c "cd ${REPO_NAME} && ./buildntest.sh ${options}"
@@ -641,28 +642,29 @@ def runStage(aimet_variant, options) {
 
     }
     else {
-        if (didDockerFileChange(env.aimet_variant)) {
+        if (didDockerFileChange(aimet_variant)) {
             // setting USE LINARO value to EMPTY to rebuild docker image
-            env.USE_LINARO=""
+            using_linaro=""
         }
         sh """
-            AIMET_VARIANT=${aimet_variant} bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -e AIMET_VARIANT ${options} ${env.USE_LINARO} ${env.PREBUILT_DOCKER_IMAGE_URL}"
+            AIMET_VARIANT=${aimet_variant} bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -e AIMET_VARIANT ${options} ${using_linaro} ${env.PREBUILT_DOCKER_IMAGE_URL}"
         """
     }
 }
 
 def callAimetExtra(target_branch) {
     echo target_branch
+    using_linaro=env.USE_LINARO
     if (didDockerFileChange("tf-gpu") || didDockerFileChange("tf-cpu") || didDockerFileChange("torch-gpu") || didDockerFileChange("torch-cpu")) {
             // setting USE LINARO value to EMPTY to rebuild docker image
-            env.USE_LINARO=""
+            using_linaro=""
         }
     if (target_branch != "develop") {
         echo "Running AIMET additional stages on ${CHANGE_TARGET} branch ..."
-        build job: "AIMET-Extra", parameters: [string(name: 'AIMET_GIT_COMMIT', value: "${CHANGE_BRANCH}"), string(name: 'PROJECT_BRANCH', value: target_branch), string(name: 'USE_LINARO', value: "${env.USE_LINARO}")]
+        build job: "AIMET-Extra", parameters: [string(name: 'AIMET_GIT_COMMIT', value: "${CHANGE_BRANCH}"), string(name: 'PROJECT_BRANCH', value: target_branch), string(name: 'USE_LINARO', value: "${using_linaro}")]
     }    else {
         echo "Running AIMET additional stages on develop branch ..."
-        build job: "AIMET-Extra", parameters: [string(name: 'AIMET_GIT_COMMIT', value: "${CHANGE_BRANCH}"), string(name: 'USE_LINARO', value: "${env.USE_LINARO}")]
+        build job: "AIMET-Extra", parameters: [string(name: 'AIMET_GIT_COMMIT', value: "${CHANGE_BRANCH}"), string(name: 'USE_LINARO', value: "${using_linaro}")]
     }
 }
 
