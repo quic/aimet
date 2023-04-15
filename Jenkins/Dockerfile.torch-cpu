@@ -37,7 +37,7 @@
 # Docker image file to build and test AIMET for PyTorch in a CPU environment
 
 ARG REGISTRY
-FROM ${REGISTRY}ubuntu:bionic as target
+FROM ${REGISTRY}ubuntu:bionic
 
 ARG DEBIAN_FRONTEND=noninteractive
 
