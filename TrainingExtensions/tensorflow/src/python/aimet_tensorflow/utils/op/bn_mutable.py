@@ -46,6 +46,7 @@ from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.common.operation import Op
+from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
 
 _DEFAULT_BN_MOMENTUM = 0.99
 _DEFAULT_BN_EPSILON = 0.001
@@ -143,21 +144,32 @@ def get_active_bn_ops(connected_graph: ConnectedGraph):
             yield bn_conn_graph_op
 
 
-def _get_bn_stats_and_params(session: tf.compat.v1.Session, bn_op: Op) \
+def _get_bn_stats_and_params(session: tf.compat.v1.Session, bn_conn_graph_op: Op) \
         -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Get BN stats (mean and variance) and params (gamma and beta).
 
+    approaches:
+    1) Try to get BN stats and params using BN op's input orders (inputs[1],inputs[2], inputs[3], inputs[4]
+    belongs to beta, gamma, moving_mean and moving_variance) and then retrieving it from TF global variables list.
+    This approach should work almost all time. Only, when BN is created with tf.name_scope(),
+    the variables doesn't reflect the names correctly.
+
+    2) Approach second tries to get BN stats and params using pattern matching. This approach performs name
+    based lookup to get ReadVariableOp.
+
+    3) Approach third uses structure match to figure out the read tensor for BN stats and params. this last approach is
+    needed only for compat and legacy BN layers created using tf.name_scope() since the variables doesn't reflect
+    names correctly.
+
     :param session: TensorFlow session
-    :param bn_op: BN op.
+    :param bn_conn_graph_op: BN op.
     :return: (mean, variance, gamma, beta)
     """
-    bn_stats_and_params = []
-    bn_stats_and_params.extend(_get_bn_stats_var(session, bn_op))
-    bn_stats_and_params.extend(_get_bn_params_var(session, bn_op))
-    assert len(bn_stats_and_params) == 4, "Unable to get the BN stats and params for given BN op: %s" % bn_op.name
-    with session.graph.as_default():
-        mean, var, gamma, beta = session.run(bn_stats_and_params)
+    try:
+        beta, gamma, mean, var = _get_info_using_global_var(session, bn_conn_graph_op)
+    except AssertionError:
+        beta, gamma, mean, var = _get_info_using_read_variable_op_tensor(session, bn_conn_graph_op)
     return mean, var, gamma, beta
 
 
@@ -385,3 +397,47 @@ def _get_epsilon_for_fused_bn(graph_def: tf.Graph, bn_conn_graph_op: Op) -> Unio
             epsilon = node.attr['epsilon'].f
             break
     return epsilon
+
+
+def _get_info_using_global_var(session: tf.compat.v1.Session,
+                               bn_conn_graph_op: Op)\
+        -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Name based lookup from TF global variables to get tf.Variable and perform session.run for given
+    BN connected graph op.
+
+    :param session: TensorFlow session
+    :param bn_conn_graph_op: BN Connected graph op.
+    :return: (beta, gamma, moving_mean, moving_variance)
+    """
+    bn_stats_and_params = []
+    bn_stats_and_params.extend(_get_bn_stats_var(session, bn_conn_graph_op))
+    bn_stats_and_params.extend(_get_bn_params_var(session, bn_conn_graph_op))
+    assert len(bn_stats_and_params) == 4, "Unable to get the BN stats and params for given BN op: %s" \
+                                          % bn_conn_graph_op.name
+    with session.graph.as_default():
+        mean, var, gamma, beta = session.run(bn_stats_and_params)
+
+    return beta, gamma, mean, var
+
+
+def _get_info_using_read_variable_op_tensor(session: tf.compat.v1.Session,
+                                            bn_conn_graph_op: Op)\
+        -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Name and structure based lookup to get ReadVariableOp tensor and perform session.run for given
+    BN connected graph op.
+
+    :param session: TensorFlow session
+    :param bn_conn_graph_op: BN Connected graph op.
+    :return: (beta, gamma, moving_mean, moving_variance)
+    """
+    bn_op_with_meta = bn_conn_graph_op.get_tf_op_with_io_tensor()
+    bn_tf_op = bn_op_with_meta.op
+
+    mean = BNUtils.get_moving_mean_as_numpy_data(session, bn_tf_op)
+    var = BNUtils.get_moving_variance_as_numpy_data(session, bn_tf_op)
+    gamma = BNUtils.get_gamma_as_numpy_data(session, bn_tf_op)
+    beta = BNUtils.get_beta_as_numpy_data(session, bn_tf_op)
+
+    return beta, gamma, mean, var
