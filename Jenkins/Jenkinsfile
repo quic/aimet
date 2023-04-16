@@ -72,17 +72,15 @@ pipeline {
                                         env.REPO_OR_FORK_URL = "https://github.com/${env.CHANGE_FORK}/aimet"
                                     }
                                     sh "bash -l -c \"git clone ${env.REPO_OR_FORK_URL} -b ${env.CHANGE_BRANCH} commit_checks_repo\""
-                                    if ("${env.QCInternalValidation}" == "true") {
-                                        if (didDockerFileChange("tf-gpu")) {
+                                    if (didDockerFileChange("tf-gpu")) {
                                             // setting USE LINARO value to EMPTY to rebuild docker image
                                             using_linaro=""
-                                        }
+                                    }
+                                    if ("${env.QCInternalValidation}" == "true") {
                                         withCredentials([usernameColonPassword(credentialsId: 'neoci-pat', variable: 'USERPASS')]) {
                                             sh "AIMET_VARIANT=\"tf-gpu\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${using_linaro} ${env.PREBUILT_DOCKER_IMAGE_URL}\""
                                         }
                                     } else {
-                                        // setting USE LINARO value to EMPTY to rebuild docker image
-                                        using_linaro=""
                                         sh "AIMET_VARIANT=\"tf-gpu\" bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${using_linaro} ${env.PREBUILT_DOCKER_IMAGE_URL}\""
                                     }
                                 }
