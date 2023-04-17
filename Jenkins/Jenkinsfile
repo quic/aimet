@@ -10,7 +10,7 @@ pipeline {
     agent { label "${params.BUILD_LABEL_CPU}" }
     options {
         timestamps()
-        timeout( time: "${BUILD_TIMEOUT}", unit: 'HOURS' )
+        timeout( time: "${params.BUILD_TIMEOUT}", unit: 'HOURS' )
     }
     environment{
         def workspace   = pwd()
