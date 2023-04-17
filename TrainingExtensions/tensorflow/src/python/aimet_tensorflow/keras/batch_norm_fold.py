@@ -574,7 +574,7 @@ def _delete_all_bns_from_model(model: Union[tf.keras.Model, tf.keras.layers.Laye
                 _delete_bn_for_non_subclassed_model(model, bn_layer)
 
 
-def _find_all_batch_norms_to_fold(model: tf.keras.Model) -> Tuple[List[PAIR_TYPE], List[PAIR_TYPE], Set[tf.keras.layers.BatchNormalization]]:
+def _find_all_batch_norms_to_fold(model: tf.keras.Model) -> Tuple[List[PairType], List[PairType], Set[tf.keras.layers.BatchNormalization]]:
     """
     uses searcher to choose layers for bias correction
 
