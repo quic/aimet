@@ -44,8 +44,9 @@ import tensorflow as tf
 from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_from_session_graph
 from tensorflow.python.framework.graph_util_impl import remove_training_nodes
 
+import aimet_common.libpymo as libpymo
+from aimet_common.utils import AimetLogger, log_with_error_and_assert_if_false
 
-from aimet_common.utils import AimetLogger
 from aimet_tensorflow.keras.defs import AxisHandling
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -492,6 +493,73 @@ def parse_activation_layer(
         return ["Unknown"]
 
     return [onnx_activation]
+
+def create_encoding_from_dict(encoding_dict: dict) -> Tuple[Union[libpymo.TfEncoding, List[libpymo.TfEncoding]], bool]:
+    """
+    Create encoding object from encoding dictionary
+    :param encoding_dict: Dictionary containing encodings
+    :return: Encoding object or list of encoding objects, is_symmetric
+    """
+
+    def _create_tf_encoding_object(bw: int, max_enc: float, min_enc: float, offset_enc: float,
+                                   delta_enc: float) -> libpymo.TfEncoding:
+        """
+        helper function to create TfEncoding object
+        :param bw: bitwidth to be filled in encoding
+        :param max_enc: max value to be filled in encoding
+        :param min_enc: min value to be filled in encoding
+        :param offset_enc: offset to be filled in encoding
+        :param delta_enc: delta to be filled in encoding
+        :return encoding of type libpymo.TfEncoding()
+        """
+        enc = libpymo.TfEncoding()
+        enc.bw = bw
+        enc.max = max_enc
+        enc.min = min_enc
+        enc.offset = offset_enc
+        enc.delta = delta_enc
+        return enc
+
+    def _create_tf_encoding_factory(encoding_dict_to_convert) -> List[libpymo.TfEncoding]:
+        return [_create_tf_encoding_object(enc_dict.get('bitwidth'),
+                                           enc_dict.get('max'),
+                                           enc_dict.get('min'),
+                                           enc_dict.get('offset'),
+                                           enc_dict.get('scale')) for enc_dict in encoding_dict_to_convert]
+
+    # make a distinction between the per-channel and per-tensor flow
+    if isinstance(encoding_dict, List):
+        # Inserting logic to loop through encoding dict is_symmetric fields and replace boolean values with string
+        # 'True' or 'False' values. AdaRound exported parameter encodings were mistakenly exporting boolean values
+        # instead of string values like QuantSim export does.
+        # AdaRound exported encodings are fixed in the same commit to export string values now, but this logic is put
+        # in place temporarily to preserve backwards compatibility with older AdaRound exported encodings. It can be
+        # removed after some time once users have fully switched to using the string exported is_symmetric flag.
+        for enc_dict in encoding_dict:
+            if isinstance(enc_dict.get('is_symmetric'), bool):
+                enc_dict['is_symmetric'] = str(enc_dict['is_symmetric'])
+
+        log_with_error_and_assert_if_false(encoding_dict[0].get('is_symmetric') in ['True', 'False'],
+                                           _logger,
+                                           f'Unexpected value for is_symmetric: {encoding_dict[0].get("is_symmetric")}')
+        is_symmetric = encoding_dict[0].get('is_symmetric') == 'True'
+        return _create_tf_encoding_factory(encoding_dict), is_symmetric
+
+    # Inserting logic to loop through encoding dict is_symmetric fields and replace boolean values with string
+    # 'True' or 'False' values. AdaRound exported parameter encodings were mistakenly exporting boolean values
+    # instead of string values like QuantSim export does.
+    # AdaRound exported encodings are fixed in the same commit to export string values now, but this logic is put
+    # in place temporarily to preserve backwards compatibility with older AdaRound exported encodings. It can be
+    # removed after some time once users have fully switched to using the string exported is_symmetric flag.
+    if isinstance(encoding_dict.get('is_symmetric'), bool):
+        encoding_dict['is_symmetric'] = str(encoding_dict['is_symmetric'])
+
+    log_with_error_and_assert_if_false(encoding_dict.get('is_symmetric') in ['True', 'False'],
+                                       _logger,
+                                       f'Unexpected value for is_symmetric: {encoding_dict.get("is_symmetric")}')
+    is_symmetric = encoding_dict.get('is_symmetric') == 'True'
+    encoding_dict = [encoding_dict]
+    return _create_tf_encoding_factory(encoding_dict)[0], is_symmetric
 
 
 def get_number_of_outputs_and_axis_handling(layer, weight_shape, param_type) -> Tuple[int, AxisHandling]:
