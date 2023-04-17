@@ -153,7 +153,7 @@ def find_all_batch_norms_to_fold(sess: tf.compat.v1.Session, start_op_names: Uni
 
     conn_graph = ConnectedGraph(sess.graph, start_op_names, output_op_names)
     bn_conv_linear_pairs, marked_bn_set = _find_all_batch_norms_to_fold(conn_graph, start_op_names, output_op_names,
-                                                            return_bn_conn_op)
+                                                                        return_bn_conn_op)
     return bn_conv_linear_pairs, marked_bn_set
 
 
