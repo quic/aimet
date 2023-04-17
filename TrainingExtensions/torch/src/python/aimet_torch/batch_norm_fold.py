@@ -542,10 +542,10 @@ def convert_batchnorm_parameters(model: torch.nn.Module, bn: Union[torch.nn.Batc
         # Update the values
         bn.eps = 0
         bn.track_running_stats = False
-        bn.weight.copy_(torch.tensor(weight, device=bn.weight.device, dtype=bn.weight.dtype).reshape_as(bn.weight))
-        bn.bias.copy_(torch.tensor(bias, device=bn.bias.device, dtype=bn.bias.dtype).reshape_as(bn.bias))
-        bn.running_mean.copy_(torch.zeros(bn.running_mean.shape, device=bn.running_mean.device, dtype=bn.running_mean.dtype).reshape_as(bn.running_mean))
-        bn.running_var.copy_(torch.ones(bn.running_var.shape, device=bn.running_var.device, dtype=bn.running_var.dtype).reshape_as(bn.running_var))
+        bn.weight.copy_(weight.clone().detach())
+        bn.bias.copy_(bias.clone().detach())
+        bn.running_mean = torch.zeros(bn.running_mean.shape, device=bn.running_mean.device, dtype=bn.running_mean.dtype)
+        bn.running_var = torch.ones(bn.running_var.shape, device=bn.running_var.device, dtype=bn.running_var.dtype)
 
 
 fold_all_batch_norms = fold_all_batch_norms_to_weight
