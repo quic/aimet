@@ -65,7 +65,8 @@ from aimet_tensorflow.utils.quantsim import create_op_to_quant_ops_dict, is_op_q
 from aimet_tensorflow.utils.graph import updated_graph_flow_context_to_loop_context, set_graph_flow_context, \
     op_not_in_loop_control_flow_context
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
-from aimet_tensorflow.defs import ParameterInfo, AxisHandling
+from aimet_tensorflow.defs import ParameterInfo
+from aimet_tensorflow.keras.defs import AxisHandling
 from aimet_tensorflow.quantizer_info import QuantizerInfo, QuantizerType, quant_scheme_to_libpymo
 from aimet_tensorflow.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_tensorflow.quantsim_recurrent import _select_simple_rnn_internal_ops_to_quantize, \

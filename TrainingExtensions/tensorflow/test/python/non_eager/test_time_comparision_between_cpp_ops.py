@@ -43,7 +43,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import tensorflow as tf
 import aimet_common.libpymo as libpymo
 import aimet_common.libaimet_tf_ops as zero_out_module
-from aimet_tensorflow.defs import AxisHandling
+from aimet_tensorflow.keras.defs import AxisHandling
 
 tf.compat.v1.disable_eager_execution()
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)

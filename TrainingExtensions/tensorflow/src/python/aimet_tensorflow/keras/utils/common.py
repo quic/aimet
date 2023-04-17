@@ -46,7 +46,7 @@ from tensorflow.python.framework.graph_util_impl import remove_training_nodes
 
 
 from aimet_common.utils import AimetLogger
-from aimet_tensorflow.defs import AxisHandling
+from aimet_tensorflow.keras.defs import AxisHandling
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 

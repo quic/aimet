@@ -48,7 +48,7 @@ from aimet_common import libpymo
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_common.quantsim import encoding_version, extract_global_quantizer_args
-from aimet_tensorflow.defs import AxisHandling
+from aimet_tensorflow.keras.defs import AxisHandling
 import aimet_tensorflow.utils.quantsim as quantsim_utils
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.graphsearchtuils import GraphSearchUtils

@@ -183,14 +183,3 @@ class ParameterInfo:
     def __init__(self, param_type: str, op_with_param_name: List):
         self.param_type = param_type
         self.op_with_param_name = op_with_param_name
-
-
-# Ways to handle getting number of channels from axes. Default is to get it from the last dimension. For depthwise
-# conv2d, it will be obtained from the last two dimensions.
-class AxisHandling(Enum):
-    """
-    Enum for axis handling used as input variable to QcQuantizePerChannelOp. This defines how to interpret the
-    number of output channels from the weight dimensions.
-    """
-    LAST_AXIS = 0
-    LAST_TWO_AXES = 1
