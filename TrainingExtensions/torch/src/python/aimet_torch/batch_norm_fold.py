@@ -383,7 +383,7 @@ def find_all_batch_norms_to_fold(model, input_shapes, dummy_input: Union[torch.T
         inp_tensor_list = utils.create_rand_tensors_given_shapes(input_shapes, device)
         connected_graph = ConnectedGraph(model, inp_tensor_list)
 
-    conv_bn_pairs, bn_conv_pairs,_ = _find_all_batch_norms_to_fold(connected_graph)
+    conv_bn_pairs, bn_conv_pairs, _ = _find_all_batch_norms_to_fold(connected_graph)
     return conv_bn_pairs + bn_conv_pairs
 
 
