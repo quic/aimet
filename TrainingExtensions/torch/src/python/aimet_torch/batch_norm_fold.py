@@ -531,30 +531,21 @@ def convert_batchnorm_parameters(model: torch.nn.Module, bn: Union[torch.nn.Batc
     :param bn: BatchNorm module whose weights needs to be converted
     """
     with utils.in_eval_mode(model), torch.no_grad():
-        bn_params = libpymo.BNParams()
-        bn_params.gamma = bn.weight.detach().cpu().numpy().reshape(-1)
-        bn_params.beta = bn.bias.detach().cpu().numpy().reshape(-1)
-        bn_params.runningMean = bn.running_mean.detach().cpu().numpy().reshape(-1)
+        gamma = bn.weight
+        beta = bn.bias
+        running_mean = bn.running_mean
         inv_sigma = torch.rsqrt(bn.running_var + bn.eps)
-        bn_params.runningVar = inv_sigma.detach().cpu().numpy().reshape(-1)
 
-        weight = np.array(bn_params.gamma)*np.array(bn_params.runningVar)
-        bias = np.array(bn_params.beta) - np.array(bn_params.runningMean) * weight
+        weight = gamma*inv_sigma
+        bias = beta - running_mean * weight
 
         # Update the values
         bn.eps = 0
         bn.track_running_stats = False
         bn.weight.copy_(torch.tensor(weight, device=bn.weight.device, dtype=bn.weight.dtype).reshape_as(bn.weight))
-
         bn.bias.copy_(torch.tensor(bias, device=bn.bias.device, dtype=bn.bias.dtype).reshape_as(bn.bias))
-
-        new_mean = np.zeros(bn.running_mean.shape)
-        bn.running_mean.copy_(torch.tensor(new_mean, device=bn.running_mean.device, dtype=bn.running_mean.dtype).reshape_as(bn.running_mean))
-
-        new_var = np.ones(bn.running_var.shape)
-        bn.running_var.copy_(torch.tensor(new_var, device=bn.running_var.device, dtype=bn.running_var.dtype).reshape_as(bn.running_var))
-
-
+        bn.running_mean.copy_(torch.zeros(bn.running_mean.shape, device=bn.running_mean.device, dtype=bn.running_mean.dtype).reshape_as(bn.running_mean))
+        bn.running_var.copy_(torch.ones(bn.running_var.shape, device=bn.running_var.device, dtype=bn.running_var.dtype).reshape_as(bn.running_var))
 
 
 fold_all_batch_norms = fold_all_batch_norms_to_weight
