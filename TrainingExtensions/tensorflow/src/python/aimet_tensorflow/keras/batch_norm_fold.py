@@ -718,7 +718,7 @@ def convert_batchnorm_parameters(bn: tf.keras.layers.BatchNormalization):
 
 
 # pylint: disable=protected-access
-def fold_all_batch_norms_to_scale(sim: QuantizationSimModel) -> Tuple[List[Tuple[QcQuantizeWrapper, QcQuantizeWrapper]]]:
+def fold_all_batch_norms_to_scale(sim: QuantizationSimModel) -> List[Tuple[QcQuantizeWrapper, QcQuantizeWrapper]]:
     """
     Fold all batch_norm layers in a model into the quantization scale parameter
     of the corresponding conv layers
