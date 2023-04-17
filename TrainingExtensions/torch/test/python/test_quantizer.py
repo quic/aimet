@@ -54,6 +54,7 @@ from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_
 from aimet_common.utils import AimetLogger
 from aimet_torch import transformer_utils, onnx_utils
 from aimet_torch import utils, elementwise_ops
+from aimet_torch.model_preparer import prepare_model
 from models.test_models import TwoLayerBidirectionalLSTMModel, SingleLayerRNNModel, \
     ModelWithTwoInputs, SimpleConditional, RoiModel, InputOutputDictModel, Conv3dModel
 from aimet_torch.meta.connectedgraph import ConnectedGraph
@@ -3573,3 +3574,78 @@ class TestQuantizationSimLearnedGrid:
         run_half()
         run_float()
         run_float()
+
+    def test_tie_quantizers_for_concat(self):
+
+        class Net(nn.Module):
+            def __init__(self):
+                super(Net, self).__init__()
+                self.conv1 = nn.Conv2d(3, 10, kernel_size=5)
+                self.conv2a = nn.Conv2d(10, 10, kernel_size=5)
+                self.conv2b = nn.Conv2d(10, 10, kernel_size=5)
+                self.conv3 = nn.Conv2d(20, 20, kernel_size=5)
+                self.conv4a = nn.Conv2d(20, 10, kernel_size=5)
+                self.conv4b = nn.Conv2d(20, 10, kernel_size=5)
+                self.conv5 = nn.Conv2d(20, 20, kernel_size=5)
+
+            def forward(self, input):
+                x = self.conv1(input)
+
+                ya = self.conv2a(x)
+                yb = self.conv2b(x)
+
+                x = torch.cat((ya, yb), 1)
+                x = self.conv3(x)
+
+                ya = self.conv4a(x)
+                yb = self.conv4b(x)
+
+                x = torch.cat((ya, yb), 1)
+                x = self.conv5(x)
+
+                return x
+
+        model = Net()
+        model = prepare_model(model)
+
+        dummy_input = torch.rand(1, 3, 28, 28)
+        def dummy_forward(model, _):
+            return model(dummy_input)
+
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                   dummy_input=torch.rand(1, 3, 28, 28))
+
+        sim.model.conv2b.output_quantizers[0] = sim.model.conv2a.output_quantizers[0]
+        sim.model.conv2a.register_forward_hook(lambda layer, input, output: print(f"sim.model.conv2a"))
+        sim.model.conv2b.register_forward_hook(lambda layer, input, output: print(f"sim.model.conv2b"))
+
+        sim.compute_encodings(dummy_forward, None)
+
+        assert sim.model.conv2a.output_quantizers[0].encoding.min == sim.model.conv2b.output_quantizers[0].encoding.min
+        assert sim.model.conv2a.output_quantizers[0].encoding.max == sim.model.conv2b.output_quantizers[0].encoding.max
+
+        # Couple of forward passes - to see if inference works
+        print(sim)
+
+        sim.model.conv2a.register_forward_hook(lambda layer, input, output: print(f"sim.model.conv2a"))
+        sim.model.conv2b.register_forward_hook(lambda layer, input, output: print(f"sim.model.conv2b"))
+        print("-" * 20)
+        dummy_forward(sim.model, None)
+        print("-" * 20)
+        dummy_forward(sim.model, None)
+        print("-" * 20)
+
+        optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.05, momentum=0.5)
+
+        # A couple of forward-backward passes
+        print("Train " + "-" * 20)
+        output = dummy_forward(sim.model, None)
+        output.sum().backward()
+        optimizer.step()
+        print("Train " + "-" * 20)
+
+        output = dummy_forward(sim.model, None)
+        output.sum().backward()
+        optimizer.step()
+
+        print("Done")
