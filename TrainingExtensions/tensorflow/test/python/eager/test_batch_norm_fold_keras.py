@@ -1278,7 +1278,7 @@ class TestBatchNormFoldToScale:
 
         baseline_output = model(random_input)
 
-        _, sim.model = fold_all_batch_norms_to_scale(sim)
+        _ = fold_all_batch_norms_to_scale(sim)
         model = sim.model
 
         output_after_fold = model(random_input)
@@ -1489,7 +1489,7 @@ class TestBatchNormFoldToScale:
         model = sim.model
 
         baseline_output = model(random_input)
-        folded_pairs, sim.model = fold_all_batch_norms_to_scale(sim)
+        folded_pairs = fold_all_batch_norms_to_scale(sim)
         model = sim.model
         output_after_fold = model(random_input)
 
@@ -1554,7 +1554,7 @@ class TestBatchNormFoldToScale:
             get_wrappers_weight_quantizer(model.layers[2].param_quantizers)))
 
         baseline_output = model(random_input)
-        bn_pairs, sim.model = fold_all_batch_norms_to_scale(sim)
+        bn_pairs = fold_all_batch_norms_to_scale(sim)
         model = sim.model
         output_after_fold = model(random_input)
 

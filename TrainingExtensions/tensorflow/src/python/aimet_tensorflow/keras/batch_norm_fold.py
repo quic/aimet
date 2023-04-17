@@ -1,9 +1,9 @@
-# /usr/bin/env python3.5
+# /usr/bin/env python3.8
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -718,17 +718,16 @@ def convert_batchnorm_parameters(bn: tf.keras.layers.BatchNormalization):
 
 
 # pylint: disable=protected-access
-def fold_all_batch_norms_to_scale(sim: QuantizationSimModel) -> \
-        Tuple[List[Tuple[QcQuantizeWrapper, QcQuantizeWrapper]], tf.keras.Model]:
+def fold_all_batch_norms_to_scale(sim: QuantizationSimModel) -> Tuple[List[Tuple[QcQuantizeWrapper, QcQuantizeWrapper]]]:
     """
     Fold all batch_norm layers in a model into the quantization scale parameter
     of the corresponding conv layers
 
     :param sim: QuantizationSimModel to be folded
-    :return: A list of pairs of layers [(Conv/Linear, BN layer that got folded)] and the bn folded model
+    :return: A list of pairs of layers [(Conv/Linear, BN layer that got folded)]
     """
 
-    assert sim.model is not None
+    assert sim.model is not None, "QuantizationSimModel attribute 'model' is None."
 
     model = sim._model_without_wrappers
 
@@ -746,9 +745,9 @@ def fold_all_batch_norms_to_scale(sim: QuantizationSimModel) -> \
     ]
 
     bn_fold_model = _fold_given_batch_norms(sim.model, conv_bn_pairs, bn_conv_pairs)
-    bn_fold_model = bn_fold_model if bn_fold_model else sim.model
+    sim.model = bn_fold_model if bn_fold_model else sim.model
 
-    return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs], bn_fold_model
+    return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs]
 
 def fold_given_batch_norms(model: tf.keras.Model, layer_pairs: List[PairType]) -> Optional[tf.keras.Model]:
     """
