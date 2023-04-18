@@ -180,26 +180,26 @@ public:
         }
     }
 
-    std::tuple<at::Tensor, at::Tensor> makeDeltaOffsetTensor(at::Tensor input, std::vector<DlQuantization::TfEncoding> encodings, int numChannel)
+    std::tuple<at::Tensor, at::Tensor> makeDeltaOffsetTensor(at::Device device, std::vector<DlQuantization::TfEncoding> &encodings)
     {
-        int encodingTensorSize = 2 * numChannel;
+        int numChannel = encodings.size();
 
-        std::vector<float> encoding_vector(encodingTensorSize);
+        std::vector<float> encodingVector(2 * numChannel);
         for(int i = 0; i < numChannel; i++)
         {
-            encoding_vector[i] = encodings[i].delta;
-            encoding_vector[i + numChannel] = encodings[i].offset;
+            encodingVector[i] = encodings[i].delta;
+            encodingVector[i + numChannel] = encodings[i].offset;
         }
 
         // Create encoding tensors
         auto options = at::TensorOptions().dtype(at::kFloat).device(at::kCPU).requires_grad(false);
-        at::Tensor encoding_tensor = torch::from_blob(encoding_vector.data(), {2, numChannel}, options).to(input.device());
-        if(encoding_tensor.device().type() == at::kCPU)
+        at::Tensor encodingTensor = torch::from_blob(encodingVector.data(), {2, numChannel}, options).to(device);
+        if(encodingTensor.device().type() == at::kCPU)
         {
-            encoding_tensor = encoding_tensor.clone();
+            encodingTensor = encodingTensor.clone();
         }
 
-        return std::make_tuple(encoding_tensor[0], encoding_tensor[1]);
+        return std::make_tuple(encodingTensor[0], encodingTensor[1]);
     }
 
 private:

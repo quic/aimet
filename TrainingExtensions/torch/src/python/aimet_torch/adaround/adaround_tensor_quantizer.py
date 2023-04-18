@@ -70,7 +70,7 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         self.alpha = None
         self.use_soft_rounding = True
         self._ch_axis = channel_axis
-        self._cppOp = AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme)
+        self._cppOp = AimetTensorQuantizer.AimetTensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[quant_scheme])
 
     def quantize_dequantize(self, tensor: torch.Tensor, _) -> torch.Tensor:
         """
@@ -116,15 +116,17 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         :return: AdaRounded weight tensor
         """
         assert self.encoding, 'Encoding needs to be set before Adaround the weight tensor.'
+
         if isinstance(self.encoding, list):
             # pylint:disable = protected-access
-            delta_tensor, offset_tensor = self._cppOp.makeDeltaOffsetTensor(tensor, self.encoding, tensor.shape[self._ch_axis])
-            shape = tuple(dim if axis == self._ch_axis else 1 for axis, dim in enumerate(tensor.shape))
-            broadcasted_delta = delta_tensor.view(shape)
-            broadcasted_offset = offset_tensor.view(shape)
+            delta, offset = self._cppOp.makeDeltaOffsetTensor(tensor.device, self.encoding)
         else:
-            broadcasted_delta = broadcast_to_tensor(tensor, self.encoding.delta, self._ch_axis)
-            broadcasted_offset = broadcast_to_tensor(tensor, self.encoding.offset, self._ch_axis)
+            delta = self.encoding.delta
+            offset = self.encoding.offset
+
+        # pylint:disable = protected-access
+        broadcasted_delta = broadcast_to_tensor(tensor, delta, self._ch_axis)
+        broadcasted_offset = broadcast_to_tensor(tensor, offset, self._ch_axis)
 
         # alpha is the "V" parameter in Equation 2 of the Systems HLD which is defined as a FP32 tensor of the
         # same shape as the weight tensor
