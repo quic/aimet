@@ -154,8 +154,7 @@ void modeSpecificActionPerChannelInt(const T* inTensor, size_t count, T* outTens
     size_t num_channels = dims[axis];
     size_t channel_size = count / num_channels;
     T* channel_buffer;
-    std::string message = std::string("Cadsfk");
-    std::string* x = &message;
+
     if (num_channels != encodings.size())
     {
         throw std::runtime_error(std::string("Channel dimensions do not match encoding vector size."));
