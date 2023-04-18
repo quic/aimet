@@ -49,6 +49,7 @@ from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.bn_reestimation import reestimate_bn_stats, _get_all_tf_bn_vars_list
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.utils.op.bn_mutable import modify_sess_bn_mutable
+from aimet_tensorflow.utils.common import iterate_tf_dataset
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
@@ -380,3 +381,86 @@ class TestBNReEstimation:
         assert np.allclose(fused_moving_var, dummy_input.var(axis=(0, 1, 2)), rtol=1e-04)
         assert np.allclose(non_fused_moving_var, dummy_input.var(axis=(0, 1, 2)), rtol=1e-04)
         sess.close()
+
+    def test_bn_reestimation_api(self):
+        """  Test BN reestimation computation """
+        np.random.seed(43)
+        tf.compat.v1.reset_default_graph()
+        tf.random.set_seed(43)
+        sess = tf.compat.v1.Session()
+        inputs = tf.keras.Input(shape=(224, 224, 3,))
+        x = tf.compat.v1.layers.batch_normalization(inputs,
+                                                    beta_initializer=tf.compat.v1.random_uniform_initializer(),
+                                                    gamma_initializer=tf.compat.v1.random_uniform_initializer(),
+                                                    moving_mean_initializer=tf.compat.v1.random_uniform_initializer(),
+                                                    moving_variance_initializer=tf.compat.v1.random_uniform_initializer(
+                                                        0),
+                                                    )
+        x = tf.keras.layers.Conv2D(3, (3, 3))(x)
+        outputs = tf.keras.layers.Flatten()(x)
+
+        # creating a dummy dataset along with expected stats for randomly generated input tensor
+        batch_size = 4
+        num_batch = 4
+        input_data = np.random.randn(batch_size * num_batch, 224, 224, 3).astype(np.float32)
+        dataset = tf.data.Dataset.from_tensor_slices(input_data)
+        dataset = dataset.batch(batch_size=batch_size)
+
+        initialize_uninitialized_vars(sess)
+        start_op_names = [inputs.op.name]
+        output_op_names = [outputs.op.name]
+        updates_sess = modify_sess_bn_mutable(sess, start_op_names, output_op_names)
+        sim = QuantizationSimModel(updates_sess, start_op_names, output_op_names)
+
+        # disable all quantizer upto BN
+        for quantizer in sim.get_enabled_activation_quantizers():
+            quantizer.enabled = False
+        for quantizer in sim.get_enabled_parameter_quantizers():
+            quantizer.enabled = False
+
+        def dummy_forward_pass(sess, args):
+            input_tensor = sess.graph.get_tensor_by_name('input_1:0')
+            output_tensor = sess.graph.get_tensor_by_name('flatten/Reshape:0')
+            dummy_input = np.random.randn(1, 224, 224, 3)
+            sess.run(output_tensor, feed_dict={input_tensor: dummy_input})
+
+        sim.compute_encodings(dummy_forward_pass, None)
+
+        bn_stats_tf_var_list, bn_momentum_tf_var_list, bn_training_tf_var_list = _get_all_tf_bn_vars_list(sim)
+        bn_mean_var_ori, bn_momentum_ori, bn_training_ori = get_all_status(sim.session,
+                                                                           bn_stats_tf_var_list,
+                                                                           bn_momentum_tf_var_list,
+                                                                           bn_training_tf_var_list)
+        expected_mean = [np.mean(data, axis=(0, 1, 2)) for data in iterate_tf_dataset(dataset)]
+        expected_mean = sum(expected_mean) / num_batch
+        expected_var = [np.var(data, axis=(0, 1, 2)) for data in iterate_tf_dataset(dataset)]
+        expected_var = sum(expected_var) / num_batch
+
+        with reestimate_bn_stats(sim, start_op_names, output_op_names, dataset, num_batch):
+            bn_mean_var_est, bn_momentum_est, bn_training_est = get_all_status(sim.session,
+                                                                               bn_stats_tf_var_list,
+                                                                               bn_momentum_tf_var_list,
+                                                                               bn_training_tf_var_list)
+            momentum_reestimated = list(bn_momentum_est.values())[0]
+            mean_reestimated, var_reestimated = bn_mean_var_est.values()
+            assert momentum_reestimated == 0.0
+            assert np.allclose(mean_reestimated, expected_mean, rtol=1e-04)
+            assert np.allclose(var_reestimated, expected_var, rtol=1e-04)
+
+        # check restored mean, var, momentum
+        bn_mean_var_restored, bn_momentum_restored, bn_training_restored = get_all_status(sim.session,
+                                                                                          bn_stats_tf_var_list,
+                                                                                          bn_momentum_tf_var_list,
+                                                                                          bn_training_tf_var_list)
+        mean_restored, var_restored = bn_mean_var_restored.values()
+        mean_orig, var_orig = bn_mean_var_ori.values()
+        assert np.allclose(mean_orig, mean_restored)
+        assert np.allclose(var_orig, var_restored)
+
+        momentum_restored = list(bn_momentum_restored.values())[0]
+        momentum_orig = list(bn_momentum_ori.values())[0]
+        assert momentum_restored == momentum_orig
+
+        sess.close()
+        updates_sess.close()
+        sim.session.close()
