@@ -744,8 +744,13 @@ def fold_all_batch_norms_to_scale(sim: QuantizationSimModel) -> List[Tuple[QcQua
         (quant_wrappers[bn], quant_wrappers[conv]) for bn, conv in bn_conv_pairs
     ]
 
-    bn_fold_model = _fold_given_batch_norms(sim.model, conv_bn_pairs, bn_conv_pairs)
-    sim.model = bn_fold_model if bn_fold_model else sim.model
+    # We fold both the sim.model and sim._model_without_wrappers because we rebuild the QuantizationSimModel during
+    # export and this utilizes the sim._model_without_wrappers to achieve this.
+    bn_fold_sim_model = _fold_given_batch_norms(sim.model, conv_bn_pairs, bn_conv_pairs)
+    _, bn_fold_model = fold_all_batch_norms(model)
+
+    sim.model = bn_fold_sim_model if bn_fold_sim_model else sim.model
+    sim._model_without_wrappers = bn_fold_model if bn_fold_model else sim._model_without_wrappers
 
     return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs]
 
