@@ -36,17 +36,17 @@
 # =============================================================================
 
 """ Utility for checking model architechture prior to using AIMET feature. """
-from typing import Callable, List, Set, Union, Tuple
+from typing import Callable, Union, Tuple
 import torch
 
 from aimet_common.utils import AimetLogger
 from aimet_torch.meta.connectedgraph import ConnectedGraph
-from aimet_torch.arch_checker.arch_checker_rules import (get_node_check_dict,
+from aimet_torch.arch_checker.arch_checker_rules import  TorchActivations
+from aimet_torch.arch_checker.arch_checker_utils import (ArchCheckerReport,
+                                                         check_type_deco,
+                                                         get_node_check_dict,
                                                          get_pattern_check_list,
-                                                         TorchActivations)
-
-from aimet_torch.arch_checker.arch_checker_utils import ArchCheckerReport, check_type_deco
-
+                                                         check_module)
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
 class ArchChecker:
@@ -56,6 +56,7 @@ class ArchChecker:
     """
     _node_check_dict = get_node_check_dict()
     _pattern_checks = get_pattern_check_list()
+    _arch_checker_report = ArchCheckerReport()
 
     @staticmethod
     def add_node_check(check_target_type: torch.nn.Module, arch_check: Callable):
@@ -101,77 +102,48 @@ class ArchChecker:
         :param dummy_input: A dummy input to the model. Can be a Tensor or a Tuple of Tensors
         :return arch_checker_report: {op.dotted_name_op: NodeErrorReportObject }
         """
-        connected_graph = ConnectedGraph(model, dummy_input)
-        arch_checker_report = ArchCheckerReport()
+        def run_node_checks():
+            """
+            Walk through connected_graph and applies node checks on each node.
+            """
+            for op in connected_graph.ordered_ops:
+                module = op.get_module()
+                if module and isinstance(module, tuple(ArchChecker._node_check_dict.keys())):
+                    if isinstance(module, TorchActivations):
+                        checks = ArchChecker._node_check_dict[TorchActivations]
+                    else:
+                        checks = ArchChecker._node_check_dict[type(module)]
 
+                    failed_checks_set = check_module(module, checks)
+                    if failed_checks_set:
+                        ArchChecker._arch_checker_report.update_raw_report(op, failed_checks_set)
+                        logger.info("Graph/Node: %s: %s fails check: %s", op.dotted_name, module,
+                                    failed_checks_set)
+
+        def run_patten_check():
+            """
+            Applies pattern checks on connected graph.
+            """
+            for _check in ArchChecker._pattern_checks:
+                failed_check_ops = _check(connected_graph)
+
+                if failed_check_ops:
+                    ArchChecker._arch_checker_report.update_raw_report(failed_check_ops, _check.__name__)
+                    for op in failed_check_ops:
+                        logger.info("Graph/Node: %s: %s fails check: %s", op.dotted_name, op.get_module(), {_check.__name__})
+
+        connected_graph = ConnectedGraph(model, dummy_input)
         # Run all node checkes
         logger.info("Running node checkes.")
-        _node_checker_report = ArchChecker.run_node_checks(connected_graph)
-        arch_checker_report.merge_new_raw_report(_node_checker_report.raw_report)
+        run_node_checks()
 
         # Run all pattern checkes
         logger.info("Running pattern checkes.")
-        _pattern_checker_report = ArchChecker.run_patten_check(connected_graph)
-        arch_checker_report.merge_new_raw_report(_pattern_checker_report.raw_report)
+        run_patten_check()
 
-        return arch_checker_report
-
-    @staticmethod
-    def run_node_checks(connected_graph: ConnectedGraph)-> ArchCheckerReport:
-        """
-        Walk through connected_graph and applies node checks on each node.
-        :param connected_graph: Connected_graph object.
-        :return arch_checker_report: ArchCheckerReport object.
-        """
-        arch_checker_report = ArchCheckerReport()
-
-        for op in connected_graph.ordered_ops:
-            module = op.get_module()
-            if module and isinstance(module, tuple(ArchChecker._node_check_dict.keys())):
-                if isinstance(module, TorchActivations):
-                    checks = ArchChecker._node_check_dict[TorchActivations]
-                else:
-                    checks = ArchChecker._node_check_dict[type(module)]
-
-                failed_checks_set = ArchChecker.check_module(module, checks)
-
-                if failed_checks_set:
-                    arch_checker_report.update_raw_report(op, failed_checks_set)
-                    logger.info("Graph/Node: %s: %s fails check: %s", op.dotted_name, module,
-                                failed_checks_set)
-
-        return arch_checker_report
+        ArchChecker._arch_checker_report.export_to_html()
 
     @staticmethod
-    def run_patten_check(connected_graph):
-        """
-        Applies pattern checks on connected graph.
-        :param connected_graph: Connected_graph object.
-        :return arch_checker_report: ArchCheckerReport object.
-        """
-        arch_checker_report = ArchCheckerReport()
-        for _check in ArchChecker._pattern_checks:
-            failed_check_ops = _check(connected_graph)
-
-            if failed_check_ops:
-                arch_checker_report.update_raw_report(failed_check_ops, _check.__name__)
-                for op in failed_check_ops:
-                    logger.info("Graph/Node: %s: %s fails check: %s", op.dotted_name, op.get_module(), {_check.__name__})
-
-        return arch_checker_report
-
-    @staticmethod
-    def check_module(module: torch.nn.Module, check_list: List) -> Set:
-        """
-        Check a torch.nn.modules with the check_list, return check names for failed checks.
-        :param module: module to be checked.
-        :param check_list: List of checks.
-        :return set of failed check names.
-        """
-        failed_checks_list = []
-
-        for _check in check_list:
-            if not _check(module):
-                failed_checks_list.append(_check.__name__)
-
-        return set(failed_checks_list)
+    def set_export_dir(dir_path: str):
+        """ Set export dir. """
+        ArchChecker._arch_checker_report.result_dir = dir_path

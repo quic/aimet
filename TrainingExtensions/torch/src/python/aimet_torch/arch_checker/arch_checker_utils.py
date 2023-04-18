@@ -37,27 +37,17 @@
 
 """ Utility for checking model architechture prior to using AIMET feature. """
 import os
-from typing import Dict, List, Union, Set, Tuple, Callable
+from typing import Dict, List, Union, Set, Tuple
+import torch
 import pandas as pd
 
 from aimet_torch.meta.operation import Op
 from aimet_torch.arch_checker.constants import ArchCheckerReportConstants as report_const
+from aimet_torch.arch_checker.arch_checker_rules import NODE_CHECK_DICT, PATTERN_CHECK_LIST
 
 from aimet_common.utils import AimetLogger
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
-
-class PatternHandler():
-    """ Object to handle pattern checkes. """
-    def __init__(self, check: Callable):
-        self.check = check
-
-    def __call__(self, *args, **kwargs):
-        """
-        Run pattern check on PatternType_object, op_subset.
-        """
-        _, op_subset = args
-        self.check(op_subset)
 
 class NodeErrorReportObject:
     """ Error report object for each op. """
@@ -79,9 +69,10 @@ class ArchCheckerReport:
     """
     ArchCheckerReport object to handle utilities for arch_checker_report.
     """
-    def __init__(self) -> None:
+    def __init__(self, result_dir: str = "/tmp") -> None:
         self._raw_report = {}
-        self._export_path = "arch_checker_report.csv"
+        self._result_dir = result_dir
+        self._filename = "arch_checker_report"
 
     def merge_new_raw_report(self, new_raw_report):
         """
@@ -98,43 +89,21 @@ class ArchCheckerReport:
         """
         _update_raw_report(self._raw_report, _generate_arch_checker_report(op, failed_check))
 
-    def export_checker_report_to_cvs(self, path: str = None):
-        """
-        Map raw report to issue and recommendations in report_const.ERR_MSG_DICT to form
-        arch_checker_report and write csv file to self._export_path.
-        """
-        if path is not None:
-            self.export_path = path
+    def export_to_html(self):
+        """ Map raw report to human-friendly messages in pandas dataframe and export to html file. """
+        df = _get_pd_dataframe(self._raw_report)
+        html_filename = self._get_write_path(".html")
+        html_file_txt = df.to_html()
 
-        df = pd.DataFrame(columns=report_const.OUTPUT_CSV_HEADER)
+        with open(html_filename, "w") as html_file:
+            html_file.write(html_file_txt)
+        logger.info("Save arch_checker report to %s", html_filename)
 
-        for dotted_name, node_error_report_object in self._raw_report.items():
-            for issue, recomm in node_error_report_object.get_issue_recomm_list():
-                tmp_df = dict.fromkeys(report_const.OUTPUT_CSV_HEADER, 'N/A')
-                tmp_df[report_const.DF_GRAPH_NODENAME] = dotted_name
-                tmp_df[report_const.DF_ISSUE] = issue
-                tmp_df[report_const.DF_RECOMM] = recomm
-                df = pd.concat([df, pd.DataFrame([tmp_df])], ignore_index=True)
-
-        logger.info("Save arch_checker report to %s", self._export_path)
-        df.to_csv(self._export_path, sep='\t', index=True)
-
-    @property
-    def export_path(self):
-        """ Returns export path. """
-        return self._export_path
-
-    @export_path.setter
-    def export_path(self, path):
-        """ Sets the export path. """
-        _name, _extension = os.path.splitext(path)
-        if _extension != ".csv":
-            logger.info("Got ArchCheckerReport.export_path: \"%s\" is not csv file: ", path)
-            path = os.path.join(_name, ".csv")
-            logger.info("Overwrite ArchCheckerReport.export_path to: \"%s\"", path)
-
-        logger.info("Set arch_checker_report path to %s", self._export_path)
-        self._export_path = path
+    def _get_write_path(self, file_extension: str):
+        """ Get path to write and attach corresponding file extension. """
+        if file_extension[0] != ".":
+            file_extension += "."
+        return os.path.join(self._result_dir, self._filename) + file_extension
 
     @property
     def raw_report(self):
@@ -144,6 +113,33 @@ class ArchCheckerReport:
     def reset_raw_report(self):
         """ Reset raw report to empty dictionary. """
         self._raw_report = {}
+
+    @property
+    def result_dir(self):
+        """ Return _result_dir. """
+        return self._result_dir
+
+    @result_dir.setter
+    def result_dir(self, _new_result_dir: str):
+        """ Set new result_dir. """
+        self._result_dir = _new_result_dir
+
+def _get_pd_dataframe(raw_report):
+    """
+    Map a raw report to pandas dataframe.
+    :param raw_report: {op.dotted_name_op: error_report_object}.
+    :return df: pandas dataframe.
+    """
+    df = pd.DataFrame(columns=report_const.OUTPUT_CSV_HEADER)
+    for dotted_name, node_error_report_object in raw_report.items():
+        for issue, recomm in node_error_report_object.get_issue_recomm_list():
+            tmp_df = dict.fromkeys(report_const.OUTPUT_CSV_HEADER, 'N/A')
+            tmp_df[report_const.DF_GRAPH_NODENAME] = dotted_name
+            tmp_df[report_const.DF_ISSUE] = issue
+            tmp_df[report_const.DF_RECOMM] = recomm
+            df = pd.concat([df, pd.DataFrame([tmp_df])], ignore_index=True)
+
+    return df
 
 def _update_raw_report(raw_report: Dict, new_raw_report: Dict):
     """
@@ -196,6 +192,35 @@ def _generate_arch_checker_report(op: Union[List, List[Op]], failed_check: Union
 
     # Pattenr check returns a list Op with single str(failed_check.__name__)
     return {_op.dotted_name_op: NodeErrorReportObject(_op, {failed_check}) for _op in op}
+
+def get_node_check_dict()-> Dict:
+    """
+    Get dictionary for node checks.
+    :return check_dicts: {check target type: list of checks}.
+    """
+    return NODE_CHECK_DICT
+
+def get_pattern_check_list()-> List:
+    """
+    Get a list of pattern checks.
+    :return: List of pattern checks.
+    """
+    return PATTERN_CHECK_LIST
+
+def check_module(module: torch.nn.Module, check_list: List) -> Set:
+    """
+    Check a torch.nn.modules with the check_list, return check names for failed checks.
+    :param module: module to be checked.
+    :param check_list: List of checks.
+    :return set of failed check names.
+    """
+    failed_checks_list = []
+
+    for _check in check_list:
+        if not _check(module):
+            failed_checks_list.append(_check.__name__)
+
+    return set(failed_checks_list)
 
 def check_type_deco(module_type):
     """
