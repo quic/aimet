@@ -478,13 +478,16 @@ def _fold_given_auto_selected_batch_norms_scale(sim: QuantizationSimModel, layer
             _fold_pair_scale(conv_linear_w_quantizer, conv_linear_a_quantizer, bn_a_quantizer, bn_params)
 
             # remove bn op
-            updated_sess = _delete_bn_from_model(sess, bn, is_bias_valid)
+            _delete_bn_from_model(sess, bn, is_bias_valid)
+
+    # we edited the graph, so we should load and save for the metagraph associated with the session to be updated
+    updated_sess = save_and_load_graph('./temp_bn_fold_to_scale', sess)
     sim.session = updated_sess
 
 
 def _delete_bn_from_model(sess: tf.compat.v1.Session,
                           bn_op: OpWithMetaInfoType,
-                          is_bias_valid: bool) -> tf.compat.v1.Session:
+                          is_bias_valid: bool):
     """
     Delete BN from the session. If BN's previous conv doesn't have bias, is_bias_valid must
     be False. In that case, need to find the correct BN's input tensor.
@@ -505,10 +508,6 @@ def _delete_bn_from_model(sess: tf.compat.v1.Session,
 
     # Detach BN from the graph.
     BNUtils.skip_bn_op(sess, bn_tf_op, bn_in_tensor, bn_out_tensor)
-
-    # we edited the graph, so we should load and save for the metagraph associated with the session to be updated
-    updated_sess = save_and_load_graph('./temp_bn_fold_to_scale', sess)
-    return updated_sess
 
 
 def _fold_pair_scale(conv_linear_w_quantizer: QuantizerInfo,
