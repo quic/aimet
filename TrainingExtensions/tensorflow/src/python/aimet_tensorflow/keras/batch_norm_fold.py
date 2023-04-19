@@ -473,6 +473,13 @@ def _delete_bn_from_functional(model: tf.keras.Model,
                 original_keras_symbolic_tensors_order = model_layer_connections[ModelLayerConnectionsProperties.CALL_ARGS][
                     current_layer.name][KERAS_SYMBOLIC_TENSORS_INDEX]
 
+                # Special case for Lambda layers. Lambda layers can be thought of as z = x + y. Unfortunately, their call
+                # args for the keras symbolic tensors will ONLY have the x portion. In our layer_input we have both x and y.
+                # This statement is added to wrap the x portion of the original call args and check if it's a batch norm
+                # folded out.
+                if not isinstance(original_keras_symbolic_tensors_order, List):
+                    original_keras_symbolic_tensors_order = [original_keras_symbolic_tensors_order]
+
                 # Check if a Batch Norm that was deleted is in the original keras symbolic order.
                 name_of_bn_replaced = [
                     tensor.name for tensor in original_keras_symbolic_tensors_order
@@ -488,21 +495,18 @@ def _delete_bn_from_functional(model: tf.keras.Model,
                         model_layer_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS][new_inbound_layer_name]
                         for new_inbound_layer_name in batch_norms_replaced_with_names[name_of_bn_replaced]
                     ]
-                else:
-                    updated_keras_symbolic_tensors_order = model_layer_connections[ModelLayerConnectionsProperties.CALL_ARGS][
-                        current_layer.name][KERAS_SYMBOLIC_TENSORS_INDEX]
 
-                # Dictionary of the keras symbolic tensor name to the order.
-                ordered_inputs = {k.name: v for v, k in enumerate(updated_keras_symbolic_tensors_order)}
+                    # Dictionary of the keras symbolic tensor name to the order.
+                    ordered_inputs = {k.name: v for v, k in enumerate(updated_keras_symbolic_tensors_order)}
 
-                # Sort layer_input based on the above dictionary.
-                layer_input = sorted(layer_input, key=lambda current_input, oi=ordered_inputs: oi[current_input.name])
+                    # Sort layer_input based on the above dictionary.
+                    layer_input = sorted(layer_input, key=lambda current_input, oi=ordered_inputs: oi[current_input.name])
 
             # Since we are rerouting around the batch normalization layers, we need to temporarily remove the inbound and
             # outbound nodes of the batch normalization layers so that the model can be built correctly and not duplicate
             # the non batch normalization layers inbound/outbound nodes.
             current_layer._inbound_nodes = []  # pylint: disable=protected-access
-            # Special case for when there is a Lambda opertaion with multiple inputs. For example, x = y + z.
+            # Special case for when there is a Lambda opertaion with multiple inputs. For example, z = x + y.
             if isinstance(current_layer, TFOpLambda) and isinstance(layer_input, List):
                 x = current_layer(*layer_input)
             else:
