@@ -62,7 +62,7 @@ from models.test_models import ModelWithFunctionalReLU, SingleResidual, ModelWit
     ConcatModel
 from aimet_torch.model_validator.model_validator import ModelValidator
 from aimet_torch.quantsim import QuantizationSimModel, QuantParams
-from aimet_torch.utils import create_fake_data_loader, get_device, replace_modules_of_type1_with_type2
+from aimet_torch.utils import create_fake_data_loader, get_device
 from aimet_torch.model_preparer import prepare_model, _find_functional_name_for_node, _prepare_traced_model
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.cross_layer_equalization import  equalize_model
@@ -1763,13 +1763,7 @@ class TestFX:
 
         prepared_model = prepare_model(model)
 
-        # functional
-        assert isinstance(prepared_model.module_silu_1, torch.nn.SiLU) and prepared_model.module_silu_1.inplace
-        # reused (default inplace=False)
-        assert isinstance(prepared_model.module_silu_2, torch.nn.SiLU) and not prepared_model.module_silu_2.inplace
-
         # Replace SiLU by CustomSiLU module
-        replace_modules_of_type1_with_type2(prepared_model, torch.nn.SiLU, elementwise_ops.CustomSiLU)
         assert isinstance(prepared_model.silu, elementwise_ops.CustomSiLU)
         assert isinstance(prepared_model.module_silu_1, elementwise_ops.CustomSiLU)
         assert isinstance(prepared_model.module_silu_2, elementwise_ops.CustomSiLU)
