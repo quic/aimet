@@ -44,7 +44,7 @@ import numpy as np
 import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme
 from aimet_torch.elementwise_ops import Add, Subtract, Multiply, Divide, Concat, MatMul, Erf, Sqrt, \
-    Greater, Less, GreaterEqual, LessEqual, NotEqual, Equal, Where
+    Greater, Less, GreaterEqual, LessEqual, NotEqual, Equal, Where, Mean, Sum, Prod
 from aimet_torch.quantsim import QuantizationSimModel
 
 
@@ -413,3 +413,27 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         out1 = torch.where(input1 > input2, input1, input2)
         self.assertTrue(np.allclose(out, out1))
         self.assertEqual(input1.shape, out.shape)
+
+    def test_mean_op(self):
+        torch.manual_seed(10)
+        model = Model3(Mean())
+        input1 = torch.rand((5, 10, 10, 20))
+        out = model(input1)
+        out1 = torch.mean(input1)
+        self.assertTrue(np.allclose(out, out1))
+
+    def test_sum_op(self):
+        torch.manual_seed(10)
+        model = Model3(Sum())
+        input1 = torch.rand((5, 10, 10, 20))
+        out = model(input1)
+        out1 = torch.sum(input1)
+        self.assertTrue(np.allclose(out, out1))
+
+    def test_prod_op(self):
+        torch.manual_seed(10)
+        model = Model3(Prod())
+        input1 = torch.rand((5, 10, 10, 20))
+        out = model(input1)
+        out1 = torch.prod(input1)
+        self.assertTrue(np.allclose(out, out1))
