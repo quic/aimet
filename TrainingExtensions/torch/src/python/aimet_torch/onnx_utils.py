@@ -101,6 +101,7 @@ map_torch_types_to_onnx = {
     nn.Flatten: ['Flatten'],
     nn.Softmax: ['Softmax'],
     nn.Tanh: ['Tanh'],
+    nn.Embedding: ['Gather'],
     nn.Softplus: ['Softplus'],
     nn.Hardswish: ['HardSwish'],
     elementwise_ops.Add: ['Add'],
