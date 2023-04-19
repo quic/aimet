@@ -45,7 +45,7 @@ import torch
 import torch.fx
 from aimet_common.utils import AimetLogger
 from aimet_torch.utils import in_eval_mode
-
+from aimet_torch.utils import replace_modules_of_type1_with_type2
 import aimet_torch.elementwise_ops as elementwise_ops
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ModelPreparer)
@@ -378,15 +378,19 @@ def _prepare_traced_model(traced_model: torch.fx.GraphModule):
 
     _verify_traced_model(traced_model)
 
-def _verify_traced_model(symbolic_traced_model: torch.fx.GraphModule):
+    # Replace SiLU with CustomSiLU
+    replace_modules_of_type1_with_type2(traced_model, torch.nn.SiLU, elementwise_ops.CustomSiLU)
+
+
+def _verify_traced_model(traced_model: torch.fx.GraphModule):
     """
     Does some checks to make sure the graph is well-formed and recompile the forward() method of symbolic_traced
     model from its graph
-    :param symbolic_traced_model: Symbolically traced model
-    :return: None
+
+    :param traced_model: Symbolically traced model
     """
-    symbolic_traced_model.graph.lint()
-    symbolic_traced_model.recompile()
+    traced_model.graph.lint()
+    traced_model.recompile()
 
 
 def _create_node_for_new_module(traced_model: torch.fx.GraphModule, node: torch.fx.node,

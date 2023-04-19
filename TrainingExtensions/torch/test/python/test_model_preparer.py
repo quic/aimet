@@ -1742,3 +1742,55 @@ class TestFX:
         finally:
             if os.path.isdir(results_dir):
                 shutil.rmtree(results_dir)
+
+    def test_replace_silu_with_custom_silu(self):
+        """ test to verify replacement of silu with custom silu (sigmoid + mul) """
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super(Model, self).__init__()
+                self.conv = torch.nn.Conv2d(3, 3, (3, 3))
+                self.silu = torch.nn.SiLU()
+
+            def forward(self, inputs):
+                x = self.conv(inputs)
+                x = self.silu(x)
+                x = torch.nn.functional.silu(x, inplace=True)
+                x = self.silu(x)
+                return x
+
+        dummy_input = torch.randn(1, 3, 8, 8)
+        model = Model().eval()
+
+        prepared_model = prepare_model(model)
+
+        # Replace SiLU by CustomSiLU module
+        assert isinstance(prepared_model.silu, elementwise_ops.CustomSiLU)
+        assert isinstance(prepared_model.module_silu_1, elementwise_ops.CustomSiLU)
+        assert isinstance(prepared_model.module_silu_2, elementwise_ops.CustomSiLU)
+
+        # Verify the outputs (won't be bit-exact).
+        assert torch.allclose(model(dummy_input), prepared_model(dummy_input))
+
+        sim = QuantizationSimModel(prepared_model, dummy_input)
+        sim.compute_encodings(evaluate, dummy_input)
+
+        # Check encodings are computed correctly for both (sigmoid + mul) for all three CustomSiLUs
+        assert sim.model.silu.sigmoid.output_quantizers[0].encoding
+        assert sim.model.silu.mul.output_quantizers[0].encoding
+        assert sim.model.module_silu_1.sigmoid.output_quantizers[0].encoding
+        assert sim.model.module_silu_1.mul.output_quantizers[0].encoding
+        assert sim.model.module_silu_2.sigmoid.output_quantizers[0].encoding
+        assert sim.model.module_silu_2.mul.output_quantizers[0].encoding
+
+        # Verify Quantsim Export workflow.
+        results_dir = os.path.abspath('./data/verify_sim_export/')
+        os.makedirs(results_dir, exist_ok=True)
+        try:
+            sim.export(results_dir, filename_prefix='modified_model', dummy_input=dummy_input)
+            with open(results_dir + '/modified_model.encodings') as json_file:
+                encoding_data = json.load(json_file)
+            # Total 8 encodings for activations. 1 input, 1 output of Conv and 6 (2 * 3) for CustomSiLU modules.
+            assert len(encoding_data["activation_encodings"]) == 8
+        finally:
+            if os.path.isdir(results_dir):
+                shutil.rmtree(results_dir)
