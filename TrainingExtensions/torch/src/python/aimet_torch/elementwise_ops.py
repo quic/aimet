@@ -159,7 +159,7 @@ class DynamicConv2d(torch.nn.Module):
 
 
 class Pow(torch.nn.Module):
-    """ Pow module for a functional pow"""
+    """ Pow module for a functional pow """
     # pylint:disable=arguments-differ
     @staticmethod
     def forward(x: Any, y: Any) -> Any:
@@ -167,3 +167,17 @@ class Pow(torch.nn.Module):
         Forward-pass routine for Pow op
         """
         return x ** y
+
+
+class CustomSiLU(torch.nn.Module):
+    """ SiLU as Sigmoid + mul """
+    def __init__(self):
+        super().__init__()
+        self.sigmoid = torch.nn.Sigmoid()
+        self.mul = Multiply()
+
+    def forward(self, x: torch.Tensor) -> Any:
+        """
+        Forward-pass routine for custom SiLU
+        """
+        return self.mul(x, self.sigmoid(x))
