@@ -44,6 +44,7 @@ import torch
 
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
+from aimet_common.defs import QuantScheme
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from models.test_models import TinyModel
@@ -126,7 +127,7 @@ class TestAdaroundActivationSampler(unittest.TestCase):
     def test_adaround_tensor_quantizer(self):
         """ Test the Adarounding of a Tensor """
         weight_tensor = torch.randn(1, 3, 64, 64)
-        ada_quantizer = AdaroundTensorQuantizer(bitwidth=4, round_mode='Adaptive', quant_scheme='tf_enhanced',
+        ada_quantizer = AdaroundTensorQuantizer(bitwidth=4, round_mode='Adaptive', quant_scheme=QuantScheme.post_training_tf_enhanced,
                                                 use_symmetric_encodings=True, enabled_by_default=True, channel_axis=0)
 
         nearest_encoding = libpymo.TfEncoding()
