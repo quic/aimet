@@ -43,6 +43,7 @@ from aimet_torch.meta.operation import Op
 
 from aimet_torch.arch_checker.arch_checker import ArchChecker
 from aimet_torch.arch_checker.arch_checker_rules import TorchActivations
+from aimet_torch.arch_checker.arch_checker_utils import _get_pd_dataframe
 from aimet_torch.arch_checker.constants import ArchCheckerReportConstants as report_const
 
 class Model_inter_pad_with_BN(torch.nn.Module):
@@ -273,7 +274,8 @@ class TestArchChecker():
     def test_intermediate_padding(self):
         # Test sequence: Conv -> Activation -> BN -> Conv
         model = Model_inter_pad_with_BN()
-        arch_checker_report = ArchChecker.check_model_arch(model, self.dummy_input)
+        ArchChecker.check_model_arch(model, self.dummy_input)
+        arch_checker_report = ArchChecker._arch_checker_report
         assert "_check_intermediate_padding" in arch_checker_report.raw_report["Model_inter_pad_with_BN.conv2"].failed_checks
         assert "Model_inter_pad_with_BN.conv4" not in arch_checker_report.raw_report
         assert "Model_inter_pad_with_BN.conv6" not in arch_checker_report.raw_report
@@ -282,7 +284,8 @@ class TestArchChecker():
 
         # Test sequence: Conv -> Activation -> Conv
         model = Model_inter_pad_without_BN()
-        arch_checker_report = ArchChecker.check_model_arch(model, self.dummy_input)
+        ArchChecker.check_model_arch(model, self.dummy_input)
+        arch_checker_report = ArchChecker._arch_checker_report
         assert "_check_intermediate_padding" in arch_checker_report.raw_report["Model_inter_pad_without_BN.conv2"].failed_checks
         assert "Model_inter_pad_without_BN.conv4" not in arch_checker_report.raw_report
         assert "Model_inter_pad_without_BN.conv6" not in arch_checker_report.raw_report
@@ -290,7 +293,8 @@ class TestArchChecker():
         arch_checker_report.reset_raw_report()
 
         model = Model_inter_pad_act_type()
-        arch_checker_report = ArchChecker.check_model_arch(model, self.dummy_input)
+        ArchChecker.check_model_arch(model, self.dummy_input)
+        arch_checker_report = ArchChecker._arch_checker_report
         assert "_check_intermediate_padding" in arch_checker_report.raw_report["Model_inter_pad_act_type.conv2"].failed_checks
         assert "_check_intermediate_padding" in arch_checker_report.raw_report["Model_inter_pad_act_type.conv4"].failed_checks
         assert "_check_intermediate_padding" in arch_checker_report.raw_report["Model_inter_pad_act_type.conv6"].failed_checks
@@ -299,20 +303,13 @@ class TestArchChecker():
 
     def test_arch_checker_report(self):
         """ Test exported functions in ArchCheckerReport Class. """
-        def read_csv(file_path):
-            csv_file = []
-            with open(file_path) as file:
-                f = csv.reader(file, delimiter='\t')
-                for line in f:
-                    csv_file.append(line)
-            return csv_file
+        def get_export_dict_from_df(dataframe):
+            # -1 to remove header column.
+            column_length = len(dataframe[report_const.DF_GRAPH_NODENAME])
 
-        def get_export_dict(csv_file):
-            # Remove header
-            csv_file = csv_file[1:]
             export_dict = {}
-            for line in csv_file:
-                _, module_name, issue, recomm = line
+            for idx in range(column_length):
+                module_name, issue, recomm = dataframe.loc[idx]
                 if module_name not in export_dict:
                     export_dict[module_name] = {report_const.DF_ISSUE: {issue},
                                                 report_const.DF_RECOMM: {recomm}}
@@ -321,22 +318,20 @@ class TestArchChecker():
                     export_dict[module_name][report_const.DF_RECOMM].update({recomm})
             return export_dict
 
-        arch_checker_report = ArchChecker.check_model_arch(self.model, self.dummy_input)
-        export_path = arch_checker_report.export_path
-        
+        ArchChecker.check_model_arch(self.model, self.dummy_input)
+        arch_checker_report = ArchChecker._arch_checker_report
+    
         # Add undefined check results to raw result.
         test_op = Op(name="test_op", dotted_name="test_dotted_name", output_shape =None, 
                  is_anonymous=False, op_type="test_type", residing_module=None)
-        unknown_check_name = "unknow_check"
+        unknown_check_name = "unknown_check"
 
         arch_checker_report.raw_report["Model.conv1"].add_failed_checks({unknown_check_name})
         arch_checker_report.update_raw_report(test_op, {unknown_check_name} ) 
 
-        arch_checker_report.export_checker_report_to_cvs()
-
-        # Read export csv file.
-        csv_file = read_csv(export_path)
-        export_dict = get_export_dict(csv_file)
+        # Read from dataframe file.
+        dataframe = _get_pd_dataframe(arch_checker_report._raw_report)
+        export_dict = get_export_dict_from_df(dataframe)
 
         # unknown_check_name raises undefined message.
         assert report_const.UNDEFINED_ISSUE.format(unknown_check_name) in export_dict[test_op.dotted_name][report_const.DF_ISSUE]
@@ -345,46 +340,17 @@ class TestArchChecker():
         assert report_const.UNDEFINED_ISSUE.format(unknown_check_name) in export_dict["Model.conv1"][report_const.DF_ISSUE]
         assert report_const.UNDEFINED_RECOMM.format(unknown_check_name) in export_dict["Model.conv1"][report_const.DF_RECOMM]
 
-        os.remove(export_path)
-        assert not os.path.exists(export_path)
-
-        # Export to pass-in path
-        test_export_path = "test_export_path.csv"
-        arch_checker_report.export_checker_report_to_cvs(test_export_path)
-        
-        # Read export csv file.
-        csv_file = read_csv(test_export_path)
-        export_dict = get_export_dict(csv_file)
-
-        # unknown_check_name raises undefined message.
-        assert report_const.UNDEFINED_ISSUE.format(unknown_check_name) in export_dict[test_op.dotted_name][report_const.DF_ISSUE]
-        assert report_const.UNDEFINED_RECOMM.format(unknown_check_name) in export_dict[test_op.dotted_name][report_const.DF_RECOMM]
-
-        assert report_const.UNDEFINED_ISSUE.format(unknown_check_name) in export_dict["Model.conv1"][report_const.DF_ISSUE]
-        assert report_const.UNDEFINED_RECOMM.format(unknown_check_name) in export_dict["Model.conv1"][report_const.DF_RECOMM]
-
+        # Test .html is exported
+        test_export_path = arch_checker_report._get_write_path(".html")
+        arch_checker_report.export_to_html()
+        assert os.path.exists(test_export_path)
         os.remove(test_export_path)
         assert not os.path.exists(test_export_path)
 
-        # Test setter fot export_path.
-        new_export_path = "./new_export_path.csv"
-        arch_checker_report.export_path = new_export_path
-
-        # Test reset_raw_report. 
-        arch_checker_report.reset_raw_report()
-        arch_checker_report.export_checker_report_to_cvs()
-        assert os.path.exists(new_export_path)
-
-        csv_file = read_csv(new_export_path)
-        # An empty report should export header only.
-        assert len(csv_file) == 1
-        assert csv_file[0][1:] == report_const.OUTPUT_CSV_HEADER
-        os.remove(new_export_path)
-        arch_checker_report.reset_raw_report()
-
     def test_check_arch(self):
         """ Test check_arch function with self defined model."""
-        arch_checker_report = ArchChecker.check_model_arch(self.model, self.dummy_input)
+        ArchChecker.check_model_arch(self.model, self.dummy_input)
+        arch_checker_report = ArchChecker._arch_checker_report
         # Node check unit test
         # Model.conv1 has input channel = 3, should fail _check_conv_channel_32_base and
         # _check_conv_channel_larger_than_32
@@ -429,7 +395,8 @@ class TestArchChecker():
             return True
         ArchChecker.add_node_check(torch.nn.ReLU, _temp_check_relu_is_conv2d)
 
-        arch_checker_report = ArchChecker.check_model_arch(self.model, self.dummy_input)
+        ArchChecker.check_model_arch(self.model, self.dummy_input)
+        arch_checker_report = ArchChecker._arch_checker_report
 
         # Relu is TorchActivations. Should under TorchActivations checks.
         assert torch.nn.ReLU not in ArchChecker._node_check_dict
@@ -459,7 +426,8 @@ class TestArchChecker():
 
         ArchChecker.add_pattern_check(_temp_check_get_all_bns)
 
-        arch_checker_report = ArchChecker.check_model_arch(self.model, self.dummy_input)
+        ArchChecker.check_model_arch(self.model, self.dummy_input)
+        arch_checker_report = ArchChecker._arch_checker_report
 
         # all bns should be listed
         assert _temp_check_get_all_bns.__name__ in arch_checker_report.raw_report['Model.bn1'].failed_checks

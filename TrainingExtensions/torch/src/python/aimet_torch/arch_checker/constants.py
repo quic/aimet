@@ -52,13 +52,13 @@ class ArchCheckerReportConstants:
     ERR_MSG_DICT = {
         "_check_conv_channel_32_base": {DF_ISSUE: "The channel size of input/output tensor of this convolution is not a multiple of 32",
                                         DF_RECOMM: "Try adjusting the channels to multiple of 32 to get better performance."},
-        "_check_conv_channel_larger_than_32":{DF_ISSUE: "The channel size of input/output tensor of this convolution is not a multiple of 32",
+        "_check_conv_channel_larger_than_32":{DF_ISSUE: "The channel size of input/output tensor of this convolution is smaller than 32",
                                               DF_RECOMM: "Try adjusting the channels to multiple of 32 to get better performance."},
         "_activation_checks":{"PRelu": {DF_ISSUE:"PRelu activation function degenerates performance.",
                                         DF_RECOMM:"Try use Relu instead."},
                               "SiLU": {DF_ISSUE:"SiLU (Swish) activation function degenerates performance.",
                                        DF_RECOMM:"Try use Hard SiLU (hardswish) instaed."}},
-        "_check_batch_norm_fold": {DF_ISSUE: "The batch norm layer cannot be folded to immediate conv/linear layer. Quantizing standalone BN can lead to performance degeneration.",
+        "_check_batch_norm_fold": {DF_ISSUE: "The batch norm layer cannot be folded to immediate conv/linear layer. Quantizing standalone BN can degenerate performance.",
                                    DF_RECOMM: "Try remove the standalone BN or move the BN adjacent to Conv."},
         "_check_intermediate_padding": {DF_ISSUE: "This convolution includes intermediate padding that degenerates performance.",
                                         DF_RECOMM: "Try move all padding to the first convolution in the sequence: [Conv -> Activation -> (Optionally) BN -> Conv]."}
