@@ -41,7 +41,7 @@ Node checks should follow :param node: :return bool:.
 Pattern checks should follow :param connected_graph: :return list[ops]:
 """
 
-from typing import Dict, List
+from typing import List, Callable
 import torch
 
 from aimet_common.graph_searcher import GraphSearcher
@@ -50,26 +50,8 @@ from aimet_common.utils import AimetLogger
 
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.batch_norm_fold import find_standalone_batchnorm_ops
-from aimet_torch.arch_checker.arch_checker_utils import PatternHandler
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
-
-def get_node_check_dict()-> Dict:
-    """
-    Get dictionary for node checks.
-    :return check_dicts: {check target type: list of checks}.
-    """
-    check_dicts = {torch.nn.modules.conv.Conv2d: [_check_conv_channel_32_base,
-                                                  _check_conv_channel_larger_than_32],
-                   TorchActivations: [_activation_checks],}
-    return check_dicts
-
-def get_pattern_check_list()-> List:
-    """
-    Get a list of pattern checks.
-    :return: List of pattern checks.
-    """
-    return [_check_batch_norm_fold, _check_intermediate_padding]
 
 def _check_conv_channel_32_base(node: torch.nn.Module)-> bool:
     """
@@ -168,3 +150,20 @@ class TorchActivations(metaclass=CheckType):
         if module.__module__ == 'torch.nn.modules.activation':
             return True
         return False
+
+class PatternHandler():
+    """ Object to handle pattern checkes. """
+    def __init__(self, check: Callable):
+        self.check = check
+
+    def __call__(self, *args, **kwargs):
+        """
+        Run pattern check on PatternType_object, op_subset.
+        """
+        _, op_subset = args
+        self.check(op_subset)
+
+NODE_CHECK_DICT = {torch.nn.modules.conv.Conv2d: [_check_conv_channel_32_base,
+                                                  _check_conv_channel_larger_than_32],
+                   TorchActivations: [_activation_checks],}
+PATTERN_CHECK_LIST = [_check_batch_norm_fold, _check_intermediate_padding]
