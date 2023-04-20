@@ -184,6 +184,7 @@ public:
     {
         int numChannel = encodings.size();
 
+        // Collect encoding delta/offset data
         std::vector<float> encodingVector(2 * numChannel);
         for(int i = 0; i < numChannel; i++)
         {
@@ -194,6 +195,9 @@ public:
         // Create encoding tensors
         auto options = at::TensorOptions().dtype(at::kFloat).device(at::kCPU).requires_grad(false);
         at::Tensor encodingTensor = torch::from_blob(encodingVector.data(), {2, numChannel}, options).to(device);
+
+        // Since torch::from_blob doesn't have the ownership of data, cloning CPU tensor to prevent data deallocated
+        // when going out of this function's scope. No need to clone tensor if it is on GPU.
         if(encodingTensor.device().type() == at::kCPU)
         {
             encodingTensor = encodingTensor.clone();
