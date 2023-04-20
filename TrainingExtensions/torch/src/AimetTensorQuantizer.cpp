@@ -180,6 +180,32 @@ public:
         }
     }
 
+    std::tuple<at::Tensor, at::Tensor> makeDeltaOffsetTensor(at::Device device, std::vector<DlQuantization::TfEncoding> &encodings)
+    {
+        int numChannel = encodings.size();
+
+        // Collect encoding delta/offset data
+        std::vector<float> encodingVector(2 * numChannel);
+        for(int i = 0; i < numChannel; i++)
+        {
+            encodingVector[i] = encodings[i].delta;
+            encodingVector[i + numChannel] = encodings[i].offset;
+        }
+
+        // Create encoding tensors
+        auto options = at::TensorOptions().dtype(at::kFloat).device(at::kCPU).requires_grad(false);
+        at::Tensor encodingTensor = torch::from_blob(encodingVector.data(), {2, numChannel}, options).to(device);
+
+        // Since torch::from_blob doesn't have the ownership of data, cloning CPU tensor to prevent data deallocated
+        // when going out of this function's scope. No need to clone tensor if it is on GPU.
+        if(encodingTensor.device().type() == at::kCPU)
+        {
+            encodingTensor = encodingTensor.clone();
+        }
+
+        return std::make_tuple(encodingTensor[0], encodingTensor[1]);
+    }
+
 private:
     bool _isEncodingValid;
     DlQuantization::QuantizationMode _quantizationScheme;
@@ -198,5 +224,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
         .def("getEncoding", &AimetTensorQuantizer::getEncoding)
         .def("resetEncodingStats", &AimetTensorQuantizer::resetEncodingStats)
         .def("getStatsHistogram", &AimetTensorQuantizer::getStatsHistogram)
-        .def("setPercentileValue", &AimetTensorQuantizer::setPercentileValue);
+        .def("setPercentileValue", &AimetTensorQuantizer::setPercentileValue)
+        .def("makeDeltaOffsetTensor", &AimetTensorQuantizer::makeDeltaOffsetTensor);
 }

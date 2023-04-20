@@ -42,7 +42,8 @@ import torch
 import torch.nn
 
 # Import AIMET specific modules
-from aimet_common.defs import AdaroundConstants, QuantizationDataType, QuantScheme
+import aimet_common.AimetTensorQuantizer as AimetTensorQuantizer
+from aimet_common.defs import AdaroundConstants, QuantizationDataType, QuantScheme, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_torch.tensor_quantizer import TensorQuantizer
 from aimet_torch.quantsim_straight_through_grad import broadcast_to_tensor
 
@@ -69,6 +70,7 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         self.alpha = None
         self.use_soft_rounding = True
         self._ch_axis = channel_axis
+        self._cppOp = AimetTensorQuantizer.AimetTensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[quant_scheme])
 
     def quantize_dequantize(self, tensor: torch.Tensor, _) -> torch.Tensor:
         """
@@ -116,12 +118,13 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         assert self.encoding, 'Encoding needs to be set before Adaround the weight tensor.'
 
         if isinstance(self.encoding, list):
-            delta = [enc.delta for enc in self.encoding]                # pylint: disable=not-an-iterable
-            offset = [enc.offset for enc in self.encoding]              # pylint: disable=not-an-iterable
+            # pylint:disable = protected-access
+            delta, offset = self._cppOp.makeDeltaOffsetTensor(tensor.device, self.encoding)
         else:
             delta = self.encoding.delta
             offset = self.encoding.offset
 
+        # pylint:disable = protected-access
         broadcasted_delta = broadcast_to_tensor(tensor, delta, self._ch_axis)
         broadcasted_offset = broadcast_to_tensor(tensor, offset, self._ch_axis)
 
