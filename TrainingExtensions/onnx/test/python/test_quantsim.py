@@ -42,7 +42,7 @@ import numpy as np
 from onnx import load_model
 import onnxruntime as ort
 import pytest
-from aimet_common.defs import QuantScheme
+from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.qc_quantize_op import OpMode
 from aimet_onnx.utils import make_dummy_input
@@ -372,3 +372,44 @@ class TestQuantSim:
             assert cpu_encodings['param_encodings'][name]['offset'] == \
                    gpu_encodings['param_encodings'][name]['offset']
 
+    @pytest.mark.cuda
+    def test_compare_encodings_cpu_gpu_fp16(self):
+        """Test to compare encodings with PT"""
+        if not os.path.exists('/tmp'):
+            os.mkdir('/tmp')
+
+        np.random.seed(0)
+        torch.manual_seed(0)
+
+        inputs = np.random.rand(128, 3, 32, 32).astype(np.float32)
+        model = DummyModel()
+        model.eval()
+
+        torch.onnx.export(model, torch.as_tensor(inputs), '/tmp/dummy_model.onnx',
+                          training=torch.onnx.TrainingMode.PRESERVE,
+                          input_names=['input'], output_names=['output'])
+
+        onnx_model_cpu = load_model('/tmp/dummy_model.onnx')
+        onnx_model_gpu = load_model('/tmp/dummy_model.onnx')
+
+        onnx_sim_cpu = QuantizationSimModel(onnx_model_cpu, use_cuda=False,
+                                            quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                            default_data_type=QuantizationDataType.float, default_param_bw=16,
+                                            default_activation_bw=16)
+        onnx_sim_gpu = QuantizationSimModel(onnx_model_gpu, use_cuda=True,
+                                            quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                            default_data_type=QuantizationDataType.float, default_param_bw=16,
+                                            default_activation_bw=16)
+
+        for node in onnx_sim_gpu.model.graph().node:
+            if node.op_type == "QcQuantizeOp":
+                if 'CUDAExecutionProvider' in ort.get_available_providers():
+                    assert node.domain == "aimet.customop.cuda"
+        for node in onnx_sim_cpu.model.graph().node:
+            if node.op_type == "QcQuantizeOp":
+                assert node.domain == "aimet.customop.cpu"
+
+        out_cpu = onnx_sim_cpu.session.run(None, {'input': inputs})[0]
+        out_gpu = onnx_sim_gpu.session.run(None, {'input': inputs})[0]
+
+        assert (np.max(np.abs(out_cpu - out_gpu)) < 0.05)

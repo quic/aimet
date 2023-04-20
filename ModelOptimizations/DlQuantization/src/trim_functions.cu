@@ -37,7 +37,7 @@
 //==============================================================================
 
 #include <stdexcept>
-
+#include "cuda_fp16.h"
 #include "cuda_util.hpp"
 #include "trim_functions.cuh"
 #include "trim_functions.hpp"
@@ -84,6 +84,22 @@ void quantizeDequantizeGpu(const DTYPE* in, int cnt, const TfEncoding& encoding,
             in, cnt, out, encoding.min, encoding.max, encoding.delta,
             encoding.offset, rounding_mode);
 }
+
+
+__global__ void quantizeDequantizeFp16Kernel(const float* in, int cnt, float* out)
+{
+    CUDA_KERNEL_LOOP(i, cnt)
+    {
+        *(out + i) = __half2float(__float2half(*(in + i)));
+    }
+}
+
+
+void quantizeDequantizeFp16ForGPU(const float* in, int cnt, float* out)
+{
+    quantizeDequantizeFp16Kernel<<<CUDA_NUM_BLOCKS(cnt), CUDA_NUM_THREADS>>>(in, cnt, out);
+}
+
 
 template <typename DTYPE>
 void quantizeToFxpGpu(const DTYPE* in, int cnt, const TfEncoding& encoding,

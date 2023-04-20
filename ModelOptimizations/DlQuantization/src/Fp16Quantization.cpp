@@ -36,34 +36,19 @@
 //
 //==============================================================================
 
-#include "AimetOpUtils.h"
+#include "DlQuantization/Fp16Quantization.hpp"
+#include "trim_functions.hpp"
+#include <stdexcept>
 
-template <typename T>
-void copyInputTensorsToOutputTensors(const T* inTensor, size_t count, T* outTensor, bool useCuda)
+namespace DlQuantization
 {
-    // copy input_tensor to output_tensor
-    if (useCuda)
+
+    void quantizeDequantizeFp16Gpu(const float* in, int cnt, float* out)
     {
-#ifdef ONNX_CUDA
-        cudaMemcpy(outTensor, inTensor, count * sizeof(float), cudaMemcpyDeviceToDevice);
-#else
-        throw std::runtime_error("Not compiled for GPU mode.");
-#endif
-    }
-    else
-    {
-        std::copy(inTensor, inTensor + count, outTensor);
+         #ifdef GPU_QUANTIZATION_ENABLED
+                quantizeDequantizeFp16ForGPU(in, cnt, out);
+         #else
+                throw std::runtime_error("Not compiled for GPU mode.");
+         #endif
     }
 }
-
-
-void quantizeDequantizeFp16Cpu(const float* in, int cnt, float* out)
-{
-    for (int i = 0; i < cnt; ++i)
-    {
-        *(out + i) = Eigen::half_impl::half_to_float(Eigen::half_impl::float_to_half_rtne(*(in + i)));
-    }
-}
-
-
-template void copyInputTensorsToOutputTensors(const float* inTensor, size_t count, float* outTensor, bool useCuda);

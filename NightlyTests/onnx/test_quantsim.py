@@ -44,7 +44,7 @@ from onnx import load_model
 from torchvision import models
 
 from aimet_onnx.utils import make_dummy_input
-from aimet_common.defs import QuantScheme
+from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_torch.quantsim import QuantizationSimModel as PtQuantizationSimModel
 from torch_utils import get_cifar10_data_loaders, train_cifar10
@@ -116,6 +116,49 @@ class TestQuantizeAcceptance:
         dummy_input = make_dummy_input(onnx_model)
         sim = QuantizationSimModel(onnx_model, dummy_input, quant_scheme=QuantScheme.post_training_tf, default_param_bw=8,
                                    default_activation_bw=8)
+
+        def dummy_forward_pass_onnx(session, _):
+            in_tensor = {'input': inputs}
+            session.run(None, in_tensor)
+
+        sim.compute_encodings(dummy_forward_pass_onnx, None)
+
+        pytorch_forward_pass_output = model(torch.as_tensor(inputs))
+        onnx_forward_pass_output = sim.session.run(None, {'input': inputs})
+        assert np.all(np.abs(
+            np.asarray(pytorch_forward_pass_output.detach().numpy()) - np.asarray(onnx_forward_pass_output)) < 0.05)
+
+    def test_quantize_resnet18_fp16(self):
+        """ Test for E2E quantization """
+        np.random.seed(0)
+        torch.manual_seed(0)
+
+        if not os.path.exists(WORKING_DIR):
+            os.makedirs(WORKING_DIR)
+
+        inputs = np.random.rand(1, 3, 224, 224).astype(np.float32)
+
+        model = models.resnet18(pretrained=False)
+
+        # layers_to_ignore = [model.conv1]
+        sim_pt = PtQuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf, default_param_bw=16,
+                                        default_output_bw=16, dummy_input=torch.as_tensor(inputs),
+                                        default_data_type=QuantizationDataType.float)
+
+        def dummy_forward_pass_pt(model, _):
+            model.eval()
+            model(torch.as_tensor(inputs))
+
+        # If 'iterations'set to None, will iterate over all the validation data
+        sim_pt.compute_encodings(dummy_forward_pass_pt, forward_pass_callback_args=None)
+
+        torch.onnx.export(model, torch.as_tensor(inputs), os.path.join(WORKING_DIR, 'resnet18.onnx'),
+                          training=torch.onnx.TrainingMode.PRESERVE,
+                          input_names=['input'], output_names=['output'])
+
+        onnx_model = load_model(os.path.join(WORKING_DIR, 'resnet18.onnx'))
+        sim = QuantizationSimModel(onnx_model, quant_scheme=QuantScheme.post_training_tf, default_param_bw=16,
+                                   default_activation_bw=16, default_data_type=QuantizationDataType.float)
 
         def dummy_forward_pass_onnx(session, _):
             in_tensor = {'input': inputs}
