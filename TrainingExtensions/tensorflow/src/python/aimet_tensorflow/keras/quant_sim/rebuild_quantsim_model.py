@@ -56,7 +56,7 @@ class RebuiltQuantSimModelFactory:
     This use case occurs during exporting of the model.
     """
     # pylint: disable=bad-whitespace, protected-access
-    def __init__(self, original_quantsim: tf.keras.Model): # UPDATE
+    def __init__(self, original_quantsim: tf.keras.Model):
         """
         :param original_quantsim_model: The original QuantizationSimModel
         """
