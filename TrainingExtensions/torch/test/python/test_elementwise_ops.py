@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -44,7 +44,7 @@ import numpy as np
 import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme
 from aimet_torch.elementwise_ops import Add, Subtract, Multiply, Divide, Concat, MatMul, Erf, Sqrt, \
-    Greater, Less, GreaterEqual, LessEqual, NotEqual, Equal, Where, Mean, Sum, Prod
+    Greater, Less, GreaterEqual, LessEqual, NotEqual, Equal, Where, Mean, Sum, Prod, Log, Abs, Neg
 from aimet_torch.quantsim import QuantizationSimModel
 
 
@@ -437,3 +437,30 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         out = model(input1)
         out1 = torch.prod(input1)
         self.assertTrue(np.allclose(out, out1))
+
+    def test_log_op(self):
+        torch.manual_seed(42)
+        model = Model3(Log())
+        inputs = torch.rand(4, 3, 28, 28)
+
+        custom_module_out = model(inputs)
+        original_module_out = torch.log(inputs)
+        self.assertTrue(np.allclose(custom_module_out, original_module_out))
+
+    def test_abs_op(self):
+        torch.manual_seed(42)
+        model = Model3(Abs())
+        inputs = torch.rand(4, 3, 28, 28)
+
+        custom_module_out = model(inputs)
+        original_module_out = torch.abs(inputs)
+        self.assertTrue(np.allclose(custom_module_out, original_module_out))
+
+    def test_neg_op(self):
+        torch.manual_seed(42)
+        model = Model3(Neg())
+        inputs = torch.rand(4, 3, 28, 28)
+
+        custom_module_out = model(inputs)
+        original_module_out = torch.neg(inputs)
+        self.assertTrue(np.allclose(custom_module_out, original_module_out))

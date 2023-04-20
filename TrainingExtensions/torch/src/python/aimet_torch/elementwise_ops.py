@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -95,6 +95,9 @@ MaskedFill = create_wrapper_module('MaskedFill', torch.Tensor.masked_fill_)
 Mean = create_wrapper_module('Mean', torch.mean)
 Sum = create_wrapper_module('Sum', torch.sum)
 Prod = create_wrapper_module('Prod', torch.prod)
+Log = create_wrapper_module('Log', torch.log)
+Abs = create_wrapper_module('Abs', torch.abs)
+Neg = create_wrapper_module('Neg', torch.neg)
 
 
 # modules for functional operations defined under torch.nn.functional package
