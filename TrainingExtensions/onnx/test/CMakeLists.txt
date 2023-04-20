@@ -57,6 +57,7 @@ endif(DEFINED ENV{DEPENDENCY_DATA_PATH})
 if (ENABLE_CUDA)
 include_directories(BEFORE
         ${CMAKE_CURRENT_SOURCE_DIR}/../src
+        ${EIGEN3_INCLUDE_DIR}
         )
 
 add_executable(OnnxTrainingExtensionCppTest
