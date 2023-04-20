@@ -51,6 +51,8 @@ add_library(OnnxCppOps SHARED
 
 find_path(ONNXRUNTIME_INC "onnxruntime_cxx_api.h" PATH_SUFFIXES onnxruntime_headers/include)
 
+find_package(Eigen3 REQUIRED)
+include_directories(${EIGEN3_INCLUDE_DIR})
 
 target_include_directories(OnnxCppOps PRIVATE
         ${ONNXRUNTIME_INC}

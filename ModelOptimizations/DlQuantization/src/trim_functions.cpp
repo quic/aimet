@@ -46,7 +46,6 @@
 #include <thread>
 #include <vector>
 #include <functional>
-
 #include "DlQuantization/Quantization.hpp"
 #include "trim_functions.hpp"
 
@@ -186,6 +185,7 @@ void quantizeDequantizeCpu(const DTYPE* in, int cnt, const TfEncoding& encoding,
         dequantizeValueCpu<DTYPE>(&out[i], encoding.delta, encoding.offset);
     }
 }
+
 
 template <typename DTYPE>
 void quantizeToFxpPacked(const DTYPE* in, int cnt, const TfEncoding& encoding,
