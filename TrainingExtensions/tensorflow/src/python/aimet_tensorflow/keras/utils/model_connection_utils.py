@@ -95,6 +95,25 @@ class ModelLayerConnections:
                     {outbound_node.layer.name: outbound_node.call_kwargs}
                 )
 
+        # After having all the inbound nodes for a given layer, we go back through and for any layers that
+        # have multi input, we sort the inputs based on the original call args.
+        KERAS_SYMBOLIC_TENSOR_INDEX = 0
+        for layer_name, inbound_nodes in model_layer_connections[ModelLayerConnectionsProperties.INBOUND_NODES].items():
+            # If the original keras symbolic tensors for a given layer are a List, then we set the `original_keras_symbolic_tensors_order`
+            # param and sort the layers inbound nodes.
+            if isinstance(
+                    original_keras_symbolic_tensors_order :=
+                    model_layer_connections[ModelLayerConnectionsProperties.CALL_ARGS][layer_name][KERAS_SYMBOLIC_TENSOR_INDEX],
+                    typing.List):
+                ordered_inputs = {
+                    k._keras_history.layer.name: v #pylint: disable=protected-access
+                    for v, k in enumerate(original_keras_symbolic_tensors_order)
+                }
+
+                correctly_ordered_inbound_nodes = sorted(inbound_nodes, key=lambda current_input, oi=ordered_inputs: oi[current_input])
+
+                model_layer_connections[ModelLayerConnectionsProperties.INBOUND_NODES][layer_name] = correctly_ordered_inbound_nodes
+
         return model_layer_connections
 
     @staticmethod
