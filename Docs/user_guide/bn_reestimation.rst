@@ -9,10 +9,10 @@ Overview
 ========
 
 The BN Re-estimation feature utilizes a small subset of training data to individually re-estimate the statistics of the
-Batch Normalization (BN) layers in a model. These BN statistics are then used to adjust the quantization scale parameter
-of the preceeding Convolution or Linear laye. Effectively, the BN layers are folded.
+Batch Normalization (BN) layers in a model. These BN statistics are then used to adjust the quantization scale parameters
+of the preceeding Convolution or Linear layers. Effectively, the BN layers are folded.
 
-The BN Re-estimation feature is applied after performaing Quantization Aware Training (QAT) with Range Learning, with
+The BN Re-estimation feature is applied after performing Quantization Aware Training (QAT) with Range Learning, with
 Per Channel Quantization (PCQ) enabled. It is very important NOT to fold the BN layers before performing QAT. The BN layers are
 folded ONLY after QAT and the re-estimation of the BN statistics are completed. The Workflow section below, covers
 the exact sequence of steps.
