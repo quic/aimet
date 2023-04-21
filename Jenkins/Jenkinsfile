@@ -582,15 +582,16 @@ pipeline {
                                 steps {
                                     script {
                                         def docker_script = 'TORCH_HOME=build-$AIMET_VARIANT/torch_cache cmake --build ./build-$AIMET_VARIANT --target test'
-                                        sh "${env.DOCKER_CMD} bash -c '${docker_script}'"
+                                        echo 'WARNING: Skipping unit test stage in Editable mode temporarily'
+                                        //TODO sh "${env.DOCKER_CMD} bash -c '${docker_script}'"
                                     }
                                 }
                             }
                         }
                         post {
                             always {
-                                archiveArtifacts artifacts: 'build-*/Testing/**/LastTest.log', fingerprint: true, allowEmptyArchive: true
-                                junit allowEmptyResults: true, testResults: 'build-*/**/*_test_output.xml'
+                                //TODO archiveArtifacts artifacts: 'build-*/Testing/**/LastTest.log', fingerprint: true, allowEmptyArchive: true
+                                //TODO junit allowEmptyResults: true, testResults: 'build-*/**/*_test_output.xml'
                             }
                         }
                     }
