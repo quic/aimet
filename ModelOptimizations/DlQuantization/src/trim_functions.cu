@@ -77,6 +77,22 @@ __global__ void quantizeToFxpKernel(const DTYPE* in, int cnt, DTYPE* out,
 }
 
 template <typename DTYPE>
+__global__ void quantizeDequantizePerChannelKernel(const DTYPE* in, int numChannel, int numElement, int numElementPerChannel,
+                                                   DTYPE* out, DTYPE* encodingMin, DTYPE* encodingMax, DTYPE* encodingDelta,
+                                                   DTYPE* encodingOffset, RoundingMode roundingMode)
+{
+    CUDA_KERNEL_LOOP(i, numElement)
+    {
+        int channelIdx = (i / numElementPerChannel) % numChannel;
+        quantizeToFxpDevice<DTYPE>(in + i, out + i,
+                                   *(encodingMin + channelIdx), *(encodingMax + channelIdx),
+                                   *(encodingDelta + channelIdx), *(encodingOffset + channelIdx),
+                                   roundingMode, i);
+        dequantizeFromFxpDevice<DTYPE>(out + i, *(encodingDelta + channelIdx), *(encodingOffset + channelIdx));
+    }
+}
+
+template <typename DTYPE>
 void quantizeDequantizeGpu(const DTYPE* in, int cnt, const TfEncoding& encoding,
                            DTYPE* out, RoundingMode rounding_mode)
 {
@@ -114,6 +130,18 @@ void quantizeToFxpGpu(const DTYPE* in, int cnt, const TfEncoding& encoding,
             encoding.offset, rounding_mode, shift);
 }
 
+template <typename DTYPE>
+void quantizeDequantizePerChannelGpu(const DTYPE* in, int numChannel, int numElement, int numElementPerChannel, DTYPE* out,
+                                     DTYPE* encodingMin, DTYPE* encodingMax, DTYPE* encodingDelta, DTYPE* encodingOffset,
+                                     RoundingMode roundingMode)
+{
+
+    quantizeDequantizePerChannelKernel<DTYPE><<<CUDA_NUM_BLOCKS(numElement), CUDA_NUM_THREADS>>>(
+                    in, numChannel, numElement, numElementPerChannel, out, encodingMin, encodingMax, encodingDelta,
+                    encodingOffset, roundingMode);
+
+}
+
 // Explicit instantiations
 template void quantizeDequantizeGpu(const double* in, int cnt, const TfEncoding& encoding, double* out,
                                     RoundingMode rounding_mode);
@@ -127,4 +155,13 @@ template void quantizeToFxpGpu(const double* in, int cnt, const TfEncoding& enco
 
 template void quantizeToFxpGpu(const float* in, int cnt, const TfEncoding& encoding, float* out,
                                RoundingMode rounding_mode, bool shiftToSigned);
+
+template void quantizeDequantizePerChannelGpu(const float* in, int numChannel, int numElement, int numElementPerChannel, float* out,
+                                              float* encodingMin, float* encodingMax, float* encodingDelta, float* encodingOffset,
+                                              RoundingMode roundingMode);
+
+template void quantizeDequantizePerChannelGpu(const double* in, int numChannel, int numElement, int numElementPerChannel, double* out,
+                                              double* encodingMin, double* encodingMax, double* encodingDelta, double* encodingOffset,
+                                              RoundingMode roundingMode);
+
 }   // End of namespace DlQuantization

@@ -95,6 +95,10 @@ void dequantizeFromPackedFxpCpu(const uint8_t* input, int cnt,
 double computeDelta(double encodingMin, double encodingMax, double numSteps);
 double computeOffset(double encodingMin, double delta);
 
+template <typename DTYPE>
+void quantizeDequantizePerChannel(const DTYPE* in, int numChannel, int numElement, int numElementPerChannel, DTYPE* out,
+                                  DTYPE* encodingMin, DTYPE* encodingMax, DTYPE* encodingDelta, DTYPE* encodingOffset,
+                                  ComputationMode modeCpuGpu, RoundingMode roundingMode);
 
 // GPU implementations ...
 #ifdef GPU_QUANTIZATION_ENABLED
@@ -106,6 +110,11 @@ void quantizeToFxpGpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYP
 template <typename DTYPE>
 void quantizeDequantizeGpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out,
                            RoundingMode rounding_mode);
+
+template <typename DTYPE>
+void quantizeDequantizePerChannelGpu(const DTYPE* in, int numChannel, int numElement, int numElementPerChannel, DTYPE* out,
+                                     DTYPE* encodingMin, DTYPE* encodingMax, DTYPE* encodingDelta, DTYPE* encodingOffset,
+                                     RoundingMode roundingMode);
 
 #endif   // GPU_QUANTIZATION_ENABLED
 

@@ -233,6 +233,71 @@ public:
         return std::make_tuple(encodingTensor[0], encodingTensor[1]);
     }
 
+    void gateMinMaxTensor(at::Tensor &encodingMin, at::Tensor &encodingMax, at::TensorOptions options)
+    {
+        at::Tensor zeroTensor = at::zeros({1}, options);
+        encodingMin = torch::minimum(encodingMin, zeroTensor);
+        encodingMax = torch::maximum(encodingMax, zeroTensor);
+        encodingMax = torch::maximum(encodingMax, encodingMin + 1e-5);
+    }
+
+    at::Tensor computeDeltaTensor(at::Tensor encodingMin, at::Tensor encodingMax, double numStep)
+    {
+        at::Tensor encodingDelta = (encodingMax - encodingMin) / numStep;
+        return encodingDelta;
+    }
+
+    at::Tensor computeOffsetTensor(at::Tensor encodingMin, at::Tensor encodingDelta)
+    {
+        at::Tensor encodingOffset = at::round(encodingMin / encodingDelta);
+        return encodingOffset;
+    }
+
+    at::Tensor quantizeDequantizePerChannel(at::Tensor input, std::vector<DlQuantization::TfEncoding> encodings,
+                                              size_t numChannel, size_t numElement, size_t numElementPerChannel,
+                                              DlQuantization::RoundingMode roundingMode, bool useCuda)
+    {
+        // Allocate an output tensor as the same shape as the input
+        at::Tensor output = at::empty(input.sizes(), input.options());
+        int encodingTensorSize = 2 * numChannel;
+
+        // Collect encoding min/max data
+        std::vector<float> encodingVector(encodingTensorSize);
+        for(int i = 0; i < numChannel; i++)
+        {
+            encodingVector[i] = encodings[i].min;
+            encodingVector[i + numChannel] = encodings[i].max;
+        }
+
+        // Create encoding tensors
+        auto options = at::TensorOptions().dtype(at::kFloat).device(at::kCPU).requires_grad(false);
+        at::Tensor encodingTensor = torch::from_blob(encodingVector.data(), {2, numChannel}, options).to(input.device());
+
+        at::Tensor encodingMin = encodingTensor[0];
+        at::Tensor encodingMax = encodingTensor[1];
+
+        // Calculate number of steps
+        double numSteps = pow(2, encodings[0].bw) - 1;
+        if (encodings[0].min == -encodings[0].max)
+        {
+            numSteps -= 1;
+        }
+
+        // Compute delta and offset on the fly
+        gateMinMaxTensor(encodingMin, encodingMax, encodingTensor.options());
+        at::Tensor encodingDelta = computeDeltaTensor(encodingMin, encodingMax, numSteps);
+        at::Tensor encodingOffset = computeOffsetTensor(encodingMin, encodingDelta);
+
+        _tensorQuantizationSim->quantizeDequantizeTensorPerChannel(input.data<float>(), numChannel, numElement,
+                                                                   numElementPerChannel, output.data<float>(),
+                                                                   encodingMin.data<float>(), encodingMax.data<float>(),
+                                                                   encodingDelta.data<float>(), encodingOffset.data<float>(),
+                                                                   roundingMode, useCuda);
+
+        return output;
+    }
+
+
 private:
     bool _isEncodingValid;
     DlQuantization::QuantizationMode _quantizationScheme;
@@ -252,5 +317,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
         .def("resetEncodingStats", &AimetTensorQuantizer::resetEncodingStats)
         .def("getStatsHistogram", &AimetTensorQuantizer::getStatsHistogram)
         .def("setPercentileValue", &AimetTensorQuantizer::setPercentileValue)
-        .def("makeDeltaOffsetTensor", &AimetTensorQuantizer::makeDeltaOffsetTensor);
+        .def("makeDeltaOffsetTensor", &AimetTensorQuantizer::makeDeltaOffsetTensor)
+        .def("quantizeDequantizePerChannel", &AimetTensorQuantizer::quantizeDequantizePerChannel);
 }

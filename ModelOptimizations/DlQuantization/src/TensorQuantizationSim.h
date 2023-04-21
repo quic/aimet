@@ -94,6 +94,11 @@ public:
     void generateScaleOffset(double &encodingMin, double &encodingMax, uint8_t bw, double &encodingScale,
                              double &encodingOffset);
 
+    void quantizeDequantizeTensorPerChannel(const DTYPE* inputTensorData, size_t numChannel, size_t numElement,
+                                            size_t numElementPerChannel, DTYPE* outputTensorData, DTYPE* encodingMin,
+                                            DTYPE* encodingMax, DTYPE* encodingDelta, DTYPE* encodingOffset,
+                                            RoundingMode roundingMode, bool useCuda) override;
+
     inline DlQuantization::ComputationMode getComputationMode(bool use_cuda)
     {
         return (use_cuda ? DlQuantization::ComputationMode::COMP_MODE_GPU
