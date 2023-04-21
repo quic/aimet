@@ -373,7 +373,7 @@ class PassThroughOp(tf.keras.layers.Layer):
         """
         return inputs
 
-# pylint: disable=too-many-branches, protected-access, too-many-locals
+# pylint: disable=too-many-branches, protected-access, too-many-locals, too-many-nested-blocks
 def _delete_bn_from_functional(model: tf.keras.Model,
                                bn_layers_to_remove: List[tf.keras.layers.BatchNormalization]) -> tf.keras.Model:
     """
@@ -399,7 +399,6 @@ def _delete_bn_from_functional(model: tf.keras.Model,
     #  New model flow   \                       /
     #                    \                     /
     #                     \___________________/
-    #
 
     def wrapped_bn_layer_in_bns_to_remove(layer: tf.keras.layers.Layer) -> bool:
         return isinstance(layer, QcQuantizeWrapper) and layer._layer_to_wrap in bn_layers_to_remove
@@ -447,7 +446,9 @@ def _delete_bn_from_functional(model: tf.keras.Model,
                     [outlayer.replace(current_layer.name, *all_batch_norms_inbound_layers_names)
                      for outlayer in model_layer_connections[ModelLayerConnectionsProperties.INBOUND_NODES][outbound_node.outbound_layer.name]]
 
-                batch_norms_replaced_with_names[current_layer.name] = batch_norms_outbound_layers_new_inbound_layers_names
+                # Keras Batch Norm only supports one input tensors. Meaning there is one singular layer coming into it.
+                # Hence, 'inbound_nodes[0]'.
+                batch_norms_replaced_with_names[current_layer.name] = current_layer._inbound_nodes[0].inbound_layers.name
 
                 model_layer_connections[ModelLayerConnectionsProperties.INBOUND_NODES].update(
                     {outbound_node.outbound_layer.name: batch_norms_outbound_layers_new_inbound_layers_names})
@@ -461,10 +462,8 @@ def _delete_bn_from_functional(model: tf.keras.Model,
         # Otherwise, treat like a normal layer
         else:
             # For layers that have multiple inputs, order matters for what is fed into the layer. For example, if we have
-            # a Concat layer with inputs of MaxPool and Conv2D, then we need to make sure the order of those match the
-            # original models order. If the Concat's original input order is MaxPool followed by Conv2D, then layer_input needs
-            # to match this. Moreover, if one of the original inputs was a Batch Norm layer that was deleted, it needs to
-            # be replaced with the folded layer and in the correct order.
+            # an Add layer with inputs from a ReLU and a Batch Norm, the order they go into the Add matters. Furthermore,
+            # if the Batch Norm is deleted, then it needs to be replaced with it's folded layer in the same order.
 
             KERAS_SYMBOLIC_TENSORS_INDEX = 0
             # Check if we need to change layer_input order. If there is just one input, there is no order.
@@ -482,19 +481,25 @@ def _delete_bn_from_functional(model: tf.keras.Model,
 
                 # Check if a Batch Norm that was deleted is in the original keras symbolic order.
                 name_of_bn_replaced = [
-                    tensor.name for tensor in original_keras_symbolic_tensors_order
-                    if tensor.name.split('/')[0] in batch_norms_replaced_with_names
+                    tensor._keras_history.layer.name
+                    for tensor in original_keras_symbolic_tensors_order
+                    if tensor._keras_history.layer.name in batch_norms_replaced_with_names
                 ]
 
                 # If a Batch Norm is found, then the keras symbolic tensor order is slightly updated to replace the
                 # Batch Norm with the folded layer. Otherwise, we can just use the original keras symbolic tensor order.
                 if name_of_bn_replaced:
-                    name_of_bn_replaced = name_of_bn_replaced[0].split('/')[0]
 
-                    updated_keras_symbolic_tensors_order = [
-                        model_layer_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS][new_inbound_layer_name]
-                        for new_inbound_layer_name in batch_norms_replaced_with_names[name_of_bn_replaced]
-                    ]
+                    updated_keras_symbolic_tensors_order = []
+                    for keras_symbolic_tensor in original_keras_symbolic_tensors_order:
+                        if (name_of_bn := keras_symbolic_tensor._keras_history.layer.name) in name_of_bn_replaced: #pylint: disable=superfluous-parens
+                            updated_keras_symbolic_tensors_order.append(
+                                model_layer_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS][
+                                    batch_norms_replaced_with_names[name_of_bn]
+                                ]
+                            )
+                        else:
+                            updated_keras_symbolic_tensors_order.append(keras_symbolic_tensor)
 
                     # Dictionary of the keras symbolic tensor name to the order.
                     ordered_inputs = {k.name: v for v, k in enumerate(updated_keras_symbolic_tensors_order)}
