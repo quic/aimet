@@ -590,6 +590,7 @@ pipeline {
                         }
                         post {
                             always {
+                                echo 'WARNING: Skipping test results archiving step in Editable mode temporarily'
                                 //TODO archiveArtifacts artifacts: 'build-*/Testing/**/LastTest.log', fingerprint: true, allowEmptyArchive: true
                                 //TODO junit allowEmptyResults: true, testResults: 'build-*/**/*_test_output.xml'
                             }
