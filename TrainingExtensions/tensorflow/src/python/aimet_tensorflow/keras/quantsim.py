@@ -48,8 +48,6 @@ from aimet_common import libpymo
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_common.quantsim import encoding_version, extract_global_quantizer_args
-from aimet_tensorflow.defs import AxisHandling
-import aimet_tensorflow.utils.quantsim as quantsim_utils
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.graphsearchtuils import GraphSearchUtils
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
@@ -60,6 +58,9 @@ from aimet_tensorflow.keras.quant_sim.tensor_quantizer import TensorQuantizer, A
 from aimet_tensorflow.keras.quantsim_config.quantsim_config import QuantSimConfigurator, INPUT_QUANTIZERS, \
     OUTPUT_QUANTIZERS, PARAM_QUANTIZERS
 from aimet_tensorflow.keras.utils.common import convert_h5_model_to_pb_model
+
+from aimet_tensorflow.keras.defs import AxisHandling
+import aimet_tensorflow.keras.utils.common as keras_common_utils
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -534,7 +535,7 @@ class QuantizationSimModel(tf.keras.Model):
                     if not input_quantizer.is_enabled():
                         _logger.info("Not loading encodings for quantizer: %s as it is disabled", tensor_name)
                         continue
-                    encoding, is_symmetric = quantsim_utils.create_encoding_from_dict(activation_encodings[tensor_name][0])
+                    encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(activation_encodings[tensor_name][0])
                     input_quantizer.tensor_quantizer.isEncodingValid = True
                     input_quantizer.set_quantizer_encodings(encoding.bw, is_symmetric, encoding,
                                                             libpymo.TensorQuantizerOpMode.quantizeDequantize)
@@ -552,12 +553,12 @@ class QuantizationSimModel(tf.keras.Model):
                         _logger.info("Not loading encodings for parameter: %s as quantizer is disabled", param_name)
                         continue
                     if isinstance(param_quantizer, StaticGridPerChannelQuantizer):
-                        encoding, is_symmetric = quantsim_utils.create_encoding_from_dict(param_encodings[param_name])
+                        encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(param_encodings[param_name])
                         for tensor_quantizer in param_quantizer.tensor_quantizer:
                             tensor_quantizer.isEncodingValid = True
                         bw = encoding[0].bw
                     else:
-                        encoding, is_symmetric = quantsim_utils.create_encoding_from_dict(param_encodings[param_name][0])
+                        encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(param_encodings[param_name][0])
                         param_quantizer.tensor_quantizer.isEncodingValid = True
                         bw = encoding.bw
                     param_quantizer.set_quantizer_encodings(bw, is_symmetric, encoding,
@@ -585,7 +586,7 @@ class QuantizationSimModel(tf.keras.Model):
                     if not output_quantizer.is_enabled():
                         _logger.info("Not loading encodings for quantizer: %s as it is disabled", tensor_name)
                         continue
-                    encoding, is_symmetric = quantsim_utils.create_encoding_from_dict(activation_encodings[tensor_name][0])
+                    encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(activation_encodings[tensor_name][0])
                     output_quantizer.tensor_quantizer.isEncodingValid = True
                     output_quantizer.set_quantizer_encodings(encoding.bw, is_symmetric, encoding,
                                                              libpymo.TensorQuantizerOpMode.quantizeDequantize)

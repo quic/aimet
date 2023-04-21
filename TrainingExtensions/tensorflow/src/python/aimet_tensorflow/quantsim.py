@@ -61,15 +61,18 @@ from aimet_tensorflow.utils import transformer_utils
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 from aimet_tensorflow.utils.op.embedding import get_embedding_params_using_patterns
 from aimet_tensorflow.utils.quantsim import create_op_to_quant_ops_dict, is_op_quantizable, \
-    get_time_steps_tensor_from_rnn_inner_ops, create_encoding_from_dict, swap_last_two_dim
+    get_time_steps_tensor_from_rnn_inner_ops, swap_last_two_dim
 from aimet_tensorflow.utils.graph import updated_graph_flow_context_to_loop_context, set_graph_flow_context, \
     op_not_in_loop_control_flow_context
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
-from aimet_tensorflow.defs import ParameterInfo, AxisHandling
+from aimet_tensorflow.defs import ParameterInfo
 from aimet_tensorflow.quantizer_info import QuantizerInfo, QuantizerType, quant_scheme_to_libpymo
 from aimet_tensorflow.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_tensorflow.quantsim_recurrent import _select_simple_rnn_internal_ops_to_quantize, \
     _select_lstm_internal_ops_to_quantize, SUPPORTED_RECURRENT_TYPES
+
+from aimet_tensorflow.keras.defs import AxisHandling
+from aimet_tensorflow.keras.utils.common import create_encoding_from_dict
 
 # this is required to associate gradient with QcQuantize op
 from aimet_tensorflow import quantsim_straight_through_grad      # pylint: disable=unused-import
