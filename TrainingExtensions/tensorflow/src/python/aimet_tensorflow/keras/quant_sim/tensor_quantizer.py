@@ -49,7 +49,7 @@ from aimet_common.defs import MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, 
     RANGE_LEARNING_SCHEMES
 from aimet_common.quantsim import calculate_delta_offset, compute_min_max_given_delta_offset
 from aimet_common.utils import AimetLogger
-from aimet_tensorflow.quantsim import AxisHandling
+from aimet_tensorflow.keras.defs import AxisHandling
 from aimet_tensorflow.keras.quant_sim.quantsim_straight_through_grad import qc_straight_through_estimator_grad, \
     quantsim_custom_grad_learned_grid, quantsim_per_channel_custom_grad_learned_grid
 import aimet_tensorflow.keras.utils.common as keras_common_utils

@@ -41,7 +41,7 @@ from typing import Tuple
 import tensorflow as tf
 
 from aimet_common import libpymo
-from aimet_tensorflow.defs import AxisHandling
+from aimet_tensorflow.keras.defs import AxisHandling
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 
 
