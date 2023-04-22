@@ -470,8 +470,11 @@ class StaticGridPerTensorQuantizer(StaticGridTensorQuantizer):
                     tensor = torch.tensor([self.encoding_min_max_fixed_vals[0],
                                            self.encoding_min_max_fixed_vals[1]])
                 for op in self._cppOp:
+                    # If we have a half-float tensor, just upcast it to float
+                    # Need to change this when libpymo can handle half-float tensors
                     if tensor.dtype == torch.float16:
                         tensor = tensor.to(torch.float32)
+
                     op.updateStats(tensor, tensor.is_cuda)
 
 
@@ -554,6 +557,11 @@ class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
                     for op in self._cppOp:
                         op.updateStats(tensor, tensor.is_cuda)
                 else:
+                    # If we have a half-float tensor, just upcast it to float
+                    # Need to change this when libpymo can handle half-float tensors
+                    if tensor.dtype == torch.float16:
+                        tensor = tensor.to(torch.float32)
+
                     for channel_idx, op in enumerate(self._cppOp):
                         tensor_slice = tensor.select(self._ch_axis, channel_idx).contiguous(
                             memory_format=torch.contiguous_format)
@@ -1071,10 +1079,15 @@ class QuantizeDequantize(torch.autograd.Function):
         if tensor_quantizer.data_type == QuantizationDataType.float:
             quantized_tensor = QuantizeDequantize._quantize_float(tensor, tensor_quantizer, False)
         else:
+            # If we have a half-float tensor, just upcast it to float
+            # Need to change this when libpymo can handle half-float tensors
             dtype = tensor.dtype
             tensor = tensor.to(torch.float32)
+
             quantized_tensor = tensor_quantizer._cppOp[0].quantizeDequantize(tensor, tensor_quantizer.encoding,
                                                                              round_mode, tensor.is_cuda)
+
+            # Cast the quantized tensor to the same dtype as the original tensor
             quantized_tensor = quantized_tensor.to(dtype)
 
         return quantized_tensor
@@ -1085,6 +1098,11 @@ class QuantizeDequantize(torch.autograd.Function):
         if tensor_quantizer.data_type == QuantizationDataType.float:
             quantized_tensor = QuantizeDequantize._quantize_float(tensor, tensor_quantizer, True)
         else:
+            # If we have a half-float tensor, just upcast it to float
+            # Need to change this when libpymo can handle half-float tensors
+            dtype = tensor.dtype
+            tensor = tensor.to(torch.float32)
+
             # Collect info for doing quantize-dequantize
             # pylint: disable=protected-access
             sizes = [*tensor.shape, 1]
@@ -1093,10 +1111,14 @@ class QuantizeDequantize(torch.autograd.Function):
             num_element_per_channel = functools.reduce(lambda x, y: x * y, sizes[tensor_quantizer.channel_axis + 1:])
             # Vectorized CppOp
             # pylint: disable=protected-access
-            quantized_tensor = tensor_quantizer._cppOp[0].quantizeDequantizePerChannel(tensor, tensor_quantizer._encoding,
+            quantized_tensor = tensor_quantizer._cppOp[0].quantizeDequantizePerChannel(tensor,
+                                                                                       tensor_quantizer._encoding,
                                                                                        num_channel, num_element,
                                                                                        num_element_per_channel,
                                                                                        round_mode, tensor.is_cuda)
+
+            # Cast the quantized tensor to the same dtype as the original tensor
+            quantized_tensor = quantized_tensor.to(dtype)
 
         return quantized_tensor
 
