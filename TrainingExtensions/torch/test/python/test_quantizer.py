@@ -414,6 +414,22 @@ class Model_Inputs_Shared_Constant_Intermediate(nn.Module):
         return x, y, z
 
 
+class HalfFloatTestModel(nn.Module):
+    def __init__(self):
+        super(HalfFloatTestModel, self).__init__()
+        self.fc1 = nn.Linear(320, 50)
+        self.relu1 = nn.ReLU()
+        self.fc2 = nn.Linear(50, 10)
+        self.relu2 = nn.ReLU()
+
+    def forward(self, x):
+        x = x.view(-1, 320)
+        x = self.fc1(x)
+        x = self.relu1(x)
+        x = self.fc2(x)
+        x = self.relu2(x)
+        return x
+
 class TestQuantizationSimStaticGrad:
     def test_is_leaf_module_positive(self):
         """With an actual leaf module"""
@@ -3460,7 +3476,7 @@ class TestQuantizationSimLearnedGrid:
         output.backward()
         optimizer.step()
 
-    def test_fp16_model_sim_creation_cpu(self):
+    def test_fp16_model_sim_eval_train_cpu(self):
         class DummyModel(nn.Module):
             def __init__(self):
                 super(DummyModel, self).__init__()
@@ -3490,90 +3506,133 @@ class TestQuantizationSimLearnedGrid:
                                    dummy_input=dummy_input)
 
         def dummy_forward(model, _):
-            model(dummy_input)
+            return model(dummy_input)
 
         sim.compute_encodings(dummy_forward, None)
         print(sim.model)
-        dummy_forward(sim.model, None)
+
+        optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.05, momentum=0.5)
+        output = dummy_forward(model, None)
+        loss = output.sum()
+        loss.backward()
+        optimizer.step()
+
 
     @pytest.mark.cuda
-    def test_fp16_model_sim_creation_gpu(self):
-        class DummyModelHalf(nn.Module):
-            def __init__(self):
-                super(DummyModelHalf, self).__init__()
-                self.fc1 = nn.Linear(320, 50)
-                self.relu1 = nn.ReLU()
-                self.fc2 = nn.Linear(50, 10)
-                self.relu2 = nn.ReLU()
+    def test_fp16_model_sim_eval_train_gpu(self):
 
-            def forward(self, x):
-                x = x.view(-1, 320)
-                x = self.fc1(x)
-                x = x.float()
-                x = self.relu1(x)
-                x = x.half()
-                x = self.fc2(x)
-                x = x.float()
-                x = self.relu2(x)
-                x = x.half()
-                return x
+        model = HalfFloatTestModel().cuda().half()
+        dummy_input = torch.rand(1, 20, 4, 4).half().cuda()
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                   dummy_input=dummy_input)
 
-        class DummyModel(nn.Module):
-            def __init__(self):
-                super(DummyModel, self).__init__()
-                self.fc1 = nn.Linear(320, 50)
-                self.relu1 = nn.ReLU()
-                self.fc2 = nn.Linear(50, 10)
-                self.relu2 = nn.ReLU()
+        def dummy_forward(model, _):
+            output = None
+            for _ in range(100):
+                output = model(dummy_input)
+            return output
 
-            def forward(self, x):
-                x = x.view(-1, 320)
-                x = self.fc1(x)
-                x = self.relu1(x)
-                x = self.fc2(x)
-                x = self.relu2(x)
-                return x
+        optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.05, momentum=0.5)
+        sim.compute_encodings(dummy_forward, None)
+        output = dummy_forward(model, None)
+        loss = output.sum()
+        loss.backward()
+        optimizer.step()
 
-        import time
+    @pytest.mark.cuda
+    def test_fp16_model_sim_eval_train_learned_grid_per_channel_gpu(self):
 
-        def run_half():
-            model = DummyModel().cuda().half()
-            dummy_input = torch.rand(1, 20, 4, 4).half().cuda()
-            sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
-                                       dummy_input=dummy_input)
+        quantsim_config = {
+                                "defaults":
+                                {
+                                    "ops":
+                                    {
+                                        "is_output_quantized": "True",
+                                        "is_symmetric": "True"
+                                    },
+                                    "params":
+                                    {
+                                        "is_quantized": "True",
+                                        "is_symmetric": "True"
+                                    },
+                                    "strict_symmetric": "False",
+                                    "unsigned_symmetric": "True",
+                                    "per_channel_quantization": "True",
+                                },
+                                "params": {},
+                                "op_type": {},
+                                "supergroups": [],
+                                "model_input": {},
+                                "model_output": {}
+                          }
+        with open("./data/quantsim_config.json", "w") as f:
+            json.dump(quantsim_config, f)
 
-            def dummy_forward(model, _):
-                for _ in range(100):
-                    model(dummy_input)
+        model = HalfFloatTestModel().cuda().half()
+        dummy_input = torch.rand(1, 20, 4, 4).half().cuda()
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                   dummy_input=dummy_input, config_file="./data/quantsim_config.json")
 
-            before = time.time()
-            # sim.compute_encodings(dummy_forward, None)
-            # dummy_forward(sim.model, None)
-            dummy_forward(model, None)
-            after = time.time()
-            print(after - before)
+        def dummy_forward(model, _):
+            output = None
+            for _ in range(100):
+                output = model(dummy_input)
+            return output
 
-        def run_float():
-            model = DummyModel().cuda()
-            dummy_input = torch.rand(1, 20, 4, 4).cuda()
-            sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
-                                       dummy_input=dummy_input)
+        optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.05, momentum=0.5)
+        sim.compute_encodings(dummy_forward, None)
+        output = dummy_forward(model, None)
+        loss = output.sum()
+        loss.backward()
+        optimizer.step()
 
-            def dummy_forward(model, _):
-                for _ in range(100):
-                    model(dummy_input)
+    @pytest.mark.cuda
+    def test_fp16_model_sim_eval_train_static_grid_per_channel_gpu(self):
 
-            before = time.time()
-            # sim.compute_encodings(dummy_forward, None)
-            # dummy_forward(sim.model, None)
-            dummy_forward(model, None)
-            after = time.time()
-            print(after - before)
+        quantsim_config = {
+            "defaults":
+                {
+                    "ops":
+                        {
+                            "is_output_quantized": "True",
+                            "is_symmetric": "True"
+                        },
+                    "params":
+                        {
+                            "is_quantized": "True",
+                            "is_symmetric": "True"
+                        },
+                    "strict_symmetric": "False",
+                    "unsigned_symmetric": "True",
+                    "per_channel_quantization": "True",
+                },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open("./data/quantsim_config.json", "w") as f:
+            json.dump(quantsim_config, f)
 
-        run_half()
-        run_half()
-        run_float()
-        run_float()
+        model = HalfFloatTestModel().cuda().half()
+        dummy_input = torch.rand(1, 20, 4, 4).half().cuda()
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
+                                   dummy_input=dummy_input, config_file="./data/quantsim_config.json")
+
+        def dummy_forward(model, _):
+            output = None
+            for _ in range(100):
+                output = model(dummy_input)
+            return output
+
+        optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.05, momentum=0.5)
+        sim.compute_encodings(dummy_forward, None)
+        output = dummy_forward(model, None)
+        loss = output.sum()
+        loss.backward()
+        optimizer.step()
+
 
     def test_tie_quantizers_for_concat(self):
 
