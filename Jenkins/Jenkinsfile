@@ -569,7 +569,7 @@ pipeline {
                                                 '-DENABLE_TENSORFLOW=$([[ "$AIMET_VARIANT" =~ "tf" ]] && echo 1 || echo 0) ' +
                                             '&& cmake --build ./build-$AIMET_VARIANT --target whl_develop'
                                         //TODO Remove this step after pre-built docker images have included this package
-                                        docker_script = "apt-get install python3-venv && " + ${docker_script}
+                                        docker_script = "apt-get install python3-venv && ${docker_script}"
                                         sh "${env.DOCKER_CMD} bash -c '${docker_script}'"
                                     }
                                 }
