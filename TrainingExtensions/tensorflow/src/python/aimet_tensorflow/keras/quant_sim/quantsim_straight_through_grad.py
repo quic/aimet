@@ -40,7 +40,7 @@ from typing import List, Tuple
 
 import tensorflow as tf
 
-from aimet_tensorflow.defs import AxisHandling
+from aimet_tensorflow.keras.defs import AxisHandling
 
 
 def _compute_derivative_of_loss_function(x: tf.Tensor,

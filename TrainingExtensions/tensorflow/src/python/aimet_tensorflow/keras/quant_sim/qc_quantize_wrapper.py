@@ -43,11 +43,9 @@ import tensorflow as tf
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme, QuantizationDataType
-import aimet_tensorflow.utils.quantsim as quantsim_utils
 import aimet_tensorflow.keras.utils.common as keras_common_utils
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQuantizer, \
     ParamPerTensorQuantizer, ParamPerChannelQuantizer, StaticGridPerChannelQuantizer
-from aimet_tensorflow.keras.utils.common import is_lambda_operator
 from aimet_tensorflow.utils.constants import QUANT_ALLOWED_DTYPES
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -177,7 +175,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         self.output_quantizers = output_quantizers
         self.param_quantizers = param_quantizers
         self._shadow_params = shadow_params
-        self._is_lambda_operator_layer = is_lambda_operator(layer_to_wrap)
+        self._is_lambda_operator_layer = keras_common_utils.is_lambda_operator(layer_to_wrap)
         self._set_quantizers(per_channel_quantization_enabled)
 
         # This is needed since Model Transformer reconstructs the layer, with the layer to wrap weights being empty
@@ -395,12 +393,12 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
             param_name = self._layer_to_wrap.weights[idx].name
             if param_name in param_encodings:
                 if isinstance(param_quantizer, StaticGridPerChannelQuantizer):
-                    encoding, is_symmetric = quantsim_utils.create_encoding_from_dict(param_encodings[param_name])
+                    encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(param_encodings[param_name])
                     for tensor_quantizer in param_quantizer.tensor_quantizer:
                         tensor_quantizer.isEncodingValid = True
                     param_quantizer.bitwidth = encoding[0].bw
                 else:
-                    encoding, is_symmetric = quantsim_utils.create_encoding_from_dict(param_encodings[param_name][0])
+                    encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(param_encodings[param_name][0])
                     param_quantizer.tensor_quantizer.isEncodingValid = True
                     param_quantizer.bitwidth = encoding.bw
                 param_quantizer.use_symmetric_encodings = is_symmetric
