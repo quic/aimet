@@ -83,8 +83,8 @@ computed using the specified quantization calibration technique. An encoding for
 - Delta:   Granularity of the fixed point numbers (is a function of the bit-width selected)
 - Offset:  Offset from zero
 
-The delta and offset can be calculated using min and max and vice versa using the equations:
-    :math:`delta = \frac{min - max}{{2}^{bitwidth} - 1}` and :math:`offset = \frac{-min}{delta}`
+The Delta and Offset can be calculated using Min and Max and vice versa using the equations:
+    :math:`\textrm{Delta} = \dfrac{\textrm{Max} - \textrm{Min}}{{2}^{\textrm{bitwidth}} - 1} \quad \textrm{Offset} = \dfrac{-\textrm{Min}}{\textrm{Delta}}`
 
 Quantization Schemes
 ====================
