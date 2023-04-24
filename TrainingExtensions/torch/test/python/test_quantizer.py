@@ -2983,14 +2983,16 @@ class TestQuantizationSimLearnedGrid:
                 self.relu = torch.nn.ReLU(inplace=True)
 
             def forward(self, inputs):
+                ## These ops will wrapped as supergroup ##
                 x = self.conv1(inputs)
-                x = self.relu(x)
+                x = self.relu(x) # in-place relu
+                ##########################################
                 return x
 
         # Test with both QAT and QAT-range learning.
         input_shape = (1, 3, 8, 8)
-        dummy_input = [torch.randn(*input_shape)]
-        model = ModelWithInPlaceReLU().eval()
+        dummy_input = torch.randn(*input_shape)
+        model = ModelWithInPlaceReLU().train() # In-place ops are problematic only during training
         quant_schemes = [QuantScheme.post_training_tf_enhanced,
                          QuantScheme.training_range_learning_with_tf_enhanced_init]
 
@@ -2998,7 +3000,12 @@ class TestQuantizationSimLearnedGrid:
             quant_sim = QuantizationSimModel(model, dummy_input, quant_scheme=quant_scheme, default_param_bw=4,
                                              default_output_bw=4)
             quant_sim.compute_encodings(evaluate, dummy_input)
-            quant_sim.model(*dummy_input)
+
+            optimizer = torch.optim.SGD(quant_sim.model.parameters(), lr=0.001, momentum=0.5)
+            out = quant_sim.model(dummy_input)
+            loss = out.flatten().sum()
+            loss.backward() # Should not raise error
+            optimizer.step()
 
     def test_inplace_modification_with_add(self):
         """
@@ -3013,18 +3020,16 @@ class TestQuantizationSimLearnedGrid:
             def __init__(self):
                 super(ModelWithInPlaceAdd, self).__init__()
                 self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
-                self.conv2 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
 
             def forward(self, *inputs):
                 x = self.conv1(inputs[0])
-                y = self.conv2(inputs[1])
-                x += y
+                x += 1 # in-place add
                 return x
 
         # Test with both QAT and QAT-range learning.
         input_shape = (1, 3, 8, 8)
-        dummy_input = [torch.randn(*input_shape), torch.randn(*input_shape)]
-        model = ModelWithInPlaceAdd().eval()
+        dummy_input = torch.randn(*input_shape)
+        model = ModelWithInPlaceAdd().train() # In-place ops are problematic only during backward pass
         quant_schemes = [QuantScheme.post_training_tf_enhanced,
                          QuantScheme.training_range_learning_with_tf_enhanced_init]
 
@@ -3032,7 +3037,12 @@ class TestQuantizationSimLearnedGrid:
             quant_sim = QuantizationSimModel(model, dummy_input, quant_scheme=quant_scheme, default_param_bw=4,
                                              default_output_bw=4)
             quant_sim.compute_encodings(evaluate, dummy_input)
-            quant_sim.model(*dummy_input)
+
+            optimizer = torch.optim.SGD(quant_sim.model.parameters(), lr=0.001, momentum=0.5)
+            out = quant_sim.model(dummy_input)
+            loss = out.flatten().sum()
+            loss.backward() # Should not raise error
+            optimizer.step()
 
     def test_multi_output_onnx_op(self):
         """
