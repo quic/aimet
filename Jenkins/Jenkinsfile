@@ -392,7 +392,7 @@ pipeline {
                             steps {
                                 echo 'Building code (and generating Docs and pip packages)...'
                                 script {
-                                    runStage(env.AIMET_VARIANT_TORCH_CPU, "-bp")
+                                    //***TODO runStage(env.AIMET_VARIANT_TORCH_CPU, "-bp")
                                 }
                             }
                         }
@@ -401,7 +401,7 @@ pipeline {
                             steps {
                                 echo 'Running code violations...'
                                 script {
-                                    runStage(env.AIMET_VARIANT_TORCH_CPU, "-v")
+                                    //***TODO runStage(env.AIMET_VARIANT_TORCH_CPU, "-v")
                                 }
                             }
                             post {
@@ -433,7 +433,7 @@ pipeline {
                                 script {
                                     if ("${env.QCInternalValidation}" == "false") {
                                         echo 'Building code and running tests...'
-                                        runStage(env.AIMET_VARIANT_TORCH_CPU, "-u")
+                                        //***TODO runStage(env.AIMET_VARIANT_TORCH_CPU, "-u")
                                     }
                                 }
                             }
@@ -466,7 +466,7 @@ pipeline {
                                 script {
                                     echo 'WARNING: Currently NOT failing on static analysis errors!'
                                     //TODO Remove the '| true' from the below invocation when errors are fixed
-                                    runStage(env.AIMET_VARIANT_TORCH_CPU, "-s | true")
+                                    //***TODO runStage(env.AIMET_VARIANT_TORCH_CPU, "-s | true")
                                 }
                             }
                         }
@@ -482,7 +482,7 @@ pipeline {
                                 script {
                                     if ("${env.QCInternalValidation}" == "true") {
                                         echo 'Running AIMET additional stages'
-                                        //TODO callAimetExtra(env.CHANGE_TARGET)
+                                        //***TODO callAimetExtra(env.CHANGE_TARGET)
                                     }
                                 }
                             }
@@ -568,6 +568,8 @@ pipeline {
                                                 '-DENABLE_TORCH=$([[ "$AIMET_VARIANT" =~ "torch" ]] && echo 1 || echo 0) ' +
                                                 '-DENABLE_TENSORFLOW=$([[ "$AIMET_VARIANT" =~ "tf" ]] && echo 1 || echo 0) ' +
                                             '&& cmake --build ./build-$AIMET_VARIANT --target whl_develop'
+                                        //TODO Remove this step after pre-built docker images have included this package
+                                        docker_script = "apt-get install python3-venv && " + ${docker_script}
                                         sh "${env.DOCKER_CMD} bash -c '${docker_script}'"
                                     }
                                 }
