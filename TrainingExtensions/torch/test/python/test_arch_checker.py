@@ -34,8 +34,9 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+from collections import OrderedDict
 import torch
-import csv
+import torchvision
 import os
 
 from aimet_torch import utils
@@ -266,10 +267,56 @@ class Model(torch.nn.Module):
         x = self.silu(x)
         return x
 
+class FPN_model(torch.nn.Module):
+    def __init__(self) -> None:
+        super(FPN_model, self).__init__()
+        self.dummy_input = OrderedDict()
+        self.dummy_input['feat0'] = torch.rand(4, 10, 64, 64)
+        self.dummy_input['feat2'] = torch.rand(4, 20, 16, 16)
+        self.dummy_input['feat3'] = torch.rand(4, 30, 8, 8)
+
+        self.fpn = torchvision.ops.FeaturePyramidNetwork([10, 20, 30], 5)
+        self.conv1 = torch.nn.Conv2d(5, 5, 3, stride = 8, padding = 1 )
+        self.conv2 = torch.nn.Conv2d(5, 5, 3, stride = 2, padding = 1 )
+        self.conv3 = torch.nn.Conv2d(5, 5, 1)
+        self.conv4 = torch.nn.Conv2d(10, 5, 1)
+        self.conv5 = torch.nn.Conv2d(10, 5, 1)
+
+        self.bn1 = torch.nn.BatchNorm2d(10)
+        self.bn2 = torch.nn.BatchNorm2d(25)
+
+    def forward(self, x):
+        fpn_output = self.fpn(x)
+        out2 = self.conv2(fpn_output['feat2'])
+        out3 = self.conv3(fpn_output['feat3'])
+        concate = torch.cat((out2, out3), 1)
+        x = self.bn1(concate)
+
+        out0 = self.conv1(fpn_output['feat0'])
+        out4 = self.conv4(x)
+        out5 = self.conv5(x)
+        concate = torch.cat((x, out0, out4, out5), 1)
+        x = self.bn2(concate)
+
+        return x
+
 class TestArchChecker():
     """ Class for testing arch (architechture) checker. """
     model = Model()
     dummy_input = utils.create_rand_tensors_given_shapes(model.except_shape, utils.get_device(model))
+
+    def test_check_conv_conv_cat_bn(self):
+        model = FPN_model()
+        dummy_input = model.dummy_input
+        ArchChecker.check_model_arch(model, dummy_input)
+
+        assert "_check_foldable_bn_with_split" in ArchChecker._arch_checker_report.raw_report["(FPN_model.conv2, FPN_model.conv3)-> Concat_44-> FPN_model.bn1"].failed_checks
+        assert "_check_foldable_bn_with_split" in ArchChecker._arch_checker_report.raw_report["(FPN_model.bn1, FPN_model.conv1, FPN_model.conv4, FPN_model.conv5)-> Concat_51-> FPN_model.bn2"].failed_checks
+        filepath = ArchChecker._arch_checker_report._get_write_path(".html")
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
+        ArchChecker._arch_checker_report.reset_raw_report()
 
     def test_intermediate_padding(self):
         # Test sequence: Conv -> Activation -> BN -> Conv
@@ -300,6 +347,10 @@ class TestArchChecker():
         assert "_check_intermediate_padding" in arch_checker_report.raw_report["Model_inter_pad_act_type.conv6"].failed_checks
         assert "Model_inter_pad_act_type.conv8" not in arch_checker_report.raw_report
         arch_checker_report.reset_raw_report()
+
+        filepath = ArchChecker._arch_checker_report._get_write_path(".html")
+        if os.path.exists(filepath):
+            os.remove(filepath)
 
     def test_arch_checker_report(self):
         """ Test exported functions in ArchCheckerReport Class. """
@@ -383,6 +434,10 @@ class TestArchChecker():
         assert "_check_batch_norm_fold" in arch_checker_report.raw_report['Model.bn4'].failed_checks
         arch_checker_report.reset_raw_report()
 
+        filepath = ArchChecker._arch_checker_report._get_write_path(".html")
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
     def test_add_node_check(self):
         """
         Test add_check function is arch_checker. Add a test that will always fail: pass if relu is
@@ -413,6 +468,10 @@ class TestArchChecker():
         assert "_activation_checks" not in arch_checker_report.raw_report['Model.relu1'].failed_checks
         arch_checker_report.reset_raw_report()
 
+        filepath = ArchChecker._arch_checker_report._get_write_path(".html")
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
     def test_add_pattern_check(self):
         """
         Test add_check function is arch_checker. Add a test that will always fail: pass if relu is
@@ -435,3 +494,7 @@ class TestArchChecker():
         assert _temp_check_get_all_bns.__name__ in arch_checker_report.raw_report['Model.bn3'].failed_checks
         assert _temp_check_get_all_bns.__name__ in arch_checker_report.raw_report['Model.bn4'].failed_checks
         arch_checker_report.reset_raw_report()
+
+        filepath = ArchChecker._arch_checker_report._get_write_path(".html")
+        if os.path.exists(filepath):
+            os.remove(filepath)

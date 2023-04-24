@@ -49,10 +49,71 @@ from aimet_common.utils import AimetLogger
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
+# pylint: disable=too-few-public-methods
+class OpStructure:
+    """ op for NodeErrorReportObject when op is not Op class but tuple of ops. """
+    def __init__(self, op_tuple) -> None:
+        self.op_tuple = op_tuple
+        self.dotted_name_op = get_dotted_name_op_from_op_tuple(op_tuple)
+        self.type = report_const.OP_STRUCT_OP_TYPE
+
+    def get_module(self):
+        """ Return all modules associated with this Op Tuple in connected_graph sequence. """
+        return [op.get_module() if isinstance(op, Op) else OpStructure(op).get_module() for op in self.op_tuple]
+
+    @property
+    def dotted_name(self):
+        """ Returns dotted_name_op. """
+        return self.dotted_name_op
+
+def get_dotted_name_op_from_op_tuple(op_list):
+    """ Structure of module always return a list. Must start with list_handler """
+    def list_handler(op_list):
+        """ Add "-> " between 2 Ops. """
+        dotted_name_op = ""
+        for op in op_list:
+            if isinstance(op, tuple):
+                next_name = tuple_handler(op)
+            elif isinstance(op, list):
+                next_name = list_handler(op)
+            else:
+                next_name = op.dotted_name_op
+            dotted_name_op += next_name
+            dotted_name_op += "-> "
+
+        # remove last "-> "
+        dotted_name_op = dotted_name_op[:-3]
+        return dotted_name_op
+
+    def tuple_handler(op_tuple):
+        """ Add ", " between 2 Ops and attach () on the end of the strings. """
+
+        dotted_name_op = "("
+
+        for op in op_tuple:
+            if isinstance(op, list):
+                next_name = "("
+                next_name += list_handler(op)
+                next_name += ")"
+            elif isinstance(op, tuple):
+                next_name = tuple_handler(op)
+            else:
+                next_name = op.dotted_name_op
+            dotted_name_op += next_name
+            dotted_name_op += ", "
+
+        #remove last ", "
+        dotted_name_op = dotted_name_op[:-2]
+        dotted_name_op += ")"
+
+        return dotted_name_op
+
+    return list_handler(op_list)
+
 class NodeErrorReportObject:
     """ Error report object for each op. """
-    def __init__(self, op, failed_checks: Set[str]) -> None:
-        self.dotted_name = op.dotted_name_op
+    def __init__(self, op: Union[Op, OpStructure], failed_checks: Set[str]) -> None:
+        self.dotted_name_op = op.dotted_name_op
         self.op_type = op.type
         self.failed_checks = set()
         self.add_failed_checks(failed_checks)
@@ -81,10 +142,10 @@ class ArchCheckerReport:
         """
         _update_raw_report(self._raw_report, new_raw_report)
 
-    def update_raw_report(self, op: Union[List, List[Op]], failed_check: Union[Set[str], str]):
+    def update_raw_report(self, op: Union[Op, List[Op], List[OpStructure]], failed_check: Union[Set[str], str]):
         """
         Update raw_report with op and failed check.
-        :param op: Op or list of Ops.
+        :param op: Op, list of Ops or List of OpStructure.
         :param failed_check: failed_check.__name__ or set(failed_check.__name__)
         """
         _update_raw_report(self._raw_report, _generate_arch_checker_report(op, failed_check))
@@ -180,7 +241,7 @@ def _get_report_issue_recomm(check_name: str, optype: str):
 
     return issue, recomm
 
-def _generate_arch_checker_report(op: Union[List, List[Op]], failed_check: Union[Set[str], str])-> Dict[str, NodeErrorReportObject]:
+def _generate_arch_checker_report(op: Union[Op, List[Op], List[OpStructure]], failed_check: Union[Set[str], str])-> Dict[str, NodeErrorReportObject]:
     """
     Get new_arch_checker_report with op and failed_check.
     :param op: Op for node_check or list of Op for pattern check.
@@ -190,7 +251,7 @@ def _generate_arch_checker_report(op: Union[List, List[Op]], failed_check: Union
     if isinstance(op, Op):
         return {op.dotted_name_op: NodeErrorReportObject(op, failed_check)}
 
-    # Pattenr check returns a list Op with single str(failed_check.__name__)
+    # Pattern check that marks nodes returns list of Ops and a failed check.
     return {_op.dotted_name_op: NodeErrorReportObject(_op, {failed_check}) for _op in op}
 
 def get_node_check_dict()-> Dict:
@@ -198,14 +259,14 @@ def get_node_check_dict()-> Dict:
     Get dictionary for node checks.
     :return check_dicts: {check target type: list of checks}.
     """
-    return NODE_CHECK_DICT
+    return NODE_CHECK_DICT.copy()
 
 def get_pattern_check_list()-> List:
     """
     Get a list of pattern checks.
     :return: List of pattern checks.
     """
-    return PATTERN_CHECK_LIST
+    return PATTERN_CHECK_LIST.copy()
 
 def check_module(module: torch.nn.Module, check_list: List) -> Set:
     """
