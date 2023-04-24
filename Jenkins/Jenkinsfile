@@ -521,7 +521,7 @@ pipeline {
                         environment {
                             AIMET_VARIANT="${ML_FMWORK}-${PROC_TYPE}"
                             DOCKER_CMD='docker run --rm $([[ "$PROC_TYPE" == "gpu" ]] && echo "--gpus all") -u "$(id -u):$(id -g)" -v $PWD:$PWD -w $PWD -e AIMET_VARIANT $DOCKER_IMAGE '
-                            DOCKER_IMAGE="aimet-dev-docker:${AIMET_VARIANT}"
+                            DOCKER_IMAGE="aimet-dev:latest.${AIMET_VARIANT}"
                         }
                         stages {
                             stage('Get Docker Image') {
