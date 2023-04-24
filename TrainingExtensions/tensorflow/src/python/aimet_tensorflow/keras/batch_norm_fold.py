@@ -1,9 +1,9 @@
-# /usr/bin/env python3.5
+# /usr/bin/env python3.8
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -373,7 +373,7 @@ class PassThroughOp(tf.keras.layers.Layer):
         """
         return inputs
 
-# pylint: disable=too-many-branches, protected-access
+# pylint: disable=too-many-branches, protected-access, too-many-locals, too-many-nested-blocks
 def _delete_bn_from_functional(model: tf.keras.Model,
                                bn_layers_to_remove: List[tf.keras.layers.BatchNormalization]) -> tf.keras.Model:
     """
@@ -399,9 +399,7 @@ def _delete_bn_from_functional(model: tf.keras.Model,
     #  New model flow   \                       /
     #                    \                     /
     #                     \___________________/
-    #
-    #
-    #
+
     def wrapped_bn_layer_in_bns_to_remove(layer: tf.keras.layers.Layer) -> bool:
         return isinstance(layer, QcQuantizeWrapper) and layer._layer_to_wrap in bn_layers_to_remove
 
@@ -417,6 +415,7 @@ def _delete_bn_from_functional(model: tf.keras.Model,
 
     # Step 2: Create a new model with the batch normalization layers removed by iterating through the layers in the model
     # and using the inbound and outbound connections to rerouting around the batch normalization layers.
+    batch_norms_replaced_with_names = {}
     model_outputs = []
     for current_layer in model.layers:
         if isinstance(current_layer, tf.keras.layers.InputLayer):
@@ -425,7 +424,6 @@ def _delete_bn_from_functional(model: tf.keras.Model,
         # Determine input tensors of the given layer
         layer_input = [model_layer_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS][layer_aux]
                        for layer_aux in model_layer_connections[ModelLayerConnectionsProperties.INBOUND_NODES][current_layer.name]]
-
 
         layer_input = layer_input[0] if len(layer_input) == 1 else layer_input
 
@@ -448,6 +446,10 @@ def _delete_bn_from_functional(model: tf.keras.Model,
                     [outlayer.replace(current_layer.name, *all_batch_norms_inbound_layers_names)
                      for outlayer in model_layer_connections[ModelLayerConnectionsProperties.INBOUND_NODES][outbound_node.outbound_layer.name]]
 
+                # Keras Batch Norm only supports one input tensors. Meaning there is one singular layer coming into it.
+                # Hence, 'inbound_nodes[0]'.
+                batch_norms_replaced_with_names[current_layer.name] = current_layer._inbound_nodes[0].inbound_layers.name
+
                 model_layer_connections[ModelLayerConnectionsProperties.INBOUND_NODES].update(
                     {outbound_node.outbound_layer.name: batch_norms_outbound_layers_new_inbound_layers_names})
 
@@ -459,11 +461,57 @@ def _delete_bn_from_functional(model: tf.keras.Model,
 
         # Otherwise, treat like a normal layer
         else:
+            # For layers that have multiple inputs, order matters for what is fed into the layer. For example, if we have
+            # an Add layer with inputs from a ReLU and a Batch Norm, the order they go into the Add matters. Furthermore,
+            # if the Batch Norm is deleted, then it needs to be replaced with it's folded layer in the same order.
+
+            KERAS_SYMBOLIC_TENSORS_INDEX = 0
+            # Check if we need to change layer_input order. If there is just one input, there is no order.
+            if isinstance(layer_input, List):
+                # Original models keras symbolic tensor order
+                original_keras_symbolic_tensors_order = model_layer_connections[ModelLayerConnectionsProperties.CALL_ARGS][
+                    current_layer.name][KERAS_SYMBOLIC_TENSORS_INDEX]
+
+                # Special case for Lambda layers. Lambda layers can be thought of as z = x + y. Unfortunately, their call
+                # args for the keras symbolic tensors will ONLY have the x portion. In our layer_input we have both x and y.
+                # This statement is added to wrap the x portion of the original call args and check if it's a batch norm
+                # folded out.
+                if not isinstance(original_keras_symbolic_tensors_order, List):
+                    original_keras_symbolic_tensors_order = [original_keras_symbolic_tensors_order]
+
+                # Check if a Batch Norm that was deleted is in the original keras symbolic order.
+                name_of_bn_replaced = [
+                    tensor._keras_history.layer.name
+                    for tensor in original_keras_symbolic_tensors_order
+                    if tensor._keras_history.layer.name in batch_norms_replaced_with_names
+                ]
+
+                # If a Batch Norm is found, then the keras symbolic tensor order is slightly updated to replace the
+                # Batch Norm with the folded layer. Otherwise, we can just use the original keras symbolic tensor order.
+                if name_of_bn_replaced:
+
+                    updated_keras_symbolic_tensors_order = []
+                    for keras_symbolic_tensor in original_keras_symbolic_tensors_order:
+                        if (name_of_bn := keras_symbolic_tensor._keras_history.layer.name) in name_of_bn_replaced: #pylint: disable=superfluous-parens
+                            updated_keras_symbolic_tensors_order.append(
+                                model_layer_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS][
+                                    batch_norms_replaced_with_names[name_of_bn]
+                                ]
+                            )
+                        else:
+                            updated_keras_symbolic_tensors_order.append(keras_symbolic_tensor)
+
+                    # Dictionary of the keras symbolic tensor name to the order.
+                    ordered_inputs = {k.name: v for v, k in enumerate(updated_keras_symbolic_tensors_order)}
+
+                    # Sort layer_input based on the above dictionary.
+                    layer_input = sorted(layer_input, key=lambda current_input, oi=ordered_inputs: oi[current_input.name])
+
             # Since we are rerouting around the batch normalization layers, we need to temporarily remove the inbound and
             # outbound nodes of the batch normalization layers so that the model can be built correctly and not duplicate
             # the non batch normalization layers inbound/outbound nodes.
             current_layer._inbound_nodes = []  # pylint: disable=protected-access
-            # Special case for when there is a Lambda opertaion with multiple inputs. For example, x = y + z.
+            # Special case for when there is a Lambda opertaion with multiple inputs. For example, z = x + y.
             if isinstance(current_layer, TFOpLambda) and isinstance(layer_input, List):
                 x = current_layer(*layer_input)
             else:
@@ -675,17 +723,16 @@ def convert_batchnorm_parameters(bn: tf.keras.layers.BatchNormalization):
 
 
 # pylint: disable=protected-access
-def fold_all_batch_norms_to_scale(sim: QuantizationSimModel) -> \
-        Tuple[List[Tuple[QcQuantizeWrapper, QcQuantizeWrapper]], tf.keras.Model]:
+def fold_all_batch_norms_to_scale(sim: QuantizationSimModel) -> List[Tuple[QcQuantizeWrapper, QcQuantizeWrapper]]:
     """
     Fold all batch_norm layers in a model into the quantization scale parameter
     of the corresponding conv layers
 
     :param sim: QuantizationSimModel to be folded
-    :return: A list of pairs of layers [(Conv/Linear, BN layer that got folded)] and the bn folded model
+    :return: A list of pairs of layers [(Conv/Linear, BN layer that got folded)]
     """
 
-    assert sim.model is not None
+    assert sim.model is not None, "QuantizationSimModel attribute 'model' is None."
 
     model = sim._model_without_wrappers
 
@@ -702,10 +749,15 @@ def fold_all_batch_norms_to_scale(sim: QuantizationSimModel) -> \
         (quant_wrappers[bn], quant_wrappers[conv]) for bn, conv in bn_conv_pairs
     ]
 
-    bn_fold_model = _fold_given_batch_norms(sim.model, conv_bn_pairs, bn_conv_pairs)
-    bn_fold_model = bn_fold_model if bn_fold_model else sim.model
+    # We fold both the sim.model and sim._model_without_wrappers because we rebuild the QuantizationSimModel during
+    # export and this utilizes the sim._model_without_wrappers to achieve this.
+    bn_fold_sim_model = _fold_given_batch_norms(sim.model, conv_bn_pairs, bn_conv_pairs)
+    _, bn_fold_model = fold_all_batch_norms(model)
 
-    return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs], bn_fold_model
+    sim.model = bn_fold_sim_model if bn_fold_sim_model else sim.model
+    sim._model_without_wrappers = bn_fold_model if bn_fold_model else sim._model_without_wrappers
+
+    return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs]
 
 def fold_given_batch_norms(model: tf.keras.Model, layer_pairs: List[PairType]) -> Optional[tf.keras.Model]:
     """
