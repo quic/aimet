@@ -277,10 +277,8 @@ class GraphSearchUtils:
 
         for op in self._connected_graph.get_all_ops().values():
 
-            if op.get_module() is module and len(op.output.consumers) == 1:
-                is_relu_activation = isinstance(op.output.consumers[0].get_module(),
-                                                self._cls_supported_activation_types)
-                return is_relu_activation
+            if op.name == module.dotted_name and len(op.output.consumers) == 1:
+                return op.output.consumers[0].get_module().op_type in self._cls_supported_activation_types
 
         return False
 

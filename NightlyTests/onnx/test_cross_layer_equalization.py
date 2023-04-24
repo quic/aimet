@@ -42,18 +42,18 @@ from onnxruntime_extensions import get_library_path
 from aimet_onnx.cross_layer_equalization import equalize_model
 import test_models
 
+
 class TestCLEAcceptance:
     """ Acceptance test for AIMET ONNX """
     def test_cle_mv2(self):
         """ Test for E2E quantization """
         np.random.seed(0)
         test_data = np.random.rand(1, 3, 224, 224).astype(np.float32)
-
         model = test_models.mobilenetv2()
-
         session = _build_session(model)
         output_before_cle = session.run(None, {'input': test_data})
         equalize_model(model)
+        session = _build_session(model)
         output_after_cle = session.run(None, {'input': test_data})
         assert np.allclose(output_after_cle, output_before_cle, rtol=1e-2)
 

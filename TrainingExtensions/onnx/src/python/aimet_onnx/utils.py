@@ -191,6 +191,26 @@ def make_dummy_input(model: onnx_pb.ModelProto, dynamic_size: int = 1) -> Dict[s
     return input_dict
 
 
+def replace_relu6_with_relu(model: onnx_pb.ModelProto):
+    """
+    Replace relu6 op with relu op
+
+    :param model: ONNX model
+    """
+    for node in model.model.graph.node:
+        if node.op_type == 'Clip':
+            # Clip has 3 inputs, 1st one corresponding to the previous layer's output and the other two related min and max
+            inputs = [node.input[0]]
+            outputs = [node.output[0]]
+            relu_node = onnx.helper.make_node(
+                op_type="Relu",
+                inputs=inputs,
+                outputs=outputs,
+            )
+            remove_node(node, model.model.graph)
+            model.add_node(relu_node)
+
+
 def add_hook_to_get_activation(model: onnx_pb.ModelProto, name: str) -> onnx_pb.ValueInfoProto:
     """
     Adds a given activation to the model output
