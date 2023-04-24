@@ -106,7 +106,7 @@ depend on the ML framework the model is written in.
 Pytorch:
     :doc:`PyTorch Model Guidelines<../api_docs/torch_model_guidelines>`
 
-    In the case of PyTorch, there exist the Model Validator utility, to automate the checking of certain PyTorch model
+    In the case of PyTorch, there exists the Model Validator utility, to automate the checking of certain PyTorch model
     requirements, as well as the Model Preparer utility, to automate the updating of the model definition to align with
     certain requirements.
 
