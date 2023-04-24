@@ -200,15 +200,32 @@ def replace_relu6_with_relu(model: onnx_pb.ModelProto):
     for node in model.model.graph.node:
         if node.op_type == 'Clip':
             # Clip has 3 inputs, 1st one corresponding to the previous layer's output and the other two related min and max
-            inputs = [node.input[0]]
-            outputs = [node.output[0]]
-            relu_node = onnx.helper.make_node(
-                op_type="Relu",
-                inputs=inputs,
-                outputs=outputs,
-            )
-            remove_node(node, model.model.graph)
-            model.add_node(relu_node)
+            if check_if_node_is_relu6(node, model):
+                inputs = [node.input[0]]
+                outputs = [node.output[0]]
+                relu_node = onnx.helper.make_node(
+                    op_type="Relu",
+                    inputs=inputs,
+                    outputs=outputs,
+                )
+                remove_node(node, model.model.graph)
+                model.add_node(relu_node)
+
+
+def check_if_node_is_relu6(node: onnx_pb.NodeProto, model: onnx_pb.ModelProto):
+    """
+    Check if the node is Relu6 by checking if it's 3rd input is a constant with value == 6
+
+    :param node: ONNX node
+    :param model: ONNX model
+    """
+    input = node.input[2]
+    for node_graph in model.model.graph.node:
+        if node_graph.output[0] == input:
+            if hasattr(node_graph, "attribute") and hasattr(node_graph.attribute[0], "t") and \
+                    numpy_helper.to_array(node_graph.attribute[0].t) == 6:
+                return True
+    return False
 
 
 def add_hook_to_get_activation(model: onnx_pb.ModelProto, name: str) -> onnx_pb.ValueInfoProto:
