@@ -1116,7 +1116,7 @@ def single_residual_model():
     torch.onnx.export(model,  # model being run
                       x,  # model input (or a tuple for multiple inputs)
                       "./model_single_residual.onnx",  # where to save the model (can be a file or file-like object)
-                      training=torch.onnx.TrainingMode.PRESERVE,
+                      training=torch.onnx.TrainingMode.EVAL,
                       export_params=True,  # store the trained parameter weights inside the model file
                       opset_version=12,  # the ONNX version to export the model to
                       do_constant_folding=True,  # whether to execute constant folding for optimization

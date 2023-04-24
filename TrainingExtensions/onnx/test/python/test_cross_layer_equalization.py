@@ -64,7 +64,7 @@ class TestCLS:
         graph_search_utils = GraphSearchUtils(connected_graph, ordered_module_list, cls_supported_layer_types, cls_supported_activation_types)
         ordered_layer_groups = graph_search_utils.find_layer_groups_to_scale()[0]
         ordered_layer_groups_names = [op.dotted_name for op in ordered_layer_groups]
-        assert ordered_layer_groups_names == ['Conv_4', 'Conv_7']
+        assert ordered_layer_groups_names == ['Conv_3', 'Conv_5']
 
     def test_find_cls_sets_depthwise_model(self):
         model = models_for_tests.depthwise_conv_model()
@@ -98,7 +98,7 @@ class TestCLS:
         for cls_set in cls_sets:
             cls_sets_name = tuple([op.dotted_name for op in cls_set])
             cls_sets_names.append(cls_sets_name)
-        assert cls_sets_names == [('Conv_4', 'Conv_7')]
+        assert cls_sets_names == [('Conv_3', 'Conv_5')]
 
     def test_scale_model_residual(self):
         model = models_for_tests.single_residual_model()
@@ -149,6 +149,7 @@ class TestCLS:
         assert len(cls_set_infos) == 8
 
     def test_cle(self):
+        np.random.seed(0)
         model, _ = models_for_tests.my_model_with_bns()
         fold_all_batch_norms_to_weight(model.model)
         replace_relu6_with_relu(model)
