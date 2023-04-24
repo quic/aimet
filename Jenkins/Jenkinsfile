@@ -482,7 +482,7 @@ pipeline {
                                 script {
                                     if ("${env.QCInternalValidation}" == "true") {
                                         echo 'Running AIMET additional stages'
-                                        //***TODO callAimetExtra(env.CHANGE_TARGET)
+                                        callAimetExtra(env.CHANGE_TARGET)
                                     }
                                 }
                             }
@@ -529,8 +529,6 @@ pipeline {
                                     echo "*** Running Docker stage for ${AIMET_VARIANT} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
                                     script {
                                         if (env.AIMET_PREBUILT_DOCKER_IMAGE_URL && ! pullRequest.files.any { f -> f.getFilename().contains('Dockerfile') }) {
-                                            //TODO env.DOCKER_IMAGE = "${env.AIMET_PREBUILT_DOCKER_IMAGE_URL}/${env.DOCKER_IMAGE}"
-                                            //TODO sh "docker pull ${env.DOCKER_IMAGE}"
                                             DOCKER_IMAGE_FULL_URL = "${env.AIMET_PREBUILT_DOCKER_IMAGE_URL}/${env.DOCKER_IMAGE}"
                                             sh "docker pull ${DOCKER_IMAGE_FULL_URL} && docker tag ${DOCKER_IMAGE_FULL_URL} ${env.DOCKER_IMAGE}"
                                         } else {
@@ -568,8 +566,6 @@ pipeline {
                                                 '-DENABLE_TORCH=$([[ "$AIMET_VARIANT" =~ "torch" ]] && echo 1 || echo 0) ' +
                                                 '-DENABLE_TENSORFLOW=$([[ "$AIMET_VARIANT" =~ "tf" ]] && echo 1 || echo 0) ' +
                                             '&& cmake --build ./build-$AIMET_VARIANT --target whl_develop'
-                                        //TODO Remove this step after pre-built docker images have included this package
-                                        docker_script = "apt-get install python3-venv && ${docker_script}"
                                         sh "${env.DOCKER_CMD} bash -c '${docker_script}'"
                                     }
                                 }
