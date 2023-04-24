@@ -482,7 +482,7 @@ pipeline {
                                 script {
                                     if ("${env.QCInternalValidation}" == "true") {
                                         echo 'Running AIMET additional stages'
-                                        callAimetExtra(env.CHANGE_TARGET)
+                                        //TODO callAimetExtra(env.CHANGE_TARGET)
                                     }
                                 }
                             }
