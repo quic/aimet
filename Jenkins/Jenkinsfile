@@ -529,10 +529,10 @@ pipeline {
                                     echo "*** Running Docker stage for ${AIMET_VARIANT} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
                                     script {
                                         if (env.AIMET_PREBUILT_DOCKER_IMAGE_URL && ! pullRequest.files.any { f -> f.getFilename().contains('Dockerfile') }) {
-                                            env.DOCKER_IMAGE = "${env.AIMET_PREBUILT_DOCKER_IMAGE_URL}/${env.DOCKER_IMAGE}"
-                                            sh "docker pull ${env.DOCKER_IMAGE}"
-                                            //TODO DOCKER_IMAGE_FULL_URL = "${env.AIMET_PREBUILT_DOCKER_IMAGE_URL}/${env.DOCKER_IMAGE}"
-                                            //TODO sh "docker pull ${DOCKER_IMAGE_FULL_URL}"
+                                            //TODO env.DOCKER_IMAGE = "${env.AIMET_PREBUILT_DOCKER_IMAGE_URL}/${env.DOCKER_IMAGE}"
+                                            //TODO sh "docker pull ${env.DOCKER_IMAGE}"
+                                            DOCKER_IMAGE_FULL_URL = "${env.AIMET_PREBUILT_DOCKER_IMAGE_URL}/${env.DOCKER_IMAGE}"
+                                            sh "docker pull ${DOCKER_IMAGE_FULL_URL} && docker tag ${DOCKER_IMAGE_FULL_URL} ${env.DOCKER_IMAGE}"
                                         } else {
                                             env.DOCKER_IMAGE = "${env.DOCKER_IMAGE}.${CHANGE_ID}"
                                             def build_args = "-f Jenkins/Dockerfile.${AIMET_VARIANT} -t ${env.DOCKER_IMAGE}"
