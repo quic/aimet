@@ -219,9 +219,9 @@ def check_if_node_is_relu6(node: onnx_pb.NodeProto, model: onnx_pb.ModelProto):
     :param node: ONNX node
     :param model: ONNX model
     """
-    input = node.input[2]
+    input_node = node.input[2]
     for node_graph in model.model.graph.node:
-        if node_graph.output[0] == input:
+        if node_graph.output[0] == input_node:
             if hasattr(node_graph, "attribute") and hasattr(node_graph.attribute[0], "t") and \
                     numpy_helper.to_array(node_graph.attribute[0].t) == 6:
                 return True
