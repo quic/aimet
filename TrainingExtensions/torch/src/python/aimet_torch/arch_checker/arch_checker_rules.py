@@ -129,6 +129,7 @@ def _check_intermediate_padding(connected_graph: ConnectedGraph) -> List:
     for _act_op_type in _support_activation_op_type:
         for _conv_op_type in _support_conv_op_type:
             patterns_with_callbacks.append(PatternType(pattern=[_conv_op_type, _act_op_type, "BatchNormalization", _conv_op_type], action=handler))
+            patterns_with_callbacks.append(PatternType(pattern=[_conv_op_type, "BatchNormalization", _act_op_type, _conv_op_type], action=handler))
             patterns_with_callbacks.append(PatternType(pattern=[_conv_op_type, _act_op_type, _conv_op_type], action=handler))
 
     graph_searcher = GraphSearcher(connected_graph, patterns_with_callbacks)
