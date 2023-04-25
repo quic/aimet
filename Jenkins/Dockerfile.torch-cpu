@@ -255,3 +255,6 @@ RUN apt-get update --fix-missing -y && apt upgrade -y && apt-get install -y clan
 
 # Create a version-less symbolic link for clang-tidy
 RUN ln -s /usr/bin/run-clang-tidy-11.py /usr/bin/run-clang-tidy.py
+
+# Provide write permission to the python package folder in order to install AIMET in editable mode
+RUN chmod o+w /usr/local/lib/python3.8/dist-packages
