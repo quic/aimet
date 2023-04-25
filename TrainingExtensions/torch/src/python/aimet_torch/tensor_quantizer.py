@@ -1074,18 +1074,23 @@ class QuantizeDequantize(torch.autograd.Function):
 
     @staticmethod
     def _per_channel_quantize_dequantize(tensor, tensor_quantizer, round_mode):
+
         if tensor_quantizer.data_type == QuantizationDataType.float:
             quantized_tensor = QuantizeDequantize._quantize_float(tensor, tensor_quantizer, True)
         else:
-            quantized_tensors = []
+            # Collect info for doing quantize-dequantize
             # pylint: disable=protected-access
-            for index, op in enumerate(tensor_quantizer._cppOp):
-                # pylint: disable=protected-access
-                tensor_slice = tensor.select(tensor_quantizer._ch_axis, index).contiguous(memory_format=torch.contiguous_format)
-                computed_tensor = op.quantizeDequantize(tensor_slice, tensor_quantizer._encoding[index],
-                                                        round_mode, tensor.is_cuda)
-                quantized_tensors.append(computed_tensor)
-            quantized_tensor = torch.stack(tuple(quantized_tensors), dim=tensor_quantizer._ch_axis)
+            sizes = [*tensor.shape, 1]
+            num_channel = sizes[tensor_quantizer.channel_axis]
+            num_element = functools.reduce(lambda x, y: x * y, sizes)
+            num_element_per_channel = functools.reduce(lambda x, y: x * y, sizes[tensor_quantizer.channel_axis + 1:])
+            # Vectorized CppOp
+            # pylint: disable=protected-access
+            quantized_tensor = tensor_quantizer._cppOp[0].quantizeDequantizePerChannel(tensor, tensor_quantizer._encoding,
+                                                                                       num_channel, num_element,
+                                                                                       num_element_per_channel,
+                                                                                       round_mode, tensor.is_cuda)
+
         return quantized_tensor
 
     # pylint:disable = arguments-differ

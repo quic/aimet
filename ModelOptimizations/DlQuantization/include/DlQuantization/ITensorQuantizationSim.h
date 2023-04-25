@@ -104,6 +104,14 @@ public:
 
     virtual void generateScaleOffset(double &encodingMin, double &encodingMax, uint8_t bw,
                                      double &encodingScale, double &encodingOffset) = 0;
+
+//    Quantize-dequantize a tensor using vectorized method
+    virtual void quantizeDequantizeTensorPerChannel(const DTYPE* inputTensorData, size_t numChannel,
+                                                    size_t numElement, size_t numElementPerChannel,
+                                                    DTYPE* outputTensorData, DTYPE* encodingMin, DTYPE* encodingMax,
+                                                    DTYPE* encodingDelta, DTYPE* encodingOffset,
+                                                    RoundingMode roundingMode, bool useCuda) = 0;
+
 };
 
 }   // namespace DlQuantization
