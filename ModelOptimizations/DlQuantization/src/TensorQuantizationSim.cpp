@@ -262,6 +262,24 @@ void TensorQuantizationSim<DTYPE>::dequantizePerChannelTensor(const uint8_t* inp
     (void)dummy;
 }
 
+template <typename DTYPE>
+void TensorQuantizationSim<DTYPE>::quantizeDequantizeTensorPerChannel(const DTYPE* inputTensorData, size_t numChannel,
+                                                                      size_t numElement, size_t numElementPerChannel,
+                                                                      DTYPE* outputTensorData, DTYPE* encodingMin,
+                                                                      DTYPE* encodingMax, DTYPE* encodingDelta,
+                                                                      DTYPE* encodingOffset, RoundingMode roundingMode,
+                                                                      bool useCuda)
+{
+    DlQuantization::ComputationMode cpuGpuMode;
+    if (useCuda)
+        cpuGpuMode = DlQuantization::ComputationMode::COMP_MODE_GPU;
+    else
+        cpuGpuMode = DlQuantization::ComputationMode::COMP_MODE_CPU;
+
+    quantizeDequantizePerChannel(inputTensorData, numChannel, numElement, numElementPerChannel, outputTensorData,
+                                 encodingMin, encodingMax, encodingDelta, encodingOffset, cpuGpuMode, roundingMode);
+}
+
 template class TensorQuantizationSim<float>;
 template class TensorQuantizationSim<double>;
 

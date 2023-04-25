@@ -599,6 +599,48 @@ void dequantizeFromPackedFxpCpu(const uint8_t* input, int cnt,
     }
 }
 
+template <typename DTYPE>
+void quantizeDequantizePerChannel(const DTYPE* in, int numChannel, int numElement, int numElementPerChannel, DTYPE* out,
+                                  DTYPE* encodingMin, DTYPE* encodingMax, DTYPE* encodingDelta, DTYPE* encodingOffset,
+                                  ComputationMode modeCpuGpu, RoundingMode roundingMode)
+{
+    switch (modeCpuGpu)
+    {
+    case COMP_MODE_CPU:
+        quantizeDequantizePerChannelCpu(in, numChannel, numElement, numElementPerChannel, out, encodingMin, encodingMax,
+                                        encodingDelta, encodingOffset, roundingMode);
+        break;
+    case COMP_MODE_GPU:
+#ifdef GPU_QUANTIZATION_ENABLED
+        quantizeDequantizePerChannelGpu(in, numChannel, numElement, numElementPerChannel, out, encodingMin, encodingMax,
+                                        encodingDelta, encodingOffset, roundingMode);
+#else
+        throw runtime_error("Not compiled for GPU mode.");
+#endif
+        break;
+    default:
+        throw runtime_error("Unknown computation mode.");
+        break;
+    }
+}
+
+template <typename DTYPE>
+void quantizeDequantizePerChannelCpu(const DTYPE* in, int numChannel, int numElement, int numElementPerChannel, DTYPE* out,
+                                     DTYPE* encodingMin, DTYPE* encodingMax, DTYPE* encodingDelta, DTYPE* encodingOffset,
+                                     RoundingMode roundingMode)
+{
+    for (int i = 0; i < numElement; ++i)
+    {
+        int channelIdx = (i / numElementPerChannel) % numChannel;
+        quantizeValueCpu<DTYPE>(&in[i], &out[i],
+                                encodingMin[channelIdx], encodingMax[channelIdx],
+                                encodingDelta[channelIdx], encodingOffset[channelIdx],
+                                roundingMode);
+        dequantizeValueCpu<DTYPE>(&out[i], encodingDelta[channelIdx], encodingOffset[channelIdx]);
+    }
+}
+
+
 // Explicit instantiations
 template void quantizeDequantize(const double* in, int cnt, const TfEncoding& encoding, double* out,
                                  ComputationMode mode_cpu_gpu, RoundingMode rounding_mode);
@@ -624,5 +666,12 @@ template void dequantizeFromPackedFxp(const uint8_t* input, int cnt,
 template void dequantizeFromPackedFxp(const uint8_t* input, int cnt,
                                       const TfEncoding& encoding, float* output,
                                       ComputationMode mode_cpu_gpu, bool shiftToSigned);
+
+template void quantizeDequantizePerChannel(const float* in, int numChannel, int numElement, int numElementPerChannel, float* out,
+                                           float* encodingMin, float* encodingMax, float* encodingDelta, float* encodingOffset,
+                                           ComputationMode modeCpuGpu, RoundingMode roundingMode);
+template void quantizeDequantizePerChannel(const double* in, int numChannel, int numElement, int numElementPerChannel, double* out,
+                                           double* encodingMin, double* encodingMax, double* encodingDelta, double* encodingOffset,
+                                           ComputationMode modeCpuGpu, RoundingMode roundingMode);
 
 }   // End of namespace DlQuantization
