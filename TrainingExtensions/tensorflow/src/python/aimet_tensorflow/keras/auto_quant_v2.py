@@ -468,7 +468,10 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         model = _apply_adaround_cached(model, # pylint: disable=protected-access
                                        self.adaround_params,
                                        path=self.results_dir,
-                                       filename_prefix=filename_prefix)
+                                       filename_prefix=filename_prefix,
+                                       default_param_bw=self._quantsim_params["param_bw"],
+                                       default_quant_scheme=self._quantsim_params.get("quant_scheme").param_quant_scheme,
+                                       config_file=self._quantsim_params["config_file"])
 
         return model, adaround_encoding_path
 
