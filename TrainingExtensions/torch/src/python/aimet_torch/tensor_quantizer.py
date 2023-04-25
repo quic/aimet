@@ -1107,11 +1107,9 @@ class QuantizeDequantize(torch.autograd.Function):
             else:
                 quantized_tensor = QuantizeDequantize._per_tensor_quantize_dequantize(tensor, tensor_quantizer,
                                                                                       round_mode)
-
+            ctx.save_for_backward(tensor) # `tensor` is needed for backward when quantizer is enabled
         else:
             quantized_tensor = tensor
-
-        ctx.save_for_backward(quantized_tensor)
 
         ctx.tensor_quantizer = tensor_quantizer
         return quantized_tensor

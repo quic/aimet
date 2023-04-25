@@ -103,16 +103,21 @@ def compute_dloss_by_dx(x, grad, encoding_min, encoding_max, ch_axis=0):
     encoding_max = broadcast_to_tensor(x, encoding_max, ch_axis)
     encoding_min = broadcast_to_tensor(x, encoding_min, ch_axis)
 
-    # compute dloss_by_dx = dq_by_dx * grad
-    inner_cond = torch.where(torch.le(x, encoding_max),  # condition to check per value
-                             torch.ones_like(x),  # execute if true
-                             torch.zeros_like(x))  # execute if false
+    # dL / dx = (dL / dx_q) * (dx_q / dx)
+    #         =   `grad`    * (dx_q / dx)
 
-    dloss_by_dx = torch.where(torch.le(encoding_min, x),  # condition to check per value
-                              inner_cond,  # execute if true
-                              torch.zeros_like(x)) * grad
+    # x_q = quantize_dequantize(x)
+    #     = +-- round(x / delta) * delta  if  encoding_min <= x <= encoding_max
+    #       |-- encoding_min              if  x < encoding_min
+    #       +-- encoding_max              if  x > encoding_max
 
-    return dloss_by_dx
+    # dx_q / dx  =  +-- 1  if  encoding_min <= x <= encoding_max
+    #  (`mask`)     |-- 0  if  x < encoding_min
+    #               +-- 0  if  x > encoding_max
+    mask = (encoding_min <= x).logical_and(x <= encoding_max)
+
+    # Therefore, dL / dx = `grad` * `mask`
+    return grad * mask
 
 
 def get_computed_encodings(bitwidth: int,
