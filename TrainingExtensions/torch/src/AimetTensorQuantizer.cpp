@@ -50,6 +50,8 @@
 
 #if ENABLE_CUDA_PYTORCH
 #include <c10/cuda/CUDACachingAllocator.h>
+#include <c10/cuda/CUDAFunctions.h>
+
 
 
 class PyTorchCudaAllocator: public DlQuantization::IAllocator
@@ -93,6 +95,14 @@ public:
 
     void updateStats(at::Tensor input, bool use_cuda)
     {
+#if ENABLE_CUDA_PYTORCH
+        // Use the same cuda device as the input
+        if (use_cuda && input.device().is_cuda())
+        {
+            c10::cuda::set_device(input.device().index());
+        }
+#endif
+
         // Set encoding as valid
         _isEncodingValid = true;
 
@@ -108,6 +118,7 @@ public:
             use_cuda ? DlQuantization::ComputationMode::COMP_MODE_GPU : DlQuantization::ComputationMode::COMP_MODE_CPU;
 
         DlQuantization::IAllocator* allocator;
+
 #if ENABLE_CUDA_PYTORCH
         allocator = &_allocator;
 #else
@@ -120,6 +131,14 @@ public:
     at::Tensor quantizeDequantize(at::Tensor input, DlQuantization::TfEncoding& encoding,
                                   DlQuantization::RoundingMode roundingMode, bool use_cuda)
     {
+#if ENABLE_CUDA_PYTORCH
+        // Use the same cuda device as the input
+        if (use_cuda && input.device().is_cuda())
+        {
+            c10::cuda::set_device(input.device().index());
+        }
+#endif
+
         // Create an empty output tensor based on the dimension and options of input
         at::IntArrayRef sizes  = input.sizes();
         at::Tensor output = at::empty(sizes, input.options());
@@ -138,6 +157,14 @@ public:
     at::Tensor quantize(at::Tensor input, DlQuantization::TfEncoding& encoding,
                         DlQuantization::RoundingMode roundingMode, bool use_cuda, bool shiftToSigned)
     {
+#if ENABLE_CUDA_PYTORCH
+        // Use the same cuda device as the input
+        if (use_cuda && input.device().is_cuda())
+        {
+            c10::cuda::set_device(input.device().index());
+        }
+#endif
+
         // Create an empty output tensor based on the dimension and options of input
         at::IntArrayRef sizes  = input.sizes();
         at::Tensor output = at::empty(sizes, input.options());
