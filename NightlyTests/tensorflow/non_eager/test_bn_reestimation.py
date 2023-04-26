@@ -54,7 +54,10 @@ from aimet_tensorflow.utils.op.bn_mutable import modify_sess_bn_mutable
 from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.utils.op.bn_mutable import get_active_bn_ops, set_mutable_bn_is_training_var
-from Examples.tensorflow.utils.add_computational_nodes_in_graph import add_image_net_computational_nodes_in_graph
+
+#from Examples.tensorflow.utils.add_computational_nodes_in_graph import add_image_net_computational_nodes_in_graph
+# currently multiple notebook example is using the above utilty function, making a copy,
+# TODO refactor to common TF util
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
@@ -62,6 +65,38 @@ AimetLogger.set_level_for_all_areas(logging.DEBUG)
 tf.compat.v1.disable_eager_execution()
 np.random.seed(0)
 tf.compat.v1.set_random_seed(0)
+
+def add_image_net_computational_nodes_in_graph(session: tf.compat.v1.Session, logits_name: str, num_classes: int):
+    """
+    :param session: Tensorflow session to operate on
+    :param logits_name: Output tensor name of session graph
+    :param num_classes: No of classes in model data
+    """
+    with session.graph.as_default():
+        # predicted value of the model
+        y_hat = session.graph.get_tensor_by_name(logits_name)
+        y_hat_argmax = tf.compat.v1.argmax(y_hat, axis=1)
+
+        # placeholder for the labels
+        y = tf.compat.v1.placeholder(tf.compat.v1.int64, shape=[None, num_classes], name='labels')
+        y_argmax = tf.compat.v1.argmax(y, axis=1)
+
+        # prediction Op
+        correct_prediction = tf.compat.v1.equal(y_hat_argmax, y_argmax)
+
+        # pylint: disable-msg=unused-variable
+        # accuracy Op: top1
+        top1_acc = tf.compat.v1.reduce_mean(tf.compat.v1.cast(correct_prediction, tf.compat.v1.float32), name='top1-acc')
+
+        # accuracy Op: top5
+        top5_acc = tf.compat.v1.reduce_mean(tf.compat.v1.cast(tf.compat.v1.nn.in_top_k(predictions=y_hat,
+                                                         targets=tf.compat.v1.cast(y_argmax, tf.compat.v1.int32),
+                                                         k=5),
+                                          tf.compat.v1.float32),
+                                  name='top5-acc')
+
+        # loss Op: loss
+        loss = tf.compat.v1.reduce_mean(tf.compat.v1.losses.softmax_cross_entropy(onehot_labels=y, logits=y_hat))
 
 def get_all_status(
         sess,
