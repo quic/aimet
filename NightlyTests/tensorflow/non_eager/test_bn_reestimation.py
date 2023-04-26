@@ -35,16 +35,11 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
 import pytest
-import logging
 import os
-
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-
-import argparse
 import logging
-from typing import List, Callable, Any
-
 import json
 import numpy as np
 import tensorflow as tf
@@ -56,6 +51,11 @@ from aimet_tensorflow.bn_reestimation import reestimate_bn_stats, _get_all_tf_bn
 from aimet_tensorflow.batch_norm_fold import fold_all_batch_norms_to_scale
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.utils.op.bn_mutable import modify_sess_bn_mutable
+from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
+from aimet_tensorflow.common.connectedgraph import ConnectedGraph
+from aimet_tensorflow.utils.op.bn_mutable import get_active_bn_ops, set_mutable_bn_is_training_var
+from Examples.tensorflow.utils.add_computational_nodes_in_graph import add_image_net_computational_nodes_in_graph
+
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 AimetLogger.set_level_for_all_areas(logging.DEBUG)
@@ -247,6 +247,83 @@ class TestBNReEstimation:
         assert np.allclose(output_baseline, output_fold_after_fold, atol=1e-2)
         sim.session.close()
 
+    def test_remove_bn_update_ops_with_training_ops(self):
+        """ verify that the BNs UPDATE_OPS are removed correctly after training ops are added (QAT) """
+        tf.compat.v1.reset_default_graph()
+        graph = tf.Graph()
+        with graph.as_default():
+            device = '/gpu:0'
+            with tf.device(device):
+                tf.keras.applications.mobilenet_v2.MobileNetV2(weights=None, input_shape=(224, 224, 3))
+        sess = tf.compat.v1.Session(graph=graph)
+        initialize_uninitialized_vars(sess)
+
+        start_op_names = ["input_1"]
+        output_op_names = ["predictions/Softmax"]
+        validation_inputs = ["labels"]
+        add_image_net_computational_nodes_in_graph(sess, logits_name=output_op_names[0] + ':0', num_classes=1000)
+
+        # Update BNs with mutable BNs.
+        updated_sess = modify_sess_bn_mutable(sess, start_op_names, output_op_names)
+
+        with updated_sess.graph.as_default():
+            update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
+            assert len(update_ops) == 104
+
+        # set all mutable BNs in training mode.
+        set_mutable_bn_is_training_var(updated_sess, True)
+        self._training_loop(updated_sess, update_ops, start_op_names, validation_inputs)
+
+        # Find BNs UPDATE_OPS programmatically.
+        update_ops_programmatically = []
+        conn_graph = ConnectedGraph(updated_sess.graph, start_op_names, output_op_names)
+        bn_conn_graph_ops = tuple(get_active_bn_ops(conn_graph))
+        for bn_conn_graph_op in bn_conn_graph_ops:
+            bn_tf_op = bn_conn_graph_op.get_tf_op_with_io_tensor().op
+            assign_moving_avg_op = BNUtils.get_assign_moving_avg_op(bn_tf_op)
+            assign_moving_avg_op_1 = BNUtils.get_assign_moving_avg_1_op(bn_tf_op)
+            update_ops_programmatically.append(assign_moving_avg_op)
+            update_ops_programmatically.append(assign_moving_avg_op_1)
+
+        with updated_sess.graph.as_default():
+            update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
+        assert len(update_ops_programmatically) == len(update_ops)
+
+        # Remove BNs UPDATE_OPS
+        for bn_conn_graph_op in bn_conn_graph_ops:
+            bn_tf_op = bn_conn_graph_op.get_tf_op_with_io_tensor().op
+            BNUtils.remove_bn_op_from_update_ops(updated_sess, bn_tf_op)
+        with updated_sess.graph.as_default():
+            update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
+        # check that UPDATE_OPS list is empty
+        assert not update_ops
+
+        sess.close()
+        updated_sess.close()
+
+    @staticmethod
+    def _training_loop(session, update_ops, data_inputs, validation_inputs):
+        """ utility to add training ops """
+        dummy_input = np.random.randn(1, 224, 224, 3)
+        dummy_labels = np.random.randn(1, 1000)
+
+        with session.graph.as_default():
+            loss_op = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.LOSSES)[0]
+            global_step_op = tf.compat.v1.train.create_global_step()
+
+            # Define an optimizer
+            optimizer_op = tf.compat.v1.train.MomentumOptimizer(learning_rate=0.01, momentum=0.9)
+            with tf.control_dependencies(update_ops):
+                train_op = optimizer_op.minimize(loss_op, global_step=global_step_op)
+
+            initialize_uninitialized_vars(session)
+            input_label_tensors = [session.graph.get_tensor_by_name(input_label + ':0')
+                                   for input_label in tuple(data_inputs) + tuple(validation_inputs)]
+            input_label_tensors_dict = {input_label_tensors[0]: dummy_input,
+                                        input_label_tensors[1]: dummy_labels}
+            feed_dict = {**input_label_tensors_dict}
+            for i in range(2):
+                batch_loss_val, _ = session.run([loss_op, train_op], feed_dict=feed_dict)
 
     def _reestimate_and_compare_results(self, sess_sim, sess_fp32, bn_re_restimation_dataset, bn_num_batches, input_op, output_op):
         bn_mean_var_tf_var_list, bn_momentum_tf_var_list, bn_training_tf_var_list = _get_all_tf_bn_vars_list(sess_sim)
