@@ -46,6 +46,7 @@ Layer groups: Groups of layers that are immediately connected and can be decompo
 from typing import Tuple, List, Union
 import numpy as np
 from onnx import onnx_pb, numpy_helper
+from onnxruntime.quantization.onnx_quantizer import ONNXModel
 
 from aimet_common.utils import AimetLogger
 from aimet_common.connected_graph.connectedgraph import get_ordered_ops
@@ -55,7 +56,7 @@ import aimet_common.libpymo as libpymo      # pylint: disable=import-error
 
 from aimet_onnx.meta.connectedgraph import ConnectedGraph, WEIGHT_INDEX, BIAS_INDEX
 from aimet_onnx.meta.operations import Op
-from aimet_onnx.utils import transpose_tensor, ParamUtils, get_node_attribute
+from aimet_onnx.utils import transpose_tensor, ParamUtils, get_node_attribute, replace_relu6_with_relu
 from aimet_onnx.batch_norm_fold import BNLayer, fold_all_batch_norms_to_weight
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -346,11 +347,18 @@ def equalize_model(model: onnx_pb.ModelProto):
 
     :param model: Model to equalize
     """
-    conv_bn_pairs, _ = fold_all_batch_norms_to_weight(model)
+    if not isinstance(model, ONNXModel):
+        model = ONNXModel(model)
+    conv_bn_pairs, bn_conv_pairs = fold_all_batch_norms_to_weight(model)
+
+    replace_relu6_with_relu(model)
 
     bn_dict = {}
     for conv_bn in conv_bn_pairs:
         bn_dict[conv_bn[0].name] = conv_bn[1]
+
+    for bn_conv in bn_conv_pairs:
+        bn_dict[bn_conv[1].name] = bn_conv[0]
 
     # perform cross-layer scaling on applicable layer sets
     cls = CrossLayerScaling(model)

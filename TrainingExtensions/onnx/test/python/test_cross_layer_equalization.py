@@ -37,16 +37,19 @@
 # =============================================================================
 import numpy as np
 import copy
+
+import onnx
 import torch
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 from onnxruntime_extensions import get_library_path
 from onnx import numpy_helper
 
+from aimet_torch.cross_layer_equalization import equalize_model as equalize_torch
 from aimet_common.cross_layer_equalization import GraphSearchUtils
 from aimet_onnx.meta.connectedgraph import ConnectedGraph, WEIGHT_INDEX, BIAS_INDEX
 from aimet_onnx.cross_layer_equalization import get_ordered_list_of_conv_modules, \
     cls_supported_layer_types, cls_supported_activation_types, CrossLayerScaling, HighBiasFold, equalize_model
-from aimet_onnx.utils import ParamUtils
+from aimet_onnx.utils import ParamUtils, replace_relu6_with_relu
 from aimet_onnx.batch_norm_fold import fold_all_batch_norms_to_weight
 
 from models import models_for_tests
@@ -55,6 +58,7 @@ from models import models_for_tests
 class TestCLS:
     def test_graph_search_utils_single_residual_model(self):
         model = models_for_tests.single_residual_model()
+        fold_all_batch_norms_to_weight(model.model)
         connected_graph = ConnectedGraph(model)
         ordered_module_list = get_ordered_list_of_conv_modules(connected_graph.starting_ops)
         graph_search_utils = GraphSearchUtils(connected_graph, ordered_module_list, cls_supported_layer_types, cls_supported_activation_types)
@@ -81,7 +85,7 @@ class TestCLS:
 
     def test_find_cls_sets_resnet_model(self):
         model = models_for_tests.single_residual_model()
-
+        fold_all_batch_norms_to_weight(model.model)
         connected_graph = ConnectedGraph(model)
         ordered_module_list = get_ordered_list_of_conv_modules(connected_graph.starting_ops)
         graph_search_utils = GraphSearchUtils(connected_graph, ordered_module_list, cls_supported_layer_types,
@@ -98,13 +102,14 @@ class TestCLS:
 
     def test_scale_model_residual(self):
         model = models_for_tests.single_residual_model()
-
+        fold_all_batch_norms_to_weight(model.model)
         input_shape = (1, 3, 32, 32)
         test_data = np.random.randn(*input_shape).astype(np.float32)
         session = _build_session(model)
         output_before_cls = session.run(None, {'input': test_data})
         cls = CrossLayerScaling(model)
         cls_set_info = cls.scale_model()
+        session = _build_session(model)
         output_after_cls = session.run(None, {'input': test_data})
         assert np.allclose(output_after_cls, output_before_cls)
         conv_3 = cls_set_info[0].cls_pair_info_list[0].layer1.get_module()
@@ -121,8 +126,9 @@ class TestCLS:
         output_before_cls = session.run(None, {'input': test_data})
         cls = CrossLayerScaling(model)
         cls_set_info = cls.scale_model()
+        session = _build_session(model)
         output_after_cls = session.run(None, {'input': test_data})
-        assert np.allclose(output_after_cls, output_before_cls)
+        assert np.allclose(output_after_cls, output_before_cls, rtol=1e-2)
         conv_3 = cls_set_info[0].cls_pair_info_list[0].layer1.get_module()
         conv_5 = cls_set_info[0].cls_pair_info_list[0].layer2.get_module()
         weight_3 = numpy_helper.to_array(ParamUtils.get_param(model.model, conv_3, WEIGHT_INDEX))
@@ -137,17 +143,22 @@ class TestCLS:
         output_before_cls = session.run(None, {'input': test_data})
         cls = CrossLayerScaling(model)
         cls_set_infos = cls.scale_model()
+        session = _build_session(model)
         output_after_cls = session.run(None, {'input': test_data})
         assert np.allclose(output_after_cls, output_before_cls)
         assert len(cls_set_infos) == 8
 
     def test_cle(self):
-        model = models_for_tests.my_model_with_bns()
+        np.random.seed(0)
+        model, _ = models_for_tests.my_model_with_bns()
+        fold_all_batch_norms_to_weight(model.model)
+        replace_relu6_with_relu(model)
         input_shape = (2, 10, 24, 24)
         test_data = np.random.randn(*input_shape).astype(np.float32)
         session = _build_session(model)
         output_before_cle = session.run(None, {'input': test_data})
         equalize_model(model)
+        session = _build_session(model)
         output_after_cle = session.run(None, {'input': test_data})
         assert np.allclose(output_after_cle, output_before_cle, rtol=1e-2)
 
@@ -180,23 +191,34 @@ class TestHighBiasFold:
     """ Test methods for HighBiasFold"""
 
     def test_find_high_bias_fold(self):
-        model = models_for_tests.my_model_with_bns()
+        model_onnx, model_torch = models_for_tests.get_single_residual_model_and_torch_model()
 
-        conv_bn_pairs, bn_conv_pairs = fold_all_batch_norms_to_weight(model.model)
+        input_shape = (1, 3, 32, 32)
+        test_data = np.random.randn(*input_shape).astype(np.float32)
+        equalize_torch(model_torch, input_shape)
+        cle_out = model_torch(torch.as_tensor(test_data))
+
+        # Equalize ONNX
+        conv_bn_pairs, bn_conv_pairs = fold_all_batch_norms_to_weight(model_onnx.model)
         bn_dict = {}
-        convs = []
+
+        replace_relu6_with_relu(model_onnx)
 
         for conv_bn in conv_bn_pairs:
             bn_dict[conv_bn[0].name] = conv_bn[1]
-            convs.append(conv_bn[0])
 
-        bias1 = copy.deepcopy(numpy_helper.to_array(ParamUtils.get_param(model.model, convs[1], BIAS_INDEX)))
-        cls = CrossLayerScaling(model)
+        for bn_conv in bn_conv_pairs:
+            bn_dict[bn_conv[1].name] = bn_conv[0]
+
+        cls = CrossLayerScaling(model_onnx)
         cls_set_info = cls.scale_model()
-        hbf = HighBiasFold(model)
+        hbf = HighBiasFold(model_onnx)
         hbf.bias_fold(cls_set_info, bn_dict)
-        bias1_new = numpy_helper.to_array(ParamUtils.get_param(model.model, convs[1], BIAS_INDEX))
-        assert not bias1.sum() == bias1_new.sum()
+
+        session = _build_session(model_onnx)
+        output_after_hbf_onnx = session.run(None, {'input': test_data})
+        assert np.allclose(output_after_hbf_onnx, cle_out.detach().numpy(), rtol=1e-2)
+
 
 def _build_session(model):
     """

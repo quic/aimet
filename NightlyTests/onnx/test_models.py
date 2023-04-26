@@ -43,16 +43,20 @@ from torchvision.models import MobileNetV2
 
 def mobilenetv2():
     x = torch.randn(1, 3, 224, 224, requires_grad=True)
-    model = MobileNetV2()
+    model = MobileNetV2().eval()
 
-    # Export the model
     torch.onnx.export(model,  # model being run
                       x,  # model input (or a tuple for multiple inputs)
-                      "./model_mobilenetv2.onnx",  # where to save the model (can be a file or file-like object)
-                      export_params=True,  # store the trained parameter weights inside the model file
-                      opset_version=12,  # the ONNX version to export the model to
-                      do_constant_folding=True,  # whether to execute constant folding for optimization
-                      input_names=['input'],  # the model's input names
-                      output_names=['output'])
+                      "./model_mobilenetv2.onnx",
+                      training=torch.onnx.TrainingMode.PRESERVE,
+                      export_params=True,
+                      do_constant_folding=False,
+                      input_names=['input'],
+                      output_names=['output'],
+                      dynamic_axes={
+                          'input': {0: 'batch_size'},
+                          'output': {0: 'batch_size'},
+                      }
+                      )
     model = ONNXModel(load_model('./model_mobilenetv2.onnx'))
     return model

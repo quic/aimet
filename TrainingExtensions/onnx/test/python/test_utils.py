@@ -158,3 +158,22 @@ class TestUtils:
         conv_layer = model.graph.node[0]
         assert utils.get_node_attribute(conv_layer, "pads") == [1, 1, 1, 1]
         assert utils.get_node_attribute(conv_layer, "kernel_shape") == [3, 3]
+
+    def test_replace_relu6_with_relu(self):
+        model = models_for_tests.depthwise_conv_model_with_relu6()
+        relu6_count = 0
+        original_relu_count = 0
+        for node in model.model.graph.node:
+            if node.op_type == 'Clip':
+                relu6_count += 1
+            if node.op_type == 'Relu':
+                original_relu_count += 1
+
+        utils.replace_relu6_with_relu(model)
+
+        relu_count = 0
+        for node in model.model.graph.node:
+            if node.op_type == 'Relu':
+                relu_count += 1
+
+        assert relu_count - original_relu_count == relu6_count
