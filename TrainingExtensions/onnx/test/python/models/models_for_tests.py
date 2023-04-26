@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -50,7 +50,7 @@ from onnx import helper, numpy_helper, OperatorSetIdProto, TensorProto, load_mod
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
 from torch.nn.modules.batchnorm import _BatchNorm
 
-from .mobilenet import MockMobileNetV1
+from .mobilenet import MockMobileNetV1, MockMobileNetV11
 
 
 import aimet_torch.elementwise_ops as aimet_elementwise
@@ -1116,13 +1116,31 @@ def single_residual_model():
     torch.onnx.export(model,  # model being run
                       x,  # model input (or a tuple for multiple inputs)
                       "./model_single_residual.onnx",  # where to save the model (can be a file or file-like object)
+                      training=torch.onnx.TrainingMode.EVAL,
                       export_params=True,  # store the trained parameter weights inside the model file
                       opset_version=12,  # the ONNX version to export the model to
                       do_constant_folding=True,  # whether to execute constant folding for optimization
                       input_names=['input'],  # the model's input names
                       output_names=['output'])
-    model = ONNXModel(load_model('./model_single_residual.onnx'))
-    return model
+    model_onnx = ONNXModel(load_model('./model_single_residual.onnx'))
+    return model_onnx
+
+def get_single_residual_model_and_torch_model():
+    x = torch.randn(1, 3, 32, 32, requires_grad=True)
+    model = SingleResidualWithAvgPool()
+
+    # Export the model
+    torch.onnx.export(model,  # model being run
+                      x,  # model input (or a tuple for multiple inputs)
+                      "./model_single_residual.onnx",  # where to save the model (can be a file or file-like object)
+                      training=torch.onnx.TrainingMode.PRESERVE,
+                      export_params=True,  # store the trained parameter weights inside the model file
+                      opset_version=12,  # the ONNX version to export the model to
+                      do_constant_folding=True,  # whether to execute constant folding for optimization
+                      input_names=['input'],  # the model's input names
+                      output_names=['output'])
+    model_onnx = ONNXModel(load_model('./model_single_residual.onnx'))
+    return model_onnx, model
 
 def multi_input_model():
     x = (torch.rand(32, 1, 28, 28, requires_grad=True), torch.rand(32, 1, 28, 28, requires_grad=True))
@@ -1175,6 +1193,22 @@ def transposed_conv_model_without_bn():
 def depthwise_conv_model():
     x = torch.randn(1, 3, 224, 224, requires_grad=True)
     model = MockMobileNetV1()
+
+    # Export the model
+    torch.onnx.export(model,  # model being run
+                      x,  # model input (or a tuple for multiple inputs)
+                      "./model_mock_mobilenet.onnx",  # where to save the model (can be a file or file-like object)
+                      export_params=True,  # store the trained parameter weights inside the model file
+                      opset_version=12,  # the ONNX version to export the model to
+                      do_constant_folding=True,  # whether to execute constant folding for optimization
+                      input_names=['input'],  # the model's input names
+                      output_names=['output'])
+    model = ONNXModel(load_model('./model_mock_mobilenet.onnx'))
+    return model
+
+def depthwise_conv_model_with_relu6():
+    x = torch.randn(1, 3, 224, 224, requires_grad=True)
+    model = MockMobileNetV11()
 
     # Export the model
     torch.onnx.export(model,  # model being run
@@ -1539,8 +1573,8 @@ def my_model_with_bns():
                       do_constant_folding=False,  # whether to execute constant folding for optimization
                       input_names=['input'],  # the model's input names
                       output_names=['output'])
-    model = ONNXModel(load_model('./model_single_residual.onnx'))
-    return model
+    model_onnx = ONNXModel(load_model('./model_single_residual.onnx'))
+    return model_onnx, model
 
 
 def initialize_bn_params(model: torch.nn.Module):
