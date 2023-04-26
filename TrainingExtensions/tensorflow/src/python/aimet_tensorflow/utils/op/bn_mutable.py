@@ -35,7 +35,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-""" Utilities to modify batchnorm layer's momentum of pre-traind tf2 model as mutable TF variable """
+""" Utilities to modify batchnorm layer's momentum of pre-trained tf2 model as mutable TF variable """
 
 from typing import List, Union, Tuple
 import numpy as np
@@ -51,6 +51,7 @@ from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
 _DEFAULT_BN_MOMENTUM = 0.99
 _DEFAULT_BN_EPSILON = 0.001
 _BN_MOMENTUM_NAME = '/mutable_momentum'
+_BN_IS_TRAINING_VAR_NAME = 'bn_training_var'
 
 
 def modify_model_bn_mutable(model: tf.keras.Model):
@@ -91,7 +92,7 @@ def modify_sess_bn_mutable(sess: tf.compat.v1.Session,
         if training_tf_placeholder:
             bn_training = tf.compat.v1.placeholder_with_default(False, shape=[], name='bn_training_placeholder')
         else:
-            bn_training = tf.Variable(tf.compat.v1.constant(False), trainable=False, name='bn_training_var')
+            bn_training = tf.Variable(tf.compat.v1.constant(False), trainable=False, name=_BN_IS_TRAINING_VAR_NAME)
 
         for bn_op in bn_ops:
             new_bn_name = bn_op.name + '_modified'
@@ -142,6 +143,23 @@ def get_active_bn_ops(connected_graph: ConnectedGraph):
         if conn_graph_op.type in ['FusedBatchNormV3', 'BatchNorm']:
             bn_conn_graph_op = conn_graph_op
             yield bn_conn_graph_op
+
+
+def set_mutable_bn_is_training_var(sess: tf.compat.v1.Session,
+                                   updated_value: bool):
+    """
+    Set all mutable BNs 'is_training' variable.
+
+    NOTE: invoke modify_sess_bn_mutable() API before invoking this API.
+
+    :param sess: TensorFlow session.
+    :param updated_value: Boolean True if all BNs in training mode.
+    """
+    with sess.graph.as_default():
+        var = [var for var in tf.compat.v1.global_variables() if var.name == _BN_IS_TRAINING_VAR_NAME + ':0']
+        assert len(var) == 1, "Unable to get BN is_training variable, convert to variable using" \
+                              " modify_sess_bn_mutable() API."
+        _set_var(sess, var[0], updated_value)
 
 
 def _get_bn_stats_and_params(session: tf.compat.v1.Session, bn_conn_graph_op: Op) \
