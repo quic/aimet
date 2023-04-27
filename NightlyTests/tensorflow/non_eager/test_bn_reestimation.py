@@ -287,9 +287,7 @@ class TestBNReEstimation:
         tf.compat.v1.reset_default_graph()
         graph = tf.Graph()
         with graph.as_default():
-            device = '/gpu:0'
-            with tf.device(device):
-                tf.keras.applications.mobilenet_v2.MobileNetV2(weights=None, input_shape=(224, 224, 3))
+            tf.keras.applications.mobilenet_v2.MobileNetV2(weights=None, input_shape=(224, 224, 3))
         sess = tf.compat.v1.Session(graph=graph)
         initialize_uninitialized_vars(sess)
 
