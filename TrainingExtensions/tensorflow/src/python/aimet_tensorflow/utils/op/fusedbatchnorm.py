@@ -765,7 +765,7 @@ class BNUtils:
         if bn_op.type in 'Identity':
             if_op = bn_op.inputs[0].op
             assert if_op.type == 'If'
-            identity_1_op = if_op.outputs[1].consumers()[0]
+            identity_1_op = [consumer for consumer in if_op.outputs[1].consumers() if consumer.type == 'Identity'][0]
             assert identity_1_op.type == 'Identity'
             sub_op = identity_1_op.outputs[0].consumers()[0]
             assert sub_op.type == 'Sub'
@@ -801,7 +801,7 @@ class BNUtils:
         if bn_op.type in 'Identity':
             if_op = bn_op.inputs[0].op
             assert if_op.type == 'If'
-            identity_2_op = if_op.outputs[2].consumers()[0]
+            identity_2_op = [consumer for consumer in if_op.outputs[2].consumers() if consumer.type == 'Identity'][0]
             assert identity_2_op.type == 'Identity'
             sub_op = identity_2_op.outputs[0].consumers()[0]
             assert sub_op.type == 'Sub'
