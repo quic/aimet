@@ -47,6 +47,7 @@ import pytest
 import torch
 import torch.nn as nn
 import yaml
+from packaging.version import Version
 from torchvision import models
 
 import aimet_common.libpymo as libpymo
@@ -3476,6 +3477,10 @@ class TestQuantizationSimLearnedGrid:
         output.backward()
         optimizer.step()
 
+    @pytest.mark.skipif(
+        Version(torch.__version__) >= Version('1.13.0'),
+        reason="Error `addmm_impl_cpu_` not implemented for Half in PyTorch 1.13.0 or later"
+    )
     def test_fp16_model_sim_eval_train_cpu(self):
         class DummyModel(nn.Module):
             def __init__(self):
