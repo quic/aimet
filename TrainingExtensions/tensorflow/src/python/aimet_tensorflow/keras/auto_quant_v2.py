@@ -48,9 +48,9 @@ from typing import List, Callable, Dict, Any, Tuple, Optional, Mapping
 import io
 from unittest.mock import patch
 import traceback
+import shutil
 from numpy.ma import copy
 from tqdm import tqdm
-
 import jinja2
 import tensorflow as tf
 
@@ -508,6 +508,10 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
                 if acc is not None:
                     _logger.info("Best eval score: %f", acc)
 
+                    # Save the best model with "best_model_" as prefix
+                    best_res = self.eval_manager.get_best_ptq_result()
+                    best_res.save_result_as("best_model")
+
                     if acc < target_acc:
                         _logger.info(
                             "AutoQuant is unable to match the target accuracy. "
@@ -695,7 +699,20 @@ class PtqResult:
         :return: Loaded model
         """
         return tf.keras.models.load_model(self.model_path)
-
+    def save_result_as(self, prefix: str = "best_model"):
+        """
+        Creates the copy of the PTQ result files with the given prefix.
+        :param prefix: prefix to be added to the file's basename
+        """
+        src_files = [self.model_path+".h5", self.model_path+"_converted.pb", self.encoding_path]
+        for file in src_files:
+            name = os.path.basename(file)
+            dirname = os.path.dirname(file)
+            dest = os.path.join(dirname, prefix + "_" + name)
+            if os.path.exists(file):
+                if os.path.exists(dest):
+                    os.remove(dest)
+                shutil.copyfile(file, dest)
     def as_dict(self):
         """Convert to dictionary"""
         return dict(model=self.load_model(),
