@@ -1082,6 +1082,8 @@ class _EvalSession:  # pylint: disable=too-many-instance-attributes, too-many-ar
         if self._ptq_result is not None:
             _logger.info("Session finished: %s. (eval score: %f)",
                          self.title, self._ptq_result.accuracy)
+        self._sim = None
+        self._acc = None
 
         self._spinner.__exit__(exc_type, exc_val, exc_tb)
 
