@@ -1308,7 +1308,7 @@ class QuantizationSimModel:
         tensor_quantizers = [None] * num_output_channels
         # Create a tensor_quantizer per channel
         for i in range(num_output_channels):
-            tensor_quantizer = libpymo.TensorQuantizer(libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+            tensor_quantizer = libpymo.TensorQuantizer(quant_scheme_to_libpymo[self._quant_scheme],
                                                        libpymo.RoundingMode.ROUND_NEAREST)
 
             tensor_quantizers[i] = tensor_quantizer
