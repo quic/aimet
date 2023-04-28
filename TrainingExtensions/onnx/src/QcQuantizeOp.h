@@ -61,7 +61,7 @@ private:
     std::unique_ptr<DlQuantization::ITensorQuantizationSim<float>> tensorQuantizationSim;
     const OrtKernelInfo* info_;
     Ort::CustomOpApi api_;
-    struct QcQuantizeInfo* quant_info;
+    struct QcQuantizeInfo* quantInfo;
     bool useCuda;
 };
 

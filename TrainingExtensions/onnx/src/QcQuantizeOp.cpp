@@ -44,16 +44,16 @@
 
 
 #ifdef ONNX_CUDA
-static OnnxCudaAllocator _allocator;
+static OnnxCudaAllocator cudaAllocator;
 #endif
-static OnnxCpuAllocator cpu_allocator;
+static OnnxCpuAllocator cpuAllocator;
 
 
 QcQuantizeKernel::QcQuantizeKernel(const OrtApi* api, const OrtKernelInfo* info, bool useCuda) :
     api_(*api), info_(info), useCuda(useCuda)
 {
     tensorQuantizationSim = DlQuantization::getTensorQuantizationSim<float>();
-    quant_info =
+    quantInfo =
         reinterpret_cast<struct QcQuantizeInfo*>(api_.KernelInfoGetAttribute<std::int64_t>(info_, "quant_info"));
 }
 
@@ -62,52 +62,52 @@ void QcQuantizeKernel::Compute(OrtKernelContext* context)
 {
     // Setup inputs
     const OrtValue* input = api_.KernelContext_GetInput(context, 0);
-    auto input_data       = api_.GetTensorData<float>(input);
+    auto inputData       = api_.GetTensorData<float>(input);
     OrtTensorDimensions dimensions(api_, input);
     // Setup outputs
     OrtValue* output = api_.KernelContext_GetOutput(context, 0, dimensions.data(), dimensions.size());
     auto result      = api_.GetTensorMutableData<float>(output);
-    OrtTensorTypeAndShapeInfo* output_info = api_.GetTensorTypeAndShape(output);
-    size_t size                            = api_.GetTensorShapeElementCount(output_info);
+    OrtTensorTypeAndShapeInfo* outputInfo = api_.GetTensorTypeAndShape(output);
+    size_t size                            = api_.GetTensorShapeElementCount(outputInfo);
 
-    std::vector<DlQuantization::TfEncoding*> encodings = quant_info->encoding;
+    std::vector<DlQuantization::TfEncoding*> encodings = quantInfo->encoding;
 
-    DlQuantization::TensorQuantizerOpMode op_mode = quant_info->opMode;
+    DlQuantization::TensorQuantizerOpMode opMode = quantInfo->opMode;
     // Disable unused quantizers
-    if (!quant_info->enabled)
+    if (!quantInfo->enabled)
     {
-        op_mode = DlQuantization::TensorQuantizerOpMode::passThrough;
+        opMode = DlQuantization::TensorQuantizerOpMode::passThrough;
     }
 
-    api_.ReleaseTensorTypeAndShapeInfo(output_info);
+    api_.ReleaseTensorTypeAndShapeInfo(outputInfo);
 
-    DlQuantization::IAllocator* allocator = &cpu_allocator;
+    DlQuantization::IAllocator* allocator = &cpuAllocator;
 #ifdef ONNX_CUDA
     if (useCuda)
     {
-        allocator = &_allocator;
+        allocator = &cudaAllocator;
         cudaDeviceSynchronize();
     }
 #endif
 
-    if (quant_info->isIntDataType)
+    if (quantInfo->isIntDataType)
     {
-        if (quant_info->usePerChannelMode)
+        if (quantInfo->usePerChannelMode)
         {
-            int axis = quant_info->channelAxis;
-            modeSpecificActionPerChannelInt(input_data, size, result, axis, dimensions, quant_info->tensorQuantizerRef,
-                                            op_mode, encodings, quant_info->useSymmetricEncoding, allocator, useCuda,
+            int axis = quantInfo->channelAxis;
+            modeSpecificActionPerChannelInt(inputData, size, result, axis, dimensions, quantInfo->tensorQuantizerRef,
+                                            opMode, encodings, quantInfo->useSymmetricEncoding, allocator, useCuda,
                                             tensorQuantizationSim);
         }
         else
         {
-            modeSpecificActionInt(input_data, size, result, quant_info->tensorQuantizerRef[0], op_mode, encodings[0],
-                                  quant_info->useSymmetricEncoding, allocator, useCuda);
+            modeSpecificActionInt(inputData, size, result, quantInfo->tensorQuantizerRef[0], opMode, encodings[0],
+                                  quantInfo->useSymmetricEncoding, allocator, useCuda);
         }
     }
     else
     {
-        modeSpecificActionFloat(input_data, size, result, op_mode, allocator, useCuda);
+        modeSpecificActionFloat(inputData, size, result, opMode, allocator, useCuda);
     }
 }
 
