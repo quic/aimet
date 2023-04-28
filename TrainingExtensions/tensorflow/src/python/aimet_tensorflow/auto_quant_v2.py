@@ -1130,6 +1130,7 @@ class _EvalSession:  # pylint: disable=too-many-instance-attributes, too-many-ar
             model: tf.compat.v1.Session = None,
             sim: QuantizationSimModel = None,
             acc: float = None,
+            avoid_recalculation: bool = True,
             **kwargs
     ) -> None:
         """
@@ -1139,17 +1140,22 @@ class _EvalSession:  # pylint: disable=too-many-instance-attributes, too-many-ar
         1) If sim and acc is specified, save them as the result of this session.
         2) If model is specified, evaluate the quantized accuracy of the model and save the result.
         An exception is that if self._sim and self._acc is present then rest of the conditions are ignored
+        except sim and if `avoid_recalculation` is True
 
         :param model: Result of PTQ.
         :param sim: Result of PTQ. The quamtization encoding (compute_encodings()) is
                     assumed to have been computed in advance.
         :param acc: Eval score.
+        :param avoid_recalculation: Defaults to True. If True uses self._sim if already present
         :param **kwargs: Additional arguments to the quantsim factory.
         :return: None
         """
 
+        # Gives preference to user provided sim
+        avoid_recalculation = avoid_recalculation and (sim is None)
+
         # Additional logic to avoid recalculations in case of values already computed from eval of the same session.
-        if self._sim and self._acc:
+        if avoid_recalculation and self._sim and self._acc:
             sim = self._sim
             acc = self._acc
             model = None
@@ -1167,6 +1173,9 @@ class _EvalSession:  # pylint: disable=too-many-instance-attributes, too-many-ar
             assert model is None
 
         self._set_ptq_result(sim, acc, applied_techniques)
+        # After the result is set we can remove the values of self._sim and self._acc
+        self._sim = None
+        self._acc = None
 
     def _set_ptq_result(
             self,
