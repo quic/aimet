@@ -223,6 +223,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         _validate_inputs(model, dataset, eval_callback, results_dir, strict_validation, \
                          quant_scheme, param_bw, output_bw, rounding_mode)
         self.fp32_model = model
+        self._fp32_acc = None
         self.dataset = dataset
         self.eval_callback = eval_callback
 
@@ -497,10 +498,10 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         try:
             with cache.enable(self.cache_dir):
                 _logger.info("Starting AutoQuant")
-                fp32_acc = self._evaluate_model_performance(self.fp32_model)
-                target_acc = fp32_acc - allowed_accuracy_drop
+                self._fp32_acc = self._evaluate_model_performance(self.fp32_model)
+                target_acc = self._fp32_acc - allowed_accuracy_drop
                 _logger.info("Target eval score: %f", target_acc)
-                _logger.info("FP32 eval score (W32A32): %f", fp32_acc)
+                _logger.info("FP32 eval score (W32A32): %f", self._fp32_acc)
 
                 ret = optimize_fn(self.fp32_model, target_acc)
 
