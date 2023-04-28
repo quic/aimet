@@ -51,9 +51,8 @@ from tensorflow.keras.layers import Dense, Conv2D, BatchNormalization, Flatten, 
 import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme
 
-from aimet_tensorflow.utils import graph_saver
 from aimet_tensorflow.batch_norm_fold import fold_all_batch_norms, find_all_batch_norms_to_fold, \
-    fold_all_batch_norms_to_scale, _get_weight_tensor_transpose_reshape, _get_bn_params
+    fold_all_batch_norms_to_scale, _get_bn_params
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.examples.test_models import tf_slim_basic_model
 from aimet_tensorflow.utils.graph import update_keras_bn_ops_trainable_flag
@@ -61,6 +60,8 @@ from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
+from aimet_tensorflow.utils.common import get_ordered_ops
+
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
 
@@ -713,7 +714,7 @@ class TestTrainingExtensionBnFoldToScale:
     @pytest.mark.parametrize("is_training_variable", [True, False])
     def test_fold_conv_with_bias_bn_relu(self, is_training_variable):
         """
-        test conv (no bias) + bn + relu sequence
+        test conv (with bias) + bn + relu sequence
         """
         np.random.seed(43)
         tf.compat.v1.reset_default_graph()
@@ -723,7 +724,7 @@ class TestTrainingExtensionBnFoldToScale:
             """ Model with conv + bn + relu sequence """
             training = tf.Variable(False, name='bn_training_var') if is_training_variable else False
             inputs = tf.keras.Input(shape=(24, 24, 10,))
-            x = tf.keras.layers.Conv2D(10, (3, 3))(inputs)
+            x = tf.keras.layers.Conv2D(12, (3, 3))(inputs)
             x = tf.keras.layers.BatchNormalization(beta_initializer=tf.random_normal_initializer(),
                                                    gamma_initializer=tf.random_normal_initializer(),
                                                    moving_mean_initializer=tf.random_normal_initializer(),
@@ -749,8 +750,10 @@ class TestTrainingExtensionBnFoldToScale:
         conv_a_quantizer = sim.quantizer_config('conv2d/BiasAdd_quantized')
         conv_w_quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
         if is_training_variable:
+            bn_op_to_be_removed = 3
             bn_a_quantizer = sim.quantizer_config('batch_normalization/cond/Identity_quantized')
         else:
+            bn_op_to_be_removed = 2
             bn_a_quantizer = sim.quantizer_config('batch_normalization/FusedBatchNormV3_quantized')
         relu_a_quantizer = sim.quantizer_config('Relu_quantized')
 
@@ -761,8 +764,12 @@ class TestTrainingExtensionBnFoldToScale:
 
         input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
         baseline_output = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
-
+        ordered_ops_before = get_ordered_ops(sim.session.graph, start_op_names, output_op_names)
         fold_all_batch_norms_to_scale(sim, start_op_names, output_op_names)
+
+        # Verify that the BN, BN_quantized ops are removed from the graph.
+        ordered_ops = get_ordered_ops(sim.session.graph, start_op_names, output_op_names)
+        assert len(ordered_ops) == len(ordered_ops_before) - bn_op_to_be_removed
 
         input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
         output_after_fold = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
@@ -794,7 +801,7 @@ class TestTrainingExtensionBnFoldToScale:
             """ Model with conv + bn + relu sequence """
             training = tf.Variable(False, name='bn_training_var') if is_training_variable else False
             inputs = tf.keras.Input(shape=(24, 24, 10,))
-            x = tf.keras.layers.Conv2D(10, (3, 3), use_bias=False)(inputs)
+            x = tf.keras.layers.Conv2D(12, (3, 3), use_bias=False)(inputs)
             x = tf.keras.layers.BatchNormalization(beta_initializer=tf.random_normal_initializer(),
                                                    gamma_initializer=tf.random_normal_initializer(),
                                                    moving_mean_initializer=tf.random_normal_initializer(),
@@ -814,14 +821,17 @@ class TestTrainingExtensionBnFoldToScale:
         start_op_names = ["input_1"]
         output_op_names = ["flatten/Reshape"]
         dummy_input = np.random.randn(1, 24, 24, 10)
+        sess = BiasUtils.initialize_model_with_bias(sess, start_op_names, output_op_names)
         sim = quantsim(sess, start_op_names, output_op_names, dummy_input)
 
         # Check quantizers are enabled/disabled properly
-        conv_a_quantizer = sim.quantizer_config('conv2d/Conv2D_quantized')
+        conv_a_quantizer = sim.quantizer_config('bias_value_quantized')
         conv_w_quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
         if is_training_variable:
+            bn_op_to_be_removed = 3
             bn_a_quantizer = sim.quantizer_config('batch_normalization/cond/Identity_quantized')
         else:
+            bn_op_to_be_removed = 2
             bn_a_quantizer = sim.quantizer_config('batch_normalization/FusedBatchNormV3_quantized')
         relu_a_quantizer = sim.quantizer_config('Relu_quantized')
 
@@ -832,8 +842,12 @@ class TestTrainingExtensionBnFoldToScale:
 
         input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
         baseline_output = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
-
+        ordered_ops_before = get_ordered_ops(sim.session.graph, start_op_names, output_op_names)
         fold_all_batch_norms_to_scale(sim, start_op_names, output_op_names)
+
+        # Verify that the BN, BN_quantized ops are removed from the graph.
+        ordered_ops = get_ordered_ops(sim.session.graph, start_op_names, output_op_names)
+        assert len(ordered_ops) == len(ordered_ops_before) - bn_op_to_be_removed
 
         input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
         output_after_fold = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
@@ -865,7 +879,7 @@ class TestTrainingExtensionBnFoldToScale:
             """ Model with depthwise (with bias) + bn + relu sequence """
             training = tf.Variable(False, name='bn_training_var') if is_training_variable else False
             inputs = tf.keras.Input(shape=(24, 24, 10,))
-            x = tf.keras.layers.DepthwiseConv2D(10, (3, 3))(inputs)
+            x = tf.keras.layers.DepthwiseConv2D((3, 3))(inputs)
             x = tf.keras.layers.BatchNormalization(beta_initializer=tf.random_normal_initializer(),
                                                    gamma_initializer=tf.random_normal_initializer(),
                                                    moving_mean_initializer=tf.random_normal_initializer(),
@@ -890,9 +904,12 @@ class TestTrainingExtensionBnFoldToScale:
         # Check quantizers are enabled/disabled properly
         depthwise_conv_a_quantizer = sim.quantizer_config('depthwise_conv2d/BiasAdd_quantized')
         depthwise_conv_w_quantizer = sim.quantizer_config('depthwise_conv2d/depthwise/ReadVariableOp_quantized')
+
         if is_training_variable:
+            bn_op_to_be_removed = 3
             bn_a_quantizer = sim.quantizer_config('batch_normalization/cond/Identity_quantized')
         else:
+            bn_op_to_be_removed = 2
             bn_a_quantizer = sim.quantizer_config('batch_normalization/FusedBatchNormV3_quantized')
         relu_a_quantizer = sim.quantizer_config('Relu_quantized')
 
@@ -903,8 +920,12 @@ class TestTrainingExtensionBnFoldToScale:
 
         input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
         baseline_output = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
-
+        ordered_ops_before = get_ordered_ops(sim.session.graph, start_op_names, output_op_names)
         fold_all_batch_norms_to_scale(sim, start_op_names, output_op_names)
+
+        # Verify that the BN, BN_quantized ops are removed from the graph.
+        ordered_ops = get_ordered_ops(sim.session.graph, start_op_names, output_op_names)
+        assert len(ordered_ops) == len(ordered_ops_before) - bn_op_to_be_removed
 
         input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
         output_after_fold = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
@@ -936,7 +957,7 @@ class TestTrainingExtensionBnFoldToScale:
             """ Model with depthwise (no bias) + bn + relu sequence """
             training = tf.Variable(False, name='bn_training_var') if is_training_variable else False
             inputs = tf.keras.Input(shape=(24, 24, 10,))
-            x = tf.keras.layers.DepthwiseConv2D(10, (3, 3), use_bias=False)(inputs)
+            x = tf.keras.layers.DepthwiseConv2D((3, 3), use_bias=False)(inputs)
             x = tf.keras.layers.BatchNormalization(beta_initializer=tf.random_normal_initializer(),
                                                    gamma_initializer=tf.random_normal_initializer(),
                                                    moving_mean_initializer=tf.random_normal_initializer(),
@@ -956,14 +977,18 @@ class TestTrainingExtensionBnFoldToScale:
         start_op_names = ["input_1"]
         output_op_names = ["flatten/Reshape"]
         dummy_input = np.random.randn(1, 24, 24, 10)
+        sess = BiasUtils.initialize_model_with_bias(sess, start_op_names, output_op_names)
         sim = quantsim(sess, start_op_names, output_op_names, dummy_input)
 
         # Check quantizers are enabled/disabled properly
-        depthwise_conv_a_quantizer = sim.quantizer_config('depthwise_conv2d/depthwise_quantized')
+        depthwise_conv_a_quantizer = sim.quantizer_config('bias_value_quantized')
         depthwise_conv_w_quantizer = sim.quantizer_config('depthwise_conv2d/depthwise/ReadVariableOp_quantized')
+
         if is_training_variable:
+            bn_op_to_be_removed = 3
             bn_a_quantizer = sim.quantizer_config('batch_normalization/cond/Identity_quantized')
         else:
+            bn_op_to_be_removed = 2
             bn_a_quantizer = sim.quantizer_config('batch_normalization/FusedBatchNormV3_quantized')
         relu_a_quantizer = sim.quantizer_config('Relu_quantized')
 
@@ -974,8 +999,13 @@ class TestTrainingExtensionBnFoldToScale:
 
         input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
         baseline_output = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
+        ordered_ops_before = get_ordered_ops(sim.session.graph, start_op_names, output_op_names)
 
         fold_all_batch_norms_to_scale(sim, start_op_names, output_op_names)
+
+        # Verify that the BN, BN_quantized ops are removed from the graph.
+        ordered_ops = get_ordered_ops(sim.session.graph, start_op_names, output_op_names)
+        assert len(ordered_ops) == len(ordered_ops_before) - bn_op_to_be_removed
 
         input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
         output_after_fold = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
@@ -1031,8 +1061,10 @@ class TestTrainingExtensionBnFoldToScale:
         conv_a_quantizer = sim.quantizer_config('conv2d/BiasAdd_quantized')
         conv_w_quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
         if is_training_variable:
+            bn_op_to_be_removed = 3
             bn_a_quantizer = sim.quantizer_config('batch_normalization/cond/Identity_quantized')
         else:
+            bn_op_to_be_removed = 2
             bn_a_quantizer = sim.quantizer_config('batch_normalization/FusedBatchNormV3_quantized')
 
         assert not conv_a_quantizer.enabled
@@ -1042,8 +1074,12 @@ class TestTrainingExtensionBnFoldToScale:
 
         input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
         baseline_output = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
-
+        ordered_ops_before = get_ordered_ops(sim.session.graph, start_op_names, output_op_names)
         fold_all_batch_norms_to_scale(sim, start_op_names, output_op_names)
+
+        # Verify that the BN, BN_quantized ops are removed from the graph.
+        ordered_ops = get_ordered_ops(sim.session.graph, start_op_names, output_op_names)
+        assert len(ordered_ops) == len(ordered_ops_before) - bn_op_to_be_removed
 
         input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
         output_after_fold = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
@@ -1101,14 +1137,17 @@ class TestTrainingExtensionBnFoldToScale:
         start_op_names = ["input_1"]
         output_op_names = ["flatten/Reshape"]
         dummy_input = np.random.randn(1, 24, 24, 10)
+        sess = BiasUtils.initialize_model_with_bias(sess, start_op_names, output_op_names)
         sim = quantsim(sess, start_op_names, output_op_names, dummy_input)
 
         # Check quantizers are enabled/disabled properly
-        conv_a_quantizer = sim.quantizer_config('conv2d/Conv2D_quantized')
+        conv_a_quantizer = sim.quantizer_config('bias_value_quantized')
         conv_w_quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
         if is_training_variable:
+            bn_op_to_be_removed = 3 # (Bn_If-> BN_Identity -> BN_quantized)
             bn_a_quantizer = sim.quantizer_config('batch_normalization/cond/Identity_quantized')
         else:
+            bn_op_to_be_removed = 2 # (Bn -> BN_quantized)
             bn_a_quantizer = sim.quantizer_config('batch_normalization/FusedBatchNormV3_quantized')
 
         assert not conv_a_quantizer.enabled
@@ -1119,7 +1158,12 @@ class TestTrainingExtensionBnFoldToScale:
         input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
         baseline_output = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
 
+        ordered_ops_before = get_ordered_ops(sim.session.graph, start_op_names, output_op_names)
         fold_all_batch_norms_to_scale(sim, start_op_names, output_op_names)
+
+        # Verify that the BN, BN_quantized ops are removed from the graph.
+        ordered_ops = get_ordered_ops(sim.session.graph, start_op_names, output_op_names)
+        assert len(ordered_ops) == len(ordered_ops_before) - bn_op_to_be_removed
 
         input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
         output_after_fold = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
@@ -1173,14 +1217,17 @@ class TestTrainingExtensionBnFoldToScale:
         start_op_names = ["input_1"]
         output_op_names = ["flatten/Reshape"]
         dummy_input = np.random.randn(1, 24, 24, 10)
+        sess = BiasUtils.initialize_model_with_bias(sess, start_op_names, output_op_names)
         sim = quantsim(sess, start_op_names, output_op_names, dummy_input)
 
         # Check quantizers are enabled/disabled properly
-        conv_a_quantizer = sim.quantizer_config('conv2d/Conv2D_quantized')
+        conv_a_quantizer = sim.quantizer_config('bias_value_quantized')
         conv_w_quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
         if is_training_variable:
+            bn_op_to_be_removed = 3
             bn_a_quantizer = sim.quantizer_config('batch_normalization/cond/Identity_quantized')
         else:
+            bn_op_to_be_removed = 2
             bn_a_quantizer = sim.quantizer_config('batch_normalization/FusedBatchNormV3_quantized')
 
         assert not conv_a_quantizer.enabled
@@ -1190,8 +1237,12 @@ class TestTrainingExtensionBnFoldToScale:
 
         input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
         baseline_output = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
-
+        ordered_ops_before = get_ordered_ops(sim.session.graph, start_op_names, output_op_names)
         fold_all_batch_norms_to_scale(sim, start_op_names, output_op_names)
+
+        # Verify that the BN, BN_quantized ops are removed from the graph.
+        ordered_ops = get_ordered_ops(sim.session.graph, start_op_names, output_op_names)
+        assert len(ordered_ops) == len(ordered_ops_before) - bn_op_to_be_removed
 
         input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
         output_after_fold = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
@@ -1251,19 +1302,26 @@ class TestTrainingExtensionBnFoldToScale:
         conv_a_quantizer = sim.quantizer_config('conv2d/BiasAdd_quantized')
         conv_w_quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
         if is_training_variable:
+            bn_op_to_be_removed = 3
             bn_a_quantizer = sim.quantizer_config('batch_normalization/cond/Identity_quantized')
         else:
+            bn_op_to_be_removed = 2
             bn_a_quantizer = sim.quantizer_config('batch_normalization/FusedBatchNormV3_quantized')
 
         assert not conv_a_quantizer.enabled
         assert conv_w_quantizer.enabled
         assert bn_a_quantizer.enabled
         bn_output_encoding = bn_a_quantizer.get_encoding()
+        assert conv_w_quantizer.quant_scheme == libpymo.QuantizationMode.QUANTIZATION_TF
 
         input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
         baseline_output = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
-
+        ordered_ops_before = get_ordered_ops(sim.session.graph, start_op_names, output_op_names)
         fold_all_batch_norms_to_scale(sim, start_op_names, output_op_names)
+
+        # Verify that the BN, BN_quantized ops are removed from the graph.
+        ordered_ops = get_ordered_ops(sim.session.graph, start_op_names, output_op_names)
+        assert len(ordered_ops) == len(ordered_ops_before) - bn_op_to_be_removed
 
         input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
         output_after_fold = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
