@@ -58,6 +58,7 @@ public:
     void Compute(OrtKernelContext* context);
 
 private:
+    std::unique_ptr<DlQuantization::ITensorQuantizationSim<float>> tensorQuantizationSim;
     const OrtKernelInfo* info_;
     Ort::CustomOpApi api_;
     struct QcQuantizeInfo* quant_info;

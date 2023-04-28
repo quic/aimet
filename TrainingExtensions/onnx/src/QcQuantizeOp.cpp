@@ -40,8 +40,6 @@
 #include "AimetOpUtils.h"
 
 
-#include <cmath>
-#include <mutex>
 #include <vector>
 
 
@@ -54,6 +52,7 @@ static OnnxCpuAllocator cpu_allocator;
 QcQuantizeKernel::QcQuantizeKernel(const OrtApi* api, const OrtKernelInfo* info, bool useCuda) :
     api_(*api), info_(info), useCuda(useCuda)
 {
+    tensorQuantizationSim = DlQuantization::getTensorQuantizationSim<float>();
     quant_info =
         reinterpret_cast<struct QcQuantizeInfo*>(api_.KernelInfoGetAttribute<std::int64_t>(info_, "quant_info"));
 }
@@ -97,14 +96,14 @@ void QcQuantizeKernel::Compute(OrtKernelContext* context)
         {
             int axis = quant_info->channelAxis;
             modeSpecificActionPerChannelInt(input_data, size, result, axis, dimensions, quant_info->tensorQuantizerRef,
-                                            op_mode, encodings, quant_info->useSymmetricEncoding, allocator, useCuda);
+                                            op_mode, encodings, quant_info->useSymmetricEncoding, allocator, useCuda,
+                                            tensorQuantizationSim);
         }
         else
         {
             modeSpecificActionInt(input_data, size, result, quant_info->tensorQuantizerRef[0], op_mode, encodings[0],
                                   quant_info->useSymmetricEncoding, allocator, useCuda);
         }
-
     }
     else
     {

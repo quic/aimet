@@ -39,32 +39,27 @@
 #ifndef AIMET_QUANTIZEDEQUANTIZEUTILS_HPP
 #define AIMET_QUANTIZEDEQUANTIZEUTILS_HPP
 
-#include "OnnxOpUtils.h"
 #include "DlQuantization/TensorQuantizer.h"
+#include "OnnxOpUtils.h"
 #include <cstdint>
 #include <stdexcept>
 #include <vector>
 
+#ifdef ONNX_CUDA
+#include <cuda_runtime_api.h>
+#endif
 
-template <typename DTYPE>
-void quantizeDequantizePerChannelGPU(const DTYPE* inTensor, DTYPE* outTensor, std::vector<int64_t>& dims, int axis,
-                                     std::vector<DlQuantization::TfEncoding*>& encodings,
-                                     DlQuantization::IAllocator* allocator);
-
-template <typename DTYPE>
-void quantizeDequantizePerChannelCPU(const DTYPE* inTensor, DTYPE* outTensor, std::vector<int64_t>& dims, int axis,
-                                     std::vector<DlQuantization::TfEncoding*>& encodings);
 
 template <typename T>
-void sliceTensorChannelGPU(const T* inTensor, T* outTensor, long iters, long copy_width, long input_stride,
-                           long output_stride, long input_offset, long output_offset);
+void sliceTensorChannelGPU(const T* inTensor, T* outTensor, long iters, long copyWidth, long inputStride,
+                           long outputStride, long inputOffset, long outputOffset);
 
 
 template <typename T>
 void sliceTensorAlongAxis(const T* inTensor, std::vector<int64_t>& dims, size_t axis, size_t channel, T* outTensor,
                           bool useCuda)
 {
-    uint64_t copy_width = 1;
+    uint64_t copyWidth = 1;
     uint64_t iter       = 1;
     for (int i = 0; i < dims.size(); i++)
     {
@@ -74,16 +69,16 @@ void sliceTensorAlongAxis(const T* inTensor, std::vector<int64_t>& dims, size_t 
         }
         else if (i > axis)
         {
-            copy_width *= dims[i];
+            copyWidth *= dims[i];
         }
     }
-    uint64_t incr          = copy_width * dims[axis];
-    uint64_t input_offset  = copy_width * channel;
-    uint64_t output_stride = copy_width;
+    uint64_t incr         = copyWidth * dims[axis];
+    uint64_t inputOffset  = copyWidth * channel;
+    uint64_t outputStride = copyWidth;
     if (useCuda)
     {
 #ifdef ONNX_CUDA
-        sliceTensorChannelGPU(inTensor, outTensor, iter, copy_width, incr, output_stride, input_offset, 0);
+        sliceTensorChannelGPU(inTensor, outTensor, iter, copyWidth, incr, outputStride, inputOffset, 0);
 #else
         throw std::runtime_error("Not compiled for GPU mode.");
 #endif
@@ -92,30 +87,67 @@ void sliceTensorAlongAxis(const T* inTensor, std::vector<int64_t>& dims, size_t 
     {
         for (long i = 0; i < iter; i++)
         {
-            std::copy(inTensor + input_offset, inTensor + input_offset + copy_width, outTensor + i * copy_width);
-            input_offset += incr;
+            std::copy(inTensor + inputOffset, inTensor + inputOffset + copyWidth, outTensor + i * copyWidth);
+            inputOffset += incr;
         }
     }
 }
 
 
 template <typename T>
-void quantizeDequantizePerChannel(const T* inTensor, std::vector<int64_t>& shape, int axis, T* outTensor,
-                                  std::vector<DlQuantization::TfEncoding*>& encodings,
-                                  std::vector<DlQuantization::TensorQuantizer*>& tensorQuantizers, bool useCuda,
-                                  DlQuantization::IAllocator* allocator)
+void quantizeDequantizePerChannel(
+    const T* inTensor, std::vector<int64_t>& shape, int axis, T* outTensor,
+    std::vector<DlQuantization::TfEncoding*>& encodings,
+    std::vector<DlQuantization::TensorQuantizer*>& tensorQuantizers, bool useCuda,
+    DlQuantization::IAllocator* allocator,
+    std::unique_ptr<DlQuantization::ITensorQuantizationSim<float> >& tensorQuantizationSim)
 {
+    size_t channels   = shape[axis];
+    size_t numElement = 1;
+    size_t innerDims  = 1;
+    for (int i = 0; i < shape.size(); i++)
+    {
+        numElement *= shape[i];
+        if (i > axis)
+        {
+            innerDims *= shape[i];
+        }
+    }
+
+    T encVec[4][channels];
+    for (int i = 0; i < channels; i++)
+    {
+        encVec[0][i] = encodings[i]->min;
+        encVec[1][i] = encodings[i]->max;
+        encVec[2][i] = encodings[i]->delta;
+        encVec[3][i] = encodings[i]->offset;
+    }
+    T* encodingVectorDevice;
     if (useCuda)
     {
 #ifdef ONNX_CUDA
-        quantizeDequantizePerChannelGPU(inTensor, outTensor, shape, axis, encodings, allocator);
+        encodingVectorDevice = (T*) allocator->allocateRaw(4 * channels * sizeof(T));
+        cudaMemcpy(encodingVectorDevice, encVec, 4 * channels * sizeof(T), cudaMemcpyHostToDevice);
 #else
         throw std::runtime_error("Not compiled for GPU mode.");
 #endif
     }
     else
     {
-        quantizeDequantizePerChannelCPU(inTensor, outTensor, shape, axis, encodings);
+        encodingVectorDevice = (T*) encVec;
+    }
+
+    T* encodingMin    = encodingVectorDevice;
+    T* encodingMax    = encodingVectorDevice + channels;
+    T* encodingDelta  = encodingVectorDevice + 2 * channels;
+    T* encodingOffset = encodingVectorDevice + 3 * channels;
+
+    tensorQuantizationSim->quantizeDequantizeTensorPerChannel(inTensor, channels, numElement, innerDims, outTensor,
+                                                              encodingMin, encodingMax, encodingDelta, encodingOffset,
+                                                              tensorQuantizers[0]->roundingMode, useCuda);
+    if (useCuda)
+    {
+        allocator->deleteRaw(encodingVectorDevice);
     }
 }
 

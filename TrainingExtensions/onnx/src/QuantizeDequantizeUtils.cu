@@ -49,107 +49,38 @@ inline int CUDA_NUM_BLOCKS(const int N)
 
 
 template <typename T>
-__global__ void sliceTensorChannelKernel(const T* inTensor, T* outTensor, long iters, long copy_width,
-                                         long input_stride, long output_stride, long input_offset, long output_offset)
+__global__ void sliceTensorChannelKernel(const T* inTensor, T* outTensor, long iters, long copyWidth,
+                                         long inputStride, long outputStride, long inputOffset, long outputOffset)
 {
     /*
      * Can be used to retrieve a specific channel of the input tensor into the output tensor
      * For example: 4-D array [in_chan, out_chan, k, k], to write outTensor <- inTensor[:, n, :, :],
-     * iters = in_chan; copy_width = k * k; input_stride = out_chan * k * k; output_stride = copy_width;
-     * input_offset = n * k * k; output_offset = 0;
+     * iters = in_chan; copyWidth = k * k; inputStride = out_chan * k * k; outputStride = copyWidth;
+     * inputOffset = n * k * k; outputOffset = 0;
      *
      */
     int64_t idx            = blockIdx.x * blockDim.x + threadIdx.x;
-    int64_t total_elements = iters * copy_width;
-    if (idx < total_elements)
+    int64_t totalElements = iters * copyWidth;
+    if (idx < totalElements)
     {
-        int64_t slice_number = idx / copy_width;
-        int64_t slice_pos = idx % copy_width;
-        int64_t input_idx  = input_offset + slice_number * input_stride + slice_pos;
-        int64_t output_idx = output_offset + slice_number * output_stride + slice_pos;
-        outTensor[output_idx] = inTensor[input_idx];
+        int64_t sliceNumber  = idx / copyWidth;
+        int64_t slicePos     = idx % copyWidth;
+        int64_t inputIdx     = inputOffset + sliceNumber * inputStride + slicePos;
+        int64_t outputIdx    = outputOffset + sliceNumber * outputStride + slicePos;
+        outTensor[outputIdx] = inTensor[inputIdx];
     }
 }
 
 template <typename T>
-void sliceTensorChannelGPU(const T* inTensor, T* outTensor, long iters, long copy_width, long input_stride,
-                           long output_stride, long input_offset, long output_offset)
+void sliceTensorChannelGPU(const T* inTensor, T* outTensor, long iters, long copyWidth, long inputStride,
+                           long outputStride, long inputOffset, long outputOffset)
 {
-    int64_t total_threads = iters * copy_width;
-    int64_t grid_size     = CUDA_NUM_BLOCKS(total_threads);
-    sliceTensorChannelKernel<T><<<grid_size, CUDA_NUM_THREADS>>>(inTensor, outTensor, iters, copy_width, input_stride,
-                                                                 output_stride, input_offset, output_offset);
+    int64_t totalThreads = iters * copyWidth;
+    int64_t gridSize     = CUDA_NUM_BLOCKS(totalThreads);
+    sliceTensorChannelKernel<T><<<gridSize, CUDA_NUM_THREADS>>>(inTensor, outTensor, iters, copyWidth, inputStride,
+                                                                 outputStride, inputOffset, outputOffset);
 }
 
 
-template <typename DTYPE>
-__global__ void quantizeDequantizePerChannelKernel(const DTYPE* inTensor, DTYPE* outTensor, DTYPE* encodingMin,
-                                                   DTYPE* encodingMax, DTYPE* encodingDelta, uint num_el,
-                                                   uint innerDims, uint num_channels)
-{
-    uint idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < num_el)
-    {
-        uint chanIdx = (idx / innerDims) % num_channels;
-
-        DTYPE delta = encodingDelta[chanIdx];
-
-        // Saturate
-        DTYPE out = fmaxf(fminf(inTensor[idx], encodingMax[chanIdx]), encodingMin[chanIdx]);
-        // Scale
-        out = out / delta;
-        // Round, unscale
-        out            = roundf(out) * delta;
-        outTensor[idx] = out;
-    }
-}
-
-
-template <typename DTYPE>
-void quantizeDequantizePerChannelGPU(const DTYPE* inTensor, DTYPE* outTensor, std::vector<int64_t>& dims, int axis,
-                                     std::vector<DlQuantization::TfEncoding*>& encodings,
-                                     DlQuantization::IAllocator* allocator)
-{
-    int64_t channels = dims[axis];
-    int num_el       = 1;
-    for (long dim: dims)
-    {
-        num_el *= dim;
-    }
-    int64_t total_threads = num_el;
-    int64_t grid_size     = CUDA_NUM_BLOCKS((int) total_threads);
-    DTYPE enc_vec[3][channels];
-    for (int i = 0; i < channels; i++)
-    {
-        enc_vec[0][i] = encodings[i]->min;
-        enc_vec[1][i] = encodings[i]->max;
-        enc_vec[2][i] = encodings[i]->delta;
-    }
-    auto encodingVectorDevice = (DTYPE*) allocator->allocateRaw(3 * channels * sizeof(DTYPE));
-    cudaMemcpy(encodingVectorDevice, enc_vec, 3 * channels * sizeof(DTYPE), cudaMemcpyHostToDevice);
-    DTYPE* encodingMin   = encodingVectorDevice;
-    DTYPE* encodingMax   = encodingVectorDevice + channels;
-    DTYPE* encodingDelta = encodingVectorDevice + 2 * channels;
-
-    int innerDims = 1;
-    for (int i = 0; i < dims.size(); i++)
-    {
-        if (i > axis)
-        {
-            innerDims *= dims[i];
-        }
-    }
-
-    quantizeDequantizePerChannelKernel<<<grid_size, CUDA_NUM_THREADS>>>(inTensor, outTensor, encodingMin, encodingMax,
-                                                                        encodingDelta, num_el, innerDims, channels);
-
-    allocator->deleteRaw(encodingVectorDevice);
-}
-
-
-template void quantizeDequantizePerChannelGPU(const float* inTensor, float* outTensor, std::vector<int64_t>& dims,
-                                              int axis, std::vector<DlQuantization::TfEncoding*>& encodings,
-                                              DlQuantization::IAllocator* allocator);
-
-template void sliceTensorChannelGPU(const float* inTensor, float* outTensor, long iters, long copy_width,
-                                    long input_stride, long output_stride, long input_offset, long output_offset);
+template void sliceTensorChannelGPU(const float* inTensor, float* outTensor, long iters, long copyWidth,
+                                    long inputStride, long outputStride, long inputOffset, long outputOffset);
