@@ -489,7 +489,8 @@ def _delete_bn_from_model(sess: tf.compat.v1.Session,
                           bn_op: OpWithMetaInfoType,
                           is_bias_valid: bool):
     """
-    Delete BN from the session. If BN's previous conv doesn't have bias, is_bias_valid must
+    Delete BN and BN_quantized ops from the session.graph.
+    If BN's previous conv doesn't have bias, is_bias_valid must
     be False. In that case, need to find the correct BN's input tensor.
 
     Note: supports only Fused BN op types (FusedBatchNormV3, Identity).
@@ -502,11 +503,19 @@ def _delete_bn_from_model(sess: tf.compat.v1.Session,
     bn_in_tensor = sess.graph.get_tensor_by_name(bn_op.in_tensor.name)
     bn_out_tensor = sess.graph.get_tensor_by_name(bn_op.out_tensor.name)
 
+    # Find BNs correct input tensor.
     if not is_bias_valid:
         bn_in_tensor = bn_in_tensor.consumers()[0].outputs[0].consumers()[0].outputs[0]
-    assert bn_in_tensor.op.type == 'BiasAdd', 'BNs preceding op must be of type BiasAdd.'
+        assert bn_in_tensor.op.type == 'BiasAdd', 'BNs preceding op must be of type BiasAdd.'
+    else:
+        bn_in_tensor = bn_in_tensor.consumers()[0].outputs[0]
+        assert bn_in_tensor.op.type == 'QcQuantize', 'BNs preceding op must be of type QcQuantize.'
 
-    # Detach BN from the graph.
+    # Find BNs correct output tensor.
+    bn_out_tensor = bn_out_tensor.consumers()[0].outputs[0]
+    assert bn_out_tensor.op.type == 'QcQuantize', 'BNs output op must be of type QcQuantize.'
+
+    # Detach BN and following BN_quantized ops from the graph.
     BNUtils.skip_bn_op(sess, bn_tf_op, bn_in_tensor, bn_out_tensor)
 
 
@@ -559,6 +568,7 @@ def _fold_pair_scale(conv_linear_w_quantizer: QuantizerInfo,
         encoding.min = bn_encoding.min
         encoding.offset = bn_encoding.offset
         encoding.bw = bn_encoding.bw
+        conv_linear_a_quantizer.set_op_mode(int(libpymo.TensorQuantizerOpMode.quantizeDequantize))
         conv_linear_a_quantizer.set_encoding(encoding)
 
     bn_a_quantizer.enabled = False
