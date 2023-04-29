@@ -40,6 +40,8 @@ import typing
 import numpy as np
 import tensorflow as tf
 
+from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper
+
 
 class WeightTensorUtils:
     """
@@ -109,3 +111,23 @@ class WeightTensorUtils:
         param_tensors = layer.get_weights()
         weight_tensor = param_tensors[0]
         return np.amax(np.abs(weight_tensor), axis=axis)
+
+    @staticmethod
+    def get_all_sim_models_layer_to_wrap_weights(model: tf.keras.Model) -> typing.List:
+        """
+        Helper function to get a QuantizationSimModel's original wrapped layers weights.
+
+        :param model: QuantizationSimModel to get weights from
+        :return: A list of weights
+        """
+        layer_to_wrap_weights = []
+
+        for layer in model.layers:
+            if isinstance(layer, tf.keras.layers.InputLayer):
+                continue
+            if isinstance(layer, QcQuantizeWrapper):
+                layer_to_wrap_weights.extend(layer._layer_to_wrap.get_weights()) #pylint: disable=protected-access
+            else:
+                layer_to_wrap_weights.extend(layer.get_weights())
+
+        return layer_to_wrap_weights

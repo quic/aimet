@@ -36,6 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+#pylint: disable=too-many-lines
 """ Utility for batch norm fold in tf 2.x """
 from typing import Iterable, Optional, Tuple, Union, List, Dict, Set
 import numpy as np
@@ -53,6 +54,7 @@ from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 from aimet_tensorflow.keras.utils import common
 from aimet_tensorflow.keras.utils.model_connection_utils import ModelLayerConnections, ModelLayerConnectionsProperties
 from aimet_tensorflow.keras.utils.quantizer_utils import get_wrappers_bias_quantizer, get_wrappers_weight_quantizer
+from aimet_tensorflow.keras.utils.weight_tensor_utils import WeightTensorUtils
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
@@ -749,13 +751,17 @@ def fold_all_batch_norms_to_scale(sim: QuantizationSimModel) -> List[Tuple[QcQua
         (quant_wrappers[bn], quant_wrappers[conv]) for bn, conv in bn_conv_pairs
     ]
 
+    old_model_without_wrappers = tf.keras.models.clone_model(model)
+    conv_bn_pairs_without_wrappers, _, _ = _find_all_batch_norms_to_fold(old_model_without_wrappers)
+    old_model_without_wrappers.set_weights(WeightTensorUtils.get_all_sim_models_layer_to_wrap_weights(sim.model))
+
     # We fold both the sim.model and sim._model_without_wrappers because we rebuild the QuantizationSimModel during
     # export and this utilizes the sim._model_without_wrappers to achieve this.
     bn_fold_sim_model = _fold_given_batch_norms(sim.model, conv_bn_pairs, bn_conv_pairs)
-    _, bn_fold_model = fold_all_batch_norms(model)
-
     sim.model = bn_fold_sim_model if bn_fold_sim_model else sim.model
-    sim._model_without_wrappers = bn_fold_model if bn_fold_model else sim._model_without_wrappers
+
+    bn_fold_model = _fold_given_batch_norms(old_model_without_wrappers, conv_bn_pairs_without_wrappers, [])
+    sim._model_without_wrappers = bn_fold_model
 
     return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs]
 
