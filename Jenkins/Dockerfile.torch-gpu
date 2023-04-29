@@ -158,6 +158,7 @@ RUN python3 -m pip --no-cache-dir install \
         grpcio-tools \
         h5py==2.10.0 \
         ipykernel \
+        ipython==8.12.1 \
         Jinja2==3.0.3 \
         jupyter \
         keras==2.2.4 \
