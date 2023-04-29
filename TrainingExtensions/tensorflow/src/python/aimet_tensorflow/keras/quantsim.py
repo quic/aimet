@@ -52,7 +52,6 @@ from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.graphsearchtuils import GraphSearchUtils
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
 from aimet_tensorflow.keras.quant_sim.qc_mha_wrapper import QcQuantizableMultiHeadAttention
-from aimet_tensorflow.keras.quant_sim.rebuild_quantsim_model import RebuiltQuantSimModelFactory
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import TensorQuantizer, ActivationTensorQuantizer, \
     ParamPerTensorQuantizer, StaticGridPerChannelQuantizer, ParamPerChannelQuantizer
 from aimet_tensorflow.keras.quantsim_config.quantsim_config import QuantSimConfigurator, INPUT_QUANTIZERS, \
@@ -443,10 +442,6 @@ class QuantizationSimModel(tf.keras.Model):
         self._model_without_wrappers.save(model_path)
         self._model_without_wrappers.save(model_path + '.h5', save_format='h5')
 
-        # Save the state of the model to later rebuild it after converting to a frozen pb. Freezing to a pb invalidates
-        # all Keras graphs. Meaning that the model needs to be rebuilt to allow users to still use sim.model after exporting.
-        rebuilt_quantsim_model_worker = RebuiltQuantSimModelFactory(self)
-
         # Conversion of saved h5 model to pb model for consumption by SNPE/QNN
         try:
             convert_h5_model_to_pb_model(f'{model_path}.h5', custom_objects=custom_objects)
@@ -454,14 +449,14 @@ class QuantizationSimModel(tf.keras.Model):
             _logger.error("Could not convert h5 to frozen pb. "
                           "Please call export() again with custom_objects defined.")
             raise
+        finally:
+            encodings_dict = self.get_encodings_dict()
+            encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
+            save_json_yaml(encoding_file_path, encodings_dict)
 
-        # Rebuild the model after converting to a frozen pb
-        rebuilt_quantsim_model_worker.rebuild_model()
-        self.model = rebuilt_quantsim_model_worker.rebuilt_model
-
-        encodings_dict = self.get_encodings_dict()
-        encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
-        save_json_yaml(encoding_file_path, encodings_dict)
+            # Keras magic under the hood that causes the 'Invalid Graph' error to go away
+            # TODO: Investigate what is actually fixing this issue.
+            _ = tf.keras.models.clone_model(self._model_without_wrappers)
 
     def _compute_and_set_parameter_encodings(self, ops_with_invalid_encodings: List):
         # pylint: disable=too-many-nested-blocks
