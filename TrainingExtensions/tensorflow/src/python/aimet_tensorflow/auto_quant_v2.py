@@ -250,6 +250,7 @@ class AutoQuant:  # pylint: disable=too-many-instance-attributes
         self.output_op_names = output_op_names
         self.dataset = dataset
         self.eval_callback = eval_callback
+        self._fp32_accuracy = None
 
         self._quantsim_params = dict(
             param_bw=param_bw,
@@ -549,17 +550,17 @@ class AutoQuant:  # pylint: disable=too-many-instance-attributes
             cache.mark("adaround", TfSessionSerializationProtocol()) \
             (Adaround.apply_adaround)
 
-        sess = _apply_adaround_cached(sess,
-                                      self.starting_op_names,
-                                      self.output_op_names,
-                                      self.adaround_params,
-                                      path=self.results_dir,
-                                      filename_prefix=filename_prefix,
-                                      default_param_bw=self._quantsim_params["param_bw"],
-                                      default_quant_scheme=self._quantsim_params.get("quant_scheme").param_quant_scheme,
-                                      default_config_file=self._quantsim_params["config_file"])
+        ada_sess = _apply_adaround_cached(sess,
+                                          self.starting_op_names,
+                                          self.output_op_names,
+                                          self.adaround_params,
+                                          path=self.results_dir,
+                                          filename_prefix=filename_prefix,
+                                          default_param_bw=self._quantsim_params["param_bw"],
+                                          default_quant_scheme=self._quantsim_params.get("quant_scheme").param_quant_scheme,
+                                          default_config_file=self._quantsim_params["config_file"])
 
-        return sess, adaround_encoding_path
+        return ada_sess, adaround_encoding_path
 
     def _optimize_helper(
             self,
@@ -584,10 +585,10 @@ class AutoQuant:  # pylint: disable=too-many-instance-attributes
             with cache.enable(self.cache_dir):
                 _logger.info("Starting AutoQuant")
 
-                fp32_acc = self._evaluate_model_performance(self.fp32_model)
-                target_acc = fp32_acc - allowed_accuracy_drop
+                self._fp32_accuracy = self._evaluate_model_performance(self.fp32_model)
+                target_acc = self._fp32_accuracy - allowed_accuracy_drop
                 _logger.info("Target eval score: %f", target_acc)
-                _logger.info("FP32 eval score (W32A32): %f", fp32_acc)
+                _logger.info("FP32 eval score (W32A32): %f", self._fp32_accuracy)
 
                 ret = optimize_fn(self.fp32_model, target_acc)
 
@@ -966,6 +967,8 @@ class _EvalSession:  # pylint: disable=too-many-instance-attributes, too-many-ar
         self._results_dir = results_dir
         self._strict_validation = strict_validation
         self._ptq = ptq
+        self._sim = None
+        self._acc = None
 
         self._spinner = None
 
@@ -1014,6 +1017,8 @@ class _EvalSession:  # pylint: disable=too-many-instance-attributes, too-many-ar
             "effective": True,
         }
         self._ptq_result = None
+        self._sim = None
+        self._acc = None
 
     def wrap(self, fn, cacheRes=False):
         """
@@ -1063,9 +1068,9 @@ class _EvalSession:  # pylint: disable=too-many-instance-attributes, too-many-ar
         :param **kwargs: Additional arguments to the quantsim factory.
         :return: Eval score.
         """
-        sim = self._quantsim_factory(sess, **kwargs)
-        acc = self._eval_func(sim.session)
-        return acc
+        self._sim = self._quantsim_factory(sess, **kwargs)
+        self._acc = self._eval_func(self._sim.session)
+        return self._acc
 
     def __enter__(self):
         self._spinner = Spinner(self.title)
@@ -1077,6 +1082,8 @@ class _EvalSession:  # pylint: disable=too-many-instance-attributes, too-many-ar
         if self._ptq_result is not None:
             _logger.info("Session finished: %s. (eval score: %f)",
                          self.title, self._ptq_result.accuracy)
+        self._sim = None
+        self._acc = None
 
         self._spinner.__exit__(exc_type, exc_val, exc_tb)
 
@@ -1125,6 +1132,7 @@ class _EvalSession:  # pylint: disable=too-many-instance-attributes, too-many-ar
             model: tf.compat.v1.Session = None,
             sim: QuantizationSimModel = None,
             acc: float = None,
+            avoid_recalculation: bool = True,
             **kwargs
     ) -> None:
         """
@@ -1133,14 +1141,27 @@ class _EvalSession:  # pylint: disable=too-many-instance-attributes, too-many-ar
         Exactly one among model and (sim, acc) pair should be specified.
         1) If sim and acc is specified, save them as the result of this session.
         2) If model is specified, evaluate the quantized accuracy of the model and save the result.
+        An exception is that if self._sim and self._acc is present then rest of the conditions are ignored
+        except sim and if `avoid_recalculation` is True
 
         :param model: Result of PTQ.
         :param sim: Result of PTQ. The quamtization encoding (compute_encodings()) is
                     assumed to have been computed in advance.
         :param acc: Eval score.
+        :param avoid_recalculation: Defaults to True. If True uses self._sim if already present
         :param **kwargs: Additional arguments to the quantsim factory.
         :return: None
         """
+
+        # Gives preference to user provided sim
+        avoid_recalculation = avoid_recalculation and (sim is None)
+
+        # Additional logic to avoid recalculations in case of values already computed from eval of the same session.
+        if avoid_recalculation and self._sim and self._acc:
+            sim = self._sim
+            acc = self._acc
+            model = None
+
         if sim is None:
             assert acc is None
             assert model is not None
@@ -1154,6 +1175,9 @@ class _EvalSession:  # pylint: disable=too-many-instance-attributes, too-many-ar
             assert model is None
 
         self._set_ptq_result(sim, acc, applied_techniques)
+        # After the result is set we can remove the values of self._sim and self._acc
+        self._sim = None
+        self._acc = None
 
     def _set_ptq_result(
             self,
