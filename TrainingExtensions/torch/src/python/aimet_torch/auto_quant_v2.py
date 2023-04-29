@@ -293,6 +293,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
             strict_validation=strict_validation)
 
         self._quant_scheme_candidates = _QUANT_SCHEME_CANDIDATES
+        self._fp32_acc = None
 
     def _evaluate_model_performance(self, model) -> float:
         """
@@ -588,10 +589,10 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
             with in_eval_mode(self.fp32_model), cache.enable(self.cache_dir):
                 _logger.info("Starting AutoQuant")
 
-                fp32_acc = self._evaluate_model_performance(self.fp32_model)
-                target_acc = fp32_acc - allowed_accuracy_drop
+                self._fp32_acc = self._evaluate_model_performance(self.fp32_model)
+                target_acc = self._fp32_acc - allowed_accuracy_drop
                 _logger.info("Target eval score: %f", target_acc)
-                _logger.info("FP32 eval score (W32A32): %f", fp32_acc)
+                _logger.info("FP32 eval score (W32A32): %f", self._fp32_acc)
 
                 ret = optimize_fn(self.fp32_model, target_acc)
 
