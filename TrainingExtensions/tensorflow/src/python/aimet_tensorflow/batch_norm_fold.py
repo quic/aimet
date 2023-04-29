@@ -505,11 +505,11 @@ def _delete_bn_from_model(sess: tf.compat.v1.Session,
 
     # Find BNs correct input tensor.
     if not is_bias_valid:
+        # bias was not present and was added between conv and quant op
         bn_in_tensor = bn_in_tensor.consumers()[0].outputs[0].consumers()[0].outputs[0]
-        assert bn_in_tensor.op.type == 'BiasAdd', 'BNs preceding op must be of type BiasAdd.'
     else:
         bn_in_tensor = bn_in_tensor.consumers()[0].outputs[0]
-        assert bn_in_tensor.op.type == 'QcQuantize', 'BNs preceding op must be of type QcQuantize.'
+    assert bn_in_tensor.op.type == 'QcQuantize', 'BNs preceding op must be of type QcQuantize.'
 
     # Find BNs correct output tensor.
     bn_out_tensor = bn_out_tensor.consumers()[0].outputs[0]
@@ -645,9 +645,11 @@ def _find_quantizers(sim: QuantizationSimModel,
         assert conv_linear_a_quantizer_op.type == 'QcQuantize'
         conv_linear_a_quantizer_name = conv_linear_a_quantizer_op.name
     else:
-        conv_linear_a_quantizer_op = conv_linear_tf_op.outputs[0].consumers()[0]
-        assert conv_linear_a_quantizer_op.type == 'QcQuantize'
-        conv_linear_a_quantizer_name = conv_linear_a_quantizer_op.name
+        next_op = conv_linear_tf_op.outputs[0].consumers()[0]
+        if next_op.type == 'BiasAdd': # did bias get added between conv -> quant op?
+            next_op = next_op.outputs[0].consumers()[0]
+        assert next_op.type == 'QcQuantize'
+        conv_linear_a_quantizer_name = next_op.name
 
     bn_a_quantizer_name = bn_tf_op.name + "_quantized"
     conv_linear_w_quantizer_name = conv_linear_tf_op.inputs[1].op.inputs[0].op.name + "_quantized"
