@@ -238,12 +238,7 @@ class BiasUtils:
     def _create_bias_add_op_and_insert(sess: tf.compat.v1.Session, conv_op: tf.Operation, new_bias_var: tf.Variable,
                                        bias_name="bias_value") -> None:
         """
-        creates and adds a bias_add op to conv op. If conv op is followed by quantized op, adds bias_add after
-        conv_quantized op.
-
-        Two cases:
-        1) conv -> (newly added bias)
-        2) conv -> conv_quantized -> (newly added bias)
+        creates and adds a bias_add op to conv op.
 
         :param sess: active tf.compat.v1.Session
         :param conv_op: Convolution op
@@ -255,13 +250,8 @@ class BiasUtils:
         with sess.graph.as_default():
             if conv_op.outputs:
                 bias_index_in_op = BiasUtils.get_bias_index_in_given_op(conv_op)
-                following_op = conv_op.outputs[bias_index_in_op].consumers()[0]
-                if following_op.type in ['QcQuantize']:
-                    conv_op_out_tensor = following_op.outputs[bias_index_in_op]
-                    assert conv_op_out_tensor.op.type in ['QcQuantize']
-                else:
-                    conv_op_out_tensor = conv_op.outputs[bias_index_in_op]
-                    assert conv_op_out_tensor.op.type in ['Conv2D', 'DepthwiseConv2dNative', 'MatMul']
+                conv_op_out_tensor = conv_op.outputs[bias_index_in_op]
+                assert conv_op_out_tensor.op.type in ['Conv2D', 'DepthwiseConv2dNative', 'MatMul']
                 sess.run(tf.compat.v1.variables_initializer([new_bias_var]))
                 BiasUtils.insert_bias_add_op(sess, conv_op_out_tensor, new_bias_var, bias_name)
 
