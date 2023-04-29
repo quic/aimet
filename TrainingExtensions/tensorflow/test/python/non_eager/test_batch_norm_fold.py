@@ -821,11 +821,10 @@ class TestTrainingExtensionBnFoldToScale:
         start_op_names = ["input_1"]
         output_op_names = ["flatten/Reshape"]
         dummy_input = np.random.randn(1, 24, 24, 10)
-        sess = BiasUtils.initialize_model_with_bias(sess, start_op_names, output_op_names)
         sim = quantsim(sess, start_op_names, output_op_names, dummy_input)
 
         # Check quantizers are enabled/disabled properly
-        conv_a_quantizer = sim.quantizer_config('bias_value_quantized')
+        conv_a_quantizer = sim.quantizer_config('conv2d/Conv2D_quantized')
         conv_w_quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
         if is_training_variable:
             bn_op_to_be_removed = 3
@@ -847,7 +846,7 @@ class TestTrainingExtensionBnFoldToScale:
 
         # Verify that the BN, BN_quantized ops are removed from the graph.
         ordered_ops = get_ordered_ops(sim.session.graph, start_op_names, output_op_names)
-        assert len(ordered_ops) == len(ordered_ops_before) - bn_op_to_be_removed
+        assert len(ordered_ops) == len(ordered_ops_before) - bn_op_to_be_removed + 1 # for bias_add
 
         input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
         output_after_fold = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
@@ -1137,11 +1136,11 @@ class TestTrainingExtensionBnFoldToScale:
         start_op_names = ["input_1"]
         output_op_names = ["flatten/Reshape"]
         dummy_input = np.random.randn(1, 24, 24, 10)
-        sess = BiasUtils.initialize_model_with_bias(sess, start_op_names, output_op_names)
+        #sess = BiasUtils.initialize_model_with_bias(sess, start_op_names, output_op_names)
         sim = quantsim(sess, start_op_names, output_op_names, dummy_input)
 
         # Check quantizers are enabled/disabled properly
-        conv_a_quantizer = sim.quantizer_config('bias_value_quantized')
+        conv_a_quantizer = sim.quantizer_config('conv2d/Conv2D_quantized')
         conv_w_quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
         if is_training_variable:
             bn_op_to_be_removed = 3 # (Bn_If-> BN_Identity -> BN_quantized)
@@ -1163,7 +1162,7 @@ class TestTrainingExtensionBnFoldToScale:
 
         # Verify that the BN, BN_quantized ops are removed from the graph.
         ordered_ops = get_ordered_ops(sim.session.graph, start_op_names, output_op_names)
-        assert len(ordered_ops) == len(ordered_ops_before) - bn_op_to_be_removed
+        assert len(ordered_ops) == len(ordered_ops_before) - bn_op_to_be_removed + 1 # for bias_add
 
         input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
         output_after_fold = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
