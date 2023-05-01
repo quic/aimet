@@ -1004,7 +1004,7 @@ def build_dummy_model():
 
     return model
 
-def single_residual_model():
+def single_residual_model(training=torch.onnx.TrainingMode.EVAL):
     x = torch.randn(1, 3, 32, 32, requires_grad=True)
     model = SingleResidualWithAvgPool()
 
@@ -1012,7 +1012,7 @@ def single_residual_model():
     torch.onnx.export(model,  # model being run
                       x,  # model input (or a tuple for multiple inputs)
                       "./model_single_residual.onnx",  # where to save the model (can be a file or file-like object)
-                      training=torch.onnx.TrainingMode.EVAL,
+                      training=training,
                       export_params=True,  # store the trained parameter weights inside the model file
                       opset_version=12,  # the ONNX version to export the model to
                       do_constant_folding=True,  # whether to execute constant folding for optimization
@@ -1020,23 +1020,6 @@ def single_residual_model():
                       output_names=['output'])
     model_onnx = ONNXModel(load_model('./model_single_residual.onnx'))
     return model_onnx
-
-def get_single_residual_model_and_torch_model():
-    x = torch.randn(1, 3, 32, 32, requires_grad=True)
-    model = SingleResidualWithAvgPool()
-
-    # Export the model
-    torch.onnx.export(model,  # model being run
-                      x,  # model input (or a tuple for multiple inputs)
-                      "./model_single_residual.onnx",  # where to save the model (can be a file or file-like object)
-                      training=torch.onnx.TrainingMode.PRESERVE,
-                      export_params=True,  # store the trained parameter weights inside the model file
-                      opset_version=12,  # the ONNX version to export the model to
-                      do_constant_folding=True,  # whether to execute constant folding for optimization
-                      input_names=['input'],  # the model's input names
-                      output_names=['output'])
-    model_onnx = ONNXModel(load_model('./model_single_residual.onnx'))
-    return model_onnx, model
 
 def multi_input_model():
     x = (torch.rand(32, 1, 28, 28, requires_grad=True), torch.rand(32, 1, 28, 28, requires_grad=True))

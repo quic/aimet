@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -46,7 +46,6 @@ from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.qc_quantize_op import OpMode
 from aimet_onnx.utils import make_dummy_input
-from aimet_torch.quantsim import QuantizationSimModel as PtQuantizationSimModel
 from models.models_for_tests import SingleResidual
 from models.models_for_tests import build_dummy_model, single_residual_model, BNAfterConv
 
@@ -219,64 +218,6 @@ class TestQuantSim:
         for param in param_keys:
             param_encodings_keys = list(encoding_data["param_encodings"][param].keys())
             assert param_encodings_keys == ['bitwidth', 'dtype', 'is_symmetric', 'max', 'min', 'offset', 'scale']
-
-    def test_compare_encodings_with_PT(self):
-        """Test to compare encodings with PT"""
-        if not os.path.exists('/tmp'):
-            os.mkdir('/tmp')
-
-        def pytorch_callback(model, inputs):
-            model.eval()
-            model(torch.as_tensor(inputs))
-
-        def onnx_callback(session, inputs):
-            in_tensor = {'input': inputs}
-            session.run(None, in_tensor)
-
-        inputs = np.random.rand(1, 3, 32, 32).astype(np.float32)
-        model = DummyModel()
-        model.eval()
-
-        torch.onnx.export(model, torch.as_tensor(inputs), '/tmp/dummy_model.onnx', training=torch.onnx.TrainingMode.PRESERVE,
-                          input_names=['input'], output_names=['output'])
-
-        pt_sim = PtQuantizationSimModel(model, dummy_input=torch.as_tensor(inputs))
-        pt_sim.compute_encodings(pytorch_callback, inputs)
-        pt_sim.export('/tmp', 'pt_sim', dummy_input=torch.as_tensor(inputs))
-
-        onnx_model = load_model('/tmp/dummy_model.onnx')
-
-        onnx_sim = QuantizationSimModel(onnx_model)
-
-        activation_encodings_map = {'12': '9', '15': '10', '21': '12', '24': '13', '27': '14', '30': '15',
-                                    '34': '17', '38': '19', 't.1': 'input'}
-        onnx_sim.compute_encodings(onnx_callback, inputs)
-        onnx_sim.export('/tmp', 'onnx_sim')
-
-        with open('/tmp/pt_sim.encodings') as f:
-            pt_encodings = json.load(f)
-        with open('/tmp/onnx_sim.encodings') as f:
-            onnx_encodings = json.load(f)
-
-        for pt, onnx in activation_encodings_map.items():
-            assert round(pt_encodings['activation_encodings'][pt][0]['max'], 4) == \
-                   round(onnx_encodings['activation_encodings'][onnx]['max'], 4)
-            assert round(pt_encodings['activation_encodings'][pt][0]['min'], 4) == \
-                   round(onnx_encodings['activation_encodings'][onnx]['min'], 4)
-            assert round(pt_encodings['activation_encodings'][pt][0]['scale'], 4) == \
-                   round(onnx_encodings['activation_encodings'][onnx]['scale'], 4)
-            assert pt_encodings['activation_encodings'][pt][0]['offset'] == \
-                   onnx_encodings['activation_encodings'][onnx]['offset']
-
-        for name in list(onnx_encodings['param_encodings'].keys()):
-            assert round(pt_encodings['param_encodings'][name][0]['max'], 4) == \
-                   round(onnx_encodings['param_encodings'][name]['max'], 4)
-            assert round(pt_encodings['param_encodings'][name][0]['min'], 4) == \
-                   round(onnx_encodings['param_encodings'][name]['min'], 4)
-            assert round(pt_encodings['param_encodings'][name][0]['scale'], 4) == \
-                   round(onnx_encodings['param_encodings'][name]['scale'], 4)
-            assert pt_encodings['param_encodings'][name][0]['offset'] == \
-                   onnx_encodings['param_encodings'][name]['offset']
 
     def test_single_residual(self):
         model = single_residual_model().model
