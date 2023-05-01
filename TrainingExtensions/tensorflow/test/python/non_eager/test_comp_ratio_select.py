@@ -85,33 +85,38 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
         layer_db.mark_picked_layers([layer1])
         eval_func.side_effect = [90, 80, 70, 60, 50, 40, 30, 20, 10]
 
-        url, process = start_bokeh_server_session(8006)
-        bokeh_session = BokehServerSession(url=url, session_id="compression")
+        process = None
+        try:
+            url, process = start_bokeh_server_session()
+            bokeh_session = BokehServerSession(url=url, session_id="compression")
 
-        # Instantiate child
-        greedy_algo = comp_ratio_select.GreedyCompRatioSelectAlgo(layer_db=layer_db, pruner=pruner,
-                                                                  cost_calculator=SpatialSvdCostCalculator(),
-                                                                  eval_func=eval_func, eval_iterations=20,
-                                                                  cost_metric=CostMetric.mac, target_comp_ratio=0.5,
-                                                                  num_candidates=10, use_monotonic_fit=True,
-                                                                  saved_eval_scores_dict=None,
-                                                                  comp_ratio_rounding_algo=None, use_cuda=False,
-                                                                  bokeh_session=bokeh_session)
-        progress_bar = ProgressBar(1, "eval scores", "green", bokeh_document=bokeh_session)
-        data_table = DataTable(num_columns=3, num_rows=1,
-                               column_names=['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9'],
-                               row_index_names=[layer1.name], bokeh_document=bokeh_session)
+            # Instantiate child
+            greedy_algo = comp_ratio_select.GreedyCompRatioSelectAlgo(layer_db=layer_db, pruner=pruner,
+                                                                      cost_calculator=SpatialSvdCostCalculator(),
+                                                                      eval_func=eval_func, eval_iterations=20,
+                                                                      cost_metric=CostMetric.mac, target_comp_ratio=0.5,
+                                                                      num_candidates=10, use_monotonic_fit=True,
+                                                                      saved_eval_scores_dict=None,
+                                                                      comp_ratio_rounding_algo=None, use_cuda=False,
+                                                                      bokeh_session=bokeh_session)
+            progress_bar = ProgressBar(1, "eval scores", "green", bokeh_document=bokeh_session)
+            data_table = DataTable(num_columns=3, num_rows=1,
+                                   column_names=['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9'],
+                                   row_index_names=[layer1.name], bokeh_document=bokeh_session)
 
-        pruner.prune_model.return_value = layer_db
-        eval_dict = greedy_algo._compute_layerwise_eval_score_per_comp_ratio_candidate(data_table, progress_bar, layer1)
+            pruner.prune_model.return_value = layer_db
+            eval_dict = greedy_algo._compute_layerwise_eval_score_per_comp_ratio_candidate(data_table, progress_bar, layer1)
 
-        self.assertEqual(90, eval_dict[Decimal('0.1')])
+            self.assertEqual(90, eval_dict[Decimal('0.1')])
 
-        tf.compat.v1.reset_default_graph()
-        sess.close()
+            tf.compat.v1.reset_default_graph()
+            sess.close()
 
-        bokeh_session.server_session.close("test complete")
-        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+            bokeh_session.server_session.close("test complete")
+        finally:
+            if process:
+                process.terminate()
+                process.join()
 
     def test_eval_scores(self):
 
@@ -139,31 +144,36 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
 
         layer_db.mark_picked_layers([layer1, layer2])
 
-        url, process = start_bokeh_server_session(8006)
-        bokeh_session = BokehServerSession(url=url, session_id="compression")
+        process = None
+        try:
+            url, process = start_bokeh_server_session()
+            bokeh_session = BokehServerSession(url=url, session_id="compression")
 
-        # Instantiate child
-        greedy_algo = comp_ratio_select.GreedyCompRatioSelectAlgo(layer_db=layer_db, pruner=pruner,
-                                                                  cost_calculator=SpatialSvdCostCalculator(),
-                                                                  eval_func=eval_func, eval_iterations=20,
-                                                                  cost_metric=CostMetric.mac, target_comp_ratio=0.5,
-                                                                  num_candidates=10, use_monotonic_fit=True,
-                                                                  saved_eval_scores_dict=None,
-                                                                  comp_ratio_rounding_algo=None, use_cuda=False,
-                                                                  bokeh_session=bokeh_session)
+            # Instantiate child
+            greedy_algo = comp_ratio_select.GreedyCompRatioSelectAlgo(layer_db=layer_db, pruner=pruner,
+                                                                      cost_calculator=SpatialSvdCostCalculator(),
+                                                                      eval_func=eval_func, eval_iterations=20,
+                                                                      cost_metric=CostMetric.mac, target_comp_ratio=0.5,
+                                                                      num_candidates=10, use_monotonic_fit=True,
+                                                                      saved_eval_scores_dict=None,
+                                                                      comp_ratio_rounding_algo=None, use_cuda=False,
+                                                                      bokeh_session=bokeh_session)
 
-        eval_dict = greedy_algo._compute_eval_scores_for_all_comp_ratio_candidates()
+            eval_dict = greedy_algo._compute_eval_scores_for_all_comp_ratio_candidates()
 
-        self.assertEqual(50, eval_dict['conv2d/Conv2D'][Decimal('0.5')])
-        self.assertEqual(60, eval_dict['conv2d/Conv2D'][Decimal('0.4')])
+            self.assertEqual(50, eval_dict['conv2d/Conv2D'][Decimal('0.5')])
+            self.assertEqual(60, eval_dict['conv2d/Conv2D'][Decimal('0.4')])
 
-        self.assertEqual(11, eval_dict['conv2d_1/Conv2D'][Decimal('0.9')])
+            self.assertEqual(11, eval_dict['conv2d_1/Conv2D'][Decimal('0.9')])
 
-        tf.compat.v1.reset_default_graph()
-        sess.close()
+            tf.compat.v1.reset_default_graph()
+            sess.close()
 
-        bokeh_session.server_session.close("test complete")
-        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+            bokeh_session.server_session.close("test complete")
+        finally:
+            if process:
+                process.terminate()
+                process.join()
 
     def test_eval_scores_with_spatial_svd_pruner(self):
 
@@ -191,33 +201,38 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
 
         layer_db.mark_picked_layers([layer1, layer2])
 
-        url, process = start_bokeh_server_session(8006)
-        bokeh_session = BokehServerSession(url=url, session_id="compression")
+        process = None
+        try:
+            url, process = start_bokeh_server_session()
+            bokeh_session = BokehServerSession(url=url, session_id="compression")
 
-        # Instantiate child
-        greedy_algo = comp_ratio_select.GreedyCompRatioSelectAlgo(layer_db=layer_db, pruner=pruner,
-                                                                  cost_calculator=SpatialSvdCostCalculator(),
-                                                                  eval_func=eval_func, eval_iterations=20,
-                                                                  cost_metric=CostMetric.mac, target_comp_ratio=0.5,
-                                                                  num_candidates=10, use_monotonic_fit=True,
-                                                                  saved_eval_scores_dict=None,
-                                                                  comp_ratio_rounding_algo=None, use_cuda=False,
-                                                                  bokeh_session=bokeh_session)
+            # Instantiate child
+            greedy_algo = comp_ratio_select.GreedyCompRatioSelectAlgo(layer_db=layer_db, pruner=pruner,
+                                                                      cost_calculator=SpatialSvdCostCalculator(),
+                                                                      eval_func=eval_func, eval_iterations=20,
+                                                                      cost_metric=CostMetric.mac, target_comp_ratio=0.5,
+                                                                      num_candidates=10, use_monotonic_fit=True,
+                                                                      saved_eval_scores_dict=None,
+                                                                      comp_ratio_rounding_algo=None, use_cuda=False,
+                                                                      bokeh_session=bokeh_session)
 
-        dict = greedy_algo._compute_eval_scores_for_all_comp_ratio_candidates()
+            dict = greedy_algo._compute_eval_scores_for_all_comp_ratio_candidates()
 
-        print()
-        print(dict)
-        self.assertEqual(90, dict['conv2d/Conv2D'][Decimal('0.1')])
+            print()
+            print(dict)
+            self.assertEqual(90, dict['conv2d/Conv2D'][Decimal('0.1')])
 
-        self.assertEqual(51, dict['conv2d_1/Conv2D'][Decimal('0.5')])
-        self.assertEqual(21, dict['conv2d_1/Conv2D'][Decimal('0.8')])
+            self.assertEqual(51, dict['conv2d_1/Conv2D'][Decimal('0.5')])
+            self.assertEqual(21, dict['conv2d_1/Conv2D'][Decimal('0.8')])
 
-        tf.compat.v1.reset_default_graph()
-        sess.close()
+            tf.compat.v1.reset_default_graph()
+            sess.close()
 
-        bokeh_session.server_session.close("test complete")
-        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+            bokeh_session.server_session.close("test complete")
+        finally:
+            if process:
+                process.terminate()
+                process.join()
 
     def test_find_min_max_eval_scores(self):
 
@@ -319,73 +334,78 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
         except OSError:
             pass
 
-        url, process = start_bokeh_server_session(8006)
-        bokeh_session = BokehServerSession(url=url, session_id="compression")
+        process = None
+        try:
+            url, process = start_bokeh_server_session()
+            bokeh_session = BokehServerSession(url=url, session_id="compression")
 
-        # Instantiate child
-        greedy_algo = comp_ratio_select.GreedyCompRatioSelectAlgo(layer_db=layer_db, pruner=pruner,
-                                                                  cost_calculator=SpatialSvdCostCalculator(),
-                                                                  eval_func=eval_func, eval_iterations=20,
-                                                                  cost_metric=CostMetric.mac,
-                                                                  target_comp_ratio=Decimal(0.6), num_candidates=10,
-                                                                  use_monotonic_fit=True, saved_eval_scores_dict=None,
-                                                                  comp_ratio_rounding_algo=rounding_algo,
-                                                                  use_cuda=False,
-                                                                  bokeh_session=bokeh_session)
+            # Instantiate child
+            greedy_algo = comp_ratio_select.GreedyCompRatioSelectAlgo(layer_db=layer_db, pruner=pruner,
+                                                                      cost_calculator=SpatialSvdCostCalculator(),
+                                                                      eval_func=eval_func, eval_iterations=20,
+                                                                      cost_metric=CostMetric.mac,
+                                                                      target_comp_ratio=Decimal(0.6), num_candidates=10,
+                                                                      use_monotonic_fit=True, saved_eval_scores_dict=None,
+                                                                      comp_ratio_rounding_algo=rounding_algo,
+                                                                      use_cuda=False,
+                                                                      bokeh_session=bokeh_session)
 
-        layer_comp_ratio_list, stats = greedy_algo.select_per_layer_comp_ratios()
+            layer_comp_ratio_list, stats = greedy_algo.select_per_layer_comp_ratios()
 
-        original_cost = SpatialSvdCostCalculator.compute_model_cost(layer_db)
+            original_cost = SpatialSvdCostCalculator.compute_model_cost(layer_db)
 
-        for layer in layer_db:
-            if layer not in selected_layers:
-                layer_comp_ratio_list.append(LayerCompRatioPair(layer, None))
-        compressed_cost = SpatialSvdCostCalculator.calculate_compressed_cost(layer_db, layer_comp_ratio_list,
-                                                                             CostMetric.mac)
-        rounding_algo.round.side_effect = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9,
-                                           0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-        actual_compression_ratio = compressed_cost.mac / original_cost.mac
-        self.assertTrue(math.isclose(Decimal(0.6), actual_compression_ratio, abs_tol=0.05))
-        self.assertTrue(os.path.isfile('./data/greedy_selection_eval_scores_dict.pkl'))
+            for layer in layer_db:
+                if layer not in selected_layers:
+                    layer_comp_ratio_list.append(LayerCompRatioPair(layer, None))
+            compressed_cost = SpatialSvdCostCalculator.calculate_compressed_cost(layer_db, layer_comp_ratio_list,
+                                                                                 CostMetric.mac)
+            rounding_algo.round.side_effect = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9,
+                                               0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+            actual_compression_ratio = compressed_cost.mac / original_cost.mac
+            self.assertTrue(math.isclose(Decimal(0.6), actual_compression_ratio, abs_tol=0.05))
+            self.assertTrue(os.path.isfile('./data/greedy_selection_eval_scores_dict.pkl'))
 
-        print('\n')
-        for pair in layer_comp_ratio_list:
-            print(pair)
+            print('\n')
+            for pair in layer_comp_ratio_list:
+                print(pair)
 
-        # lets repeat with a saved eval_dict
-        greedy_algo = comp_ratio_select.GreedyCompRatioSelectAlgo(layer_db=layer_db, pruner=pruner,
-                                                                  cost_calculator=SpatialSvdCostCalculator(),
-                                                                  eval_func=eval_func, eval_iterations=20,
-                                                                  cost_metric=CostMetric.mac,
-                                                                  target_comp_ratio=Decimal(0.6), num_candidates=10,
-                                                                  use_monotonic_fit=True,
-                                                                  saved_eval_scores_dict='./data/greedy_selection_eval_scores_dict.pkl',
-                                                                  comp_ratio_rounding_algo=rounding_algo,
-                                                                  use_cuda=False,
-                                                                  bokeh_session=bokeh_session)
+            # lets repeat with a saved eval_dict
+            greedy_algo = comp_ratio_select.GreedyCompRatioSelectAlgo(layer_db=layer_db, pruner=pruner,
+                                                                      cost_calculator=SpatialSvdCostCalculator(),
+                                                                      eval_func=eval_func, eval_iterations=20,
+                                                                      cost_metric=CostMetric.mac,
+                                                                      target_comp_ratio=Decimal(0.6), num_candidates=10,
+                                                                      use_monotonic_fit=True,
+                                                                      saved_eval_scores_dict='./data/greedy_selection_eval_scores_dict.pkl',
+                                                                      comp_ratio_rounding_algo=rounding_algo,
+                                                                      use_cuda=False,
+                                                                      bokeh_session=bokeh_session)
 
-        layer_comp_ratio_list, stats = greedy_algo.select_per_layer_comp_ratios()
+            layer_comp_ratio_list, stats = greedy_algo.select_per_layer_comp_ratios()
 
-        original_cost = SpatialSvdCostCalculator.compute_model_cost(layer_db)
+            original_cost = SpatialSvdCostCalculator.compute_model_cost(layer_db)
 
-        for layer in layer_db:
-            if layer not in selected_layers:
-                layer_comp_ratio_list.append(LayerCompRatioPair(layer, None))
-        compressed_cost = SpatialSvdCostCalculator.calculate_compressed_cost(layer_db, layer_comp_ratio_list,
-                                                                             CostMetric.mac)
+            for layer in layer_db:
+                if layer not in selected_layers:
+                    layer_comp_ratio_list.append(LayerCompRatioPair(layer, None))
+            compressed_cost = SpatialSvdCostCalculator.calculate_compressed_cost(layer_db, layer_comp_ratio_list,
+                                                                                 CostMetric.mac)
 
-        actual_compression_ratio = compressed_cost.mac / original_cost.mac
-        self.assertTrue(math.isclose(Decimal(0.6), actual_compression_ratio, abs_tol=0.05))
+            actual_compression_ratio = compressed_cost.mac / original_cost.mac
+            self.assertTrue(math.isclose(Decimal(0.6), actual_compression_ratio, abs_tol=0.05))
 
-        print('\n')
-        for pair in layer_comp_ratio_list:
-            print(pair)
+            print('\n')
+            for pair in layer_comp_ratio_list:
+                print(pair)
 
-        tf.compat.v1.reset_default_graph()
-        sess.close()
+            tf.compat.v1.reset_default_graph()
+            sess.close()
 
-        bokeh_session.server_session.close("test complete")
-        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+            bokeh_session.server_session.close("test complete")
+        finally:
+            if process:
+                process.terminate()
+                process.join()
 
     def test_select_per_layer_comp_ratios_with_spatial_svd_pruner(self):
 
@@ -415,39 +435,44 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
         selected_layers = [layer for layer in layer_db if layer.module.type == 'Conv2D']
         layer_db.mark_picked_layers(selected_layers)
 
-        url, process = start_bokeh_server_session(8006)
-        bokeh_session = BokehServerSession(url=url, session_id="compression")
+        process = None
+        try:
+            url, process = start_bokeh_server_session()
+            bokeh_session = BokehServerSession(url=url, session_id="compression")
 
-        # Instantiate child
-        greedy_algo = comp_ratio_select.GreedyCompRatioSelectAlgo(layer_db=layer_db, pruner=pruner,
-                                                                  cost_calculator=SpatialSvdCostCalculator(),
-                                                                  eval_func=eval_func, eval_iterations=20,
-                                                                  cost_metric=CostMetric.mac,
-                                                                  target_comp_ratio=Decimal(0.4), num_candidates=10,
-                                                                  use_monotonic_fit=True, saved_eval_scores_dict=None,
-                                                                  comp_ratio_rounding_algo=rounding_algo,
-                                                                  use_cuda=False,
-                                                                  bokeh_session=bokeh_session)
+            # Instantiate child
+            greedy_algo = comp_ratio_select.GreedyCompRatioSelectAlgo(layer_db=layer_db, pruner=pruner,
+                                                                      cost_calculator=SpatialSvdCostCalculator(),
+                                                                      eval_func=eval_func, eval_iterations=20,
+                                                                      cost_metric=CostMetric.mac,
+                                                                      target_comp_ratio=Decimal(0.4), num_candidates=10,
+                                                                      use_monotonic_fit=True, saved_eval_scores_dict=None,
+                                                                      comp_ratio_rounding_algo=rounding_algo,
+                                                                      use_cuda=False,
+                                                                      bokeh_session=bokeh_session)
 
-        layer_comp_ratio_list, stats = greedy_algo.select_per_layer_comp_ratios()
+            layer_comp_ratio_list, stats = greedy_algo.select_per_layer_comp_ratios()
 
-        original_cost = SpatialSvdCostCalculator.compute_model_cost(layer_db)
+            original_cost = SpatialSvdCostCalculator.compute_model_cost(layer_db)
 
-        for layer in layer_db:
-            if layer not in selected_layers:
-                layer_comp_ratio_list.append(LayerCompRatioPair(layer, None))
-        compressed_cost = SpatialSvdCostCalculator.calculate_compressed_cost(layer_db, layer_comp_ratio_list,
-                                                                             CostMetric.mac)
+            for layer in layer_db:
+                if layer not in selected_layers:
+                    layer_comp_ratio_list.append(LayerCompRatioPair(layer, None))
+            compressed_cost = SpatialSvdCostCalculator.calculate_compressed_cost(layer_db, layer_comp_ratio_list,
+                                                                                 CostMetric.mac)
 
-        actual_compression_ratio = compressed_cost.mac / original_cost.mac
-        self.assertTrue(math.isclose(Decimal(0.3), actual_compression_ratio, abs_tol=0.8))
+            actual_compression_ratio = compressed_cost.mac / original_cost.mac
+            self.assertTrue(math.isclose(Decimal(0.3), actual_compression_ratio, abs_tol=0.8))
 
-        print('\n')
-        for pair in layer_comp_ratio_list:
-            print(pair)
+            print('\n')
+            for pair in layer_comp_ratio_list:
+                print(pair)
 
-        tf.compat.v1.reset_default_graph()
-        sess.close()
+            tf.compat.v1.reset_default_graph()
+            sess.close()
 
-        bokeh_session.server_session.close("test complete")
-        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+            bokeh_session.server_session.close("test complete")
+        finally:
+            if process:
+                process.terminate()
+                process.join()

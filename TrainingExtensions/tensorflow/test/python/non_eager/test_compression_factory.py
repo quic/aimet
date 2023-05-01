@@ -116,14 +116,17 @@ class TestTfCompressionFactory(unittest.TestCase):
         params = SpatialSvdParameters(input_op_names=['reshape_input'], output_op_names=['linear/BiasAdd'],
                                       mode=SpatialSvdParameters.Mode.auto, params=auto_params)
 
-        url, process = start_bokeh_server_session(8006)
+        process = None
+        try:
+            url, process = start_bokeh_server_session()
 
-        spatial_svd_algo = CompressionFactory.create_spatial_svd_algo(sess, None, eval_callback, 100, (1, 28, 28),
-                                                                      CostMetric.mac, params, url)
-        self.assertTrue(0 == 0)
-        # delete temp directory
-        shutil.rmtree(str('./temp_meta/'))
-
-        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-
-        sess.close()
+            spatial_svd_algo = CompressionFactory.create_spatial_svd_algo(sess, None, eval_callback, 100, (1, 28, 28),
+                                                                          CostMetric.mac, params, url)
+            self.assertTrue(0 == 0)
+            # delete temp directory
+            shutil.rmtree(str('./temp_meta/'))
+            sess.close()
+        finally:
+            if process:
+                process.terminate()
+                process.join()
