@@ -538,6 +538,16 @@ def _fold_pair_scale(conv_linear_w_quantizer: QuantizerInfo,
     if encodings is None:
         raise RuntimeError
 
+    if isinstance(encodings, libpymo.TfEncoding):
+        encodings = [encodings]
+
+    # Override encoding min value to the original values from tensorFlow graph as
+    # quantizer_info.get_encoding() method returns adjusted encodings.
+    # @TODO: expose get_effective_encoding() and bring parity with torch impl.
+    if conv_linear_w_quantizer.use_symmetric_encoding:
+        for encoding in encodings:
+            encoding.min = encoding.min + encoding.delta
+
     gamma = np.array(bn_params.gamma)
     sigma = np.array(bn_params.runningVar)
 
