@@ -56,7 +56,7 @@ from aimet_tensorflow.keras.quant_sim.tensor_quantizer import TensorQuantizer, A
     ParamPerTensorQuantizer, StaticGridPerChannelQuantizer, ParamPerChannelQuantizer
 from aimet_tensorflow.keras.quantsim_config.quantsim_config import QuantSimConfigurator, INPUT_QUANTIZERS, \
     OUTPUT_QUANTIZERS, PARAM_QUANTIZERS
-from aimet_tensorflow.keras.utils.common import convert_h5_model_to_pb_model
+from aimet_tensorflow.keras.utils.common import convert_h5_model_to_pb_model, set_keras_backend_version_to_v2
 
 from aimet_tensorflow.keras.defs import AxisHandling
 import aimet_tensorflow.keras.utils.common as keras_common_utils
@@ -457,10 +457,9 @@ class QuantizationSimModel(tf.keras.Model):
             encodings_dict = self.get_encodings_dict()
             encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
             save_json_yaml(encoding_file_path, encodings_dict)
-
-            # Keras magic under the hood that causes the 'Invalid Graph' error to go away
-            # TODO: Investigate what is actually fixing this issue.
-            _ = tf.keras.models.clone_model(self._model_without_wrappers)
+            # The above conversion call changes the Keras backend to v1 style.
+            # We need to reset back to v2 after conversion.
+            set_keras_backend_version_to_v2()
 
     def _compute_and_set_parameter_encodings(self, ops_with_invalid_encodings: List):
         # pylint: disable=too-many-nested-blocks
