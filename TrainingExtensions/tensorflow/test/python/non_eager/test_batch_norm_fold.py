@@ -718,10 +718,9 @@ class TestTrainingExtensionBnFoldToScale:
     """ Test methods for BatchNormFold with QuantizationSimModel"""
 
     @pytest.mark.cuda
-    @pytest.mark.parametrize("config", quantsim_config_map.keys())
     @pytest.mark.parametrize("quant_scheme", quant_scheme_map.keys())
     @pytest.mark.parametrize("is_training_variable", [True, False])
-    def test_fold_conv_with_bias_bn_relu(self, is_training_variable, config, quant_scheme):
+    def test_fold_conv_with_bias_bn_relu(self, is_training_variable, quant_scheme):
         """
         test conv (with bias) + bn + relu sequence
         """
@@ -753,9 +752,8 @@ class TestTrainingExtensionBnFoldToScale:
         start_op_names = ["input_1"]
         output_op_names = ["flatten/Reshape"]
         dummy_input = np.random.randn(32, 24, 24, 10)
-        quantsim_config = quantsim_config_map[config]
         quant_scheme = quant_scheme_map[quant_scheme]
-        sim = quantsim(sess, start_op_names, output_op_names, dummy_input, quantsim_config, quant_scheme)
+        sim = quantsim(sess, start_op_names, output_op_names, dummy_input, quant_scheme=quant_scheme)
 
         # Check quantizers are enabled/disabled properly
         conv_a_quantizer = sim.quantizer_config('conv2d/BiasAdd_quantized')
@@ -791,9 +789,8 @@ class TestTrainingExtensionBnFoldToScale:
         assert not bn_a_quantizer.enabled
         assert relu_a_quantizer.enabled
 
-        relu_output_encoding = relu_a_quantizer.get_encoding()
-        delta = float((relu_output_encoding.max - relu_output_encoding.min) / 255)
-        assert np.allclose(baseline_output, output_after_fold, atol=delta)  # Allow 1-tick difference
+        assert np.sum(np.abs(baseline_output - output_after_fold)) == 0
+        assert np.allclose(baseline_output, output_after_fold)
 
         sess.close()
         sim.session.close()
@@ -868,9 +865,8 @@ class TestTrainingExtensionBnFoldToScale:
         assert not bn_a_quantizer.enabled
         assert relu_a_quantizer.enabled
 
-        relu_output_encoding = relu_a_quantizer.get_encoding()
-        delta = float((relu_output_encoding.max - relu_output_encoding.min) / 255)
-        assert np.allclose(baseline_output, output_after_fold, atol=delta)  # Allow 1-tick difference
+        assert np.sum(np.abs(baseline_output - output_after_fold)) == 0
+        assert np.allclose(baseline_output, output_after_fold)
 
         sess.close()
         sim.session.close()
@@ -946,9 +942,8 @@ class TestTrainingExtensionBnFoldToScale:
         assert not bn_a_quantizer.enabled
         assert relu_a_quantizer.enabled
 
-        relu_output_encoding = relu_a_quantizer.get_encoding()
-        delta = float((relu_output_encoding.max - relu_output_encoding.min) / 255)
-        assert np.allclose(baseline_output, output_after_fold, atol=delta)  # Allow 1-tick difference
+        assert np.sum(np.abs(baseline_output - output_after_fold)) == 0
+        assert np.allclose(baseline_output, output_after_fold)
 
         sess.close()
         sim.session.close()
@@ -1025,9 +1020,8 @@ class TestTrainingExtensionBnFoldToScale:
         assert not bn_a_quantizer.enabled
         assert relu_a_quantizer.enabled
 
-        relu_output_encoding = relu_a_quantizer.get_encoding()
-        delta = float((relu_output_encoding.max - relu_output_encoding.min) / 255)
-        assert np.allclose(baseline_output, output_after_fold, atol=delta)  # Allow 1-tick difference
+        assert np.sum(np.abs(baseline_output - output_after_fold)) == 0
+        assert np.allclose(baseline_output, output_after_fold)
 
         sess.close()
         sim.session.close()
@@ -1106,9 +1100,8 @@ class TestTrainingExtensionBnFoldToScale:
                conv_output_encoding.offset == bn_output_encoding.offset and \
                conv_output_encoding.bw == bn_output_encoding.bw
 
-        conv_output_encoding = conv_a_quantizer.get_encoding()
-        delta = float((conv_output_encoding.max - conv_output_encoding.min) / 255)
-        assert np.allclose(baseline_output, output_after_fold, atol=delta)  # Allow 1-tick difference
+        assert np.sum(np.abs(baseline_output - output_after_fold)) == 0
+        assert np.allclose(baseline_output, output_after_fold)
 
         sess.close()
         sim.session.close()
@@ -1189,8 +1182,8 @@ class TestTrainingExtensionBnFoldToScale:
                conv_output_encoding.offset == bn_output_encoding.offset and \
                conv_output_encoding.bw == bn_output_encoding.bw
 
-        delta = float((conv_output_encoding.max - conv_output_encoding.min) / 255)
-        assert np.allclose(baseline_output, output_after_fold, atol=delta)  # Allow 1-tick difference
+        assert np.sum(np.abs(baseline_output - output_after_fold)) == 0
+        assert np.allclose(baseline_output, output_after_fold)
 
         sess.close()
         sim.session.close()
@@ -1241,6 +1234,7 @@ class TestTrainingExtensionBnFoldToScale:
         assert conv_w_quantizer.enabled
         assert bn_a_quantizer.enabled
         bn_output_encoding = bn_a_quantizer.get_encoding()
+        assert conv_w_quantizer.quant_scheme == libpymo.QuantizationMode.QUANTIZATION_TF
 
         input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
         baseline_output = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
@@ -1267,16 +1261,16 @@ class TestTrainingExtensionBnFoldToScale:
                conv_output_encoding.offset == bn_output_encoding.offset and \
                conv_output_encoding.bw == bn_output_encoding.bw
 
-        delta = float((conv_output_encoding.max - conv_output_encoding.min) / 255)
-        assert np.allclose(baseline_output, output_after_fold, atol=delta)  # Allow 1-tick difference
+        assert np.sum(np.abs(baseline_output - output_after_fold)) == 0
+        assert np.allclose(baseline_output, output_after_fold)
 
         sess.close()
         sim.session.close()
 
     @pytest.mark.cuda
-    @pytest.mark.parametrize("config", quantsim_config_map.keys())
+    @pytest.mark.parametrize("quant_scheme", quant_scheme_map.keys())
     @pytest.mark.parametrize("is_training_variable", [True, False])
-    def test_fold_conv_with_bias_compat_bn(self, is_training_variable, config):
+    def test_fold_conv_with_bias_compat_bn(self, is_training_variable, quant_scheme):
         """
         test conv + bn (compat) sequence
         """
@@ -1304,8 +1298,8 @@ class TestTrainingExtensionBnFoldToScale:
         start_op_names = ["input_1"]
         output_op_names = ["flatten/Reshape"]
         dummy_input = np.random.randn(32, 24, 24, 10)
-        quantsim_config = quantsim_config_map[config]
-        sim = quantsim(sess, start_op_names, output_op_names, dummy_input, quantsim_config)
+        quant_scheme = quant_scheme_map[quant_scheme]
+        sim = quantsim(sess, start_op_names, output_op_names, dummy_input, quant_scheme=quant_scheme)
 
         # Check quantizers are enabled/disabled properly
         conv_a_quantizer = sim.quantizer_config('conv2d/BiasAdd_quantized')
@@ -1321,7 +1315,6 @@ class TestTrainingExtensionBnFoldToScale:
         assert conv_w_quantizer.enabled
         assert bn_a_quantizer.enabled
         bn_output_encoding = bn_a_quantizer.get_encoding()
-        assert conv_w_quantizer.quant_scheme == libpymo.QuantizationMode.QUANTIZATION_TF
 
         input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
         baseline_output = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
@@ -1348,9 +1341,8 @@ class TestTrainingExtensionBnFoldToScale:
                conv_output_encoding.offset == bn_output_encoding.offset and \
                conv_output_encoding.bw == bn_output_encoding.bw
 
-        conv_output_encoding = conv_a_quantizer.get_encoding()
-        delta = float((conv_output_encoding.max - conv_output_encoding.min) / 255)
-        assert np.allclose(baseline_output, output_after_fold, atol=delta)  # Allow 1-tick difference
+        assert np.sum(np.abs(baseline_output - output_after_fold)) == 0
+        assert np.allclose(baseline_output, output_after_fold)
 
         # Verify that activations encodings are correctly exported.
         results_dir = os.path.abspath('./tmp/')
