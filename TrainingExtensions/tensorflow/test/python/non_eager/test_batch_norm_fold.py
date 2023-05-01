@@ -45,6 +45,7 @@ import pytest
 import tensorflow as tf
 import numpy as np
 import json
+import shutil
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Conv2D, BatchNormalization, Flatten, AvgPool2D, MaxPool2D
 
@@ -57,7 +58,7 @@ from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.examples.test_models import tf_slim_basic_model
 from aimet_tensorflow.utils.graph import update_keras_bn_ops_trainable_flag
 from aimet_tensorflow.quantsim import QuantizationSimModel
-from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils
+from aimet_tensorflow.utils.op.conv import WeightTensorUtils
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
 from aimet_tensorflow.utils.common import get_ordered_ops
@@ -674,8 +675,13 @@ quantsim_config_map = {
     "asymmetric": asymmetric_quantsim_config,
 }
 
+quant_scheme_map = {
+    "tf": QuantScheme.training_range_learning_with_tf_init,
+    "tf_enhnaced": QuantScheme.training_range_learning_with_tf_enhanced_init
+}
 
-def quantsim(session, start_op_names, output_op_names, dummy_input, quantsim_config=None):
+def quantsim(session, start_op_names, output_op_names, dummy_input, quantsim_config=None,
+             quant_scheme=QuantScheme.training_range_learning_with_tf_init):
     config_file_path = "/tmp/quantsim_config.json"
     quantsim_config = quantsim_config or symmetric_quantsim_config
     try:
@@ -685,7 +691,8 @@ def quantsim(session, start_op_names, output_op_names, dummy_input, quantsim_con
         sim = QuantizationSimModel(session,
                                    start_op_names,
                                    output_op_names,
-                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                   default_param_bw=4,
+                                   quant_scheme=quant_scheme,
                                    config_file=config_file_path)
         def forward_pass_callback(sess, _):
             input_tensor = sess.graph.get_tensor_by_name(start_op_names[0] + ':0')
@@ -711,8 +718,10 @@ class TestTrainingExtensionBnFoldToScale:
     """ Test methods for BatchNormFold with QuantizationSimModel"""
 
     @pytest.mark.cuda
+    @pytest.mark.parametrize("config", quantsim_config_map.keys())
+    @pytest.mark.parametrize("quant_scheme", quant_scheme_map.keys())
     @pytest.mark.parametrize("is_training_variable", [True, False])
-    def test_fold_conv_with_bias_bn_relu(self, is_training_variable):
+    def test_fold_conv_with_bias_bn_relu(self, is_training_variable, config, quant_scheme):
         """
         test conv (with bias) + bn + relu sequence
         """
@@ -724,7 +733,7 @@ class TestTrainingExtensionBnFoldToScale:
             """ Model with conv + bn + relu sequence """
             training = tf.Variable(False, name='bn_training_var') if is_training_variable else False
             inputs = tf.keras.Input(shape=(24, 24, 10,))
-            x = tf.keras.layers.Conv2D(12, (3, 3))(inputs)
+            x = tf.keras.layers.Conv2D(10, (3, 3))(inputs)
             x = tf.keras.layers.BatchNormalization(beta_initializer=tf.random_normal_initializer(),
                                                    gamma_initializer=tf.random_normal_initializer(),
                                                    moving_mean_initializer=tf.random_normal_initializer(),
@@ -743,8 +752,10 @@ class TestTrainingExtensionBnFoldToScale:
 
         start_op_names = ["input_1"]
         output_op_names = ["flatten/Reshape"]
-        dummy_input = np.random.randn(1, 24, 24, 10)
-        sim = quantsim(sess, start_op_names, output_op_names, dummy_input)
+        dummy_input = np.random.randn(32, 24, 24, 10)
+        quantsim_config = quantsim_config_map[config]
+        quant_scheme = quant_scheme_map[quant_scheme]
+        sim = quantsim(sess, start_op_names, output_op_names, dummy_input, quantsim_config, quant_scheme)
 
         # Check quantizers are enabled/disabled properly
         conv_a_quantizer = sim.quantizer_config('conv2d/BiasAdd_quantized')
@@ -801,7 +812,7 @@ class TestTrainingExtensionBnFoldToScale:
             """ Model with conv + bn + relu sequence """
             training = tf.Variable(False, name='bn_training_var') if is_training_variable else False
             inputs = tf.keras.Input(shape=(24, 24, 10,))
-            x = tf.keras.layers.Conv2D(12, (3, 3), use_bias=False)(inputs)
+            x = tf.keras.layers.Conv2D(10, (3, 3), use_bias=False)(inputs)
             x = tf.keras.layers.BatchNormalization(beta_initializer=tf.random_normal_initializer(),
                                                    gamma_initializer=tf.random_normal_initializer(),
                                                    moving_mean_initializer=tf.random_normal_initializer(),
@@ -820,7 +831,7 @@ class TestTrainingExtensionBnFoldToScale:
 
         start_op_names = ["input_1"]
         output_op_names = ["flatten/Reshape"]
-        dummy_input = np.random.randn(1, 24, 24, 10)
+        dummy_input = np.random.randn(32, 24, 24, 10)
         sim = quantsim(sess, start_op_names, output_op_names, dummy_input)
 
         # Check quantizers are enabled/disabled properly
@@ -897,7 +908,7 @@ class TestTrainingExtensionBnFoldToScale:
 
         start_op_names = ["input_1"]
         output_op_names = ["flatten/Reshape"]
-        dummy_input = np.random.randn(1, 24, 24, 10)
+        dummy_input = np.random.randn(32, 24, 24, 10)
         sim = quantsim(sess, start_op_names, output_op_names, dummy_input)
 
         # Check quantizers are enabled/disabled properly
@@ -975,12 +986,11 @@ class TestTrainingExtensionBnFoldToScale:
 
         start_op_names = ["input_1"]
         output_op_names = ["flatten/Reshape"]
-        dummy_input = np.random.randn(1, 24, 24, 10)
-        sess = BiasUtils.initialize_model_with_bias(sess, start_op_names, output_op_names)
+        dummy_input = np.random.randn(32, 24, 24, 10)
         sim = quantsim(sess, start_op_names, output_op_names, dummy_input)
 
         # Check quantizers are enabled/disabled properly
-        depthwise_conv_a_quantizer = sim.quantizer_config('bias_value_quantized')
+        depthwise_conv_a_quantizer = sim.quantizer_config('depthwise_conv2d/depthwise_quantized')
         depthwise_conv_w_quantizer = sim.quantizer_config('depthwise_conv2d/depthwise/ReadVariableOp_quantized')
 
         if is_training_variable:
@@ -1004,7 +1014,7 @@ class TestTrainingExtensionBnFoldToScale:
 
         # Verify that the BN, BN_quantized ops are removed from the graph.
         ordered_ops = get_ordered_ops(sim.session.graph, start_op_names, output_op_names)
-        assert len(ordered_ops) == len(ordered_ops_before) - bn_op_to_be_removed
+        assert len(ordered_ops) == len(ordered_ops_before) - bn_op_to_be_removed + 1 # for bias_add
 
         input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
         output_after_fold = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
@@ -1053,7 +1063,7 @@ class TestTrainingExtensionBnFoldToScale:
 
         start_op_names = ["input_1"]
         output_op_names = ["flatten/Reshape"]
-        dummy_input = np.random.randn(1, 24, 24, 10)
+        dummy_input = np.random.randn(32, 24, 24, 10)
         sim = quantsim(sess, start_op_names, output_op_names, dummy_input)
 
         # Check quantizers are enabled/disabled properly
@@ -1135,8 +1145,7 @@ class TestTrainingExtensionBnFoldToScale:
 
         start_op_names = ["input_1"]
         output_op_names = ["flatten/Reshape"]
-        dummy_input = np.random.randn(1, 24, 24, 10)
-        #sess = BiasUtils.initialize_model_with_bias(sess, start_op_names, output_op_names)
+        dummy_input = np.random.randn(32, 24, 24, 10)
         sim = quantsim(sess, start_op_names, output_op_names, dummy_input)
 
         # Check quantizers are enabled/disabled properly
@@ -1215,12 +1224,11 @@ class TestTrainingExtensionBnFoldToScale:
 
         start_op_names = ["input_1"]
         output_op_names = ["flatten/Reshape"]
-        dummy_input = np.random.randn(1, 24, 24, 10)
-        sess = BiasUtils.initialize_model_with_bias(sess, start_op_names, output_op_names)
+        dummy_input = np.random.randn(32, 24, 24, 10)
         sim = quantsim(sess, start_op_names, output_op_names, dummy_input)
 
         # Check quantizers are enabled/disabled properly
-        conv_a_quantizer = sim.quantizer_config('bias_value_quantized')
+        conv_a_quantizer = sim.quantizer_config('conv2d/Conv2D_quantized')
         conv_w_quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
         if is_training_variable:
             bn_op_to_be_removed = 3
@@ -1241,7 +1249,7 @@ class TestTrainingExtensionBnFoldToScale:
 
         # Verify that the BN, BN_quantized ops are removed from the graph.
         ordered_ops = get_ordered_ops(sim.session.graph, start_op_names, output_op_names)
-        assert len(ordered_ops) == len(ordered_ops_before) - bn_op_to_be_removed
+        assert len(ordered_ops) == len(ordered_ops_before) - bn_op_to_be_removed + 1 # for bias_add
 
         input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
         output_after_fold = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
@@ -1266,8 +1274,9 @@ class TestTrainingExtensionBnFoldToScale:
         sim.session.close()
 
     @pytest.mark.cuda
+    @pytest.mark.parametrize("config", quantsim_config_map.keys())
     @pytest.mark.parametrize("is_training_variable", [True, False])
-    def test_fold_conv_with_bias_compat_bn(self, is_training_variable):
+    def test_fold_conv_with_bias_compat_bn(self, is_training_variable, config):
         """
         test conv + bn (compat) sequence
         """
@@ -1294,8 +1303,9 @@ class TestTrainingExtensionBnFoldToScale:
 
         start_op_names = ["input_1"]
         output_op_names = ["flatten/Reshape"]
-        dummy_input = np.random.randn(1, 24, 24, 10)
-        sim = quantsim(sess, start_op_names, output_op_names, dummy_input)
+        dummy_input = np.random.randn(32, 24, 24, 10)
+        quantsim_config = quantsim_config_map[config]
+        sim = quantsim(sess, start_op_names, output_op_names, dummy_input, quantsim_config)
 
         # Check quantizers are enabled/disabled properly
         conv_a_quantizer = sim.quantizer_config('conv2d/BiasAdd_quantized')
@@ -1341,6 +1351,21 @@ class TestTrainingExtensionBnFoldToScale:
         conv_output_encoding = conv_a_quantizer.get_encoding()
         delta = float((conv_output_encoding.max - conv_output_encoding.min) / 255)
         assert np.allclose(baseline_output, output_after_fold, atol=delta)  # Allow 1-tick difference
+
+        # Verify that activations encodings are correctly exported.
+        results_dir = os.path.abspath('./tmp/')
+        os.makedirs(results_dir, exist_ok=True)
+        try:
+            sim.export(results_dir, filename_prefix='fold_to_scale')
+            with open(results_dir + '/fold_to_scale.encodings') as json_file:
+                encoding_data = json.load(json_file)
+
+            # Total 2 encodings for activations. (input_1_quantized, conv2d/BiasAdd_quantized)
+            assert len(encoding_data["activation_encodings"]) == 2
+
+        finally:
+            if os.path.isdir(results_dir):
+                shutil.rmtree(results_dir)
 
         sess.close()
         sim.session.close()
