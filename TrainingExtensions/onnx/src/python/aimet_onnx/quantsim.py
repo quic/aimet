@@ -41,7 +41,7 @@ import os
 from typing import Dict, List
 
 import numpy as np
-from onnx import helper, onnx_pb, mapping
+from onnx import helper, onnx_pb
 import onnxruntime as ort
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
@@ -149,7 +149,7 @@ class QuantizationSimModel:
         """
         valid_ops = self._get_ops_with_parameter()
         for op in valid_ops:
-            for param_name, param_info in op.parameters.items():
+            for param_info in op.parameters.values():
                 param, _ = param_info
                 if param.name and param.name not in self.param_names:
                     self.param_names.append(param.name)
@@ -160,8 +160,7 @@ class QuantizationSimModel:
 
         :return: Connected graph ops
         """
-        valid_ops = [op for op in self.connected_graph.get_all_ops().values() if op.type not in
-                       ['BatchNormalization']]
+        valid_ops = [op for op in self.connected_graph.get_all_ops().values() if op.type not in ['BatchNormalization']]
         return valid_ops
 
     def _get_activations_to_quantize(self, dummy_input: Dict[str, np.ndarray]):
