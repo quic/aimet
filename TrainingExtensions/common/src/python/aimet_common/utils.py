@@ -45,7 +45,6 @@ import logging.handlers
 import math
 import os
 import signal
-import socket
 import subprocess
 import threading
 import time
@@ -252,23 +251,50 @@ def kill_process_with_name_and_port_number(name: str, port_number: int):
             break
 
 
-def start_bokeh_server_session(port: int):
+def start_bokeh_server_session(port: int = None):
     """
     start a bokeh server programmatically. Used for testing purposes.
-    :param port: port number
+    :param port: Port number. If not specified, bokeh server will listen on an arbitrary free port.
     :return: Returns the Bokeh Server URL and the process object used to create the child server process
     """
+    from bokeh.server.server import Server
+    from bokeh.application import Application
+    import multiprocessing
+    manager = multiprocessing.Manager()
+    d = manager.dict()
+    server_started = manager.Event()
 
-    host_name = socket.gethostname()
-    bokeh_serve_command = "bokeh serve  --allow-websocket-origin=" + \
-                          host_name + ":" + str(port) + " --allow-websocket-origin=localhost:" + str(port) + " --port=" + str(port) + " &"
-    process = subprocess.Popen(bokeh_serve_command,  # pylint: disable=subprocess-popen-preexec-fn
-                               shell=True,
-                               preexec_fn=os.setsid)
-    url = "http://" + host_name + ":" + str(port)
-    # Doesn't allow document to be added to server unless there is some sort of wait time.
-    time.sleep(4)
-    return url, process
+    def start_bokeh_server(port: int = None):
+        os.setsid()
+
+        # If port is 0, server automatically finds and listens on an arbitrary free port.
+        port = port or 0
+        try:
+            server = Server({'/': Application()}, port=port)
+            server.start()
+            d['port'] = server.port
+            server_started.set()
+            server.run_until_shutdown()
+        except Exception as e:
+            d['exception'] = e
+            raise
+
+    proc = multiprocessing.Process(target=start_bokeh_server, args=(port,))
+
+    proc.start()
+    server_started.wait(timeout=3)
+
+    if 'port' not in d:
+        if 'exception' in d:
+            e = d['exception']
+            raise RuntimeError(f'Bokeh server failed with the following error: {e}')
+
+        raise RuntimeError('Bokeh Server failed with an unknown error')
+
+    port = d['port']
+    address = f'http://localhost:{port}'
+
+    return address, proc
 
 
 def log_package_info():

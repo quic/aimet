@@ -89,15 +89,20 @@ class VisualizeNetwork(unittest.TestCase):
         self.assertEqual(total_weights_expected, total_weights_actual)
 
     def test_progress_bar(self):
-        visualization_url, process = start_bokeh_server_session(8002)
-        bokeh_session = BokehServerSession(url=visualization_url, session_id="test")
-        progress_bar = ProgressBar(total=10, bokeh_document=bokeh_session, title="testing", color="green")
-        for i in range(10):
+        process = None
+        try:
+            visualization_url, process = start_bokeh_server_session()
+            bokeh_session = BokehServerSession(url=visualization_url, session_id="test")
+            progress_bar = ProgressBar(total=10, bokeh_document=bokeh_session, title="testing", color="green")
+            for i in range(10):
+                progress_bar.update()
             progress_bar.update()
-        progress_bar.update()
-        self.assertEqual(progress_bar.calculate_percentage_complete(), 100.0)
-        bokeh_session.server_session.close("test complete")
-        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+            self.assertEqual(progress_bar.calculate_percentage_complete(), 100.0)
+            bokeh_session.server_session.close("test complete")
+        finally:
+            if process:
+                process.terminate()
+                process.join()
 
     def test_show_zoomed_in_plot_from_start(self):
         layout = bokeh_plots.PlotsLayout()
@@ -115,15 +120,20 @@ class VisualizeNetwork(unittest.TestCase):
         layout.complete_layout()
 
     def test_invoke_progress_bar(self):
-        visualization_url, process = start_bokeh_server_session(8002)
-        bokeh_session = BokehServerSession(url=visualization_url, session_id="test")
-        progress_bar = ProgressBar(80, title="Some Title Goes Here", color="green", bokeh_document=bokeh_session)
+        process = None
+        try:
+            visualization_url, process = start_bokeh_server_session()
+            bokeh_session = BokehServerSession(url=visualization_url, session_id="test")
+            progress_bar = ProgressBar(80, title="Some Title Goes Here", color="green", bokeh_document=bokeh_session)
 
-        for i in range(80):
+            for i in range(80):
+                progress_bar.update()
             progress_bar.update()
-        progress_bar.update()
-        bokeh_session.server_session.close("test complete")
-        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+            bokeh_session.server_session.close("test complete")
+        finally:
+            if process:
+                process.terminate()
+                process.join()
 
     def test_module_data_frame_mapping(self):
         layer_weights_map = plotting_utils.map_all_module_weights_to_data_frame(model)
