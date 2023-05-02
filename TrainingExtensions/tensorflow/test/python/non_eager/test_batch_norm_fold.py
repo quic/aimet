@@ -717,6 +717,18 @@ def _get_inp_out_tensor(session, inp_tensor_name, out_tensor_name):
 class TestTrainingExtensionBnFoldToScale:
     """ Test methods for BatchNormFold with QuantizationSimModel"""
 
+    def w_int(self, session, conv_name, quantizer):
+        quant_op = session.graph.get_operation_by_name(conv_name).inputs[1]
+        assert quant_op.op.type in ['QcQuantize', 'QcQuantizePerChannel']
+        assert quant_op.op.inputs[0].op.type in ['ReadVariableOp', 'Const']
+        weight_tensor = session.run(quant_op.op.inputs[0])
+        encodings = quantizer.get_encoding()
+        x_copy = copy.deepcopy(weight_tensor)
+        for i, encoding in enumerate(encodings):
+            x_copy[ :, :, :, i] = x_copy[ :, :, :, i] / encoding.delta - encoding.offset
+
+        return np.round(x_copy)
+
     @pytest.mark.cuda
     @pytest.mark.parametrize("quant_scheme", quant_scheme_map.keys())
     @pytest.mark.parametrize("is_training_variable", [True, False])
@@ -773,8 +785,27 @@ class TestTrainingExtensionBnFoldToScale:
 
         input_tensor, output_tensor = _get_inp_out_tensor(sim.session, start_op_names, output_op_names)
         baseline_output = sim.session.run(output_tensor, feed_dict={input_tensor: dummy_input})
+        conv_wt_int = self.w_int(sim.session, 'conv2d/Conv2D', conv_w_quantizer)
+        if is_training_variable:
+            bn_op = sim.session.graph.get_operation_by_name('batch_normalization/cond/Identity')
+        else:
+            bn_op = sim.session.graph.get_operation_by_name('batch_normalization/FusedBatchNormV3')
+        gamma = BNUtils.get_gamma_as_numpy_data(sim.session, bn_op).reshape(-1)
+
         ordered_ops_before = get_ordered_ops(sim.session.graph, start_op_names, output_op_names)
         fold_all_batch_norms_to_scale(sim, start_op_names, output_op_names)
+
+        conv_wt_int_after_fold = self.w_int(sim.session, 'conv2d/Conv2D', conv_w_quantizer)
+
+        encodings = conv_w_quantizer.get_encoding()
+
+        for i, g in enumerate(gamma):
+            if g < 0: # TODO account for negative scaling ?
+                conv_wt_int_after_fold[:, :, :, i] = (2 ** encodings[i].bw) - conv_wt_int_after_fold[:, :, :, i]
+
+        #verify that quantized conv weights are unchanged
+        assert np.sum(np.abs(conv_wt_int - conv_wt_int_after_fold)) == 0
+        assert np.allclose(conv_wt_int, conv_wt_int_after_fold)
 
         # Verify that the BN, BN_quantized ops are removed from the graph.
         ordered_ops = get_ordered_ops(sim.session.graph, start_op_names, output_op_names)
