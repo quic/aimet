@@ -457,9 +457,6 @@ class QuantizationSimModel(tf.keras.Model):
             encodings_dict = self.get_encodings_dict()
             encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
             save_json_yaml(encoding_file_path, encodings_dict)
-            # The above conversion call changes the Keras backend to v1 style.
-            # We need to reset back to v2 after conversion.
-            set_keras_backend_version_to_v2()
 
     def _compute_and_set_parameter_encodings(self, ops_with_invalid_encodings: List):
         # pylint: disable=too-many-nested-blocks
