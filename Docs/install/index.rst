@@ -52,6 +52,13 @@ Install the basic pre-requisite packages as follows:
     python3 -m pip install --upgrade pip
     apt-get install --assume-yes wget gnupg2
 
+If you have multiple python versions installed, set the default python version as follows:
+
+.. code-block::
+
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1
+    update-alternatives --set python3 /usr/bin/python3.8
+
 Install GPU packages
 ~~~~~~~~~~~~~~~~~~~~
 

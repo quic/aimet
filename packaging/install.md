@@ -24,6 +24,12 @@ python3 -m pip install --upgrade pip
 apt-get install --assume-yes wget gnupg2
 ```
 
+If you have multiple python versions installed, set the default python version as follows:
+```bash
+update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1
+update-alternatives --set python3 /usr/bin/python3.8
+```
+
 ### Install GPU packages
 > _NOTE:_ Do this section **ONLY** for the PyTorch or Tensorflow *GPU* packages.
 

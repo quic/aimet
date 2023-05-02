@@ -152,7 +152,7 @@ RUN python3 -m pip --no-cache-dir install \
         grpcio-tools \
         h5py==2.10.0 \
         ipykernel \
-        ipython==8.12.1 \
+        ipython \
         Jinja2==3.0.3 \
         jupyter \
         keras==2.2.4 \
@@ -252,6 +252,7 @@ RUN python3 -m pip install git-pylint-commit-hook osqp
 # NOTE: We need to pin the holoviews version to this since the latest version has a circular dependency on bokeh 2.0.0 through the panel package
 RUN python3 -m pip install holoviews==1.12.7 netron jsonschema pandas==1.5.3
 
+# Note: bokeh requires Pillow while we need to use Pillow-SIMD for performance reasons.
 RUN python3 -m pip install bokeh==1.2.0 hvplot==0.4.0
 
 # Remove onnxruntime install and replace with onnxruntime-gpu

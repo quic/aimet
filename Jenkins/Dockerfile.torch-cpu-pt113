@@ -1,7 +1,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -34,25 +34,12 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-# Docker image file to build and test AIMET for Tensorflow in a GPU environment
+# Docker image file to build and test AIMET for PyTorch in a CPU environment
+
 ARG REGISTRY
-FROM ${REGISTRY}nvidia/cuda:11.1.1-cudnn8-devel-ubuntu20.04
+FROM ${REGISTRY}ubuntu:bionic as target
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=DontWarn
-
-# Please see here for more information on these steps:
-# https://forums.developer.nvidia.com/t/gpg-error-http-developer-download-nvidia-com-compute-cuda-repos-ubuntu2004-x86-64/212904
-## The additional steps are to fix this error and eliminate/reduce some warnings:
-## Failed to fetch https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/Packages.gz Hash Sum mismatch
-RUN mv /etc/apt/sources.list.d/cuda.list /etc/apt/sources.list.d/cuda.list.orig && \
-    apt-get update > /dev/null && \
-    apt-get install -y --no-install-recommends apt-utils && \
-    apt-key del --no-tty 7fa2af80 && \
-    apt-key adv --no-tty --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/3bf863cc.pub && \
-    apt-key adv --no-tty --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/7fa2af80.pub && \
-    apt-get update > /dev/null && \
-    rm -rf /var/lib/apt/lists/*
 
 RUN apt-get update > /dev/null && \
     apt-get install --no-install-recommends -y \
@@ -81,16 +68,12 @@ RUN echo "%users ALL = (ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 RUN apt-get update -y > /dev/null && \
     apt-get install --no-install-recommends -y \
-
-        # Python
         python3.8 \
         python3.8-dev \
         python3.8-venv \
         python3-pip \
         python3-setuptools \
         build-essential \
-
-        # lmdb dependency
         libffi-dev && \
         rm -rf /var/lib/apt/lists/*
 
@@ -99,13 +82,19 @@ RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1
 # Set python 3.8 as the default python
 RUN update-alternatives --set python3 /usr/bin/python3.8
 
+# Python 2 pip installation
+RUN apt-get update && apt-get install -y python-pip && rm -rf /var/lib/apt/lists/* && \
+    python2.7 -m pip --no-cache-dir install --upgrade \
+        pip==20.3.4 \
+        restkit
+
 # Upgrade Python3 pip and install some more packages
 RUN python3 -m pip --no-cache-dir install --upgrade \
         pip \
         setuptools==41.0.1 \
         wheel==0.33.4
 
-# Ubuntu packages for tensorflow aimet
+# Ubuntu packages for pytorch aimet
 RUN dpkg --add-architecture i386
 RUN apt-get update > /dev/null && \
     apt-get install --no-install-recommends -y \
@@ -115,6 +104,7 @@ RUN apt-get update > /dev/null && \
         less \
         libavcodec-dev \
         libavformat-dev \
+        libeigen3-dev \
         libgtest-dev \
         libgtk2.0-dev \
         libsox-dev \
@@ -138,24 +128,31 @@ RUN python3 -m pip --no-cache-dir install \
         astroid==2.5.3 \
         attrs==19.1.0 \
         behave==1.2.6 \
-        bert-tensorflow \
-        blosc \
+        blosc==1.10.1 \
         cffi==1.12.3 \
         click \
+        cumm==0.2.8 \
         cython==0.29.12 \
         dataclasses \
         Deprecated \
         docutils==0.16 \
+        grpcio \
+        grpcio-tools \
         h5py==2.10.0 \
         ipykernel \
         ipython \
         Jinja2==3.0.3 \
         jupyter \
         keras==2.2.4 \
-        lmdb==0.95 \
+        lmdb==1.2.1 \
+        matplotlib>=3 \
+        mock \
         nbsphinx==0.8.12 \
-        numpy==1.19.5 \
+        'numpy<1.24,>=1.20.5' \
         onnx==1.10.0 \
+        onnxsim \
+        onnxruntime==1.10.0 \
+        onnxruntime-extensions \
         opencv-python \
         Pillow==9.3.0 \
         pluggy==0.12.0 \
@@ -166,26 +163,27 @@ RUN python3 -m pip --no-cache-dir install \
         pybind11 \
         pyDOE2 \
         pylint==2.3.1 \
-        pymoo \
+        pymoo==0.4.1 \
         pytest==4.6.5 \
         pytest-cov==2.6.1 \
+        pytorch-ignite \
         PyYAML \
         scikit-learn==1.1.3 \
         scipy==1.8.1 \
+        spconv==2.1.20 \
         sphinx==2.1.1 \
-        sphinx-jinja==1.1.1 \
         sphinx-autodoc-typehints==1.6.0 \
+        sphinx-jinja==1.1.1 \
         sphinx-rtd-theme \
         tensorboard==2.4.0 \
         tensorboardX==2.4 \
-        tensorflow-gpu==2.4.3 \
-        tensorflow-hub \
-        tensorflow-model-optimization \
-        tensorlayer==2.2.1 \
-        torchvision==0.14.1 \
-        timm==0.3.1 \
+        timm==0.4.12 \
+        torch==1.13.1+cpu -f https://download.pytorch.org/whl/torch_stable.html \
+        torchaudio==0.13.1 -f https://download.pytorch.org/whl/torch_stable.html \
+        torchtext==0.14.1 \
+        torchvision==0.14.1+cpu -f https://download.pytorch.org/whl/torch_stable.html \
         tqdm \
-        transformers==4.11.3 \
+        transformers==4.27.4 \
         wget && \
     python3 -m ipykernel.kernelspec
 
@@ -197,6 +195,12 @@ RUN mkdir -p /opt/cmake  &&  \
     ln -fs /opt/cmake/bin/cmake /usr/local/bin/cmake && \
     ln -fs /opt/cmake/bin/ctest /usr/local/bin/ctest && \
     ln -fs /opt/cmake/bin/cpack /usr/local/bin/cpack
+
+# Onnxruntime C/C++ package needed to create custom C++ onnx ops for quantsim
+RUN mkdir /opt/onnxruntime && \
+    export ONNXRUNTIME_VER=$(python3 -c 'import onnxruntime; print(onnxruntime.__version__)') && \
+    wget -qO- "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VER}/onnxruntime-linux-x64-${ONNXRUNTIME_VER}.tgz" | tar xvz --strip-components 1 -C /opt/onnxruntime && \
+    ln -s /opt/onnxruntime /usr/local/bin/onnxruntime_headers
 
 ENV PATH=/usr/local/bin:$PATH
 
@@ -231,14 +235,12 @@ RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/s
 # SSH login fix. Otherwise user is kicked off after login
 RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
 
-# Clone the tensorflow repo to enable development
-RUN cd / && git clone --depth 1 --single-branch --branch v2.4.3 https://github.com/tensorflow/tensorflow.git
-
 RUN python3 -m pip install git-pylint-commit-hook osqp
 
 # NOTE: We need to pin the holoviews version to this since the latest version has a circular dependency on bokeh 2.0.0 through the panel package
-RUN python3 -m pip install holoviews==1.12.7 netron jsonschema pandas==1.4.3
+RUN python3 -m pip install holoviews==1.12.7 netron jsonschema pandas==1.5.3
 
+# Note: bokeh requires Pillow while we need to use Pillow-SIMD for performance reasons.
 RUN python3 -m pip install bokeh==1.2.0 hvplot==0.4.0
 
 # Remove existing Pillow & Pillow-SIMD and replace with correct version of Pillow-SIMD.
@@ -246,7 +248,7 @@ RUN python3 -m pip uninstall -y Pillow Pillow-SIMD
 RUN python3 -m pip --no-cache-dir install Pillow-SIMD==9.0.0.post1
 
 RUN apt-get update && apt-get install -y gnupg2
-RUN wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key|sudo apt-key add - && echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-11 main" >> /etc/apt/sources.list
+RUN wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key|sudo apt-key add - && echo "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-11 main" >> /etc/apt/sources.list
 RUN apt-get update --fix-missing -y && apt upgrade -y && apt-get install -y clang-11 clang-format clang-tidy-11 && \
    rm -rf /var/lib/apt/lists/*
 
@@ -255,7 +257,3 @@ RUN ln -s /usr/bin/run-clang-tidy-11.py /usr/bin/run-clang-tidy.py
 
 # Provide write permission to the python package folder in order to install AIMET in editable mode
 RUN chmod o+w /usr/local/lib/python3.8/dist-packages
-
-# Work-around for tensorflow being unable to find libcusolver.so.10 in the cuda:11.1.1 container
-# Reference: https://github.com/tensorflow/tensorflow/issues/44777#issuecomment-817303735
-RUN ln -s /usr/local/cuda-11.1/lib64/libcusolver.so.11 /usr/local/lib/python3.8/dist-packages/tensorflow/python/libcusolver.so.10

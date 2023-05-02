@@ -105,6 +105,13 @@ make doc
 
 To begin navigating the documentation, open the page `$WORKSPACE/aimet/build/staging/universal/Docs/user_guide/index.html` on any browser.
 
+## Generate wheel packages
+Run the following commands to generate installable python wheel packages:
+```bash
+cd $WORKSPACE/aimet/build
+make packageaimet
+```
+
 ## Docker information
 Code may *optionally* be developed inside a development docker container. This section describes how to build a docker image and launch a container using the provided [Dockerfiles](../Jenkins).
 
