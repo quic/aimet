@@ -56,7 +56,7 @@ from aimet_tensorflow.keras.quant_sim.tensor_quantizer import TensorQuantizer, A
     ParamPerTensorQuantizer, StaticGridPerChannelQuantizer, ParamPerChannelQuantizer
 from aimet_tensorflow.keras.quantsim_config.quantsim_config import QuantSimConfigurator, INPUT_QUANTIZERS, \
     OUTPUT_QUANTIZERS, PARAM_QUANTIZERS
-from aimet_tensorflow.keras.utils.common import convert_h5_model_to_pb_model, set_keras_backend_version_to_v2
+from aimet_tensorflow.keras.utils.common import convert_h5_model_to_pb_model
 
 from aimet_tensorflow.keras.defs import AxisHandling
 import aimet_tensorflow.keras.utils.common as keras_common_utils
