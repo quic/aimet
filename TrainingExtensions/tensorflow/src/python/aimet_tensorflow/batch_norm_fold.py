@@ -45,6 +45,7 @@ import tensorflow as tf
 from aimet_common.graph_searcher import GraphSearcher
 from aimet_common.bias_correction import ConvBnPatternHandler
 from aimet_common.graph_pattern_matcher import PatternType
+from aimet_common.quantsim import compute_min_max_given_delta_offset
 from aimet_common.utils import AimetLogger
 import aimet_common.libpymo as libpymo
 
@@ -541,28 +542,21 @@ def _fold_pair_scale(conv_linear_w_quantizer: QuantizerInfo,
     if isinstance(encodings, libpymo.TfEncoding):
         encodings = [encodings]
 
-    # Override encoding min value to the original values from tensorFlow graph as
-    # quantizer_info.get_encoding() method returns adjusted encodings.
-    # @TODO: expose get_effective_encoding() and bring parity with torch impl.
-    if conv_linear_w_quantizer.use_symmetric_encoding:
-        for encoding in encodings:
-            encoding.min = encoding.min + encoding.delta
-
     gamma = np.array(bn_params.gamma)
     sigma = np.array(bn_params.runningVar)
 
     new_encodings = []
     for old_encoding, c in zip(encodings, gamma/sigma):
         new_encoding = libpymo.TfEncoding()
-        new_encoding.delta = old_encoding.delta * abs(c)
-        if c >= 0:
-            new_encoding.max = old_encoding.max * c
-            new_encoding.min = old_encoding.min * c
-        else:
-            new_encoding.max = old_encoding.min * c
-            new_encoding.min = old_encoding.max * c
-        new_encoding.offset = old_encoding.offset
         new_encoding.bw = old_encoding.bw
+        new_encoding.offset = old_encoding.offset
+        new_encoding.delta = old_encoding.delta * abs(c)
+        new_encoding.min, new_encoding.max = \
+            compute_min_max_given_delta_offset(new_encoding.delta,
+                                               new_encoding.offset,
+                                               new_encoding.bw,
+                                               conv_linear_w_quantizer.use_symmetric_encoding,
+                                               conv_linear_w_quantizer.use_strict_symmetric)
         new_encodings.append(new_encoding)
 
     conv_linear_w_quantizer.set_encoding(new_encodings)
