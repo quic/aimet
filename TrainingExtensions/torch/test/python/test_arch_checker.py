@@ -74,6 +74,7 @@ class Model_inter_pad_with_BN(torch.nn.Module):
         self.bn2 = torch.nn.BatchNorm2d(32)
         self.conv4 = torch.nn.Conv2d(32, 32, kernel_size=2, stride=2, padding=2, bias=False)
 
+        # conv5 has intermediate paddings when consider (conv3, conv4, conv5) 
         # conv6 has no intermediate paddings
         self.conv5 = torch.nn.Conv2d(32, 32, kernel_size=2, padding=2, bias=False)
         self.relu3 = torch.nn.ReLU()
@@ -129,17 +130,19 @@ class Model_inter_pad_without_BN(torch.nn.Module):
         self.relu1 = torch.nn.ReLU()
         self.conv2 = torch.nn.Conv2d(32, 32, kernel_size=2, stride=2, padding=2, bias=False)
 
-        # conv4 has no intermediate paddings since conv3 has no paddings
+        # conv4 has intermediate paddings consider (conv1, conv2, conv3, conv4)
         self.conv3 = torch.nn.Conv2d(32, 32, kernel_size=2, stride=2, padding=0, bias=False)
         self.relu2 = torch.nn.ReLU()
         self.conv4 = torch.nn.Conv2d(32, 32, kernel_size=2, stride=2, padding=2, bias=False)
-
+        
+        # PReLU is not a supported activation, stop examining the nodes after for (conv1, relu1, conv2) pattern.
+        self.prelu = torch.nn.PReLU()
         # conv6 has no intermediate paddings
         self.conv5 = torch.nn.Conv2d(32, 32, kernel_size=2, padding=2, bias=False)
         self.relu3 = torch.nn.ReLU()
         self.conv6 = torch.nn.Conv2d(32, 32, kernel_size=2, padding=0, bias=False)
 
-        # conv7 has no intermediate paddings
+        # conv7, conv8 has no intermediate paddings
         self.conv7 = torch.nn.Conv2d(32, 32, kernel_size=2, padding=0, bias=False)
         self.relu4 = torch.nn.ReLU()
         self.conv8 = torch.nn.Conv2d(32, 32, kernel_size=2, padding=0, bias=False)
@@ -153,6 +156,7 @@ class Model_inter_pad_without_BN(torch.nn.Module):
         x = self.relu2(x)
         x = self.conv4(x)
 
+        x = self.prelu(x)
         x = self.conv5(x)
         x = self.relu3(x)
         x = self.conv6(x)
@@ -198,14 +202,17 @@ class Model_inter_pad_act_type(torch.nn.Module):
         x = self.conv1(x)
         x = self.relu(x)
         x = self.conv2(x)
+        x = self.prelu(x) # Break point for variable length
 
         x = self.conv3(x)
         x = self.tanh(x)
         x = self.conv4(x)
+        x = self.prelu(x) # Break point for variable length
 
         x = self.conv5(x)
         x = self.hardswich(x)
         x = self.conv6(x)
+        x = self.prelu(x) # Break point for variable length
 
         x = self.conv7(x)
         x = self.prelu(x)
@@ -324,6 +331,7 @@ class TestArchChecker():
         ArchChecker.check_model_arch(model, self.dummy_input)
         arch_checker_report = ArchChecker._arch_checker_report
         assert "_check_intermediate_padding" in arch_checker_report.raw_report["Model_inter_pad_with_BN.conv2"].failed_checks
+        assert "_check_intermediate_padding" in arch_checker_report.raw_report["Model_inter_pad_with_BN.conv5"].failed_checks
         assert "Model_inter_pad_with_BN.conv4" not in arch_checker_report.raw_report
         assert "Model_inter_pad_with_BN.conv6" not in arch_checker_report.raw_report
         assert "Model_inter_pad_with_BN.conv8" not in arch_checker_report.raw_report
@@ -334,7 +342,7 @@ class TestArchChecker():
         ArchChecker.check_model_arch(model, self.dummy_input)
         arch_checker_report = ArchChecker._arch_checker_report
         assert "_check_intermediate_padding" in arch_checker_report.raw_report["Model_inter_pad_without_BN.conv2"].failed_checks
-        assert "Model_inter_pad_without_BN.conv4" not in arch_checker_report.raw_report
+        assert "_check_intermediate_padding" in arch_checker_report.raw_report["Model_inter_pad_without_BN.conv4"].failed_checks
         assert "Model_inter_pad_without_BN.conv6" not in arch_checker_report.raw_report
         assert "Model_inter_pad_without_BN.conv8" not in arch_checker_report.raw_report
         arch_checker_report.reset_raw_report()
@@ -342,10 +350,16 @@ class TestArchChecker():
         model = Model_inter_pad_act_type()
         ArchChecker.check_model_arch(model, self.dummy_input)
         arch_checker_report = ArchChecker._arch_checker_report
+
+        assert "_check_intermediate_padding" not in arch_checker_report.raw_report["Model_inter_pad_act_type.conv1"].failed_checks
         assert "_check_intermediate_padding" in arch_checker_report.raw_report["Model_inter_pad_act_type.conv2"].failed_checks
+        assert "Model_inter_pad_act_type.conv3" not in arch_checker_report.raw_report
         assert "_check_intermediate_padding" in arch_checker_report.raw_report["Model_inter_pad_act_type.conv4"].failed_checks
+        assert "Model_inter_pad_act_type.conv5" not in arch_checker_report.raw_report
         assert "_check_intermediate_padding" in arch_checker_report.raw_report["Model_inter_pad_act_type.conv6"].failed_checks
+        assert "Model_inter_pad_act_type.conv7" not in arch_checker_report.raw_report
         assert "Model_inter_pad_act_type.conv8" not in arch_checker_report.raw_report
+
         arch_checker_report.reset_raw_report()
 
         filepath = ArchChecker._arch_checker_report._get_write_path(".html")
