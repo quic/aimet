@@ -141,7 +141,7 @@ public:
 
         // Create an empty output tensor based on the dimension and options of input
         at::IntArrayRef sizes  = input.sizes();
-        at::Tensor output = at::empty(sizes, input.options());
+        at::Tensor output = at::empty_like(input);
 
 
         size_t inputTensorSize = 1;
@@ -167,7 +167,7 @@ public:
 
         // Create an empty output tensor based on the dimension and options of input
         at::IntArrayRef sizes  = input.sizes();
-        at::Tensor output = at::empty(sizes, input.options());
+        at::Tensor output = at::empty_like(input);
 
         size_t inputTensorSize = 1;
         for (auto size: sizes)
@@ -257,8 +257,17 @@ public:
                                               size_t numChannel, size_t numElement, size_t numElementPerChannel,
                                               DlQuantization::RoundingMode roundingMode, bool useCuda)
     {
+        // Our per-channel quantizeDequantize kernel currently assumes that
+        // input tensor has contiguous memory format.
+        // `input.contiguous()` will return itself immediately if the input is already contiguous,
+        // and return a contiguous copy of input if the input isn't contiguous.
+        //
+        // This is a quick and dirty solution, but it's okay at the moment because
+        // the inputs of per-channel quantizeDequantize are almost always contiguous.
+        input = input.contiguous();
+
         // Allocate an output tensor as the same shape as the input
-        at::Tensor output = at::empty(input.sizes(), input.options());
+        at::Tensor output = at::empty_like(input);
         int encodingTensorSize = 2 * numChannel;
 
         // Collect encoding min/max data
