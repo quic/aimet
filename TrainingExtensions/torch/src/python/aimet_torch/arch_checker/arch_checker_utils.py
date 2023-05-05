@@ -45,26 +45,41 @@ from aimet_torch.meta.operation import Op
 from aimet_torch.arch_checker.constants import ArchCheckerReportConstants as report_const
 from aimet_torch.arch_checker.arch_checker_rules import NODE_CHECK_DICT, PATTERN_CHECK_LIST
 
+import aimet_common.connected_graph.operation
 from aimet_common.utils import AimetLogger
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
 # pylint: disable=too-few-public-methods
-class OpStructure:
-    """ op for NodeErrorReportObject when op is not Op class but tuple of ops. """
-    def __init__(self, op_tuple) -> None:
+class OpStructure(aimet_common.connected_graph.operation.Op):
+    """
+    Subclass OpStructure inherited from aimet_common.connected_graph.operation.Op.
+    Used to mark a structure of Ops.
+    """
+    def __init__(self, op_tuple: str):
+        """
+        Initializer for OpStructure
+        :param op_tuple: structure with ops.
+        """
         self.op_tuple = op_tuple
-        self.dotted_name_op = get_dotted_name_op_from_op_tuple(op_tuple)
-        self.type = report_const.OP_STRUCT_OP_TYPE
+        dotted_name = get_dotted_name_op_from_op_tuple(op_tuple)
+        first_op = op_tuple[0]
+        while not isinstance(first_op, Op):
+            first_op = first_op[0]
+
+        last_op = op_tuple[-1]
+        while not isinstance(last_op, Op):
+            last_op = last_op[-1]
+
+        output_shape = last_op.output_shape
+        is_anonymous = True
+        op_type = report_const.OP_STRUCT_OP_TYPE
+        name = '_'.join([report_const.OP_STRUCT_OP_TYPE, first_op.name.split("_")[-1], last_op.name.split("_")[-1]])
+        super().__init__(name, dotted_name, output_shape, is_anonymous, op_type)
 
     def get_module(self):
         """ Return all modules associated with this Op Tuple in connected_graph sequence. """
         return [op.get_module() if isinstance(op, Op) else OpStructure(op).get_module() for op in self.op_tuple]
-
-    @property
-    def dotted_name(self):
-        """ Returns dotted_name_op. """
-        return self.dotted_name_op
 
 def get_dotted_name_op_from_op_tuple(op_list):
     """ Structure of module always return a list. Must start with list_handler """
