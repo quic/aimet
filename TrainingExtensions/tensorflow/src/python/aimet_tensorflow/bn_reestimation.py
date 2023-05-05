@@ -100,14 +100,15 @@ def _get_all_tf_bn_vars_list(sim: QuantizationSimModel) -> Tuple:
     return mean_var_tf_var_list, momentum_tf_var_list, training_tf_var_list
 
 
-def _reset_bn_stats(sess: tf.compat.v1.Session, bn_mean_var_checkpoints: Dict, bn_momentum_checkpoints: Dict,
-                    bn_training_checkpoints: Dict) -> Handle:
+def _reset_bn_stats(sess: tf.compat.v1.Session,
+                    bn_mean_var_checkpoints: Dict,
+                    bn_momentum_checkpoints: Dict) -> Handle:
     """
     reset bn stats
+
     :param sess: tf session
     :param bn_mean_var_checkpoints: Dict for original mean&var
     :param bn_momentum_checkpoints: Dict for original bn momentum
-    :param bn_training_checkpoints: Dict for original bn training
     :return:
     """
     def cleanup():
@@ -117,29 +118,30 @@ def _reset_bn_stats(sess: tf.compat.v1.Session, bn_mean_var_checkpoints: Dict, b
         with sess.graph.as_default():
             sess.run([tf.compat.v1.assign(k, bn_mean_var_checkpoints[k]) for k in bn_mean_var_checkpoints.keys()])
             sess.run([tf.compat.v1.assign(k, bn_momentum_checkpoints[k]) for k in bn_momentum_checkpoints.keys()])
-            sess.run([tf.compat.v1.assign(k, bn_training_checkpoints[k]) for k in bn_training_checkpoints.keys()])
 
     try:
         with sess.graph.as_default():
             sess.run([tf.compat.v1.assign(k, 0.0) for k in bn_momentum_checkpoints.keys()])
-            sess.run([tf.compat.v1.assign(k, tf.compat.v1.constant(True)) for k in bn_training_checkpoints.keys()])
         return Handle(cleanup)
     except:
         cleanup()
         raise
 
 
+DEFAULT_NUM_BATCHES = 100
+
+
 def reestimate_bn_stats(sim: QuantizationSimModel, start_op_names: List[str],
-                        output_op_names: List[str], bn_re_estimation_dataset: tf.compat.v1.data.Dataset,
-                        bn_num_batches: int = 100) -> Handle:
+                        output_op_names: List[str], dataset: tf.compat.v1.data.Dataset,
+                        num_batches: int = DEFAULT_NUM_BATCHES) -> Handle:
     """
-    top level api for end user directly call for eval()
+    Reestimate BatchNorm statistics (running mean and var).
 
     :param sim: tf quantized model
     :param start_op_names: List of starting op names of the model
     :param output_op_names: List of output op names of the model
-    :param bn_re_estimation_dataset: Training dataset
-    :param bn_num_batches: The number of batches to be used for reestimation
+    :param dataset: Training dataset
+    :param num_batches: The number of batches to be used for reestimation
     :returns: Handle that undos the effect of BN reestimation upon handle.remove()
     """
     # setup tf variable list to access
@@ -152,14 +154,18 @@ def reestimate_bn_stats(sim: QuantizationSimModel, start_op_names: List[str],
         bn_momentum_checkpoints = dict(zip(bn_momentum_tf_var_list, sess.run([v for v in bn_momentum_tf_var_list])))
         bn_training_checkpoints = dict(zip(bn_training_tf_var_list, sess.run([v for v in bn_training_tf_var_list])))
 
+    # Set all the batchnorm layers to train mode
+    with sess.graph.as_default():
+        sess.run([tf.compat.v1.assign(k, True) for k in bn_training_checkpoints.keys()])
+
     # 1. switch to re-estimation mode and setup remove
-    handle = _reset_bn_stats(sess, bn_mean_var_checkpoints, bn_momentum_checkpoints, bn_training_checkpoints)
+    handle = _reset_bn_stats(sess, bn_mean_var_checkpoints, bn_momentum_checkpoints)
 
     # 2 per batch forward and BN re-estimation
     with sess.graph.as_default():
         output_ops = [sess.graph.get_operation_by_name(name) for name in output_op_names]
         output_tensors = [sess.graph.get_tensor_by_name(output_op.name + ':0') for output_op in output_ops]
-        bn_dataset_iterator = iterate_tf_dataset(bn_re_estimation_dataset)
+        bn_dataset_iterator = iterate_tf_dataset(dataset)
 
         update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
         assert update_ops, "GraphKeys.UPDATE_OPS can not be empty."
@@ -175,22 +181,27 @@ def reestimate_bn_stats(sim: QuantizationSimModel, start_op_names: List[str],
         # (1)initialization
         sum_dict = {v: np.zeros(v.shape, dtype=v.dtype.as_numpy_dtype) for v in bn_mean_var_tf_var_list}
         # (2)forward and accumulate mean and var
-    for batch_index in range(bn_num_batches):
+    for batch_index in range(num_batches):
         try:
             batch_data = next(bn_dataset_iterator)
             feed_dict = create_input_feed_dict(sess.graph, start_op_names, batch_data)
             sess.run(output_tensors_dependencies, feed_dict=feed_dict)
             for v in bn_mean_var_tf_var_list:
                 sum_dict[v] += sess.run(v)
-            if batch_index == bn_num_batches - 1:
+            if batch_index == num_batches - 1:
                 break
         except tf.errors.OutOfRangeError:
-            logger.info("tf.errors.OutOfRangeError:: no data from BN dataset.")  # ==> "End of dataset"
+            logger.info("tf.errors.OutOfRangeError:: no data from BN dataset.")
             break
     # (3) average mean&var
     for k in sum_dict.keys():
-        sum_dict[k] = sum_dict[k] / bn_num_batches
+        sum_dict[k] = sum_dict[k] / num_batches
     # (4) apply result: update BN stats
     with sess.graph.as_default():
         sess.run([tf.compat.v1.assign(k, sum_dict[k]) for k in bn_mean_var_checkpoints.keys()])
+
+    # Set all the batchnorm layers to eval mode.
+    with sess.graph.as_default():
+        sess.run([tf.compat.v1.assign(k, False) for k in bn_training_checkpoints.keys()])
+
     return handle
