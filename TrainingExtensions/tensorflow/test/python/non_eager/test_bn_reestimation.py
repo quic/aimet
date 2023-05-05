@@ -205,7 +205,7 @@ class TestBNReEstimation:
                                               bn_num_batches,
                                               bn_momentum_names, bn_training_names):
         sess_sim, sess_fp32 = gpu_sessions
-        self._reestimate_and_compare_results(sess_sim, sess_fp32, bn_re_estimation_dataset, bn_num_batches,
+        self._reestimate_and_compare_results(sess_sim, bn_re_estimation_dataset, bn_num_batches,
                                 ['input_1'], ['dense/BiasAdd'])
 
     def test_reestimation_with_rewriter(self, bn_re_estimation_dataset, bn_num_batches):
@@ -214,17 +214,14 @@ class TestBNReEstimation:
 
         inputs = tf.keras.Input(shape=(32, 32, 3,))
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-
         bn_op = tf.compat.v1.layers.batch_normalization(conv_op,
                                                         beta_initializer=tf.compat.v1.random_uniform_initializer(),
                                                         gamma_initializer=tf.compat.v1.random_uniform_initializer(),
                                                         moving_mean_initializer=tf.compat.v1.random_uniform_initializer(),
                                                         moving_variance_initializer=tf.compat.v1.random_uniform_initializer(),
                                                         fused=True)
-
         outputs = tf.nn.relu(bn_op)
         initialize_uninitialized_vars(sess)
-
         start_op_names = [inputs.op.name]
         end_op_names = [outputs.op.name]
 
@@ -238,7 +235,10 @@ class TestBNReEstimation:
             sess.run(model_output, feed_dict={model_input: dummy_val})
         sim.compute_encodings(dummy_forward_pass, None)
 
-        self._reestimate_and_compare_results(sim, sess, bn_re_estimation_dataset, bn_num_batches, [inputs.op.name], [outputs.op.name])
+        self._reestimate_and_compare_results(sim, bn_re_estimation_dataset, bn_num_batches,
+                                             [inputs.op.name], [outputs.op.name])
+        sess.close()
+        sim.session.close()
 
     def test_reestimation_with_rewriter_multiple_branches(self, bn_re_estimation_dataset, bn_num_batches):
         tf.compat.v1.reset_default_graph()
@@ -247,21 +247,18 @@ class TestBNReEstimation:
         inputs = tf.keras.Input(shape=(32, 32, 3,))
         conv_op1 = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
         conv_op2 = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-
         bn_op1 = tf.compat.v1.layers.batch_normalization(conv_op1,
                                                         beta_initializer=tf.compat.v1.random_uniform_initializer(),
                                                         gamma_initializer=tf.compat.v1.random_uniform_initializer(),
                                                         moving_mean_initializer=tf.compat.v1.random_uniform_initializer(),
                                                         moving_variance_initializer=tf.compat.v1.random_uniform_initializer(),
                                                         fused=True)
-
         bn_op2 = tf.compat.v1.layers.batch_normalization(conv_op2,
                                                          beta_initializer=tf.compat.v1.random_uniform_initializer(),
                                                          gamma_initializer=tf.compat.v1.random_uniform_initializer(),
                                                          moving_mean_initializer=tf.compat.v1.random_uniform_initializer(),
                                                          moving_variance_initializer=tf.compat.v1.random_uniform_initializer(),
                                                          fused=True)
-
         outputs1 = tf.nn.relu(bn_op1)
         outputs2 = tf.nn.relu(bn_op2)
 
@@ -272,7 +269,6 @@ class TestBNReEstimation:
         end_op_names = [outputs1.op.name, outputs2.op.name]
 
         sess = modify_sess_bn_mutable(sess, start_op_names, end_op_names, training_tf_placeholder=False)
-
         sim = QuantizationSimModel(sess, start_op_names, end_op_names)
 
         def dummy_forward_pass(sess, args):
@@ -283,12 +279,12 @@ class TestBNReEstimation:
             sess.run([model_output1,model_output2], feed_dict={model_input: dummy_val})
 
         sim.compute_encodings(dummy_forward_pass, None)
+        self._reestimate_and_compare_results(sim, bn_re_estimation_dataset, bn_num_batches, [inputs.op.name],
+                                             [outputs1.op.name, outputs2.op.name])
+        sess.close()
+        sim.session.close()
 
-        self._reestimate_and_compare_results(sim, sess, bn_re_estimation_dataset, bn_num_batches, [inputs.op.name],
-                                             [outputs1.op.name,outputs2.op.name])
-
-
-    def _reestimate_and_compare_results(self, sess_sim, sess_fp32, bn_re_restimation_dataset, bn_num_batches, input_ops_name, output_ops_name):
+    def _reestimate_and_compare_results(self, sess_sim, bn_re_restimation_dataset, bn_num_batches, input_ops_name, output_ops_name):
         bn_mean_var_tf_var_list, bn_momentum_tf_var_list, bn_training_tf_var_list = _get_all_tf_bn_vars_list(sess_sim)
 
         model_inputs= sess_sim.session.graph.get_tensor_by_name(input_ops_name[0] + ':0')
@@ -309,17 +305,18 @@ class TestBNReEstimation:
                                                                            bn_momentum_tf_var_list, bn_training_tf_var_list)
 
         with reestimate_bn_stats(sim=sess_sim, start_op_names=input_ops_name, output_op_names=output_ops_name,
-                                 bn_re_estimation_dataset=bn_re_restimation_dataset,
-                                 bn_num_batches=bn_num_batches):
+                                 dataset=bn_re_restimation_dataset,
+                                 num_batches=bn_num_batches):
             bn_mean_var_est, bn_momentum_est, bn_training_est = get_all_status(sess_sim.session, bn_mean_var_tf_var_list,
                                                                                bn_momentum_tf_var_list,
                                                                                bn_training_tf_var_list)
-            # Sanity check(apply_bn_re_estimation):  re-estimation , update runing mean &var, set training with False for
-            # eval(), momentum  no change
+            # Sanity check(apply_bn_re_estimation):  re-estimation ,update runing mean &var, momentum  no change
             assert not is_two_dict_close_numpy_array(bn_mean_var_ori, bn_mean_var_est)
             assert not is_dict_close_numpy_array_zeros(bn_mean_var_est)
             assert not is_two_dict_close_float(bn_momentum_ori, bn_momentum_est)
-            assert not is_two_dict_close_bool(bn_training_ori, bn_training_est)
+
+            # mutable BNs should be in eval mode before and after reestimate_bn_stats() call
+            assert is_two_dict_close_bool(bn_training_ori, bn_training_est)
 
         bn_mean_var_restored, bn_momentum_restored, bn_training_restored = get_all_status(sess_sim.session,
                                                                                           bn_mean_var_tf_var_list,
