@@ -85,7 +85,9 @@ def _reset_bn_stats(bn_layers: List[tf.keras.layers.Layer], bn_mean_checkpoints:
 def reestimate_bn_stats(model: tf.keras.Model, bn_re_estimation_dataset: tf.data.Dataset,
                         bn_num_batches: int = 100) -> Handle:
     """
+
     top level api for end user directly call
+
     :param model: tf.keras.Model
     :param bn_re_estimation_dataset: Training dataset
     :param bn_num_batches: The number of batches to be used for reestimation
