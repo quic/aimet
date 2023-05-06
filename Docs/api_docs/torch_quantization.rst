@@ -8,6 +8,7 @@ whether AIMET Quantization features can be applied on PyTorch model.
 
 Users should first invoke Model Preparer API before using any of the AIMET Quantization features.
    - :ref:`Model Guidelines<api-torch-model-guidelines>`: Guidelines for defining PyTorch models
+   - :ref:`Architecture Checker API<api-torch-architecture_checker>`: Allows user to check for performance concern with the model.
    - :ref:`Model Preparer API<api-torch-model-preparer>`: Allows user to automate model definition changes
    - :ref:`Model Validator API<api-torch-model-validator>`: Allows user to check whether AIMET Quantization feature can be applied on a PyTorch model
 
