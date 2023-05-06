@@ -96,8 +96,10 @@ class ArchChecker:
     @staticmethod
     def check_model_arch(model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple])-> ArchCheckerReport:
         """
+
         Check each node in the model using checks in _node_check_dict. Record only the nodes and
         failed tests.
+
         :param model: Torch model to be checked.
         :param dummy_input: A dummy input to the model. Can be a Tensor or a Tuple of Tensors
         :return arch_checker_report: {op.dotted_name_op: NodeErrorReportObject }
