@@ -77,7 +77,7 @@ Run the checker on the model by passing in the model as well as the model input:
    :language: python
    :pyobject: example_check_for_non_performant_activations
 
-the PReLU layer in model is consider non-performant, the followeing logger print will appear::
+the PReLU layer in model is consider non-performant compared to ReLU, the following logger print will appear::
 
     Utils - INFO - Graph/Node: ModelWithPrelu.prelu1: PReLU(num_parameters=1) fails check: {'_activation_checks'}
 
@@ -96,7 +96,7 @@ Run the checker on the model by passing in the model as well as the model input:
    :language: python
    :pyobject: example_check_for_standalone_bn
 
-the AveragePool layer prevent BatchNormalization layer to be followed with Convolution layer, the following logger print will appear::
+the AveragePool layer prevents the BatchNormalization layer to be folded with the Convolution layer, the following logger print will appear::
 
     Utils - INFO - Graph/Node: ModelWithNonfoldableBN.bn1: BatchNorm2d(32, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True) fails check: {'_check_batch_norm_fold'}
 
