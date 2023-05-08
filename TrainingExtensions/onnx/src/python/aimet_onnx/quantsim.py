@@ -38,10 +38,10 @@
 """ Implementation for simulating models running on Quantized hardware """
 
 import os
-from typing import Dict
+from typing import Dict, List
 
 import numpy as np
-from onnx import helper, onnx_pb, mapping
+from onnx import helper, onnx_pb
 import onnxruntime as ort
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
@@ -52,6 +52,7 @@ from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.quantsim import encoding_version, extract_global_quantizer_args
 from aimet_common.utils import save_json_yaml
 from aimet_onnx import utils
+from aimet_onnx.meta.operations import Op
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
 from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode
 from aimet_onnx.quantsim_config.quantsim_config import QuantSimConfigurator
@@ -146,10 +147,21 @@ class QuantizationSimModel:
         """
         Get the names of params
         """
-        for param in self.model.initializer():
-            if mapping.TENSOR_TYPE_TO_NP_TYPE[param.data_type] in data_types_to_quantize:
-                if param.name not in self.param_names and param.name:
+        valid_ops = self._get_ops_with_parameter()
+        for op in valid_ops:
+            for param_info in op.parameters.values():
+                param, _ = param_info
+                if param.name and param.name not in self.param_names:
                     self.param_names.append(param.name)
+
+    def _get_ops_with_parameter(self) -> List[Op]:
+        """
+        Gets ops with parameters to add quantization nodes for
+
+        :return: Connected graph ops
+        """
+        valid_ops = [op for op in self.connected_graph.get_all_ops().values() if op.type not in ['BatchNormalization']]
+        return valid_ops
 
     def _get_activations_to_quantize(self, dummy_input: Dict[str, np.ndarray]):
         """
