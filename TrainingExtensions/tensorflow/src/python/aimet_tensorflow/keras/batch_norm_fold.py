@@ -824,9 +824,11 @@ def _fold_given_batch_norms(model: tf.keras.Model,
         try:
             if is_wrapped:
                 assert isinstance(conv, QcQuantizeWrapper) and isinstance(bn, QcQuantizeWrapper)
+                bn._layer_to_wrap.trainable = False
                 _fold_to_scale(conv, bn)
                 bn_layers.append(bn._layer_to_wrap)
             else:
+                bn.trainable = False
                 _fold_to_weight(conv, bn, fold_backward=fold_backward)
         except _BatchNormFoldingNotSupported as e:
             bn_name = bn._layer_to_wrap.name if is_wrapped else bn.name
@@ -884,13 +886,11 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
                 "Can't fold BatchNorm to scale if bias quantizer is enabled."
             )
 
-    encodings = weight_quantizer.encoding
+    enc_min = weight_quantizer._encoding_min
+    enc_max = weight_quantizer._encoding_max
 
-    if encodings is None:
+    if not weight_quantizer.is_encoding_valid():
         raise RuntimeError
-
-    if isinstance(encodings, libpymo.TfEncoding):
-        encodings = [encodings]
 
     with bn_wrapper._quantize_params():
         _fold_to_weight(conv, bn, fold_backward=True)
@@ -898,21 +898,16 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
         gamma = bn.gamma
         sigma = K.sqrt(bn.moving_variance + bn.epsilon)
 
-        new_encodings = []
-        for old_encoding, c in zip(encodings, gamma/sigma):
-            new_encoding = libpymo.TfEncoding()
-            new_encoding.delta = old_encoding.delta * abs(c)
+        for i, c in enumerate(gamma/sigma):
+            c = float(c)
             if c >= 0:
-                new_encoding.max = old_encoding.max * c
-                new_encoding.min = old_encoding.min * c
+                enc_max[i].assign(enc_max[i] * c)
+                enc_min[i].assign(enc_min[i] * c)
             else:
-                new_encoding.max = old_encoding.min * c
-                new_encoding.min = old_encoding.max * c
-            new_encoding.offset = old_encoding.offset
-            new_encoding.bw = old_encoding.bw
-            new_encodings.append(new_encoding)
+                enc_max_before_reassign = enc_max[i]
+                enc_max[i].assign(enc_min[i] * c)
+                enc_min[i].assign(enc_max_before_reassign * c)
 
-        weight_quantizer.encoding = new_encodings
 
     # Copy batchnorm's output quantizers to conv output quantizers
     for conv_output_quantizer, bn_output_quantizer in \
@@ -923,13 +918,9 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
             conv_output_quantizer.disable()
 
         if bn_output_quantizer.encoding is not None:
-            encoding = libpymo.TfEncoding()
-            encoding.delta  = bn_output_quantizer.encoding.delta
-            encoding.max    = bn_output_quantizer.encoding.max
-            encoding.min    = bn_output_quantizer.encoding.min
-            encoding.offset = bn_output_quantizer.encoding.offset
-            encoding.bw     = bn_output_quantizer.encoding.bw
-            conv_output_quantizer.encoding = encoding
+            conv_output_quantizer._encoding_min.assign(bn_output_quantizer._encoding_min)
+            conv_output_quantizer._encoding_max.assign(bn_output_quantizer._encoding_max)
+            conv_output_quantizer._is_encoding_valid = True
 
             tensor_quantizers = conv_output_quantizer._tensor_quantizer if isinstance(conv_output_quantizer._tensor_quantizer, List) else [conv_output_quantizer._tensor_quantizer]
             for tensor_quantizer in tensor_quantizers:
@@ -938,8 +929,8 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
         bn_output_quantizer.disable()
 
     if bias_quantizer is None:
-        bias_quantizer = ParamPerTensorQuantizer(weight_quantizer._original_layer,
-                                                 weight_quantizer._name,
+        bias_quantizer = ParamPerTensorQuantizer(conv,
+                                                 conv.bias.name.split(':')[0],
                                                  weight_quantizer.quant_scheme,
                                                  MAP_PYMO_TO_ROUND_MODE[weight_quantizer.round_mode],
                                                  weight_quantizer.bitwidth,
@@ -952,6 +943,7 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
         for tensor_quantizer in tensor_quantizers:
             tensor_quantizer.isEncodingValid = True
         conv_wrapper.param_quantizers.append(bias_quantizer)
+
 
 def _fold_to_weight(conv_linear: LayerType, bn: BatchNormType, fold_backward: bool):
     """
@@ -997,7 +989,7 @@ def _fold_to_weight(conv_linear: LayerType, bn: BatchNormType, fold_backward: bo
 
     if not is_bias_valid:
         conv_linear.use_bias = True
-        conv_linear.bias = conv_linear.add_weight(name="bias",
+        conv_linear.bias = conv_linear.add_weight(name=f"{conv_linear.name}/bias",
                                                   shape=(weight_tensor.shape[0],),
                                                   dtype=conv_linear.dtype,
                                                   trainable=True)
