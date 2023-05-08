@@ -473,7 +473,7 @@ def get_input_shape_batch_size(data_loader):
         # finding shape of a batch
         input_shape = torch.Tensor.size(images_in_one_batch)
 
-        return input_shape[0], (1, input_shape[1], input_shape[2], input_shape[3])
+        return input_shape[0], (1, *input_shape[1:])
 
 
 def has_hooks(module: torch.nn.Module):
