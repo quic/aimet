@@ -323,6 +323,16 @@ class ConvReluModel(torch.nn.Module):
         return self.relu(self.conv(inputs))
 
 
+class ConvTransposeReluModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv = torch.nn.ConvTranspose2d(3, 5, kernel_size=2, bias=False)
+        self.relu = torch.nn.ReLU()
+
+    def forward(self, inputs):
+        return self.relu(self.conv(inputs))
+
+
 class CustModelV1Simple(torch.nn.Module):
     def __init__(self):
         super(CustModelV1Simple, self).__init__()
@@ -3334,7 +3344,8 @@ class TestQuantizationSimLearnedGrid:
         out = quant_sim.model(dummy_input)
         out.sum().backward()
 
-    def test_quantizer_flag_when_unsigned_symmetric_is_enabled(self):
+    @pytest.mark.parametrize("model", [ConvReluModel(), ConvTransposeReluModel()])
+    def test_quantizer_flag_when_unsigned_symmetric_is_enabled(self, model):
         results_dir = os.path.abspath("./tmp/")
         os.makedirs(results_dir, exist_ok=True)
 
@@ -3363,7 +3374,6 @@ class TestQuantizationSimLearnedGrid:
         with open("./tmp/quantsim_config.json", "w") as f:
             json.dump(quantsim_config, f)
 
-        model = ConvReluModel()
         # Force all weight values to have positive numbers
         model.conv.weight = nn.Parameter(model.conv.weight.data.clamp_min(0))
 
