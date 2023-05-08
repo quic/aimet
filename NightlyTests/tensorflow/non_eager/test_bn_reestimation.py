@@ -98,18 +98,20 @@ def add_image_net_computational_nodes_in_graph(session: tf.compat.v1.Session, lo
         # loss Op: loss
         loss = tf.compat.v1.reduce_mean(tf.compat.v1.losses.softmax_cross_entropy(onehot_labels=y, logits=y_hat))
 
-def get_all_status(
-        sess,
-        bn_mean_var_tf_var_list, bn_momentum_tf_var_list, bn_training_tf_var_list
-):
+def get_all_status(sess,
+                   bn_mean_tf_var_list,
+                   bn_variance_tf_var_list,
+                   bn_momentum_tf_var_list,
+                   bn_training_tf_var_list):
     """
     get current all stats (momentum,training, mean,var) for debug and unit test
    ."""
     with sess.graph.as_default():
-        bn_stats_dict = dict(zip(bn_mean_var_tf_var_list, sess.run([v for v in bn_mean_var_tf_var_list])))
+        bn_mean_dict = dict(zip(bn_mean_tf_var_list, sess.run([v for v in bn_mean_tf_var_list])))
+        bn_variance_dict = dict(zip(bn_variance_tf_var_list, sess.run([v for v in bn_variance_tf_var_list])))
         bn_momentum_dict = dict(zip(bn_momentum_tf_var_list, sess.run([v for v in bn_momentum_tf_var_list])))
-        bn_traning_dict = dict(zip(bn_training_tf_var_list, sess.run([v for v in bn_training_tf_var_list])))
-    return bn_stats_dict, bn_momentum_dict, bn_traning_dict
+        bn_training_dict = dict(zip(bn_training_tf_var_list, sess.run([v for v in bn_training_tf_var_list])))
+    return bn_mean_dict, bn_variance_dict, bn_momentum_dict, bn_training_dict
 
 
 def is_dict_close_numpy_array_zeros(dict1):
@@ -252,9 +254,6 @@ class TestBNReEstimation:
         sim = QuantizationSimModel(sess, start_op_names, end_op_names, use_cuda=True,
                                    quant_scheme=QuantScheme.training_range_learning_with_tf_init,
                                    config_file=config_file_path)
-
-
-
         def dummy_forward_pass(sess, args):
             model_input = sess.graph.get_tensor_by_name("input_1:0")
             model_output = sess.graph.get_tensor_by_name('predictions/Softmax:0')
@@ -263,7 +262,7 @@ class TestBNReEstimation:
         sim.compute_encodings(dummy_forward_pass, None)
 
         # check bn_re_estimation
-        self._reestimate_and_compare_results(sim, sess, bn_re_estimation_dataset, bn_num_batches, "input_1", "predictions/Softmax")
+        self._reestimate_and_compare_results(sim, bn_re_estimation_dataset, bn_num_batches, start_op_names, end_op_names)
 
         # check bn_fold
         model_input = sim.session.graph.get_tensor_by_name("input_1:0")
@@ -358,39 +357,48 @@ class TestBNReEstimation:
             for i in range(2):
                 batch_loss_val, _ = session.run([loss_op, train_op], feed_dict=feed_dict)
 
-    def _reestimate_and_compare_results(self, sess_sim, sess_fp32, bn_re_restimation_dataset, bn_num_batches, input_op, output_op):
-        bn_mean_var_tf_var_list, bn_momentum_tf_var_list, bn_training_tf_var_list = _get_all_tf_bn_vars_list(sess_sim)
+    @staticmethod
+    def _reestimate_and_compare_results(sim, dataset, num_batches, start_op_names, output_op_names):
+        mean_tf_vars, variance_tf_vars, momentum_tf_vars, is_training_tf_vars = _get_all_tf_bn_vars_list(sim)
 
-        model_input = sess_sim.session.graph.get_tensor_by_name(input_op + ':0')
-        model_output = sess_sim.session.graph.get_tensor_by_name(output_op + ':0')
+        model_input = sim.session.graph.get_tensor_by_name(start_op_names[0] + ':0')
+        model_output = sim.session.graph.get_tensor_by_name(output_op_names[0] + ':0')
         dummy_val = np.random.randn(1, *model_input.shape[1:])
 
         feed_dict_data = {model_input: dummy_val}
-        for bn_training in bn_training_tf_var_list:
-            feed_dict_data[bn_training]: True
-        sess_sim.session.run(model_output, feed_dict=feed_dict_data)
+        for bn_training in is_training_tf_vars:
+            feed_dict_data[bn_training] = True
+        sim.session.run(model_output, feed_dict=feed_dict_data)
 
-        bn_mean_var_ori, bn_momentum_ori, bn_training_ori = get_all_status(sess_sim.session, bn_mean_var_tf_var_list,
-                                                                           bn_momentum_tf_var_list, bn_training_tf_var_list)
+        mean_ori, variance_ori, momentum_ori, is_training_ori = get_all_status(sim.session,
+                                                                               mean_tf_vars,
+                                                                               variance_tf_vars,
+                                                                               momentum_tf_vars,
+                                                                               is_training_tf_vars)
 
-        with reestimate_bn_stats(sim=sess_sim, start_op_names=[input_op], output_op_names=[output_op],
-                                 bn_re_estimation_dataset=bn_re_restimation_dataset,
-                                 bn_num_batches=bn_num_batches):
-            bn_mean_var_est, bn_momentum_est, bn_training_est = get_all_status(sess_sim.session, bn_mean_var_tf_var_list,
-                                                                               bn_momentum_tf_var_list,
-                                                                               bn_training_tf_var_list)
+        with reestimate_bn_stats(sim=sim, start_op_names=start_op_names, output_op_names=output_op_names,
+                                 dataset=dataset, num_batches=num_batches):
+            mean_est, variance_est, momentum_est, is_training_est = get_all_status(sim.session,
+                                                                                   mean_tf_vars,
+                                                                                   variance_tf_vars,
+                                                                                   momentum_tf_vars,
+                                                                                   is_training_tf_vars)
             # Sanity check(apply_bn_re_estimation):  re-estimation , update runing mean &var, set training with False for
             # eval(), momentum  no change
-            assert not is_two_dict_close_numpy_array(bn_mean_var_ori, bn_mean_var_est)
-            assert not is_dict_close_numpy_array_zeros(bn_mean_var_est)
-            assert not is_two_dict_close_float(bn_momentum_ori, bn_momentum_est)
-            assert not is_two_dict_close_bool(bn_training_ori, bn_training_est)
+            assert not is_two_dict_close_numpy_array(mean_ori, mean_est)
+            assert not is_two_dict_close_numpy_array(variance_ori, variance_est)
+            assert not is_dict_close_numpy_array_zeros(variance_est)
+            assert is_two_dict_close_float(momentum_ori, momentum_est)
+            assert is_two_dict_close_bool(is_training_ori, is_training_est)
 
-        bn_mean_var_restored, bn_momentum_restored, bn_training_restored = get_all_status(sess_sim.session,
-                                                                                          bn_mean_var_tf_var_list,
-                                                                                          bn_momentum_tf_var_list,
-                                                                                          bn_training_tf_var_list)
+        mean_restored, variance_restored, momentum_restored, is_training_restored = get_all_status(sim.session,
+                                                                                                   mean_tf_vars,
+                                                                                                   variance_tf_vars,
+                                                                                                   momentum_tf_vars,
+                                                                                                   is_training_tf_vars)
+
         # Sanity check(train_mode): restore  mean &var, set training with True for train(), momentum no change
-        assert is_two_dict_close_numpy_array(bn_mean_var_ori, bn_mean_var_restored)
-        assert is_two_dict_close_float(bn_momentum_ori, bn_momentum_restored)
-        assert is_two_dict_close_bool(bn_training_ori, bn_training_restored)
+        assert is_two_dict_close_numpy_array(mean_ori, mean_restored)
+        assert is_two_dict_close_numpy_array(variance_ori, variance_restored)
+        assert is_two_dict_close_float(momentum_ori, momentum_restored)
+        assert is_two_dict_close_bool(is_training_ori, is_training_restored)
