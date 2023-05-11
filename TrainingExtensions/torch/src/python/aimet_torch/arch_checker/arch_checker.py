@@ -43,6 +43,7 @@ from aimet_common.utils import AimetLogger
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.arch_checker.arch_checker_rules import  TorchActivations
 from aimet_torch.arch_checker.arch_checker_utils import (ArchCheckerReport,
+                                                         OpStructure,
                                                          check_type_deco,
                                                          get_node_check_dict,
                                                          get_pattern_check_list,
@@ -94,7 +95,7 @@ class ArchChecker:
         ArchChecker._pattern_checks.append(arch_check)
 
     @staticmethod
-    def check_model_arch(model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple])-> ArchCheckerReport:
+    def check_model_arch(model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple], result_dir: str = None)-> ArchCheckerReport:
         """
 
         Check each node in the model using checks in _node_check_dict. Record only the nodes and
@@ -130,6 +131,11 @@ class ArchChecker:
                 failed_check_ops = _check(connected_graph)
 
                 if failed_check_ops:
+                    # Pattern check that marks structure returns List[List[Op]]
+                    # Transform List[List[Op]] to List[OpStructure]
+                    if isinstance(failed_check_ops[0], list):
+                        failed_check_ops = [OpStructure(_op_tuple) for _op_tuple in failed_check_ops]
+
                     ArchChecker._arch_checker_report.update_raw_report(failed_check_ops, _check.__name__)
                     for op in failed_check_ops:
                         logger.info("Graph/Node: %s: %s fails check: %s", op.dotted_name, op.get_module(), {_check.__name__})
@@ -143,6 +149,8 @@ class ArchChecker:
         logger.info("Running pattern checkes.")
         run_patten_check()
 
+        if result_dir is not None:
+            ArchChecker.set_export_dir(result_dir)
         ArchChecker._arch_checker_report.export_to_html()
 
     @staticmethod
