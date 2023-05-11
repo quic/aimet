@@ -93,6 +93,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
 
         self._model = model
         self._conn_graph = conn_graph
+        self.per_channel_quantization_flag = self._parse_per_channel_quantization().get('defaults')
         self._quant_ops_dict = {}
         self._param_names = {}
         self._activation_names = {}
