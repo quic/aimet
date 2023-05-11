@@ -102,7 +102,7 @@ def _check_intermediate_padding(connected_graph: ConnectedGraph) -> List:
     Checks is there intermediate padding in conv2 sequence: [Conv -> Activation -> (Optionally) BN -> Conv].
     Activation can be [relu, tanh, hardswish].
     :param connected_graph: Connected_graph object.
-    :return: List of conv contains intermediate padding in connected_graph.
+    :return: List of conv Ops contains intermediate padding in connected_graph.
     """
     def _examine_intermediate_padding_in_op_subset(op_subset):
         """
@@ -137,6 +137,71 @@ def _check_intermediate_padding(connected_graph: ConnectedGraph) -> List:
 
     return inter_pad_op_list
 
+
+def _find_all_split_bn_in_graph(connected_graph: ConnectedGraph):
+    """
+    Find all conv/linear -> split -> bn patterns.
+    :param connected_graph: ConnectedGraph object.
+    :return conv_bn_pair_list: Captured patterns.
+    """
+    def _examine_split_bn(op_subset):
+        """
+        :param op_subset: found subset pattern [split, bn]
+        """
+        split_bn_pair_list.append(op_subset)
+
+    split_bn_pair_list = []
+
+    handler = PatternHandler(_examine_split_bn)
+    _support_split_op = ["Concat"]
+
+    patterns_with_callbacks = []
+    for _split_op in _support_split_op:
+        patterns_with_callbacks.append(PatternType(pattern=[_split_op, "BatchNormalization"], action=handler))
+    patterns_with_callbacks.append(PatternType(pattern=[_split_op, 'BatchNorm3d'], action=handler))
+
+    graph_searcher = GraphSearcher(connected_graph, patterns_with_callbacks)
+    graph_searcher.find_all_patterns_in_graph_apply_actions()
+
+    return split_bn_pair_list
+
+def _check_foldable_bn_with_split(connected_graph: ConnectedGraph) -> List[List]:
+    """
+    Check if bn in [split, bn] pattern is foldable to all input for a split node.
+    :param connected_graph: ConnectedGraph object.
+    :return not_foldable_pattern: List of List:[unfoldable node, split_node, bn_node ]
+    """
+    foldable_type = ['Conv1d', 'Conv', 'ConvTranspose'] + ['Gemm']
+    split_bn_pair_list = _find_all_split_bn_in_graph(connected_graph)
+    not_foldable_pattern = []
+
+    # exam each branch through the split node.
+    for (split, bn) in split_bn_pair_list:
+        if bn.type == 'BatchNorm3d':
+            _foldable_type = ["Conv3d"]
+        else:
+            _foldable_type = foldable_type
+
+        input_ops_tuple = _get_split_point_input(split.input_ops)
+        for _node in input_ops_tuple:
+            if _node.type in _foldable_type:
+                not_foldable_pattern.append([input_ops_tuple, split, bn])
+
+    return not_foldable_pattern
+
+def _get_split_point_input(input_ops: List):
+    """
+    Ignore "Split" node and get the node splited.
+    :param input_ops: list of ops.
+    :return input_ops_tuple: tuple of ops
+    """
+    input_ops_list = []
+    for op in input_ops:
+        if op.type == "Split":
+            op = op.input_ops[0]
+        input_ops_list.append(op)
+    return tuple(input_ops_list)
+
 class CheckType(type):
     """ Metaclass to overwrite __instancecheck__. """
     def __instancecheck__(cls, obj):
@@ -167,4 +232,4 @@ class PatternHandler():
 NODE_CHECK_DICT = {torch.nn.modules.conv.Conv2d: [_check_conv_channel_32_base,
                                                   _check_conv_channel_larger_than_32],
                    TorchActivations: [_activation_checks],}
-PATTERN_CHECK_LIST = [_check_batch_norm_fold, _check_intermediate_padding]
+PATTERN_CHECK_LIST = [_check_batch_norm_fold, _check_intermediate_padding, _check_foldable_bn_with_split]
