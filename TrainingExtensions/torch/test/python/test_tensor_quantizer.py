@@ -36,6 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+import random
 import pytest
 import torch
 import aimet_common.libpymo as libpymo
@@ -46,6 +47,12 @@ from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGri
     StaticGridTensorQuantizer, LearnedGridTensorQuantizer
 
 BUCKET_SIZE = 512
+
+
+@pytest.fixture(autouse=True)
+def set_seed():
+    random.seed(19521)
+    torch.random.manual_seed(19521)
 
 
 class TestStaticTensorQuantizer:
@@ -343,3 +350,42 @@ class TestLearnedGridTensorQuantizer:
 
         with pytest.raises(RuntimeError):
             tensor_quantizer.encoding = enc_new
+
+    @pytest.mark.parametrize("quantizer",
+                             [StaticGridPerTensorQuantizer(bitwidth=8,
+                                                           round_mode=libpymo.RoundingMode.ROUND_NEAREST,
+                                                           quant_scheme=QuantScheme.post_training_tf,
+                                                           use_symmetric_encodings=False,
+                                                           enabled_by_default=True),
+                              StaticGridPerChannelQuantizer(bitwidth=8,
+                                                            round_mode=libpymo.RoundingMode.ROUND_NEAREST,
+                                                            quant_scheme=QuantScheme.post_training_tf,
+                                                            use_symmetric_encodings=True,
+                                                            enabled_by_default=True,
+                                                            num_channels=5,
+                                                            ch_axis=0),
+                              StaticGridPerChannelQuantizer(bitwidth=8,
+                                                            round_mode=libpymo.RoundingMode.ROUND_NEAREST,
+                                                            quant_scheme=QuantScheme.post_training_tf,
+                                                            use_symmetric_encodings=True,
+                                                            enabled_by_default=True,
+                                                            num_channels=5,
+                                                            ch_axis=1)
+                              ])
+    def test_non_contiguous_input_tensor(self, quantizer):
+        tensor = torch.randn((5, 5, 100, 100))
+        quantizer.update_encoding_stats(tensor)
+        quantizer.compute_encoding()
+
+        out_contiguous = quantizer.quantize_dequantize(tensor.to(memory_format=torch.contiguous_format),
+                                                       quantizer.round_mode)
+        out_channels_last = quantizer.quantize_dequantize(tensor.to(memory_format=torch.channels_last),
+                                                          quantizer.round_mode)
+        assert torch.allclose(out_contiguous, out_channels_last)
+
+        tensor = tensor.view(*tensor.shape, 1)
+        out_contiguous = quantizer.quantize_dequantize(tensor.to(memory_format=torch.contiguous_format),
+                                                       quantizer.round_mode)
+        out_channels_last_3d = quantizer.quantize_dequantize(tensor.to(memory_format=torch.channels_last_3d),
+                                                          quantizer.round_mode)
+        assert torch.allclose(out_contiguous, out_channels_last_3d)
