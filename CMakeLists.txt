@@ -142,12 +142,6 @@ if (ENABLE_TORCH)
   string(REPLACE "'\]" "" CMAKE_CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES})
   string(REPLACE "\[" "" CMAKE_CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES})
 
-  if (ENABLE_CUDA AND NOT TORCH_VERSION MATCHES "1.9")
-    # We remove this architecture for Torch 1.9 since we get an "Unsupported gpu architecture"
-    # error during the DlQuantization build step due to an older cuda version in the base docker.
-    list(REMOVE_ITEM CMAKE_CUDA_ARCHITECTURES 86)
-  endif()
-
   message(STATUS "** Updated CMAKE_CUDA_ARCHITECTURES to ${CMAKE_CUDA_ARCHITECTURES} **")
 
   find_package(Torch REQUIRED PATHS ${TORCH_CMAKE_DIR} NO_DEFAULT_PATH)
