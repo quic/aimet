@@ -35,7 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 #
 #=============================================================================
-cmake_minimum_required(VERSION 3.17)
+cmake_minimum_required(VERSION 3.19)
 
 project(aimet)
 
@@ -84,6 +84,7 @@ if (ENABLE_CUDA)
   if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
     set(CMAKE_CUDA_ARCHITECTURES 52 60 61 70 72)
   endif()
+  message(STATUS "** Initial CMAKE_CUDA_ARCHITECTURES = ${CMAKE_CUDA_ARCHITECTURES} **")
 
   enable_language(CUDA)
 
@@ -113,16 +114,45 @@ if (NOT (DEFINED ENABLE_TORCH))
 endif(NOT (DEFINED ENABLE_TORCH))
 
 if (ENABLE_TORCH)
+  execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import torch; print(torch.__version__)"
+  OUTPUT_VARIABLE TORCH_VERSION
+  OUTPUT_STRIP_TRAILING_WHITESPACE)
+  message(STATUS "Found Torch version: ${TORCH_VERSION}")
+
   set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/torch/src/python:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/onnx/src/python")
   execute_process(COMMAND ${Python3_EXECUTABLE} "-c" "import torch;print(torch.utils.cmake_prefix_path)"
                   RESULT_VARIABLE TORCH_NOT_FOUND
                   OUTPUT_VARIABLE TORCH_CMAKE_DIR
                   OUTPUT_STRIP_TRAILING_WHITESPACE
                   )
+
+  # Obtain the list of architectures that this pytorch version was compiled for
+  execute_process(COMMAND ${Python3_EXECUTABLE} "-c" "import torch;print(torch.cuda.get_arch_list())"
+                  RESULT_VARIABLE TORCH_NOT_FOUND
+                  OUTPUT_VARIABLE TORCH_CUDA_ARCH_LIST_PYTHON
+                  OUTPUT_STRIP_TRAILING_WHITESPACE
+                  )
+  message(STATUS "** PyTorch ${TORCH_VERSION} was compiled for ${TORCH_CUDA_ARCH_LIST_PYTHON} **")
+
+  # Update CMAKE_CUDA_ARCHITECTURES with the supported architectures
+  #   1. Remove sm_ prefixes from the CUDA architecture names.
+  #   2. Change python list into a CMake list.
+  string(REPLACE "\'sm_" "" CMAKE_CUDA_ARCHITECTURES ${TORCH_CUDA_ARCH_LIST_PYTHON})
+  string(REGEX REPLACE "'*,* " ";" CMAKE_CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES})
+  string(REPLACE "'\]" "" CMAKE_CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES})
+  string(REPLACE "\[" "" CMAKE_CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES})
+
+  if (ENABLE_CUDA AND NOT TORCH_VERSION MATCHES "1.9")
+    # We remove this architecture for Torch 1.9 since we get an "Unsupported gpu architecture"
+    # error during the DlQuantization build step due to an older cuda version in the base docker.
+    list(REMOVE_ITEM CMAKE_CUDA_ARCHITECTURES 86)
+  endif()
+
+  message(STATUS "** Updated CMAKE_CUDA_ARCHITECTURES to ${CMAKE_CUDA_ARCHITECTURES} **")
+
   find_package(Torch REQUIRED PATHS ${TORCH_CMAKE_DIR} NO_DEFAULT_PATH)
   get_filename_component(TORCH_DIR ${TORCH_CMAKE_DIR}/../../ ABSOLUTE)
-  execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import torch; print(torch.__version__)" OUTPUT_VARIABLE TORCH_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
-  message(STATUS "Found Torch version: ${TORCH_VERSION}")
+
 else (ENABLE_TORCH)
   message("AIMET Torch build disabled")
 endif (ENABLE_TORCH)

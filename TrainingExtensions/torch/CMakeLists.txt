@@ -63,6 +63,7 @@ add_custom_command(OUTPUT ${OUTPUT}
               -E env
                   PYTHONPATH="${CMAKE_BINARY_DIR}/artifacts"
                   ENABLE_CUDA_PYTORCH=${ENABLE_CUDA_PYTORCH}
+                  TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST}
                   EXTRA_LINK_ARGS="-Wl,-rpath;-Wl,$<TARGET_FILE_DIR:PyModelOptimizations>;-Wl,-rpath;-Wl,${TORCH_DIR}/lib;-Wl,--enable-new-dtags"
               ${Python3_EXECUTABLE} ${SETUP_PY} install  --install-base=${CMAKE_BINARY_DIR}/artifacts
                                              --install-purelib=${CMAKE_BINARY_DIR}/artifacts
