@@ -46,7 +46,6 @@ import logging
 import os
 from datetime import datetime
 from functools import partial
-from typing import Tuple
 from torchvision import models
 import torch
 import torch.utils.data as torch_data
@@ -78,7 +77,7 @@ logging.basicConfig(format=formatter)
 #       - Quant Scheme: 'tf_enhanced'
 #       - rounding_mode: 'nearest'
 #       - default_output_bw: 8, default_param_bw: 8
-#       - Encoding compution with or without encodings file
+#       - Encoding computation with or without encodings file
 #       - Encoding computation using 5 batches of data
 #    - AIMET Adaround
 #       - num of batches for adarounding: 5
@@ -120,7 +119,7 @@ class ImageNetDataPipeline:
 
 def apply_adaround_and_find_quantized_accuracy(model: torch.nn.Module, evaluator: aimet_common.defs.EvalFunction,
                                                data_loader: torch_data.DataLoader, use_cuda: bool = False,
-                                               logdir: str = '') -> Tuple[torch.nn.Module, float]:
+                                               logdir: str = '') -> float:
     """
     Quantizes the model using AIMET's adaround feature, and saves the model.
 
@@ -129,7 +128,7 @@ def apply_adaround_and_find_quantized_accuracy(model: torch.nn.Module, evaluator
     :param data_loader: The dataloader to be passed into the AdaroundParameters api
     :param use_cuda: The cuda device.
     :param logdir: Path to a directory for logging.
-    :return: A tuple of quantized model and accuracy of model on this quantsim
+    :return: Accuracy of model on this quantsim
     """
 
     bn_folded_model = copy.deepcopy(model)
@@ -178,9 +177,10 @@ def adaround_example(config: argparse.Namespace):
     3. Calculates Model accuracy
         3.1. Calculates floating point accuracy
         3.2. Calculates Quant Simulator accuracy
-    4. Applies AIMET CLE and BC
-        4.1. Applies AIMET CLE and calculates QuantSim accuracy
-        4.2. Applies AIMET BC and calculates QuantSim accuracy
+    4. Applies AIMET Adaround and calculates QuantSim accuracy
+        4.1. Applies AIMET Adaround
+        4.2. Calculates Adaround applied model Quant Simulator accuracy
+        4.3. Exports Adaround applied model so it is ready to be run on-target
 
     :param config: This argparse.Namespace config expects following parameters:
                    tfrecord_dir: Path to a directory containing ImageNet TFRecords.
