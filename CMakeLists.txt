@@ -126,22 +126,14 @@ if (ENABLE_TORCH)
                   OUTPUT_STRIP_TRAILING_WHITESPACE
                   )
 
-  # Obtain the list of architectures that this pytorch version was compiled for
-  execute_process(COMMAND ${Python3_EXECUTABLE} "-c" "import torch;print(torch.cuda.get_arch_list())"
-                  RESULT_VARIABLE TORCH_NOT_FOUND
-                  OUTPUT_VARIABLE TORCH_CUDA_ARCH_LIST_PYTHON
-                  OUTPUT_STRIP_TRAILING_WHITESPACE
-                  )
-  message(STATUS "** PyTorch ${TORCH_VERSION} was compiled for ${TORCH_CUDA_ARCH_LIST_PYTHON} **")
-
-  # Update CMAKE_CUDA_ARCHITECTURES with the supported architectures
+  # Update CMAKE_CUDA_ARCHITECTURES with the supported architectures that this pytorch version was compiled for
   #   1. Remove sm_ prefixes from the CUDA architecture names.
   #   2. Change python list into a CMake list.
-  string(REPLACE "\'sm_" "" CMAKE_CUDA_ARCHITECTURES ${TORCH_CUDA_ARCH_LIST_PYTHON})
-  string(REGEX REPLACE "'*,* " ";" CMAKE_CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES})
-  string(REPLACE "'\]" "" CMAKE_CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES})
-  string(REPLACE "\[" "" CMAKE_CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES})
-
+  execute_process(COMMAND ${Python3_EXECUTABLE} "-c" "import torch; print(';'.join(arch.split('_')[1] for arch in torch.cuda.get_arch_list()))"
+                  RESULT_VARIABLE TORCH_NOT_FOUND
+                  OUTPUT_VARIABLE CMAKE_CUDA_ARCHITECTURES
+                  OUTPUT_STRIP_TRAILING_WHITESPACE
+                  )
   message(STATUS "** Updated CMAKE_CUDA_ARCHITECTURES to ${CMAKE_CUDA_ARCHITECTURES} **")
 
   find_package(Torch REQUIRED PATHS ${TORCH_CMAKE_DIR} NO_DEFAULT_PATH)
