@@ -124,25 +124,21 @@ class QuantizationSimModel:
         self.activation_dtypes = {}
         self._get_param_names()
         self._get_activations_to_quantize(dummy_input)
-
-        quantsim_configurator = QuantSimConfigurator(self.model, self.connected_graph, config_file,
-                                                     self._default_activation_bw, self._default_param_bw,
-                                                     self._default_quantization_data_type)
-
-        self.per_channel_enabled = quantsim_configurator.per_channel_quantization_flag
-
         self._add_quantization_nodes()
         self.session = self._build_session(self.providers)
 
-        quantsim_configurator = self._add_configuration_(quantsim_configurator)
+        quantsim_configurator = self._add_configuration_(config_file)
         self.quant_args = extract_global_quantizer_args(quant_scheme, quantsim_configurator)
 
-    def _add_configuration_(self, quantsim_configurator: QuantSimConfigurator):
+    def _add_configuration_(self, config_file: str):
         """
         Add configuration based on config file
 
-        :param quantsim_configurator: QuantSim Configuration object
+        :param config_file: Path to Configuration file for model quantizers
         """
+        quantsim_configurator = QuantSimConfigurator(self.model, self.connected_graph, config_file,
+                                                     self._default_activation_bw, self._default_param_bw,
+                                                     self._default_quantization_data_type)
         quantsim_configurator.configure_quantizers(self.qc_quantize_op_dict, self.param_names, self.activation_names)
 
         return quantsim_configurator

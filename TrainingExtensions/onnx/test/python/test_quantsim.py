@@ -355,11 +355,3 @@ class TestQuantSim:
         out_gpu = onnx_sim_gpu.session.run(None, {'input': inputs})[0]
 
         assert (np.max(np.abs(out_cpu - out_gpu)) < 0.05)
-
-    def test_per_channel_quantization(self):
-        model = build_dummy_model()
-        config_file = get_path_for_per_channel_config()
-        sim = QuantizationSimModel(model, default_activation_bw=16, default_param_bw=16,
-                                   quant_scheme=QuantScheme.post_training_tf, config_file=config_file)
-
-        assert sim.per_channel_enabled == True

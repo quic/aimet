@@ -36,7 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Utilities for parsing and applying quantsim configurations from json config file """
-
+from abc import abstractmethod
 from typing import List, Dict
 
 from onnx import onnx_pb
@@ -93,7 +93,6 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
 
         self._model = model
         self._conn_graph = conn_graph
-        self.per_channel_quantization_flag = self._parse_per_channel_quantization().get('defaults')
         self._quant_ops_dict = {}
         self._param_names = {}
         self._activation_names = {}
@@ -117,6 +116,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         self._set_quantsim_configs()
         self._override_param_bw_dtype(self._param_names, self._default_data_type, self._default_param_bw)
         self._override_act_bw_dtype(self._activation_names, self._default_data_type, self._default_output_bw)
+        self._generate_and_apply_op_instance_specific_config()
 
     def _map_quantizers_to_ops(self) -> Dict[str, OpToQuantizers]:
         """
@@ -430,4 +430,79 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         fields (if absent use default per_channel_quantization) and generate op instance specific config
         :return: {op_instance_name, op_specific_config}
         """
-        raise NotImplementedError
+        per_channel_quantization = self._parse_per_channel_quantization()
+        hw_version = self._get_hw_version()
+        config_generator = config_generator_factory(hw_version, per_channel_quantization)
+
+        for op in self._conn_graph.ordered_ops:
+            if op.dotted_name in self._op_to_quantizers:
+                per_channel_quantization = config_generator.generate(op.get_module(), op.type)
+                if per_channel_quantization:
+                    for _, param_quantizer in self._op_to_quantizers[op.dotted_name].parameter_quantizers:
+                        param_quantizer.enable_per_channel_quantization()
+
+
+def config_generator_factory(hw_version, per_channel_quantization):
+    """
+    factory to select the config generator based on the hw_version
+    :param hw_version: hw_version field from the config file
+    :param per_channel_quantization: aggregated per_channel_quantization fields from the config file
+    :return: Config Generator object
+    """
+
+    config_generator = DefaultOpInstanceConfigGenerator(per_channel_quantization)
+    logger.info('Selecting DefaultOpInstanceConfigGenerator to compute the specialized config. hw_version:%s',
+                hw_version)
+    return config_generator
+
+
+class OpInstanceConfigGenerator:
+    """
+    Class to specify op instance specific rules and generate the updated config
+    """
+
+    def __init__(self, op_type_pcq: dict):
+        """
+        :param op_type_pcq: per_channel_quantization(pcq) fields from the config file(specific op types + default)
+        """
+        self.op_type_pcq = op_type_pcq
+        assert ConfigDictKeys.DEFAULTS in self.op_type_pcq
+
+    @abstractmethod
+    def generate(self, op: onnx_pb.NodeProto, op_type: str) -> dict:
+        """ generate the config for the given op """
+
+    def _generate_pcq(self, op: onnx_pb.NodeProto) -> bool:
+        """
+        Helper function to generate the pcq field
+        :param op: op instance to generate the pcq value for
+        :return: pcq value for the op type
+
+        Steps:
+        1. Check if the onnx_type exist in the config file for pcq
+        2. If any entry is present, use it else use the default value
+        """
+        pcq = False
+
+        if op.op_type in self.op_type_pcq:
+            pcq = self.op_type_pcq[op.op_type]
+        elif self.op_type_pcq[ConfigDictKeys.DEFAULTS]:
+            pcq = True
+
+        return pcq
+
+
+class DefaultOpInstanceConfigGenerator(OpInstanceConfigGenerator):
+    """
+    Default implementation of OpInstanceConfigGenerator
+    """
+
+    def generate(self, op: onnx_pb.NodeProto, op_type: str) -> bool:
+        """
+        :param op: op to generate the specialized config
+        :param op_type: Type str retrieved from CG op
+        :return: supported_kernels and per_channel_quantization fields
+        """
+        pcq = self._generate_pcq(op)
+
+        return pcq
