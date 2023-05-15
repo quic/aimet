@@ -62,6 +62,7 @@ if "CUDAExecutionProvider" in available_providers:
 else:
     op_domain = "aimet.customop.cpu"
 op_name = "QcQuantizeOp"
+per_channel_op_name = "QcQuantizeOp"
 
 def create_quant_info(encoding,
                       tensor_quantizer,
@@ -71,12 +72,33 @@ def create_quant_info(encoding,
                       bitwidth=8):
     quant_info = libquant_info.QcQuantizeInfo()
     encoding.bw = bitwidth
+    quant_info.encoding = [encoding]
+    quant_info.opMode = opMode
+    quant_info.useSymmetricEncoding = useSymmetricEncoding
+    quant_info.enabled = enabled
+    quant_info.tensorQuantizerRef = [libpymo.PtrToInt64(tensor_quantizer)]
+    quant_info.isIntDataType = True
+    quant_info.usePerChannelMode = False
+    return quant_info
+
+def create_per_channel_quant_info(encoding,
+                      tensor_quantizer,
+                      opMode,
+                      useSymmetricEncoding=False,
+                      enabled=True,
+                      ch_idx=0,
+                      bitwidth=8):
+    quant_info = libquant_info.QcQuantizeInfo()
+    for enc in encoding:
+        enc.bw = bitwidth
     quant_info.encoding = encoding
     quant_info.opMode = opMode
     quant_info.useSymmetricEncoding = useSymmetricEncoding
     quant_info.enabled = enabled
-    quant_info.tensorQuantizerRef = libpymo.PtrToInt64(tensor_quantizer)
+    quant_info.tensorQuantizerRef = [libpymo.PtrToInt64(item) for item in tensor_quantizer]
+    quant_info.channelAxis = ch_idx
     quant_info.isIntDataType = True
+    quant_info.usePerChannelMode = True
     return quant_info
 
 
@@ -126,7 +148,7 @@ class TestQcQuantizeOp:
         print("Encoding returned: min={}, max={}, offset={}. delta={}, bw={}"
               .format(encodings.min, encodings.max, encodings.offset, encodings.delta, encodings.bw))
         assert encodings is not None
-        assert quant_info.tensorQuantizerRef.isEncodingValid is True
+        assert quant_info.tensorQuantizerRef[0].isEncodingValid is True
 
     def test_quantize_dequantize_with_pymo(self):
 
@@ -241,8 +263,8 @@ class TestQcQuantizeOp:
                                      enc.max, 8, False)
 
         output = session.run(None, {'input': input_arr})[0]
-        assert quant_info.encoding.max == enc.max
-        assert quant_info.encoding.min == enc.min
+        assert quant_info.encoding[0].max == enc.max
+        assert quant_info.encoding[0].min == enc.min
         assert np.allclose(output, out_tensor)
 
     def test_one_shot_quantize_dequantize_asymmetric_cpu(self):
@@ -383,14 +405,98 @@ class TestQcQuantizeOp:
                              use_symmetric_encodings=True,
                              )
         qc_op.use_strict_symmetric = True
-        assert quant_info.tensorQuantizerRef.getStrictSymmetric() == True
+        assert quant_info.tensorQuantizerRef[0].getStrictSymmetric() == True
 
         qc_op.use_unsigned_symmetric = False
-        assert quant_info.tensorQuantizerRef.getUnsignedSymmetric()== False
+        assert quant_info.tensorQuantizerRef[0].getUnsignedSymmetric()== False
 
         qc_op.use_unsigned_symmetric = True
-        assert quant_info.tensorQuantizerRef.getUnsignedSymmetric() == True
+        assert quant_info.tensorQuantizerRef[0].getUnsignedSymmetric() == True
 
         qc_op.data_type = QuantizationDataType.float
         assert qc_op.data_type == QuantizationDataType.float
         assert qc_op.quant_info.isIntDataType == False
+
+    @pytest.mark.parametrize("quant_axis", [0, 1])
+    @pytest.mark.parametrize("use_symmetric,strict_symmetric,unsigned_symmetric", [(True, True, False), (True, False, True), (False, False, False)])
+    def test_per_channel_one_shot_quantize_dequantize(self, use_symmetric, strict_symmetric, unsigned_symmetric, quant_axis):
+        """
+        Compares the output of per-channel quantization to the output of each channel passing through
+        a per-tensor quantizer.
+        """
+        input_shape = (12, 6, 3, 3)
+        input_arr = np.random.randn(*input_shape, ).astype(np.float32)
+        expected_output_arr = []
+        tensor_quantizers = []
+        encodings = []
+        for idx in range (input_shape[quant_axis]):
+            tensor_quantizer = libpymo.TensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                       MAP_ROUND_MODE_TO_PYMO['nearest'])
+            tensor_quantizer.setStrictSymmetric(strict_symmetric)
+            tensor_quantizer.setUnsignedSymmetric(unsigned_symmetric)
+            tensor_quantizers.append(tensor_quantizer)
+            encodings.append(libpymo.TfEncoding())
+
+        quant_info = create_per_channel_quant_info(encodings, tensor_quantizers, OpMode.oneShotQuantizeDequantize,
+                                                   useSymmetricEncoding=use_symmetric, ch_idx=quant_axis)
+
+        quant_node = helper.make_node(op_name, inputs=['input'], outputs=['output'],
+                                      domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
+        quant_info.usePerChannelMode = False
+        per_tensor_model = create_model_from_node(quant_node, input_arr.take(indices=0, axis=quant_axis).shape)
+        session = build_session(per_tensor_model, available_providers)
+        # Run each channel through a per-tensor quantizer
+        for idx in range(input_shape[quant_axis]):
+            channel_input = input_arr.take(indices=idx, axis=quant_axis)
+            output = session.run(None, {'input': channel_input})[0]
+            expected_output_arr.append(np.expand_dims(output, quant_axis))
+        expected_output_arr = np.concatenate(expected_output_arr, axis=quant_axis)
+
+        quant_info.usePerChannelMode = True
+        per_channel_quant_node = helper.make_node(per_channel_op_name, inputs=['input'], outputs=['output'],
+                                                  domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
+        per_channel_model = create_model_from_node(per_channel_quant_node, input_arr.shape)
+        # Run the entire tensor through the per-channel quantizer
+        session = build_session(per_channel_model, available_providers)
+        output_per_channel = session.run(None, {'input': input_arr})[0]
+        assert np.allclose(output_per_channel, expected_output_arr)
+
+    def test_per_channel_quantize_dequantize(self):
+        inp_array = np.array([[-7, -5, -3, 0, .1, 2.5],
+                              [-7, -5, -3, 0, .1, 2.5],
+                              [-7, -5, -3, 0, .1, 2.5],
+                              [-7, -5, -3, 0, .1, 2.5]],
+                             ).astype(np.float32)
+        tensor_quantizers = []
+        encodings = [libpymo.TfEncoding() for _ in range(4)]
+        for index in range(3):
+            tensor_quantizer = libpymo.TensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                       MAP_ROUND_MODE_TO_PYMO['nearest'])
+            tensor_quantizer.isEncodingValid = True
+            tensor_quantizers.append(tensor_quantizer)
+            encodings[index].bw = 8
+            encodings[index].max = 3.81
+            encodings[index].min = -3.84
+            encodings[index].delta = 0.03
+            encodings[index].offset = -128
+        encodings[3].bw = 8
+        encodings[3].max = 6.35
+        encodings[3].min = -6.4
+        encodings[3].delta = 0.05
+        encodings[3].offset = -128
+        quant_info = create_per_channel_quant_info(encodings, tensor_quantizers, OpMode.quantizeDequantize,
+                                                   useSymmetricEncoding=True, ch_idx=0)
+        per_channel_quant_node = helper.make_node(per_channel_op_name, inputs=['input'], outputs=['output'],
+                                                  domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
+
+        per_channel_model = create_model_from_node(per_channel_quant_node, inp_array.shape)
+        per_channel_session = build_session(per_channel_model, available_providers)
+
+
+        expected_out = np.array([[-3.84, -3.84, -3, 0, .089999996, 2.49],
+                                     [-3.84, -3.84, -3, 0, .089999996, 2.49],
+                                     [-3.84, -3.84, -3, 0, .089999996, 2.49],
+                                     [-6.4, -5, -3, 0, .1, 2.5]],
+                                    ).astype(np.float32)
+        output = per_channel_session.run(None, {'input': inp_array})[0]
+        assert np.allclose(output, expected_out)

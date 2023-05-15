@@ -36,35 +36,44 @@
 //
 //==============================================================================
 
-#pragma once
+#include "RegisterCustomOps.h"
 
-#include "DlQuantization/IQuantizationEncodingAnalyzer.hpp"
-#include "DlQuantization/QuantizerFactory.hpp"
-#include "DlQuantization/TensorQuantizer.h"
-#include <string>
+static const char* c_OpDomain    = "aimet.customop.cpu";
+static const char* c_OpDomainGPU = "aimet.customop.cuda";
 
 
-struct QcQuantizeInfo
+OrtStatus* ORT_API_CALL RegisterCustomOps(OrtSessionOptions* options, const OrtApiBase* api)
 {
-    void set_tensor_quantizer(std::vector<uint64_t>& addr)
+    OrtCustomOpDomain* domain = nullptr;
+    const OrtApi* ortApi      = api->GetApi(ORT_API_VERSION);
+
+    if (auto status = ortApi->CreateCustomOpDomain(c_OpDomain, &domain))
     {
-        tensorQuantizerRef = std::vector<DlQuantization::TensorQuantizer*>();
-        for(uint64_t i : addr){
-            tensorQuantizerRef.push_back(reinterpret_cast<DlQuantization::TensorQuantizer*>(i));
-        }
-    }
-    std::vector<DlQuantization::TensorQuantizer*> get_tensor_quantizer()
-    {
-        return tensorQuantizerRef;
+        return status;
     }
 
-    std::vector<DlQuantization::TensorQuantizer*> tensorQuantizerRef;
-    std::vector<DlQuantization::TfEncoding*> encoding;
-    DlQuantization::TensorQuantizerOpMode opMode;
-    bool useSymmetricEncoding;
-    bool enabled;
-    bool isIntDataType;
-    bool usePerChannelMode;
-    int channelAxis;
-    std::string name;
-};
+    AddOrtCustomOpDomainToContainer(domain, ortApi);
+    static const QcQuantizeOp c_QcQuantizeOp;
+    if (auto status = ortApi->CustomOpDomain_Add(domain, &c_QcQuantizeOp))
+    {
+        return status;
+    }
+
+#ifdef ONNX_CUDA
+    OrtCustomOpDomain* cuda_domain = nullptr;
+    if (auto status = ortApi->CreateCustomOpDomain(c_OpDomainGPU, &cuda_domain))
+    {
+        return status;
+    }
+
+    AddOrtCustomOpDomainToContainer(cuda_domain, ortApi);
+    static const QcQuantizeOpGPU c_QcQuantizeOpGPU;
+    if (auto status = ortApi->CustomOpDomain_Add(cuda_domain, &c_QcQuantizeOpGPU))
+    {
+        return status;
+    }
+    ortApi->AddCustomOpDomain(options, cuda_domain);
+#endif
+
+    return ortApi->AddCustomOpDomain(options, domain);
+}
