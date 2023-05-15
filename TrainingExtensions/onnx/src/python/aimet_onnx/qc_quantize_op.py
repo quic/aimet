@@ -78,6 +78,7 @@ class QcQuantizeOp:
         self.use_symmetric_encodings = use_symmetric_encodings
         self.enabled = True
         self._data_type = QuantizationDataType.int
+        self.quant_info.usePerChannelMode = False
 
     @property
     def data_type(self) -> QuantizationDataType:
@@ -112,7 +113,7 @@ class QcQuantizeOp:
         :param tensor_quantizer: The libpymo.TensorQuantizer object to give to the C++ op
         """
         self._tensor_quantizer = tensor_quantizer
-        self.quant_info.tensorQuantizerRef = libpymo.PtrToInt64(tensor_quantizer)
+        self.quant_info.tensorQuantizerRef = [libpymo.PtrToInt64(tensor_quantizer)]
 
     @property
     def enabled(self) -> bool:
@@ -186,7 +187,7 @@ class QcQuantizeOp:
         Reads the encodings object from the node's QcQuantizeInfo
         :return: The libpymo.TfEncoding object used to store the node's quantization encoding
         """
-        return self.quant_info.encoding
+        return self.quant_info.encoding[0]
 
     @encodings.setter
     def encodings(self, encoding: Union[libpymo.TfEncoding, None]):
@@ -202,8 +203,8 @@ class QcQuantizeOp:
             self._tensor_quantizer.isEncodingValid = True
         # pylint: disable=attribute-defined-outside-init
         self._encoding = encoding
-        self.quant_info.encoding = encoding
-        self.quant_info.encoding.bw = self.bitwidth
+        self.quant_info.encoding = [encoding]
+        self.quant_info.encoding[0].bw = self.bitwidth
 
     @property
     def op_mode(self) -> OpMode:

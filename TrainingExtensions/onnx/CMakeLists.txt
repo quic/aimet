@@ -36,6 +36,9 @@
 
 find_package(Python3 COMPONENTS Interpreter)
 
+find_path(ONNXRUNTIME_INC "onnxruntime_cxx_api.h" PATH_SUFFIXES onnxruntime_headers/include)
+find_package(Eigen3 REQUIRED)
+
 add_subdirectory(src/python)
 add_subdirectory(test)
 
@@ -44,14 +47,17 @@ add_library(OnnxCppOps SHARED
         src/QcQuantizeOp.h
         src/AimetOpUtils.h
         src/AimetOpUtils.cpp
+        src/RegisterCustomOps.h
+        src/RegisterCustomOps.cpp
         src/QcQuantizeInfo.cpp
         src/QcQuantizeInfo.h
-        src/QcQuantizeOp.cpp)
+        src/QcQuantizeOp.cpp
+        src/OnnxOpUtils.h
+        src/QuantizeDequantizeUtils.hpp
+        src/QuantizeDequantizeUtils.cu
+        )
 
 
-find_path(ONNXRUNTIME_INC "onnxruntime_cxx_api.h" PATH_SUFFIXES onnxruntime_headers/include)
-
-find_package(Eigen3 REQUIRED)
 include_directories(${EIGEN3_INCLUDE_DIR})
 
 target_include_directories(OnnxCppOps PRIVATE

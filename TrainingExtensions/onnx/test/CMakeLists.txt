@@ -54,3 +54,33 @@ set_property(TEST OnnxTrainingExtensionTest
       APPEND PROPERTY ENVIRONMENT "${DEPENDENCY_DATA_PATH}")
 endif(DEFINED ENV{DEPENDENCY_DATA_PATH})
 
+if (ENABLE_CUDA)
+include_directories(BEFORE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../src
+        ${EIGEN3_INCLUDE_DIR}
+        )
+
+add_executable(OnnxTrainingExtensionCppTest
+        TestOnnxTensorOps.cpp)
+
+target_include_directories(OnnxTrainingExtensionCppTest PRIVATE
+        ${ONNXRUNTIME_INC}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../common/include
+        )
+
+target_compile_options(OnnxTrainingExtensionCppTest
+        PRIVATE
+        -DONNX_CUDA=1
+        )
+
+target_link_libraries(OnnxTrainingExtensionCppTest
+        gtest_main
+        OnnxCppOps
+        MoDlQuantization
+        MoDlQuantizationCuda
+        CUDA::cublas
+        )
+
+add_test(OnnxTrainingExtensionCppTest
+        OnnxTrainingExtensionCppTest --gtest_output=xml:cpp_test_output.xml)
+endif (ENABLE_CUDA)

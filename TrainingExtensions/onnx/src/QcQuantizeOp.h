@@ -44,7 +44,6 @@
 #undef ORT_API_MANUAL_INIT
 
 #include "QcQuantizeInfo.h"
-#include <DlQuantization/TensorQuantizerOpFacade.h>
 
 #ifdef ONNX_CUDA
 #include <cuda_runtime_api.h>
@@ -59,9 +58,10 @@ public:
     void Compute(OrtKernelContext* context);
 
 private:
+    std::unique_ptr<DlQuantization::ITensorQuantizationSim<float>> tensorQuantizationSim;
     const OrtKernelInfo* info_;
     Ort::CustomOpApi api_;
-    struct QcQuantizeInfo* quant_info;
+    struct QcQuantizeInfo* quantInfo;
     bool useCuda;
 };
 
@@ -90,9 +90,6 @@ struct QcQuantizeOpGPU : Ort::CustomOpBase<QcQuantizeOpGPU, QcQuantizeKernel>
     const char* GetExecutionProviderType() const;
 };
 #endif
-
-
-extern "C" ORT_EXPORT OrtStatus* ORT_API_CALL RegisterCustomOps(OrtSessionOptions* options, const OrtApiBase* api);
 
 
 #endif   // AIMET_MAIN_QCQUANTIZEOP_H
