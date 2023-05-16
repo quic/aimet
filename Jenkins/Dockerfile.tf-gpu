@@ -261,3 +261,7 @@ RUN ln -s /usr/bin/run-clang-tidy-11.py /usr/bin/run-clang-tidy.py
 
 # Provide write permission to the python package folder in order to install AIMET in editable mode
 RUN chmod o+w /usr/local/lib/python3.8/dist-packages
+
+# Work-around for tensorflow being unable to find libcusolver.so.10 in the cuda:11.1.1 container
+# Reference: https://github.com/tensorflow/tensorflow/issues/44777#issuecomment-817303735
+RUN ln -s /usr/local/cuda-11.1/lib64/libcusolver.so.11 /usr/local/lib/python3.8/dist-packages/tensorflow/python/libcusolver.so.10
