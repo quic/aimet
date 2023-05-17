@@ -114,8 +114,9 @@ functional_with_stateless_api = {
     'mean'                      : elementwise_ops.Mean,
     'pow'                       : elementwise_ops.Pow,
     'where'                     : elementwise_ops.Where,
-    'addmm'                     : elementwise_ops.AddMM,
+    'addmm'                     : elementwise_ops.Addmm,
     'bmm'                       : elementwise_ops.Bmm,
+    'baddbmm'                   : elementwise_ops.Baddbmm,
     'cumsum'                    : elementwise_ops.CumSum,
     'masked_fill'               : elementwise_ops.MaskedFill,
 }
