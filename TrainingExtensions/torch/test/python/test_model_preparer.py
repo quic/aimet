@@ -1794,3 +1794,102 @@ class TestFX:
         finally:
             if os.path.isdir(results_dir):
                 shutil.rmtree(results_dir)
+
+    def test_fx_with_baddbmm(self):
+        """ test torch fx with baddbmm """
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super(Model, self).__init__()
+                self.conv = torch.nn.Conv2d(3, 10, (1, 1))
+
+            def forward(self, *inputs):
+                x = self.conv(inputs[0]).squeeze(0)
+                x = x.baddbmm(inputs[1], inputs[2], beta=0.2, alpha=0.4)
+                x = torch.baddbmm(x, inputs[1], inputs[2], beta=0.5, alpha=0.1)
+                return x
+
+        input_shape = (1, 3, 5, 5)
+        dummy_input = (torch.randn(*input_shape), torch.randn(10, 5, 4), torch.randn(10, 4, 5))
+        model = Model().eval()
+        prepared_model = prepare_model(model)
+
+        # Verify that validator checks pass.
+        assert ModelValidator.validate_model(prepared_model, dummy_input)
+
+        # Verify bit-exact outputs.
+        assert torch.equal(model(*dummy_input), prepared_model(*dummy_input))
+        assert isinstance(prepared_model.module_baddbmm, elementwise_ops.Baddbmm)
+        assert isinstance(prepared_model.module_baddbmm_1, elementwise_ops.Baddbmm)
+
+        # Verify with Quantization workflow.
+        sim = QuantizationSimModel(prepared_model, dummy_input)
+        sim.compute_encodings(evaluate, dummy_input)
+        sim.model(*dummy_input)
+        assert sim.model.module_baddbmm.output_quantizers[0].encoding
+        assert sim.model.module_baddbmm_1.output_quantizers[0].encoding
+
+    def test_fx_with_addmm(self):
+        """ test torch fx with addmm """
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super(Model, self).__init__()
+                self.conv = torch.nn.Conv2d(3, 10, (1, 1))
+
+            def forward(self, *inputs):
+                x = self.conv(inputs[0]).squeeze()[0]
+                x = x.addmm(inputs[1], inputs[2], beta=0.2, alpha=0.4)
+                x = torch.addmm(x, inputs[1], inputs[2], beta=0.5, alpha=0.1)
+                return x
+
+        input_shape = (1, 3, 3, 3)
+        dummy_input = (torch.randn(*input_shape), torch.randn(3, 3), torch.rand(3, 3))
+        model = Model().eval()
+        prepared_model = prepare_model(model)
+
+        # Verify that validator checks pass.
+        assert ModelValidator.validate_model(prepared_model, dummy_input)
+
+        # Verify bit-exact outputs.
+        assert torch.equal(model(*dummy_input), prepared_model(*dummy_input))
+        assert isinstance(prepared_model.module_addmm, elementwise_ops.Addmm)
+        assert isinstance(prepared_model.module_addmm_1, elementwise_ops.Addmm)
+
+        # Verify with Quantization workflow.
+        sim = QuantizationSimModel(prepared_model, dummy_input)
+        sim.compute_encodings(evaluate, dummy_input)
+        sim.model(*dummy_input)
+        assert sim.model.module_addmm.output_quantizers[0].encoding
+        assert sim.model.module_addmm_1.output_quantizers[0].encoding
+
+    def test_fx_with_bmm(self):
+        """ test torch fx with bmm """
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super(Model, self).__init__()
+                self.conv = torch.nn.Conv2d(3, 10, (1, 1))
+
+            def forward(self, *inputs):
+                x = self.conv(inputs[0]).squeeze()
+                x = x.bmm(inputs[1])
+                x = torch.bmm(x, inputs[1])
+                return x
+
+        input_shape = (1, 3, 3, 3)
+        dummy_input = (torch.randn(*input_shape), torch.randn(10, 3, 3))
+        model = Model().eval()
+        model(*dummy_input)
+        prepared_model = prepare_model(model)
+        # Verify that validator checks pass.
+        assert ModelValidator.validate_model(prepared_model, dummy_input)
+        #
+        # Verify bit-exact outputs.
+        assert torch.equal(model(*dummy_input), prepared_model(*dummy_input))
+        assert isinstance(prepared_model.module_bmm, elementwise_ops.Bmm)
+        assert isinstance(prepared_model.module_bmm_1, elementwise_ops.Bmm)
+
+        # Verify with Quantization workflow.
+        sim = QuantizationSimModel(prepared_model, dummy_input)
+        sim.compute_encodings(evaluate, dummy_input)
+        sim.model(*dummy_input)
+        assert sim.model.module_bmm.output_quantizers[0].encoding
+        assert sim.model.module_bmm_1.output_quantizers[0].encoding

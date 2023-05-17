@@ -88,7 +88,6 @@ GreaterEqual = create_wrapper_module('GreaterEqual', torch.ge)
 LessEqual = create_wrapper_module('LessEqual', torch.le)
 NotEqual = create_wrapper_module('NotEqual', torch.ne)
 Equal = create_wrapper_module('Equal', torch.eq)
-AddMM = create_wrapper_module('AddMM', torch.addmm)
 Bmm = create_wrapper_module('Bmm', torch.bmm)
 CumSum = create_wrapper_module('CumSum', torch.cumsum)
 MaskedFill = create_wrapper_module('MaskedFill', torch.Tensor.masked_fill_)
@@ -184,3 +183,25 @@ class CustomSiLU(torch.nn.Module):
         Forward-pass routine for custom SiLU
         """
         return self.mul(x, self.sigmoid(x))
+
+
+class Baddbmm(torch.nn.Module):
+    """Custom module for a functional baddbmm"""
+    @staticmethod
+    def forward(*args) -> torch.Tensor:
+        """
+        Forward-pass routine for torch.baddbmm
+        """
+        tensor, batch1, batch2, beta, alpha = args
+        return tensor.baddbmm(batch1, batch2, beta=beta, alpha=alpha)
+
+
+class Addmm(torch.nn.Module):
+    """Custom module for a functional baddbmm"""
+    @staticmethod
+    def forward(*args) -> torch.Tensor:
+        """
+        Forward-pass routine for torch.baddbmm
+        """
+        tensor, mat1, mat2, beta, alpha = args
+        return tensor.addmm(mat1, mat2, beta=beta, alpha=alpha)
