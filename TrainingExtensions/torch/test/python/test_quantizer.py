@@ -3377,7 +3377,8 @@ class TestQuantizationSimLearnedGrid:
             json.dump(quantsim_config, f)
 
         # Force all weight values to have positive numbers
-        model.conv.weight = nn.Parameter(model.conv.weight.data.clamp_min(0))
+        with torch.no_grad():
+            model.conv.weight.add_(1).clamp_min_(0)
 
         dummy_input = torch.rand(16, 3, 28, 28)
         sim = QuantizationSimModel(model, dummy_input=dummy_input,
