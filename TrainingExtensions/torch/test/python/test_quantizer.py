@@ -3346,6 +3346,8 @@ class TestQuantizationSimLearnedGrid:
 
     @pytest.mark.parametrize("model", [ConvReluModel(), ConvTransposeReluModel()])
     def test_quantizer_flag_when_unsigned_symmetric_is_enabled(self, model):
+        torch.manual_seed(116)
+
         results_dir = os.path.abspath("./tmp/")
         os.makedirs(results_dir, exist_ok=True)
 
@@ -3431,6 +3433,7 @@ class TestQuantizationSimLearnedGrid:
             loss = out.flatten().sum()
             loss.backward()
             optimizer.step()
+            optimizer.zero_grad()
 
         sim.export(results_dir, "after_range_learning", dummy_input)
         _validate_export_result("after_range_learning")
