@@ -2522,6 +2522,7 @@ class TestQuantizationSimLearnedGrid:
 
         optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.05, momentum=0.5)
         optimizer.step()
+        optimizer.zero_grad()
 
         new_conv1_weight = sim.model.conv1._module_to_wrap.weight.clone().detach()
         new_conv1_encoding_max = sim.model.conv1.param_quantizers['weight'].encoding.max
@@ -2721,6 +2722,7 @@ class TestQuantizationSimLearnedGrid:
         loss = out.flatten().sum()
         loss.backward()
         optimizer.step()
+        optimizer.zero_grad()
 
         # Checking if encoding min max have changed
         assert not trainable_module.input0_encoding_min.item() == -2.0
@@ -2785,6 +2787,7 @@ class TestQuantizationSimLearnedGrid:
         loss = out.flatten().sum()
         loss.backward()
         optimizer.step()
+        optimizer.zero_grad()
         # All parameters should have a gradient
         for params in sim.model.parameters():
             assert params.grad is not None
@@ -2813,6 +2816,7 @@ class TestQuantizationSimLearnedGrid:
             loss = out.flatten().sum()
             loss.backward()
             optimizer.step()
+            optimizer.zero_grad()
 
         def _helper(_module_name: str):
             wrapper = getattr(sim.model, _module_name)
@@ -2867,6 +2871,7 @@ class TestQuantizationSimLearnedGrid:
             loss = out.flatten().sum()
             loss.backward()
             optimizer.step()
+            optimizer.zero_grad()
 
         assert sim.model.conv1_a.weight_encoding_min == -sim.model.conv1_a.weight_encoding_max
         assert sim.model.fc1.weight_encoding_min == -sim.model.fc1.weight_encoding_max
@@ -3126,6 +3131,7 @@ class TestQuantizationSimLearnedGrid:
             loss = out.flatten().sum()
             loss.backward() # Should not raise error
             optimizer.step()
+            optimizer.zero_grad()
 
     def test_inplace_modification_with_add(self):
         """
@@ -3163,6 +3169,7 @@ class TestQuantizationSimLearnedGrid:
             loss = out.flatten().sum()
             loss.backward() # Should not raise error
             optimizer.step()
+            optimizer.zero_grad()
 
     def test_multi_output_onnx_op(self):
         """
@@ -3465,6 +3472,7 @@ class TestQuantizationSimLearnedGrid:
         output = output.sum()
         output.backward()
         optimizer.step()
+        optimizer.zero_grad()
 
     def test_quantsim_conv3d_tf_fp16_eval_train(self):
 
@@ -3490,6 +3498,7 @@ class TestQuantizationSimLearnedGrid:
         output = output.sum()
         output.backward()
         optimizer.step()
+        optimizer.zero_grad()
 
     @pytest.mark.skipif(
         Version(torch.__version__) >= Version('1.13.0'),
@@ -3535,6 +3544,7 @@ class TestQuantizationSimLearnedGrid:
         loss = output.sum()
         loss.backward()
         optimizer.step()
+        optimizer.zero_grad()
 
 
     @pytest.mark.cuda
@@ -3557,6 +3567,7 @@ class TestQuantizationSimLearnedGrid:
         loss = output.sum()
         loss.backward()
         optimizer.step()
+        optimizer.zero_grad()
 
     @pytest.mark.cuda
     def test_fp16_model_sim_eval_train_learned_grid_per_channel_gpu(self):
@@ -3604,6 +3615,7 @@ class TestQuantizationSimLearnedGrid:
         loss = output.sum()
         loss.backward()
         optimizer.step()
+        optimizer.zero_grad()
 
     @pytest.mark.cuda
     def test_fp16_model_sim_eval_train_static_grid_per_channel_gpu(self):
@@ -3651,7 +3663,7 @@ class TestQuantizationSimLearnedGrid:
         loss = output.sum()
         loss.backward()
         optimizer.step()
-
+        optimizer.zero_grad()
 
     def test_tie_quantizers_for_concat(self):
 
@@ -3720,10 +3732,12 @@ class TestQuantizationSimLearnedGrid:
         output = dummy_forward(sim.model, None)
         output.sum().backward()
         optimizer.step()
+        optimizer.zero_grad()
         print("Train " + "-" * 20)
 
         output = dummy_forward(sim.model, None)
         output.sum().backward()
         optimizer.step()
+        optimizer.zero_grad()
 
         print("Done")
