@@ -79,6 +79,13 @@ class QcQuantizeOp:
         self.enabled = True
         self._data_type = QuantizationDataType.int
         self.quant_info.usePerChannelMode = False
+        self.per_channel_quantization_enabled = False
+
+    def enable_per_channel_quantization(self):
+        """
+        Enables per channel quantization for qc_quantize_op
+        """
+        self.per_channel_quantization_enabled = True
 
     @property
     def data_type(self) -> QuantizationDataType:

@@ -271,3 +271,45 @@ class TestQuantSimConfig:
         for quantizer in sim.qc_quantize_op_dict.values():
             assert quantizer.use_strict_symmetric == True
             assert quantizer.use_unsigned_symmetric == False
+
+    def test_generate_and_apply_op_level_config(self):
+        model = models_for_tests.build_dummy_model()
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "False",
+                    "is_symmetric": "True"
+                }
+            },
+            "params": {},
+            "op_type": {
+                "Conv": {
+                    "is_input_quantized": "True",
+                    "is_symmetric": "False",
+                    "params": {
+                        "weight": {
+                            "is_quantized": "True",
+                            "is_symmetric": "False"
+                        }
+                    },
+                    "per_channel_quantization": "True",
+                }
+            },
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {
+                "is_output_quantized": "True",
+            }
+        }
+        if not os.path.exists('./data'):
+            os.makedirs('./data')
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+        sim = QuantizationSimModel(model, config_file='./data/quantsim_config.json', use_cuda=False)
+        assert sim.qc_quantize_op_dict['conv_w'].per_channel_quantization_enabled == True
+        assert sim.qc_quantize_op_dict['fc_w'].per_channel_quantization_enabled == False

@@ -43,6 +43,7 @@ from onnx import load_model
 import onnxruntime as ort
 import pytest
 from aimet_common.defs import QuantScheme, QuantizationDataType
+from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.qc_quantize_op import OpMode
 from aimet_onnx.utils import make_dummy_input
