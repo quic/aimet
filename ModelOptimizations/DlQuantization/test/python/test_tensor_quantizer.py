@@ -376,3 +376,62 @@ class TestTensorQuantizer(unittest.TestCase):
         self.assertTrue(is_valid)
         self.assertAlmostEqual(x_min, encoding.min, places=5)
         self.assertAlmostEqual(x_max, encoding.max, places=5)
+
+    def test_tensor_quantization_sim_with_numpy_interface_other_dimensions(self):
+        """
+        test TensorQuantizationSimForPython's quantizeDequantize API for different input dimensions
+        """
+        np.random.seed(10)
+        bitwidth = 4
+        quant_scheme = libpymo.QuantizationMode.QUANTIZATION_TF
+        is_symmetric = False
+        strict_symmetric = False
+        unsigned_symmetric = False
+        use_cuda = False
+        inp = 5 * (np.random.normal(size=[1, 3, 224, 224])) + 2
+
+        # Perform calibration
+        enc_analyzer = libpymo.EncodingAnalyzerForPython(quant_scheme)
+        enc_analyzer.updateStats(inp, use_cuda)
+        encoding, is_valid = enc_analyzer.computeEncoding(bitwidth,
+                                                          is_symmetric,
+                                                          strict_symmetric,
+                                                          unsigned_symmetric)
+        assert is_valid
+        # Quantized to integer and then scales back to original domain
+        quantizer = libpymo.TensorQuantizationSimForPython()
+        # 4-dimensional tensor
+        out = quantizer.quantizeDequantize(inp,
+                                           encoding,
+                                           libpymo.RoundingMode.ROUND_NEAREST,
+                                           bitwidth,
+                                           use_cuda)
+        delta = float((encoding.max - encoding.min) / 15)
+        assert np.allclose(inp, out, atol=delta)  # Allow 1-tick difference
+        # 3-dimensional tensor
+        inp = inp.reshape(3, 2, -1)
+        out = quantizer.quantizeDequantize(inp,
+                                           encoding,
+                                           libpymo.RoundingMode.ROUND_NEAREST,
+                                           bitwidth,
+                                           use_cuda)
+        delta = float((encoding.max - encoding.min) / 15)
+        assert np.allclose(inp, out, atol=delta)  # Allow 1-tick difference
+        # 2-dimensional tensor
+        inp = inp.reshape(3, -1)
+        out = quantizer.quantizeDequantize(inp,
+                                           encoding,
+                                           libpymo.RoundingMode.ROUND_NEAREST,
+                                           bitwidth,
+                                           use_cuda)
+        delta = float((encoding.max - encoding.min) / 15)
+        assert np.allclose(inp, out, atol=delta)  # Allow 1-tick difference
+        # 1-dimensional tensor
+        inp = inp.flatten()
+        out = quantizer.quantizeDequantize(inp,
+                                           encoding,
+                                           libpymo.RoundingMode.ROUND_NEAREST,
+                                           bitwidth,
+                                           use_cuda)
+        delta = float((encoding.max - encoding.min) / 15)
+        assert np.allclose(inp, out, atol=delta)  # Allow 1-tick difference
