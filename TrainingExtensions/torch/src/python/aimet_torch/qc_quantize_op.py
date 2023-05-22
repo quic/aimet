@@ -38,7 +38,6 @@
 """ Custom PyTorch Op for quantizing weights and activations """
 
 import abc
-import contextlib
 from enum import Enum
 from typing import Dict, Tuple, Union, List
 import os
@@ -46,12 +45,12 @@ import torch
 from torch import nn
 
 import aimet_common.libpymo as libpymo
-from aimet_common.utils import AimetLogger
+from aimet_common.utils import AimetLogger, Handle
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
 from aimet_torch.custom import custom_tensor_utils
 from aimet_torch import utils
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer, TensorQuantizer, \
-    LearnedGridTensorQuantizer, ParameterQuantizer, set_encoding_min_max_gating_threshold
+    LearnedGridTensorQuantizer, set_encoding_min_max_gating_threshold
 import aimet_torch.quantsim_straight_through_grad as ste
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -820,7 +819,7 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
         torch_inputs = custom_tensor_utils.to_torch_tensor(inputs)
         quantized_inputs = self._quantize_activation(torch_inputs, self.input_quantizers, 'input')
 
-        with self._quantize_params(quantized_inputs):
+        with self._quantize_params():
             quantized_inputs = custom_tensor_utils.to_custom_tensor(inputs, quantized_inputs)
             # Call the forward of the wrapped module
             wrapped_output = self._module_to_wrap(*quantized_inputs)
@@ -838,32 +837,34 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
 
         return output
 
-    @contextlib.contextmanager
-    def _quantize_params(self, inputs=None):
-        inputs = inputs or [torch.empty(1).to(self.device)]
-        shadow_params = {}
-        encoding_list_for_params = []
+    def _quantize_params(self):
+        handles = []
+
+        def cleanup_fn():
+            for handle in handles:
+                handle.remove()
 
         try:
-            for name, param in self.get_named_parameters():
-                shadow_params[name] = param.detach().clone()
-                # Create a list of encoding parameters for params
-                if self.param_quantizers[name].enabled:
-                    encoding_list_for_params.append(getattr(self, name + '_encoding_min'))
-                    encoding_list_for_params.append(getattr(self, name + '_encoding_max'))
+            for param_name, _ in self.get_named_parameters():
+                param_quantizer = self.param_quantizers[param_name]
 
-            # Quantize the parameters
-            inputs[0] = ParameterQuantizer.apply(inputs[0], self, *encoding_list_for_params)
+                if not param_quantizer.enabled:
+                    continue
 
-            # clone() the outputs of Custom function to avoid incorrect gradient calculation for in-place modification
-            # of view (view is created since Custom function's forward return input as-is)
-            inputs[0] = inputs[0].clone()
-            yield
+                original_param = getattr(self._module_to_wrap, param_name)
+                encoding_min = getattr(self, param_name + '_encoding_min')
+                encoding_max = getattr(self, param_name + '_encoding_max')
+                quantized_param = param_quantizer.quantize_dequantize(original_param,
+                                                                      encoding_min,
+                                                                      encoding_max)
 
-        finally:
-            for name, param in self.get_named_parameters():
-                if name in shadow_params:
-                    param.data.copy_(shadow_params[name].data)
+                handle = _patch_param(self._module_to_wrap, param_name, quantized_param)
+                handles.append(handle)
+
+            return Handle(cleanup_fn)
+        except Exception:
+            cleanup_fn()
+            raise
 
     def _quantize_activation(self, tensors_to_quantize, tensor_quantizers, type_of_quantizer):
         quantized_tensors = []
@@ -968,3 +969,22 @@ class SteGatingFuncForParameters(torch.autograd.Function):
             calc_param_grad(name, param)
 
         return (None, *output_grad)
+
+
+def _patch_param(module: torch.nn.Module, param_name: str, quantized_param: torch.Tensor):
+    original_param = getattr(module, param_name)
+    assert original_param.shape == quantized_param.shape
+
+    if param_name in module.__dict__:
+        assert module.__dict__[param_name] is original_param
+        cleanup_fn = lambda: module.__dict__.update({param_name: original_param})
+    else:
+        assert module._parameters[param_name] is original_param # pylint: disable=protected-access
+        cleanup_fn = lambda: module.__dict__.pop(param_name)
+
+    try:
+        module.__dict__.update({param_name: quantized_param})
+        return Handle(cleanup_fn)
+    except Exception:
+        cleanup_fn()
+        raise
