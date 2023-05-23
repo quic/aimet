@@ -105,6 +105,7 @@ macro(whl_add_whl_action_target whl_name)
                 AIMET_CU_VER=$<IF:$<BOOL:${ENABLE_CUDA}>,$ENV{CUDA_VERSION},"cpu">
                 AIMET_TF_VER=$<IF:$<BOOL:${ENABLE_TENSORFLOW}>,${TF_VERSION},"">
                 AIMET_PT_VER=$<IF:$<BOOL:${ENABLE_TORCH}>,${Torch_VERSION},"">
+                AIMET_ONNX_VER=$<IF:$<BOOL:${ENABLE_ONNX}>,${Onnx_VERSION},"">
             ${Python3_EXECUTABLE} setup.py build --build-base ${WHL_PREP_DIR}/build_${whl_name} ${whl_action} ${whl_action_args_${whl_action}}
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/src/python
         )
@@ -127,5 +128,9 @@ if (ENABLE_TORCH)
     endif (NOT ${TORCH_VERSION} MATCHES "1.13.1.*")
     add_subdirectory(torch)
 endif(ENABLE_TORCH)
+
+if (ENABLE_ONNX)
+    add_subdirectory(onnx)
+endif(ENABLE_ONNX)
 
 add_subdirectory(common)

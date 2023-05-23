@@ -52,6 +52,8 @@ else()
     set(variant_name "tf-torch")
   elseif(ENABLE_TORCH)
     set(variant_name "torch")
+  elseif(ENABLE_ONNX)
+    set(variant_name "onnx")
   elseif(ENABLE_TENSORFLOW)
     set(variant_name "tf")
   else()
@@ -115,6 +117,23 @@ if(ENABLE_TORCH)
   else()
     # Torch CPU dependencies
     list(APPEND deps_name_list_aimet_torch "reqs_pip_torch_cpu.txt")
+  endif()
+endif()
+
+# Setup Onnx package dependencies if required
+if(ENABLE_ONNX)
+  # Add AIMET Onnx package to package array list
+  list(APPEND package_name_list aimet_onnx)
+
+  # Onnx dependencies that are common to CPU and GPU
+  set(deps_name_list_aimet_onnx "reqs_pip_onnx_common.txt")
+
+  if(ENABLE_CUDA)
+    # Onnx GPU dependencies
+    list(APPEND deps_name_list_aimet_onnx "reqs_deb_onnx_gpu.txt" "reqs_pip_onnx_gpu.txt")
+  else()
+    # Onnx CPU dependencies
+    list(APPEND deps_name_list_aimet_onnx "reqs_pip_onnx_cpu.txt")
   endif()
 endif()
 
