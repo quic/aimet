@@ -1,7 +1,7 @@
 #==============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -34,7 +34,7 @@
 #  @@-COPYRIGHT-END-@@
 #==============================================================================
 
-""" Package generation file for aimet tensorflow package """
+""" Package generation file for aimet onnx package """
 
 import os
 import sys
@@ -42,7 +42,7 @@ from setuptools import setup, find_packages, find_namespace_packages
 from packaging_common import bdist_wheel_aimet, get_dependency_packages, get_dependency_urls, get_dependency_wheel
 import setup_cfg # pylint: disable=import-error
 
-package_name = "aimet_tensorflow"
+package_name = "aimet_onnx"
 package_url_base = setup_cfg.remote_url + "/releases/download/"+str(setup_cfg.version)
 
 dependency_url_list = []
@@ -55,42 +55,41 @@ else:
 
 # Obtain package contents; exclude build and certain other files including those from other packages
 packages_found = find_packages() + \
-    find_namespace_packages(exclude=['*bin', 'pyenv3*', 'build', 'dist', '*bin', '*x86*', '*aimet_common*', '*aimet_torch*', '*aimet_onnx*'])
+    find_namespace_packages(exclude=['*bin', 'pyenv3*', 'build', 'dist', '*bin', '*x86*', '*aimet_common*','*aimet_torch*','*aimet_tensorflow*'])
 
 # Create common dependency list
-package_dependency_files = ['reqs_pip_tf_common.txt']
-install_requires_list = get_dependency_packages(package_name, 'reqs_pip_tf_common.txt')
+package_dependency_files = ['reqs_pip_onnx_common.txt']
+install_requires_list = get_dependency_packages(package_name, 'reqs_pip_onnx_common.txt')
 if "--gpu" in sys.argv:
-    # Create Tensorflow GPU dependency list
-    package_dependency_files.extend(['reqs_pip_tf_gpu.txt', 'reqs_deb_tf_gpu.txt'])
-    install_requires_list.extend(get_dependency_packages(package_name, 'reqs_pip_tf_gpu.txt'))
-    dependency_url_list.extend(get_dependency_urls(package_name, 'reqs_pip_tf_gpu.txt'))
+    # Create onnx GPU dependency list
+    package_dependency_files.extend(['reqs_pip_onnx_gpu.txt', 'reqs_deb_onnx_gpu.txt'])
+    install_requires_list.extend(get_dependency_packages(package_name, 'reqs_pip_onnx_gpu.txt'))
+    dependency_url_list.extend(get_dependency_urls(package_name, 'reqs_pip_onnx_gpu.txt'))
     sys.argv.remove("--gpu")
 else:
-    # Create Tensorflow CPU dependency list
-    package_dependency_files.extend(['reqs_pip_tf_cpu.txt'])
-    install_requires_list.extend(get_dependency_packages(package_name, 'reqs_pip_tf_cpu.txt'))
-    dependency_url_list.extend(get_dependency_urls(package_name, 'reqs_pip_tf_cpu.txt'))
+    # Create onnx CPU dependency list
+    package_dependency_files.extend(['reqs_pip_onnx_cpu.txt'])
+    install_requires_list.extend(get_dependency_packages(package_name, 'reqs_pip_onnx_cpu.txt'))
+    dependency_url_list.extend(get_dependency_urls(package_name, 'reqs_pip_onnx_cpu.txt'))
 
 # Loop over package artifacts folder
 required_package_data = ['acceptance_tests/*.*']
 for path, _, filenames in os.walk(package_name):
     required_package_data += [os.path.join(path, filename) for filename in filenames if
                               filename.endswith(tuple(package_dependency_files))]
-
 required_package_data = ['/'.join(files.split('/')[1:]) for files in required_package_data]
 #TODO For some reason, we need to explicitly add HTML files from subfolders like this
 required_package_data += ['*/*.html']
 
 setup(
-    name='AimetTensorflow',
+    name='AimetOnnx',
     version=str(setup_cfg.version),
     author='Qualcomm Innovation Center, Inc.',
     author_email='aimet.os@quicinc.com',
     packages=packages_found,
     url=package_url_base,
     license='NOTICE.txt',
-    description='AIMET TensorFlow Package',
+    description='AIMET Onnx Package',
     long_description=open('README.txt').read(),
     package_data={package_name:required_package_data},
     install_requires=install_requires_list,

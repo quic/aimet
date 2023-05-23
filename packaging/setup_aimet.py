@@ -50,6 +50,11 @@ if torch_dep_whl is not None:
     torch_dep_whl_url = package_url_base + "/" + torch_dep_whl
     dependency_list.append(torch_dep_whl_url)
 
+onnx_dep_whl = get_dependency_wheel("AimetOnnx")
+if onnx_dep_whl is not None:
+    onnx_dep_whl_url = package_url_base + "/" + onnx_dep_whl
+    dependency_list.append(onnx_dep_whl_url)
+
 tf_dep_whl = get_dependency_wheel("AimetTensorflow")
 if tf_dep_whl is not None:
     tf_dep_whl_url = package_url_base + "/" + tf_dep_whl
