@@ -53,8 +53,9 @@ from aimet_common.quantsim import encoding_version, extract_global_quantizer_arg
 from aimet_common.utils import save_json_yaml
 from aimet_onnx import utils
 from aimet_onnx.meta.operations import Op
+from aimet_onnx.meta.utils import get_op_type_given_param_name, get_param_shape_using_connected_graph
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
-from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode
+from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode, TensorQuantizerParams
 from aimet_onnx.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_onnx.utils import make_dummy_input, add_hook_to_get_activation, remove_activation_hooks
 
@@ -62,6 +63,8 @@ WORKING_DIR = '/tmp/quantsim/'
 
 op_types_to_ignore = ["branch", "Flatten", "Gather", "Reshape", "Shape", "Unsqueeze", "Squeeze", "Split",
                       "Compress", "Tile", "Transpose", "Identity"]
+
+allowed_op_type_for_per_channel = ['Conv', 'Gemm', 'MatMul', 'ConvTranspose']
 
 data_types_to_quantize = [np.float32]
 
@@ -228,7 +231,7 @@ class QuantizationSimModel:
         for name in self.param_names:
             self.model.replace_input_of_all_nodes(name, name + '_qdq')
 
-            quant_info = libquant_info.QcQuantizeInfo()
+            quant_info, tensor_quantizer_params = self._create_quant_info_object_for_param(name)
             custom_node = helper.make_node(
                 op_type='QcQuantizeOp',
                 inputs=[name],
@@ -245,8 +248,41 @@ class QuantizationSimModel:
                                                           encodings=None,
                                                           op_mode=OpMode.oneShotQuantizeDequantize,
                                                           bitwidth=self._default_param_bw,
-                                                          use_symmetric_encodings=self._use_symmetric_encodings
-                                                          )
+                                                          use_symmetric_encodings=self._use_symmetric_encodings,
+                                                          tensor_quantizer_params=tensor_quantizer_params)
+
+    def _create_quant_info_object_for_param(self, param_name):
+        """
+        Creates quant info object for QcQuantizeOp and QDQ node
+
+        :param param_name: Name of the parameter for which the quant info object will be created
+        :return: quant info object
+        """
+        quant_info = libquant_info.QcQuantizeInfo()
+        quant_info.usePerChannelMode = False
+        tensor_quantizer_params = TensorQuantizerParams()
+        op_type = get_op_type_given_param_name(self.connected_graph, param_name)
+        param_shape = get_param_shape_using_connected_graph(self.connected_graph, param_name)
+        if len(param_shape) == 1:
+            tensor_quantizer_params.axis = 0
+        else:
+            tensor_quantizer_params.axis = self._get_quantization_axis(op_type)
+        tensor_quantizer_params.num_output_channels = param_shape[quant_info.channelAxis]
+
+        return quant_info, tensor_quantizer_params
+
+    def _get_quantization_axis(self, op_type):
+        """
+        Gets quantization axis for Per channel quantization
+
+        :param op_type: type of the op
+        return: axis
+        """
+
+        if op_type in ['Conv', 'Gemm', 'MatMul']:
+            return 0
+        elif op_type in ['ConvTranspose']:
+            return 1
 
     def _insert_activation_quantization_nodes(self):
         """
@@ -343,14 +379,14 @@ class QuantizationSimModel:
         def update_encoding_dict_entry_int(encoding_dict: Dict, op_name: str):
             qc_quantize_op = self.qc_quantize_op_dict[op_name]
             if qc_quantize_op.data_type == QuantizationDataType.int:
-                encoding_dict[op_name] = {'min': qc_quantize_op.encodings.min, 'max': qc_quantize_op.encodings.max,
-                                          'scale': qc_quantize_op.encodings.delta,
-                                          'offset': qc_quantize_op.encodings.offset,
-                                          'bitwidth': qc_quantize_op.encodings.bw,
+                encoding_dict[op_name] = {'min': qc_quantize_op.encodings[0].min, 'max': qc_quantize_op.encodings[0].max,
+                                          'scale': qc_quantize_op.encodings[0].delta,
+                                          'offset': qc_quantize_op.encodings[0].offset,
+                                          'bitwidth': qc_quantize_op.encodings[0].bw,
                                           'is_symmetric': qc_quantize_op.use_symmetric_encodings,
                                           'dtype': 'int'}
             else:
-                encoding_dict[op_name] = {'bitwidth': qc_quantize_op.encodings.bw,
+                encoding_dict[op_name] = {'bitwidth': qc_quantize_op.encodings[0].bw,
                                           'dtype': 'float'}
 
 
