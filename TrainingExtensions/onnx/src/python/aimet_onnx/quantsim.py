@@ -279,9 +279,9 @@ class QuantizationSimModel:
         return: axis
         """
 
-        if op_type in ['Conv', 'Gemm', 'MatMul']:
+        if op_type in ['Conv']:
             return 0
-        elif op_type in ['ConvTranspose']:
+        elif op_type in ['ConvTranspose', 'Gemm', 'MatMul']:
             return 1
 
     def _insert_activation_quantization_nodes(self):
