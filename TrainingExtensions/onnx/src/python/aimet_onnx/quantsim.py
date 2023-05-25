@@ -383,7 +383,7 @@ class QuantizationSimModel:
                                           'scale': qc_quantize_op.encodings[0].delta,
                                           'offset': qc_quantize_op.encodings[0].offset,
                                           'bitwidth': qc_quantize_op.encodings[0].bw,
-                                          'is_symmetric': qc_quantize_op.use_symmetric_encodings,
+                                          'is_symmetric': str(qc_quantize_op.use_symmetric_encodings),
                                           'dtype': 'int'}]
             else:
                 encoding_dict[op_name] = [{'bitwidth': qc_quantize_op.encodings[0].bw,
