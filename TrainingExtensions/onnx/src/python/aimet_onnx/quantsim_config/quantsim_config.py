@@ -436,8 +436,8 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
 
         for op in self._conn_graph.ordered_ops:
             if op.dotted_name in self._op_to_quantizers:
-                per_channel_quantization = config_generator.generate(op.get_module(), op.type)
-                if per_channel_quantization:
+                per_channel_quantization_flag = config_generator.generate(op.get_module(), op.type)
+                if per_channel_quantization_flag:
                     for _, param_quantizer in self._op_to_quantizers[op.dotted_name].parameter_quantizers:
                         param_quantizer.enable_per_channel_quantization()
 

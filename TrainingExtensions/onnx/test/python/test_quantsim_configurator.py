@@ -311,5 +311,5 @@ class TestQuantSimConfig:
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
         sim = QuantizationSimModel(model, config_file='./data/quantsim_config.json', use_cuda=False)
-        assert sim.qc_quantize_op_dict['conv_w'].per_channel_quantization_enabled == True
-        assert sim.qc_quantize_op_dict['fc_w'].per_channel_quantization_enabled == False
+        assert sim.qc_quantize_op_dict['conv_w'].quant_info.usePerChannelMode == True
+        assert sim.qc_quantize_op_dict['fc_w'].quant_info.usePerChannelMode == False

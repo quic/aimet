@@ -154,7 +154,7 @@ class TestQuantSim:
         sim.compute_encodings(callback, None)
 
         for name, qc_op in sim.get_qc_quantize_op().items():
-            assert qc_op.encodings.bw == 8
+            assert qc_op.encodings[0].bw == 8
 
         for name, qc_op in sim.get_qc_quantize_op().items():
             assert qc_op.quant_info.tensorQuantizerRef[0].isEncodingValid is True
@@ -355,3 +355,20 @@ class TestQuantSim:
         out_gpu = onnx_sim_gpu.session.run(None, {'input': inputs})[0]
 
         assert (np.max(np.abs(out_cpu - out_gpu)) < 0.05)
+
+    def test_per_channel_quantization(self):
+        model = single_residual_model().model
+        sim = QuantizationSimModel(model, use_cuda=False, config_file=get_path_for_per_channel_config())
+        def dummy_callback(session, args):
+            in_tensor = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
+            session.run(None, in_tensor)
+
+        sim.compute_encodings(dummy_callback, None)
+        for param_name in sim.param_names:
+            qc_op = sim.qc_quantize_op_dict[param_name]
+            if qc_op.quant_info.usePerChannelMode and qc_op.enabled:
+                num_channels = qc_op.tensor_quantizer_params.num_output_channels
+                assert num_channels == len(qc_op.encodings)
+                for encoding in qc_op.encodings:
+                    assert encoding.bw == 8
+                    assert encoding.min != encoding.max
