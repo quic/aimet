@@ -362,7 +362,7 @@ class TestQuantSim:
         def dummy_callback(session, args):
             in_tensor = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
             session.run(None, in_tensor)
-
+        sim.qc_quantize_op_dict['fc.weight'].enable_per_channel_quantization()
         sim.compute_encodings(dummy_callback, None)
 
         sim.export('./tmp/', 'encodings')

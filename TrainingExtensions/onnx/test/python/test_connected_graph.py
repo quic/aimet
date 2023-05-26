@@ -35,8 +35,9 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+import torch
+import numpy as np
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops
-from aimet_common.connected_graph.connectedgraph import get_ordered_ops
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
 from models import models_for_tests
 
@@ -64,6 +65,7 @@ class TestConnectedGraph:
         input_ops = get_all_input_ops(conn_graph)
         assert len(input_ops) == 1
         assert conn_graph._branch_count == 2
+        assert conn_graph.ordered_ops[20].transposed_params == True
 
     def test_multi_inputs_model(self):
         model = models_for_tests.multi_input_model()
@@ -118,3 +120,17 @@ class TestConnectedGraph:
         assert name_to_index['Conv_0'] < name_to_index['Concat_18']
         assert name_to_index['Conv_86'] < name_to_index['branch_0']
         assert name_to_index['Conv_40'] < name_to_index['Conv_54']
+
+    def test_matmul_layer_param_creation(self):
+        torch.manual_seed(10)
+        torch_model = models_for_tests.BNBeforeFlattenLinear()
+
+        torch_model.eval()
+
+        input_shape = (2, 10, 24, 24)
+
+        model = models_for_tests._convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
+
+        cg = ConnectedGraph(model)
+        assert cg.ordered_ops[4].type == 'MatMul'
+        assert 'fc2.weight' in cg.ordered_ops[4].parameters
