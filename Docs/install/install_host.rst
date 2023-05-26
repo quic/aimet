@@ -40,7 +40,7 @@
 AIMET Installation and Setup
 ##############################
 
-This page provides instructions to install AIMET package on Ubuntu 18.04 LTS with Nvidia GPU. Please follow the instructions in the order provided, unless specified otherwise.
+This page provides instructions to install AIMET package on Ubuntu 20.04 LTS with Nvidia GPU. Please follow the instructions in the order provided, unless specified otherwise.
 
 **NOTE:**
     #. Please pre-pend the "apt-get install" and "pip3 install" commands with "sudo -H" as appropriate.
@@ -76,18 +76,18 @@ Install GPU packages
 
 .. code-block::
 
-    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/cuda-ubuntu1804.pin
-    mv cuda-ubuntu1804.pin /etc/apt/preferences.d/cuda-repository-pin-600
-    wget https://developer.download.nvidia.com/compute/cuda/11.1.1/local_installers/cuda-repo-ubuntu1804-11-1-local_11.1.1-455.32.00-1_amd64.deb
-    dpkg -i cuda-repo-ubuntu1804-11-1-local_11.1.1-455.32.00-1_amd64.deb
-    apt-key add /var/cuda-repo-ubuntu1804-11-1-local/7fa2af80.pub
-    echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64 /" > /etc/apt/sources.list.d/cuda.list
-    echo "deb https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1804/x86_64 /" > /etc/apt/sources.list.d/nvidia-ml.list
+    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin
+    mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600
+    wget https://developer.download.nvidia.com/compute/cuda/11.1.1/local_installers/cuda-repo-ubuntu2004-11-1-local_11.1.1-455.32.00-1_amd64.deb
+    dpkg -i cuda-repo-ubuntu2004-11-1-local_11.1.1-455.32.00-1_amd64.deb
+    apt-key add /var/cuda-repo-ubuntu2004-11-1-local/7fa2af80.pub
+    echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64 /" > /etc/apt/sources.list.d/cuda.list
+    echo "deb https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu2004/x86_64 /" > /etc/apt/sources.list.d/nvidia-ml.list
     apt-get update
     apt-get -y install cuda
 
-    wget http://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1804/x86_64/nvidia-machine-learning-repo-ubuntu1804_1.0.0-1_amd64.deb
-    dpkg -i nvidia-machine-learning-repo-ubuntu1804_1.0.0-1_amd64.deb
+    wget http://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu2004/x86_64/nvidia-machine-learning-repo-ubuntu2004_1.0.0-1_amd64.deb
+    dpkg -i nvidia-machine-learning-repo-ubuntu2004_1.0.0-1_amd64.deb
     apt-get update
 
 

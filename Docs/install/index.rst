@@ -65,7 +65,7 @@ System Requirements
 The AIMET package requires the following host platform setup:
 
 * 64-bit Intel x86-compatible processor
-* Linux Ubuntu: 18.04 LTS
+* Linux Ubuntu: 20.04 LTS
 * bash command shell
 * For GPU variants:
     * Nvidia GPU card (Compute capability 5.2 or later)

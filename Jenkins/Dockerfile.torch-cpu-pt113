@@ -37,7 +37,7 @@
 # Docker image file to build and test AIMET for PyTorch in a CPU environment
 
 ARG REGISTRY
-FROM ${REGISTRY}ubuntu:bionic as target
+FROM ${REGISTRY}ubuntu:focal as target
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -81,12 +81,6 @@ RUN apt-get update -y > /dev/null && \
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1
 # Set python 3.8 as the default python
 RUN update-alternatives --set python3 /usr/bin/python3.8
-
-# Python 2 pip installation
-RUN apt-get update && apt-get install -y python-pip && rm -rf /var/lib/apt/lists/* && \
-    python2.7 -m pip --no-cache-dir install --upgrade \
-        pip==20.3.4 \
-        restkit
 
 # Upgrade Python3 pip and install some more packages
 RUN python3 -m pip --no-cache-dir install --upgrade \
