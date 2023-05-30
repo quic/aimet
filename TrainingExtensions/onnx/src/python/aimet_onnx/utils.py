@@ -306,9 +306,8 @@ class ParamUtils:
                 for param in model.graph.initializer:
                     if param.name == param_name:
                         return param
-            assert "Param not present in the node"
         else:
-            assert "Node type not in allowed op types with param list"
+            assert False, "Node type not in allowed op types with param list"
         return None
 
 
