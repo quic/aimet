@@ -46,6 +46,7 @@ from torchvision import models
 from aimet_onnx.utils import make_dummy_input
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_onnx.quantsim import QuantizationSimModel
+from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
 from torch_utils import get_cifar10_data_loaders, train_cifar10
 
 WORKING_DIR = '/tmp/quantsim'
@@ -76,9 +77,9 @@ def model_eval_onnx(session, val_loader):
 
 class TestQuantizeAcceptance:
     """ Acceptance test for AIMET ONNX """
-
+    @pytest.mark.parametrize("config_file", [None, get_path_for_per_channel_config()])
     @pytest.mark.cuda
-    def test_quantized_accuracy(self):
+    def test_quantized_accuracy(self, config_file):
         if not os.path.exists(WORKING_DIR):
             os.makedirs(WORKING_DIR)
         np.random.seed(0)
@@ -103,7 +104,7 @@ class TestQuantizeAcceptance:
         onnx_model = load_model(os.path.join(WORKING_DIR, 'resnet18.onnx'))
         dummy_input = make_dummy_input(onnx_model)
         sim = QuantizationSimModel(onnx_model, dummy_input, quant_scheme=QuantScheme.post_training_tf, default_param_bw=8,
-                                   default_activation_bw=8, use_cuda=True)
+                                   default_activation_bw=8, use_cuda=True, config_file=config_file)
 
         def onnx_callback(session, iters):
             for i, batch in enumerate(train_loader):
