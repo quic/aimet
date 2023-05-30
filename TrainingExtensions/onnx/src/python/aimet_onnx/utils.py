@@ -300,14 +300,12 @@ class ParamUtils:
         :param node: ONNX node to which the param feeds to
         :param param_index: Index at which param feeds to the ONNX node
         """
-        if node.op_type in OP_TYPES_WITH_PARAMS:
-            if len(node.input) >= param_index + 1:
-                param_name = node.input[param_index]
-                for param in model.graph.initializer:
-                    if param.name == param_name:
-                        return param
-        else:
-            assert False, "Node type not in allowed op types with param list"
+        assert node.op_type in OP_TYPES_WITH_PARAMS, "Node type not in allowed op types with param list"
+        if len(node.input) >= param_index + 1:
+            param_name = node.input[param_index]
+            for param in model.graph.initializer:
+                if param.name == param_name:
+                    return param
         return None
 
 
