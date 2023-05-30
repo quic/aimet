@@ -156,7 +156,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
             op = self._generate_op(op_type, layer)
 
-            self._name_to_layer[layer.output.name] = layer
+            if isinstance(layer.output, typing.List):
+                for output in layer.output:
+                    self._name_to_layer[output.name] = layer
+            else:
+                self._name_to_layer[layer.output.name] = layer
+
             self._op_name_to_layer[op.name] = layer
             self._layer_to_op[layer] = op
             self._ops[op.name] = op
@@ -237,7 +242,9 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param inbound_layer: tf.keras.layer related to producer Op
         """
         consumer_op = self._layer_to_op.get(target_layer)
-        producer_op = self.get_op_from_module_name(inbound_layer.output.name)
+        inbound_layer_output_name = \
+            inbound_layer.output[0].name if isinstance(inbound_layer.output, typing.List) else inbound_layer.output.name
+        producer_op = self.get_op_from_module_name(inbound_layer_output_name)
 
         if producer_op is None:
             raise RuntimeError("Producer Op must exist")
