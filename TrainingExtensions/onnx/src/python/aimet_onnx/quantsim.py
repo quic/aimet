@@ -379,15 +379,15 @@ class QuantizationSimModel:
         def update_encoding_dict_entry_int(encoding_dict: Dict, op_name: str):
             qc_quantize_op = self.qc_quantize_op_dict[op_name]
             if qc_quantize_op.data_type == QuantizationDataType.int:
-                encoding_dict[op_name] = {'min': qc_quantize_op.encodings[0].min, 'max': qc_quantize_op.encodings[0].max,
+                encoding_dict[op_name] = [{'min': qc_quantize_op.encodings[0].min, 'max': qc_quantize_op.encodings[0].max,
                                           'scale': qc_quantize_op.encodings[0].delta,
                                           'offset': qc_quantize_op.encodings[0].offset,
                                           'bitwidth': qc_quantize_op.encodings[0].bw,
-                                          'is_symmetric': qc_quantize_op.use_symmetric_encodings,
-                                          'dtype': 'int'}
+                                          'is_symmetric': str(qc_quantize_op.use_symmetric_encodings),
+                                          'dtype': 'int'}]
             else:
-                encoding_dict[op_name] = {'bitwidth': qc_quantize_op.encodings[0].bw,
-                                          'dtype': 'float'}
+                encoding_dict[op_name] = [{'bitwidth': qc_quantize_op.encodings[0].bw,
+                                          'dtype': 'float'}]
 
 
         param_encodings = {}
