@@ -271,7 +271,8 @@ class QuantizationSimModel:
 
         return quant_info, tensor_quantizer_params
 
-    def _get_quantization_axis(self, op_type):
+    @staticmethod
+    def _get_quantization_axis(op_type: str):
         """
         Gets quantization axis for Per channel quantization
 
@@ -279,10 +280,11 @@ class QuantizationSimModel:
         return: axis
         """
 
-        if op_type in ['Conv']:
+        if op_type == 'Conv':
             return 0
-        elif op_type in ['ConvTranspose', 'Gemm', 'MatMul']:
+        if op_type in ['ConvTranspose', 'Gemm', 'MatMul']:
             return 1
+        return -1
 
     def _insert_activation_quantization_nodes(self):
         """
