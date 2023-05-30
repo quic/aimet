@@ -211,13 +211,13 @@ class TestQuantSim:
         activation_keys = list(encoding_data["activation_encodings"].keys())
         assert activation_keys == ['3', '4', '5', 'input', 'output']
         for act in activation_keys:
-            act_encodings_keys = list(encoding_data["activation_encodings"][act].keys())
+            act_encodings_keys = list(encoding_data["activation_encodings"][act][0].keys())
             assert act_encodings_keys == ['bitwidth', 'dtype', 'is_symmetric', 'max', 'min', 'offset', 'scale']
 
         param_keys = list(encoding_data['param_encodings'].keys())
         assert param_keys == ['conv_b', 'conv_w', 'fc_b', 'fc_w']
         for param in param_keys:
-            param_encodings_keys = list(encoding_data["param_encodings"][param].keys())
+            param_encodings_keys = list(encoding_data["param_encodings"][param][0].keys())
             assert param_encodings_keys == ['bitwidth', 'dtype', 'is_symmetric', 'max', 'min', 'offset', 'scale']
 
     def test_single_residual(self):
@@ -237,13 +237,13 @@ class TestQuantSim:
         activation_keys = list(encoding_data["activation_encodings"].keys())
         assert activation_keys == ['20', '21', '24', '25', '26', '28', '29', '30', '31', '33', '34', '44', '47', 'input', 'output']
         for act in activation_keys:
-            act_encodings_keys = list(encoding_data["activation_encodings"][act].keys())
+            act_encodings_keys = list(encoding_data["activation_encodings"][act][0].keys())
             assert act_encodings_keys == ['bitwidth', 'dtype', 'is_symmetric', 'max', 'min', 'offset', 'scale']
 
         param_keys = list(encoding_data['param_encodings'].keys())
         assert param_keys == ['45', '46', '48', '49', 'conv3.weight', 'conv4.bias', 'conv4.weight', 'fc.bias', 'fc.weight']
         for param in param_keys:
-            param_encodings_keys = list(encoding_data["param_encodings"][param].keys())
+            param_encodings_keys = list(encoding_data["param_encodings"][param][0].keys())
             assert param_encodings_keys == ['bitwidth', 'dtype', 'is_symmetric', 'max', 'min', 'offset', 'scale']
 
     @pytest.mark.cuda
@@ -295,24 +295,24 @@ class TestQuantSim:
             gpu_encodings = json.load(f)
 
         for name in list(cpu_encodings['activation_encodings'].keys()):
-            assert round(cpu_encodings['activation_encodings'][name]['max'], 4) == \
-                   round(gpu_encodings['activation_encodings'][name]['max'], 4)
-            assert round(cpu_encodings['activation_encodings'][name]['min'], 4) == \
-                   round(gpu_encodings['activation_encodings'][name]['min'], 4)
-            assert round(cpu_encodings['activation_encodings'][name]['scale'], 4) == \
-                   round(gpu_encodings['activation_encodings'][name]['scale'], 4)
-            assert cpu_encodings['activation_encodings'][name]['offset'] == \
-                   gpu_encodings['activation_encodings'][name]['offset']
+            assert round(cpu_encodings['activation_encodings'][name][0]['max'], 4) == \
+                   round(gpu_encodings['activation_encodings'][name][0]['max'], 4)
+            assert round(cpu_encodings['activation_encodings'][name][0]['min'], 4) == \
+                   round(gpu_encodings['activation_encodings'][name][0]['min'], 4)
+            assert round(cpu_encodings['activation_encodings'][name][0]['scale'], 4) == \
+                   round(gpu_encodings['activation_encodings'][name][0]['scale'], 4)
+            assert cpu_encodings['activation_encodings'][name][0]['offset'] == \
+                   gpu_encodings['activation_encodings'][name][0]['offset']
 
         for name in list(cpu_encodings['param_encodings'].keys()):
-            assert round(cpu_encodings['param_encodings'][name]['max'], 4) == \
-                   round(gpu_encodings['param_encodings'][name]['max'], 4)
-            assert round(cpu_encodings['param_encodings'][name]['min'], 4) == \
-                   round(gpu_encodings['param_encodings'][name]['min'], 4)
-            assert round(cpu_encodings['param_encodings'][name]['scale'], 4) == \
-                   round(gpu_encodings['param_encodings'][name]['scale'], 4)
-            assert cpu_encodings['param_encodings'][name]['offset'] == \
-                   gpu_encodings['param_encodings'][name]['offset']
+            assert round(cpu_encodings['param_encodings'][name][0]['max'], 4) == \
+                   round(gpu_encodings['param_encodings'][name][0]['max'], 4)
+            assert round(cpu_encodings['param_encodings'][name][0]['min'], 4) == \
+                   round(gpu_encodings['param_encodings'][name][0]['min'], 4)
+            assert round(cpu_encodings['param_encodings'][name][0]['scale'], 4) == \
+                   round(gpu_encodings['param_encodings'][name][0]['scale'], 4)
+            assert cpu_encodings['param_encodings'][name][0]['offset'] == \
+                   gpu_encodings['param_encodings'][name][0]['offset']
 
     @pytest.mark.cuda
     def test_compare_encodings_cpu_gpu_fp16(self):

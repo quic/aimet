@@ -1453,7 +1453,7 @@ def my_model_with_bns():
                       input_names=['input'],  # the model's input names
                       output_names=['output'])
     model_onnx = ONNXModel(load_model('./model_single_residual.onnx'))
-    return model_onnx, model
+    return model_onnx
 
 
 def initialize_bn_params(model: torch.nn.Module):
