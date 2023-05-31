@@ -1,1 +1,1 @@
-tensorflow-gpu==2.4.3
+tensorflow-gpu==2.10.1

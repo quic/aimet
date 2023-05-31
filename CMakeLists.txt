@@ -207,15 +207,22 @@ if (NOT (DEFINED ENABLE_TENSORFLOW))
 endif(NOT (DEFINED ENABLE_TENSORFLOW))
 
 if (ENABLE_TENSORFLOW)
+  # Get Tensorflow version
+  execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import tensorflow as tf; print(tf.__version__)" OUTPUT_VARIABLE TF_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
+
   if(NOT DEFINED TF_LIB_DIR)
     # Get location of TensorFlow library
     execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import tensorflow as tf; print(tf.sysconfig.get_lib())" OUTPUT_VARIABLE TF_LIB_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
-    # Get Tensorflow version
-    execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import tensorflow as tf; print(tf.__version__)" OUTPUT_VARIABLE TF_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
     message(STATUS "Found TensorFlow version: ${TF_VERSION} TensorFlow library path: ${TF_LIB_DIR}")
   else(TF_LIB_DIR)
     message(STATUS "TensorFlow version and TensorFlow library already set.")
   endif(NOT DEFINED TF_LIB_DIR)
+
+  # Use different cmake version for TF2.10
+  if (${TF_VERSION} MATCHES "2.10.*")
+    message(STATUS "TensorFlow version is 2.10. Setting cmake cxx flags with c++17")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -O0 -ggdb -fPIC -D_GLIBCXX_USE_CXX11_ABI=1 -DPYIND11_BUILD_API=\\\"_cxxabi1011\\\"")
+  endif (${TF_VERSION} MATCHES "2.10.*")
 
   # Find the TensorFlow library file
   find_library(TF_LIB_FILE NAMES libtensorflow_framework.so.1 libtensorflow_framework.so.2 HINTS ${TF_LIB_DIR})
