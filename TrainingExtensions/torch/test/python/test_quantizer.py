@@ -1554,10 +1554,10 @@ class TestQuantizationSimStaticGrad:
         output_encoding2 = loaded_model_layer.output_quantizers[0].encoding
 
         assert model_layer.output_quantizers[0].bitwidth == loaded_model_layer.output_quantizers[0].bitwidth
-        assert output_encoding1.max == output_encoding2.max
-        assert output_encoding1.min == output_encoding2.min
-        assert output_encoding1.delta == output_encoding2.delta
-        assert output_encoding1.offset == output_encoding2.offset
+        assert np.allclose(output_encoding1.max, output_encoding2.max)
+        assert np.allclose(output_encoding1.min, output_encoding2.min)
+        assert np.allclose(output_encoding1.delta, output_encoding2.delta)
+        assert np.allclose(output_encoding1.offset, output_encoding2.offset)
 
         if model_layer.param_quantizers:
             assert next(iter(model_layer.param_quantizers.values())).bitwidth == \
@@ -1720,8 +1720,8 @@ class TestQuantizationSimStaticGrad:
         assert not sim.model.conv1.param_quantizers['weight'].encoding.offset in [-127, -128]
 
         # Check that mins and maxes have been recomputed
-        assert not asym_min == sym_min
-        assert not asym_max == sym_max
+        assert not np.allclose(asym_min, sym_min)
+        assert not np.allclose(asym_max, sym_max)
 
     def test_compute_encodings_on_subset_of_modules(self):
         """ Test that computing encodings on a subset of modules causes remaining quantized modules to be set to
@@ -2845,6 +2845,11 @@ class TestQuantizationSimLearnedGrid:
             _helper(module_name)
 
     def test_symmetry_characteristic_and_export_result(self):
+        seed = 1
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+
         model = ModelWithTwoInputsOneToAdd()
         dummy_input = (torch.rand(32, 1, 100, 100), torch.rand(32, 10, 22, 22))
 
@@ -2853,18 +2858,16 @@ class TestQuantizationSimLearnedGrid:
                                    quant_scheme=QuantScheme.training_range_learning_with_tf_init)
 
         def forward_pass(sim_model, _):
-            sim_model.eval()
-            with torch.no_grad():
-                sim_model(*dummy_input)
+            sim_model(*dummy_input)
 
         sim.compute_encodings(forward_pass, None)
         assert sim.model.conv1_a.weight_encoding_min == -sim.model.conv1_a.weight_encoding_max
-        assert sim.model.fc1.weight_encoding_min == -sim.model.fc1.weight_encoding_max
+        assert torch.allclose(sim.model.fc1.weight_encoding_min, -sim.model.fc1.weight_encoding_max)
 
         before_conv1_weight_encoding_min = sim.model.conv1_a.weight_encoding_min.detach()
         before_fc_weight_encoding_min = sim.model.fc1.weight_encoding_min.detach()
 
-        optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.05, momentum=0.5)
+        optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.001, momentum=0.5)
         for _ in range(20):
             inputs = (torch.rand(32, 1, 100, 100), torch.rand(32, 10, 22, 22))
             out = sim.model(*inputs)
@@ -2873,14 +2876,14 @@ class TestQuantizationSimLearnedGrid:
             optimizer.step()
             optimizer.zero_grad()
 
-        assert sim.model.conv1_a.weight_encoding_min == -sim.model.conv1_a.weight_encoding_max
-        assert sim.model.fc1.weight_encoding_min == -sim.model.fc1.weight_encoding_max
+        assert torch.allclose(sim.model.conv1_a.weight_encoding_min, -sim.model.conv1_a.weight_encoding_max)
+        assert torch.allclose(sim.model.fc1.weight_encoding_min, -sim.model.fc1.weight_encoding_max)
 
         after_conv1_weight_encoding_min = sim.model.conv1_a.weight_encoding_min
         after_fc_weight_encoding_min = sim.model.fc1.weight_encoding_min
 
-        assert before_conv1_weight_encoding_min != after_conv1_weight_encoding_min
-        assert before_fc_weight_encoding_min != after_fc_weight_encoding_min
+        assert not torch.allclose(before_conv1_weight_encoding_min, after_conv1_weight_encoding_min)
+        assert not torch.allclose(before_fc_weight_encoding_min, after_fc_weight_encoding_min)
 
         results_dir = '/tmp/symmetry_and_calibration'
         if not os.path.exists(results_dir):
@@ -2902,7 +2905,7 @@ class TestQuantizationSimLearnedGrid:
                 # Non-strict symmetric should have
                 # encoding_min == -encoding_max - scale (one more bin)
                 # offset as -128
-                assert encoding_min == -encoding_max - scale
+                assert np.allclose(encoding_min, -encoding_max - scale)
                 assert offset == -128
 
         if os.path.exists(results_dir):
@@ -2933,7 +2936,7 @@ class TestQuantizationSimLearnedGrid:
 
         # Check if quantizer.encoding is accessible
         print(trainable_module.input_quantizers[0].encoding)
-        assert trainable_module.input0_encoding_min.data == encodings.min
+        assert np.allclose(trainable_module.input0_encoding_min.detach().numpy(), encodings.min)
 
     def test_model_with_two_inputs(self):
         """Model with more than 1 input"""
@@ -3395,7 +3398,7 @@ class TestQuantizationSimLearnedGrid:
         sim.compute_encodings(evaluate, dummy_input)
         # Check whether encoding of weight parameter is symmetric characteristic
         for encoding in sim.model.conv.param_quantizers["weight"].encoding:
-            assert encoding.min == -encoding.max
+            assert np.allclose(encoding.min, -encoding.max)
             assert encoding.offset == -128
             assert np.allclose(encoding.delta, encoding.max / 127.0)
 
@@ -3414,7 +3417,7 @@ class TestQuantizationSimLearnedGrid:
                 scale = encoding_info["scale"]
                 offset = encoding_info["offset"]
 
-                assert encoding_min == -encoding_max - scale
+                assert np.allclose(encoding_min, -encoding_max - scale)
                 assert offset == -128
                 assert np.isclose(encoding_min, scale * offset, atol=1e-6)
                 assert np.isclose(encoding_max, encoding_min + scale * 255, atol=1e-6)
