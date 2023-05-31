@@ -43,7 +43,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
+from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops,\
+    get_all_ops_with_constant_inputs
 from models import test_models
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.meta import connectedgraph_utils
@@ -129,7 +130,7 @@ class TestConnectedGraph(unittest.TestCase):
         inp_tensor_list = create_rand_tensors_given_shapes([inp_shape_1, inp_shape_2, inp_shape_3], get_device(model))
         conn_graph = ConnectedGraph(model, inp_tensor_list)
         concat_op = [op for op in conn_graph.get_all_ops().values() if op.type == 'Concat'][0]
-        self.assertEqual(3, len(concat_op.inputs))
+        self.assertEqual(4, len(concat_op.inputs))
         self.assertEqual(14, concat_op.output_shape[1])
 
     def test_dropouts(self):
@@ -534,7 +535,7 @@ class TestConnectedGraph(unittest.TestCase):
         rand_inp = torch.randn((5, 10))
         conn_graph = ConnectedGraph(model, model_input=(rand_inp, (h, c)))
         self.assertEqual(4, len(conn_graph.ordered_ops))
-        self.assertEqual(8, len(conn_graph.get_all_products()))
+        self.assertEqual(9, len(conn_graph.get_all_products()))
 
 
 class ModelWithMultipleActivations(nn.Module):
@@ -766,3 +767,20 @@ class TestConnectedGraphUtils(unittest.TestCase):
 
         with pytest.raises(RuntimeError):
             _ = bn_trace.graph
+
+    def test_constant_elementwise_inputs(self):
+        """ Test that constant inputs to elementwise ops are identified correctly """
+        class ConstantElementwiseInputModel(torch.nn.Module):
+            def __init__(self):
+                super(ConstantElementwiseInputModel, self).__init__()
+                self.add = elementwise_ops.Add()
+
+            def forward(self, inp):
+                x = self.add(inp, torch.tensor(2.0))
+                return x
+
+        model = ConstantElementwiseInputModel()
+        cg = ConnectedGraph(model, model_input=torch.randn(1, 6))
+        assert len(get_all_ops_with_constant_inputs(cg)) == 1
+        assert len(cg.ordered_ops[0].inputs) == 2
+        assert cg.ordered_ops[0].inputs[1].is_const

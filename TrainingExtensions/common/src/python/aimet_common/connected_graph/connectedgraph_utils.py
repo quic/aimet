@@ -45,10 +45,12 @@ from aimet_common.connected_graph.operation import Op
 
 def get_all_input_ops(conn_graph: ConnectedGraph) -> List[Op]:
     """
-    Return a list of all operations with no inputs
+    Return a list of all operations with model inputs as inputs.
+
     :param conn_graph: Connected graph to search for input ops in
     :return: List of all operations with no inputs
     """
+
     all_ops = conn_graph.get_all_ops().values()
     input_ops = [op for op in all_ops if not op.input_ops]
     for op in all_ops:
@@ -58,6 +60,23 @@ def get_all_input_ops(conn_graph: ConnectedGraph) -> List[Op]:
                     input_ops.append(op)
 
     return input_ops
+
+
+def get_all_ops_with_constant_inputs(conn_graph: ConnectedGraph) -> List[Op]:
+    """
+    Return a list of all operations with constant inputs.
+
+    :param conn_graph: Connected graph to search for constant input ops in
+    :return: List of all operations with constant inputs
+    """
+
+    constant_input_ops = []
+    for op in conn_graph.get_all_ops().values():
+        for product in op.inputs:
+            if product.is_const:
+                constant_input_ops.append(op)
+
+    return constant_input_ops
 
 
 def get_all_output_ops(conn_graph: ConnectedGraph) -> List[Op]:

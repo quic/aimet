@@ -908,7 +908,28 @@ class TestQuantsimConfig:
 
     def test_parse_config_file_model_inputs(self):
         """ Test that model input quantization parameters are set correctly when using json config file """
-        model = MultiInput()
+
+        class MultiInputWithConstant(torch.nn.Module):
+            """ A model with multiple inputs.
+                Use this model for unit testing purposes. """
+
+            def __init__(self, num_classes=3):
+                super(MultiInputWithConstant, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 16, kernel_size=2, stride=2, padding=3, bias=False)
+                self.conv2 = torch.nn.Conv2d(16, 8, kernel_size=3, stride=2, padding=2)
+                self.conv3 = torch.nn.Conv2d(3, 8, kernel_size=3, stride=2, padding=2)
+                self.add1 = Add()
+                self.add2 = Add()
+
+            def forward(self, *inputs):
+                x1 = self.conv1(inputs[0])
+                x1 = self.conv2(x1)
+                x2 = self.conv3(inputs[1])
+                x = self.add1(x1, x2)
+                x = self.add2(x, torch.tensor(2.0))
+                return x
+
+        model = MultiInputWithConstant()
         model.eval()
 
         quantsim_config = {
@@ -931,9 +952,11 @@ class TestQuantsimConfig:
                                    dummy_input=(torch.rand(1, 3, 32, 32), torch.rand(1, 3, 20, 20)), in_place=True)
         for name, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
-                # Output of add op is input quantized
                 if name in ('conv1', 'conv3'):
                     assert module.input_quantizers[0].enabled
+                elif name == 'add2':
+                    assert not module.input_quantizers[0].enabled
+                    assert module.input_quantizers[1].enabled
                 else:
                     assert not module.input_quantizers[0].enabled
                 assert not module.output_quantizers[0].enabled

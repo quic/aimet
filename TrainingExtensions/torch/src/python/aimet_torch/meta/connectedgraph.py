@@ -120,8 +120,9 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         # Maps pytorch modules to module names
         self._module_to_name = {}
         self._op_counter = 0
-
         self._split_count = 0  # Use it in the name of split Ops getting added to the connected graph.
+        # Counts number of constant inputs there are in the graph
+        self._constant_count = 0
 
         self._generate_module_lookup_table(model)
         with in_eval_mode(model), torch.no_grad():
@@ -621,7 +622,20 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                     # Op has no inputs. Simply delete the op, its output product, and the output product from the inputs
                     # of consumer ops.
                     for consumer in consumers:
-                        consumer.inputs.remove(op.output_products[0])
+                        # Check if consumer is not a passthrough or ignore op type. If so, create a constant input into
+                        # the consumer.
+                        if consumer.type in self.passthrough_graph_nodes or consumer.type in \
+                                self.input_graph_nodes_to_ignore:
+                            consumer.inputs.remove(op.output_products[0])
+                        else:
+                            product_index = consumer.inputs.index(op.output_products[0])
+                            constant_product = self._add_product(f'constant_{self._constant_count}',
+                                                                 op.output_products[0].shape)
+                            constant_product._is_const = True
+                            self._constant_count += 1
+                            constant_product.add_consumer(consumer)
+                            consumer.inputs[product_index] = constant_product
+
                 else:
                     assert len(op.inputs) == 1
                     for consumer in consumers:
@@ -812,6 +826,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 new_product = Product(f'{producer_name}_to_{consumer.name}', shape=product.shape)
                 new_product.producer = product.producer
                 new_product.is_model_input = product.is_model_input
+                new_product.is_const = product.is_const
                 new_product._consumers = [consumer]
                 new_product_dict[new_product.name] = new_product
                 if producer and not producer.output:

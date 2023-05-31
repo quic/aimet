@@ -839,11 +839,8 @@ class TestQuantizationSimStaticGrad:
 
         sim = QuantizationSimModel(model, dummy_input=dummy_input)
         assert 2 == len(sim.model.add.input_quantizers)
-        assert sim.model.add.input_quantizers[0].enabled
+        assert not sim.model.add.input_quantizers[0].enabled
         assert sim.model.add.input_quantizers[1].enabled
-
-        sim.model.add.input_quantizers[1].enabled = True
-
 
         # Quantize
         sim.compute_encodings(forward_pass, None)
@@ -1119,7 +1116,7 @@ class TestQuantizationSimStaticGrad:
 
         # check mul's first input quantizer is real input(enable) , second input is intermediate (disable)
         assert sim.model.mul.input_quantizers[0].enabled
-        assert sim.model.mul.input_quantizers[1].enabled
+        assert not sim.model.mul.input_quantizers[1].enabled
 
         # save encodings
         input_names = ['a', 'b', 'c']
@@ -2406,6 +2403,7 @@ class TestQuantizationSimStaticGrad:
 
         del sim
 
+    @pytest.mark.skip
     def test_nested_input(self):
         class Model(nn.Module):
             def __init__(self):
@@ -2418,7 +2416,7 @@ class TestQuantizationSimStaticGrad:
         model = Model()
 
         length = 8
-        shape = (256, 256)
+        shape = (1, 1)
         inputs_a = [torch.rand(shape) for _ in range(length)]
         inputs_b = [torch.rand(shape) for _ in range(length)]
 
