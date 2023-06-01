@@ -282,12 +282,13 @@ class QuantizationSimModel:
         """
         if op.type in ['Conv']:
             return 0
-        elif op.type in ['ConvTranspose']:
+        if op.type in ['ConvTranspose']:
             return 1
         if op.type in ['Gemm', 'MatMul'] and op.transposed_params:
             return 0
-        elif op.type in ['Gemm', 'MatMul']:
+        if op.type in ['Gemm', 'MatMul']:
             return 1
+        return -1
 
     def _insert_activation_quantization_nodes(self):
         """
