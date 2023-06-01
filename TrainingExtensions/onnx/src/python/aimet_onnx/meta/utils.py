@@ -50,8 +50,9 @@ def get_op_type_given_param_name(connected_graph: ConnectedGraph, param_name: st
     for op in ops.values():
         if op.parameters:
             for param, param_type in op.parameters.values():
-                if param_type =='weight' and param.name == param_name:
+                if param_type == 'weight' and param.name == param_name:
                     return op.type
+    return None
 
 
 def get_param_shape_using_connected_graph(connected_graph: ConnectedGraph, param_name: str):
@@ -67,3 +68,4 @@ def get_param_shape_using_connected_graph(connected_graph: ConnectedGraph, param
             for param, _ in op.parameters.values():
                 if param.name == param_name:
                     return param.shape
+    return None
