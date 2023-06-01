@@ -364,11 +364,17 @@ class TestQuantSim:
             session.run(None, in_tensor)
 
         sim.compute_encodings(dummy_callback, None)
+
+        sim.export('./tmp/', 'encodings')
+        with open('./tmp/encodings.encodings') as json_file:
+            encoding_data = json.load(json_file)
+
         for param_name in sim.param_names:
             qc_op = sim.qc_quantize_op_dict[param_name]
             if qc_op.quant_info.usePerChannelMode and qc_op.enabled:
                 num_channels = qc_op.tensor_quantizer_params.num_output_channels
                 assert num_channels == len(qc_op.encodings)
+                assert num_channels == len(encoding_data['param_encodings'][param_name])
                 for encoding in qc_op.encodings:
                     assert encoding.bw == 8
                     assert encoding.min != encoding.max
