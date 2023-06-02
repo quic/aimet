@@ -3744,3 +3744,57 @@ class TestQuantizationSimLearnedGrid:
         optimizer.zero_grad()
 
         print("Done")
+
+    def test_gradient_accumulation(self):
+        quantsim_config = {
+            "defaults":
+                {
+                    "ops":
+                        {
+                            "is_output_quantized": "True",
+                            "is_symmetric": "True"
+                        },
+                    "params":
+                        {
+                            "is_quantized": "True",
+                            "is_symmetric": "True"
+                        },
+                    "strict_symmetric": "False",
+                    "unsigned_symmetric": "True",
+                    "per_channel_quantization": "True",
+                },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+
+        config_file = "/tmp/quantsim_config.json"
+        with open(config_file, "w") as f:
+            json.dump(quantsim_config, f)
+
+        try:
+            model = ConvReluModel()
+            dummy_input = torch.rand(16, 3, 28, 28)
+            sim = QuantizationSimModel(model, dummy_input=dummy_input,
+                                       quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                       config_file=config_file)
+            sim.compute_encodings(evaluate, dummy_input)
+
+            inputs = torch.rand(32, 3, 28, 28)
+            grads = None
+            for i in range(20):
+                out = sim.model(inputs)
+                loss = out.flatten().sum()
+                loss.backward()
+                if grads is None:
+                    grads = {name: param.grad.clone() for name, param in sim.model.named_parameters()}
+
+                for name, param in sim.model.named_parameters():
+                    assert torch.allclose(param.grad, grads[name] * (i+1))
+        finally:
+            try:
+                os.remove(config_file)
+            except FileNotFoundError:
+                pass
