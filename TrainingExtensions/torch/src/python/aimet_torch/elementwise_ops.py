@@ -209,3 +209,17 @@ class Addmm(torch.nn.Module):
         """
         tensor, mat1, mat2, beta, alpha = args
         return tensor.addmm(mat1, mat2, beta=beta, alpha=alpha)
+
+
+class StridedSlice(torch.nn.Module):
+    """Custom module for a functional slice"""
+    @staticmethod
+    def forward(*args) -> torch.Tensor:
+        """
+        Forward-pass routine for StridedSlice op
+        """
+        tensor, slice_ranges = args
+        slice_params = []
+        for slice_range in slice_ranges:
+            slice_params.append(slice(*slice_range))
+        return tensor[slice_params]
