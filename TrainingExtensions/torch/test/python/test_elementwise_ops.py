@@ -463,3 +463,13 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         custom_module_out = model(inputs)
         original_module_out = torch.neg(inputs)
         self.assertTrue(np.allclose(custom_module_out, original_module_out))
+
+    def test_slice_op(self):
+        torch.manual_seed(42)
+        model = Model3(elementwise_ops.StridedSlice())
+        input1 = torch.rand(4, 3, 28, 28)
+        input2 = [[0,4,2]]
+
+        custom_module_out = model(input1, input2)
+        original_module_out = input1[input2[0][0]:input2[0][1]:input2[0][2]]
+        self.assertTrue(np.allclose(custom_module_out, original_module_out))
