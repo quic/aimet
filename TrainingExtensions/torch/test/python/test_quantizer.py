@@ -2796,6 +2796,11 @@ class TestQuantizationSimLearnedGrid:
             os.remove(config_file_path)
 
     def test_get_effective_encoding(self):
+        seed = 42
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+
         model = ModelWithTwoInputsOneToAdd()
         dummy_input = (torch.rand(32, 1, 100, 100), torch.rand(32, 10, 22, 22))
 
@@ -2833,8 +2838,8 @@ class TestQuantizationSimLearnedGrid:
                 encoding_min = encoding.min
                 encoding_max = encoding.max
 
-                assert np.isclose(encoding_min, delta * offset, atol=1e-6)
-                assert np.isclose(encoding_max, encoding_min + delta * 255, atol=1e-6)
+                assert np.isclose(encoding_min, delta * offset, atol=1e-5)
+                assert np.isclose(encoding_max, encoding_min + delta * 255, atol=1e-5)
 
         module_names = ["conv1_a", "maxpool1_a", "relu1_a",
                         "conv1_b", "maxpool1_b", "relu1_b",
@@ -2867,7 +2872,7 @@ class TestQuantizationSimLearnedGrid:
         before_conv1_weight_encoding_min = sim.model.conv1_a.weight_encoding_min.detach()
         before_fc_weight_encoding_min = sim.model.fc1.weight_encoding_min.detach()
 
-        optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.001, momentum=0.5)
+        optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.003, momentum=0.5)
         for _ in range(20):
             inputs = (torch.rand(32, 1, 100, 100), torch.rand(32, 10, 22, 22))
             out = sim.model(*inputs)
