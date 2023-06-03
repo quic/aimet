@@ -119,7 +119,7 @@ if (ENABLE_TORCH)
   OUTPUT_STRIP_TRAILING_WHITESPACE)
   message(STATUS "Found Torch version: ${TORCH_VERSION}")
 
-  set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/torch/src/python:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/onnx/src/python")
+  set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/torch/src/python")
   execute_process(COMMAND ${Python3_EXECUTABLE} "-c" "import torch;print(torch.utils.cmake_prefix_path)"
                   RESULT_VARIABLE TORCH_NOT_FOUND
                   OUTPUT_VARIABLE TORCH_CMAKE_DIR

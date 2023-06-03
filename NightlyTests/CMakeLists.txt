@@ -41,8 +41,6 @@ add_custom_target(AcceptanceTests)
 if (ENABLE_TORCH)
     add_dependencies(AcceptanceTests
             AcceptanceTests.Torch)
-    add_dependencies(AcceptanceTests
-            AcceptanceTests.ONNX)
 endif (ENABLE_TORCH)
 
 if (ENABLE_TENSORFLOW)
@@ -57,9 +55,8 @@ endif (ENABLE_TENSORFLOW)
 
 if (ENABLE_TORCH)
     add_subdirectory(torch)
-    add_subdirectory(onnx)
 endif (ENABLE_TORCH)
 
 if (ENABLE_TENSORFLOW)
-add_subdirectory(tensorflow)
+    add_subdirectory(tensorflow)
 endif (ENABLE_TENSORFLOW)
