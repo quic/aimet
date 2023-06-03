@@ -41,6 +41,7 @@
 from enum import Enum
 from typing import List, Optional, Union
 
+from dataclasses import dataclass
 import tensorflow as tf
 
 from aimet_common.defs import GreedySelectionParameters
@@ -183,3 +184,13 @@ class ParameterInfo:
     def __init__(self, param_type: str, op_with_param_name: List):
         self.param_type = param_type
         self.op_with_param_name = op_with_param_name
+
+@dataclass
+class Tensorflow2Version:
+    """
+    Enumeration for checking TensorFlow version for import statements
+    """
+
+    v2_4_3 = '2.4.3'
+
+    v2_10_1 = '2.10.1'

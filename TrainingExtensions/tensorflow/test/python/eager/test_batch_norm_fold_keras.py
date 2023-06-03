@@ -123,7 +123,7 @@ class TestBatchNormFold(unittest.TestCase):
 
     def test_bn_replacement_layers(self):
 
-        class Block2(tf.keras.layers.Layer):
+        class Block2(tf.keras.Model):
             def __init__(self):
                 super(Block2, self).__init__()
                 # define all layers in init
@@ -661,7 +661,7 @@ class TestBatchNormFold(unittest.TestCase):
         layer_out_node_map = common.create_layer_to_out_node_map(Block2)
         conv_linear_with_bn_dict = _find_possible_convs_linears_bn(node_layer_map, layer_out_node_map)
 
-        self.assertTrue(Block1._layers[3] in conv_linear_with_bn_dict)
+        self.assertTrue(Block1.layers[2] in conv_linear_with_bn_dict)
         self.assertEqual(1, len(conv_linear_with_bn_dict))
 
     def test_ordered_conv_linears_functional(self):
@@ -682,7 +682,7 @@ class TestBatchNormFold(unittest.TestCase):
         layer_out_node_map = common.create_layer_to_out_node_map(model)
         ordered_conv_linears = _get_ordered_conv_linears(node_layer_map, layer_out_node_map)
 
-        for layer in model._layers:
+        for layer in model.layers:
             if layer.name == 'conv1a':
                 self.assertTrue(layer == ordered_conv_linears[0])
             if layer.name == 'conv3':
@@ -705,7 +705,7 @@ class TestBatchNormFold(unittest.TestCase):
         node_layer_map = common.create_node_to_layer_map(Block2)
         layer_out_node_map = common.create_layer_to_out_node_map(Block2)
         ordered_conv_linears = _get_ordered_conv_linears(node_layer_map, layer_out_node_map)
-        self.assertEqual(Block2._layers[3], ordered_conv_linears[0])
+        self.assertEqual(Block2.layers[2], ordered_conv_linears[0])
 
     def test_ordered_conv_linears_combined_model(self):
         Block3 = tf.keras.Sequential()
@@ -755,9 +755,9 @@ class TestBatchNormFold(unittest.TestCase):
 
         self.assertEqual(model.conv1, ordered_conv_linears[0])
         self.assertEqual(model.dn1, ordered_conv_linears[1])
-        self.assertEqual(model.block2._layers[2], ordered_conv_linears[2])
-        self.assertEqual(model.block2._layers[4]._layers[1], ordered_conv_linears[3])
-        self.assertEqual(model.block2._layers[4]._layers[2]._layers[2], ordered_conv_linears[4])
+        self.assertEqual(model.block2.layers[1], ordered_conv_linears[2])
+        self.assertEqual(model.block2.layers[3].layers[1], ordered_conv_linears[3])
+        self.assertEqual(model.block2.layers[3].layers[2].layers[1], ordered_conv_linears[4])
 
     def test_find_all_bns_to_fold_sequential(self):
 
@@ -837,13 +837,13 @@ class TestBatchNormFold(unittest.TestCase):
         conv_bn_pairs, bn_conv_pairs, _ = _find_all_batch_norms_to_fold(model)
 
         self.assertEqual(3, len(conv_bn_pairs) + len(bn_conv_pairs))
-        self.assertEqual((model._layers[4]._layers[1], model._layers[4]._layers[2]), bn_conv_pairs[0])
+        self.assertEqual((model.layers[4].layers[0], model.layers[4].layers[1]), bn_conv_pairs[0])
         self.assertEqual(
-            (model._layers[4]._layers[4]._layers[1],
-             model._layers[4]._layers[4]._layers[2]._layers[1]),
+            (model.layers[4].layers[3].layers[1],
+             model.layers[4].layers[3].layers[2].layers[0]),
             conv_bn_pairs[0])
-        self.assertEqual((model._layers[4]._layers[4]._layers[2]._layers[2],
-                         model._layers[4]._layers[4]._layers[3]), conv_bn_pairs[1])
+        self.assertEqual((model.layers[4].layers[3].layers[2].layers[1],
+                         model.layers[4].layers[3].layers[3]), conv_bn_pairs[1])
 
     def test_bn_fold_auto_rules_bn_after_conv(self):
         """
@@ -943,7 +943,7 @@ class TestBatchNormFold(unittest.TestCase):
         model = tf.keras.Model(inputs=inputs, outputs=relu)
 
         np.random.seed(0)
-        w_shape = model._layers[0].input.shape
+        w_shape = model.layers[0].input.shape
         numpy_data = np.random.rand(1, w_shape[1], w_shape[2], w_shape[3]).astype(np.float32)
 
         baseline_output = model(numpy_data)
@@ -971,7 +971,7 @@ class TestBatchNormFold(unittest.TestCase):
         model = tf.keras.Model(inputs=inputs, outputs=relu)
 
         np.random.seed(0)
-        w_shape = model._layers[0].input.shape
+        w_shape = model.layers[0].input.shape
         numpy_data = np.random.rand(1, w_shape[1], w_shape[2], w_shape[3]).astype(np.float32)
         baseline_output = model(numpy_data)
 
@@ -995,14 +995,14 @@ class TestBatchNormFold(unittest.TestCase):
 
         # get baseline output
         np.random.seed(0)
-        w_shape = model._layers[0].input.shape
+        w_shape = model.layers[0].input.shape
         numpy_data = np.random.rand(1, w_shape[1], w_shape[2], w_shape[3]).astype(np.float32)
         baseline_output = model(numpy_data)
-        weight_before_fold = model._layers[3].kernel.numpy()
+        weight_before_fold = model.layers[3].kernel.numpy()
 
         _, model = fold_all_batch_norms(model)
         after_fold_output = model(numpy_data)
-        weight_after_fold = model._layers[2].kernel.numpy()
+        weight_after_fold = model.layers[2].kernel.numpy()
 
         # check that weight got updated
         self.assertFalse(np.allclose(weight_before_fold, weight_after_fold, atol=1e-4))

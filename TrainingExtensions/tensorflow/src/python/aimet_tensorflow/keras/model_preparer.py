@@ -40,15 +40,23 @@
 import inspect
 from typing import Any, Dict, List, Set, Union
 import re
+from packaging import version
 import numpy as np
 
 import tensorflow as tf
-from tensorflow.python.keras.engine.base_layer_utils import is_subclassed
-from tensorflow.python.keras.engine.keras_tensor import KerasTensor
-from tensorflow.python.keras.engine.functional import Functional
-from tensorflow.python.keras.layers.core import TFOpLambda
 from tensorflow.python.keras.layers.merge import _Merge as MergeLayersParentClass
 import tensorflow.keras.backend as K
+
+if version.parse(tf.version.VERSION) >= version.parse("2.10"):
+    from keras.engine.base_layer_utils import is_subclassed
+    from keras.engine.functional import Functional
+    from keras.engine.keras_tensor import KerasTensor
+    from keras.layers.core.tf_op_layer import TFOpLambda
+else:
+    from tensorflow.python.keras.engine.base_layer_utils import is_subclassed
+    from tensorflow.python.keras.engine.keras_tensor import KerasTensor
+    from tensorflow.python.keras.engine.functional import Functional
+    from tensorflow.python.keras.layers.core import TFOpLambda
 
 from aimet_tensorflow.keras.utils.model_connection_utils import ModelLayerConnections, ModelLayerConnectionsProperties
 

@@ -429,7 +429,6 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
             :param variables: Variables used in forward pass to return gradients for
             """
             assert len(variables) == 2, 'len variables is ' + str(len(variables))
-            assert 'encoding_min' in variables[0].name
             return qc_straight_through_estimator_grad(tensor, self._encoding_min, self._encoding_max,
                                                       self._quantizer_mode, upstream)
 
@@ -456,10 +455,19 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
             :param variables: Variables used in forward pass to return gradients for
             """
             assert len(variables) == 2, 'len variables is ' + str(len(variables))
-            assert 'encoding_min' in variables[0].name
-            return quantsim_custom_grad_learned_grid(tensor, self._encoding_min, self._encoding_max,
-                                                     self._quantizer_mode, self._bitwidth, self._is_symmetric,
-                                                     upstream)
+
+            (dloss_by_dx, (dloss_by_dmin, dloss_by_dmax)) = quantsim_custom_grad_learned_grid(tensor,
+                                                                                              self._encoding_min,
+                                                                                              self._encoding_max,
+                                                                                              self._quantizer_mode,
+                                                                                              self._bitwidth,
+                                                                                              self._is_symmetric,
+                                                                                              upstream)
+            # To account for the difference in the order of variables between TF 2.4 and TF 2.10
+            if 'encoding_max' in variables[0].name:
+                return dloss_by_dx, [dloss_by_dmax, dloss_by_dmin]
+            else:
+                return dloss_by_dx, [dloss_by_dmin, dloss_by_dmax]
 
         return qcops.qc_quantize(name='qc_quantize_op', in_tensor=tensor,
                                  op_mode=self._quantizer_mode,
@@ -524,7 +532,6 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
             raise RuntimeError("get_percentile_value() can be invoked only when quantization scheme is Percentile.")
 
         return self.tensor_quantizer.getPercentileValue()
-
 
 
 # pylint: disable=too-many-ancestors
@@ -848,7 +855,8 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
                                              use_symmetric_encoding=self._is_symmetric,
                                              is_int_data_type=self._is_int_data_type,
                                              axis_handling=self.axis_handling,
-                                             is_training=tf.cast(tf.keras.backend.learning_phase(), dtype=tf.bool)), grad
+                                             is_training=tf.cast(tf.keras.backend.learning_phase(),
+                                                                 dtype=tf.bool)), grad
 
     @_handle_conv2d_transpose
     def call_per_channel_quantize_dequantize(self, tensor: tf.Tensor):
@@ -928,6 +936,7 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
             raise RuntimeError("set_percentile_value() can be invoked only when quantization scheme is Percentile.")
 
         return [quantizer.getPercentileValue() for quantizer in self.tensor_quantizer]
+
 
 # pylint: disable=too-many-ancestors
 class ParamPerChannelQuantizer(StaticGridPerChannelQuantizer):

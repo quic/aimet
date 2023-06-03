@@ -230,7 +230,7 @@ class QuantizationSimModel(tf.keras.Model):
                 new_class = substitutable_modules[type(layer)]
                 config = layer.get_config()
                 config["copy_source_weights"] = layer.get_weights()
-                wrapped_layer = new_class(**config)
+                wrapped_layer = new_class.from_config(config)
                 self._substituted_layer[layer] = wrapped_layer
                 return wrapped_layer
 

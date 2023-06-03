@@ -225,7 +225,7 @@ if (ENABLE_TENSORFLOW)
   # Use different cmake version for TF2.10
   if (${TF_VERSION} MATCHES "2.10.*")
     message(STATUS "TensorFlow version is 2.10. Setting cmake cxx flags with c++17")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS_ORG} -std=c++17 -O0 -ggdb -fPIC -D_GLIBCXX_USE_CXX11_ABI=1 -DPYIND11_BUILD_API=\\\"_cxxabi1011\\\"")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS_ORG} -std=c++17 -O0 -ggdb -fPIC -D_GLIBCXX_USE_CXX11_ABI=1 -DPYBIND11_BUILD_API=\\\"_cxxabi1011\\\"")
   endif (${TF_VERSION} MATCHES "2.10.*")
 
   # Find the TensorFlow library file

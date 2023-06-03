@@ -147,10 +147,14 @@ if (ENABLE_CUDA)
     add_library(TrainingExtensionsTfCuda
             src/AimetOpUtilsGpu.cu
             )
-
+    if (TF_VERSION VERSION_GREATER_EQUAL "2.9")
+        set(ABI_VALUE "1")
+    else ()
+        set(ABI_VALUE "0")
+    endif ()
     target_compile_options(TrainingExtensionsTfCuda
             PRIVATE
-            -Xcompiler -fPIC -D_GLIBCXX_USE_CXX11_ABI=0
+            -Xcompiler -fPIC -D_GLIBCXX_USE_CXX11_ABI=${ABI_VALUE}
             -DGOOGLE_CUDA=1
             -I ${TF_LIB_DIR}/include --expt-relaxed-constexpr
             )
