@@ -57,6 +57,7 @@ Please refer to the following documentation:
    Compression User Guide <model_compression>
    API Documentation<../api_docs/index>
    Examples Documentation <examples>
+   Installation <../install/index>
 
 |
 

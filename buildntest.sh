@@ -159,12 +159,9 @@ fi
 dockerfile_path=${scriptPath}/Jenkins
 if [ -n "$PYTHON_VER" ]; then
     # If the python version variable was set, then switch the path
-    if [ "${PYTHON_VER}" == "3.7" ]; then
-        # The python 3.7 docker files are located in a sub-directory
-        dockerfile_path="${scriptPath}/Jenkins/python37"
-    elif [ "${PYTHON_VER}" != "3.8" ]; then
-        # We only support python 3.8 or 3.7 versions.
-        echo "ERROR: Invalid PYTHON_VER (${PYTHON_VER}). Must be either 3.8 or 3.7!"
+    if [ "${PYTHON_VER}" != "3.8" ]; then
+        # We only support python 3.8 version.
+        echo "ERROR: Invalid PYTHON_VER (${PYTHON_VER}). Must be either 3.8!"
         exit 3
     fi
 fi
