@@ -43,14 +43,15 @@ from packaging import version
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
-
-if version.parse(tf.version.VERSION) >= version.parse("2.10"):
-    from keras.layers.core.tf_op_layer import TFOpLambda
-    from keras.engine.functional import Functional
-else:
+if version.parse(tf.version.VERSION) < version.parse("2.10"):
     from tensorflow.python.keras.engine.functional import Functional
     from tensorflow.python.keras.layers.core import TFOpLambda
+else:
+    from keras.layers.core.tf_op_layer import TFOpLambda
+    from keras.engine.functional import Functional
 
+# Since conditional imports are placed before other imports
+# pylint: disable=wrong-import-position
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ParamPerTensorQuantizer
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel

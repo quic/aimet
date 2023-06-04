@@ -149,7 +149,9 @@ class AdaroundWrapper(keras.layers.Layer):
 
         return adaround_out_tensor
 
-    def call(self, inputs, **kwargs):  # pylint: disable=unused-argument
+    # Different 'call' method signatures between TF 2.4 and TF 2.10
+    # pylint: disable=arguments-differ
+    def call(self, inputs, *args, **kwargs):  # pylint: disable=unused-argument
         """
         :param inputs: Input tensor
         :param kwargs: Additional keyword arguments
