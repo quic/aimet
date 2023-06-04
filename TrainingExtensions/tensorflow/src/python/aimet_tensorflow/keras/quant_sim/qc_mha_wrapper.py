@@ -39,21 +39,24 @@
 
 from typing import Union
 import math
+import tensorflow as tf
 from packaging import version
 
-import tensorflow as tf
+# Disable pylint errors because of conditional imports
+# pylint: disable=wrong-import-order, ungrouped-imports
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.keras.layers.advanced_activations import _large_compatible_negative
 from tensorflow.python.keras.utils import tf_utils
 from tensorflow.python.ops import math_ops, special_math_ops, array_ops
-
-if version.parse(tf.version.VERSION) >= version.parse("2.10"):
-    from tensorflow.keras.layers import MultiHeadAttention
-    from keras.layers.attention.multi_head_attention import _build_proj_equation, _get_output_shape
-else:
+if version.parse(tf.version.VERSION) < version.parse("2.10"):
     from tensorflow.python.keras.layers.multi_head_attention import MultiHeadAttention, _build_proj_equation, _get_output_shape
+else:
+    from tensorflow.keras.layers import MultiHeadAttention
+    # pylint: disable=import-error
+    from keras.layers.attention.multi_head_attention import _build_proj_equation, _get_output_shape
 
-
+# Disable pylint warning since there is a conditional import above
+# pylint: disable=wrong-import-position
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_tensorflow.keras.quantsim import QuantizerSettings, QcQuantizeWrapper

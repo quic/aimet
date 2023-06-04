@@ -466,8 +466,8 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
             # To account for the difference in the order of variables between TF 2.4 and TF 2.10
             if 'encoding_max' in variables[0].name:
                 return dloss_by_dx, [dloss_by_dmax, dloss_by_dmin]
-            else:
-                return dloss_by_dx, [dloss_by_dmin, dloss_by_dmax]
+
+            return dloss_by_dx, [dloss_by_dmin, dloss_by_dmax]
 
         return qcops.qc_quantize(name='qc_quantize_op', in_tensor=tensor,
                                  op_mode=self._quantizer_mode,

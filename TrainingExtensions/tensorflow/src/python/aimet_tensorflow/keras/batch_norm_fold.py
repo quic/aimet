@@ -39,31 +39,22 @@
 #pylint: disable=too-many-lines
 """ Utility for batch norm fold in tf 2.x """
 from typing import Iterable, Optional, Tuple, Union, List, Dict, Set
-from packaging import version
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
-if version.parse(tf.version.VERSION) < version.parse("2.10"):
-    from tensorflow.python.keras.engine.functional import Functional
-    from tensorflow.python.keras.layers.core import TFOpLambda
-else:
-    from keras.layers.core.tf_op_layer import TFOpLambda
-    from keras.engine.functional import Functional
+from tensorflow.python.keras.engine.functional import Functional
+from tensorflow.python.keras.layers.core import TFOpLambda
+from aimet_common.defs import QuantScheme, MAP_ROUND_MODE_TO_PYMO
 
-# Since conditional imports are placed before other imports
-# pylint: disable=wrong-import-position
+import aimet_common.libpymo as libpymo
+from aimet_common.utils import AimetLogger
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ParamPerTensorQuantizer
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 from aimet_tensorflow.keras.utils import common
-from aimet_tensorflow.keras.utils.common import to_functional
 from aimet_tensorflow.keras.utils.model_connection_utils import ModelLayerConnections, ModelLayerConnectionsProperties
 from aimet_tensorflow.keras.utils.quantizer_utils import get_wrappers_bias_quantizer, get_wrappers_weight_quantizer
 from aimet_tensorflow.keras.utils.weight_tensor_utils import WeightTensorUtils
-
-from aimet_common.defs import QuantScheme, MAP_ROUND_MODE_TO_PYMO
-import aimet_common.libpymo as libpymo
-from aimet_common.utils import AimetLogger
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
@@ -390,7 +381,7 @@ class PassThroughOp(tf.keras.layers.Layer):
         return inputs
 
 # pylint: disable=too-many-branches, protected-access, too-many-locals, too-many-nested-blocks
-@to_functional
+@common.to_functional
 def _delete_bn_from_functional(model: tf.keras.Model,
                                bn_layers_to_remove: List[tf.keras.layers.BatchNormalization]) -> tf.keras.Model:
     """
