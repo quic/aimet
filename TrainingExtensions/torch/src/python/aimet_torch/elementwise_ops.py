@@ -97,6 +97,10 @@ Prod = create_wrapper_module('Prod', torch.prod)
 Log = create_wrapper_module('Log', torch.log)
 Abs = create_wrapper_module('Abs', torch.abs)
 Neg = create_wrapper_module('Neg', torch.neg)
+Argmin = create_wrapper_module('Argmin', torch.argmin)
+Argmax = create_wrapper_module('Argmax', torch.argmax)
+ElementwiseCeil = create_wrapper_module('ElementwiseCeil', torch.ceil)
+ElementwiseFloor = create_wrapper_module('ElementwiseFloor', torch.floor)
 
 
 # modules for functional operations defined under torch.nn.functional package
