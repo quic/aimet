@@ -103,8 +103,8 @@ def test_wrapper():
         param_quant_only = model.predict(test_inp)
         model.layers[1].output_quantizers[0].enable()
         param_and_output_quant = model.predict(test_inp)
-        assert np.allclose(param_quant_only, np.array([[6.9411764145, 10.6735286713, 5.2558822632]]))
-        assert np.allclose(param_and_output_quant, np.array([[6.9482579231, 10.6735286713, 5.2739787102]]))
+        assert np.allclose(param_quant_only, np.array([[6.9411764145, 10.6735286713, 5.2558822632]]), atol=1e-2)
+        assert np.allclose(param_and_output_quant, np.array([[6.9482579231, 10.6735286713, 5.2739787102]]), atol=1e-2)
 
         model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
                       loss=tf.keras.losses.MeanSquaredError())

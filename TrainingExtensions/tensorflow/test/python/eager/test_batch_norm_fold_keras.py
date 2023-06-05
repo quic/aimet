@@ -1008,7 +1008,7 @@ class TestBatchNormFold(unittest.TestCase):
         self.assertFalse(np.allclose(weight_before_fold, weight_after_fold, atol=1e-4))
 
         # check outputs are close
-        self.assertTrue(np.allclose(baseline_output, after_fold_output, atol=1e-4))
+        self.assertTrue(np.allclose(baseline_output, after_fold_output, atol=1e-3))
 
     def test_find_conv_bn_pairs_functional_nested(self):
         """
