@@ -42,8 +42,18 @@ from typing import Iterable, Optional, Tuple, Union, List, Dict, Set
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
-from tensorflow.python.keras.engine.functional import Functional
-from tensorflow.python.keras.layers.core import TFOpLambda
+from packaging import version
+
+if version.parse(tf.version.VERSION) >= version.parse("2.10"):
+    # Ignore pylint errors as keras module is not available in TF 2.4
+    from keras.layers.core.tf_op_layer import TFOpLambda # pylint: disable=import-error
+    from keras.engine.functional import Functional # pylint: disable=import-error
+else:
+    # Ignore pylint errors due to conditional imports
+    from tensorflow.python.keras.engine.functional import Functional # pylint: disable=ungrouped-imports
+    from tensorflow.python.keras.layers.core import TFOpLambda # pylint: disable=ungrouped-imports
+
+# pylint: disable=wrong-import-position
 from aimet_common.defs import QuantScheme, MAP_ROUND_MODE_TO_PYMO
 
 import aimet_common.libpymo as libpymo
