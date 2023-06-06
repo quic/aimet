@@ -35,6 +35,8 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
+# pylint: disable=too-many-lines
 """ Custom PyTorch Op for quantizing weights and activations """
 
 import abc
@@ -972,10 +974,22 @@ class SteGatingFuncForParameters(torch.autograd.Function):
 
 
 def _patch_param(module: torch.nn.Module, param_name: str, quantized_param: torch.Tensor):
+    """
+    Substitute the reference to the a parameter with the quantized parameter.
+    Under the scope of this function, ``getattr(module, param_name)`` will return
+    ``quantized_param`` instead of the original parameter.
+
+    :param module: Module that owns the parameter
+    :param param_name: Name of the parameter
+    :param quantized_param: Quantized version of the parameter
+    """
     original_param = getattr(module, param_name)
     assert original_param.shape == quantized_param.shape
 
     if param_name in module.__dict__:
+        # Some non-standard modules (e.g. replicas of torch.nn.DataParallel) store their parameters
+        # directly to module.__dict__. In that case, the cleanup function should restore the dict
+        # so that module.__dict__[param_name] points back to the original parameter again.
         assert module.__dict__[param_name] is original_param
         cleanup_fn = lambda: module.__dict__.update({param_name: original_param})
     else:
@@ -983,6 +997,12 @@ def _patch_param(module: torch.nn.Module, param_name: str, quantized_param: torc
         cleanup_fn = lambda: module.__dict__.pop(param_name)
 
     try:
+        # Modify module.__dict__.
+        # module.__dict__ is the primary lookup table which has higher priority than __getattr__ method.
+        # Once we overwrite module.__dict__[param_name] with quantized_params,
+        # getattr(module, param_name) will return module.__dict__[param_name] directly
+        # without falling back to torch.nn.Module's __getattr__ method which returns
+        # the original parameter stored in module._parameters.
         module.__dict__.update({param_name: quantized_param})
         return Handle(cleanup_fn)
     except Exception:
