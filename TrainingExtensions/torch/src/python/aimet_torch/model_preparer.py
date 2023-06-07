@@ -40,7 +40,7 @@
 
 import copy
 from re import split
-from typing import Any, Optional, Dict, Union, List
+from typing import Any, Optional, Dict, Union, List, Callable
 import torch
 import torch.fx
 from aimet_common.utils import AimetLogger
@@ -292,7 +292,9 @@ special_handler_functions = {
     'conv2d': {'node_fn': conv2d_create_node, 'module_fn': conv2d_create_module}
 }
 
-def prepare_model(model: torch.nn.Module, modules_to_exclude: List[torch.nn.Module] = None,
+def prepare_model(model: torch.nn.Module,
+                  modules_to_exclude: List[torch.nn.Module] = None,
+                  module_classes_to_exclude: List[Callable] = None,
                   concrete_args: Optional[Dict[str, Any]] = None) -> torch.fx.GraphModule:
     """
     Prepare and modify the pytorch model for AIMET features using torch.FX symbolic tracing API.
@@ -302,25 +304,29 @@ def prepare_model(model: torch.nn.Module, modules_to_exclude: List[torch.nn.Modu
 
     :param model: pytorch Model to be modified.
     :param modules_to_exclude: List of modules to exclude when tracing.
+    :param module_classes_to_exclude: List of module classes to exclude when tracing.
     :param concrete_args: Allows you to partially specialize your function, whether it's to remove control flow or
      data structures. If the model has control flow, torch.fx won't be able to trace the model. Check
      torch.fx.symbolic_trace API in detail.
     :return: Modified pytorch Model
     """
     with in_eval_mode(model):
-        traced_model = _trace_model(model, modules_to_exclude, concrete_args)
+        traced_model = _trace_model(model, modules_to_exclude, module_classes_to_exclude, concrete_args)
 
     # Prepare model and perform checks to make sure the graph is well-formed.
     _prepare_traced_model(traced_model)
     return traced_model
 
 
-def _trace_model(model: torch.nn.Module, modules_to_exclude: Optional[List[torch.nn.Module]],
+def _trace_model(model: torch.nn.Module,
+                 modules_to_exclude: Optional[List[torch.nn.Module]],
+                 module_classes_to_exclude: Optional[List[Callable]],
                  concrete_args: Optional[Dict[str, Any]]):
     """
     Overrides the is_leaf_module() method of parent class when modules_to_exclude list is not None
     :param model: pytorch Model to be modified.
     :param modules_to_exclude: List of modules to exclude when tracing.
+    :param module_classes_to_exclude: List of module classes to exclude when tracing.
     :param concrete_args: Concrete arguments that should not be treated as Proxies.
     :return: Traced model.
     """
@@ -329,9 +335,11 @@ def _trace_model(model: torch.nn.Module, modules_to_exclude: Optional[List[torch
         Override is_leaf_module() method of parent class.
         """
         def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
-            if modules_to_exclude and m in modules_to_exclude:
-                return True
-            return super(Tracer, self).is_leaf_module(m, module_qualified_name)
+            return (
+                modules_to_exclude and m in modules_to_exclude
+                or module_classes_to_exclude and type(m) in module_classes_to_exclude # pylint: disable=unidiomatic-typecheck
+                or super(Tracer, self).is_leaf_module(m, module_qualified_name)
+            )
 
     # Symbolic tracing frontend - captures the semantics of the module
     tracer = Tracer()

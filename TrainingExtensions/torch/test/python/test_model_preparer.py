@@ -1893,3 +1893,47 @@ class TestFX:
         sim.model(*dummy_input)
         assert sim.model.module_bmm.output_quantizers[0].encoding
         assert sim.model.module_bmm_1.output_quantizers[0].encoding
+
+    def test_fx_with_module_classes_to_exclude(self):
+        """ test torch fx with module_classes_to_exclude """
+
+        class Square(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+
+            @staticmethod
+            def forward( x):
+                return torch.square(x)
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super(Model, self).__init__()
+                self.conv = torch.nn.Conv2d(3, 10, (1, 1))
+                self.square1 = Square()
+                self.square2 = Square()
+
+            def forward(self, *inputs):
+                x = self.square1(inputs[0])
+                x = self.conv(x)
+                x = self.square2(x)
+                return x
+
+        input_shape = (1, 3, 3, 3)
+        dummy_input = (torch.randn(*input_shape), torch.randn(10, 3, 3))
+        model = Model().eval()
+        model(*dummy_input)
+        prepared_model = prepare_model(model, module_classes_to_exclude=[Square])
+
+        # Verify that validator checks pass.
+        assert ModelValidator.validate_model(prepared_model, dummy_input)
+
+        # Verify bit-exact outputs.
+        assert torch.equal(model(*dummy_input), prepared_model(*dummy_input))
+        assert isinstance(prepared_model.square1, Square)
+        assert isinstance(prepared_model.square2, Square)
+
+        # Verify with Quantization workflow.
+        sim = QuantizationSimModel(prepared_model, dummy_input)
+        sim.compute_encodings(evaluate, dummy_input)
+        sim.model(*dummy_input)
+        assert sim.model.square1.output_quantizers[0].encoding
+        assert sim.model.square2.output_quantizers[0].encoding
