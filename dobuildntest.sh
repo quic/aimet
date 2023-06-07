@@ -286,14 +286,15 @@ if [ $run_prep -eq 1 ]; then
             python_src_path_endings+=("Examples/torch/quantization")
             python_src_path_endings+=("Examples/torch/utils")
             pycov_dir_endings+=("TrainingExtensions/torch/src/python:TrainingExtensions/torch/test")
-
+        fi
+        if [[ "$AIMET_VARIANT" == *"onnx"* ]]; then
             python_src_path_endings+=("TrainingExtensions/onnx/src/python/aimet_onnx")
             python_src_path_endings+=("Examples/onnx/quantization")
             python_src_path_endings+=("Examples/onnx/utils")
             pycov_dir_endings+=("TrainingExtensions/onnx/src/python:TrainingExtensions/onnx/test")
         fi
     else
-        # For default variant, add both tensorflow and/or torch paths
+        # For default variant, add both tensorflow and/or torch and/or onnx paths
         python_src_path_endings+=("TrainingExtensions/tensorflow/src/python/aimet_tensorflow")
         pycov_dir_endings+=("TrainingExtensions/tensorflow/src/python:TrainingExtensions/tensorflow/test")
 
@@ -382,11 +383,17 @@ if [ $run_build -eq 1 ]; then
         if [[ "$AIMET_VARIANT" == *"torch"* ]]; then
             extra_opts+=" -DENABLE_TORCH=ON"
         fi
+        if [[ "$AIMET_VARIANT" == *"onnx"* ]]; then
+            extra_opts+=" -DENABLE_ONNX=ON"
+        fi
         if [[ "$AIMET_VARIANT" != *"tf"* ]]; then
             extra_opts+=" -DENABLE_TENSORFLOW=OFF"
         fi
         if [[ "$AIMET_VARIANT" != *"torch"* ]]; then
             extra_opts+=" -DENABLE_TORCH=OFF"
+        fi
+        if [[ "$AIMET_VARIANT" != *"onnx"* ]]; then
+            extra_opts+=" -DENABLE_ONNX=OFF"
         fi
     fi
     # Do not exit on failure by default from this point forward
