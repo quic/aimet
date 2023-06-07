@@ -341,3 +341,27 @@ class RoiAlign(torch.nn.Module):
         """
         roi = torch.cat((torch.reshape(batch_indices, (batch_indices.shape[0], 1)), roi), dim=1)
         return torchvision.ops.roi_align(inp, roi, self.output_size, self.spatial_scale, self.sampling_ratio)
+
+class NonMaxSuppression(torch.nn.Module):
+    """
+    Implementation od NMS Op in the form of nn.Module
+    """
+    @staticmethod
+    def forward(*args, **kwargs) -> torch.Tensor:
+        """
+        Forward-pass routine for NMS op
+        """
+        batches_boxes = args[0]
+        batch_scores = args[1]
+        iou_thershold = kwargs['iou_threshold']
+        max_output_boxes_per_class = kwargs['max_output_boxes_per_class']
+
+        res = []
+        for index, (boxes, scores) in enumerate(zip(batches_boxes, batch_scores)):
+            for class_index, classes_score in enumerate(scores):
+                res_ = torchvision.ops.nms(boxes, classes_score, iou_thershold)
+                for val in res_:
+                    res.append([index, class_index, val.detach()])
+                res = res[:(max_output_boxes_per_class*(index+1))]
+        return torch.Tensor(res).type(torch.int64)
+
