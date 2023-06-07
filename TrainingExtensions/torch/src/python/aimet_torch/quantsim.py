@@ -1547,7 +1547,7 @@ class QuantizationSimModel:
                 ts_path = os.path.join(path, filename_prefix + '_embedded' + '.torchscript.pth')
                 trace.save(ts_path)
         else:
-            OnnxSaver._export_model_to_onnx(quant_sim_model, dummy_input, model_path, is_conditional, onnx_export_args)
+            OnnxSaver._export_model_to_onnx(quant_sim_model, dummy_input, model_path, is_conditional, onnx_export_args) # pylint: disable=protected-access
 
 
 def save_checkpoint(quant_sim_model: QuantizationSimModel, file_path: str):
