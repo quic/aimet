@@ -110,6 +110,7 @@ AdaptiveAvgPool2d = create_wrapper_module('AdaptiveAvgPool2d', torch.nn.function
 AvgPool2d = create_wrapper_module('AvgPool2d', torch.nn.functional.avg_pool2d)
 BatchNorm = create_wrapper_module('BatchNorm', torch.nn.functional.batch_norm)
 GroupNorm = create_wrapper_module('GroupNorm', torch.nn.functional.group_norm)
+L2Norm = create_wrapper_module('L2Norm', torch.nn.functional.normalize)
 
 
 # following modules are for overloaded operators like + and *,
