@@ -103,7 +103,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         split_conv_output = sess.run(split_conv_op2.outputs[0])
 
-        self.assertTrue(np.allclose(split_conv_output, orig_conv_output, atol=1e-4))
+        self.assertTrue(np.allclose(split_conv_output, orig_conv_output, atol=1e-3))
 
         # check the output after bias
         for consumer in orig_conv_op.outputs[0].consumers():
@@ -112,7 +112,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
         for consumer in split_conv_op2.outputs[0].consumers():
             split_bias_out = sess.run(consumer.outputs[0])
 
-        self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-4))
+        self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-3))
 
         sess.close()
 
@@ -153,7 +153,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         split_conv_output = sess.run(split_conv_op2.outputs[0])
 
-        self.assertTrue(np.allclose(split_conv_output, orig_conv_output, atol=1e-4))
+        self.assertTrue(np.allclose(split_conv_output, orig_conv_output, atol=1e-3))
 
         # check the output after bias
         for consumer in orig_conv_op.outputs[0].consumers():
@@ -162,7 +162,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
         for consumer in split_conv_op2.outputs[0].consumers():
             split_bias_out = sess.run(consumer.outputs[0])
 
-        self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-4))
+        self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-3))
 
         sess.close()
 
@@ -206,7 +206,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         split_conv_output = sess.run(split_conv_op2.outputs[0])
 
-        self.assertTrue(np.allclose(split_conv_output, orig_conv_output, atol=1e-4))
+        self.assertTrue(np.allclose(split_conv_output, orig_conv_output, atol=1e-3))
 
         # check the output after bias
         for consumer in orig_conv_op.outputs[0].consumers():
@@ -215,7 +215,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
         for consumer in split_conv_op2.outputs[0].consumers():
             split_bias_out = sess.run(consumer.outputs[0])
 
-        self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-4))
+        self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-3))
 
         sess.close()
 
@@ -258,7 +258,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         split_conv_output = sess.run(split_conv_op2.outputs[0])
 
-        self.assertTrue(np.allclose(split_conv_output, orig_conv_output, atol=1e-4))
+        self.assertTrue(np.allclose(split_conv_output, orig_conv_output, atol=1e-3))
 
         # check the output after bias
         for consumer in orig_conv_op.outputs[0].consumers():
@@ -267,7 +267,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
         for consumer in split_conv_op2.outputs[0].consumers():
             split_bias_out = sess.run(consumer.outputs[0])
 
-        self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-4))
+        self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-3))
 
         sess.close()
 

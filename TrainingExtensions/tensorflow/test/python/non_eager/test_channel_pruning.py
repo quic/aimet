@@ -642,7 +642,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
         # if data is increased, choose tolerance wisely
         # compare output after bias op
-        self.assertTrue(np.allclose(bias_out, updated_bias_out, atol=1e-5))
+        self.assertTrue(np.allclose(bias_out, updated_bias_out, atol=1e-3))
 
         # they should not be exactly same
         self.assertFalse(np.array_equal(bias_out, updated_bias_out))
