@@ -2650,69 +2650,73 @@ class TestQuantizationSimStaticGrad:
 
     def test_native_pytorch_quantization_nodes_pertensor(self):
         """Test export onnx model with embedded torch native quantization nodes"""
-        # There still have a liitle accuracy gap while using LearnedGridTensorQuantizer
+
         torch.manual_seed(10)
-        dummy_input = torch.rand(32, 1, 28, 28)
+        for _quant_scheme in [QuantScheme.post_training_tf,
+                              QuantScheme.training_range_learning_with_tf_init]:
+            dummy_input = torch.rand(32, 1, 28, 28)
 
-        def forward_pass(model, args):
-            model.eval()
-            with torch.no_grad():
-                return model(dummy_input)
+            def forward_pass(model, args):
+                model.eval()
+                with torch.no_grad():
+                    return model(dummy_input)
 
-        model = SmallMnist()
-        sim = QuantizationSimModel(model, dummy_input=dummy_input)
+            model = SmallMnist()
+            sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme = _quant_scheme)
 
-        # Quantize
-        sim.compute_encodings(forward_pass, None)
+            # Quantize
+            sim.compute_encodings(forward_pass, None)
 
-        results_dir = './data/embedded_encodings'
-        if not os.path.exists(results_dir):
-            os.makedirs(results_dir)
-        # Generate model with native pytorch quantization nodes
-        quant_sim_model = copy.deepcopy(sim.model)
+            results_dir = './data/embedded_encodings'
+            if not os.path.exists(results_dir):
+                os.makedirs(results_dir)
+            # Generate model with native pytorch quantization nodes
+            quant_sim_model = copy.deepcopy(sim.model)
 
-        device = utils.get_device(quant_sim_model)
-        QuantizationSimModel._replace_quantization_wrapper_with_native_torch_quantization_nodes(quant_sim_model, device)
+            device = utils.get_device(quant_sim_model)
+            QuantizationSimModel._replace_quantization_wrapper_with_native_torch_quantization_nodes(quant_sim_model, device)
 
-        # Inference AIMET quantization nodes
-        aimet_res = forward_pass(sim.model, None)
-        # Inference Native torch quantization nodes
-        torch_res = forward_pass(quant_sim_model, None)
-        assert torch.allclose(aimet_res, torch_res)
+            # Inference AIMET quantization nodes
+            aimet_res = forward_pass(sim.model, None)
+            # Inference Native torch quantization nodes
+            torch_res = forward_pass(quant_sim_model, None)
+            assert torch.allclose(aimet_res, torch_res)
 
     def test_native_pytorch_quantization_nodes_perchannel(self):
         """Test export onnx model with embedded torch native quantization nodes"""
-        # There still have a liitle accuracy gap while using LearnedGridTensorQuantizer
+
         torch.manual_seed(10)
-        dummy_input = torch.rand(32, 1, 28, 28)
+        for _quant_scheme in [QuantScheme.post_training_tf,
+                              QuantScheme.training_range_learning_with_tf_init]:
+            dummy_input = torch.rand(32, 1, 28, 28)
 
-        def forward_pass(model, args):
-            model.eval()
-            with torch.no_grad():
-                return model(dummy_input)
+            def forward_pass(model, args):
+                model.eval()
+                with torch.no_grad():
+                    return model(dummy_input)
 
-        model = SmallMnist()
-        sim = QuantizationSimModel(model, dummy_input=dummy_input)
-        for _, wrapper in sim.quant_wrappers():
-            wrapper.enable_per_channel_quantization()
+            model = SmallMnist()
+            sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme = _quant_scheme)
+            for _, wrapper in sim.quant_wrappers():
+                wrapper.enable_per_channel_quantization()
 
-        # Quantize
-        sim.compute_encodings(forward_pass, None)
+            # Quantize
+            sim.compute_encodings(forward_pass, None)
 
-        results_dir = './data/embedded_encodings'
-        if not os.path.exists(results_dir):
-            os.makedirs(results_dir)
-        # Generate model with native pytorch quantization nodes
-        quant_sim_model = copy.deepcopy(sim.model)
+            results_dir = './data/embedded_encodings'
+            if not os.path.exists(results_dir):
+                os.makedirs(results_dir)
+            # Generate model with native pytorch quantization nodes
+            quant_sim_model = copy.deepcopy(sim.model)
 
-        device = utils.get_device(quant_sim_model)
-        QuantizationSimModel._replace_quantization_wrapper_with_native_torch_quantization_nodes(quant_sim_model, device)
+            device = utils.get_device(quant_sim_model)
+            QuantizationSimModel._replace_quantization_wrapper_with_native_torch_quantization_nodes(quant_sim_model, device)
 
-        # Inference AIMET quantization nodes
-        aimet_res = forward_pass(sim.model, None)
-        # Inference Native torch quantization nodes
-        torch_res = forward_pass(quant_sim_model, None)
-        assert torch.allclose(aimet_res, torch_res)
+            # Inference AIMET quantization nodes
+            aimet_res = forward_pass(sim.model, None)
+            # Inference Native torch quantization nodes
+            torch_res = forward_pass(quant_sim_model, None)
+            assert torch.allclose(aimet_res, torch_res)
 
 class TestQuantizationSimLearnedGrid:
 

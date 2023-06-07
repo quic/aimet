@@ -971,7 +971,7 @@ class NativeTorchQuantWrapper(nn.Module):
     """
     A custom PyTorch module for inserting native PyToch quantization nodes
     """
-    def __init__(self, post_training_module: StaticGridQuantWrapper, module_name: str, device: torch.device):
+    def __init__(self, post_training_module: Union[StaticGridQuantWrapper, LearnedGridQuantWrapper], module_name: str, device: torch.device):
         """
         Constructor
         :param post_training_module: StaticGridQuantWrapper wrapped module
@@ -981,8 +981,10 @@ class NativeTorchQuantWrapper(nn.Module):
         super(NativeTorchQuantWrapper, self).__init__()
 
         self._module_to_wrap = getattr(post_training_module, module_name)
-        # pylint: disable=protected-access
-        self._mode = post_training_module._mode
+        if isinstance(post_training_module, LearnedGridQuantWrapper):
+            self._mode = QcQuantizeOpMode.ACTIVE # pylint: disable=protected-access
+        else:
+            self._mode = post_training_module._mode # pylint: disable=protected-access
 
         self.output_quantizers = [TorchQuantizer(quantizer, device) for quantizer in post_training_module.output_quantizers]
 
