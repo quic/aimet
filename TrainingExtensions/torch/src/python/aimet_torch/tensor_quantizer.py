@@ -1058,7 +1058,7 @@ class TorchQuantizer:
     """
     A Quantizer using native torch quantization nodes
     """
-    def __init__(self, quantizer: Union[StaticGridPerChannelQuantizer, StaticGridPerTensorQuantizer],
+    def __init__(self, quantizer: Union[StaticGridTensorQuantizer, LearnedGridTensorQuantizer],
                  device: torch.device):
         """
         Constructor
@@ -1068,11 +1068,13 @@ class TorchQuantizer:
         super(TorchQuantizer, self).__init__()
         self.device, self.enabled, self.data_type, self.bitwidth = device, quantizer.enabled, quantizer.data_type, quantizer.bitwidth
         self.per_channel_enabled = False
-        if hasattr(quantizer, '_ch_axis'):
-            # pylint: disable=protected-access
-            self._ch_axis = quantizer._ch_axis
-            self.per_channel_enabled = True
+        encodings = quantizer.encoding
+        # To aviod quantizer.enabled is True but quantizer.encoding is None
         if quantizer.enabled and quantizer.encoding:
+            if not isinstance(encodings, libpymo.TfEncoding):
+                # pylint: disable=protected-access
+                self._ch_axis = quantizer._ch_axis
+                self.per_channel_enabled = True
             self.scale, self.zero_point, self.q_max, self.q_min = calc_params_for_native_torch_quantizer(quantizer, self.per_channel_enabled, device)
 
     def quantize_dequantize(self, tensor: torch.Tensor):

@@ -58,15 +58,16 @@ def calc_params_for_native_torch_quantizer(quantizer, per_channel_enabled: bool,
     """
 
     numSteps = pow(2, quantizer.bitwidth) - 1
+    encodings = quantizer.encoding
     if quantizer.use_strict_symmetric:
         error_msg = ('Strict symmetric is not supported by native torch quantizer')
         logger.error(error_msg)
         raise ValueError(error_msg)
 
     if per_channel_enabled:
-        scale = torch.Tensor([encoding.delta for encoding in quantizer.encoding]).to(device)
-        zero_point = torch.Tensor([int(-encoding.offset) for encoding in quantizer.encoding]).long().to(device)
-        if quantizer.use_symmetric_encodings and (all([encoding.min < 0 for encoding in quantizer.encoding])
+        scale = torch.Tensor([encoding.delta for encoding in encodings]).to(device)
+        zero_point = torch.Tensor([int(-encoding.offset) for encoding in encodings]).long().to(device)
+        if quantizer.use_symmetric_encodings and (all([encoding.min < 0 for encoding in encodings])
                                                   or (not quantizer.use_unsigned_symmetric)):
             # Symmetric quantization
             q_max = math.floor(numSteps / 2)
@@ -77,9 +78,9 @@ def calc_params_for_native_torch_quantizer(quantizer, per_channel_enabled: bool,
             q_min, q_max = 0, numSteps
 
     else:
-        scale = float(quantizer.encoding.delta)
-        zero_point = int(-quantizer.encoding.offset)
-        if quantizer.use_symmetric_encodings and (quantizer.encoding.min < 0
+        scale = float(encodings.delta)
+        zero_point = int(-encodings.offset)
+        if quantizer.use_symmetric_encodings and (encodings.min < 0
                                                   or (not quantizer.use_unsigned_symmetric)):
             # Symmetric quantization
             q_max = math.floor(numSteps / 2)
