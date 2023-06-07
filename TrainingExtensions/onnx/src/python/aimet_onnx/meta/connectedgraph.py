@@ -55,7 +55,7 @@ from aimet_common.utils import AimetLogger
 from aimet_common.model_module import ONNXModelModule
 from aimet_onnx.meta.operations import Op
 from aimet_onnx.meta.product import Product
-from aimet_onnx.utils import ParamUtils
+from aimet_onnx.utils import ParamUtils, retrieve_constant_input
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
 
@@ -130,7 +130,13 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         op.model_module = ONNXModelModule(node)
 
         if op.type in ['Conv', 'ConvTranspose']:
-            op.groups = get_op_groups(node)
+            op.groups = get_op_attributes(node, 'group')
+
+        if op.type == 'MatMul':
+            op.transposed_params = True
+
+        if op.type == 'Gemm':
+            op.transposed_params = bool(get_op_attributes(node, 'transB'))
 
         return op
 
@@ -391,6 +397,17 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             if bias_tensor:
                 create_and_connect_product(bias_tensor.name, bias_tensor.dims, my_op, bias_tensor, 'bias')
 
+        def create_matmul_params(my_op: Op):
+            """
+            Create products for MatMul layer
+
+            :param my_op: Connected Graph Op
+            """
+            op = my_op.get_module()
+            weight_tensor, _ = retrieve_constant_input(op, self.model, WEIGHT_INDEX)
+            if weight_tensor:
+                create_and_connect_product(weight_tensor.name, weight_tensor.dims, my_op, weight_tensor, 'weight')
+
         def create_batchnorm_params(my_op: Op):
             """ Create products for fusedbatchnorm """
             op = my_op.get_module()
@@ -417,7 +434,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             "Conv": create_conv2d_dense_type_params,
             "Gemm": create_conv2d_dense_type_params,
             "ConvTranspose": create_conv2d_dense_type_params,
-            "BatchNormalization": create_batchnorm_params
+            "BatchNormalization": create_batchnorm_params,
+            "MatMul": create_matmul_params
         }
 
         for op in self._ops.values():
@@ -425,9 +443,14 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             handler(op)
 
 
-def get_op_groups(node: onnx_pb.NodeProto):
-    """Gets group information for Conv type node"""
+def get_op_attributes(node: onnx_pb.NodeProto, attribute_name: str):
+    """
+    Gets attribute information for layer
+
+    :param node: ONNX node
+    :param attribute_name: The attribute we are searching for
+    """
     for attribute in node.attribute:
-        if attribute.name == 'group':
+        if attribute.name == attribute_name:
             return attribute.i
     return None
