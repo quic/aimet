@@ -39,7 +39,6 @@ import numpy as np
 import copy
 import torch
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
-from onnxruntime_extensions import get_library_path
 from onnx import numpy_helper
 
 from aimet_common.cross_layer_equalization import GraphSearchUtils
