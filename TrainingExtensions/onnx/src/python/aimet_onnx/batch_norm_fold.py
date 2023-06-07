@@ -52,7 +52,7 @@ from aimet_common.utils import AimetLogger
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
 from aimet_onnx.meta.connectedgraph import WEIGHT_INDEX, BIAS_INDEX, RUNNING_MEAN_INDEX, RUNNING_VAR_INDEX
 from aimet_onnx.meta.operations import Op
-from aimet_onnx.utils import get_node_attribute, remove_node, transpose_tensor, ParamUtils
+from aimet_onnx.utils import get_node_attribute, remove_node, transpose_tensor, ParamUtils, retrieve_constant_input
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.BatchNormFolding)
 
@@ -418,26 +418,3 @@ def get_input_output_channels(node: onnx_pb.NodeProto, model: onnx_pb.ModelProto
         num_out_channels = None
         num_in_channels = None
     return num_in_channels, num_out_channels
-
-
-def retrieve_constant_input(node: onnx_pb.NodeProto, model: onnx_pb.ModelProto, index: int
-                            ) -> Tuple[onnx_pb.TensorProto, bool]:
-    """
-    Retrieves node input at the specified index if the input has a corresponding initializer in model.graph.initializer
-    and is separated from node by no more than one Transpose operation.
-    :param node: The node to find the input for
-    :param model: The model to which the node belongs
-    :param index: The index of the desired input within node.input
-    :return: Tuple containing the input parameter and a bool specifying whether the param is transposed before entering
-             the node
-    """
-    weight_input = node.input[WEIGHT_INDEX]
-    transposed = False
-    weight = ParamUtils.get_param(model, node, index)
-    if not weight:
-        # Check if the weight is transposed before entering the node
-        for other_node in model.graph.node:
-            if weight_input in other_node.output and other_node.op_type == "Transpose":
-                weight = ParamUtils.get_param(model, other_node, 0)
-                transposed = True
-    return weight, transposed

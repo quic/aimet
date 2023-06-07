@@ -39,9 +39,9 @@
 
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
 
-def get_op_type_given_param_name(connected_graph: ConnectedGraph, param_name: str):
+def get_op_given_param_name(connected_graph: ConnectedGraph, param_name: str):
     """
-    Gets op type for a given param name
+    Gets op for a given param name
 
     :param connected_graph: Connected graph
     :param param_name: Name of the parameter
@@ -49,9 +49,9 @@ def get_op_type_given_param_name(connected_graph: ConnectedGraph, param_name: st
     ops = connected_graph.get_all_ops()
     for op in ops.values():
         if op.parameters:
-            for param, param_type in op.parameters.values():
-                if param_type == 'weight' and param.name == param_name:
-                    return op.type
+            for param, _ in op.parameters.values():
+                if param.name == param_name:
+                    return op
     return None
 
 

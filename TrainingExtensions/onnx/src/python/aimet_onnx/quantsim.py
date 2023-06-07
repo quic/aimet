@@ -53,7 +53,7 @@ from aimet_common.quantsim import encoding_version, extract_global_quantizer_arg
 from aimet_common.utils import save_json_yaml
 from aimet_onnx import utils
 from aimet_onnx.meta.operations import Op
-from aimet_onnx.meta.utils import get_op_type_given_param_name, get_param_shape_using_connected_graph
+from aimet_onnx.meta.utils import get_op_given_param_name, get_param_shape_using_connected_graph
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
 from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode, TensorQuantizerParams
 from aimet_onnx.quantsim_config.quantsim_config import QuantSimConfigurator
@@ -251,7 +251,7 @@ class QuantizationSimModel:
                                                           use_symmetric_encodings=self._use_symmetric_encodings,
                                                           tensor_quantizer_params=tensor_quantizer_params)
 
-    def _create_quant_info_object_for_param(self, param_name):
+    def _create_quant_info_object_for_param(self, param_name: str):
         """
         Creates quant info object for QcQuantizeOp and QDQ node
 
@@ -261,28 +261,32 @@ class QuantizationSimModel:
         quant_info = libquant_info.QcQuantizeInfo()
         quant_info.usePerChannelMode = False
         tensor_quantizer_params = TensorQuantizerParams()
-        op_type = get_op_type_given_param_name(self.connected_graph, param_name)
+        op = get_op_given_param_name(self.connected_graph, param_name)
         param_shape = get_param_shape_using_connected_graph(self.connected_graph, param_name)
         if len(param_shape) == 1:
             tensor_quantizer_params.axis = 0
+            tensor_quantizer_params.num_output_channels = param_shape[0]
         else:
-            tensor_quantizer_params.axis = self._get_quantization_axis(op_type)
-        tensor_quantizer_params.num_output_channels = param_shape[quant_info.channelAxis]
+            tensor_quantizer_params.axis = self._get_quantization_axis(op)
+            tensor_quantizer_params.num_output_channels = param_shape[quant_info.channelAxis]
 
         return quant_info, tensor_quantizer_params
 
     @staticmethod
-    def _get_quantization_axis(op_type: str):
+    def _get_quantization_axis(op: Op) -> int:
         """
         Gets quantization axis for Per channel quantization
 
-        :param op_type: type of the op
+        :param op: Connected graph op
         return: axis
         """
-
-        if op_type == 'Conv':
+        if op.type in ['Conv']:
             return 0
-        if op_type in ['ConvTranspose', 'Gemm', 'MatMul']:
+        if op.type in ['ConvTranspose']:
+            return 1
+        if op.type in ['Gemm', 'MatMul'] and op.transposed_params:
+            return 0
+        if op.type in ['Gemm', 'MatMul']:
             return 1
         return -1
 

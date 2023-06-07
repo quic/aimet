@@ -42,7 +42,6 @@ import numpy as np
 import onnx
 from onnx import onnx_pb, helper, numpy_helper, mapping
 
-
 OP_TYPES_WITH_PARAMS = ['Conv', 'Gemm', 'ConvTranspose', 'BatchNormalization', 'MatMul', 'Transpose']
 
 
@@ -301,15 +300,12 @@ class ParamUtils:
         :param node: ONNX node to which the param feeds to
         :param param_index: Index at which param feeds to the ONNX node
         """
-        if node.op_type in OP_TYPES_WITH_PARAMS:
-            if len(node.input) >= param_index + 1:
-                param_name = node.input[param_index]
-                for param in model.graph.initializer:
-                    if param.name == param_name:
-                        return param
-            assert "Param not present in the node"
-        else:
-            assert "Node type not in allowed op types with param list"
+        assert node.op_type in OP_TYPES_WITH_PARAMS, "Node type not in allowed op types with param list"
+        if len(node.input) >= param_index + 1:
+            param_name = node.input[param_index]
+            for param in model.graph.initializer:
+                if param.name == param_name:
+                    return param
         return None
 
 
@@ -324,3 +320,26 @@ def get_product_name_from_quantized_name(quantized_name: str):
         return quantized_name[:quantized_name.index('_qdq')]
     # If there is no quantizer added then return None
     return None
+
+
+def retrieve_constant_input(node: onnx_pb.NodeProto, model: onnx_pb.ModelProto, index: int
+                            ) -> Tuple[onnx_pb.TensorProto, bool]:
+    """
+    Retrieves node input at the specified index if the input has a corresponding initializer in model.graph.initializer
+    and is separated from node by no more than one Transpose operation.
+    :param node: The node to find the input for
+    :param model: The model to which the node belongs
+    :param index: The index of the desired input within node.input
+    :return: Tuple containing the input parameter and a bool specifying whether the param is transposed before entering
+             the node
+    """
+    weight_input = node.input[index]
+    transposed = False
+    weight = ParamUtils.get_param(model, node, index)
+    if not weight:
+        # Check if the weight is transposed before entering the node
+        for other_node in model.graph.node:
+            if weight_input in other_node.output and other_node.op_type == "Transpose":
+                weight = ParamUtils.get_param(model, other_node, 0)
+                transposed = True
+    return weight, transposed
