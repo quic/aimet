@@ -223,7 +223,6 @@ def _build_session(model):
     :param providers: providers to execute onnxruntime
     """
     sess_options = SessionOptions()
-    sess_options.register_custom_ops_library(get_library_path())
     sess_options.graph_optimization_level = GraphOptimizationLevel.ORT_DISABLE_ALL
     session = InferenceSession(
         path_or_bytes=model.model.SerializeToString(),
