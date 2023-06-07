@@ -40,6 +40,7 @@
 #define AIMET_FP16_OP_UTILS_H
 
 #include "AimetOpUtils.h"
+#include "DlQuantization/Fp16Quantization.hpp"
 
 #define EIGEN_USE_THREADS
 
@@ -86,18 +87,12 @@ class QuantizeDequantizeFp16Functor <CPUDevice>
 template <>
 class QuantizeDequantizeFp16Functor <GPUDevice>
 {
-    // truncate, if set to true would truncate the inputs before casting to fp16. If set to true, tensorflow backend
-    // calls LSBZeroSetter which does the truncate operation
-    bool _truncate = false;
-
     public:
     void operator()(OpKernelContext* context, const Tensor& inTensor, Tensor* outTensor)
     {
-        Tensor tempTensorFp16;
-        OP_REQUIRES_OK(context, context->allocate_temp(DT_HALF, inTensor.shape(), &tempTensorFp16));
-
-        GetGpuCastFromFloat(DT_HALF)(context, inTensor, &tempTensorFp16, _truncate);
-        GetGpuCastFromHalf(DT_FLOAT)(context, tempTensorFp16, outTensor, _truncate);
+        DlQuantization::quantizeDequantizeFp16Gpu(inTensor.flat<float>().data(),
+                                                  inTensor.NumElements(),
+                                                  outTensor->flat<float>().data());
     }
 };
 #endif // GOOGLE_CUDA
