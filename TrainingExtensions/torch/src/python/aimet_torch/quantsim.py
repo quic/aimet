@@ -400,24 +400,24 @@ class QuantizationSimModel:
 
         torch.save(model_to_export, model_path)
 
+        if onnx_export_args is None:
+            onnx_export_args = {'opset_version': None,
+                                'input_names': None,
+                                'output_names': None}
+            if version.parse(torch.__version__) < version.parse("1.10.0") and isinstance(onnx_export_args, dict):
+                onnx_export_args['enable_onnx_checker'] = False
+        log_with_error_and_assert_if_false(isinstance(onnx_export_args, (OnnxExportApiArgs, dict)),
+                                           logger,
+                                           f'unsupported opt_args type={type(onnx_export_args)}')
+
         if use_embedded_encodings:
             QuantizationSimModel.save_model_with_embedded_quantization_nodes(self.model, path, filename_prefix, dummy_input,
                                                                              onnx_export_args, export_to_torchscript, self._is_conditional)
         else:
-
             if export_to_torchscript:
                 self.export_torch_script_model_and_encodings(path, filename_prefix, model_to_export, self.model,
                                                              dummy_input, self._excluded_layer_names)
             else:
-                if onnx_export_args is None:
-                    onnx_export_args = {'opset_version': None,
-                                        'input_names': None,
-                                        'output_names': None}
-                    if version.parse(torch.__version__) < version.parse("1.10.0") and isinstance(onnx_export_args, dict):
-                        onnx_export_args['enable_onnx_checker'] = False
-                log_with_error_and_assert_if_false(isinstance(onnx_export_args, (OnnxExportApiArgs, dict)),
-                                                   logger,
-                                                   f'unsupported opt_args type={type(onnx_export_args)}')
                 self.export_onnx_model_and_encodings(path, filename_prefix, model_to_export, self.model,
                                                      dummy_input, onnx_export_args, propagate_encodings,
                                                      self._module_marker_map, self._is_conditional,
@@ -1534,6 +1534,17 @@ class QuantizationSimModel:
         :param is_conditional: True if model is conditional, False otherwise
         :return:
         """
+        def _validate_torchquantizer(quant_sim_model):
+            # To avoid non 8 bit TorchQuantizer are exported to ONNX
+            for _, module in quant_sim_model.named_modules():
+                if isinstance(module, NativeTorchQuantWrapper):
+                    quantizers = module.input_quantizers + module.output_quantizers
+                    if 'weight' in module.param_quantizers:
+                        quantizers += [module.param_quantizers['weight']]
+                    for quantizer in quantizers:
+                        if quantizer.enabled and quantizer.data_type == QuantizationDataType.int and quantizer.bitwidth != 8:
+                            raise ValueError('Only 8 bit quantizers are supported by exporting to ONNX model.'
+                                             'Please enable export_to_torchscript if you want to export non 8 bit quantizers.')
 
         model_filename = filename_prefix + '_embedded' + '.onnx'
         model_path = os.path.join(path, model_filename)
@@ -1548,7 +1559,9 @@ class QuantizationSimModel:
                 ts_path = os.path.join(path, filename_prefix + '_embedded' + '.torchscript.pth')
                 trace.save(ts_path)
         else:
+            _validate_torchquantizer(quant_sim_model)
             OnnxSaver._export_model_to_onnx(quant_sim_model, dummy_input, model_path, is_conditional, onnx_export_args) # pylint: disable=protected-access
+
 
 
 def save_checkpoint(quant_sim_model: QuantizationSimModel, file_path: str):

@@ -1067,6 +1067,8 @@ class TorchQuantizer:
         """
         super(TorchQuantizer, self).__init__()
         self.device, self.enabled, self.data_type, self.bitwidth = device, quantizer.enabled, quantizer.data_type, quantizer.bitwidth
+        if self.data_type == QuantizationDataType.float and self.bitwidth != 16:
+            raise ValueError('Only FP16 quantizers are supported by TorchQuantizer')
         self.per_channel_enabled = False
         encodings = quantizer.encoding
         # To aviod quantizer.enabled is True but quantizer.encoding is None

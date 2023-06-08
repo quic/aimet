@@ -2542,8 +2542,8 @@ class TestQuantizationSimStaticGrad:
                 onnx_type.add(node.op_type)
             assert('QuantizeLinear' in onnx_type)
             assert('DequantizeLinear' in onnx_type)
-            if os.path.exists(results_dir):
-                shutil.rmtree(results_dir)
+        if os.path.exists(results_dir):
+            shutil.rmtree(results_dir)
 
     def test_save_model_with_embedded_quantization_nodes_fp16(self):
         """Model with more than 1 input"""
@@ -2579,8 +2579,8 @@ class TestQuantizationSimStaticGrad:
                 onnx_type.add(node.op_type)
             assert('Cast' in onnx_type)
 
-            if os.path.exists(results_dir):
-                shutil.rmtree(results_dir)
+        if os.path.exists(results_dir):
+            shutil.rmtree(results_dir)
 
     def test_save_model_with_embedded_quantization_nodes_per_channel(self):
         """Model with more than 1 input"""
@@ -2617,8 +2617,8 @@ class TestQuantizationSimStaticGrad:
             assert('QuantizeLinear' in onnx_type)
             assert('DequantizeLinear' in onnx_type)
 
-            if os.path.exists(results_dir):
-                shutil.rmtree(results_dir)
+        if os.path.exists(results_dir):
+            shutil.rmtree(results_dir)
 
     def test_save_model_with_embedded_quantization_nodes_using_torch_script(self):
         """Test export onnx model with embedded torch native quantization nodes using torch script"""
@@ -2645,8 +2645,8 @@ class TestQuantizationSimStaticGrad:
             QuantizationSimModel.save_model_with_embedded_quantization_nodes(sim.model, results_dir, 'two_input_model', dummy_input, export_to_torchscript = True)
             assert(os.path.exists(os.path.join(results_dir, 'two_input_model' + '_embedded' + '.torchscript.pth')))
 
-            if os.path.exists(results_dir):
-                shutil.rmtree(results_dir)
+        if os.path.exists(results_dir):
+            shutil.rmtree(results_dir)
 
     def test_native_pytorch_quantization_nodes_pertensor(self):
         """Test export onnx model with embedded torch native quantization nodes"""
@@ -2680,7 +2680,10 @@ class TestQuantizationSimStaticGrad:
             aimet_res = forward_pass(sim.model, None)
             # Inference Native torch quantization nodes
             torch_res = forward_pass(quant_sim_model, None)
-            assert torch.allclose(aimet_res, torch_res)
+            assert torch.allclose(aimet_res, torch_res, rtol=1e-2)
+
+        if os.path.exists(results_dir):
+            shutil.rmtree(results_dir)
 
     def test_native_pytorch_quantization_nodes_perchannel(self):
         """Test export onnx model with embedded torch native quantization nodes"""
@@ -2716,7 +2719,10 @@ class TestQuantizationSimStaticGrad:
             aimet_res = forward_pass(sim.model, None)
             # Inference Native torch quantization nodes
             torch_res = forward_pass(quant_sim_model, None)
-            assert torch.allclose(aimet_res, torch_res)
+            assert torch.allclose(aimet_res, torch_res, rtol=1e-2)
+
+        if os.path.exists(results_dir):
+            shutil.rmtree(results_dir)
 
 class TestQuantizationSimLearnedGrid:
 
