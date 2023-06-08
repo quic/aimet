@@ -121,13 +121,15 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
         test the split after and before split_module call with channel last
         """
         tf.compat.v1.reset_default_graph()
+        tf.compat.v1.set_random_seed(0)
+        tf.keras.utils.set_random_seed(0)
         num_examples = 2000
         g = tf.Graph()
         with g.as_default():
             inp_tensor = tf.compat.v1.get_variable('inp_tensor', shape=[num_examples, 5, 5, 20],
-                                         initializer=tf.random_normal_initializer())
+                                         initializer=tf.random_normal_initializer(seed=0))
             filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, 20, 50],
-                                            initializer=tf.random_normal_initializer())
+                                            initializer=tf.random_normal_initializer(seed=0))
             conv1 = tf.nn.conv2d(inp_tensor, filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                  data_format="NHWC", name='Conv2D_1')
             bias_tensor = tf.compat.v1.get_variable('bias_tensor', shape=[50], initializer=tf.random_normal_initializer())

@@ -258,6 +258,9 @@ class TestBatchNormFold(unittest.TestCase):
         Custom Model where BN layer is followed by MatMul layer
         """
         tf.compat.v1.reset_default_graph()
+        tf.compat.v1.set_random_seed(0)
+        tf.keras.utils.set_random_seed(0)
+        
         inputs = tf.keras.Input(shape=(1, 1, 4,))
         bn_op = tf.keras.layers.BatchNormalization(fused=True)(inputs, training=False)
         x = tf.keras.layers.Flatten()(bn_op)
@@ -273,7 +276,6 @@ class TestBatchNormFold(unittest.TestCase):
         input_op_name = 'input_1'
 
         # get baseline output
-        np.random.seed(0)
         input_tensor = sess.graph.get_tensor_by_name('input_1:0')
         w_shape = input_tensor.shape
         # tf 1.14 we do not have fused_batchnorm_1 in this case
@@ -736,10 +738,10 @@ class TestTrainingExtensionBnFoldToScale:
         """
         test conv (with bias) + bn + relu sequence
         """
-        np.random.seed(43)
+        # np.random.seed(43)
         tf.compat.v1.reset_default_graph()
-        tf.random.set_seed(43)
-
+        tf.compat.v1.set_random_seed(43)
+        tf.keras.utils.set_random_seed(43)
         def model():
             """ Model with conv + bn + relu sequence """
             training = tf.Variable(False, name='bn_training_var') if is_training_variable else False
@@ -804,7 +806,7 @@ class TestTrainingExtensionBnFoldToScale:
                 conv_wt_int_after_fold[:, :, :, i] = (2 ** encodings[i].bw) - conv_wt_int_after_fold[:, :, :, i]
 
         #verify that quantized conv weights are unchanged
-        assert np.sum(np.abs(conv_wt_int - conv_wt_int_after_fold)) == 0
+        assert np.sum(np.abs(conv_wt_int - conv_wt_int_after_fold)) == 0 #0.010006785, 0.009287998
         assert np.allclose(conv_wt_int, conv_wt_int_after_fold)
 
         # Verify that the BN, BN_quantized ops are removed from the graph.
@@ -1305,9 +1307,10 @@ class TestTrainingExtensionBnFoldToScale:
         """
         test conv + bn (compat) sequence
         """
-        np.random.seed(43)
         tf.compat.v1.reset_default_graph()
-        tf.random.set_seed(43)
+        tf.compat.v1.set_random_seed(0)
+        tf.keras.utils.set_random_seed(0)
+        
         def model():
             """ Model with conv (with bias) + bn (compat) sequence """
             training = tf.Variable(False, name='bn_training_var') if is_training_variable else False

@@ -593,6 +593,9 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         Test the reconstruction of weight and bias
         """
         tf.compat.v1.reset_default_graph()
+        tf.compat.v1.set_random_seed(0)
+        tf.keras.utils.set_random_seed(0)
+        
         # input shape should be [Ns, Nic, k_h, k_w]
         number_of_images = 500
         num_in_channels = 5
@@ -603,11 +606,11 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         with g.as_default():
             inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
             filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, num_in_channels, num_out_channels],
-                                            initializer=tf.random_normal_initializer())
+                                            initializer=tf.random_normal_initializer(seed=0))
             conv = tf.nn.conv2d(inp_tensor, filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                 data_format="NCHW", name='Conv2D_1')
             bias_tensor = tf.compat.v1.get_variable('bias_tensor', shape=[num_out_channels],
-                                          initializer=tf.random_normal_initializer())
+                                          initializer=tf.random_normal_initializer(seed=0))
             tf.nn.bias_add(conv, bias_tensor, data_format="NCHW")
 
             init = tf.compat.v1.global_variables_initializer()
