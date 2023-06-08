@@ -403,24 +403,25 @@ class QuantizationSimModel:
         if use_embedded_encodings:
             QuantizationSimModel.save_model_with_embedded_quantization_nodes(self.model, path, filename_prefix, dummy_input,
                                                                              onnx_export_args, export_to_torchscript, self._is_conditional)
-
-        if export_to_torchscript:
-            self.export_torch_script_model_and_encodings(path, filename_prefix, model_to_export, self.model,
-                                                         dummy_input, self._excluded_layer_names)
         else:
-            if onnx_export_args is None:
-                onnx_export_args = {'opset_version': None,
-                                    'input_names': None,
-                                    'output_names': None}
-                if version.parse(torch.__version__) < version.parse("1.10.0") and isinstance(onnx_export_args, dict):
-                    onnx_export_args['enable_onnx_checker'] = False
-            log_with_error_and_assert_if_false(isinstance(onnx_export_args, (OnnxExportApiArgs, dict)),
-                                               logger,
-                                               f'unsupported opt_args type={type(onnx_export_args)}')
-            self.export_onnx_model_and_encodings(path, filename_prefix, model_to_export, self.model,
-                                                 dummy_input, onnx_export_args, propagate_encodings,
-                                                 self._module_marker_map, self._is_conditional,
-                                                 self._excluded_layer_names, quantizer_args=self.quant_args)
+
+            if export_to_torchscript:
+                self.export_torch_script_model_and_encodings(path, filename_prefix, model_to_export, self.model,
+                                                             dummy_input, self._excluded_layer_names)
+            else:
+                if onnx_export_args is None:
+                    onnx_export_args = {'opset_version': None,
+                                        'input_names': None,
+                                        'output_names': None}
+                    if version.parse(torch.__version__) < version.parse("1.10.0") and isinstance(onnx_export_args, dict):
+                        onnx_export_args['enable_onnx_checker'] = False
+                log_with_error_and_assert_if_false(isinstance(onnx_export_args, (OnnxExportApiArgs, dict)),
+                                                   logger,
+                                                   f'unsupported opt_args type={type(onnx_export_args)}')
+                self.export_onnx_model_and_encodings(path, filename_prefix, model_to_export, self.model,
+                                                     dummy_input, onnx_export_args, propagate_encodings,
+                                                     self._module_marker_map, self._is_conditional,
+                                                     self._excluded_layer_names, quantizer_args=self.quant_args)
 
     @staticmethod
     def export_torch_script_model_and_encodings(path: str, filename_prefix: str,
