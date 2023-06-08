@@ -137,16 +137,16 @@ RUN python3 -m pip --no-cache-dir install \
         ipython \
         Jinja2==3.0.3 \
         jupyter \
-        keras==2.2.4 \
+        keras==2.10.0 \
         lmdb==0.95 \
         nbsphinx==0.8.12 \
-        numpy==1.19.5 \
-        onnx==1.10.0 \
+        numpy==1.20.0 \
+        onnx==1.12.0 \
         opencv-python \
         Pillow==9.3.0 \
         pluggy==0.12.0 \
         progressbar2 \
-        protobuf==3.20.1 \
+        protobuf==3.19.2 \
         psutil \
         ptflops \
         pybind11 \
