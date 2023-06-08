@@ -37,7 +37,7 @@
 # =============================================================================
 """ Utilities for parsing and applying quantsim configurations from json config file """
 from abc import abstractmethod
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 from onnx import onnx_pb
 from aimet_common.defs import QuantizationDataType
@@ -46,7 +46,7 @@ from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops,
 from aimet_common.quantsim_config.json_config_importer import ConfigDictKeys, ConfigType, OpType, ParamType, OpTypeType, \
     SupergroupType
 from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as AimetCommonQuantSimConfigurator, \
-    get_setting_type, SupergroupConfigCallback as AimetCommonSupergroupConfigCallback
+    get_setting_type, SupergroupConfigCallback as AimetCommonSupergroupConfigCallback, reformat_supported_kernels
 from aimet_common.utils import AimetLogger
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
 from aimet_onnx.utils import get_product_name_from_quantized_name
@@ -98,6 +98,23 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         self._activation_names = {}
         self._op_to_quantizer_lists_dict = None
         self._op_to_quantizers = {}
+        self._supported_kernels = self._parse_supported_kernels()
+        self._op_to_supported_kernel = {}
+
+    def get_op_to_supported_kernels(self) -> Dict:
+        """
+        Return _supported_kernels for every ONNX op in the graph
+        :return: Dictionary containing supported_kernels
+        """
+        return self._op_to_supported_kernel
+
+
+    def get_supported_kernels(self) -> Dict:
+        """
+        Return _supported_kernels parsed from the config file
+        :return: Dictionary containing supported_kernels
+        """
+        return self._supported_kernels
 
     def configure_quantizers(self, quant_ops_dict: Dict,
                              param_names: List[str],
@@ -199,7 +216,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         :param bitwidth: bitwidth to be configured
         :return:
         """
-        raise NotImplementedError
+        self._override_act_bw_dtype(self._activation_names, data_type, bitwidth)
 
     def _override_default_param_bw_dtype(self, data_type: QuantizationDataType, bitwidth: int):
         """
@@ -208,7 +225,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         :param data_type: data type as QuantizationDataType
         :return:
         """
-        raise NotImplementedError
+        self._override_param_bw_dtype(self._param_names, data_type, bitwidth)
 
     def _set_param_configs(self, param_configs: ParamType):
         """
@@ -430,27 +447,31 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         fields (if absent use default per_channel_quantization) and generate op instance specific config
         :return: {op_instance_name, op_specific_config}
         """
+
         per_channel_quantization = self._parse_per_channel_quantization()
         hw_version = self._get_hw_version()
-        config_generator = config_generator_factory(hw_version, per_channel_quantization)
+        supported_kernels = reformat_supported_kernels(self._supported_kernels)
+        config_generator = config_generator_factory(hw_version, supported_kernels, per_channel_quantization)
 
         for op in self._conn_graph.ordered_ops:
             if op.dotted_name in self._op_to_quantizers:
+                self._op_to_supported_kernel[op.dotted_name], \
                 per_channel_quantization_flag = config_generator.generate(op.get_module(), op.type)
                 if per_channel_quantization_flag:
                     for _, param_quantizer in self._op_to_quantizers[op.dotted_name].parameter_quantizers:
                         param_quantizer.enable_per_channel_quantization()
 
 
-def config_generator_factory(hw_version, per_channel_quantization):
+def config_generator_factory(hw_version, supported_kernels, per_channel_quantization):
     """
     factory to select the config generator based on the hw_version
     :param hw_version: hw_version field from the config file
+    :param supported_kernels: aggregated supported_kernels fields from the config file
     :param per_channel_quantization: aggregated per_channel_quantization fields from the config file
     :return: Config Generator object
     """
 
-    config_generator = DefaultOpInstanceConfigGenerator(per_channel_quantization)
+    config_generator = DefaultOpInstanceConfigGenerator(supported_kernels, per_channel_quantization)
     logger.info('Selecting DefaultOpInstanceConfigGenerator to compute the specialized config. hw_version:%s',
                 hw_version)
     return config_generator
@@ -461,11 +482,14 @@ class OpInstanceConfigGenerator:
     Class to specify op instance specific rules and generate the updated config
     """
 
-    def __init__(self, op_type_pcq: dict):
+    def __init__(self, op_type_supported_kernels: dict, op_type_pcq: dict):
         """
+        :param op_type_supported_kernels: supported_kernels fields from the config file(specific op types + default)
         :param op_type_pcq: per_channel_quantization(pcq) fields from the config file(specific op types + default)
         """
+        self.op_type_supported_kernels = op_type_supported_kernels
         self.op_type_pcq = op_type_pcq
+        assert ConfigDictKeys.DEFAULTS in self.op_type_supported_kernels
         assert ConfigDictKeys.DEFAULTS in self.op_type_pcq
 
     @abstractmethod
@@ -497,12 +521,14 @@ class DefaultOpInstanceConfigGenerator(OpInstanceConfigGenerator):
     Default implementation of OpInstanceConfigGenerator
     """
 
-    def generate(self, op: onnx_pb.NodeProto, op_type: str) -> bool:
+    def generate(self, op: onnx_pb.NodeProto, op_type: str) -> Tuple[dict, bool]:
         """
         :param op: op to generate the specialized config
         :param op_type: Type str retrieved from CG op
         :return: supported_kernels and per_channel_quantization fields
         """
+        supported_kernels = self.op_type_supported_kernels.get(op_type,
+                                                               self.op_type_supported_kernels[ConfigDictKeys.DEFAULTS])
         pcq = self._generate_pcq(op)
 
-        return pcq
+        return supported_kernels, pcq
