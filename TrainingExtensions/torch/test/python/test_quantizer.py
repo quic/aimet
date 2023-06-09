@@ -2869,8 +2869,8 @@ class TestQuantizationSimLearnedGrid:
         assert sim.model.conv1_a.weight_encoding_min == -sim.model.conv1_a.weight_encoding_max
         assert torch.allclose(sim.model.fc1.weight_encoding_min, -sim.model.fc1.weight_encoding_max)
 
-        before_conv1_weight_encoding_min = sim.model.conv1_a.weight_encoding_min.detach()
-        before_fc_weight_encoding_min = sim.model.fc1.weight_encoding_min.detach()
+        before_conv1_weight_encoding_min = sim.model.conv1_a.weight_encoding_min.clone().detach()
+        before_fc_weight_encoding_min = sim.model.fc1.weight_encoding_min.clone().detach()
 
         optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.003, momentum=0.5)
         for _ in range(20):
@@ -2884,8 +2884,8 @@ class TestQuantizationSimLearnedGrid:
         assert torch.allclose(sim.model.conv1_a.weight_encoding_min, -sim.model.conv1_a.weight_encoding_max)
         assert torch.allclose(sim.model.fc1.weight_encoding_min, -sim.model.fc1.weight_encoding_max)
 
-        after_conv1_weight_encoding_min = sim.model.conv1_a.weight_encoding_min
-        after_fc_weight_encoding_min = sim.model.fc1.weight_encoding_min
+        after_conv1_weight_encoding_min = sim.model.conv1_a.weight_encoding_min.clone().detach()
+        after_fc_weight_encoding_min = sim.model.fc1.weight_encoding_min.clone().detach()
 
         assert not torch.allclose(before_conv1_weight_encoding_min, after_conv1_weight_encoding_min)
         assert not torch.allclose(before_fc_weight_encoding_min, after_fc_weight_encoding_min)

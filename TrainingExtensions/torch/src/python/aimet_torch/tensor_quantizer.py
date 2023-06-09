@@ -1302,6 +1302,7 @@ def set_encoding_min_max_gating_threshold(encoding_min: torch.nn.Parameter, enco
     """
     zero_tensor = constant_tensor_factory(0., encoding_min.device)
     eps_tensor = constant_tensor_factory(1e-5, encoding_min.device)
-    encoding_min.data = torch.minimum(zero_tensor, encoding_min.data)
-    encoding_max.data = torch.maximum(zero_tensor, encoding_max.data)
-    encoding_max.data = torch.maximum(encoding_max.data, encoding_min.data + eps_tensor)
+    with torch.no_grad():
+        encoding_min.clamp_(max=zero_tensor)
+        encoding_max.clamp_(min=zero_tensor)
+        encoding_max.clamp_(min=encoding_min.data + eps_tensor)
