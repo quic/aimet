@@ -552,7 +552,7 @@ def test_qc_rnn_learned_grid_mode(tmp_path, learned_grid):
 
     # for name, _ in sim.model.gru.input_quantizers(): check for _encoding min/max params
 
-    params = {f'{i}.{name}': param.data for i, module in enumerate([sim.model.gru1, sim.model.gru2])
+    params = {f'{i}.{name}': param.clone().detach() for i, module in enumerate([sim.model.gru1, sim.model.gru2])
               for name, param in module.named_parameters(recurse=False)}
 
     optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.05, momentum=0.5)
@@ -566,7 +566,7 @@ def test_qc_rnn_learned_grid_mode(tmp_path, learned_grid):
         loss = o_qc_rnn.flatten().sum() + h_qc_rnn.flatten().sum()
         loss.backward()
         optimizer.step()
-    learned_params = {f'{i}.{name}': param.data for i, module in enumerate([sim.model.gru1, sim.model.gru2])
+    learned_params = {f'{i}.{name}': param.clone().detach() for i, module in enumerate([sim.model.gru1, sim.model.gru2])
                       for name, param in module.named_parameters(recurse=False)}
 
     for name in params:
