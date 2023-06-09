@@ -46,6 +46,7 @@ import tensorflow as tf
 import numpy as np
 import json
 import shutil
+from packaging import version
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Conv2D, BatchNormalization, Flatten, AvgPool2D, MaxPool2D
 
@@ -259,7 +260,11 @@ class TestBatchNormFold(unittest.TestCase):
         """
         tf.compat.v1.reset_default_graph()
         tf.compat.v1.set_random_seed(0)
-        tf.keras.utils.set_random_seed(0)
+        
+        if version.parse(tf.version.VERSION) >= version.parse("2.10"):
+            tf.keras.utils.set_random_seed(0)
+        else:
+            np.random.seed(0)
         
         inputs = tf.keras.Input(shape=(1, 1, 4,))
         bn_op = tf.keras.layers.BatchNormalization(fused=True)(inputs, training=False)
@@ -738,18 +743,22 @@ class TestTrainingExtensionBnFoldToScale:
         """
         test conv (with bias) + bn + relu sequence
         """
-        # np.random.seed(43)
+
         tf.compat.v1.reset_default_graph()
         tf.compat.v1.set_random_seed(43)
-        tf.keras.utils.set_random_seed(43)
+        if version.parse(tf.version.VERSION) >= version.parse("2.10"):
+            tf.keras.utils.set_random_seed(43)
+        else:
+            np.random.seed(43)
+
         def model():
             """ Model with conv + bn + relu sequence """
             training = tf.Variable(False, name='bn_training_var') if is_training_variable else False
             inputs = tf.keras.Input(shape=(24, 24, 10,))
             x = tf.keras.layers.Conv2D(10, (3, 3))(inputs)
-            x = tf.keras.layers.BatchNormalization(beta_initializer=tf.random_normal_initializer(),
-                                                   gamma_initializer=tf.random_normal_initializer(),
-                                                   moving_mean_initializer=tf.random_normal_initializer(),
+            x = tf.keras.layers.BatchNormalization(beta_initializer=tf.random_normal_initializer(seed=43),
+                                                   gamma_initializer=tf.random_normal_initializer(seed=43),
+                                                   moving_mean_initializer=tf.random_normal_initializer(seed=0),
                                                    moving_variance_initializer=tf.random_uniform_initializer(0)) \
                 (x, training)
             x = tf.nn.relu(x)
@@ -843,10 +852,10 @@ class TestTrainingExtensionBnFoldToScale:
             training = tf.Variable(False, name='bn_training_var') if is_training_variable else False
             inputs = tf.keras.Input(shape=(24, 24, 10,))
             x = tf.keras.layers.Conv2D(10, (3, 3), use_bias=False)(inputs)
-            x = tf.keras.layers.BatchNormalization(beta_initializer=tf.random_normal_initializer(),
-                                                   gamma_initializer=tf.random_normal_initializer(),
-                                                   moving_mean_initializer=tf.random_normal_initializer(),
-                                                   moving_variance_initializer=tf.random_uniform_initializer(0)) \
+            x = tf.keras.layers.BatchNormalization(beta_initializer=tf.random_normal_initializer(seed=0),
+                                                   gamma_initializer=tf.random_normal_initializer(seed=0),
+                                                   moving_mean_initializer=tf.random_normal_initializer(seed=0),
+                                                   moving_variance_initializer=tf.random_uniform_initializer(0, seed=0)) \
                 (x, training)
             x = tf.nn.relu(x)
             outputs = tf.keras.layers.Flatten()(x)
@@ -919,10 +928,10 @@ class TestTrainingExtensionBnFoldToScale:
             training = tf.Variable(False, name='bn_training_var') if is_training_variable else False
             inputs = tf.keras.Input(shape=(24, 24, 10,))
             x = tf.keras.layers.DepthwiseConv2D((3, 3))(inputs)
-            x = tf.keras.layers.BatchNormalization(beta_initializer=tf.random_normal_initializer(),
-                                                   gamma_initializer=tf.random_normal_initializer(),
-                                                   moving_mean_initializer=tf.random_normal_initializer(),
-                                                   moving_variance_initializer=tf.random_uniform_initializer(0)) \
+            x = tf.keras.layers.BatchNormalization(beta_initializer=tf.random_normal_initializer(seed=43),
+                                                   gamma_initializer=tf.random_normal_initializer(seed=43),
+                                                   moving_mean_initializer=tf.random_normal_initializer(seed=43),
+                                                   moving_variance_initializer=tf.random_uniform_initializer(0, seed=43)) \
                 (x, training)
             x = tf.nn.relu(x)
             outputs = tf.keras.layers.Flatten()(x)
@@ -996,10 +1005,10 @@ class TestTrainingExtensionBnFoldToScale:
             training = tf.Variable(False, name='bn_training_var') if is_training_variable else False
             inputs = tf.keras.Input(shape=(24, 24, 10,))
             x = tf.keras.layers.DepthwiseConv2D((3, 3), use_bias=False)(inputs)
-            x = tf.keras.layers.BatchNormalization(beta_initializer=tf.random_normal_initializer(),
-                                                   gamma_initializer=tf.random_normal_initializer(),
-                                                   moving_mean_initializer=tf.random_normal_initializer(),
-                                                   moving_variance_initializer=tf.random_uniform_initializer(0)) \
+            x = tf.keras.layers.BatchNormalization(beta_initializer=tf.random_normal_initializer(seed=0),
+                                                   gamma_initializer=tf.random_normal_initializer(seed=0),
+                                                   moving_mean_initializer=tf.random_normal_initializer(seed=0),
+                                                   moving_variance_initializer=tf.random_uniform_initializer(0, seed=0)) \
                 (x, training)
             x = tf.nn.relu(x)
             outputs = tf.keras.layers.Flatten()(x)
@@ -1073,10 +1082,10 @@ class TestTrainingExtensionBnFoldToScale:
             training = tf.Variable(False, name='bn_training_var') if is_training_variable else False
             inputs = tf.keras.Input(shape=(24, 24, 10,))
             x = tf.keras.layers.Conv2D(10, (3, 3))(inputs)
-            x = tf.keras.layers.BatchNormalization(beta_initializer=tf.random_normal_initializer(),
-                                                   gamma_initializer=tf.random_normal_initializer(),
-                                                   moving_mean_initializer=tf.random_normal_initializer(),
-                                                   moving_variance_initializer=tf.random_uniform_initializer(0)) \
+            x = tf.keras.layers.BatchNormalization(beta_initializer=tf.random_normal_initializer(seed=43),
+                                                   gamma_initializer=tf.random_normal_initializer(seed=43),
+                                                   moving_mean_initializer=tf.random_normal_initializer(seed=43),
+                                                   moving_variance_initializer=tf.random_uniform_initializer(0, seed=43)) \
                 (x, training)
             outputs = tf.keras.layers.Flatten()(x)
             model = tf.keras.Model(inputs=inputs, outputs=outputs)
@@ -1154,10 +1163,10 @@ class TestTrainingExtensionBnFoldToScale:
             training = tf.Variable(False, name='bn_training_var') if is_training_variable else False
             inputs = tf.keras.Input(shape=(24, 24, 10,))
             x = tf.keras.layers.Conv2D(10, (3, 3), use_bias=False)(inputs)
-            x = tf.keras.layers.BatchNormalization(beta_initializer=tf.random_normal_initializer(),
-                                                   gamma_initializer=tf.random_normal_initializer(),
-                                                   moving_mean_initializer=tf.random_normal_initializer(),
-                                                   moving_variance_initializer=tf.random_uniform_initializer(0)) \
+            x = tf.keras.layers.BatchNormalization(beta_initializer=tf.random_normal_initializer(seed=0),
+                                                   gamma_initializer=tf.random_normal_initializer(seed=0),
+                                                   moving_mean_initializer=tf.random_normal_initializer(seed=0),
+                                                   moving_variance_initializer=tf.random_uniform_initializer(0, seed=0)) \
                 (x, training)
             outputs = tf.keras.layers.Flatten()(x)
             model = tf.keras.Model(inputs=inputs, outputs=outputs)
@@ -1236,10 +1245,10 @@ class TestTrainingExtensionBnFoldToScale:
             inputs = tf.keras.Input(shape=(24, 24, 10,))
             x = tf.keras.layers.Conv2D(10, (3, 3), use_bias=False)(inputs)
             x = tf.compat.v1.layers.batch_normalization(x, training=training,
-                                                        beta_initializer=tf.random_normal_initializer(),
-                                                        gamma_initializer=tf.random_normal_initializer(),
-                                                        moving_mean_initializer=tf.random_normal_initializer(),
-                                                        moving_variance_initializer=tf.random_uniform_initializer(0))
+                                                        beta_initializer=tf.random_normal_initializer(seed=43),
+                                                        gamma_initializer=tf.random_normal_initializer(seed=43),
+                                                        moving_mean_initializer=tf.random_normal_initializer(seed=43),
+                                                        moving_variance_initializer=tf.random_uniform_initializer(0, seed=43))
             _ = tf.keras.layers.Flatten()(x)
 
         device = '/gpu:0'
@@ -1309,7 +1318,10 @@ class TestTrainingExtensionBnFoldToScale:
         """
         tf.compat.v1.reset_default_graph()
         tf.compat.v1.set_random_seed(0)
-        tf.keras.utils.set_random_seed(0)
+        if version.parse(tf.version.VERSION) >= version.parse("2.10"):
+            tf.keras.utils.set_random_seed(0)
+        else:
+            np.random.seed(0)
         
         def model():
             """ Model with conv (with bias) + bn (compat) sequence """
@@ -1317,9 +1329,9 @@ class TestTrainingExtensionBnFoldToScale:
             inputs = tf.keras.Input(shape=(24, 24, 10,))
             x = tf.keras.layers.Conv2D(10, (3, 3))(inputs)
             x = tf.compat.v1.layers.batch_normalization(x, training=training,
-                                                        beta_initializer=tf.random_normal_initializer(),
-                                                        gamma_initializer=tf.random_normal_initializer(),
-                                                        moving_mean_initializer=tf.random_normal_initializer(),
+                                                        beta_initializer=tf.random_normal_initializer(seed=0),
+                                                        gamma_initializer=tf.random_normal_initializer(seed=0),
+                                                        moving_mean_initializer=tf.random_normal_initializer(seed=0),
                                                         moving_variance_initializer=tf.random_uniform_initializer(0))
             _ = tf.keras.layers.Flatten()(x)
 

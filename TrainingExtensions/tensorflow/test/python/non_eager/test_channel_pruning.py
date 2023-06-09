@@ -45,6 +45,7 @@ import shutil
 import itertools
 import copy
 import logging
+from packaging import version
 import tensorflow as tf
 import numpy as np
 from tensorflow.keras.applications.vgg16 import VGG16
@@ -594,7 +595,10 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         """
         tf.compat.v1.reset_default_graph()
         tf.compat.v1.set_random_seed(0)
-        tf.keras.utils.set_random_seed(0)
+        if version.parse(tf.version.VERSION) >= version.parse("2.10"):
+            tf.keras.utils.set_random_seed(0)
+        else:
+            np.random.seed(0)
         
         # input shape should be [Ns, Nic, k_h, k_w]
         number_of_images = 500

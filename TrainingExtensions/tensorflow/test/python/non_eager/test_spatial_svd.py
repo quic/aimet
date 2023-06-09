@@ -43,6 +43,7 @@ import shutil
 from decimal import Decimal
 import numpy as np
 import os
+from packaging import version
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import tensorflow as tf
 
@@ -122,7 +123,11 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
         """
         tf.compat.v1.reset_default_graph()
         tf.compat.v1.set_random_seed(0)
-        tf.keras.utils.set_random_seed(0)
+        if version.parse(tf.version.VERSION) >= version.parse("2.10"):
+            tf.keras.utils.set_random_seed(0)
+        else:
+            np.random.seed(0)
+
         num_examples = 2000
         g = tf.Graph()
         with g.as_default():
