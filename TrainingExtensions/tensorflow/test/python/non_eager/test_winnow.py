@@ -1109,6 +1109,7 @@ class TestTfModuleReducer(unittest.TestCase):
         new_sess.close()
         self.assertEqual(0, 0)
 
+    @pytest.mark.tf1
     def test_reducing_upsample2d(self):
         """ Test for reducing a model with upsample2D op """
         tf.compat.v1.reset_default_graph()

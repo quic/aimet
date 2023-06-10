@@ -5,6 +5,7 @@ onnx==1.10.0
 onnxruntime==1.10.0
 onnxruntime-extensions
 onnxsim
+protobuf==3.20.1
 psutil
 scikit-learn==1.1.3
 tensorboardX==2.4

@@ -136,7 +136,8 @@ class AutoQuant:
     def apply(self,
               fp32_model: tf.keras.Model,
               results_dir: str = "/tmp",
-              cache_id: str = None) -> Tuple[tf.keras.Model, float, str]:
+              cache_id: str = None,
+              custom_objects: Dict = None) -> Tuple[tf.keras.Model, float, str]:
         """
         Apply post-training quantization techniques.
 
@@ -145,12 +146,13 @@ class AutoQuant:
         :param cache_id: A string that composes a cache id in combination with results_dir.
             If specified, AutoQuant will load/save the PTQ results from/to the file system
             if previous PTQ results produced under the same results_dir and cache_id exist,
+        :param custom_objects: Custom objects of model.
         :return: Tuple of (best model, eval score, encoding path).
         """
         result = self._apply_helper(self._auto_quant_main,
                                     fp32_model,
                                     results_dir,
-                                    cache_id)
+                                    cache_id, custom_objects)
 
         return result["model"], result["accuracy"], result["encoding_path"]
 
@@ -158,7 +160,8 @@ class AutoQuant:
                       auto_quant_main_fn: Callable,
                       fp32_model: tf.keras.Model,
                       results_dir: str = "/tmp",
-                      cache_id: str = None) -> Dict[str, Any]:
+                      cache_id: str = None,
+                      custom_objects: Dict = None) -> Dict[str, Any]:
         """
 
         :param auto_quant_main_fn: Function that implements the main logic of AutoQuant.
@@ -167,6 +170,7 @@ class AutoQuant:
         :param cache_id: A string that composes a cache id in combination with results_dir.
             If specified, AutoQuant will load/save the PTQ results from/to the file system
             if previous PTQ results produced under the same results_dir and cache_id exist,
+        :param custom_objects: Custom objects of model.
         :return: The best ptq result as a dictionary.
         """
         results_dir = os.path.abspath(results_dir)
@@ -193,7 +197,7 @@ class AutoQuant:
             )
 
             ret = auto_quant_main_fn(fp32_model, target_acc,
-                                     eval_manager, results_dir)
+                                     eval_manager, results_dir, custom_objects)
 
             acc = ret["accuracy"]
             encoding_path = ret["encoding_path"]
@@ -325,7 +329,8 @@ class AutoQuant:
                          fp32_model: tf.keras.Model,
                          target_acc: float,
                          eval_manager: "_EvalManager",
-                         results_dir: str = "/tmp") -> Dict[str, Any]:
+                         results_dir: str = "/tmp",
+                         custom_objects: Dict = None) -> Dict[str, Any]:
         """
         Helper function of apply().
 
@@ -333,6 +338,7 @@ class AutoQuant:
         :param target_acc: Target eval score.
         :param eval_manager: _Evalmanager object.
         :param results_dir: Directory to save the results.
+        :param custom_objects: Custom objects of model.
         :return: The best ptq result as a dictionary.
         """
         with eval_manager.analysis_session("Weight Quantization Sensitivity") as sess:
@@ -354,16 +360,16 @@ class AutoQuant:
             model, folded_pairs = self._apply_batchnorm_folding(fp32_model)
             for conv, bn in folded_pairs:
                 sess.diagnostics.add(f"{conv} was merged with {bn}.")
-            sess.set_ptq_result(model=model, applied_techniques=["batchnorm_folding"])
+            sess.set_ptq_result(model=model, applied_techniques=["batchnorm_folding"], custom_objects=custom_objects)
 
         best_result = eval_manager.get_best_ptq_result()
         if best_result.accuracy >= target_acc:
-            return best_result.as_dict()
+            return best_result.as_dict(custom_objects=custom_objects)
 
         # Cross-Layer Equalization
         with eval_manager.ptq_session("Cross-Layer Equalization") as sess:
             model = self._apply_cross_layer_equalization(fp32_model)
-            sess.set_ptq_result(model=model, applied_techniques=["cross_layer_equalization"])
+            sess.set_ptq_result(model=model, applied_techniques=["cross_layer_equalization"], custom_objects=custom_objects)
 
         best_result = eval_manager.get_best_ptq_result()
         if best_result.accuracy >= target_acc:
@@ -371,11 +377,12 @@ class AutoQuant:
 
         # Adaround
         with eval_manager.ptq_session("AdaRound") as sess:
-            model, encoding_path = self._apply_adaround(best_result.load_model(),
+            model, encoding_path = self._apply_adaround(best_result.load_model(custom_objects=custom_objects),
                                                         results_dir)
             sess.set_ptq_result(model=model,
                                 encoding_path=encoding_path,
-                                applied_techniques=[*best_result.applied_techniques, "adaround"])
+                                applied_techniques=[*best_result.applied_techniques, "adaround"],
+                                custom_objects=custom_objects)
 
         return eval_manager.get_best_ptq_result().as_dict()
 
@@ -394,16 +401,20 @@ class PtqResult:
     accuracy: float
     applied_techniques: List[str]
 
-    def load_model(self):
+    def load_model(self, custom_objects: Dict = None):
         """
         Load model
+        :param custom_objects: Custom objects of model.
         :return: Loaded model
         """
-        return tf.keras.models.load_model(self.model_path)
+        return tf.keras.models.load_model(self.model_path, custom_objects=custom_objects)
 
-    def as_dict(self):
-        """Convert to dictionary"""
-        return dict(model=self.load_model(),
+    def as_dict(self, custom_objects: Dict = None):
+        """
+        Convert to dictionary
+        :param custom_objects: Custom objects of model.
+        """
+        return dict(model=self.load_model(custom_objects=custom_objects),
                     accuracy=self.accuracy,
                     encoding_path=self.encoding_path,
                     applied_techniques=self.applied_techniques)
@@ -585,6 +596,7 @@ class _PtqSession(_EvalSession):
                        model: tf.keras.Model = None,
                        sim: QuantizationSimModel = None,
                        acc: float = None,
+                       custom_objects: Dict = None,
                        **kwargs):
         """
         Set the result of PTQ. Should be called exactly once inside a with-as block
@@ -597,6 +609,7 @@ class _PtqSession(_EvalSession):
         :param sim: Result of PTQ. The quantization encoding (compute_encodings()) is
                     assumed to have been computed in advance
         :param acc: Eval score
+        :param custom_objects: Custom objects of model.
         :param kwargs: Additional arguments to the quantsim factory
         """
         if sim is None:
@@ -608,25 +621,27 @@ class _PtqSession(_EvalSession):
             assert acc is not None
             assert model is None
 
-        self._set_ptq_result(sim, acc, applied_techniques)
+        self._set_ptq_result(sim, acc, applied_techniques, custom_objects)
 
     def _set_ptq_result(self,
                         sim: QuantizationSimModel,
                         acc: float,
-                        applied_techniques: List[str]) -> PtqResult:
+                        applied_techniques: List[str],
+                        custom_objects: Dict = None) -> PtqResult:
         """
         Set the result of PTQ. Should be called exactly once inside a with-as block
         :param sim: Result of PTQ. The quantization encoding (compute_encodings()) is
                     assumed to have been computed in advance
         :param acc: Eval score
         :param applied_techniques: List of applied technique names
+        :param custom_objects: Custom objects of model.
         :return: PtqResult object
         """
         if self._ptq_result is not None:
             raise RuntimeError(
                 "sess.eval() can be called only once per each _EvalSession instance."
             )
-        model_path, encoding_path = self._export(sim)
+        model_path, encoding_path = self._export(sim, custom_objects)
         self._ptq_result = PtqResult(model_path=model_path,
                                      encoding_path=encoding_path,
                                      accuracy=acc,
@@ -634,13 +649,13 @@ class _PtqSession(_EvalSession):
         _logger.info(self._ptq_result)
         return self._ptq_result
 
-    def _export(self, sim: QuantizationSimModel) -> Tuple[str, str]:
+    def _export(self, sim: QuantizationSimModel, custom_objects: Dict = None) -> Tuple[str, str]:
         """
         Export quantsim
         :param sim: QuantizationSimModel object to export
         :return: The paths where model and encoding are saved
         """
-        sim.export(path=self._results_dir, filename_prefix=self._filename)
+        sim.export(path=self._results_dir, filename_prefix=self._filename, custom_objects=custom_objects)
         model_path = os.path.join(self._results_dir, f"{self._filename}")
         encoding_path = os.path.join(self._results_dir, f"{self._filename}.encodings")
         _logger.info("The results of %s is saved in %s and %s.",

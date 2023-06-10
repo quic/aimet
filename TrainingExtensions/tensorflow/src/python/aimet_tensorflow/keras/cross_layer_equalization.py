@@ -59,6 +59,12 @@ BatchNormFoldedPair = typing.Union[typing.Tuple[tf.keras.layers.Conv2D,
 ScaleFactor = typing.Union[np.ndarray, typing.Tuple[np.ndarray, np.ndarray]]
 ReluFlag = typing.Union[bool, typing.Tuple[bool, bool]]
 
+Convs = typing.Union[tf.keras.layers.Conv2D,
+                     tf.keras.layers.DepthwiseConv2D,
+                     tf.keras.layers.Conv2DTranspose]
+
+_supported_convs = Convs.__args__
+
 class ClsSetInfo:
     """
     This class hold information about the layers in a CLS set, along with corresponding scaling factors
@@ -168,9 +174,7 @@ class CrossLayerScaling:
         """
 
         for layer in cls_set:
-            # NOTE: DepthwiseConv2D and Conv2DTranspose is subclass of Conv2D
-            #   The check below covers all of Conv2D, DepthwiseConv2D and Conv2DTranspose class
-            if not isinstance(layer, tf.keras.layers.Conv2D):
+            if not isinstance(layer, _supported_convs):
                 raise ValueError("Only Conv or Transposed Conv layers are supported for CLE")
 
         scaling_params, prev_layer_params, curr_layer_params, next_layer_params = \

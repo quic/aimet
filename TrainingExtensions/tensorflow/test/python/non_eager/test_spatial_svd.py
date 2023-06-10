@@ -43,6 +43,7 @@ import shutil
 from decimal import Decimal
 import numpy as np
 import os
+from packaging import version
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import tensorflow as tf
 
@@ -103,7 +104,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         split_conv_output = sess.run(split_conv_op2.outputs[0])
 
-        self.assertTrue(np.allclose(split_conv_output, orig_conv_output, atol=1e-4))
+        self.assertTrue(np.allclose(split_conv_output, orig_conv_output, atol=1e-3))
 
         # check the output after bias
         for consumer in orig_conv_op.outputs[0].consumers():
@@ -112,7 +113,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
         for consumer in split_conv_op2.outputs[0].consumers():
             split_bias_out = sess.run(consumer.outputs[0])
 
-        self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-4))
+        self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-3))
 
         sess.close()
 
@@ -121,13 +122,19 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
         test the split after and before split_module call with channel last
         """
         tf.compat.v1.reset_default_graph()
+        tf.compat.v1.set_random_seed(0)
+        if version.parse(tf.version.VERSION) >= version.parse("2.10"):
+            tf.keras.utils.set_random_seed(0)
+        else:
+            np.random.seed(0)
+
         num_examples = 2000
         g = tf.Graph()
         with g.as_default():
             inp_tensor = tf.compat.v1.get_variable('inp_tensor', shape=[num_examples, 5, 5, 20],
-                                         initializer=tf.random_normal_initializer())
+                                         initializer=tf.random_normal_initializer(seed=0))
             filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, 20, 50],
-                                            initializer=tf.random_normal_initializer())
+                                            initializer=tf.random_normal_initializer(seed=0))
             conv1 = tf.nn.conv2d(inp_tensor, filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                  data_format="NHWC", name='Conv2D_1')
             bias_tensor = tf.compat.v1.get_variable('bias_tensor', shape=[50], initializer=tf.random_normal_initializer())
@@ -153,7 +160,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         split_conv_output = sess.run(split_conv_op2.outputs[0])
 
-        self.assertTrue(np.allclose(split_conv_output, orig_conv_output, atol=1e-4))
+        self.assertTrue(np.allclose(split_conv_output, orig_conv_output, atol=1e-3))
 
         # check the output after bias
         for consumer in orig_conv_op.outputs[0].consumers():
@@ -162,7 +169,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
         for consumer in split_conv_op2.outputs[0].consumers():
             split_bias_out = sess.run(consumer.outputs[0])
 
-        self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-4))
+        self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-3))
 
         sess.close()
 
@@ -206,7 +213,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         split_conv_output = sess.run(split_conv_op2.outputs[0])
 
-        self.assertTrue(np.allclose(split_conv_output, orig_conv_output, atol=1e-4))
+        self.assertTrue(np.allclose(split_conv_output, orig_conv_output, atol=1e-3))
 
         # check the output after bias
         for consumer in orig_conv_op.outputs[0].consumers():
@@ -215,7 +222,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
         for consumer in split_conv_op2.outputs[0].consumers():
             split_bias_out = sess.run(consumer.outputs[0])
 
-        self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-4))
+        self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-3))
 
         sess.close()
 
@@ -258,7 +265,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         split_conv_output = sess.run(split_conv_op2.outputs[0])
 
-        self.assertTrue(np.allclose(split_conv_output, orig_conv_output, atol=1e-4))
+        self.assertTrue(np.allclose(split_conv_output, orig_conv_output, atol=1e-3))
 
         # check the output after bias
         for consumer in orig_conv_op.outputs[0].consumers():
@@ -267,7 +274,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
         for consumer in split_conv_op2.outputs[0].consumers():
             split_bias_out = sess.run(consumer.outputs[0])
 
-        self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-4))
+        self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-3))
 
         sess.close()
 

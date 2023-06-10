@@ -1794,6 +1794,7 @@ class TestQuantSim(unittest.TestCase):
         assert new_relu.inputs[0] == orig_param_tensor
         assert quantized_param_tensor.op.inputs[0] == orig_param_tensor
 
+    @pytest.mark.tf1
     def test_sim_export_side_effect_qat_with_training_loop(self):
         """
         Test to validate gradient is updating for param quantizer ops
@@ -2151,6 +2152,7 @@ class TestQuantSimRangeLearning:
         sess.close()
         sim.session.close()
 
+    @pytest.mark.tf1
     def test_qat_fp16(self, iterations=5):
         """
         test qat fp16

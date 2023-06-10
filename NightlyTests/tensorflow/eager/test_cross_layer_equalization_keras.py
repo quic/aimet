@@ -46,15 +46,15 @@ from aimet_tensorflow.keras.utils.weight_tensor_utils import WeightTensorUtils
 def test_fold_batch_norms():
     rand_inp = np.random.randn(1, 224, 224, 3)
     model = tf.keras.applications.resnet50.ResNet50()
-    conv_99 = model.layers[99]
-    before_fold_weight = conv_99.get_weights()[0]
+    conv_99_name = model.layers[99].name
+    before_fold_weight = model.get_layer(conv_99_name).get_weights()[0]
     before_fold_output = model(rand_inp)
     conv_bn_pairs, model = fold_all_batch_norms(model)
-    after_fold_weight = conv_99.get_weights()[0]
+    after_fold_weight = model.get_layer(conv_99_name).get_weights()[0]
     after_fold_output = model(rand_inp)
 
     assert len(conv_bn_pairs) == 53
-    assert np.allclose(before_fold_output, after_fold_output, rtol=1e-2)
+    assert np.allclose(before_fold_output, after_fold_output, atol=1e-3)
     assert not np.array_equal(before_fold_weight, after_fold_weight)
 
 
