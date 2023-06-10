@@ -57,6 +57,7 @@ from models.supervised_classification_pipeline import create_stand_alone_supervi
     create_supervised_classification_trainer
 from aimet_torch.bn_reestimation import reestimate_bn_stats
 from aimet_torch.batch_norm_fold import fold_all_batch_norms_to_scale
+from aimet_torch.model_preparer import prepare_model
 
 two_class_image_dir = './data/tiny-imagenet-2'
 image_size = 224
@@ -181,9 +182,9 @@ class QuantizeAcceptanceTests(unittest.TestCase):
         torch.cuda.empty_cache()
 
         # Train the model using tiny imagenet data
-        model = models.resnet18(pretrained=False)
+        model = models.resnet18(pretrained=False).eval().cuda()
+        model = prepare_model(model)
         _ = model_train(model, epochs=2)
-        model = model.to(torch.device('cuda'))
 
         # layers_to_ignore = [model.conv1]
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf, default_param_bw=8,
@@ -317,9 +318,8 @@ class QuantizeAcceptanceTests(unittest.TestCase):
         save_config_file_for_per_channel_quantization()
         # Set up trained model
         base_pre_model_load_mark = torch.cuda.memory_allocated()
-        resnet = models.resnet18()
-        resnet = resnet.to(torch.device('cuda'))
-        resnet.eval()
+        resnet = models.resnet18().eval().cuda()
+        resnet = prepare_model(resnet)
         base_model_loaded_mark = torch.cuda.memory_allocated()
 
         dummy_input = torch.rand(1, 3, 224, 224).cuda()
