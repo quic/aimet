@@ -42,8 +42,18 @@ from typing import Iterable, Optional, Tuple, Union, List, Dict, Set
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
-from tensorflow.python.keras.engine.functional import Functional
-from tensorflow.python.keras.layers.core import TFOpLambda
+from packaging import version
+
+if version.parse(tf.version.VERSION) >= version.parse("2.10"):
+    # Ignore pylint errors as keras module is not available in TF 2.4
+    from keras.layers.core.tf_op_layer import TFOpLambda # pylint: disable=import-error
+    from keras.engine.functional import Functional # pylint: disable=import-error
+else:
+    # Ignore pylint errors due to conditional imports
+    from tensorflow.python.keras.engine.functional import Functional # pylint: disable=ungrouped-imports
+    from tensorflow.python.keras.layers.core import TFOpLambda # pylint: disable=ungrouped-imports
+
+# pylint: disable=wrong-import-position
 from aimet_common.defs import QuantScheme, MAP_ROUND_MODE_TO_PYMO
 
 import aimet_common.libpymo as libpymo
@@ -74,7 +84,12 @@ _supported_batchnorms = BatchNormType
 
 # Todo: search for more types of convolution
 LinearType = tf.keras.layers.Dense
-ConvType = tf.keras.layers.Conv2D
+ConvType = Union[tf.keras.layers.Conv1D,
+                 tf.keras.layers.Conv2D,
+                 tf.keras.layers.DepthwiseConv2D,
+                 tf.keras.layers.Conv2DTranspose]
+_supported_convs = ConvType.__args__
+
 FlattenType = Union[tf.keras.layers.Flatten, tf.keras.layers.Reshape]
 
 MAP_PYMO_TO_ROUND_MODE = {v: k for k, v in MAP_ROUND_MODE_TO_PYMO.items()}
@@ -96,7 +111,7 @@ def _check_layer_to_find_pattern(cur_layer: tf.keras.layers.Layer,
     """
 
     # pylint: disable=too-many-branches
-    if isinstance(cur_layer, ConvType):
+    if isinstance(cur_layer, _supported_convs):
         if has_seen[1] is not None:
             conv_linear_with_bn_dict[cur_layer] = [has_seen[1], None]
             has_seen[1] = None
@@ -209,7 +224,7 @@ def _get_ordered_conv_linears(node_layer_map: Dict,
     # look for conv layers
     ordered_conv_linears = []
     for layer in list_of_ordered_layers:
-        if isinstance(layer, (tf.keras.layers.Conv2D, tf.keras.layers.Dense)):
+        if isinstance(layer, _supported_layers):
             ordered_conv_linears.append(layer)
     return ordered_conv_linears
 
@@ -376,6 +391,7 @@ class PassThroughOp(tf.keras.layers.Layer):
         return inputs
 
 # pylint: disable=too-many-branches, protected-access, too-many-locals, too-many-nested-blocks
+@common.to_functional
 def _delete_bn_from_functional(model: tf.keras.Model,
                                bn_layers_to_remove: List[tf.keras.layers.BatchNormalization]) -> tf.keras.Model:
     """
@@ -545,7 +561,7 @@ def _delete_bn_from_sequential(layer: tf.keras.layers.Layer,
     visited = False
     idx = None
     # pylint: disable=protected-access
-    for index, inner_layer in enumerate(layer._layers):
+    for index, inner_layer in enumerate(layer.layers):
         if visited:
             layers_after_bn.append(inner_layer)
 
@@ -558,7 +574,7 @@ def _delete_bn_from_sequential(layer: tf.keras.layers.Layer,
 
     if visited and idx is not None:
         # pylint: disable=protected-access
-        for _ in range(len(layer._layers) - idx):
+        for _ in range(len(layer.layers) - idx):
             layer.pop()
         for layer_to_add in layers_after_bn:
             layer.add(layer_to_add)
@@ -579,8 +595,7 @@ def _delete_bn_for_non_subclassed_model(model: Union[tf.keras.Model, tf.keras.la
     # We are expecting to find sequential model in functional model
     # or model subclassing in the elif statement
     elif isinstance(model, (tf.keras.layers.Layer, tf.keras.Model)):
-        # pylint: disable=protected-access
-        for layer in model._layers:
+        for layer in model.layers:
             if layer.submodules:
                 _delete_bn_for_non_subclassed_model(layer, bn_layer)
 
@@ -612,7 +627,7 @@ def _delete_all_bns_from_model(model: Union[tf.keras.Model, tf.keras.layers.Laye
     """
     if bn_layers:
         # QuantizationSimModel's model will fall into this case.
-        if isinstance(model, Functional) and not isinstance(model, tf.keras.Sequential):
+        if isinstance(model, Functional) and not isinstance(model, tf.keras.Sequential) or any(isinstance(l, QcQuantizeWrapper) for l in model.layers):
             return _delete_bn_from_functional(model, bn_layers)
 
         module_to_name_map = common.module_to_name_map(model)
@@ -761,7 +776,7 @@ def fold_all_batch_norms_to_scale(sim: QuantizationSimModel) -> List[Tuple[QcQua
     sim.model = bn_fold_sim_model if bn_fold_sim_model else sim.model
 
     bn_fold_model = _fold_given_batch_norms(old_model_without_wrappers, conv_bn_pairs_without_wrappers, [])
-    sim._model_without_wrappers = bn_fold_model
+    sim._model_without_wrappers = bn_fold_model if bn_fold_model else old_model_without_wrappers
 
     return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs]
 

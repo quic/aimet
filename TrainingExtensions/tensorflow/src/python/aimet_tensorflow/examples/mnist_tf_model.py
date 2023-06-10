@@ -38,8 +38,8 @@
 """ MNIST model using Keras API"""
 
 import tensorflow as tf
-from tensorflow.python.keras.models import Sequential
-from tensorflow.python.keras.layers import Reshape, MaxPool2D, Conv2D, Flatten, Dropout, Dense
+from tensorflow.keras import Sequential
+from tensorflow.keras.layers import Reshape, MaxPool2D, Conv2D, Flatten, Dropout, Dense
 
 
 #  Copyright 2017 The TensorFlow Authors. All Rights Reserved.

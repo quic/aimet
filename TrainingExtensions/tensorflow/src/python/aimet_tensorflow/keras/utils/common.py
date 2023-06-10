@@ -39,7 +39,7 @@
 """ Common Utilities for tf 2 keras """
 import errno
 import os
-from typing import Union, List, Dict, Tuple, AnyStr
+from typing import Union, List, Dict, Tuple, AnyStr, Callable
 import tensorflow as tf
 from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_from_session_graph
 from tensorflow.python.framework.graph_util_impl import remove_training_nodes
@@ -57,6 +57,32 @@ per_channel_quantizeable_layers = (tf.keras.layers.Conv2D, tf.keras.layers.Conv2
                                    tf.keras.layers.Dense)
 
 SUBMODULES_TO_SKIP = (tf.keras.layers.MultiHeadAttention,)
+
+def to_functional(func: Callable) -> tf.keras.Model:
+    """
+    Decorator to check if the input model is a Sequential model. If it is, then the model is converted to a
+    Functional model and the new model is returned. Otherwise, the same model is returned. This is necessary for node
+    mapping as the `.layers` API call does NOT include a Sequential models InputLayer.
+    :param func: Function to be decorated
+    :return: Decorated function
+    """
+
+    def wrapper(*args, **kwargs):
+        """
+        Wrapper function to check if the input model is a Sequential model. If it is, then the model is converted to a
+        Functional model and the new model is returned. Otherwise, the same model is returned.
+        :param args: args to be passed to the function
+        :param kwargs: kwargs to be passed to the function
+        :return: Decorated function
+        """
+        model = args[0]
+        if isinstance(model, tf.keras.Sequential):
+            _logger.info("Input model is a Sequential model. Converting to Functional model.")
+            model = tf.keras.Model(inputs=model.input, outputs=model.output)
+            args = (model,) + args[1:]
+        return func(*args, **kwargs)
+
+    return wrapper
 
 
 def is_lambda_operator(layer: tf.keras.layers.Layer) -> bool:
@@ -81,8 +107,7 @@ def module_to_name_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) \
     """
 
     ref_name = {}
-    # pylint: disable=protected-access
-    for inner_layer in cur_layer._layers:
+    for inner_layer in cur_layer.layers:
         if not isinstance(inner_layer, tf.keras.layers.Layer):
             continue
         if inner_layer.submodules:
@@ -123,7 +148,7 @@ def _find_last_layers(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) \
 
     last_layers = []
     # pylint: disable=protected-access
-    for inner_layer in cur_layer._layers:
+    for inner_layer in cur_layer.layers:
         if not isinstance(inner_layer, tf.keras.layers.Layer):
             continue
         if inner_layer.outbound_nodes == []:
@@ -134,7 +159,7 @@ def _find_last_layers(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) \
 
     return last_layers
 
-
+@to_functional
 def create_layer_to_out_node_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) -> Dict:
     """
     To find the outbound nodes of one layer.
@@ -211,7 +236,7 @@ def _submodule_handler_node_to_layer_map(
 
     return im_node_layer_map, im_node_input, im_nodes_after_input_layer
 
-
+@to_functional
 def create_node_to_layer_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) -> Dict:
     """
     To find the input layers and output layer of one node.
@@ -221,8 +246,7 @@ def create_node_to_layer_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer))
     """
 
     node_layer_map = {}
-    # pylint: disable=protected-access
-    for inner_layer in cur_layer._layers:
+    for inner_layer in cur_layer.layers:
         if not isinstance(inner_layer, tf.keras.layers.Layer):
             continue
         for out_node in inner_layer.outbound_nodes:

@@ -41,17 +41,26 @@ import inspect
 from typing import Any, Dict, List, Set, Union
 import re
 import numpy as np
-
 import tensorflow as tf
-from tensorflow.python.keras.engine.base_layer_utils import is_subclassed
-from tensorflow.python.keras.engine.keras_tensor import KerasTensor
-from tensorflow.python.keras.engine.functional import Functional
-from tensorflow.python.keras.layers.core import TFOpLambda
 from tensorflow.python.keras.layers.merge import _Merge as MergeLayersParentClass
 import tensorflow.keras.backend as K
+from packaging import version
 
+if version.parse(tf.version.VERSION) >= version.parse("2.10"):
+    # Ignore pylint errors as keras module is not available in TF 2.4
+    from keras.engine.base_layer_utils import is_subclassed # pylint: disable=import-error
+    from keras.engine.functional import Functional # pylint: disable=import-error
+    from keras.engine.keras_tensor import KerasTensor # pylint: disable=import-error
+    from keras.layers.core.tf_op_layer import TFOpLambda # pylint: disable=import-error
+else:
+    # Ignore pylint errors due to conditional imports
+    from tensorflow.python.keras.engine.base_layer_utils import is_subclassed # pylint: disable=ungrouped-imports
+    from tensorflow.python.keras.engine.keras_tensor import KerasTensor # pylint: disable=ungrouped-imports
+    from tensorflow.python.keras.engine.functional import Functional # pylint: disable=ungrouped-imports
+    from tensorflow.python.keras.layers.core import TFOpLambda # pylint: disable=ungrouped-imports
+
+# pylint: disable=wrong-import-position
 from aimet_tensorflow.keras.utils.model_connection_utils import ModelLayerConnections, ModelLayerConnectionsProperties
-
 from aimet_tensorflow.keras.utils.model_transform_utils import replace_separable_conv_with_depthwise_pointwise
 from aimet_common.utils import AimetLogger
 

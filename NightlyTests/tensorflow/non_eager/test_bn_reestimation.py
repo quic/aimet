@@ -162,7 +162,7 @@ def bn_re_estimation_dataset(bn_num_batches, batch_size):
 
 class TestBNReEstimation:
 
-    def test_modle_rewriter_ptq_reestimation_fold(self, bn_re_estimation_dataset, bn_num_batches):
+    def test_model_rewriter_ptq_reestimation_fold(self, bn_re_estimation_dataset, bn_num_batches):
         tf.compat.v1.reset_default_graph()
         model = tf.keras.applications.mobilenet_v2.MobileNetV2(weights=None, input_shape=(32, 32, 3))
         graph = model.inputs[0].graph

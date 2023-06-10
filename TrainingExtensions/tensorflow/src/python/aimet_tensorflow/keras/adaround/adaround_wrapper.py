@@ -37,7 +37,7 @@
 # =============================================================================
 
 """ Adaround wrapper """
-
+import typing
 from typing import Dict, Union, List, Tuple
 import numpy as np
 import tensorflow as tf
@@ -49,6 +49,12 @@ from aimet_common.defs import QuantScheme
 from aimet_tensorflow.adaround.adaround_wrapper import AdaroundWrapper as TfAdaroundWrapper
 
 BATCH_SIZE = 32
+
+ConvType = typing.Union[tf.keras.layers.Conv2D,
+                        tf.keras.layers.Conv2DTranspose,
+                        tf.keras.layers.DepthwiseConv2D]
+
+_supported_convs = ConvType.__args__
 
 class AdaroundWrapper(keras.layers.Layer):
     """
@@ -122,7 +128,7 @@ class AdaroundWrapper(keras.layers.Layer):
         :param adaround_weight_tensor: The adarounded weight
         :return: output of the op computed with AdaRounded weights
         """
-        if isinstance(self._layer, tf.keras.layers.Conv2D):
+        if isinstance(self._layer, _supported_convs):
             kwargs = self._get_conv_args(self._layer)
             if isinstance(self._layer, tf.keras.layers.DepthwiseConv2D):
                 adaround_out_tensor = tf.nn.depthwise_conv2d(inp_tensor, adaround_weight_tensor, **kwargs)
@@ -143,7 +149,9 @@ class AdaroundWrapper(keras.layers.Layer):
 
         return adaround_out_tensor
 
-    def call(self, inputs, **kwargs):  # pylint: disable=unused-argument
+    # Different 'call' method signatures between TF 2.4 and TF 2.10
+    # pylint: disable=arguments-differ
+    def call(self, inputs, *args, **kwargs):  # pylint: disable=unused-argument
         """
         :param inputs: Input tensor
         :param kwargs: Additional keyword arguments

@@ -36,7 +36,7 @@
 
 # Docker image file to build and test AIMET for Tensorflow in a GPU environment
 ARG REGISTRY
-FROM ${REGISTRY}nvidia/cuda:11.1.1-cudnn8-devel-ubuntu20.04
+FROM ${REGISTRY}nvidia/cuda:11.2.0-cudnn8-devel-ubuntu20.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=DontWarn
@@ -150,16 +150,16 @@ RUN python3 -m pip --no-cache-dir install \
         ipykernel \
         Jinja2==3.0.3 \
         jupyter \
-        keras==2.2.4 \
+        keras==2.10.0 \
         lmdb==0.95 \
         nbsphinx==0.8.12 \
-        numpy==1.19.5 \
-        onnx==1.10.0 \
+        numpy==1.20.0 \
+        onnx==1.12.0 \
         opencv-python \
         Pillow==9.3.0 \
         pluggy==0.12.0 \
         progressbar2 \
-        protobuf==3.20.1 \
+        protobuf==3.19.2 \
         psutil \
         ptflops \
         pybind11 \
@@ -175,9 +175,9 @@ RUN python3 -m pip --no-cache-dir install \
         sphinx-jinja==1.1.1 \
         sphinx-autodoc-typehints==1.6.0 \
         sphinx-rtd-theme \
-        tensorboard==2.4.0 \
-        tensorboardX==2.4 \
-        tensorflow-gpu==2.4.3 \
+        tensorboard==2.10.1 \
+        tensorboardX==2.6 \
+        tensorflow-gpu==2.10.1 \
         tensorflow-hub \
         tensorflow-model-optimization \
         tensorlayer==2.2.1 \
@@ -231,7 +231,7 @@ RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/s
 RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
 
 # Clone the tensorflow repo to enable development
-RUN cd / && git clone --depth 1 --single-branch --branch v2.4.3 https://github.com/tensorflow/tensorflow.git
+RUN cd / && git clone --depth 1 --single-branch --branch v2.10.1 https://github.com/tensorflow/tensorflow.git
 
 RUN python3 -m pip install git-pylint-commit-hook osqp
 
@@ -251,3 +251,10 @@ RUN apt-get update --fix-missing -y && apt upgrade -y && apt-get install -y clan
 
 # Create a version-less symbolic link for clang-tidy
 RUN ln -s /usr/bin/run-clang-tidy-11.py /usr/bin/run-clang-tidy.py
+
+# Provide write permission to the python package folder in order to install AIMET in editable mode
+RUN chmod o+w /usr/local/lib/python3.8/dist-packages
+
+# Work-around for tensorflow being unable to find libcusolver.so.10 in the cuda:11.2.0 container
+# Reference: https://github.com/tensorflow/tensorflow/issues/44777#issuecomment-817303735
+RUN ln -s /usr/local/cuda-11.2/lib64/libcusolver.so.11 /usr/local/lib/python3.8/dist-packages/tensorflow/python/libcusolver.so.10
