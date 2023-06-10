@@ -137,16 +137,16 @@ RUN python3 -m pip --no-cache-dir install \
         ipython \
         Jinja2==3.0.3 \
         jupyter \
-        keras==2.2.4 \
+        keras==2.10.0 \
         lmdb==0.95 \
         nbsphinx==0.8.12 \
-        numpy==1.19.5 \
-        onnx==1.10.0 \
+        numpy==1.20.0 \
+        onnx==1.12.0 \
         opencv-python \
         Pillow==9.3.0 \
         pluggy==0.12.0 \
         progressbar2 \
-        protobuf==3.20.1 \
+        protobuf==3.19.2 \
         psutil \
         ptflops \
         pybind11 \
@@ -162,9 +162,9 @@ RUN python3 -m pip --no-cache-dir install \
         sphinx-jinja==1.1.1 \
         sphinx-autodoc-typehints==1.6.0 \
         sphinx-rtd-theme \
-        tensorboard==2.4.0 \
-        tensorboardX==2.4 \
-        tensorflow-cpu==2.4.3 \
+        tensorboard==2.10.1 \
+        tensorboardX==2.6 \
+        tensorflow-cpu==2.10.1 \
         tensorflow-hub \
         tensorflow-model-optimization \
         tensorlayer==2.2.1 \
@@ -218,7 +218,7 @@ RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/s
 RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
 
 # Clone the tensorflow repo to enable development
-RUN cd / && git clone --depth 1 --single-branch --branch v2.4.3 https://github.com/tensorflow/tensorflow.git
+RUN cd / && git clone --depth 1 --single-branch --branch v2.10.1 https://github.com/tensorflow/tensorflow.git
 
 RUN python3 -m pip install git-pylint-commit-hook osqp
 

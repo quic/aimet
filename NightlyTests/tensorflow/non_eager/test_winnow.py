@@ -46,9 +46,11 @@ from packaging import version
 import tensorflow as tf
 if not version.parse(tf.version.VERSION) >= version.parse("2.00"):
     from tensorflow.contrib.slim.nets import vgg        # pylint: disable=no-name-in-module
+
 from tensorflow.keras.applications.resnet50 import ResNet50
-from tensorflow.python.keras.applications.vgg16 import VGG16
-from tensorflow.python.keras.applications.inception_v3 import InceptionV3
+from tensorflow.keras.applications.vgg16 import VGG16
+from tensorflow.keras.applications.inception_v3 import InceptionV3
+
 import numpy as np
 
 from aimet_common.utils import AimetLogger

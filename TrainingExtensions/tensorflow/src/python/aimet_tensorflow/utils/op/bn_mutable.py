@@ -113,6 +113,9 @@ def modify_sess_bn_mutable(sess: tf.compat.v1.Session,
             is_fused = bool(bn_op.type == 'FusedBatchNormV3')
 
             tf_op = bn_op.get_tf_op_with_io_tensor()
+            # PyLint triggering an error although 'batch_normalization' is defined
+            # https://www.tensorflow.org/api_docs/python/tf/compat/v1/layers/batch_normalization
+            # pylint: disable=no-member
             new_bn = tf.compat.v1.layers.batch_normalization(tf_op.in_tensor,
                                                              epsilon=epsilon,
                                                              momentum=momentum_var,

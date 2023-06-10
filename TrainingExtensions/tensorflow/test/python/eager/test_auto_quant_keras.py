@@ -49,6 +49,7 @@ import tensorflow as tf
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_tensorflow.keras.auto_quant import AutoQuant
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
+from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 
 from aimet_common.utils import AimetLogger
@@ -56,16 +57,41 @@ import logging
 
 AimetLogger.set_level_for_all_areas(logging.DEBUG)
 
+def get_tracking_layer(model: tf.keras.Model) -> bool:
+    return model.layers[-1]._layer_to_wrap if isinstance(model.layers[-1], QcQuantizeWrapper) else model.layers[-1]
+
+class TrackingLayer(tf.keras.layers.Layer):
+    def __init__(self, *args, **kwargs):
+        super(TrackingLayer, self).__init__()
+
+        self.applied_bn_folding = self.add_weight('applied_bn_folding',
+                                                    dtype=tf.bool,
+                                                    initializer=tf.constant_initializer(False),
+                                                    trainable=False)
+
+        self.applied_cle = self.add_weight('applied_cle',
+                                            dtype=tf.bool,
+                                            initializer=tf.constant_initializer(False),
+                                            trainable=False)
+
+        self.applied_adaround= self.add_weight('applied_adaround',
+                                                dtype=tf.bool,
+                                                initializer=tf.constant_initializer(False),
+                                                trainable=False)
+
+    def get_config(self):
+        return super().get_config()
+
+    def call(self, inputs, *args, **kwargs):
+        return inputs
+
 @pytest.fixture(scope="function")
 def model():
     inputs = tf.keras.Input(shape=(32, 32, 3,))
     x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-    outputs = tf.keras.layers.Dense(10, activation="softmax")(x)
+    x = tf.keras.layers.Dense(10, activation="softmax")(x)
+    outputs = TrackingLayer()(x)
     functional_model = tf.keras.Model(inputs=inputs, outputs=outputs)
-
-    functional_model.applied_bn_folding = tf.Variable(False, trainable=False)
-    functional_model.applied_cle = tf.Variable(False, trainable=False)
-    functional_model.applied_adaround = tf.Variable(False, trainable=False)
 
     return functional_model
 
@@ -87,33 +113,34 @@ def assert_applied_techniques(
         output_model, acc, encoding_path,
         target_acc, bn_folded_acc, cle_acc, adaround_acc
 ):
+    tracking_layer = get_tracking_layer(output_model)
     # Batchnorm folding is always applied.
-    assert output_model.applied_bn_folding
+    assert tracking_layer.applied_bn_folding
 
     # If accuracy is good enough after batchnorm folding
     if bn_folded_acc >= target_acc:
         assert acc == bn_folded_acc
         assert encoding_path.endswith("batchnorm_folding.encodings")
-        assert not output_model.applied_cle
-        assert not output_model.applied_adaround
+        assert not tracking_layer.applied_cle
+        assert not tracking_layer.applied_adaround
         return
 
     # If accuracy is good enough after cle
     if cle_acc >= target_acc:
         assert acc == cle_acc
         assert encoding_path.endswith("cross_layer_equalization.encodings")
-        assert output_model.applied_cle
-        assert not output_model.applied_adaround
+        assert tracking_layer.applied_cle
+        assert not tracking_layer.applied_adaround
         return
 
     # CLE should be applied if and only if it brings accuracy gain
-    assert output_model.applied_cle == (bn_folded_acc < cle_acc)
+    assert tracking_layer.applied_cle == (bn_folded_acc < cle_acc)
 
     # If accuracy is good enough after adaround
     if adaround_acc >= target_acc:
         assert acc == adaround_acc
         assert encoding_path.endswith("adaround.encodings")
-        assert output_model.applied_adaround
+        assert tracking_layer.applied_adaround
         return
 
     assert acc == max(bn_folded_acc, cle_acc, adaround_acc)
@@ -138,22 +165,28 @@ def _set_attr_to_copied_model(copied_model: tf.keras.Model,
 @contextlib.contextmanager
 def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc):
     def bn_folding(model: tf.keras.Model, *_, **__):
-        model.applied_bn_folding.assign(True)
+        tracking_layer = get_tracking_layer(model)
+        tracking_layer.applied_bn_folding.assign(True)
+
         return model, tuple()
 
     def cle(model: tf.keras.Model, *_, **__):
         copied_model = tf.keras.models.clone_model(model)
-        _set_attr_to_copied_model(copied_model, model)
 
-        copied_model.applied_bn_folding.assign(True)
-        copied_model.applied_cle.assign(True)
+        copied_model.layers[-1].set_weights(model.layers[-1].get_weights())
+        tracking_layer = get_tracking_layer(copied_model)
+        tracking_layer.applied_bn_folding.assign(True)
+        tracking_layer.applied_cle.assign(True)
+
         return copied_model
 
     def adaround(model: tf.keras.Model, *_, **__):
         copied_model = tf.keras.models.clone_model(model)
-        _set_attr_to_copied_model(copied_model, model)
 
-        copied_model.applied_adaround.assign(True)
+        tracking_layer = get_tracking_layer(copied_model)
+        tracking_layer.set_weights(get_tracking_layer(model).get_weights())
+        tracking_layer.applied_adaround.assign(True)
+
         return copied_model
 
     class _QuantizationSimModel(QuantizationSimModel):
@@ -167,7 +200,8 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc):
             self._model_without_wrappers = model
             if not in_place:
                 self._model_without_wrappers = tf.keras.models.clone_model(model)
-                self._model_without_wrappers.set_weights(model.get_weights()[:4])
+                n_weights = len(self._model_without_wrappers.weights)
+                self._model_without_wrappers.set_weights(model.get_weights()[:n_weights])
 
                 for key in ["applied_bn_folding", "applied_cle", "applied_adaround"]:
                     if hasattr(model, key):
@@ -199,11 +233,12 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc):
             return model
 
     def mock_eval_callback(model, _):
-        if model.applied_adaround:
+        tracking_layer = get_tracking_layer(model)
+        if tracking_layer.applied_adaround:
             return adaround_acc
-        if model.applied_cle:
+        if tracking_layer.applied_cle:
             return cle_acc
-        if model.applied_bn_folding:
+        if tracking_layer.applied_bn_folding:
             return bn_folded_acc
 
         return FP32_ACC
@@ -260,7 +295,9 @@ class TestAutoQuant:
         with create_tmp_directory() as results_dir:
             target_acc = FP32_ACC - allowed_accuracy_drop
 
-            output_model, acc, encoding_path = auto_quant.apply(model, results_dir=results_dir)
+            output_model, acc, encoding_path = auto_quant.apply(model,
+                                                                results_dir=results_dir,
+                                                                custom_objects={'TrackingLayer': TrackingLayer})
             assert_applied_techniques(output_model, acc, encoding_path, target_acc, bn_folded_acc, cle_acc, adaround_acc)
 
     def test_auto_quant_invalid_input(self):
@@ -297,7 +334,7 @@ class TestAutoQuant:
                 ]
 
                 # No previously cached results
-                auto_quant.apply(model, results_dir=results_dir, cache_id=cache_id)
+                auto_quant.apply(model, results_dir=results_dir, cache_id=cache_id, custom_objects={'TrackingLayer': TrackingLayer})
 
                 for cache_file in cache_files:
                     assert os.path.exists(cache_file)
@@ -306,7 +343,7 @@ class TestAutoQuant:
                 assert mocks.apply_adaround.call_count == 1
 
                 # Load cached result
-                auto_quant.apply(model, results_dir=results_dir, cache_id=cache_id)
+                auto_quant.apply(model, results_dir=results_dir, cache_id=cache_id, custom_objects={'TrackingLayer': TrackingLayer})
 
                 assert mocks.equalize_model.call_count == 1
                 assert mocks.apply_adaround.call_count == 1

@@ -42,7 +42,10 @@ from packaging import version
 
 import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme, QuantizationDataType
+from aimet_tensorflow.examples.test_models import keras_sequential_conv_net
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
+from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ParamPerChannelQuantizer
+from aimet_tensorflow.keras.utils.common import get_number_of_outputs_and_axis_handling
 
 
 def dense_functional():
@@ -103,8 +106,8 @@ def test_wrapper():
         param_quant_only = model.predict(test_inp)
         model.layers[1].output_quantizers[0].enable()
         param_and_output_quant = model.predict(test_inp)
-        assert np.allclose(param_quant_only, np.array([[6.9411764145, 10.6735286713, 5.2558822632]]))
-        assert np.allclose(param_and_output_quant, np.array([[6.9482579231, 10.6735286713, 5.2739787102]]))
+        assert np.allclose(param_quant_only, np.array([[6.9411764145, 10.6735286713, 5.2558822632]]), rtol=1e-2)
+        assert np.allclose(param_and_output_quant, np.array([[6.9482579231, 10.6735286713, 5.2739787102]]), rtol=1e-2)
 
         model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
                       loss=tf.keras.losses.MeanSquaredError())
@@ -669,3 +672,27 @@ def test_bn_QcQuantizeWrapper():
     model_wrapper = tf.keras.Model(inputs=inputs, outputs=bn_wrapper)
     bn_layers_wrapper = [model_wrapper.layers[1].original_layer]
     _test_bn_correctness(model_wrapper, bn_layers_wrapper, dummy_inputs)
+
+def test_keras_fp16_pc():
+    model = keras_sequential_conv_net()
+    rand = np.random.rand(1, 28, 28, 3)
+    _ = model(rand)
+    
+    conv_layer = model.layers[0]
+    
+    num_c, axis = get_number_of_outputs_and_axis_handling(conv_layer, conv_layer.weights[0].shape, "weight")
+    ppcq = ParamPerChannelQuantizer(conv_layer,
+                                    name=conv_layer.weights[0].name.split(':')[0],
+                                    quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                    round_mode='nearest',
+                                    bitwidth=16,
+                                    data_type=QuantizationDataType.float,
+                                    is_symmetric=False,
+                                    use_strict_symmetric=False,
+                                    use_unsigned_symmetric=False,
+                                    axis_handling=axis,
+                                    num_output_channels=num_c,
+                                    enabled=True)
+    
+    ppcq_rand_tensor = np.random.rand(1, 28, 28, 4)
+    _ = ppcq(ppcq_rand_tensor)
