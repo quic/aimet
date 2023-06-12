@@ -37,6 +37,7 @@
 # =============================================================================
 import json
 import os
+from aimet_common.defs import QuantizationDataType
 from aimet_onnx.quantsim import QuantizationSimModel
 from models import models_for_tests
 
@@ -313,3 +314,84 @@ class TestQuantSimConfig:
         sim = QuantizationSimModel(model, config_file='./data/quantsim_config.json', use_cuda=False)
         assert sim.qc_quantize_op_dict['conv_w'].quant_info.usePerChannelMode == True
         assert sim.qc_quantize_op_dict['fc_w'].quant_info.usePerChannelMode == False
+
+
+    def test_supported_kernels(self):
+        """
+        Tests the generated supported_kernels
+        """
+        model = models_for_tests.single_residual_model()
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "False",
+                    "is_symmetric": "True"
+                },
+                "hw_version": "V01",
+                "supported_kernels": [
+                    {
+                        "activation": {
+                            "bitwidth": 16,
+                            "dtype": "float"
+                        },
+                        "param": {
+                            "bitwidth": 16,
+                            "dtype": "float"
+                        }
+                    }
+                ],
+                "per_channel_quantization": "True",
+            },
+            "params": {},
+            "op_type": {
+                'Conv':{
+                    "supported_kernels": [
+                        {
+                            "activation": {
+                                "bitwidth": 16,
+                                "dtype": "int"
+                            },
+                            "param": {
+                                "bitwidth": 8,
+                                "dtype": "int"
+                            }
+                        }
+                    ],
+                    "per_channel_quantization": "False",
+                }
+            },
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+        sim = QuantizationSimModel(model, config_file='./data/quantsim_config.json')
+        op_to_supported_kernels = sim._op_to_supported_kernel
+        for op_name in op_to_supported_kernels:
+                assert len(op_to_supported_kernels[op_name]) == 1
+                if 'Conv' in op_name:
+                    assert op_to_supported_kernels[op_name] == [((16, QuantizationDataType.int), (8, QuantizationDataType.int))]
+                else:
+                    assert op_to_supported_kernels[op_name] == [((16, QuantizationDataType.float), (16, QuantizationDataType.float))]
+
+        expected_supported_kernels = [
+                    {
+                        "activation": {
+                            "bitwidth": 16,
+                            "dtype": QuantizationDataType.int
+                        },
+                        "param": {
+                            "bitwidth": 8,
+                            "dtype": QuantizationDataType.int
+                        }
+                    }
+                ]
+        supported_kernels_conv = sim.get_supported_kernels()["Conv"]
+        assert len(supported_kernels_conv) == 1
+        assert supported_kernels_conv == expected_supported_kernels

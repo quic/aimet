@@ -131,7 +131,18 @@ class QuantizationSimModel:
         self.session = self._build_session(self.providers)
 
         quantsim_configurator = self._add_configuration_(config_file)
+
+        self._supported_kernels = quantsim_configurator.get_supported_kernels()
+        self._op_to_supported_kernel = quantsim_configurator.get_op_to_supported_kernels()
+
         self.quant_args = extract_global_quantizer_args(quant_scheme, quantsim_configurator)
+
+    def get_supported_kernels(self) -> Dict:
+        """
+        Return _supported_kernels parsed from the config file
+        :return: Dictionary containing supported_kernels
+        """
+        return self._supported_kernels
 
     def _add_configuration_(self, config_file: str):
         """
