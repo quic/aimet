@@ -123,7 +123,6 @@ BatchNorm = create_wrapper_module('BatchNorm', torch.nn.functional.batch_norm)
 GroupNorm = create_wrapper_module('GroupNorm', torch.nn.functional.group_norm)
 Normalize = create_wrapper_module('Normalize', torch.nn.functional.normalize)
 
-
 # following modules are for overloaded operators like + and *,
 # which can operate other than torch.Tensor datatype.
 class Add(torch.nn.Module):
@@ -275,3 +274,24 @@ class CustomGather(torch.nn.Module):
         target_shape = data.shape[:axis] + indices.shape + data.shape[axis + 1:]
         indices = (indices < 0).to(indices.dtype) * data.shape[axis] + indices
         return torch.index_select(data, axis, indices.flatten()).reshape(target_shape)
+
+
+class DepthToSpaceDCRMode(torch.nn.Module):
+    """ Depthtospace op implementation in DCR mode """
+
+    # This class is created because Pytorch as of now doesn't have option
+    # to run DCR mode in PixelShuffle op.
+    def __init__(self, block_size: int):
+        super().__init__()
+        self.block_size = block_size
+
+    def forward(self, x: torch.Tensor) -> Any:
+        """
+        Forward-pass routine for DepthToSpace op in DCR mode
+        """
+        b, c, h, w = x.shape
+        blocksize = self.block_size
+        tmp = torch.reshape(x, (b, blocksize, blocksize, c // (blocksize**2), h, w))
+        tmp = torch.permute(tmp, (0, 3, 4, 1, 5, 2))
+        out = torch.reshape(tmp, (b, c // (blocksize**2), h * blocksize, w * blocksize))
+        return out
