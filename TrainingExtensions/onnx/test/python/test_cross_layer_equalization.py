@@ -39,7 +39,6 @@ import numpy as np
 import copy
 import torch
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
-from onnxruntime_extensions import get_library_path
 from onnx import numpy_helper
 
 from aimet_common.cross_layer_equalization import GraphSearchUtils
@@ -204,7 +203,6 @@ def _build_session(model):
     :param providers: providers to execute onnxruntime
     """
     sess_options = SessionOptions()
-    sess_options.register_custom_ops_library(get_library_path())
     sess_options.graph_optimization_level = GraphOptimizationLevel.ORT_DISABLE_ALL
     session = InferenceSession(
         path_or_bytes=model.model.SerializeToString(),

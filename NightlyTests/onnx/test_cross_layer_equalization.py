@@ -37,7 +37,6 @@
 # =============================================================================
 import numpy as np
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
-from onnxruntime_extensions import get_library_path
 
 from aimet_onnx.cross_layer_equalization import equalize_model
 import test_models
@@ -64,7 +63,6 @@ def _build_session(model):
     :param providers: providers to execute onnxruntime
     """
     sess_options = SessionOptions()
-    sess_options.register_custom_ops_library(get_library_path())
     sess_options.graph_optimization_level = GraphOptimizationLevel.ORT_DISABLE_ALL
     session = InferenceSession(
         path_or_bytes=model.model.SerializeToString(),
