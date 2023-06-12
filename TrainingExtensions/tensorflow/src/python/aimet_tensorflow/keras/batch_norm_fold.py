@@ -58,6 +58,7 @@ from aimet_common.defs import QuantScheme, MAP_ROUND_MODE_TO_PYMO
 
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
+from aimet_tensorflow.keras.model_preparer import _handle_normal_keras_layer
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ParamPerTensorQuantizer
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
@@ -530,8 +531,8 @@ def _delete_bn_from_functional(model: tf.keras.Model,
             # the non batch normalization layers inbound/outbound nodes.
             current_layer._inbound_nodes = []  # pylint: disable=protected-access
             # Special case for when there is a Lambda opertaion with multiple inputs. For example, z = x + y.
-            if isinstance(current_layer, TFOpLambda) and isinstance(layer_input, List):
-                x = current_layer(*layer_input)
+            if isinstance(current_layer, TFOpLambda):
+                x = _handle_normal_keras_layer(current_layer, model_layer_connections)
             else:
                 x = current_layer(layer_input)
             current_layer._outbound_nodes = [] # pylint: disable=protected-access
