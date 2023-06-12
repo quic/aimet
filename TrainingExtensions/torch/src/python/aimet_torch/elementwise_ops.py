@@ -107,6 +107,12 @@ Asin = create_wrapper_module('Asin', torch.asin)
 Atan = create_wrapper_module('Atan', torch.atan)
 Round = create_wrapper_module('Round', torch.round)
 Gather = create_wrapper_module('Gather', torch.gather)
+LogicalOr = create_wrapper_module('LogicalOr', torch.logical_or)
+LogicalAnd = create_wrapper_module('LogicalAnd', torch.logical_and)
+LogicalNot = create_wrapper_module('LogicalNot', torch.logical_not)
+Split = create_wrapper_module('Split', torch.split)
+Reshape = create_wrapper_module('Reshape', torch.reshape)
+Permute = create_wrapper_module('Permute', torch.permute)
 
 # modules for functional operations defined under torch.nn.functional package
 Interpolate = create_wrapper_module('Interpolate', torch.nn.functional.interpolate)
@@ -244,3 +250,16 @@ class ChannelShuffle(torch.nn.Module):
         tensor = args[0]
         n, c, h, w = tensor.shape
         return tensor.view(n, self.groups, c // self.groups, h, w).transpose(1, 2).contiguous().view(n, -1, h, w)
+
+
+class Cast(torch.nn.Module):
+    """ Cast module for a functional cast"""
+    def __init__(self, dtype):
+        super().__init__()
+        self.dtype = dtype
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward-pass routine for cast op
+        """
+        return x.type(self.dtype)

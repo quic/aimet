@@ -484,3 +484,75 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         custom_module_out = custom_module(dummy_input)
         original_module_out = original_module(dummy_input)
         self.assertTrue(np.allclose(custom_module_out, original_module_out))
+
+    def test_logical_or_op(self):
+        torch.manual_seed(42)
+        model = Model3(elementwise_ops.LogicalOr())
+        input1 = torch.rand((5, 10, 10, 20)) > 0.5
+        input2 = torch.rand((5, 10, 10, 20)) > 0.5
+
+        custom_module_out = model(input1, input2)
+        original_module_out = torch.logical_or(input1, input2)
+        self.assertTrue(np.allclose(custom_module_out, original_module_out))
+
+    def test_logical_and_op(self):
+        torch.manual_seed(42)
+        model = Model3(elementwise_ops.LogicalAnd())
+        input1 = torch.rand((5, 10, 10, 20)) > 0.5
+        input2 = torch.rand((5, 10, 10, 20)) > 0.5
+
+        custom_module_out = model(input1, input2)
+        original_module_out = torch.logical_and(input1, input2)
+        self.assertTrue(np.allclose(custom_module_out, original_module_out))
+
+    def test_logical_not_op(self):
+        torch.manual_seed(42)
+        model = Model3(elementwise_ops.LogicalNot())
+        inputs = torch.rand((5, 10, 10, 20)) > 0.5
+
+        custom_module_out = model(inputs)
+        original_module_out = torch.logical_not(inputs)
+        self.assertTrue(np.allclose(custom_module_out, original_module_out))
+
+    def test_cast_ops(self):
+        torch.manual_seed(42)
+        dtypes = [torch.int8, torch.uint8, torch.int16, torch.int32, torch.float16]
+
+        for dtype in dtypes:
+            model = Model3(elementwise_ops.Cast(dtype))
+            inputs = torch.rand((5, 10, 10, 20))
+
+            custom_module_out = model(inputs)
+            original_module_out = inputs.to(dtype)
+            self.assertTrue(np.allclose(custom_module_out, original_module_out))
+
+    def test_split_ops(self):
+        torch.manual_seed(42)
+        model = Model3(elementwise_ops.Split())
+        inputs = torch.rand(10, 10, 10)
+
+        for split_size_or_sections, dim in [(3, 0), (3, 1), ([1, 9], 0), ([2, 8], 1)]:
+            custom_module_out = model(inputs, split_size_or_sections, dim)
+            original_module_out = torch.split(inputs, split_size_or_sections=split_size_or_sections, dim=dim)
+            for i in range(len(original_module_out)):
+                self.assertTrue(np.allclose(custom_module_out[i], original_module_out[i]))
+
+    def test_reshape_op(self):
+        torch.manual_seed(42)
+        model = Model3(elementwise_ops.Reshape())
+        input1 = torch.rand((5, 10, 10, 20))
+        input2 = [5, 10, 200]
+
+        custom_module_out = model(input1, input2)
+        original_module_out = torch.reshape(input1, input2)
+        self.assertTrue(np.allclose(custom_module_out, original_module_out))
+
+    def test_permute_op(self):
+        torch.manual_seed(42)
+        model = Model3(elementwise_ops.Permute())
+        input1 = torch.rand((5, 10, 10, 20))
+        input2 = [0, 1, 3, 2]
+
+        custom_module_out = model(input1, input2)
+        original_module_out = torch.permute(input1, input2)
+        self.assertTrue(np.allclose(custom_module_out, original_module_out))
