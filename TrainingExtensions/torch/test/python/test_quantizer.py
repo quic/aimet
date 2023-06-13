@@ -67,6 +67,8 @@ from aimet_torch.quantsim import QuantizationSimModel, check_accumulator_overflo
     has_valid_encodings
 from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
 
+from models import test_models
+
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
 
@@ -3854,6 +3856,29 @@ class TestQuantizationSimLearnedGrid:
                 os.remove(config_file)
             except FileNotFoundError:
                 pass
+
+    @pytest.mark.parametrize('quant_scheme', [QuantScheme.post_training_tf,
+                                              QuantScheme.training_range_learning_with_tf_init])
+    def test_no_hard_stop_upon_reused_modules(self, quant_scheme):
+        """
+        Forward & backward shouldn't hard-stop even if the model contains reused Modules
+        """
+        model = test_models.ModelWithReusedNodes()
+        model.eval()
+        shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(shape)
+        sim = QuantizationSimModel(model, dummy_input=dummy_input,
+                                   quant_scheme=quant_scheme)
+        sim.compute_encodings(lambda model, _: model(dummy_input), None)
+        optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.05, momentum=0.5)
+
+        model.train()
+        for _ in range(3):
+            inp = torch.randn(shape)
+            out = sim.model(inp)
+            out.sum().backward()
+            optimizer.step()
+            optimizer.zero_grad()
 
 
 @pytest.mark.cuda
