@@ -228,3 +228,18 @@ class StridedSlice(torch.nn.Module):
         for slice_range in slice_ranges:
             slice_params.append(slice(*slice_range))
         return tensor[slice_params]
+
+
+class ChannelShuffle(torch.nn.Module):
+    """Custom module for a ChannelShuffle op"""
+    def __init__(self, groups):
+        super().__init__()
+        self.groups = groups
+
+    def forward(self, *args) -> torch.Tensor:
+        """
+        Forward-pass routine for ChannelShuffle op
+        """
+        tensor = args[0]
+        n, c, h, w = tensor.shape
+        return tensor.view(n, self.groups, c // self.groups, h, w).transpose(1, 2).contiguous().view(n, -1, h, w)
