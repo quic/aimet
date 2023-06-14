@@ -556,3 +556,15 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         custom_module_out = model(input1, input2)
         original_module_out = torch.permute(input1, input2)
         self.assertTrue(np.allclose(custom_module_out, original_module_out))
+
+    def test_custom_gather_op(self):
+        torch.manual_seed(42)
+        model = Model3(elementwise_ops.CustomGather())
+        inputs = torch.rand((5, 10, 20))
+        indices_list = [torch.tensor([[0, 1], [1, 2]]), torch.tensor([[0, 1], [-1, -2]])]
+        axis = 1
+
+        for indices in indices_list:
+            custom_module_out = model(inputs, indices, axis)
+            original_module_out = np.take(inputs, indices, axis=axis)
+            self.assertTrue(np.allclose(custom_module_out, original_module_out))

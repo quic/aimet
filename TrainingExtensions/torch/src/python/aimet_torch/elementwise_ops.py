@@ -263,3 +263,15 @@ class Cast(torch.nn.Module):
         Forward-pass routine for cast op
         """
         return x.type(self.dtype)
+
+
+class CustomGather(torch.nn.Module):
+    """ Custom module for ONNX Gather """
+    @staticmethod
+    def forward(data: torch.Tensor, indices: torch.Tensor, axis: int = 0) -> torch.Tensor:
+        """
+        Forward-pass routine for ONNX Gather op
+        """
+        target_shape = data.shape[:axis] + indices.shape + data.shape[axis + 1:]
+        indices = (indices < 0).to(indices.dtype) * data.shape[axis] + indices
+        return torch.index_select(data, axis, indices.flatten()).reshape(target_shape)
