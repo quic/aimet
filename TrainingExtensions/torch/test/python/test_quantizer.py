@@ -402,21 +402,21 @@ class Clamp(torch.nn.Module):
         return x.clamp(0)
 
 
-class Model_Inputs_Shared_Constant_Intermediate(nn.Module):
+class ModelInputsSharedConstantIntermediate(nn.Module):
     def __init__(self):
-        super(Model_Inputs_Shared_Constant_Intermediate, self).__init__()
+        super(ModelInputsSharedConstantIntermediate, self).__init__()
         self.add1 = elementwise_ops.Add()
         self.add2 = elementwise_ops.Add()
         self.mul = elementwise_ops.Multiply()
-        self.tensor1 = torch.tensor([2.0])
+        self.register_buffer('tensor1', torch.tensor([2.0]))
 
         self.relu1 = nn.ReLU()
         self.relu2 = nn.ReLU()
         self.relu3 = nn.ReLU()
 
     def forward(self, a, b, c):
-        x = self.add1(a, self.tensor1)
-        y = self.add2(b, self.tensor1)
+        x = self.add1(a, torch.tensor([2.0]))
+        y = self.add2(self.tensor1, b)
         z = self.mul(c, x)
 
         x = self.relu1(x)
@@ -440,6 +440,25 @@ class HalfFloatTestModel(nn.Module):
         x = self.fc2(x)
         x = self.relu2(x)
         return x
+
+
+class ModelWithConstantQuantization(torch.nn.Module):
+    def __init__(self):
+        super(ModelWithConstantQuantization, self).__init__()
+        self.relu = torch.nn.ReLU()
+        self.add = elementwise_ops.Add()
+        self.add2 = elementwise_ops.Add()
+        self.add3 = elementwise_ops.Add()
+        self.tensor1 = 1.0
+        self.register_buffer('tensor2', torch.tensor([2.0]))
+
+    def forward(self, inp):
+        x = self.relu(inp)
+        x = self.add(x, self.tensor1)
+        x = self.add2(self.tensor2, x)
+        x = self.add3(x, torch.tensor([1.0, 2.0]))
+        return x
+
 
 class TestQuantizationSimStaticGrad:
     def test_is_leaf_module_positive(self):
@@ -1103,7 +1122,7 @@ class TestQuantizationSimStaticGrad:
 
     def test_inputs_shared_constant_intermediate_quantization(self):
         """"""
-        model = Model_Inputs_Shared_Constant_Intermediate()
+        model = ModelInputsSharedConstantIntermediate()
 
         dummy_input = (torch.randn(1, 10, 10, 10), torch.randn(1, 10, 10, 10), torch.randn(1, 10, 10, 10))
 
@@ -1118,13 +1137,43 @@ class TestQuantizationSimStaticGrad:
         assert sim.model.mul.input_quantizers[0].enabled
         assert not sim.model.mul.input_quantizers[1].enabled
 
+        assert not sim.model.add1.input_quantizers[0].is_const
+        assert sim.model.add1.input_quantizers[1].is_const
+        assert sim.model.add2.input_quantizers[0].is_const
+        assert not sim.model.add2.input_quantizers[1].is_const
+
         # save encodings
         input_names = ['a', 'b', 'c']
 
-        sim.export('./data/', 'Model_Inputs_Shared_Constant_Intermediate', dummy_input, onnx_export_args=OnnxExportApiArgs(input_names=input_names))
-        with open("./data/Model_Inputs_Shared_Constant_Intermediate.encodings", "r") as encodings_file:
+        sim.export('./data/', 'model_inputs_shared_constant_intermediate',
+                   dummy_input,
+                   onnx_export_args=OnnxExportApiArgs(input_names=input_names))
+        with open("./data/model_inputs_shared_constant_intermediate.encodings", "r") as encodings_file:
             activation_encoding_tensors = set(json.load(encodings_file)['activation_encodings'].keys())
             assert set(input_names).issubset(activation_encoding_tensors)
+
+    def test_constant_quantization(self):
+        model = ModelWithConstantQuantization()
+        dummy_input = torch.rand(1, 2)
+        sim = QuantizationSimModel(model, dummy_input)
+        assert not sim.model.add.input_quantizers[0].enabled
+        assert sim.model.add.input_quantizers[1].enabled
+        assert sim.model.add2.input_quantizers[0].enabled
+        assert not sim.model.add2.input_quantizers[1].enabled
+        assert not sim.model.add3.input_quantizers[0].enabled
+        assert sim.model.add3.input_quantizers[1].enabled
+
+        sim.compute_encodings(lambda m, _: m(dummy_input), None)
+        # As add and add2 use constants with numel 1, we expect the quantizers to not have any encoding stats and thus
+        # be disabled after compute encodings.
+        assert not sim.model.add.input_quantizers[1].enabled
+        assert not sim.model.add2.input_quantizers[1].enabled
+        assert sim.model.add3.input_quantizers[1].enabled
+
+        sim.export('./data', 'model_with_constant_quantization', dummy_input)
+        with open("./data/model_with_constant_quantization.encodings", "r") as encodings_file:
+            activation_encoding_tensors = set(json.load(encodings_file)['activation_encodings'].keys())
+            assert len(activation_encoding_tensors) == 6
 
 
     # -------------------------------------------
@@ -2403,7 +2452,8 @@ class TestQuantizationSimStaticGrad:
 
         del sim
 
-    @pytest.mark.skip
+    @pytest.mark.skip('Reevaluate what this test is testing. ElementwiseAdd here is only performing list concat'
+                      'which does not register in connected graph')
     def test_nested_input(self):
         class Model(nn.Module):
             def __init__(self):
@@ -2416,7 +2466,7 @@ class TestQuantizationSimStaticGrad:
         model = Model()
 
         length = 8
-        shape = (1, 1)
+        shape = (256, 256)
         inputs_a = [torch.rand(shape) for _ in range(length)]
         inputs_b = [torch.rand(shape) for _ in range(length)]
 

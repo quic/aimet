@@ -774,13 +774,17 @@ class TestConnectedGraphUtils(unittest.TestCase):
             def __init__(self):
                 super(ConstantElementwiseInputModel, self).__init__()
                 self.add = elementwise_ops.Add()
+                self.mul = elementwise_ops.Multiply()
 
             def forward(self, inp):
                 x = self.add(inp, torch.tensor(2.0))
+                x = self.mul(torch.tensor(3.0), x)
                 return x
 
         model = ConstantElementwiseInputModel()
         cg = ConnectedGraph(model, model_input=torch.randn(1, 6))
-        assert len(get_all_ops_with_constant_inputs(cg)) == 1
-        assert len(cg.ordered_ops[0].inputs) == 2
+        assert len(get_all_ops_with_constant_inputs(cg)) == 2
+        assert not cg.ordered_ops[0].inputs[0].is_const
         assert cg.ordered_ops[0].inputs[1].is_const
+        assert cg.ordered_ops[1].inputs[0].is_const
+        assert not cg.ordered_ops[1].inputs[1].is_const

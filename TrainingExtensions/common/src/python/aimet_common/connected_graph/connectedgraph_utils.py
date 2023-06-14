@@ -38,7 +38,7 @@
 """ Utilities for ConnectedGraph """
 import json
 import os
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Set
 from aimet_common.connected_graph.connectedgraph import ConnectedGraph, get_ordered_ops
 from aimet_common.connected_graph.operation import Op
 
@@ -62,19 +62,19 @@ def get_all_input_ops(conn_graph: ConnectedGraph) -> List[Op]:
     return input_ops
 
 
-def get_all_ops_with_constant_inputs(conn_graph: ConnectedGraph) -> List[Op]:
+def get_all_ops_with_constant_inputs(conn_graph: ConnectedGraph) -> Set[Op]:
     """
-    Return a list of all operations with constant inputs.
+    Return a set of all operations with constant inputs.
 
     :param conn_graph: Connected graph to search for constant input ops in
-    :return: List of all operations with constant inputs
+    :return: Set of all operations with constant inputs
     """
 
-    constant_input_ops = []
+    constant_input_ops = set()
     for op in conn_graph.get_all_ops().values():
         for product in op.inputs:
             if product.is_const:
-                constant_input_ops.append(op)
+                constant_input_ops.add(op)
 
     return constant_input_ops
 

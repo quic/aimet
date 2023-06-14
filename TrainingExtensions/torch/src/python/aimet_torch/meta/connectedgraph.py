@@ -43,7 +43,7 @@ operations represent a module or a function that generates a tensor, while produ
 the tensors that are either input to the model (input, constant or parameter) or the
 result of an operation. Furthermore the graph representation is bi-directional."""
 
-from typing import Tuple, Union, List, Dict, Type
+from typing import Tuple, Union, List, Dict, Type, Optional
 import torch
 
 from aimet_common.connected_graph.connectedgraph import ConnectedGraph as AimetCommonConnectedGraph
@@ -51,6 +51,7 @@ from aimet_common.connected_graph.product import Product
 from aimet_common.connected_graph.operation import determine_preceding_op_input_product_index_in_multi_input_op
 from aimet_common.model_module import PytorchModelModule
 from aimet_common.utils import AimetLogger
+from aimet_torch import elementwise_ops
 from aimet_torch.meta.operation import Op
 from aimet_torch.utils import is_leaf_module, run_hook_for_layers_with_given_input, in_eval_mode, \
     is_torch_nn_leaf_module, is_custom_leaf_module, get_torch_tensortype_shape
@@ -300,12 +301,14 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         _ = self._parse_trace_graph(trace, model, output_map, top_level_inputs, module_to_jit_trace=module_to_jit_trace)
 
+    # pylint: disable=too-many-branches
     def _parse_trace_graph(self, # pylint: disable=too-many-locals
                            trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule],
                            model: torch.nn.Module,
-                           output_map,
-                           higher_level_inputs,
-                           module_to_jit_trace: Dict[torch.nn.Module, torch.jit.TracedModule]):
+                           output_map: Dict[torch._C.TensorType, Product],
+                           higher_level_inputs: List[torch._C.TensorType],
+                           module_to_jit_trace: Dict[torch.nn.Module, torch.jit.TracedModule],
+                           elementwise_info: Optional[Tuple[torch.nn.Module, torch.nn.Module]] = None):
         """
         Implements a depth-first graph extraction to create ops and products.
         Depth-first extraction is realized using recursion.
@@ -315,6 +318,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param output_map: Dictionary mapping output tensors to products
         :param higher_level_inputs: Corresponding inputs from a higher graph level
         :param module_to_jit_trace: Dictionary mapping torch modules to their traces
+        :param elementwise_info: If not None, contains a tuple with the residing module and module of the elementwise
+            node currently being processed
         :return: the outputs of the traced module
         """
         curr_inputs = [inp for inp in trace.graph.inputs()]
@@ -337,6 +342,9 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         # Keep track of output tensors generated from this current trace level. After parsing all nodes, remove all
         # entries in output_map that are contained in this list, except for tensors that are outputted from this graph.
         curr_level_tensors = []
+        aten_nodes = self._find_aten_nodes_in_forward_pass(trace)
+        if elementwise_info:
+            assert len(aten_nodes) == 1
 
         for node in trace.graph.nodes():
             outputs = [output for output in node.outputs()]
@@ -344,10 +352,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             # retrieving a module reference
             if 'GetAttr' in node.kind():
                 self._parse_getattr_node(node, curr_inputs, outputs, node_name_to_module, node_name_to_subgraph_model,
-                                         module_to_jit_trace)
+                                         module_to_jit_trace, model, output_map, curr_level_tensors)
 
             # invoking forward method
             elif 'CallMethod' in node.kind():
+                # In the case of parsing the interior of an elementwise op, we never expect to see any CallMethod nodes
+                assert not elementwise_info
                 submodule_outputs = self._parse_callmethod_node(node, trace, node_name_to_module,
                                                                 node_name_to_subgraph_model, output_map, model,
                                                                 module_to_jit_trace)
@@ -365,8 +375,15 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
             # functional operations e.g. cat, size etc
             else:
-                op_type = self._get_functional_node_type(node)
-                op = self._create_new_multi_output_op(op_type, residing_module=model)
+                if elementwise_info and node == aten_nodes[0]:
+                    # Aten op that corresponds to the elementwise op
+                    op_type = self.get_op_type(type(elementwise_info[1]))
+                    op = self._create_new_multi_output_op(op_type,
+                                                          residing_module=elementwise_info[0],
+                                                          op_module=elementwise_info[1])
+                else:
+                    op_type = self._get_functional_node_type(node)
+                    op = self._create_new_multi_output_op(op_type, residing_module=model)
                 # For prim and aten nodes, inputs[0] is a regular input to the module, so no need to take inputs[1:]
                 self._add_products_for_op(op, [inp for inp in node.inputs()], outputs, output_map)
                 for output in outputs:
@@ -402,13 +419,28 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         op_type = node.kind().split("::")[-1].lstrip('_').rstrip('_')
         return op_type
 
+    # pylint: disable=too-many-arguments
     def _parse_getattr_node(self, node: torch._C.Node, inputs: List[torch._C.TensorType],
                             outputs: List[torch._C.TensorType], node_name_to_module: Dict[str, torch.nn.Module],
                             node_name_to_subgraph_model: Dict[str, Tuple[torch.jit.TracedModule, torch._C.Node]],
-                            module_to_jit_trace: Dict[torch.nn.Module, torch.jit.TracedModule]):
+                            module_to_jit_trace: Dict[torch.nn.Module, torch.jit.TracedModule],
+                            residing_module: torch.nn.Module,
+                            output_map: Dict[torch._C.TensorType, Product],
+                            curr_level_tensors: List[torch._C.TensorType]):
         """
         Parse getattr nodes in the trace graph, adding name to module references and name to subgraph model references
         if it references a subgraph.
+
+        :param node: trace graph node i.e. 'GetAttr' node
+        :param inputs: Inputs to the node
+        :param outputs: Outputs of the node
+        :param node_name_to_module: dictionary of module indexed by output_name referenced in the sub-graph
+        :param node_name_to_subgraph_model: dictionary of torch graph nodes index of output_name that have not been
+            resolved
+        :param module_to_jit_trace: Dictionary mapping torch modules to their traces
+        :param residing_module: Module which the node belongs to
+        :param output_map: Dictionary mapping high recursion level outputs to lower level equivalent outputs
+        :param curr_level_tensors: output tensors generated from the current trace level
         """
         # For GetAttr lines, the output name will be referring to the module, and not the module's output(s)
         assert len(outputs) == 1
@@ -418,6 +450,10 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         subgraph_model = ConnectedGraph._get_module_instance(node, node_name_to_module)
         if isinstance(subgraph_model, torch.Tensor):
+            op = self._create_new_multi_output_op('Constant', residing_module=residing_module)
+            self._add_products_for_op(op, [inp for inp in node.inputs()], outputs, output_map)
+            for output in outputs:
+                curr_level_tensors.append(output)
             return
         if getattr_node_info.node_alias not in node_name_to_module:
             node_name_to_module[getattr_node_info.node_alias] = subgraph_model
@@ -432,7 +468,11 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         # Recursive parsing is needed 1) if the module is not leaf module.
         # 2) If the module is leaf module but has multiple functional operations in
         # forward method.
-        if self._is_recursive_parsing_needed(subgraph_model, module_to_jit_trace):
+        # In the case of elementwise ops, we want to express the elementwise op as an Operation, however sometimes
+        # it is necessary to parse the interior of the elementwise op's CallMethod to extract information about
+        # constants being passed in, or the order in which operands are used.
+        if self._is_recursive_parsing_needed(subgraph_model, module_to_jit_trace) or \
+                self._is_elementwise_op(subgraph_model):
             node_name_to_subgraph_model[getattr_node_info.node_alias] = (subgraph_model, getattr_node_info)
 
     # pylint: disable=too-many-arguments
@@ -440,7 +480,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                                trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule],
                                node_name_to_module: Dict[str, torch.nn.Module],
                                node_name_to_subgraph_model: Dict[str, Tuple[torch.jit.TracedModule, torch._C.Node]],
-                               output_map,
+                               output_map: Dict[torch._C.TensorType, Product],
                                residing_module: torch.nn.Module,
                                module_to_jit_trace: Dict[torch.nn.Module, torch.jit.TracedModule]):
         # pylint: disable=too-many-locals
@@ -462,7 +502,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         input_name: str = inputs[0].debugName()
         outputs = [output for output in node.outputs()]
         if input_name in node_name_to_subgraph_model:
+            elementwise_info = None
             subgraph_model, getattr_node_info = node_name_to_subgraph_model[input_name]
+            # For elementwise ops, we need to parse the callmethod interior, but want to retain information about the
+            # elementwise op's residing module and torch module
+            if self._is_elementwise_op(subgraph_model):
+                elementwise_info = (residing_module, node_name_to_module[input_name])
             trace_levels = [getattr_node_info.node_name]
             # If node_input (input to the current GetAttr node) is None, we are at the topmost level, and can call
             # trace.<current node name> to get the trace for the subgraph. Otherwise, compile a list of node names to
@@ -476,7 +521,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 subgraph_trace = getattr(subgraph_trace, level)
 
             submodule_outputs = self._parse_trace_graph(subgraph_trace, subgraph_model, output_map, inputs[1:],
-                                                        module_to_jit_trace=module_to_jit_trace)
+                                                        module_to_jit_trace=module_to_jit_trace,
+                                                        elementwise_info=elementwise_info)
             return submodule_outputs
 
         # Op is a leaf level module
@@ -1126,6 +1172,18 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             recursive_parsing_needed = False
 
         return recursive_parsing_needed
+
+    @staticmethod
+    def _is_elementwise_op(module: torch.nn.Module):
+        """
+        Check whether the module is an elementwise op to parse.
+
+        :param module: module to check
+        :return: True if module is an elementwise op to parse.
+        """
+
+        return isinstance(module, (elementwise_ops.Add, elementwise_ops.Multiply, elementwise_ops.Subtract,
+                                   elementwise_ops.Divide))
 
     @staticmethod
     def _generate_trace_lookup_table(model: torch.nn.Module,
