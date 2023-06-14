@@ -105,6 +105,7 @@ Sin = create_wrapper_module('Sin', torch.sin)
 Cos = create_wrapper_module('Cos', torch.cos)
 Asin = create_wrapper_module('Asin', torch.asin)
 Atan = create_wrapper_module('Atan', torch.atan)
+Round = create_wrapper_module('Round', torch.round)
 
 # modules for functional operations defined under torch.nn.functional package
 Interpolate = create_wrapper_module('Interpolate', torch.nn.functional.interpolate)
