@@ -928,11 +928,6 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
     # Copy batchnorm's output quantizers to conv output quantizers
     for conv_output_quantizer, bn_output_quantizer in \
             zip(conv_wrapper.output_quantizers, bn_wrapper.output_quantizers):
-        if bn_output_quantizer.is_enabled():
-            conv_output_quantizer.enable()
-        else:
-            conv_output_quantizer.disable()
-
         if bn_output_quantizer.encoding is not None:
             conv_output_quantizer._encoding_min.assign(bn_output_quantizer._encoding_min)
             conv_output_quantizer._encoding_max.assign(bn_output_quantizer._encoding_max)
@@ -941,6 +936,13 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
             tensor_quantizers = conv_output_quantizer._tensor_quantizer if isinstance(conv_output_quantizer._tensor_quantizer, List) else [conv_output_quantizer._tensor_quantizer]
             for tensor_quantizer in tensor_quantizers:
                 tensor_quantizer.isEncodingValid = True
+
+        if bn_output_quantizer.is_enabled():
+            conv_output_quantizer.enable()
+        else:
+            conv_output_quantizer.disable()
+
+
 
         bn_output_quantizer.disable()
 
