@@ -47,6 +47,7 @@ import unittest
 import tensorflow as tf
 import numpy as np
 from test_models_keras import transposed_conv_model
+import aimet_common.libpymo as libpymo
 from aimet_tensorflow.keras.utils import common
 from aimet_tensorflow.keras.batch_norm_fold import _delete_all_bns_from_model, _find_possible_convs_linears_bn, \
     _get_ordered_conv_linears, _find_all_batch_norms_to_fold, fold_all_batch_norms, fold_all_batch_norms_to_scale, fold_given_batch_norms
@@ -1172,6 +1173,13 @@ class TestBatchNormFoldToScale:
         except FileNotFoundError:
             pass
 
+    def _test_output_quantizers_enabled_and_quant_mode_is_quantize_dequantize(self, model, layer_nums_to_check):
+        for layer_num in layer_nums_to_check:
+            is_enabled = model.layers[layer_num].output_quantizers[0].is_enabled()
+            output_quantizers_quant_mode = model.layers[layer_num].output_quantizers[0].quant_mode
+            assert is_enabled and output_quantizers_quant_mode == int(libpymo.TensorQuantizerOpMode.quantizeDequantize), \
+            "Quantizer layer num {} -> Enabled: {}, quantMode: {}".format(layer_num, is_enabled, output_quantizers_quant_mode)
+
     def test_fold_bn_before_conv_no_bias(self):
         input_shape = (20, 4, 4, 10)
 
@@ -1264,8 +1272,8 @@ class TestBatchNormFoldToScale:
 
         # Check quantizers
         assert not model.layers[1].output_quantizers[0].is_enabled()
+        self._test_output_quantizers_enabled_and_quant_mode_is_quantize_dequantize(model, layer_nums_to_check=[-1])
         assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
-        assert model.layers[-1].output_quantizers[0].is_enabled()
 
         relu_output_encoding = model.layers[-1].output_quantizers[0].encoding
         delta = float((relu_output_encoding.max - relu_output_encoding.min)/255)
@@ -1311,8 +1319,8 @@ class TestBatchNormFoldToScale:
 
         # Check quantizers
         assert not model.layers[1].output_quantizers[0].is_enabled()
+        self._test_output_quantizers_enabled_and_quant_mode_is_quantize_dequantize(model, layer_nums_to_check=[-1])
         assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
-        assert model.layers[-1].output_quantizers[0].is_enabled()
 
         relu_output_encoding = model.layers[-1].output_quantizers[0].encoding
         delta = float((relu_output_encoding.max - relu_output_encoding.min)/255)
@@ -1355,8 +1363,8 @@ class TestBatchNormFoldToScale:
 
         # Check quantizers
         assert not model.layers[1].output_quantizers[0].is_enabled()
+        self._test_output_quantizers_enabled_and_quant_mode_is_quantize_dequantize(model, layer_nums_to_check=[-1])
         assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
-        assert model.layers[-1].output_quantizers[0].is_enabled()
 
         relu_output_encoding = model.layers[-1].output_quantizers[0].encoding
         delta = float((relu_output_encoding.max - relu_output_encoding.min)/255)
@@ -1452,7 +1460,7 @@ class TestBatchNormFoldToScale:
         for wrapper in model.layers[1:]:
             assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
 
-        assert model.layers[1].output_quantizers[0].is_enabled()
+        self._test_output_quantizers_enabled_and_quant_mode_is_quantize_dequantize(model, layer_nums_to_check=[1])
         assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
 
         # Check batchnorm's output encoding is coped to fc's output encoding
@@ -1494,7 +1502,7 @@ class TestBatchNormFoldToScale:
         for wrapper in model.layers[1:]:
             assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
 
-        assert model.layers[1].output_quantizers[0].is_enabled()
+        self._test_output_quantizers_enabled_and_quant_mode_is_quantize_dequantize(model, layer_nums_to_check=[1])
         assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
 
         # Check batchnorm's output encoding is coped to fc's output encoding
@@ -1520,6 +1528,9 @@ class TestBatchNormFoldToScale:
         # Check bn is deleted
         for wrapper in model.layers[1:]:
             assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
+
+        # Check quantizers are enabled/disabled proeprly
+        self._test_output_quantizers_enabled_and_quant_mode_is_quantize_dequantize(model, layer_nums_to_check=[1, 3])
 
         conv2_output_encoding = model.layers[3].output_quantizers[0].encoding
         delta = float((conv2_output_encoding.max - conv2_output_encoding.min)/255)
@@ -1592,7 +1603,7 @@ class TestBatchNormFoldToScale:
             assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
 
         # Check quantizers are enabled/disabled proeprly
-        assert model.layers[1].output_quantizers[0].is_enabled()
+        self._test_output_quantizers_enabled_and_quant_mode_is_quantize_dequantize(model, layer_nums_to_check=[1])
         assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
 
         conv_output_encoding = model.layers[1].output_quantizers[0].encoding
@@ -1632,7 +1643,7 @@ class TestBatchNormFoldToScale:
             assert not isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization)
 
         # Check quantizers are enabled/disabled proeprly
-        assert model.layers[1].output_quantizers[0].is_enabled()
+        self._test_output_quantizers_enabled_and_quant_mode_is_quantize_dequantize(model, layer_nums_to_check=[1])
         assert get_wrappers_weight_quantizer(model.layers[1].param_quantizers).is_enabled()
 
         conv_output_encoding = model.layers[1].output_quantizers[0].encoding
