@@ -473,3 +473,14 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         custom_module_out = model(input1, input2)
         original_module_out = input1[input2[0][0]:input2[0][1]:input2[0][2]]
         self.assertTrue(np.allclose(custom_module_out, original_module_out))
+
+    def test_channel_shuffle_op(self):
+        torch.manual_seed(42)
+
+        original_module = nn.ChannelShuffle(groups=4)
+        custom_module = Model3(elementwise_ops.ChannelShuffle(groups=4))
+
+        dummy_input = torch.rand(4, 16, 28, 28)
+        custom_module_out = custom_module(dummy_input)
+        original_module_out = original_module(dummy_input)
+        self.assertTrue(np.allclose(custom_module_out, original_module_out))
