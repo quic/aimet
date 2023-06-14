@@ -123,6 +123,7 @@ class AutoQuant:
         self.default_quant_scheme = default_quant_scheme
         self.default_rounding_mode = default_rounding_mode
         self.default_config_file = default_config_file
+        self._fp_32_acc = None
 
         def forward_pass_callback(model, _: Any = None):
             for input_data in tqdm(unlabeled_dataset):
@@ -184,11 +185,11 @@ class AutoQuant:
         with cache.enable(cache_dir):
             _logger.info("Starting AutoQuant")
 
-            fp32_acc = self._evaluate_model_performance(fp32_model)
-            target_acc = fp32_acc - self.allowed_accuracy_drop
+            self._fp_32_acc = self._evaluate_model_performance(fp32_model)
+            target_acc = self._fp_32_acc - self.allowed_accuracy_drop
 
             _logger.info("Target eval score: %f", target_acc)
-            _logger.info("FP32 eval score (W32A32): %f", fp32_acc)
+            _logger.info("FP32 eval score (W32A32): %f", self._fp_32_acc)
 
             eval_manager = _EvalManager(
                 quantsim_factory=self._create_quantsim_and_encodings,
