@@ -1171,6 +1171,7 @@ class QuantizationSimModel:
         if self.connected_graph is not None:
             for _, qc_quantize_wrapper in self.quant_wrappers():
                 if isinstance(qc_quantize_wrapper, QcQuantizeWrapper):
+                    # Only handling QcQuantWrappers and not QcQuantizeRecurrents
                     # pylint: disable=protected-access
                     conn_graph_op = self.connected_graph._module_to_op_dict.get(qc_quantize_wrapper._module_to_wrap)
                     if conn_graph_op is not None:

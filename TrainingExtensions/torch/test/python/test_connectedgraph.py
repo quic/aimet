@@ -788,3 +788,30 @@ class TestConnectedGraphUtils(unittest.TestCase):
         assert cg.ordered_ops[0].inputs[1].is_const
         assert cg.ordered_ops[1].inputs[0].is_const
         assert not cg.ordered_ops[1].inputs[1].is_const
+
+    def test_constant_single_input(self):
+        class ConstantSingleInputModel(torch.nn.Module):
+            def __init__(self):
+                super(ConstantSingleInputModel, self).__init__()
+                self.relu = torch.nn.ReLU()
+                self.relu2 = torch.nn.ReLU()
+                self.add = elementwise_ops.Add()
+                self.add2 = elementwise_ops.Add()
+                self.register_buffer('constant_1', torch.tensor([3.0, 4.0]))
+
+            def forward(self, inp):
+                x = self.relu(torch.tensor([-1.0, 1.0]))
+                y = self.relu2(self.constant_1)
+                x = self.add(x, inp)
+                x = self.add2(x, y)
+                return x
+
+        model = ConstantSingleInputModel()
+        dummy_input = torch.randn(1, 2)
+        cg = ConnectedGraph(model, model_input=dummy_input)
+        assert cg.ordered_ops[0].inputs[0].is_const
+        assert cg.ordered_ops[1].inputs[0].is_const
+        assert not cg.ordered_ops[2].inputs[0].is_const
+        assert not cg.ordered_ops[2].inputs[1].is_const
+        assert not cg.ordered_ops[3].inputs[0].is_const
+        assert not cg.ordered_ops[3].inputs[1].is_const

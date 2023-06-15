@@ -472,7 +472,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         # it is necessary to parse the interior of the elementwise op's CallMethod to extract information about
         # constants being passed in, or the order in which operands are used.
         if self._is_recursive_parsing_needed(subgraph_model, module_to_jit_trace) or \
-                self._is_elementwise_op(subgraph_model):
+                self._is_multi_input_op(subgraph_model):
             node_name_to_subgraph_model[getattr_node_info.node_alias] = (subgraph_model, getattr_node_info)
 
     # pylint: disable=too-many-arguments
@@ -506,7 +506,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             subgraph_model, getattr_node_info = node_name_to_subgraph_model[input_name]
             # For elementwise ops, we need to parse the callmethod interior, but want to retain information about the
             # elementwise op's residing module and torch module
-            if self._is_elementwise_op(subgraph_model):
+            if self._is_multi_input_op(subgraph_model):
                 elementwise_info = (residing_module, node_name_to_module[input_name])
             trace_levels = [getattr_node_info.node_name]
             # If node_input (input to the current GetAttr node) is None, we are at the topmost level, and can call
@@ -1174,12 +1174,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         return recursive_parsing_needed
 
     @staticmethod
-    def _is_elementwise_op(module: torch.nn.Module):
+    def _is_multi_input_op(module: torch.nn.Module):
         """
-        Check whether the module is an elementwise op to parse.
+        Check whether the module is an multi input op to parse.
 
         :param module: module to check
-        :return: True if module is an elementwise op to parse.
+        :return: True if module is an multi input op to parse.
         """
 
         return isinstance(module, (elementwise_ops.Add, elementwise_ops.Multiply, elementwise_ops.Subtract,
