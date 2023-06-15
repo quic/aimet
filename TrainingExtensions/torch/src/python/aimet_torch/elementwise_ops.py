@@ -114,6 +114,7 @@ Split = create_wrapper_module('Split', torch.split)
 Reshape = create_wrapper_module('Reshape', torch.reshape)
 Permute = create_wrapper_module('Permute', torch.permute)
 Remainder = create_wrapper_module('Remainder', torch.remainder)
+IndexSelect = create_wrapper_module('IndexSelect', torch.index_select)
 
 # modules for functional operations defined under torch.nn.functional package
 Interpolate = create_wrapper_module('Interpolate', torch.nn.functional.interpolate)
