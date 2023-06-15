@@ -106,6 +106,15 @@ Cos = create_wrapper_module('Cos', torch.cos)
 Asin = create_wrapper_module('Asin', torch.asin)
 Atan = create_wrapper_module('Atan', torch.atan)
 Round = create_wrapper_module('Round', torch.round)
+Gather = create_wrapper_module('Gather', torch.gather)
+LogicalOr = create_wrapper_module('LogicalOr', torch.logical_or)
+LogicalAnd = create_wrapper_module('LogicalAnd', torch.logical_and)
+LogicalNot = create_wrapper_module('LogicalNot', torch.logical_not)
+Split = create_wrapper_module('Split', torch.split)
+Reshape = create_wrapper_module('Reshape', torch.reshape)
+Permute = create_wrapper_module('Permute', torch.permute)
+Remainder = create_wrapper_module('Remainder', torch.remainder)
+IndexSelect = create_wrapper_module('IndexSelect', torch.index_select)
 
 # modules for functional operations defined under torch.nn.functional package
 Interpolate = create_wrapper_module('Interpolate', torch.nn.functional.interpolate)
@@ -115,7 +124,6 @@ AvgPool2d = create_wrapper_module('AvgPool2d', torch.nn.functional.avg_pool2d)
 BatchNorm = create_wrapper_module('BatchNorm', torch.nn.functional.batch_norm)
 GroupNorm = create_wrapper_module('GroupNorm', torch.nn.functional.group_norm)
 Normalize = create_wrapper_module('Normalize', torch.nn.functional.normalize)
-
 
 # following modules are for overloaded operators like + and *,
 # which can operate other than torch.Tensor datatype.
@@ -243,3 +251,49 @@ class ChannelShuffle(torch.nn.Module):
         tensor = args[0]
         n, c, h, w = tensor.shape
         return tensor.view(n, self.groups, c // self.groups, h, w).transpose(1, 2).contiguous().view(n, -1, h, w)
+
+
+class Cast(torch.nn.Module):
+    """ Cast module for a functional cast"""
+    def __init__(self, dtype):
+        super().__init__()
+        self.dtype = dtype
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward-pass routine for cast op
+        """
+        return x.type(self.dtype)
+
+
+class CustomGather(torch.nn.Module):
+    """ Custom module for ONNX Gather """
+    @staticmethod
+    def forward(data: torch.Tensor, indices: torch.Tensor, axis: int = 0) -> torch.Tensor:
+        """
+        Forward-pass routine for ONNX Gather op
+        """
+        target_shape = data.shape[:axis] + indices.shape + data.shape[axis + 1:]
+        indices = (indices < 0).to(indices.dtype) * data.shape[axis] + indices
+        return torch.index_select(data, axis, indices.flatten()).reshape(target_shape)
+
+
+class DepthToSpaceDCRMode(torch.nn.Module):
+    """ Depthtospace op implementation in DCR mode """
+
+    # This class is created because Pytorch as of now doesn't have option
+    # to run DCR mode in PixelShuffle op.
+    def __init__(self, block_size: int):
+        super().__init__()
+        self.block_size = block_size
+
+    def forward(self, x: torch.Tensor) -> Any:
+        """
+        Forward-pass routine for DepthToSpace op in DCR mode
+        """
+        b, c, h, w = x.shape
+        blocksize = self.block_size
+        tmp = torch.reshape(x, (b, blocksize, blocksize, c // (blocksize**2), h, w))
+        tmp = torch.permute(tmp, (0, 3, 4, 1, 5, 2))
+        out = torch.reshape(tmp, (b, c // (blocksize**2), h * blocksize, w * blocksize))
+        return out
