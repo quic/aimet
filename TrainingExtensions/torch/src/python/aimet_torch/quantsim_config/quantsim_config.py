@@ -45,7 +45,7 @@ from aimet_common.graph_searcher import GraphSearcher
 from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.connected_graph.operation import Op
 from aimet_common.defs import QuantizationDataType, QuantDtypeBwInfo
-from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
+from aimet_common.connected_graph import connectedgraph_utils as cg_utils
 from aimet_common.quantsim_config.json_config_importer import ConfigDictKeys, ConfigType, SupergroupType, OpType, \
     ParamType, DefaultsType, OpTypeType, ConfigDictType
 from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as AimetCommonQuantSimConfigurator, \
@@ -196,7 +196,8 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
             while queue:
                 current_op = queue.pop()
                 if current_op.inputs:
-                    input_ops = [inp.producer for inp in current_op.inputs if not inp.is_model_input]
+                    input_ops = [inp.producer for inp in current_op.inputs if not inp.is_model_input and
+                                 not inp.is_const]
                     for input_op in input_ops:
                         if input_op.get_module() is not None and input_op.get_module() in \
                                 self._module_to_quantsim_wrapper_dict:
@@ -524,22 +525,31 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
 
     def _set_model_input_configs(self, model_input_configs: ConfigType):
         """
-        Set model input specific configurations (fifth level of specificity in configuration file)
+        Set model input specific configurations (fifth level of specificity in configuration file).
+
         :param model_input_configs: Configuration for model inputs
         """
-        input_ops = get_all_input_ops(self._conn_graph)
-        for op in input_ops:
-            if op.get_module() in self._named_modules_to_tensor_quantizers_dict:
-                modified_tensor_quantizers = {}
-                self._set_config_for_module(self._named_modules_to_tensor_quantizers_dict[op.get_module()],
-                                            model_input_configs, modified_tensor_quantizers)
+
+        if ConfigDictKeys.IS_INPUT_QUANTIZED in model_input_configs:
+            # Find all ops which are either model input ops or have constant inputs as inputs
+            input_ops = cg_utils.get_all_input_ops(self._conn_graph)
+            ops_to_set = list(set(input_ops).union(cg_utils.get_all_ops_with_constant_inputs(self._conn_graph)))
+
+            for op in ops_to_set:
+                if op.get_module() in self._module_to_quantsim_wrapper_dict:
+                    input_and_constant_input_indices = [idx for idx, inp in enumerate(op.inputs) if
+                                                        inp.is_model_input or inp.is_const]
+                    curr_module = self._module_to_quantsim_wrapper_dict[op.get_module()]
+                    for idx, quantizer in enumerate(curr_module.input_quantizers):
+                        if idx in input_and_constant_input_indices:
+                            quantizer.enabled = True
 
     def _set_model_output_configs(self, model_output_configs: ConfigType):
         """
         Set model output specific configurations (sixth level of specificity in configuration file)
         :param model_output_configs: Configuration for model outputs
         """
-        output_ops = get_all_output_ops(self._conn_graph)
+        output_ops = cg_utils.get_all_output_ops(self._conn_graph)
         for op in output_ops:
             if op.get_module() in self._named_modules_to_tensor_quantizers_dict:
                 modified_tensor_quantizers = {}

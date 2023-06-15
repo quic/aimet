@@ -200,6 +200,7 @@ class QuantizationSimModel:
         num_inout_tensors = utils.find_num_inout_tensors_per_module(self.model, dummy_input)
 
         self._add_quantization_wrappers(self.model, num_inout_tensors, default_data_type)
+        self._set_tensor_quantizers_for_consts()
 
         # Disable bias quantization
         self.exclude_param_from_quantization("bias")
@@ -1161,6 +1162,21 @@ class QuantizationSimModel:
             # recursively call children modules
             else:
                 self._add_quantization_wrappers(module_ref, num_inout_tensors, default_data_type)
+
+    def _set_tensor_quantizers_for_consts(self):
+        """
+        Identify and set is_const for tensor quantizers which correspond to constant inputs in the model.
+        """
+
+        if self.connected_graph is not None:
+            for _, qc_quantize_wrapper in self.quant_wrappers():
+                if isinstance(qc_quantize_wrapper, QcQuantizeWrapper):
+                    # Only handling QcQuantWrappers and not QcQuantizeRecurrents
+                    # pylint: disable=protected-access
+                    conn_graph_op = self.connected_graph._module_to_op_dict.get(qc_quantize_wrapper._module_to_wrap)
+                    if conn_graph_op is not None:
+                        for (input_quantizer, inp) in zip(qc_quantize_wrapper.input_quantizers, conn_graph_op.inputs):
+                            input_quantizer.is_const = inp.is_const
 
     @staticmethod
     def _create_encoding_dict(encoding: libpymo.TfEncoding, quantizer, propagate_encodings: bool) -> Union[Dict, None]:

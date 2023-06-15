@@ -468,7 +468,7 @@ class MaskPropagator:
             # look at the product shape[1]
             # Propagate only those channel masks up.
             a_product = add_op.inputs[index]
-            if a_product.producer.dotted_name == product.producer.dotted_name:
+            if a_product.producer is not None and a_product.producer.dotted_name == product.producer.dotted_name:
                 if isinstance(self._op_to_mask_dict[a_product.producer].internal_connectivity,
                               SplitInternalConnectivity):
                     add_op_mask = self._op_to_mask_dict[add_op]

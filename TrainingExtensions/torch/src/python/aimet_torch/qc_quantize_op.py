@@ -445,6 +445,29 @@ class QcQuantizeWrapper(nn.Module):
                 param_quantizer.freeze_encoding()
                 _logger.info("Freezing quantization encodings for parameter: %s", param_name)
 
+    @staticmethod
+    def should_perform_quant_dequant(tensor: torch.Tensor, tensor_quantizer: TensorQuantizer) -> bool:
+        """
+        Check if, for the given tensor and tensor quantizer, quantize dequantize should be performed. Returns True if
+        so, False otherwise.
+        Checks to make are the following:
+        - Tensor is a valid type to quantize (torch.Tensor, vs. primitive int/float/bool etc.)
+        - Tensor is a valid dtype to quantize (ex. torch.float vs. torch.int)
+        - If tensor is a constant tensor with 1 element, do not perform quant/dequant
+        - If tensor quantizer is enabled
+
+        :param tensor: Tensor to potentially quant/dequant
+        :param tensor_quantizer: Tensor quantizer for the tensor
+        :return: True if tensor quantizer should perform quant/dequant
+        """
+
+        if isinstance(tensor, utils.dtypes_to_ignore_for_quantization) or \
+                tensor.dtype in utils.torch_dtypes_to_ignore_for_quantization or \
+                (tensor_quantizer.is_const and torch.numel(tensor) == 1) or \
+                not tensor_quantizer.enabled:
+            return False
+        return True
+
 
 class StaticGridQuantWrapper(QcQuantizeWrapper):
     """ A custom PyTorch module that derives from QcQuantizeWrapper and quantizes modules """
@@ -627,10 +650,7 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
                     f"but got {type(input_tensor)}"
                 )
 
-            if isinstance(input_tensor, utils.dtypes_to_ignore_for_quantization) or \
-                    input_tensor.dtype in utils.torch_dtypes_to_ignore_for_quantization or \
-                    not tensor_quantizers[index].enabled:
-                # Do not quantize tensors of integer or bool data type or if the quantizer is disabled.
+            if not self.should_perform_quant_dequant(input_tensor, tensor_quantizers[index]):
                 return input_tensor
 
             if self._mode is QcQuantizeOpMode.ANALYSIS:
@@ -874,10 +894,7 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
             assert len(tensor_quantizers) > index,\
                 f"Not enough tensor quantizers ({len(tensor_quantizers)}) allocated"
 
-            if isinstance(tensor_to_quantize, utils.dtypes_to_ignore_for_quantization) or\
-                    tensor_to_quantize.dtype in utils.torch_dtypes_to_ignore_for_quantization or\
-                    not tensor_quantizers[index].enabled:
-                # Do not quantize tensors of integer or bool data type or if the quantizer is disabled.
+            if not self.should_perform_quant_dequant(tensor_to_quantize, tensor_quantizers[index]):
                 quantized_tensors.append(tensor_to_quantize)
                 continue
 
