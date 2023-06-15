@@ -1057,7 +1057,7 @@ class TestBatchNormFold(unittest.TestCase):
         _, model = fold_all_batch_norms(model)
         output_after_batchnorm_folding = model(mock_input)
 
-        assert np.allclose(output_before_batchnorm_folding, output_after_batchnorm_folding, rtol=1e-2)
+        assert np.allclose(output_before_batchnorm_folding, output_after_batchnorm_folding, atol=1e-4)
 
     def test_bn_fold_depthwise_convolution(self):
         inputs = tf.keras.Input((32, 32, 3))
@@ -1071,7 +1071,7 @@ class TestBatchNormFold(unittest.TestCase):
         _, model = fold_all_batch_norms(model)
         output_after_batchnorm_folding = model(mock_input)
 
-        assert np.allclose(output_before_batchnorm_folding, output_after_batchnorm_folding, rtol=1e-2)
+        assert np.allclose(output_before_batchnorm_folding, output_after_batchnorm_folding, atol=1e-4)
 
     def test_bn_conversion(self):
         inputs = tf.keras.Input((26, 26, 3))
@@ -1091,7 +1091,7 @@ class TestBatchNormFold(unittest.TestCase):
         folded_pairs, model = fold_all_batch_norms(model)
         output_after_batchnorm_folding = model(mock_input)
         assert 1 == len(folded_pairs)
-        assert np.allclose(output_before_batchnorm_folding, output_after_batchnorm_folding, rtol=1e-2)
+        assert np.allclose(output_before_batchnorm_folding, output_after_batchnorm_folding, atol=1e-4)
 
 
 symmetric_quantsim_config = {
