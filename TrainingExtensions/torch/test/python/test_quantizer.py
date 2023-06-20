@@ -2452,8 +2452,6 @@ class TestQuantizationSimStaticGrad:
 
         del sim
 
-    @pytest.mark.skip('Reevaluate what this test is testing. ElementwiseAdd here is only performing list concat'
-                      'which does not register in connected graph')
     def test_nested_input(self):
         class Model(nn.Module):
             def __init__(self):
@@ -2471,6 +2469,11 @@ class TestQuantizationSimStaticGrad:
         inputs_b = [torch.rand(shape) for _ in range(length)]
 
         sim = QuantizationSimModel(model, (inputs_a, inputs_b))
+        # Need to set these manually since in the connected graph, the Add is a no-op with no inputs.
+        # The list concatenation happens outside of the Add node.
+        # This means that Add will not be identified as an input module.
+        sim.model.add.input_quantizers[0].enabled = True
+        sim.model.add.input_quantizers[1].enabled = True
 
         def forward_pass(model, args):
             model.eval()
