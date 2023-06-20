@@ -40,9 +40,12 @@
 import errno
 import os
 from typing import Callable, Union, List, Dict, Tuple, AnyStr
+
 import tensorflow as tf
 from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_from_session_graph
 from tensorflow.python.framework.graph_util_impl import remove_training_nodes
+from packaging import version
+
 from packaging import version
 
 import aimet_common.libpymo as libpymo
@@ -650,14 +653,24 @@ def set_keras_backend_version_to_v2(func_to_run_before_setting_back_to_v2: Calla
     # Imports kept inside the function to minimize confusion and to not be accidentally used anywhere else
     def wrap(*args, **kwargs):
         func_to_run_before_setting_back_to_v2(*args, **kwargs)
-        from tensorflow.python.keras.engine.functional import Functional
-        import tensorflow.python.keras.engine.base_layer as base_layer
-        import tensorflow.python.keras.engine.base_layer_v1 as base_layer_v1
+        if version.parse(tf.version.VERSION) >= version.parse("2.10"):
+            from keras.engine.functional import Functional
+            import keras.engine.base_layer as base_layer
+            import keras.engine.base_layer_v1 as base_layer_v1
 
-        import tensorflow.python.keras.engine.training as training
-        import tensorflow.python.keras.engine.training_v1 as training_v1
+            import keras.engine.training as training
+            import keras.engine.training_v1 as training_v1
 
-        from tensorflow.python.keras.utils.version_utils import swap_class
+            from keras.utils.version_utils import swap_class
+        else:
+            from tensorflow.python.keras.engine.functional import Functional
+            import tensorflow.python.keras.engine.base_layer as base_layer
+            import tensorflow.python.keras.engine.base_layer_v1 as base_layer_v1
+
+            import tensorflow.python.keras.engine.training as training
+            import tensorflow.python.keras.engine.training_v1 as training_v1
+
+            from tensorflow.python.keras.utils.version_utils import swap_class
 
         _ = swap_class(Functional, base_layer.Layer, base_layer_v1.Layer, use_v2=True)
         _ = swap_class(Functional, training.Model, training_v1.Model, use_v2=True)
