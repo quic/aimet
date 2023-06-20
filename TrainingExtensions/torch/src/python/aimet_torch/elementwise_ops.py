@@ -117,6 +117,12 @@ Reshape = create_wrapper_module('Reshape', torch.reshape)
 Permute = create_wrapper_module('Permute', torch.permute)
 Remainder = create_wrapper_module('Remainder', torch.remainder)
 IndexSelect = create_wrapper_module('IndexSelect', torch.index_select)
+Fmod = create_wrapper_module('Fmod', torch.fmod)
+NonZero = create_wrapper_module('NonZero', torch.nonzero)
+TopK = create_wrapper_module('TopK', torch.topk)
+Shape = create_wrapper_module('Shape', torch.Tensor.size)
+Tile = create_wrapper_module('Tile', torch.tile)
+ElementwiseUnarySign = create_wrapper_module('ElementwiseUnarySign', torch.sign)
 
 # modules for functional operations defined under torch.nn.functional package
 Interpolate = create_wrapper_module('Interpolate', torch.nn.functional.interpolate)
@@ -126,6 +132,7 @@ AvgPool2d = create_wrapper_module('AvgPool2d', torch.nn.functional.avg_pool2d)
 BatchNorm = create_wrapper_module('BatchNorm', torch.nn.functional.batch_norm)
 GroupNorm = create_wrapper_module('GroupNorm', torch.nn.functional.group_norm)
 Normalize = create_wrapper_module('Normalize', torch.nn.functional.normalize)
+Pad = create_wrapper_module('Pad', torch.nn.functional.pad)
 
 # following modules are for overloaded operators like + and *,
 # which can operate other than torch.Tensor datatype.
