@@ -342,9 +342,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         # Keep track of output tensors generated from this current trace level. After parsing all nodes, remove all
         # entries in output_map that are contained in this list, except for tensors that are outputted from this graph.
         curr_level_tensors = []
-        aten_nodes = self._find_aten_nodes_in_forward_pass(trace)
-        if elementwise_info:
-            assert len(aten_nodes) == 1
 
         for node in trace.graph.nodes():
             outputs = [output for output in node.outputs()]
@@ -375,6 +372,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
             # functional operations e.g. cat, size etc
             else:
+                aten_nodes = self._find_aten_nodes_in_forward_pass(trace)
                 if elementwise_info and node == aten_nodes[0]:
                     # Aten op that corresponds to the elementwise op
                     op_type = self.get_op_type(type(elementwise_info[1]))
@@ -519,6 +517,22 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             subgraph_trace = trace
             for level in trace_levels:
                 subgraph_trace = getattr(subgraph_trace, level)
+
+            # For elementwise ops, we need to parse the callmethod interior, but want to retain information about the
+            # elementwise op's residing module and torch module
+            if self._is_multi_input_op(subgraph_model):
+                aten_nodes = self._find_aten_nodes_in_forward_pass(subgraph_trace)
+                assert len(aten_nodes) <= 1
+                if len(aten_nodes) == 1:
+                    elementwise_info = (residing_module, node_name_to_module[input_name])
+                else:
+                    # This is an elementwise op that does not actually perform aten operations inside.
+                    # We see this in case of elementwise Add when it is concatenating two lists for example.
+                    # In this case, simply treat the op as a leaf level op without parsing the interior.
+                    op_type = self.get_op_type(type(node_name_to_module[input_name]))
+                    op = self._create_new_multi_output_op(op_type, residing_module, node_name_to_module[input_name])
+                    self._add_products_for_op(op, inputs[1:], outputs, output_map)
+                    return outputs
 
             submodule_outputs = self._parse_trace_graph(subgraph_trace, subgraph_model, output_map, inputs[1:],
                                                         module_to_jit_trace=module_to_jit_trace,
