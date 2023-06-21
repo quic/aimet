@@ -306,3 +306,20 @@ class DepthToSpaceDCRMode(torch.nn.Module):
         tmp = torch.permute(tmp, (0, 3, 4, 1, 5, 2))
         out = torch.reshape(tmp, (b, c // (blocksize**2), h * blocksize, w * blocksize))
         return out
+
+
+class ScatterND(torch.nn.Module):
+    """ ScatterND op implementation """
+    @staticmethod
+    def forward(data: torch.Tensor, indices: torch.Tensor, updates: torch.Tensor) -> torch.Tensor:
+        """
+        Forward-pass routine for ScatterND op
+        """
+        output = torch.clone(data)
+        update_indices = indices.size(dim=0)
+
+        for idx in range(update_indices):
+            idx_list = tuple(indices[idx].tolist())
+            output[idx_list] = updates[idx]
+
+        return output
