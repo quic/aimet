@@ -45,7 +45,6 @@ from typing import Dict, Tuple, Union, List, Callable, Type
 import os
 import torch
 from torch import nn
-from torch.utils.checkpoint import checkpoint
 from torch.nn import functional as F
 
 import aimet_common.libpymo as libpymo
