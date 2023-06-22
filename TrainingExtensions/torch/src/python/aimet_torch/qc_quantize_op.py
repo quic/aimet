@@ -1154,6 +1154,7 @@ class FusedQdqLinear(torch.autograd.Function):
         dloss_by_dx = None
         if inp.requires_grad:
             dloss_by_dx = torch.matmul(grad, qdq_weight)
+            del qdq_weight
 
         dloss_by_dW = dloss_by_dmin = dloss_by_dmax = None
         if weight.requires_grad or\
@@ -1164,6 +1165,7 @@ class FusedQdqLinear(torch.autograd.Function):
             dloss_by_dW, dloss_by_dmin, dloss_by_dmax =\
                 ste.calculate_gradients(weight, dloss_by_dWq, intermediate_result,
                                         ctx.weight_quantizer.channel_axis)
+            del intermediate_result
 
         dloss_by_db = None
         if isinstance(bias, torch.Tensor) and bias.requires_grad:
