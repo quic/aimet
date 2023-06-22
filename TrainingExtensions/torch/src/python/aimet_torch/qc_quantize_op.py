@@ -864,7 +864,7 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
             layer_type = type(self._module_to_wrap)
             forward_fn = _fused_forward_functions.get(layer_type, _default_forward)
 
-        wrapped_output = forward_fn(self, inputs)
+        wrapped_output = forward_fn(self, quantized_inputs)
 
         # Quantize the outputs
         if not isinstance(wrapped_output, (List, Tuple)):
