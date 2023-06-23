@@ -1,1 +1,1 @@
-../reqs_pip_tf_common_legacy.txt
+../reqs_pip_tf_common.txt
