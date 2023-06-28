@@ -190,25 +190,32 @@ def make_dummy_input(model: onnx_pb.ModelProto, dynamic_size: int = 1) -> Dict[s
     return input_dict
 
 
-def replace_relu6_with_relu(model: onnx_pb.ModelProto):
+def replace_relu6_with_relu(model: onnx_pb.ModelProto, connected_graph):
     """
     Replace relu6 op with relu op
 
     :param model: ONNX model
+    :param connected_graph: Connected Graph
     """
+    child_to_parent_dict = {}
+    for op in connected_graph.ordered_ops:
+        if op.type == 'Clip':
+            child_to_parent_dict[op.dotted_name] = op.input_ops[0]
     for node in model.model.graph.node:
         if node.op_type == 'Clip':
-            # Clip has 3 inputs, 1st one corresponding to the previous layer's output and the other two related min and max
-            if check_if_node_is_relu6(node, model):
-                inputs = [node.input[0]]
-                outputs = [node.output[0]]
-                relu_node = onnx.helper.make_node(
-                    op_type="Relu",
-                    inputs=inputs,
-                    outputs=outputs,
-                )
-                remove_node(node, model.model.graph)
-                model.add_node(relu_node)
+            name = node.name
+            remove_node(node, model.model.graph)
+            parent_node = child_to_parent_dict[node.name].get_module()
+            inputs = [parent_node.output[0]]
+            model.replace_input_of_all_nodes(parent_node.output[0], parent_node.output[0] + '_replaced')
+            relu_node = onnx.helper.make_node(
+                op_type="Relu",
+                inputs=inputs,
+                outputs=[parent_node.output[0] + '_replaced'],
+                name='Relu_' + name,
+            )
+
+            model.add_node(relu_node)
 
 
 def check_if_node_is_relu6(node: onnx_pb.NodeProto, model: onnx_pb.ModelProto):

@@ -351,7 +351,7 @@ def equalize_model(model: onnx_pb.ModelProto):
         model = ONNXModel(model)
     conv_bn_pairs, bn_conv_pairs = fold_all_batch_norms_to_weight(model)
 
-    replace_relu6_with_relu(model)
+    replace_relu6_with_relu(model, ConnectedGraph(model))
 
     bn_dict = {}
     for conv_bn in conv_bn_pairs:
