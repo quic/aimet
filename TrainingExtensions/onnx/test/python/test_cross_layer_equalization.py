@@ -37,6 +37,8 @@
 # =============================================================================
 import numpy as np
 import copy
+
+import onnx
 import torch
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 from onnx import numpy_helper
@@ -145,7 +147,6 @@ class TestCLS:
         np.random.seed(0)
         model = models_for_tests.my_model_with_bns()
         fold_all_batch_norms_to_weight(model.model)
-        replace_relu6_with_relu(model)
         input_shape = (2, 10, 24, 24)
         test_data = np.random.randn(*input_shape).astype(np.float32)
         session = _build_session(model)
@@ -193,7 +194,7 @@ class TestHighBiasFold:
         conv_bn_pairs, bn_conv_pairs = fold_all_batch_norms_to_weight(model_onnx.model)
         bn_dict = {}
 
-        replace_relu6_with_relu(model_onnx)
+        replace_relu6_with_relu(model_onnx, ConnectedGraph(model_onnx))
 
         convs = []
         for conv_bn in conv_bn_pairs:
