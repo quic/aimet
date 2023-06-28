@@ -50,6 +50,7 @@ from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, LearnedGridQuantW
     QcQuantizeOpMode
 from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, QuantizeDequantizeFunc
+from aimet_torch import utils
 
 
 class TestQcQuantizeOpStaticGrid:
@@ -938,3 +939,58 @@ class TestQcQuantizeOpLearnedGrid:
         loaded_quant_wrapper.input_quantizers[0].encoding = enc_new
         with pytest.raises(RuntimeError):
             loaded_quant_wrapper.output_quantizers[0].encoding = enc_new
+
+    @pytest.mark.cuda
+    def test_learned_grid_preserves_fp16(self):
+        """
+        Test if the forward of LearnedGridQuantWrapper preserves the dtype between
+        input and output
+        """
+        torch.manual_seed(2023)
+
+        in_features = 200
+        out_features = 100
+
+        input_shape = (4, 200)
+        x = torch.randn(input_shape).cuda().half()
+        weight = torch.randn((out_features, in_features)).clamp(-1, 1)
+        bias = torch.randn(out_features)
+        linear = torch.nn.Linear(in_features, out_features).cuda()
+        with torch.no_grad():
+            linear.weight.copy_(weight)
+            linear.bias.copy_(bias)
+
+        linear_wrapper = LearnedGridQuantWrapper(linear,
+                                                 weight_bw=4,
+                                                 activation_bw=8,
+                                                 round_mode='round_nearest',
+                                                 quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                                 device='cuda:0')
+        param_quantizers, input_quantizers, output_quantizers = utils.get_all_quantizers(linear_wrapper)
+        for quantizer in param_quantizers + input_quantizers + output_quantizers:
+            quantizer.enabled = False
+
+        linear_wrapper.param_quantizers['weight'].enabled = True
+        linear_wrapper.weight_encoding_min = torch.nn.Parameter(torch.tensor([-1.0 for _ in range(out_features)]))
+        linear_wrapper.weight_encoding_max = torch.nn.Parameter(torch.tensor([1.0 for _ in range(out_features)]))
+
+        linear_wrapper.input_quantizers[0].enabled = True
+        linear_wrapper.input0_encoding_min = torch.nn.Parameter(torch.tensor([-3.5]))
+        linear_wrapper.input0_encoding_max = torch.nn.Parameter(torch.tensor([3.5]))
+
+        linear_wrapper.output_quantizers[0].enabled = True
+        linear_wrapper.output0_encoding_min = torch.nn.Parameter(torch.tensor([-30.]))
+        linear_wrapper.output0_encoding_max = torch.nn.Parameter(torch.tensor([30.]))
+
+        linear_wrapper.cuda().train().half()
+        out_16 = linear_wrapper(x.half())
+        assert out_16.dtype == torch.float16
+
+        out_16.sum().backward()
+        assert linear_wrapper.weight.grad.dtype == torch.float16
+        assert linear_wrapper.weight_encoding_min.grad.dtype == torch.float16
+        assert linear_wrapper.weight_encoding_max.grad.dtype == torch.float16
+        assert linear_wrapper.input0_encoding_min.grad.dtype == torch.float16
+        assert linear_wrapper.input0_encoding_max.grad.dtype == torch.float16
+        assert linear_wrapper.output0_encoding_min.grad.dtype == torch.float16
+        assert linear_wrapper.output0_encoding_max.grad.dtype == torch.float16
