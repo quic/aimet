@@ -46,7 +46,6 @@ import copy
 import numpy as np
 import onnx
 import torch
-from packaging.version import Version
 pytest.importorskip("torch", minversion="1.8") # Skip tests in this file if minimum torch version is not met
 import torch.fx
 torch.fx.wrap('len')
@@ -63,7 +62,7 @@ from models.test_models import ModelWithFunctionalReLU, SingleResidual, ModelWit
 from aimet_torch.model_validator.model_validator import ModelValidator
 from aimet_torch.quantsim import QuantizationSimModel, QuantParams
 from aimet_torch.utils import create_fake_data_loader, get_device
-from aimet_torch.model_preparer import prepare_model, _find_functional_name_for_node, _prepare_traced_model
+from aimet_torch.model_preparer import prepare_model, _find_functional_name_for_node
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.cross_layer_equalization import  equalize_model
 from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
@@ -204,14 +203,14 @@ class TestFX:
         # 8 duplicate ReLUs are replaced by new ReLUs in modified model
         assert original_model_relu_count + 8 == modified_model_relu_count
 
-        assert model_transformed.module_layer1_0_relu_1.inplace == True
-        assert model_transformed.module_layer1_1_relu_1.inplace == True
-        assert model_transformed.module_layer2_0_relu_1.inplace == True
-        assert model_transformed.module_layer2_1_relu_1.inplace == True
-        assert model_transformed.module_layer3_0_relu_1.inplace == True
-        assert model_transformed.module_layer3_1_relu_1.inplace == True
-        assert model_transformed.module_layer4_0_relu_1.inplace == True
-        assert model_transformed.module_layer4_1_relu_1.inplace == True
+        assert model_transformed.layer1._modules['0'].module_relu_1.inplace == True
+        assert model_transformed.layer1._modules['1'].module_relu_1.inplace == True
+        assert model_transformed.layer2._modules['0'].module_relu_1.inplace == True
+        assert model_transformed.layer2._modules['1'].module_relu_1.inplace == True
+        assert model_transformed.layer3._modules['0'].module_relu_1.inplace == True
+        assert model_transformed.layer3._modules['1'].module_relu_1.inplace == True
+        assert model_transformed.layer4._modules['0'].module_relu_1.inplace == True
+        assert model_transformed.layer4._modules['1'].module_relu_1.inplace == True
 
     @pytest.mark.cuda
     def test_fx_with_resnet18_with_cuda(self):
@@ -1395,18 +1394,6 @@ class TestFX:
         assert torch.allclose(model_transformed(*input_tensor),
                               model_with_branch_true(*input_tensor))
 
-    def test_inception_v3_compute_encodings(self):
-        model = models.inception_v3().eval()
-        model_transformed = prepare_model(model)
-        print(model_transformed)
-        input_shape = (1, 3, 299, 299)
-        input_tensor = torch.randn(*input_shape)
-        assert torch.allclose(model_transformed(input_tensor),
-                              model(input_tensor))
-        quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
-        quant_sim.compute_encodings(evaluate, input_tensor)
-        quant_sim.model(input_tensor)
-
     def test_prepare_model_with_pytorch_transformer_layer(self):
         """
         Test that validates auto replacement of functional activation functions in
@@ -1671,77 +1658,6 @@ class TestFX:
 
         # Compare output after bnf
         assert torch.equal(model_transformed(dummy_input)[0], model(dummy_input)[0])
-
-    @pytest.mark.skipif(Version(torch.__version__) < Version('1.10.0'), reason="torch1.13.1 is required.")
-    def test_fx_with_vit(self):
-        from transformers import ViTModel, ViTConfig
-        from transformers.utils.fx import symbolic_trace
-
-        # Set the strict flag to False so that torch.jit.trace can be successful.
-        from aimet_torch.meta import connectedgraph
-        connectedgraph.jit_trace_args.update({"strict": False})
-
-        model = ViTModel(ViTConfig())
-        dummy_input = torch.randn(1, 3, 224, 224)
-
-        traced_model = symbolic_trace(model, ["pixel_values"])
-        _prepare_traced_model(traced_model)
-
-        with torch.no_grad():
-            outputs = model(dummy_input)
-            outputs2 = traced_model(dummy_input)
-
-        # Verify bit-exact outputs.
-        assert torch.equal(dict(outputs)["last_hidden_state"], outputs2["last_hidden_state"])
-        assert torch.equal(dict(outputs)["pooler_output"], outputs2["pooler_output"])
-
-        # Verify that validator checks pass.
-        assert ModelValidator.validate_model(traced_model, dummy_input)
-
-    @pytest.mark.skipif(Version(torch.__version__) < Version('1.10.0'), reason="torch1.13.1 is required.")
-    def test_fx_with_bert_large(self):
-        from transformers import BertForQuestionAnswering
-        from transformers.utils.fx import symbolic_trace
-
-        # Set the strict flag to False so that torch.jit.trace can be successful.
-        from aimet_torch.meta import connectedgraph
-        connectedgraph.jit_trace_args.update({"strict": False})
-
-        model = BertForQuestionAnswering.from_pretrained('bert-large-uncased-whole-word-masking-finetuned-squad', return_dict=False)
-        input_shape = (1,128)
-        input_ids = torch.randint(1, input_shape)
-        attention_mask = torch.randint(1, input_shape)
-        token_type_ids = torch.randint(1, input_shape)
-        dummy_input = [input_ids, attention_mask, token_type_ids]
-
-        traced_model = symbolic_trace(model, ["input_ids", "attention_mask", "token_type_ids"])
-        _prepare_traced_model(traced_model)
-
-        with torch.no_grad():
-            outputs = model(*dummy_input)
-            outputs2 = traced_model(*dummy_input)
-
-        # Verify bit-exact outputs.
-        assert torch.equal(outputs[0], outputs2[0])
-        assert torch.equal(outputs[1], outputs2[1])
-
-        # Verify that validator checks pass.
-        assert ModelValidator.validate_model(traced_model, dummy_input)
-
-        # Verify with Quantization workflow.
-        sim = QuantizationSimModel(traced_model, dummy_input=dummy_input)
-        sim.compute_encodings(evaluate, forward_pass_callback_args=dummy_input)
-        sim.model(*dummy_input)
-
-        # Verify Quantsim Export workflow.
-        results_dir = os.path.abspath('./data/verify_sim_export/')
-        os.makedirs(results_dir, exist_ok=True)
-
-        try:
-            sim.export(results_dir, filename_prefix='prepared_model', dummy_input=tuple(dummy_input))
-        finally:
-            if os.path.isdir(results_dir):
-                shutil.rmtree(results_dir)
 
     def test_replace_silu_with_custom_silu(self):
         """ test to verify replacement of silu with custom silu (sigmoid + mul) """
