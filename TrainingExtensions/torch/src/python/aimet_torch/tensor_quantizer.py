@@ -860,6 +860,9 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
             encodings_min = [encodings.min]
             encodings_max = [encodings.max]
 
+        # TODO:
+        #   - Encoding min & max shouldn't be always initialized as float32.
+        #   - Should respect the device and dtype of the existing encoding min & max
         params[enc_min_param] = torch.nn.Parameter(torch.FloatTensor(encodings_min).to(self.wrapper_ref.device),
                                                    requires_grad=True)
         params[enc_max_param] = torch.nn.Parameter(torch.FloatTensor(encodings_max).to(self.wrapper_ref.device),
