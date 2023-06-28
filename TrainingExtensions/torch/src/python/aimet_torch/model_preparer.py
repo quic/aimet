@@ -39,8 +39,8 @@
 """ Implementation to automatically prepare pytorch models for AIMET features """
 
 import copy
-from re import split
-from typing import Any, Optional, Dict, Union, List, Callable
+import re
+from typing import Any, Optional, Dict, Union, List, Callable, Tuple
 import torch
 import torch.fx
 from aimet_common.utils import AimetLogger
@@ -120,6 +120,46 @@ functional_with_stateless_api = {
     'cumsum'                    : elementwise_ops.CumSum,
     'masked_fill'               : elementwise_ops.MaskedFill,
 }
+
+
+class Scope:
+    """
+    Code adapted from: https://github.com/pytorch/pytorch/blob/main/torch/fx/proxy.py#L26
+
+    Scope object that records the module path and the module type of module.
+    Scope is used to track the information of the module that contains a Node
+    in a Graph of GraphModule.
+    """
+    def __init__(self, module_path: str, module_type: Any):
+        super().__init__()
+        self.module_path = module_path
+        self.module_type = module_type
+
+
+class ScopeContextManager:
+    """
+    Code adapted from: https://github.com/pytorch/pytorch/blob/main/torch/fx/proxy.py#L57
+
+    A context manager to track the Scope of Node during symbolic tracing.
+    When entering a forward function of a Module, we'll update the scope information of
+    the current module, and when we exit, we'll restore the previous scope information.
+    """
+    def __init__(self, scope: Scope, current_scope: Scope):
+        super().__init__()
+        # Keep a copy of prev scope.
+        self._prev_scope = copy.copy(scope)
+        # Update scope to current scope
+        scope.module_path = current_scope.module_path
+        scope.module_type = current_scope.module_type
+        # Save a reference so, we can restore tracer.scope with prev scope on exit.
+        self._scope = scope
+
+    def __enter__(self):
+        return
+
+    def __exit__(self, *args):
+        self._scope.module_path = self._prev_scope.module_path
+        self._scope.module_type = self._prev_scope.module_type
 
 
 def conv2d_create_node(traced_model: torch.fx.GraphModule, module_name: str, node: torch.fx.node) \
@@ -263,6 +303,7 @@ def concat_create_node(traced_model: torch.fx.GraphModule, module_name: str, nod
         new_node = traced_model.graph.call_module(module_name, args=tuple(node.args[0]))
         return new_node
 
+
 def concat_create_module(node: torch.fx.node) -> torch.nn.Module:
     """
     Create the replacement module.
@@ -292,6 +333,7 @@ special_handler_functions = {
     'conv2d': {'node_fn': conv2d_create_node, 'module_fn': conv2d_create_module}
 }
 
+
 def prepare_model(model: torch.nn.Module,
                   modules_to_exclude: List[torch.nn.Module] = None,
                   module_classes_to_exclude: List[Callable] = None,
@@ -311,49 +353,70 @@ def prepare_model(model: torch.nn.Module,
     :return: Modified pytorch Model
     """
     with in_eval_mode(model):
-        traced_model = _trace_model(model, modules_to_exclude, module_classes_to_exclude, concrete_args)
+        traced_model, node_name_to_scope = \
+            _trace_model(model, modules_to_exclude, module_classes_to_exclude, concrete_args)
 
     # Prepare model and perform checks to make sure the graph is well-formed.
-    _prepare_traced_model(traced_model)
+    _prepare_traced_model(traced_model, node_name_to_scope)
     return traced_model
 
 
 def _trace_model(model: torch.nn.Module,
                  modules_to_exclude: Optional[List[torch.nn.Module]],
                  module_classes_to_exclude: Optional[List[Callable]],
-                 concrete_args: Optional[Dict[str, Any]]):
+                 concrete_args: Optional[Dict[str, Any]]) -> [torch.fx.GraphModule, Dict]:
     """
-    Overrides the is_leaf_module() method of parent class when modules_to_exclude list is not None
+    Returns traced model and dictionary of node name to the scope of module which contains the node.
+
     :param model: pytorch Model to be modified.
     :param modules_to_exclude: List of modules to exclude when tracing.
     :param module_classes_to_exclude: List of module classes to exclude when tracing.
     :param concrete_args: Concrete arguments that should not be treated as Proxies.
-    :return: Traced model.
+    :return: (Traced model, node_name_to_scope)
     """
+    #TODO: node_name_to_scope should be removed and instead use node.meta[] after upgrading to torch 2.0
     class Tracer(torch.fx.Tracer):
         """
-        Override is_leaf_module() method of parent class.
+        Override is_leaf_module(), call_module() and create_node() methods of parent class.
         """
+        def __init__(self):
+            super().__init__()
+            self.scope = Scope("", None)
+            self.node_name_to_scope = {}
+
         def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
             return (
                 modules_to_exclude and m in modules_to_exclude
                 or module_classes_to_exclude and type(m) in module_classes_to_exclude # pylint: disable=unidiomatic-typecheck
-                or super(Tracer, self).is_leaf_module(m, module_qualified_name)
+                or super().is_leaf_module(m, module_qualified_name)
             )
+
+        def call_module(self, m: torch.nn.Module, forward: Callable[..., Any], args: Tuple[Any, ...],
+                        kwargs: Dict[str, Any]) -> Any:
+            module_qualified_name = self.path_of_module(m)
+            with ScopeContextManager(self.scope, Scope(module_qualified_name, type(m))):
+                return super().call_module(m, forward, args, kwargs)
+
+        def create_node(self, kind: str, target, args, kwargs, name: Optional[str] = None,
+                        type_expr: Optional[Any] = None) -> torch.fx.Node:
+            node = super().create_node(kind, target, args, kwargs, name, type_expr)
+            self.node_name_to_scope[node.name] = (self.scope.module_path, self.scope.module_type)
+            return node
 
     # Symbolic tracing frontend - captures the semantics of the module
     tracer = Tracer()
     graph = tracer.trace(model, concrete_args=concrete_args)
-    symbolic_traced_model = torch.fx.GraphModule(tracer.root, graph)
+    traced_model = torch.fx.GraphModule(tracer.root, graph)
+    return traced_model, tracer.node_name_to_scope
 
-    return symbolic_traced_model
 
-
-def _prepare_traced_model(traced_model: torch.fx.GraphModule):
+def _prepare_traced_model(traced_model: torch.fx.GraphModule,
+                          node_name_to_scope: Dict[str, Tuple[str, type]] = None):
     """
     Helper for prepare_model(). This prepares the given traced_model in-place.
 
     :param traced_model: Symbolically traced model.
+    :param node_name_to_scope: Mapping from node name to the scope of module which contains the node.
     """
     unique_nodes = set()
 
@@ -366,22 +429,24 @@ def _prepare_traced_model(traced_model: torch.fx.GraphModule):
             if functional_name:
                 # Instantiate new module for functional node
                 new_module = _create_module_for_functional_node(node, functional_name)
-                new_nodule_name = 'module_' + node.name
-                setattr(traced_model, new_nodule_name, new_module)
-                # Create the node for new module in the graph
-                _create_node_for_new_module(traced_model, node, new_nodule_name, functional_name)
-                logger.info("Functional         : Adding new module for node: {%s} ", node.name)
+                parent_module, new_module_name, new_module_qualified_name = \
+                    _get_info_for_functional_node(traced_model, node, node_name_to_scope)
+                setattr(parent_module, new_module_name, new_module)
+                # Insert the node for new module in the graph
+                _insert_node_for_new_module(traced_model, node, new_module_qualified_name, functional_name)
+                logger.info("Functional         : Adding new module for node: {%s} ", new_module_qualified_name)
 
         # Create new module for reused/duplicate nodes
         elif node.target in unique_nodes:
             if node.op == 'call_module':
                 # Instantiate new module for reused node
                 new_module = _create_module_for_reused_node(node, traced_model)
-                new_nodule_name = 'module_' + node.name
-                setattr(traced_model, new_nodule_name, new_module)
-                # Create the node for new module in the graph
-                _create_node_for_new_module(traced_model, node, new_nodule_name)
-                logger.info("Reused/Duplicate   : Adding new module for node: {%s} ", node.name)
+                parent_module, new_module_name, new_module_qualified_name = \
+                    _get_info_for_reused_node(traced_model, node, node_name_to_scope)
+                setattr(parent_module, new_module_name, new_module)
+                # Insert the node for new module in the graph
+                _insert_node_for_new_module(traced_model, node, new_module_qualified_name)
+                logger.info("Reused/Duplicate   : Adding new module for node: {%s} ", new_module_qualified_name)
         else:
             unique_nodes.add(node.target)
 
@@ -402,28 +467,29 @@ def _verify_traced_model(traced_model: torch.fx.GraphModule):
     traced_model.recompile()
 
 
-def _create_node_for_new_module(traced_model: torch.fx.GraphModule, node: torch.fx.node,
-                                module_name: str, functional_name: str = None):
+def _insert_node_for_new_module(traced_model: torch.fx.GraphModule,
+                                node: torch.fx.node,
+                                module_qualified_name: str,
+                                functional_name: str = None):
     """
     Insert 'call module' node into graph and replace all the uses of 'node' with newly added node and erase the
     old node from graph
     :param traced_model: Symbolically traced model
     :param node: Current node in the graph after which new node will be inserted
-    :param module_name: Qualified module name in symbolic_traced_model hierarchy corresponding to new node
+    :param module_qualified_name: Qualified module name in symbolic_traced_model hierarchy corresponding to new node
     :param functional_name: Original functional name
-    :return: None
     """
     with traced_model.graph.inserting_after(node):
         if functional_name:
             if functional_name in functional_with_special_handling.keys():
-                new_node = special_handler_functions[functional_name]['node_fn'](traced_model, module_name, node)
+                new_node = special_handler_functions[functional_name]['node_fn'](traced_model, module_qualified_name, node)
             elif functional_name in functional_with_stateless_api.keys():
                 merged_args = _merge_args_and_kwargs(node)
-                new_node = traced_model.graph.call_module(module_name, args=tuple(merged_args))
+                new_node = traced_model.graph.call_module(module_qualified_name, args=tuple(merged_args))
             else:
-                new_node = traced_model.graph.call_module(module_name, args=node.args)
+                new_node = traced_model.graph.call_module(module_qualified_name, args=node.args)
         else:
-            new_node = traced_model.graph.call_module(module_name, args=node.args)
+            new_node = traced_model.graph.call_module(module_qualified_name, args=node.args)
 
         node.replace_all_uses_with(new_node)
     traced_model.graph.erase_node(node)
@@ -441,7 +507,7 @@ def _find_functional_name_for_node(node_name: str) -> Union[str, None]:
     # Functional operations with similar names are differentiated using "_count" suffix
     # when symbolically traced. For example, two add operations will have name 'add' and 'add_1'.
     # Split given node name by occurrence of pattern. \d is used to match [0-9] followed by '_'.
-    strings = split(pattern=r'_\d', string=node_name)
+    strings = re.split(pattern=r'_\d', string=node_name)
     for string in strings:
         if string in combined_lookup.keys():
             return string
@@ -546,3 +612,76 @@ def _merge_args_and_kwargs(node: torch.fx.node) -> List:
     for arg in node.kwargs.values():
         merged_args.append(arg)
     return merged_args
+
+
+def _get_info_for_functional_node(traced_model: torch.fx.GraphModule,
+                                  node: torch.fx.Node,
+                                  node_name_to_scope: Dict[str, Tuple[str, type]])\
+        -> Tuple[torch.fx.GraphModule, str, str]:
+    """
+    For functional node, get module which contains the node, corresponding new module's name and fully qualified name.
+    This information will be used to add new module at either module-level scope or model-level scope.
+
+    NOTE: If node_name_to_scope is not provided, then the corresponding new module will be added at model-level scope.
+    Also, if exception is raised, new module will be added at model-level scope.
+
+    :param traced_model: Traced model
+    :param node: torch.fx Node
+    :param node_name_to_scope: Mapping from node name to the scope of module which contains the node.
+    :return: (parent_module, new_module_name, new_module_qualified_name)
+    """
+    parent_module = traced_model
+    new_module_name = "module_" + node.name
+    new_module_qualified_name = new_module_name
+
+    if node_name_to_scope:
+        try:
+            module_path, _ = node_name_to_scope[node.name]
+            parent_module = traced_model.get_submodule(module_path)
+            if module_path == "":
+                new_module_qualified_name = new_module_name
+            else:
+                new_module_qualified_name = module_path + "." + new_module_name
+        except (KeyError, AttributeError):
+            pass
+
+    return parent_module, new_module_name, new_module_qualified_name
+
+
+def _get_info_for_reused_node(traced_model: torch.fx.GraphModule,
+                              node: torch.fx.Node,
+                              node_name_to_scope: Dict[str, Tuple[str, type]])\
+        -> Tuple[torch.fx.GraphModule, str, str]:
+    """
+    For reused node, get module which contains the node, corresponding new module's name and fully qualified name.
+    This information will be used to add new module at either module-level scope or model-level scope.
+
+    NOTE: If node_name_to_scope is not provided, then the corresponding new module will be added at model-level scope.
+    Also, if exception is raised, new module will be added at model-level scope.
+
+    :param traced_model: Traced model
+    :param node: torch.fx Node
+    :param node_name_to_scope: Mapping from node name to the scope of module which contains the node.
+    :return: (parent_module, new_module_name, new_module_qualified_name)
+    """
+    parent_module = traced_model
+    new_module_name = "module_" + node.name
+    new_module_qualified_name = new_module_name
+
+    if node_name_to_scope:
+        try:
+            module_path, _ = node_name_to_scope[node.name]
+            if "." in module_path:
+                parent_name, child_name = module_path.rsplit(".", maxsplit=1)
+            else:
+                parent_name, child_name = "", module_path
+            parent_module = traced_model.get_submodule(parent_name)
+            new_module_name = "module_" + child_name + "_" + node.name.rsplit("_", maxsplit=1)[1]
+            if parent_name == "":
+                new_module_qualified_name = new_module_name
+            else:
+                new_module_qualified_name = parent_name + "." + new_module_name
+        except (KeyError, AttributeError):
+            pass
+
+    return parent_module, new_module_name, new_module_qualified_name
