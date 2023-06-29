@@ -981,10 +981,9 @@ class NativeTorchQuantWrapper(nn.Module):
         super(NativeTorchQuantWrapper, self).__init__()
 
         self._module_to_wrap = getattr(post_training_module, module_name)
-        if isinstance(post_training_module, LearnedGridQuantWrapper):
-            self._mode = QcQuantizeOpMode.ACTIVE # pylint: disable=protected-access
-        else:
-            self._mode = post_training_module._mode # pylint: disable=protected-access
+        if isinstance(post_training_module, StaticGridQuantWrapper):
+            if post_training_module._mode != QcQuantizeOpMode.ACTIVE: # pylint: disable=protected-access
+                raise ValueError('Only ACTIVE QcQuantizeOpMode is supported while using StaticGridQuantWrapper')
 
         self.output_quantizers = [TorchQuantizer(quantizer, device) for quantizer in post_training_module.output_quantizers]
 
@@ -994,7 +993,8 @@ class NativeTorchQuantWrapper(nn.Module):
         for name, quantizer in post_training_module.param_quantizers.items():
             self.param_quantizers[name] = TorchQuantizer(quantizer, device)
 
-    def _quantize_dequantize(self, tensor_quantizers, tensors_to_quantize):
+    @staticmethod
+    def _quantize_dequantize(tensor_quantizers, tensors_to_quantize):
         """
         Forward-pass routine. This quantizes the weights before delegating to the wrapped module and
         then quantizes the output before returning the same
@@ -1015,10 +1015,7 @@ class NativeTorchQuantWrapper(nn.Module):
             assert len(tensor_quantizers) > index, \
                 f"Not enough tensor quantizers ({len(tensor_quantizers)}) allocated"
 
-            if self._mode is QcQuantizeOpMode.ACTIVE:
-                output = tensor_quantizers[index].quantize_dequantize(input_tensor)
-            else:
-                output = input_tensor
+            output = tensor_quantizers[index].quantize_dequantize(input_tensor)
 
             outputs.append(output)
 
@@ -1045,7 +1042,8 @@ class NativeTorchQuantWrapper(nn.Module):
             param_quantizer = self.param_quantizers[name]
             if param_quantizer.enabled:
                 setattr(self._module_to_wrap, name,
-                        torch.nn.parameter.Parameter(param_quantizer.quantize_dequantize(param)))
+                        torch.nn.Parameter(param_quantizer.quantize_dequantize(param), requires_grad=True))
+
         wrapped_output = self._module_to_wrap(*quantized_inputs)
 
         # Quantize the outputs

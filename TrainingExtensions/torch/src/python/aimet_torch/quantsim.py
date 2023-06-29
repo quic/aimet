@@ -1541,6 +1541,9 @@ class QuantizationSimModel:
                     quantizers = module.input_quantizers + module.output_quantizers
                     if 'weight' in module.param_quantizers:
                         quantizers += [module.param_quantizers['weight']]
+                    if 'bias' in module.param_quantizers:
+                        quantizers += [module.param_quantizers['bias']]
+
                     for quantizer in quantizers:
                         if quantizer.enabled and quantizer.data_type == QuantizationDataType.int and quantizer.bitwidth != 8:
                             raise ValueError('Only 8 bit quantizers are supported by exporting to ONNX model.'
