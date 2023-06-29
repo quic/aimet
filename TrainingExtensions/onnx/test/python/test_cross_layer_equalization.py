@@ -194,7 +194,7 @@ class TestHighBiasFold:
         conv_bn_pairs, bn_conv_pairs = fold_all_batch_norms_to_weight(model_onnx.model)
         bn_dict = {}
 
-        replace_relu6_with_relu(model_onnx, ConnectedGraph(model_onnx))
+        replace_relu6_with_relu(model_onnx)
 
         convs = []
         for conv_bn in conv_bn_pairs:
