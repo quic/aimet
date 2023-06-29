@@ -61,7 +61,7 @@ from models.test_models import TwoLayerBidirectionalLSTMModel, SingleLayerRNNMod
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.onnx_utils import OnnxExportApiArgs
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, \
-    StaticGridQuantWrapper, QcQuantizeOpMode, LearnedGridQuantWrapper
+    StaticGridQuantWrapper, QcQuantizeOpMode, LearnedGridQuantWrapper, enable_recompute, no_recompute
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.quantsim import QuantizationSimModel, check_accumulator_overflow, load_encodings_to_sim, \
     has_valid_encodings
@@ -3854,3 +3854,70 @@ class TestQuantizationSimLearnedGrid:
                 os.remove(config_file)
             except FileNotFoundError:
                 pass
+
+
+@pytest.mark.cuda
+@pytest.mark.parametrize('input_dims', (2, 3, 4))
+def test_fused_qdq_linear(input_dims):
+    torch.manual_seed(2023)
+
+    in_features = 200
+    out_features = 100
+
+    input_shape = tuple(in_features if dim == input_dims-1 else 4 for dim in range(input_dims))
+    x = torch.randn(input_shape)
+    weight = torch.randn((out_features, in_features))
+    bias = torch.randn(out_features)
+    linear = torch.nn.Linear(in_features, out_features).cuda()
+    with torch.no_grad():
+        linear.weight.copy_(weight)
+        linear.bias.copy_(bias)
+
+    linear_wrapper = LearnedGridQuantWrapper(linear,
+                                             weight_bw=4,
+                                             activation_bw=16,
+                                             round_mode='round_nearest',
+                                             quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                             device='cuda:0')
+    param_quantizers, input_quantizers, output_quantizers = utils.get_all_quantizers(linear_wrapper)
+    for quantizer in param_quantizers + input_quantizers + output_quantizers:
+        quantizer.enabled = False
+
+    linear_wrapper.param_quantizers['weight'].enabled = True
+    linear_wrapper.weight_encoding_min = torch.nn.Parameter(torch.tensor([-1.0 for _ in range(out_features)]))
+    linear_wrapper.weight_encoding_max = torch.nn.Parameter(torch.tensor([1.0 for _ in range(out_features)]))
+    linear_wrapper.cuda()
+
+    _assert_same_results_with_or_without_recompute(linear_wrapper, x)
+
+
+def _assert_same_results_with_or_without_recompute(wrapper: LearnedGridQuantWrapper, x):
+    with no_recompute():
+        # If recomputation is disabled, we use the default forward/backward functions
+        # defined in torch.nn.Linear
+        logits = wrapper(x.cuda())
+        logits.sum().backward()
+
+    weight_grad = wrapper._module_to_wrap.weight.grad.clone().detach()
+    min_grad = wrapper.weight_encoding_min.grad.clone().detach()
+    max_grad = wrapper.weight_encoding_max.grad.clone().detach()
+
+    wrapper._module_to_wrap.weight.grad = None
+    wrapper.weight_encoding_min.grad = None
+    wrapper.weight_encoding_max.grad = None
+
+    with enable_recompute():
+        # If recomputation is enabled, AIMET uses its custom forward/backward functions
+        # that perform recompute during bacward to reduce memory footprint
+        logits_with_recompute = wrapper(x.cuda())
+        logits_with_recompute.sum().backward()
+
+    weight_grad_with_recompute = wrapper._module_to_wrap.weight.grad.clone().detach()
+    min_grad_with_recompute = wrapper.weight_encoding_min.grad.clone().detach()
+    max_grad_with_recompute = wrapper.weight_encoding_max.grad.clone().detach()
+
+    # Assert logits and grads are equal with/without recomputation
+    assert logits.equal(logits_with_recompute)
+    assert weight_grad.equal(weight_grad_with_recompute)
+    assert min_grad.equal(min_grad_with_recompute)
+    assert max_grad.equal(max_grad_with_recompute)
