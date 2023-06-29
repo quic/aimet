@@ -202,6 +202,7 @@ def replace_relu6_with_relu(model: onnx_pb.ModelProto):
             for temp_node in model.model.graph.node:
                 if node.input[0] in temp_node.output:
                     parent_node = temp_node
+            assert parent_node, "Parent Node for Clip operation does not exist"
             name = node.name
             remove_node(node, model.model.graph)
             inputs = [parent_node.output[0]]
