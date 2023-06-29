@@ -122,11 +122,11 @@ Set the <variant_string> to ONE of the following depending on your desired varia
 
     export AIMET_VARIANT=<variant_string>
 
-Replace <variant_string> in the steps below with the appropriate tag:
+Replace <release_tag> in the steps below with the appropriate tag:
 
 .. code-block::
 
-    export AIMET_VARIANT=<variant_string>
+    export release_tag=<release_tag>
 
 Set the package download URL as follows:
 
