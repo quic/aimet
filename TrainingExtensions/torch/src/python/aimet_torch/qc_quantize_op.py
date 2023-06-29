@@ -41,10 +41,11 @@
 
 import abc
 from enum import Enum
-from typing import Dict, Tuple, Union, List
+from typing import Dict, Tuple, Union, List, Callable, Type
 import os
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger, Handle
@@ -720,6 +721,22 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
 QcPostTrainingWrapper = StaticGridQuantWrapper
 
 
+_fused_forward_functions: Dict[Type[nn.Module], Callable] = dict()
+
+def _register_forward(layer_type: Type[nn.Module]):
+    """
+    Register fused forward function for the given layer type
+    :param layer_type: Type of layer to which the registered forward function will be applied
+    """
+    if layer_type in _fused_forward_functions:
+        raise RuntimeError(f"Forward function for {layer_type} is already registered.")
+
+    def wrapper(forward_fn):
+        _fused_forward_functions[layer_type] = forward_fn
+        return forward_fn
+    return wrapper
+
+
 class LearnedGridQuantWrapper(QcQuantizeWrapper):
     """
     Learns Min and Max for Encodings of Enabled quantizers for a layer
@@ -840,11 +857,14 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
         # Quantize inputs
         torch_inputs = custom_tensor_utils.to_torch_tensor(inputs)
         quantized_inputs = self._quantize_activation(torch_inputs, self.input_quantizers, 'input')
+        quantized_inputs = custom_tensor_utils.to_custom_tensor(inputs, quantized_inputs)
 
-        with self._quantize_params():
-            quantized_inputs = custom_tensor_utils.to_custom_tensor(inputs, quantized_inputs)
-            # Call the forward of the wrapped module
-            wrapped_output = self._module_to_wrap(*quantized_inputs)
+        forward_fn = _default_forward
+        if torch.is_grad_enabled() and is_recompute_enabled():
+            layer_type = type(self._module_to_wrap)
+            forward_fn = _fused_forward_functions.get(layer_type, _default_forward)
+
+        wrapped_output = forward_fn(self, quantized_inputs)
 
         # Quantize the outputs
         if not isinstance(wrapped_output, (List, Tuple)):
@@ -909,6 +929,42 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
             quantized_tensors.append(tensor_quantizers[index].quantize_dequantize(tensor_to_quantize, encoding_min,
                                                                                   encoding_max))
         return quantized_tensors
+
+
+def _default_forward(quant_wrapper: LearnedGridQuantWrapper, inputs):
+    """
+    Default forward implementation with quantize-dequantized parameters
+
+    :param inputs: Tuple of inputs which will be passed to the inner module
+    :return: Output of the inner module's forward with quantize-dequantized parameters
+    """
+    # pylint: disable=protected-access
+    with quant_wrapper._quantize_params():
+        # Call the forward of the wrapped module
+        return quant_wrapper._module_to_wrap(*inputs)
+
+
+@_register_forward(nn.Linear)
+def _linear_forward_with_recompute(quant_wrapper: LearnedGridQuantWrapper, inputs):
+    """
+    Forward implementation of nn.Linear with quantize-dequantized parameters
+    with recompute enabled. Compared to the default forward implementation, this
+    function has zero memory overead at the cost of additional computation.
+
+    :param quant_wrapper: Q
+    :param inputs: Tuple of inputs which will be passed to the inner module
+    :return: Output of the inner module's forward with quantize-dequantized parameters
+    """
+    # pylint: disable=protected-access
+    if not quant_wrapper.param_quantizers['weight'].enabled:
+        return _default_forward(quant_wrapper, inputs)
+
+    weight = quant_wrapper._module_to_wrap.weight
+    bias = quant_wrapper._module_to_wrap.bias
+    inp, = inputs
+    return FusedQdqLinear.apply(inp, weight, bias,
+                                quant_wrapper.weight_encoding_min, quant_wrapper.weight_encoding_max,
+                                quant_wrapper.param_quantizers['weight'])
 
 
 class QcQuantizeStandalone(QcQuantizeStandAloneBase):
@@ -1025,3 +1081,94 @@ def _patch_param(module: torch.nn.Module, param_name: str, quantized_param: torc
     except Exception:
         cleanup_fn()
         raise
+
+
+_ENABLE_RECOMPUTE = False
+
+
+def _set_enable_recompute(mode: bool):
+    global _ENABLE_RECOMPUTE # pylint: disable=global-statement
+    original_mode = _ENABLE_RECOMPUTE
+
+    def cleanup():
+        global _ENABLE_RECOMPUTE # pylint: disable=global-statement
+        _ENABLE_RECOMPUTE = original_mode
+
+    try:
+        _ENABLE_RECOMPUTE = mode
+        return Handle(cleanup)
+    except Exception:
+        cleanup()
+        raise
+
+
+def is_recompute_enabled():
+    """
+    Returns True if recomputation for memory saving is enabled; False otherwise.
+    """
+    return _ENABLE_RECOMPUTE
+
+
+def enable_recompute():
+    """
+    Enable recomputation for memory saving.
+    """
+    return _set_enable_recompute(True)
+
+
+def no_recompute():
+    """
+    Disable recomputation for memory saving.
+    """
+    return _set_enable_recompute(False)
+
+
+class FusedQdqLinear(torch.autograd.Function):
+    """
+    Run forward/backward of linear without saving quantize-dequantized weight
+    for backward for memory efficiency. The quantize-dequantized weight will
+    be recomputed during backward
+    """
+    # pylint:disable=arguments-differ
+    @staticmethod
+    def forward(ctx, inp, weight, bias, weight_encoding_min, weight_encoding_max, weight_quantizer):
+        # Do not save qdq_weight for backward as it will recompute it during backward
+        ctx.save_for_backward(inp, weight, bias, weight_encoding_min, weight_encoding_max)
+        ctx.weight_quantizer = weight_quantizer
+        qdq_weight, _ = ste.calculate_forward_pass(weight,
+                                                   weight_quantizer,
+                                                   weight_encoding_min,
+                                                   weight_encoding_max)
+        return F.linear(inp, qdq_weight, bias)
+
+    @staticmethod
+    def backward(ctx, grad):
+        inp, weight, bias, weight_encoding_min, weight_encoding_max = ctx.saved_tensors
+
+        qdq_weight = intermediate_result = None
+        if inp.requires_grad or weight.requires_grad:
+            qdq_weight, intermediate_result = ste.calculate_forward_pass(weight,
+                                                                         ctx.weight_quantizer,
+                                                                         weight_encoding_min,
+                                                                         weight_encoding_max)
+        dloss_by_dx = None
+        if inp.requires_grad:
+            dloss_by_dx = torch.matmul(grad, qdq_weight)
+            del qdq_weight
+
+        dloss_by_dW = dloss_by_dmin = dloss_by_dmax = None
+        if weight.requires_grad or\
+                weight_encoding_min.requires_grad or\
+                weight_encoding_max.requires_grad:
+            dloss_by_dWq = torch.matmul(grad.view(grad.shape[-1], -1),
+                                        inp.view(-1, inp.shape[-1]))
+            dloss_by_dW, dloss_by_dmin, dloss_by_dmax =\
+                ste.calculate_gradients(weight, dloss_by_dWq, intermediate_result,
+                                        ctx.weight_quantizer.channel_axis)
+            del intermediate_result
+
+        dloss_by_db = None
+        if isinstance(bias, torch.Tensor) and bias.requires_grad:
+            dloss_by_db = grad.sum(dim=0)
+
+        return dloss_by_dx, dloss_by_dW, dloss_by_db, dloss_by_dmin, dloss_by_dmax, None
