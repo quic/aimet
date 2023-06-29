@@ -190,22 +190,20 @@ def make_dummy_input(model: onnx_pb.ModelProto, dynamic_size: int = 1) -> Dict[s
     return input_dict
 
 
-def replace_relu6_with_relu(model: onnx_pb.ModelProto, connected_graph):
+def replace_relu6_with_relu(model: onnx_pb.ModelProto):
     """
     Replace relu6 op with relu op
 
     :param model: ONNX model
-    :param connected_graph: Connected Graph
     """
-    child_to_parent_dict = {}
-    for op in connected_graph.ordered_ops:
-        if op.type == 'Clip':
-            child_to_parent_dict[op.dotted_name] = op.input_ops[0]
     for node in model.model.graph.node:
         if node.op_type == 'Clip':
+            parent_node = None
+            for temp_node in model.model.graph.node:
+                if node.input[0] in temp_node.output:
+                    parent_node = temp_node
             name = node.name
             remove_node(node, model.model.graph)
-            parent_node = child_to_parent_dict[node.name].get_module()
             inputs = [parent_node.output[0]]
             model.replace_input_of_all_nodes(parent_node.output[0], parent_node.output[0] + '_replaced')
             relu_node = onnx.helper.make_node(
