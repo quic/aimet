@@ -1554,6 +1554,10 @@ class QuantizationSimModel:
         quant_sim_model = copy.deepcopy(sim_model)
 
         device = utils.get_device(quant_sim_model)
+        if isinstance(dummy_input, torch.Tensor):
+            dummy_input = dummy_input.to(device)
+        else:
+            dummy_input = tuple([input.to(device) for input in dummy_input])
         QuantizationSimModel._replace_quantization_wrapper_with_native_torch_quantization_nodes(quant_sim_model, device)
 
         if export_to_torchscript:
