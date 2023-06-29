@@ -38,9 +38,10 @@
 
 """ Custom modules for functional operations defined under torch and torch.nn.functional packages """
 
-from typing import Callable, Any
+from typing import Callable, Any, Tuple, Union
 import torch
 import torch.nn
+import torchvision
 
 
 def forward_function_wrapper(functional: Callable) -> Any:
@@ -323,3 +324,20 @@ class ScatterND(torch.nn.Module):
             output[idx_list] = updates[idx]
 
         return output
+
+
+class RoiAlign(torch.nn.Module):
+    """ Custom module for ONNX RoiAlign  """
+
+    def __init__(self, output_size: Union[int, Tuple[int, int]], spatial_scale: float, sampling_ratio: int):
+        super().__init__()
+        self.output_size = output_size
+        self.spatial_scale = spatial_scale
+        self.sampling_ratio = sampling_ratio
+
+    def forward(self, inp: torch.Tensor, roi: torch.Tensor, batch_indices: torch.Tensor) -> torch.Tensor:
+        """
+        Forward-pass routine for RoiAlign
+        """
+        roi = torch.cat((torch.reshape(batch_indices, (batch_indices.shape[0], 1)), roi), dim=1)
+        return torchvision.ops.roi_align(inp, roi, self.output_size, self.spatial_scale, self.sampling_ratio)
