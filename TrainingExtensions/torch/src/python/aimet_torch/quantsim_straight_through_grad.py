@@ -43,7 +43,7 @@ from typing import TYPE_CHECKING, Tuple
 import torch
 from torch.autograd import Variable
 
-from aimet_torch.tensor_factory_utils import constant_tensor_factory
+from aimet_torch.tensor_factory_utils import constant_like
 
 if TYPE_CHECKING:
     from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer
@@ -137,17 +137,16 @@ def get_computed_encodings(bitwidth: int,
     :param is_unsigned_symmetric: Whether to use signed/unsigned in symmetric case
     :return: Tuple of delta and offset and num_steps
     """
-    device = encoding_min.device
     num_steps = 2 ** bitwidth - 1
     if use_symmetric_encodings and use_strict_symmetric:
         num_steps -= 1
     half_num_steps = num_steps / 2
 
-    num_steps_tensor = constant_tensor_factory(num_steps, device)
+    num_steps_tensor = constant_like(num_steps, encoding_min)
     if use_symmetric_encodings and not is_unsigned_symmetric:
         # signed symmetric
-        delta = encoding_max / constant_tensor_factory(math.floor(half_num_steps), device)
-        offset = -constant_tensor_factory(math.ceil(half_num_steps), device)
+        delta = encoding_max / constant_like(math.floor(half_num_steps), encoding_min)
+        offset = -constant_like(math.ceil(half_num_steps), encoding_min)
     else:
         delta = (encoding_max - encoding_min) / num_steps_tensor
         if use_symmetric_encodings:
@@ -155,10 +154,10 @@ def get_computed_encodings(bitwidth: int,
             offset = encoding_min / delta
         else:
             # asymmetric
-            zero_tensor = constant_tensor_factory(0., device)
+            zero_tensor = constant_like(0., encoding_min)
             b_zero = torch.round(-encoding_min / delta)
             b_zero = torch.min(num_steps_tensor, torch.max(zero_tensor, b_zero))
-            offset = -b_zero.clone().detach()
+            offset = -b_zero
 
     return delta, offset, num_steps_tensor
 
@@ -203,6 +202,20 @@ def calculate_forward_pass(tensor: torch.Tensor,
     :param encoding_max: Encoding max
     :return: QuantizeDequantize out and intermediate result tuple
     """
+    if tensor.dtype not in (torch.float32, torch.float16):
+        raise RuntimeError("Invalid input data type. Expected torch.float32 or torch.float16. "
+                           f"Got {tensor.dtype}.")
+
+    if not (tensor.dtype == encoding_min.dtype == encoding_max.dtype): # pylint: disable=superfluous-parens
+        raise RuntimeError("Data type mismatch. Expected the input and encoding min & max to be of same dtype."
+                           f"Got {tensor.dtype} input, {encoding_min.dtype} encoding_min, "
+                           f"and {encoding_max.dtype} encoding_max")
+
+    if tensor.dtype == torch.float16 and tensor_quantizer.bitwidth >= 16:
+        raise RuntimeError("torch.float16 does not provide sufficient precision for simulating "
+                           "16-bit or higher integers. Please consider using torch.float32 arithmetic "
+                           "or sub-16-bit quantization.")
+
     use_symmetric_encodings = tensor_quantizer.use_symmetric_encodings
     is_unsigned_symmetric = tensor_quantizer.is_unsigned_symmetric
     delta, offset, num_steps = _compute_variables_for_range_learning(tensor,
@@ -276,7 +289,9 @@ def asymmetric_gradients(tensor: torch.Tensor,
         intermediate_term2 = num_steps / (encoding_max - encoding_min) ** 2 * grad_offset.sum(dim=dim)
 
     grad_encoding_min = -intermediate_term1 + encoding_max * intermediate_term2
+    grad_encoding_min = grad_encoding_min.view_as(encoding_min)
     grad_encoding_max = intermediate_term1 - encoding_min * intermediate_term2
+    grad_encoding_max = grad_encoding_max.view_as(encoding_max)
 
     return grad_tensor, grad_encoding_min, grad_encoding_max
 
@@ -315,6 +330,7 @@ def symmetric_gradients(tensor: torch.Tensor,
         grad_encoding_max = ((x_quant + offset) * grad).sum(dim=dim) - (mask_tensor * (tensor / delta) * grad).sum(dim=dim)
 
     grad_encoding_max = grad_encoding_max / torch.div(num_steps, 2, rounding_mode="floor")
+    grad_encoding_max = grad_encoding_max.view_as(intermediate_result.encoding_max)
 
     return grad_tensor, -grad_encoding_max, grad_encoding_max
 

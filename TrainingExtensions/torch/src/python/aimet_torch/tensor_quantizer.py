@@ -53,7 +53,7 @@ from aimet_common.utils import AimetLogger, log_with_error_and_assert_if_false
 import aimet_torch.quantsim_straight_through_grad as grad_fn
 from aimet_torch.quantsim_straight_through_grad import IntermediateResult
 from aimet_torch.fp_quantization import fp8_quantizer, INIT_MAP
-from aimet_torch.tensor_factory_utils import constant_tensor_factory
+from aimet_torch.tensor_factory_utils import constant_like
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -860,6 +860,9 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
             encodings_min = [encodings.min]
             encodings_max = [encodings.max]
 
+        # TODO:
+        #   - Encoding min & max shouldn't be always initialized as float32.
+        #   - Should respect the device and dtype of the existing encoding min & max
         params[enc_min_param] = torch.nn.Parameter(torch.FloatTensor(encodings_min).to(self.wrapper_ref.device),
                                                    requires_grad=True)
         params[enc_max_param] = torch.nn.Parameter(torch.FloatTensor(encodings_max).to(self.wrapper_ref.device),
@@ -1303,8 +1306,8 @@ def set_encoding_min_max_gating_threshold(encoding_min: torch.nn.Parameter, enco
     :param encoding_min: trainable Parameter holding encoding min value.
     :param encoding_max: trainable Parameter holding encoding max value.
     """
-    zero_tensor = constant_tensor_factory(0., encoding_min.device)
-    eps_tensor = constant_tensor_factory(1e-5, encoding_min.device)
+    zero_tensor = constant_like(0., encoding_min)
+    eps_tensor = constant_like(1e-5, encoding_min)
     with torch.no_grad():
         encoding_min.clamp_(max=zero_tensor)
         encoding_max.clamp_(min=zero_tensor)
