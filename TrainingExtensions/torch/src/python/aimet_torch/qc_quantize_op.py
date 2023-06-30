@@ -53,7 +53,8 @@ from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_
 from aimet_torch.custom import custom_tensor_utils
 from aimet_torch import utils
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer, TensorQuantizer, \
-    LearnedGridTensorQuantizer, set_encoding_min_max_gating_threshold, TorchQuantizer
+    LearnedGridTensorQuantizer, set_encoding_min_max_gating_threshold
+from aimet_torch.torch_quantizer import TorchQuantizer
 import aimet_torch.quantsim_straight_through_grad as ste
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
