@@ -266,8 +266,6 @@ if [ $run_prep -eq 1 ]; then
 
     # Array of python src file path endings
     declare -a python_src_path_endings=("TrainingExtensions/common/src/python/aimet_common")
-    # TODO: the line below causes code violation failures in TrainingExtensions/tensorflow and TrainingExtensions/torch
-    # python_src_path_endings+=("Examples/common")
     # Array of path endings of interest for code coverage and their corresponding test folders
     declare -a pycov_dir_endings=("TrainingExtensions/common/src/python:TrainingExtensions/common/test")
 
@@ -279,6 +277,7 @@ if [ $run_prep -eq 1 ]; then
             python_src_path_endings+=("Examples/tensorflow/compression")
             python_src_path_endings+=("Examples/tensorflow/quantization")
             python_src_path_endings+=("Examples/tensorflow/utils")
+            python_src_path_endings+=("Examples/common")
         fi
         if [[ "$AIMET_VARIANT" == *"torch"* ]]; then
             python_src_path_endings+=("TrainingExtensions/torch/src/python/aimet_torch")
@@ -286,12 +285,14 @@ if [ $run_prep -eq 1 ]; then
             python_src_path_endings+=("Examples/torch/quantization")
             python_src_path_endings+=("Examples/torch/utils")
             pycov_dir_endings+=("TrainingExtensions/torch/src/python:TrainingExtensions/torch/test")
+            python_src_path_endings+=("Examples/common")
         fi
         if [[ "$AIMET_VARIANT" == *"onnx"* ]]; then
             python_src_path_endings+=("TrainingExtensions/onnx/src/python/aimet_onnx")
             python_src_path_endings+=("Examples/onnx/quantization")
             python_src_path_endings+=("Examples/onnx/utils")
             pycov_dir_endings+=("TrainingExtensions/onnx/src/python:TrainingExtensions/onnx/test")
+            python_src_path_endings+=("Examples/common")
         fi
     else
         # For default variant, add both tensorflow and/or torch and/or onnx paths
@@ -312,6 +313,7 @@ if [ $run_prep -eq 1 ]; then
         python_src_path_endings+=("Examples/tensorflow/utils")
         python_src_path_endings+=("Examples/onnx/quantization")
         python_src_path_endings+=("Examples/onnx/utils")
+        python_src_path_endings+=("Examples/common")
     fi
 
     # Populate an array of python src paths for use in later stages
