@@ -45,8 +45,8 @@ Layer groups: Groups of layers that are immediately connected and can be decompo
 
 from typing import Tuple, List, Union
 import numpy as np
-from onnx import onnx_pb, numpy_helper
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
+from onnx import onnx_pb, numpy_helper
 
 from aimet_common.utils import AimetLogger
 from aimet_common.connected_graph.connectedgraph import get_ordered_ops

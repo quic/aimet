@@ -49,8 +49,8 @@ import os
 from datetime import datetime
 from functools import partial
 from typing import Tuple
-import torch
 from torchvision import models
+import torch
 
 # imports for AIMET
 from aimet_common.defs import QuantScheme, EvalFunction

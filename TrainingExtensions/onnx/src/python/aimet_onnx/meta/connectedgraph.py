@@ -47,8 +47,8 @@ result of an operation. Furthermore the graph representation is bi-directional."
 
 
 from typing import List, Union
-from onnx import onnx_pb
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
+from onnx import onnx_pb
 
 from aimet_common.connected_graph.connectedgraph import ConnectedGraph as AimetCommonConnectedGraph, get_ordered_ops
 from aimet_common.utils import AimetLogger

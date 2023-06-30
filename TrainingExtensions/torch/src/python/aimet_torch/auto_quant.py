@@ -46,10 +46,10 @@ from dataclasses import dataclass
 import functools
 import os
 from typing import Any, Collection, Callable, Dict, List, Optional, Tuple, Union, Mapping
-import torch
-from torch.utils.data import DataLoader
 import jinja2
 from tqdm import tqdm
+import torch
+from torch.utils.data import DataLoader
 
 from aimet_torch import utils
 from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters

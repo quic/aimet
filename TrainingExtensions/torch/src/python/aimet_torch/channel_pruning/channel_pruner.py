@@ -40,8 +40,8 @@
 from typing import Iterator, List
 import copy
 
-import torch
 import numpy as np
+import torch
 
 # Import AIMET specific modules
 from aimet_common.defs import CostMetric, LayerCompRatioPair

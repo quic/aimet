@@ -39,9 +39,9 @@
 """ Custom modules for functional operations defined under torch and torch.nn.functional packages """
 
 from typing import Callable, Any, Tuple, Union
+import torchvision
 import torch
 import torch.nn
-import torchvision
 
 
 def forward_function_wrapper(functional: Callable) -> Any:

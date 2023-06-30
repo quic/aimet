@@ -41,9 +41,9 @@
 from typing import Union, Callable, Tuple
 from functools import reduce
 import numpy as np
+from tqdm import tqdm
 import tensorflow as tf
 from tensorflow import keras
-from tqdm import tqdm
 
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger

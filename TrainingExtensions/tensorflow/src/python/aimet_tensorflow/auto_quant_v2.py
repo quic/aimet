@@ -53,10 +53,9 @@ import contextlib
 from dataclasses import dataclass
 import os
 from typing import Any, Callable, Dict, List, Optional, Tuple, Mapping
-import tensorflow as tf
 from tqdm import tqdm
-
 import jinja2
+import tensorflow as tf
 
 from aimet_tensorflow.adaround.adaround_weight import Adaround, AdaroundParameters
 from aimet_tensorflow.cross_layer_equalization import equalize_model

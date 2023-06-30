@@ -38,8 +38,8 @@
 
 """ BN Utilities for tf 2.x """
 
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
 
 
 class BNUtils:

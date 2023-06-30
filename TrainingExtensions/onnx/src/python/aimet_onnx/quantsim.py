@@ -41,10 +41,10 @@ import os
 from typing import Dict, List, Union
 
 import numpy as np
-from onnx import helper, onnx_pb
 import onnxruntime as ort
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
+from onnx import helper, onnx_pb
 
 from aimet_common import libpymo
 from aimet_common import libquant_info

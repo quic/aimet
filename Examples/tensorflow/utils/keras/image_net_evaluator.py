@@ -43,9 +43,9 @@ Creates Evaluator for Image-Net dataset
 import os
 import logging
 
+import numpy as np
 from tensorflow.keras.utils import Progbar
 import tensorflow as tf
-import numpy as np
 
 from Examples.common import image_net_config
 from Examples.tensorflow.utils.keras.image_net_dataset import ImageNetDataset
