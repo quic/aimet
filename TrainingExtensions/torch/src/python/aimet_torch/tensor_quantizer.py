@@ -916,10 +916,20 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
                                                                         encoding_min, encoding_max)
         ctx.is_symmetric = intermediate_result.is_symmetric
         ctx.is_unsigned = intermediate_result.is_unsigned
+
+        # NOTE: Save the clone of encoding min/max. This is a temporary solution to
+        #       prevent getting hard-stopped for the models that contain reused modules
+        #       If a model contains a reused module whose forward gets invoked multiple times,
+        #       encoding_min & max will be `clamp_`-ed again after they were saved for backward.
+        #       However, since pytorch disallows in-place modification of the tensors that
+        #       were saved for backward, we save the copy of encoding_min & max.
         ctx.save_for_backward(tensor, intermediate_result.x_quant,
-                              intermediate_result.delta, intermediate_result.offset,
-                              intermediate_result.encoding_min, intermediate_result.encoding_max,
-                              intermediate_result.mask_tensor, intermediate_result.num_steps)
+                              intermediate_result.delta,
+                              intermediate_result.offset,
+                              intermediate_result.encoding_min.clone().detach(),
+                              intermediate_result.encoding_max.clone().detach(),
+                              intermediate_result.mask_tensor,
+                              intermediate_result.num_steps)
 
         return x_dequant
 
