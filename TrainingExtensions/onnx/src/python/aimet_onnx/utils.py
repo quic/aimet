@@ -198,17 +198,23 @@ def replace_relu6_with_relu(model: onnx_pb.ModelProto):
     """
     for node in model.model.graph.node:
         if node.op_type == 'Clip':
-            # Clip has 3 inputs, 1st one corresponding to the previous layer's output and the other two related min and max
-            if check_if_node_is_relu6(node, model):
-                inputs = [node.input[0]]
-                outputs = [node.output[0]]
-                relu_node = onnx.helper.make_node(
-                    op_type="Relu",
-                    inputs=inputs,
-                    outputs=outputs,
-                )
-                remove_node(node, model.model.graph)
-                model.add_node(relu_node)
+            parent_node = None
+            for temp_node in model.model.graph.node:
+                if node.input[0] in temp_node.output:
+                    parent_node = temp_node
+            assert parent_node, "Parent Node for Clip operation does not exist"
+            name = node.name
+            remove_node(node, model.model.graph)
+            inputs = [parent_node.output[0]]
+            model.replace_input_of_all_nodes(parent_node.output[0], parent_node.output[0] + '_replaced')
+            relu_node = onnx.helper.make_node(
+                op_type="Relu",
+                inputs=inputs,
+                outputs=[parent_node.output[0] + '_replaced'],
+                name='Relu_' + name,
+            )
+
+            model.add_node(relu_node)
 
 
 def check_if_node_is_relu6(node: onnx_pb.NodeProto, model: onnx_pb.ModelProto):
