@@ -58,7 +58,7 @@ from aimet_common.quant_utils import get_conv_accum_bounds
 
 from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_torch.qc_quantize_op import QcQuantizeStandAloneBase, QcQuantizeWrapper, QcQuantizeOpMode, \
-    StaticGridQuantWrapper, LearnedGridQuantWrapper, QUANTIZER_TYPE_INPUT, QUANTIZER_TYPE_OUTPUT
+    StaticGridQuantWrapper, LearnedGridQuantWrapper, NativeTorchQuantWrapper, QUANTIZER_TYPE_INPUT, QUANTIZER_TYPE_OUTPUT
 from aimet_torch.tensor_quantizer import StaticGridTensorQuantizer, LearnedGridTensorQuantizer, \
     initialize_learned_grid_quantizer_attributes
 from aimet_torch import torchscript_utils, utils, transformer_utils
@@ -363,7 +363,7 @@ class QuantizationSimModel:
 
     def export(self, path: str, filename_prefix: str, dummy_input: Union[torch.Tensor, Tuple],
                onnx_export_args: Optional[Union[OnnxExportApiArgs, Dict]] = None, propagate_encodings: bool = False,
-               export_to_torchscript: bool = False):
+               export_to_torchscript: bool = False, use_embedded_encodings: bool = False):
         """
         This method exports out the quant-sim model so it is ready to be run on-target.
 
@@ -387,6 +387,7 @@ class QuantizationSimModel:
                 multiple ONNX nodes) are filled with the same BW and data_type as the output tensor for that series of
                 ops. Defaults to False.
         :param export_to_torchscript: If True, export to torchscript. Export to onnx otherwise. Defaults to False.
+        :param use_embedded_encodings: If True, another onnx model embedded with fakequant nodes will be exported
         """
         # save the quantized model and encodings
         model_filename = filename_prefix + '.pth'
@@ -399,23 +400,28 @@ class QuantizationSimModel:
 
         torch.save(model_to_export, model_path)
 
-        if export_to_torchscript:
-            self.export_torch_script_model_and_encodings(path, filename_prefix, model_to_export, self.model,
-                                                         dummy_input, self._excluded_layer_names)
+        if onnx_export_args is None:
+            onnx_export_args = {'opset_version': None,
+                                'input_names': None,
+                                'output_names': None}
+            if version.parse(torch.__version__) < version.parse("1.10.0") and isinstance(onnx_export_args, dict):
+                onnx_export_args['enable_onnx_checker'] = False
+        log_with_error_and_assert_if_false(isinstance(onnx_export_args, (OnnxExportApiArgs, dict)),
+                                           logger,
+                                           f'unsupported opt_args type={type(onnx_export_args)}')
+
+        if use_embedded_encodings:
+            QuantizationSimModel.save_model_with_embedded_quantization_nodes(self.model, path, filename_prefix, dummy_input,
+                                                                             onnx_export_args, export_to_torchscript, self._is_conditional)
         else:
-            if onnx_export_args is None:
-                onnx_export_args = {'opset_version': None,
-                                    'input_names': None,
-                                    'output_names': None}
-                if version.parse(torch.__version__) < version.parse("1.10.0") and isinstance(onnx_export_args, dict):
-                    onnx_export_args['enable_onnx_checker'] = False
-            log_with_error_and_assert_if_false(isinstance(onnx_export_args, (OnnxExportApiArgs, dict)),
-                                               logger,
-                                               f'unsupported opt_args type={type(onnx_export_args)}')
-            self.export_onnx_model_and_encodings(path, filename_prefix, model_to_export, self.model,
-                                                 dummy_input, onnx_export_args, propagate_encodings,
-                                                 self._module_marker_map, self._is_conditional,
-                                                 self._excluded_layer_names, quantizer_args=self.quant_args)
+            if export_to_torchscript:
+                self.export_torch_script_model_and_encodings(path, filename_prefix, model_to_export, self.model,
+                                                             dummy_input, self._excluded_layer_names)
+            else:
+                self.export_onnx_model_and_encodings(path, filename_prefix, model_to_export, self.model,
+                                                     dummy_input, onnx_export_args, propagate_encodings,
+                                                     self._module_marker_map, self._is_conditional,
+                                                     self._excluded_layer_names, quantizer_args=self.quant_args)
 
     @staticmethod
     def export_torch_script_model_and_encodings(path: str, filename_prefix: str,
@@ -1486,6 +1492,83 @@ class QuantizationSimModel:
                 else:
                     for candidate in set(act_candidates):
                         apply_act_rules(candidate, supported_kernels, name)
+
+    @staticmethod
+    def _replace_quantization_wrapper_with_native_torch_quantization_nodes(quant_sim_model, device: torch.device):
+        """
+        Recursively remove quantization wrappers from all appropriate modules starting with a given module
+        :param quant_sim_model: model for which QcQuantizeWrapper gets replaced with wrapped module using
+        native torch quantization nodes
+        :param device: device on which model is present
+        :return:
+        """
+        # Recursively replace quantization wrappers to native torch quantization nodes
+        for module_name, module_ref in quant_sim_model.named_children():
+            # Create a native torch quantization node
+            if isinstance(module_ref, QcQuantizeWrapper):
+                embedded_module = NativeTorchQuantWrapper(module_ref, '_module_to_wrap', device)
+                setattr(quant_sim_model, module_name, embedded_module)
+
+            elif isinstance(module_ref, QcQuantizeRecurrent):
+                logger.error('Do not support save model embedded native torch quantization nodes using QcQuantizeRecurrent.')
+                raise AssertionError
+
+            # Recursively call children modules if present
+            if not utils.is_leaf_module(module_ref):
+                QuantizationSimModel._replace_quantization_wrapper_with_native_torch_quantization_nodes(module_ref, device)
+
+    @staticmethod
+    def save_model_with_embedded_quantization_nodes(sim_model, path: str, filename_prefix: str, dummy_input: Union[torch.Tensor, Tuple],
+                                                    onnx_export_args: Optional[Union[OnnxExportApiArgs, Dict]] = None,
+                                                    export_to_torchscript: bool = False, is_conditional: bool = False):
+        """
+        Export model embedded with native torch quantization nodes. These nodes will be exported
+        as default onnx or torch script quantized nodes.
+        :param sim_model: model with the quantsim wrappers
+        :param path: path where to store model pth and encodings
+        :param filename_prefix: Prefix to use for filenames of the model pth and encodings files
+        :param dummy_input: Dummy input to the model. Used to parse model graph
+        :param onnx_export_args: optional export argument with onnx specific overrides if not provide export via
+                torchscript graph. Int16 can only be exported by torchscript
+        :param export_to_torchscript: If True, export to torchscript. Export to onnx otherwise. Defaults to False.
+        :param is_conditional: True if model is conditional, False otherwise
+        :return:
+        """
+        def _validate_torchquantizer(quant_sim_model):
+            # To avoid non 8 bit TorchQuantizer are exported to ONNX
+            for _, module in quant_sim_model.named_modules():
+                if isinstance(module, NativeTorchQuantWrapper):
+                    quantizers = module.input_quantizers + module.output_quantizers
+                    if 'weight' in module.param_quantizers:
+                        quantizers += [module.param_quantizers['weight']]
+                    if 'bias' in module.param_quantizers:
+                        quantizers += [module.param_quantizers['bias']]
+
+                    for quantizer in quantizers:
+                        if quantizer.enabled and quantizer.data_type == QuantizationDataType.int and quantizer.bitwidth != 8:
+                            raise ValueError('Only 8 bit quantizers are supported by exporting to ONNX model.'
+                                             'Please enable export_to_torchscript if you want to export non 8 bit quantizers.')
+
+        model_filename = filename_prefix + '_embedded' + '.onnx'
+        model_path = os.path.join(path, model_filename)
+        quant_sim_model = copy.deepcopy(sim_model)
+
+        device = utils.get_device(quant_sim_model)
+        if isinstance(dummy_input, torch.Tensor):
+            dummy_input = dummy_input.to(device)
+        else:
+            dummy_input = tuple([input.to(device) for input in dummy_input])
+        QuantizationSimModel._replace_quantization_wrapper_with_native_torch_quantization_nodes(quant_sim_model, device)
+
+        if export_to_torchscript:
+            with utils.in_eval_mode(quant_sim_model), torch.no_grad():
+                trace = torch.jit.trace(quant_sim_model, dummy_input)
+                ts_path = os.path.join(path, filename_prefix + '_embedded' + '.torchscript.pth')
+                trace.save(ts_path)
+        else:
+            _validate_torchquantizer(quant_sim_model)
+            OnnxSaver._export_model_to_onnx(quant_sim_model, dummy_input, model_path, is_conditional, onnx_export_args) # pylint: disable=protected-access
+
 
 
 def save_checkpoint(quant_sim_model: QuantizationSimModel, file_path: str):

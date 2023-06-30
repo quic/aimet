@@ -2511,6 +2511,218 @@ class TestQuantizationSimStaticGrad:
             else:
                 assert has_valid_encodings(m)
 
+    def test_save_model_with_embedded_quantization_nodes(self):
+        """Test export onnx model with embedded torch native quantization nodes"""
+
+        for _quant_scheme in [QuantScheme.post_training_tf,
+                              QuantScheme.training_range_learning_with_tf_init]:
+            dummy_input = (torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28))
+
+            def forward_pass(model, args):
+                model.eval()
+                with torch.no_grad():
+                    model(*dummy_input)
+
+            model = ModelWithTwoInputs()
+            sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme = _quant_scheme)
+
+            # Quantize
+            sim.compute_encodings(forward_pass, None)
+
+            results_dir = './data/embedded_encodings'
+            if not os.path.exists(results_dir):
+                os.makedirs(results_dir)
+            # Save model
+            sim.export(results_dir, 'two_input_model', dummy_input,
+                       onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),
+                       use_embedded_encodings=True)
+            onnx_model = onnx.load(os.path.join(results_dir, 'two_input_model' + '_embedded' + '.onnx'))
+            onnx_type = set()
+            for node in onnx_model.graph.node:
+                onnx_type.add(node.op_type)
+            assert('QuantizeLinear' in onnx_type)
+            assert('DequantizeLinear' in onnx_type)
+        if os.path.exists(results_dir):
+            shutil.rmtree(results_dir)
+
+    def test_save_model_with_embedded_quantization_nodes_fp16(self):
+        """Model with more than 1 input"""
+
+        for _quant_scheme in [QuantScheme.post_training_tf,
+                              QuantScheme.training_range_learning_with_tf_init]:
+            dummy_input=(torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28))
+
+            def forward_pass(model, args):
+                model.eval()
+                with torch.no_grad():
+                    model(*dummy_input)
+
+            model = ModelWithTwoInputs()
+
+            sim = QuantizationSimModel(model, default_output_bw=16, default_param_bw=16, dummy_input=dummy_input,
+                                       quant_scheme = _quant_scheme, default_data_type=QuantizationDataType.float)
+
+            # Quantize
+            sim.compute_encodings(forward_pass, None)
+
+            # save model
+            results_dir = './data/embedded_encodings'
+            if not os.path.exists(results_dir):
+                os.makedirs(results_dir)
+            sim.export(results_dir, 'two_input_model_fp16', dummy_input,
+                       onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),
+                       use_embedded_encodings=True)
+
+            onnx_model = onnx.load(os.path.join(results_dir, 'two_input_model_fp16' + '_embedded' + '.onnx'))
+            onnx_type = set()
+            for node in onnx_model.graph.node:
+                onnx_type.add(node.op_type)
+            assert('Cast' in onnx_type)
+
+        if os.path.exists(results_dir):
+            shutil.rmtree(results_dir)
+
+    def test_save_model_with_embedded_quantization_nodes_per_channel(self):
+        """Model with more than 1 input"""
+
+        for _quant_scheme in [QuantScheme.post_training_tf,
+                              QuantScheme.training_range_learning_with_tf_init]:
+            dummy_input = (torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28))
+
+            def forward_pass(model, args):
+                model.eval()
+                with torch.no_grad():
+                    model(*dummy_input)
+
+            model = ModelWithTwoInputs()
+
+            sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme = _quant_scheme)
+            for _, wrapper in sim.quant_wrappers():
+                wrapper.enable_per_channel_quantization()
+
+            # Quantize
+            sim.compute_encodings(forward_pass, None)
+
+            # Export model with opset_vesrion 13
+            results_dir = './data/embedded_encodings'
+            if not os.path.exists(results_dir):
+                os.makedirs(results_dir)
+            sim.export(results_dir, 'two_input_model_perchannel', dummy_input,
+                       onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=13)),
+                       use_embedded_encodings=True)
+            onnx_model = onnx.load(os.path.join(results_dir, 'two_input_model_perchannel' + '_embedded' + '.onnx'))
+            onnx_type = set()
+            for node in onnx_model.graph.node:
+                onnx_type.add(node.op_type)
+            assert('QuantizeLinear' in onnx_type)
+            assert('DequantizeLinear' in onnx_type)
+
+        if os.path.exists(results_dir):
+            shutil.rmtree(results_dir)
+
+    def test_save_model_with_embedded_quantization_nodes_using_torch_script(self):
+        """Test export onnx model with embedded torch native quantization nodes using torch script"""
+
+        for _quant_scheme in [QuantScheme.post_training_tf,
+                              QuantScheme.training_range_learning_with_tf_init]:
+            dummy_input = torch.rand(32, 1, 28, 28)
+
+            def forward_pass(model, args):
+                model.eval()
+                with torch.no_grad():
+                    model(dummy_input)
+
+            model = SmallMnist()
+            sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme = _quant_scheme)
+
+            # Quantize
+            sim.compute_encodings(forward_pass, None)
+
+            results_dir = './data/embedded_encodings'
+            if not os.path.exists(results_dir):
+                os.makedirs(results_dir)
+            # Save model
+            QuantizationSimModel.save_model_with_embedded_quantization_nodes(sim.model, results_dir, 'two_input_model', dummy_input, export_to_torchscript = True)
+            assert(os.path.exists(os.path.join(results_dir, 'two_input_model' + '_embedded' + '.torchscript.pth')))
+
+        if os.path.exists(results_dir):
+            shutil.rmtree(results_dir)
+
+    def test_native_pytorch_quantization_nodes_pertensor(self):
+        """Test export onnx model with embedded torch native quantization nodes"""
+
+        torch.manual_seed(10)
+        for _quant_scheme in [QuantScheme.post_training_tf,
+                              QuantScheme.training_range_learning_with_tf_init]:
+            dummy_input = torch.rand(32, 1, 28, 28)
+
+            def forward_pass(model, args):
+                model.eval()
+                with torch.no_grad():
+                    return model(dummy_input)
+
+            model = SmallMnist()
+            sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme = _quant_scheme)
+
+            # Quantize
+            sim.compute_encodings(forward_pass, None)
+
+            results_dir = './data/embedded_encodings'
+            if not os.path.exists(results_dir):
+                os.makedirs(results_dir)
+            # Generate model with native pytorch quantization nodes
+            quant_sim_model = copy.deepcopy(sim.model)
+
+            device = utils.get_device(quant_sim_model)
+            QuantizationSimModel._replace_quantization_wrapper_with_native_torch_quantization_nodes(quant_sim_model, device)
+
+            # Inference AIMET quantization nodes
+            aimet_res = forward_pass(sim.model, None)
+            # Inference Native torch quantization nodes
+            torch_res = forward_pass(quant_sim_model, None)
+            assert torch.allclose(aimet_res, torch_res, rtol=1e-2)
+
+        if os.path.exists(results_dir):
+            shutil.rmtree(results_dir)
+
+    def test_native_pytorch_quantization_nodes_perchannel(self):
+        """Test export onnx model with embedded torch native quantization nodes"""
+
+        torch.manual_seed(10)
+        for _quant_scheme in [QuantScheme.post_training_tf,
+                              QuantScheme.training_range_learning_with_tf_init]:
+            dummy_input = torch.rand(32, 1, 28, 28)
+
+            def forward_pass(model, args):
+                model.eval()
+                with torch.no_grad():
+                    return model(dummy_input)
+
+            model = SmallMnist()
+            sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme = _quant_scheme)
+            for _, wrapper in sim.quant_wrappers():
+                wrapper.enable_per_channel_quantization()
+
+            # Quantize
+            sim.compute_encodings(forward_pass, None)
+
+            results_dir = './data/embedded_encodings'
+            if not os.path.exists(results_dir):
+                os.makedirs(results_dir)
+            # Generate model with native pytorch quantization nodes
+            quant_sim_model = copy.deepcopy(sim.model)
+
+            device = utils.get_device(quant_sim_model)
+            QuantizationSimModel._replace_quantization_wrapper_with_native_torch_quantization_nodes(quant_sim_model, device)
+
+            # Inference AIMET quantization nodes
+            aimet_res = forward_pass(sim.model, None)
+            # Inference Native torch quantization nodes
+            torch_res = forward_pass(quant_sim_model, None)
+            assert torch.allclose(aimet_res, torch_res, rtol=1e-2)
+
+        if os.path.exists(results_dir):
+            shutil.rmtree(results_dir)
 
 class TestQuantizationSimLearnedGrid:
 
