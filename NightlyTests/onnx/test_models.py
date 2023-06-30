@@ -39,7 +39,7 @@ import torch
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
 from onnx import load_model
 
-from torchvision.models import MobileNetV2
+from torchvision.models import MobileNetV2, mobilenet_v3_large
 
 def mobilenetv2():
     x = torch.randn(1, 3, 224, 224, requires_grad=True)
@@ -59,4 +59,24 @@ def mobilenetv2():
                       }
                       )
     model = ONNXModel(load_model('./model_mobilenetv2.onnx'))
+    return model
+
+def mobilenetv3_large_model():
+    x = torch.randn(1, 3, 224, 224, requires_grad=True)
+    model = mobilenet_v3_large().eval()
+
+    torch.onnx.export(model,  # model being run
+                      x,  # model input (or a tuple for multiple inputs)
+                      "./model_mobilenetv3.onnx",
+                      training=torch.onnx.TrainingMode.PRESERVE,
+                      export_params=True,
+                      do_constant_folding=False,
+                      input_names=['input'],
+                      output_names=['output'],
+                      dynamic_axes={
+                          'input': {0: 'batch_size'},
+                          'output': {0: 'batch_size'},
+                      }
+                      )
+    model = ONNXModel(load_model('./model_mobilenetv3.onnx'))
     return model
