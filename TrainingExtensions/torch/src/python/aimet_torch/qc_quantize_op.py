@@ -1237,26 +1237,43 @@ class FusedQdqLinear(torch.autograd.Function):
         inp, weight, bias, weight_encoding_min, weight_encoding_max = ctx.saved_tensors
 
         qdq_weight = intermediate_result = None
-        if inp.requires_grad or weight.requires_grad:
+        if inp.requires_grad or\
+                weight.requires_grad or\
+                weight_encoding_min.requires_grad or\
+                weight_encoding_max.requires_grad:
             qdq_weight, intermediate_result = ste.calculate_forward_pass(weight,
                                                                          ctx.weight_quantizer,
                                                                          weight_encoding_min,
                                                                          weight_encoding_max)
         dloss_by_dx = None
         if inp.requires_grad:
+            assert qdq_weight is not None
             dloss_by_dx = torch.matmul(grad, qdq_weight)
-            del qdq_weight
 
-        dloss_by_dW = dloss_by_dmin = dloss_by_dmax = None
+        del qdq_weight
+
+        dloss_by_dWq = None
         if weight.requires_grad or\
                 weight_encoding_min.requires_grad or\
                 weight_encoding_max.requires_grad:
             dloss_by_dWq = torch.matmul(grad.view(grad.shape[-1], -1),
                                         inp.view(-1, inp.shape[-1]))
-            dloss_by_dW, dloss_by_dmin, dloss_by_dmax =\
+        dloss_by_dW = None
+        if weight.requires_grad:
+            assert dloss_by_dWq is not None
+            assert intermediate_result is not None
+            dloss_by_dW = dloss_by_dWq * intermediate_result.mask_tensor
+
+        dloss_by_dmin = dloss_by_dmax = None
+        if weight_encoding_min.requires_grad or weight_encoding_max.requires_grad:
+            assert dloss_by_dWq is not None
+            assert intermediate_result is not None
+            dloss_by_dmin, dloss_by_dmax =\
                 ste.calculate_gradients(weight, dloss_by_dWq, intermediate_result,
                                         ctx.weight_quantizer.channel_axis)
-            del intermediate_result
+
+        del dloss_by_dWq
+        del intermediate_result
 
         dloss_by_db = None
         if isinstance(bias, torch.Tensor) and bias.requires_grad:

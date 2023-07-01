@@ -916,6 +916,16 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
                                                                         encoding_min, encoding_max)
         ctx.is_symmetric = intermediate_result.is_symmetric
         ctx.is_unsigned = intermediate_result.is_unsigned
+        ctx.input_requires_grad = tensor.requires_grad
+
+        if not encoding_min.requires_grad and not encoding_max.requires_grad:
+            # These tensors are only needed for computing the gradients of encoding min & max.
+            # Since saving these tensors bears significant impact on the peak memory usage,
+            # we don't save these tensors unless encoding min or max requires gradient.
+            tensor = None
+            intermediate_result.x_quant = None
+            intermediate_result.delta = None
+            intermediate_result.offset = None
 
         # NOTE: Save the clone of encoding min/max. This is a temporary solution to
         #       prevent getting hard-stopped for the models that contain reused modules
@@ -923,11 +933,14 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
         #       encoding_min & max will be `clamp_`-ed again after they were saved for backward.
         #       However, since pytorch disallows in-place modification of the tensors that
         #       were saved for backward, we save the copy of encoding_min & max.
-        ctx.save_for_backward(tensor, intermediate_result.x_quant,
+        ctx.save_for_backward(tensor,
+                              intermediate_result.x_quant,
                               intermediate_result.delta,
                               intermediate_result.offset,
-                              intermediate_result.encoding_min.clone().detach(),
-                              intermediate_result.encoding_max.clone().detach(),
+                              intermediate_result.encoding_min.clone()\
+                                      .requires_grad_(encoding_min.requires_grad),
+                              intermediate_result.encoding_max.clone()\
+                                      .requires_grad_(encoding_max.requires_grad),
                               intermediate_result.mask_tensor,
                               intermediate_result.num_steps)
 
@@ -945,13 +958,19 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
         channel_axis = tensor_quantizer.channel_axis
         is_symmetric = ctx.is_symmetric
         is_unsigned = ctx.is_unsigned
+        input_requires_grad = ctx.input_requires_grad
 
-        intermediate_result = IntermediateResult(x_quant, encoding_min, encoding_max,
-                                                 delta, offset, mask_tensor, num_steps,
-                                                 is_symmetric, is_unsigned)
+        tensor_grad = None
+        if input_requires_grad:
+            tensor_grad = mask_tensor * grad
 
-        tensor_grad, tensor_encoding_min_grad, tensor_encoding_max_grad = \
-            grad_fn.calculate_gradients(tensor, grad, intermediate_result, channel_axis)
+        tensor_encoding_min_grad = tensor_encoding_max_grad = None
+        if encoding_min.requires_grad or encoding_max.requires_grad:
+            intermediate_result = IntermediateResult(x_quant, encoding_min, encoding_max,
+                                                     delta, offset, mask_tensor, num_steps,
+                                                     is_symmetric, is_unsigned)
+            tensor_encoding_min_grad, tensor_encoding_max_grad = \
+                grad_fn.calculate_gradients(tensor, grad, intermediate_result, channel_axis)
 
         return tensor_grad, tensor_encoding_min_grad, tensor_encoding_max_grad, None
 
@@ -975,7 +994,8 @@ class ParameterQuantizer(torch.autograd.Function):
         :param channel_axis: Channel axis
         :return: grad with respect to tensor, grad of encoding min and max
         """
-        tensor_grad, tensor_encoding_min_grad, tensor_encoding_max_grad = \
+        tensor_grad = intermediate_result.mask_tensor * grad
+        tensor_encoding_min_grad, tensor_encoding_max_grad = \
             grad_fn.calculate_gradients(tensor, grad, intermediate_result, channel_axis)
 
         tensor.grad = tensor_grad
