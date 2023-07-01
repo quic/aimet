@@ -917,6 +917,8 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
         ctx.is_symmetric = intermediate_result.is_symmetric
         ctx.is_unsigned = intermediate_result.is_unsigned
         ctx.input_requires_grad = tensor.requires_grad
+        ctx.encoding_min_requires_grad = encoding_min.requires_grad
+        ctx.encoding_max_requires_grad = encoding_max.requires_grad
 
         if not encoding_min.requires_grad and not encoding_max.requires_grad:
             # These tensors are only needed for computing the gradients of encoding min & max.
@@ -937,10 +939,8 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
                               intermediate_result.x_quant,
                               intermediate_result.delta,
                               intermediate_result.offset,
-                              intermediate_result.encoding_min.clone()\
-                                      .requires_grad_(encoding_min.requires_grad),
-                              intermediate_result.encoding_max.clone()\
-                                      .requires_grad_(encoding_max.requires_grad),
+                              intermediate_result.encoding_min.clone().detach(),
+                              intermediate_result.encoding_max.clone().detach(),
                               intermediate_result.mask_tensor,
                               intermediate_result.num_steps)
 
@@ -959,13 +959,15 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
         is_symmetric = ctx.is_symmetric
         is_unsigned = ctx.is_unsigned
         input_requires_grad = ctx.input_requires_grad
+        encoding_min_requires_grad = ctx.encoding_min_requires_grad
+        encoding_max_requires_grad = ctx.encoding_max_requires_grad
 
         tensor_grad = None
         if input_requires_grad:
             tensor_grad = mask_tensor * grad
 
         tensor_encoding_min_grad = tensor_encoding_max_grad = None
-        if encoding_min.requires_grad or encoding_max.requires_grad:
+        if encoding_min_requires_grad or encoding_max_requires_grad:
             intermediate_result = IntermediateResult(x_quant, encoding_min, encoding_max,
                                                      delta, offset, mask_tensor, num_steps,
                                                      is_symmetric, is_unsigned)
