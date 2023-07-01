@@ -41,6 +41,7 @@
 import math
 from typing import Tuple, Union
 import torch
+from packaging import version
 
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
@@ -48,6 +49,10 @@ from aimet_common.defs import QuantizationDataType
 from aimet_torch.tensor_quantizer import StaticGridTensorQuantizer, LearnedGridTensorQuantizer
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
+
+torch_quantizer_zero_ponit_data_type = torch.int64
+if version.parse(torch.__version__) > version.parse('1.10.2'):
+    torch_quantizer_zero_ponit_data_type = torch.int32
 
 
 def calc_params_for_native_torch_quantizer(quantizer, ch_axis, device: torch.device) \
@@ -62,6 +67,7 @@ def calc_params_for_native_torch_quantizer(quantizer, ch_axis, device: torch.dev
 
     numSteps = pow(2, quantizer.bitwidth) - 1
     encodings = quantizer.encoding
+
     if quantizer.use_strict_symmetric:
         error_msg = ('Strict symmetric is not supported by native torch quantizer')
         logger.error(error_msg)
@@ -84,13 +90,13 @@ def calc_params_for_native_torch_quantizer(quantizer, ch_axis, device: torch.dev
     else:
         # Per Channel quantization
         scale = torch.tensor([encoding.delta for encoding in encodings], device=device)
-        zero_point = torch.tensor([int(-encoding.offset) for encoding in encodings], device=device)
+        zero_point = torch.tensor([int(-encoding.offset) for encoding in encodings], device=device, dtype=torch_quantizer_zero_ponit_data_type)
         if quantizer.use_symmetric_encodings and (all([encoding.min < 0 for encoding in encodings])
                                                   or (not quantizer.use_unsigned_symmetric)):
             # Symmetric quantization
             q_max = math.floor(numSteps / 2)
             q_min = -math.ceil(numSteps / 2)
-            zero_point = torch.zeros_like(zero_point)
+            zero_point = torch.zeros_like(zero_point, dtype=torch_quantizer_zero_ponit_data_type)
         else:
             # Unsigned symmetric
             q_min, q_max = 0, numSteps
@@ -114,9 +120,10 @@ class TorchQuantizer:
         self.enabled = quantizer.enabled
         self.data_type = quantizer.data_type
         self.bitwidth = quantizer.bitwidth
+        self._ch_axis = None
+
         if self.data_type == QuantizationDataType.float and self.bitwidth != 16:
             raise ValueError('Only FP16 quantizers are supported by TorchQuantizer')
-        self._ch_axis = None
         encodings = quantizer.encoding
         # To aviod quantizer.enabled is True but quantizer.encoding is None
         if quantizer.enabled and quantizer.encoding:
