@@ -411,5 +411,4 @@ class GatherNd(torch.nn.Module):
 
         if output_data_buffer[0].dim() == 0:
             return torch.tensor(output_data_buffer).reshape(output_shape)
-        else:
-            return torch.cat(output_data_buffer).reshape(output_shape)
+        return torch.cat(output_data_buffer).reshape(output_shape)
