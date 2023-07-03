@@ -41,7 +41,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Tuple
 
 import torch
-from torch.autograd import Variable
 
 from aimet_torch.tensor_factory_utils import constant_like
 
@@ -250,34 +249,26 @@ def calculate_forward_pass(tensor: torch.Tensor,
 def asymmetric_gradients(tensor: torch.Tensor,
                          grad: torch.Tensor,
                          intermediate_result: IntermediateResult,
-                         channel_axis: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+                         channel_axis: int) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Calculate asymmetric gradients with respect to tensor, gradients of encoding min and max
-    :param tensor: Given tensor
-    :param grad: Gradient using which other gradients will be calculated
+    :param tensor: Input tensor of quant-dequant forward pass
+    :param grad: Gradient w.r.t the output of quant-dequant
     :param intermediate_result: Intermediate result from forward pass
     :param channel_axis: Channel axis
-    :return: Gradients with respect to tensor, gradients of encoding min and max
+    :return: Gradients with respect to encoding min and max
     """
+    mask_tensor = intermediate_result.mask_tensor
+    encoding_min = intermediate_result.encoding_min
+    encoding_max = intermediate_result.encoding_max
     delta = intermediate_result.delta
     offset = intermediate_result.offset
     x_quant = intermediate_result.x_quant
-    mask_tensor = intermediate_result.mask_tensor
+    num_steps = intermediate_result.num_steps
 
     grad_xq = delta * grad
-    mask_tensor = Variable(mask_tensor.type_as(grad_xq.data))
-
-    grad_tensor = grad * mask_tensor
     grad_scale = (x_quant + offset - tensor * mask_tensor / delta) * grad
-    grad_offset = grad_xq * (1 - mask_tensor)
-
-    dim = list(range(len(tensor.shape)))
-    if delta.numel() > 1 and len(tensor.shape) > 1:
-        dim.pop(channel_axis)
-
-    num_steps = intermediate_result.num_steps
-    encoding_min = intermediate_result.encoding_min
-    encoding_max = intermediate_result.encoding_max
+    grad_offset = grad_xq * (~mask_tensor)
 
     if delta.numel() > 1 and len(tensor.shape) == 1:
         # NOTE: Handle when applying per-channel quant to 1-D Tensor case such as bias tensor in Conv or beta/gamma in BatchNorm
@@ -285,6 +276,9 @@ def asymmetric_gradients(tensor: torch.Tensor,
         intermediate_term2 = num_steps / (encoding_max - encoding_min) ** 2 * grad_offset
     else:
         # Per-channel quant to k-D Tensor (k >= 2) or per-tensor case
+        dim = list(range(len(tensor.shape)))
+        if delta.numel() > 1 and len(tensor.shape) > 1:
+            dim.pop(channel_axis)
         intermediate_term1 = grad_scale.sum(dim=dim) / num_steps
         intermediate_term2 = num_steps / (encoding_max - encoding_min) ** 2 * grad_offset.sum(dim=dim)
 
@@ -293,59 +287,55 @@ def asymmetric_gradients(tensor: torch.Tensor,
     grad_encoding_max = intermediate_term1 - encoding_min * intermediate_term2
     grad_encoding_max = grad_encoding_max.view_as(encoding_max)
 
-    return grad_tensor, grad_encoding_min, grad_encoding_max
+    return grad_encoding_min, grad_encoding_max
 
 
 # pylint:disable=too-many-locals
 def symmetric_gradients(tensor: torch.Tensor,
                         grad: torch.Tensor,
                         intermediate_result: IntermediateResult,
-                        channel_axis: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+                        channel_axis: int) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Calculate signed symmetric gradients with respect to tensor, gradients of encoding min and max
-    :param tensor: Given tensor
-    :param grad: Gradient using which other gradients will be calculated
+    :param tensor: Input tensor of quant-dequant forward pass
+    :param grad: Gradient w.r.t the output of quant-dequant
     :param intermediate_result: Intermediate result from forward pass
     :param channel_axis: Channel axis
-    :return: Gradients with respect to tensor, gradients of encoding min and max
+    :return: Gradients with respect to encoding min and max
     """
+    mask_tensor = intermediate_result.mask_tensor
     delta = intermediate_result.delta
     offset = intermediate_result.offset
     x_quant = intermediate_result.x_quant
-    mask_tensor = intermediate_result.mask_tensor
-    mask_tensor = Variable(mask_tensor.type_as(grad.data))
-
-    dim = list(range(len(tensor.shape)))
-    if delta.numel() > 1 and len(tensor.shape) > 1:
-        dim.pop(channel_axis)
-
     num_steps = intermediate_result.num_steps
-    grad_tensor = mask_tensor * grad
 
     if delta.numel() > 1 and len(tensor.shape) == 1:
         # NOTE: Handle when applying per-channel quant to 1-D Tensor case such as bias tensor in Conv or beta/gamma in BatchNorm
         grad_encoding_max = ((x_quant + offset) * grad) - (mask_tensor * (tensor / delta) * grad)
     else:
         # Per-channel quant to k-D Tensor (k >= 2) or per-tensor case
+        dim = list(range(len(tensor.shape)))
+        if delta.numel() > 1 and len(tensor.shape) > 1:
+            dim.pop(channel_axis)
         grad_encoding_max = ((x_quant + offset) * grad).sum(dim=dim) - (mask_tensor * (tensor / delta) * grad).sum(dim=dim)
 
     grad_encoding_max = grad_encoding_max / torch.div(num_steps, 2, rounding_mode="floor")
     grad_encoding_max = grad_encoding_max.view_as(intermediate_result.encoding_max)
 
-    return grad_tensor, -grad_encoding_max, grad_encoding_max
+    return -grad_encoding_max, grad_encoding_max
 
 
 def calculate_gradients(tensor: torch.Tensor,
                         grad: torch.Tensor,
                         intermediate_result: IntermediateResult,
-                        channel_axis: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+                        channel_axis: int) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Calculate gradients with respect to tensor, gradients of encoding min and max
-    :param tensor: Given tensor
-    :param grad: Gradient using which other gradients will be calculated
+    :param tensor: Input tensor of quant-dequant forward pass
+    :param grad: Gradient w.r.t the output of quant-dequant
     :param intermediate_result: Intermediate result from forward pass
     :param channel_axis: Channel axis
-    :return: Gradients with respect to tensor, gradients of encoding min and max
+    :return: Gradients with respect to encoding min and max
     """
     if intermediate_result.is_symmetric:
         return symmetric_gradients(tensor, grad, intermediate_result, channel_axis)
