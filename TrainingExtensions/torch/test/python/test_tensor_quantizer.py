@@ -389,3 +389,9 @@ class TestLearnedGridTensorQuantizer:
         out_channels_last_3d = quantizer.quantize_dequantize(tensor.to(memory_format=torch.channels_last_3d),
                                                           quantizer.round_mode)
         assert torch.allclose(out_contiguous, out_channels_last_3d)
+
+        out_contiguous = quantizer.quantize_dequantize(tensor[..., ::2, :].contiguous(),
+                                                       quantizer.round_mode)
+        out_strided = quantizer.quantize_dequantize(tensor[..., ::2, :],
+                                                    quantizer.round_mode)
+        assert torch.allclose(out_contiguous, out_strided)
