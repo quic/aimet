@@ -1754,7 +1754,8 @@ class TestFX:
             def forward(self, *inputs):
                 x = self.conv(inputs[0]).squeeze()[0]
                 x = x.addmm(inputs[1], inputs[2], beta=0.2, alpha=0.4)
-                x = torch.addmm(x, inputs[1], inputs[2], beta=0.5, alpha=0.1)
+                x = torch.addmm(x, inputs[1], inputs[2], beta=0.5)
+                x = torch.addmm(x, inputs[1], inputs[2])
                 return x
 
         input_shape = (1, 3, 3, 3)
@@ -1769,6 +1770,7 @@ class TestFX:
         assert torch.equal(model(*dummy_input), prepared_model(*dummy_input))
         assert isinstance(prepared_model.module_addmm, elementwise_ops.Addmm)
         assert isinstance(prepared_model.module_addmm_1, elementwise_ops.Addmm)
+        assert isinstance(prepared_model.module_addmm_2, elementwise_ops.Addmm)
 
         # Verify with Quantization workflow.
         sim = QuantizationSimModel(prepared_model, dummy_input)
@@ -1776,6 +1778,7 @@ class TestFX:
         sim.model(*dummy_input)
         assert sim.model.module_addmm.output_quantizers[0].encoding
         assert sim.model.module_addmm_1.output_quantizers[0].encoding
+        assert sim.model.module_addmm_2.output_quantizers[0].encoding
 
     def test_fx_with_bmm(self):
         """ test torch fx with bmm """
