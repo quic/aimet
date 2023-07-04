@@ -124,6 +124,8 @@ TopK = create_wrapper_module('TopK', torch.topk)
 Shape = create_wrapper_module('Shape', torch.Tensor.size)
 Tile = create_wrapper_module('Tile', torch.tile)
 ElementwiseUnarySign = create_wrapper_module('ElementwiseUnarySign', torch.sign)
+Baddbmm = create_wrapper_module('Baddbmm', torch.baddbmm)
+Addmm = create_wrapper_module('Addmm', torch.addmm)
 
 # modules for functional operations defined under torch.nn.functional package
 Interpolate = create_wrapper_module('Interpolate', torch.nn.functional.interpolate)
@@ -210,28 +212,6 @@ class CustomSiLU(torch.nn.Module):
         Forward-pass routine for custom SiLU
         """
         return self.mul(x, self.sigmoid(x))
-
-
-class Baddbmm(torch.nn.Module):
-    """Custom module for a functional baddbmm"""
-    @staticmethod
-    def forward(*args) -> torch.Tensor:
-        """
-        Forward-pass routine for torch.baddbmm
-        """
-        tensor, batch1, batch2, beta, alpha = args
-        return tensor.baddbmm(batch1, batch2, beta=beta, alpha=alpha)
-
-
-class Addmm(torch.nn.Module):
-    """Custom module for a functional baddbmm"""
-    @staticmethod
-    def forward(*args) -> torch.Tensor:
-        """
-        Forward-pass routine for torch.baddbmm
-        """
-        tensor, mat1, mat2, beta, alpha = args
-        return tensor.addmm(mat1, mat2, beta=beta, alpha=alpha)
 
 
 class StridedSlice(torch.nn.Module):
