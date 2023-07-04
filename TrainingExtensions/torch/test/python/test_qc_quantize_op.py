@@ -51,6 +51,7 @@ from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, LearnedGridQuantW
 from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, QuantizeDequantizeFunc
 from aimet_torch import utils
+from aimet_torch import elementwise_ops
 
 
 class TestQcQuantizeOpStaticGrid:
@@ -994,3 +995,26 @@ class TestQcQuantizeOpLearnedGrid:
         assert linear_wrapper.input0_encoding_max.grad.dtype == torch.float16
         assert linear_wrapper.output0_encoding_min.grad.dtype == torch.float16
         assert linear_wrapper.output0_encoding_max.grad.dtype == torch.float16
+
+    @pytest.mark.parametrize("wrapper",
+                             [StaticGridQuantWrapper(elementwise_ops.Addmm(),
+                                                     8, 8, 'nearest',
+                                                     QuantScheme.post_training_tf_enhanced,
+                                                     num_inputs=3, num_outputs=1),
+                              LearnedGridQuantWrapper(elementwise_ops.Addmm(),
+                                                      8, 8, 'nearest',
+                                                      QuantScheme.training_range_learning_with_tf_init,
+                                                      torch.device('cpu'),
+                                                      num_inputs=3, num_outputs=1)
+                              ])
+    def test_wrapper_with_kwargs(self, wrapper):
+        """ test wrapper with keyword arguemnts """
+        wrapper.input_quantizers[0].enabled = False
+        wrapper.input_quantizers[0].enabled = False
+        wrapper.input_quantizers[0].enabled = False
+        wrapper.output_quantizers[0].enabled = False
+        out1 = wrapper(torch.randn(2, 3), torch.randn(2, 3), torch.randn(3, 3), beta=1, alpha=1)
+        out2 = wrapper(torch.randn(2, 3), torch.randn(2, 3), torch.randn(3, 3), beta=1)
+        out3 = wrapper(torch.randn(2, 3), torch.randn(2, 3), torch.randn(3, 3))
+        assert out1.shape == out2.shape
+        assert out2.shape == out3.shape

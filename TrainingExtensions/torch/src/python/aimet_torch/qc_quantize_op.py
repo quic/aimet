@@ -277,11 +277,12 @@ class QcQuantizeWrapper(nn.Module):
             return getattr(self._module_to_wrap, name)
 
     @abc.abstractmethod
-    def forward(self, *inputs):
+    def forward(self, *inputs, **kwargs):
         """
         Forward-pass routine. This quantizes the weights before delegating to the wrapped module and
         then quantizes the output before returning the same
         :param inputs: Inputs passed to the module in the forward pass
+        :param kwargs: Addtional keyword arguments to wrapped module
         :return: Quantized output from the wrapped module
         """
 
@@ -497,11 +498,12 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
                                                      is_output_quantized, is_symmetric, num_inputs,
                                                      num_outputs, data_type)
 
-    def forward(self, *inputs):
+    def forward(self, *inputs, **kwargs):
         """
         Forward-pass routine. This quantizes the weights before delegating to the wrapped module and
         then quantizes the output before returning the same
         :param inputs: Inputs passed to the module in the forward pass
+        :param kwargs: Addtional keyword arguments to wrapped module
         :return: Quantized output from the wrapped module
         """
 
@@ -522,7 +524,7 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
         quantized_inputs = [inp.clone() if isinstance(inp, torch.Tensor) else inp for inp in quantized_inputs]
 
         # Call the forward of the wrapped module
-        wrapped_output = self._module_to_wrap(*quantized_inputs)
+        wrapped_output = self._module_to_wrap(*quantized_inputs, **kwargs)
 
         self._restore_shadow_params(shadow_params)
 
@@ -845,11 +847,12 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
                     getattr(self, name + '_encoding_min'),
                     getattr(self, name + '_encoding_max'))
 
-    def forward(self, *inputs):
+    def forward(self, *inputs, **kwargs):
         """
         Forward-pass routine. This quantizes the weights before delegating to the wrapped module and
         then quantizes the output before returning the same
         :param inputs: Inputs passed to the module in the forward pass
+        :param kwargs: Addtional keyword arguments to wrapped module
         :return: Quantized output from the wrapped module
         """
 
@@ -865,7 +868,7 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
             layer_type = type(self._module_to_wrap)
             forward_fn = _fused_forward_functions.get(layer_type, _default_forward)
 
-        wrapped_output = forward_fn(self, quantized_inputs)
+        wrapped_output = forward_fn(self, quantized_inputs, **kwargs)
 
         # Quantize the outputs
         if not isinstance(wrapped_output, (List, Tuple)):
@@ -932,21 +935,22 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
         return quantized_tensors
 
 
-def _default_forward(quant_wrapper: LearnedGridQuantWrapper, inputs):
+def _default_forward(quant_wrapper: LearnedGridQuantWrapper, inputs, **kwargs):
     """
     Default forward implementation with quantize-dequantized parameters
 
     :param inputs: Tuple of inputs which will be passed to the inner module
+    :param kwargs: Addtional keyword arguments to wrapped module
     :return: Output of the inner module's forward with quantize-dequantized parameters
     """
     # pylint: disable=protected-access
     with quant_wrapper._quantize_params():
         # Call the forward of the wrapped module
-        return quant_wrapper._module_to_wrap(*inputs)
+        return quant_wrapper._module_to_wrap(*inputs, **kwargs)
 
 
 @_register_forward(nn.Linear)
-def _linear_forward_with_recompute(quant_wrapper: LearnedGridQuantWrapper, inputs):
+def _linear_forward_with_recompute(quant_wrapper: LearnedGridQuantWrapper, inputs, **kwargs):
     """
     Forward implementation of nn.Linear with quantize-dequantized parameters
     with recompute enabled. Compared to the default forward implementation, this
@@ -954,11 +958,12 @@ def _linear_forward_with_recompute(quant_wrapper: LearnedGridQuantWrapper, input
 
     :param quant_wrapper: Q
     :param inputs: Tuple of inputs which will be passed to the inner module
+    :param kwargs: Addtional keyword arguments to wrapped module
     :return: Output of the inner module's forward with quantize-dequantized parameters
     """
     # pylint: disable=protected-access
     if not quant_wrapper.param_quantizers['weight'].enabled:
-        return _default_forward(quant_wrapper, inputs)
+        return _default_forward(quant_wrapper, inputs, **kwargs)
 
     weight = quant_wrapper._module_to_wrap.weight
     bias = quant_wrapper._module_to_wrap.bias
@@ -1026,11 +1031,12 @@ class NativeTorchQuantWrapper(nn.Module):
 
         return outputs
 
-    def forward(self, *inputs):
+    def forward(self, *inputs, **kwargs):
         """
         Forward-pass routine. This quantizes the weights before delegating to the wrapped module and
         then quantizes the output before returning the same
         :param inputs: Inputs passed to the module in the forward pass
+        :param kwargs: Addtional keyword arguments to wrapped module
         :return: Quantized output from the wrapped module
         """
         # Quantize inputs
@@ -1045,7 +1051,7 @@ class NativeTorchQuantWrapper(nn.Module):
                 setattr(self._module_to_wrap, name,
                         torch.nn.Parameter(param_quantizer.quantize_dequantize(param), requires_grad=True))
 
-        wrapped_output = self._module_to_wrap(*quantized_inputs)
+        wrapped_output = self._module_to_wrap(*quantized_inputs, **kwargs)
 
         # Quantize the outputs
         if not self.output_quantizers[0].enabled:
