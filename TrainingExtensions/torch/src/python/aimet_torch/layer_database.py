@@ -214,7 +214,11 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
         output_activation_shape = list(output.size())
         # activation dimension for FC layer is (1,1)
         if isinstance(module, torch.nn.Linear):
-            output_activation_shape.extend([1, 1])
+            # In cases where batch dimension is 1
+            if len(output_activation_shape) == 1:
+                output_activation_shape = [1, *output_activation_shape, 1, 1]
+            else:
+                output_activation_shape.extend([1, 1])
 
         module_name = None
         for name, module_ref in self._model.named_modules():
