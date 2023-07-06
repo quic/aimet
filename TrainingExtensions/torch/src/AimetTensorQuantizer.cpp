@@ -139,16 +139,15 @@ public:
         }
 #endif
 
+        // Since the quant-dequant kernel operate on raw data pointers,
+        // input tensor should not be a strided view of a larger tensor.
+        // Such cases can be prevented by .contiguous().
+        // NOTE: suggest_memory_format() tries to preserve the same memory format
+        input = input.contiguous(input.suggest_memory_format());
         // Create an empty output tensor based on the dimension and options of input
-        at::IntArrayRef sizes  = input.sizes();
         at::Tensor output = at::empty_like(input);
 
-
-        size_t inputTensorSize = 1;
-        for (auto size: sizes)
-            inputTensorSize *= size;
-
-        _tensorQuantizationSim->quantizeDequantizeTensor(input.data<float>(), inputTensorSize, output.data<float>(),
+        _tensorQuantizationSim->quantizeDequantizeTensor(input.data<float>(), input.numel(), output.data<float>(),
                                                          encoding.min, encoding.max, encoding.bw, roundingMode, use_cuda);
 
         return output;
@@ -165,15 +164,15 @@ public:
         }
 #endif
 
+        // Since the quant-dequant kernel operate on raw data pointers,
+        // input tensor should not be a strided view of a larger tensor.
+        // Such cases can be prevented by .contiguous().
+        // NOTE: suggest_memory_format() tries to preserve the same memory format
+        input = input.contiguous(input.suggest_memory_format());
         // Create an empty output tensor based on the dimension and options of input
-        at::IntArrayRef sizes  = input.sizes();
         at::Tensor output = at::empty_like(input);
 
-        size_t inputTensorSize = 1;
-        for (auto size: sizes)
-            inputTensorSize *= size;
-
-        _tensorQuantizationSim->quantizeTensor(input.data<float>(), inputTensorSize, output.data<float>(), encoding.min,
+        _tensorQuantizationSim->quantizeTensor(input.data<float>(), input.numel(), output.data<float>(), encoding.min,
                                                encoding.max, encoding.bw, roundingMode, use_cuda, shiftToSigned);
 
         return output;
