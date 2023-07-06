@@ -56,8 +56,8 @@ PyTorch
 - **torch-cpu** for PyTorch 1.9 CPU package with Python 3.8 - If installing on a machine without CUDA
 
 TensorFlow
-- **tf-gpu** for TensorFlow 2.4 GPU package with Python 3.8 - *Recommended for use* with TensorFlow models
-- **tf-cpu** for TensorFlow 2.4 CPU package with Python 3.8 - If installing on a machine without CUDA
+- **tf-gpu** for TensorFlow 2.10 GPU package with Python 3.8 - *Recommended for use* with TensorFlow models
+- **tf-cpu** for TensorFlow 2.10 CPU package with Python 3.8 - If installing on a machine without CUDA
 
 System Requirements
 ~~~~~~~~~~~~~~~~~~~
