@@ -227,6 +227,17 @@ class QcQuantizeOp:
         """
         return self.quant_info.encoding
 
+    def load_encodings(self, encoding):
+        """
+        Loads pre-existing encodings to quantizer which can be used during quantize-dequantize
+
+        :param encoding: The libpymo.TfEncoding object to be used by the C++ op
+        """
+        self.encodings = encoding
+        for tensor_quantizer in self._tensor_quantizer:
+            tensor_quantizer.isEncodingValid = True
+        self.op_mode = OpMode.quantizeDequantize
+
     @encodings.setter
     def encodings(self, encoding: Union[List[libpymo.TfEncoding], None]):
         """
