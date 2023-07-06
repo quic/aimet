@@ -44,7 +44,7 @@ import onnxruntime as ort
 import pytest
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
-from aimet_onnx.quantsim import QuantizationSimModel
+from aimet_onnx.quantsim import QuantizationSimModel, load_encodings_to_sim
 from aimet_onnx.qc_quantize_op import OpMode
 from aimet_onnx.utils import make_dummy_input
 from models.models_for_tests import SingleResidual
@@ -378,3 +378,27 @@ class TestQuantSim:
                 for encoding in qc_op.encodings:
                     assert encoding.bw == 8
                     assert encoding.min != encoding.max
+
+
+    def test_load_encodings_ptq(self):
+        model = single_residual_model().model
+        sim = QuantizationSimModel(model)
+
+        def callback(session, args):
+            in_tensor = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
+            session.run(None, in_tensor)
+
+        dummy_tensor = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
+
+        sim.compute_encodings(callback, None)
+        sim.export('/tmp', 'onnx_sim')
+
+        out2 = sim.session.run(None, dummy_tensor)
+
+        del sim
+
+        sim = QuantizationSimModel(model)
+        load_encodings_to_sim(sim, '/tmp/onnx_sim.encodings')
+        out3 = sim.session.run(None, dummy_tensor)
+
+        assert np.allclose(out2, out3)

@@ -39,7 +39,7 @@
 
 import os
 from typing import Dict, List, Union
-
+import json
 import numpy as np
 from onnx import helper, onnx_pb
 import onnxruntime as ort
@@ -470,3 +470,36 @@ class QuantizationSimModel:
         """
         self._export_encodings(os.path.join(path, filename_prefix) + '.encodings')
         self._remove_nodes_and_save_model(os.path.join(path, filename_prefix) + '.onnx')
+
+
+def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, onnx_encoding_path: str):
+    """
+    Loads the saved encodings to quant sim model. The encoding filename to load should end in .encodings,
+    generated as part of quantsim export.
+
+    :param quant_sim_model: Quantized model to load encodings for. Note: The model configuration should be the same as
+        when encodings were exported.
+    :param onnx_encoding_path: Path of the encodings file to load.
+    """
+    def _create_libpymo_encodings(encoding):
+        libpymo_encodings = []
+        for enc_val in encoding:
+            enc = libpymo.TfEncoding()
+            enc.bw, enc.delta, enc.max, enc.min, enc.offset = enc_val['bitwidth'], enc_val['scale'], enc_val['max'], \
+                                                              enc_val['min'], enc_val['offset']
+            libpymo_encodings.append(enc)
+        return libpymo_encodings
+
+    # Load encodings file
+    with open(onnx_encoding_path) as json_file:
+        encodings = json.load(json_file)
+
+    for quantizer in encodings['activation_encodings']:
+        if quantizer in quant_sim_model.qc_quantize_op_dict:
+            libpymo_encodings = _create_libpymo_encodings(encodings['activation_encodings'][quantizer])
+            quant_sim_model.qc_quantize_op_dict[quantizer].load_encodings(libpymo_encodings)
+
+    for quantizer in encodings['param_encodings']:
+        if quantizer in quant_sim_model.qc_quantize_op_dict:
+            libpymo_encodings = _create_libpymo_encodings(encodings['param_encodings'][quantizer])
+            quant_sim_model.qc_quantize_op_dict[quantizer].load_encodings(libpymo_encodings)
