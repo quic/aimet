@@ -35,7 +35,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
+import torchvision
 from packaging.version import Version
 import pytest
 import torch
@@ -88,8 +88,10 @@ class TestModelPreparer:
         # Set the strict flag to False so that torch.jit.trace can be successful.
         from aimet_torch.meta import connectedgraph
         connectedgraph.jit_trace_args.update({"strict": False})
-
-        model = models.segmentation.deeplabv3_resnet50(weights_backbone=None).eval().cuda()
+        if Version(torchvision.__version__) < Version('0.10.2'):
+            model = models.segmentation.deeplabv3_resnet50(pretrained_backbone=False).eval().cuda()
+        else:
+            model = models.segmentation.deeplabv3_resnet50(weights_backbone=None).eval().cuda()
         prepared_model = prepare_model(model)
         print(prepared_model)
         input_shape = (1, 3, 224, 224)
