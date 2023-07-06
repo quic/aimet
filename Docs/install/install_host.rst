@@ -178,7 +178,7 @@ Replace Pillow with Pillow-SIMD
 .. code-block::
 
     python3 -m pip uninstall -y pillow
-    python3 -m pip install --no-cache-dir Pillow-SIMD==7.0.0.post3
+    python3 -m pip install --no-cache-dir Pillow-SIMD==9.0.0.post1
 
 Replace onnxruntime with onnxruntime-gpu
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -187,8 +187,9 @@ Replace onnxruntime with onnxruntime-gpu
 
 .. code-block::
 
+    export ONNXRUNTIME_VER=$(python3 -c 'import onnxruntime; print(onnxruntime.__version__)')
     python3 -m pip uninstall -y onnxruntime
-    python3 -m pip install --no-cache-dir onnxruntime-gpu==1.10.0
+    python3 -m pip install --no-cache-dir onnxruntime-gpu==$ONNXRUNTIME_VER
 
 Post installation steps
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -201,10 +202,8 @@ Post installation steps
 
 .. code-block::
 
-    # If you installed the CUDA 11.x drivers
-    ln -s /usr/local/cuda-11.0 /usr/local/cuda
-    # OR if you installed the CUDA 10.x drivers
-    ln -s /usr/local/cuda-10.0 /usr/local/cuda
+    # If you installed a CUDA driver other than 11.1, please modify the command accordingly
+    ln -s /usr/local/cuda-11.1 /usr/local/cuda
 
 Environment setup
 ~~~~~~~~~~~~~~~~~
