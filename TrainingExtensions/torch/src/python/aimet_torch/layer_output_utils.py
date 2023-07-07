@@ -61,31 +61,32 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.LayerOutputs)
 
 
 class NamingScheme(Enum):
-    """ Enumeration to specify layer-output naming scheme while generating intermediate layer-outputs of quantsim
-    model """
+    """ Enumeration of layer-output naming schemes. """
 
-    PYTORCH = 1  # names outputs according to exported pytorch model
-    ONNX = 2  # names outputs according to exported onnx model
-    TORCHSCRIPT = 3  # names outputs according to exported torchscript model
+    PYTORCH = 1
+    """ Names outputs according to exported pytorch model. Layer names are used. """
+    ONNX = 2
+    """ Names outputs according to exported onnx model. Layer output names are generally numeric. """
+    TORCHSCRIPT = 3
+    """ Names outputs according to exported torchscript model. Layer output names are generally numeric. """
 
 
 class LayerOutputUtil:
-    """ Implementation to capture and save outputs of intermediate layers of a model (fp32/quantsim) """
+    """ Implementation to capture and save outputs of intermediate layers of a model (fp32/quantsim). """
 
     def __init__(self, model: torch.nn.Module, dir_path: str, naming_scheme: NamingScheme = NamingScheme.PYTORCH,
                  dummy_input: Union[torch.Tensor, Tuple, List] = None, onnx_export_args: Union[OnnxExportApiArgs, Dict] = None):
         """
-        Constructor - It initializes the utility classes that captures and saves layer-outputs
+        Constructor for LayerOutputUtil.
 
         :param model: Model whose layer-outputs are needed.
         :param dir_path: Directory wherein layer-outputs will be saved.
         :param naming_scheme: Naming scheme to be followed to name layer-outputs. There are multiple schemes as per
             the exported model (pytorch, onnx or torchscript). Refer the NamingScheme enum definition.
-        :param dummy_input: Dummy input to model (required if naming_scheme is 'onnx')
+        :param dummy_input: Dummy input to model. Required if naming_scheme is 'NamingScheme.ONNX' or 'NamingScheme.TORCHSCRIPT'.
         :param onnx_export_args: Should be same as that passed to quantsim export API to have consistency between
-            layer-output names present in exported onnx model and generated layer-outputs. (required if naming_scheme is
-            'onnx')
-        :return: None
+            layer-output names present in exported onnx model and generated layer-outputs. Required if naming_scheme is
+            'NamingScheme.ONNX'.
         """
 
         # Utility to capture layer-outputs
@@ -100,7 +101,7 @@ class LayerOutputUtil:
         This method captures output of every layer of a model & saves the inputs and corresponding layer-outputs to disk.
 
         :param input_batch: Batch of inputs for which we want to obtain layer-outputs.
-        :return:
+        :return: None
         """
 
         logger.info("Generating layer-outputs for %d input instances", len(input_batch))
@@ -109,8 +110,8 @@ class LayerOutputUtil:
         layer_output_batch_dict = self.layer_output.get_outputs(input_batch)
 
         # Place inputs and layer-outputs on CPU
-        input_batch = LayerOutputUtil.get_input_batch_in_numpy(input_batch)
-        layer_output_batch_dict = LayerOutputUtil.get_layer_output_batch_in_numpy(layer_output_batch_dict)
+        input_batch = LayerOutputUtil._get_input_batch_in_numpy(input_batch)
+        layer_output_batch_dict = LayerOutputUtil._get_layer_output_batch_in_numpy(layer_output_batch_dict)
 
         # Save inputs and layer-outputs
         self.save_input_output.save(input_batch, layer_output_batch_dict)
@@ -118,7 +119,7 @@ class LayerOutputUtil:
         logger.info('Successfully generated layer-outputs for %d input instances', len(input_batch))
 
     @staticmethod
-    def get_input_batch_in_numpy(input_batch: Union[torch.Tensor, List[torch.Tensor], Tuple[torch.Tensor]]) -> \
+    def _get_input_batch_in_numpy(input_batch: Union[torch.Tensor, List[torch.Tensor], Tuple[torch.Tensor]]) -> \
             Union[np.ndarray, List[np.ndarray], Tuple[np.ndarray]]:
         """
         Coverts the torch tensors into numpy arrays
@@ -133,7 +134,7 @@ class LayerOutputUtil:
         return input_batch.cpu().numpy()
 
     @staticmethod
-    def get_layer_output_batch_in_numpy(layer_output_dict: Dict[str, torch.Tensor]) -> Dict[str, np.ndarray]:
+    def _get_layer_output_batch_in_numpy(layer_output_dict: Dict[str, torch.Tensor]) -> Dict[str, np.ndarray]:
         """
         Converts the torch tensors into numpy arrays
         :param layer_output_dict: layer output dictionary with torch tensors
