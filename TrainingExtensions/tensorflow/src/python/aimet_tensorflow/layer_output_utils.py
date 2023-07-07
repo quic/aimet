@@ -60,7 +60,7 @@ class LayerOutputUtil:
     def __init__(self, session: tf.compat.v1.Session, starting_op_names: List[str], output_op_names: List[str],
                  dir_path: str):
         """
-        Constructor - It initializes the utility classes that captures and saves layer-outputs
+        Constructor for LayerOutputUtil.
 
         :param session: Session containing the model whose layer-outputs are needed.
         :param starting_op_names: List of starting op names of the model.
@@ -85,7 +85,7 @@ class LayerOutputUtil:
         This method captures output of every layer of a model & saves the inputs and corresponding layer-outputs to disk.
 
         :param input_batch: Batch of inputs for which we want to obtain layer-outputs.
-        :return:
+        :return: None
         """
         logger.info("Generating layer-outputs for %d input instances", len(input_batch))
 
