@@ -42,8 +42,9 @@ from dataclasses import dataclass
 from typing import List, Callable, Dict, Any, Tuple, Optional
 
 import jinja2
-import tensorflow as tf
 from tqdm import tqdm
+import tensorflow as tf
+
 
 from aimet_common.auto_quant import Diagnostics
 from aimet_common.cache import Cache
@@ -66,7 +67,7 @@ cache = Cache()
 NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION = None
 
 
-class AutoQuant:
+class AutoQuant: # pylint: disable=too-many-instance-attributes
     """
     Integrate and apply post-training quantization techniques.
 
