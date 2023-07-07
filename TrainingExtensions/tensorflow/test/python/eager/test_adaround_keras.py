@@ -396,3 +396,13 @@ def test_apply_adaround_per_channel_conv2d_transpose():
     conv_transpose_encoding_data = encoding_data['conv2d_transpose/kernel:0']
     assert (isinstance(conv_transpose_encoding_data, list))
     assert len(conv_transpose_encoding_data) == 8
+
+
+def test_adaround_layer_selection():
+    """To test if the desired layers are selected for adaround or not"""
+    model = depthwise_conv2d_model()
+
+    layer_indices = Adaround._get_ordered_adaround_layer_indices(model)
+
+    assert len(layer_indices) == 4
+    assert [1, 3, 4, 6] == layer_indices

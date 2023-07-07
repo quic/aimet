@@ -55,7 +55,7 @@ from aimet_tensorflow.keras.connectedgraph import ConnectedGraph, map_keras_type
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
-AdaroundSupportedOps = (tf.keras.layers.Conv2D, tf.keras.layers.Dense)
+AdaroundSupportedOps = (tf.keras.layers.Conv2D, tf.keras.layers.DepthwiseConv2D, tf.keras.layers.Dense)
 
 
 class Adaround:
