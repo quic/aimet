@@ -451,6 +451,7 @@ class TestQcQuantizeOp:
             channel_input = input_arr.take(indices=idx, axis=quant_axis)
             output = session.run(None, {'input': channel_input})[0]
             expected_output_arr.append(np.expand_dims(output, quant_axis))
+            quant_info.opMode = OpMode.oneShotQuantizeDequantize
         expected_output_arr = np.concatenate(expected_output_arr, axis=quant_axis)
 
         quant_info.usePerChannelMode = True
