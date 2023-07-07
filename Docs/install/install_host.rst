@@ -90,16 +90,13 @@ Install GPU packages for PyTorch or ONNX
     dpkg -i nvidia-machine-learning-repo-ubuntu2004_1.0.0-1_amd64.deb
     apt-get update
 
-#. Do this section ONLY for the Tensorflow GPU package.
-#. Visit this page https://developer.nvidia.com/cuda-11.2.2-download-archive to obtain the exact and up-to-date installation instructions for your environment.
-
 Install GPU packages for TensorFlow
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **NOTE:**
 
 #. Do this section ONLY for the TensorFlow GPU variant.
-#. Visit this page https://developer.nvidia.com/cuda-11.1.1-download-archive to obtain the exact and up-to-date installation instructions for your environment.
+#. Visit this page https://developer.nvidia.com/cuda-11.2.2-download-archive to obtain the exact and up-to-date installation instructions for your environment.
 
 .. code-block::
 
@@ -124,10 +121,14 @@ Go to https://github.com/quic/aimet/releases and identify the release tag of the
 
 Set the <variant_string> to ONE of the following depending on your desired variant
 
-#. For the PyTorch GPU variant, use "torch_gpu"
-#. For the PyTorch CPU variant, use "torch_cpu"
+#. For the PyTorch 1.9 GPU variant, use "torch_gpu"
+#. For the PyTorch 1.9 CPU variant, use "torch_cpu"
+#. For the PyTorch 1.13 GPU variant, use "torch_gpu_pt113"
+#. For the PyTorch 1.13 CPU variant, use "torch_cpu_pt113"
 #. For the TensorFlow GPU variant, use "tf_gpu"
 #. For the TensorFlow CPU variant, use "tf_cpu"
+#. For the ONNX GPU variant, use "onnx_gpu"
+#. For the ONNX CPU variant, use "onnx_cpu"
 
 .. code-block::
 
@@ -165,6 +166,8 @@ Install the AIMET packages in the order specified below:
     python3 -m pip install ${download_url}/AimetTorch-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix} -f https://download.pytorch.org/whl/torch_stable.html
     # OR
     python3 -m pip install ${download_url}/AimetTensorflow-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
+    # OR
+    python3 -m pip install ${download_url}/AimetOnnx-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
 
     python3 -m pip install ${download_url}/Aimet-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
 
@@ -177,6 +180,18 @@ Install the common debian packages as follows:
 .. code-block::
 
     cat /usr/local/lib/python3.8/dist-packages/aimet_common/bin/reqs_deb_common.txt | xargs apt-get --assume-yes install
+
+**NOTE:** Do the following ONLY for the PyTorch variant packages.
+
+.. code-block::
+
+    cat /usr/local/lib/python3.8/dist-packages/aimet_onnx/bin/reqs_deb_torch_common.txt | xargs apt-get --assume-yes install
+
+**NOTE:** Do the following ONLY for the ONNX variant packages.
+
+.. code-block::
+
+    cat /usr/local/lib/python3.8/dist-packages/aimet_onnx/bin/reqs_deb_onnx_common.txt | xargs apt-get --assume-yes install
 
 Install tensorflow GPU debian packages
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -195,6 +210,15 @@ Install torch GPU debian packages
 .. code-block::
 
     cat /usr/local/lib/python3.8/dist-packages/aimet_torch/bin/reqs_deb_torch_gpu.txt | xargs apt-get --assume-yes install
+
+Install ONNX GPU debian packages
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**NOTE:** Do this ONLY for the ONNX GPU package.
+
+.. code-block::
+
+    cat /usr/local/lib/python3.8/dist-packages/aimet_onnx/bin/reqs_deb_onnx_gpu.txt | xargs apt-get --assume-yes install
 
 Replace Pillow with Pillow-SIMD
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
