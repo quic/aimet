@@ -17,7 +17,7 @@ lower compute and memory requirements and minimal impact to task accuracy.
 
 ![How AIMET works](Docs/images/how-it-works.png)
 
-AIMET is designed to work with [PyTorch](https://pytorch.org) and [TensorFlow](https://tensorflow.org) models.
+AIMET is designed to work with [PyTorch](https://pytorch.org), [TensorFlow](https://tensorflow.org) and [ONNX](https://onnx.ai) models.
 
 We also host the [AIMET Model Zoo](https://github.com/quic/aimet-model-zoo) - a collection of popular neural network models optimized for 8-bit inference.
 We also provide recipes for users to quantize floating point models using AIMET.
