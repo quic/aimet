@@ -66,12 +66,12 @@ If you have multiple python versions installed, set the default python version a
     update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1
     update-alternatives --set python3 /usr/bin/python3.8
 
-Install GPU packages
-~~~~~~~~~~~~~~~~~~~~
+Install GPU packages for PyTorch or ONNX
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **NOTE:**
 
-#. Do this section ONLY for the PyTorch or Tensorflow GPU packages.
+#. Do this section ONLY for the PyTorch or ONNX GPU variants.
 #. Visit this page https://developer.nvidia.com/cuda-11.1.1-download-archive to obtain the exact and up-to-date installation instructions for your environment.
 
 .. code-block::
@@ -90,6 +90,32 @@ Install GPU packages
     dpkg -i nvidia-machine-learning-repo-ubuntu2004_1.0.0-1_amd64.deb
     apt-get update
 
+#. Do this section ONLY for the Tensorflow GPU package.
+#. Visit this page https://developer.nvidia.com/cuda-11.2.2-download-archive to obtain the exact and up-to-date installation instructions for your environment.
+
+Install GPU packages for TensorFlow
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**NOTE:**
+
+#. Do this section ONLY for the TensorFlow GPU variant.
+#. Visit this page https://developer.nvidia.com/cuda-11.1.1-download-archive to obtain the exact and up-to-date installation instructions for your environment.
+
+.. code-block::
+
+    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin
+    mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600
+    wget https://developer.download.nvidia.com/compute/cuda/11.2.2/local_installers/cuda-repo-ubuntu2004-11-2-local_11.2.2-460.32.03-1_amd64.deb
+    dpkg -i cuda-repo-ubuntu2004-11-2-local_11.2.2-460.32.03-1_amd64.deb
+    apt-key add /var/cuda-repo-ubuntu2004-11-2-local/7fa2af80.pub
+    echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64 /" > /etc/apt/sources.list.d/cuda.list
+    echo "deb https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu2004/x86_64 /" > /etc/apt/sources.list.d/nvidia-ml.list
+    apt-get update
+    apt-get -y install cuda
+
+    wget http://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu2004/x86_64/nvidia-machine-learning-repo-ubuntu2004_1.0.0-1_amd64.deb
+    dpkg -i nvidia-machine-learning-repo-ubuntu2004_1.0.0-1_amd64.deb
+    apt-get update
 
 Install AIMET packages
 ~~~~~~~~~~~~~~~~~~~~~~~
