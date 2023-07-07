@@ -55,7 +55,7 @@ PyTorch
 
 #. **torch-gpu** for PyTorch 1.9 GPU package with Python 3.8 and CUDA 11.x - *Recommended for use* with PyTorch models
 #. **torch-cpu** for PyTorch 1.9 CPU package with Python 3.8 - If installing on a machine without CUDA
-#. **torch-gpu-pt113** for PyTorch 1.13 GPU package with Python 3.8 and CUDA 11.x - *Recommended for use* with PyTorch models
+#. **torch-gpu-pt113** for PyTorch 1.13 GPU package with Python 3.8 and CUDA 11.x
 #. **torch-cpu-pt113** for PyTorch 1.13 CPU package with Python 3.8 - If installing on a machine without CUDA
 
 TensorFlow
