@@ -1,0 +1,66 @@
+:orphan:
+
+.. _api-torch-layer-output-generation:
+
+================================
+AIMET PyTorch Layer Output Generation API
+================================
+
+This API captures and saves intermediate layer-outputs of a model. The model can be original(FP32) or quantsim.
+The layer-outputs are named according to the exported PyTorch/ONNX/TorchScript model by the quantsim export API.
+This allows layer-output comparison amongst FP32 model, quantization simulated model and actually quantized model
+on target-device to debug accuracy miss-match issues.
+
+Top-level API
+=============
+
+.. autoclass:: aimet_torch.layer_output_utils.LayerOutputUtil
+
+|
+
+**The following API can be used to Generate Layer Outputs**
+
+.. automethod:: aimet_torch.layer_output_utils.LayerOutputUtil.generate_layer_outputs
+
+|
+
+Enum Definition
+===============
+
+**Naming Scheme Enum**
+
+.. autoclass:: aimet_torch.layer_output_utils.NamingScheme
+    :members:
+
+|
+
+Code Example
+=============
+
+**Imports**
+
+.. literalinclude:: ../torch_code_examples/layer_output_generation_code_example.py
+    :language: python
+    :start-after: # Step 0. Import statements
+    :end-before: # End step 0
+
+**Obtain Original or QuantSim model**
+
+.. literalinclude:: ../torch_code_examples/layer_output_generation_code_example.py
+    :language: python
+    :start-after: # Step 1. Obtain original or quantsim model
+    :end-before: # End step 1
+
+**Obtain pre-processed inputs**
+
+.. literalinclude:: ../torch_code_examples/layer_output_generation_code_example.py
+    :language: python
+    :start-after: # Step 2. Obtain pre-processed inputs
+    :end-before: # End step 2
+
+**Generate Layer Outputs**
+
+.. literalinclude:: ../torch_code_examples/layer_output_generation_code_example.py
+    :language: python
+    :start-after: # Step 3. Generate outputs
+    :end-before: # End step 3
