@@ -378,6 +378,8 @@ class QuantizationSimModel:
             qc_op.reset_encoding_stats()
             if op_name in self.activation_names:
                 qc_op.op_mode = OpMode.updateStats
+            else:
+                qc_op.op_mode = OpMode.oneShotQuantizeDequantize
 
         forward_pass_callback(self.session, forward_pass_callback_args)
         for op_name, qc_op in self.qc_quantize_op_dict.items():
