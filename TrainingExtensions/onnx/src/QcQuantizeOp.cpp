@@ -109,6 +109,12 @@ void QcQuantizeKernel::Compute(OrtKernelContext* context)
     {
         modeSpecificActionFloat(inputData, size, result, opMode, allocator, useCuda);
     }
+
+    // We only ever need to run in oneShotQuantizeDequantize once, afterwards just use quantizeDequantize
+    if (opMode == DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize)
+    {
+        quantInfo->opMode = DlQuantization::TensorQuantizerOpMode::quantizeDequantize;
+    }
 }
 
 

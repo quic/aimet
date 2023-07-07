@@ -378,13 +378,14 @@ class QuantizationSimModel:
             qc_op.reset_encoding_stats()
             if op_name in self.activation_names:
                 qc_op.op_mode = OpMode.updateStats
+            else:
+                qc_op.op_mode = OpMode.oneShotQuantizeDequantize
 
         forward_pass_callback(self.session, forward_pass_callback_args)
         for op_name, qc_op in self.qc_quantize_op_dict.items():
             if qc_op.data_type == QuantizationDataType.int:
                 qc_op.compute_encodings()
-            if op_name in self.activation_names:
-                qc_op.op_mode = OpMode.quantizeDequantize
+            qc_op.op_mode = OpMode.quantizeDequantize
 
     @staticmethod
     def _create_encoding_dict(encoding: libpymo.TfEncoding, qc_quantize_op: QcQuantizeOp) -> Union[Dict, None]:
