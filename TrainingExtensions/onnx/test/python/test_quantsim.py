@@ -158,7 +158,7 @@ class TestQuantSim:
 
         for name, qc_op in sim.get_qc_quantize_op().items():
             assert qc_op.quant_info.tensorQuantizerRef[0].isEncodingValid is True
-            assert qc_op.op_mode == OpMode.quantizeDequantize or OpMode.oneShotQuantizeDequantize
+            assert qc_op.op_mode == OpMode.quantizeDequantize
 
     def test_export_model_with_quant_args(self):
         """Test to export encodings and model"""
