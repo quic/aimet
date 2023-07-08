@@ -41,8 +41,8 @@
 from typing import List, Dict, Tuple, Set
 
 import copy
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
 
 # Import aimet specific modules
 from aimet_common.defs import CostMetric, LayerCompRatioPair

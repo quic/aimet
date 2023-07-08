@@ -42,8 +42,8 @@ Creates Evaluator for Image-Net dataset
 import logging
 
 import progressbar
-import torch
 import onnxruntime as ort
+import torch
 
 from Examples.common.utils import accuracy
 from Examples.torch.utils.image_net_data_loader import ImageNetDataLoader

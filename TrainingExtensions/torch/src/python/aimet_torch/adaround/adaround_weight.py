@@ -43,9 +43,9 @@ import itertools
 import json
 import shutil
 from typing import Tuple, Union, Dict, List, Callable, Any
+from tqdm import tqdm
 import torch
 from torch.utils.data import DataLoader
-from tqdm import tqdm
 
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger

@@ -46,12 +46,12 @@ import os
 import copy
 from collections import defaultdict, deque
 from enum import IntEnum
+import onnxsim
+import yaml
 import torch
 import torch.nn as nn
 import torch.onnx.symbolic_caffe2
 import onnx
-import onnxsim
-import yaml
 from packaging import version
 
 from aimet_common.utils import AimetLogger

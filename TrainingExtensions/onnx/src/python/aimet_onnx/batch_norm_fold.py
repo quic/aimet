@@ -39,8 +39,8 @@
 
 from typing import Dict, List, Tuple
 import contextlib
-from onnx import onnx_pb, numpy_helper
 import numpy as np
+from onnx import onnx_pb, numpy_helper
 
 from aimet_common.bias_correction import ConvBnPatternHandler
 from aimet_common.graph_pattern_matcher import PatternType

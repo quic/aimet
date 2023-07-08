@@ -43,10 +43,10 @@ import os
 import pickle
 import sys
 import numpy as np
+from torchvision import datasets, transforms
 import torch.nn
 import torch
 from torch.utils.data import DataLoader, Dataset
-from torchvision import datasets, transforms
 
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_common.utils import AimetLogger, Handle, log_with_error_and_assert_if_false

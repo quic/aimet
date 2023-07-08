@@ -41,8 +41,8 @@ import io
 from enum import Enum
 from typing import Union, List
 
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
 
 import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme, QuantizationDataType, RANGE_LEARNING_SCHEMES

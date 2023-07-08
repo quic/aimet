@@ -39,9 +39,9 @@
 """ Top level API for visualizing a pytorch model. """
 import os
 from typing import List
-import torch
 from bokeh import plotting
 from bokeh.layouts import column
+import torch
 from aimet_torch import plotting_utils
 from aimet_torch.utils import get_layer_by_name
 

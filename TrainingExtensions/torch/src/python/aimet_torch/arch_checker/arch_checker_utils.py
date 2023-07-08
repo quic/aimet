@@ -38,8 +38,8 @@
 """ Utility for checking model architechture prior to using AIMET feature. """
 import os
 from typing import Dict, List, Union, Set, Tuple
-import torch
 import pandas as pd
+import torch
 
 from aimet_torch.meta.operation import Op
 from aimet_torch.arch_checker.constants import ArchCheckerReportConstants as report_const

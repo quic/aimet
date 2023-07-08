@@ -40,10 +40,9 @@
 import os
 import numpy as np
 import pandas as pd
-import torch
 from tensorboardX import SummaryWriter
 import matplotlib.pyplot as plt
-
+import torch
 
 def switch_backend():
     """

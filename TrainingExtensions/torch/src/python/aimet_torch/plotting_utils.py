@@ -41,7 +41,6 @@ import math
 import holoviews as hv
 import numpy as np
 import pandas as pd
-import torch
 from bokeh.layouts import row
 from bokeh.models import HoverTool, ColumnDataSource, Span, TableColumn, DataTable
 from bokeh.plotting import figure
@@ -51,6 +50,7 @@ from bokeh.models import Div
 # Some magic stuff happening during import that ties pandas dataframe to hvplot
 # Need this import, please don't remove
 import hvplot.pandas  # pylint:disable=unused-import
+import torch
 
 from aimet_common.plotting_utils import style
 from aimet_common import bokeh_plots
