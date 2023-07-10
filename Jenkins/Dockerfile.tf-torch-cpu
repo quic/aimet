@@ -140,21 +140,21 @@ RUN python3 -m pip --no-cache-dir install \
         ipython \
         Jinja2==3.0.3 \
         jupyter \
-        keras==2.2.4 \
+        keras==2.10.0 \
         lmdb==1.2.1 \
         matplotlib>=3 \
         mock \
         nbsphinx==0.8.12 \
-        numpy==1.19.5 \
-        onnx==1.10.0 \
+        numpy==1.21.0 \
+        onnx==1.11.0 \
         onnxsim \
-        onnxruntime==1.10.0 \
+        onnxruntime==1.11.0 \
         onnxruntime-extensions \
         opencv-python \
         Pillow==9.3.0 \
         pluggy==0.12.0 \
         progressbar2 \
-        protobuf==3.20.1 \
+        protobuf==3.19.2 \
         psutil \
         ptflops \
         pybind11 \
@@ -172,9 +172,9 @@ RUN python3 -m pip --no-cache-dir install \
         sphinx-jinja==1.1.1 \
         sphinx-autodoc-typehints==1.6.0 \
         sphinx-rtd-theme \
-        tensorboard==2.4.0 \
-        tensorboardX==2.4 \
-        tensorflow-cpu==2.4.3 \
+        tensorboard==2.10.1 \
+        tensorboardX==2.6 \
+        tensorflow-cpu==2.10.1 \
         tensorflow-hub \
         tensorflow-model-optimization \
         tensorlayer==2.2.1 \

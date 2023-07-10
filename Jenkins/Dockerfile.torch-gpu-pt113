@@ -157,9 +157,9 @@ RUN python3 -m pip --no-cache-dir install \
         mock \
         nbsphinx==0.8.12 \
         'numpy<1.24,>=1.20.5' \
-        onnx==1.10.0 \
+        onnx==1.11.0 \
         onnxsim \
-        onnxruntime==1.10.0 \
+        onnxruntime==1.11.0 \
         onnxruntime-extensions \
         opencv-python \
         Pillow==9.3.0 \
