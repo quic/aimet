@@ -66,12 +66,12 @@ If you have multiple python versions installed, set the default python version a
     update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1
     update-alternatives --set python3 /usr/bin/python3.8
 
-Install GPU packages
-~~~~~~~~~~~~~~~~~~~~
+Install GPU packages for PyTorch or ONNX
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **NOTE:**
 
-#. Do this section ONLY for the PyTorch or Tensorflow GPU packages.
+#. Do this section ONLY for the PyTorch or ONNX GPU variants.
 #. Visit this page https://developer.nvidia.com/cuda-11.1.1-download-archive to obtain the exact and up-to-date installation instructions for your environment.
 
 .. code-block::
@@ -90,6 +90,29 @@ Install GPU packages
     dpkg -i nvidia-machine-learning-repo-ubuntu2004_1.0.0-1_amd64.deb
     apt-get update
 
+Install GPU packages for TensorFlow
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**NOTE:**
+
+#. Do this section ONLY for the TensorFlow GPU variant.
+#. Visit this page https://developer.nvidia.com/cuda-11.2.2-download-archive to obtain the exact and up-to-date installation instructions for your environment.
+
+.. code-block::
+
+    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin
+    mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600
+    wget https://developer.download.nvidia.com/compute/cuda/11.2.2/local_installers/cuda-repo-ubuntu2004-11-2-local_11.2.2-460.32.03-1_amd64.deb
+    dpkg -i cuda-repo-ubuntu2004-11-2-local_11.2.2-460.32.03-1_amd64.deb
+    apt-key add /var/cuda-repo-ubuntu2004-11-2-local/7fa2af80.pub
+    echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64 /" > /etc/apt/sources.list.d/cuda.list
+    echo "deb https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu2004/x86_64 /" > /etc/apt/sources.list.d/nvidia-ml.list
+    apt-get update
+    apt-get -y install cuda
+
+    wget http://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu2004/x86_64/nvidia-machine-learning-repo-ubuntu2004_1.0.0-1_amd64.deb
+    dpkg -i nvidia-machine-learning-repo-ubuntu2004_1.0.0-1_amd64.deb
+    apt-get update
 
 Install AIMET packages
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -98,10 +121,14 @@ Go to https://github.com/quic/aimet/releases and identify the release tag of the
 
 Set the <variant_string> to ONE of the following depending on your desired variant
 
-#. For the PyTorch GPU variant, use "torch_gpu"
-#. For the PyTorch CPU variant, use "torch_cpu"
+#. For the PyTorch 1.9 GPU variant, use "torch_gpu"
+#. For the PyTorch 1.9 CPU variant, use "torch_cpu"
+#. For the PyTorch 1.13 GPU variant, use "torch_gpu_pt113"
+#. For the PyTorch 1.13 CPU variant, use "torch_cpu_pt113"
 #. For the TensorFlow GPU variant, use "tf_gpu"
 #. For the TensorFlow CPU variant, use "tf_cpu"
+#. For the ONNX GPU variant, use "onnx_gpu"
+#. For the ONNX CPU variant, use "onnx_cpu"
 
 .. code-block::
 
@@ -139,6 +166,8 @@ Install the AIMET packages in the order specified below:
     python3 -m pip install ${download_url}/AimetTorch-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix} -f https://download.pytorch.org/whl/torch_stable.html
     # OR
     python3 -m pip install ${download_url}/AimetTensorflow-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
+    # OR
+    python3 -m pip install ${download_url}/AimetOnnx-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
 
     python3 -m pip install ${download_url}/Aimet-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
 
@@ -151,6 +180,18 @@ Install the common debian packages as follows:
 .. code-block::
 
     cat /usr/local/lib/python3.8/dist-packages/aimet_common/bin/reqs_deb_common.txt | xargs apt-get --assume-yes install
+
+**NOTE:** Do the following ONLY for the PyTorch variant packages.
+
+.. code-block::
+
+    cat /usr/local/lib/python3.8/dist-packages/aimet_onnx/bin/reqs_deb_torch_common.txt | xargs apt-get --assume-yes install
+
+**NOTE:** Do the following ONLY for the ONNX variant packages.
+
+.. code-block::
+
+    cat /usr/local/lib/python3.8/dist-packages/aimet_onnx/bin/reqs_deb_onnx_common.txt | xargs apt-get --assume-yes install
 
 Install tensorflow GPU debian packages
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -170,6 +211,15 @@ Install torch GPU debian packages
 
     cat /usr/local/lib/python3.8/dist-packages/aimet_torch/bin/reqs_deb_torch_gpu.txt | xargs apt-get --assume-yes install
 
+Install ONNX GPU debian packages
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**NOTE:** Do this ONLY for the ONNX GPU package.
+
+.. code-block::
+
+    cat /usr/local/lib/python3.8/dist-packages/aimet_onnx/bin/reqs_deb_onnx_gpu.txt | xargs apt-get --assume-yes install
+
 Replace Pillow with Pillow-SIMD
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -178,7 +228,7 @@ Replace Pillow with Pillow-SIMD
 .. code-block::
 
     python3 -m pip uninstall -y pillow
-    python3 -m pip install --no-cache-dir Pillow-SIMD==7.0.0.post3
+    python3 -m pip install --no-cache-dir Pillow-SIMD==9.0.0.post1
 
 Replace onnxruntime with onnxruntime-gpu
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -187,8 +237,9 @@ Replace onnxruntime with onnxruntime-gpu
 
 .. code-block::
 
+    export ONNXRUNTIME_VER=$(python3 -c 'import onnxruntime; print(onnxruntime.__version__)')
     python3 -m pip uninstall -y onnxruntime
-    python3 -m pip install --no-cache-dir onnxruntime-gpu==1.10.0
+    python3 -m pip install --no-cache-dir onnxruntime-gpu==$ONNXRUNTIME_VER
 
 Post installation steps
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -201,10 +252,8 @@ Post installation steps
 
 .. code-block::
 
-    # If you installed the CUDA 11.x drivers
-    ln -s /usr/local/cuda-11.0 /usr/local/cuda
-    # OR if you installed the CUDA 10.x drivers
-    ln -s /usr/local/cuda-10.0 /usr/local/cuda
+    # If you installed a CUDA driver other than 11.1, please modify the command accordingly
+    ln -s /usr/local/cuda-11.1 /usr/local/cuda
 
 Environment setup
 ~~~~~~~~~~~~~~~~~

@@ -52,12 +52,21 @@ AIMET release packages are hosted at https://github.com/quic/aimet/releases. Eac
 Please find more information below about each *VARIANT*.
 
 PyTorch
-- **torch-gpu** for PyTorch 1.9 GPU package with Python 3.8 and CUDA 11.x - *Recommended for use* with PyTorch models
-- **torch-cpu** for PyTorch 1.9 CPU package with Python 3.8 - If installing on a machine without CUDA
+
+#. **torch-gpu** for PyTorch 1.9 GPU package with Python 3.8 and CUDA 11.x - *Recommended for use* with PyTorch models
+#. **torch-cpu** for PyTorch 1.9 CPU package with Python 3.8 - If installing on a machine without CUDA
+#. **torch-gpu-pt113** for PyTorch 1.13 GPU package with Python 3.8 and CUDA 11.x
+#. **torch-cpu-pt113** for PyTorch 1.13 CPU package with Python 3.8 - If installing on a machine without CUDA
 
 TensorFlow
-- **tf-gpu** for TensorFlow 2.4 GPU package with Python 3.8 - *Recommended for use* with TensorFlow models
-- **tf-cpu** for TensorFlow 2.4 CPU package with Python 3.8 - If installing on a machine without CUDA
+
+#. **tf-gpu** for TensorFlow 2.10 GPU package with Python 3.8 - *Recommended for use* with TensorFlow models
+#. **tf-cpu** for TensorFlow 2.10 CPU package with Python 3.8 - If installing on a machine without CUDA
+
+ONNX
+
+#. **onnx-gpu** for ONNX 1.10.0 GPU package with Python 3.8 - *Recommended for use* with ONNX models
+#. **onnx-cpu** for ONNX 1.10.0 CPU package with Python 3.8 - If installing on a machine without CUDA
 
 System Requirements
 ~~~~~~~~~~~~~~~~~~~
@@ -83,8 +92,8 @@ Recommended host system hardware requirements:
 
 While these are not minimum requirements, they are recommended for good performance when training large networks.
 
-Installation
-~~~~~~~~~~~~
+Installation Instructions
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 There are two ways to setup and install AIMET:
     * On your host machine

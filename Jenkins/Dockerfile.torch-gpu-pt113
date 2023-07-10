@@ -37,7 +37,7 @@
 # Docker image file to build and test AIMET for Tensorflow in a GPU environment
 
 ARG REGISTRY
-FROM ${REGISTRY}nvidia/cuda:11.6.0-cudnn8-devel-ubuntu20.04
+FROM ${REGISTRY}nvidia/cuda:11.6.2-cudnn8-devel-ubuntu20.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=DontWarn
