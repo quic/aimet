@@ -197,7 +197,7 @@ def replace_relu6_with_relu(model: onnx_pb.ModelProto):
     :param model: ONNX model
     """
     for node in model.model.graph.node:
-        if node.op_type == 'Clip':
+        if node.op_type == 'Clip' and check_if_clip_node_minimum_is_zero(node, model):
             parent_node = None
             child_node = None
             for temp_node in model.model.graph.node:
@@ -222,19 +222,22 @@ def replace_relu6_with_relu(model: onnx_pb.ModelProto):
                 model.add_node(relu_node)
 
 
-def check_if_node_is_relu6(node: onnx_pb.NodeProto, model: onnx_pb.ModelProto):
+def check_if_clip_node_minimum_is_zero(node: onnx_pb.NodeProto, model: onnx_pb.ModelProto):
     """
-    Check if the node is Relu6 by checking if it's 3rd input is a constant with value == 6
+    Check if the clip node's minimum is 0
 
     :param node: ONNX node
     :param model: ONNX model
     """
-    input_node = node.input[2]
-    for node_graph in model.model.graph.node:
-        if node_graph.output[0] == input_node:
-            if hasattr(node_graph, "attribute") and hasattr(node_graph.attribute[0], "t") and \
-                    numpy_helper.to_array(node_graph.attribute[0].t) == 6:
-                return True
+    if len(node.input) == 3:
+        input_node = node.input[1]
+        for node_graph in model.model.graph.node:
+            if node_graph.output[0] == input_node:
+                if hasattr(node_graph, "attribute") and hasattr(node_graph.attribute[0], "t") and \
+                        numpy_helper.to_array(node_graph.attribute[0].t) == 0:
+                    return True
+    elif hasattr(node, "attribute") and node.attribute[1].name == "min" and node.attribute[1].f == 0.0:
+        return True
     return False
 
 
