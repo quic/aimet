@@ -199,22 +199,27 @@ def replace_relu6_with_relu(model: onnx_pb.ModelProto):
     for node in model.model.graph.node:
         if node.op_type == 'Clip':
             parent_node = None
+            child_node = None
             for temp_node in model.model.graph.node:
                 if node.input[0] in temp_node.output:
                     parent_node = temp_node
+                if node.output[0] in temp_node.input:
+                    child_node = temp_node
             assert parent_node, "Parent Node for Clip operation does not exist"
-            name = node.name
-            remove_node(node, model.model.graph)
-            inputs = [parent_node.output[0]]
-            model.replace_input_of_all_nodes(parent_node.output[0], parent_node.output[0] + '_replaced')
-            relu_node = onnx.helper.make_node(
-                op_type="Relu",
-                inputs=inputs,
-                outputs=[parent_node.output[0] + '_replaced'],
-                name='Relu_' + name,
-            )
+            if parent_node.op_type in ['Conv', 'ConvTranspose'] and child_node and \
+                    child_node.op_type in ['Conv', 'ConvTranspose']:
+                name = node.name
+                remove_node(node, model.model.graph)
+                inputs = [parent_node.output[0]]
+                model.replace_input_of_all_nodes(parent_node.output[0], parent_node.output[0] + '_replaced')
+                relu_node = onnx.helper.make_node(
+                    op_type="Relu",
+                    inputs=inputs,
+                    outputs=[parent_node.output[0] + '_replaced'],
+                    name='Relu_' + name,
+                )
 
-            model.add_node(relu_node)
+                model.add_node(relu_node)
 
 
 def check_if_node_is_relu6(node: onnx_pb.NodeProto, model: onnx_pb.ModelProto):
