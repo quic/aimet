@@ -176,4 +176,6 @@ class TestUtils:
             if node.op_type == 'Relu':
                 relu_count += 1
 
-        assert relu_count - original_relu_count == relu6_count
+        hard_swish_count = 1
+
+        assert relu_count - original_relu_count == relu6_count - hard_swish_count

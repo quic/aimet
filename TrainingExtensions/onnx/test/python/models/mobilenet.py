@@ -434,6 +434,7 @@ class MockMobileNetV11(nn.Module):
         def conv_bn(inp, oup, stride):
             return nn.Sequential(
                 nn.Conv2d(inp, oup, 3, stride, 1, bias=False),
+                nn.Hardswish(inplace=True),
                 nn.BatchNorm2d(oup),
             )
 
