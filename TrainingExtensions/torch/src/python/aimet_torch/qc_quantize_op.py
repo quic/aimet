@@ -496,6 +496,7 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
                                                      is_output_quantized, is_symmetric, num_inputs,
                                                      num_outputs, data_type)
 
+    # pylint: disable=arguments-differ
     def forward(self, *inputs, **kwargs):
         """
         Forward-pass routine. This quantizes the weights before delegating to the wrapped module and
@@ -504,7 +505,6 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
         :param kwargs: Addtional keyword arguments to wrapped module
         :return: Quantized output from the wrapped module
         """
-
         # Quantize the inputs
         torch_inputs = custom_tensor_utils.to_torch_tensor(inputs)
         quantized_inputs = self._quantize_activation(self.input_quantizers, torch_inputs)
@@ -845,6 +845,7 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
                     getattr(self, name + '_encoding_min'),
                     getattr(self, name + '_encoding_max'))
 
+    # pylint: disable=arguments-differ
     def forward(self, *inputs, **kwargs):
         """
         Forward-pass routine. This quantizes the weights before delegating to the wrapped module and
