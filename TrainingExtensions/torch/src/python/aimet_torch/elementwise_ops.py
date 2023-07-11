@@ -412,3 +412,53 @@ class GatherNd(torch.nn.Module):
         if output_data_buffer[0].dim() == 0:
             return torch.tensor(output_data_buffer).reshape(output_shape)
         return torch.cat(output_data_buffer).reshape(output_shape)
+
+
+class ScatterElements(torch.nn.Module):
+    """ ScatterElements op implementation """
+    def __init__(self, dim: int, reduce: str = None):
+
+        super().__init__()
+
+        self.dim = dim
+        self.reduce = reduce
+
+    def forward(self, x: Union[torch.Tensor, list],
+                index: Union[torch.Tensor, list],
+                src: Union[torch.Tensor, list]):
+        """
+        Forward-pass routine for ScatterElements op
+        """
+        if isinstance(index, list):
+            index = torch.tensor(index, dtype=torch.int64)
+        if isinstance(src, list):
+            src = torch.tensor(src)
+        if isinstance(x, list):
+            x = torch.tensor(x, dtype=src.dtype)
+
+        if self.reduce:
+            if isinstance(src, torch.Tensor):
+                return x.scatter_reduce_(self.dim, index, src, self.reduce)
+            # If src is a single float value
+            return x.scatter_(self.dim, index, src, reduce=self.reduce)
+
+        return x.scatter_(self.dim, index, src)
+
+
+class OneHot(torch.nn.Module):
+    """ Custom module for ONNX OneHot  """
+
+    def __init__(self, num_classes: int, off_value: Union[int, float], on_value: Union[int, float]):
+        super().__init__()
+        self.num_classes = num_classes
+        self.off_value = off_value
+        self.on_value = on_value
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        """
+        Forward-pass routine for OneHot
+        """
+        out = torch.nn.functional.one_hot(inputs, self.num_classes)
+        if self.off_value != 0 or self.on_value != 1:
+            out = out * (self.on_value - self.off_value) + self.off_value
+        return out
