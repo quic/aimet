@@ -579,6 +579,8 @@ def _insert_node_for_new_module(traced_model: torch.fx.GraphModule,
                 new_node = traced_model.graph.call_module(module_qualified_name, args=node.args, kwargs=node.kwargs)
             elif functional_name in functional_with_stateful_api:
                 new_node = traced_model.graph.call_module(module_qualified_name, args=node.args)
+            else:
+                raise ValueError("Unsupported module: {}".format(functional_name))
         else:
             new_node = traced_model.graph.call_module(module_qualified_name, args=node.args)
 
@@ -616,14 +618,14 @@ def _create_module_for_functional_node(node: torch.fx.node, functional_name: str
     :return: New module
     """
     # Instantiate new module from lookup
-    if functional_name in functional_with_stateful_api.keys():
+    if functional_name in functional_with_stateful_api:
         module = functional_with_stateful_api[functional_name]()
         # Set the parameters for module from node.kwargs
         for key, value in node.kwargs.items():
             setattr(module, key, value)
-    elif functional_name in functional_with_special_handling.keys():
+    elif functional_name in functional_with_special_handling:
         module = special_handler_functions[functional_name]['module_fn'](node)
-    elif functional_name in functional_with_stateless_api.keys():
+    elif functional_name in functional_with_stateless_api:
         module = functional_with_stateless_api[functional_name]()
     else:
         raise ValueError("Unsupported module: {}".format(functional_name))

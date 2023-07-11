@@ -269,7 +269,6 @@ class QcQuantizeWrapper(nn.Module):
             for name, param in self._module_to_wrap.named_parameters():
                 yield name, param
 
-
     def __getattr__(self, name):
         try:
             return super().__getattr__(name)
@@ -277,12 +276,11 @@ class QcQuantizeWrapper(nn.Module):
             return getattr(self._module_to_wrap, name)
 
     @abc.abstractmethod
-    def forward(self, *inputs, **kwargs):
+    def forward(self, *inputs):
         """
         Forward-pass routine. This quantizes the weights before delegating to the wrapped module and
         then quantizes the output before returning the same
         :param inputs: Inputs passed to the module in the forward pass
-        :param kwargs: Addtional keyword arguments to wrapped module
         :return: Quantized output from the wrapped module
         """
 
