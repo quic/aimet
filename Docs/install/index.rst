@@ -65,8 +65,8 @@ TensorFlow
 
 ONNX
 
-#. **onnx-gpu** for ONNX 1.10.0 GPU package with Python 3.8 - *Recommended for use* with ONNX models
-#. **onnx-cpu** for ONNX 1.10.0 CPU package with Python 3.8 - If installing on a machine without CUDA
+#. **onnx-gpu** for ONNX 1.11.0 GPU package with Python 3.8 - *Recommended for use* with ONNX models
+#. **onnx-cpu** for ONNX 1.11.0 CPU package with Python 3.8 - If installing on a machine without CUDA
 
 System Requirements
 ~~~~~~~~~~~~~~~~~~~
