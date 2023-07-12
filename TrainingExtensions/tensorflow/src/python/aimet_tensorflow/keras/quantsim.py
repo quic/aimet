@@ -322,10 +322,14 @@ class QuantizationSimModel(tf.keras.Model):
                                                                               Dict[str, Union[str, int, float]]]:
         """
         Get encoding dict for a tensor quantizer.
+
         :param quantizer: Quantizer to get encoding info from
         :return: Dictionary or List of dictionaries containing encodings info for the tensor quantizer
         """
-        quantizer_encodings = [quantizer.encoding] if not isinstance(quantizer, ParamPerChannelQuantizer) else quantizer.encoding
+        if not isinstance(quantizer, ParamPerChannelQuantizer) or quantizer.data_type == QuantizationDataType.float:
+            quantizer_encodings = [quantizer.encoding]
+        else:
+            quantizer_encodings = quantizer.encoding
         return [
             {
                 'min': encoding.min,
