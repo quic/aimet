@@ -325,7 +325,8 @@ class QuantizationSimModel(tf.keras.Model):
         :param quantizer: Quantizer to get encoding info from
         :return: Dictionary or List of dictionaries containing encodings info for the tensor quantizer
         """
-        quantizer_encodings = [quantizer.encoding] if not isinstance(quantizer, ParamPerChannelQuantizer) else quantizer.encoding
+        quantizer_encodings = [quantizer.encoding] if (not isinstance(quantizer, ParamPerChannelQuantizer)
+                                                       or quantizer.data_type == QuantizationDataType.float) else quantizer.encoding
         return [
             {
                 'min': encoding.min,
