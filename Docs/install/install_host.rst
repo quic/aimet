@@ -52,7 +52,7 @@ Install prerequisite packages
 
 Install the basic pre-requisite packages as follows:
 
-.. code-block::
+.. code-block:: bash
 
     apt-get update
     apt-get install python3.8 python3.8-dev python3-pip
@@ -61,20 +61,33 @@ Install the basic pre-requisite packages as follows:
 
 If you have multiple python versions installed, set the default python version as follows:
 
-.. code-block::
+.. code-block:: bash
 
     update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1
     update-alternatives --set python3 /usr/bin/python3.8
 
-Install GPU packages for PyTorch or ONNX
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Install GPU packages
+~~~~~~~~~~~~~~~~~~~~~
+
+**NOTE:**
+
+#. Do this section ONLY for the GPU variants.
+#. The released AIMET GPU packages *were tested* with the following CUDA toolkit versions:
+    #. PyTorch 1.9 GPU variant: `CUDA Toolkit 11.1.1 <https://developer.nvidia.com/cuda-11-1-1-download-archive>`_
+    #. PyTorch 1.13 GPU variant: `CUDA Toolkit 11.6.2 <https://developer.nvidia.com/cuda-11-6-2-download-archive>`_
+    #. TensorFlow GPU variant: `CUDA Toolkit 11.2.2 <https://developer.nvidia.com/cuda-11-2-2-download-archive>`_
+    #. ONNX GPU variant: `CUDA Toolkit 11.1.1 <https://developer.nvidia.com/cuda-11-1-1-download-archive>`_
+#. The instructions in the sub-sections below correspond to our tested versions above. Visit this page https://developer.nvidia.com/cuda-toolkit-archive to obtain the correct version of the CUDA toolkit for your environment.
+
+Install GPU packages for PyTorch 1.9 or ONNX
+=============================================
 
 **NOTE:**
 
 #. Do this section ONLY for the PyTorch or ONNX GPU variants.
 #. Visit this page https://developer.nvidia.com/cuda-11.1.1-download-archive to obtain the exact and up-to-date installation instructions for your environment.
 
-.. code-block::
+.. code-block:: bash
 
     wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin
     mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600
@@ -90,15 +103,39 @@ Install GPU packages for PyTorch or ONNX
     dpkg -i nvidia-machine-learning-repo-ubuntu2004_1.0.0-1_amd64.deb
     apt-get update
 
+Install GPU packages for PyTorch 1.13
+======================================
+
+**NOTE:**
+
+#. Do this section ONLY for the PyTorch 1.13 variant.
+#. Visit this page https://developer.nvidia.com/cuda-11-6-2-download-archive to obtain the exact and up-to-date installation instructions for your environment.
+
+.. code-block:: bash
+
+    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin
+    mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600
+    wget https://developer.download.nvidia.com/compute/cuda/11.6.2/local_installers/cuda-repo-ubuntu2004-11-6-local_11.6.2-510.47.03-1_amd64.deb
+    dpkg -i cuda-repo-ubuntu2004-11-6-local_11.6.2-510.47.03-1_amd64.deb
+    apt-key add /var/cuda-repo-ubuntu2004-11-6-local/7fa2af80.pub
+    echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64 /" > /etc/apt/sources.list.d/cuda.list
+    echo "deb https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu2004/x86_64 /" > /etc/apt/sources.list.d/nvidia-ml.list
+    apt-get update
+    apt-get -y install cuda
+
+    wget http://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu2004/x86_64/nvidia-machine-learning-repo-ubuntu2004_1.0.0-1_amd64.deb
+    dpkg -i nvidia-machine-learning-repo-ubuntu2004_1.0.0-1_amd64.deb
+    apt-get update
+
 Install GPU packages for TensorFlow
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+====================================
 
 **NOTE:**
 
 #. Do this section ONLY for the TensorFlow GPU variant.
 #. Visit this page https://developer.nvidia.com/cuda-11.2.2-download-archive to obtain the exact and up-to-date installation instructions for your environment.
 
-.. code-block::
+.. code-block:: bash
 
     wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin
     mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600
@@ -130,19 +167,19 @@ Set the <variant_string> to ONE of the following depending on your desired varia
 #. For the ONNX GPU variant, use "onnx_gpu"
 #. For the ONNX CPU variant, use "onnx_cpu"
 
-.. code-block::
+.. code-block:: bash
 
     export AIMET_VARIANT=<variant_string>
 
 Replace <release_tag> in the steps below with the appropriate tag:
 
-.. code-block::
+.. code-block:: bash
 
     export release_tag=<release_tag>
 
 Set the package download URL as follows:
 
-.. code-block::
+.. code-block:: bash
 
     export download_url="https://github.com/quic/aimet/releases/download/${release_tag}"
 
@@ -150,7 +187,7 @@ Set the common suffix for the package files as follows:
 
 **NOTE:** Set wheel_file_suffix to cp38-cp38-linux_x86_64.whl OR cp36-cp36m-linux_x86_64 OR cp37-cp37m-linux_x86_64 OR py3-none-any as appropriate depending on the actual wheel filename(s) on the https://github.com/quic/aimet/releases.
 
-.. code-block::
+.. code-block:: bash
 
     export wheel_file_suffix="cp38-cp38-linux_x86_64.whl"
 
@@ -158,7 +195,7 @@ Install the AIMET packages in the order specified below:
 
 **NOTE:** Python dependencies will automatically get installed.
 
-.. code-block::
+.. code-block:: bash
 
     python3 -m pip install ${download_url}/AimetCommon-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
 
@@ -177,19 +214,19 @@ Install common debian packages
 
 Install the common debian packages as follows:
 
-.. code-block::
+.. code-block:: bash
 
     cat /usr/local/lib/python3.8/dist-packages/aimet_common/bin/reqs_deb_common.txt | xargs apt-get --assume-yes install
 
 **NOTE:** Do the following ONLY for the PyTorch variant packages.
 
-.. code-block::
+.. code-block:: bash
 
     cat /usr/local/lib/python3.8/dist-packages/aimet_onnx/bin/reqs_deb_torch_common.txt | xargs apt-get --assume-yes install
 
 **NOTE:** Do the following ONLY for the ONNX variant packages.
 
-.. code-block::
+.. code-block:: bash
 
     cat /usr/local/lib/python3.8/dist-packages/aimet_onnx/bin/reqs_deb_onnx_common.txt | xargs apt-get --assume-yes install
 
@@ -198,7 +235,7 @@ Install tensorflow GPU debian packages
 
 **NOTE:** Do this ONLY for the TensorFlow GPU package.
 
-.. code-block::
+.. code-block:: bash
 
     cat /usr/local/lib/python3.8/dist-packages/aimet_tensorflow/bin/reqs_deb_tf_gpu.txt | xargs apt-get --assume-yes install
 
@@ -207,7 +244,7 @@ Install torch GPU debian packages
 
 **NOTE:** Do this ONLY for the PyTorch GPU package.
 
-.. code-block::
+.. code-block:: bash
 
     cat /usr/local/lib/python3.8/dist-packages/aimet_torch/bin/reqs_deb_torch_gpu.txt | xargs apt-get --assume-yes install
 
@@ -216,7 +253,7 @@ Install ONNX GPU debian packages
 
 **NOTE:** Do this ONLY for the ONNX GPU package.
 
-.. code-block::
+.. code-block:: bash
 
     cat /usr/local/lib/python3.8/dist-packages/aimet_onnx/bin/reqs_deb_onnx_gpu.txt | xargs apt-get --assume-yes install
 
@@ -225,7 +262,7 @@ Replace Pillow with Pillow-SIMD
 
 **Optional:** Replace the Pillow package with Pillow-SIMD as follows:
 
-.. code-block::
+.. code-block:: bash
 
     python3 -m pip uninstall -y pillow
     python3 -m pip install --no-cache-dir Pillow-SIMD==9.0.0.post1
@@ -235,7 +272,7 @@ Replace onnxruntime with onnxruntime-gpu
 
 **NOTE:** Do this ONLY for the PyTorch GPU package.
 
-.. code-block::
+.. code-block:: bash
 
     export ONNXRUNTIME_VER=$(python3 -c 'import onnxruntime; print(onnxruntime.__version__)')
     python3 -m pip uninstall -y onnxruntime
@@ -244,15 +281,15 @@ Replace onnxruntime with onnxruntime-gpu
 Post installation steps
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. code-block::
+.. code-block:: bash
 
     ln -s /usr/lib/x86_64-linux-gnu/libjpeg.so /usr/lib
 
 **NOTE:** Do the following step ONLY for the PyTorch or Tensorflow GPU packages.
 
-.. code-block::
+.. code-block:: bash
 
-    # If you installed a CUDA driver other than 11.1, please modify the command accordingly
+    # NOTE: Please modify the below command depending on the version of your CUDA driver toolkit
     ln -s /usr/local/cuda-11.1 /usr/local/cuda
 
 Environment setup
@@ -260,7 +297,7 @@ Environment setup
 
 Set the common environment variables as follows:
 
-.. code-block::
+.. code-block:: bash
 
     source /usr/local/lib/python3.8/dist-packages/aimet_common/bin/envsetup.sh
 

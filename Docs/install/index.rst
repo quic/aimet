@@ -65,8 +65,8 @@ TensorFlow
 
 ONNX
 
-#. **onnx-gpu** for ONNX 1.10.0 GPU package with Python 3.8 - *Recommended for use* with ONNX models
-#. **onnx-cpu** for ONNX 1.10.0 CPU package with Python 3.8 - If installing on a machine without CUDA
+#. **onnx-gpu** for ONNX 1.11.0 GPU package with Python 3.8 - *Recommended for use* with ONNX models
+#. **onnx-cpu** for ONNX 1.11.0 CPU package with Python 3.8 - If installing on a machine without CUDA
 
 System Requirements
 ~~~~~~~~~~~~~~~~~~~
@@ -103,7 +103,7 @@ Please click on the appropriate link for installation instructions:
 
 .. toctree::
    :titlesonly:
-   :maxdepth: 2
+   :maxdepth: 3
 
    Install in Host Machine <install_host>
    Install in Docker Container <install_docker>

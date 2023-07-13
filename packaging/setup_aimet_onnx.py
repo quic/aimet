@@ -97,7 +97,7 @@ setup(
     include_package_data=True,
     zip_safe=True,
     platforms='x86',
-    python_requires='>=3.6',
+    python_requires='>=3.8',
     cmdclass={
         'bdist_wheel': bdist_wheel_aimet,
     },
