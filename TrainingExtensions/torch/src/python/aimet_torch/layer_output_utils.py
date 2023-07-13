@@ -229,7 +229,7 @@ class LayerOutput:
         :return: None
         """
         layer_name = self.module_to_name_dict[module]
-        self.layer_name_to_layer_output_dict[layer_name] = output
+        self.layer_name_to_layer_output_dict[layer_name] = output.clone()
 
     @staticmethod
     def rename_layer_outputs(layer_name_to_layer_output_dict: Dict[str, torch.Tensor],
