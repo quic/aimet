@@ -71,16 +71,12 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         self.use_soft_rounding = True
         self._ch_axis = channel_axis
         self._cppOp = AimetTensorQuantizer.AimetTensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[quant_scheme])
-        self._closed = False
 
     def free(self):
         """
-        Free the resources occupied by this object
+        Free the memory occupied by Adaround variable
         """
         self.alpha = None
-        self._cppOp = None
-        self.enabled = False
-        self._closed = True
 
     def quantize_dequantize(self, tensor: torch.Tensor, _) -> torch.Tensor:
         """
@@ -89,9 +85,6 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         :param _: Rounding mode parameter is not used
         :return: Resulting tensor
         """
-        if self._closed:
-            raise RuntimeError
-
         if self.enabled:
             quantized_tensor = self.adaround_weights(tensor)
         else:
@@ -127,9 +120,6 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         :param tensor: The weight tensor to be ada rounded.
         :return: AdaRounded weight tensor
         """
-        if self._closed:
-            raise RuntimeError
-
         assert self.encoding, 'Encoding needs to be set before Adaround the weight tensor.'
 
         if isinstance(self.encoding, list):
@@ -174,9 +164,6 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         Initializes alpha parameter, same shape as the weight tensor
         :param tensor: The weight tensor to be ada rounded
         """
-        if self._closed:
-            raise RuntimeError
-
         tensor_floor = torch.floor(tensor / delta)
 
         tensor = (tensor / delta) - tensor_floor
