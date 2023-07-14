@@ -184,9 +184,6 @@ class Adaround:
 
         cls._adaround_model(model, quant_sim, module_act_func_pair, params, dummy_input)
 
-        # Update every module (AdaroundSupportedModules) weight with Adarounded weight (Soft rounding)
-        cls._update_modules_with_adarounded_weights(quant_sim)
-
         # Export quantization encodings to JSON-formatted file
         cls._export_encodings_to_json(path, filename_prefix, quant_sim)
 
@@ -207,7 +204,7 @@ class Adaround:
         :param params: Adaround parameters
         :param dummy_input: Dummy input to the model
         """
-        # pylint: disable=too-many-locals
+        # pylint: disable=too-many-locals, protected-access
 
         num_iterations = params.num_iterations
 
@@ -248,6 +245,19 @@ class Adaround:
                         logger.info("Started Optimizing weight rounding of module: %s", name)
                         AdaroundOptimizer.adaround_module(module, quant_wrapper, model, quant_sim.model, act_func,
                                                           cached_dataset, params.forward_fn, opt_params)
+
+                        weight = quant_wrapper._module_to_wrap.weight
+                        quantizer = quant_wrapper.param_quantizers['weight']
+
+                        # Fold trained alpha to weight
+                        with torch.no_grad():
+                            # Use soft rounding to compute Adarounded weight
+                            quantizer.use_soft_rounding = True
+                            adarounded_weight = quantizer.adaround_weights(weight)
+                            weight.copy_(adarounded_weight)
+
+                        # Free the memory occupied by quantizer
+                        quantizer.free()
         finally:
             if os.path.exists(WORKING_DIR):
                 logger.info('Deleting model inputs from location: %s', WORKING_DIR)
@@ -318,42 +328,6 @@ class Adaround:
                 break
 
         return quant_module
-
-    @classmethod
-    def _update_modules_with_adarounded_weights(cls, quant_sim: QuantizationSimModel):
-        """
-        Update every module (Conv and Linear)'s weight parameter with Adarounded weight (Soft rounding)
-        :param quant_sim: The QuantSim that contains the model and Adaround tensor quantizers
-        """
-        # pylint: disable=protected-access
-        for quant_module in quant_sim.model.modules():
-            if isinstance(quant_module, StaticGridQuantWrapper) and \
-                    isinstance(quant_module._module_to_wrap, AdaroundSupportedModules):
-                quantizer = quant_module.param_quantizers['weight']
-
-                # It is possible that a module with weights defined in the model may not be used in the
-                # forward pass. These modules will not have a AdaroundTensorQuantizer associated with them
-                if isinstance(quantizer, AdaroundTensorQuantizer):
-                    cls._update_module_params(quant_module._module_to_wrap, quantizer)
-
-    @staticmethod
-    def _update_module_params(module: torch.nn.Module, quantizer: AdaroundTensorQuantizer):
-        """
-        Update module's weight parameter with Adarounded weight
-        :param module: module which was Adarounded
-        :param quantizer: Tensor quantizer associated with the module
-        """
-        for param_name, param in module.named_parameters():
-            # Only the weight parameter is Adarounded
-            if param_name == 'weight':
-                orig_weight = param.detach().clone()
-
-                # Use soft rounding to compute Adarounded weight
-                quantizer.use_soft_rounding = True
-                adaround_weight = quantizer.adaround_weights(orig_weight)
-
-                param.data.zero_()
-                param.data.add_(adaround_weight.data)
 
     @classmethod
     def _export_encodings_to_json(cls, path: str, filename_prefix: str, quant_sim: QuantizationSimModel):
