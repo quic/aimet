@@ -255,6 +255,7 @@ class Adaround:
                             quantizer.use_soft_rounding = True
                             adarounded_weight = quantizer.adaround_weights(weight)
                             weight.copy_(adarounded_weight)
+                            del adarounded_weight
 
                         # Free the memory occupied by quantizer
                         quantizer.free()
