@@ -72,6 +72,12 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         self._ch_axis = channel_axis
         self._cppOp = AimetTensorQuantizer.AimetTensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[quant_scheme])
 
+    def free(self):
+        """
+        Free the memory occupied by Adaround variable
+        """
+        self.alpha = None
+
     def quantize_dequantize(self, tensor: torch.Tensor, _) -> torch.Tensor:
         """
         Quantize-dequantize the tensor, using the saved encoding for this tensor
@@ -79,7 +85,6 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         :param _: Rounding mode parameter is not used
         :return: Resulting tensor
         """
-
         if self.enabled:
             quantized_tensor = self.adaround_weights(tensor)
         else:
