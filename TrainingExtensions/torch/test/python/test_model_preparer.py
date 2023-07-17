@@ -1856,3 +1856,34 @@ class TestFX:
         sim.model(*dummy_input)
         assert sim.model.square1.output_quantizers[0].encoding
         assert sim.model.square2.output_quantizers[0].encoding
+
+    def test_fx_with_cumsum(self):
+        """ test torch fx with cumsum taking kwargs """
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super(Model, self).__init__()
+                self.conv = torch.nn.Conv2d(3, 10, (1, 1))
+
+            def forward(self, inputs):
+                x = self.conv(inputs).squeeze()
+                x = torch.cumsum(x, dim=1, dtype=torch.float32)
+                return x
+
+        input_shape = (1, 3, 3, 3)
+        dummy_input = (torch.randn(*input_shape))
+        model = Model().eval()
+        prepared_model = prepare_model(model)
+
+        # Verify that validator checks pass.
+        assert ModelValidator.validate_model(prepared_model, dummy_input)
+
+        # Verify bit-exact outputs.
+        assert torch.equal(model(dummy_input), prepared_model(dummy_input))
+        assert isinstance(prepared_model.module_cumsum, elementwise_ops.CumSum)
+
+        # Verify with Quantization workflow.
+        sim = QuantizationSimModel(prepared_model, dummy_input)
+        sim.compute_encodings(evaluate, dummy_input)
+        sim.model(dummy_input)
+        assert sim.model.module_cumsum.output_quantizers[0].encoding

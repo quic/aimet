@@ -276,11 +276,12 @@ class QcQuantizeWrapper(nn.Module):
             return getattr(self._module_to_wrap, name)
 
     @abc.abstractmethod
-    def forward(self, *inputs):
+    def forward(self, *inputs, **kwargs):
         """
         Forward-pass routine. This quantizes the weights before delegating to the wrapped module and
         then quantizes the output before returning the same
         :param inputs: Inputs passed to the module in the forward pass
+        :param kwargs: Addtional keyword arguments to wrapped module
         :return: Quantized output from the wrapped module
         """
 
@@ -496,7 +497,6 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
                                                      is_output_quantized, is_symmetric, num_inputs,
                                                      num_outputs, data_type)
 
-    # pylint: disable=arguments-differ
     def forward(self, *inputs, **kwargs):
         """
         Forward-pass routine. This quantizes the weights before delegating to the wrapped module and
@@ -845,7 +845,6 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
                     getattr(self, name + '_encoding_min'),
                     getattr(self, name + '_encoding_max'))
 
-    # pylint: disable=arguments-differ
     def forward(self, *inputs, **kwargs):
         """
         Forward-pass routine. This quantizes the weights before delegating to the wrapped module and
@@ -854,7 +853,6 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
         :param kwargs: Addtional keyword arguments to wrapped module
         :return: Quantized output from the wrapped module
         """
-
         self.apply_gating_logic()
 
         # Quantize inputs
