@@ -77,7 +77,7 @@ def _create_torch_mha_pattern(embed_dim, num_heads, seq_size, batch_size) -> Lis
     return pattern
 
 
-def _create_gpt2_mha_pattern(config: GPT2Config) -> List[str]:
+def _create_gpt2_mha_pattern(config) -> List[str]:
     """
     Create pattern for GPT2 MHA variant.
     A pattern is list of connected graph op types in order of occurence.
@@ -91,7 +91,7 @@ def _create_gpt2_mha_pattern(config: GPT2Config) -> List[str]:
     return pattern
 
 
-def _create_llama_mha_pattern(config: LlamaConfig) -> List[str]:
+def _create_llama_mha_pattern(config) -> List[str]:
     """
     Create pattern for GPT2 MHA variant.
     A pattern is list of connected graph op types in order of occurence.
@@ -214,7 +214,7 @@ class TestMhaClassifier:
         num_encoder_layers = 2
         num_decoder_layers = 2
         pattern = _create_torch_mha_pattern(embed_dim, num_heads, seq_size, batch_size)
-
+        print('torch', pattern)
         src = torch.rand((seq_size, batch_size, embed_dim))
         tgt = torch.rand((seq_size, batch_size, embed_dim))
         dummy_input = (src, tgt)
@@ -242,7 +242,7 @@ class TestMhaClassifier:
         config.n_layer = 4
         config.n_head = 4
         pattern = _create_gpt2_mha_pattern(config)
-
+        print('gpt2, ', pattern)
         class Wrapper(torch.nn.Module):
             """
             Wrapper which allows
@@ -288,7 +288,7 @@ class TestMhaClassifier:
         config.num_hidden_layers = 4
         config.num_attention_heads = 4
         pattern = _create_llama_mha_pattern(config)
-
+        print('llama ', pattern)
         class Wrapper(torch.nn.Module):
             """
             Wrapper which allows
