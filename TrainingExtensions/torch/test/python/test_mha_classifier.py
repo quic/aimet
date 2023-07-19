@@ -71,9 +71,10 @@ def _create_torch_mha_pattern(embed_dim, num_heads, seq_size, batch_size) -> Lis
     value = torch.rand(seq_size, batch_size, embed_dim)
     dummy_input = (query, key, value)
     torch_mha = QuantizableMultiheadAttention(embed_dim, num_heads, bias=False)
-    wrapped_torch_mha = TorchMhaWrapper(torch_mha, need_weights=False)
+    wrapped_torch_mha = TorchMhaWrapper(torch_mha,
+                                        need_weights=False)
     conn_graph = ConnectedGraph(wrapped_torch_mha, dummy_input)
-    pattern = [op.type for op in conn_graph.ordered_ops if op.type not in ConnectedGraph.math_invariant_types]
+    pattern = [op.type for op in conn_graph.ordered_ops]
     return pattern
 
 
@@ -87,21 +88,26 @@ def _create_gpt2_mha_pattern(config) -> List[str]:
     gpt2_mha = GPT2Attention(config)
     wrapped_gpt2_mha = Gpt2MhaWrapper(gpt2_mha)
     conn_graph = ConnectedGraph(wrapped_gpt2_mha, dummy_input)
-    pattern = [op.type for op in conn_graph.ordered_ops if op.type not in ConnectedGraph.math_invariant_types]
+    pattern = [op.type for op in conn_graph.ordered_ops]
     return pattern
 
 
 def _create_llama_mha_pattern(config) -> List[str]:
     """
-    Create pattern for GPT2 MHA variant.
+    Create pattern for Llama MHA variant.
     A pattern is list of connected graph op types in order of occurence.
     :return: List of op types in order of occurence.
     """
-    dummy_input = torch.randn(1, 1, config.hidden_size)
+    dummy_input = torch.randn(1, 4, config.hidden_size)
+    attention_mask = torch.ones((1, 1, 4, 4), dtype=torch.bool)
+    position_ids = torch.arange(0, 4, dtype=torch.long)
+    position_ids = position_ids.unsqueeze(0).view(-1, 4)
     llama_mha = LlamaAttention(config)
-    wrapped_llama_mha = LlamaMhaWrapper(llama_mha)
+    wrapped_llama_mha = LlamaMhaWrapper(llama_mha,
+                                        attention_mask=attention_mask,
+                                        position_ids=position_ids)
     conn_graph = ConnectedGraph(wrapped_llama_mha, dummy_input)
-    pattern = [op.type for op in conn_graph.ordered_ops if op.type not in ConnectedGraph.math_invariant_types]
+    pattern = [op.type for op in conn_graph.ordered_ops if op.type]
     return pattern
 
 
@@ -214,7 +220,7 @@ class TestMhaClassifier:
         num_encoder_layers = 2
         num_decoder_layers = 2
         pattern = _create_torch_mha_pattern(embed_dim, num_heads, seq_size, batch_size)
-        print('torch', pattern)
+
         src = torch.rand((seq_size, batch_size, embed_dim))
         tgt = torch.rand((seq_size, batch_size, embed_dim))
         dummy_input = (src, tgt)
@@ -242,7 +248,7 @@ class TestMhaClassifier:
         config.n_layer = 4
         config.n_head = 4
         pattern = _create_gpt2_mha_pattern(config)
-        print('gpt2, ', pattern)
+
         class Wrapper(torch.nn.Module):
             """
             Wrapper which allows
@@ -288,7 +294,7 @@ class TestMhaClassifier:
         config.num_hidden_layers = 4
         config.num_attention_heads = 4
         pattern = _create_llama_mha_pattern(config)
-        print('llama ', pattern)
+
         class Wrapper(torch.nn.Module):
             """
             Wrapper which allows

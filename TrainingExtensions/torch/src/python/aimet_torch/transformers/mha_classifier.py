@@ -76,8 +76,8 @@ def find_mha_variant(model: torch.nn.Module,
 def pattern_exists(ordered_ops: List[Op],
                    pattern: List[str]) -> Optional[List[MhaInfo]]:
     """
-    For given ordered_ops and pattern, locate the pattern if it exists in ordered_ops.
-    Given pattern doesn't have to be consecutive in ordered_ops.
+    Determine if the ordered ops contain the given pattern or not. If the pattern occurs mulitple times,
+    only non-overlapping pattern(s) need to be determined.
 
     :param ordered_ops: Orderered connected graph ops.
     :param pattern: A pattern is list of connected graph op types in order of occurence.
@@ -86,8 +86,7 @@ def pattern_exists(ordered_ops: List[Op],
     position = 0
     mha_modules_info = []
     for index, op in enumerate(ordered_ops):
-        if position < len(pattern) and op.type == pattern[position]:
-            position += 1
+        position = position + 1 if position < len(pattern) and op.type == pattern[position] else 0
         if position == len(pattern):
             position = 0
             _, parent_name = ordered_ops[index].dotted_name.split(".", 1)
