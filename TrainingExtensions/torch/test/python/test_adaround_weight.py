@@ -50,10 +50,12 @@ from torchvision import models
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import calculate_delta_offset
+from aimet_torch.tensor_quantizer import StaticGridTensorQuantizer
+from aimet_torch.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer
 from aimet_torch.utils import create_fake_data_loader, create_rand_tensors_given_shapes, get_device
 from models.test_models import TinyModel
 from aimet_torch.quantsim import QuantizationSimModel
-from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QcQuantizeOpMode
+from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QcQuantizeOpMode, QcQuantizeWrapper
 from aimet_torch.adaround.adaround_weight import Adaround, AdaroundOptimizer, AdaroundParameters
 
 
@@ -851,3 +853,37 @@ class TestAdaround:
             # If adaround is performed with sub-8 bit weights, the default num_iterations should be 15K
             _, _, _, _, _, _, _, opt_params  = adaround_module_fn_mock.call_args[0]
             assert opt_params.num_iterations == 15000
+
+    def test_adaround_restore_tensor_quantizer_after_folding(self):
+        torch.manual_seed(10)
+
+        data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
+
+        net = TinyModel().eval()
+        model = net.to(torch.device('cpu'))
+
+        params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=5)
+
+        adaround_module = AdaroundOptimizer.adaround_module
+
+        def _adaround_module(module, wrapper, model, sim_model, *args, **kwargs):
+            # Assert all the weight quantizers are StaticGridTensorQuantizer
+            # except for the quant wrapper that is currently being optimized
+            for module_ in sim_model.modules():
+                if not isinstance(module_, QcQuantizeWrapper):
+                    continue
+
+                if 'weight' not in module_.param_quantizers:
+                    continue
+
+                if module_ is wrapper:
+                    expected_weight_quantizer_cls = AdaroundTensorQuantizer
+                else:
+                    expected_weight_quantizer_cls = StaticGridTensorQuantizer
+
+                assert isinstance(module_.param_quantizers['weight'], expected_weight_quantizer_cls)
+
+            return adaround_module(module, wrapper, model, sim_model, *args, **kwargs)
+
+        with patch.object(AdaroundOptimizer, 'adaround_module', _adaround_module):
+            _ = Adaround.apply_adaround(model, torch.randn((1, 3, 32, 32)), params, './', 'dummy')

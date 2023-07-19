@@ -39,6 +39,7 @@
 """ Top level API for Adaptive Rounding - Post-Training Quantization (PTQ) """
 
 import os
+import contextlib
 import itertools
 import json
 import shutil
@@ -56,7 +57,7 @@ from aimet_torch.save_utils import SaveUtils
 from aimet_torch.meta import connectedgraph_utils
 from aimet_torch.quantsim import QuantizationSimModel, QcQuantizeWrapper
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QcQuantizeOpMode
-from aimet_torch.tensor_quantizer import StaticGridPerChannelQuantizer
+from aimet_torch.tensor_quantizer import StaticGridPerChannelQuantizer, TensorQuantizer
 from aimet_torch.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer
 from aimet_torch.adaround.adaround_optimizer import AdaroundOptimizer
 from aimet_torch.adaround.adaround_loss import AdaroundHyperParameters
@@ -235,10 +236,12 @@ class Adaround:
                 if isinstance(module, AdaroundSupportedModules):
                     # Using name, get corresponding quantized wrapper module from Quant sim model
                     quant_wrapper = cls._get_quant_wrapper(quant_sim.model, name)
-                    if quant_wrapper:
-                        # Replace quant module's tensor quantizer with Adaround tensor quantizer
-                        cls._replace_tensor_quantizer(quant_wrapper)
 
+                    if not quant_wrapper:
+                        continue
+
+                    # Temporarily replace quant module's tensor quantizer with Adaround tensor quantizer
+                    with cls._replace_tensor_quantizer(quant_wrapper):
                         # Get module's next following activation function
                         act_func = module_act_func_pair[module]
 
@@ -256,9 +259,6 @@ class Adaround:
                             adarounded_weight = quantizer.adaround_weights(weight)
                             weight.copy_(adarounded_weight)
                             del adarounded_weight
-
-                        # Free the memory occupied by quantizer
-                        quantizer.free()
         finally:
             if os.path.exists(WORKING_DIR):
                 logger.info('Deleting model inputs from location: %s', WORKING_DIR)
@@ -290,6 +290,7 @@ class Adaround:
                 quant_module.set_mode(QcQuantizeOpMode.ACTIVE)
 
     @staticmethod
+    @contextlib.contextmanager
     def _replace_tensor_quantizer(quant_module: StaticGridQuantWrapper):
         """
         Replace the quantized module's weight tensor quantizer with the Adaround tensor quantizer
@@ -311,7 +312,13 @@ class Adaround:
 
         # Set the encodings and replace by Adaround tensor quantizer
         adaround_quantizer.encoding = quantizer.encoding
-        quant_module.param_quantizers['weight'] = adaround_quantizer
+
+        try:
+            quant_module.param_quantizers['weight'] = adaround_quantizer
+            yield
+        finally:
+            # Restore original quantizer
+            quant_module.param_quantizers['weight'] = quantizer
 
     @staticmethod
     def _get_quant_wrapper(quant_sim_model: torch.nn.Module, module_name: str) -> Union[StaticGridQuantWrapper, None]:
@@ -347,7 +354,7 @@ class Adaround:
                     isinstance(quant_module._module_to_wrap, AdaroundSupportedModules):
                 quantizer = quant_module.param_quantizers['weight']
 
-                if isinstance(quantizer, AdaroundTensorQuantizer):
+                if isinstance(quantizer, TensorQuantizer):
                     cls._update_param_encodings_dict(quant_module, name, param_encodings)
 
         # export encodings to JSON file
@@ -371,7 +378,7 @@ class Adaround:
                 param_encodings[param_name] = encodings
 
     @staticmethod
-    def _create_encodings_dict_for_quantizer(quantizer: AdaroundTensorQuantizer) -> List[Dict]:
+    def _create_encodings_dict_for_quantizer(quantizer: TensorQuantizer) -> List[Dict]:
         """
         Return encodings for given qunatizer
         :param quantizer: Tensor quantizer associated with module's param
