@@ -80,38 +80,38 @@ class TestAdaroundOptimizer(unittest.TestCase):
         nearest_encoding.delta = 0.001551126479
         quant_module.param_quantizers['weight'].encoding = nearest_encoding
 
-        Adaround._replace_tensor_quantizer(quant_module)
-        alpha = torch.randn(quant_module._module_to_wrap.weight.shape, requires_grad=True)
-        quant_module.param_quantizers['weight'].alpha = alpha
+        with Adaround._replace_tensor_quantizer(quant_module):
+            alpha = torch.randn(quant_module._module_to_wrap.weight.shape, requires_grad=True)
+            quant_module.param_quantizers['weight'].alpha = alpha
 
-        # create copy of parameter
-        before_opt = alpha.clone()
+            # create copy of parameter
+            before_opt = alpha.clone()
 
-        dataset_size = 50
-        batch_size = 10
-        image_size = (3, 32, 32)
-        data_loader = create_fake_data_loader(dataset_size, batch_size, image_size)
-        def forward_fn(model, inputs):
-            inputs, _ = inputs
-            model(inputs)
+            dataset_size = 50
+            batch_size = 10
+            image_size = (3, 32, 32)
+            data_loader = create_fake_data_loader(dataset_size, batch_size, image_size)
+            def forward_fn(model, inputs):
+                inputs, _ = inputs
+                model(inputs)
 
-        path = './tmp/cached_dataset/'
-        try:
-            cached_dataset = CachedDataset(data_loader, dataset_size // batch_size, path)
-            opt_params = AdaroundHyperParameters(num_iterations=10, reg_param=0.01, beta_range=(20, 2),
-                                                 warm_start=warm_start)
-            AdaroundOptimizer.adaround_module(module, quant_module, model, sim.model, None, cached_dataset, forward_fn,
-                                              opt_params)
-            after_opt = quant_module.param_quantizers['weight'].alpha
+            path = './tmp/cached_dataset/'
+            try:
+                cached_dataset = CachedDataset(data_loader, dataset_size // batch_size, path)
+                opt_params = AdaroundHyperParameters(num_iterations=10, reg_param=0.01, beta_range=(20, 2),
+                                                     warm_start=warm_start)
+                AdaroundOptimizer.adaround_module(module, quant_module, model, sim.model, None, cached_dataset, forward_fn,
+                                                  opt_params)
+                after_opt = quant_module.param_quantizers['weight'].alpha
 
-            # parameter should be different before and after optimization
-            self.assertFalse(np.array_equal(to_numpy(before_opt), to_numpy(after_opt)))
+                # parameter should be different before and after optimization
+                self.assertFalse(np.array_equal(to_numpy(before_opt), to_numpy(after_opt)))
 
-            # alpha's gradient should not be None
-            self.assertTrue(quant_module.param_quantizers['weight'].alpha.grad is not None)
-        finally:
-            if os.path.isdir(path):
-                shutil.rmtree(path)
+                # alpha's gradient should not be None
+                self.assertTrue(quant_module.param_quantizers['weight'].alpha.grad is not None)
+            finally:
+                if os.path.isdir(path):
+                    shutil.rmtree(path)
 
     def test_optimize_rounding_with_only_recons_loss(self):
         """ test optimize layer rounding with reconstruction loss """
@@ -146,15 +146,14 @@ class TestAdaroundOptimizer(unittest.TestCase):
                                               quant_scheme=quant_scheme)
 
         quant_module.param_quantizers['weight'].encoding = encoding
-        Adaround._replace_tensor_quantizer(quant_module)
-
         inp_data = np.random.rand(1, 4, 10, 10).astype(dtype='float32')
         inp_data = torch.from_numpy(inp_data)
         out_data = np.random.rand(1, 4, 10, 10).astype(dtype='float32')
         out_data = torch.from_numpy(out_data)
 
-        recons_err_hard, recons_err_soft = AdaroundOptimizer._compute_recons_metrics(quant_module, None, inp_data,
-                                                                                     out_data)
+        with Adaround._replace_tensor_quantizer(quant_module):
+            recons_err_hard, recons_err_soft = AdaroundOptimizer._compute_recons_metrics(quant_module, None, inp_data,
+                                                                                         out_data)
 
         print(recons_err_hard, recons_err_soft)
         self.assertAlmostEqual(recons_err_hard, 0.610206663608551, places=3)
@@ -182,15 +181,14 @@ class TestAdaroundOptimizer(unittest.TestCase):
         encoding = quant_module.param_quantizers['weight'].encoding
         print(encoding.max, encoding.min)
 
-        # Replace the quantizer
-        Adaround._replace_tensor_quantizer(quant_module)
-
         inp_data = np.random.rand(1, 4, 10, 10).astype(dtype='float32')
         inp_data = torch.from_numpy(inp_data).to(torch.device('cuda'))
         out_data = np.random.rand(1, 4, 10, 10).astype(dtype='float32')
         out_tensor = torch.from_numpy(out_data).to(torch.device('cuda'))
 
-        adaround_out_tensor = AdaroundOptimizer._compute_output_with_adarounded_weights(quant_module, inp_data)
+        # Replace the quantizer
+        with Adaround._replace_tensor_quantizer(quant_module):
+            adaround_out_tensor = AdaroundOptimizer._compute_output_with_adarounded_weights(quant_module, inp_data)
 
         # Compute mse loss
         mse_loss = functional.mse_loss(adaround_out_tensor, out_tensor)
