@@ -402,3 +402,26 @@ class TestQuantSim:
         out3 = sim.session.run(None, dummy_tensor)
 
         assert np.allclose(out2, out3)
+
+    def test_load_encodings_pcq(self):
+        model = single_residual_model().model
+        sim = QuantizationSimModel(model, config_file=get_path_for_per_channel_config())
+
+        def callback(session, args):
+            in_tensor = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
+            session.run(None, in_tensor)
+
+        dummy_tensor = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
+
+        sim.compute_encodings(callback, None)
+        sim.export('/tmp', 'onnx_sim')
+
+        out2 = sim.session.run(None, dummy_tensor)
+
+        del sim
+
+        sim = QuantizationSimModel(model, config_file=get_path_for_per_channel_config())
+        load_encodings_to_sim(sim, '/tmp/onnx_sim.encodings')
+        out3 = sim.session.run(None, dummy_tensor)
+
+        assert np.allclose(out2, out3)
