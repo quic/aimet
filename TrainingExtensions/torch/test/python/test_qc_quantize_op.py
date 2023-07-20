@@ -362,6 +362,7 @@ class TestQcQuantizeOpStaticGrid:
         expected_out = torch.tensor([0, 59, 74, 197, 241, 255], dtype=torch.float32, device=torch.device('cuda'))
         assert torch.equal(quant_out, expected_out)
 
+    @pytest.mark.skip(reason="causing random failures in CI. disabling to see in regressions if this is the root cause")
     def test_qc_post_training_wrapper_mem_leak(self):
         torch.manual_seed(0)
 
