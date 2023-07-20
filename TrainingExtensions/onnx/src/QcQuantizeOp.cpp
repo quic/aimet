@@ -115,6 +115,14 @@ void QcQuantizeKernel::Compute(OrtKernelContext* context)
     {
         quantInfo->opMode = DlQuantization::TensorQuantizerOpMode::quantizeDequantize;
     }
+
+#ifdef ONNX_CUDA
+    // Wait for our calls to finish before continuing since we do not use the onnxruntime stream
+    if (useCuda)
+    {
+        cudaDeviceSynchronize();
+    }
+#endif
 }
 
 
