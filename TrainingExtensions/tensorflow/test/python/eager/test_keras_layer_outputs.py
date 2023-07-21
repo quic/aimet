@@ -1,20 +1,56 @@
+# /usr/bin/env python3.8
+# -*- mode: python -*-
+# =============================================================================
+#  @@-COPYRIGHT-START-@@
+#
+#  Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#
+#  Redistribution and use in source and binary forms, with or without
+#  modification, are permitted provided that the following conditions are met:
+#
+#  1. Redistributions of source code must retain the above copyright notice,
+#     this list of conditions and the following disclaimer.
+#
+#  2. Redistributions in binary form must reproduce the above copyright notice,
+#     this list of conditions and the following disclaimer in the documentation
+#     and/or other materials provided with the distribution.
+#
+#  3. Neither the name of the copyright holder nor the names of its contributors
+#     may be used to endorse or promote products derived from this software
+#     without specific prior written permission.
+#
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+#  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+#  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+#  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+#  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+#  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+#  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+#  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+#  POSSIBILITY OF SUCH DAMAGE.
+#
+#  SPDX-License-Identifier: BSD-3-Clause
+#
+#  @@-COPYRIGHT-END-@@
+# =============================================================================
+
 import re
-import numpy as np
-from aimet_tensorflow.keras.quantsim import QuantizationSimModel
-from aimet_tensorflow.keras.model_preparer import prepare_model
-import tensorflow as tf
-from tensorflow.python.keras.models import Sequential
-from tensorflow.python.keras.layers import Dense, Conv2D, BatchNormalization, Flatten, AvgPool2D, MaxPool2D
-from tensorflow.python.keras.backend import eager_learning_phase_scope
-from aimet_tensorflow.keras.layer_output_utils import LayerOutputUtil
-import os
-from glob import glob
-from aimet_common.utils import AimetLogger
-from datetime import datetime
-import shutil
-import progressbar
 import json
-from aimet_tensorflow.keras.quantsim import QcQuantizeWrapper
+import shutil
+from glob import glob
+from datetime import datetime
+import os
+import numpy as np
+import progressbar
+import tensorflow as tf
+from keras.models import Sequential
+from keras.layers import BatchNormalization, Dense, Conv2D, Flatten, AvgPool2D, MaxPool2D
+from aimet_tensorflow.keras.quantsim import QuantizationSimModel, QcQuantizeWrapper
+from aimet_tensorflow.keras.model_preparer import prepare_model
+from aimet_tensorflow.keras.layer_output_utils import LayerOutputUtil
+from aimet_common.utils import AimetLogger
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.LayerOutputs)
 
@@ -30,14 +66,13 @@ class DummyDataLoader(tf.keras.utils.Sequence):
         pass
 
     def __getitem__(self, index):
-        return tf.convert_to_tensor(self.data[index*self.batch_size: (index+1)*self.batch_size], dtype=np.float32), tf.convert_to_tensor([np.random.choice([0,1]) for _ in range(self.batch_size)], dtype=np.int32)
+        return tf.convert_to_tensor(self.data[index*self.batch_size: (index+1)*self.batch_size], dtype=np.float32), tf.convert_to_tensor([np.random.choice([0, 1]) for _ in range(self.batch_size)], dtype=np.int32)
 
     def __len__(self):
         return int(np.ceil(self.data_count / self.batch_size))
 
 def dummy_forward_pass(model, input_batch):
-    with eager_learning_phase_scope(value=0): ## Test Mode
-        _ = model.predict(input_batch)
+    _ = model.predict(input_batch)
 
 def keras_model():
     """ Function for returning a basic keras model """
@@ -68,6 +103,8 @@ def get_quantsim_artifacts(base_model):
         config_file=None
     )
 
+    sim.trainable = False
+
     sim.compute_encodings(dummy_forward_pass,
                           forward_pass_callback_args=dummy_input
                           )
@@ -93,9 +130,10 @@ class TestLayerOutputUtil:
 
         # Get the DataLoader
         dataloader = DummyDataLoader(data_count=data_points, batch_size=batch_size)
+
         layer_output_util_obj = LayerOutputUtil(model=qs_obj.model, save_dir=save_dir)
         for batch_num, inp_batch in enumerate(dataloader):
-            batch_x, batch_y = inp_batch
+            batch_x, _ = inp_batch
             layer_output_util_obj.generate_layer_outputs(input_batch=batch_x)
 
         # Verify number of Inputs
@@ -130,15 +168,14 @@ class TestLayerOutputUtil:
         with progressbar.ProgressBar(max_value=n_iterations) as progress_bar:
             for batch_num, input_batch in enumerate(dataloader):
                 batch_x, _ = input_batch
-                for idx in range(len(batch_x)):
-                    with eager_learning_phase_scope(value=0):
-                        actual_output = qs_obj.model.predict(np.expand_dims(batch_x[idx], axis=0))
+                for inp_batch in batch_x:
+                    actual_output = qs_obj.model.predict(np.expand_dims(inp_batch, axis=0))
                     last_layer_name = qs_obj.model.layers[-1].original_layer.output.name
                     last_layer_name = re.sub(r'\W+', "_", last_layer_name)
                     last_layer_file_name = f"{save_dir}/outputs/layer_outputs_{cnt}/{last_layer_name}.raw"
                     saved_last_layer_output = np.fromfile(last_layer_file_name, dtype=np.float32)
                     np.testing.assert_array_equal(actual_output[0], saved_last_layer_output)
-                    cnt+=1
+                    cnt += 1
 
                 progress_bar.update(batch_num+1)
                 if (batch_num+1) >= n_iterations:
@@ -152,17 +189,18 @@ class TestLayerOutputUtil:
                                       np.array(list(saved_layer_output_name_mapper.keys())))
 
         # Verify modified layer name for each of the layers
-        for layer_idx in range(len(unmodified_actual_layer_output_names)):
+        for layer_idx, unmodified_actual_layer_name in enumerate(unmodified_actual_layer_output_names):
 
             # Test Saved File layer output
             assert actual_layer_output_names[layer_idx] == \
-                   saved_layer_output_name_mapper[unmodified_actual_layer_output_names[layer_idx]]
+                   saved_layer_output_name_mapper[unmodified_actual_layer_name]
 
             # Test dict layer output
-            assert actual_layer_output_names[layer_idx] == layer_output_util_obj.layer_output_name_mapper[unmodified_actual_layer_output_names[layer_idx]]
+            assert actual_layer_output_names[layer_idx] == \
+                   layer_output_util_obj.layer_output_name_mapper[unmodified_actual_layer_name]
 
 
-        logger.info(f"All tests passed !!!")
+        logger.info("All tests passed !!!")
         logger.info(f"Deleting the temporary created directory: {save_dir}")
 
         # Removing the temporary output that was created (if all tests are passed)

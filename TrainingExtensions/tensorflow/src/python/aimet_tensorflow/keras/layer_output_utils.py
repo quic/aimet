@@ -1,13 +1,52 @@
+# /usr/bin/env python3.8
+# -*- mode: python -*-
+# =============================================================================
+#  @@-COPYRIGHT-START-@@
+#
+#  Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#
+#  Redistribution and use in source and binary forms, with or without
+#  modification, are permitted provided that the following conditions are met:
+#
+#  1. Redistributions of source code must retain the above copyright notice,
+#     this list of conditions and the following disclaimer.
+#
+#  2. Redistributions in binary form must reproduce the above copyright notice,
+#     this list of conditions and the following disclaimer in the documentation
+#     and/or other materials provided with the distribution.
+#
+#  3. Neither the name of the copyright holder nor the names of its contributors
+#     may be used to endorse or promote products derived from this software
+#     without specific prior written permission.
+#
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+#  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+#  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+#  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+#  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+#  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+#  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+#  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+#  POSSIBILITY OF SUCH DAMAGE.
+#
+#  SPDX-License-Identifier: BSD-3-Clause
+#
+#  @@-COPYRIGHT-END-@@
+# =============================================================================
+
+""" This module contains utilities to capture and save intermediate layer-outputs of a model. """
+
 import os
 import re
-import tensorflow as tf
-from aimet_tensorflow.keras.quantsim import QcQuantizeWrapper
-from tensorflow.python.keras import backend as K
-from tensorflow.python.keras.backend import eager_learning_phase_scope
 from collections import OrderedDict
+import json
+import tensorflow as tf
+from keras.utils import tf_utils
+from aimet_tensorflow.keras.quantsim import QcQuantizeWrapper
 from aimet_common.layer_output_utils import SaveInputOutput
 from aimet_common.utils import AimetLogger
-import json
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.LayerOutputs)
 
@@ -20,9 +59,13 @@ class LayerOutputUtil:
         """
         Constructor - It initializes a few things that are required for capturing and naming layer-outputs.
         :param model: Keras (fp32/quantsim) model.
-        :param is_quantsim_model: Enable when passing a quantsim keras model.
+        :param save_dir: Directory to save the layer outputs.
         """
         self.model = model
+
+        # Freeze the model, i.e, run in test mode
+        self.model.trainable = False
+
         self.layer_output_name_mapper = OrderedDict()
         self.layer_output_name_mapper_path = os.path.join(save_dir, "LayerOutputNameMapper.json")
 
@@ -32,9 +75,10 @@ class LayerOutputUtil:
         # Utility to save model inputs and their corresponding layer-outputs
         self.save_inp_out_obj = SaveInputOutput(save_dir, axis_layout=axis_layout)
 
-        logger.info(f"Initialised LayerOutputUtil Class for Keras")
+        logger.info("Initialised LayerOutputUtil Class for Keras")
 
-    def _get_layer_name(self, layer):
+    @classmethod
+    def _get_layer_name(cls, layer):
         if isinstance(layer, QcQuantizeWrapper):
             return layer.original_layer.output.name
         return layer.output.name
@@ -47,12 +91,15 @@ class LayerOutputUtil:
         """
         layer_name_to_layer_output_dict = OrderedDict()
 
-        pred_func = K.function(inputs=[self.model.layers[0].input],
-                               outputs=[layer.output for layer in self.model.layers])
-
-        # run in test mode, i.e. 0 means test
-        with eager_learning_phase_scope(value=0):
-            output_pred = pred_func(input_batch)
+        inputs = [self.model.layers[0].input]
+        outputs = [layer.output for layer in self.model.layers]
+        intermediate_model = tf.keras.models.Model(inputs=inputs, outputs=outputs)
+        intermediate_model.trainable = False
+        outs = intermediate_model(input_batch)
+        wrap_outputs = isinstance(outputs, list) and len(outputs) == 1
+        if wrap_outputs:
+            outs = [outs]
+        output_pred = tf_utils.sync_to_numpy_or_python_type(outs)
 
         for layer_idx, layer in enumerate(self.model.layers):
             layer_output_name = self._get_layer_name(layer)
@@ -86,6 +133,4 @@ class LayerOutputUtil:
         if not os.path.exists(self.layer_output_name_mapper_path):
             json.dump(self.layer_output_name_mapper, open(self.layer_output_name_mapper_path, 'w'), indent=4)
 
-        logger.info(f"Layer Outputs Saved")
-
-
+        logger.info("Layer Outputs Saved")
