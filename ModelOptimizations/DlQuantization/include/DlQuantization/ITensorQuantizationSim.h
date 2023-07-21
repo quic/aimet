@@ -52,6 +52,13 @@ public:
                                           double encodingMin, double encodingMax,
                                           uint8_t bw, RoundingMode roundMode,
                                           bool use_cuda) = 0;
+
+    virtual void quantizeDequantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount,
+                                          DTYPE* outputTensorData,
+                                          double encodingMin, double encodingMax,
+                                          uint8_t bw, RoundingMode roundMode,
+                                          bool use_cuda, void* stream) = 0;
+
     virtual void quantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount, DTYPE* outputTensorData,
                                 double encodingMin, double encodingMax, uint8_t bw, RoundingMode roundMode,
                                 bool use_cuda, bool shiftToSigned) = 0;
@@ -111,6 +118,12 @@ public:
                                                     DTYPE* outputTensorData, DTYPE* encodingMin, DTYPE* encodingMax,
                                                     DTYPE* encodingDelta, DTYPE* encodingOffset,
                                                     RoundingMode roundingMode, bool useCuda) = 0;
+
+    virtual void quantizeDequantizeTensorPerChannel(const DTYPE* inputTensorData, size_t numChannel,
+                                                    size_t numElement, size_t numElementPerChannel,
+                                                    DTYPE* outputTensorData, DTYPE* encodingMin, DTYPE* encodingMax,
+                                                    DTYPE* encodingDelta, DTYPE* encodingOffset,
+                                                    RoundingMode roundingMode, bool useCuda, void* stream) = 0;
 
 };
 

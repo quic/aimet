@@ -89,7 +89,7 @@ public:
 };
 
 template <typename T>
-void copyInputTensorsToOutputTensors(const T* inTensor, size_t count, T* outTensor, bool useCuda);
+void copyInputTensorsToOutputTensors(const T* inTensor, size_t count, T* outTensor, bool useCuda, void* stream);
 
 void quantizeDequantizeFp16Cpu(const float* in, int cnt, float* out);
 
@@ -98,9 +98,9 @@ template <typename T>
 void modeSpecificActionInt(const T* inTensor, size_t count, T* outTensor,
                            DlQuantization::TensorQuantizer* tensorQuantizer,
                            const DlQuantization::TensorQuantizerOpMode opMode, DlQuantization::TfEncoding* encoding,
-                           const bool useSymmetricEncoding, DlQuantization::IAllocator* allocator, bool useCuda)
+                           const bool useSymmetricEncoding, DlQuantization::IAllocator* allocator, bool useCuda,
+                           void* stream)
 {
-
     switch (opMode)
     {
     case DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize:
@@ -110,7 +110,7 @@ void modeSpecificActionInt(const T* inTensor, size_t count, T* outTensor,
         DlQuantization::TfEncoding initial_encoding =
             tensorQuantizer->computeEncoding(encoding->bw, useSymmetricEncoding);
         tensorQuantizer->quantizeDequantize(inTensor, count, outTensor, initial_encoding.min, initial_encoding.max,
-                                            encoding->bw, useCuda);
+                                            encoding->bw, useCuda, stream);
         // Update encoding object with computed encoding
         encoding->min    = initial_encoding.min;
         encoding->max    = initial_encoding.max;
@@ -121,18 +121,18 @@ void modeSpecificActionInt(const T* inTensor, size_t count, T* outTensor,
     case DlQuantization::TensorQuantizerOpMode::updateStats:
     {
         tensorQuantizer->updateStats(inTensor, count, useCuda, allocator);
-        copyInputTensorsToOutputTensors(inTensor, count, outTensor, useCuda);
+        copyInputTensorsToOutputTensors(inTensor, count, outTensor, useCuda, stream);
         break;
     }
     case DlQuantization::TensorQuantizerOpMode::quantizeDequantize:
     {
         tensorQuantizer->quantizeDequantize(inTensor, count, outTensor, encoding->min, encoding->max, encoding->bw,
-                                            useCuda);
+                                            useCuda, stream);
         break;
     }
     case DlQuantization::TensorQuantizerOpMode::passThrough:
     {
-        copyInputTensorsToOutputTensors(inTensor, count, outTensor, useCuda);
+        copyInputTensorsToOutputTensors(inTensor, count, outTensor, useCuda, stream);
         break;
     }
     default:
@@ -148,7 +148,7 @@ void modeSpecificActionPerChannelInt(
     const T* inTensor, size_t count, T* outTensor, int axis, OrtTensorDimensions& dims,
     std::vector<DlQuantization::TensorQuantizer*>& tensorQuantizers, const DlQuantization::TensorQuantizerOpMode opMode,
     std::vector<DlQuantization::TfEncoding*>& encodings, const bool useSymmetricEncoding,
-    DlQuantization::IAllocator* allocator, bool useCuda,
+    DlQuantization::IAllocator* allocator, bool useCuda, void* stream,
     std::unique_ptr<DlQuantization::ITensorQuantizationSim<float>>& tensorQuantizationSim)
 {
     size_t numChannels = dims[axis];
@@ -180,7 +180,7 @@ void modeSpecificActionPerChannelInt(
             encodings[ch]->delta  = channelEncoding.delta;
         }
         quantizeDequantizePerChannel(inTensor, dims, axis, outTensor, encodings, tensorQuantizers, useCuda, allocator,
-                                     tensorQuantizationSim);
+                                     stream, tensorQuantizationSim);
         allocator->deleteRaw(channelBuffer);
         break;
     }
@@ -194,18 +194,18 @@ void modeSpecificActionPerChannelInt(
             tensorQuantizer->updateStats(channelBuffer, channelSize, useCuda, allocator);
         }
         allocator->deleteRaw(channelBuffer);
-        copyInputTensorsToOutputTensors(inTensor, count, outTensor, useCuda);
+        copyInputTensorsToOutputTensors(inTensor, count, outTensor, useCuda, stream);
         break;
     }
     case DlQuantization::TensorQuantizerOpMode::quantizeDequantize:
     {
         quantizeDequantizePerChannel(inTensor, dims, axis, outTensor, encodings, tensorQuantizers, useCuda, allocator,
-                                     tensorQuantizationSim);
+                                     stream, tensorQuantizationSim);
         break;
     }
     case DlQuantization::TensorQuantizerOpMode::passThrough:
     {
-        copyInputTensorsToOutputTensors(inTensor, count, outTensor, useCuda);
+        copyInputTensorsToOutputTensors(inTensor, count, outTensor, useCuda, stream);
         break;
     }
     default:
@@ -217,17 +217,17 @@ void modeSpecificActionPerChannelInt(
 
 template <typename T>
 void modeSpecificActionFloat(const T* inTensor, size_t count, T* outTensor,
-                           const DlQuantization::TensorQuantizerOpMode opMode,
-                           DlQuantization::IAllocator* allocator, bool useCuda)
+                             const DlQuantization::TensorQuantizerOpMode opMode, DlQuantization::IAllocator* allocator,
+                             bool useCuda, void* stream)
 {
     switch (opMode)
     {
     case DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize:
     case DlQuantization::TensorQuantizerOpMode::quantizeDequantize:
     {
-        if(useCuda)
+        if (useCuda)
         {
-           DlQuantization::quantizeDequantizeFp16Gpu(inTensor, count, outTensor);
+            DlQuantization::quantizeDequantizeFp16Gpu(inTensor, count, outTensor, stream);
         }
         else
             quantizeDequantizeFp16Cpu(inTensor, count, outTensor);
@@ -236,7 +236,7 @@ void modeSpecificActionFloat(const T* inTensor, size_t count, T* outTensor,
     case DlQuantization::TensorQuantizerOpMode::updateStats:
     case DlQuantization::TensorQuantizerOpMode::passThrough:
     {
-        copyInputTensorsToOutputTensors(inTensor, count, outTensor, useCuda);
+        copyInputTensorsToOutputTensors(inTensor, count, outTensor, useCuda, stream);
         break;
     }
     default:

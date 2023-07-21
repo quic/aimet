@@ -99,7 +99,7 @@ void quantizeDequantizePerChannel(
     const T* inTensor, std::vector<int64_t>& shape, int axis, T* outTensor,
     std::vector<DlQuantization::TfEncoding*>& encodings,
     std::vector<DlQuantization::TensorQuantizer*>& tensorQuantizers, bool useCuda,
-    DlQuantization::IAllocator* allocator,
+    DlQuantization::IAllocator* allocator, void* stream,
     std::unique_ptr<DlQuantization::ITensorQuantizationSim<float> >& tensorQuantizationSim)
 {
     size_t channels   = shape[axis];
@@ -144,7 +144,7 @@ void quantizeDequantizePerChannel(
 
     tensorQuantizationSim->quantizeDequantizeTensorPerChannel(inTensor, channels, numElement, innerDims, outTensor,
                                                               encodingMin, encodingMax, encodingDelta, encodingOffset,
-                                                              tensorQuantizers[0]->roundingMode, useCuda);
+                                                              tensorQuantizers[0]->roundingMode, useCuda, stream);
     if (useCuda)
     {
         allocator->deleteRaw(encodingVectorDevice);

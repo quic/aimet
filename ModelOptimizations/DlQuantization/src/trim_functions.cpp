@@ -92,7 +92,7 @@ Lambda parallelize(const uint32_t number_of_threads, Lambda lambda)
 // encoding: TF: rounded
 template <typename DTYPE>
 void quantizeDequantize(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out,
-                        ComputationMode mode_cpu_gpu, RoundingMode rounding_mode)
+                        ComputationMode mode_cpu_gpu, RoundingMode rounding_mode, void* stream)
 {
     switch (mode_cpu_gpu)
     {
@@ -101,7 +101,7 @@ void quantizeDequantize(const DTYPE* in, int cnt, const TfEncoding& encoding, DT
         break;
     case COMP_MODE_GPU:
 #ifdef GPU_QUANTIZATION_ENABLED
-            quantizeDequantizeGpu(in, cnt, encoding, out, rounding_mode);
+            quantizeDequantizeGpu(in, cnt, encoding, out, rounding_mode, stream);
 #else
         throw runtime_error("Not compiled for GPU mode.");
 #endif
@@ -602,7 +602,7 @@ void dequantizeFromPackedFxpCpu(const uint8_t* input, int cnt,
 template <typename DTYPE>
 void quantizeDequantizePerChannel(const DTYPE* in, int numChannel, int numElement, int numElementPerChannel, DTYPE* out,
                                   DTYPE* encodingMin, DTYPE* encodingMax, DTYPE* encodingDelta, DTYPE* encodingOffset,
-                                  ComputationMode modeCpuGpu, RoundingMode roundingMode)
+                                  ComputationMode modeCpuGpu, RoundingMode roundingMode, void* stream)
 {
     switch (modeCpuGpu)
     {
@@ -613,7 +613,7 @@ void quantizeDequantizePerChannel(const DTYPE* in, int numChannel, int numElemen
     case COMP_MODE_GPU:
 #ifdef GPU_QUANTIZATION_ENABLED
         quantizeDequantizePerChannelGpu(in, numChannel, numElement, numElementPerChannel, out, encodingMin, encodingMax,
-                                        encodingDelta, encodingOffset, roundingMode);
+                                        encodingDelta, encodingOffset, roundingMode, stream);
 #else
         throw runtime_error("Not compiled for GPU mode.");
 #endif
@@ -643,10 +643,10 @@ void quantizeDequantizePerChannelCpu(const DTYPE* in, int numChannel, int numEle
 
 // Explicit instantiations
 template void quantizeDequantize(const double* in, int cnt, const TfEncoding& encoding, double* out,
-                                 ComputationMode mode_cpu_gpu, RoundingMode rounding_mode);
+                                 ComputationMode mode_cpu_gpu, RoundingMode rounding_mode, void* stream);
 
 template void quantizeDequantize(const float* in, int cnt, const TfEncoding& encoding, float* out,
-                                 ComputationMode mode_cpu_gpu, RoundingMode rounding_mode);
+                                 ComputationMode mode_cpu_gpu, RoundingMode rounding_mode, void* stream);
 
 template void quantizeToFxp(const double* in, int cnt, const TfEncoding& encoding, double* out,
                             ComputationMode mode_cpu_gpu, RoundingMode rounding_mode, bool shiftToSigned);
@@ -669,9 +669,9 @@ template void dequantizeFromPackedFxp(const uint8_t* input, int cnt,
 
 template void quantizeDequantizePerChannel(const float* in, int numChannel, int numElement, int numElementPerChannel, float* out,
                                            float* encodingMin, float* encodingMax, float* encodingDelta, float* encodingOffset,
-                                           ComputationMode modeCpuGpu, RoundingMode roundingMode);
+                                           ComputationMode modeCpuGpu, RoundingMode roundingMode, void* stream);
 template void quantizeDequantizePerChannel(const double* in, int numChannel, int numElement, int numElementPerChannel, double* out,
                                            double* encodingMin, double* encodingMax, double* encodingDelta, double* encodingOffset,
-                                           ComputationMode modeCpuGpu, RoundingMode roundingMode);
+                                           ComputationMode modeCpuGpu, RoundingMode roundingMode, void* stream);
 
 }   // End of namespace DlQuantization

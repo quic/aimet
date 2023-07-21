@@ -49,7 +49,7 @@ namespace DlQuantization
      * @param cnt total size of input tensor
      * @param out pointer to the output tensor
      */
-    void quantizeDequantizeFp16Gpu(const float* in, int cnt, float* out);
+    void quantizeDequantizeFp16Gpu(const float* in, int cnt, float* out, void* stream);
 
 }
 
