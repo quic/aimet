@@ -60,6 +60,9 @@ torch_dtypes_to_ignore_for_quantization = [torch.int, torch.int8, torch.int16, t
 allowed_output_types = (torch.Tensor, *dtypes_to_ignore_for_quantization)
 DROPOUT_TYPES = (torch.nn.Dropout, torch.nn.Dropout2d, torch.nn.Dropout3d)
 
+# list of modules which need to be treated as a leaf module
+modules_to_treat_as_leaf = []
+
 class IterFirstX:
     """ Iterator for the first x samples in a given data-loader """
 
@@ -274,7 +277,27 @@ def run_hook_for_layers_with_given_input(model: torch.nn.Module,
     # ------------------------
     hooks = []
     # All leaf modules
-    modules = [module for module in model.modules() if not leaf_node_only or is_leaf_module(module)]
+    modules = []
+
+    # Based on the modules in modules_to_treat_as_leaf, we do not want to further continue searching for next level
+    # of modules present in modules_to_treat_as_leaf. To achieve this, save them in modules_to_skip
+    modules_to_skip = set()
+
+    for module in model.modules():
+        if module not in modules_to_skip:
+            # pylint: disable=protected-access
+            if module._get_name() in modules_to_treat_as_leaf:
+                modules.append(module)
+                # check for modules inside the 'module' and add them to modules_to_skip
+                for sub_module in module._modules.values():
+                    modules_to_skip.add(sub_module)
+            else:
+                if leaf_node_only:
+                    if is_leaf_module(module):
+                        modules.append(module)
+                else:
+                    modules.append(module)
+
     if module_type_for_attaching_hook:
         # if needed, filter by module types specified by caller
         modules = [module for module in modules if isinstance(module, module_type_for_attaching_hook)]
