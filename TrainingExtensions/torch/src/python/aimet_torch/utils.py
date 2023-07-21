@@ -271,7 +271,7 @@ def run_hook_for_layers_with_given_input(model: torch.nn.Module,
     :param leaf_node_only: Set to False if all modules are required
     :return: None
     """
-
+    # pylint: disable=too-many-branches
     # ------------------------
     # Register hook function
     # ------------------------
