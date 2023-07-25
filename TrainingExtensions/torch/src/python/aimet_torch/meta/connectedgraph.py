@@ -907,16 +907,21 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             if module is not None:
                 name = self._module_to_name.get(module, None)
                 if op.type in aimet_torch.utils.modules_to_treat_as_leaf:
-                    # pylint: disable=protected-access
-                    child_modules = op.model_module.get_module()._modules.items()
-                    for child_name, child_module in child_modules:
+                    for child_name, child_module in op.get_module().named_children():
                         self._create_param_products_helper(op, child_module, name + "." + child_name,
                                                            self.get_op_type(type(child_module)))
                 else:
                     self._create_param_products_helper(op, module, name, op.type)
 
-    def _create_param_products_helper(self, conn_graph_op, module, module_name, op_type):
-
+    def _create_param_products_helper(self, conn_graph_op: Op, module: torch.nn.Module, module_name: str, op_type: str):
+        """
+        Helper to create param products for ops like convolution, batch norm, and linear if they don't exist yet
+        :param conn_graph_op: Connected graph whose param products need to be added
+        :param module: module of type torch.nn.Module to be used to create the param products.
+        There can be several modules in a single connected graph op.
+        :param module_name: name of the module.
+        :param op_type: type (str) of the op which is stored in the connected graph
+        """
         if op_type in ['Conv', 'ConvTranspose', 'BatchNormalization', 'Gemm']:
             if module.weight is not None:
                 product_name = module_name + '.weight'
