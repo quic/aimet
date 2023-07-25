@@ -643,12 +643,17 @@ class MiniModel(torch.nn.Module):
         torch.save(model.state_dict(), './data/mini_model.pth')
         new_model = utils.load_pytorch_model('MiniModel', './data', 'mini_model', load_state_dict=True)
         utils.match_model_settings(model, new_model)
+        torch.save(new_model, './data/saved_mini_model.pth')
+        new_model = torch.load('./data/saved_mini_model.pth')
         out2 = new_model(dummy_input)
         assert torch.allclose(out1, out2)
 
         # Delete pth state dict file
         if os.path.exists("./data/mini_model.pth"):
             os.remove("./data/mini_model.pth")
+
+        if os.path.exists("./data/saved_mini_model.pth"):
+            os.remove("./data/saved_mini_model.pth")
 
         with self.assertRaises(AssertionError):
             _ = utils.load_pytorch_model('MiniModel', './data', 'mini_model', load_state_dict=True)
