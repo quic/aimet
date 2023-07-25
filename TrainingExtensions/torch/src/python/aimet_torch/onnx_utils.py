@@ -103,11 +103,27 @@ map_torch_types_to_onnx = {
     nn.Embedding: ['Gather'],
     nn.Softplus: ['Softplus'],
     nn.Hardswish: ['HardSwish'],
+    nn.ChannelShuffle: ['ChannelShuffle'],
+    nn.MaxPool3d: ['MaxPool'],
     elementwise_ops.Add: ['Add'],
     elementwise_ops.Subtract: ['Sub'],
     elementwise_ops.Multiply: ['Mul'],
     elementwise_ops.Divide: ['Div'],
-    elementwise_ops.Concat: ['Concat']
+    elementwise_ops.Concat: ['Concat'],
+    elementwise_ops.Reshape: ['Reshape'],
+    elementwise_ops.Pad: ['Pad'],
+    elementwise_ops.ChannelShuffle: ['ChannelShuffle'],
+    elementwise_ops.Tile: ['Tile'],
+    elementwise_ops.TopK: ['TopK'],
+    elementwise_ops.Gather: ['Gather'],
+    elementwise_ops.GatherNd: ['GatherND'],
+    elementwise_ops.Min: ['ReduceMin'],
+    elementwise_ops.Max: ['ReduceMax'],
+    elementwise_ops.StridedSlice: ['Slice'],
+    elementwise_ops.NonZero: ['NonZero'],
+    elementwise_ops.DepthToSpaceDCRMode: ['DepthToSpace'],
+    elementwise_ops.MaxPool2d: ['MaxPool'],
+    elementwise_ops.Split: ['Split'],
 }
 
 # Maps pytorch functional op string names to corresponding onnx types.
