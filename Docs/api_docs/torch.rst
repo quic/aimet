@@ -5,7 +5,6 @@ AIMET PyTorch APIs
 
 .. toctree::
    :titlesonly:
-   :maxdepth: 1
 
    PyTorch Model Quantization API<torch_quantization>
    PyTorch Model Compression API<torch_compress>

@@ -141,7 +141,7 @@ html_theme_options = {
     'prev_next_buttons_location': 'both',
     'collapse_navigation': False,
     'sticky_navigation': True,
-    'navigation_depth': 4
+    'navigation_depth': 10
 }
 
 # Add any paths that contain custom static files (such as style sheets) here,

@@ -51,7 +51,6 @@ Getting Started
 Please refer to the following documentation:
 
 .. toctree::
-   :maxdepth: 2
 
    Quantization User Guide <model_quantization>
    Compression User Guide <model_compression>

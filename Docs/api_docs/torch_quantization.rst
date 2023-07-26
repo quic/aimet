@@ -6,6 +6,23 @@ In order to make full use of AIMET Quantization features, there are several guid
 when defining PyTorch models. AIMET provides APIs which can automate some of the model definition changes and checks
 whether AIMET Quantization features can be applied on PyTorch model.
 
+.. toctree::
+   :titlesonly:
+   :hidden:
+
+    Model Guidelines <torch_model_guidelines>
+    Architecture Checker API<torch_architecture_checker>
+    Model Preparer API<torch_model_preparer>
+    Model Validator API<torch_model_validator>
+    Quant Analyzer API<torch_quant_analyzer>
+    Quantization Simulation API<torch_quantsim>
+    Adaptive Rounding API<torch_adaround>
+    Cross-Layer Equalization API<torch_cross_layer_equalization>
+    Bias Correction API<torch_bias_correction>
+    AutoQuant API<torch_auto_quant>
+    BN Re-estimation APIs<torch_batchnorm_re_estimation>
+    Multi-GPU guidelines<torch_multi_gpu>
+
 Users should first invoke Model Preparer API before using any of the AIMET Quantization features.
    - :ref:`Model Guidelines<api-torch-model-guidelines>`: Guidelines for defining PyTorch models
    - :ref:`Architecture Checker API<api-torch-architecture_checker>`: Allows user to check for performance concern with the model.

@@ -1,5 +1,8 @@
+.. role:: hideitem
+   :class: hideitem
 .. _ug-model-quantization:
 
+========================
 AIMET Model Quantization
 ========================
 Models are generally trained on floating-point hardware like CPUs and GPUs. However, when these trained models are run
@@ -15,7 +18,7 @@ relative to floating-point models.
 This section provides information on typical use cases and AIMET's quantization features.
 
 Use Cases
----------
+=========
 1. **Predict on-target accuracy**: AIMET enables a user to simulate the effects of quantization to get a first order
 estimate of the model's accuracy when run on quantized targets. This is useful to get an estimate of on-target accuracy
 without needing an actual target platform. Note that to create a simulation model, AIMET uses representative data
@@ -44,30 +47,19 @@ fine-tuning, it can provide better accuracy especially at low bitwidths. A typic
     .. image:: ../images/quant_use_case_2.PNG
 
 AIMET Quantization Features
----------------------------
+===========================
+
+.. toctree::
+   :titlesonly:
+   :hidden:
+
+    Quantization Simulation <quantization_sim>
+    Quantization-Aware Training (QAT) <quantization_aware_training>
+
 - :doc:`Quantization Simulation<quantization_sim>`:
     QuantSim enables a user to modify a model by adding quantization simulation ops. When an evaluation is run on a
     model with these quantization simulation ops, the user can observe a first-order simulation of expected accuracy on
     quantized hardware.
-
-- Post-Training Quantization (PTQ) Techniques
-    Post-training quantization techniques help a model improve quantized accuracy without needing to re-train.
-
-    - :ref:`AutoQuant<ug-auto-quant>`:
-        AIMET provides an API that integrates the post-training quantization techniques described below. AutoQuant is
-        recommended for PTQ. If desired, individual techniques can be invoked using standalone feature specific APIs.
-
-        - :ref:`Adaptive Rounding (AdaRound)<ug-adaround>`:
-            Determines optimal rounding for weight tensors to improve quantized performance.
-
-        - :ref:`Cross-Layer Equalization<ug-post-training-quantization>`:
-            Equalizes weight ranges in consecutive layers.
-
-    - :ref:`BN Re-estimation<ug-bn-reestimation>`:
-        Re-estimates Batch Norm layer statistics before folding the Batch Norm layers.
-
-    - :ref:`Bias Correction<ug-post-training-quantization>` [Deprecated]:
-        Bias Correction is considered deprecated. It is advised to use AdaRound instead.
 
 - :ref:`Quantization-Aware Training (QAT)<ug-quantization-aware-training>`:
     QAT allows users to take a QuantSim model and further fine-tune the model parameters by taking quantization into
@@ -84,6 +76,48 @@ AIMET Quantization Features
         In addition to trainable module weights and scale/offset parameters for weight quantizers, scale/offset
         parameters for activation quantizers are also updated during each training step.
 
+:hideitem:`Post-Training Quantization`
+-----------------------------------------
+- Post-Training Quantization (PTQ) Techniques:
+
+    Post-training quantization techniques help a model improve quantized accuracy without needing to re-train.
+
+    .. toctree::
+        :titlesonly:
+        :hidden:
+
+        AutoQuant <auto_quant>
+        Adaptive Rounding (AdaRound) <adaround>
+        Cross-Layer Equalization <post_training_quant_techniques>
+        BN Re-estimation<bn_reestimation>
+        Bias Correction [Depricated] <post_training_quant_techniques>
+
+    - :ref:`AutoQuant<ug-auto-quant>`:
+        AIMET provides an API that integrates the post-training quantization techniques described below. AutoQuant is
+        recommended for PTQ. If desired, individual techniques can be invoked using standalone feature specific APIs.
+
+    - :ref:`Adaptive Rounding (AdaRound)<ug-adaround>`:
+        Determines optimal rounding for weight tensors to improve quantized performance.
+
+    - :ref:`Cross-Layer Equalization<ug-post-training-quantization>`:
+        Equalizes weight ranges in consecutive layers.
+
+    - :ref:`BN Re-estimation<ug-bn-reestimation>`:
+        Re-estimates Batch Norm layer statistics before folding the Batch Norm layers.
+
+    - :ref:`Bias Correction<ug-post-training-quantization>` [Deprecated]:
+        Bias Correction is considered deprecated. It is advised to use AdaRound instead.
+
+:hideitem:`Debugging/Analysis Tools`
+------------------------------------
+
+.. toctree::
+   :titlesonly:
+   :hidden:
+
+   QuantAnalyzer<quant_analyzer>
+   Visualizations<visualization_quant>
+
 - Debugging/Analysis Tools
     - :ref:`QuantAnalyzer<ug-quant-analyzer>`:
         Automated debugging of the model to understand sensitivity to weight and/or activation quantization, individual
@@ -93,7 +127,8 @@ AIMET Quantization Features
         Visualizations and histograms of weight and activation ranges.
 
 AIMET Quantization Workflow
----------------------------
+===========================
+
 This section describes the recommended workflow for quantizing a neural network.
 
     .. image:: ../images/quantization_workflow.PNG
@@ -103,8 +138,18 @@ This section describes the recommended workflow for quantizing a neural network.
 Before attempting quantization, ensure that models have been defined in accordance to model guidelines. These guidelines
 depend on the ML framework the model is written in.
 
-Pytorch:
-    :doc:`PyTorch Model Guidelines<../api_docs/torch_model_guidelines>`
+:hideitem:`PyTorch`
+--------------------
+.. toctree::
+   :titlesonly:
+   :hidden:
+   
+    PyTorch Model Guidlines <../api_docs/torch_model_guidelines>
+    AIMET PyTorch Quantization APIs <../api_docs/torch_quantization>
+
+- Pytorch:
+    
+   :doc:`PyTorch Model Guidelines<../api_docs/torch_model_guidelines>`
 
     In the case of PyTorch, there exists the Model Validator utility, to automate the checking of certain PyTorch model
     requirements, as well as the Model Preparer utility, to automate the updating of the model definition to align with
@@ -122,7 +167,15 @@ Pytorch:
     For more information on model validator and preparer, refer to the corresponding sections in
     :doc:`AIMET PyTorch Quantization APIs<../api_docs/torch_quantization>`.
 
-Tensorflow:
+:hideitem:`Tensorflow`
+-----------------------
+.. toctree::
+   :titlesonly:
+   :hidden:
+
+    TensorFlow Model Guidelines<../api_docs/tensorflow_model_guidelines>
+
+- Tensorflow:
     :doc:`TensorFlow Model Guidelines<../api_docs/tensorflow_model_guidelines>`
 
 **2. PTQ/AutoQuant**
@@ -132,10 +185,12 @@ quantization. We recommend trying AutoQuant first, a PTQ feature which internall
 finds the best combination of methods to apply. Refer to the
 AIMET Quantization Features section for more details on PTQ/AutoQuant.
 
+
 **3. QAT**
 
 If model accuracy is still not satisfactory after PTQ/AutoQuant, the user can use QAT to fine-tune the model. Refer to
 the AIMET Quantization Features section for more details on QAT.
+
 
 **4. Exporting models**
 
@@ -158,7 +213,13 @@ CLE are used, users will need to first create a QuantSim object from the modifie
 QuantSim object.
 
 Debugging Guidelines
-----------------------
+====================
+.. toctree::
+   :titlesonly:
+   :hidden:
+
+   Quantization Guidebook <quantization_feature_guidebook>
+
 Applying AIMET Quantization features may involve some trial and error in order to find the best optimizations to apply
 on a particular model. We have included some debugging steps in the :ref:`Quantization Guidebook<ug-quant-guidebook>`
 that can be tried when quantization accuracy does not seem to improve right off the bat.

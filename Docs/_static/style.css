@@ -1,3 +1,26 @@
+.rst-content .hideitem {
+ display: none;
+}
+
+nav .hideitem {
+  display: unset;
+  font-size: 13px;
+}
+
+.hideitem {
+  font-size: 14px;
+}
+
+.rst-content .code-block-caption .headerlink, .rst-content .eqno .headerlink, .rst-content .toctree-wrapper > p.caption .headerlink, .rst-content dl dt .headerlink, .rst-content h1 .headerlink, .rst-content h2 .headerlink, .rst-content h3 .headerlink, .rst-content h4 .headerlink, .rst-content h5 .headerlink, .rst-content h6 .headerlink, .rst-content p.caption .headerlink, .rst-content p .headerlink, .rst-content table > caption .headerlink {
+  opacity: 0;
+  font-size: 14px;
+  font-family: FontAwesome;
+  margin-left: -8.5em;
+  position: absolute;
+  margin-top: -55px;
+}
+
+
 :root {
   --aimet-blue: #3253dc;
   --aimet-dark-blue: #0000ff
@@ -51,6 +74,7 @@ color: var(--aimet-dark-blue);
   border-right-width: 2px;
   border-right-style: solid;
   border-right-color: var(--aimet-border-grey);
+ /* position: fixed; */
 }
 
 /* Left Menu  */
@@ -193,3 +217,6 @@ padding: .4045em 1.618em;
   background: var(--aimet-menu-hover);
 }
 
+.wy-menu-vertical li.toctree-l3, .wy-menu-vertical li.toctree-l4 {
+  font-size: 14px;
+}
