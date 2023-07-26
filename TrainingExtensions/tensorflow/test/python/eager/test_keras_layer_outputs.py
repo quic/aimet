@@ -160,7 +160,7 @@ class TestLayerOutputUtil:
             saved_layer_output_list.append(each_layer_output_name)
 
         # Verify number of layer-outputs
-        np.testing.assert_array_equal(np.array(actual_layer_output_names), np.array(saved_layer_output_list))
+        np.testing.assert_array_equal(np.array(sorted(actual_layer_output_names)), np.array(sorted(saved_layer_output_list)))
 
         # Verify final layer output for all data points
         cnt = 0

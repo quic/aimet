@@ -66,8 +66,16 @@ class LayerOutputUtil:
         # Freeze the model, i.e, run in test mode
         self.model.trainable = False
 
-        self.layer_output_name_mapper = OrderedDict()
-        self.layer_output_name_mapper_path = os.path.join(save_dir, "LayerOutputNameMapper.json")
+        # Get Intermediate model for layer-outputs
+        self.intermediate_model = self._get_intermediate_model(self.model)
+
+        # Get Actual Layer output name to Modified Layer Output name dict
+        self.layer_output_name_mapper = self._layer_output_name_mapper(self.model)
+
+        # Saving the actual layer output name to modified layer output name (valid file name to save) in a json file
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        json.dump(self.layer_output_name_mapper, open(os.path.join(save_dir, "LayerOutputNameMapper.json"), 'w'), indent=4)
 
         # Identify the axis-layout used for representing an image tensor
         axis_layout = 'NHWC' if tf.keras.backend.image_data_format() == 'channels_last' else 'NCHW'
@@ -83,38 +91,38 @@ class LayerOutputUtil:
             return layer.original_layer.output.name
         return layer.output.name
 
+    @classmethod
+    def _get_intermediate_model(cls, model):
+        inputs = [model.layers[0].input]
+        outputs = [layer.output for layer in model.layers]
+        intermediate_model = tf.keras.models.Model(inputs=inputs, outputs=outputs)
+        intermediate_model.trainable = False
+        return intermediate_model
+
+    @classmethod
+    def _layer_output_name_mapper(cls, model):
+        layer_output_name_mapper = OrderedDict()
+        for layer in model.layers:
+            layer_output_name = cls._get_layer_name(layer)
+
+            # Replace all Non-word characters with "_" to make it a valid file name for saving the results
+            # For Eg.: "conv2d/BiasAdd:0" gets converted to "conv2d_BiasAdd_0"
+            modified_layer_output_name = re.sub(r'\W+', "_", layer_output_name)
+
+            layer_output_name_mapper[layer_output_name] = modified_layer_output_name
+
+        return layer_output_name_mapper
+
     def get_outputs(self, input_batch: tf.Tensor):
         """
         This function captures layer-outputs and renames them as per the AIMET exported model.
         :param input_batch: Batch of inputs for which we want to obtain layer-outputs.
         :return: layer-output name to layer-output batch dict
         """
-        layer_name_to_layer_output_dict = OrderedDict()
-
-        inputs = [self.model.layers[0].input]
-        outputs = [layer.output for layer in self.model.layers]
-        intermediate_model = tf.keras.models.Model(inputs=inputs, outputs=outputs)
-        intermediate_model.trainable = False
-        outs = intermediate_model(input_batch)
-        wrap_outputs = isinstance(outputs, list) and len(outputs) == 1
-        if wrap_outputs:
-            outs = [outs]
+        outs = self.intermediate_model(input_batch)
         output_pred = tf_utils.sync_to_numpy_or_python_type(outs)
 
-        for layer_idx, layer in enumerate(self.model.layers):
-            layer_output_name = self._get_layer_name(layer)
-
-            # Replace all Non-word characters with "_" to make it a valid file name for saving the results
-            # For Eg.: "conv2d/BiasAdd:0" gets converted to "conv2d_BiasAdd_0"
-            modified_layer_output_name = re.sub(r'\W+', "_", layer_output_name)
-
-            # Storing the actual layer output name to modified layer output name (valid file name to save) in a dict
-            if not os.path.exists(self.layer_output_name_mapper_path):
-                self.layer_output_name_mapper[layer_output_name] = modified_layer_output_name
-
-            layer_name_to_layer_output_dict[modified_layer_output_name] = output_pred[layer_idx]
-
-        return layer_name_to_layer_output_dict
+        return dict(zip(self.layer_output_name_mapper.values(), output_pred))
 
     def generate_layer_outputs(self, input_batch: tf.Tensor):
         """
@@ -128,9 +136,5 @@ class LayerOutputUtil:
 
         batch_layer_name_to_layer_output = self.get_outputs(input_batch)
         self.save_inp_out_obj.save(input_batch, batch_layer_name_to_layer_output)
-
-        # Saving the actual layer output name to modified layer output name (valid file name to save) in a json file
-        if not os.path.exists(self.layer_output_name_mapper_path):
-            json.dump(self.layer_output_name_mapper, open(self.layer_output_name_mapper_path, 'w'), indent=4)
 
         logger.info("Layer Outputs Saved")
