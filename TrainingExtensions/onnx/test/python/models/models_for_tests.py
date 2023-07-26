@@ -1464,3 +1464,54 @@ def initialize_bn_params(model: torch.nn.Module):
                 module.bias.copy_(torch.randn_like(module.bias))
                 module.running_mean.copy_(torch.randn_like(module.bias))
                 module.running_var.add_(torch.randn_like(module.bias).abs())
+
+
+# pylint: disable=no-member
+def build_dummy_model_with_dynamic_input():
+    """ Build dummy ONNX model for testing. The batch-size dimension of the input is dynamic. """
+    op = OperatorSetIdProto()
+    op.version = 13
+    input_info = helper.make_tensor_value_info(name='input', elem_type=TensorProto.FLOAT,
+                                               shape=['batch_size', 3, 32, 32])
+
+    output_info = helper.make_tensor_value_info(name='output', elem_type=TensorProto.FLOAT,
+                                                shape=['batch_size', 10])
+    conv_node = helper.make_node('Conv',
+                                 ['input', 'conv_w', 'conv_b'],
+                                 ['3'],
+                                 'conv',
+                                 kernel_shape=[3, 3],
+                                 pads=[1, 1, 1, 1],)
+    relu_node = helper.make_node('Relu',
+                                 ['3'],
+                                 ['4'],
+                                 'relu')
+    maxpool_node = helper.make_node('MaxPool',
+                                    ['4'],
+                                    ['5'],
+                                    'maxpool',
+                                    kernel_shape=[3, 3],
+                                    pads=[1, 1, 1, 1],
+                                    strides=[2, 2],)
+
+    flatten_node = helper.make_node('Flatten',
+                                    ['5'],
+                                    ['6'],
+                                    'flatten')
+    fc_node = helper.make_node('Gemm',
+                               ['6', 'fc_w', 'fc_b'],
+                               ['output'],
+                               'fc')
+
+    conv_w_init = numpy_helper.from_array(np.random.rand(1, 3, 3, 3).astype(np.float32), 'conv_w')
+    conv_b_init = numpy_helper.from_array(np.random.rand(1).astype(np.float32), 'conv_b')
+    fc_w_init = numpy_helper.from_array(np.random.rand(256, 10).astype(np.float32), 'fc_w')
+    fc_b_init = numpy_helper.from_array(np.random.rand(10).astype(np.float32), 'fc_b')
+
+    onnx_graph = helper.make_graph([conv_node, relu_node, maxpool_node, flatten_node, fc_node],
+                                   'dummy_graph', [input_info], [output_info],
+                                   [conv_w_init, conv_b_init, fc_w_init, fc_b_init])
+
+    model = helper.make_model(onnx_graph, opset_imports=[op])
+
+    return model
