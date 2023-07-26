@@ -438,7 +438,7 @@ def load_pytorch_model(model_name: str, path: str, filename: str, load_state_dic
     # Import model's module and instantiate model
     spec = importlib.util.spec_from_file_location(filename, model_path)
     module = importlib.util.module_from_spec(spec)
-    sys.modules[model_name] = module
+    sys.modules[filename] = module
     spec.loader.exec_module(module)
     model = getattr(module, model_name)()
 
