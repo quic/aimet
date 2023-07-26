@@ -1211,10 +1211,12 @@ class Quantize(torch.autograd.Function):
     """
     @staticmethod
     def _per_tensor_quantize(tensor, tensor_quantizer, round_mode):
+        # by default use signed range for tensors in quantize-only mode, except for unsigned symmetric
+        shift_to_signed = True
+        if tensor_quantizer.use_symmetric_encodings and tensor_quantizer.use_unsigned_symmetric:
+            shift_to_signed = False
+
         # pylint:disable = protected-access
-        shift_to_signed = False
-        if tensor_quantizer.use_symmetric_encodings and tensor_quantizer.encoding.offset < 0:
-            shift_to_signed = True
         quantized_tensor = tensor_quantizer._cppOp[0].quantize(tensor, tensor_quantizer.encoding, round_mode,
                                                                tensor.is_cuda, shift_to_signed)
         return quantized_tensor
@@ -1222,8 +1224,11 @@ class Quantize(torch.autograd.Function):
     @staticmethod
     def _per_channel_quantize(tensor, tensor_quantizer, round_mode):
         quantized_tensors = []
-        # TODO: handle unsigned symmetric case
-        shift_to_signed = bool(tensor_quantizer.use_symmetric_encodings)
+        # by default use signed range for tensors in quantize-only mode, except for unsigned symmetric
+        shift_to_signed = True
+        if tensor_quantizer.use_symmetric_encodings and tensor_quantizer.use_unsigned_symmetric:
+            shift_to_signed = False
+
         # pylint:disable = protected-access
         for index, op in enumerate(tensor_quantizer._cppOp):
             curr_encoding = tensor_quantizer._encoding[index]
