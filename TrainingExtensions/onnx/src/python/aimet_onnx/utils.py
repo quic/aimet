@@ -37,7 +37,7 @@
 # =============================================================================
 """ Utility functions for ONNX """
 import itertools
-from typing import Dict, List, Union, Tuple, Set
+from typing import Dict, List, Union, Tuple
 
 import os
 import pickle
@@ -274,21 +274,21 @@ def remove_activation_hooks(model: onnx_pb.ModelProto,
         model.graph.output.remove(hook)
 
 
-def get_graph_intermediate_activations(graph: onnx_pb.GraphProto) -> Set[str]:
+def get_graph_intermediate_activations(graph: onnx_pb.GraphProto) -> List[str]:
     """
     Returns the names of all activations within a graph that are used as the input to another node
     :param graph: The graph for which to retrieve the activations
     :return: A list containing the names of all found activations
     """
-    param_names = set()
+    param_names = []
     for param in graph.initializer:
         if param.name not in param_names and param.name:
-            param_names.add(param.name)
-    activation_names = set()
+            param_names.append(param.name)
+    activation_names = []
     for node in graph.node:
         for name in node.input:
             if name not in activation_names and name not in param_names:
-                activation_names.add(name)
+                activation_names.append(name)
     return activation_names
 
 
@@ -366,8 +366,6 @@ def retrieve_constant_input(node: onnx_pb.NodeProto, model: onnx_pb.ModelProto, 
     return weight, transposed
 
 
-
-
 class CachedDataset:
     """
     Cache number of batches from the data loader at given path location and
@@ -414,3 +412,34 @@ class CachedDataset:
                 pickle.dump(batch, file)
 
         logger.info('Caching %d batches from data loader at path location: %s', self._num_batches, self._path)
+
+
+def create_input_dict(model: onnx_pb.ModelProto, input_batch: Union[np.ndarray, List[np.ndarray], Tuple[np.ndarray]]) -> Dict:
+    """
+    Creates input dictionary (input name to input value map) for session.run
+
+    :param model: ONNX model
+    :param input_batch: either single numpy array, list or tuple of numpy array
+    :return: input dictionary
+    """
+    input_names = [input.name for input in model.graph.input]
+
+    # single input
+    if isinstance(input_batch, np.ndarray):
+        input_batch_list = [input_batch]
+
+    # list of multiple inputs
+    elif isinstance(input_batch, list):
+        input_batch_list = input_batch
+
+    # tuple of multiple inputs
+    elif isinstance(input_batch, tuple):
+        input_batch_list = list(input_batch)
+
+    else:
+        raise ValueError('Input batch should be either numpy array, list or tuple')
+
+    if not len(input_names) == len(input_batch_list):
+        raise ValueError('There is mismatch between number of input names and input tensors')
+
+    return dict(zip(input_names, input_batch_list))

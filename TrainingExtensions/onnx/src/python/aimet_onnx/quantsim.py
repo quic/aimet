@@ -128,7 +128,7 @@ class QuantizationSimModel:
         self._get_param_names()
         self._get_activations_to_quantize(dummy_input)
         self._add_quantization_nodes()
-        self.session = self._build_session(self.providers)
+        self.session = QuantizationSimModel.build_session(self.model.model, self.providers)
 
         quantsim_configurator = self._add_configuration_(config_file)
 
@@ -184,16 +184,16 @@ class QuantizationSimModel:
         :param dummy_input: Sample input to be run through the model
         """
         self.fill_activation_dtypes(dummy_input)
+        for node in self.model.graph().input:
+            name = node.name
+            if name not in self.activation_names and name not in self.param_names and self._is_op_quantizable(name):
+                self.activation_names.append(name)
         for node in self.model.nodes():
             if node.op_type not in op_types_to_ignore:
                 for name in node.output:
                     if name not in self.activation_names and name not in self.param_names and \
                             self._is_op_quantizable(name):
                         self.activation_names.append(name)
-        for node in self.model.graph().input:
-            name = node.name
-            if name not in self.activation_names and name not in self.param_names and self._is_op_quantizable(name):
-                self.activation_names.append(name)
         for node in self.model.graph().output:
             if node.name in self.activation_names:
                 node.name += '_updated'
@@ -220,7 +220,7 @@ class QuantizationSimModel:
         hooks = []
         for name in activations:
             hooks.append(add_hook_to_get_activation(self.model.model, name))
-        sess = self._build_session(self.providers)
+        sess = QuantizationSimModel.build_session(self.model.model, self.providers)
         outputs = sess.run(None, dummy_input)
         for idx in range(len(self.model.graph().output)):
             act_name = self.model.graph().output[idx].name
@@ -327,10 +327,12 @@ class QuantizationSimModel:
                                                           use_symmetric_encodings=self._use_symmetric_encodings
                                                           )
 
-    def _build_session(self, providers):
+    @staticmethod
+    def build_session(model: onnx_pb.ModelProto, providers: List):
         """
         Build and return onnxruntime inference session
 
+        :param model: onnx model
         :param providers: providers to execute onnxruntime
         """
         sess_options = SessionOptions()
@@ -339,7 +341,7 @@ class QuantizationSimModel:
         sess_options.register_custom_ops_library(shared_library)
         sess_options.graph_optimization_level = GraphOptimizationLevel.ORT_DISABLE_ALL
         session = InferenceSession(
-            path_or_bytes=self.model.model.SerializeToString(),
+            path_or_bytes=model.SerializeToString(),
             sess_options=sess_options,
             providers=providers,
         )
