@@ -286,7 +286,7 @@ def run_hook_for_layers_with_given_input(model: torch.nn.Module,
     for module in model.modules():
         if module not in modules_to_skip:
             # pylint: disable=protected-access
-            if module._get_name() in modules_to_treat_as_leaf:
+            if type(module) in modules_to_treat_as_leaf:
                 modules.append(module)
                 # check for modules inside the 'module' and add them to modules_to_skip
                 for sub_module in module._modules.values():

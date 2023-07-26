@@ -851,7 +851,7 @@ class TestConnectedGraphUtils(unittest.TestCase):
 
         dummy_input = torch.randn(1, 3, 32, 32)
 
-        aimet_torch.utils.modules_to_treat_as_leaf = ['ConvLinearModel']
+        aimet_torch.utils.modules_to_treat_as_leaf = [ConvLinearModel]
 
         cg_1 = ConnectedGraph(model, model_input=dummy_input)
         assert len(cg_1.ordered_ops) == 2
@@ -904,7 +904,7 @@ class TestConnectedGraphUtils(unittest.TestCase):
         dummy_input = torch.randn(1, 3, 3, 3)
 
         #out = model(dummy_input)
-        aimet_torch.utils.modules_to_treat_as_leaf = ['ConvLinearModel']
+        aimet_torch.utils.modules_to_treat_as_leaf = [ConvLinearModel]
 
         cg_1 = ConnectedGraph(model, model_input=dummy_input)
 

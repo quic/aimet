@@ -669,7 +669,8 @@ def test_mha_as_leaf_module(replace_with_q_mha):
 
     cg_0 = ConnectedGraph(transformer_model, model_input=dummy_input)
 
-    aimet_torch.utils.modules_to_treat_as_leaf = ['MultiheadAttention', 'QuantizableMultiheadAttention']
+    aimet_torch.utils.modules_to_treat_as_leaf = [torch.nn.MultiheadAttention,
+                                                  aimet_torch.transformers.activation.QuantizableMultiheadAttention]
     cg_1 = ConnectedGraph(transformer_model, model_input=dummy_input)
 
     # create a dictionary of ops which are not part of modules_to_treat_as_leaf
@@ -677,11 +678,11 @@ def test_mha_as_leaf_module(replace_with_q_mha):
     ops_from_cg_1 = {}
 
     for op in cg_0.ordered_ops:
-        if op.residing_module._get_name() not in aimet_torch.utils.modules_to_treat_as_leaf:
+        if type(op.residing_module) not in aimet_torch.utils.modules_to_treat_as_leaf:
             ops_from_cg_0[op.dotted_name] = op
 
     for op in cg_1.ordered_ops:
-        if op.type not in aimet_torch.utils.modules_to_treat_as_leaf:
+        if type(op.get_module()) not in aimet_torch.utils.modules_to_treat_as_leaf:
             ops_from_cg_1[op.dotted_name] = op
 
     assert len(ops_from_cg_0) == len(ops_from_cg_1)

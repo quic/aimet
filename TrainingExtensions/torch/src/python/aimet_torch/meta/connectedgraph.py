@@ -906,7 +906,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             module = op.get_module()
             if module is not None:
                 name = self._module_to_name.get(module, None)
-                if op.type in aimet_torch.utils.modules_to_treat_as_leaf:
+                if type(op.get_module()) in aimet_torch.utils.modules_to_treat_as_leaf:
                     for child_name, child_module in op.get_module().named_children():
                         self._create_param_products_helper(op, child_module, name + "." + child_name,
                                                            self.get_op_type(type(child_module)))
@@ -1198,10 +1198,9 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :return: Boolean whether recursive parsing needed or not. If needed returns True, False otherwise.
         """
         recursive_parsing_needed = True
-        # pylint: disable=protected-access
         if is_torch_nn_leaf_module(module) or \
                 is_custom_leaf_module(module, self.get_all_aten_nodes(module, module_to_jit_trace)) or \
-                module._get_name() in aimet_torch.utils.modules_to_treat_as_leaf:
+                type(module) in aimet_torch.utils.modules_to_treat_as_leaf:
             recursive_parsing_needed = False
 
         return recursive_parsing_needed
