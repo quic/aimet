@@ -59,15 +59,17 @@ color: var(--aimet-dark-blue);
 /* position of main body */
 .wy-grid-for-nav {
     position: absolute;
-    width: 65%;
+    width: 95%;
     height: 100%;
+    display: grid;
+    justify-content: left;
 }
 
 /* boarder around main content */
 .wy-nav-content-wrap {
   margin-left: 300px;
   background: var(--aimet-white);
-  min-height: 100%;
+  min-height: auto;
   border-left-width: 2px;
   border-left-style: solid;
   border-left-color: var(--aimet-border-grey);
@@ -106,7 +108,7 @@ color: var(--aimet-dark-blue);
 .wy-nav-content {
     padding: 1.618em 3.236em;
     height: 100%;
-    max-width: 900px;
+    max-width: 1400px;
     margin: auto;
     background: #ffffff;
 }

@@ -1,3 +1,5 @@
+.. role:: hideitem
+   :class: hideitem
 .. _ug-index:
 
 ======================================
@@ -50,7 +52,16 @@ Getting Started
 
 Please refer to the following documentation:
 
+- :ref:`Quantization User Guide <ug-model-quantization>`
+- :ref:`Compression User Guide <ug-model-compression>`
+- :ref:`API Documentation <ug-apidocs>`
+- :ref:`Examples Documentation <ug-examples>`
+- :ref:`Installation <ug-installation>`
+
+:hideitem:`toc tree`
+------------------------------------
 .. toctree::
+  :hidden:
 
    Quantization User Guide <model_quantization>
    Compression User Guide <model_compression>
