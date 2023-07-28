@@ -1,8 +1,9 @@
+#!/usr/bin/env python3.8
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -37,6 +38,7 @@
 # pylint: disable=too-many-lines
 
 """Automatic Post-Training Quantization"""
+import contextlib
 import itertools
 import math
 import os
@@ -1041,6 +1043,57 @@ class _EvalSession: # pylint: disable=too-many-instance-attributes
         _logger.info("The results of %s is saved in %s and %s.",
                      self.title, model_path, encoding_path)
         return model_path, encoding_path
+
+
+@contextlib.contextmanager
+def spy_auto_quant(auto_quant: AutoQuant):
+    """
+    Install a spy that collects the handles to the ptq result of
+    each stage of AutoQuant.
+
+    Typical usage::
+        >>> auto_quant = AutoQuant(...)
+        ... with auto_quant_spy(auto_quant) as spy:
+        ...     _ = auto_quant.apply(...)
+        ...
+        ... for result in spy.get_all_ptq_results():
+        ...     print(result.applied_techniques)
+        ...     print(result.accuracy)
+        ...     print(result.encoding_path)
+        ...     model = result.load_model()
+        ...     ...
+    """
+
+    # pylint: disable=protected-access
+    class Spy:
+        """
+        Spy that collects the handles to the ptq result of
+        each stage of AutoQuant.
+        """
+
+        def __init__(self, eval_manager):
+            self._eval_manager = eval_manager
+
+        def get_all_ptq_results(self) -> List[PtqResult]:
+            """Return handles to the results of AutoQuant"""
+            if self._eval_manager is None:
+                return []
+            return [sess.ptq_result for sess in self._eval_manager._all_sessions.values()
+                    if sess.ptq_result is not None]
+
+    spy = Spy(auto_quant.eval_manager)
+
+    _optimize_main = auto_quant._optimize_main
+
+    def _optimize_main_wrapper(fp32_model, target_acc):
+        return _optimize_main(fp32_model, target_acc)
+
+    try:
+        setattr(auto_quant, "_optimize_main", _optimize_main_wrapper)
+        yield spy
+    finally:
+        setattr(auto_quant, "_optimize_main", _optimize_main)
+
 
 def _build_flowchart_metadata(result: Mapping) -> Dict: # pylint: disable=too-many-return-statements
     """

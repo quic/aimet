@@ -1233,7 +1233,7 @@ def spy_auto_quant(auto_quant: AutoQuant):
         ... with auto_quant_spy(auto_quant) as spy:
         ...     _ = auto_quant.apply(...)
         ...
-        ... for result i n spy.get_all_ptq_results():
+        ... for result in spy.get_all_ptq_results():
         ...     print(result.applied_techniques)
         ...     print(result.accuracy)
         ...     print(result.encoding_path)
@@ -1248,8 +1248,8 @@ def spy_auto_quant(auto_quant: AutoQuant):
         each stage of AutoQuant.
         """
 
-        def __init__(self):
-            self._eval_manager = None
+        def __init__(self, eval_manager):
+            self._eval_manager = eval_manager
 
         def get_all_ptq_results(self) -> List[PtqResult]:
             """Return handles to the results of AutoQuant"""
@@ -1258,21 +1258,18 @@ def spy_auto_quant(auto_quant: AutoQuant):
             return [sess.ptq_result for sess in self._eval_manager._all_sessions.values()
                     if sess.ptq_result is not None]
 
-    spy = Spy()
+    spy = Spy(auto_quant.eval_manager)
 
-    _auto_quant_main = auto_quant._auto_quant_main
+    _optimize_main = auto_quant._optimize_main
 
-    def _auto_quant_main_wrapper(fp32_sess, target_acc, starting_op_names,
-                                 output_op_names, eval_manager, results_dir="./tmp"):
-        spy._eval_manager = eval_manager
-        return _auto_quant_main(fp32_sess, target_acc, starting_op_names,
-                                output_op_names, eval_manager, results_dir)
+    def _optimize_main_wrapper(fp32_sess, target_acc):
+        return _optimize_main(fp32_sess, target_acc)
 
     try:
-        setattr(auto_quant, "_auto_quant_main", _auto_quant_main_wrapper)
+        setattr(auto_quant, "_optimize_main", _optimize_main_wrapper)
         yield spy
     finally:
-        setattr(auto_quant, "_auto_quant_main", _auto_quant_main)
+        setattr(auto_quant, "_optimize_main", _optimize_main)
 
 
 def _build_flowchart_metadata(result: Mapping) -> Dict:  # pylint: disable=too-many-return-statements
