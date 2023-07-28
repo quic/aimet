@@ -56,6 +56,7 @@ from aimet_torch.meta.operation import Op
 from aimet_torch.utils import is_leaf_module, run_hook_for_layers_with_given_input, in_eval_mode, \
     is_torch_nn_leaf_module, is_custom_leaf_module, get_torch_tensortype_shape
 from aimet_torch import onnx_utils
+import aimet_torch.utils
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
 
@@ -905,23 +906,39 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             module = op.get_module()
             if module is not None:
                 name = self._module_to_name.get(module, None)
-                if op.type in ['Conv', 'ConvTranspose', 'BatchNormalization', 'Gemm']:
-                    if module.weight is not None:
-                        product_name = name + '.weight'
-                        self._create_and_add_param_product_if_not_exists(op, product_name, list(module.weight.shape))
-                    if module.bias is not None:
-                        product_name = name + '.bias'
-                        self._create_and_add_param_product_if_not_exists(op, product_name, list(module.bias.shape))
-                if op.type == 'BatchNormalization':
-                    # If batch_norm, fill in rest of bn params
-                    if module.running_mean is not None:
-                        product_name = name + '.running_mean'
-                        self._create_and_add_param_product_if_not_exists(op, product_name,
-                                                                         list(module.running_mean.shape))
-                    if module.running_var is not None:
-                        product_name = name + '.running_var'
-                        self._create_and_add_param_product_if_not_exists(op, product_name,
-                                                                         list(module.running_var.shape))
+                if isinstance(op.get_module(), tuple(aimet_torch.utils.modules_to_treat_as_leaf)):
+                    for child_name, child_module in op.get_module().named_children():
+                        self._create_param_products_helper(op, child_module, name + "." + child_name,
+                                                           self.get_op_type(type(child_module)))
+                else:
+                    self._create_param_products_helper(op, module, name, op.type)
+
+    def _create_param_products_helper(self, conn_graph_op: Op, module: torch.nn.Module, module_name: str, op_type: str):
+        """
+        Helper to create param products for ops like convolution, batch norm, and linear if they don't exist yet
+        :param conn_graph_op: Connected graph whose param products need to be added
+        :param module: module of type torch.nn.Module to be used to create the param products.
+        There can be several modules in a single connected graph op.
+        :param module_name: name of the module.
+        :param op_type: type (str) of the op which is stored in the connected graph
+        """
+        if op_type in ['Conv', 'ConvTranspose', 'BatchNormalization', 'Gemm']:
+            if module.weight is not None:
+                product_name = module_name + '.weight'
+                self._create_and_add_param_product_if_not_exists(conn_graph_op, product_name, list(module.weight.shape))
+            if module.bias is not None:
+                product_name = module_name + '.bias'
+                self._create_and_add_param_product_if_not_exists(conn_graph_op, product_name, list(module.bias.shape))
+        if op_type == 'BatchNormalization':
+            # If batch_norm, fill in rest of bn params
+            if module.running_mean is not None:
+                product_name = module_name + '.running_mean'
+                self._create_and_add_param_product_if_not_exists(conn_graph_op, product_name,
+                                                                 list(module.running_mean.shape))
+            if module.running_var is not None:
+                product_name = module_name + '.running_var'
+                self._create_and_add_param_product_if_not_exists(conn_graph_op, product_name,
+                                                                 list(module.running_var.shape))
 
     def _create_and_add_param_product_if_not_exists(self, op: Op, product_name: str, shape: List[int]):
         """
@@ -1181,8 +1198,9 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :return: Boolean whether recursive parsing needed or not. If needed returns True, False otherwise.
         """
         recursive_parsing_needed = True
-        if is_torch_nn_leaf_module(module) or is_custom_leaf_module(module, self.get_all_aten_nodes(module,
-                                                                                                    module_to_jit_trace)):
+        if is_torch_nn_leaf_module(module) or \
+                is_custom_leaf_module(module, self.get_all_aten_nodes(module, module_to_jit_trace)) or \
+                isinstance(module, tuple(aimet_torch.utils.modules_to_treat_as_leaf)):
             recursive_parsing_needed = False
 
         return recursive_parsing_needed

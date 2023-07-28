@@ -36,6 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ This file contains unit tests for testing ConnectedGraph module for PyTorch. """
+import copy
 
 import pytest
 import unittest.mock
@@ -43,6 +44,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import aimet_torch.utils
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops,\
     get_all_ops_with_constant_inputs
 from models import test_models
@@ -815,3 +817,112 @@ class TestConnectedGraphUtils(unittest.TestCase):
         assert not cg.ordered_ops[2].inputs[1].is_const
         assert not cg.ordered_ops[3].inputs[0].is_const
         assert not cg.ordered_ops[3].inputs[1].is_const
+
+    def test_model_with_non_leaf_candidate_0(self):
+        """
+        Model: [C1 -> L1] -> L2
+        Where [C1 -> L1] is non leaf module wrapped under ConvLinearModel
+        ConvLinearModel is made to be considered a leaf
+        """
+        class ConvLinearModel(torch.nn.Module):
+            def __init__(self):
+                super(ConvLinearModel, self).__init__()
+                self.conv1 = nn.Conv2d(3, 12, kernel_size=(1, 1), stride=(1, 1), padding=0, bias=False)
+                self.linear1 = nn.Linear(32, 32, bias=False)
+
+            def forward(self, inp):
+                y = self.conv1(inp)
+                y = self.linear1(y)
+                return y
+
+        class TopLevelModel(torch.nn.Module):
+            def __init__(self):
+                super(TopLevelModel, self).__init__()
+                self.layer1 = ConvLinearModel()
+                self.linear1 = nn.Linear(32, 64, bias=False)
+
+            def forward(self, inp):
+                y = self.layer1(inp)
+                y = self.linear1(y)
+                return y
+
+        model = TopLevelModel()
+        model.eval()
+
+        dummy_input = torch.randn(1, 3, 32, 32)
+
+        aimet_torch.utils.modules_to_treat_as_leaf = [ConvLinearModel]
+
+        cg_1 = ConnectedGraph(model, model_input=dummy_input)
+        assert len(cg_1.ordered_ops) == 2
+
+        assert len(cg_1.ordered_ops[0].inputs) == 3
+        assert cg_1.ordered_ops[0].inputs[0].name == 'input_0_to_ConvLinearModel_0'
+        assert cg_1.ordered_ops[0].inputs[0].is_model_input == True
+
+        assert cg_1.ordered_ops[0].inputs[1].name == 'TopLevelModel.layer1.conv1.weight'
+        assert cg_1.ordered_ops[0].inputs[1].is_model_input == False
+        assert cg_1.ordered_ops[0].inputs[1].is_parm == True
+
+        assert cg_1.ordered_ops[0].inputs[2].name == 'TopLevelModel.layer1.linear1.weight'
+        assert cg_1.ordered_ops[0].inputs[2].is_model_input == False
+        assert cg_1.ordered_ops[0].inputs[2].is_parm == True
+
+    def test_model_with_non_leaf_candidate_1(self):
+        """
+        Model: L1 -> [C1 -> L2] -> L3
+        Where [C1 -> L2] is non leaf module wrapped under ConvLinearModel
+        ConvLinearModel is made to be considered a leaf
+        """
+        class ConvLinearModel(torch.nn.Module):
+            def __init__(self):
+                super(ConvLinearModel, self).__init__()
+                self.conv1 = nn.Conv2d(3, 12, kernel_size=(1, 1), stride=(1, 1), padding=0, bias=False)
+                self.linear1 = nn.Linear(3, 3, bias=False)
+
+            def forward(self, inp):
+                y = self.conv1(inp)
+                y = self.linear1(y)
+                return y
+
+        class TopLevelModel(torch.nn.Module):
+            def __init__(self):
+                super(TopLevelModel, self).__init__()
+                self.linear1 = nn.Linear(3, 3, bias=False)
+                self.layer1 = ConvLinearModel()
+                self.linear2 = nn.Linear(3, 6, bias=False)
+
+            def forward(self, inp):
+                y = self.linear1(inp)
+                y = self.layer1(y)
+                y = self.linear2(y)
+                return y
+
+        model = TopLevelModel()
+        model.eval()
+
+        dummy_input = torch.randn(1, 3, 3, 3)
+
+        #out = model(dummy_input)
+        aimet_torch.utils.modules_to_treat_as_leaf = [ConvLinearModel]
+
+        cg_1 = ConnectedGraph(model, model_input=dummy_input)
+
+        # three ops in total: linear1, layer1(non-leaf), linear2
+        assert len(cg_1.ordered_ops) == 3
+
+        assert len(cg_1.ordered_ops[1].inputs) == 3
+
+        assert cg_1.ordered_ops[0].inputs[0].name == 'input_0_to_Gemm_0'
+        assert cg_1.ordered_ops[0].inputs[0].is_model_input == True
+        assert cg_1.ordered_ops[0].inputs[1].name == 'TopLevelModel.linear1.weight'
+        assert cg_1.ordered_ops[0].inputs[1].is_parm == True
+
+        assert cg_1.ordered_ops[1].inputs[0].name == 'Gemm_0_to_ConvLinearModel_1'
+        assert cg_1.ordered_ops[1].inputs[0].is_model_input == False
+        assert cg_1.ordered_ops[1].inputs[1].is_parm == True
+        assert cg_1.ordered_ops[1].inputs[2].is_parm == True
+
+        assert cg_1.ordered_ops[2].inputs[0].name == 'ConvLinearModel_1_to_Gemm_2'
+        assert cg_1.ordered_ops[2].inputs[0].is_model_input == False
+        assert cg_1.ordered_ops[2].inputs[1].is_parm == True
