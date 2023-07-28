@@ -1210,8 +1210,8 @@ def spy_auto_quant(auto_quant: AutoQuant):
         Spy that collects the handles to the ptq result of
         each stage of AutoQuant.
         """
-        def __init__(self):
-            self._eval_manager = None
+        def __init__(self, eval_manager):
+            self._eval_manager = eval_manager
 
         def get_all_ptq_results(self) -> List[PtqResult]:
             """Return handles to the results of AutoQuant"""
@@ -1220,21 +1220,18 @@ def spy_auto_quant(auto_quant: AutoQuant):
             return [sess.ptq_result for sess in self._eval_manager._all_sessions.values()
                     if sess.ptq_result is not None]
 
-    spy = Spy()
+    spy = Spy(auto_quant.eval_manager)
 
-    _auto_quant_main = auto_quant._auto_quant_main
+    _optimize_main = auto_quant._optimize_main
 
-    def _auto_quant_main_wrapper(fp32_model, target_acc, dummy_input,
-                                 eval_manager, results_dir="/tmp"):
-        spy._eval_manager = eval_manager
-        return _auto_quant_main(fp32_model, target_acc, dummy_input,
-                                eval_manager, results_dir)
+    def _optimize_main_wrapper(fp32_model, target_acc):
+        return _optimize_main(fp32_model, target_acc)
 
     try:
-        setattr(auto_quant, "_auto_quant_main", _auto_quant_main_wrapper)
+        setattr(auto_quant, "_optimize_main", _optimize_main_wrapper)
         yield spy
     finally:
-        setattr(auto_quant, "_auto_quant_main", _auto_quant_main)
+        setattr(auto_quant, "_optimize_main", _optimize_main)
 
 
 def _build_flowchart_metadata(result: Mapping) -> Dict: # pylint: disable=too-many-return-statements
