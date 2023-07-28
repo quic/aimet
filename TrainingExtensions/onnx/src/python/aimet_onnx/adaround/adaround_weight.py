@@ -37,18 +37,24 @@
 # =============================================================================
 
 """ Top level API for Adaptive Rounding - Post-Training Quantization (PTQ) """
-
+import os
+import shutil
 import contextlib
-from typing import Tuple, Union, Dict, List, Callable, Any
-import torch
+from typing import Tuple, Dict, List, Callable
+from onnx import onnx_pb
+
+from tqdm import tqdm
 
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger
-from aimet_common.defs import QuantScheme
+from aimet_common.defs import QuantScheme, QuantizationDataType
 
+from aimet_torch.adaround.adaround_loss import AdaroundHyperParameters
 from aimet_torch.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.qc_quantize_op import OpMode
+from aimet_onnx.meta.utils import get_module_act_func_pair, get_ordered_ops
+from aimet_onnx import utils
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -64,7 +70,7 @@ class AdaroundParameters:
     def __init__(self, data_loader, num_batches: int,
                  default_num_iterations: int = None, default_reg_param: float = 0.01,
                  default_beta_range: Tuple = (20, 2), default_warm_start: float = 0.2,
-                 forward_fn: Callable[[torch.nn.Module, Any], Any] = None):
+                 forward_fn: Callable = None):
         """
         :param data_loader: Data loader
         :param num_batches: Number of batches to be used for Adaround.
@@ -98,12 +104,12 @@ class Adaround:
     Weight-rounding mechanism for Post Training Quantization (PTQ)
     """
     @classmethod
-    def apply_adaround(cls, model: torch.nn.Module, params: AdaroundParameters,
+    def apply_adaround(cls, model: onnx_pb.ModelProto, params: AdaroundParameters,
                        path: str, filename_prefix: str, default_param_bw: int = 4,
-                       param_bw_override_list: List[Tuple[torch.nn.Module, int]] = None,
-                       ignore_quant_ops_list: List[torch.nn.Module] = None,
+                       param_bw_override_list: List[Tuple[str, int]] = None,
+                       ignore_quant_ops_list: List[str] = None,
                        default_quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
-                       default_config_file: str = None) -> torch.nn.Module:
+                       default_config_file: str = None) -> onnx_pb.ModelProto:
         """
         Returns model with optimized weight rounding of every module (Conv and Linear) and also saves the
         corresponding quantization encodings to a separate JSON-formatted file that can then be imported by
@@ -142,8 +148,8 @@ class Adaround:
         return cls._apply_adaround(quant_sim, model, params, path, filename_prefix)
 
     @classmethod
-    def _apply_adaround(cls, quant_sim: QuantizationSimModel, model: torch.nn.Module, params: AdaroundParameters,
-                        path: str, filename_prefix: str) -> torch.nn.Module:
+    def _apply_adaround(cls, quant_sim: QuantizationSimModel, model: onnx_pb.ModelProto, params: AdaroundParameters,
+                        path: str, filename_prefix: str) -> onnx_pb.ModelProto:
         """
         Returns model with optimized weight rounding of every module (Conv and Linear) and also saves the
         corresponding quantization encodings to a separate JSON-formatted file that can then be imported by
@@ -158,11 +164,25 @@ class Adaround:
         :return: Model with Adarounded weights and saves corresponding parameter encodings JSON file at provided path
         """
 
-        pass
+        # Sanity check: All the input/output quantizers should be disabled
+        for quantizer_name in quant_sim.activation_names:
+            assert not quant_sim.qc_quantize_op_dict[quantizer_name].enabled
+
+        # Get the module - activation function pair using ConnectedGraph
+        module_act_func_pair = get_module_act_func_pair(model)
+
+        cls._adaround_model(model, quant_sim, module_act_func_pair, params)
+
+        # Export quantization encodings to JSON-formatted file
+        cls._export_encodings_to_json(path, filename_prefix, quant_sim)
+
+        quant_sim.remove_quantization_nodes()
+        logger.info('Completed Adarounding Model')
+        return quant_sim.model
 
     @classmethod
-    def _adaround_model(cls, model: torch.nn.Module, quant_sim: QuantizationSimModel, module_act_func_pair: Dict,
-                        params: AdaroundParameters, dummy_input: Union[torch.Tensor, Tuple]):
+    def _adaround_model(cls, model: onnx_pb.ModelProto, quant_sim: QuantizationSimModel, module_act_func_pair: Dict,
+                        params: AdaroundParameters):
         """
         Optimize weight rounding of every module (AdaroundSupportedModules) of model in sequential manner
         based on occurrence
@@ -171,9 +191,38 @@ class Adaround:
                           The activation quantizers are expected to have been disabled.
         :param module_act_func_pair: Dictionary of module to immediate following activation function
         :param params: Adaround parameters
-        :param dummy_input: Dummy input to the model
         """
-        pass
+        # pylint: disable=too-many-locals, protected-access
+
+        num_iterations = params.num_iterations
+
+        if num_iterations is None:
+            lowest_weight_bw = 32
+            for param_name in quant_sim.param_names:
+                quantizer = quant_sim.qc_quantize_op_dict[param_name]
+                if quantizer.enabled and quantizer.data_type == QuantizationDataType.int:
+                    lowest_weight_bw = min(lowest_weight_bw, quantizer.bitwidth)
+            # If the lowest wegith bitwidth is < 8, then set num_iterations to 15K by default
+            if lowest_weight_bw < 8:
+                num_iterations = 15000
+            else:
+                num_iterations = 10000
+
+        try:
+            # Cache model input data to WORKING_DIR
+            cached_dataset = utils.CachedDataset(params.data_loader, params.num_batches, WORKING_DIR)
+
+            # Optimization Hyper parameters
+            opt_params = AdaroundHyperParameters(num_iterations, params.reg_param, params.beta_range,
+                                                 params.warm_start)
+
+            # AdaRound must be applied to modules in the order of occurrence
+            modules = get_ordered_ops(model)
+
+        finally:
+            if os.path.exists(WORKING_DIR):
+                logger.info('Deleting model inputs from location: %s', WORKING_DIR)
+                shutil.rmtree(WORKING_DIR)
 
     @staticmethod
     def _compute_param_encodings(quant_sim: QuantizationSimModel):
@@ -215,23 +264,6 @@ class Adaround:
 
         return param_to_tq_dict
 
-    @staticmethod
-    def _get_quant_wrapper(quant_sim_model: torch.nn.Module, module_name: str) -> Union[StaticGridQuantWrapper, None]:
-        """
-        For given module name, get the quantized wrapper module from the QuantSim model
-        :param quant_sim_model: Model with simulation ops
-        :param module_name: Module name
-        :return: Quantized wrapper module or None
-        """
-        quant_module = None
-
-        for name, module in quant_sim_model.named_modules():
-            if name == module_name and isinstance(module, StaticGridQuantWrapper):
-                quant_module = module
-                break
-
-        return quant_module
-
     @classmethod
     def _export_encodings_to_json(cls, path: str, filename_prefix: str, quant_sim: QuantizationSimModel):
         """
@@ -240,17 +272,15 @@ class Adaround:
         :param filename_prefix: filename to store exported weight encodings in JSON format
         :param quant_sim: QunatSim that contains the model and Adaround tensor quantizers
         """
-        pass
 
     @classmethod
-    def _update_param_encodings_dict(cls, quant_module: StaticGridQuantWrapper, name: str, param_encodings: Dict):
+    def _update_param_encodings_dict(cls, quant_module, name: str, param_encodings: Dict):
         """
         Add module's weight parameter encodings to dictionary to be used for exporting encodings
         :param quant_module: quant module
         :param name: name of module
         :param param_encodings: Dictionary of param encodings
         """
-        pass
 
     @staticmethod
     def _create_encodings_dict_for_quantizer(quantizer: TensorQuantizer) -> List[Dict]:
@@ -259,11 +289,10 @@ class Adaround:
         :param quantizer: Tensor quantizer associated with module's param
         :return: Dictionary containing encodings
         """
-        pass
 
     @staticmethod
     def _override_param_bitwidth(quant_sim: QuantizationSimModel,
-                                 param_bw_override_list: List[Tuple[torch.nn.Module, int]]):
+                                 param_bw_override_list: List[Tuple[str, int]]):
         """
         For the QuantSim, for the list of modules in the param_bw_override_list,
         overrides the default parameter bitwidths with the provided bitwidth.
@@ -278,7 +307,7 @@ class Adaround:
 
     @classmethod
     def _exclude_modules(cls, quant_sim: QuantizationSimModel,
-                         ignore_quant_ops_list: List[torch.nn.Module]):
+                         ignore_quant_ops_list: List[str]):
         """
         For the modules mentioned in the ignore_quant_ops_list, remove the corresponding quant wrappers from the
         quantSim and excludes modules from adaround optimization.
@@ -288,4 +317,3 @@ class Adaround:
         :param ignore_quant_ops_list: The list of quantizers for which the Quantization wrappers are removed from the
                                       QuantSim object.
         """
-        pass
