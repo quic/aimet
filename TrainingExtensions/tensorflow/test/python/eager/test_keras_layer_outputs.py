@@ -50,9 +50,6 @@ from keras.layers import BatchNormalization, Dense, Conv2D, Flatten, AvgPool2D, 
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel, QcQuantizeWrapper
 from aimet_tensorflow.keras.model_preparer import prepare_model
 from aimet_tensorflow.keras.layer_output_utils import LayerOutputUtil
-from aimet_common.utils import AimetLogger
-
-logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.LayerOutputs)
 
 class DummyDataLoader(tf.keras.utils.Sequence):
 
@@ -159,7 +156,7 @@ class TestLayerOutputUtil:
             each_layer_output_name = each_layer_output_name.split("/")[-1][:-4]
             saved_layer_output_list.append(each_layer_output_name)
 
-        # Verify number of layer-outputs
+        # Verify layer-output names
         np.testing.assert_array_equal(np.array(sorted(actual_layer_output_names)), np.array(sorted(saved_layer_output_list)))
 
         # Verify final layer output for all data points
@@ -197,11 +194,7 @@ class TestLayerOutputUtil:
 
             # Test dict layer output
             assert actual_layer_output_names[layer_idx] == \
-                   layer_output_util_obj.layer_output_name_mapper[unmodified_actual_layer_name]
-
-
-        logger.info("All tests passed !!!")
-        logger.info(f"Deleting the temporary created directory: {save_dir}")
+                   layer_output_util_obj.original_name_to_modified_name_mapper[unmodified_actual_layer_name]
 
         # Removing the temporary output that was created (if all tests are passed)
         shutil.rmtree(save_dir)

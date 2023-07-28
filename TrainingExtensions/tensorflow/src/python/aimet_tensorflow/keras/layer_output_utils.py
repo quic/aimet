@@ -39,6 +39,7 @@
 """ This module contains utilities to capture and save intermediate layer-outputs of a model. """
 
 import os
+from typing import Union, List, Tuple
 import re
 from collections import OrderedDict
 import json
@@ -70,12 +71,14 @@ class LayerOutputUtil:
         self.intermediate_model = self._get_intermediate_model(self.model)
 
         # Get Actual Layer output name to Modified Layer Output name dict
-        self.layer_output_name_mapper = self._layer_output_name_mapper(self.model)
+        self.original_name_to_modified_name_mapper = self._get_original_name_to_modified_name_mapper(self.model)
 
         # Saving the actual layer output name to modified layer output name (valid file name to save) in a json file
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
-        json.dump(self.layer_output_name_mapper, open(os.path.join(save_dir, "LayerOutputNameMapper.json"), 'w'), indent=4)
+        fp = open(os.path.join(save_dir, "LayerOutputNameMapper.json"), 'w')
+        json.dump(self.original_name_to_modified_name_mapper, fp=fp, indent=4)
+        fp.close()
 
         # Identify the axis-layout used for representing an image tensor
         axis_layout = 'NHWC' if tf.keras.backend.image_data_format() == 'channels_last' else 'NCHW'
@@ -83,10 +86,8 @@ class LayerOutputUtil:
         # Utility to save model inputs and their corresponding layer-outputs
         self.save_inp_out_obj = SaveInputOutput(save_dir, axis_layout=axis_layout)
 
-        logger.info("Initialised LayerOutputUtil Class for Keras")
-
     @classmethod
-    def _get_layer_name(cls, layer):
+    def _get_layer_output_name(cls, layer):
         if isinstance(layer, QcQuantizeWrapper):
             return layer.original_layer.output.name
         return layer.output.name
@@ -100,20 +101,20 @@ class LayerOutputUtil:
         return intermediate_model
 
     @classmethod
-    def _layer_output_name_mapper(cls, model):
-        layer_output_name_mapper = OrderedDict()
+    def _get_original_name_to_modified_name_mapper(cls, model):
+        original_name_to_modified_name_mapper = OrderedDict()
         for layer in model.layers:
-            layer_output_name = cls._get_layer_name(layer)
+            layer_output_name = cls._get_layer_output_name(layer)
 
             # Replace all Non-word characters with "_" to make it a valid file name for saving the results
             # For Eg.: "conv2d/BiasAdd:0" gets converted to "conv2d_BiasAdd_0"
             modified_layer_output_name = re.sub(r'\W+', "_", layer_output_name)
 
-            layer_output_name_mapper[layer_output_name] = modified_layer_output_name
+            original_name_to_modified_name_mapper[layer_output_name] = modified_layer_output_name
 
-        return layer_output_name_mapper
+        return original_name_to_modified_name_mapper
 
-    def get_outputs(self, input_batch: tf.Tensor):
+    def get_outputs(self, input_batch: Union[tf.Tensor, List[tf.Tensor], Tuple[tf.Tensor]]):
         """
         This function captures layer-outputs and renames them as per the AIMET exported model.
         :param input_batch: Batch of inputs for which we want to obtain layer-outputs.
@@ -122,9 +123,9 @@ class LayerOutputUtil:
         outs = self.intermediate_model(input_batch)
         output_pred = tf_utils.sync_to_numpy_or_python_type(outs)
 
-        return dict(zip(self.layer_output_name_mapper.values(), output_pred))
+        return dict(zip(self.original_name_to_modified_name_mapper.values(), output_pred))
 
-    def generate_layer_outputs(self, input_batch: tf.Tensor):
+    def generate_layer_outputs(self, input_batch: Union[tf.Tensor, List[tf.Tensor], Tuple[tf.Tensor]]):
         """
         This method captures output of every layer of a keras model & saves the inputs and corresponding layer-outputs to disk.
         This allows layer-output comparison either between original fp32 model and quantization simulated model or quantization
@@ -135,6 +136,6 @@ class LayerOutputUtil:
         """
 
         batch_layer_name_to_layer_output = self.get_outputs(input_batch)
-        self.save_inp_out_obj.save(input_batch, batch_layer_name_to_layer_output)
+        self.save_inp_out_obj.save(tf_utils.sync_to_numpy_or_python_type(input_batch), batch_layer_name_to_layer_output)
 
         logger.info("Layer Outputs Saved")
