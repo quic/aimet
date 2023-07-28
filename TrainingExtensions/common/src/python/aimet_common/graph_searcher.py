@@ -175,7 +175,7 @@ class GraphSearcher:
         # Find the input node(s) in the graph
         input_nodes = []
         for op in self._connected_graph.get_all_ops().values():
-            if op.inputs and op.inputs[0].is_model_input:
+            if any(t.is_model_input for t in op.inputs):
                 input_nodes.append(op)
 
         visited_nodes = set()

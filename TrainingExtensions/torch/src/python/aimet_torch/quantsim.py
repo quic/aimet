@@ -599,7 +599,8 @@ class QuantizationSimModel:
             self._replace_quantization_wrapper(self.model, device)
 
     def _override_quant_config_for_transformer_layers(self):
-        """Looks for specfic ops in a transformer and overrides the quantizer to tf mode
+        """
+        Looks for specific ops in a transformer and overrides the quantizer to tf mode
         """
         # pylint: disable=protected-access
         attention_with_mask_add_quantizer_dict = transformer_utils.get_attention_with_mask_add_quantizer_dict(self.model)
