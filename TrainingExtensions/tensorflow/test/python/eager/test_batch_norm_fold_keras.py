@@ -230,7 +230,23 @@ class TestBatchNormFold(unittest.TestCase):
         for layer in new_model.layers:
             self.assertFalse(isinstance(layer, tf.keras.layers.BatchNormalization))
         self.assertTrue(len(new_model.layers) == len(model.layers) - 3)
+        
+    def test_bn_removal_functional_gamma_is_none(self):
+        
+        inp = tf.keras.Input(shape=(28, 28, 3))
+        conv = tf.keras.layers.Conv2D(3, 3)(inp)
+        bn = tf.keras.layers.BatchNormalization()
+        x = bn(conv)
 
+        model = tf.keras.Model(inputs=[inp], outputs=[x])
+        bn.gamma = None
+        
+        conv_bns, model = fold_all_batch_norms(model)
+        assert len(conv_bns) == 1
+        
+        for layer in model.layers:
+            assert not isinstance(layer, tf.keras.layers.BatchNormalization)
+        
     def test_bn_removal_functional_two_paths(self):
         inp = tf.keras.Input(shape=(6, 6, 3))
 
