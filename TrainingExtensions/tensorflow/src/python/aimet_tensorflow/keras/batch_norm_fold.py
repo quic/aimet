@@ -300,8 +300,15 @@ def _get_bn_params(bn: tf.keras.layers.BatchNormalization) -> libpymo.BNParams()
 
     bn_params = libpymo.BNParams()
 
-    bn_params.gamma = bn.gamma.numpy().reshape(-1)
-    bn_params.beta = bn.beta.numpy().reshape(-1)
+    bn_beta_numpy = bn.beta.numpy()
+    if bn.gamma is None:
+        _logger.warning("Gamma for BatchNormalization '%s' is None. Setting to ones.", bn.name)
+        calculated_gamma = np.ones_like(bn_beta_numpy)
+    else:
+        calculated_gamma = bn.gamma.numpy()
+
+    bn_params.gamma = calculated_gamma.reshape(-1)
+    bn_params.beta = bn_beta_numpy.reshape(-1)
     bn_params.runningMean = bn.moving_mean.numpy().reshape(-1)
     bn_params.runningVar = bn.moving_variance.numpy().reshape(-1)
     epsilon = bn.epsilon
