@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -48,7 +48,9 @@ import aimet_torch.utils
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops,\
     get_all_ops_with_constant_inputs
 from models import test_models
+from aimet_common.connected_graph.product import Product
 from aimet_torch.meta.connectedgraph import ConnectedGraph
+from aimet_torch.meta.operation import Op
 from aimet_torch.meta import connectedgraph_utils
 from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 from aimet_torch import elementwise_ops
@@ -926,3 +928,78 @@ class TestConnectedGraphUtils(unittest.TestCase):
         assert cg_1.ordered_ops[2].inputs[0].name == 'ConvLinearModel_1_to_Gemm_2'
         assert cg_1.ordered_ops[2].inputs[0].is_model_input == False
         assert cg_1.ordered_ops[2].inputs[1].is_parm == True
+
+    def test_conv_bn_mangle_nodes(self):
+        class ModelWithConvBNMangleNodes(torch.nn.Module):
+            def __init__(self):
+                super(ModelWithConvBNMangleNodes, self).__init__()
+                self.inner_seq = nn.Sequential(
+                    nn.Conv2d(3, 16, kernel_size=2, stride=2, padding=2, bias=False),
+                    nn.BatchNorm2d(16)
+                )
+                self.seq_list = nn.Sequential(
+                    self.inner_seq,
+                    nn.ReLU(inplace=True)
+                )
+
+            def forward(self, inp):
+                return self.inner_seq(inp)
+
+        dummy_input = torch.randn(1, 3, 8, 8)
+        model = ModelWithConvBNMangleNodes()
+        cg = ConnectedGraph(model, dummy_input)
+        assert len(cg.ordered_ops[0].inputs) == 2
+        assert len(cg.ordered_ops[1].inputs) == 5
+        for inp in cg.ordered_ops[0].inputs[1:]:
+            assert inp.is_parm
+            assert not inp.is_const
+        for inp in cg.ordered_ops[1].inputs[1:]:
+            assert inp.is_parm
+            assert not inp.is_const
+
+    def test_remove_inputs_for_ops(self):
+        class MockConnectedGraph(ConnectedGraph):
+            def __init__(self):
+                self._ops = {}
+                self._products = {}
+
+        mcg = MockConnectedGraph()
+
+        conv_1 = Op('conv_1', 'conv_1', None, False, 'Conv', None)
+        p1 = Product('p1', None)
+        p2 = Product('p2', None)
+        conv_1.add_input(p1)
+        conv_1.add_input(p2)
+        mcg._ops[conv_1.name] = conv_1
+        mcg._products[p1.name] = p1
+        mcg._products[p2.name] = p2
+
+        add_1 = Op('add_1', 'add_1', None, False, 'Add', None)
+        p3 = Product('p3', None)
+        p4 = Product('p4', None)
+        p5 = Product('p5', None)
+        add_1.add_input(p3)
+        add_1.add_input(p4)
+        add_1.add_input(p5)
+        mcg._ops[add_1.name] = add_1
+        mcg._products[p3.name] = p3
+        mcg._products[p4.name] = p4
+        mcg._products[p5.name] = p5
+
+        assert len(conv_1.inputs) == 2
+        assert conv_1.inputs == [p1, p2]
+        assert p1.name in mcg._products.keys()
+
+        assert len(add_1.inputs) == 3
+        assert add_1.inputs == [p3, p4, p5]
+        assert p5.name in mcg._products.keys()
+
+        mcg._remove_inputs_for_ops()
+
+        assert len(conv_1.inputs) == 1
+        assert conv_1.inputs == [p2]
+        assert p1.name not in mcg._products.keys()
+
+        assert len(add_1.inputs) == 2
+        assert add_1.inputs == [p3, p4]
+        assert p5.name not in mcg._products.keys()
