@@ -252,7 +252,6 @@ class QcQuantizeWrapper(nn.Module):
                                                           data_type=data_type)
                                  for _ in range(num_inputs)]
 
-        self._quant_scheme = quant_scheme
         self.supported_kernels = {}
 
     def get_named_parameters(self):
@@ -656,7 +655,8 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
                 return input_tensor
 
             if self._mode is QcQuantizeOpMode.ANALYSIS:
-                if TF_ENHANCED_USE_DOWNSAMPLING and self._quant_scheme == QuantScheme.post_training_tf_enhanced:
+                if TF_ENHANCED_USE_DOWNSAMPLING and \
+                        tensor_quantizers[index].quant_scheme == QuantScheme.post_training_tf_enhanced:
                     # Update stats using downsampled output to speed up tf enhanced
                     input_tensor_flatten = input_tensor.reshape(-1)
                     downsampled_input = \
