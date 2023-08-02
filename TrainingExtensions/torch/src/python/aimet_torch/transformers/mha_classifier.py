@@ -38,6 +38,7 @@
 
 """ Utility to classify MultiHeadAttention (MHA) module(s) """
 
+from collections import deque
 from dataclasses import dataclass
 from typing import List, Union, Tuple, Optional
 import torch
@@ -76,19 +77,18 @@ def find_mha_variant(model: torch.nn.Module,
 def pattern_exists(ordered_ops: List[Op],
                    pattern: List[str]) -> Optional[List[MhaInfo]]:
     """
-    Determine if the ordered ops contain the given pattern or not. If the pattern occurs mulitple times,
-    only non-overlapping pattern(s) need to be determined.
+    Determine if the ordered ops contain the given pattern or not using sliding window approach.
 
     :param ordered_ops: Orderered connected graph ops.
     :param pattern: A pattern is list of connected graph op types in order of occurence.
     :return: List of MHAInfo which consists of mha's type and qualified name.
     """
-    position = 0
     mha_modules_info = []
+    sliding_window = deque(maxlen=len(pattern))
     for index, op in enumerate(ordered_ops):
-        position = position + 1 if position < len(pattern) and op.type == pattern[position] else 0
-        if position == len(pattern):
-            position = 0
+        sliding_window.append(op)
+        sliced_pattern = [op.type for op in sliding_window]
+        if sliced_pattern == pattern:
             _, parent_name = ordered_ops[index].dotted_name.split(".", 1)
             module_qualified_name, _ = parent_name.rsplit(".", 1)
             mha_info = MhaInfo(type(ordered_ops[index].residing_module),
