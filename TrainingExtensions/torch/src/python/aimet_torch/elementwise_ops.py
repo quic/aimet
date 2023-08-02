@@ -442,3 +442,13 @@ class OneHot(torch.nn.Module):
         if self.off_value != 0 or self.on_value != 1:
             out = out * (self.on_value - self.off_value) + self.off_value
         return out
+
+
+class Expand(torch.nn.Module):
+    """Custom module for a Expand op"""
+    @staticmethod
+    def forward(tensor: torch.Tensor, *args) -> torch.Tensor:
+        """
+        Forward-pass routine for Expand op
+        """
+        return tensor.expand(*args)
