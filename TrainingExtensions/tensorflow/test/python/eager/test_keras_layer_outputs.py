@@ -86,7 +86,7 @@ def keras_model():
     return model
 
 def get_quantsim_artifacts(base_model):
-    # Using Model Preparer
+    # Using model preparer
     base_model = prepare_model(base_model)
     dummy_input = np.random.rand(1, 16, 16, 3)
 
@@ -117,15 +117,15 @@ class TestLayerOutputUtil:
         # Get the QuantSim artifacts
         qs_obj = get_quantsim_artifacts(base_model)
 
-        # Temporary Output path to store outputs temporarily
+        # Temporary output path to store outputs temporarily
         temp_folder_name = f"temp_keras_layer_output_{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}"
         save_dir = os.path.join(os.getcwd(), temp_folder_name)
 
-        # Required Params for the layer output generation function
+        # Required params for the layer output generation function
         data_points = 4
         batch_size = 3
 
-        # Get the DataLoader
+        # Get the dataLoader
         dataloader = DummyDataLoader(data_count=data_points, batch_size=batch_size)
 
         layer_output_util_obj = LayerOutputUtil(model=qs_obj.model, save_dir=save_dir)
@@ -133,10 +133,10 @@ class TestLayerOutputUtil:
             batch_x, _ = inp_batch
             layer_output_util_obj.generate_layer_outputs(input_batch=batch_x)
 
-        # Verify number of Inputs
+        # Verify number of inputs
         assert data_points == len(glob(save_dir+"/inputs/*.raw")) ## Check #Inputs
 
-        # verify number of layer outputs
+        # Verify number of layer outputs
         assert data_points == len(glob(save_dir+"/outputs/*")) ## Check #Outputs
 
         # Getting the actual layer output names
@@ -178,17 +178,17 @@ class TestLayerOutputUtil:
                 if (batch_num+1) >= n_iterations:
                     break
 
-        # Test the Layer output name mapper file and dict
+        # Test the layer output name mapper file and dict
         saved_layer_output_name_mapper = json.load(open(temp_folder_name+"/LayerOutputNameMapper.json", "r"))
 
-        # Verify Number of Layers
+        # Verify number of layers
         np.testing.assert_array_equal(np.array(unmodified_actual_layer_output_names),
                                       np.array(list(saved_layer_output_name_mapper.keys())))
 
         # Verify modified layer name for each of the layers
         for layer_idx, unmodified_actual_layer_name in enumerate(unmodified_actual_layer_output_names):
 
-            # Test Saved File layer output
+            # Test saved file layer output
             assert actual_layer_output_names[layer_idx] == \
                    saved_layer_output_name_mapper[unmodified_actual_layer_name]
 
@@ -223,7 +223,7 @@ class TestLayerOutputUtil:
             assert each_actual_output_name in layer_output_dict.keys(), f"Output not generated for " \
                                                                         f"{each_actual_output_name}"
 
-        # Verify the Final layer Output
+        # Verify the final layer output
         actual_output = qs_obj.model.predict(dataloader[0][0])
         np.testing.assert_array_equal(actual_output, layer_output_dict[qs_model_actual_output_names[-1]])
 
@@ -247,6 +247,6 @@ class TestLayerOutputUtil:
             assert each_actual_output_name in layer_output_dict.keys(), f"Output not generated for " \
                                                                         f"{each_actual_output_name}"
 
-        # Verify the Final layer Output
+        # Verify the final layer output
         actual_output = base_model.predict(dataloader[0][0])
         np.testing.assert_array_equal(actual_output, layer_output_dict[base_model_actual_output_names[-1]])

@@ -45,7 +45,7 @@ from collections import OrderedDict
 import json
 import tensorflow as tf
 from keras.utils import tf_utils
-from aimet_tensorflow.keras.quantsim import QcQuantizeWrapper
+from aimet_tensorflow.keras.quantsim import QcQuantizeWrapper, QcQuantizableMultiHeadAttention
 from aimet_common.layer_output_utils import SaveInputOutput
 from aimet_common.utils import AimetLogger
 
@@ -62,23 +62,19 @@ class LayerOutputUtil:
         :param model: Keras (fp32/quantsim) model.
         :param save_dir: Directory to save the layer outputs.
         """
-        self.model = model
-
         # Freeze the model, i.e, run in test mode
-        self.model.trainable = False
+        model.trainable = False
 
-        # Get Intermediate model for layer-outputs
-        self.intermediate_model = self._get_intermediate_model(self.model)
+        # Get intermediate model for layer-outputs
+        self.intermediate_model = self._get_intermediate_model(model)
 
-        # Get Actual Layer output name to Modified Layer Output name dict
-        self.original_name_to_modified_name_mapper = self._get_original_name_to_modified_name_mapper(self.model)
+        # Get actual Layer output name to modified layer output name dict
+        self.original_name_to_modified_name_mapper = self._get_original_name_to_modified_name_mapper(model)
 
         # Saving the actual layer output name to modified layer output name (valid file name to save) in a json file
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
-        fp = open(os.path.join(save_dir, "LayerOutputNameMapper.json"), 'w')
-        json.dump(self.original_name_to_modified_name_mapper, fp=fp, indent=4)
-        fp.close()
+        os.makedirs(save_dir, exist_ok=True)
+        with open(os.path.join(save_dir, "LayerOutputNameMapper.json"), 'w') as fp:
+            json.dump(self.original_name_to_modified_name_mapper, fp=fp, indent=4)
 
         # Identify the axis-layout used for representing an image tensor
         axis_layout = 'NHWC' if tf.keras.backend.image_data_format() == 'channels_last' else 'NCHW'
@@ -87,13 +83,23 @@ class LayerOutputUtil:
         self.save_inp_out_obj = SaveInputOutput(save_dir, axis_layout=axis_layout)
 
     @classmethod
-    def _get_layer_output_name(cls, layer):
+    def _get_layer_output_name(cls, layer: Union[QcQuantizeWrapper, QcQuantizableMultiHeadAttention, tf.keras.layers.Layer]):
+        """
+        This function returns the actual layer output name for a given layer
+        :param layer: Keras model layer.
+        :return: Actual layer output name for the layer
+        """
         if isinstance(layer, QcQuantizeWrapper):
             return layer.original_layer.output.name
         return layer.output.name
 
     @classmethod
-    def _get_intermediate_model(cls, model):
+    def _get_intermediate_model(cls, model: tf.keras.Model):
+        """
+        This function instantiates the feature extraction model for per layer outputs
+        :param model: Keras model.
+        :return: Intermediate keras model for feature extraction
+        """
         inputs = [model.layers[0].input]
         outputs = [layer.output for layer in model.layers]
         intermediate_model = tf.keras.models.Model(inputs=inputs, outputs=outputs)
@@ -101,12 +107,18 @@ class LayerOutputUtil:
         return intermediate_model
 
     @classmethod
-    def _get_original_name_to_modified_name_mapper(cls, model):
+    def _get_original_name_to_modified_name_mapper(cls, model: tf.keras.Model):
+        """
+        This function captures the per-layer output name and modifies it to make a valid file name
+        (by removing non-word characters) so that the layer output can be easily saved with the modified name.
+        :param model: Keras model.
+        :return: Actual layer name to modified layer name dict
+        """
         original_name_to_modified_name_mapper = OrderedDict()
         for layer in model.layers:
             layer_output_name = cls._get_layer_output_name(layer)
 
-            # Replace all Non-word characters with "_" to make it a valid file name for saving the results
+            # Replace all non-word characters with "_" to make it a valid file name for saving the results
             # For Eg.: "conv2d/BiasAdd:0" gets converted to "conv2d_BiasAdd_0"
             modified_layer_output_name = re.sub(r'\W+', "_", layer_output_name)
 
