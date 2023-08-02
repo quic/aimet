@@ -38,11 +38,18 @@
 
 """ Prunes layers using Spatial SVD schemes """
 
-from aimet_common.utils import AimetLogger
-import aimet_common.svd_pruner
+import tensorflow as tf
+import aimet_common.libpymo as pymo
 
+from aimet_common.utils import AimetLogger
+from aimet_common import cost_calculator
+from aimet_common.defs import CostMetric
+import aimet_common.svd_pruner
+from aimet_common.pruner import Pruner
+
+from aimet_tensorflow.keras.utils import pymo_utils
 from aimet_tensorflow.keras.layer_database import LayerDatabase, Layer
-from aimet_tensorflow.keras.svd_spiltter import SpatialSvdModuleSplitter
+from aimet_tensorflow.keras.svd_spiltter import SpatialSvdModuleSplitter, WeightSvdModuleSplitter
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Svd)
 
@@ -66,13 +73,75 @@ class SpatialSvdPruner(aimet_common.svd_pruner.SpatialSvdPruner):
         module_a, module_b = SpatialSvdModuleSplitter.split_module(comp_layer_db.model, layer, rank)
 
         # get the output activation shape for first conv op
-        output_shape_a = module_a.output_shape
+        output_shape_a = _get_layer_output_shape(module_a)
 
         # get the output activation shape for second conv op
-        output_shape_b = module_b.output_shape
+        output_shape_b = _get_layer_output_shape(module_b)
 
         # Create two new layers and return them
         layer_a = Layer(layer=module_a, name=module_a.name, output_shape=output_shape_a)
         layer_b = Layer(layer=module_b, name=module_b.name, output_shape=output_shape_b)
 
         comp_layer_db.replace_layer_with_sequential_of_two_layers(layer, layer_a, layer_b)
+
+
+class WeightSvdPruner(Pruner):
+    """
+    Pruner for Weight-SVD method
+    """
+
+    def _prune_layer(self, orig_layer_db: LayerDatabase, comp_layer_db: LayerDatabase, layer: Layer, comp_ratio: float,
+                     cost_metric: CostMetric):
+        """
+        Replaces a given layer within the comp_layer_db with a pruned version of the layer
+        In this case, the replaced layer will be a sequential of two spatial-svd-decomposed layers
+
+        :param cost_metric:
+        :param orig_layer_db: original Layer database
+        :param comp_layer_db: Layer database, which will get modified
+        :param layer: Layer to prune
+        :param comp_ratio: Compression-ratio
+        :return: updated compression ratio
+        """
+
+        # Given a compression ratio, find the appropriate rounded rank
+        rank = cost_calculator.WeightSvdCostCalculator.calculate_rank_given_comp_ratio(layer, comp_ratio, cost_metric)
+
+        logger.info("Weight SVD splitting layer: %s using rank: %s", layer.name, rank)
+
+        # For the rounded rank compute the new compression ratio
+        comp_ratio = cost_calculator.WeightSvdCostCalculator.calculate_comp_ratio_given_rank(layer, rank,
+                                                                                             cost_metric)
+
+        # Create a new instance of libpymo and register layers with it
+        svd_lib_ref = pymo.GetSVDInstance()
+        pymo_utils.PymoSvdUtils.configure_layers_in_pymo_svd([layer], cost_metric, svd_lib_ref, pymo.TYPE_SINGLE)
+
+        # Split module using Weight SVD
+        logger.info("Splitting module: %s with rank: %r", layer.name, rank)
+        module_a, module_b = WeightSvdModuleSplitter.split_module(comp_layer_db.model, layer.module, rank, svd_lib_ref)
+
+        # get the output activation shape for first conv/fc op
+        output_shape_a = _get_layer_output_shape(module_a)
+
+        # get the output activation shape for second conv/fc op
+        output_shape_b = _get_layer_output_shape(module_b)
+
+        # Create two new layers and return them
+        layer_a = Layer(layer=module_a, name=module_a.name, output_shape=output_shape_a)
+        layer_b = Layer(layer=module_b, name=module_b.name, output_shape=output_shape_b)
+
+        comp_layer_db.replace_layer_with_sequential_of_two_layers(layer, layer_a, layer_b)
+        return comp_ratio
+
+
+def _get_layer_output_shape(layer: tf.keras.layers):
+    output_activation_shape = list(layer.output_shape)
+    if len(output_activation_shape) == 4:
+        reorder = [0, 3, 1, 2]
+        output_activation_shape = [output_activation_shape[idx] for idx in reorder]
+    # activation dimension for FC layer is (1,1)
+    if isinstance(layer, tf.keras.layers.Dense):
+        output_activation_shape.extend([1, 1])
+
+    return output_activation_shape
