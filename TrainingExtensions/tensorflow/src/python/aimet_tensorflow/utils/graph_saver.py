@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -230,16 +230,5 @@ def keras_remove_hanging_nodes(model: tf.keras.Model) -> tf.keras.Model:
     :param model: keras model from which hanging nodes needs to be removed.
     :return udpated keras model with hanging nodes removed
     """
-    # Get the last layer of the model
-    last_layer = model.layers[-1]
 
-    # Check if this layer is disconnected
-    while not (len(last_layer.inbound_nodes) or len(last_layer.outbound_nodes)):
-        # pylint: disable=protected-access
-        model._layers.remove(last_layer)
-        last_layer = model.layers[-1]
-
-    # Relaod the graph so that the changes gets reflected properly
-    keras_save_and_load_graph('./data/temp', model)
-
-    return model
+    return tf.keras.Model(model.inputs, model.outputs)
