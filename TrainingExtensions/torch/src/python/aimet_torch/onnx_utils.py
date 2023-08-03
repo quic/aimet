@@ -115,6 +115,7 @@ map_torch_types_to_onnx = {
     elementwise_ops.ChannelShuffle: ['ChannelShuffle'],
     elementwise_ops.Tile: ['Tile'],
     elementwise_ops.TopK: ['TopK'],
+    elementwise_ops.IndexSelect: ['Gather'],
     elementwise_ops.CustomGather: ['Gather'],
     elementwise_ops.Gather: ['Gather'],
     elementwise_ops.GatherNd: ['GatherND'],
