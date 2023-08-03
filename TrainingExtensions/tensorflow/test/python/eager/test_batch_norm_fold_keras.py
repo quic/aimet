@@ -232,7 +232,6 @@ class TestBatchNormFold(unittest.TestCase):
         self.assertTrue(len(new_model.layers) == len(model.layers) - 3)
         
     def test_bn_removal_functional_gamma_is_none(self):
-        
         inp = tf.keras.Input(shape=(28, 28, 3))
         conv = tf.keras.layers.Conv2D(3, 3)(inp)
         bn = tf.keras.layers.BatchNormalization()
@@ -240,13 +239,27 @@ class TestBatchNormFold(unittest.TestCase):
 
         model = tf.keras.Model(inputs=[inp], outputs=[x])
         bn.gamma = None
-        
+
         conv_bns, model = fold_all_batch_norms(model)
         assert len(conv_bns) == 1
-        
+
         for layer in model.layers:
             assert not isinstance(layer, tf.keras.layers.BatchNormalization)
-        
+
+    def test_bn_gamma_is_none_standalone_bn(self):
+        inp = tf.keras.Input(shape=(28, 28, 3))
+        x = tf.keras.layers.MaxPool2D()(inp)
+        bn = tf.keras.layers.BatchNormalization()
+        x = bn(x)
+        x = tf.keras.layers.ReLU()(x)
+
+        model = tf.keras.Model(inputs=[inp], outputs=[x])
+        bn.gamma = None
+
+        _, model = fold_all_batch_norms(model)
+
+        assert bn.gamma is not None
+
     def test_bn_removal_functional_two_paths(self):
         inp = tf.keras.Input(shape=(6, 6, 3))
 

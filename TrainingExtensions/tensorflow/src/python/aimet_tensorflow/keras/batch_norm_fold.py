@@ -303,11 +303,13 @@ def _get_bn_params(bn: tf.keras.layers.BatchNormalization) -> libpymo.BNParams()
     bn_beta_numpy = bn.beta.numpy()
     if bn.gamma is None:
         _logger.warning("Gamma for BatchNormalization '%s' is None. Setting to ones.", bn.name)
-        calculated_gamma = np.ones_like(bn_beta_numpy)
-    else:
-        calculated_gamma = bn.gamma.numpy()
+        # Gamma weight needs to be added to BN in order to set weights for standalone BN's.
+        # We first utilize gamma_initializer to create the gamma tensor which by default creates a tensor of ones based
+        # on a shape given. Then, we have to rebuild the BN in order for the weight to be added in the correct spot.
+        bn.gamma_initializer(bn_beta_numpy.shape)
+        bn.build(bn.input.shape)
 
-    bn_params.gamma = calculated_gamma.reshape(-1)
+    bn_params.gamma = bn.gamma.numpy().reshape(-1)
     bn_params.beta = bn_beta_numpy.reshape(-1)
     bn_params.runningMean = bn.moving_mean.numpy().reshape(-1)
     bn_params.runningVar = bn.moving_variance.numpy().reshape(-1)
