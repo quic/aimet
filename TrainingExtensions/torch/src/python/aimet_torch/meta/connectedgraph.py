@@ -64,6 +64,20 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
 # users as needed.
 jit_trace_args = {'check_trace': False}
 
+# Dictionary mapping connected graph op types to a tuple consisting of:
+# index 0: number of expected inputs
+# index 1: whether in the order of inputs to the op, if the expected inputs come at the front of the list (True) or the
+# back of the list (False).
+# This is needed for removing certain constant inputs to ops which we don't want to exist, for example mangled Conv and
+# BN ops which expose parameter inputs as constant inputs to the op.
+op_inputs_dict = {
+    'Conv': (1, False),
+    'ConvTranspose': (1, False),
+    'BatchNormalization': (1, False),
+    'Gemm': (1, False),
+    'Add': (2, True)
+}
+
 # pylint: disable=too-many-lines
 # pylint: disable=protected-access
 class OpWithMultipleOutputs(Op):
@@ -276,6 +290,10 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         self._transform_ops_and_products_to_connected_graph_convention()
         self._fill_op_and_product_properties(module_tensor_shapes_map)
 
+        # In certain models, a 'mangled' version of nodes like Conv or BN appears in the trace which exposes parameters
+        # as constant inputs to the node. In such cases, remove constant inputs since param products will be created
+        # to track them.
+        self._remove_inputs_for_ops()
         # Create parameters for ops such as conv, batchnorm, etc.
         self._create_param_products()
 
@@ -939,6 +957,27 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 product_name = module_name + '.running_var'
                 self._create_and_add_param_product_if_not_exists(conn_graph_op, product_name,
                                                                  list(module.running_var.shape))
+
+    def _remove_inputs_for_ops(self):
+        """
+        Remove certain constant inputs for certain ops.
+        """
+
+        for op in self._ops.values():
+            num_expected_inputs, start_from_front = op_inputs_dict.get(op.type, (None, None))
+            if num_expected_inputs is not None and len(op.inputs) > num_expected_inputs:
+                if start_from_front:
+                    # Remove trailing inputs so that only num_expected_inputs remains
+                    inputs_to_remove = op.inputs[num_expected_inputs:]
+                    inputs_to_keep = op.inputs[:num_expected_inputs]
+                else:
+                    # Remove leading inputs so that only num_expected_inputs remains
+                    inputs_to_remove = op.inputs[:-num_expected_inputs]
+                    inputs_to_keep = op.inputs[-num_expected_inputs:]
+
+                for inp in inputs_to_remove:
+                    del self._products[inp.name]
+                op.inputs = inputs_to_keep
 
     def _create_and_add_param_product_if_not_exists(self, op: Op, product_name: str, shape: List[int]):
         """
