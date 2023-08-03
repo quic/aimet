@@ -35,6 +35,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+# pylint: skip-file
 
 """ Top level API for Adaptive Rounding - Post-Training Quantization (PTQ) """
 import os
