@@ -38,14 +38,14 @@
 
 """ Top-level API for aimet compression library """
 
-from typing import Union, Tuple
+from typing import Union, Tuple, Callable
 import tensorflow as tf
 
 from aimet_common.defs import CostMetric, CompressionScheme, EvalFunction, CompressionStats
 from aimet_common.bokeh_plots import BokehServerSession
 
 from aimet_tensorflow.utils.graph_saver import keras_wrapper_func, keras_save_and_load_graph, keras_remove_hanging_nodes
-from aimet_tensorflow.defs import SpatialSvdParameters, ChannelPruningParameters
+from aimet_tensorflow.defs import SpatialSvdParameters
 from aimet_tensorflow.keras.compression_factory import CompressionFactory
 
 
@@ -57,9 +57,8 @@ class ModelCompressor:
     @staticmethod
     def compress_model(model: tf.keras.Model, eval_callback: EvalFunction, eval_iterations,
                        compress_scheme: CompressionScheme, cost_metric: CostMetric,
-                       parameters: Union[SpatialSvdParameters,
-                                         ChannelPruningParameters],
-                       trainer=None, visualization_url=None) -> Tuple[tf.keras.Model, CompressionStats]:
+                       parameters: Union[SpatialSvdParameters],
+                       trainer: Callable = None, visualization_url: str = None) -> Tuple[tf.keras.Model, CompressionStats]:
         """
         Compress a given model using the specified parameters
 
@@ -67,9 +66,6 @@ class ModelCompressor:
         :param eval_callback:  Evaluation callback. Expected signature is evaluate(model, iterations, use_cuda).
                                Expected to return an accuracy metric.
         :param eval_iterations: Iterations to run evaluation for.
-        :param trainer: Training Class: Contains a callable, train_model, which takes model, layer which is being
-                            fine-tuned and an optional parameter train_flag as a parameter.
-                        None: If per layer fine-tuning is not required while creating the final compressed model
         :param compress_scheme: Compression scheme. See the enum for allowed values
         :param cost_metric: Cost metric to use for the compression-ratio (either mac or memory)
         :param parameters: Compression parameters specific to given compression scheme

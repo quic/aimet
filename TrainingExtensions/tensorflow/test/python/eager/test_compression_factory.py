@@ -42,7 +42,6 @@ import aimet_common.cost_calculator
 import aimet_tensorflow
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import signal
-import pytest
 from unittest.mock import MagicMock
 import tensorflow as tf
 
@@ -64,8 +63,7 @@ def get_model():
     return tf.keras.Model(inp, out)
 
 
-
-class TestTfCompressionFactory():
+class TestKerasCompressionFactory:
 
     def test_spatial_svd_factory(self):
         """
@@ -103,7 +101,7 @@ class TestTfCompressionFactory():
                                       mode=SpatialSvdParameters.Mode.auto, params=auto_params)
 
         try:
-            url, process = start_bokeh_server_session(8016)
+            url, process = start_bokeh_server_session(0)
 
             svd_algo = CompressionFactory.create_spatial_svd_algo(model, eval_callback, 100,
                                                                           CostMetric.mac, params, url)

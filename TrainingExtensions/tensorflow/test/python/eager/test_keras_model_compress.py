@@ -41,15 +41,10 @@ import os
 from aimet_tensorflow.keras.compress import ModelCompressor
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-import signal
-import pytest
 from unittest.mock import MagicMock
 import tensorflow as tf
 import aimet_common.defs as aimet_common_defs
-from aimet_common.utils import start_bokeh_server_session
-from aimet_common.defs import CostMetric
 from aimet_tensorflow.defs import SpatialSvdParameters, GreedySelectionParameters
-from aimet_tensorflow.keras.compression_factory import CompressionFactory
 
 
 def get_model():
@@ -64,11 +59,10 @@ def get_model():
     return tf.keras.Model(inp, out)
 
 
-class TestSpatilSVD:
+class TestSpatialSVD:
     def test_spatial_svd_compression(self):
         """
-        Tests spatial svd factory creates the right algo.
-        Bokeh session is not used.
+        Tests spatial svd compression utility.
         :return: None
         """
         model = get_model()

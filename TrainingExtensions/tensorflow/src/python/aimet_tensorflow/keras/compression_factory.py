@@ -40,6 +40,8 @@
 
 from typing import List
 import tensorflow as tf
+
+from aimet_common.bokeh_plots import BokehServerSession
 from aimet_common.defs import CostMetric, EvalFunction, LayerCompRatioPair
 from aimet_common.cost_calculator import SpatialSvdCostCalculator
 from aimet_common.comp_ratio_select import GreedyCompRatioSelectAlgo, ManualCompRatioSelectAlgo
@@ -56,16 +58,15 @@ class CompressionFactory:
     """ Factory to construct various aimet model compression classes based on a scheme """
 
     @classmethod
-    def create_spatial_svd_algo(cls, model: tf.keras.Model, eval_callback: EvalFunction, eval_iterations,
+    def create_spatial_svd_algo(cls, model: tf.keras.Model, eval_callback: EvalFunction, eval_iterations: int,
                                 cost_metric: CostMetric, params: SpatialSvdParameters,
-                                bokeh_session=None) -> CompressionAlgo:
+                                bokeh_session: BokehServerSession = None) -> CompressionAlgo:
         """
         Factory method to construct SpatialSvdCompressionAlgo
 
         :param model: Keras model to compress
         :param eval_callback: Evaluation callback for the model
         :param eval_iterations: Evaluation iterations
-        :param input_shape: tuple or list of tuples of input shape to the model
         :param cost_metric: Cost metric (mac or memory)
         :param params: Spatial SVD compression parameters
         :param bokeh_session: The Bokeh Session to display plots
@@ -117,7 +118,14 @@ class CompressionFactory:
         return spatial_svd_algo
 
     @staticmethod
-    def _get_layer_pairs(layer_db: LayerDatabase, module_comp_ratio_pairs: List[ModuleCompRatioPair]):
+    def _get_layer_pairs(layer_db: LayerDatabase, module_comp_ratio_pairs: List[ModuleCompRatioPair]) -> List[LayerCompRatioPair]:
+        """
+        Converts the List of module to compresion-ratio pair to List of Layer to compression-ratio pairs.
+
+        :param layer_db: Layerdatabase of the Model under compression
+        :param module_comp_ratio_pairs: List of module to compression retio pairs
+        :return: Returns the list in the form of List of LayerDatabase Layer to compression ratio pair
+        """
         layer_comp_ratio_pairs = []
 
         for pair in module_comp_ratio_pairs:
