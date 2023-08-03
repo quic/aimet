@@ -646,8 +646,9 @@ class TestOnnxUtils:
         if os.path.exists(onnx_path):
             os.remove(onnx_path)
 
-    @pytest.mark.skipif(Version(torch.__version__) < Version('1.10.0'),
-                        reason="Need Pytorch1.10.0 https://github.com/pytorch/pytorch/pull/60244")
+    # @pytest.mark.skipif(Version(torch.__version__) < Version('1.10.0'),
+    #                     reason="Need Pytorch1.10.0 https://github.com/pytorch/pytorch/pull/60244")
+    @pytest.mark.skip(reason="This test causes sporadic subprocess abort failures due to possible excess process/memory usage.")
     def test_set_node_name_for_large_model(self):
         class LargeModel(torch.nn.Module):
             def __init__(self):
