@@ -136,7 +136,7 @@ class WeightSvdModuleSplitter:
     """ Weight SVD module splitter """
     # pylint: disable=too-many-locals
     @classmethod
-    def split_module(cls, model, layer, rank, svd_lib_ref):
+    def split_module(cls, model, layer, rank, svd_lib_ref) -> (tf.keras.layers.Layer, tf.keras.layers.Layer):
         """
         Split a given module using weight svd
 
@@ -158,7 +158,8 @@ class WeightSvdModuleSplitter:
         return split_modules
 
     @classmethod
-    def split_conv_module(cls, model: tf.keras.Model, layer: tf.keras.layers, rank, svd_lib_ref):
+    def split_conv_module(cls, model: tf.keras.Model, layer: tf.keras.layers, rank, svd_lib_ref) \
+            -> (tf.keras.layers.Conv2D, tf.keras.layers.Conv2D):
         """
         Split a given Conv2D module using weight svd
 
@@ -241,7 +242,7 @@ class WeightSvdModuleSplitter:
         return conv_a, conv_b
 
     @classmethod
-    def split_fc_module(cls, model, layer, rank, svd_lib_ref):
+    def split_fc_module(cls, model, layer, rank, svd_lib_ref) -> (tf.keras.layers.Dense, tf.keras.layers.Dense):
         """
         Split a given Linear module using weight svd
 

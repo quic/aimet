@@ -36,22 +36,19 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-# import unittest
 import pytest
-import tensorflow as tf
 import numpy as np
 
 from aimet_common import cost_calculator
-from aimet_common.utils import AimetLogger
 from aimet_common.defs import CostMetric
 from aimet_tensorflow.keras.layer_database import *
 from aimet_tensorflow.keras.svd_spiltter import WeightSvdModuleSplitter
 from aimet_tensorflow.keras.svd_pruner import WeightSvdPruner
 from aimet_tensorflow.keras.utils import pymo_utils
 import aimet_common.libpymo as pymo
-logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
-def get_model(model_type = "Sequential"):
+
+def get_model(model_type="Sequential"):
     tf.keras.backend.clear_session()
     if model_type == "Sequential":
         return tf.keras.Sequential([
@@ -69,12 +66,14 @@ def get_model(model_type = "Sequential"):
 
         return tf.keras.Model(inp, out)
 
+
 def _get_layers(model, model_type="Sequential"):
     # Drop first layer (Input layer) of Functional model
     if model_type == "Functional":
         return model.layers[1:]
     elif model_type == "Sequential":
         return model.layers
+
 
 class TestWeightSvdLayerSplitandSVDPrunner:
 

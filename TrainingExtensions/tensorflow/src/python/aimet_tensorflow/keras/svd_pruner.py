@@ -37,6 +37,7 @@
 # =============================================================================
 
 """ Prunes layers using Spatial SVD schemes """
+from typing import Tuple
 
 import tensorflow as tf
 import aimet_common.libpymo as pymo
@@ -60,7 +61,6 @@ class SpatialSvdPruner(aimet_common.svd_pruner.SpatialSvdPruner):
     """
 
     def _perform_svd_and_split_layer(self, layer: Layer, rank: int, comp_layer_db: LayerDatabase):
-
         """
         Performs spatial svd and splits given layer into two layers
         :param layer: Layer to split
@@ -91,16 +91,16 @@ class WeightSvdPruner(Pruner):
     """
 
     def _prune_layer(self, orig_layer_db: LayerDatabase, comp_layer_db: LayerDatabase, layer: Layer, comp_ratio: float,
-                     cost_metric: CostMetric):
+                     cost_metric: CostMetric) -> float:
         """
         Replaces a given layer within the comp_layer_db with a pruned version of the layer
         In this case, the replaced layer will be a sequential of two spatial-svd-decomposed layers
 
-        :param cost_metric:
         :param orig_layer_db: original Layer database
         :param comp_layer_db: Layer database, which will get modified
         :param layer: Layer to prune
         :param comp_ratio: Compression-ratio
+        :param cost_metric: Cost metric to used for compression
         :return: updated compression ratio
         """
 
@@ -135,7 +135,13 @@ class WeightSvdPruner(Pruner):
         return comp_ratio
 
 
-def _get_layer_output_shape(layer: tf.keras.layers):
+def _get_layer_output_shape(layer: tf.keras.layers) -> Tuple:
+    """
+    Returns the output shape of the layer as required by the Layer class
+
+    :param layer: Keras Layer for which output shape needs to be retrieved.
+    :return: Tuple containing the output shape
+    """
     output_activation_shape = list(layer.output_shape)
     if len(output_activation_shape) == 4:
         reorder = [0, 3, 1, 2]
@@ -144,4 +150,4 @@ def _get_layer_output_shape(layer: tf.keras.layers):
     if isinstance(layer, tf.keras.layers.Dense):
         output_activation_shape.extend([1, 1])
 
-    return output_activation_shape
+    return tuple(output_activation_shape)
