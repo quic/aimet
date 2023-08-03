@@ -136,6 +136,29 @@ class TestModelPreparer:
         # Verify that validator checks pass.
         assert ModelValidator.validate_model(traced_model, dummy_input)
 
+    def test_const_as_first_operand(self):
+        class SampleModel(torch.nn.Module):
+            def __init__(self):
+                super(SampleModel, self).__init__()
+
+            def forward(self, x):
+                x = torch.mul(x, 1.5)
+                x = torch.mul(2, x)
+                x = x * 3
+                x = 4 * x
+                x = torch.tensor(5.0) + x
+                x = 6 + x
+                x = 7.1 - x
+                return x
+
+        model = SampleModel()
+        model = prepare_model(model)
+
+        for node in model.graph.nodes:
+            if node.name.startswith(("module_mul", "module_add")) and len(node.args) == 2:
+                # First operand should be of type 'torch.fx.node.Node' and next one may be const or 'torch.fx.node.Node'
+                assert isinstance(node.args[0], torch.fx.node.Node)
+
     def test_dummy(self):
         # pytest has a 'feature' that returns an error code when all tests for a given suite are not selected
         # to be executed
