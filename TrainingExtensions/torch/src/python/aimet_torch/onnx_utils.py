@@ -109,6 +109,7 @@ map_torch_types_to_onnx = {
     elementwise_ops.Subtract: ['Sub'],
     elementwise_ops.Multiply: ['Mul'],
     elementwise_ops.Divide: ['Div'],
+    elementwise_ops.Cast: ['Cast'],
     elementwise_ops.Concat: ['Concat'],
     elementwise_ops.Reshape: ['Reshape'],
     elementwise_ops.Pad: ['Pad'],
