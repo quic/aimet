@@ -54,7 +54,8 @@ Set the `<variant_string>` to ONE of the following depending on your desired var
     #. For the ONNX GPU variant, use `onnx-gpu`
     #. For the ONNX CPU variant, use `onnx-cpu`
 
-.. code-block::
+.. code-block:: bash
+
     export AIMET_VARIANT=<variant_string>
 
 
@@ -62,7 +63,8 @@ Use prebuilt docker image
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 Follow these instructions to use one of the pre-built docker images:
 
-.. code-block::
+.. code-block:: bash
+
     WORKSPACE="<absolute_path_to_workspace>"
     docker_image_name="artifacts.codelinaro.org/codelinaro-aimet/aimet-dev:latest.${AIMET_VARIANT}"
     docker_container_name="aimet-dev-<any_name>"
@@ -73,7 +75,8 @@ Build docker image locally
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Follow these instructions ONLY if you want to build the docker image locally. If not, skip to the next section.
 
-.. code-block::
+.. code-block:: bash
+
     WORKSPACE="<absolute_path_to_workspace>"
     docker_image_name="aimet-dev-docker:<any_tag>"
     docker_container_name="aimet-dev-<any_name>"
@@ -85,7 +88,8 @@ Start docker container
 ~~~~~~~~~~~~~~~~~~~~~~~
 Ensure that a docker named `$docker_container_name` is not already running; otherwise remove the existing container and then start a new container as follows:
 
-.. code-block::
+.. code-block:: bash
+
     docker ps -a | grep ${docker_container_name} && docker kill ${docker_container_name}
 
     docker run --rm -it -u $(id -u ${USER}):$(id -g ${USER}) \
@@ -101,7 +105,8 @@ Ensure that a docker named `$docker_container_name` is not already running; othe
     #. If nvidia-docker 1.0 is installed, then replace `docker run` with `nvidia-docker run` in order to enable GPU access inside the docker container. 
     #. Port forwarding needs to be done in order to run the Visualization APIs from docker container. This can be achieved by running the docker container as follows:
 
-.. code-block::
+.. code-block:: bash
+
     port_id="<any-port-number>"
 
     docker run -p ${port_id}:${port_id} --rm -it -u $(id -u ${USER}):$(id -g ${USER}) \
@@ -121,26 +126,28 @@ Set the <variant_string> to ONE of the following depending on your desired varia
 #. For the PyTorch CPU variant, use "torch_cpu"
 #. For the TensorFlow GPU variant, use "tf_gpu"
 #. For the TensorFlow CPU variant, use "tf_cpu"
+#. For the ONNX GPU variant, use "onnx_gpu"
+#. For the ONNX CPU variant, use "onnx_cpu"
 
-.. code-block::
+.. code-block:: bash
 
     export AIMET_VARIANT=<variant_string>
 
 Replace <release_tag> in the steps below with the appropriate tag:
 
-.. code-block::
+.. code-block:: bash
 
     export release_tag=<release_tag>
 
 Set the package download URL as follows:
 
-.. code-block::
+.. code-block:: bash
 
     export download_url="https://github.com/quic/aimet/releases/download/${release_tag}"
 
 Set the common suffix for the package files as follows:
 
-.. code-block::
+.. code-block:: bash
 
     export wheel_file_suffix="cp38-cp38-linux_x86_64.whl"
 
@@ -151,7 +158,7 @@ Install the AIMET packages in the order specified below:
     #. These instructions assume that pip packages will be installed in the path: /usr/local/lib/python3.8/dist-packages. If that is not the case, please modify it accordingly.
     #. Python dependencies will automatically get installed.
 
-.. code-block::
+.. code-block:: bash
 
     python3 -m pip install ${download_url}/AimetCommon-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
 
@@ -159,6 +166,8 @@ Install the AIMET packages in the order specified below:
     python3 -m pip install ${download_url}/AimetTorch-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix} -f https://download.pytorch.org/whl/torch_stable.html
     # OR
     python3 -m pip install ${download_url}/AimetTensorflow-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
+    # OR
+    python3 -m pip install ${download_url}/AimetOnnx-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
 
     python3 -m pip install ${download_url}/Aimet-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
 
@@ -167,7 +176,7 @@ Environment setup
 
 Set the common environment variables as follows:
 
-.. code-block::
+.. code-block:: bash
 
     source /usr/local/lib/python3.8/dist-packages/aimet_common/bin/envsetup.sh
 
