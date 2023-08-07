@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -48,7 +48,7 @@ from torch import nn as nn
 from torchvision.ops import roi_align
 
 import aimet_torch.elementwise_ops as aimet_elementwise
-
+from aimet_torch import elementwise_ops
 
 # pylint: disable=too-many-instance-attributes
 from aimet_torch.elementwise_ops import Multiply
@@ -1102,3 +1102,18 @@ class Conv3dModel1(nn.Module):
         out = self.bn2(out)
 
         return out
+
+
+class ModuleWithListInputModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.reshape = elementwise_ops.Reshape()
+        self.conv = torch.nn.Conv2d(in_channels=1,
+                                    out_channels=16,
+                                    kernel_size=3)
+
+    def forward(self, *inputs):
+        # Module with list input (second argument)
+        x = self.reshape(inputs[0], [-1, 1, 32, 128])
+        x = self.conv(x)
+        return x
