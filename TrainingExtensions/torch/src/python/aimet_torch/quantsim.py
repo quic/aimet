@@ -162,8 +162,8 @@ class QuantizationSimModel:
                                  Possible options are QuantizationDataType.int and QuantizationDataType.float.
                                  Note that the mode default_data_type=QuantizationDataType.float is only supported with
                                  default_output_bw=16 and default_param_bw=16
-        :param master_opdef_xml_file: Path to xml file for master ops definition
-        :param backend_opdef_xml_file: Path to xml file for backend ops definition
+        :param master_opdef_file: Path to xml file for master ops definition
+        :param backend_opdef_file: Path to xml file for backend ops definition
         """
         # Perform sanity checks on inputs
         validate_quantsim_inputs(quant_scheme, rounding_mode, default_output_bw, default_param_bw,
