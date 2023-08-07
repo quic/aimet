@@ -41,7 +41,7 @@
 # pylint: disable=too-many-lines
 import abc
 from enum import Enum
-from typing import Dict, Tuple, Union, List, Callable, Type
+from typing import Dict, Tuple, Union, List, Callable, Type, Any
 import os
 import torch
 from torch import nn
@@ -909,26 +909,46 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
             cleanup_fn()
             raise
 
-    def _quantize_activation(self, tensors_to_quantize, tensor_quantizers, type_of_quantizer):
-        quantized_tensors = []
-        for index, tensor_to_quantize in enumerate(tensors_to_quantize):
-            assert len(tensor_quantizers) > index,\
-                f"Not enough tensor quantizers ({len(tensor_quantizers)}) allocated"
+    def _quantize_activation(self,
+                             tensors_to_quantize: List[torch.Tensor],
+                             tensor_quantizers: List[LearnedGridTensorQuantizer],
+                             type_of_quantizer: str) -> List:
+        """
+        Forward-pass routine. This method do fake quantization and return its output for activation
 
-            if not self.should_perform_quant_dequant(tensor_to_quantize, tensor_quantizers[index]):
-                quantized_tensors.append(tensor_to_quantize)
-                continue
+        :param tensors_to_quantize: Inputs passed to the module in the forward pass
+        :param tensor_quantizers: Tensor quantizers to use for fake quantizing
+        :param type_of_quantizer: input or output
+        :return: Fake quantized output from the wrapped module
+        """
+        def inner_quantization(input_tensor: Any,
+                               index: int) -> Union[torch.Tensor, List[torch.Tensor]]:
+            if isinstance(input_tensor, (List, Tuple)):
+                inner_outputs = []
+                for inner_input in input_tensor:
+                    inner_outputs.append(inner_quantization(inner_input, index))
+                return inner_outputs
 
-            if not isinstance(tensor_to_quantize, torch.Tensor):
+            if not self.should_perform_quant_dequant(input_tensor, tensor_quantizers[index]):
+                return input_tensor
+
+            if not isinstance(input_tensor, torch.Tensor):
                 error_msg = (f'Expecting quantize activation input of type torch.Tensor but got '
-                             f'{type(tensor_to_quantize)}')
+                             f'{type(input_tensor)}')
                 _logger.error(error_msg)
                 raise AssertionError(error_msg)
 
             encoding_min = getattr(self, type_of_quantizer + str(index) + '_encoding_min')
             encoding_max = getattr(self, type_of_quantizer + str(index) + '_encoding_max')
-            quantized_tensors.append(tensor_quantizers[index].quantize_dequantize(tensor_to_quantize, encoding_min,
-                                                                                  encoding_max))
+            return tensor_quantizers[index].quantize_dequantize(input_tensor, encoding_min, encoding_max)
+
+        quantized_tensors = []
+        for index, tensor_to_quantize in enumerate(tensors_to_quantize):
+            assert len(tensor_quantizers) > index,\
+                f"Not enough tensor quantizers ({len(tensor_quantizers)}) allocated"
+
+            quantized_tensors.append(inner_quantization(tensor_to_quantize, index))
+
         return quantized_tensors
 
 
