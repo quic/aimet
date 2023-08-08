@@ -37,6 +37,7 @@
 # =============================================================================
 
 import os
+import re
 import shutil
 import torch
 import numpy as np
@@ -61,7 +62,7 @@ def get_original_model_artifacts():
     # Load resnet18 model
     model = models.resnet18()
     model.eval()
-    dummy_input = torch.rand(1, 3, 10, 10)
+    dummy_input = torch.rand(1, 3, 224, 224)
 
     # Prepare model for quantization simulation
     model = prepare_model(model)
@@ -80,7 +81,7 @@ def get_quantsim_artifacts():
     # Load resnet18 model
     model = models.resnet18()
     model.eval()
-    dummy_input = torch.rand(1, 3, 10, 10)
+    dummy_input = torch.rand(1, 3, 224, 224)
 
     # Prepare model for quantization simulation
     model = prepare_model(model)
@@ -109,21 +110,22 @@ class TestLayerOutput:
 
         # Get original model artifacts
         original_model, layer_names, dummy_input = get_original_model_artifacts()
+        layer_names = [re.sub(r'\W+', "_", name) for name in layer_names]
 
         temp_dir_path = os.path.dirname(os.path.abspath(__file__))
         temp_dir_path = os.path.join(temp_dir_path, 'temp_dir')
 
         # Obtain layer-outputs of quantsim model
         layer_output = LayerOutput(model=original_model, dir_path=temp_dir_path, naming_scheme=NamingScheme.PYTORCH)
-        layer_name_to_layer_output_dict = layer_output.get_outputs(dummy_input)
+        name_to_output_dict = layer_output.get_outputs(dummy_input)
 
         # Verify whether outputs are generated for all the layers
         for layer_name in layer_names:
-            assert layer_name in layer_name_to_layer_output_dict, \
+            assert layer_name in name_to_output_dict, \
                 "Output not generated for layer " + layer_name
 
         # Verify whether outputs are correct. This can only be checked for final output of the model
-        assert torch.equal(original_model(dummy_input), layer_name_to_layer_output_dict['fc']), \
+        assert torch.equal(original_model(dummy_input), name_to_output_dict['fc']), \
             "Output of last layer of original model doesn't match with captured layer-output"
 
         # Delete temp_dir
@@ -134,21 +136,22 @@ class TestLayerOutput:
 
         # Get quantsim artifacts
         quantsim, layer_names, dummy_input = get_quantsim_artifacts()
+        layer_names = [re.sub(r'\W+', "_", name) for name in layer_names]
 
         temp_dir_path = os.path.dirname(os.path.abspath(__file__))
         temp_dir_path = os.path.join(temp_dir_path, 'temp_dir')
 
         # Obtain layer-outputs of quantsim model
         layer_output = LayerOutput(model=quantsim.model, dir_path=temp_dir_path, naming_scheme=NamingScheme.PYTORCH)
-        layer_name_to_layer_output_dict = layer_output.get_outputs(dummy_input)
+        name_to_output_dict = layer_output.get_outputs(dummy_input)
 
         # Verify whether outputs are generated for all the layers
         for layer_name in layer_names:
-            assert layer_name in layer_name_to_layer_output_dict, \
+            assert layer_name in name_to_output_dict, \
                 "Output not generated for layer " + layer_name
 
         # Verify whether outputs are quantized outputs. This can only be checked for final output of the model
-        assert torch.equal(quantsim.model(dummy_input), layer_name_to_layer_output_dict['fc']), \
+        assert torch.equal(quantsim.model(dummy_input), name_to_output_dict['fc']), \
             "Output of last layer of quantsim model doesn't match with captured layer-output"
 
         # Delete temp_dir
@@ -214,6 +217,7 @@ class TestLayerOutputUtil:
 
         # Get quantsim artifacts
         quantsim, layer_output_names, dummy_input = get_quantsim_artifacts()
+        layer_output_names = [re.sub(r'\W+', "_", name) for name in layer_output_names]
 
         # Get dataset artifacts
         dummy_dataset, dummy_data_loader, data_count = get_dataset_artifacts()
