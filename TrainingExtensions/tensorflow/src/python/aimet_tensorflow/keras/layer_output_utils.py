@@ -62,7 +62,7 @@ class LayerOutputUtil:
         :param model: Keras (fp32/quantsim) model.
         :param save_dir: Directory to save the layer outputs.
         """
-        # Freeze the model, i.e, run in test mode
+        # Freeze the model weights and state
         model.trainable = False
 
         # Get intermediate model for layer-outputs
@@ -100,9 +100,8 @@ class LayerOutputUtil:
         :param model: Keras model.
         :return: Intermediate keras model for feature extraction
         """
-        inputs = [model.layers[0].input]
         outputs = [layer.output for layer in model.layers]
-        intermediate_model = tf.keras.models.Model(inputs=inputs, outputs=outputs)
+        intermediate_model = tf.keras.models.Model(inputs=model.inputs, outputs=outputs)
         intermediate_model.trainable = False
         return intermediate_model
 
@@ -132,7 +131,8 @@ class LayerOutputUtil:
         :param input_batch: Batch of inputs for which we want to obtain layer-outputs.
         :return: layer-output name to layer-output batch dict
         """
-        outs = self.intermediate_model(input_batch)
+        # Run in inference mode
+        outs = self.intermediate_model(input_batch, training=False)
         output_pred = tf_utils.sync_to_numpy_or_python_type(outs)
 
         return dict(zip(self.original_name_to_modified_name_mapper.values(), output_pred))
