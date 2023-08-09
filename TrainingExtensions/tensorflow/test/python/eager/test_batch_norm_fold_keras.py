@@ -43,7 +43,6 @@ import copy
 import json
 import os
 from packaging import version
-import unittest
 import tensorflow as tf
 import numpy as np
 from test_models_keras import transposed_conv_model
@@ -124,10 +123,10 @@ class TestBatchNormFold():
 
         _delete_all_bns_from_model(model, bn_layers)
 
-        self.assertFalse(isinstance(model.bn1, tf.keras.layers.BatchNormalization))
-        self.assertFalse(isinstance(model.block1.block2.bn1, tf.keras.layers.BatchNormalization))
-        self.assertFalse(isinstance(model.block2.bn1, tf.keras.layers.BatchNormalization))
-        self.assertTrue(isinstance(model.block1.bn1, tf.keras.layers.BatchNormalization))
+        assert not isinstance(model.bn1, tf.keras.layers.BatchNormalization)
+        assert not isinstance(model.block1.block2.bn1, tf.keras.layers.BatchNormalization)
+        assert not isinstance(model.block2.bn1, tf.keras.layers.BatchNormalization)
+        assert isinstance(model.block1.bn1, tf.keras.layers.BatchNormalization)
 
     def test_bn_replacement_layers(self):
 
@@ -186,10 +185,10 @@ class TestBatchNormFold():
 
         _delete_all_bns_from_model(model, bn_layers)
 
-        self.assertFalse(isinstance(model.bn1, tf.keras.layers.BatchNormalization))
-        self.assertFalse(isinstance(model.block1.block2.bn1, tf.keras.layers.BatchNormalization))
-        self.assertFalse(isinstance(model.block2.bn1, tf.keras.layers.BatchNormalization))
-        self.assertTrue(isinstance(model.block1.bn1, tf.keras.layers.BatchNormalization))
+        assert not isinstance(model.bn1, tf.keras.layers.BatchNormalization)
+        assert not isinstance(model.block1.block2.bn1, tf.keras.layers.BatchNormalization)
+        assert not isinstance(model.block2.bn1, tf.keras.layers.BatchNormalization)
+        assert isinstance(model.block1.bn1, tf.keras.layers.BatchNormalization)
 
     def test_bn_removal_functional(self):
         inp = tf.keras.Input(shape=(6, 6, 3))
@@ -207,8 +206,8 @@ class TestBatchNormFold():
         new_model = _delete_all_bns_from_model(model, bn_layers)
 
         for layer in new_model.layers:
-            self.assertFalse(isinstance(layer, tf.keras.layers.BatchNormalization))
-        self.assertTrue(len(new_model.layers) == len(model.layers) - 2)
+            assert not isinstance(layer, tf.keras.layers.BatchNormalization)
+        assert len(new_model.layers) == len(model.layers) - 2
 
     def test_bn_removal_functional_with_sequantial_bns(self):
         inp = tf.keras.Input(shape=(6, 6, 3))
@@ -227,8 +226,8 @@ class TestBatchNormFold():
         new_model = _delete_all_bns_from_model(model, bn_layers)
 
         for layer in new_model.layers:
-            self.assertFalse(isinstance(layer, tf.keras.layers.BatchNormalization))
-        self.assertTrue(len(new_model.layers) == len(model.layers) - 3)
+            assert not isinstance(layer, tf.keras.layers.BatchNormalization)
+        assert len(new_model.layers) == len(model.layers) - 3
 
     @pytest.mark.parametrize('use_scale', [True, False])
     @pytest.mark.parametrize('is_standalone', [True, False])
@@ -284,8 +283,8 @@ class TestBatchNormFold():
         new_model = _delete_all_bns_from_model(model, bn_layers)
 
         for layer in new_model.layers:
-            self.assertFalse(isinstance(layer, tf.keras.layers.BatchNormalization))
-        self.assertTrue(len(new_model.layers) == len(model.layers) - len(bn_layers))
+            assert not isinstance(layer, tf.keras.layers.BatchNormalization)
+        assert len(new_model.layers) == len(model.layers) - len(bn_layers)
 
     def test_bn_removal_functional_lambda(self):
 
@@ -318,8 +317,8 @@ class TestBatchNormFold():
         new_model = _delete_all_bns_from_model(model, bn_layers)
 
         for layer in new_model.layers:
-            self.assertFalse(isinstance(layer, tf.keras.layers.BatchNormalization))
-        self.assertTrue(len(new_model.layers) == len(model.layers) - len(bn_layers))
+            assert not isinstance(layer, tf.keras.layers.BatchNormalization)
+        assert len(new_model.layers) == len(model.layers) - len(bn_layers)
 
     def test_bn_replacement_sequential(self):
 
@@ -353,8 +352,8 @@ class TestBatchNormFold():
 
         _delete_all_bns_from_model(chain_model, bn_layers)
 
-        self.assertTrue(len(chain_model.layers[2].layers) == len_layers[0]-1)
-        self.assertTrue(len(chain_model.layers[2].layers[2].layers[1].layers) == len_layers[1]-1)
+        assert len(chain_model.layers[2].layers) == len_layers[0]-1
+        assert len(chain_model.layers[2].layers[2].layers[1].layers) == len_layers[1]-1
 
     def test_bn_replacement_combined_seq_model(self):
 
@@ -419,9 +418,9 @@ class TestBatchNormFold():
 
         _delete_all_bns_from_model(model, bn_layers)
 
-        self.assertTrue(len(model.block2.layers) == len_layers[0]-1)
-        self.assertFalse(isinstance(model.block2.get_layer(index=2).bn1, tf.keras.layers.BatchNormalization))
-        self.assertFalse(isinstance(model.block2.get_layer(index=2).block3.bn1, tf.keras.layers.BatchNormalization))
+        assert len(model.block2.layers) == len_layers[0]-1
+        assert not isinstance(model.block2.get_layer(index=2).bn1, tf.keras.layers.BatchNormalization)
+        assert not isinstance(model.block2.get_layer(index=2).block3.bn1, tf.keras.layers.BatchNormalization)
 
     def test_bn_replacement_combined2_seq_model(self):
 
@@ -479,8 +478,8 @@ class TestBatchNormFold():
 
         _delete_all_bns_from_model(model, bn_layers)
 
-        self.assertTrue(len(model.block2.get_layer(index=3).block3.layers) == len_layers[0]-1)
-        self.assertFalse(isinstance(model.bn1, tf.keras.layers.BatchNormalization))
+        assert len(model.block2.get_layer(index=3).block3.layers) == len_layers[0]-1
+        assert not isinstance(model.bn1, tf.keras.layers.BatchNormalization)
 
     def test_bn_replacement_combined3_seq_model(self):
         Block3 = tf.keras.Sequential()
@@ -531,8 +530,8 @@ class TestBatchNormFold():
 
         _delete_all_bns_from_model(model, bn_layers)
 
-        self.assertTrue(len(model.block1.block3.layers) == len_layers[0]-1)
-        self.assertFalse(isinstance(model.block1.bn1, tf.keras.layers.BatchNormalization))
+        assert len(model.block1.block3.layers) == len_layers[0]-1
+        assert not isinstance(model.block1.bn1, tf.keras.layers.BatchNormalization)
 
     def test_bn_replacement_combined_all(self):
 
@@ -585,12 +584,10 @@ class TestBatchNormFold():
 
         _delete_all_bns_from_model(model, bn_layers)
 
-        self.assertTrue(len(model.block2.get_layer(index=3).get_layer(index=2).layers) == len_layers[0]-1)
-        self.assertTrue(
-            isinstance(
-                model.block2.get_layer(index=3).get_layer(index=3),
-                tf.keras.layers.BatchNormalization))
-        self.assertFalse(isinstance(model.bn1, tf.keras.layers.BatchNormalization))
+        assert len(model.block2.get_layer(index=3).get_layer(index=2).layers) == len_layers[0]-1
+
+        assert isinstance(model.block2.get_layer(index=3).get_layer(index=3), tf.keras.layers.BatchNormalization)
+        assert not isinstance(model.bn1, tf.keras.layers.BatchNormalization)
 
     def test_modify_bn_params_to_make_as_passthrough(self):
         inputs = tf.keras.Input(shape=(1,))
@@ -605,7 +602,7 @@ class TestBatchNormFold():
 
         var = tf.constant([[5.0]])
         out = model(var)
-        self.assertTrue(out.numpy(), 15.0)
+        assert out.numpy() == 15.0
 
     def test_find_conv_bn_pairs_combined_model(self):
         Block3 = tf.keras.Sequential()
@@ -653,9 +650,9 @@ class TestBatchNormFold():
         layer_out_node_map = common.create_layer_to_out_node_map(model)
         conv_linear_with_bn_dict = _find_possible_convs_linears_bn(node_layer_map, layer_out_node_map)
 
-        self.assertFalse(model.conv1 in conv_linear_with_bn_dict)
-        self.assertFalse(model.bn1 in conv_linear_with_bn_dict)
-        self.assertTrue(len(conv_linear_with_bn_dict) == 3)
+        assert not model.conv1 in conv_linear_with_bn_dict
+        assert not model.bn1 in conv_linear_with_bn_dict
+        assert len(conv_linear_with_bn_dict) == 3
 
     def test_find_conv_bn_pairs_functional(self):
 
@@ -676,7 +673,7 @@ class TestBatchNormFold():
         layer_out_node_map = common.create_layer_to_out_node_map(model)
         conv_linear_with_bn_dict = _find_possible_convs_linears_bn(node_layer_map, layer_out_node_map)
 
-        self.assertEqual(3, len(conv_linear_with_bn_dict))
+        assert 3 == len(conv_linear_with_bn_dict)
 
     def test_find_conv_bn_pairs_sequential(self):
         Block1 = tf.keras.Sequential()
@@ -696,8 +693,8 @@ class TestBatchNormFold():
         layer_out_node_map = common.create_layer_to_out_node_map(Block2)
         conv_linear_with_bn_dict = _find_possible_convs_linears_bn(node_layer_map, layer_out_node_map)
 
-        self.assertTrue(Block1.layers[2] in conv_linear_with_bn_dict)
-        self.assertEqual(1, len(conv_linear_with_bn_dict))
+        assert Block1.layers[2] in conv_linear_with_bn_dict
+        assert 1, len(conv_linear_with_bn_dict)
 
     def test_ordered_conv_linears_functional(self):
         input1 = tf.keras.Input(name='input1', shape=(10, 10, 3))
@@ -719,9 +716,9 @@ class TestBatchNormFold():
 
         for layer in model.layers:
             if layer.name == 'conv1a':
-                self.assertTrue(layer == ordered_conv_linears[0])
+                assert layer == ordered_conv_linears[0]
             if layer.name == 'conv3':
-                self.assertTrue(layer == ordered_conv_linears[3])
+                assert layer == ordered_conv_linears[3]
 
     def test_ordered_conv_linears_sequential(self):
         Block1 = tf.keras.Sequential()
@@ -740,7 +737,7 @@ class TestBatchNormFold():
         node_layer_map = common.create_node_to_layer_map(Block2)
         layer_out_node_map = common.create_layer_to_out_node_map(Block2)
         ordered_conv_linears = _get_ordered_conv_linears(node_layer_map, layer_out_node_map)
-        self.assertEqual(Block2.layers[2], ordered_conv_linears[0])
+        assert Block2.layers[2] == ordered_conv_linears[0]
 
     def test_ordered_conv_linears_combined_model(self):
         Block3 = tf.keras.Sequential()
@@ -788,11 +785,11 @@ class TestBatchNormFold():
         layer_out_node_map = common.create_layer_to_out_node_map(model)
         ordered_conv_linears = _get_ordered_conv_linears(node_layer_map, layer_out_node_map)
 
-        self.assertEqual(model.conv1, ordered_conv_linears[0])
-        self.assertEqual(model.dn1, ordered_conv_linears[1])
-        self.assertEqual(model.block2.layers[1], ordered_conv_linears[2])
-        self.assertEqual(model.block2.layers[3].layers[1], ordered_conv_linears[3])
-        self.assertEqual(model.block2.layers[3].layers[2].layers[1], ordered_conv_linears[4])
+        assert model.conv1 == ordered_conv_linears[0]
+        assert model.dn1 == ordered_conv_linears[1]
+        assert model.block2.layers[1] == ordered_conv_linears[2]
+        assert model.block2.layers[3].layers[1] == ordered_conv_linears[3]
+        assert model.block2.layers[3].layers[2].layers[1] == ordered_conv_linears[4]
 
     def test_find_all_bns_to_fold_sequential(self):
 
@@ -806,9 +803,9 @@ class TestBatchNormFold():
         Block1.add(tf.keras.layers.ReLU())
 
         conv_bn_pairs, bn_conv_pairs, _ = _find_all_batch_norms_to_fold(Block1)
-        self.assertEqual(2, len(conv_bn_pairs) + len(bn_conv_pairs))
-        self.assertEqual((Block1.layers[2], Block1.layers[3]), conv_bn_pairs[0])
-        self.assertEqual((Block1.layers[1], Block1.layers[2]), bn_conv_pairs[0])
+        assert 2 == len(conv_bn_pairs) + len(bn_conv_pairs)
+        assert (Block1.layers[2], Block1.layers[3]) == conv_bn_pairs[0]
+        assert (Block1.layers[1], Block1.layers[2]) == bn_conv_pairs[0]
 
     def test_find_all_bns_to_fold_functional(self):
         input1 = tf.keras.Input(name='input1', shape=(10, 10, 3))
@@ -825,7 +822,7 @@ class TestBatchNormFold():
         model = tf.keras.Model(input1, output)
 
         conv_bn_pairs, bn_conv_pairs, _ = _find_all_batch_norms_to_fold(model)
-        self.assertEqual(4, len(conv_bn_pairs) + len(bn_conv_pairs))
+        assert 4 == len(conv_bn_pairs) + len(bn_conv_pairs)
 
     def test_find_all_bns_to_fold_combined_model(self):
         Block3 = tf.keras.Sequential()
@@ -871,14 +868,12 @@ class TestBatchNormFold():
 
         conv_bn_pairs, bn_conv_pairs, _ = _find_all_batch_norms_to_fold(model)
 
-        self.assertEqual(3, len(conv_bn_pairs) + len(bn_conv_pairs))
-        self.assertEqual((model.layers[4].layers[0], model.layers[4].layers[1]), bn_conv_pairs[0])
-        self.assertEqual(
-            (model.layers[4].layers[3].layers[1],
-             model.layers[4].layers[3].layers[2].layers[0]),
-            conv_bn_pairs[0])
-        self.assertEqual((model.layers[4].layers[3].layers[2].layers[1],
-                         model.layers[4].layers[3].layers[3]), conv_bn_pairs[1])
+        assert 3, len(conv_bn_pairs) + len(bn_conv_pairs)
+        assert (model.layers[4].layers[0], model.layers[4].layers[1]) == bn_conv_pairs[0]
+        assert (model.layers[4].layers[3].layers[1],
+                model.layers[4].layers[3].layers[2].layers[0]) == conv_bn_pairs[0]
+        assert (model.layers[4].layers[3].layers[2].layers[1],
+                model.layers[4].layers[3].layers[3]) == conv_bn_pairs[1]
 
     def test_bn_fold_auto_rules_bn_after_conv(self):
         """
@@ -891,7 +886,7 @@ class TestBatchNormFold():
         model = tf.keras.Model(inputs=inputs, outputs=relu)
 
         conv_bn_pairs, bn_conv_pairs, _ = _find_all_batch_norms_to_fold(model)
-        self.assertEqual(1, len(conv_bn_pairs) + len(bn_conv_pairs))
+        assert 1 == len(conv_bn_pairs) + len(bn_conv_pairs)
 
     def test_bn_fold_layer_selection_looped_network(self):
         """
@@ -915,7 +910,7 @@ class TestBatchNormFold():
 
         conv_bn_pairs, bn_conv_pairs, _ = _find_all_batch_norms_to_fold(model)
 
-        self.assertEqual(0, len(conv_bn_pairs) + len(bn_conv_pairs))
+        assert 0 == len(conv_bn_pairs) + len(bn_conv_pairs)
 
     def test_bn_fold_auto_rules_bn_before_conv(self):
         """
@@ -928,7 +923,7 @@ class TestBatchNormFold():
         model = tf.keras.Model(inputs=inputs, outputs=relu)
 
         conv_bn_pairs, bn_conv_pairs, _ = _find_all_batch_norms_to_fold(model)
-        self.assertEqual(1, len(conv_bn_pairs) + len(bn_conv_pairs))
+        assert 1 == len(conv_bn_pairs) + len(bn_conv_pairs)
 
     def test_bn_fold_find_layers_model_with_multi_input(self):
         """
@@ -946,7 +941,7 @@ class TestBatchNormFold():
         model = tf.keras.Model(inputs=[input1, input2], outputs=relu)
 
         conv_bn_pairs, bn_conv_pairs, _ = _find_all_batch_norms_to_fold(model)
-        self.assertEqual(1, len(conv_bn_pairs) + len(bn_conv_pairs))
+        assert 1 == len(conv_bn_pairs) + len(bn_conv_pairs)
 
     def test_bn_fold_auto_rules_conv_bn_conv(self):
         """
@@ -961,10 +956,10 @@ class TestBatchNormFold():
         model = tf.keras.Model(inputs=inputs, outputs=relu)
 
         conv_bn_pairs, bn_conv_pairs, _ = _find_all_batch_norms_to_fold(model)
-        self.assertEqual(1, len(conv_bn_pairs) + len(bn_conv_pairs))
+        assert 1 == len(conv_bn_pairs) + len(bn_conv_pairs)
         conv_linear, batchnorm = conv_bn_pairs[0]
-        self.assertEqual('conv1', conv_linear.name)
-        self.assertEqual('bn', batchnorm.name)
+        assert 'conv1' == conv_linear.name
+        assert 'bn' == batchnorm.name
         # add additional check to verify backward fold is picked over forward in case both are available
 
     def test_batch_norm_fold(self):
@@ -986,7 +981,7 @@ class TestBatchNormFold():
         _, model = fold_all_batch_norms(model)
         output_after_fold = model(numpy_data)
 
-        self.assertTrue(np.allclose(baseline_output, output_after_fold, atol=1.e-4))
+        assert np.allclose(baseline_output, output_after_fold, atol=1.e-4)
 
     def test_batch_norm_fold_with_random_data(self):
         """
@@ -1014,8 +1009,8 @@ class TestBatchNormFold():
 
         output_after_fold = model(numpy_data)
 
-        self.assertFalse(np.allclose(baseline_output, output_after_fold, atol=0))
-        self.assertTrue(np.allclose(baseline_output, output_after_fold, atol=1e-4))
+        assert not np.allclose(baseline_output, output_after_fold, atol=0)
+        assert np.allclose(baseline_output, output_after_fold, atol=1e-4)
 
     def test_bn_fold_with_linear_layer(self):
         """
@@ -1040,10 +1035,10 @@ class TestBatchNormFold():
         weight_after_fold = model.layers[2].kernel.numpy()
 
         # check that weight got updated
-        self.assertFalse(np.allclose(weight_before_fold, weight_after_fold, atol=1e-4))
+        assert not np.allclose(weight_before_fold, weight_after_fold, atol=1e-4)
 
         # check outputs are close
-        self.assertTrue(np.allclose(baseline_output, after_fold_output, atol=1e-3))
+        assert np.allclose(baseline_output, after_fold_output, atol=1e-3)
 
     def test_find_conv_bn_pairs_functional_nested(self):
         """
@@ -1069,9 +1064,9 @@ class TestBatchNormFold():
         layer_out_node_map = common.create_layer_to_out_node_map(model)
         conv_linear_with_bn_dict = _find_possible_convs_linears_bn(node_layer_map, layer_out_node_map)
 
-        self.assertEqual(10, len(node_layer_map))
-        self.assertEqual(9, len(layer_out_node_map))
-        self.assertEqual(1, len(conv_linear_with_bn_dict))
+        assert 10 == len(node_layer_map)
+        assert 9 == len(layer_out_node_map)
+        assert 1 == len(conv_linear_with_bn_dict)
 
     def test_bn_fold_with_no_bias(self):
         inputs = tf.keras.Input((32, 32, 3))
