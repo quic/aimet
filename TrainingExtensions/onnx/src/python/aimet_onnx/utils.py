@@ -36,11 +36,18 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Utility functions for ONNX """
+import itertools
 from typing import Dict, List, Union, Tuple, Set
 
+import os
+import pickle
 import numpy as np
 import onnx
 from onnx import onnx_pb, helper, numpy_helper, mapping
+from aimet_common.utils import AimetLogger
+
+logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
+
 
 OP_TYPES_WITH_PARAMS = ['Conv', 'Gemm', 'ConvTranspose', 'BatchNormalization', 'MatMul', 'Transpose']
 
@@ -357,3 +364,53 @@ def retrieve_constant_input(node: onnx_pb.NodeProto, model: onnx_pb.ModelProto, 
                 weight = ParamUtils.get_param(model, other_node, 0)
                 transposed = True
     return weight, transposed
+
+
+
+
+class CachedDataset:
+    """
+    Cache number of batches from the data loader at given path location and
+    provide interface to fetch single batch of model inputs.
+    """
+
+    # pylint: disable=super-init-not-called
+    def __init__(self, data_loader, num_batches: int, path: str):
+        """
+        :param data_loader: Data loader
+        :param num_batches: Number of batches to fetch from data loader
+        :param path: Path to save model inputs
+        """
+        if len(data_loader) < num_batches:
+            raise ValueError(f'Can not fetch {num_batches} batches from '
+                             f'a data loader of length {len(data_loader)}.')
+
+        self._num_batches = num_batches
+        self._path = path
+
+        self._cache_model_inputs(itertools.islice(data_loader, num_batches))
+
+    def __len__(self):
+        return self._num_batches
+
+    def __getitem__(self, index: int):
+        path = os.path.join(self._path, 'model_inputs_' + str(index))
+
+        with open(path, 'rb') as file:
+            batch = pickle.load(file)
+
+        return batch
+
+    def _cache_model_inputs(self, data_loader):
+        """
+        Function to cache number of batches individually in separate file at provided path location
+        """
+        if not os.path.exists(self._path):
+            os.makedirs(self._path)
+
+        for i, batch in enumerate(data_loader):
+            path = os.path.join(self._path, f'model_inputs_{i}')
+            with open(path, 'wb') as file:
+                pickle.dump(batch, file)
+
+        logger.info('Caching %d batches from data loader at path location: %s', self._num_batches, self._path)

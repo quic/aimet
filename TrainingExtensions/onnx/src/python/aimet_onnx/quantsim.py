@@ -441,11 +441,9 @@ class QuantizationSimModel:
 
         save_json_yaml(encoding_file_path, encodings_dict)
 
-    def _remove_nodes_and_save_model(self, file_path):
+    def remove_quantization_nodes(self):
         """
-        Remove quantization nodes and save model to file
-
-        :param file_path: path to save onnx model
+        Remove quantization nodes
         """
         nodes_to_remove = []
         for node in self.model.nodes():
@@ -459,8 +457,6 @@ class QuantizationSimModel:
         for node in self.model.graph().output:
             node.name = node.name.replace('_updated', '')
 
-        self.model.save_model_to_file(file_path)
-
     def export(self, path: str, filename_prefix: str):
         """
         Compute encodings and export to files
@@ -469,7 +465,8 @@ class QuantizationSimModel:
         :param filename_prefix: filename to save encoding files
         """
         self._export_encodings(os.path.join(path, filename_prefix) + '.encodings')
-        self._remove_nodes_and_save_model(os.path.join(path, filename_prefix) + '.onnx')
+        self.remove_quantization_nodes()
+        self.model.save_model_to_file(os.path.join(path, filename_prefix) + '.onnx')
 
 
 def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, onnx_encoding_path: str):

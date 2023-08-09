@@ -36,8 +36,14 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Utilities for ONNX Connected Graph """
+from typing import Dict, List
+from onnx import onnx_pb
 
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
+
+
+ActivationTypes = ['Relu', 'Clip', 'Sigmoid', 'Tanh']
+
 
 def get_op_given_param_name(connected_graph: ConnectedGraph, param_name: str):
     """
@@ -69,3 +75,54 @@ def get_param_shape_using_connected_graph(connected_graph: ConnectedGraph, param
                 if param.name == param_name:
                     return param.shape
     return None
+
+def get_module_act_func_pair(model: onnx_pb.ModelProto) -> Dict[str, str]:
+    """
+    For given model, returns dictionary of module to immediate following activation function else maps
+    module to None.
+
+    Activation functions should be defined as nn.Modules in model and not as functional in the forward pass.
+
+    :param model: ONNX model
+    :return: Dictionary of module name to activation function name
+    """
+    # Create ConnectedGraph
+    graph = ConnectedGraph(model)
+
+    # Maps module to next following activation function else None
+    module_act_func_pair = {}
+
+    # Get all the ops
+    all_ops = graph.get_all_ops()
+
+    for op in all_ops.values():
+
+        # Get module associated with op
+        cur_module = op.get_module()
+
+        if cur_module:
+            module_act_func_pair[cur_module] = None
+
+            if op.output:
+                assert op.output.consumers, 'op output should have at least one consumer op.'
+                # Get the next op
+                next_op = op.output.consumers[0]
+                # Get module associated with next op
+                next_module = next_op.get_module()
+
+                # Get the appropriate activation function
+                if next_module.type in ActivationTypes:
+                    module_act_func_pair[cur_module] = next_module
+
+    return module_act_func_pair
+
+
+def get_ordered_ops(model: onnx_pb.ModelProto) -> List:
+    """
+    Gets list of ordered ops
+
+    :param model: ONNX model
+    :return: A list of ordered ops
+    """
+    cg = ConnectedGraph(model)
+    return cg.ordered_ops
