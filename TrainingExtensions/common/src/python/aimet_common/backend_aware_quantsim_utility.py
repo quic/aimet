@@ -52,7 +52,6 @@ from aimet_common.libpymopro import ModelOpDefParser
 
 
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
 default_index_to_set_bitwidth_dtype = 0
 
 @dataclass
@@ -128,7 +127,7 @@ def get_backend_info(op_names: List[str], master_opdef_path: str, backend_opdef_
 
     return op_and_supported_backend_info_map
 
-def get_supported_kernel_in_dict_format(act_constraint: Dict, weight_constraint: Dict):
+def get_supported_kernel_in_dict_format(act_constraint: Dict, weight_constraint: Dict) -> Dict:
     """
     Returns supported kernel in dict format
 
@@ -148,6 +147,8 @@ def set_and_return_supported_kernels(module: torch.nn.Module, backend_act_constr
     :param backend_act_constraints: Activation constraints for op
     :param backend_weight_constraints: Weight constraints for op
     :param module_type: Module name to display in logger
+
+    :return supported kernels for op
     """
     supported_kernels = []
     supported_kernels_in_dict_format = []
@@ -223,7 +224,7 @@ def set_datatype_bitwidth_for_activations(module: torch.nn.Module, backend_act_c
                         str(dtype_to_set_for_activation), str(bitwidth_to_set_for_activation))
 
 def populate_backend_info(model: torch.nn.Module, module_types: List[str], master_opdef_file_path: str,
-                          backend_opdef_file_path: str, quantsim_info: QuantsimInfo) -> None:
+                          backend_opdef_file_path: str, quantsim_info: QuantsimInfo) -> Dict[str, List]:
     """
     Driver function to get and set backend constraints for model
 
@@ -232,6 +233,8 @@ def populate_backend_info(model: torch.nn.Module, module_types: List[str], maste
     :param master_opdef_file_path: Master Op. Def. file path
     :param backend_opdef_file_path: Backend Op. Def. file path
     :param quantsim_info: Quantization info for model
+
+    :return Dict of op to it's supported kernels
     """
     supported_kernels = get_backend_info(module_types, master_opdef_file_path, backend_opdef_file_path)
 
