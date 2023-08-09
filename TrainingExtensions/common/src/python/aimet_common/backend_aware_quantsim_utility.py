@@ -40,6 +40,8 @@
 import copy
 import logging
 from typing import List, Dict
+from dataclasses import dataclass
+
 import torch
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch import onnx_utils
@@ -53,35 +55,24 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 default_index_to_set_bitwidth_dtype = 0
 
+@dataclass
 class SupportedBackendInfo:
     """
     Class which holds backend constraint information
     """
-    def __init__(self, activation_constraints: List[Dict], weights_constraints: List[Dict]):
-        """
-        Constructor
 
-        :param activation_constraints: Activation constraints for op
-        :param weights_constraints: Weight constraints for op
-        """
-        self.activation_constraints = activation_constraints
-        self.weights_constraints = weights_constraints
+    activation_constraints: List[Dict]
+    weights_constraints: List[Dict]
 
+@dataclass
 class QuantsimInfo:
     """
     Class which holds info. about quantsim object
     """
-    def __init__(self, activation_bitwidth: int, param_bitwidth: int, data_type: QuantizationDataType):
-        """
-        Constructor
 
-        :param activation_bitwidth: Activation bitwidth
-        :param param_bitwidth: Param bitwidth
-        :param data_type: Data type to use for quantizing layer inputs
-        """
-        self.activation_bitwidth = activation_bitwidth
-        self.param_bitwidth = param_bitwidth
-        self.data_type = data_type
+    activation_bitwidth: int
+    param_bitwidth: int
+    data_type: QuantizationDataType
 
 # pylint: disable=too-many-locals
 def get_backend_info(op_names: List[str], master_opdef_path: str, backend_opdef_path: str) -> Dict[str, SupportedBackendInfo]:
@@ -149,14 +140,14 @@ def get_supported_kernel_in_dict_format(act_constraint: Dict, weight_constraint:
                                        'param':{'bitwidth': weight_constraint['bitwidth'], 'dtype':weight_constraint['dtype']}}
     return supported_kernel_in_dict_format
 
-def set_and_return_supported_kernels(module: torch.nn.Module, backend_act_constraints: List[Dict], backend_weight_constraints: List[Dict], module_name: str) -> None:
+def set_and_return_supported_kernels(module: torch.nn.Module, backend_act_constraints: List[Dict], backend_weight_constraints: List[Dict], module_type: str) -> List[Dict]:
     """
     Set supported kernels for module
 
     :param module: torch.nn.Module
     :param backend_act_constraints: Activation constraints for op
     :param backend_weight_constraints: Weight constraints for op
-    :param module_name: Module name to display in logger
+    :param module_type: Module name to display in logger
     """
     supported_kernels = []
     supported_kernels_in_dict_format = []
@@ -169,21 +160,23 @@ def set_and_return_supported_kernels(module: torch.nn.Module, backend_act_constr
                 supported_kernels_in_dict_format.append(get_supported_kernel_in_dict_format(act_constraint, weight_constraint))
 
     module.supported_kernels = supported_kernels
-    logger.info("Setting supported kernels of %s to %s", module_name, str(supported_kernels))
+    logger.info("Setting supported kernels of %s to %s", module_type, str(supported_kernels))
     return supported_kernels_in_dict_format
 
 
-def set_datatye_bitwidth_for_weights(module: torch.nn.Module, backend_weight_constraints: List[Dict], module_name: str) -> None:
+def set_datatype_bitwidth_for_weights(module: torch.nn.Module, backend_weight_constraints: List[Dict], module_type: str):
     """
     Set datatype, bitwidth for module having weights according to constraints
 
     :param module: torch.nn.Module
     :param backend_weight_constraints: Weight constraints for op
-    :param module_name: Module name to display in logger
+    :param module_type: Module name to display in logger
     """
     weight_bitwidth = module.param_quantizers['weight'].bitwidth
     weight_dtype = module.param_quantizers['weight'].data_type
     default_dtype_bitwidth_match = False
+    supported_dtype_for_op_weight = backend_weight_constraints[default_index_to_set_bitwidth_dtype]['dtype']
+    supported_bitwidth_for_op_weight = backend_weight_constraints[default_index_to_set_bitwidth_dtype]['bitwidth']
 
     for weight_constraint in backend_weight_constraints:
         if weight_bitwidth == weight_constraint['bitwidth'] and weight_dtype == weight_constraint['dtype']:
@@ -191,24 +184,24 @@ def set_datatye_bitwidth_for_weights(module: torch.nn.Module, backend_weight_con
             break
 
     if not default_dtype_bitwidth_match:
-        supported_dtype_for_op_weight = backend_weight_constraints[default_index_to_set_bitwidth_dtype]['dtype']
-        supported_bitwidth_for_op_weight = backend_weight_constraints[default_index_to_set_bitwidth_dtype]['bitwidth']
         module.param_quantizers['weight'].data_type = supported_dtype_for_op_weight
         module.param_quantizers['weight'].bitwidth = supported_bitwidth_for_op_weight
-        logger.info("Setting datatype and bitwidth of %s weights to %s and %s according to backend constraints", module_name,
+        logger.info("Setting datatype and bitwidth of %s weights to %s and %s according to backend constraints", module_type,
                     str(supported_dtype_for_op_weight), str(supported_bitwidth_for_op_weight))
 
-def set_datatype_bitwidth_for_activations(module: torch.nn.Module, backend_act_constraints: List[Dict], module_name: str) -> None:
+def set_datatype_bitwidth_for_activations(module: torch.nn.Module, backend_act_constraints: List[Dict], module_type: str):
     """
-    Set datatype, bitwidth for module's output activations having according to constraints
+    Set datatype, bitwidth for module's activations having according to constraints
 
     :param module: torch.nn.Module
     :param backend_act_constraints: Output activation constraints for op
-    :param module_name: Module name to display in logger
+    :param module_type: Module name to display in logger
     """
-    for i in range(len(module.output_quantizers)):
-        act_bitwidth = module.output_quantizers[i].bitwidth
-        act_dtype = module.output_quantizers[i].data_type
+    dtype_to_set_for_activation = backend_act_constraints[default_index_to_set_bitwidth_dtype]['dtype']
+    bitwidth_to_set_for_activation = backend_act_constraints[default_index_to_set_bitwidth_dtype]['bitwidth']
+    for output_quantizer in module.output_quantizers:
+        act_bitwidth = output_quantizer.bitwidth
+        act_dtype = output_quantizer.data_type
         default_dtype_bitwidth_match = False
 
         for act_constraint in backend_act_constraints:
@@ -217,25 +210,30 @@ def set_datatype_bitwidth_for_activations(module: torch.nn.Module, backend_act_c
                 break
 
         if not default_dtype_bitwidth_match:
-            supported_dtype_for_op_activation = backend_act_constraints[default_index_to_set_bitwidth_dtype]['dtype']
-            supported_bitwidth_for_op_activation = backend_act_constraints[default_index_to_set_bitwidth_dtype]['bitwidth']
-            module.output_quantizers[i].data_type = supported_dtype_for_op_activation
-            module.output_quantizers[i].bitwidth = supported_bitwidth_for_op_activation
-            logger.info("Setting datatype and bitwidth of %s output activations to %s and %s according to backend constraints.", module_name,
-                        str(supported_dtype_for_op_activation), str(supported_bitwidth_for_op_activation))
+            output_quantizer.data_type = dtype_to_set_for_activation
+            output_quantizer.bitwidth = bitwidth_to_set_for_activation
+            logger.info("Setting datatype and bitwidth of %s output activations to %s and %s according to backend constraints.", module_type,
+                        str(dtype_to_set_for_activation), str(bitwidth_to_set_for_activation))
 
-def populate_backend_info(model: torch.nn.Module, module_names: List[str], master_opdef_file_path: str,
+    for input_quantizer in module.input_quantizers:
+        if input_quantizer.enabled:
+            input_quantizer.data_type = dtype_to_set_for_activation
+            input_quantizer.bitwidth = bitwidth_to_set_for_activation
+            logger.info("Setting datatype and bitwidth of %s input activations to %s and %s according to backend constraints.", module_type,
+                        str(dtype_to_set_for_activation), str(bitwidth_to_set_for_activation))
+
+def populate_backend_info(model: torch.nn.Module, module_types: List[str], master_opdef_file_path: str,
                           backend_opdef_file_path: str, quantsim_info: QuantsimInfo) -> None:
     """
     Driver function to get and set backend constraints for model
 
     :param model: Model
-    :param module_names: List of module names for whom backend constraints are retrieved and set accordingly
+    :param module_types: List of module names for whom backend constraints are retrieved and set accordingly
     :param master_opdef_file_path: Master Op. Def. file path
     :param backend_opdef_file_path: Backend Op. Def. file path
     :param quantsim_info: Quantization info for model
     """
-    supported_kernels = get_backend_info(module_names, master_opdef_file_path, backend_opdef_file_path)
+    supported_kernels = get_backend_info(module_types, master_opdef_file_path, backend_opdef_file_path)
 
     default_act_kernel = [{'bitwidth': quantsim_info.activation_bitwidth, 'dtype' : quantsim_info.data_type}]
     default_weight_kernel = [{'bitwidth' : quantsim_info.param_bitwidth, 'dtype' : quantsim_info.data_type}]
@@ -243,12 +241,12 @@ def populate_backend_info(model: torch.nn.Module, module_names: List[str], maste
     op_to_supported_kernels['defaults'] = [get_supported_kernel_in_dict_format(default_act_kernel[0], default_weight_kernel[0])]
 
     # pylint:disable=too-many-nested-blocks
-    for _, module in model.named_modules():
+    for module in model.modules():
         if isinstance(module, QcQuantizeWrapper):
             # pylint: disable=protected-access
-            module_name = module._module_to_wrap.__class__.__name__
-            if module_name in supported_kernels.keys():
-                backend_supported_info = supported_kernels[module_name]
+            module_type = module._module_to_wrap.__class__.__name__
+            if module_type in supported_kernels.keys():
+                backend_supported_info = supported_kernels[module_type]
                 is_weight_constraint_present = False
                 is_act_constraint_present = False
                 backend_weight_constraints = default_weight_kernel
@@ -264,7 +262,7 @@ def populate_backend_info(model: torch.nn.Module, module_names: List[str], maste
 
                 #set module's supported kernels
                 if is_weight_constraint_present or is_act_constraint_present:
-                    supported_kernels_for_op = set_and_return_supported_kernels(module, backend_act_constraints, backend_weight_constraints, module_name)
+                    supported_kernels_for_op = set_and_return_supported_kernels(module, backend_act_constraints, backend_weight_constraints, module_type)
                     # pylint: disable=protected-access
                     if type(module._module_to_wrap) in onnx_utils.map_torch_types_to_onnx.keys(): # pylint: disable=unidiomatic-typecheck
                         onnx_types = onnx_utils.map_torch_types_to_onnx.get(type(module._module_to_wrap))
@@ -274,10 +272,10 @@ def populate_backend_info(model: torch.nn.Module, module_names: List[str], maste
 
                 #set bitwidth and dtype of module's weights according to supported_kernel
                 if 'weight' in module.param_quantizers and is_weight_constraint_present:
-                    set_datatye_bitwidth_for_weights(module, backend_weight_constraints, module_name)
+                    set_datatype_bitwidth_for_weights(module, backend_weight_constraints, module_type)
 
-                #set bitwidth and dtype of module's output quantizers according to supported_kernel
+                #set bitwidth and dtype of module's activation quantizers according to supported_kernel
                 if  is_act_constraint_present:
-                    set_datatype_bitwidth_for_activations(module, backend_act_constraints, module_name)
+                    set_datatype_bitwidth_for_activations(module, backend_act_constraints, module_type)
 
     return op_to_supported_kernels
