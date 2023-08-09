@@ -45,8 +45,8 @@ from dataclasses import dataclass
 import torch
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch import onnx_utils
-from aimet_torch.pro.utils.translation_mappping import op_to_weight_index_map, qnn_datatype_to_aimet_map, \
-    aimet_op_to_qnn_op_name_map
+from aimet_torch.pro.utils.translation_mappping import op_to_weight_index_map, backend_datatype_to_aimet_map, \
+    aimet_op_to_backend_op_name_map
 from aimet_common.defs import QuantizationDataType
 from aimet_common.libpymopro import ModelOpDefParser
 
@@ -85,13 +85,14 @@ def get_backend_info(op_names: List[str], master_opdef_path: str, backend_opdef_
     """
     op_names_according_to_backend = copy.deepcopy(op_names)
     for i, op_name in enumerate(op_names):
-        if op_name in aimet_op_to_qnn_op_name_map.keys():
-            op_names_according_to_backend[i] = aimet_op_to_qnn_op_name_map[op_name]
+        if op_name in aimet_op_to_backend_op_name_map.keys():
+            op_names_according_to_backend[i] = aimet_op_to_backend_op_name_map[op_name]
 
     parser = ModelOpDefParser(master_opdef_path, backend_opdef_path, op_names_according_to_backend)
 
     op_and_supported_backend_info_map = {}
 
+    # pylint:disable=too-many-nested-blocks
     for i, op_name in enumerate(op_names):
         op_name_in_opdef = op_names_according_to_backend[i]
 
@@ -105,7 +106,8 @@ def get_backend_info(op_names: List[str], master_opdef_path: str, backend_opdef_
                 try:
                     datatype_constraints = parser.get_output_datatype(op_name_in_opdef, output_index)
                     for datatype in datatype_constraints:
-                        activation_constraints.append(qnn_datatype_to_aimet_map[datatype])
+                        if backend_datatype_to_aimet_map[datatype] not in activation_constraints:
+                            activation_constraints.append(backend_datatype_to_aimet_map[datatype])
                 # pylint: disable=bare-except
                 except:
                     #Parser API will throw appropriate error message if not able to get output datattypes
@@ -116,7 +118,7 @@ def get_backend_info(op_names: List[str], master_opdef_path: str, backend_opdef_
                 try:
                     datatype_constraints = parser.get_input_datatype(op_name_in_opdef, op_to_weight_index_map[op_name_in_opdef])
                     for datatype in datatype_constraints:
-                        weight_constraints.append(qnn_datatype_to_aimet_map[datatype])
+                        weight_constraints.append(backend_datatype_to_aimet_map[datatype])
                 # pylint: disable=bare-except
                 except:
                     #Parser API will throw appropriate error message if not able to get input datatypes
