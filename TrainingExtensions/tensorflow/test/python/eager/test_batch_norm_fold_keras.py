@@ -56,8 +56,7 @@ from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.keras.utils.quantizer_utils import get_wrappers_weight_quantizer
 
-
-class TestBatchNormFold(unittest.TestCase):
+class TestBatchNormFold():
     """ Test methods for BatchNormFold"""
     @pytest.fixture(autouse=True)
     def set_random_seed(self):
@@ -230,35 +229,34 @@ class TestBatchNormFold(unittest.TestCase):
         for layer in new_model.layers:
             self.assertFalse(isinstance(layer, tf.keras.layers.BatchNormalization))
         self.assertTrue(len(new_model.layers) == len(model.layers) - 3)
-        
-    def test_bn_removal_functional_gamma_is_none(self):
+
+    @pytest.mark.parametrize('use_scale', [True, False])
+    @pytest.mark.parametrize('is_standalone', [True, False])
+    def test_bn_without_gamma_for_standalone_bn(self, use_scale, is_standalone):
         inp = tf.keras.Input(shape=(28, 28, 3))
-        conv = tf.keras.layers.Conv2D(3, 3)(inp)
-        bn = tf.keras.layers.BatchNormalization()
-        x = bn(conv)
-
-        model = tf.keras.Model(inputs=[inp], outputs=[x])
-        bn.gamma = None
-
-        conv_bns, model = fold_all_batch_norms(model)
-        assert len(conv_bns) == 1
-
-        for layer in model.layers:
-            assert not isinstance(layer, tf.keras.layers.BatchNormalization)
-
-    def test_bn_gamma_is_none_standalone_bn(self):
-        inp = tf.keras.Input(shape=(28, 28, 3))
-        x = tf.keras.layers.MaxPool2D()(inp)
-        bn = tf.keras.layers.BatchNormalization()
+        x = (tf.keras.layers.MaxPool2D() if is_standalone else tf.keras.layers.Conv2D(3, 3))(inp)
+        bn = tf.keras.layers.BatchNormalization(scale=use_scale)
         x = bn(x)
         x = tf.keras.layers.ReLU()(x)
 
+        if not use_scale:
+            assert not bn.scale, "scale should be False"
+
         model = tf.keras.Model(inputs=[inp], outputs=[x])
-        bn.gamma = None
 
-        _, model = fold_all_batch_norms(model)
+        if use_scale:
+            bn.gamma = None
+        assert bn.gamma is None, "gamma should be None."
 
-        assert bn.gamma is not None
+        conv_bns, model = fold_all_batch_norms(model)
+
+        if is_standalone:
+            assert bn.gamma is not None
+        else:
+            for layer in model.layers:
+                assert not isinstance(layer, tf.keras.layers.BatchNormalization)
+
+        assert len(conv_bns) == 0 if is_standalone else 1
 
     def test_bn_removal_functional_two_paths(self):
         inp = tf.keras.Input(shape=(6, 6, 3))

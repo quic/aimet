@@ -297,20 +297,21 @@ def _get_bn_params(bn: tf.keras.layers.BatchNormalization) -> libpymo.BNParams()
     :param bn: BatchNorm Layer
     :return: return bn params in libpymo.TensorParams() format.
     """
+    if bn.gamma is None:
+        _logger.warning("Gamma for BatchNormalization '%s' is None. Setting to ones.", bn.name)
+        # Batch Normalization layers can having missing gammas with two different cases. One is that the 'gamma' attribute
+        # is set to None. The second is if `scale` is set to False upon creation of the layer which turns off gamma.
+        with tf.name_scope(bn.name):
+            weights_with_gamma_and_before_rebuild = [np.ones_like(bn.beta)] + bn.get_weights()
+            bn.scale = True
+            bn.build(bn.input.shape)
+            bn.set_weights(weights_with_gamma_and_before_rebuild)
+            bn.gamma = next(filter(lambda w: 'gamma' in w.name, bn.weights))
 
     bn_params = libpymo.BNParams()
 
-    bn_beta_numpy = bn.beta.numpy()
-    if bn.gamma is None:
-        _logger.warning("Gamma for BatchNormalization '%s' is None. Setting to ones.", bn.name)
-        # Gamma weight needs to be added to BN in order to set weights for standalone BN's.
-        # We first utilize gamma_initializer to create the gamma tensor which by default creates a tensor of ones based
-        # on a shape given. Then, we have to rebuild the BN in order for the weight to be added in the correct spot.
-        bn.gamma_initializer(bn_beta_numpy.shape)
-        bn.build(bn.input.shape)
-
     bn_params.gamma = bn.gamma.numpy().reshape(-1)
-    bn_params.beta = bn_beta_numpy.reshape(-1)
+    bn_params.beta = bn.beta.numpy().reshape(-1)
     bn_params.runningMean = bn.moving_mean.numpy().reshape(-1)
     bn_params.runningVar = bn.moving_variance.numpy().reshape(-1)
     epsilon = bn.epsilon
@@ -427,6 +428,7 @@ def _delete_bn_from_functional(model: tf.keras.Model,
     #  New model flow   \                       /
     #                    \                     /
     #                     \___________________/
+
 
     def wrapped_bn_layer_in_bns_to_remove(layer: tf.keras.layers.Layer) -> bool:
         return isinstance(layer, QcQuantizeWrapper) and layer._layer_to_wrap in bn_layers_to_remove
@@ -706,7 +708,6 @@ def fold_all_batch_norms(model: tf.keras.Model) \
     if bn_converted:
         _logger.info("%d BatchNorms' weights got converted", len(bn_converted))
         model.compile()
-
     _logger.warning("A new model is returned with the Batch Normalization layers removed for Keras models. "
                     "Please use this new model for the rest of the AIMET flow.")
 
@@ -720,6 +721,7 @@ def convert_standalone_batchnorms(model: tf.keras.Model, folded_bns: set) -> Lis
     :param folded_bns: list of batch norms which got folded
     :return: list of BatchNorms whose weights is converted
     """
+
     bn_converted = []
     for layer in model.layers:
         if isinstance(layer, tf.keras.layers.BatchNormalization) and layer not in folded_bns:
