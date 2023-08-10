@@ -50,7 +50,9 @@ import torch.nn as nn
 
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_torch.meta.connectedgraph import ConnectedGraph
-from aimet_torch.utils import create_rand_tensors_given_shapes
+from aimet_torch.transformers.activation import create_quantizable_transformer_encoder_layer, \
+    create_quantizable_transformer_decoder_layer, create_quantizable_multihead_attention, QuantizableMultiheadAttention
+from aimet_torch.utils import create_rand_tensors_given_shapes, replace_modules_of_type1_using_constructor
 from aimet_torch.meta import connectedgraph_utils
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, StaticGridPerTensorQuantizer
 from aimet_torch.quantsim import QuantizationSimModel
@@ -500,7 +502,6 @@ class TestQuantizationSimTransformers(unittest.TestCase):
             self.assertTrue(isinstance(transformer_model.decoder.layers[i].self_attn, torch.nn.MultiheadAttention))
 
         # auto replace PyTorch MHA in given transformer layer with quantizable MHA
-        from aimet_torch.transformers.activation import create_quantizable_multihead_attention, QuantizableMultiheadAttention
         utils.replace_modules_of_type1_using_constructor(transformer_model, torch.nn.MultiheadAttention,
                                                          create_quantizable_multihead_attention)
 
@@ -559,7 +560,6 @@ class TestQuantizationSimTransformers(unittest.TestCase):
         prepare_pt_transformer_for_quantsim(transformer_model)
 
         # auto replace PyTorch MHA in given transformer layer with quantizable MHA
-        from aimet_torch.transformers.activation import create_quantizable_multihead_attention
         utils.replace_modules_of_type1_using_constructor(transformer_model, torch.nn.MultiheadAttention,
                                                          create_quantizable_multihead_attention)
 
@@ -663,7 +663,6 @@ def test_mha_as_leaf_module(replace_with_q_mha):
     aimet_torch.utils.modules_to_treat_as_leaf = []
 
     if replace_with_q_mha:
-        from aimet_torch.transformers.activation import create_quantizable_multihead_attention
         utils.replace_modules_of_type1_using_constructor(transformer_model, torch.nn.MultiheadAttention,
                                                          create_quantizable_multihead_attention)
 
@@ -699,3 +698,33 @@ def test_mha_as_leaf_module(replace_with_q_mha):
                     assert input_tensor.is_model_input == cg_1_op.inputs[idx].is_model_input
                     assert input_tensor.numel == cg_1_op.inputs[idx].numel
                     assert input_tensor.shape == cg_1_op.inputs[idx].shape
+
+def test_transformer_transformation(self):
+    self._set_random_seed(10)
+    src = torch.rand(10, 32, 512)
+
+    transformer_model_1 = nn.Transformer(num_encoder_layers=2, num_decoder_layers=2)
+    transformer_model_1.eval()
+    transformer_model_2 = copy.deepcopy(transformer_model_1)
+
+    out_fp = transformer_model_1(src=copy.deepcopy(src), tgt=copy.deepcopy(src))
+
+    # current method being followed
+    prepare_pt_transformer_for_quantsim(transformer_model_1)
+    replace_modules_of_type1_using_constructor(transformer_model_1, torch.nn.MultiheadAttention,
+                                               create_quantizable_multihead_attention)
+    transformer_model_1.eval()
+    out_fp_1 = transformer_model_1(src=copy.deepcopy(src), tgt=copy.deepcopy(src))
+    assert torch.allclose(out_fp, out_fp_1, atol=1e-6)
+
+    # add in quantizable enc/dec
+    prepare_pt_transformer_for_quantsim(transformer_model_2)
+    replace_modules_of_type1_using_constructor(transformer_model_2.encoder, nn.TransformerEncoderLayer,
+                                               create_quantizable_transformer_encoder_layer)
+    replace_modules_of_type1_using_constructor(transformer_model_2.decoder, nn.TransformerDecoderLayer,
+                                               create_quantizable_transformer_decoder_layer)
+    replace_modules_of_type1_using_constructor(transformer_model_2, torch.nn.MultiheadAttention,
+                                               create_quantizable_multihead_attention)
+    transformer_model_2.eval()
+    out_fp_2 = transformer_model_2(src=copy.deepcopy(src), tgt=copy.deepcopy(src))
+    assert torch.allclose(out_fp, out_fp_2, atol=1e-6)

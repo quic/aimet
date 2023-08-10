@@ -132,7 +132,7 @@
 
 # pylint check enabled
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 import warnings
 import torch
 from torch import Tensor
@@ -475,3 +475,248 @@ def create_quantizable_multihead_attention(module: torch.nn.MultiheadAttention) 
             q_MHA.out_proj.bias.copy_(module.out_proj.bias.data)
 
     return q_MHA
+
+class QuantizableTransformerEncoderLayer(nn.TransformerEncoderLayer):
+    """
+       QuantizableTransformerEncoderLayer replaces add operations in TransformerEncoderLayer with elementwise add operations
+       """
+    __constants__ = ['batch_first', 'norm_first']
+
+    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation=nnF.relu, layer_norm_eps=1e-5,
+                 batch_first=False, norm_first=False, device=None, dtype=None) -> None:
+        super().__init__(d_model, nhead, dim_feedforward, dropout, activation, layer_norm_eps, batch_first)
+        self.norm_first = norm_first
+        self.add1 = elementwise_ops.Add()
+        self.add2 = elementwise_ops.Add()
+
+    def forward(self, src: Tensor, src_mask: Optional[Tensor] = None,
+                src_key_padding_mask: Optional[Tensor] = None) -> Tensor:
+        r"""Pass the input through the encoder layer.
+
+        Args:
+            src: the sequence to the encoder layer (required).
+            src_mask: the mask for the src sequence (optional).
+            src_key_padding_mask: the mask for the src keys per batch (optional).
+
+        Shape:
+            see the docs in Transformer class.
+        """
+        # pylint: disable = too-many-branches
+        if src_key_padding_mask is not None:
+            _skpm_dtype = src_key_padding_mask.dtype
+            if _skpm_dtype != torch.bool and not torch.is_floating_point(src_key_padding_mask):
+                raise AssertionError(
+                    "only bool and floating types of key_padding_mask are supported")
+        # see Fig. 1 of https://arxiv.org/pdf/2002.04745v1.pdf
+        why_not_sparsity_fast_path = ''
+        # pylint: disable = protected-access
+        if not src.dim() == 3:
+            why_not_sparsity_fast_path = f"input not batched; expected src.dim() of 3 but got {src.dim()}"
+        elif self.training:
+            why_not_sparsity_fast_path = "training is enabled"
+        elif not self.self_attn.batch_first:
+            why_not_sparsity_fast_path = "self_attn.batch_first was not True"
+        elif not self.self_attn._qkv_same_embed_dim:
+            why_not_sparsity_fast_path = "self_attn._qkv_same_embed_dim was not True"
+        elif not self.activation_relu_or_gelu:
+            why_not_sparsity_fast_path = "activation_relu_or_gelu was not True"
+        elif self.norm1.eps != self.norm2.eps:
+            why_not_sparsity_fast_path = "norm1.eps is not equal to norm2.eps"
+        elif src_mask is not None:
+            why_not_sparsity_fast_path = "src_mask is not supported for fastpath"
+        elif src.is_nested and src_key_padding_mask is not None:
+            why_not_sparsity_fast_path = "src_key_padding_mask is not supported with NestedTensor input for fastpath"
+        elif self.self_attn.num_heads % 2 == 1:
+            why_not_sparsity_fast_path = "num_head is odd"
+        elif torch.is_autocast_enabled():
+            why_not_sparsity_fast_path = "autocast is enabled"
+
+        if not why_not_sparsity_fast_path:
+            tensor_args = (
+                src,
+                self.self_attn.in_proj_weight,
+                self.self_attn.in_proj_bias,
+                self.self_attn.out_proj.weight,
+                self.self_attn.out_proj.bias,
+                self.norm1.weight,
+                self.norm1.bias,
+                self.norm2.weight,
+                self.norm2.bias,
+                self.linear1.weight,
+                self.linear1.bias,
+                self.linear2.weight,
+                self.linear2.bias,
+            )
+
+            # We have to use list comprehensions below because TorchScript does not support
+            # generator expressions.
+            if torch.overrides.has_torch_function(tensor_args):
+                why_not_sparsity_fast_path = "some Tensor argument has_torch_function"
+            elif not all((x.is_cuda or 'cpu' in str(x.device)) for x in tensor_args):
+                why_not_sparsity_fast_path = "some Tensor argument is neither CUDA nor CPU"
+            elif torch.is_grad_enabled() and any(x.requires_grad for x in tensor_args):
+                why_not_sparsity_fast_path = ("grad is enabled and at least one of query or the "
+                                              "input/output projection weights or biases requires_grad")
+
+            if not why_not_sparsity_fast_path:
+                return torch._transformer_encoder_layer_fwd(
+                    src,
+                    self.self_attn.embed_dim,
+                    self.self_attn.num_heads,
+                    self.self_attn.in_proj_weight,
+                    self.self_attn.in_proj_bias,
+                    self.self_attn.out_proj.weight,
+                    self.self_attn.out_proj.bias,
+                    self.activation_relu_or_gelu == 2,
+                    self.norm_first,
+                    self.norm1.eps,
+                    self.norm1.weight,
+                    self.norm1.bias,
+                    self.norm2.weight,
+                    self.norm2.bias,
+                    self.linear1.weight,
+                    self.linear1.bias,
+                    self.linear2.weight,
+                    self.linear2.bias,
+                    # TODO: if src_mask and src_key_padding_mask merge to single 4-dim mask
+                    src_mask if src_mask is not None else src_key_padding_mask,
+                    1 if src_key_padding_mask is not None else
+                    0 if src_mask is not None else
+                    None,
+                )
+
+        x = src
+        if self.norm_first:
+            x = self.add1(x, self._sa_block(self.norm1(x), src_mask, src_key_padding_mask))
+            x = self.add2(x, self._ff_block(self.norm2(x)))
+        else:
+            x = self.norm1(self.add1(x, self._sa_block(x, src_mask, src_key_padding_mask)))
+            x = self.norm2(self.add2(x, self._ff_block(x)))
+
+        return x
+
+
+class QuantizableTransformerDecoderLayer(nn.TransformerDecoderLayer):
+    """
+    QuantizableTransformerDecoderLayer replaces add operations in TransformerDecoderLayer with elementwise add operations
+    """
+    __constants__ = ['batch_first', 'norm_first']
+
+    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation=nnF.relu, layer_norm_eps=1e-5,
+                 batch_first=False, norm_first=False, device=None, dtype=None) -> None:
+        super().__init__(d_model, nhead, dim_feedforward, dropout, activation, layer_norm_eps, batch_first)
+        self.norm_first = norm_first
+        self.add1 = elementwise_ops.Add()
+        self.add2 = elementwise_ops.Add()
+        self.add3 = elementwise_ops.Add()
+
+    def forward(self, tgt: Tensor, memory: Tensor, tgt_mask: Optional[Tensor] = None, memory_mask: Optional[Tensor] = None,
+                tgt_key_padding_mask: Optional[Tensor] = None, memory_key_padding_mask: Optional[Tensor] = None) -> Tensor:
+        r"""Pass the inputs (and mask) through the decoder layer.
+
+        Args:
+            tgt: the sequence to the decoder layer (required).
+            memory: the sequence from the last layer of the encoder (required).
+            tgt_mask: the mask for the tgt sequence (optional).
+            memory_mask: the mask for the memory sequence (optional).
+            tgt_key_padding_mask: the mask for the tgt keys per batch (optional).
+            memory_key_padding_mask: the mask for the memory keys per batch (optional).
+
+        Shape:
+            see the docs in Transformer class.
+        """
+        # see Fig. 1 of https://arxiv.org/pdf/2002.04745v1.pdf
+
+        x = tgt
+        if self.norm_first:
+            x = self.add1(x, self._sa_block(self.norm1(x), tgt_mask, tgt_key_padding_mask))
+            x = self.add2(x, self._mha_block(self.norm2(x), memory, memory_mask, memory_key_padding_mask))
+            x = self.add3(x, self._ff_block(self.norm3(x)))
+        else:
+            x = self.norm1(self.add1(x, self._sa_block(x, tgt_mask, tgt_key_padding_mask)))
+            x = self.norm2(self.add2(x, self._mha_block(x, memory, memory_mask, memory_key_padding_mask)))
+            x = self.norm3(self.add3(x, self._ff_block(x)))
+
+        return x
+
+def copy_params_helper(src_module: Union[torch.nn.TransformerEncoderLayer, torch.nn.TransformerDecoderLayer],
+                       dest_module: Union[QuantizableTransformerEncoderLayer, QuantizableTransformerDecoderLayer]):
+    """
+    Copy params in torch enc/dec modules to equivalent quantizable enc/dec modules
+    :param src_module: source module of type torch.nn.TransformerEncoderLayer or torch.nn.TransformerDecoderLayer
+    :param dest_module: dest module of type QuantizableTransformerEncoderLayer, QuantizableTransformerDecoderLayer
+    """
+    if isinstance(src_module, torch.nn.TransformerEncoderLayer):
+        assert isinstance(dest_module, QuantizableTransformerEncoderLayer)
+
+    if isinstance(src_module, torch.nn.TransformerDecoderLayer):
+        assert isinstance(dest_module, QuantizableTransformerDecoderLayer)
+
+    with torch.no_grad():
+        # copy params of all the layers in transformerEncoderLayer to quantizable_encoder
+        enc_layers = {}
+        for layer_name, layer in src_module.named_children():
+            enc_layers[layer_name] = layer
+
+        q_enc_layers = {}
+        for layer_name, layer in dest_module.named_children():
+            q_enc_layers[layer_name] = layer
+
+        for layer_name in enc_layers:
+            for param_name, _ in enc_layers[layer_name].named_parameters():
+                q_enc_layers[layer_name].get_parameter(param_name).data.copy_(
+                    enc_layers[layer_name].get_parameter(param_name).data)
+
+
+def create_quantizable_transformer_encoder_layer(
+        transformerEncoderLayer: torch.nn.TransformerEncoderLayer) -> QuantizableTransformerEncoderLayer:
+    """
+    Create QuantizableTransformerEncoderLayer using existing torch.nn.TransformerEncoderLayer module
+    :param transformerEncoderLayer: Existing torch.nn.TransformerEncoderLayer module
+    :return: Newly created QuantizableTransformerEncoderLayer module
+    """
+    if isinstance(transformerEncoderLayer.activation, (torch.nn.modules.activation.ReLU, torch.nn.functional.relu)):
+        activation = 'relu'
+    elif isinstance(transformerEncoderLayer.activation, (torch.nn.modules.activation.GELU, torch.nn.functional.gelu)):
+        activation = 'gelu'
+    else:
+        assert False
+
+    quantizable_encoder = QuantizableTransformerEncoderLayer(d_model=transformerEncoderLayer.linear1.in_features,
+                                                             nhead=transformerEncoderLayer.self_attn.num_heads,
+                                                             dim_feedforward=transformerEncoderLayer.linear1.out_features,
+                                                             dropout=transformerEncoderLayer.dropout.p,
+                                                             activation=activation,
+                                                             layer_norm_eps=transformerEncoderLayer.norm1.eps,
+                                                             batch_first=transformerEncoderLayer.self_attn.batch_first,
+                                                             norm_first=transformerEncoderLayer.norm_first)
+
+    copy_params_helper(src_module=transformerEncoderLayer, dest_module=quantizable_encoder)
+    return quantizable_encoder
+
+
+def create_quantizable_transformer_decoder_layer(
+        transformerDecoderLayer: torch.nn.TransformerDecoderLayer) -> QuantizableTransformerDecoderLayer:
+    """
+    Create QuantizableTransformerDecoderLayer using existing torch.nn.TransformerDecoderLayer module
+    :param transformerDecoderLayer: Existing torch.nn.TransformerDecoderLayer module
+    :return: Newly created QuantizableTransformerDecoderLayer module
+    """
+    if isinstance(transformerDecoderLayer.activation, (torch.nn.modules.activation.ReLU, torch.nn.functional.relu)):
+        activation = 'relu'
+    elif isinstance(transformerDecoderLayer.activation, (torch.nn.modules.activation.GELU, torch.nn.functional.gelu)):
+        activation = 'gelu'
+    else:
+        assert False
+
+    quantizable_decoder = QuantizableTransformerDecoderLayer(d_model=transformerDecoderLayer.linear1.in_features,
+                                                             nhead=transformerDecoderLayer.self_attn.num_heads,
+                                                             dim_feedforward=transformerDecoderLayer.linear1.out_features,
+                                                             dropout=transformerDecoderLayer.dropout.p,
+                                                             activation=activation,
+                                                             layer_norm_eps=transformerDecoderLayer.norm1.eps,
+                                                             batch_first=transformerDecoderLayer.self_attn.batch_first,
+                                                             norm_first=transformerDecoderLayer.norm_first)
+
+    copy_params_helper(src_module=transformerDecoderLayer, dest_module=quantizable_decoder)
+    return quantizable_decoder
