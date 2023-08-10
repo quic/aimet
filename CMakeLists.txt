@@ -107,15 +107,37 @@ set(CMAKE_FIND_LIBRARY_SUFFIXES "${CMAKE_STATIC_LIBRARY_SUFFIX}")
 pkg_search_module(OPENCV opencv) # in case opencv will not be found, it would be built form source
 set(CMAKE_FIND_LIBRARY_SUFFIXES "${OLD_FIND_LIBRARY_SUFFIXES}")
 
+# ----------------------------------
+# Conditional build for ONNX
+# ----------------------------------
+
+if (NOT (DEFINED ENABLE_ONNX))
+  message("AIMET Onnx build not explicitly disabled.")
+  set(ENABLE_ONNX OFF CACHE BOOL "")
+
+endif(NOT (DEFINED ENABLE_ONNX))
+
+if (ENABLE_ONNX)
+  if (NOT ENABLE_TORCH)
+    message(STATUS "Enabling Torch as it is required by ONNX")
+    set(ENABLE_TORCH ON CACHE BOOL "" FORCE)
+  endif(NOT ENABLE_TORCH)
+
+  set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/onnx/src/python")
+  get_filename_component(ONNX_DIR ${ONNX_CMAKE_DIR}/../../ ABSOLUTE)
+else (ENABLE_ONNX)
+  message("AIMET Onnx build disabled")
+endif (ENABLE_ONNX)
 
 # ----------------------------------
 # Conditional build for PyTorch
 # ----------------------------------
 if (NOT (DEFINED ENABLE_TORCH))
-  message("AIMET Torch build not explicitly disabled. Enabling implicitly")
+  message(STATUS "AIMET Torch build not explicitly disabled. Enabling implicitly")
   set(ENABLE_TORCH ON CACHE BOOL "")
 
 endif(NOT (DEFINED ENABLE_TORCH))
+message(STATUS "AIMET - ENABLE_TORCH: ${ENABLE_TORCH}" )
 
 if (ENABLE_TORCH)
   execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import torch; print(torch.__version__)"
@@ -153,25 +175,8 @@ if (ENABLE_TORCH)
   get_filename_component(TORCH_DIR ${TORCH_CMAKE_DIR}/../../ ABSOLUTE)
 
 else (ENABLE_TORCH)
-  message("AIMET Torch build disabled")
+  message(STATUS "AIMET Torch build disabled inside AIMET")
 endif (ENABLE_TORCH)
-
-# ----------------------------------
-# Conditional build for ONNX
-# ----------------------------------
-
-if (NOT (DEFINED ENABLE_ONNX))
-  message("AIMET Onnx build not explicitly disabled.")
-  set(ENABLE_ONNX OFF CACHE BOOL "")
-
-endif(NOT (DEFINED ENABLE_ONNX))
-
-if (ENABLE_ONNX)
-  set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/onnx/src/python")
-  get_filename_component(ONNX_DIR ${ONNX_CMAKE_DIR}/../../ ABSOLUTE)
-else (ENABLE_ONNX)
-  message("AIMET Onnx build disabled")
-endif (ENABLE_ONNX)
 
 # ----------------------------------
 # PyBind11

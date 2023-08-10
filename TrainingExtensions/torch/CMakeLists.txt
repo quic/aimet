@@ -90,7 +90,13 @@ add_dependencies(TorchCppOps PyModelOptimizations)
 add_dependencies(BuildTorchExtensions TorchCppOps)
 
 add_subdirectory(src/python)
-add_subdirectory(test)
+
+if (ENABLE_ONNX)
+    message(STATUS "ONNX is enabled, skipping Torch Unit test")
+else(ENABLE_ONNX)
+    add_subdirectory(test)
+endif(ENABLE_ONNX)
+
 
 install(DIRECTORY ${CMAKE_BINARY_DIR}/artifacts/aimet_common/
       DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_common
