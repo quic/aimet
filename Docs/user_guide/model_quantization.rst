@@ -144,7 +144,7 @@ depend on the ML framework the model is written in.
    :titlesonly:
    :hidden:
    
-    PyTorch Model Guidlines <../api_docs/torch_model_guidelines>
+    PyTorch Model Guidelines <../api_docs/torch_model_guidelines>
     AIMET PyTorch Quantization APIs <../api_docs/torch_quantization>
 
 - Pytorch:
