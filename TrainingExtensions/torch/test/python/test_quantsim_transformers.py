@@ -590,6 +590,45 @@ class TestQuantizationSimTransformers(unittest.TestCase):
                           if 'self_attn.' in n.name }
             assert len(mha_names) == default_num_decoder_layers + num_encoder_layers
 
+    def test_transformer_transformation(self):
+        seed = 10
+        np.random.seed(seed)
+        os.environ['PYTHONHASHSEED'] = str(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(seed)
+            torch.cuda.manual_seed_all(seed)
+
+        src = torch.rand(10, 32, 512)
+
+        transformer_model_1 = nn.Transformer(num_encoder_layers=2, num_decoder_layers=2)
+        transformer_model_1.eval()
+        transformer_model_2 = copy.deepcopy(transformer_model_1)
+
+        out_fp = transformer_model_1(src=copy.deepcopy(src), tgt=copy.deepcopy(src))
+
+        # current method being followed
+        prepare_pt_transformer_for_quantsim(transformer_model_1)
+        replace_modules_of_type1_using_constructor(transformer_model_1, torch.nn.MultiheadAttention,
+                                                   create_quantizable_multihead_attention)
+        transformer_model_1.eval()
+        out_fp_1 = transformer_model_1(src=copy.deepcopy(src), tgt=copy.deepcopy(src))
+        assert torch.allclose(out_fp, out_fp_1, atol=1e-6)
+
+        # add in quantizable enc/dec
+        prepare_pt_transformer_for_quantsim(transformer_model_2)
+        replace_modules_of_type1_using_constructor(transformer_model_2.encoder, nn.TransformerEncoderLayer,
+                                                   create_quantizable_transformer_encoder_layer)
+        replace_modules_of_type1_using_constructor(transformer_model_2.decoder, nn.TransformerDecoderLayer,
+                                                   create_quantizable_transformer_decoder_layer)
+        replace_modules_of_type1_using_constructor(transformer_model_2, torch.nn.MultiheadAttention,
+                                                   create_quantizable_multihead_attention)
+        transformer_model_2.eval()
+        out_fp_2 = transformer_model_2(src=copy.deepcopy(src), tgt=copy.deepcopy(src))
+        assert torch.allclose(out_fp, out_fp_2, atol=1e-6)
+
+
 @pytest.fixture
 def seed_torch_random_variable():
     seed = 10
@@ -698,33 +737,3 @@ def test_mha_as_leaf_module(replace_with_q_mha):
                     assert input_tensor.is_model_input == cg_1_op.inputs[idx].is_model_input
                     assert input_tensor.numel == cg_1_op.inputs[idx].numel
                     assert input_tensor.shape == cg_1_op.inputs[idx].shape
-
-def test_transformer_transformation(self):
-    self._set_random_seed(10)
-    src = torch.rand(10, 32, 512)
-
-    transformer_model_1 = nn.Transformer(num_encoder_layers=2, num_decoder_layers=2)
-    transformer_model_1.eval()
-    transformer_model_2 = copy.deepcopy(transformer_model_1)
-
-    out_fp = transformer_model_1(src=copy.deepcopy(src), tgt=copy.deepcopy(src))
-
-    # current method being followed
-    prepare_pt_transformer_for_quantsim(transformer_model_1)
-    replace_modules_of_type1_using_constructor(transformer_model_1, torch.nn.MultiheadAttention,
-                                               create_quantizable_multihead_attention)
-    transformer_model_1.eval()
-    out_fp_1 = transformer_model_1(src=copy.deepcopy(src), tgt=copy.deepcopy(src))
-    assert torch.allclose(out_fp, out_fp_1, atol=1e-6)
-
-    # add in quantizable enc/dec
-    prepare_pt_transformer_for_quantsim(transformer_model_2)
-    replace_modules_of_type1_using_constructor(transformer_model_2.encoder, nn.TransformerEncoderLayer,
-                                               create_quantizable_transformer_encoder_layer)
-    replace_modules_of_type1_using_constructor(transformer_model_2.decoder, nn.TransformerDecoderLayer,
-                                               create_quantizable_transformer_decoder_layer)
-    replace_modules_of_type1_using_constructor(transformer_model_2, torch.nn.MultiheadAttention,
-                                               create_quantizable_multihead_attention)
-    transformer_model_2.eval()
-    out_fp_2 = transformer_model_2(src=copy.deepcopy(src), tgt=copy.deepcopy(src))
-    assert torch.allclose(out_fp, out_fp_2, atol=1e-6)
