@@ -568,3 +568,18 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
             custom_module_out = model(inputs, indices, axis)
             original_module_out = np.take(inputs, indices, axis=axis)
             self.assertTrue(np.allclose(custom_module_out, original_module_out))
+
+    def test_custom_scatternd_op(self):
+        torch.manual_seed(42)
+        model = Model3(elementwise_ops.ScatterND())
+        inputs = torch.rand(1, 2, 3)
+        indices = torch.tensor([[[[0, 1, 2]], [[0, 1, 0]], [[0, 0, 2]]]])
+        updates = torch.rand(1, 3, 1)
+        
+        original_module_out = inputs.clone()
+        original_module_out[0, 1, 2] = updates[0, 0, 0]
+        original_module_out[0, 1, 0] = updates[0, 1, 0]
+        original_module_out[0, 0, 2] = updates[0, 2, 0]
+
+        custom_module_out = model(inputs, indices, updates)
+        self.assertTrue(np.allclose(custom_module_out, original_module_out))

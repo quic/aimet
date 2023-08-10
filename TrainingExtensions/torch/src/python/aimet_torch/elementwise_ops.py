@@ -39,6 +39,7 @@
 """ Custom modules for functional operations defined under torch and torch.nn.functional packages """
 
 from typing import Callable, Any, Tuple, Union
+import itertools
 import torch
 import torch.nn
 import torchvision
@@ -297,9 +298,14 @@ class ScatterND(torch.nn.Module):
         Forward-pass routine for ScatterND op
         """
         output = torch.clone(data)
-        update_indices = indices.size(dim=0)
 
-        for idx in range(update_indices):
+        # Get multidimensional indices to iterate over the first N-1 dimensions of the indices variable
+        # as the last dimension of the indices variable is partial index into data
+        update_indices = indices.size()[:-1]
+        update_indices = itertools.product(*(range(index) for index in update_indices))
+
+        # For each index, update output using the updates variable
+        for idx in update_indices:
             idx_list = tuple(indices[idx].tolist())
             output[idx_list] = updates[idx]
 
