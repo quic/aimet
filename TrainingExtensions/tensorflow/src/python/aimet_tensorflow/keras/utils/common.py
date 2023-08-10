@@ -628,14 +628,16 @@ def convert_h5_model_to_pb_model(h5_model_path: AnyStr, custom_objects: Dict = N
     :param custom_objects: If there are custom objects to load, Keras needs a dict of them to map them
     """
 
+    supported_file_types = ['h5', 'hdf5']
+
     # Function for validating if the file exist and is a h5
     def validate_model_path() -> Tuple[str, str]:
         if not os.path.exists(h5_model_path):
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), h5_model_path)
 
         model_name_split = os.path.basename(h5_model_path).split('.')
-        if model_name_split[1] != 'h5':
-            raise ValueError("File must be a h5 model.")
+        if model_name_split[-1] not in supported_file_types:
+            raise ValueError(f"File must be of types {supported_file_types}.")
 
         model_name = model_name_split[0] + '_converted.pb'
         save_path = os.path.dirname(h5_model_path)
