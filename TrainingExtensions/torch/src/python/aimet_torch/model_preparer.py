@@ -185,8 +185,6 @@ functional_with_special_handling = {
     'conv2d'        : torch.nn.Conv2d
 }
 
-location_independent_op = ["add", "mul"]
-
 # In this functional --> module map, corresponding custom module is of type torch.nn and uses stateless API.
 functional_with_stateless_api = {
     '_pad'                      : elementwise_ops.Pad,
@@ -580,13 +578,6 @@ def _insert_node_for_new_module(traced_model: torch.fx.GraphModule,
             if functional_name in functional_with_special_handling:
                 new_node = special_handler_functions[functional_name]['node_fn'](traced_model, module_qualified_name, node)
             elif functional_name in functional_with_stateless_api:
-                # Swapping the positions of first and second operand if the first operand is a scalar const in a
-                # position independent op (like add, mul) because in the connected graph in AIMET the scalar const
-                # value for these ops are swapped
-                if functional_name in location_independent_op:
-                    if not isinstance(node.args[0], torch.fx.node.Node) and len(node.args) == 2:
-                        # Only for Binary Op
-                        node.args = node.args[1], node.args[0]
                 new_node = traced_model.graph.call_module(module_qualified_name, args=node.args, kwargs=node.kwargs)
             elif functional_name in functional_with_stateful_api:
                 new_node = traced_model.graph.call_module(module_qualified_name, args=node.args)

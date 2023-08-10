@@ -148,8 +148,11 @@ class Add(torch.nn.Module):
         """
         Forward-pass routine for add op
         """
-        return x + y
-
+        if isinstance(x, torch.Tensor) or isinstance(y, torch.Tensor):
+            out = torch.add(x, y)
+        else:
+            out = x + y
+        return out
 
 class Multiply(torch.nn.Module):
     """ Multiply module for a functional multiply"""
@@ -159,7 +162,11 @@ class Multiply(torch.nn.Module):
         """
         Forward-pass routine for multiply op
         """
-        return x * y
+        if isinstance(x, torch.Tensor) or isinstance(y, torch.Tensor):
+            out = torch.mul(x, y)
+        else:
+            out = x * y
+        return out
 
 
 # modules for functional requiring special handling
