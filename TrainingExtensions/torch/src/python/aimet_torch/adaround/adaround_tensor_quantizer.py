@@ -131,6 +131,8 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         # same shape as the weight tensor
         if self.alpha is None:
             self._initialize_alpha(tensor, broadcasted_delta)
+        else:
+            self.alpha = self.alpha.to(tensor.device)
 
         # Scale the tensor
         tensor = torch.floor(tensor / broadcasted_delta)

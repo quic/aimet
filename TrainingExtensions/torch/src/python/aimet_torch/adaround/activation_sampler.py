@@ -73,7 +73,7 @@ class ActivationSampler:
         self._orig_module_collector = ModuleData(orig_model, orig_module, forward_fn)
         self._quant_module_collector = ModuleData(quant_model, quant_module, forward_fn)
 
-    def sample_and_place_all_acts_on_cpu(self, cached_dataset: Dataset) -> Tuple[torch.Tensor, torch.Tensor]:
+    def sample_and_place_all_acts_on_cpu(self, cached_dataset: Dataset, cached_quant_dataset: Dataset = None) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         From the original module, collect output activations and input activations
         to corresponding quantized module.
@@ -81,16 +81,23 @@ class ActivationSampler:
         NOTE: Keeps collected activation data on CPU memory so this function should only be invoked
         if collected activation data can be fit entirely in CPU memory.
 
-        :param cached_dataset: Cached dataset.
+        :param cached_dataset: Cached dataset for fp32 model
+        :param cached_quant_dataset: Cached dataset for quant model
         :return: Input data, output data
         """
         all_inp_data = []
         all_out_data = []
 
         iterator = iter(cached_dataset)
+        if cached_quant_dataset:
+            assert len(cached_dataset) == len(cached_quant_dataset)
+            quant_iterator = iter(cached_quant_dataset)
         for batch_index in range(len(cached_dataset)):
-            model_inputs = next(iterator)
-            inp_data, out_data = self.sample_acts(model_inputs)
+            if cached_quant_dataset:
+                inp_data, _ = self.sample_acts(next(quant_iterator), collect_input=True, collect_output=False)
+                _, out_data = self.sample_acts(next(iterator), collect_input=False, collect_output=True)
+            else:
+                inp_data, out_data = self.sample_acts(next(iterator))
 
             # Keep activation data on CPU memory and then append.
             all_inp_data.append(inp_data.cpu())
@@ -103,21 +110,26 @@ class ActivationSampler:
 
         return all_inp_data, all_out_data
 
-    def sample_acts(self, model_inputs: Union[torch.tensor, List, Tuple]) -> Tuple[torch.Tensor, torch.Tensor]:
+    def sample_acts(self, model_inputs: Union[torch.tensor, List, Tuple], collect_input=True, collect_output=True) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         For given model_inputs, collect input activations data to quant module and
         output activations data from original module.
 
         :param model_inputs: Model inputs.
+        :param collect_input: True if collect input data of the quant module, False otherwise
+        :param collect_output: True if collect output data of the fp32 model, False otherwise
         :return: Input and output activations data.
         """
         # Collect input activation data to quantized wrapper module
         # (with all preceding weight modules quantized)
-        inp_data, _ = self._quant_module_collector.collect_inp_out_data(model_inputs,
-                                                                        collect_input=True,
-                                                                        collect_output=False)
+        inp_data, out_data = None, None
+        if collect_input:
+            inp_data, _ = self._quant_module_collector.collect_inp_out_data(model_inputs,
+                                                                            collect_input=True,
+                                                                            collect_output=False)
         # Collect output activation data from original module
-        _, out_data = self._orig_module_collector.collect_inp_out_data(model_inputs,
-                                                                       collect_input=False,
-                                                                       collect_output=True)
+        if collect_output:
+            _, out_data = self._orig_module_collector.collect_inp_out_data(model_inputs,
+                                                                           collect_input=False,
+                                                                           collect_output=True)
         return inp_data, out_data
