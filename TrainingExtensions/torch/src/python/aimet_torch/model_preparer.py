@@ -188,6 +188,7 @@ functional_with_special_handling = {
 # In this functional --> module map, corresponding custom module is of type torch.nn and uses stateless API.
 functional_with_stateless_api = {
     '_pad'                      : elementwise_ops.Pad,
+    'pad'                      : elementwise_ops.Pad,
     'sum'                       : elementwise_ops.Sum,
     'add'                       : elementwise_ops.Add,
     'subtract'                  : elementwise_ops.Subtract,
