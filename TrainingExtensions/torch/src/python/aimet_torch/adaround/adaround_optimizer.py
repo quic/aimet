@@ -68,7 +68,7 @@ class AdaroundOptimizer:
                         orig_model: torch.nn.Module, quant_model: torch.nn.Module,
                         act_func: Union[torch.nn.Module, None], cached_dataset: Dataset,
                         forward_fn: Callable[[torch.nn.Module, Any], Any],
-                        opt_params: AdaroundHyperParameters):
+                        opt_params: AdaroundHyperParameters, cached_quant_dataset: Dataset = None):
         """
         Adaround module
         :param module: Original module
@@ -79,17 +79,21 @@ class AdaroundOptimizer:
         :param cached_dataset: Cached dataset
         :param forward_fn: Adapter function that performs forward pass given a model and inputs
          yielded from the data loader
+        :param cached_quant_dataset: Cached dataset for quant model
         :param opt_params: Optimization parameters
         """
-        # pylint: disable=too-many-arguments
+        # pylint: disable=too-many-locals, too-many-arguments
         assert isinstance(quant_module, StaticGridQuantWrapper), '%s is not wrapper module.' % quant_module
         assert quant_module.param_quantizers['weight'], '%s does not have weight quantizer.' % quant_module
 
         # Get input and output data of batch size to compute reconstruction error of output activations
         # before and after optimization
-        model_inputs = cached_dataset[0]
         act_sampler = ActivationSampler(module, quant_module, orig_model, quant_model, forward_fn)
-        inp_data, out_data = act_sampler.sample_acts(model_inputs)
+        if cached_quant_dataset:
+            inp_data, _ = act_sampler.sample_acts(cached_quant_dataset[0], collect_input=True, collect_output=False)
+            _, out_data = act_sampler.sample_acts(cached_dataset[0], collect_input=False, collect_output=True)
+        else:
+            inp_data, out_data = act_sampler.sample_acts(cached_dataset[0])
 
         recons_err_hard, recons_err_soft = cls._compute_recons_metrics(quant_module, act_func, inp_data, out_data)
         logger.debug("Before opt, Recons. error metrics using soft rounding=%f and hard rounding=%f", recons_err_soft,
@@ -97,7 +101,7 @@ class AdaroundOptimizer:
 
         # Optimize weight rounding
         cls._optimize_rounding(module, quant_module, orig_model, quant_model, act_func, cached_dataset, forward_fn,
-                               opt_params)
+                               opt_params, cached_quant_dataset)
 
         recons_err_hard, recons_err_soft = cls._compute_recons_metrics(quant_module, act_func, inp_data, out_data)
         logger.debug("After opt, Recons. error metrics using soft rounding=%f and hard rounding=%f", recons_err_soft,
@@ -111,7 +115,7 @@ class AdaroundOptimizer:
                            orig_model: torch.nn.Module, quant_model: torch.nn.Module,
                            act_func: Union[torch.nn.Module, None], cached_dataset: Dataset,
                            forward_fn: Callable[[torch.nn.Module, Any], Any],
-                           opt_params: AdaroundHyperParameters):
+                           opt_params: AdaroundHyperParameters, cached_quant_dataset: Dataset = None):
         """
         Optimizes the weight rounding of quantized wrapper module
         :param module: Original module
@@ -141,12 +145,11 @@ class AdaroundOptimizer:
 
         if use_cache_acts_data and AdaroundOptimizer.enable_caching_acts_data():
             logger.debug("Caching intermediate activations data for optimization.")
-            all_inp_data, all_orig_out_data = act_sampler.sample_and_place_all_acts_on_cpu(cached_dataset)
+            all_inp_data, all_orig_out_data = act_sampler.sample_and_place_all_acts_on_cpu(cached_dataset, cached_quant_dataset)
             # Try to put all cached activations data on GPU for faster optimization if possible.
             device = utils.get_device(module)
             if 'cuda' in str(device):
                 all_inp_data, all_orig_out_data = cls._place_cached_acts_data(all_inp_data, all_orig_out_data, device)
-
         for iteration in range(opt_params.num_iterations):
             if use_cache_acts_data and AdaroundOptimizer.enable_caching_acts_data():
                 indices = torch.randperm(all_inp_data.size(0))[:BATCH_SIZE]
@@ -158,7 +161,6 @@ class AdaroundOptimizer:
 
             # Clear alpha's gradients before optimization step
             optimizer.zero_grad()
-
             # Get the module's output activations using AdaRounded weights
             quant_out_data = cls._compute_output_with_adarounded_weights(quant_module, inp_data)
 

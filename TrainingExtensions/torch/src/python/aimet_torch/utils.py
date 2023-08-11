@@ -42,6 +42,7 @@ import contextlib
 import os
 import pickle
 import sys
+import functools
 import numpy as np
 import torch.nn
 import torch
@@ -185,14 +186,21 @@ class CachedDataset(Dataset):
         :param num_batches: Number of batches to fetch from data loader
         :param path: Path to save model inputs
         """
-        if len(data_loader) < num_batches:
-            raise ValueError(f'Can not fetch {num_batches} batches from '
-                             f'a data loader of length {len(data_loader)}.')
+        if data_loader:
+            if len(data_loader) < num_batches:
+                raise ValueError(f'Can not fetch {num_batches} batches from '
+                                 f'a data loader of length {len(data_loader)}.')
 
-        self._num_batches = num_batches
-        self._path = path
+            self._num_batches = num_batches
+            self._path = path
 
-        self._cache_model_inputs(itertools.islice(data_loader, num_batches))
+            self._cache_model_inputs(itertools.islice(data_loader, num_batches))
+        else:
+            assert len(os.listdir(path)) == num_batches
+            self._num_batches = num_batches
+            self._path = path
+            logger.info('Found %d batches of data at path location: %s', self._num_batches, self._path)
+
 
     def __len__(self):
         return self._num_batches
@@ -261,7 +269,7 @@ def run_hook_for_layers(model: torch.nn.Module, input_shapes: Union[Tuple, List[
 
 def run_hook_for_layers_with_given_input(model: torch.nn.Module,
                                          input_tensor: Union[torch.Tensor, Tuple],
-                                         hook, module_type_for_attaching_hook=None, leaf_node_only=True):
+                                         hook, module_type_for_attaching_hook=None, leaf_node_only=True, fwd_func=None):
     """
     Register the given hook function for all layers in the model
     :param model: Model
@@ -269,6 +277,7 @@ def run_hook_for_layers_with_given_input(model: torch.nn.Module,
     :param hook: Hook function to register
     :param module_type_for_attaching_hook: Tuple of torch.nn module types for which hook has to be attached
     :param leaf_node_only: Set to False if all modules are required
+    :param fwd_func: forward function for model inference
     :return: None
     """
     # pylint: disable=too-many-branches
@@ -310,10 +319,13 @@ def run_hook_for_layers_with_given_input(model: torch.nn.Module,
         # Run forward pass to execute the hook functions
         # ------------------------------------------------
         with in_eval_mode(model), torch.no_grad():
-            if isinstance(input_tensor, (list, tuple)):
-                _ = model(*input_tensor)
+            if fwd_func:
+                _ = fwd_func(model, input_tensor)
             else:
-                _ = model(input_tensor)
+                if isinstance(input_tensor, (list, tuple)):
+                    _ = model(*input_tensor)
+                else:
+                    _ = model(input_tensor)
 
     finally:
         # --------------------------
@@ -523,11 +535,13 @@ def get_one_positions_in_binary_mask(mask):
 
 
 def get_ordered_list_of_modules(model: torch.nn.Module,
-                                dummy_input: Union[torch.Tensor, List[torch.Tensor], Tuple]) -> List:
+                                dummy_input: Union[torch.Tensor, List[torch.Tensor], Tuple],
+                                fwd_func=None) -> List:
     """
     Finds ordered modules in given model.
     :param model: PyTorch model.
     :param dummy_input: Dummy input to the model. Used to parse model graph.
+    :param fwd_func: forward function for model inference
     :return: List of module name, module in order.
     """
     def _hook_to_collect_name_of_module(module, _, __):
@@ -542,7 +556,7 @@ def get_ordered_list_of_modules(model: torch.nn.Module,
         module_to_name_dict[module] = name
 
     list_modules = []
-    run_hook_for_layers_with_given_input(model, dummy_input, hook=_hook_to_collect_name_of_module)
+    run_hook_for_layers_with_given_input(model, dummy_input, hook=_hook_to_collect_name_of_module, fwd_func=fwd_func)
 
     return list_modules
 
@@ -904,3 +918,62 @@ def disable_all_quantizers(model: torch.nn.Module) -> Handle:
     except:
         cleanup()
         raise
+
+
+def save_to_cache(tensor, dir_path, idx):
+    """
+    Save tensor data into provided path with index
+    :param tensor: Tensor
+    :param dir_path: Provided path to save data
+    :param idx: Index of the file
+    """
+    if not os.path.exists(dir_path):
+        os.makedirs(dir_path)
+    path = os.path.join(dir_path, f'model_inputs_{idx}')
+    with open(path, 'wb') as cache:
+        pickle.dump(tensor, cache)
+
+
+def get_named_module(model, name):
+    """
+    Given the name, get the target module in the model
+    :param model: Model that contains the target module
+    :param name: Name of the target module
+    :return:
+    """
+    return functools.reduce(getattr, name.split("."), model)
+
+
+def cache_intermediate_datasets(cached_dataset, cache_on_cpu, model, module_name, forward_fn, path=None):
+    """
+    Cache the input tensor of the target module and save to CPU or disk for latter usage
+    :param cached_dataset: Cached dataset
+    :param cache_on_cpu: True if caching data on CPU, False if caching to disk
+    :param model: Model that contains the target module
+    :param module_name: Name of the target module
+    :param forward_fn: Forward function that performs forward pass given a model and inputs
+    :param path: Location to save cached data if caching to dick
+    :return: Cached data on CPU
+    """
+    # pylint: disable=cell-var-from-loop
+    cached_data = []
+
+    iterator = iter(cached_dataset)
+    for idx in range(len(cached_dataset)):
+        def fn(_, inputs):
+            inputs = [*inputs]
+            if cache_on_cpu:
+                cached_data.append([inp.cpu() for inp in inputs])
+            else:
+                save_to_cache(inputs, path, idx)
+            raise StopForwardException
+        handle = get_named_module(model, module_name).register_forward_pre_hook(fn)
+        data = next(iterator)
+        try:
+            with in_eval_mode(model), torch.no_grad():
+                _ = forward_fn(model, data)
+        except StopForwardException:
+            pass
+        handle.remove()
+
+    return cached_data

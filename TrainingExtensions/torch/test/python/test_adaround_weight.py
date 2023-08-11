@@ -179,6 +179,64 @@ def save_config_file_for_per_channel_quantization():
     with open('./quantsim_config.json', 'w') as f:
         json.dump(quantsim_config, f)
 
+
+class SplittableModel(torch.nn.Module):
+    """ Use this model for unit testing purposes. Expect input shape (1, 3, 32, 32) """
+
+    def __init__(self):
+        super(SplittableModel, self).__init__()
+        self.conv1 = torch.nn.Conv2d(3, 32, kernel_size=2, stride=2, padding=2, bias=False)
+        self.bn1 = torch.nn.BatchNorm2d(32)
+        self.relu1 = torch.nn.ReLU(inplace=True)
+        self.maxpool = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
+        self.conv2 = torch.nn.Conv2d(32, 16, kernel_size=2, stride=2, padding=2, bias=False)
+        self.bn2 = torch.nn.BatchNorm2d(16)
+        self.relu2 = torch.nn.ReLU(inplace=True)
+        self.conv3 = torch.nn.Conv2d(16, 8, kernel_size=2, stride=2, padding=2, bias=False)
+        self.relu3 = torch.nn.ReLU(inplace=True)
+        self.avgpool = torch.nn.AvgPool2d(3, stride=1)
+        self.conv4 = torch.nn.Conv2d(8, 4, kernel_size=2, stride=2, padding=2, bias=True)
+        self.flatten = torch.nn.Flatten()
+        self.fc = torch.nn.Linear(36, 12)
+
+    def forward(self, *inputs):
+        x = self.conv1(inputs[0])
+        x = self.bn1(x)
+        x = self.relu1(x)
+        x = self.maxpool(x)
+
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = self.relu2(x)
+        x = self.conv3(x)
+        x = self.relu3(x)
+        x = self.avgpool(x)
+        x = self.conv4(x)
+        x = self.flatten(x)
+        x = self.fc(x)
+        return x
+
+
+def save_config_file_for_checkpoints():
+    checkpoints_config = {
+        "grouped_modules": {
+            "0": ["conv1", "bn1", "relu1", "maxpool"],
+            "1": ["conv2", "bn2", "relu2"],
+            "2": ["conv3", "relu3", "avgpool"],
+            "3": ["conv4", "flatten", "fc"],
+        },
+        "include_static_inputs": [
+            "False",
+            "False",
+            "False",
+            "False"
+        ],
+        "cache_on_cpu": "False"
+    }
+
+    with open('./test_checkpoints.json', 'w') as f:
+        json.dump(checkpoints_config, f)
+
 class TestAdaround:
     """
     AdaRound Weights Unit Test Cases
@@ -219,6 +277,60 @@ class TestAdaround:
         # Delete encodings file
         if os.path.exists("./dummy.encodings"):
             os.remove("./dummy.encodings")
+
+    def test_adaround_with_and_without_checkpoints_config(self):
+        def dummy_fwd(model, inputs):
+            return model(*inputs) if isinstance(inputs, (list, tuple)) else model(inputs)
+        torch.manual_seed(10)
+
+        # create fake data loader with image size (3, 32, 32)
+        data_loader = create_fake_data_loader(dataset_size=1, batch_size=1, image_size=(3, 32, 32))
+
+        net = SplittableModel().eval()
+        model = net.to(torch.device('cpu'))
+
+        input_shape = (1, 3, 32, 32)
+
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape, get_device(model))
+
+        params = AdaroundParameters(data_loader=data_loader, num_batches=1, default_num_iterations=5,
+                                    forward_fn=dummy_fwd)
+        save_config_file_for_checkpoints()
+        ada_rounded_model = Adaround.apply_adaround(model, inp_tensor_list, params, './', 'dummy')
+        ada_rounded_model_ckpts = Adaround.apply_adaround_with_cache(model, inp_tensor_list, params, './', 'dummy_checkpoints',
+                                                                     checkpoints_config="./test_checkpoints.json")
+
+        for (name, param), (name_ckpts, param_ckpts) in zip(ada_rounded_model.named_parameters(),
+                                                            ada_rounded_model_ckpts.named_parameters()):
+            assert name == name_ckpts
+            assert torch.equal(param, param_ckpts)
+
+        # Test export functionality
+        with open('./dummy.encodings') as json_file:
+            encoding_data = json.load(json_file)
+            print(encoding_data)
+
+        with open('./dummy_checkpoints.encodings') as json_file:
+            encoding_data_ckpts = json.load(json_file)
+            print(encoding_data_ckpts)
+
+        assert list(encoding_data.keys()) == list(encoding_data_ckpts.keys())
+
+        for key in list(encoding_data.keys()):
+            enc = encoding_data[key][0]
+            enc_ckpts = encoding_data_ckpts[key][0]
+            assert list(enc.keys()) == list(enc_ckpts.keys())
+            # Check all encodings are match
+            for k in list(enc.keys()):
+                assert enc[k] == enc_ckpts[k]
+
+        # Delete encodings files and checkpoint config json file
+        if os.path.exists("./dummy.encodings"):
+            os.remove("./dummy.encodings")
+        if os.path.exists("./dummy_checkpoints.encodings"):
+            os.remove("./dummy_checkpoints.encodings")
+        if os.path.exists("./test_checkpoints.json"):
+            os.remove("./test_checkpoints.json")
 
     def test_apply_adaround_per_channel(self):
         """ test apply_adaround end to end using tiny model when using per-channel mode """
@@ -842,7 +954,7 @@ class TestAdaround:
             with patch.object(AdaroundOptimizer, "adaround_module") as adaround_module_fn_mock:
                 _ = Adaround.apply_adaround(model, dummy_input, params, path='./', filename_prefix='resnet18',
                                             default_param_bw=8)
-            _, _, _, _, _, _, _, opt_params  = adaround_module_fn_mock.call_args[0]
+            _, _, _, _, _, _, _, opt_params, _ = adaround_module_fn_mock.call_args[0]
             # If adaround is performed with sub-8 bit weights, the default num_iterations should be 10K
             assert opt_params.num_iterations == 10000
 
@@ -851,7 +963,7 @@ class TestAdaround:
                 _ = Adaround.apply_adaround(model, dummy_input, params, path='./', filename_prefix='resnet18',
                                             default_param_bw=param_bw)
             # If adaround is performed with sub-8 bit weights, the default num_iterations should be 15K
-            _, _, _, _, _, _, _, opt_params  = adaround_module_fn_mock.call_args[0]
+            _, _, _, _, _, _, _, opt_params, _ = adaround_module_fn_mock.call_args[0]
             assert opt_params.num_iterations == 15000
 
     def test_adaround_restore_tensor_quantizer_after_folding(self):
