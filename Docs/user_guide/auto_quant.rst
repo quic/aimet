@@ -36,3 +36,4 @@ If applying AutoQuant fails to satisfy the evaluation goal, AutoQuant will retur
 of the above techniques is applied.
 
     .. image:: ../images/auto_quant_v2_flowchart.png
+
