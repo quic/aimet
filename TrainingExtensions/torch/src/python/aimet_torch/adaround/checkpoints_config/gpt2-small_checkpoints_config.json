@@ -1,0 +1,33 @@
+{
+  "grouped_modules": {
+    "0": ["transformer.h.0"],
+    "1": ["transformer.h.1"],
+    "2": ["transformer.h.2"],
+    "3": ["transformer.h.3"],
+    "4": ["transformer.h.4"],
+    "5": ["transformer.h.5"],
+    "6": ["transformer.h.6"],
+    "7": ["transformer.h.7"],
+    "8": ["transformer.h.8"],
+    "9": ["transformer.h.9"],
+    "10": ["transformer.h.10"],
+    "11": ["transformer.h.11"],
+    "12": ["transformer.ln_f", "lm_head"]
+  },
+  "include_static_inputs": [
+    "True",
+    "True",
+    "True",
+    "True",
+    "True",
+    "True",
+    "True",
+    "True",
+    "True",
+    "True",
+    "True",
+    "False",
+    "False"
+  ],
+  "cache_on_cpu": "True"
+}
