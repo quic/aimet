@@ -1,6 +1,5 @@
-:orphan:
-
 .. _ug-adaround:
+
 
 =====================
 AIMET AdaRound
@@ -22,10 +21,10 @@ AIMET AdaRound
 
 .. image:: ../images/adaround.png
     :width: 900px
-=====================
+
 AdaRound Use Cases
 =====================
-=====================
+
 Common terminology
 =====================
 	* BC - Bias Correction
@@ -35,7 +34,7 @@ Common terminology
 	* QAT - Quantization Aware Training
 	* { } - An optional step in the use case
 
-=====================
+
 Use Cases
 =====================
 
@@ -48,7 +47,7 @@ Use Cases
        For these models, QAT after AdaRound may be beneficial. AdaRound is considered as a better weights initialization
        step which helps for faster QAT.
 
-=====================
+
  Not recommended
 =====================
 Applying BC either before or after AdaRound is not recommended.
@@ -57,7 +56,7 @@ Applying BC either before or after AdaRound is not recommended.
 
  #. BC --> AdaRound
 
-=====================================
+
  AdaRound Hyper parameters guidelines
 =====================================
 

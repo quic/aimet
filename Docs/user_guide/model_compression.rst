@@ -10,6 +10,12 @@ Overview
 AIMET provides a model compression library that can be used to reduce a model's MAC and memory costs with a minimal
 drop in accuracy. AIMET supports various compression schemes like Weight SVD, Spatial SVD and Channel Pruning.
 
+.. toctree::
+   :titlesonly:
+   :hidden:
+
+   Compression Guidebook <compression_feature_guidebook>
+
 Please see the :ref:`Compression Guidebook<ug-comp-guidebook>` - which includes some practical advice on using the compression features, and how to combine the features
 
 Use Case
@@ -24,6 +30,12 @@ The following sub-sections explain these steps in more detail.
 
 Compression ratio selection
 ===========================
+.. toctree::
+    :titlesonly:
+    :hidden:
+
+    Greedy Compression Ratio Selection <greedy_compression_ratio_selection>
+
 - :ref:`Greedy Compression Ratio Selection<ug-greedy-comp-ratio-selection>`: During this phase, individual layers of the original model are analyzed to determine optimal compression ratios per layer. Currently AIMET supports the Greedy Compression Ratio Selection method.
 
 - Manual Compression Ratio Selection: As an alternative to AIMET automatically selecting optimal compression ratios per layer, the user has a choice to specify compression ratios manually per layer. The suggested procedure would be to use the Greedy Compression Ratio Selection method to get a nominal set of compression ratios first. And then use this as the starting point for manually changing compression ratios for one or more layers.
