@@ -39,6 +39,7 @@
 #include <DlEqualization/CrossLayerScalingForPython.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+#include "pybind11/complex.h"
 
 #include "DlCompression/ISVD.hpp"
 #include "DlEqualization/BatchNormFoldForPython.h"
@@ -54,6 +55,7 @@
 #include "DlQuantization/QuantizerFactory.hpp"
 #include "DlQuantization/TensorQuantizationSimForPython.h"
 #include "DlQuantization/TensorQuantizerOpFacade.h"
+#include "DlQuantization/ParserModule.h"
 
 namespace py = pybind11;
 
@@ -63,6 +65,107 @@ using namespace AimetEqualization;
 
 PYBIND11_MODULE(libpymo, m)
 {
+    py::options options;
+    options.show_function_signatures();
+    options.show_user_defined_docstrings();
+
+    py::class_<ModelOpDefParser>(m, "ModelOpDefParser")
+        .def(py::init<std::string, std::string, std::list<std::string>>())
+        .def_readwrite("op_list", &ModelOpDefParser::m_opList)
+        .def_readonly("master_path", &ModelOpDefParser::m_masterPath)
+        .def_readonly("backend_path", &ModelOpDefParser::m_backendPath)
+        .def("get_size",
+            &ModelOpDefParser::getSize,
+            py::arg("op_name"),
+            R"(Extracting input, output and parameter sizes)")
+        .def("get_filters_index",
+            &ModelOpDefParser::getFiltersIndex,
+            py::arg("op_name"),
+            R"(Getting the index mapping to filter in inputs)")
+        .def("get_input_datatype",
+            &ModelOpDefParser::getInputDataType,
+            py::arg("op_name"),
+            py::arg("attrib_num"),
+            R"(Extracting input datatypes)")
+        .def("get_output_datatype",
+            &ModelOpDefParser::getOutputDataType,
+            py::arg("op_name"),
+            py::arg("attrib_num"),
+            R"(Extracting output datatypes)")
+        .def("get_param_datatype",
+            &ModelOpDefParser::getParamDataType,
+            py::arg("op_name"),
+            py::arg("attrib_name"),
+            R"(Extracting parameter datatypes)")
+        .def("get_input_rank",
+            &ModelOpDefParser::getInputRank,
+            py::arg("op_name"),
+            py::arg("attrib_num"),
+            R"(Extracting input rank)")
+        .def("get_output_rank",
+            &ModelOpDefParser::getOutputRank,
+            py::arg("op_name"),
+            py::arg("attrib_num"),
+            R"(Extracting output rank)")
+        .def("get_param_rank",
+            &ModelOpDefParser::getParamRank,
+            py::arg("op_name"),
+            py::arg("attrib_name"),
+            R"(Extracting parameter rank)")
+        .def("get_input_multiflag",
+            &ModelOpDefParser::getInputMultiFlag,
+            py::arg("op_name"),
+            py::arg("attrib_num"),
+            R"(Extracting input multi-flag)")
+        .def("get_output_multiflag",
+            &ModelOpDefParser::getOutputMultiFlag,
+            py::arg("op_name"),
+            py::arg("attrib_num"),
+            R"(Extracting output multi-flag)");
+
+    py::enum_<QnnDatatype_t>(m, "QnnDatatype")
+        .value("QNN_DATATYPE_INT_8", QnnDatatype_t::QNN_DATATYPE_INT_8)
+        .value("QNN_DATATYPE_INT_16", QnnDatatype_t::QNN_DATATYPE_INT_16)
+        .value("QNN_DATATYPE_INT_32", QnnDatatype_t::QNN_DATATYPE_INT_32)
+        .value("QNN_DATATYPE_INT_64", QnnDatatype_t::QNN_DATATYPE_INT_64)
+
+        .value("QNN_DATATYPE_UINT_8", QnnDatatype_t::QNN_DATATYPE_UINT_8)
+        .value("QNN_DATATYPE_UINT_16", QnnDatatype_t::QNN_DATATYPE_UINT_16)
+        .value("QNN_DATATYPE_UINT_32", QnnDatatype_t::QNN_DATATYPE_UINT_32)
+        .value("QNN_DATATYPE_UINT_64", QnnDatatype_t::QNN_DATATYPE_UINT_64)
+
+        .value("QNN_DATATYPE_FLOAT_16", QnnDatatype_t::QNN_DATATYPE_FLOAT_16)
+        .value("QNN_DATATYPE_FLOAT_32", QnnDatatype_t::QNN_DATATYPE_FLOAT_32)
+
+        .value("QNN_DATATYPE_SFIXED_POINT_8", QnnDatatype_t::QNN_DATATYPE_SFIXED_POINT_8)
+        .value("QNN_DATATYPE_SFIXED_POINT_16", QnnDatatype_t::QNN_DATATYPE_SFIXED_POINT_16)
+        .value("QNN_DATATYPE_SFIXED_POINT_32", QnnDatatype_t::QNN_DATATYPE_SFIXED_POINT_32)
+
+        .value("QNN_DATATYPE_UFIXED_POINT_8", QnnDatatype_t::QNN_DATATYPE_UFIXED_POINT_8)
+        .value("QNN_DATATYPE_UFIXED_POINT_16", QnnDatatype_t::QNN_DATATYPE_UFIXED_POINT_16)
+        .value("QNN_DATATYPE_UFIXED_POINT_32", QnnDatatype_t::QNN_DATATYPE_UFIXED_POINT_32)
+
+        .value("QNN_DATATYPE_BOOL_8", QnnDatatype_t::QNN_DATATYPE_BOOL_8)
+        .value("QNN_DATATYPE_BACKEND_SPECIFIC", QnnDatatype_t::QNN_DATATYPE_BACKEND_SPECIFIC)
+        .value("QNN_DATATYPE_UNDEFINED", QnnDatatype_t::QNN_DATATYPE_UNDEFINED);
+
+    py::enum_<QnnRank_t>(m, "QnnRank")
+        .value("QNN_SCALAR", QnnRank_t::QNN_SCALAR)
+        .value("QNN_RANK_1", QnnRank_t::QNN_RANK_1)
+        .value("QNN_RANK_2", QnnRank_t::QNN_RANK_2)
+        .value("QNN_RANK_3", QnnRank_t::QNN_RANK_3)
+        .value("QNN_RANK_4", QnnRank_t::QNN_RANK_4)
+        .value("QNN_RANK_5", QnnRank_t::QNN_RANK_5)
+        .value("QNN_RANK_N", QnnRank_t::QNN_RANK_N)
+        .value("QNN_RANK_INVALID", QnnRank_t::QNN_RANK_INVALID);
+
+    m.def("str_to_dtype",
+    &strToDtype,
+    py::arg("dtype"),
+    R"(A function to convert string to QNN_DATATYPE)");
+
+    m.def("str_to_rank", &strToRank, py::arg("rank"), R"(A function to convert string to QNN_RANK)");
+
     // Quantization python bindings
     py::enum_<ComputationMode>(m, "ComputationMode")
         .value("COMP_MODE_CPU", ComputationMode::COMP_MODE_CPU)

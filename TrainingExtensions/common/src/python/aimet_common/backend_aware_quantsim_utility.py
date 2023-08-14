@@ -45,10 +45,10 @@ from dataclasses import dataclass
 import torch
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch import onnx_utils
-from aimet_torch.pro.utils.translation_mappping import op_to_weight_index_map, backend_datatype_to_aimet_map, \
+from aimet_torch.translation_mapping import op_to_weight_index_map, backend_datatype_to_aimet_map,\
     aimet_op_to_backend_op_name_map
 from aimet_common.defs import QuantizationDataType
-from aimet_common.libpymopro import ModelOpDefParser
+from aimet_common.libpymo import ModelOpDefParser
 
 
 logger = logging.getLogger()
