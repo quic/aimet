@@ -52,6 +52,7 @@ from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.graphsearchtuils import GraphSearchUtils
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
 from aimet_tensorflow.keras.quant_sim.qc_mha_wrapper import QcQuantizableMultiHeadAttention
+from aimet_tensorflow.keras.rnn.qc_quant_LSTM import QcQuantizedLSTM
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import TensorQuantizer, ActivationTensorQuantizer, \
     ParamPerTensorQuantizer, StaticGridPerChannelQuantizer, ParamPerChannelQuantizer
 from aimet_tensorflow.keras.quantsim_config.quantsim_config import QuantSimConfigurator, INPUT_QUANTIZERS, \
@@ -65,7 +66,8 @@ _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 unquantizable_modules = (tf.keras.layers.InputLayer, QcQuantizeWrapper)
 substitutable_modules = {
-    tf.keras.layers.MultiHeadAttention: QcQuantizableMultiHeadAttention
+    tf.keras.layers.MultiHeadAttention: QcQuantizableMultiHeadAttention,
+    tf.keras.layers.LSTM: QcQuantizedLSTM
 }
 
 
@@ -245,15 +247,18 @@ class QuantizationSimModel(tf.keras.Model):
             :param layer: Layer to wrap
             :return: Wrapped layer, or original layer if layer is not to be wrapped
             """
-            activation_quant_settings = QuantizerSettings(default_output_bw, default_data_type, rounding_mode,
-                                                          quant_scheme, False, False, False)
-            param_quant_settings = QuantizerSettings(default_param_bw, default_data_type, rounding_mode,
-                                                     quant_scheme, False, False, False)
-
             if isinstance(layer, tuple(substitutable_modules.keys())):
                 new_class = substitutable_modules[type(layer)]
                 config = layer.get_config()
                 config["copy_source_weights"] = layer.get_weights()
+
+                if isinstance(layer, tf.keras.layers.LSTM):
+                    config["quant_scheme"] = quant_scheme
+                    config["rounding_mode"] = rounding_mode
+                    config["default_output_bw"] = default_output_bw
+                    config["default_param_bw"] = default_param_bw
+                    config["default_data_type"] = default_data_type
+
                 wrapped_layer = new_class.from_config(config)
                 self._substituted_layer[layer] = wrapped_layer
                 return wrapped_layer
@@ -263,6 +268,11 @@ class QuantizationSimModel(tf.keras.Model):
 
             if isinstance(layer, unquantizable_modules) or layer.submodules:
                 return layer
+
+            activation_quant_settings = QuantizerSettings(default_output_bw, default_data_type, rounding_mode,
+                                                          quant_scheme, False, False, False)
+            param_quant_settings = QuantizerSettings(default_param_bw, default_data_type, rounding_mode,
+                                                     quant_scheme, False, False, False)
 
             input_quantizers, output_quantizers, param_quantizers = self._get_quantizers_by_layer(layer)
             wrapper = QcQuantizeWrapper(layer, activation_quant_settings, param_quant_settings,
@@ -646,7 +656,7 @@ class QuantizationSimModel(tf.keras.Model):
         for layer in self.model.layers:
             if isinstance(layer, QcQuantizeWrapper):
                 yield layer
-            if isinstance(layer, QcQuantizableMultiHeadAttention):
+            if isinstance(layer, tuple(substitutable_modules.values())):
                 yield from layer.quant_wrappers()
 
             # For Getting Quantizers from Sequantial Block
@@ -765,7 +775,7 @@ def quant_wrappers_for_sequential_block(seq_block: tf.keras.Sequential):
     for layer in seq_block.layers:
         if isinstance(layer, QcQuantizeWrapper):
             yield layer
-        if isinstance(layer, QcQuantizableMultiHeadAttention):
+        if isinstance(layer, tuple(substitutable_modules.values())):
             yield from layer.quant_wrappers()
 
         # in cases of nested Sequential Block
