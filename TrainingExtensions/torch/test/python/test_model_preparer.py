@@ -1887,3 +1887,42 @@ class TestFX:
         sim.compute_encodings(evaluate, dummy_input)
         sim.model(dummy_input)
         assert sim.model.module_cumsum.output_quantizers[0].encoding
+
+    def test_const_as_first_operand(self):
+        class SampleModel(torch.nn.Module):
+            def __init__(self):
+                super(SampleModel, self).__init__()
+
+            def forward(self, x):
+                x = torch.mul(x, 1.5)
+                x = torch.mul(2, x)
+                x = x * 3
+                x = 4 * x
+                x = torch.tensor(5.0) + x
+                x = 6 + x
+                x = 7.1 - x
+                return x
+
+        model = SampleModel()
+        model = prepare_model(model)
+
+        dummy_inp = torch.randn(1, 4)
+        qsim_model = QuantizationSimModel(model, dummy_input=dummy_inp,
+                                          quant_scheme="tf_enhanced",
+                                          rounding_mode='nearest', default_output_bw=8,
+                                          default_param_bw=8, in_place=False, config_file=None)
+        qsim_model.compute_encodings(forward_pass_callback=evaluate, forward_pass_callback_args=dummy_inp)
+        print(qsim_model)
+
+        for wrapper_name, wrapper in qsim_model.quant_wrappers():
+            # Verify first layer input and output quantizer enabled flag
+            if wrapper_name == "module_mul":
+                assert wrapper.input_quantizers[0].enabled == True
+                assert wrapper.input_quantizers[1].enabled == False
+                assert wrapper.output_quantizers[0].enabled == True
+            else:
+                # Verify rest of layer input and output quantizer enabled flag
+                for inp_quant in wrapper.input_quantizers:
+                    assert inp_quant.enabled == False
+                for out_quant in wrapper.output_quantizers:
+                    assert out_quant.enabled == True
