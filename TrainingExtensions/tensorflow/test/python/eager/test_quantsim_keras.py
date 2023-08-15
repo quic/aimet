@@ -103,6 +103,17 @@ def model_with_lambda_operators():
     model = tf.keras.Model(inputs=(inp, inp_2), outputs=x, name="model_with_lambda_operators")
     return model
 
+def model_with_tf_op_lambda_operators():
+    input_layer = tf.keras.Input(batch_input_shape=(1, 16, 32, 3))
+    x1 = tf.keras.layers.Dense(4, activation=tf.nn.relu)(input_layer)
+    x2 = tf.transpose(x1, perm=[0, 1, 3, 2])
+    output = tf.matmul(x1, x2)
+
+    model = tf.keras.Model(inputs=input_layer, outputs=output, name="model_with_tf_op_lambda_layers")
+    out = model(tf.random.uniform((1, 16, 32, 3)))
+
+    return model
+
 def model_with_reused_layer():
     relu = tf.keras.layers.ReLU()
     inp = tf.keras.layers.Input(shape=(5,))
@@ -370,6 +381,28 @@ def test_model_with_lambda_operators():
         assert len(encodings['activation_encodings']) == 8
         # Note: Disable bias quantization in default_config.json
         assert len(encodings['param_encodings']) == 2
+
+
+def test_model_with_tf_op_lambda_operators():
+    model = model_with_tf_op_lambda_operators()
+    random_input = tf.random.uniform((1, 16, 32, 3))
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        qsim = QuantizationSimModel(model, quant_scheme='tf')
+        qsim.compute_encodings(lambda m, _: m(random_input), None)
+        qsim.export(temp_dir, model.name)
+
+        with open(os.path.join(temp_dir, f"{model.name}.encodings"), "r") as encodings_file:
+            encodings = json.load(encodings_file)
+
+        assert "transpose" in qsim.model.layers[2].original_layer.name, "This QCQuantizeWrapper should wrap the `tf.transpose` TF Op Lambda Layer"
+        assert "matmul" in qsim.model.layers[3].original_layer.name, "This QCQuantizeWrapper should house the `tf.matmul` TF Op Lambda Layer"
+
+        assert len(qsim.model.layers[2].input_quantizers) == 1, "tf.transpose should have only 1 input_quantizer"
+        assert len(qsim.model.layers[3].input_quantizers) == 2, "tf.matmul should have 2 input_quantizer for a @ b"
+
+        assert len(encodings['activation_encodings']) == 4
+        assert len(encodings['param_encodings']) == 1, "Only the Dense layer in this model should have param_encoding"
 
 def test_qat():
     if version.parse(tf.version.VERSION) >= version.parse("2.00"):

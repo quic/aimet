@@ -44,6 +44,7 @@ import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme, QuantizationDataType
 import aimet_tensorflow.keras.utils.common as keras_common_utils
+from aimet_tensorflow.keras.model_preparer import _is_keras_or_tensor_input
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQuantizer, \
     ParamPerTensorQuantizer, ParamPerChannelQuantizer, StaticGridPerChannelQuantizer
 from aimet_tensorflow.utils.constants import QUANT_ALLOWED_DTYPES
@@ -176,6 +177,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         self.param_quantizers = param_quantizers
         self._shadow_params = shadow_params
         self._is_lambda_operator_layer = keras_common_utils.is_lambda_operator(layer_to_wrap)
+        self._is_a_tf_op_lambda_layer = keras_common_utils.is_a_tf_op_lambda_layer(layer_to_wrap)
         self._set_quantizers(per_channel_quantization_enabled)
 
         # This is needed since Model Transformer reconstructs the layer, with the layer to wrap weights being empty
@@ -313,9 +315,12 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
 
         with self._quantize_params():
             # Special logic for +, -, *, / operators which become lambda layers with kwarg inputs
-            if self._is_lambda_operator_layer and 'y' in kwargs and len(self.input_quantizers) == 2:
-                inputs = self._quantize_activation(inputs, [self.input_quantizers[0]], True)
-                kwargs['y'] = self._quantize_activation(kwargs['y'], [self.input_quantizers[1]], True)
+            # Or for TFOpLambda layers that take the `input` itself plus `n` number of additional
+            # input tensors specified in the kwargs.
+            if (self._is_lambda_operator_layer or self._is_a_tf_op_lambda_layer) and len(self.input_quantizers) >= 2:
+                kwargs_keys_for_keras_tensors = [name for name, tensor in kwargs.items() if _is_keras_or_tensor_input(tensor)]
+                for tensor_name, input_quantizer in zip(kwargs_keys_for_keras_tensors, self.input_quantizers):
+                    kwargs[tensor_name] = self._quantize_activation(kwargs[tensor_name], [input_quantizer], True)
             else:
                 inputs = self._quantize_activation(inputs, self.input_quantizers, True)
             outputs = self._layer_to_wrap(inputs, *args, **kwargs)
@@ -335,7 +340,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                 if self._layer_to_wrap.weights[idx].dtype in QUANT_ALLOWED_DTYPES:
                     quantized_param = self.param_quantizers[idx_param_quantizer](param)
                     self._layer_to_wrap.weights[idx].assign(quantized_param)
-                    idx_param_quantizer = idx_param_quantizer + 1
+                    idx_param_quantizer += 1
             yield
 
         finally:

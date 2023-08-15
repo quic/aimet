@@ -250,7 +250,7 @@ def _get_layer_input(layer: tf.keras.layers.Layer,
     return layer_input
 
 
-def _is_tensor_tensor_input(arg: Any) -> bool:
+def _is_keras_or_tensor_input(arg: Any) -> bool:
     """
     Helper function to check if a given argument is a valid Keras tensor.
 
@@ -286,7 +286,7 @@ def _get_updated_call_args(layer: tf.keras.layers.Layer, model_layers_connection
     updated_call_args = []
     found_keras_tensor = False
     for arg in original_call_args:
-        if _is_tensor_tensor_input(arg):
+        if _is_keras_or_tensor_input(arg):
 
             if found_keras_tensor and _is_tf_tensor(arg):
                 updated_call_args.append(arg)
@@ -320,7 +320,7 @@ def _get_call_kwargs(layer: tf.keras.layers.Layer, model_layers_connections: Mod
         for key, value in original_call_kwargs.items():
             # The Keras tensor is already in the call args, so we don't need to add it again. call_kwargs are for
             # keyword arguments that are not Keras tensors such as 'axis', 'training', etc.
-            if _is_tensor_tensor_input(value):
+            if _is_keras_or_tensor_input(value):
                 continue
             else:
                 call_kwargs[key] = value
