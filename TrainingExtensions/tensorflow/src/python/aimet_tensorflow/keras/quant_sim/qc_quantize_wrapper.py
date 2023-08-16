@@ -39,6 +39,7 @@
 import contextlib
 from typing import Union, List, Dict
 import tensorflow as tf
+import numpy as np
 
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
@@ -318,8 +319,14 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
             # Or for TFOpLambda layers that take the `input` itself plus `n` number of additional
             # input tensors specified in the kwargs.
             if (self._is_lambda_operator_layer or self._is_a_tf_op_lambda_layer) and len(self.input_quantizers) >= 2:
-                kwargs_keys_for_keras_tensors = [name for name, tensor in kwargs.items() if _is_keras_or_tensor_input(tensor)]
-                for tensor_name, input_quantizer in zip(kwargs_keys_for_keras_tensors, self.input_quantizers):
+                kwargs_keys_for_keras_tensors = [
+                    name for name, tensor in kwargs.items()
+                    if _is_keras_or_tensor_input(tensor) or isinstance(tensor, np.ndarray)
+                ]
+                # Quantize the input directly first
+                inputs = self._quantize_activation(inputs, [self.input_quantizers[0]], True)
+                # Quantize any subsequent arguments
+                for tensor_name, input_quantizer in zip(kwargs_keys_for_keras_tensors, self.input_quantizers[1:]):
                     kwargs[tensor_name] = self._quantize_activation(kwargs[tensor_name], [input_quantizer], True)
             else:
                 inputs = self._quantize_activation(inputs, self.input_quantizers, True)
