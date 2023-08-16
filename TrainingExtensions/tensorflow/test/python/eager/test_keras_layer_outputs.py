@@ -43,10 +43,9 @@ from glob import glob
 from datetime import datetime
 import os
 import numpy as np
-import progressbar
 import tensorflow as tf
-from keras.models import Sequential
-from keras.layers import BatchNormalization, Dense, Conv2D, Flatten, AvgPool2D, MaxPool2D
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import BatchNormalization, Dense, Conv2D, Flatten, AvgPool2D, MaxPool2D
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel, QcQuantizeWrapper
 from aimet_tensorflow.keras.model_preparer import prepare_model
 from aimet_tensorflow.keras.layer_output_utils import LayerOutputUtil
@@ -162,21 +161,19 @@ class TestLayerOutputUtil:
         # Verify final layer output for all data points
         cnt = 0
         n_iterations = np.ceil(data_points/batch_size)
-        with progressbar.ProgressBar(max_value=n_iterations) as progress_bar:
-            for batch_num, input_batch in enumerate(dataloader):
-                batch_x, _ = input_batch
-                for inp_batch in batch_x:
-                    actual_output = qs_obj.model.predict(np.expand_dims(inp_batch, axis=0))
-                    last_layer_name = qs_obj.model.layers[-1].original_layer.output.name
-                    last_layer_name = re.sub(r'\W+', "_", last_layer_name)
-                    last_layer_file_name = f"{save_dir}/outputs/layer_outputs_{cnt}/{last_layer_name}.raw"
-                    saved_last_layer_output = np.fromfile(last_layer_file_name, dtype=np.float32)
-                    np.testing.assert_array_equal(actual_output[0], saved_last_layer_output)
-                    cnt += 1
+        for batch_num, input_batch in enumerate(dataloader):
+            batch_x, _ = input_batch
+            for inp_batch in batch_x:
+                actual_output = qs_obj.model.predict(np.expand_dims(inp_batch, axis=0))
+                last_layer_name = qs_obj.model.layers[-1].original_layer.output.name
+                last_layer_name = re.sub(r'\W+', "_", last_layer_name)
+                last_layer_file_name = f"{save_dir}/outputs/layer_outputs_{cnt}/{last_layer_name}.raw"
+                saved_last_layer_output = np.fromfile(last_layer_file_name, dtype=np.float32)
+                np.testing.assert_array_equal(actual_output[0], saved_last_layer_output)
+                cnt += 1
 
-                progress_bar.update(batch_num+1)
-                if (batch_num+1) >= n_iterations:
-                    break
+            if (batch_num+1) >= n_iterations:
+                break
 
         # Test the layer output name mapper file and dict
         saved_layer_output_name_mapper = json.load(open(temp_folder_name+"/LayerOutputNameMapper.json", "r"))

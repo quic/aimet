@@ -43,8 +43,8 @@ from typing import Union, List, Tuple
 import re
 from collections import OrderedDict
 import json
+import numpy as np
 import tensorflow as tf
-from keras.utils import tf_utils
 from aimet_tensorflow.keras.quantsim import QcQuantizeWrapper, QcQuantizableMultiHeadAttention
 from aimet_common.layer_output_utils import SaveInputOutput
 from aimet_common.utils import AimetLogger
@@ -56,7 +56,7 @@ class LayerOutputUtil:
     This class captures output of every layer of a keras (fp32/quantsim) model, creates a layer-output name to
     layer-output dictionary and saves the per layer outputs
     """
-    def __init__(self, model: tf.keras.Model, save_dir: str = f"./KerasLayerOutput"):
+    def __init__(self, model: tf.keras.Model, save_dir: str = "./KerasLayerOutput"):
         """
         Constructor - It initializes a few things that are required for capturing and naming layer-outputs.
         :param model: Keras (fp32/quantsim) model.
@@ -73,7 +73,7 @@ class LayerOutputUtil:
 
         # Saving the actual layer output name to modified layer output name (valid file name to save) in a json file
         os.makedirs(save_dir, exist_ok=True)
-        with open(os.path.join(save_dir, "LayerOutputNameMapper.json"), 'w') as fp:
+        with open(os.path.join(save_dir, "LayerOutputNameMapper.json"), 'w', encoding='utf-8') as fp:
             json.dump(self.original_name_to_modified_name_mapper, fp=fp, indent=4)
 
         # Identify the axis-layout used for representing an image tensor
@@ -133,7 +133,7 @@ class LayerOutputUtil:
         """
         # Run in inference mode
         outs = self.intermediate_model(input_batch, training=False)
-        output_pred = tf_utils.sync_to_numpy_or_python_type(outs)
+        output_pred = [out.numpy() for out in outs]
 
         return dict(zip(self.original_name_to_modified_name_mapper.values(), output_pred))
 
@@ -148,6 +148,6 @@ class LayerOutputUtil:
         """
 
         batch_layer_name_to_layer_output = self.get_outputs(input_batch)
-        self.save_inp_out_obj.save(tf_utils.sync_to_numpy_or_python_type(input_batch), batch_layer_name_to_layer_output)
+        self.save_inp_out_obj.save(np.array(input_batch), batch_layer_name_to_layer_output)
 
         logger.info("Layer Outputs Saved")
