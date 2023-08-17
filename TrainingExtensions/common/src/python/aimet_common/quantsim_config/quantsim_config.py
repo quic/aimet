@@ -181,6 +181,16 @@ class QuantSimConfigurator(ABC):
         :return: {op_instance_name, op_specific_config}
         """
 
+    # pylint: disable=no-member
+    def get_module_names(self):
+        """
+        :return: List of unique module names present in wrapper dict
+        """
+        modules = set([])
+        for module in self._module_to_quantsim_wrapper_dict.keys():
+            modules.add(module.__class__.__name__)
+        return list(modules)
+
     def _parse_supported_kernels(self) -> Dict:
         """
         Parse the layer overrides present in default and op_type section of the config file
