@@ -1,9 +1,0 @@
-holoviews==1.12.7
-matplotlib>=3
-numpy<1.24,>=1.16.6
-onnx==1.11.0
-onnxruntime==1.11.0
-onnxruntime-extensions
-onnxsim
-scikit-learn==1.1.3
-tensorboardX==2.4
