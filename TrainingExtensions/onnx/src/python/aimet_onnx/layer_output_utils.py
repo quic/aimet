@@ -41,6 +41,7 @@
 import copy
 from typing import List, Dict, Tuple, Union
 import numpy as np
+import onnxruntime as ort
 from onnx import onnx_pb
 
 from aimet_common.utils import AimetLogger
@@ -55,17 +56,23 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.LayerOutputs)
 class LayerOutputUtil:
     """ Implementation to capture and save outputs of intermediate layers of a model (fp32/quantsim) """
 
-    def __init__(self, model: onnx_pb.ModelProto, dir_path: str):
+    def __init__(self, model: onnx_pb.ModelProto, dir_path: str, device: int = 0):
         """
         Constructor - It initializes the utility classes that captures and saves layer-outputs
 
         :param model: ONNX model
         :param dir_path: Directory wherein layer-outputs will be saved
+        :param device: CUDA device-id to be used
         """
         self.model = model
 
+        # Fetch appropriate execution providers depending on availability
+        providers = ['CPUExecutionProvider']
+        if 'CUDAExecutionProvider' in ort.get_available_providers():
+            providers = [('CUDAExecutionProvider', {'device_id': device}), 'CPUExecutionProvider']
+
         # Utility to capture layer-outputs
-        self.layer_output = LayerOutput(model=model, dir_path=dir_path)
+        self.layer_output = LayerOutput(model=model, providers=providers, dir_path=dir_path)
 
         # Utility to save model inputs and their corresponding layer-outputs
         self.save_input_output = SaveInputOutput(dir_path, 'NCHW')
@@ -82,7 +89,6 @@ class LayerOutputUtil:
         input_dict = create_input_dict(self.model, input_batch)
 
         layer_output_dict = self.layer_output.get_outputs(input_dict)
-
         self.save_input_output.save(input_batch, layer_output_dict)
 
         logger.info('Layer-outputs generated for %d input instances', len(input_batch))
@@ -92,11 +98,12 @@ class LayerOutput:
     """
     This class creates a layer-output name to layer-output dictionary.
     """
-    def __init__(self, model: onnx_pb.ModelProto, dir_path: str):
+    def __init__(self, model: onnx_pb.ModelProto, providers: List, dir_path: str):
         """
         Constructor - It initializes few lists that are required for capturing and naming layer-outputs.
 
         :param model: ONNX model
+        :param providers: execution providers to execute onnxruntime
         :param dir_path: directory to store topological order of layer-output names
         """
         self.model = copy.deepcopy(model)
@@ -108,7 +115,7 @@ class LayerOutput:
 
         LayerOutput.register_activations(self.model, self.activation_names)
 
-        self.session = QuantizationSimModel.build_session(self.model, ['CPUExecutionProvider'])
+        self.session = QuantizationSimModel.build_session(self.model, providers)
         self.sanitized_activation_names = [name[:-len('_updated')] if name.endswith('_updated') else name for name in self.activation_names]
 
         # Save activation names which are in topological order of model graph. This order can be used while comparing layer-outputs.
