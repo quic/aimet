@@ -46,8 +46,6 @@ from tensorflow.python.framework.convert_to_constants import convert_variables_t
 from tensorflow.python.framework.graph_util_impl import remove_training_nodes
 from packaging import version
 
-from packaging import version
-
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger, log_with_error_and_assert_if_false
 
