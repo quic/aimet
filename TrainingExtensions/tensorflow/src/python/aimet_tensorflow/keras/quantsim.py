@@ -458,10 +458,6 @@ class QuantizationSimModel(tf.keras.Model):
             encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
             save_json_yaml(encoding_file_path, encodings_dict)
 
-            # Keras magic under the hood that causes the 'Invalid Graph' error to go away
-            # TODO: Investigate what is actually fixing this issue.
-            _ = tf.keras.models.clone_model(self._model_without_wrappers)
-
     def _compute_and_set_parameter_encodings(self, ops_with_invalid_encodings: List):
         # pylint: disable=too-many-nested-blocks
         for quantizer_wrapper in self.quant_wrappers():

@@ -39,7 +39,8 @@
 """ Common Utilities for tf 2 keras """
 import errno
 import os
-from typing import Union, List, Dict, Tuple, AnyStr, Callable
+from typing import Callable, Union, List, Dict, Tuple, AnyStr
+
 import tensorflow as tf
 from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_from_session_graph
 from tensorflow.python.framework.graph_util_impl import remove_training_nodes
@@ -637,6 +638,44 @@ def log_param_quantizer_wrapper_details(layer, axis_handling=None, num_output_ch
                       axis_handling, num_output_channels)
 
 
+def set_keras_backend_version_to_v2(func_to_run_before_setting_back_to_v2: Callable):
+    """
+    Special function for setting backend Keras specifics to V2 after converting a model to a frozen pb.
+
+    :param func_to_run_before_setting_back_to_v2: Function to run before setting the Keras backend to v2.
+    """
+    # Versioning changes are taken from Tensorflow backend in the link below. Essentially, the Functional Keras class
+    # has certain parts moved to v1 once calling things like tf.Graph. Here, we set back to the v2 version.
+    # https://github.com/tensorflow/tensorflow/blob/739d01fc1a4e8dc0fd95b8aed0f9dd107451e1b6/tensorflow/python/keras/utils/version_utils.py#L48-L63
+
+    # Imports kept inside the function to minimize confusion and to not be accidentally used anywhere else
+    def wrap(*args, **kwargs):
+        func_to_run_before_setting_back_to_v2(*args, **kwargs)
+        if version.parse(tf.version.VERSION) >= version.parse("2.10"):
+            from keras.engine.functional import Functional
+            import keras.engine.base_layer as base_layer
+            import keras.engine.base_layer_v1 as base_layer_v1
+
+            import keras.engine.training as training
+            import keras.engine.training_v1 as training_v1
+
+            from keras.utils.version_utils import swap_class
+        else:
+            from tensorflow.python.keras.engine.functional import Functional
+            import tensorflow.python.keras.engine.base_layer as base_layer
+            import tensorflow.python.keras.engine.base_layer_v1 as base_layer_v1
+
+            import tensorflow.python.keras.engine.training as training
+            import tensorflow.python.keras.engine.training_v1 as training_v1
+
+            from tensorflow.python.keras.utils.version_utils import swap_class
+
+        _ = swap_class(Functional, base_layer.Layer, base_layer_v1.Layer, use_v2=True)
+        _ = swap_class(Functional, training.Model, training_v1.Model, use_v2=True)
+    return wrap
+
+
+@set_keras_backend_version_to_v2
 def convert_h5_model_to_pb_model(h5_model_path: AnyStr, custom_objects: Dict = None):
     """
     This utility function converts a h5_model from Keras into a frozen pb for consumption by SNPE/QNN
@@ -699,4 +738,4 @@ def convert_h5_model_to_pb_model(h5_model_path: AnyStr, custom_objects: Dict = N
                                           [out.op.name for out in model.outputs])
             tf.io.write_graph(frozen_graph, save_path, model_name, as_text=False)
 
-            _logger.info("Success. The converted model is located at %s saved as %s", save_path, model_name)
+    _logger.info("Success. The converted model is located at %s saved as %s", save_path, model_name)
