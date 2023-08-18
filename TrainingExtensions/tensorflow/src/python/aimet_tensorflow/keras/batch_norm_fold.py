@@ -436,12 +436,8 @@ def _delete_bn_from_functional(model: tf.keras.Model,
     # Step 1: Get the inbound and outbound connections for each layer in the model
     model_layer_connections = ModelLayerConnections.get_model_layers_connection_properties(model)
 
-    if isinstance(model.input, list):
-        # If the model has multiple inputs, we need to set the output tensor of each input layer
-        for inp in model.input:
-            model_layer_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS].update({inp.name: inp})
-    else:
-        model_layer_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS].update({model.layers[0].name: model.input})
+    for inp in model.inputs:
+        model_layer_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS].update({inp.name: inp})
 
     # Step 2: Create a new model with the batch normalization layers removed by iterating through the layers in the model
     # and using the inbound and outbound connections to rerouting around the batch normalization layers.
