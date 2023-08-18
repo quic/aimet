@@ -41,12 +41,19 @@ import shutil
 
 import torch
 import numpy as np
+import onnxruntime as ort
 from torch.utils.data import Dataset, DataLoader
 
 from aimet_onnx.utils import make_dummy_input
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.layer_output_utils import LayerOutput, LayerOutputUtil
 from models.models_for_tests import build_dummy_model_with_dynamic_input
+
+
+# Fetch appropriate execution providers depending on availability
+providers = ['CPUExecutionProvider']
+if 'CUDAExecutionProvider' in ort.get_available_providers():
+    providers = [('CUDAExecutionProvider', {'device_id': 0}), 'CPUExecutionProvider']
 
 
 def get_original_model_artifacts():
@@ -86,7 +93,7 @@ class TestLayerOutput:
         temp_dir_path = os.path.join(temp_dir_path, 'temp_dir')
 
         # Obtain layer-outputs of original model
-        layer_output = LayerOutput(model, temp_dir_path)
+        layer_output = LayerOutput(model, providers, temp_dir_path)
         output_name_to_output_val_dict = layer_output.get_outputs(input_dict)
 
         # Verify whether outputs are generated for all the layers
@@ -95,7 +102,7 @@ class TestLayerOutput:
                 "Output not generated for " + name
 
         # Verify whether captured outputs are correct. This can only be checked for final output of the model
-        session = QuantizationSimModel.build_session(model, ['CPUExecutionProvider'])
+        session = QuantizationSimModel.build_session(model, providers)
         assert np.array_equal(session.run(None, input_dict)[0], output_name_to_output_val_dict['output'])
 
         # Delete temp_dir
@@ -111,7 +118,7 @@ class TestLayerOutput:
         temp_dir_path = os.path.join(temp_dir_path, 'temp_dir')
 
         # Obtain layer-outputs of quantsim model
-        layer_output = LayerOutput(quantsim.model.model, temp_dir_path)
+        layer_output = LayerOutput(quantsim.model.model, providers, temp_dir_path)
         output_name_to_output_val_dict = layer_output.get_outputs(input_dict)
 
         # Verify whether outputs are generated for all the layers
@@ -120,7 +127,7 @@ class TestLayerOutput:
                 "Output not generated for " + name
 
         # Verify whether captured outputs are correct. This can only be checked for final output of the model
-        session = QuantizationSimModel.build_session(quantsim.model.model, ['CPUExecutionProvider'])
+        session = QuantizationSimModel.build_session(quantsim.model.model, providers)
         assert np.array_equal(session.run(None, input_dict)[0], output_name_to_output_val_dict['output'])
 
         # Delete temp_dir
@@ -182,7 +189,7 @@ class TestLayerOutputUtil:
 
         # Ensure generated layer-outputs can be correctly loaded for layer-output comparison
         saved_last_layer_output = np.fromfile(os.path.join(temp_dir_path, 'outputs', 'layer_outputs_0', 'output.raw'), dtype=np.float32).reshape((1, 10))
-        session = QuantizationSimModel.build_session(quantsim.model.model, ['CPUExecutionProvider'])
+        session = QuantizationSimModel.build_session(quantsim.model.model, providers)
         input_dict = {'input': np.expand_dims(dummy_dataset.__getitem__(0).numpy(), axis=0)}
         assert np.array_equal(session.run(None, input_dict)[0], saved_last_layer_output)
 
