@@ -78,7 +78,7 @@ def to_functional(func: Callable) -> tf.keras.Model:
         model = args[0]
         if isinstance(model, tf.keras.Sequential):
             _logger.info("Input model is a Sequential model. Converting to Functional model.")
-            model = tf.keras.Model(inputs=model.input, outputs=model.output)
+            model = tf.keras.Model(inputs=model.inputs, outputs=model.outputs)
             args = (model,) + args[1:]
         return func(*args, **kwargs)
 
