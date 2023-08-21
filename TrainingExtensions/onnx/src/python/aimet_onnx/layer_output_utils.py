@@ -47,7 +47,7 @@ from aimet_common.utils import AimetLogger
 from aimet_common.layer_output_utils import SaveInputOutput, save_layer_output_names
 
 from aimet_onnx.quantsim import QuantizationSimModel
-from aimet_onnx.utils import create_input_dict, get_graph_intermediate_activations, add_hook_to_get_activation
+from aimet_onnx.utils import create_input_dict, add_hook_to_get_activation
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.LayerOutputs)
 
@@ -132,8 +132,18 @@ class LayerOutput:
         :param model: ONNX model
         :return: list of activation names
         """
-        activation_names = get_graph_intermediate_activations(model.graph)
-        activation_names.extend([node.name for node in model.graph.output])
+        activation_names = []
+        constant_activations = []  # No need to capture them
+        for node in model.graph.input:
+            activation_names.append(node.name)
+        for node in model.graph.node:
+            if node.op_type == 'Constant':
+                # Ignore and keep track to further ignore its quantized version
+                constant_activations.append(node.output[0]+'_updated')
+            else:
+                for output in node.output:
+                    if output not in constant_activations:
+                        activation_names.append(output)
         return activation_names
 
     @staticmethod
