@@ -36,8 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 import torch
-import numpy as np
-from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops
+from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_ops_with_constant_inputs
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
 from models import models_for_tests
 
@@ -59,7 +58,7 @@ class TestConnectedGraph:
         conn_graph = ConnectedGraph(model)
         assert len(conn_graph.get_all_ops()) == 21
         products = conn_graph.get_all_products()
-        assert len(products) == 31
+        assert len(products) == 34
         assert {'Conv_0_to_Relu_1', 'Relu_1_to_MaxPool_2'}.issubset({product for product in products})
         assert {'Gemm_21_to_output','45', '46', 'conv4.weight'}.issubset({product for product in products})
         input_ops = get_all_input_ops(conn_graph)
@@ -101,7 +100,7 @@ class TestConnectedGraph:
         assert len(ops) == 11
         assert len(ops['Concat_3'].inputs) == 3
         products = conn_graph.get_all_products()
-        assert len(products) == 21
+        assert len(products) == 22
         assert conn_graph._branch_count == 1
 
     def test_hierarchical_model(self):
@@ -132,5 +131,19 @@ class TestConnectedGraph:
         model = models_for_tests._convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
 
         cg = ConnectedGraph(model)
-        assert cg.ordered_ops[4].type == 'MatMul'
-        assert 'fc2.weight' in cg.ordered_ops[4].parameters
+        assert cg.ordered_ops[4].type == 'Transpose'
+        assert cg.ordered_ops[5].type == 'MatMul'
+        assert 'fc2.weight' in cg.ordered_ops[5].parameters
+
+    def test_constant_elementwise_inputs(self):
+        """ Test that constant inputs to elementwise ops are identified correctly """
+        model = models_for_tests.elementwise_op_model()
+        cg = ConnectedGraph(model)
+
+        assert len(get_all_ops_with_constant_inputs(cg)) == 2
+
+        assert not cg.ordered_ops[0].inputs[0].is_const
+        assert cg.ordered_ops[0].inputs[1].is_const
+
+        assert not cg.ordered_ops[1].inputs[0].is_const
+        assert cg.ordered_ops[1].inputs[1].is_const

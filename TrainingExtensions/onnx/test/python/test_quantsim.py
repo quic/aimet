@@ -37,6 +37,8 @@
 # =============================================================================
 import json
 import os
+
+import onnx
 import torch
 import numpy as np
 from onnx import load_model
@@ -48,7 +50,7 @@ from aimet_onnx.quantsim import QuantizationSimModel, load_encodings_to_sim
 from aimet_onnx.qc_quantize_op import OpMode
 from aimet_onnx.utils import make_dummy_input
 from models.models_for_tests import SingleResidual
-from models.models_for_tests import build_dummy_model, single_residual_model, BNAfterConv
+from models.models_for_tests import build_dummy_model, single_residual_model, BNAfterConv, multi_input_with_constant_model
 
 
 class DummyModel(SingleResidual):
@@ -425,3 +427,10 @@ class TestQuantSim:
         out3 = sim.session.run(None, dummy_tensor)
 
         assert np.allclose(out2, out3)
+
+    def test_model_with_constants(self):
+        model = multi_input_with_constant_model()
+
+        sim = QuantizationSimModel(model)
+        assert sim.qc_quantize_op_dict['13'].enabled == True
+        assert sim.qc_quantize_op_dict['7'].enabled == True

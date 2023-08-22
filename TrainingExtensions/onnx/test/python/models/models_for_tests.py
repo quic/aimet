@@ -51,7 +51,7 @@ from onnxruntime.quantization.onnx_quantizer import ONNXModel
 from torch.nn.modules.batchnorm import _BatchNorm
 
 from .mobilenet import MockMobileNetV1, MockMobileNetV11
-
+from aimet_torch import elementwise_ops
 
 class SingleResidual(nn.Module):
     """ A model with a single residual connection.
@@ -888,6 +888,18 @@ class ModelWithTransposeConv(nn.Module):
         return self.softmax(x)
 
 
+class ConstantElementwiseInputModel(torch.nn.Module):
+    def __init__(self):
+        super(ConstantElementwiseInputModel, self).__init__()
+        self.add = elementwise_ops.Add()
+        self.mul = elementwise_ops.Multiply()
+
+    def forward(self, inp):
+        x = self.add(inp, torch.tensor(2.0))
+        x = self.mul(torch.tensor(3.0), x)
+        return x
+
+
 class SimpleConditional(torch.nn.Module):
     """
     Model using conditional paths
@@ -1464,6 +1476,69 @@ def initialize_bn_params(model: torch.nn.Module):
                 module.bias.copy_(torch.randn_like(module.bias))
                 module.running_mean.copy_(torch.randn_like(module.bias))
                 module.running_var.add_(torch.randn_like(module.bias).abs())
+
+def elementwise_op_model():
+    torch.manual_seed(10)
+    model = ConstantElementwiseInputModel().eval()
+
+    input_shape = (1, 10, 24, 24)
+    x = torch.randn(*input_shape, requires_grad=True)
+
+    # Export the model
+    torch.onnx.export(model,  # model being run
+                      x,  # model input (or a tuple for multiple inputs)
+                      "./model_elementwise.onnx",
+                      # where to save the model (can be a file or file-like object),
+                      training=torch.onnx.TrainingMode.EVAL,
+                      export_params=True,  # store the trained parameter weights inside the model file
+                      opset_version=12,  # the ONNX version to export the model to
+                      do_constant_folding=False,  # whether to execute constant folding for optimization
+                      input_names=['input'],  # the model's input names
+                      output_names=['output'])
+    model_onnx = ONNXModel(load_model('./model_elementwise.onnx'))
+    return model_onnx
+
+class MultiInputWithConstant(torch.nn.Module):
+    """ A model with multiple inputs.
+        Use this model for unit testing purposes. """
+
+    def __init__(self, num_classes=3):
+        super(MultiInputWithConstant, self).__init__()
+        self.add0 = elementwise_ops.Add()
+        self.conv1 = torch.nn.Conv2d(3, 16, kernel_size=2, stride=2, padding=3, bias=False)
+        self.conv2 = torch.nn.Conv2d(16, 8, kernel_size=3, stride=2, padding=2)
+        self.conv3 = torch.nn.Conv2d(3, 8, kernel_size=3, stride=2, padding=2)
+        self.add1 = elementwise_ops.Add()
+        self.add2 = elementwise_ops.Add()
+
+    def forward(self, *inputs):
+        x1 = self.add0(inputs[0], torch.tensor(0.02))
+        x1 = self.conv1(x1)
+        x1 = self.conv2(x1)
+        x2 = self.conv3(inputs[1])
+        x = self.add1(x1, x2)
+        x = self.add2(x, torch.tensor(2.0))
+        return x
+
+def multi_input_with_constant_model():
+    torch.manual_seed(10)
+    model = MultiInputWithConstant().eval()
+
+    x = (torch.rand(1, 3, 32, 32), torch.rand(1, 3, 20, 20))
+
+    # Export the model
+    torch.onnx.export(model,  # model being run
+                      x,  # model input (or a tuple for multiple inputs)
+                      "./model_with_constant.onnx",
+                      # where to save the model (can be a file or file-like object),
+                      training=torch.onnx.TrainingMode.EVAL,
+                      export_params=True,  # store the trained parameter weights inside the model file
+                      opset_version=12,  # the ONNX version to export the model to
+                      do_constant_folding=False,  # whether to execute constant folding for optimization
+                      input_names=['input'],  # the model's input names
+                      output_names=['output'])
+    model_onnx = ONNXModel(load_model('./model_with_constant.onnx'))
+    return model_onnx
 
 
 # pylint: disable=no-member

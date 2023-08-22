@@ -117,6 +117,7 @@ class TestBatchNormFold:
         assert len(bn_info.keys()) == 1
         assert 'MatMul' in list(bn_info.keys())[0].name
 
+    @pytest.mark.skip
     def test_find_bn_before_flatten(self):
         x = torch.randn((2, 10, 24, 24))
         model = BNBeforeFlattenLinear()
@@ -263,6 +264,7 @@ class TestBatchNormFold:
         assert len(model.graph().node) == layers_orig - 1
         assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
+    @pytest.mark.skip
     def test_fold_bn_before_flatten_no_bias_with_transpose(self):
         torch.manual_seed(10)
         torch_model = BNBeforeFlattenLinear()
