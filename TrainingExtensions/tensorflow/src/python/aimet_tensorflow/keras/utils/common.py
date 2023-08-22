@@ -107,6 +107,7 @@ def is_a_tf_op_lambda_layer(layer: tf.keras.layers.Layer) -> bool:
     :return True if the layer is a TFOpLambda layer, otherwise False.
     """
     if version.parse(tf.version.VERSION) >= version.parse("2.10"):
+        # pylint: disable=import-error
         from keras.layers.core.tf_op_layer import TFOpLambda
     else:
         from tensorflow.python.keras.layers.core import TFOpLambda
@@ -652,6 +653,7 @@ def set_keras_backend_version_to_v2(func_to_run_before_setting_back_to_v2: Calla
     def wrap(*args, **kwargs):
         func_to_run_before_setting_back_to_v2(*args, **kwargs)
         if version.parse(tf.version.VERSION) >= version.parse("2.10"):
+            # pylint: disable=import-error
             from keras.engine.functional import Functional
             import keras.engine.base_layer as base_layer
             import keras.engine.base_layer_v1 as base_layer_v1
