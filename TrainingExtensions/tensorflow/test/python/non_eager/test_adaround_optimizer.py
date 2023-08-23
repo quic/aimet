@@ -57,7 +57,7 @@ from aimet_tensorflow.adaround.adaround_loss import AdaroundHyperParameters
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 tf.compat.v1.disable_eager_execution()
 
-@pytest.mark.skip(reason="causing random failures in CI. disabling to see in regressions if this is the root cause")
+
 class TestAdaroundOptimizer(unittest.TestCase):
     """ Test AdaroundOptimizer """
 
