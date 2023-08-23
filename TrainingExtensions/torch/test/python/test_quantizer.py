@@ -39,6 +39,7 @@ import logging
 import json as json
 import os
 import shutil
+import tempfile
 import unittest.mock
 from packaging import version
 import numpy as np
@@ -2726,6 +2727,31 @@ class TestQuantizationSimStaticGrad:
 
         if os.path.exists(results_dir):
             shutil.rmtree(results_dir)
+
+    def test_export_to_onnx_direct(self):
+        if version.parse(torch.__version__) >= version.parse("1.13.0"):
+            onnx_utils.EXPORT_TO_ONNX_DIRECT = True
+            model = ModelWithTwoInputs()
+            dummy_input = (torch.rand(1, 1, 28, 28), torch.rand(1, 1, 28, 28))
+            sim = QuantizationSimModel(model, dummy_input)
+            sim.compute_encodings(lambda m, _: m(*dummy_input), None)
+            with tempfile.TemporaryDirectory() as temp_dir:
+                sim.export(temp_dir, 'direct_onnx_export', dummy_input)
+
+                onnx_utils.EXPORT_TO_ONNX_DIRECT = False
+                sim.export(temp_dir, 'onnxsaver_export', dummy_input)
+
+                with open(os.path.join(temp_dir, 'direct_onnx_export.encodings')) as direct_onnx_json:
+                    direct_onnx_encodings = json.load(direct_onnx_json)
+                with open(os.path.join(temp_dir, 'onnxsaver_export.encodings')) as onnxsaver_json:
+                    onnxsaver_encodings = json.load(onnxsaver_json)
+
+                assert len(direct_onnx_encodings['activation_encodings']) == \
+                       len(onnxsaver_encodings['activation_encodings'])
+                assert len(direct_onnx_encodings['param_encodings']) == len(onnxsaver_encodings['param_encodings'])
+                direct_onnx_act_names = direct_onnx_encodings['activation_encodings'].keys()
+                onnxsaver_act_names = onnxsaver_encodings['activation_encodings'].keys()
+                assert direct_onnx_act_names != onnxsaver_act_names
 
 
 class TestQuantizationSimLearnedGrid:
