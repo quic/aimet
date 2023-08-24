@@ -458,7 +458,7 @@ def _link_following_layers_to_new_layer_output(new_tensor_output: tf.Tensor,
             if keras_input._keras_history.layer == replaced_layer:
                 keras_inputs[idx] = new_tensor_output
         # Flatten list if only one input
-        if isinstance(keras_inputs, list):
+        if isinstance(keras_inputs, list) and len(keras_inputs) == 1:
             keras_inputs = keras_inputs[0]
         _ = following_layer(keras_inputs)
 
