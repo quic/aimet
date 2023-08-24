@@ -88,6 +88,7 @@ map_torch_types_to_onnx = {
     # Note - Currently, both LayerNorm and GELU are not in the supported ops list in ONNX
     # Adding this entry here for usage by Connected graph
     nn.LayerNorm: ['LayerNorm'],
+    nn.GroupNorm: ['GroupNorm'],
     nn.GELU: ['GELU'],
     nn.ReLU: ['Relu'],
     nn.ReLU6: ['Clip'],
