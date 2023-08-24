@@ -61,6 +61,13 @@ from aimet_torch.defs import OpToIOTensors
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
+# Controls whether quantsim export uses OnnxSaver to set exported ONNX graph node names or not.
+# From torch 1.13 onwards, ONNX export automatically names graph nodes using PyTorch's naming scheme, so no renaming is
+# required.
+# TODO: Corner cases exist when ONNX names model nodes with reused modules, or models with recurrent nodes. Do not use
+# this flag in such circumstances.
+EXPORT_TO_ONNX_DIRECT = False
+
 # runs the second pass of markers for non-leaf torch module and updates names of onnx ops belonging to
 # non-leaf pytorch module
 update_all_onnx_nodes_name = True
@@ -173,6 +180,16 @@ else:
                 ('', 'PRelu'): {1: 'weight'}
             }
     }
+
+
+def get_pytorch_name_from_onnx_name(onnx_name: str) -> str:
+    """
+    Extract the PyTorch name from ONNX name, for ONNX names obtained from torch 1.13 ONNX export.
+
+    :param onnx_name: ONNX name to parse
+    :return: PyTorch name as a string
+    """
+    return '.'.join(onnx_name.split('/')[1:-1])
 
 
 @dataclass(frozen=True)
@@ -1370,7 +1387,9 @@ class OnnxSaver:
         initializer_names = [ini.name for ini in OnnxSaver._get_all_initializers(onnx_model.graph)]
         OnnxSaver._populate_node_to_io_tensor_map_and_valid_param_set(onnx_model.graph, initializer_names,
                                                                       node_to_io_tensor_name_map, valid_param_set)
-        cls._collate_io_tensors_for_multi_layer_recurrent_nodes(onnx_model, node_to_io_tensor_name_map)
+
+        if version.parse(torch.__version__) < version.parse("1.13.0") or not EXPORT_TO_ONNX_DIRECT:
+            cls._collate_io_tensors_for_multi_layer_recurrent_nodes(onnx_model, node_to_io_tensor_name_map)
 
         return node_to_io_tensor_name_map, valid_param_set
 
