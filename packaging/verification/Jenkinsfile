@@ -1,0 +1,63 @@
+pipeline {
+    parameters {
+        string(name: 'PROJECT_NAME', defaultValue: 'aimet-verification', description: 'Verify aimet os package install')
+        string(name: 'BUILD_LABEL_GPU', defaultValue: 'docker-build-aimet-pr-gpu', description: 'Jenkins node host name or label for GPU variants')
+        string(name: 'BUILD_LABEL_CPU', defaultValue: 'docker-build-aimet-pr-cpu', description: 'Jenkins node host name or label for CPU variants')
+        string(name: 'BUILD_TIMEOUT', defaultValue: '3', description: 'Build timeout in hours')
+        
+    }
+    options {
+        timestamps()
+        timeout( time: "${params.BUILD_TIMEOUT}", unit: 'HOURS')
+    }
+    environment{
+        def workspace   = pwd()
+        PROJECT_NAME    = "${params.PROJECT_NAME}"
+        WORKSPACE_ROOT  = "${workspace}"
+    }
+    agent { label "${params.BUILD_LABEL_CPU}" }
+    stages {
+        stage ("Verification") {
+            parallel {
+                stage("Tensorflow CPU") {
+                    steps {
+                        script {
+                            env.AIMET_VARIANT = "tf_cpu"
+                            echo "*** Running SETUP on ${env.NODE_NAME} for variant ${env.AIMET_VARIANT} with tag ${params.release_tag} in ${WORKSPACE_ROOT} ***"
+                            sh "bash -l -c \"docker run --rm -v ${WORKSPACE_ROOT}:${WORKSPACE_ROOT} -w ${WORKSPACE_ROOT}/packaging/verification -e AIMET_VARIANT=${env.AIMET_VARIANT} -e release_tag=${params.release_tag} ${ALTERNATIVE_DOCKER_REGISTRY}ubuntu:focal sh -c './aimet-os-install.sh && python3 test_aimet_tf_imports.py'\""             
+                        }
+                    }
+                }
+                stage("Tensorflow GPU") {
+                    agent { label "${params.BUILD_LABEL_GPU}" }
+                    steps {
+                        script {
+                            env.AIMET_VARIANT = "tf_gpu"
+                            echo "*** Running SETUP on ${env.NODE_NAME} for variant ${env.AIMET_VARIANT} with tag ${params.release_tag} in ${WORKSPACE_ROOT} ***"
+                            sh "bash -l -c \"docker run --gpus all --rm -v ${WORKSPACE_ROOT}:${WORKSPACE_ROOT} -w ${WORKSPACE_ROOT}/packaging/verification -e AIMET_VARIANT=${env.AIMET_VARIANT} -e release_tag=${params.release_tag} ${ALTERNATIVE_DOCKER_REGISTRY}ubuntu:focal sh -c './aimet-os-install.sh && python3 test_aimet_tf_imports.py'\""
+                        }
+                    }
+                }
+                stage("Torch CPU") {
+                    steps {
+                        script {
+                            env.AIMET_VARIANT = "torch_cpu"
+                            echo "*** Running SETUP on ${env.NODE_NAME} for variant ${env.AIMET_VARIANT} with tag ${params.release_tag} in ${WORKSPACE_ROOT} ***"
+                            sh "bash -l -c \"docker run --rm -v ${WORKSPACE_ROOT}:${WORKSPACE_ROOT} -w ${WORKSPACE_ROOT}/packaging/verification -e AIMET_VARIANT=${env.AIMET_VARIANT} -e release_tag=${params.release_tag} ${ALTERNATIVE_DOCKER_REGISTRY}ubuntu:focal sh -c './aimet-os-install.sh && python3 test_aimet_torch_imports.py'\""                        
+                        }
+                    }
+                }
+                stage("Torch GPU") {
+                    agent { label "${params.BUILD_LABEL_GPU}" }
+                    steps {
+                        script {
+                            env.AIMET_VARIANT = "torch_gpu"
+                            echo "*** Running SETUP on ${env.NODE_NAME} for variant ${env.AIMET_VARIANT} with tag ${params.release_tag} in ${WORKSPACE_ROOT} ***"
+                            sh "bash -l -c \"docker run --gpus all --rm -v ${WORKSPACE_ROOT}:${WORKSPACE_ROOT} -w ${WORKSPACE_ROOT}/packaging/verification -e AIMET_VARIANT=${env.AIMET_VARIANT} -e release_tag=${params.release_tag} ${ALTERNATIVE_DOCKER_REGISTRY}ubuntu:focal sh -c './aimet-os-install.sh && python3 test_aimet_torch_imports.py'\""                        
+                        }
+                    }
+                }
+            } //parallel
+        }
+    }
+}
