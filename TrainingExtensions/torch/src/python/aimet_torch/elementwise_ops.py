@@ -304,6 +304,9 @@ class ScatterND(torch.nn.Module):
         """
         Forward-pass routine for ScatterND op
         """
+        if torch.jit.is_tracing():
+            return data
+
         output = torch.clone(data)
 
         # Get multidimensional indices to iterate over the first N-1 dimensions of the indices variable
