@@ -215,6 +215,8 @@ functional_with_stateless_api = {
     'baddbmm'                   : elementwise_ops.Baddbmm,
     'cumsum'                    : elementwise_ops.CumSum,
     'masked_fill'               : elementwise_ops.MaskedFill,
+    'square'                    : elementwise_ops.Square,
+    'rsqrt'                     : elementwise_ops.RSqRt,
 }
 
 
@@ -287,11 +289,22 @@ def conv2d_create_node(traced_model: torch.fx.GraphModule, module_name: str, nod
             break
 
     with traced_model.graph.inserting_after(node):
-        if isinstance(getattr(traced_model, module_name), elementwise_ops.DynamicConv2d):
+        if check_dynamic_conv2d(traced_model, module_name):
             new_node = traced_model.graph.call_module(module_name, args=tuple(input_tensor))
         else:
             new_node = traced_model.graph.call_module(module_name, args=tuple([input_tensor[0]]))
         return new_node
+
+
+def check_dynamic_conv2d(traced_model: torch.fx.GraphModule, module_name: str) -> bool:
+    """
+    return True if the module is dynamic conv2d.
+    """
+    m = traced_model
+    for name in module_name.split('.'):
+        m = getattr(m, name)
+
+    return isinstance(m, elementwise_ops.DynamicConv2d)
 
 
 def conv2d_create_module(node: torch.fx.node) -> torch.nn.Module:
