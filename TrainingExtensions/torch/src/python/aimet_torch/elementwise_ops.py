@@ -398,7 +398,7 @@ class GatherNd(torch.nn.Module):
             else batch_dims_shape + list(indices.shape)[self.batch_dims:-1] + list(data.shape)[self.batch_dims + indices.shape[-1]:])
 
         if torch.jit.is_tracing():
-            return torch.rand(*output_shape)
+            return torch.zeros(*output_shape)
 
         output_data_buffer = []
 
