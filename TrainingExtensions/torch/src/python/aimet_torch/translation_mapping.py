@@ -176,7 +176,8 @@ aimet_op_to_backend_op_name_map = {"Conv1d":"Conv1d",
                                    "GRU":"Gru",
                                    "CustomLayerNorm":"LayerNorm",
                                    "IndexSelect":"Gather",
-                                   "Embedding":"Gather",}
+                                   "Embedding":"Gather",
+                                   "Expand":"ElementWiseMultiply"}
 
 
 op_to_weight_index_map = {'Conv1d' : 1,
