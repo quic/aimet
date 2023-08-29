@@ -40,9 +40,10 @@
 
 from typing import Callable, Any, Tuple, Union
 import itertools
+import torchvision
 import torch
 import torch.nn
-import torchvision
+
 
 
 def forward_function_wrapper(functional: Callable) -> Any:
@@ -395,6 +396,9 @@ class GatherNd(torch.nn.Module):
             batch_dims_shape + list(indices.shape)[self.batch_dims:-1]
             if (indices.shape[-1] == data_rank - self.batch_dims)
             else batch_dims_shape + list(indices.shape)[self.batch_dims:-1] + list(data.shape)[self.batch_dims + indices.shape[-1]:])
+
+        if torch.jit.is_tracing():
+            return torch.zeros(*output_shape)
 
         output_data_buffer = []
 
