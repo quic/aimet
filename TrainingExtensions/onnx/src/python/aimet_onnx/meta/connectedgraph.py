@@ -114,6 +114,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 else:
                     self._input_to_node[input_name] = [node]
 
+    # pylint: disable=too-many-branches
     def _get_input_ops(self) -> List:
         """ Gets list of names of starting nodes"""
 
@@ -214,7 +215,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                         else:
                             self._create_and_link_product_for_inputs(node_name, input_tensor_name)
 
-    def check_if_param(self, node, index) -> bool:
+    @staticmethod
+    def check_if_param(node, index) -> bool:
         """
         Checks if given tensor is a param
 
@@ -223,9 +225,9 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         """
         if node.op_type in ['Gemm', 'Conv', 'ConvTranspose'] and index in [WEIGHT_INDEX, BIAS_INDEX]:
             return True
-        elif node.op_type == 'MatMul' and index == WEIGHT_INDEX:
+        if node.op_type == 'MatMul' and index == WEIGHT_INDEX:
             return True
-        elif node.op_type == 'BatchNormalization' and index in [WEIGHT_INDEX, BIAS_INDEX, RUNNING_VAR_INDEX, RUNNING_MEAN_INDEX]:
+        if node.op_type == 'BatchNormalization' and index in [WEIGHT_INDEX, BIAS_INDEX, RUNNING_VAR_INDEX, RUNNING_MEAN_INDEX]:
             return True
 
         return False
