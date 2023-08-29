@@ -73,61 +73,89 @@ class QuantsimInfo:
     param_bitwidth: int
     data_type: QuantizationDataType
 
+def merge_constraints_from_xmls(op_name: str, supported_backend_info: SupportedBackendInfo, merged_op_and_supported_backend_info_map: Dict[str, List]):
+
+    """
+    Merges backend constraints in supported_backend_info to merged_op_and_supported_backend_info_map
+
+    :param op_name: op_name in model
+    :param supported_backend_info: backend constraints to be merged in merged_op_and_supported_backend_info_map
+    :param merged_op_and_supported_backend_info_map: Map which holds info. about op to it's backend constraints
+    """
+    if op_name in merged_op_and_supported_backend_info_map:
+        existing_weight_constraints = merged_op_and_supported_backend_info_map[op_name].weights_constraints
+        existing_activation_constraints = merged_op_and_supported_backend_info_map[op_name].activation_constraints
+
+        merged_weight_constraints = existing_weight_constraints + [x for x in supported_backend_info.weights_constraints
+                                                                   if x not in existing_weight_constraints]
+        merged_activation_constraints = existing_activation_constraints + [x for x in supported_backend_info.activation_constraints
+                                                                           if x not in existing_activation_constraints]
+        merged_op_and_supported_backend_info_map[op_name].weights_constraints = merged_weight_constraints
+        merged_op_and_supported_backend_info_map[op_name].activation_constraints = merged_activation_constraints
+
+    else:
+        merged_op_and_supported_backend_info_map[op_name] = supported_backend_info
+
 # pylint: disable=too-many-locals
-def get_backend_info(op_names: List[str], master_opdef_path: str, backend_opdef_path: str) -> Dict[str, SupportedBackendInfo]:
+def get_backend_info(op_names: List[str], master_opdef_path: str, backend_opdef_paths: List[str]) -> Dict[str, SupportedBackendInfo]:
     """
     Returns backend constraints
 
     :param op_names: List of op names
     :param master_opdef_path: Master Op. Def. file path
-    :param backend_opdef_path: Backend Op. Def. file path
+    :param backend_opdef_paths: List of Backend Op. Def. file path
     :return: Dict of op_name and it's constraints
     """
     op_names_according_to_backend = copy.deepcopy(op_names)
+    merged_opname_supported_backend_info_map = {}
+
     for i, op_name in enumerate(op_names):
         if op_name in aimet_op_to_backend_op_name_map.keys():
             op_names_according_to_backend[i] = aimet_op_to_backend_op_name_map[op_name]
 
-    parser = ModelOpDefParser(master_opdef_path, backend_opdef_path, op_names_according_to_backend)
+    # pylint: disable=too-many-nested-blocks
+    for backend_opdef_path in backend_opdef_paths:
+        parser = ModelOpDefParser(master_opdef_path, backend_opdef_path, op_names_according_to_backend)
 
-    op_and_supported_backend_info_map = {}
+        op_and_supported_backend_info_map = {}
 
-    # pylint:disable=too-many-nested-blocks
-    for i, op_name in enumerate(op_names):
-        op_name_in_opdef = op_names_according_to_backend[i]
+        for i, op_name in enumerate(op_names):
+            op_name_in_opdef = op_names_according_to_backend[i]
 
-        if op_name not in op_and_supported_backend_info_map:
-            datatype_constraints_size = parser.get_size(op_name_in_opdef)
+            if op_name not in op_and_supported_backend_info_map:
+                datatype_constraints_size = parser.get_size(op_name_in_opdef)
 
-            output_datatype_constraints_size = datatype_constraints_size['output_size']
+                output_datatype_constraints_size = datatype_constraints_size['output_size']
 
-            activation_constraints = []
-            for output_index in range(output_datatype_constraints_size):
-                try:
-                    datatype_constraints = parser.get_output_datatype(op_name_in_opdef, output_index)
-                    for datatype in datatype_constraints:
-                        if backend_datatype_to_aimet_map[datatype] not in activation_constraints:
-                            activation_constraints.append(backend_datatype_to_aimet_map[datatype])
-                # pylint: disable=bare-except
-                except:
-                    #Parser API will throw appropriate error message if not able to get output datattypes
-                    pass
+                activation_constraints = []
+                for output_index in range(output_datatype_constraints_size):
+                    try:
+                        datatype_constraints = parser.get_output_datatype(op_name_in_opdef, output_index)
+                        for datatype in datatype_constraints:
+                            if backend_datatype_to_aimet_map[datatype] not in activation_constraints:
+                                activation_constraints.append(backend_datatype_to_aimet_map[datatype])
+                    # pylint: disable=bare-except
+                    except:
+                        #Parser API will throw appropriate error message if not able to get output datattypes
+                        pass
 
-            weight_constraints = []
-            if op_name_in_opdef in op_to_weight_index_map.keys():
-                try:
-                    datatype_constraints = parser.get_input_datatype(op_name_in_opdef, op_to_weight_index_map[op_name_in_opdef])
-                    for datatype in datatype_constraints:
-                        weight_constraints.append(backend_datatype_to_aimet_map[datatype])
-                # pylint: disable=bare-except
-                except:
-                    #Parser API will throw appropriate error message if not able to get input datatypes
-                    pass
+                weight_constraints = []
+                if op_name_in_opdef in op_to_weight_index_map.keys():
+                    try:
+                        datatype_constraints = parser.get_input_datatype(op_name_in_opdef, op_to_weight_index_map[op_name_in_opdef])
+                        for datatype in datatype_constraints:
+                            weight_constraints.append(backend_datatype_to_aimet_map[datatype])
+                    # pylint: disable=bare-except
+                    except:
+                        #Parser API will throw appropriate error message if not able to get input datatypes
+                        pass
 
-            supported_backend_info = SupportedBackendInfo(activation_constraints, weight_constraints)
-            op_and_supported_backend_info_map[op_name] = supported_backend_info
+                supported_backend_info = SupportedBackendInfo(activation_constraints, weight_constraints)
+                op_and_supported_backend_info_map[op_name] = supported_backend_info
 
-    return op_and_supported_backend_info_map
+                merge_constraints_from_xmls(op_name, supported_backend_info, merged_opname_supported_backend_info_map)
+
+    return merged_opname_supported_backend_info_map
 
 def get_supported_kernel_in_dict_format(act_constraint: Dict, weight_constraint: Dict) -> Dict:
     """
@@ -165,7 +193,6 @@ def set_and_return_supported_kernels(module: torch.nn.Module, backend_act_constr
     module.supported_kernels = supported_kernels
     logger.info("Setting supported kernels of %s to %s", module_type, str(supported_kernels))
     return supported_kernels_in_dict_format
-
 
 def set_datatype_bitwidth_for_weights(module: torch.nn.Module, backend_weight_constraints: List[Dict], module_type: str):
     """
@@ -219,26 +246,26 @@ def set_datatype_bitwidth_for_activations(module: torch.nn.Module, backend_act_c
                         str(dtype_to_set_for_activation), str(bitwidth_to_set_for_activation))
 
     for input_quantizer in module.input_quantizers:
-        if input_quantizer.enabled:
+        if input_quantizer.enabled and not default_dtype_bitwidth_match:
             input_quantizer.data_type = dtype_to_set_for_activation
             input_quantizer.bitwidth = bitwidth_to_set_for_activation
             logger.info("Setting datatype and bitwidth of %s input activations to %s and %s according to backend constraints.", module_type,
                         str(dtype_to_set_for_activation), str(bitwidth_to_set_for_activation))
 
 def populate_backend_info(model: torch.nn.Module, module_types: List[str], master_opdef_file_path: str,
-                          backend_opdef_file_path: str, quantsim_info: QuantsimInfo) -> Dict[str, List]:
+                          backend_opdef_file_paths: List[str], quantsim_info: QuantsimInfo) -> Dict[str, List]:
     """
     Driver function to get and set backend constraints for model
 
     :param model: Model
     :param module_types: List of module names for whom backend constraints are retrieved and set accordingly
     :param master_opdef_file_path: Master Op. Def. file path
-    :param backend_opdef_file_path: Backend Op. Def. file path
+    :param backend_opdef_file_paths: List of Backend Op. Def. file path
     :param quantsim_info: Quantization info for model
 
     :return Dict of op to it's supported kernels
     """
-    supported_kernels = get_backend_info(module_types, master_opdef_file_path, backend_opdef_file_path)
+    supported_kernels = get_backend_info(module_types, master_opdef_file_path, backend_opdef_file_paths)
 
     default_act_kernel = [{'bitwidth': quantsim_info.activation_bitwidth, 'dtype' : quantsim_info.data_type}]
     default_weight_kernel = [{'bitwidth' : quantsim_info.param_bitwidth, 'dtype' : quantsim_info.data_type}]

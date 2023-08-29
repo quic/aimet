@@ -143,7 +143,7 @@ class QuantizationSimModel:
                  rounding_mode: str = 'nearest', default_output_bw: int = 8, default_param_bw: int = 8,
                  in_place: bool = False, config_file: str = None,
                  default_data_type: QuantizationDataType = QuantizationDataType.int,
-                 master_opdef_file: str = None, backend_opdef_file: str = None):
+                 master_opdef_file: str = None, backend_opdef_files: List[str] = None):
         """
         Constructor for QuantizationSimModel.
 
@@ -163,7 +163,9 @@ class QuantizationSimModel:
                                  Note that the mode default_data_type=QuantizationDataType.float is only supported with
                                  default_output_bw=16 and default_param_bw=16
         :param master_opdef_file: Path to xml file for master ops definition
-        :param backend_opdef_file: Path to xml file for backend ops definition
+        :param backend_opdef_files: List of paths to xml file for backend ops definition
+                                    The bitwidth, datatype applied in case of no matching found
+                                    will be taken according to the order of xml provided
         """
         # Perform sanity checks on inputs
         validate_quantsim_inputs(quant_scheme, rounding_mode, default_output_bw, default_param_bw,
@@ -215,12 +217,12 @@ class QuantizationSimModel:
         # pylint: disable=protected-access
         self._hw_version = quantsim_configurator._get_hw_version()
 
-        if master_opdef_file is not None and backend_opdef_file is not None:
+        if master_opdef_file is not None and backend_opdef_files is not None:
             try:
                 from aimet_common.backend_aware_quantsim_utility import populate_backend_info, QuantsimInfo
                 quantsim_info = QuantsimInfo(self._default_output_bw, self._default_param_bw, default_data_type)
                 self._supported_kernels = populate_backend_info(self.model, quantsim_configurator.get_module_names(),
-                                                                master_opdef_file, backend_opdef_file, quantsim_info)
+                                                                master_opdef_file, backend_opdef_files, quantsim_info)
             except ImportError:
                 raise ImportError('Modules for backend aware quantization not found.')
         else:
