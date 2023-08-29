@@ -154,7 +154,8 @@ class QuantizationSimModel:
         quantsim_configurator = QuantSimConfigurator(self.model, self.connected_graph, config_file,
                                                      self._default_activation_bw, self._default_param_bw,
                                                      self._default_quantization_data_type)
-        quantsim_configurator.configure_quantizers(self.qc_quantize_op_dict, self.param_names, self.activation_names)
+        quantsim_configurator.configure_quantizers(self.qc_quantize_op_dict, self.param_names, self.activation_names,
+                                                   self.input_quantizers_name)
 
         return quantsim_configurator
 
