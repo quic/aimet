@@ -178,15 +178,13 @@ class GraphSearcher:
             if any(t.is_model_input for t in op.inputs):
                 input_nodes.append(op)
 
-        visited_nodes = set()
-
         # define pattern matcher for graph search and set the sliding window length
         pattern_matcher = PatternMatcher(self._patterns_with_callbacks)
         self.sliding_window = SlidingWindow(pattern_matcher.get_pattern_max_length())
 
         # find layers of interest
         for op in input_nodes:
-
+            visited_nodes = set()
             # perform DFS with sliding window
             GraphSearcher._find_patterns_apply_actions(self, op, pattern_matcher,
                                                        visited_nodes, ignore=ignore)

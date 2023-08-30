@@ -1228,6 +1228,7 @@ class BNBeforeFlattenLinear(torch.nn.Module):
         self.bn1 = torch.nn.BatchNorm2d(20)
         self.flatten = torch.nn.Flatten()
         self.fc2 = torch.nn.Linear(20 * 12 * 12, 20, bias=bias)
+        self.bn2 = torch.nn.BatchNorm1d(20)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -1235,7 +1236,7 @@ class BNBeforeFlattenLinear(torch.nn.Module):
         x = self.bn1(x)
         x = self.flatten(x)
         x = self.fc2(x)
-
+        x = self.bn2(x)
         return x
 
 

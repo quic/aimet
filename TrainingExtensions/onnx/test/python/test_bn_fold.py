@@ -117,7 +117,6 @@ class TestBatchNormFold:
         assert len(bn_info.keys()) == 1
         assert 'MatMul' in list(bn_info.keys())[0].name
 
-    @pytest.mark.skip
     def test_find_bn_before_flatten(self):
         x = torch.randn((2, 10, 24, 24))
         model = BNBeforeFlattenLinear()
@@ -245,7 +244,6 @@ class TestBatchNormFold:
         linear_layer = conn_graph.get_op_from_module_name('Gemm_4')
         assert len(bn_conv) == 1
         assert linear_layer.get_module() == bn_conv[0][1]
-        assert not conv_bn
 
     def test_fold_bn_before_flatten_no_bias(self):
         torch.manual_seed(10)
@@ -261,10 +259,9 @@ class TestBatchNormFold:
         baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
         assert pairs[0][0].name == "Gemm_4"
-        assert len(model.graph().node) == layers_orig - 1
+        assert len(model.graph().node) == layers_orig - 2
         assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
-    @pytest.mark.skip
     def test_fold_bn_before_flatten_no_bias_with_transpose(self):
         torch.manual_seed(10)
         torch_model = BNBeforeFlattenLinear()
@@ -279,7 +276,7 @@ class TestBatchNormFold:
         baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
         assert pairs[0][0].name == "Gemm_5"
-        assert len(model.graph().node) == layers_orig - 1
+        assert len(model.graph().node) == layers_orig - 2
         assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_resnet18(self):
