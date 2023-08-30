@@ -397,7 +397,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             product = Product(product_name, None)
             # add product to self._products dictionary
             self._products[product_name] = product
-            logger.debug("Created new product " + product_name)
+            logger.debug("Created new product %s", product_name)
 
             product.tensor_dict[consumer] = product_name
 
