@@ -673,6 +673,7 @@ class TestQuantizationSimTransformers(unittest.TestCase):
         # just make sure compute encodings and forward pass go through fine
         aimet_sim.compute_encodings(forward_pass, None)
         _ = forward_pass(aimet_sim.model, None)
+        aimet_torch.utils.modules_to_treat_as_leaf = []
 
 @pytest.fixture
 def seed_torch_random_variable():
