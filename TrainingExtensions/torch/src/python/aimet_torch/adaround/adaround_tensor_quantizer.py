@@ -46,7 +46,6 @@ import aimet_common.AimetTensorQuantizer as AimetTensorQuantizer
 from aimet_common.defs import AdaroundConstants, QuantizationDataType, QuantScheme, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_torch.tensor_quantizer import TensorQuantizer
 from aimet_torch.quantsim_straight_through_grad import broadcast_to_tensor
-from aimet_torch.tensor_factory_utils import constant_tensor_factory
 
 class AdaroundTensorQuantizer(TensorQuantizer):
     """
