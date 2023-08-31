@@ -633,6 +633,47 @@ class TestQuantizationSimTransformers(unittest.TestCase):
         print("max diff:", diff.max(), "min diff:", diff.min())
         assert torch.allclose(out_fp, out_fp_2, atol=1e-4)
 
+    def test_mha_as_leaf(self):
+        seed = 10
+        np.random.seed(seed)
+        os.environ['PYTHONHASHSEED'] = str(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(seed)
+            torch.cuda.manual_seed_all(seed)
+
+        x = torch.rand(15, 8, 128)
+        dummy_input = x, x, x
+
+        class MhaModel(torch.nn.Module):
+            def __init__(self):
+                super(MhaModel, self).__init__()
+                self.nn_mha = nn.MultiheadAttention(128, 1, bias=True)
+
+            def forward(self, x1, x2, x3):
+                return self.nn_mha(x1, x2, x3)
+
+        def forward_pass(m, _):
+            m.eval()
+            with torch.no_grad():
+                return m(*copy.deepcopy(dummy_input))
+
+        model = MhaModel().eval()
+        aimet_torch.utils.modules_to_treat_as_leaf = [torch.nn.MultiheadAttention, QuantizableMultiheadAttention]
+
+        utils.replace_modules_of_type1_using_constructor(model, torch.nn.MultiheadAttention,
+                                                         create_quantizable_multihead_attention)
+
+        aimet_sim = QuantizationSimModel(model, dummy_input=copy.deepcopy(dummy_input), quant_scheme='tf')
+
+        assert len(aimet_sim.model._modules) == 1
+        assert utils.is_leaf_module(aimet_sim.model.nn_mha._module_to_wrap)
+
+        # just make sure compute encodings and forward pass go through fine
+        aimet_sim.compute_encodings(forward_pass, None)
+        _ = forward_pass(aimet_sim.model, None)
+        aimet_torch.utils.modules_to_treat_as_leaf = []
 
 @pytest.fixture
 def seed_torch_random_variable():
