@@ -131,7 +131,7 @@ class ModuleData:
         device = get_device(self._model)
 
         # place the input to appropriate device
-        model_input = change_tensor_device_placement(model_input, device)
+        model_input = change_tensor_device_placement(model_input, device, dtype=next(iter(self._model.parameters())).dtype)
 
         # Custom injected exception is raised when the activations data from desired module is collected.
         try:
@@ -664,20 +664,21 @@ def get_ordered_lists_of_conv_fc(model: torch.nn.Module, input_shapes: Tuple,
     return module_list
 
 
-def change_tensor_device_placement(tensor_data: Union[torch.Tensor, List, Tuple], device: torch.device):
+def change_tensor_device_placement(tensor_data: Union[torch.Tensor, List, Tuple], device: torch.device, dtype=None):
     """
     Change the tensor_data's device placement
 
     :param tensor_data: torch.tensor , list of torch.tensors, or tuple of torch.tensors
-    :param device: device information
+    :param device: device
+    :param dtype: dtype
     :return: tensor_data with modified device placement
     """
     if isinstance(tensor_data, torch.Tensor):
-        return tensor_data.to(device=device)
+        return tensor_data.to(device=device, dtype=dtype)
 
     if isinstance(tensor_data, (tuple, list)):
         cls = tuple if isinstance(tensor_data, tuple) else list
-        return cls(change_tensor_device_placement(x, device) for x in tensor_data)
+        return cls(change_tensor_device_placement(x, device, dtype=dtype) for x in tensor_data)
 
     return tensor_data
 

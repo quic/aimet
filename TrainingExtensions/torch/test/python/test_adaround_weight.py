@@ -841,7 +841,8 @@ class TestAdaround:
             os.remove("./dummy.encodings")
 
     @pytest.mark.cuda
-    def test_apply_adaround_using_gpu(self):
+    @pytest.mark.parametrize('dtype', [torch.float, torch.half])
+    def test_apply_adaround_using_gpu(self, dtype):
         """ test apply_adaround end to end using tiny model """
         torch.manual_seed(10)
         AimetLogger.set_level_for_all_areas(logging.DEBUG)
@@ -850,10 +851,11 @@ class TestAdaround:
         data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
 
         net = TinyModel().eval()
-        model = net.to(torch.device('cuda'))
+        model = net.to(device=torch.device('cuda'), dtype=dtype)
 
         input_shape = (1, 3, 32, 32)
         dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
+        dummy_input = [x.to(dtype=dtype) for x in dummy_input]
         out_before_ada = model(*dummy_input)
 
         params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=1000)
@@ -877,7 +879,8 @@ class TestAdaround:
             os.remove("./dummy.encodings")
 
     @pytest.mark.cuda
-    def test_apply_adaround_using_gpu_caching_disabled(self):
+    @pytest.mark.parametrize('dtype', [torch.float, torch.half])
+    def test_apply_adaround_using_gpu_caching_disabled(self, dtype):
         """ test apply_adaround end to end using tiny model """
         torch.manual_seed(10)
         AimetLogger.set_level_for_all_areas(logging.DEBUG)
@@ -896,10 +899,11 @@ class TestAdaround:
         data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
 
         net = TinyModel().eval()
-        model = net.to(torch.device('cuda'))
+        model = net.to(device=torch.device('cuda'), dtype=dtype)
 
         input_shape = (1, 3, 32, 32)
         dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
+        dummy_input = [x.to(dtype=dtype) for x in dummy_input]
         out_before_ada = model(*dummy_input)
 
         params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=5)
