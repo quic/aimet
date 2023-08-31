@@ -48,7 +48,7 @@ from aimet_common.quantsim_config.json_config_importer import ConfigDictKeys, Co
 from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as AimetCommonQuantSimConfigurator, \
     get_setting_type, SupergroupConfigCallback as AimetCommonSupergroupConfigCallback, reformat_supported_kernels
 from aimet_common.utils import AimetLogger
-from aimet_onnx.meta.connectedgraph import ConnectedGraph, constant_type
+from aimet_onnx.meta.connectedgraph import ConnectedGraph, CONSTANT_TYPE
 from aimet_onnx.utils import get_product_name_from_quantized_name
 from aimet_onnx.qc_quantize_op import OpMode, QcQuantizeOp
 
@@ -292,7 +292,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                                                     model_input_configs[ConfigDictKeys.IS_INPUT_QUANTIZED], modified_quantize_ops)
 
         for node in self._model.model.graph.node:
-            if node.op_type in constant_type:
+            if node.op_type in CONSTANT_TYPE:
                 for activation_name in node.output:
                     if activation_name in self._quant_ops_dict and \
                             self._quant_ops_dict[activation_name] not in modified_quantize_ops:
@@ -360,7 +360,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
             self._quant_ops_dict[activation_name].enabled = False
 
         for node in self._model.model.graph.node:
-            if node.op_type in constant_type:
+            if node.op_type in CONSTANT_TYPE:
                 for activation_name in node.output:
                     if activation_name in self._quant_ops_dict:
                         self._quant_ops_dict[activation_name].enabled = False

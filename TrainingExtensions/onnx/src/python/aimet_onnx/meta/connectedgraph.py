@@ -46,7 +46,7 @@ the tensors that are either input to the model (input, constant or parameter) or
 result of an operation. Furthermore the graph representation is bi-directional."""
 
 
-from typing import List, Union
+from typing import List, Union, Dict
 from onnx import onnx_pb
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
 
@@ -64,7 +64,7 @@ BIAS_INDEX = 2
 RUNNING_MEAN_INDEX = 3
 RUNNING_VAR_INDEX = 4
 OPS_WITH_PARAMS = ["Conv", "Gemm", "ConvTranspose", "BatchNormalization", "MatMul"]
-constant_type = ['Constant', 'ConstantOfShape']
+CONSTANT_TYPE = ['Constant', 'ConstantOfShape']
 
 
 class ConnectedGraph(AimetCommonConnectedGraph):
@@ -91,10 +91,22 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         # Counts number of constant inputs there are in the graph
         self._constant_count = 0
+        self._constant_nodes_to_output = self._create_set_of_constant_nodes()
 
         self.fill_op_product_graph()
         # List of ops in the order they are traversed using the forward function
         self.ordered_ops = get_ordered_ops(self.starting_ops)
+
+    def _create_set_of_constant_nodes(self) -> Dict:
+        constant_nodes = {}
+        for node in self.model.graph.node:
+            if node.op_type in CONSTANT_TYPE:
+                for output in node.output:
+                    if node.name in constant_nodes:
+                        constant_nodes[node.name].append(output)
+                    else:
+                        constant_nodes[node.name] = [output]
+        return constant_nodes
 
     def get_op_from_module_name(self, name: str) -> Op:
         """
@@ -216,7 +228,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                             self._create_and_link_product_for_inputs(node_name, input_tensor_name)
 
     @staticmethod
-    def check_if_param(node, index) -> bool:
+    def check_if_param(node: onnx_pb.NodeProto, index: int) -> bool:
         """
         Checks if given tensor is a param
 
@@ -232,17 +244,15 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         return False
 
-    def check_if_const(self, input_tensor_name) -> bool:
+    def check_if_const(self, input_tensor_name: str) -> bool:
         """
         Checks if given tensor is a constant
 
         :param input_tensor_name: input tensor name we are looking at
         """
-        for node in self.model.graph.node:
-            if node.op_type in constant_type:
-                for output in node.output:
-                    if output == input_tensor_name:
-                        return True
+        for output_names in self._constant_nodes_to_output.values():
+            if input_tensor_name in output_names:
+                    return True
         return False
 
     def _create_and_link_product_for_inputs(self, consumer_node_name: str, input_tensor_name: str):

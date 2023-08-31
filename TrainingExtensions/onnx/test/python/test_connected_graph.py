@@ -144,6 +144,6 @@ class TestConnectedGraph:
 
         assert not cg.ordered_ops[0].inputs[0].is_const
         assert cg.ordered_ops[0].inputs[1].is_const
-
+        assert cg.ordered_ops[1].inputs[0].is_model_input == False
         assert not cg.ordered_ops[1].inputs[0].is_const
         assert cg.ordered_ops[1].inputs[1].is_const
