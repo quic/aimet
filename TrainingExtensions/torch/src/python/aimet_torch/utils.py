@@ -33,6 +33,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+# pylint: disable = too-many-lines
 """ Utilities that are used for different AIMET PyTorch features """
 
 import importlib
