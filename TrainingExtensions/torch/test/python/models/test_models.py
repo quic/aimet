@@ -1117,3 +1117,16 @@ class ModuleWithListInputModel(torch.nn.Module):
         x = self.reshape(inputs[0], [-1, 1, 32, 128])
         x = self.conv(x)
         return x
+
+
+class EmbeddingModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.embedding = torch.nn.Embedding(1000, 10)
+        self.linear = torch.nn.Linear(10, 10)
+        self.softmax = torch.nn.Softmax(-1)
+
+    def forward(self, input_ids):
+        x = self.embedding(input_ids)
+        x = self.linear(x)
+        return self.softmax(x)

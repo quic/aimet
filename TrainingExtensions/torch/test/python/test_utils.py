@@ -53,7 +53,7 @@ from aimet_common.utils import round_up_to_multiplicity, round_down_to_multiplic
 from aimet_torch import utils, elementwise_ops
 
 from aimet_torch.quantsim import QuantizationSimModel
-from models.test_models import TinyModel, MultiInput, ModelWithReusedNodes, SingleResidual
+from models.test_models import TinyModel, MultiInput, ModelWithReusedNodes, SingleResidual, EmbeddingModel
 
 
 class TestTrainingExtensionsUtils(unittest.TestCase):
@@ -362,6 +362,26 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         """ test collect input output data from module using multi input """
 
         self._collect_inp_out_data_multi_input(torch.device('cuda:0'))
+
+    def _collect_inp_out_data_int_input(self, device):
+        model = EmbeddingModel().to(device=device)
+        model.eval()
+        input_ids = torch.randint(1000, (10, 128))
+        module_data = utils.ModuleData(model, model.linear)
+        inp, out = module_data.collect_inp_out_data(input_ids, collect_input=True, collect_output=True)
+        assert torch.equal(inp, model.embedding(input_ids.to(device)))
+        assert torch.equal(out, model.linear(model.embedding(input_ids.to(device))))
+
+    def test_collect_inp_out_data_int_input_cpu(self):
+        """ test collect input output data from module using multi input """
+
+        self._collect_inp_out_data_int_input(torch.device('cpu'))
+
+    @pytest.mark.cuda
+    def test_collect_inp_out_data_int_input_gpu(self):
+        """ test collect input output data from module using multi input """
+
+        self._collect_inp_out_data_int_input(torch.device('cuda:0'))
 
     def test_collect_inp_out_data_quantsim_model_cpu(self):
         """ test collect input output data from module """
