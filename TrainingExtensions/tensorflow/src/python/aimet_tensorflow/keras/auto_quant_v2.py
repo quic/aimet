@@ -222,6 +222,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
 
         _validate_inputs(model, dataset, eval_callback, results_dir, strict_validation, \
                          quant_scheme, param_bw, output_bw, rounding_mode)
+        model.trainable = False
         self.fp32_model = model
         self._fp32_acc = None
         self.dataset = dataset
@@ -243,7 +244,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
 
         def forward_pass_callback(model, _: Any = None):
             for input_data in tqdm(self.dataset):
-                model(input_data)
+                model(input_data, training=False)
 
         self.forward_pass_callback = forward_pass_callback
 
