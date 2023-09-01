@@ -163,12 +163,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                     flag = False
                     break
             if flag:
-                input_ops.append(node.name)
+                input_ops.append(node)
 
         for input_tensor_name in input_tensors_names:
             if input_tensor_name in self._input_to_node:
                 for node in self._input_to_node[input_tensor_name]:
-                    input_ops.append(node.name)
+                    input_ops.append(node)
 
         return input_ops
 
@@ -210,22 +210,21 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param op_queue: Queue for performing dfs
         """
         input_ops = self._get_input_ops()
-        for node_name in input_ops:
-            for node in self.model.graph.node:
-                if node.name == node_name:
-                    if node_name not in self._ops:
-                        op = self._create_ir_op(node)
-                        self._ops[node_name] = op
-                        self._add_children_ops_to_op_queue(node, op_queue)
-                        self.starting_ops.append(op)
-                    for index, input_tensor_name in enumerate(node.input):
-                        if self.check_if_param(node, index):
-                            continue
-                        if self.check_if_const(input_tensor_name):
-                            op = self._ops[node.name]
-                            self._create_constant_product(op, input_tensor_name)
-                        else:
-                            self._create_and_link_product_for_inputs(node_name, input_tensor_name)
+        for node in input_ops:
+            node_name = node.name
+            if node_name not in self._ops:
+                op = self._create_ir_op(node)
+                self._ops[node_name] = op
+                self._add_children_ops_to_op_queue(node, op_queue)
+                self.starting_ops.append(op)
+            for index, input_tensor_name in enumerate(node.input):
+                if self.check_if_param(node, index):
+                    continue
+                if self.check_if_const(input_tensor_name):
+                    op = self._ops[node.name]
+                    self._create_constant_product(op, input_tensor_name)
+                else:
+                    self._create_and_link_product_for_inputs(node_name, input_tensor_name)
 
     @staticmethod
     def check_if_param(node: onnx_pb.NodeProto, index: int) -> bool:
@@ -252,7 +251,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         """
         for output_names in self._constant_nodes_to_output.values():
             if input_tensor_name in output_names:
-                    return True
+                return True
         return False
 
     def _create_and_link_product_for_inputs(self, consumer_node_name: str, input_tensor_name: str):
