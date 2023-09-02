@@ -37,7 +37,7 @@
 # Docker image file to build and test AIMET for Tensorflow in a GPU environment
 
 ARG REGISTRY
-FROM ${REGISTRY}nvidia/cuda:11.1.1-cudnn8-devel-ubuntu20.04
+FROM ${REGISTRY}nvidia/cuda:11.6.2-cudnn8-devel-ubuntu20.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=DontWarn
@@ -82,7 +82,6 @@ RUN echo "%users ALL = (ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 RUN apt-get update -y > /dev/null && \
     apt-get install --no-install-recommends -y \
-
         # Python
         python3.8 \
         python3.8-dev \
@@ -90,7 +89,6 @@ RUN apt-get update -y > /dev/null && \
         python3-pip \
         python3-setuptools \
         build-essential \
-
         # lmdb dependency
         libffi-dev && \
         rm -rf /var/lib/apt/lists/*
@@ -160,7 +158,7 @@ RUN python3 -m pip --no-cache-dir install \
         matplotlib>=3 \
         mock \
         nbsphinx==0.8.12 \
-        'numpy<1.24,>=1.16.6' \
+        'numpy<1.24,>=1.20.5' \
         onnx==1.11.0 \
         onnxsim \
         onnxruntime==1.11.0 \
@@ -190,12 +188,12 @@ RUN python3 -m pip --no-cache-dir install \
         tensorboard==2.4.0 \
         tensorboardX==2.4 \
         timm==0.4.12 \
-        torch==1.9.1+cu111 -f https://download.pytorch.org/whl/torch_stable.html \
-        torchaudio==0.9.1 -f https://download.pytorch.org/whl/torch_stable.html \
-        torchtext==0.10.1 \
-        torchvision==0.10.1+cu111 -f https://download.pytorch.org/whl/torch_stable.html \
+        torch==1.13.1+cu116 -f https://download.pytorch.org/whl/torch_stable.html \
+        torchaudio==0.13.1 -f https://download.pytorch.org/whl/torch_stable.html \
+        torchtext==0.14.1 \
+        torchvision==0.14.1+cu116 -f https://download.pytorch.org/whl/torch_stable.html \
         tqdm \
-        transformers==4.11.3 \
+        transformers==4.27.4 \
         wget && \
     python3 -m ipykernel.kernelspec
 

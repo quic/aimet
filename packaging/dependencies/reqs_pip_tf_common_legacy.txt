@@ -1,7 +1,7 @@
 bert-tensorflow
-holoviews==1.12.7
 numpy==1.19.5
+pandas==1.4.3
 protobuf==3.20.1
-scikit-learn==1.1.3
 tensorflow-hub
 tensorflow-model-optimization
+transformers==4.11.3

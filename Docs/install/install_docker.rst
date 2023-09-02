@@ -45,10 +45,8 @@ This page provides instructions to install AIMET package inside a development do
 Set variant
 ~~~~~~~~~~~
 Set the `<variant_string>` to ONE of the following depending on your desired variant
-    #. For the PyTorch 1.9 GPU variant, use `torch-gpu`
-    #. For the PyTorch 1.9 CPU variant, use `torch-cpu`
-    #. For the PyTorch 1.13 GPU variant, use `torch-gpu-pt113`
-    #. For the PyTorch 1.13 CPU variant, use `torch-cpu-pt113`
+    #. For the PyTorch 1.13 GPU variant, use `torch-gpu`
+    #. For the PyTorch 1.13 CPU variant, use `torch-cpu`
     #. For the TensorFlow GPU variant, use `tf-gpu`
     #. For the TensorFlow CPU variant, use `tf-cpu`
     #. For the ONNX GPU variant, use `onnx-gpu`
@@ -84,7 +82,7 @@ Follow these instructions ONLY if you want to build the docker image locally. If
 
 **NOTE:** Feel free to modify the `docker_image_name` and `docker_container_name` as needed.
 
-Start docker container 
+Start docker container
 ~~~~~~~~~~~~~~~~~~~~~~~
 Ensure that a docker named `$docker_container_name` is not already running; otherwise remove the existing container and then start a new container as follows:
 
@@ -102,7 +100,7 @@ Ensure that a docker named `$docker_container_name` is not already running; othe
 **NOTE:**
     #. Feel free to modify the above `docker run` command based on the environment and filesystem on your host machine.
     #. If nvidia-docker 2.0 is installed, then add `--gpus all` to the `docker run` commands in order to enable GPU access inside the docker container.
-    #. If nvidia-docker 1.0 is installed, then replace `docker run` with `nvidia-docker run` in order to enable GPU access inside the docker container. 
+    #. If nvidia-docker 1.0 is installed, then replace `docker run` with `nvidia-docker run` in order to enable GPU access inside the docker container.
     #. Port forwarding needs to be done in order to run the Visualization APIs from docker container. This can be achieved by running the docker container as follows:
 
 .. code-block:: bash
@@ -113,7 +111,7 @@ Ensure that a docker named `$docker_container_name` is not already running; othe
     -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro \
     -v ${HOME}:${HOME} -v ${WORKSPACE}:${WORKSPACE} \
     -v "/local/mnt/workspace":"/local/mnt/workspace" \
-    --entrypoint /bin/bash -w ${WORKSPACE} --hostname ${docker_container_name} ${docker_image_name} 
+    --entrypoint /bin/bash -w ${WORKSPACE} --hostname ${docker_container_name} ${docker_image_name}
 
 Install AIMET packages
 ~~~~~~~~~~~~~~~~~~~~~~~

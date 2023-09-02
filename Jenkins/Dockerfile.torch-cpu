@@ -68,7 +68,6 @@ RUN echo "%users ALL = (ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 RUN apt-get update -y > /dev/null && \
     apt-get install --no-install-recommends -y \
-
         # Python
         python3.8 \
         python3.8-dev \
@@ -145,7 +144,7 @@ RUN python3 -m pip --no-cache-dir install \
         matplotlib>=3 \
         mock \
         nbsphinx==0.8.12 \
-        'numpy<1.24,>=1.16.6' \
+        'numpy<1.24,>=1.20.5' \
         onnx==1.11.0 \
         onnxsim \
         onnxruntime==1.11.0 \
@@ -175,12 +174,12 @@ RUN python3 -m pip --no-cache-dir install \
         tensorboard==2.4.0 \
         tensorboardX==2.4 \
         timm==0.4.12 \
-        torch==1.9.1+cpu -f https://download.pytorch.org/whl/torch_stable.html \
-        torchaudio==0.9.1 -f https://download.pytorch.org/whl/torch_stable.html \
-        torchtext==0.10.1 \
-        torchvision==0.10.1+cpu -f https://download.pytorch.org/whl/torch_stable.html \
+        torch==1.13.1+cpu -f https://download.pytorch.org/whl/torch_stable.html \
+        torchaudio==0.13.1 -f https://download.pytorch.org/whl/torch_stable.html \
+        torchtext==0.14.1 \
+        torchvision==0.14.1+cpu -f https://download.pytorch.org/whl/torch_stable.html \
         tqdm \
-        transformers==4.11.3 \
+        transformers==4.27.4 \
         wget && \
     python3 -m ipykernel.kernelspec
 
@@ -237,6 +236,7 @@ RUN python3 -m pip install git-pylint-commit-hook osqp
 # NOTE: We need to pin the holoviews version to this since the latest version has a circular dependency on bokeh 2.0.0 through the panel package
 RUN python3 -m pip install holoviews==1.12.7 netron jsonschema pandas==1.5.3
 
+# Note: bokeh requires Pillow while we need to use Pillow-SIMD for performance reasons.
 RUN python3 -m pip install bokeh==1.2.0 hvplot==0.4.0
 
 # Remove existing Pillow & Pillow-SIMD and replace with correct version of Pillow-SIMD.

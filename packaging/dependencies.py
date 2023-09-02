@@ -56,6 +56,7 @@ _TORCH = {
     "1.11.0": ["torch==1.11.0+{cu}", "torchvision==0.12.0+{cu}"],
     "1.12.0": ["torch==1.12.0+{cu}", "torchvision==0.13.0+{cu}"],
     "1.12.1": ["torch==1.12.1+{cu}", "torchvision==0.13.1+{cu}"],
+    "1.13.1": ["torch==1.13.1+{cu}", "torchvision==0.14.1+{cu}"],
 }
 
 
