@@ -183,7 +183,7 @@ pipeline {
                                 cleanWs()
                                 unstash 'AIMETBuildTree'
                                 script{
-                                    env.AIMET_VARIANT_TORCH_GPU = "torch-gpu-pt113"
+                                    env.AIMET_VARIANT_TORCH_GPU = "torch-gpu"
                                 }
                                 echo "*** Running SETUP stage for ${env.AIMET_VARIANT_TORCH_GPU} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
                             }
@@ -588,7 +588,7 @@ pipeline {
                                 cleanWs()
                                 unstash 'AIMETBuildTree'
                                 script {
-                                    env.AIMET_VARIANT_TORCH_CPU = "torch-cpu-pt113"
+                                    env.AIMET_VARIANT_TORCH_CPU = "torch-cpu"
                                 }
                                 echo "*** Running SETUP stage for ${env.AIMET_VARIANT_TORCH_CPU} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
                             }

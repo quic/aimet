@@ -179,10 +179,10 @@ RUN python3 -m pip --no-cache-dir install \
         tensorflow-model-optimization \
         tensorlayer==2.2.1 \
         timm==0.4.12 \
-        torch==1.9.1+cpu -f https://download.pytorch.org/whl/torch_stable.html \
-        torchaudio==0.9.1 -f https://download.pytorch.org/whl/torch_stable.html \
-        torchtext==0.10.1 \
-        torchvision==0.10.1+cpu -f https://download.pytorch.org/whl/torch_stable.html \
+        torch==1.13.1+cpu -f https://download.pytorch.org/whl/torch_stable.html \
+        torchaudio==0.13.1 -f https://download.pytorch.org/whl/torch_stable.html \
+        torchtext==0.14.1 \
+        torchvision==0.14.1+cpu -f https://download.pytorch.org/whl/torch_stable.html \
         tqdm \
         transformers==4.11.3 \
         wget && \
