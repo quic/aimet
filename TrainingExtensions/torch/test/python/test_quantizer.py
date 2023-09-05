@@ -2753,6 +2753,17 @@ class TestQuantizationSimStaticGrad:
                 onnxsaver_act_names = onnxsaver_encodings['activation_encodings'].keys()
                 assert direct_onnx_act_names != onnxsaver_act_names
 
+    def test_save_encodings_to_json(self):
+        model = ModelWithTwoInputsOneToAdd()
+        dummy_input = (torch.rand(32, 1, 100, 100), torch.rand(32, 10, 22, 22))
+        qsim = QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf)
+        qsim.compute_encodings(lambda m, _: m(*dummy_input), None)
+        qsim.save_encodings_to_json('./data', 'saved_encodings')
+        with open('./data/saved_encodings.json') as encodings_file:
+            encodings = json.load(encodings_file)
+            assert len(encodings['activation_encodings']) == 14
+            assert len(encodings['param_encodings']) == 5
+
 
 class TestQuantizationSimLearnedGrid:
 
