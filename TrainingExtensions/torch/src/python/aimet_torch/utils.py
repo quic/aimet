@@ -33,6 +33,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+# pylint: disable = too-many-lines
 """ Utilities that are used for different AIMET PyTorch features """
 
 import importlib
@@ -110,6 +111,16 @@ class ModuleData:
         :param collect_output: Boolean to collect output or not
         :return: Module's input and output data
         """
+        def adjust_input_dtype(module, inp):
+            if hasattr(module, 'weight'):
+                dtype = module.weight.dtype
+                # Cast input to dtype only if it is a floating point tensor (float, half, bfloat16, etc.).
+                # If input is a non-float tensor (e.g. long, bool), leave the input uncasted.
+                return nested_map(inp, lambda x: x.to(dtype) if x.is_floating_point() else x)
+            return inp
+
+        handles = [mod.register_forward_pre_hook(adjust_input_dtype) for mod in self._model.modules()]
+
         def _hook_to_collect_inp_out_data(_, inp, out):
             """
             hook to collect input and output data
@@ -125,7 +136,7 @@ class ModuleData:
         inp_data_list = []
         out_data_list = []
 
-        handle = self._module.register_forward_hook(_hook_to_collect_inp_out_data)
+        handles.append(self._module.register_forward_hook(_hook_to_collect_inp_out_data))
 
         # get the model's device placement information
         device = get_device(self._model)
@@ -139,9 +150,10 @@ class ModuleData:
                 _ = self._forward_fn(self._model, model_input)
         except StopForwardException:
             pass
-
-        # remove hook handle
-        handle.remove()
+        finally:
+            # remove hook handle
+            for handle in handles:
+                handle.remove()
 
         inp_data, out_data = None, None
 
@@ -435,6 +447,7 @@ def get_device(model):
     """
     return next(model.parameters()).device
 
+
 def match_model_settings(model_to_match: torch.nn.Module, model_to_set: torch.nn.Module):
     """
     Match training and device settings of the model_to_set with those of model_to_match.
@@ -669,17 +682,32 @@ def change_tensor_device_placement(tensor_data: Union[torch.Tensor, List, Tuple]
     Change the tensor_data's device placement
 
     :param tensor_data: torch.tensor , list of torch.tensors, or tuple of torch.tensors
-    :param device: device information
+    :param device: device
     :return: tensor_data with modified device placement
     """
-    if isinstance(tensor_data, torch.Tensor):
-        return tensor_data.to(device=device)
+    return nested_map(tensor_data, lambda x: x.to(device=device))
 
-    if isinstance(tensor_data, (tuple, list)):
-        cls = tuple if isinstance(tensor_data, tuple) else list
-        return cls(change_tensor_device_placement(x, device) for x in tensor_data)
 
-    return tensor_data
+def nested_map(tensor, fn: Callable[[torch.Tensor], torch.Tensor]):
+    """
+    Apply a function to a nested tuple, list, or dict of tensors.
+    :param tensor: Tensor, or a nested tuple, list, or dict of tensors.
+    :param fn: Function to apply to the tensors
+    :return: Nested structure of tensors with function applied
+    """
+    if isinstance(tensor, torch.Tensor):
+        return fn(tensor)
+
+    if isinstance(tensor, (tuple, list)):
+        cls = tuple if isinstance(tensor, tuple) else list
+        return cls(nested_map(x, fn) for x in tensor)
+
+    if isinstance(tensor, dict):
+        return {
+            key: nested_map(value, fn) for key, value in tensor.items()
+        }
+
+    raise TypeError(f'Input should be torch.Tensor, tuple, list, or dict. Got {type(tensor)}')
 
 
 def find_num_inout_tensors_per_module(model: torch.nn.Module, input_tensor) -> Dict:

@@ -71,6 +71,8 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         self.use_soft_rounding = True
         self._ch_axis = channel_axis
         self._cppOp = AimetTensorQuantizer.AimetTensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[quant_scheme])
+        self.broadcasted_delta = None
+        self.broadcasted_offset = None
 
     def quantize_dequantize(self, tensor: torch.Tensor, _) -> torch.Tensor:
         """
@@ -116,42 +118,44 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         """
         assert self.encoding, 'Encoding needs to be set before Adaround the weight tensor.'
 
-        if isinstance(self.encoding, list):
-            # pylint:disable = protected-access
-            delta, offset = self._cppOp.makeDeltaOffsetTensor(tensor.device, self.encoding)
-        else:
-            delta = self.encoding.delta
-            offset = self.encoding.offset
-
         # pylint:disable = protected-access
-        broadcasted_delta = broadcast_to_tensor(tensor, delta, self._ch_axis)
-        broadcasted_offset = broadcast_to_tensor(tensor, offset, self._ch_axis)
+        if self.broadcasted_delta is None or self.broadcasted_offset is None:
+            if isinstance(self.encoding, list):
+                # pylint:disable = protected-access
+                delta, offset = self._cppOp.makeDeltaOffsetTensor(tensor.device, self.encoding)
+            else:
+                delta = self.encoding.delta
+                offset = self.encoding.offset
+
+            self.broadcasted_delta = broadcast_to_tensor(tensor, delta, self._ch_axis).to(tensor.dtype)
+            self.broadcasted_offset = broadcast_to_tensor(tensor, offset, self._ch_axis).to(tensor.dtype)
 
         # alpha is the "V" parameter in Equation 2 of the Systems HLD which is defined as a FP32 tensor of the
         # same shape as the weight tensor
         if self.alpha is None:
-            self._initialize_alpha(tensor, broadcasted_delta)
-        else:
-            self.alpha = self.alpha.to(tensor.device)
+            self._initialize_alpha(tensor, self.broadcasted_delta)
+
+        alpha = self.alpha.to(device=tensor.device, dtype=tensor.dtype)
 
         # Scale the tensor
-        tensor = torch.floor(tensor / broadcasted_delta)
+        tensor = torch.floor(tensor / self.broadcasted_delta)
 
         # Soft rounding maps alpha parameter between zero and one using
         # rectified sigmoid function and hard rounding maps it to exactly zero or one
+
         if self.use_soft_rounding:
-            h_alpha = torch.clamp(torch.sigmoid(self.alpha) * (AdaroundConstants.ZETA - AdaroundConstants.GAMMA) +
+            h_alpha = torch.clamp(torch.sigmoid(alpha) * (AdaroundConstants.ZETA - AdaroundConstants.GAMMA) +
                                   AdaroundConstants.GAMMA, 0, 1)
         else:
-            h_alpha = (self.alpha >= 0).float()
+            h_alpha = (alpha >= 0).to(tensor.dtype)
 
 
         # Adaround the tensor
         tensor = tensor + h_alpha
 
         # Quantize and de-quantize the tensor
-        tensor_quant = torch.clamp(tensor - broadcasted_offset, 0, 2 ** self.bitwidth - 1)
-        tensor_dequant = (tensor_quant + broadcasted_offset) * broadcasted_delta
+        tensor_quant = torch.clamp(tensor - self.broadcasted_offset, 0, 2 ** self.bitwidth - 1)
+        tensor_dequant = (tensor_quant + self.broadcasted_offset) * self.broadcasted_delta
 
         return tensor_dequant
 
@@ -165,4 +169,6 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         tensor = (tensor / delta) - tensor_floor
         alpha = - torch.log((AdaroundConstants.ZETA - AdaroundConstants.GAMMA) / (tensor - AdaroundConstants.GAMMA) - 1)
 
-        self.alpha = torch.nn.Parameter(alpha, requires_grad=True)
+        # Even if the input is float16, alpha has to be kept in float32
+        # in order to be updated by the optimizer
+        self.alpha = torch.nn.Parameter(alpha.float(), requires_grad=True)
