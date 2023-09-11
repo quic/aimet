@@ -44,7 +44,8 @@ import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme, QuantizationDataType
 import aimet_tensorflow.keras.utils.common as keras_common_utils
-from aimet_tensorflow.keras.model_preparer import _is_keras_or_tensor_input
+from aimet_tensorflow.keras.model_preparer import _KerasModelPreparer
+is_tf_or_keras_tensor_input = _KerasModelPreparer._is_tf_or_keras_tensor_input
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQuantizer, \
     ParamPerTensorQuantizer, ParamPerChannelQuantizer, StaticGridPerChannelQuantizer
 from aimet_tensorflow.utils.constants import QUANT_ALLOWED_DTYPES
@@ -320,7 +321,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
             if (self._is_lambda_operator_layer or self._is_a_tf_op_lambda_layer) and len(self.input_quantizers) >= 2:
                 kwargs_keys_for_keras_tensors = [
                     name for name, tensor in kwargs.items()
-                    if _is_keras_or_tensor_input(tensor) or isinstance(tensor, np.ndarray)
+                    if is_tf_or_keras_tensor_input(tensor) or isinstance(tensor, np.ndarray)
                 ]
 
                 # TF functions like tf.concat could have two inputs in List form. But other layers could match
