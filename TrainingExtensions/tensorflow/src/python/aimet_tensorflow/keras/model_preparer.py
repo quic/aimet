@@ -77,27 +77,45 @@ This file contains the implementation to automatically prepare keras models for 
 
 class _KerasModelPreparer:
 
-    def __init__(self, original_model: tf.keras.Model, input_layer: tf.keras.layers.InputLayer):
-        self.original_model = original_model
-        self.input_layer = self._format_input_layer(original_model, input_layer)
+    def __init__(self, original_model: tf.keras.Model = None, input_layer: tf.keras.layers.InputLayer = None):
+        if original_model:
+            self.original_model = original_model
+            self.input_layer = self._format_input_layer(original_model, input_layer)
 
-        # Used to fix weight names at end of unwrapping
-        # Originally set to the name of the original model's class in the case that there is an inherited model
-        self.class_names = self._get_class_names_in_model(original_model)
+            # Used to fix weight names at end of unwrapping
+            # Originally set to the name of the original model's class in the case that there is an inherited model
+            self.class_names = self._get_class_names_in_model(original_model)
 
-        if self._inherits_from_keras_model(original_model):
-            _logger.info("This model inherits from tf.keras.Model, connecting model...")
-            self.original_model = self._connect_inherited_model(original_model, input_layer)
+            if self._inherits_from_keras_model(original_model):
+                _logger.info("This model inherits from tf.keras.Model, connecting model...")
+                self.original_model = self._connect_inherited_model(original_model, input_layer)
 
-        self.model_layers_connections = ModelLayerConnections.get_model_layers_connection_properties(original_model)
-        self._set_prepared_models_input_layer()
+            self.model_layers_connections = ModelLayerConnections.get_model_layers_connection_properties(original_model)
+            self._set_prepared_models_input_layer()
 
-        self.model_outputs = []
-        self.original_models_last_layer = original_model.layers[-1]
+            self.model_outputs = []
+            self.original_models_last_layer = original_model.layers[-1]
 
-        self.prepared_model = None
-        self.custom_objects = None
-        self.original_weights_in_prepared_model_order = None
+            self.prepared_model = None
+            self.custom_objects = None
+            self.original_weights_in_prepared_model_order = None
+
+    @classmethod
+    def get_instance_for_common_layer_passthrough_functions(
+            cls, model_layers_connections: ModelLayerConnectionsProperties.TYPE
+    ):
+        """
+        Special function to __init__ for classes outside of _KerasModelPreparer that want access to useful
+        functions like _handle_normal_keras_layer. ONLY use this for internal use. For normal Keras Model Preparer,
+        please utilize the prepare_model function.
+
+        :param model_layers_connections: Dictionary of Model Layer Connections for the functions to use.
+        :return: A slim instance of _KerasModelPreparer
+        """
+
+        self = cls(original_model=None, input_layer=None)
+        self.model_layers_connections = model_layers_connections
+        return self
 
     def _get_original_models_weights_in_functional_model_order(self) -> List[np.ndarray]:
         """
@@ -509,8 +527,8 @@ class _KerasModelPreparer:
         if isinstance(layer, TFOpLambda):
             if call_kwargs := self._get_call_kwargs(layer):
                 # Special case for 'tf.concat' that takes a list of inputs with kwargs attached
-                # may need to updated in the future...
-                if 'concat' in layer.name:
+                # may need to updated in the future
+                if "concat" in layer.name:
                     new_output_tensor = layer.call([*call_args], **call_kwargs)
                 else:
                     new_output_tensor = layer.call(*call_args, **call_kwargs)
@@ -724,7 +742,7 @@ def prepare_model(original_model: tf.keras.Model,
         prepared_model, _ = replace_separable_conv_with_depthwise_pointwise(prepared_model, custom_objects=custom_objects)
         return prepared_model
 
-    keras_model_preparer = _KerasModelPreparer(original_model, input_layer)
+    keras_model_preparer = _KerasModelPreparer(original_model, input_layer=input_layer)
 
     keras_model_preparer.prepare_model()
 
