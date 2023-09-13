@@ -422,7 +422,7 @@ def create_input_dict(model: onnx_pb.ModelProto, input_batch: Union[np.ndarray, 
     :param input_batch: either single numpy array, list or tuple of numpy array
     :return: input dictionary
     """
-    input_names = [input.name for input in model.model.graph.input]
+    input_names = [input.name for input in model.graph.input]
 
     # single input
     if isinstance(input_batch, np.ndarray):

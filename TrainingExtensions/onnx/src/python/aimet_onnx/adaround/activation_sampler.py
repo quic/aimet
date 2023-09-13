@@ -98,7 +98,7 @@ class ActivationSampler:
         iterator = iter(cached_dataset)
         for batch_index in range(len(cached_dataset)):
             model_inputs = next(iterator)
-            inp_data, out_data = self.sample_acts(create_input_dict(self._org_model, model_inputs))
+            inp_data, out_data = self.sample_acts(create_input_dict(self._org_model.model, model_inputs))
 
             all_inp_data.append(inp_data)
             all_out_data.append(out_data)
