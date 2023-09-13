@@ -37,6 +37,7 @@
 
 """ Implementation to automatically prepare keras models for AIMET by converting them to a functional model """
 import inspect
+import logging
 from typing import Any, Dict, List, Set, Union, Optional
 import re
 import numpy as np
@@ -187,14 +188,18 @@ class _KerasModelPreparer:
         :param input_layer: The input layer to be used for the functional model
         :return: The input layer
         """
-        try:
+        if hasattr(original_model, "input"):
             input_layer = original_model.input
-
-        except AttributeError:
+        else:
             _logger.info("Input layer not found. Using input layer passed in.")
             if input_layer is None:
                 raise ValueError("The top layer of this model is subclassed. Please provide an input layer via the "
                                  "\'input_layer\' parameter.")
+
+        if isinstance(input_layer, dict): # Keras allows passing in tensors via tensor_name : tensor
+            input_layer = [tensor for tensor in input_layer.values()]
+            if len(input_layer) == 1:
+                return input_layer[0]
 
         return input_layer
 
@@ -261,7 +266,7 @@ class _KerasModelPreparer:
                     {input_layer.name: input_layer})
 
         try:
-            set_input_layer_factory(self.original_model.input)
+            set_input_layer_factory(self.input_layer)
         except AttributeError:
             # For models that are not connected
             _logger.info("Model is not connected. Setting input layer to input layer passed in.")
@@ -431,19 +436,20 @@ class _KerasModelPreparer:
     {inspect.getsource(layer.call)}
     """)
         layer_input = layer_input if isinstance(layer_input, List) else [layer_input]
-        temp_input = [
+        temp_inputs = [
             tf.keras.layers.Input(shape=inp.shape[1:], name=inp.name.split(':')[0] + "_temp_input")
             for inp in layer_input
         ]
-        if len(temp_input) == 1:
-            temp_input = temp_input[0]
+        if len(temp_inputs) == 1:
+            temp_inputs = temp_inputs[0]
         try:
             if _KerasModelPreparer._inherits_from_keras_model(layer):
-                temp_model = _KerasModelPreparer._connect_inherited_model(layer, temp_input)
+                temp_model = _KerasModelPreparer._connect_inherited_model(layer, temp_inputs)
             else:
-                temp_model = tf.keras.Model(inputs=temp_input,
-                                            outputs=layer.call(temp_input, training=False),
+                temp_model = tf.keras.Model(inputs=temp_inputs,
+                                            outputs=layer.call(temp_inputs, training=False),
                                             name=_TEMP_MODEL_NAME)
+                temp_model.trainable = False
             _logger.debug("Model created for layer '%s'", layer.name)
         except TypeError as e:
             if "call() got an unexpected keyword argument 'training'" in e.args:
@@ -490,7 +496,7 @@ class _KerasModelPreparer:
         :param layer: The layer to handle
         :return: The output tensor of the layer
         """
-        _logger.debug("Subclass layer '%s' found. Extracting layers.", layer.name)
+        _logger.debug("Extracting layers for '%s'", layer.name)
 
         # Converts CamelCase to snake_case of nested layers class name
         self.class_names.update([layer.name] if self._inherits_from_keras_model(
@@ -528,6 +534,7 @@ class _KerasModelPreparer:
             if call_kwargs := self._get_call_kwargs(layer):
                 # Special case for 'tf.concat' that takes a list of inputs with kwargs attached
                 # may need to updated in the future
+
                 if "concat" in layer.name:
                     new_output_tensor = layer.call([*call_args], **call_kwargs)
                 else:
@@ -580,7 +587,7 @@ class _KerasModelPreparer:
         Function to get the prepared model. This function sets up the input layer and calls the helper function to
         recursively prepare the model.
         """
-        self._prepare_model_helper(self.original_model)
+        _ = self._prepare_model_helper(self.original_model)
 
         # If the model outputs are empty, then we need to get the most recently added output tensor. This is the case
         # when a model might be sparse and not fully connected or when a Functional model is inside an inherited model.
@@ -602,20 +609,20 @@ class _KerasModelPreparer:
         setattr(self, "custom_objects", # For acceptable subclass layers
                 self._get_models_custom_objects(self.prepared_model)
                 )
-
-        # Extra prepare step to replace Separable Conv's with Depthwise Pointwise pattern.
-        self.prepared_model, _ = replace_separable_conv_with_depthwise_pointwise(self.prepared_model,
-                                                                                 custom_objects=self.custom_objects)
-        self.prepared_model, _ = replace_relu6_with_relu(self.prepared_model,
-                                                         custom_objects=self.custom_objects)
-
-        self.prepared_model.summary(print_fn=_logger.debug)
+        _logger.info("Prepared Model Summary: \n")
+        self.prepared_model.summary(print_fn=_logger.info)
 
         # Copying over weights from original model to functional model
         _logger.debug("Final class_names: %s", self.class_names)
         self._set_prepared_models_weights()
 
         self.verify_prepared_model()
+
+        # Extra prepare step to replace Separable Conv's with Depthwise Pointwise pattern.
+        self.prepared_model, _ = replace_separable_conv_with_depthwise_pointwise(self.prepared_model,
+                                                                                 custom_objects=self.custom_objects)
+        self.prepared_model, _ = replace_relu6_with_relu(self.prepared_model,
+                                                         custom_objects=self.custom_objects)
 
     @staticmethod
     def _get_models_custom_objects(model: tf.keras.Model) -> Optional[Dict[str, tf.keras.layers.Layer]]:
@@ -700,14 +707,21 @@ class _KerasModelPreparer:
             input_shape = [shape if shape is not None else 1 for shape in self.prepared_model.input_shape]
             random_input = np.random.rand(*input_shape).astype(np.float32)
 
-        original_model_output = self.original_model.predict(random_input)
-        prepared_model_output = self.prepared_model.predict(random_input)
+        verbose = logging.DEBUG == _logger.level
+        original_model_output = self.original_model.predict(random_input, verbose=verbose)
+        prepared_model_output = self.prepared_model.predict(random_input, verbose=verbose)
 
         # Check the outputs of the prepared model and the original model
         err_msg = "Outputs of prepared model and original model do not match. Since the weights match and params match, this is likely due to a mismatch in the model's architecture." + \
                   "Specifically, if there is a reuse of a layer, then the prepared model will not have the same output as the original model. For example, if a ReLU layer is defined once " + \
                   "and then used twice, then the prepared model will only have one ReLU layer while the original model will have two ReLU layers. Please check the model's architecture to see if " + \
                   "there are any layers that are reused."
+
+        if isinstance(original_model_output, Dict):
+            original_model_output = [output for output in original_model_output.values()]
+            if len(original_model_output) == 1:
+                original_model_output = original_model_output[0]
+
         if isinstance(original_model_output, List):
             for original_output, prepared_output in zip(original_model_output, prepared_model_output):
                 np.testing.assert_array_equal(original_output, prepared_output, err_msg=err_msg)
