@@ -115,7 +115,8 @@ class Adaround:
                        param_bw_override_list: List[Tuple[torch.nn.Module, int]] = None,
                        ignore_quant_ops_list: List[torch.nn.Module] = None,
                        default_quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
-                       default_config_file: str = None) -> torch.nn.Module:
+                       default_config_file: str = None,
+                       master_opdef_file: str = None, backend_opdef_files: List[str] = None) -> torch.nn.Module:
         """
         Returns model with optimized weight rounding of every module (Conv and Linear) and also saves the
         corresponding quantization encodings to a separate JSON-formatted file that can then be imported by
@@ -135,13 +136,19 @@ class Adaround:
         :param default_quant_scheme: Quantization scheme. Supported options are using Quant Scheme Enum
                                     QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced
         :param default_config_file: Default configuration file for model quantizers
+        :param master_opdef_file: Path to xml file for master ops definition
+        :param backend_opdef_files: List of paths to xml file for backend ops definition
+                                    The bitwidth, datatype applied in case of no matching found
+                                    will be taken according to the order of xml provided
         :return: Model with Adarounded weights and saves corresponding parameter encodings JSON file at provided path
         """
         # pylint: disable=too-many-arguments
         # Create Quant sim with given parameters
         quant_sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=default_quant_scheme,
                                          default_param_bw=default_param_bw,
-                                         config_file=default_config_file)
+                                         config_file=default_config_file,
+                                         master_opdef_file=master_opdef_file,
+                                         backend_opdef_files=backend_opdef_files)
 
         # For the modules in the param_bw_override_list, override the default parameter bitwidths in the QuantSim
         if param_bw_override_list:
