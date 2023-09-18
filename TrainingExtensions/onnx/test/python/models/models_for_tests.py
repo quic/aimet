@@ -1515,3 +1515,34 @@ def build_dummy_model_with_dynamic_input():
     model = helper.make_model(onnx_graph, opset_imports=[op])
 
     return model
+
+
+def simple_relu_model():
+    class ReLUModel(torch.nn.Module):
+        def __init__(self):
+            super(ReLUModel, self).__init__()
+            self.relu = torch.nn.ReLU()
+
+        def forward(self, x):
+            x = self.relu(x)
+            return x
+
+    torch.manual_seed(10)
+    model = ReLUModel().eval()
+
+    input_shape = (1, 3, 32, 32)
+    x = torch.randn(*input_shape, requires_grad=True)
+
+    # Export the model
+    torch.onnx.export(model,  # model being run
+                      x,  # model input (or a tuple for multiple inputs)
+                      "./simple_relu.onnx",
+                      # where to save the model (can be a file or file-like object),
+                      training=torch.onnx.TrainingMode.TRAINING,
+                      export_params=True,  # store the trained parameter weights inside the model file
+                      opset_version=12,  # the ONNX version to export the model to
+                      do_constant_folding=False,  # whether to execute constant folding for optimization
+                      input_names=['input'],  # the model's input names
+                      output_names=['output'])
+    model_onnx = ONNXModel(load_model('./simple_relu.onnx'))
+    return model_onnx
