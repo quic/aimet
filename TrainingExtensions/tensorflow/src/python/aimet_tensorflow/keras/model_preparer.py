@@ -435,6 +435,7 @@ class _KerasModelPreparer:
     This is the call function that is causing this error:
     {inspect.getsource(layer.call)}
     """)
+
         layer_input = layer_input if isinstance(layer_input, List) else [layer_input]
         temp_inputs = [
             tf.keras.layers.Input(shape=inp.shape[1:], name=inp.name.split(':')[0] + "_temp_input")
@@ -442,6 +443,7 @@ class _KerasModelPreparer:
         ]
         if len(temp_inputs) == 1:
             temp_inputs = temp_inputs[0]
+
         try:
             if _KerasModelPreparer._inherits_from_keras_model(layer):
                 temp_model = _KerasModelPreparer._connect_inherited_model(layer, temp_inputs)
@@ -449,7 +451,6 @@ class _KerasModelPreparer:
                 temp_model = tf.keras.Model(inputs=temp_inputs,
                                             outputs=layer.call(temp_inputs, training=False),
                                             name=_TEMP_MODEL_NAME)
-                temp_model.trainable = False
             _logger.debug("Model created for layer '%s'", layer.name)
         except TypeError as e:
             if "call() got an unexpected keyword argument 'training'" in e.args:
@@ -458,8 +459,8 @@ class _KerasModelPreparer:
                     "that the layer behaves differently during evaluation. Please add **kwargs to your call function for layer '%s.'",
                     layer.name)
             raise
-        temp_model.summary(print_fn=_logger.debug)
 
+        temp_model.summary(print_fn=_logger.debug)
         verify_weights({w.name for w in layer.weights}, {w.name for w in temp_model.weights})
 
         return temp_model
