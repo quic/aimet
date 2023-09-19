@@ -59,7 +59,7 @@ class TestAdaroundActivationSampler:
         cached_dataset = CachedDataset(data_loader, 1, './')
         all_inp_data, all_out_data = activation_sampler.sample_and_place_all_acts_on_cpu(cached_dataset)
 
-        assert np.allclose(all_out_data, all_inp_data, atol=10-5)
+        assert np.allclose(all_out_data, all_inp_data, atol=1e-5)
         assert all_inp_data[0][0].shape == (1, 3, 32, 32)
 
 def dataloader():
