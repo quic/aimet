@@ -62,8 +62,8 @@ class ActivationSampler:
         """
         :param orig_op: Single un quantized op from the original session
         :param quant_op: Corresponding quant op from the Quant sim session
-        :param orig_session: Session with the original model
-        :param quant_session: Session with the model with quantization simulations ops
+        :param orig_model: Session with the original model
+        :param quant_model: Session with the model with quantization simulations ops
         :param use_cuda: If we should use cuda
         :param device: CUDA device ID
         :return: Input data to quant op, Output data from original op
@@ -81,7 +81,7 @@ class ActivationSampler:
         self._orig_module_collector = ModuleData(orig_model, orig_op, self.providers)
         self._quant_module_collector = ModuleData(quant_model, quant_op, self.providers)
 
-    def sample_and_place_all_acts_on_cpu(self, cached_dataset) -> Tuple:
+    def sample_and_place_all_acts_on_cpu(self, dataset) -> Tuple:
         """
         From the original module, collect output activations and input activations
         to corresponding quantized module.
@@ -89,21 +89,21 @@ class ActivationSampler:
         NOTE: Keeps collected activation data on CPU memory so this function should only be invoked
         if collected activation data can be fit entirely in CPU memory.
 
-        :param cached_dataset: Cached dataset.
+        :param dataset: Cached dataset.
         :return: Input data, output data
         """
         all_inp_data = []
         all_out_data = []
 
-        iterator = iter(cached_dataset)
-        for batch_index in range(len(cached_dataset)):
+        iterator = iter(dataset)
+        for batch_index in range(len(dataset)):
             model_inputs = next(iterator)
             inp_data, out_data = self.sample_acts(create_input_dict(self._org_model.model, model_inputs))
 
             all_inp_data.append(inp_data)
             all_out_data.append(out_data)
 
-            if batch_index == len(cached_dataset) - 1:
+            if batch_index == len(dataset) - 1:
                 break
 
         return all_inp_data, all_out_data
@@ -163,3 +163,4 @@ class ModuleData:
             return None, outputs
         if collect_input:
             return outputs, None
+        return None, None
