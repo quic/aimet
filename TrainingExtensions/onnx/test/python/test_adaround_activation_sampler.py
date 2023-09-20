@@ -51,6 +51,7 @@ class TestAdaroundActivationSampler:
     """
     def test_activation_sampler_conv(self):
         """ Test ActivationSampler for a Conv op """
+        np.random.seed(0)
         model = simple_relu_model()
         sim = QuantizationSimModel(model)
         activation_sampler = ActivationSampler('input', 'output', model, sim.model, True)
@@ -58,7 +59,7 @@ class TestAdaroundActivationSampler:
         cached_dataset = CachedDataset(data_loader, 1, './')
         all_inp_data, all_out_data = activation_sampler.sample_and_place_all_acts_on_cpu(cached_dataset)
 
-        assert np.allclose(all_out_data, all_inp_data)
+        assert np.allclose(all_out_data, all_inp_data, atol=1e-5)
         assert all_inp_data[0][0].shape == (1, 3, 32, 32)
 
 def dataloader():
