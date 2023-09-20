@@ -184,6 +184,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             product.is_model_input = True
 
             consumer_op = self._ops[consumer_node_name]
+            product.tensor_dict[consumer_op] = input_tensor_name
 
             # Link parent op, product, and current op
             # Fill in input, output, producer, consumer params as appropriate.
@@ -222,6 +223,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                              parent_module_name,
                              child_node_name)
                 assert False
+            product.tensor_dict[current_op] = connecting_tensor_name
 
             # Link parent op, product, and current op
             # Fill in input, output, producer, consumer params as appropriate.
@@ -243,6 +245,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             logger.debug("Created new product %s", product_name)
 
             producer_op = self._ops[producer_node_name]
+            product.tensor_dict[producer_node_name] = producer_op
 
             # Link producer op, product, and current tensor
             producer_op.output = product
@@ -356,7 +359,10 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             assert len(product.consumers) == 1
             # item 1
             branch_op_product.add_consumer(product.consumers[0])
-            # items 2 and 3
+            # item 2
+            assert len(product.tensor_dict.keys()) == 1
+            branch_op_product.tensor_dict[product.consumers[0]] = product.tensor_dict[product.consumers[0]]
+            # items 3 and 4
             # replace the old product with the new branch product, in the same index as the old product
             index = product.consumers[0].inputs.index(product)
             product.consumers[0].inputs[index] = branch_op_product
@@ -375,6 +381,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             product = Product(param_name, product_shape)
             product.is_parm = True
             product.add_consumer(my_op)
+            product.tensor_dict[my_op] = param_tensor
             product.tensor = param_tensor
             my_op.add_input(product)
             self._products[product.name] = product
