@@ -608,8 +608,7 @@ class _KerasModelPreparer:
         K.clear_session()  # To avoid name conflicts
         self.prepared_model = tf.keras.models.clone_model(self.prepared_model)
         setattr(self, "custom_objects", # For acceptable subclass layers
-                self._get_models_custom_objects(self.prepared_model)
-                )
+                self._get_models_custom_objects(self.prepared_model))
         _logger.info("Prepared Model Summary: \n")
         self.prepared_model.summary(print_fn=_logger.info)
 
@@ -617,13 +616,13 @@ class _KerasModelPreparer:
         _logger.debug("Final class_names: %s", self.class_names)
         self._set_prepared_models_weights()
 
-        self.verify_prepared_model()
-
         # Extra prepare step to replace Separable Conv's with Depthwise Pointwise pattern.
         self.prepared_model, _ = replace_separable_conv_with_depthwise_pointwise(self.prepared_model,
                                                                                  custom_objects=self.custom_objects)
         self.prepared_model, _ = replace_relu6_with_relu(self.prepared_model,
                                                          custom_objects=self.custom_objects)
+
+        self.verify_prepared_model()
 
     @staticmethod
     def _get_models_custom_objects(model: tf.keras.Model) -> Optional[Dict[str, tf.keras.layers.Layer]]:
