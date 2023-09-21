@@ -216,6 +216,9 @@ if version.parse(tf.version.VERSION) >= version.parse("2.00"):
         Result is separated into two separate layers, layers.DepthwiseConv2D and layers.Conv2D
         """
 
+        def __init__(self):
+            self.sep_conv_name_mapper = {}
+
         def pattern(self):
             """
             Pattern to transform
@@ -250,7 +253,7 @@ if version.parse(tf.version.VERSION) >= version.parse("2.00"):
             pointwise_layer = layers.Conv2D(
                 match_layer_config["filters"],
                 kernel_size=1,  # Always 1 as per Keras source code
-                strides=match_layer_config["strides"],
+                strides=1,
                 padding="valid",  # Always valid as per Keras source code
                 data_format=match_layer_config["data_format"],
                 dilation_rate=(1, 1),  # Always (1, 1) as per Keras source code
@@ -284,6 +287,16 @@ if version.parse(tf.version.VERSION) >= version.parse("2.00"):
                 elif weight_name.startswith("bias"):
                     pointwise_layer_weights[f"bias:{tensor_number}"] = weight_value
 
+            for weight in list(match_layer.names_and_weights):
+                weight_name = weight[0]  # Original weight name
+
+                # Weight name update
+                weight_name = weight_name.replace("/depthwise_kernel", "/depthwise/depthwise_kernel"). \
+                    replace("/pointwise_kernel", "/pointwise/kernel").replace("/bias", "/pointwise/bias")
+
+                # Original model weight name mapped to updated model weight name
+                self.sep_conv_name_mapper[weight[0]] = weight_name
+
             return transforms.LayerNode(
                 pointwise_layer_config,
                 weights=pointwise_layer_weights,
@@ -296,4 +309,5 @@ if version.parse(tf.version.VERSION) >= version.parse("2.00"):
         :param model: tf.keras.Model
         """
         transform_list = [ReplaceSeparableConvWithDepthwisePointwise()]
-        return model_transformer.ModelTransformer(model, transform_list).transform()
+        model_to_return, _ = model_transformer.ModelTransformer(model, transform_list).transform()
+        return model_to_return, transform_list[0].sep_conv_name_mapper
