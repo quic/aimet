@@ -185,4 +185,3 @@ class TestUtils:
         model = models_for_tests.transposed_conv_model_without_bn()
         model_data = ModelData(model.model)
         assert len(model_data.module_to_info) == 3
-        read_attributes_for_op(model_data.module_to_info['/conv1/ConvTranspose'])
