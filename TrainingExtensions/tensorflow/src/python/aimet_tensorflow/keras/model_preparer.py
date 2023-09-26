@@ -71,8 +71,7 @@ _TEMP_MODEL_NAME = "temp_aimet_intermediate_model"
 
 def _get_original_models_weights_in_functional_model_order(original_model: tf.keras.Model,
                                                            functional_model: tf.keras.Model,
-                                                           class_names: Set[str],
-                                                           sep_conv_name_mapper: Dict = None) -> List[np.ndarray]:
+                                                           class_names: Set[str]) -> List[np.ndarray]:
     """
     Map the original model's weights to the functional model's weights.
 
@@ -91,11 +90,6 @@ def _get_original_models_weights_in_functional_model_order(original_model: tf.ke
         for class_name in class_names:
             weight_name = weight_name.replace(class_name + '/', '')
         original_model_weights[weight_name] = weight.numpy()
-
-    # Handling of SeparableConv weight names
-    if sep_conv_name_mapper is not None:
-        for original_model_weight_name, func_model_weight_name in sep_conv_name_mapper.items():
-            original_model_weights[func_model_weight_name] = original_model_weights.pop(original_model_weight_name)
 
     # Get the functional model's weights in order as a dictionary for quick lookup where the key is the weight name
     # and the position of the weight's order is the value
@@ -116,7 +110,7 @@ def _get_original_models_weights_in_functional_model_order(original_model: tf.ke
 
 
 def _set_functional_models_weights(original_model: tf.keras.Model, functional_model: tf.keras.Model,
-                                   class_names: Set[str], sep_conv_name_mapper: Dict = None):
+                                   class_names: Set[str]):
     """
     Set the functional model's weights to the original model's weights in the correct order
 
@@ -126,7 +120,7 @@ def _set_functional_models_weights(original_model: tf.keras.Model, functional_mo
     """
 
     weights_in_correct_order = \
-        _get_original_models_weights_in_functional_model_order(original_model, functional_model, class_names, sep_conv_name_mapper)
+        _get_original_models_weights_in_functional_model_order(original_model, functional_model, class_names)
 
     try:
         functional_model.set_weights(weights_in_correct_order)
@@ -616,7 +610,7 @@ def prepare_model(original_model: tf.keras.Model,
         _logger.debug("Model does not contain any nested layers. "
                       "Returning original model after going through 'replace_separable_conv_with_depthwise_pointwise.")
         model_to_return, _ = replace_separable_conv_with_depthwise_pointwise(original_model)
-        return original_model
+        return model_to_return
 
     _logger.debug("Preparing model for AIMET. Original model architecture")
     original_model.summary(print_fn=_logger.debug)
@@ -632,14 +626,14 @@ def prepare_model(original_model: tf.keras.Model,
     K.clear_session() # To avoid name conflicts
     model_to_return = tf.keras.models.clone_model(prepared_model)
 
-    # Extra prepare step to replace Separable Conv's with Depthwise Pointwise pattern if the prepared model
-    # had any in the original models nested layers.
-    model_to_return, sep_conv_name_mapper = replace_separable_conv_with_depthwise_pointwise(model_to_return)
-
     model_to_return.summary(print_fn=_logger.debug)
 
     # Copying over weights from original model to functional model
     _logger.debug("Final class_names: %s", class_names)
-    _set_functional_models_weights(original_model, model_to_return, class_names, sep_conv_name_mapper)
+    _set_functional_models_weights(original_model, model_to_return, class_names)
+
+    # Extra prepare step to replace Separable Conv's with Depthwise Pointwise pattern if the prepared model
+    # had any in the original models nested layers.
+    model_to_return, _ = replace_separable_conv_with_depthwise_pointwise(model_to_return)
 
     return model_to_return
