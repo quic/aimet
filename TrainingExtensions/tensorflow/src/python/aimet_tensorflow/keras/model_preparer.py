@@ -61,7 +61,7 @@ else:
 
 # pylint: disable=wrong-import-position
 from aimet_tensorflow.keras.utils.model_connection_utils import ModelLayerConnections, ModelLayerConnectionsProperties
-from aimet_tensorflow.keras.utils.model_transform_utils import replace_separable_conv_with_depthwise_pointwise
+from aimet_tensorflow.keras.utils.model_transform_utils import replace_separable_conv_with_depthwise_pointwise, replace_relu6_with_relu
 from aimet_common.utils import AimetLogger
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ModelPreparer)
@@ -610,6 +610,7 @@ def prepare_model(original_model: tf.keras.Model,
         _logger.debug("Model does not contain any nested layers. "
                       "Returning original model after going through 'replace_separable_conv_with_depthwise_pointwise.")
         model_to_return, _ = replace_separable_conv_with_depthwise_pointwise(original_model)
+        model_to_return, _ = replace_relu6_with_relu(model_to_return)
         return model_to_return
 
     _logger.debug("Preparing model for AIMET. Original model architecture")
@@ -635,5 +636,6 @@ def prepare_model(original_model: tf.keras.Model,
     # Extra prepare step to replace Separable Conv's with Depthwise Pointwise pattern if the prepared model
     # had any in the original models nested layers.
     model_to_return, _ = replace_separable_conv_with_depthwise_pointwise(model_to_return)
+    model_to_return, _ = replace_relu6_with_relu(model_to_return)
 
     return model_to_return
