@@ -39,6 +39,7 @@ import onnx
 
 import aimet_onnx.utils as utils
 from aimet_onnx.utils import ParamUtils
+from aimet_onnx.adaround.utils import ModelData, read_attributes_for_op
 
 from models import models_for_tests
 
@@ -179,3 +180,8 @@ class TestUtils:
         hard_swish_count = 1
 
         assert relu_count - original_relu_count == relu6_count - hard_swish_count
+
+    def test_create_model_data_single_residual_model(self):
+        model = models_for_tests.transposed_conv_model_without_bn()
+        model_data = ModelData(model.model)
+        assert len(model_data.module_to_info) == 3
