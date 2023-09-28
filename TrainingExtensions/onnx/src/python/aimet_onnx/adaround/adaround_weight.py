@@ -44,8 +44,6 @@ import contextlib
 from typing import Tuple, Dict, List, Callable
 from onnx import onnx_pb
 
-from tqdm import tqdm
-
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme, QuantizationDataType
@@ -260,7 +258,7 @@ class Adaround:
             adaround_quantizer.use_unsigned_symmetric = quantizer.use_unsigned_symmetric
 
             # Set the encodings and replace by Adaround tensor quantizer
-            adaround_quantizer.encoding = quantizer.encoding
+            adaround_quantizer.encoding = quantizer.encodings
             param_to_tq_dict[param_name] = adaround_quantizer
 
         return param_to_tq_dict

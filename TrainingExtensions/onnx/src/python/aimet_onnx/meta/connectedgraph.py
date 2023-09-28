@@ -382,6 +382,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             product.is_parm = True
             product.add_consumer(my_op)
             product.tensor_dict[my_op] = param_tensor
+            product.tensor = param_tensor
             my_op.add_input(product)
             self._products[product.name] = product
             my_op.add_param(param_name, product, product_type)

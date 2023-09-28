@@ -288,6 +288,7 @@ if [ $run_prep -eq 1 ]; then
             pycov_dir_endings+=("TrainingExtensions/torch/src/python:TrainingExtensions/torch/test")
         fi
         if [[ "$AIMET_VARIANT" == *"onnx"* ]]; then
+            python_src_path_endings+=("TrainingExtensions/torch/src/python/aimet_torch")
             python_src_path_endings+=("TrainingExtensions/onnx/src/python/aimet_onnx")
             python_src_path_endings+=("Examples/onnx/quantization")
             python_src_path_endings+=("Examples/onnx/utils")
@@ -384,12 +385,12 @@ if [ $run_build -eq 1 ]; then
             extra_opts+=" -DENABLE_TORCH=ON"
         fi
         if [[ "$AIMET_VARIANT" == *"onnx"* ]]; then
-            extra_opts+=" -DENABLE_ONNX=ON"
+            extra_opts+=" -DENABLE_ONNX=ON -DENABLE_TORCH=ON"
         fi
         if [[ "$AIMET_VARIANT" != *"tf"* ]]; then
             extra_opts+=" -DENABLE_TENSORFLOW=OFF"
         fi
-        if [[ "$AIMET_VARIANT" != *"torch"* ]]; then
+        if [[ "$AIMET_VARIANT" != *"torch"* ]] && [[ "$AIMET_VARIANT" != *"onnx"* ]]; then
             extra_opts+=" -DENABLE_TORCH=OFF"
         fi
         if [[ "$AIMET_VARIANT" != *"onnx"* ]]; then
