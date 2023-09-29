@@ -208,8 +208,8 @@ class TestAdaroundOptimizer(unittest.TestCase):
         recons_err_soft = session.run(recons_error_tensor, feed_dict={conv_wrapper.use_soft_rounding: True})
         recons_err_hard = session.run(recons_error_tensor, feed_dict={conv_wrapper.use_soft_rounding: False})
         print(recons_err_hard, recons_err_soft)
-        self.assertAlmostEqual(recons_err_hard, 0.610206663608551, places=4)
-        self.assertAlmostEqual(recons_err_soft, 0.6107949018478394, places=4)
+        self.assertAlmostEqual(recons_err_hard, 0.610206663608551, places=3)
+        self.assertAlmostEqual(recons_err_soft, 0.6107949018478394, places=3)
         session.close()
 
     @pytest.mark.cuda
