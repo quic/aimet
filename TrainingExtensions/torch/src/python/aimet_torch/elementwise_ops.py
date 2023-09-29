@@ -346,9 +346,10 @@ class NonMaxSuppression(torch.nn.Module):
     """
     Implementation of NMS Op in the form of nn.Module
     """
-    def __init__(self, iou_threshold: float, max_output_boxes_per_class: int):
+    def __init__(self, iou_threshold: float, score_threshold: float, max_output_boxes_per_class: int):
         super().__init__()
         self.iou_threshold = iou_threshold
+        self.score_threshold = score_threshold
         self.max_output_boxes_per_class = max_output_boxes_per_class
 
     def forward(self, *args) -> torch.Tensor:
@@ -361,7 +362,11 @@ class NonMaxSuppression(torch.nn.Module):
         res = []
         for index, (boxes, scores) in enumerate(zip(batches_boxes, batch_scores)):
             for class_index, classes_score in enumerate(scores):
-                res_ = torchvision.ops.nms(boxes, classes_score, self.iou_threshold)
+                filtered_score_ind = (classes_score > self.score_threshold).nonzero()[:, 0]
+                boxes = boxes[filtered_score_ind, :]
+                classes_score = classes_score[filtered_score_ind]
+                temp_res = torchvision.ops.nms(boxes, classes_score, self.iou_threshold)
+                res_ = filtered_score_ind[temp_res]
                 for val in res_:
                     res.append([index, class_index, val.detach()])
                 res = res[:(self.max_output_boxes_per_class *(index+1))]
