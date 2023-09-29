@@ -916,9 +916,14 @@ def get_all_quantizers(model: torch.nn.Module):
         m for m in model.modules() if isinstance(m, (QcQuantizeWrapper, QcQuantizeRecurrent))
     ]
     for quant_wrapper in quant_wrappers:
-        param_quantizers.extend(quant_wrapper.param_quantizers.values())
-        input_quantizers.extend(quant_wrapper.input_quantizers)
-        output_quantizers.extend(quant_wrapper.output_quantizers)
+        if isinstance(quant_wrapper, QcQuantizeWrapper):
+            param_quantizers.extend(quant_wrapper.param_quantizers.values())
+            input_quantizers.extend(quant_wrapper.input_quantizers)
+            output_quantizers.extend(quant_wrapper.output_quantizers)
+        else:
+            param_quantizers.extend(quant_wrapper.param_quantizers.values())
+            input_quantizers.extend(quant_wrapper.input_quantizers.values())
+            output_quantizers.extend(quant_wrapper.output_quantizers.values())
 
     return param_quantizers, input_quantizers, output_quantizers
 
