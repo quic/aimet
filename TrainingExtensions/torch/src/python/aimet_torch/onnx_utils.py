@@ -1450,7 +1450,7 @@ class OnnxSaver:
             torch.onnx.export(model, dummy_input, temp_file, **kwargs)
         else:
             try:
-                remove_kwargs = ['enable_onnx_checker', 'example_outputs']
+                remove_kwargs = ['enable_onnx_checker', 'example_outputs', 'use_external_data_format']
                 for key in remove_kwargs:
                     kwargs.pop(key, None)
                 torch.onnx.export(model, dummy_input, temp_file, **kwargs)
