@@ -40,7 +40,7 @@
 
 import numpy as np
 
-from models.models_for_tests import simple_relu_model
+from models.models_for_tests import simple_relu_model, single_residual_model
 from aimet_onnx.adaround.activation_sampler import ActivationSampler
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.utils import CachedDataset
@@ -52,9 +52,10 @@ class TestAdaroundActivationSampler:
     def test_activation_sampler_conv(self):
         """ Test ActivationSampler for a Conv op """
         np.random.seed(0)
-        model = simple_relu_model()
-        sim = QuantizationSimModel(model)
-        activation_sampler = ActivationSampler('input', 'output', model, sim.model, True)
+        model = single_residual_model()
+        import copy
+        sim = QuantizationSimModel(copy.deepcopy(model))
+        activation_sampler = ActivationSampler('/conv1/Conv_output_0', 'input_updated', model, sim.model, True)
         data_loader = dataloader()
         cached_dataset = CachedDataset(data_loader, 1, './')
         all_inp_data, all_out_data = activation_sampler.sample_and_place_all_acts_on_cpu(cached_dataset)

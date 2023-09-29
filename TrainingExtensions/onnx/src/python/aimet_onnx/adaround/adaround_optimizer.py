@@ -38,21 +38,30 @@
 
 """ Adaround optimizer """
 
-from typing import Tuple, Dict
+from typing import Union, Tuple, Dict
+from functools import reduce
+import numpy as np
+import psutil
 import torch
 import torch.nn.functional as functional
+from torch.utils.data import Dataset
 
-from onnx import numpy_helper
+from onnx import onnx_pb, numpy_helper
 
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger
+from aimet_onnx.adaround.activation_sampler import ActivationSampler
+from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.adaround.utils import ModuleInfo, read_attributes_for_op
+from aimet_onnx.utils import create_input_dict
+from aimet_torch.adaround.adaround_loss import AdaroundLoss, AdaroundHyperParameters
 from aimet_torch.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 BATCH_SIZE = 32
 EMPIRICAL_THRESHOLD = 3 / 4
 DATA_SIZE_IN_BITS = 32
+ACTIVATION_MAP = {'ReLU': torch.nn.ReLU(), 'PReLU': torch.nn.PReLU(), 'Tanh': torch.nn.Tanh()}
 
 
 class AdaroundOptimizer:
@@ -60,33 +69,220 @@ class AdaroundOptimizer:
     Optimizes the weight rounding of quantized wrapper module
     """
     @classmethod
-    def _compute_recons_metrics(cls, quant_module: ModuleInfo, act_func: torch.nn.Module, inp_data: torch.Tensor,
-                                out_data: torch.Tensor, param_to_adaround_tensor_quantizer: Dict) -> Tuple[float, float]:
+    def adaround_module(cls, module: ModuleInfo,
+                        orig_model: onnx_pb.ModelProto, quant_model: QuantizationSimModel,
+                        act_func: Union[torch.nn.Module, None], cached_dataset: Dataset,
+                        opt_params: AdaroundHyperParameters, param_to_adaround_tensor_quantizer: Dict,
+                        use_cuda: bool, device: int = 0):
+        """
+        Adaround module
+
+        :param module: Original module's information
+        :param orig_model: The original, un quantized, model
+        :param quant_model: QuantSim model
+        :param act_func: Activation function
+        :param cached_dataset: Cached dataset
+         yielded from the data loader
+        :param opt_params: Optimization parameters
+        :param param_to_adaround_tensor_quantizer: Param name to adaround tensor quantizer dictionary
+        :param use_cuda: If we should use cuda
+        :param device: CUDA device ID
+        """
+        # pylint: disable=too-many-arguments
+
+        # Optimize weight rounding
+        cls._optimize_rounding(module, orig_model, quant_model, act_func, cached_dataset,
+                               opt_params, param_to_adaround_tensor_quantizer, use_cuda, device)
+
+        # After optimization, set the optimized layer's rounding mode to "Hard rounding"
+        param_to_adaround_tensor_quantizer[module.params['weight'].name].use_soft_rounding = False
+
+    @classmethod
+    def _optimize_rounding(cls, module: ModuleInfo,
+                           orig_model: onnx_pb.ModelProto, quant_model: QuantizationSimModel,
+                           act_func: Union[None, str], cached_dataset: Dataset,
+                           opt_params: AdaroundHyperParameters, param_to_adaround_tensor_quantizer: Dict,
+                           use_cuda: bool, device: int = 0):
+        """
+        Optimizes the weight rounding of quantized wrapper module
+        :param module: Original module
+        :param orig_model: The original, un quantized, model
+        :param quant_model: QuantSim model
+        :param act_func: Activation function
+        :param cached_dataset: Cached dataset
+        :param opt_params: Optimization parameters
+        :param param_to_adaround_tensor_quantizer: Param name to adaround tensor quantizer dictionary
+        """
+        # pylint: disable=too-many-locals, too-many-arguments
+        adaround_quantizer = param_to_adaround_tensor_quantizer[module.params['weight'].name]
+
+        assert adaround_quantizer.use_soft_rounding, 'optimization should use soft rounding only.'
+        assert adaround_quantizer.alpha is not None, 'alpha parameter should be initialized.'
+
+        # Create and set up Adam optimizer with parameter 'alpha' to be optimized
+        optimizer = torch.optim.Adam([adaround_quantizer.alpha])
+
+        # Check if we can cache intermediate activation data.
+        model_inputs = cached_dataset[0]
+        act_sampler = ActivationSampler(module.outputs[0], module.inputs[0] + '_updated', orig_model, quant_model,
+                                        use_cuda, device)
+        inp_data, out_data = act_sampler.sample_acts(create_input_dict(orig_model.model, model_inputs))
+        inp_data_torch, out_data_torch = torch.from_numpy(inp_data[0]), torch.from_numpy(out_data[0])
+        use_cache_acts_data = cls._can_cache_acts_data(len(cached_dataset), inp_data_torch.shape, out_data_torch.shape)
+
+        if use_cache_acts_data and AdaroundOptimizer.enable_caching_acts_data():
+            logger.debug("Caching intermediate activations data for optimization.")
+            all_inp_data, all_orig_out_data = act_sampler.sample_and_place_all_acts_on_cpu(cached_dataset)
+            all_inp_data, all_out_data = torch.from_numpy(all_inp_data[0]), \
+                                         torch.from_numpy(all_orig_out_data[0])
+            # Try to put all cached activations data on GPU for faster optimization if possible.
+            if use_cuda:
+                all_inp_data, all_orig_out_data = cls._place_cached_acts_data(all_inp_data, all_out_data,
+                                                                              torch.device('cuda:0'))
+
+        torch_device = 'cpu'
+        if use_cuda:
+            torch_device = 'cuda'
+        weights = torch.from_numpy(numpy_helper.to_array(module.params['weight'].tensor)).to(torch_device)
+        enable_grad(weights)
+
+        for iteration in range(opt_params.num_iterations):
+            if use_cache_acts_data and AdaroundOptimizer.enable_caching_acts_data():
+                indices = torch.randperm(all_inp_data.size(0))[:BATCH_SIZE]
+                inp_data = all_inp_data[indices].to(device)
+                orig_out_data = all_orig_out_data[indices].to(device)
+            else:
+                model_inputs = cached_dataset[np.random.randint(len(cached_dataset))]
+                inp_data, orig_out_data = act_sampler.sample_acts(model_inputs)
+
+            enable_grad(inp_data)
+
+            # Clear alpha's gradients before optimization step
+            optimizer.zero_grad()
+
+            # Get the module's output activations using AdaRounded weights
+            quant_out_data = cls._compute_output_with_adarounded_weights(weights, module, inp_data, adaround_quantizer)
+
+            # If followed by an activation function
+            if act_func is not None:
+                orig_out_data = ACTIVATION_MAP[act_func](orig_out_data)
+                quant_out_data = ACTIVATION_MAP[act_func](quant_out_data)
+
+            # Calculate total loss
+            recon_loss = AdaroundLoss.compute_recon_loss(quant_out_data, orig_out_data)
+            round_loss = AdaroundLoss.compute_round_loss(adaround_quantizer.alpha, opt_params, iteration)
+            total_loss = recon_loss + round_loss
+
+            # Back propagate and Update the parameter 'alpha'
+            total_loss.backward()
+            optimizer.step()
+
+            if iteration == 0 or iteration % 100 == 0:
+                logger.debug("After iterations=%d, Total loss=%5f, Recons. loss=%5f, Rounding loss=%5f",
+                             iteration, float(total_loss), float(recon_loss), float(round_loss))
+
+        weights = weights.detach().cpu().numpy().tobytes()
+        module.params['weight'].tensor.raw_data = weights
+
+    @staticmethod
+    def _can_cache_acts_data(num_batches: int, input_shape: torch.Size, output_shape: torch.Size) -> bool:
+        """
+        Function to check whether activations data can be cached and fit in CPU memory for given
+        input and output shape in advance. The threshold CPU memory is determined by multiplying threshold and
+        available CPU memory so that remaining CPU memory is available for other processes.
+
+        NOTE: The threshold value is empirically chosen. Threshold ensures the safety from OOM for remaining run.
+
+        :param num_batches: Number of batches.
+        :param input_shape: Shape of input activations data.
+        :param output_shape: Shape of output activations data.
+        :return: True if we can cache, false otherwise.
+        """
+        can_cache_data = False
+
+        # Available CPU memory in GB.
+        threshold_mem = psutil.virtual_memory().available / (1024 * 1024 * 1024)
+        threshold_mem = threshold_mem * EMPIRICAL_THRESHOLD
+
+        # required CPU memory in GB.
+        req_mem = 0
+        req_mem += reduce(lambda x, y: x * y, input_shape) * num_batches * DATA_SIZE_IN_BITS / (1024 * 1024 * 1024 * 8)
+        req_mem += reduce(lambda x, y: x * y, output_shape) * num_batches * DATA_SIZE_IN_BITS / (1024 * 1024 * 1024 * 8)
+
+        if req_mem < threshold_mem:
+            can_cache_data = True
+
+        return can_cache_data
+
+    @staticmethod
+    def _place_cached_acts_data(inp_data: torch.Tensor, out_data: torch.Tensor, device: torch.device) \
+            -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Function decides whether cached activation data can be placed on device or not. If yes, it puts
+        cached activation data to given device. If there is not enough device memory, it keeps the
+        cached activation data to CPU memory.
+
+        NOTE: The threshold value is empirically chosen. Threshold ensures the safety from OOM for remaining run.
+
+        :param inp_data: Input activations data.
+        :param out_data: Output activations data.
+        :param device: Device.
+        :return: Input and output activations data.
+        """
+        torch.cuda.empty_cache()
+
+        # Available GPU memory in GB
+        threshold_mem = torch.cuda.get_device_properties(device).total_memory - torch.cuda.memory_allocated(device)
+        threshold_mem = threshold_mem / (1024 * 1024 * 1024)
+        threshold_mem = threshold_mem * EMPIRICAL_THRESHOLD
+
+        # required GPU memory in GB
+        req_mem = 0
+        req_mem += reduce(lambda x, y: x * y, inp_data.size())  * DATA_SIZE_IN_BITS / (1024 * 1024 * 1024 * 8)
+        req_mem += reduce(lambda x, y: x * y, out_data.size()) * DATA_SIZE_IN_BITS / (1024 * 1024 * 1024 * 8)
+
+        if req_mem < threshold_mem:
+            inp_data = inp_data.to(device)
+            out_data = out_data.to(device)
+            logger.debug("Placing cached activations data on GPU.")
+
+        return inp_data, out_data
+
+    @classmethod
+    def _compute_recons_metrics(cls, quant_module: ModuleInfo, act_func: Union[None, str], inp_data: torch.Tensor,
+                                out_data: torch.Tensor, param_to_adaround_tensor_quantizer: Dict,
+                                use_cuda: bool) -> Tuple[float, float]:
         """
         Compute Mean square error of output activations using soft rounding which maps alpha parameter
         between zero and one and hard rounding which maps to exact zero and one
+
         :param quant_module: Quantized wrapper module
         :param act_func: Activation function
         :param inp_data: Input data to quantized wrapper module
         :param out_data: Output data from module
         :param param_to_adaround_tensor_quantizer: Dict
+        :param use_cuda: Bool, true if we use GPU
         :return: Reconstruction error using hard rounding and soft rounding
         """
         adaround_quantizer = param_to_adaround_tensor_quantizer[quant_module.params['weight'].name]
-
+        torch_device = 'cpu'
+        if use_cuda:
+            torch_device = 'cuda'
+        weights = torch.from_numpy(numpy_helper.to_array(quant_module.params['weight'].tensor)).to(torch_device)
+        inp_data = inp_data.to(torch_device)
         # Enable hard rounding and get quantized wrapper module's output
         adaround_quantizer.use_soft_rounding = False
-        out_data_hard = cls._compute_output_with_adarounded_weights(quant_module, inp_data, adaround_quantizer)
+        out_data_hard = cls._compute_output_with_adarounded_weights(weights, quant_module, inp_data, adaround_quantizer)
 
         # Enable soft rounding and get quantized wrapper module's output
         adaround_quantizer.use_soft_rounding = True
-        out_data_soft = cls._compute_output_with_adarounded_weights(quant_module, inp_data, adaround_quantizer)
+        out_data_soft = cls._compute_output_with_adarounded_weights(weights, quant_module, inp_data, adaround_quantizer)
 
         # If followed by an activation function
         if act_func is not None:
-            out_data = act_func(out_data)
-            out_data_soft = act_func(out_data_soft)
-            out_data_hard = act_func(out_data_hard)
+            out_data = ACTIVATION_MAP[act_func](out_data)
+            out_data_soft = ACTIVATION_MAP[act_func](out_data_soft)
+            out_data_hard = ACTIVATION_MAP[act_func](out_data_hard)
 
         recons_err_soft = functional.mse_loss(out_data_soft, out_data)
         recons_err_hard = functional.mse_loss(out_data_hard, out_data)
@@ -94,37 +290,58 @@ class AdaroundOptimizer:
         return float(recons_err_hard), float(recons_err_soft)
 
     @staticmethod
-    def _compute_output_with_adarounded_weights(quant_module, inp_data: torch.Tensor,
+    def _compute_output_with_adarounded_weights(weights: torch.Tensor, quant_module, inp_data: torch.Tensor,
                                                 adaround_quantizer: AdaroundTensorQuantizer):
         """
         Compute output of AdaroundSupportedModules with adarounded weights
+
+        :param weights: Torch tensor weights to be adarounded
         :param quant_module: Quantized wrapper module
         :param inp_data: The input data to be used for computing the output
         :param adaround_quantizer: Adaround tensor quantizer
         :return: output of the module computed with AdaRounded weights
         """
-        # pylint: disable=protected-access
         # Compute adarounded weights
-        weights = torch.from_numpy(numpy_helper.to_array(quant_module.params['weight'].tensor))
+        device = 'cpu'
+        if inp_data.is_cuda:
+            device = 'cuda'
+
         adarounded_weights = adaround_quantizer.adaround_weights(weights)
 
         if quant_module.type == 'Conv':
             attributes = read_attributes_for_op(quant_module)
-            bias = torch.from_numpy(numpy_helper.to_array(quant_module.params['bias'].tensor))
+            bias = torch.from_numpy(numpy_helper.to_array(quant_module.params['bias'].tensor)).to(device)
             out_data = functional.conv2d(inp_data, adarounded_weights, bias=bias, stride=attributes['strides'],
                                          dilation=attributes['dilations'], padding=attributes['pads'][0],
                                          groups=attributes['group'])
         elif quant_module.type == 'ConvTranspose':
             attributes = read_attributes_for_op(quant_module)
-            bias = torch.from_numpy(numpy_helper.to_array(quant_module.params['bias'].tensor))
+            bias = torch.from_numpy(numpy_helper.to_array(quant_module.params['bias'].tensor)).to(device)
             out_data = functional.conv_transpose2d(inp_data, adarounded_weights, bias=bias, stride=attributes['strides'],
                                                    dilation=attributes['dilations'], padding=attributes['pads'][0],
                                                    groups=attributes['group'])
         elif quant_module.type in ['Gemm', 'MatMul']:
-            bias = torch.from_numpy(numpy_helper.to_array(quant_module.params['bias'].tensor))
+            bias = torch.from_numpy(numpy_helper.to_array(quant_module.params['bias'].tensor)).to(device)
             out_data = functional.linear(inp_data, adarounded_weights, bias=bias)
 
         else:
             raise ValueError('AdaRound is not supported for the module type: ', quant_module.type)
 
         return out_data
+
+    @staticmethod
+    def enable_caching_acts_data() -> bool:
+        """
+        Function to enable/disable caching intermediate activation data. By default, it returns True.
+        """
+        return True
+
+
+def enable_grad(tensor: torch.Tensor):
+    """
+    Enables gradient
+
+    :param tensor: Tensor for which we should enable grad
+    """
+    if tensor.is_leaf:
+        tensor.requires_grad = True
