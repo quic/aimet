@@ -66,7 +66,7 @@ from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, 
     StaticGridQuantWrapper, QcQuantizeOpMode, LearnedGridQuantWrapper, enable_recompute, no_recompute
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.quantsim import QuantizationSimModel, check_accumulator_overflow, load_encodings_to_sim, \
-    has_valid_encodings
+    has_valid_encodings, compute_encodings_for_sims
 from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
 
 from models import test_models
@@ -2763,6 +2763,48 @@ class TestQuantizationSimStaticGrad:
             encodings = json.load(encodings_file)
             assert len(encodings['activation_encodings']) == 14
             assert len(encodings['param_encodings']) == 5
+
+    def test_compute_encodings_for_multiple_sims(self):
+        class SecondModel(torch.nn.Module):
+            def __init__(self, const_inp_shape):
+                super(SecondModel, self).__init__()
+                self.add = elementwise_ops.Add()
+                self.sub = elementwise_ops.Subtract()
+                self.batchnorm = torch.nn.BatchNorm1d(10)
+                self.const_tensor = torch.randn(const_inp_shape)
+
+            def forward(self, inp, inp2):
+                x = self.add(inp, self.const_tensor)
+                x = self.batchnorm(x)
+                x = self.sub(x, inp2)
+                return x
+
+        model = ModelWithTwoInputsOneToAdd()
+        model.eval()
+        dummy_input = (torch.rand(32, 1, 100, 100), torch.rand(32, 10, 22, 22))
+        model_1_out = model(*dummy_input)
+        model_2 = SecondModel(model_1_out.shape)
+        model_2.eval()
+        dummy_input_2 = torch.randn(model_1_out.shape)
+        sim1 = QuantizationSimModel(model, dummy_input)
+        sim2 = QuantizationSimModel(model_2, (dummy_input_2, dummy_input_2))
+
+        def forward_pass_callback(model_list, _):
+            x = model_list[0](*dummy_input)
+            x = model_list[1](x, dummy_input_2)
+            return x
+
+        sim2.model.train()
+        running_mean = sim2.model.batchnorm.running_mean.clone().detach()
+        compute_encodings_for_sims([sim1, sim2], forward_pass_callback, None)
+
+        # Check that even though sim2 was in training mode prior to compute encodings, it was placed in eval mode
+        # during compute encodings, and that it was placed back to training mode afterwards.
+        assert sim2.model.training
+        assert torch.equal(running_mean, sim2.model.batchnorm.running_mean)
+        assert sim1.model.conv1_a.output_quantizers[0].encoding is not None
+        assert sim2.model.add.input_quantizers[0].encoding is not None
+        assert sim2.model.add.input_quantizers[1].encoding is not None
 
 
 class TestQuantizationSimLearnedGrid:
