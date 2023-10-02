@@ -176,9 +176,7 @@ class TestUtils:
             if node.op_type == 'Relu':
                 relu_count += 1
 
-        hard_swish_count = 1
-
-        assert relu_count - original_relu_count == relu6_count - hard_swish_count
+        assert relu_count - original_relu_count == relu6_count
 
     def test_create_model_data_single_residual_model(self):
         model = models_for_tests.transposed_conv_model_without_bn()
