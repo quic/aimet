@@ -41,6 +41,7 @@
 from typing import Union, Tuple, Dict
 from functools import reduce
 import numpy as np
+import onnx
 import psutil
 import torch
 import torch.nn.functional as functional
@@ -61,7 +62,8 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 BATCH_SIZE = 32
 EMPIRICAL_THRESHOLD = 3 / 4
 DATA_SIZE_IN_BITS = 32
-ACTIVATION_MAP = {'ReLU': torch.nn.ReLU(), 'PReLU': torch.nn.PReLU(), 'Tanh': torch.nn.Tanh()}
+ACTIVATION_MAP = {'Relu': torch.nn.ReLU(), 'PRelu': torch.nn.PReLU(), 'Tanh': torch.nn.Tanh(),
+                  'Clip': torch.nn.ReLU6(), 'Sigmoid': torch.nn.Sigmoid(), 'Softmax': torch.nn.Softmax()}
 
 
 class AdaroundOptimizer:
@@ -69,7 +71,7 @@ class AdaroundOptimizer:
     Optimizes the weight rounding of quantized wrapper module
     """
     @classmethod
-    def adaround_module(cls, module: ModuleInfo,
+    def adaround_module(cls, module: ModuleInfo, quantized_input_name: str,
                         orig_model: onnx_pb.ModelProto, quant_model: QuantizationSimModel,
                         act_func: Union[torch.nn.Module, None], cached_dataset: Dataset,
                         opt_params: AdaroundHyperParameters, param_to_adaround_tensor_quantizer: Dict,
@@ -78,6 +80,7 @@ class AdaroundOptimizer:
         Adaround module
 
         :param module: Original module's information
+        :param quantized_input_name: Name of input to the quantized layer/ layer to be adarounded
         :param orig_model: The original, un quantized, model
         :param quant_model: QuantSim model
         :param act_func: Activation function
@@ -91,14 +94,14 @@ class AdaroundOptimizer:
         # pylint: disable=too-many-arguments
 
         # Optimize weight rounding
-        cls._optimize_rounding(module, orig_model, quant_model, act_func, cached_dataset,
+        cls._optimize_rounding(module, quantized_input_name, orig_model, quant_model, act_func, cached_dataset,
                                opt_params, param_to_adaround_tensor_quantizer, use_cuda, device)
 
         # After optimization, set the optimized layer's rounding mode to "Hard rounding"
         param_to_adaround_tensor_quantizer[module.params['weight'].name].use_soft_rounding = False
 
     @classmethod
-    def _optimize_rounding(cls, module: ModuleInfo,
+    def _optimize_rounding(cls, module: ModuleInfo, quantized_input_name,
                            orig_model: onnx_pb.ModelProto, quant_model: QuantizationSimModel,
                            act_func: Union[None, str], cached_dataset: Dataset,
                            opt_params: AdaroundHyperParameters, param_to_adaround_tensor_quantizer: Dict,
@@ -106,6 +109,7 @@ class AdaroundOptimizer:
         """
         Optimizes the weight rounding of quantized wrapper module
         :param module: Original module
+        :param quantized_input_name: Name of input to the quantized layer/ layer to be adarounded
         :param orig_model: The original, un quantized, model
         :param quant_model: QuantSim model
         :param act_func: Activation function
@@ -115,6 +119,14 @@ class AdaroundOptimizer:
         """
         # pylint: disable=too-many-locals, too-many-arguments
         adaround_quantizer = param_to_adaround_tensor_quantizer[module.params['weight'].name]
+        torch_device = 'cpu'
+        if use_cuda:
+            torch_device = 'cuda:' + str(device)
+        weights = torch.from_numpy(numpy_helper.to_array(module.params['weight'].tensor)).to(torch_device)
+        enable_grad(weights)
+
+        adaround_quantizer._broadcast_offset_delta(weights)
+        adaround_quantizer._initialize_alpha(weights, adaround_quantizer.broadcasted_delta)
 
         assert adaround_quantizer.use_soft_rounding, 'optimization should use soft rounding only.'
         assert adaround_quantizer.alpha is not None, 'alpha parameter should be initialized.'
@@ -124,7 +136,7 @@ class AdaroundOptimizer:
 
         # Check if we can cache intermediate activation data.
         model_inputs = cached_dataset[0]
-        act_sampler = ActivationSampler(module.outputs[0], module.inputs[0] + '_updated', orig_model, quant_model,
+        act_sampler = ActivationSampler(module.outputs[0], quantized_input_name, orig_model, quant_model,
                                         use_cuda, device)
         inp_data, out_data = act_sampler.sample_acts(create_input_dict(orig_model.model, model_inputs))
         inp_data_torch, out_data_torch = torch.from_numpy(inp_data[0]), torch.from_numpy(out_data[0])
@@ -138,13 +150,7 @@ class AdaroundOptimizer:
             # Try to put all cached activations data on GPU for faster optimization if possible.
             if use_cuda:
                 all_inp_data, all_orig_out_data = cls._place_cached_acts_data(all_inp_data, all_out_data,
-                                                                              torch.device('cuda:0'))
-
-        torch_device = 'cpu'
-        if use_cuda:
-            torch_device = 'cuda'
-        weights = torch.from_numpy(numpy_helper.to_array(module.params['weight'].tensor)).to(torch_device)
-        enable_grad(weights)
+                                                                              torch_device)
 
         for iteration in range(opt_params.num_iterations):
             if use_cache_acts_data and AdaroundOptimizer.enable_caching_acts_data():
@@ -181,8 +187,11 @@ class AdaroundOptimizer:
                 logger.debug("After iterations=%d, Total loss=%5f, Recons. loss=%5f, Rounding loss=%5f",
                              iteration, float(total_loss), float(recon_loss), float(round_loss))
 
-        weights = weights.detach().cpu().numpy().tobytes()
-        module.params['weight'].tensor.raw_data = weights
+        adaround_quantizer.use_soft_rounding = True
+        adarounded_weights = adaround_quantizer.adaround_weights(weights)
+        weights = adarounded_weights.detach().cpu().numpy().tobytes()
+        weight_name = module.params['weight'].name
+        update_sim_weight(quant_model, weights, weight_name)
 
     @staticmethod
     def _can_cache_acts_data(num_batches: int, input_shape: torch.Size, output_shape: torch.Size) -> bool:
@@ -310,13 +319,17 @@ class AdaroundOptimizer:
 
         if quant_module.type == 'Conv':
             attributes = read_attributes_for_op(quant_module)
-            bias = torch.from_numpy(numpy_helper.to_array(quant_module.params['bias'].tensor)).to(device)
+            bias = None
+            if 'bias' in quant_module.params:
+                bias = torch.from_numpy(numpy_helper.to_array(quant_module.params['bias'].tensor)).to(device)
             out_data = functional.conv2d(inp_data, adarounded_weights, bias=bias, stride=attributes['strides'],
                                          dilation=attributes['dilations'], padding=attributes['pads'][0],
                                          groups=attributes['group'])
         elif quant_module.type == 'ConvTranspose':
             attributes = read_attributes_for_op(quant_module)
-            bias = torch.from_numpy(numpy_helper.to_array(quant_module.params['bias'].tensor)).to(device)
+            bias = None
+            if 'bias' in quant_module.params:
+                bias = torch.from_numpy(numpy_helper.to_array(quant_module.params['bias'].tensor)).to(device)
             out_data = functional.conv_transpose2d(inp_data, adarounded_weights, bias=bias, stride=attributes['strides'],
                                                    dilation=attributes['dilations'], padding=attributes['pads'][0],
                                                    groups=attributes['group'])
@@ -345,3 +358,16 @@ def enable_grad(tensor: torch.Tensor):
     """
     if tensor.is_leaf:
         tensor.requires_grad = True
+
+def update_sim_weight(quant_model: onnx.ModelProto, weights: onnx.TensorProto, weight_name: str):
+    """
+    Updates weights in sim for a given name
+
+    :param quant_model: Quantized model
+    :param weights: Weight tensor
+    :param weight_name: Name of the weight to be updated
+    """
+    for tensor in quant_model.model.graph.initializer:
+        if tensor.name == weight_name:
+            tensor.raw_data = weights
+            break

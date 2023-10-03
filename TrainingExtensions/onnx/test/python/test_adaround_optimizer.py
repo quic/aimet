@@ -56,7 +56,7 @@ class TestAdaroundOptimizer:
     Test functions in utils
     """
 
-    @pytest.mark.parametrize("warm_start", [1, 0.2])
+    @pytest.mark.parametrize("warm_start", [1.0, 0.2])
     def test_optimize_rounding(self, warm_start):
         if version.parse(torch.__version__) >= version.parse("1.13"):
             np.random.seed(0)
@@ -68,11 +68,7 @@ class TestAdaroundOptimizer:
 
             quant_module = model_data.module_to_info['/conv1/Conv']
 
-            alpha = torch.randn(list(quant_module.params['weight'].shape), requires_grad=True)
-            param_to_tq_dict[quant_module.params['weight'].name].alpha = alpha
-
-            # create copy of parameter
-            before_opt = alpha.clone()
+            old_weights = torch.from_numpy(numpy_helper.to_array(quant_module.params['weight'].tensor)).clone()
 
             data_loader = dataloader()
 
@@ -81,9 +77,19 @@ class TestAdaroundOptimizer:
             opt_params = AdaroundHyperParameters(num_iterations=10, reg_param=0.01, beta_range=(20, 2),
                                                  warm_start=warm_start)
 
-            AdaroundOptimizer.adaround_module(quant_module, model, sim.model, 'ReLU', cached_dataset, opt_params,
+            AdaroundOptimizer.adaround_module(quant_module, 'input_updated',
+                                              model, sim.model, 'Relu', cached_dataset, opt_params,
                                               param_to_tq_dict, True, 0)
-            assert not torch.all(alpha.eq(before_opt))
+
+            new_weights = torch.from_numpy(numpy_helper.to_array(quant_module.params['weight'].tensor))
+            weight_name = quant_module.params['weight'].name
+            for tensor in sim.model.model.graph.initializer:
+                if tensor.name == weight_name:
+                    quantized_weight = torch.from_numpy(numpy_helper.to_array(tensor))
+                    break
+            assert not torch.all(quantized_weight.eq(new_weights))
+            assert torch.all(old_weights.eq(new_weights))
+            assert torch.all(param_to_tq_dict[quant_module.params['weight'].name].alpha)
 
     def test_compute_recons_metrics(self):
         if version.parse(torch.__version__) >= version.parse("1.13"):

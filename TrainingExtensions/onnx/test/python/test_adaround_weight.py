@@ -37,30 +37,39 @@
 # =============================================================================
 
 """ Unit tests for Adaround Activation Sampler """
-
+from packaging import version
 import numpy as np
+import torch
+from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 
-from models.models_for_tests import simple_relu_model
-from aimet_onnx.adaround.activation_sampler import ActivationSampler
-from aimet_onnx.quantsim import QuantizationSimModel
-from aimet_onnx.utils import CachedDataset
+from aimet_onnx.adaround.adaround_weight import Adaround, AdaroundParameters
+import models.models_for_tests as test_models
 
-class TestAdaroundActivationSampler:
+class TestAdaround:
     """
-     AdaRound Activation Sampler Unit Test Cases
+    AdaRound Weights Unit Test Cases
     """
-    def test_activation_sampler_conv(self):
-        """ Test ActivationSampler for a Conv op """
-        np.random.seed(0)
-        model = simple_relu_model()
-        sim = QuantizationSimModel(model)
-        activation_sampler = ActivationSampler('input', 'output', model, sim.model, True)
-        data_loader = dataloader()
-        cached_dataset = CachedDataset(data_loader, 1, './')
-        all_inp_data, all_out_data = activation_sampler.sample_and_place_all_acts_on_cpu(cached_dataset)
 
-        assert np.allclose(all_out_data, all_inp_data, atol=1e-5)
-        assert all_inp_data[0].shape == (1, 3, 32, 32)
+    def test_apply_adaround(self):
+        if version.parse(torch.__version__) >= version.parse("1.13"):
+            np.random.seed(0)
+            torch.manual_seed(0)
+            model = test_models.single_residual_model()
+            data_loader = dataloader()
+            dummy_input = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
+            sess = build_session(model)
+            out_before_ada = sess.run(None, dummy_input)
+            def callback(session, args):
+                in_tensor = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
+                session.run(None, in_tensor)
+
+            params = AdaroundParameters(data_loader=data_loader, num_batches=1, default_num_iterations=5, forward_fn=callback,
+                                        forward_pass_callback_args=None)
+            ada_rounded_model = Adaround.apply_adaround(model, params, './', 'dummy')
+            sess = build_session(ada_rounded_model)
+            out_after_ada = sess.run(None, dummy_input)
+            assert not np.array_equal(out_before_ada[0], out_after_ada[0])
+
 
 def dataloader():
     class DataLoader:
@@ -83,3 +92,17 @@ def dataloader():
 
     dummy_dataloader = DataLoader(batch_size=2)
     return dummy_dataloader
+
+def build_session(model):
+    """
+    Build and return onnxruntime inference session
+    :param providers: providers to execute onnxruntime
+    """
+    sess_options = SessionOptions()
+    sess_options.graph_optimization_level = GraphOptimizationLevel.ORT_DISABLE_ALL
+    session = InferenceSession(
+        path_or_bytes=model.model.SerializeToString(),
+        sess_options=sess_options,
+        providers=['CPUExecutionProvider'],
+    )
+    return session
