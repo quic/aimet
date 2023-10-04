@@ -42,12 +42,11 @@ from typing import Union, Tuple, Dict
 from functools import reduce
 import numpy as np
 import onnx
+from onnx import onnx_pb, numpy_helper
 import psutil
 import torch
 import torch.nn.functional as functional
 from torch.utils.data import Dataset
-
-from onnx import onnx_pb, numpy_helper
 
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger
@@ -57,6 +56,7 @@ from aimet_onnx.adaround.utils import ModuleInfo, read_attributes_for_op
 from aimet_onnx.utils import create_input_dict
 from aimet_torch.adaround.adaround_loss import AdaroundLoss, AdaroundHyperParameters
 from aimet_torch.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer
+from aimet_torch.adaround.adaround_optimizer import AdaroundOptimizer as TorchAdaroundOptimizer
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 BATCH_SIZE = 32
@@ -125,6 +125,7 @@ class AdaroundOptimizer:
         weights = torch.from_numpy(numpy_helper.to_array(module.params['weight'].tensor)).to(torch_device)
         enable_grad(weights)
 
+        # pylint: disable=protected-access
         adaround_quantizer._broadcast_offset_delta(weights)
         adaround_quantizer._initialize_alpha(weights, adaround_quantizer.broadcasted_delta)
 
@@ -140,7 +141,8 @@ class AdaroundOptimizer:
                                         use_cuda, device)
         inp_data, out_data = act_sampler.sample_acts(create_input_dict(orig_model.model, model_inputs))
         inp_data_torch, out_data_torch = torch.from_numpy(inp_data[0]), torch.from_numpy(out_data[0])
-        use_cache_acts_data = cls._can_cache_acts_data(len(cached_dataset), inp_data_torch.shape, out_data_torch.shape)
+        use_cache_acts_data = TorchAdaroundOptimizer._can_cache_acts_data(len(cached_dataset), inp_data_torch.shape,
+                                                                          out_data_torch.shape)
 
         if use_cache_acts_data and AdaroundOptimizer.enable_caching_acts_data():
             logger.debug("Caching intermediate activations data for optimization.")
@@ -149,8 +151,8 @@ class AdaroundOptimizer:
                                          torch.from_numpy(all_orig_out_data[0])
             # Try to put all cached activations data on GPU for faster optimization if possible.
             if use_cuda:
-                all_inp_data, all_orig_out_data = cls._place_cached_acts_data(all_inp_data, all_out_data,
-                                                                              torch_device)
+                all_inp_data, all_orig_out_data = TorchAdaroundOptimizer._place_cached_acts_data(all_inp_data, all_out_data,
+                                                                                                 torch_device)
 
         for iteration in range(opt_params.num_iterations):
             if use_cache_acts_data and AdaroundOptimizer.enable_caching_acts_data():
@@ -161,7 +163,6 @@ class AdaroundOptimizer:
                 model_inputs = cached_dataset[np.random.randint(len(cached_dataset))]
                 inp_data, orig_out_data = act_sampler.sample_acts(model_inputs)
 
-            enable_grad(inp_data)
 
             # Clear alpha's gradients before optimization step
             optimizer.zero_grad()
@@ -193,74 +194,10 @@ class AdaroundOptimizer:
         weight_name = module.params['weight'].name
         update_sim_weight(quant_model, weights, weight_name)
 
-    @staticmethod
-    def _can_cache_acts_data(num_batches: int, input_shape: torch.Size, output_shape: torch.Size) -> bool:
-        """
-        Function to check whether activations data can be cached and fit in CPU memory for given
-        input and output shape in advance. The threshold CPU memory is determined by multiplying threshold and
-        available CPU memory so that remaining CPU memory is available for other processes.
-
-        NOTE: The threshold value is empirically chosen. Threshold ensures the safety from OOM for remaining run.
-
-        :param num_batches: Number of batches.
-        :param input_shape: Shape of input activations data.
-        :param output_shape: Shape of output activations data.
-        :return: True if we can cache, false otherwise.
-        """
-        can_cache_data = False
-
-        # Available CPU memory in GB.
-        threshold_mem = psutil.virtual_memory().available / (1024 * 1024 * 1024)
-        threshold_mem = threshold_mem * EMPIRICAL_THRESHOLD
-
-        # required CPU memory in GB.
-        req_mem = 0
-        req_mem += reduce(lambda x, y: x * y, input_shape) * num_batches * DATA_SIZE_IN_BITS / (1024 * 1024 * 1024 * 8)
-        req_mem += reduce(lambda x, y: x * y, output_shape) * num_batches * DATA_SIZE_IN_BITS / (1024 * 1024 * 1024 * 8)
-
-        if req_mem < threshold_mem:
-            can_cache_data = True
-
-        return can_cache_data
-
-    @staticmethod
-    def _place_cached_acts_data(inp_data: torch.Tensor, out_data: torch.Tensor, device: torch.device) \
-            -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Function decides whether cached activation data can be placed on device or not. If yes, it puts
-        cached activation data to given device. If there is not enough device memory, it keeps the
-        cached activation data to CPU memory.
-
-        NOTE: The threshold value is empirically chosen. Threshold ensures the safety from OOM for remaining run.
-
-        :param inp_data: Input activations data.
-        :param out_data: Output activations data.
-        :param device: Device.
-        :return: Input and output activations data.
-        """
-        torch.cuda.empty_cache()
-
-        # Available GPU memory in GB
-        threshold_mem = torch.cuda.get_device_properties(device).total_memory - torch.cuda.memory_allocated(device)
-        threshold_mem = threshold_mem / (1024 * 1024 * 1024)
-        threshold_mem = threshold_mem * EMPIRICAL_THRESHOLD
-
-        # required GPU memory in GB
-        req_mem = 0
-        req_mem += reduce(lambda x, y: x * y, inp_data.size())  * DATA_SIZE_IN_BITS / (1024 * 1024 * 1024 * 8)
-        req_mem += reduce(lambda x, y: x * y, out_data.size()) * DATA_SIZE_IN_BITS / (1024 * 1024 * 1024 * 8)
-
-        if req_mem < threshold_mem:
-            inp_data = inp_data.to(device)
-            out_data = out_data.to(device)
-            logger.debug("Placing cached activations data on GPU.")
-
-        return inp_data, out_data
-
     @classmethod
     def _compute_recons_metrics(cls, quant_module: ModuleInfo, act_func: Union[None, str], inp_data: torch.Tensor,
                                 out_data: torch.Tensor, param_to_adaround_tensor_quantizer: Dict,
-                                use_cuda: bool) -> Tuple[float, float]:
+                                use_cuda: bool, device: int = 0) -> Tuple[float, float]:
         """
         Compute Mean square error of output activations using soft rounding which maps alpha parameter
         between zero and one and hard rounding which maps to exact zero and one
@@ -271,12 +208,13 @@ class AdaroundOptimizer:
         :param out_data: Output data from module
         :param param_to_adaround_tensor_quantizer: Dict
         :param use_cuda: Bool, true if we use GPU
+        :param device: Cuda device
         :return: Reconstruction error using hard rounding and soft rounding
         """
         adaround_quantizer = param_to_adaround_tensor_quantizer[quant_module.params['weight'].name]
         torch_device = 'cpu'
         if use_cuda:
-            torch_device = 'cuda'
+            torch_device = 'cuda:' + str(device)
         weights = torch.from_numpy(numpy_helper.to_array(quant_module.params['weight'].tensor)).to(torch_device)
         inp_data = inp_data.to(torch_device)
         # Enable hard rounding and get quantized wrapper module's output
@@ -313,7 +251,7 @@ class AdaroundOptimizer:
         # Compute adarounded weights
         device = 'cpu'
         if inp_data.is_cuda:
-            device = 'cuda'
+            device = inp_data.device
 
         adarounded_weights = adaround_quantizer.adaround_weights(weights)
 
@@ -371,3 +309,4 @@ def update_sim_weight(quant_model: onnx.ModelProto, weights: onnx.TensorProto, w
         if tensor.name == weight_name:
             tensor.raw_data = weights
             break
+    assert "Could not find %s in QuantSim model", weight_name
