@@ -35,6 +35,8 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 import torch
+from packaging import version
+
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_ops_with_constant_inputs
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
 from models import models_for_tests
@@ -53,30 +55,32 @@ class TestConnectedGraph:
                 'conv_w', 'conv_b', 'fc_w', 'fc_b'] == [product for product in products]
 
     def test_single_residual_model(self):
-        model = models_for_tests.single_residual_model()
-        conn_graph = ConnectedGraph(model)
-        assert len(conn_graph.get_all_ops()) == 21
-        products = conn_graph.get_all_products()
-        assert len(products) == 34
-        assert {'Conv_0_to_Relu_1', 'Relu_1_to_MaxPool_2'}.issubset({product for product in products})
-        assert {'Gemm_21_to_output','45', '46', 'conv4.weight'}.issubset({product for product in products})
-        input_ops = get_all_input_ops(conn_graph)
-        assert len(input_ops) == 1
-        assert conn_graph._branch_count == 2
-        assert conn_graph.ordered_ops[20].transposed_params == True
+        if version.parse(torch.__version__) >= version.parse("1.13"):
+            model = models_for_tests.single_residual_model()
+            conn_graph = ConnectedGraph(model)
+            assert len(conn_graph.get_all_ops()) == 16
+            products = conn_graph.get_all_products()
+            assert len(products) == 29
+            assert {'/conv1/Conv_to_/relu1/Relu', '/relu1/Relu_to_/maxpool/MaxPool'}.issubset({product for product in products})
+            assert {'/fc/Gemm_to_output', 'onnx::Conv_43', 'onnx::Conv_44', 'conv4.weight'}.issubset({product for product in products})
+            input_ops = get_all_input_ops(conn_graph)
+            assert len(input_ops) == 1
+            assert conn_graph._branch_count == 1
+            assert conn_graph.ordered_ops[15].transposed_params == True
 
     def test_multi_inputs_model(self):
-        model = models_for_tests.multi_input_model()
-        conn_graph = ConnectedGraph(model)
-        assert len(conn_graph.get_all_ops()) == 15
+        if version.parse(torch.__version__) >= version.parse("1.13"):
+            model = models_for_tests.multi_input_model()
+            conn_graph = ConnectedGraph(model)
+            assert len(conn_graph.get_all_ops()) == 15
 
-        products = conn_graph.get_all_products()
-        assert len(products) == 27
-        assert {'Conv_0_to_MaxPool_1', 'Conv_3_to_MaxPool_4', 'Conv_7_to_MaxPool_8'}.issubset(
-            {product for product in products})
-        assert {'conv1_a.weight', 'conv1_a.bias', 'conv1_b.weight'}.issubset({product for product in products})
-        input_ops = get_all_input_ops(conn_graph)
-        assert len(input_ops) == 2
+            products = conn_graph.get_all_products()
+            assert len(products) == 27
+            assert {'/conv1_a/Conv_to_/maxpool1_a/MaxPool', '/conv1_b/Conv_to_/maxpool1_b/MaxPool', '/conv2/Conv_to_/maxpool2/MaxPool'}.issubset(
+                {product for product in products})
+            assert {'conv1_a.weight', 'conv1_a.bias', 'conv1_b.weight'}.issubset({product for product in products})
+            input_ops = get_all_input_ops(conn_graph)
+            assert len(input_ops) == 2
 
     def test_transposed_conv_model(self):
         model = models_for_tests.transposed_conv_model()
@@ -93,31 +97,33 @@ class TestConnectedGraph:
                 'bn2.running_var'}.issubset({product for product in products})
 
     def test_concat_model(self):
-        model = models_for_tests.concat_model()
-        conn_graph = ConnectedGraph(model)
-        ops = conn_graph.get_all_ops()
-        assert len(ops) == 11
-        assert len(ops['Concat_3'].inputs) == 3
-        products = conn_graph.get_all_products()
-        assert len(products) == 22
-        assert conn_graph._branch_count == 1
+        if version.parse(torch.__version__) >= version.parse("1.13"):
+            model = models_for_tests.concat_model()
+            conn_graph = ConnectedGraph(model)
+            ops = conn_graph.get_all_ops()
+            assert len(ops) == 6
+            assert len(ops['/Concat'].inputs) == 3
+            products = conn_graph.get_all_products()
+            assert len(products) == 17
+            assert conn_graph._branch_count == 0
 
     def test_hierarchical_model(self):
-        model = models_for_tests.hierarchical_model()
-        conn_graph = ConnectedGraph(model)
-        ops = conn_graph.get_all_ops()
-        assert len(ops) == 95
-        assert conn_graph._branch_count == 5
-        ordered_ops = conn_graph.ordered_ops
-        name_to_index = {}
-        for index, op in enumerate(ordered_ops):
-            name_to_index[op.name] = index
+        if version.parse(torch.__version__) >= version.parse("1.13"):
+            model = models_for_tests.hierarchical_model()
+            conn_graph = ConnectedGraph(model)
+            ops = conn_graph.get_all_ops()
+            assert len(ops) == 79
+            assert conn_graph._branch_count == 0
+            ordered_ops = conn_graph.ordered_ops
+            name_to_index = {}
+            for index, op in enumerate(ordered_ops):
+                name_to_index[op.name] = index
 
-        # Check in the graph that if A & B are connected and A comes before B in the graph then that should be the case
-        # in ordered graphs as well
-        assert name_to_index['Conv_0'] < name_to_index['Concat_18']
-        assert name_to_index['Conv_86'] < name_to_index['branch_0']
-        assert name_to_index['Conv_40'] < name_to_index['Conv_54']
+            # Check in the graph that if A & B are connected and A comes before B in the graph then that should be the case
+            # in ordered graphs as well
+            assert name_to_index['/conv1/conv/Conv'] < name_to_index['/nm1/tm1/Reshape']
+            assert name_to_index['/sq/seq_list/seq_list.0/Conv'] < name_to_index['/sq/seq_list/seq_list.5/Conv']
+            assert name_to_index['/conv2/conv/Conv'] < name_to_index['/nm2/tm1/conv3/Conv']
 
     def test_matmul_layer_param_creation(self):
         torch.manual_seed(10)
