@@ -46,7 +46,7 @@ the tensors that are either input to the model (input, constant or parameter) or
 result of an operation. Furthermore the graph representation is bi-directional."""
 
 
-from typing import List, Union
+from typing import List, Union, Dict
 from onnx import onnx_pb
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
 
@@ -63,6 +63,8 @@ WEIGHT_INDEX = 1
 BIAS_INDEX = 2
 RUNNING_MEAN_INDEX = 3
 RUNNING_VAR_INDEX = 4
+OPS_WITH_PARAMS = ["Conv", "Gemm", "ConvTranspose", "BatchNormalization", "MatMul"]
+CONSTANT_TYPE = ['Constant', 'ConstantOfShape']
 
 
 class ConnectedGraph(AimetCommonConnectedGraph):
@@ -87,9 +89,24 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         self.starting_ops = []
         self._branch_count = 0
 
+        # Counts number of constant inputs there are in the graph
+        self._constant_count = 0
+        self._constant_nodes_to_output = self._create_set_of_constant_nodes()
+
         self.fill_op_product_graph()
         # List of ops in the order they are traversed using the forward function
         self.ordered_ops = get_ordered_ops(self.starting_ops)
+
+    def _create_set_of_constant_nodes(self) -> Dict:
+        constant_nodes = {}
+        for node in self.model.graph.node:
+            if node.op_type in CONSTANT_TYPE:
+                for output in node.output:
+                    if node.name in constant_nodes:
+                        constant_nodes[node.name].append(output)
+                    else:
+                        constant_nodes[node.name] = [output]
+        return constant_nodes
 
     def get_op_from_module_name(self, name: str) -> Op:
         """
@@ -109,15 +126,51 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 else:
                     self._input_to_node[input_name] = [node]
 
-    def _get_input_tensors_names(self) -> List:
+    # pylint: disable=too-many-branches
+    def _get_input_ops(self) -> List:
         """ Gets list of names of starting nodes"""
+
+        def check_if_node_has_predecessor(node):
+            for input_name in node.input:
+                if input_name in output_names:
+                    return True
+            return False
+
+        output_names = {}
         input_tensors_names = []
+        for node in self.model.graph.node:
+            for node_output in node.output:
+                output_names[node_output] = node
+
+        for node in self.model.graph.node:
+            for input_name in node.input:
+                if node.op_type not in OPS_WITH_PARAMS and not check_if_node_has_predecessor(node) and input_name not in output_names:
+                    input_tensors_names.append(input_name)
+
         for tensor in self.model.graph.input:
-            input_tensors_names.append(tensor.name)
+            if tensor.name not in input_tensors_names and tensor.name in self._input_to_node:
+                input_tensors_names.append(tensor.name)
 
-        assert input_tensors_names, "The model does not have any input tensors"
+        input_ops = []
+        for node in self.model.graph.node:
+            flag = True
+            if node.op_type == 'Constant':
+                continue
+            for input_name in node.input:
+                if input_name in output_names and output_names[input_name].op_type == 'Constant':
+                    continue
+                else:
+                    flag = False
+                    break
+            if flag:
+                input_ops.append(node)
 
-        return input_tensors_names
+        for input_tensor_name in input_tensors_names:
+            if input_tensor_name in self._input_to_node:
+                for node in self._input_to_node[input_tensor_name]:
+                    input_ops.append(node)
+
+        return input_ops
 
     @staticmethod
     def _create_ir_op(node: onnx_pb.NodeProto) -> Op:
@@ -156,15 +209,50 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         Processes input ops
         :param op_queue: Queue for performing dfs
         """
-        input_tensors_names = self._get_input_tensors_names()
-        for input_tensor_name in input_tensors_names:
-            if input_tensor_name in self._input_to_node:
-                for node in self._input_to_node[input_tensor_name]:
-                    op = self._create_ir_op(node)
-                    self._ops[node.name] = op
-                    self._create_and_link_product_for_inputs(node.name, input_tensor_name)
-                    self._add_children_ops_to_op_queue(node, op_queue)
-                    self.starting_ops.append(op)
+        input_ops = self._get_input_ops()
+        for node in input_ops:
+            node_name = node.name
+            if node_name not in self._ops:
+                op = self._create_ir_op(node)
+                self._ops[node_name] = op
+                self._add_children_ops_to_op_queue(node, op_queue)
+                self.starting_ops.append(op)
+            for index, input_tensor_name in enumerate(node.input):
+                if self.check_if_param(node, index):
+                    continue
+                if self.check_if_const(input_tensor_name):
+                    op = self._ops[node.name]
+                    self._create_constant_product(op, input_tensor_name)
+                else:
+                    self._create_and_link_product_for_inputs(node_name, input_tensor_name)
+
+    @staticmethod
+    def check_if_param(node: onnx_pb.NodeProto, index: int) -> bool:
+        """
+        Checks if given tensor is a param
+
+        :param node: ONNX node
+        :param index: input index we are looking at
+        """
+        if node.op_type in ['Gemm', 'Conv', 'ConvTranspose'] and index in [WEIGHT_INDEX, BIAS_INDEX]:
+            return True
+        if node.op_type == 'MatMul' and index == WEIGHT_INDEX:
+            return True
+        if node.op_type == 'BatchNormalization' and index in [WEIGHT_INDEX, BIAS_INDEX, RUNNING_VAR_INDEX, RUNNING_MEAN_INDEX]:
+            return True
+
+        return False
+
+    def check_if_const(self, input_tensor_name: str) -> bool:
+        """
+        Checks if given tensor is a constant
+
+        :param input_tensor_name: input tensor name we are looking at
+        """
+        for output_names in self._constant_nodes_to_output.values():
+            if input_tensor_name in output_names:
+                return True
+        return False
 
     def _create_and_link_product_for_inputs(self, consumer_node_name: str, input_tensor_name: str):
         """
@@ -291,6 +379,45 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         # Identify places where branch Ops need to be inserted
         self._branch_ops_processing()
+
+        # Create constant products
+        self._create_constant_products_for_model()
+
+    def _create_constant_products_for_model(self):
+        """ Create constant products for all ops in the model """
+        for node in self.model.graph.node:
+            if node.op_type == 'Constant':
+                for output in node.output:
+                    if output in self._input_to_node:
+                        for op in self._input_to_node[output]:
+                            op_name = op.name
+                            cg_op = self._ops[op_name]
+                            self._create_constant_product(cg_op, output)
+
+    def _create_constant_product(self, consumer, connecting_tensor_name):
+        """
+        Create constant product
+
+        :param consumer: Consumer of the product
+        :param connecting_tensor_name: tensor that connects consumer and constant op
+        """
+        product_name = f'constant_{connecting_tensor_name}' + '_to_' + consumer.name
+        if product_name not in self._products:
+            product = Product(product_name, None)
+            # add product to self._products dictionary
+            self._products[product_name] = product
+            logger.debug("Created new product %s", product_name)
+
+            product.tensor_dict[consumer] = product_name
+
+            product.is_const = True
+
+            self._constant_count += 1
+
+            # Link parent op, product, and current op
+            # Fill in input, output, producer, consumer params as appropriate.
+            consumer.add_input(product)
+            product.add_consumer(consumer)
 
     def _branch_ops_processing(self):
         """ Identify places in the op/product graph where branch ops need to be inserted, and create them """

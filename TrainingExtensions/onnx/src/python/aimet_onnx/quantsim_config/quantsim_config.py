@@ -48,7 +48,7 @@ from aimet_common.quantsim_config.json_config_importer import ConfigDictKeys, Co
 from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as AimetCommonQuantSimConfigurator, \
     get_setting_type, SupergroupConfigCallback as AimetCommonSupergroupConfigCallback, reformat_supported_kernels
 from aimet_common.utils import AimetLogger
-from aimet_onnx.meta.connectedgraph import ConnectedGraph
+from aimet_onnx.meta.connectedgraph import ConnectedGraph, CONSTANT_TYPE
 from aimet_onnx.utils import get_product_name_from_quantized_name
 from aimet_onnx.qc_quantize_op import OpMode, QcQuantizeOp
 
@@ -96,6 +96,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         self._quant_ops_dict = {}
         self._param_names = {}
         self._activation_names = {}
+        self._input_quantizers = {}
         self._op_to_quantizer_lists_dict = None
         self._op_to_quantizers = {}
         self._supported_kernels = self._parse_supported_kernels()
@@ -118,13 +119,15 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
 
     def configure_quantizers(self, quant_ops_dict: Dict,
                              param_names: List[str],
-                             activation_names: List[str]):
+                             activation_names: List[str],
+                             input_activations: List[str]):
         """
         Configures quantizers based on config file
         """
         self._quant_ops_dict = quant_ops_dict
         self._param_names = param_names
         self._activation_names = activation_names
+        self._input_quantizers = input_activations
 
         self._op_to_quantizers = self._map_quantizers_to_ops()
 
@@ -276,13 +279,27 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         Set model input specific configurations (fifth level of specificity in configuration file)
         :param model_input_configs: Configuration for model inputs
         """
+        modified_quantize_ops = {}
         input_ops = get_all_input_ops(self._conn_graph)
-        for input_op in input_ops:
-            op_name = input_op.name
-            if op_name in self._op_to_quantizers:
-                modified_quantize_ops = {}
-                self._set_config_for_op(op_name, self._op_to_quantizers[op_name],
+        for op in input_ops:
+            if op.name in self._op_to_quantizers:
+                self._set_config_for_op(op.name, self._op_to_quantizers[op.name],
                                         model_input_configs, modified_quantize_ops)
+
+        for activation_name in self._input_quantizers:
+            if self._quant_ops_dict[activation_name] not in modified_quantize_ops:
+                self._modify_activation_quantize_op([self._quant_ops_dict[activation_name]], ConfigDictKeys.IS_INPUT_QUANTIZED,
+                                                    model_input_configs[ConfigDictKeys.IS_INPUT_QUANTIZED], modified_quantize_ops)
+
+        for node in self._model.model.graph.node:
+            if node.op_type in CONSTANT_TYPE:
+                for activation_name in node.output:
+                    if activation_name in self._quant_ops_dict and \
+                            self._quant_ops_dict[activation_name] not in modified_quantize_ops:
+                        self._modify_activation_quantize_op([self._quant_ops_dict[activation_name]],
+                                                            ConfigDictKeys.IS_INPUT_QUANTIZED,
+                                                            model_input_configs[ConfigDictKeys.IS_INPUT_QUANTIZED],
+                                                            modified_quantize_ops)
 
     def _set_model_output_configs(self, model_output_configs: ConfigType):
         """
@@ -333,8 +350,20 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         for op_name, op_to_quantizer in self._op_to_quantizers.items():
             self._set_config_for_op(op_name, op_to_quantizer, default_op_configs, modified_quantize_ops)
 
-        for model_input in self._model.model.graph.input:
-            self._quant_ops_dict[model_input.name].enabled = False
+        input_ops = get_all_input_ops(self._conn_graph)
+        for op in input_ops:
+            if op.name in self._op_to_quantizers:
+                for input_quantizer in self._op_to_quantizers[op.name].input_quantizers:
+                    input_quantizer.enabled = False
+
+        for activation_name in self._input_quantizers:
+            self._quant_ops_dict[activation_name].enabled = False
+
+        for node in self._model.model.graph.node:
+            if node.op_type in CONSTANT_TYPE:
+                for activation_name in node.output:
+                    if activation_name in self._quant_ops_dict:
+                        self._quant_ops_dict[activation_name].enabled = False
 
     def _set_config_for_op(self, op_name, op_to_quantizer: OpToQuantizers, op_config: OpType,
                            modified_quantize_ops: Dict):

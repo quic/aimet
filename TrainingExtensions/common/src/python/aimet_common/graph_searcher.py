@@ -37,6 +37,7 @@
 # =============================================================================
 """ Main class for pattern match based graph searcher"""
 
+from typing import List
 import itertools
 from collections import deque
 from aimet_common.graph_pattern_matcher import PatternMatcher
@@ -117,6 +118,7 @@ class GraphSearcher:
         self._connected_graph = conn_graph
         self._patterns_with_callbacks = patterns_with_callback
         self.sliding_window = None
+        self.window_already_checked = set()
 
     def _find_patterns_apply_actions(self, op,
                                      pattern_matcher: PatternMatcher,
@@ -143,14 +145,18 @@ class GraphSearcher:
             # we get the index in the sliding window and the matched pattern back from pattern matcher
             matched_patterns_start_indices_dict = pattern_matcher.get_matching_patterns(op_types_sliding_window)
 
-            if matched_patterns_start_indices_dict:
-                for matched_pattern in matched_patterns_start_indices_dict.keys():
-                    for i in matched_patterns_start_indices_dict[matched_pattern]:
-                        # we need to call appropriate handler here based on the matched length and the starting op type
-                        op_subset = list(itertools.islice(self.sliding_window.get_op_sliding_window(), i,
-                                                          i+len(matched_pattern.pattern)))
-                        logger.info('...... subset to store %s', op_subset)
-                        matched_pattern.action(matched_pattern, op_subset)
+            sliding_window_string = self.convert_sliding_window_to_str(self.sliding_window.get_op_sliding_window())
+
+            if not sliding_window_string in self.window_already_checked:
+                self.window_already_checked.add(sliding_window_string)
+                if matched_patterns_start_indices_dict:
+                    for matched_pattern in matched_patterns_start_indices_dict.keys():
+                        for i in matched_patterns_start_indices_dict[matched_pattern]:
+                            # we need to call appropriate handler here based on the matched length and the starting op type
+                            op_subset = list(itertools.islice(self.sliding_window.get_op_sliding_window(), i,
+                                                              i+len(matched_pattern.pattern)))
+                            logger.info('...... subset to store %s', op_subset)
+                            matched_pattern.action(matched_pattern, op_subset)
 
         # mark visited node
         visited_nodes.add(op)
@@ -165,6 +171,18 @@ class GraphSearcher:
         if op in self.sliding_window.current_op_window:
             self.sliding_window.remove_op_from_sliding_window(op)
 
+    @staticmethod
+    def convert_sliding_window_to_str(sliding_window: List) -> str:
+        """
+        Converts list of ops to a string comprising of names of ops
+
+        :param sliding_window: List of CG ops which are being considered in the current window
+        """
+        string_of_sliding_window_op_names = ""
+        for op in sliding_window:
+            string_of_sliding_window_op_names += op.name
+        return string_of_sliding_window_op_names
+
     def find_all_patterns_in_graph_apply_actions(self, ignore=None):
         """
         Finds corresponding op sequences and apply action.
@@ -178,15 +196,13 @@ class GraphSearcher:
             if any(t.is_model_input for t in op.inputs):
                 input_nodes.append(op)
 
-        visited_nodes = set()
-
         # define pattern matcher for graph search and set the sliding window length
         pattern_matcher = PatternMatcher(self._patterns_with_callbacks)
         self.sliding_window = SlidingWindow(pattern_matcher.get_pattern_max_length())
 
         # find layers of interest
         for op in input_nodes:
-
+            visited_nodes = set()
             # perform DFS with sliding window
             GraphSearcher._find_patterns_apply_actions(self, op, pattern_matcher,
                                                        visited_nodes, ignore=ignore)
