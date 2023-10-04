@@ -123,6 +123,7 @@ class QuantizationSimModel:
             self._op_domain = "aimet.customop.cpu"
             self.providers = ['CPUExecutionProvider']
         self.param_names = []
+        self.input_quantizers_name = []
         self.activation_names = []
         self.activation_dtypes = {}
         self._get_param_names()
@@ -153,7 +154,8 @@ class QuantizationSimModel:
         quantsim_configurator = QuantSimConfigurator(self.model, self.connected_graph, config_file,
                                                      self._default_activation_bw, self._default_param_bw,
                                                      self._default_quantization_data_type)
-        quantsim_configurator.configure_quantizers(self.qc_quantize_op_dict, self.param_names, self.activation_names)
+        quantsim_configurator.configure_quantizers(self.qc_quantize_op_dict, self.param_names, self.activation_names,
+                                                   self.input_quantizers_name)
 
         return quantsim_configurator
 
@@ -184,16 +186,26 @@ class QuantizationSimModel:
         :param dummy_input: Sample input to be run through the model
         """
         self.fill_activation_dtypes(dummy_input)
-        for node in self.model.graph().input:
-            name = node.name
-            if name not in self.activation_names and name not in self.param_names and self._is_op_quantizable(name):
-                self.activation_names.append(name)
         for node in self.model.nodes():
             if node.op_type not in op_types_to_ignore:
                 for name in node.output:
                     if name not in self.activation_names and name not in self.param_names and \
                             self._is_op_quantizable(name):
                         self.activation_names.append(name)
+            for input_name in node.input:
+                if input_name not in self.activation_names and input_name not in self.param_names:
+                    for tensors in self.model.model.graph.initializer:
+                        if tensors.name == input_name and tensors.data_type == 1: # 1 corresponds to float, dictionary can be found by using onnx.TensorProto.DataType.items()
+                            self.activation_names.append(tensors.name)
+                            self.input_quantizers_name.append(tensors.name)
+
+        # Model inputs
+        for node in self.model.graph().input:
+            name = node.name
+            if name not in self.activation_names and name not in self.param_names and self._is_op_quantizable(name):
+                self.activation_names.append(name)
+
+        # Model outputs
         for node in self.model.graph().output:
             if node.name in self.activation_names:
                 node.name += '_updated'
