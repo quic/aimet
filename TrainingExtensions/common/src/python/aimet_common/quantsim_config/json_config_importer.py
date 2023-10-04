@@ -132,10 +132,11 @@ def _validate_supported_kernels(supported_kernels: List):
                 logger.error('Activation dtype:float is only supported with bitwidth:16')
                 raise NotImplementedError('Activation dtype:float is only supported with bitwidth:16')
 
-            if supported_kernel["param"]["dtype"] == QuantizationDataType.float and \
-                    supported_kernel["param"]["bitwidth"] != 16:
-                logger.error('Param dtype:float is only supported with bitwidth:16')
-                raise NotImplementedError('Param dtype:float is only supported with bitwidth:16')
+            if "param" in supported_kernel:
+                if supported_kernel["param"]["dtype"] == QuantizationDataType.float and \
+                        supported_kernel["param"]["bitwidth"] != 16:
+                    logger.error('Param dtype:float is only supported with bitwidth:16')
+                    raise NotImplementedError('Param dtype:float is only supported with bitwidth:16')
 
 def _validate_semantics(quantsim_config: ConfigDictType):
     """
@@ -217,10 +218,11 @@ def _convert_str_to_quantization_data_type_helper(supported_kernels: List):
             else:
                 supported_kernel["activation"]["dtype"] = QuantizationDataType.int
 
-            if supported_kernel["param"]["dtype"] == "float":
-                supported_kernel["param"]["dtype"] = QuantizationDataType.float
-            else:
-                supported_kernel["param"]["dtype"] = QuantizationDataType.int
+            if "param" in supported_kernel:
+                if supported_kernel["param"]["dtype"] == "float":
+                    supported_kernel["param"]["dtype"] = QuantizationDataType.float
+                else:
+                    supported_kernel["param"]["dtype"] = QuantizationDataType.int
 
 
 def _convert_dtype_to_quantization_data_type(quantsim_config: ConfigDictType):

@@ -44,7 +44,7 @@ from aimet_common.utils import AimetLogger, log_with_error_and_assert_if_false
 from aimet_common.graph_searcher import GraphSearcher
 from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.connected_graph.operation import Op
-from aimet_common.defs import QuantizationDataType, QuantDtypeBwInfo
+from aimet_common.defs import QuantizationDataType
 from aimet_common.connected_graph import connectedgraph_utils as cg_utils
 from aimet_common.quantsim_config.json_config_importer import ConfigDictKeys, ConfigType, SupergroupType, OpType, \
     ParamType, DefaultsType, OpTypeType, ConfigDictType
@@ -116,16 +116,6 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         self._named_modules_to_tensor_quantizers_dict = self._create_named_modules_to_tensor_quantizers_dict()
         self._elementwise_op_to_tensor_quantizers_dict = self._create_elementwise_op_to_tensor_quantizers_dict()
         self._disable_all_quantizers()
-        # TODO remove the below field and use the wrapper.supported_kernels instead. reformat_supported_kernels missing
-        #  as well
-        self._supported_kernels = self._parse_supported_kernels()
-
-        if ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG:
-            if self.check_correctness_of_dtype_bw_rules(
-                    QuantDtypeBwInfo(self._default_data_type, self._default_output_bw,
-                                     self._default_data_type, self._default_param_bw)):
-                logger.info("Supported Kernel check for valid dtype and bitwidth overrides completed")
-
         self._set_quantsim_configs()
         self._generate_and_apply_op_instance_specific_config()
 
