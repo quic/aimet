@@ -698,14 +698,13 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
 
         :return: encoding(s).
         """
-        # pylint:disable=protected-access
-        if self.enabled:
-            if self.bitwidth == 32 or self.data_type == QuantizationDataType.float:
-                return None
-            encoding = self._compute_updated_encoding()
-            return encoding
+        if not self.enabled:
+            return None
 
-        return None
+        if self.bitwidth == 32 or self.data_type == QuantizationDataType.float:
+            return None
+
+        return self._compute_updated_encoding()
 
     @encoding.setter
     def encoding(self, encoding: Union[libpymo.TfEncoding, List[libpymo.TfEncoding]]):
@@ -809,25 +808,32 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         encoding_min = getattr(self.wrapper_ref, self.name + '_encoding_min')
         encoding_max = getattr(self.wrapper_ref, self.name + '_encoding_max')
 
-        encodings = []
-        for minimum, maximum in zip(encoding_min, encoding_max):
-            tf_encoding = libpymo.TfEncoding()
-            scale, offset = self.compute_scaling_offset(minimum, maximum)
+        if encoding_min is None or encoding_max is None:
+            return None # Encoding is not inititialized yet
 
+        scale, offset = self.compute_scaling_offset(encoding_min.float(), encoding_max.float())
+        assert scale is not None
+        assert offset is not None
+
+        if not self.use_symmetric_encodings or self.is_unsigned_symmetric:
             # Calculate 'min' and 'max' based on 'delta' and 'offset'
             #   because offset was adjusted so that zero must be quantizable
             #   in the case of asymmetric or unsigned symmetric quantization
             #   Please refer quantization_utils.cpp if you need
-            if not self.use_symmetric_encodings or self.is_unsigned_symmetric:
-                tf_encoding.min = scale * offset
-                # NOTE: We want to calculate: max = delta * numSteps + min
-                #   To avoid numerical accuracy issues on Linaro, we simplify the math.
-                tf_encoding.max = maximum - minimum + tf_encoding.min
-            else:
-                tf_encoding.min = minimum
-                tf_encoding.max = maximum
+            # NOTE: We want to calculate: max = delta * numSteps + min
+            #   To avoid numerical accuracy issues on Linaro, we simplify the math.
+            adjusted_min = scale * offset
+            encoding_max = encoding_max - encoding_min + adjusted_min
+            encoding_min = adjusted_min
 
-            tf_encoding.offset, tf_encoding.delta, tf_encoding.bw = offset, scale, self.bitwidth
+        encodings = []
+        for min_, max_, scale_, offset_ in zip(encoding_min, encoding_max, scale, offset):
+            tf_encoding = libpymo.TfEncoding()
+            tf_encoding.min = min_
+            tf_encoding.max = max_
+            tf_encoding.delta = scale_
+            tf_encoding.offset = offset_
+            tf_encoding.bw = self.bitwidth
             encodings.append(tf_encoding)
 
         # TODO: Remove when using only sequence of encodings (Done for backward compatibility)

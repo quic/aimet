@@ -36,6 +36,7 @@
 # =============================================================================
 
 import random
+import numpy as np
 import pytest
 import torch
 import aimet_common.libpymo as libpymo
@@ -394,3 +395,23 @@ class TestLearnedGridTensorQuantizer:
         out_strided = quantizer.quantize_dequantize(tensor[..., ::2, :],
                                                     quantizer.round_mode)
         assert torch.allclose(out_contiguous, out_strided)
+
+    @pytest.mark.parametrize("dtype", [torch.float32, torch.float16])
+    def test_learned_grid_encoding_getter(self, dtype):
+        conv = torch.nn.Conv2d(1, 1, 1)
+        quant_wrapper = LearnedGridQuantWrapper(conv, round_mode=libpymo.RoundingMode.ROUND_NEAREST,
+                                                quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                                is_output_quantized=True, activation_bw=16,
+                                                weight_bw=8, device="cuda:0")
+        enc = libpymo.TfEncoding()
+        enc.bw, enc.max, enc.min = 16, 0.4, -0.98
+
+        quant_wrapper.output_quantizers[0].enabled = True
+        quant_wrapper.output_quantizers[0].encoding = enc
+
+        e = quant_wrapper.to(dtype=dtype).output_quantizers[0].encoding
+        rtol=1e-3
+        assert np.isclose(e.max, 0.4,   rtol=rtol)
+        assert np.isclose(e.min, -0.98, rtol=rtol)
+        assert np.isclose(e.delta, (e.max-e.min)/(2**e.bw-1), rtol=rtol)
+        assert np.isclose(e.offset, e.min/e.delta, rtol=rtol)
