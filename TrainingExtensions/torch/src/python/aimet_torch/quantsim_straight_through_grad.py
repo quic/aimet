@@ -209,10 +209,14 @@ def calculate_forward_pass(tensor: torch.Tensor,
                            f"Got {tensor.dtype} input, {encoding_min.dtype} encoding_min, "
                            f"and {encoding_max.dtype} encoding_max")
 
+    if tensor_quantizer.bitwidth >= 32:
+        raise RuntimeError(f'Invalid bitwidth: {tensor_quantizer.bitwidth}')
+
+    orig_dtype = tensor.dtype
     if tensor.dtype == torch.float16 and tensor_quantizer.bitwidth >= 16:
-        raise RuntimeError("torch.float16 does not provide sufficient precision for simulating "
-                           "16-bit or higher integers. Please consider using torch.float32 arithmetic "
-                           "or sub-16-bit quantization.")
+        tensor = tensor.float()
+        encoding_min = encoding_min.float()
+        encoding_max = encoding_max.float()
 
     use_symmetric_encodings = tensor_quantizer.use_symmetric_encodings
     is_unsigned_symmetric = tensor_quantizer.is_unsigned_symmetric
@@ -241,7 +245,7 @@ def calculate_forward_pass(tensor: torch.Tensor,
                                              encoding_min, encoding_max,
                                              delta, offset, mask_tensor, num_steps,
                                              use_symmetric_encodings, is_unsigned_symmetric)
-    return x_dequant, intermediate_result
+    return x_dequant.to(orig_dtype), intermediate_result
 
 
 # pylint:disable=too-many-locals
