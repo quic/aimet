@@ -957,8 +957,9 @@ class TestQcQuantizeOpLearnedGrid:
         with pytest.raises(RuntimeError):
             loaded_quant_wrapper.output_quantizers[0].encoding = enc_new
 
+    @pytest.mark.parametrize('act_bw', [8, 16])
     @pytest.mark.cuda
-    def test_learned_grid_preserves_fp16(self):
+    def test_learned_grid_preserves_fp16(self, act_bw):
         """
         Test if the forward of LearnedGridQuantWrapper preserves the dtype between
         input and output
@@ -979,7 +980,7 @@ class TestQcQuantizeOpLearnedGrid:
 
         linear_wrapper = LearnedGridQuantWrapper(linear,
                                                  weight_bw=4,
-                                                 activation_bw=8,
+                                                 activation_bw=act_bw,
                                                  round_mode='round_nearest',
                                                  quant_scheme=QuantScheme.training_range_learning_with_tf_init,
                                                  device='cuda:0')
@@ -1011,6 +1012,15 @@ class TestQcQuantizeOpLearnedGrid:
         assert linear_wrapper.input0_encoding_max.grad.dtype == torch.float16
         assert linear_wrapper.output0_encoding_min.grad.dtype == torch.float16
         assert linear_wrapper.output0_encoding_max.grad.dtype == torch.float16
+
+        for val in (torch.nan, torch.inf, -torch.inf):
+            assert torch.all(linear_wrapper.weight.grad               != val)
+            assert torch.all(linear_wrapper.weight_encoding_min.grad  != val)
+            assert torch.all(linear_wrapper.weight_encoding_max.grad  != val)
+            assert torch.all(linear_wrapper.input0_encoding_min.grad  != val)
+            assert torch.all(linear_wrapper.input0_encoding_max.grad  != val)
+            assert torch.all(linear_wrapper.output0_encoding_min.grad != val)
+            assert torch.all(linear_wrapper.output0_encoding_max.grad != val)
 
     @pytest.mark.parametrize("wrapper",
                              [StaticGridQuantWrapper(elementwise_ops.Addmm(),
