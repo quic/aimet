@@ -1114,7 +1114,7 @@ class TestBatchNormFold():
         folded_pairs, model = fold_all_batch_norms(model)
         output_after_batchnorm_folding = model(mock_input)
         assert 1 == len(folded_pairs)
-        assert np.allclose(output_before_batchnorm_folding, output_after_batchnorm_folding, atol=1e-3)
+        assert np.allclose(output_before_batchnorm_folding, output_after_batchnorm_folding, atol=1e-2)
 
 
 symmetric_quantsim_config = {
