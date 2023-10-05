@@ -39,11 +39,9 @@
 """ Adaround optimizer """
 
 from typing import Union, Tuple, Dict
-from functools import reduce
 import numpy as np
 import onnx
 from onnx import onnx_pb, numpy_helper
-import psutil
 import torch
 import torch.nn.functional as functional
 from torch.utils.data import Dataset
