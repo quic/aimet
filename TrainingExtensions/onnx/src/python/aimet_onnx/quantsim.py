@@ -394,10 +394,12 @@ class QuantizationSimModel:
                 qc_op.op_mode = OpMode.updateStats
             else:
                 qc_op.op_mode = OpMode.oneShotQuantizeDequantize
+                if qc_op.is_encoding_frozen():
+                    qc_op.op_mode = OpMode.quantizeDequantize
 
         forward_pass_callback(self.session, forward_pass_callback_args)
         for op_name, qc_op in self.qc_quantize_op_dict.items():
-            if qc_op.data_type == QuantizationDataType.int:
+            if qc_op.data_type == QuantizationDataType.int and not qc_op.is_encoding_frozen():
                 qc_op.compute_encodings()
             qc_op.op_mode = OpMode.quantizeDequantize
 
@@ -481,6 +483,41 @@ class QuantizationSimModel:
         self._export_encodings(os.path.join(path, filename_prefix) + '.encodings')
         self.remove_quantization_nodes()
         self.model.save_model_to_file(os.path.join(path, filename_prefix) + '.onnx')
+
+    def set_and_freeze_param_encodings(self, encoding_path: str):
+        """
+        Set and freeze parameter encodings from encodings JSON file
+
+        :param encoding_path: path from where to load parameter encodings file
+        """
+
+        def _create_libpymo_encodings(encoding):
+            libpymo_encodings = []
+            for enc_val in encoding:
+                enc = libpymo.TfEncoding()
+                enc.bw, enc.delta, enc.max, enc.min, enc.offset = enc_val['bitwidth'], enc_val['scale'], enc_val['max'], \
+                                                                  enc_val['min'], enc_val['offset']
+                libpymo_encodings.append(enc)
+            return libpymo_encodings
+
+        # Load encodings file
+        with open(encoding_path) as json_file:
+            encodings = json.load(json_file)
+
+        for quantizer_name in encodings:
+            if quantizer_name in self.qc_quantize_op_dict:
+                libpymo_encodings = _create_libpymo_encodings(encodings[quantizer_name])
+                self.qc_quantize_op_dict[quantizer_name].load_encodings(libpymo_encodings)
+                self.qc_quantize_op_dict[quantizer_name].bitwidth = encodings[quantizer_name][0]['bitwidth']
+                dtype = QuantizationDataType.float
+                if encodings[quantizer_name][0]['dtype'] == 'int':
+                    dtype = QuantizationDataType.int
+                self.qc_quantize_op_dict[quantizer_name].data_type = dtype
+                is_symmetric = False
+                if encodings[quantizer_name][0]['is_symmetric'] == 'True':
+                    is_symmetric = True
+                self.qc_quantize_op_dict[quantizer_name].use_symmetric_encodings = is_symmetric
+                self.qc_quantize_op_dict[quantizer_name].freeze_encodings()
 
 
 def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, onnx_encoding_path: str):

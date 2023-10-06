@@ -41,7 +41,7 @@
 import copy
 import os
 import shutil
-import contextlib
+import json
 from typing import Tuple, Dict, List, Callable
 from onnx import onnx_pb
 from tqdm import tqdm
@@ -301,27 +301,28 @@ class Adaround:
     def _export_encodings_to_json(cls, path: str, filename_prefix: str, quant_sim: QuantizationSimModel):
         """
         Save Adadrounded module's parameter encodings to JSON file
+
         :param path: path where to store param encodings
         :param filename_prefix: filename to store exported weight encodings in JSON format
         :param quant_sim: QunatSim that contains the model and Adaround tensor quantizers
         """
+        # pylint: disable=protected-access
+        def update_encoding_dict_entry(encoding_dict: Dict, op_name: str):
+            qc_quantize_op = quant_sim.qc_quantize_op_dict[op_name]
+            encoding_dict[op_name] = []
+            for encoding in qc_quantize_op.encodings:
+                encoding_dict[op_name].append(QuantizationSimModel._create_encoding_dict(encoding, qc_quantize_op))
 
-    @classmethod
-    def _update_param_encodings_dict(cls, quant_module, name: str, param_encodings: Dict):
-        """
-        Add module's weight parameter encodings to dictionary to be used for exporting encodings
-        :param quant_module: quant module
-        :param name: name of module
-        :param param_encodings: Dictionary of param encodings
-        """
+        param_encodings = {}
+        for name in quant_sim.param_names:
+            if quant_sim.qc_quantize_op_dict[name].enabled:
+                update_encoding_dict_entry(param_encodings, name)
 
-    @staticmethod
-    def _create_encodings_dict_for_quantizer(quantizer) -> List[Dict]:
-        """
-        Return encodings for given qunatizer
-        :param quantizer: Tensor quantizer associated with module's param
-        :return: Dictionary containing encodings
-        """
+        # export encodings to JSON file
+        os.makedirs(os.path.abspath(path), exist_ok=True)
+        encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
+        with open(encoding_file_path, 'w') as encoding_fp:
+            json.dump(param_encodings, encoding_fp, sort_keys=True, indent=4)
 
     @staticmethod
     def _override_param_bitwidth(quant_sim: QuantizationSimModel,

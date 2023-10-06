@@ -87,6 +87,7 @@ class QcQuantizeOp:
         self.quant_info = quant_info
         self.quant_scheme = quant_scheme
         self.rounding_mode = rounding_mode
+        self._is_encoding_frozen = False
         self._tensor_quantizer = None
         self.set_tensor_quantizer(self._build_tensor_quantizer())
         self.op_mode = op_mode
@@ -96,6 +97,14 @@ class QcQuantizeOp:
         self.enabled = True
         self._data_type = QuantizationDataType.int
         self.tensor_quantizer_params = tensor_quantizer_params
+
+    def is_encoding_frozen(self) -> bool:
+        """ Returns is_encoding_frozen var """
+        return self._is_encoding_frozen
+
+    def freeze_encodings(self):
+        """ Sets encodings to frozen """
+        self._is_encoding_frozen = True
 
     def enable_per_channel_quantization(self):
         """
@@ -133,10 +142,11 @@ class QcQuantizeOp:
 
         :param data_type: Quantization data type
         """
-        self._data_type = data_type
-        self.quant_info.isIntDataType = False
-        if data_type == QuantizationDataType.int:
-            self.quant_info.isIntDataType = True
+        if not self._is_encoding_frozen:
+            self._data_type = data_type
+            self.quant_info.isIntDataType = False
+            if data_type == QuantizationDataType.int:
+                self.quant_info.isIntDataType = True
 
     def _build_tensor_quantizer(self):
         return libpymo.TensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[self.quant_scheme],
@@ -181,7 +191,8 @@ class QcQuantizeOp:
         Sets the useSymmetricEncoding attribute of the nodes QcQuantizeInfo object
         :param use_symmetric_encodings: True if the node is to use symmetric encodings
         """
-        self.quant_info.useSymmetricEncoding = use_symmetric_encodings
+        if not self._is_encoding_frozen:
+            self.quant_info.useSymmetricEncoding = use_symmetric_encodings
 
     @property
     def use_strict_symmetric(self) -> bool:
@@ -279,20 +290,22 @@ class QcQuantizeOp:
         """
         reset the stats of tensor quantizer
         """
-        encodings = []
-        for tensor_quantizer in self._tensor_quantizer:
-            encoding = libpymo.TfEncoding()
-            encoding.bw = self.bitwidth
-            encodings.append(encoding)
-            tensor_quantizer.resetEncodingStats()
-        self.encodings = encodings
+        if not self._is_encoding_frozen:
+            encodings = []
+            for tensor_quantizer in self._tensor_quantizer:
+                encoding = libpymo.TfEncoding()
+                encoding.bw = self.bitwidth
+                encodings.append(encoding)
+                tensor_quantizer.resetEncodingStats()
+            self.encodings = encodings
 
     def set_bitwidth(self, bitwidth: int):
         """
         Set bitwidth for quantization
         """
-        self.bitwidth = bitwidth
-        self.reset_encoding_stats()
+        if not self._is_encoding_frozen:
+            self.bitwidth = bitwidth
+            self.reset_encoding_stats()
 
     def set_quant_scheme(self, quant_scheme: QuantScheme):
         """
@@ -309,12 +322,14 @@ class QcQuantizeOp:
         """
         Compute and return encodings of each tensor quantizer
         """
-        if self.enabled:
-            encodings = []
-            for tensor_quantizer in self._tensor_quantizer:
-                encodings.append(tensor_quantizer.computeEncoding(self.bitwidth, self.use_symmetric_encodings))
-            self.encodings = encodings
-        else:
-            encodings = None
+        if not self._is_encoding_frozen:
+            if self.enabled:
+                encodings = []
+                for tensor_quantizer in self._tensor_quantizer:
+                    encodings.append(tensor_quantizer.computeEncoding(self.bitwidth, self.use_symmetric_encodings))
+                self.encodings = encodings
+            else:
+                encodings = None
 
-        return encodings
+            return encodings
+        return None
