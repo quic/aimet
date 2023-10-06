@@ -42,7 +42,7 @@ from onnx import onnx_pb
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
 
 
-ActivationTypes = ['Relu', 'Clip', 'Sigmoid', 'Tanh']
+ActivationTypes = ['Relu', 'Clip', 'Sigmoid', 'Tanh', 'PRelu', 'Softmax']
 
 
 def get_op_given_param_name(connected_graph: ConnectedGraph, param_name: str):
@@ -97,22 +97,14 @@ def get_module_act_func_pair(model: onnx_pb.ModelProto) -> Dict[str, str]:
 
     for op in all_ops.values():
 
-        # Get module associated with op
-        cur_module = op.get_module()
+        module_act_func_pair[op.name] = None
 
-        if cur_module:
-            module_act_func_pair[cur_module] = None
-
-            if op.output:
-                assert op.output.consumers, 'op output should have at least one consumer op.'
-                # Get the next op
-                next_op = op.output.consumers[0]
-                # Get module associated with next op
-                next_module = next_op.get_module()
-
-                # Get the appropriate activation function
-                if next_module.type in ActivationTypes:
-                    module_act_func_pair[cur_module] = next_module
+        if op.output and op.output.consumers:
+            # Get the next op
+            next_op = op.output.consumers[0]
+            # Get the appropriate activation function
+            if next_op.type in ActivationTypes:
+                module_act_func_pair[op.name] = next_op.type
 
     return module_act_func_pair
 

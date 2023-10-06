@@ -100,8 +100,8 @@ class ActivationSampler:
             model_inputs = next(iterator)
             inp_data, out_data = self.sample_acts(create_input_dict(self._org_model.model, model_inputs))
 
-            all_inp_data.append(inp_data)
-            all_out_data.append(out_data)
+            all_inp_data.append(inp_data[0])
+            all_out_data.append(out_data[0])
 
             if batch_index == len(dataset) - 1:
                 break

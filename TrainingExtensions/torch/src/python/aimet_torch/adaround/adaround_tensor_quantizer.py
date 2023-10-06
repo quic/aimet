@@ -118,17 +118,7 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         """
         assert self.encoding, 'Encoding needs to be set before Adaround the weight tensor.'
 
-        # pylint:disable = protected-access
-        if self.broadcasted_delta is None or self.broadcasted_offset is None:
-            if isinstance(self.encoding, list):
-                # pylint:disable = protected-access
-                delta, offset = self._cppOp.makeDeltaOffsetTensor(tensor.device, self.encoding)
-            else:
-                delta = self.encoding.delta
-                offset = self.encoding.offset
-
-            self.broadcasted_delta = broadcast_to_tensor(tensor, delta, self._ch_axis).to(tensor.dtype)
-            self.broadcasted_offset = broadcast_to_tensor(tensor, offset, self._ch_axis).to(tensor.dtype)
+        self._broadcast_offset_delta(tensor)
 
         # alpha is the "V" parameter in Equation 2 of the Systems HLD which is defined as a FP32 tensor of the
         # same shape as the weight tensor
@@ -158,6 +148,24 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         tensor_dequant = (tensor_quant + self.broadcasted_offset) * self.broadcasted_delta
 
         return tensor_dequant
+
+    def _broadcast_offset_delta(self, tensor: torch.Tensor):
+        """
+        Broadcast offset and delta
+
+        :param tensor: The weight tensor to be adarounded
+        """
+        # pylint:disable = protected-access
+        if self.broadcasted_delta is None or self.broadcasted_offset is None:
+            if isinstance(self.encoding, list):
+                # pylint:disable = protected-access
+                delta, offset = self._cppOp.makeDeltaOffsetTensor(tensor.device, self.encoding)
+            else:
+                delta = self.encoding.delta
+                offset = self.encoding.offset
+
+            self.broadcasted_delta = broadcast_to_tensor(tensor, delta, self._ch_axis).to(tensor.dtype)
+            self.broadcasted_offset = broadcast_to_tensor(tensor, offset, self._ch_axis).to(tensor.dtype)
 
     def _initialize_alpha(self, tensor: torch.Tensor, delta):
         """
