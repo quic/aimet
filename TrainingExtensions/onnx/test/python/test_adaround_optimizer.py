@@ -35,20 +35,62 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+import copy
 import pytest
 from packaging import version
 import torch
 import numpy as np
+from onnx import numpy_helper
 from aimet_torch.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer
 from aimet_torch.adaround.adaround_loss import AdaroundHyperParameters
 from aimet_onnx.adaround.adaround_optimizer import AdaroundOptimizer
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.adaround.utils import ModelData
 import models.models_for_tests as test_models
+from aimet_onnx.utils import CachedDataset
 
 from aimet_common import libpymo
 
 class TestAdaroundOptimizer:
+    """
+    Test functions in utils
+    """
+
+    @pytest.mark.parametrize("warm_start", [1.0, 0.2])
+    def test_optimize_rounding(self, warm_start):
+        if version.parse(torch.__version__) >= version.parse("1.13"):
+            np.random.seed(0)
+            torch.manual_seed(0)
+            model = test_models.single_residual_model()
+            model_data = ModelData(model.model)
+            sim = QuantizationSimModel(copy.deepcopy(model))
+            param_to_tq_dict = create_param_to_tensor_quantizer_dict(sim)
+
+            quant_module = model_data.module_to_info['/conv1/Conv']
+
+            old_weights = torch.from_numpy(numpy_helper.to_array(quant_module.params['weight'].tensor)).clone()
+
+            data_loader = dataloader()
+
+            path = './tmp/cached_dataset/'
+            cached_dataset = CachedDataset(data_loader, 1, path)
+            opt_params = AdaroundHyperParameters(num_iterations=10, reg_param=0.01, beta_range=(20, 2),
+                                                 warm_start=warm_start)
+
+            AdaroundOptimizer.adaround_module(quant_module, 'input_updated',
+                                              model, sim.model, 'Relu', cached_dataset, opt_params,
+                                              param_to_tq_dict, True, 0)
+
+            new_weights = torch.from_numpy(numpy_helper.to_array(quant_module.params['weight'].tensor))
+            weight_name = quant_module.params['weight'].name
+            for tensor in sim.model.model.graph.initializer:
+                if tensor.name == weight_name:
+                    quantized_weight = torch.from_numpy(numpy_helper.to_array(tensor))
+                    break
+            assert not torch.all(quantized_weight.eq(new_weights))
+            assert torch.all(old_weights.eq(new_weights))
+            assert torch.all(param_to_tq_dict[quant_module.params['weight'].name].alpha)
+
     def test_compute_recons_metrics(self):
         if version.parse(torch.__version__) >= version.parse("1.13"):
             np.random.seed(0)
@@ -63,7 +105,8 @@ class TestAdaroundOptimizer:
             inp_data = torch.randn(1, 3, 32, 32)
             out_data = torch.randn(1, 32, 18, 18)
             recon_error_soft, recon_error_hard = AdaroundOptimizer._compute_recons_metrics(quant_module, None, inp_data,
-                                                                                           out_data, param_to_tq_dict)
+                                                                                           out_data, param_to_tq_dict,
+                                                                                           False)
 
             assert recon_error_hard > recon_error_soft > 1.4
 
@@ -76,15 +119,17 @@ class TestAdaroundOptimizer:
             param_to_tq_dict = create_param_to_tensor_quantizer_dict(sim)
 
             quant_module = model_data.module_to_info['/conv2/Conv']
+            weights = torch.from_numpy(numpy_helper.to_array(quant_module.params['weight'].tensor))
             inp_data = torch.randn(1, 32, 32, 32)
-            out_data = AdaroundOptimizer._compute_output_with_adarounded_weights(quant_module, inp_data,
+            out_data = AdaroundOptimizer._compute_output_with_adarounded_weights(weights, quant_module, inp_data,
                                                                                  param_to_tq_dict[quant_module.params['weight'].name])
             assert out_data.requires_grad == True
             assert out_data.shape == torch.Size([1, 16, 18, 18])
 
             quant_module = model_data.module_to_info['/fc/Gemm']
+            weights = torch.from_numpy(numpy_helper.to_array(quant_module.params['weight'].tensor))
             inp_data = torch.randn(1, 72)
-            out_data = AdaroundOptimizer._compute_output_with_adarounded_weights(quant_module, inp_data,
+            out_data = AdaroundOptimizer._compute_output_with_adarounded_weights(weights, quant_module, inp_data,
                                                                                  param_to_tq_dict[quant_module.params['weight'].name])
             assert out_data.shape == torch.Size([1, 10])
 
@@ -95,8 +140,9 @@ class TestAdaroundOptimizer:
             param_to_tq_dict = create_param_to_tensor_quantizer_dict(sim)
 
             quant_module = model_data.module_to_info['/conv1/ConvTranspose']
+            weights = torch.from_numpy(numpy_helper.to_array(quant_module.params['weight'].tensor))
             inp_data = torch.randn(10, 10, 4, 4)
-            out_data = AdaroundOptimizer._compute_output_with_adarounded_weights(quant_module, inp_data, param_to_tq_dict[quant_module.params['weight'].name])
+            out_data = AdaroundOptimizer._compute_output_with_adarounded_weights(weights, quant_module, inp_data, param_to_tq_dict[quant_module.params['weight'].name])
             assert out_data.shape == torch.Size([10, 10, 6, 6])
 
 def create_param_to_tensor_quantizer_dict(quant_sim):
@@ -129,3 +175,26 @@ def create_param_to_tensor_quantizer_dict(quant_sim):
         param_to_tq_dict[param_name] = adaround_quantizer
 
     return param_to_tq_dict
+
+
+def dataloader():
+    class DataLoader:
+        """
+        Example of a Dataloader which can be used for running AMPv2
+        """
+        def __init__(self, batch_size: int):
+            """
+            :param batch_size: batch size for data loader
+            """
+            self.batch_size = batch_size
+
+        def __iter__(self):
+            """Iterates over dataset"""
+            dummy_input = np.random.rand(1, 3, 32, 32).astype(np.float32)
+            yield dummy_input
+
+        def __len__(self):
+            return 4
+
+    dummy_dataloader = DataLoader(batch_size=2)
+    return dummy_dataloader
