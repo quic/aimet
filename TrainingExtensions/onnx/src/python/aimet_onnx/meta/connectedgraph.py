@@ -483,18 +483,25 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         # 4: Remove product from original op to child in child's inputs
         # 5: Remove product from self._products
         for product in product_list:
-            assert len(product.consumers) == 1
-            # item 1
-            branch_op_product.add_consumer(product.consumers[0])
-            # item 2
-            assert len(product.tensor_dict.keys()) == 1
-            branch_op_product.tensor_dict[product.consumers[0]] = product.tensor_dict[product.consumers[0]]
-            # items 3 and 4
-            # replace the old product with the new branch product, in the same index as the old product
-            index = product.consumers[0].inputs.index(product)
-            product.consumers[0].inputs[index] = branch_op_product
-            # item 5
-            del self._products[product.name]
+            assert len(product.consumers) <= 1
+
+            if len(product.consumers) == 1:
+                # item 1
+                branch_op_product.add_consumer(product.consumers[0])
+                # item 2
+                assert len(product.tensor_dict.keys()) == 1
+                branch_op_product.tensor_dict[product.consumers[0]] = product.tensor_dict[product.consumers[0]]
+                # items 3 and 4
+                # replace the old product with the new branch product, in the same index as the old product
+                index = product.consumers[0].inputs.index(product)
+                product.consumers[0].inputs[index] = branch_op_product
+                # item 5
+                del self._products[product.name]
+            else:
+                for output in self.model.graph.output:
+                    if output.name in product.name:
+                        del self._products[product.name]
+                        self._create_link_for_output_product(output.name, branch_op.name)
 
         self._products[branch_op_product.name] = branch_op_product
 
