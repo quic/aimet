@@ -34,55 +34,25 @@
 #  @@-COPYRIGHT-END-@@
 #==============================================================================
 
-if (ENABLE_CUDA)
-    add_test(OnnxTrainingExtensionTest
-            ${Python3_EXECUTABLE} -m pytest ${CMAKE_CURRENT_SOURCE_DIR} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
-            )
+cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
 
-else (ENABLE_CUDA)
-    add_test(OnnxTrainingExtensionTest
-            ${Python3_EXECUTABLE} -m pytest ${CMAKE_CURRENT_SOURCE_DIR} -m "not cuda" --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
-            )
+find_package(Torch REQUIRED)
+set(CMAKE_CXX_STANDARD 14)
 
-endif (ENABLE_CUDA)
-
-add_subdirectory(python/models/customops)
-
-set_property(TEST OnnxTrainingExtensionTest
-      APPEND PROPERTY ENVIRONMENT "${AIMET_PYTHONPATH}")
-
-if(DEFINED ENV{DEPENDENCY_DATA_PATH})
-set_property(TEST OnnxTrainingExtensionTest
-      APPEND PROPERTY ENVIRONMENT "${DEPENDENCY_DATA_PATH}")
-endif(DEFINED ENV{DEPENDENCY_DATA_PATH})
-
-if (ENABLE_CUDA)
-include_directories(BEFORE
-        ${CMAKE_CURRENT_SOURCE_DIR}/../src
-        ${EIGEN3_INCLUDE_DIR}
+add_library(torch_custom_add SHARED torch_custom_add.cpp)
+target_compile_features(torch_custom_add PRIVATE cxx_std_14)
+target_link_libraries(torch_custom_add "${TORCH_LIBRARIES}")
+set_target_properties(torch_custom_add PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts/aimet_common/customops"
         )
 
-add_executable(OnnxTrainingExtensionCppTest
-        TestOnnxTensorOps.cpp)
+find_path(ONNXRUNTIME_INC "onnxruntime_cxx_api.h" PATH_SUFFIXES onnxruntime_headers/include)
+find_library(ONNXRUNTIME_LIBRARY NAMES libonnxruntime.so PATH_SUFFIXES /onnxruntime_headers/lib)
 
-target_include_directories(OnnxTrainingExtensionCppTest PRIVATE
-        ${ONNXRUNTIME_INC}
-        ${CMAKE_CURRENT_SOURCE_DIR}/../common/include
+add_library(onnx_custom_add SHARED onnx_custom_add.cpp onnx_custom_add.h)
+target_compile_features(onnx_custom_add PRIVATE cxx_std_14)
+target_include_directories(onnx_custom_add PRIVATE ${ONNXRUNTIME_INC})
+target_link_libraries(onnx_custom_add PUBLIC ${ONNXRUNTIME_LIBRARY})
+set_target_properties(onnx_custom_add PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts/aimet_common/customops"
         )
-
-target_compile_options(OnnxTrainingExtensionCppTest
-        PRIVATE
-        -DONNX_CUDA=1
-        )
-
-target_link_libraries(OnnxTrainingExtensionCppTest
-        gtest_main
-        OnnxCppOps
-        MoDlQuantization
-        MoDlQuantizationCuda
-        CUDA::cublas
-        )
-
-add_test(OnnxTrainingExtensionCppTest
-        OnnxTrainingExtensionCppTest --gtest_output=xml:cpp_test_output.xml)
-endif (ENABLE_CUDA)
