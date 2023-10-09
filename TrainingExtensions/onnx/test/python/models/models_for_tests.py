@@ -1049,6 +1049,19 @@ def multi_input_model():
     model = ONNXModel(load_model('./model_multi_input.onnx'))
     return model
 
+def multi_output_model():
+    model = MultipleOutputModel()
+    sample_input = np.random.rand(128, 3, 32, 32).astype(np.float32)
+
+    onnx_filename = "/tmp/dummy_model_multiple_outputs.onnx"
+    input_names = ["input"]
+    output_names = ["output_mul", "output_add"]
+    torch.onnx.export(model, torch.as_tensor(sample_input), onnx_filename, verbose=True, input_names=input_names,
+                      output_names=output_names)
+
+    model = ONNXModel(load_model(onnx_filename))
+    return model
+
 def transposed_conv_model():
     x = torch.randn(10, 10, 4, 4, requires_grad=True)
     model = TransposedConvModel()
@@ -1416,6 +1429,51 @@ class MyModelFoldFoward(torch.nn.Module):
         x = self.conv3(x)
 
         return x
+
+class MultipleOutputModel(SingleResidual):
+    """
+    Model
+    """
+    def __init__(self):
+        super().__init__()
+        # change padding size to 0, onnxruntime only support input size is the factor of output size for pooling
+        self.conv4 = torch.nn.Conv2d(32, 8, kernel_size=2, stride=2, padding=0, bias=True)
+        self.fc2 = torch.nn.Linear(10, 3)
+        # remove bn layer for currently not supporting non-4 dim param tensors
+        del self.bn1
+        del self.bn2
+
+    def forward(self, inputs):
+        x = self.conv1(inputs)
+        # TODO
+        # remove bn layer for currently not supporting non-4 dim param tensors
+        # x = self.bn1(x)
+        x = self.relu1(x)
+        x = self.maxpool(x)
+
+        # Save the output of MaxPool as residual.
+        residual = x
+
+        x = self.conv2(x)
+        # TODO
+        # remove bn layer for currently not supporting non-4 dim param tensors
+        # x = self.bn2(x)
+        x = self.relu2(x)
+        x = self.conv3(x)
+
+        # Add the residual
+        # AdaptiveAvgPool2d is used to get the desired dimension before adding.
+        residual = self.conv4(residual)
+        residual = self.ada(residual)
+        x += residual
+        x = self.relu3(x)
+
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+        y = self.fc2(x)
+
+        return x, y
 
 
 def _convert_to_onnx_no_fold(model: torch.nn.Module, dummy_input, filename='./temp_model.onnx'):

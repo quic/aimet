@@ -50,8 +50,7 @@ from aimet_onnx.quantsim import QuantizationSimModel, load_encodings_to_sim
 from aimet_onnx.qc_quantize_op import OpMode
 from aimet_onnx.utils import make_dummy_input
 from models.models_for_tests import SingleResidual
-from models.models_for_tests import build_dummy_model, single_residual_model, BNAfterConv, multi_input_with_constant_model
-
+from models.models_for_tests import build_dummy_model, single_residual_model, BNAfterConv, multi_input_with_constant_model , multi_output_model
 
 class DummyModel(SingleResidual):
     """
@@ -96,7 +95,6 @@ class DummyModel(SingleResidual):
         x = self.fc(x)
 
         return x
-
 
 class TestQuantSim:
     """Tests for QuantizationSimModel"""
@@ -428,9 +426,23 @@ class TestQuantSim:
 
         assert np.allclose(out2, out3)
 
+
     def test_model_with_constants(self):
         model = multi_input_with_constant_model()
 
         sim = QuantizationSimModel(model)
         assert sim.qc_quantize_op_dict['13'].enabled == True
         assert sim.qc_quantize_op_dict['7'].enabled == True
+
+
+    def test_multiple_output_quantsim(self):
+        model = multi_output_model()
+        sample_input = np.random.rand(128, 3, 32, 32).astype(np.float32)
+
+        sim = QuantizationSimModel(model=model,
+                                   quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                   default_activation_bw=8,
+                                   default_param_bw=8)
+        sim.session.run(None, {'input': sample_input})
+
+
