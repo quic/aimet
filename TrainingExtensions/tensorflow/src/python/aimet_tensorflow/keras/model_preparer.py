@@ -61,7 +61,7 @@ else:
 
 # pylint: disable=wrong-import-position
 from aimet_tensorflow.keras.utils.model_connection_utils import ModelLayerConnections, ModelLayerConnectionsProperties
-from aimet_tensorflow.keras.utils.model_transform_utils import replace_separable_conv_with_depthwise_pointwise
+from aimet_tensorflow.keras.utils.model_transform_utils import replace_separable_conv_with_depthwise_pointwise, replace_relu6_with_relu
 from aimet_common.utils import AimetLogger
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ModelPreparer)
@@ -165,7 +165,7 @@ def _get_class_names_in_model(model: Union[tf.keras.Model, tf.keras.layers.Layer
     :param model: the 'layer' or 'model' to get the class name
     :return: A set containing the class name
     """
-    return {regex_for_camel_case_to_snake_case.sub("_", model.__class__.__name__).lower()}
+    return {regex_for_camel_case_to_snake_case.sub("_", model.name).lower()}
 
 
 def _is_nested_layer(layer: tf.keras.layers.Layer) -> bool:
@@ -610,7 +610,8 @@ def prepare_model(original_model: tf.keras.Model,
         _logger.debug("Model does not contain any nested layers. "
                       "Returning original model after going through 'replace_separable_conv_with_depthwise_pointwise.")
         model_to_return, _ = replace_separable_conv_with_depthwise_pointwise(original_model)
-        return original_model
+        model_to_return, _ = replace_relu6_with_relu(model_to_return)
+        return model_to_return
 
     _logger.debug("Preparing model for AIMET. Original model architecture")
     original_model.summary(print_fn=_logger.debug)
@@ -626,14 +627,15 @@ def prepare_model(original_model: tf.keras.Model,
     K.clear_session() # To avoid name conflicts
     model_to_return = tf.keras.models.clone_model(prepared_model)
 
-    # Extra prepare step to replace Separable Conv's with Depthwise Pointwise pattern if the prepared model
-    # had any in the original models nested layers.
-    model_to_return, _ = replace_separable_conv_with_depthwise_pointwise(model_to_return)
-
     model_to_return.summary(print_fn=_logger.debug)
 
     # Copying over weights from original model to functional model
     _logger.debug("Final class_names: %s", class_names)
     _set_functional_models_weights(original_model, model_to_return, class_names)
+
+    # Extra prepare step to replace Separable Conv's with Depthwise Pointwise pattern if the prepared model
+    # had any in the original models nested layers.
+    model_to_return, _ = replace_separable_conv_with_depthwise_pointwise(model_to_return)
+    model_to_return, _ = replace_relu6_with_relu(model_to_return)
 
     return model_to_return

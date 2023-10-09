@@ -478,12 +478,16 @@ def test_keras_text_classification_example_model_to_functional():
 def test_non_nested_layered_model():
     original_model = conv_functional()
     random_input = np.random.rand(32, *original_model.input_shape[1:])
-    _ = original_model(random_input)
+    orig_output = original_model(random_input)
 
     functional_model = prepare_model(original_model)
 
-    assert original_model == functional_model, \
-        "Prepare model did not give back the original model. This model does not need to be prepared."
+    functional_model_output = functional_model(random_input)
+    model_weights_in_correct_order = _get_original_models_weights_in_functional_model_order(
+        original_model, functional_model, class_names=set())
+
+    compare_weights(model_weights_in_correct_order, functional_model.get_weights())
+    np.testing.assert_array_equal(orig_output.numpy(), functional_model_output.numpy())
 
 def test_multi_output():
     class TestMultiOut(tf.keras.layers.Layer):
@@ -522,9 +526,13 @@ def test_multi_output_only_lambda():
 
     original_model = tf.keras.Model(inputs=encoder_input, outputs=out)
     random_input = np.random.rand(1, *original_model.input_shape[1:])
-    _ = original_model(random_input)
+    orig_output = original_model(random_input)
 
     functional_model = prepare_model(original_model)
 
-    assert functional_model == original_model, "The original model does not contain any nested layers. \
-        The original model should be returned."
+    functional_model_output = functional_model(random_input)
+    model_weights_in_correct_order = _get_original_models_weights_in_functional_model_order(
+        original_model, functional_model, class_names=set())
+
+    compare_weights(model_weights_in_correct_order, functional_model.get_weights())
+    np.testing.assert_array_equal(orig_output.numpy(), functional_model_output.numpy())
