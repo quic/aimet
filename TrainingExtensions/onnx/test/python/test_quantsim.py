@@ -43,13 +43,17 @@ import numpy as np
 from onnx import load_model
 import onnxruntime as ort
 import pytest
+from aimet_common import libquant_info
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
 from aimet_onnx.quantsim import QuantizationSimModel, load_encodings_to_sim
 from aimet_onnx.qc_quantize_op import OpMode
 from aimet_onnx.utils import make_dummy_input
 from models.models_for_tests import SingleResidual
-from models.models_for_tests import build_dummy_model, single_residual_model, BNAfterConv, multi_input_with_constant_model , multi_output_model
+
+from models.models_for_tests import build_dummy_model, single_residual_model, BNAfterConv, multi_input_with_constant_model, multi_output_model
+from models.models_for_tests import custom_add_model
+
 
 class DummyModel(SingleResidual):
     """
@@ -445,3 +449,24 @@ class TestQuantSim:
         sim.session.run(None, {'input': sample_input})
 
 
+    def test_model_with_custom_ops(self):
+        custom_ops_path = os.path.dirname(libquant_info.__file__)
+        custom_ops_path = os.path.join(custom_ops_path, "customops")
+        onnx_library = os.path.join(custom_ops_path, "libonnx_custom_add.so")
+
+        def callback(session, args):
+            pass
+
+        model = custom_add_model()
+        sim = QuantizationSimModel(model=model,
+                                  quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                  default_activation_bw=8,
+                                  default_param_bw=8,
+                                  user_onnx_libs=[onnx_library])
+        sim.save_model_graph("./quantized_custom_model")
+
+        def dummy_callback(session, args):
+            pass
+
+        sim.compute_encodings(dummy_callback, None)
+        sim.export('./tmp/', 'custom_op_model')

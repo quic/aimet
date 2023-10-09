@@ -40,6 +40,7 @@
 from collections import namedtuple
 from typing import Dict, List
 
+import os
 import torch.nn.functional as F
 from torch import nn as nn
 from torchvision.ops import roi_align
@@ -48,6 +49,7 @@ import torch
 from onnx import helper, numpy_helper, OperatorSetIdProto, TensorProto, load_model
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
 from torch.nn.modules.batchnorm import _BatchNorm
+from aimet_common import libquant_info
 
 from .mobilenet import MockMobileNetV1, MockMobileNetV11
 from aimet_torch import elementwise_ops
@@ -1678,4 +1680,40 @@ def simple_relu_model():
                       input_names=['input'],  # the model's input names
                       output_names=['output'])
     model_onnx = ONNXModel(load_model('./simple_relu.onnx'))
+    return model_onnx
+
+def custom_add_model():
+    class CustomAddModel(nn.Module):
+        """Simple model using custom addition op"""
+
+        def __init__(self):
+            super(CustomAddModel, self).__init__()
+
+            custom_ops_path = os.path.dirname(libquant_info.__file__)
+            custom_ops_path = os.path.join(custom_ops_path, "customops")
+            torch_library = os.path.join(custom_ops_path, "libtorch_custom_add.so")
+
+            torch.ops.load_library(torch_library)
+
+            def my_add(g, x, y):
+                return g.op("my_ops::custom_add", x, y)
+
+            torch.onnx.register_custom_op_symbolic("my_ops::custom_add", my_add, 9)
+
+            self.conv = nn.Conv2d(in_channels=3, out_channels=16, kernel_size=3, stride=1, padding=1)
+
+        def forward(self, x):
+            x_conv = self.conv(x)
+            x_add1 = torch.ops.my_ops.custom_add(x_conv, x_conv)
+            return x_add1
+
+    model = CustomAddModel()
+    torch.onnx.export(model,
+                      torch.randn(1, 3, 64, 64),
+                      './simple_custom_model.onnx',
+                      verbose=True,
+                      input_names=["input"],
+                      output_names=["output_add"],
+                      custom_opsets={"my_ops": 2})
+    model_onnx = ONNXModel(load_model('./simple_custom_model.onnx'))
     return model_onnx
