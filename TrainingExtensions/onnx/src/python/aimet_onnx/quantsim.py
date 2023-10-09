@@ -90,7 +90,8 @@ class QuantizationSimModel:
                  default_param_bw: int = 8,
                  default_activation_bw: int = 8,
                  use_symmetric_encodings: bool = False, use_cuda: bool = True,
-                 device: int = 0, config_file: str = None, default_data_type: QuantizationDataType = QuantizationDataType.int):
+                 device: int = 0, config_file: str = None, default_data_type: QuantizationDataType = QuantizationDataType.int,
+                 user_onnx_libs: List[str] = None):
         """
         Constructor
 
@@ -107,6 +108,7 @@ class QuantizationSimModel:
                                  Possible options are QuantizationDataType.int and QuantizationDataType.float.
                                  Note that the mode default_data_type=QuantizationDataType.float is only supported with
                                  default_output_bw=16 and default_param_bw=16
+        :param: user_onnx_libs: List of paths to all compiled ONNX custom ops libraries
         """
         self.model = model
         if not isinstance(model, ONNXModel):
@@ -130,6 +132,7 @@ class QuantizationSimModel:
         else:
             self._op_domain = "aimet.customop.cpu"
             self.providers = ['CPUExecutionProvider']
+        self._user_onnx_libs = user_onnx_libs
         self.param_names = []
         self.input_quantizers_name = []
         self.activation_names = []
@@ -137,7 +140,7 @@ class QuantizationSimModel:
         self._get_param_names()
         self._get_activations_to_quantize(dummy_input)
         self._add_quantization_nodes()
-        self.session = QuantizationSimModel.build_session(self.model.model, self.providers)
+        self.session = QuantizationSimModel.build_session(self.model.model, self.providers, self._user_onnx_libs)
 
         quantsim_configurator = self._add_configuration_(config_file)
 
@@ -240,7 +243,7 @@ class QuantizationSimModel:
         hooks = []
         for name in activations:
             hooks.append(add_hook_to_get_activation(self.model.model, name))
-        sess = QuantizationSimModel.build_session(self.model.model, self.providers)
+        sess = QuantizationSimModel.build_session(self.model.model, self.providers, self._user_onnx_libs)
         outputs = sess.run(None, dummy_input)
         for idx in range(len(self.model.graph().output)):
             act_name = self.model.graph().output[idx].name
@@ -348,17 +351,21 @@ class QuantizationSimModel:
                                                           )
 
     @staticmethod
-    def build_session(model: ModelProto, providers: List):
+    def build_session(model, providers: List, user_onnx_libs: List[str] = None):
         """
         Build and return onnxruntime inference session
 
         :param model: onnx model
         :param providers: providers to execute onnxruntime
+        :param user_onnx_libs: list of paths to user custom ONNX op libraries
         """
         sess_options = SessionOptions()
         shared_library = os.path.dirname(libquant_info.__file__)
         shared_library = os.path.join(shared_library, "libaimet_onnxrt_ops.so")
         sess_options.register_custom_ops_library(shared_library)
+        if user_onnx_libs is not None:
+            for lib in user_onnx_libs:
+                sess_options.register_custom_ops_library(lib)
         sess_options.graph_optimization_level = GraphOptimizationLevel.ORT_DISABLE_ALL
         session = InferenceSession(
             path_or_bytes=model.SerializeToString(),
