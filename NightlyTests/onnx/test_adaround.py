@@ -1,4 +1,4 @@
-# /usr/bin/env python3.6
+# /usr/bin/env python3.8
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
@@ -35,27 +35,60 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
-""" Unit tests for Adaround Weights """
-import json
+import os
 from packaging import version
+import json
 import numpy as np
+import pytest
 import torch
+from onnx import load_model
+from onnxruntime.quantization.onnx_quantizer import ONNXModel
+from torchvision import models
+
+from aimet_onnx.utils import make_dummy_input
+from aimet_common.defs import QuantScheme
+from aimet_onnx.quantsim import QuantizationSimModel
+from torch_utils import get_cifar10_data_loaders, train_cifar10
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 
 from aimet_onnx.adaround.adaround_weight import Adaround, AdaroundParameters
-import models.models_for_tests as test_models
 
-class TestAdaround:
+WORKING_DIR = '/tmp/quantsim'
+
+image_size = 32
+batch_size = 64
+num_workers = 4
+
+
+def model_eval_onnx(session, val_loader):
     """
-    AdaRound Weights Unit Test Cases
+    :param model: model to be evaluated
+    :param early_stopping_iterations: if None, data loader will iterate over entire validation data
+    :return: top_1_accuracy on validation data
     """
 
-    def test_apply_adaround(self):
+    corr = 0
+    total = 0
+    for (i, batch) in enumerate(val_loader):
+        x, y = batch[0].numpy(), batch[1].numpy()
+        in_tensor = {'input': x}
+        out = session.run(None, in_tensor)[0]
+        corr += np.sum(np.argmax(out, axis=1) == y)
+        total += x.shape[0]
+    print(f'Accuracy: {corr / total}')
+    return corr / total
+
+
+class TestAdaroundAcceptance:
+    """ Acceptance test for AIMET ONNX """
+    @pytest.mark.cuda
+    def test_adaround(self):
         if version.parse(torch.__version__) >= version.parse("1.13"):
             np.random.seed(0)
             torch.manual_seed(0)
-            model = test_models.single_residual_model()
+
+            model = get_model()
+
             data_loader = dataloader()
             dummy_input = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
             sess = build_session(model)
@@ -74,9 +107,29 @@ class TestAdaround:
             with open('./dummy.encodings') as json_file:
                 encoding_data = json.load(json_file)
 
-            param_keys = list(encoding_data.keys())
-            assert 'onnx::Conv_43' in param_keys
+            sim = QuantizationSimModel(ada_rounded_model, dummy_input, quant_scheme=QuantScheme.post_training_tf, default_param_bw=8,
+                                       default_activation_bw=8, use_cuda=True)
+            sim.set_and_freeze_param_encodings('./dummy.encodings')
+            sim.compute_encodings(callback, None)
+            assert sim.qc_quantize_op_dict['fc.weight'].encodings[0].delta == encoding_data['fc.weight'][0]['scale']
 
+def get_model():
+    model = models.resnet18(pretrained=False, num_classes=10)
+    if torch.cuda.is_available():
+        device = torch.device('cuda:0')
+        model.to(device)
+
+    torch.onnx.export(model, torch.rand(batch_size, 3, 32, 32).cuda(), './resnet18.onnx',
+                      training=torch.onnx.TrainingMode.EVAL,
+                      input_names=['input'], output_names=['output'],
+                      dynamic_axes={
+                          'input': {0: 'batch_size'},
+                          'output': {0: 'batch_size'},
+                      }
+                      )
+
+    onnx_model = ONNXModel(load_model('./resnet18.onnx'))
+    return onnx_model
 
 def dataloader():
     class DataLoader:
