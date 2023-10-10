@@ -118,6 +118,9 @@ public:
     void quantizeDequantize(const float* input, std::size_t tensorSize, float* output,
                             double encodingMin, double encodingMax, unsigned int bitwidth, bool useCuda) override;
 
+    void quantizeDequantize(const float* input, std::size_t tensorSize, float* output, double encodingMin,
+                            double encodingMax, unsigned int bitwidth, bool useCuda, void* stream) override;
+
     /**
      * @brief Convert a tensor from DTYPE to quantized 8-bit packed format
      * @relates quantizeDequantize, except output is stored in 8-bit packed format

@@ -96,10 +96,20 @@ void TensorQuantizationSim<DTYPE>::quantizeDequantizeTensor(const DTYPE* inputTe
                                                             double encodingMax, uint8_t bw, RoundingMode roundingMode,
                                                             bool use_cuda)
 {
+    quantizeDequantizeTensor(inputTensorData, inputTensorCount, outputTensorData, encodingMin, encodingMax,
+                             bw, roundingMode, use_cuda, nullptr);
+}
+
+template <typename DTYPE>
+void TensorQuantizationSim<DTYPE>::quantizeDequantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount,
+                                                            DTYPE* outputTensorData, double encodingMin,
+                                                            double encodingMax, uint8_t bw, RoundingMode roundingMode,
+                                                            bool use_cuda, void* stream)
+{
     TfEncoding encoding;
     fillEncodingInfo(encoding, bw, encodingMin, encodingMax);
     quantizeDequantize(inputTensorData, inputTensorCount, encoding, outputTensorData, getComputationMode(use_cuda),
-                        roundingMode);
+                        roundingMode, stream);
 }
 
 template <typename DTYPE>
@@ -145,7 +155,7 @@ void TensorQuantizationSim<DTYPE>::quantizeDequantizePerChannelTensor(
     for (uint32_t i = 0; i < splits.size(); ++i) {
         auto& split = splits[i];
         quantizeDequantize(split.data(), split.size(), completeEncodings[i], split.data(), getComputationMode(useCuda),
-                            roundMode);
+                            roundMode, nullptr);
     }
 
     // Concatenate the quantized data back into its original shape.
@@ -270,6 +280,19 @@ void TensorQuantizationSim<DTYPE>::quantizeDequantizeTensorPerChannel(const DTYP
                                                                       DTYPE* encodingOffset, RoundingMode roundingMode,
                                                                       bool useCuda)
 {
+    quantizeDequantizeTensorPerChannel(inputTensorData, numChannel, numElement, numElementPerChannel, outputTensorData,
+                                       encodingMin, encodingMax, encodingDelta, encodingOffset, roundingMode, useCuda,
+                                       nullptr);
+}
+
+template <typename DTYPE>
+void TensorQuantizationSim<DTYPE>::quantizeDequantizeTensorPerChannel(const DTYPE* inputTensorData, size_t numChannel,
+                                                                      size_t numElement, size_t numElementPerChannel,
+                                                                      DTYPE* outputTensorData, DTYPE* encodingMin,
+                                                                      DTYPE* encodingMax, DTYPE* encodingDelta,
+                                                                      DTYPE* encodingOffset, RoundingMode roundingMode,
+                                                                      bool useCuda, void* stream)
+{
     DlQuantization::ComputationMode cpuGpuMode;
     if (useCuda)
         cpuGpuMode = DlQuantization::ComputationMode::COMP_MODE_GPU;
@@ -277,7 +300,8 @@ void TensorQuantizationSim<DTYPE>::quantizeDequantizeTensorPerChannel(const DTYP
         cpuGpuMode = DlQuantization::ComputationMode::COMP_MODE_CPU;
 
     quantizeDequantizePerChannel(inputTensorData, numChannel, numElement, numElementPerChannel, outputTensorData,
-                                 encodingMin, encodingMax, encodingDelta, encodingOffset, cpuGpuMode, roundingMode);
+                                 encodingMin, encodingMax, encodingDelta, encodingOffset, cpuGpuMode, roundingMode,
+                                 stream);
 }
 
 template class TensorQuantizationSim<float>;

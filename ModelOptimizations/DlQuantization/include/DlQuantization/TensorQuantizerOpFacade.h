@@ -90,6 +90,8 @@ public:
     virtual void quantizeDequantize(const float* input, std::size_t tensorSize, float* output,
                                     double encodingMin, double encodingMax, unsigned int bitwidth, bool useCuda) = 0;
 
+    virtual void quantizeDequantize(const float* input, std::size_t tensorSize, float* output, double encodingMin,
+                                    double encodingMax, unsigned int bitwidth, bool useCuda, void* stream) = 0;
     /**
      * Compute the encoding for this tensor using stats collected so far
      */
