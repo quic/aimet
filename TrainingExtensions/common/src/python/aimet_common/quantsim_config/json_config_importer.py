@@ -128,13 +128,13 @@ def _validate_supported_kernels(supported_kernels: List):
     if supported_kernels:
         for supported_kernel in supported_kernels:
             if supported_kernel["activation"]["dtype"] == QuantizationDataType.float and \
-                    supported_kernel["activation"]["bitwidth"] != 16:
+                    supported_kernel["activation"]["bitwidth"] not in [16, 32]:
                 logger.error('Activation dtype:float is only supported with bitwidth:16')
                 raise NotImplementedError('Activation dtype:float is only supported with bitwidth:16')
 
             if "param" in supported_kernel:
                 if supported_kernel["param"]["dtype"] == QuantizationDataType.float and \
-                        supported_kernel["param"]["bitwidth"] != 16:
+                        supported_kernel["param"]["bitwidth"] not in [16, 32]:
                     logger.error('Param dtype:float is only supported with bitwidth:16')
                     raise NotImplementedError('Param dtype:float is only supported with bitwidth:16')
 

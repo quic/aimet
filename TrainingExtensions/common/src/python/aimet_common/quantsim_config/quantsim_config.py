@@ -150,11 +150,11 @@ class QuantSimConfigurator(ABC):
 
         self._supported_kernels = self._parse_supported_kernels()
         if ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG:
+            change_supported_kernels_in_config_dict(self._quantsim_configs[ConfigDictKeys.OP_TYPE], self._supported_kernels)
             if self.check_correctness_of_dtype_bw_rules(
                     QuantDtypeBwInfo(self._default_data_type, self._default_output_bw,
                                      self._default_data_type, self._default_param_bw)):
                 logger.info("Supported Kernel check for valid dtype and bitwidth overrides completed")
-
 
     def _set_quantsim_configs(self):
         """
@@ -766,12 +766,10 @@ def is_override_dtype_bw_valid(override_dtype_bw_info: QuantDtypeBwInfo, quantsi
              quantsim_dtype_bw_info.param_bw > override_dtype_bw_info.param_bw)) or (
                  quantsim_dtype_bw_info.act_dtype == QuantizationDataType.float
                  and quantsim_dtype_bw_info.param_dtype == QuantizationDataType.float):
-        logger.error(' Target specfic op level override only with a higher precision kernel is supported  \n,'
-                     ' (please check both quantsim defaults and default supported_kernels in config file specified at override index {%s}) \n'
-                     ' quantsim is configured with %s and supported_kernels override configured as %s \n',
-                     DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX, quantsim_dtype_bw_info, override_dtype_bw_info)
-        return False
-
+        logger.info(' Target specfic op level override only with a higher precision kernel is supported  \n,'
+                    ' (please check both quantsim defaults and default supported_kernels in config file specified at override index {%s}) \n'
+                    ' quantsim is configured with %s and supported_kernels override configured as %s \n',
+                    DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX, quantsim_dtype_bw_info, override_dtype_bw_info)
     return True
 
 
@@ -838,3 +836,14 @@ def reformat_supported_kernels(supported_kernels: Dict):
         ret_dict[op_name] = candidates
 
     return ret_dict
+
+def change_supported_kernels_in_config_dict(op_type_from_config: Dict, supported_kernels: Dict):
+    """
+    Change supported kernels in config dict according to new supported kernels
+
+    :param op_type_from_config: Dict of op to it's supported kernels
+    :param supported_kernels: Dict of op to it's supported kernels
+    """
+    for op_type in op_type_from_config:
+        if op_type in supported_kernels:
+            op_type_from_config[op_type][ConfigDictKeys.SUPPORTED_KERNELS] = supported_kernels[op_type]

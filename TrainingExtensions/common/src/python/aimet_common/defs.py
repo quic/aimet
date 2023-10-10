@@ -388,11 +388,11 @@ class QuantDtypeBwInfo:
         """
         Validate inputs
         """
-        if self.param_dtype == QuantizationDataType.float and self.param_bw != 16:
+        if self.param_dtype == QuantizationDataType.float and self.param_bw not in [16, 32]:
             raise ValueError(
                 'float param_dtype can only be used when param_bw is set to 16, not ' + str(self.param_bw))
 
-        if self.act_dtype == QuantizationDataType.float and self.act_bw != 16:
+        if self.act_dtype == QuantizationDataType.float and self.act_bw not in [16, 32]:
             raise ValueError(
                 'float act_dtype can only be used when act_bw is set to 16, not ' + str(self.act_bw))
 

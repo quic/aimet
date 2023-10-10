@@ -144,6 +144,7 @@ class QuantizationSimModel:
                  rounding_mode: str = 'nearest', default_output_bw: int = 8, default_param_bw: int = 8,
                  in_place: bool = False, config_file: str = None,
                  default_data_type: QuantizationDataType = QuantizationDataType.int):
+
         """
         Constructor for QuantizationSimModel.
 

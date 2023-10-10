@@ -40,6 +40,7 @@ from abc import abstractmethod
 from typing import Dict, List, Tuple, Set, Union
 import torch
 
+import aimet_common.quantsim_config.quantsim_config
 from aimet_common.utils import AimetLogger, log_with_error_and_assert_if_false
 from aimet_common.graph_searcher import GraphSearcher
 from aimet_common.graph_pattern_matcher import PatternType
@@ -55,9 +56,7 @@ from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch.tensor_quantizer import TensorQuantizer
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.onnx_utils import map_torch_types_to_onnx, pytorch_functional_name_to_onnx_dict
-
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
-
 MAP_PYTORCH_PARAM_NAME_TO_QUANTSIM_NAME = {
     "bias": "bias",
     "weight": "weight"
@@ -110,6 +109,8 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
     def __init__(self, model, connected_graph: ConnectedGraph, config_file: str, quantsim_output_bw: int,
                  quantsim_param_bw: int, quantsim_data_type: QuantizationDataType):
         super().__init__(config_file, quantsim_data_type, quantsim_output_bw, quantsim_param_bw)
+        global ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG # pylint: disable=global-statement
+        ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = aimet_common.quantsim_config.quantsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG
         _report_unsupported_ops(self._quantsim_configs)
         self._conn_graph = connected_graph
         self._module_to_quantsim_wrapper_dict = _create_module_to_quantsim_wrapper_dict(model)
@@ -377,8 +378,11 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
             if not onnx_types:
                 continue
             for onnx_type in onnx_types:
-                if onnx_type in op_configs:
-                    op_config = op_configs[onnx_type]
+                if onnx_type in op_configs or module.__class__.__name__ in op_configs:
+                    if onnx_type in op_configs:
+                        op_config = op_configs[onnx_type]
+                    else:
+                        op_config = op_configs[module.__class__.__name__]
                     logger.info(' Set op level config for op = {%s}', onnx_type)
                     self._set_config_for_module(input_output_tensor_quantizers, op_config, modified_tensor_quantizers,
                                                 module)
@@ -600,41 +604,9 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         :param data_type: data type as QuantizationDataType
         :param bitwidth: bitwidth
         """
-        # For now, only override activation bw and dtype for fp16 supported kernel.
-        # For a standalone kernel supporting fp16, only its parameter quantizer needs to be changed to fp16 because
-        # requantization will happen on the input and output of the kernel (int8 -> fp16 for input and fp16 -> int8 for
-        # output), causing lower precision encodings to be necessary for input and output.
-        # In the case of back to back kernels supporting fp16, no requantization will happen in between, so that
-        # quantizer can be set to fp16.
-        if data_type == QuantizationDataType.float and bitwidth == 16:
-            # pylint: disable=protected-access
-            conn_graph_op = self._conn_graph._module_to_op_dict[quantize_wrapper._module_to_wrap]
-
-            # Checking if input quantizer(s) should be set to fp16. Only set to fp16 if all input ops are also only
-            # fp16 supported.
-            input_ops = conn_graph_op.input_ops
-            all_input_ops_fp16 = True
-            for input_op in input_ops:
-                if not self._op_type_default_override_supported_kernel_lookup(input_op.type, bitwidth, data_type):
-                    all_input_ops_fp16 = False
-                    break
-            if all_input_ops_fp16:
-                for input_quantizer in quantize_wrapper.input_quantizers:
-                    input_quantizer.bitwidth = bitwidth
-                    input_quantizer.data_type = data_type
-
-            # Checking if output quantizer(s) should be set to fp16. Only set to fp16 if all output ops are also only
-            # fp16 supported.
-            output_ops = conn_graph_op.output_ops
-            all_output_ops_fp16 = True
-            for output_op in output_ops:
-                if not self._op_type_default_override_supported_kernel_lookup(output_op.type, bitwidth, data_type):
-                    all_output_ops_fp16 = False
-                    break
-            if all_output_ops_fp16:
-                for output_quantizer in quantize_wrapper.output_quantizers:
-                    output_quantizer.bitwidth = bitwidth
-                    output_quantizer.data_type = data_type
+        for quantizer in quantize_wrapper.input_quantizers + quantize_wrapper.output_quantizers:
+            quantizer.bitwidth = bitwidth
+            quantizer.data_type = data_type
 
     # -----------------------------------[ override support end] --------------------------------------------- #
 
@@ -878,6 +850,9 @@ class DefaultOpInstanceConfigGenerator(OpInstanceConfigGenerator):
         """
         supported_kernels = self.op_type_supported_kernels.get(op_type,
                                                                self.op_type_supported_kernels[ConfigDictKeys.DEFAULTS])
+        if not supported_kernels:
+            supported_kernels = self.op_type_supported_kernels.get(module.__class__.__name__,
+                                                                   self.op_type_supported_kernels[ConfigDictKeys.DEFAULTS])
         pcq = self._generate_pcq(module)
 
         return supported_kernels, pcq

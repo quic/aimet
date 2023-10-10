@@ -74,7 +74,6 @@ backend_datatype_to_aimet_map = {QnnDatatype.QNN_DATATYPE_INT_8: {'bitwidth': 8,
                                                                    'dtype': QuantizationDataType.int}
                                  }
 
-
 aimet_op_to_backend_op_name_map = {"Conv1d":"Conv1d",
                                    "Conv2d":"Conv2d",
                                    "Conv3d":"Conv3d",
@@ -150,7 +149,7 @@ aimet_op_to_backend_op_name_map = {"Conv1d":"Conv1d",
                                    "Gather":"Gather",
                                    "ChannelShuffle":"ChannelShuffle",
                                    "Pad":"Pad",
-                                   "ElementwiseUnarySign":"",
+                                   "ElementwiseUnarySign":"ElementWiseUnary",
                                    "RoIPool":"RoiPooling",
                                    "PixelShuffle":"DepthToSpace",
                                    "DepthToSpaceDCRMode":"DepthToSpace",
