@@ -75,7 +75,7 @@ py::array_t<float> TensorQuantizationSimForPython::quantizeDequantize(py::array_
 
     _tensorQuantizationSim->quantizeDequantizeTensor(inputDataPtr, inputTensorSize, outputDataPtr,
                                                      encoding.min, encoding.max, bitwidth, roundingMode,
-                                                     use_cuda);
+                                                     use_cuda, nullptr);
 
     return output;
 }

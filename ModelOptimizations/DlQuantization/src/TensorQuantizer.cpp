@@ -165,9 +165,15 @@ void TensorQuantizer::computeEncodingFromData(uint8_t bw, const float* data, siz
 void TensorQuantizer::quantizeDequantize(const float* input, std::size_t tensorSize, float* output, double encodingMin,
                                          double encodingMax, unsigned int bitwidth, bool useCuda)
 {
+    quantizeDequantize(input, tensorSize, output, encodingMin, encodingMax, bitwidth, useCuda, nullptr);
+}
+
+void TensorQuantizer::quantizeDequantize(const float* input, std::size_t tensorSize, float* output, double encodingMin,
+                                         double encodingMax, unsigned int bitwidth, bool useCuda, void* stream)
+{
     assert(isEncodingValid);
     _tensorQuantizationSim->quantizeDequantizeTensor(input, tensorSize, output, encodingMin, encodingMax, bitwidth,
-                                                     roundingMode, useCuda);
+                                                     roundingMode, useCuda, stream);
 }
 
 void TensorQuantizer::quantizeTensorPacked(const float* input, std::size_t tensorSize, std::vector<uint8_t>& output,

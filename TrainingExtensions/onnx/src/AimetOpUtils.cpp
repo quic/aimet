@@ -39,13 +39,14 @@
 #include "AimetOpUtils.h"
 
 template <typename T>
-void copyInputTensorsToOutputTensors(const T* inTensor, size_t count, T* outTensor, bool useCuda)
+void copyInputTensorsToOutputTensors(const T* inTensor, size_t count, T* outTensor, bool useCuda, void* stream)
 {
     // copy input_tensor to output_tensor
     if (useCuda)
     {
 #ifdef ONNX_CUDA
-        cudaMemcpy(outTensor, inTensor, count * sizeof(float), cudaMemcpyDeviceToDevice);
+        cudaMemcpyAsync(outTensor, inTensor, count * sizeof(float), cudaMemcpyDeviceToDevice,
+                        reinterpret_cast<cudaStream_t>(stream));
 #else
         throw std::runtime_error("Not compiled for GPU mode.");
 #endif
@@ -66,4 +67,5 @@ void quantizeDequantizeFp16Cpu(const float* in, int cnt, float* out)
 }
 
 
-template void copyInputTensorsToOutputTensors(const float* inTensor, size_t count, float* outTensor, bool useCuda);
+template void copyInputTensorsToOutputTensors(const float* inTensor, size_t count, float* outTensor, bool useCuda,
+                                              void* stream);

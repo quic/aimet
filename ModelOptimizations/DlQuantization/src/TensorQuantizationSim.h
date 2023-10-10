@@ -60,6 +60,10 @@ public:
                                   double encodingMin, double encodingMax, uint8_t bw, RoundingMode roundMode,
                                   bool use_cuda) override;
 
+    void quantizeDequantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount, DTYPE* outputTensorData,
+                                  double encodingMin, double encodingMax, uint8_t bw, RoundingMode roundMode,
+                                  bool use_cuda, void* stream) override;
+
     void quantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount, DTYPE* outputTensorData,
                         double encodingMin, double encodingMax, uint8_t bw, RoundingMode roundMode, bool use_cuda,
                         bool shiftToSigned)
@@ -98,6 +102,11 @@ public:
                                             size_t numElementPerChannel, DTYPE* outputTensorData, DTYPE* encodingMin,
                                             DTYPE* encodingMax, DTYPE* encodingDelta, DTYPE* encodingOffset,
                                             RoundingMode roundingMode, bool useCuda) override;
+
+    void quantizeDequantizeTensorPerChannel(const DTYPE* inputTensorData, size_t numChannel, size_t numElement,
+                                            size_t numElementPerChannel, DTYPE* outputTensorData, DTYPE* encodingMin,
+                                            DTYPE* encodingMax, DTYPE* encodingDelta, DTYPE* encodingOffset,
+                                            RoundingMode roundingMode, bool useCuda, void* stream) override;
 
     inline DlQuantization::ComputationMode getComputationMode(bool use_cuda)
     {

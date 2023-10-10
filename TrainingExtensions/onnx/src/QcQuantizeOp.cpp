@@ -82,11 +82,12 @@ void QcQuantizeKernel::Compute(OrtKernelContext* context)
     api_.ReleaseTensorTypeAndShapeInfo(outputInfo);
 
     DlQuantization::IAllocator* allocator = &cpuAllocator;
+    void* stream = nullptr;
 #ifdef ONNX_CUDA
     if (useCuda)
     {
         allocator = &cudaAllocator;
-        cudaDeviceSynchronize();
+        stream = api_.KernelContext_GetGPUComputeStream(context);
     }
 #endif
 
@@ -97,17 +98,17 @@ void QcQuantizeKernel::Compute(OrtKernelContext* context)
             int axis = quantInfo->channelAxis;
             modeSpecificActionPerChannelInt(inputData, size, result, axis, dimensions, quantInfo->tensorQuantizerRef,
                                             opMode, encodings, quantInfo->useSymmetricEncoding, allocator, useCuda,
-                                            tensorQuantizationSim);
+                                            stream, tensorQuantizationSim);
         }
         else
         {
             modeSpecificActionInt(inputData, size, result, quantInfo->tensorQuantizerRef[0], opMode, encodings[0],
-                                  quantInfo->useSymmetricEncoding, allocator, useCuda);
+                                  quantInfo->useSymmetricEncoding, allocator, useCuda, stream);
         }
     }
     else
     {
-        modeSpecificActionFloat(inputData, size, result, opMode, allocator, useCuda);
+        modeSpecificActionFloat(inputData, size, result, opMode, allocator, useCuda, stream);
     }
 
     // We only ever need to run in oneShotQuantizeDequantize once, afterwards just use quantizeDequantize
@@ -115,14 +116,6 @@ void QcQuantizeKernel::Compute(OrtKernelContext* context)
     {
         quantInfo->opMode = DlQuantization::TensorQuantizerOpMode::quantizeDequantize;
     }
-
-#ifdef ONNX_CUDA
-    // Wait for our calls to finish before continuing since we do not use the onnxruntime stream
-    if (useCuda)
-    {
-        cudaDeviceSynchronize();
-    }
-#endif
 }
 
 
