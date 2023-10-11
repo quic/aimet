@@ -594,7 +594,7 @@ class TestQuantSimConfig(unittest.TestCase):
 
         qsim_config = QuantSimConfigurator(config_file='./config.json', default_data_type=QuantizationDataType.int,
                                            default_output_bw=8, default_param_bw=8)
-        supported_kernels = qsim_config.get_supported_kernels()
+        supported_kernels = qsim_config._parse_supported_kernels()
         assert len(supported_kernels['Type2']) == 3
         assert {'activation': {'bitwidth': 8, 'dtype': QuantizationDataType.int}, 'param': {'bitwidth': 8, 'dtype': QuantizationDataType.int}} in supported_kernels['Type2']
         assert {'activation': {'bitwidth': 8, 'dtype': QuantizationDataType.int}, 'param': {'bitwidth': 16, 'dtype': QuantizationDataType.int}} in supported_kernels['Type2']
