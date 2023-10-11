@@ -46,7 +46,7 @@ import aimet_common.libpymo as pymo
 from aimet_common.quantsim_config.json_config_importer import DefaultsType, OpType, ParamType, OpTypeType, \
     SupergroupType, ConfigType, ConfigDictKeys
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
-from aimet_common.defs import QuantizationDataType
+from aimet_common.defs import QuantizationDataType, QuantDtypeBwInfo
 from aimet_common.graph_searcher import GraphSearcher
 from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as AimetCommonQuantSimConfigurator
@@ -110,6 +110,14 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         self._op_to_quantizer_lists_dict = None
         self._onnx_conn_graph_name_mapper = OnnxConnectedGraphTypeMapper(onnx_tf_conn_graph_type_pairs)
         self.per_channel_quantization_flag = self._parse_per_channel_quantization().get('defaults')
+
+        self._supported_kernels = self._parse_supported_kernels()
+        if ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG:
+            if self.check_correctness_of_dtype_bw_rules(QuantDtypeBwInfo(act_dtype=quantsim_data_type,
+                                                                         act_bw=quantsim_output_bw,
+                                                                         param_dtype=quantsim_data_type,
+                                                                         param_bw=quantsim_param_bw)):
+                logger.info("Supported Kernel check for valid dtype and bitwidth overrides completed")
 
     def configure_quantizers(self, op_to_quant_ops_dict: OpToQuantOpsDictType,
                              param_quantizer_dict: Dict[str, QuantizerInfo],

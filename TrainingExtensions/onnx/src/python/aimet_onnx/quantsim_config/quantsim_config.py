@@ -99,6 +99,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         self._input_quantizers = {}
         self._op_to_quantizer_lists_dict = None
         self._op_to_quantizers = {}
+        self._supported_kernels = self._parse_supported_kernels()
         self._op_to_supported_kernel = {}
 
     def get_op_to_supported_kernels(self) -> Dict:

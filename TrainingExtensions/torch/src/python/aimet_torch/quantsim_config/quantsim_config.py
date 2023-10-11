@@ -40,12 +40,11 @@ from abc import abstractmethod
 from typing import Dict, List, Tuple, Set, Union
 import torch
 
-import aimet_common.quantsim_config.quantsim_config
 from aimet_common.utils import AimetLogger, log_with_error_and_assert_if_false
 from aimet_common.graph_searcher import GraphSearcher
 from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.connected_graph.operation import Op
-from aimet_common.defs import QuantizationDataType
+from aimet_common.defs import QuantizationDataType, QuantDtypeBwInfo
 from aimet_common.connected_graph import connectedgraph_utils as cg_utils
 from aimet_common.quantsim_config.json_config_importer import ConfigDictKeys, ConfigType, SupergroupType, OpType, \
     ParamType, DefaultsType, OpTypeType, ConfigDictType
@@ -109,14 +108,18 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
     def __init__(self, model, connected_graph: ConnectedGraph, config_file: str, quantsim_output_bw: int,
                  quantsim_param_bw: int, quantsim_data_type: QuantizationDataType):
         super().__init__(config_file, quantsim_data_type, quantsim_output_bw, quantsim_param_bw)
-        global ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG # pylint: disable=global-statement
-        ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = aimet_common.quantsim_config.quantsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG
         _report_unsupported_ops(self._quantsim_configs)
         self._conn_graph = connected_graph
         self._module_to_quantsim_wrapper_dict = _create_module_to_quantsim_wrapper_dict(model)
         self._named_modules_to_tensor_quantizers_dict = self._create_named_modules_to_tensor_quantizers_dict()
         self._elementwise_op_to_tensor_quantizers_dict = self._create_elementwise_op_to_tensor_quantizers_dict()
         self._disable_all_quantizers()
+        self._supported_kernels = self._parse_supported_kernels()
+        if ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG:
+            change_supported_kernels_in_config_dict(self._quantsim_configs[ConfigDictKeys.OP_TYPE], self._supported_kernels)
+            if self.check_correctness_of_dtype_bw_rules(QuantDtypeBwInfo(self._default_data_type, self._default_output_bw,
+                                                                         self._default_data_type, self._default_param_bw)):
+                logger.info("Supported Kernel check for valid dtype and bitwidth overrides completed")
         self._set_quantsim_configs()
         self._generate_and_apply_op_instance_specific_config()
 
@@ -604,9 +607,44 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         :param data_type: data type as QuantizationDataType
         :param bitwidth: bitwidth
         """
-        for quantizer in quantize_wrapper.input_quantizers + quantize_wrapper.output_quantizers:
-            quantizer.bitwidth = bitwidth
-            quantizer.data_type = data_type
+        # For a standalone kernel supporting fp16, only its parameter quantizer needs to be changed to fp16 because
+        # requantization will happen on the input and output of the kernel (int8 -> fp16 for input and fp16 -> int8 for
+        # output), causing lower precision encodings to be necessary for input and output.
+        # In the case of back to back kernels supporting fp16, no requantization will happen in between, so that
+        # quantizer can be set to fp16.
+        if data_type == QuantizationDataType.float and bitwidth == 16:
+            # pylint: disable=protected-access
+            conn_graph_op = self._conn_graph._module_to_op_dict[quantize_wrapper._module_to_wrap]
+
+            # Checking if input quantizer(s) should be set to fp16. Only set to fp16 if all input ops are also only
+            # fp16 supported.
+            input_ops = conn_graph_op.input_ops
+            all_input_ops_fp16 = True
+            for input_op in input_ops:
+                if not self._op_type_default_override_supported_kernel_lookup(input_op.type, bitwidth, data_type):
+                    all_input_ops_fp16 = False
+                    break
+            if all_input_ops_fp16:
+                for input_quantizer in quantize_wrapper.input_quantizers:
+                    input_quantizer.bitwidth = bitwidth
+                    input_quantizer.data_type = data_type
+
+            # Checking if output quantizer(s) should be set to fp16. Only set to fp16 if all output ops are also only
+            # fp16 supported.
+            output_ops = conn_graph_op.output_ops
+            all_output_ops_fp16 = True
+            for output_op in output_ops:
+                if not self._op_type_default_override_supported_kernel_lookup(output_op.type, bitwidth, data_type):
+                    all_output_ops_fp16 = False
+                    break
+            if all_output_ops_fp16:
+                for output_quantizer in quantize_wrapper.output_quantizers:
+                    output_quantizer.bitwidth = bitwidth
+                    output_quantizer.data_type = data_type
+        else:
+            for quantizer in quantize_wrapper.input_quantizers + quantize_wrapper.output_quantizers:
+                quantizer.bitwidth = bitwidth
+                quantizer.data_type = data_type
 
     # -----------------------------------[ override support end] --------------------------------------------- #
 
@@ -856,3 +894,14 @@ class DefaultOpInstanceConfigGenerator(OpInstanceConfigGenerator):
         pcq = self._generate_pcq(module)
 
         return supported_kernels, pcq
+
+def change_supported_kernels_in_config_dict(op_type_from_config: Dict, supported_kernels: Dict):
+    """
+    Change supported kernels in config dict according to new supported kernels
+
+    :param op_type_from_config: Dict of op to it's supported kernels
+    :param supported_kernels: Dict of op to it's supported kernels
+    """
+    for op_type in op_type_from_config:
+        if op_type in supported_kernels:
+            op_type_from_config[op_type][ConfigDictKeys.SUPPORTED_KERNELS] = supported_kernels[op_type]
