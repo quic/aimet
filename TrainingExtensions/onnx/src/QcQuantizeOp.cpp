@@ -88,6 +88,12 @@ void QcQuantizeKernel::Compute(OrtKernelContext* context)
     {
         allocator = &cudaAllocator;
         stream = api_.KernelContext_GetGPUComputeStream(context);
+        if ((opMode == DlQuantization::TensorQuantizerOpMode::updateStats) ||
+            (opMode == DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize))
+        {
+            // updateStats doesn't use cuda stream, must synchronize first to ensure input buffer is populated
+            cudaStreamSynchronize(reinterpret_cast<cudaStream_t>(stream));
+        }
     }
 #endif
 
