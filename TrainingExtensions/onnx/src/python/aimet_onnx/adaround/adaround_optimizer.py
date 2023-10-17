@@ -52,6 +52,7 @@ from aimet_onnx.adaround.activation_sampler import ActivationSampler
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.adaround.utils import ModuleInfo, read_attributes_for_op
 from aimet_onnx.utils import create_input_dict
+# pylint: disable=import-error
 from aimet_torch.adaround.adaround_loss import AdaroundLoss, AdaroundHyperParameters
 from aimet_torch.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer
 from aimet_torch.adaround.adaround_optimizer import AdaroundOptimizer as TorchAdaroundOptimizer
