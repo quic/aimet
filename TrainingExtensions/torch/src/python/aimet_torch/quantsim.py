@@ -38,11 +38,12 @@
 
 """ Implementation for simulating models running on Quantized hardware """
 # pylint: disable=too-many-lines
+import contextlib
 import os
 import io
 import copy
 import pickle
-from typing import Tuple, List, Union, Dict, Callable, Optional
+from typing import Tuple, List, Union, Dict, Callable, Optional, Any
 from collections.abc import Iterable
 import json
 import torch
@@ -285,6 +286,53 @@ class QuantizationSimModel:
 
         return stream.getvalue()
 
+    @staticmethod
+    def prepare_sim_for_compute_encodings(sim: 'QuantizationSimModel'):
+        """
+        Prepare QuantSim for compute encodings. Resets encodings for each quantizable layer and sets mode to Analysis.
+
+        :param sim: QuantSim to prepare
+        """
+        # pylint: disable=protected-access
+        quantized_layers = sim._get_qc_quantized_layers(sim.model)
+
+        for _, layer in quantized_layers:
+            # Clear stats and encodings if they are present
+            layer.reset_encodings()
+
+            # And set the mode to analysis
+            layer.set_mode(QcQuantizeOpMode.ANALYSIS)
+
+        for _, layer in quantized_layers:
+            # call only when quant scheme is percentile
+            if sim._quant_scheme == QuantScheme.post_training_percentile:
+                layer.set_percentile_value(sim._percentile_value)
+
+    @staticmethod
+    def compute_layer_encodings_for_sim(sim: 'QuantizationSimModel'):
+        """
+        Compute encodings for each quantizable layer in sim after forward pass has been called.
+
+        :param sim: QuantSim to compute encodings for
+        """
+        # pylint: disable=protected-access
+        quantized_layers = sim._get_qc_quantized_layers(sim.model)
+        # Get the computed per-layer encodings and log them
+        for name, layer in quantized_layers:
+            layer.compute_encoding()
+
+            # Before we return we set the mode to active - meaning ready for quantize/de-quantize
+            # for layers with valid_encoding, otherwise we set to pass through
+            if isinstance(layer, QcQuantizeRecurrent):
+                sim.set_mode_for_recurrent_module(layer, name)
+            else:
+                # By default we want to set the Quantization wrappers to ACTIVE mode
+                layer.set_mode(QcQuantizeOpMode.ACTIVE)
+
+        sim.replace_wrappers_for_quantize_dequantize()
+
+        sim._clamp_transformer_attention_mask_encoding()
+
     def compute_encodings(self, forward_pass_callback, forward_pass_callback_args):
         """
         Computes encodings for all quantization sim nodes in the model. It is also used to find initial encodings for
@@ -302,40 +350,13 @@ class QuantizationSimModel:
 
         """
 
-        quantized_layers = self._get_qc_quantized_layers(self.model)
-
-        for _, layer in quantized_layers:
-            # Clear stats and encodings if they are present
-            layer.reset_encodings()
-
-            # And set the mode to analysis
-            layer.set_mode(QcQuantizeOpMode.ANALYSIS)
-
-        for _, layer in quantized_layers:
-            # call only when quant scheme is percentile
-            if self._quant_scheme == QuantScheme.post_training_percentile:
-                layer.set_percentile_value(self._percentile_value)
+        QuantizationSimModel.prepare_sim_for_compute_encodings(self)
 
         # Run forward iterations so we can collect statistics to compute the appropriate encodings
         with utils.in_eval_mode(self.model), torch.no_grad():
             _ = forward_pass_callback(self.model, forward_pass_callback_args)
 
-        # Get the computed per-layer encodings and log them
-        for name, layer in quantized_layers:
-            layer.compute_encoding()
-
-            # Before we return we set the mode to active - meaning ready for quantize/de-quantize
-            # for layers with valid_encoding, otherwise we set to pass through
-            if isinstance(layer, QcQuantizeRecurrent):
-                self.set_mode_for_recurrent_module(layer, name)
-
-            else:
-                # By default we want to set the Quantization wrappers to ACTIVE mode
-                layer.set_mode(QcQuantizeOpMode.ACTIVE)
-
-        self.replace_wrappers_for_quantize_dequantize()
-
-        self._clamp_transformer_attention_mask_encoding()
+        QuantizationSimModel.compute_layer_encodings_for_sim(self)
 
     @classmethod
     def set_mode_for_recurrent_module(cls, layer: QcQuantizeRecurrent, name: str):
@@ -1915,3 +1936,36 @@ def has_valid_encodings(qc_quantize_op: Union[QcQuantizeWrapper, QcQuantizeRecur
             return True
 
     return False
+
+
+def compute_encodings_for_sims(sim_list: List[QuantizationSimModel], forward_pass_callback: Callable,
+                               forward_pass_callback_args: Any):
+    """
+    Compute encodings for a list of QuantSims.
+
+    :param sim_list: List of QuantSims to compute encodings for.
+    :param forward_pass_callback: A callback function that simply runs forward passes on the models. This callback
+        function should use representative data for the forward pass, so the calculated encodings work for all
+        data samples. This callback internally chooses the number of data samples it wants to use for calculating
+        encodings.
+        The callback expects exactly two inputs:
+            - List of models which are involved in the forward pass. The models are taken directly from calling
+            sim.model for each sim in sim_list, passed in the same order in which the sims appear in sim_list.
+            - Forward pass callback args
+    :param forward_pass_callback_args: These argument(s) are passed to the forward_pass_callback as-is. Up to
+        the user to determine the type of this parameter. E.g. could be simply an integer representing the number
+        of data samples to use. Or could be a tuple of parameters or an object representing something more complex.
+        If set to None, forward_pass_callback will be invoked with no parameters.
+    """
+    ctx_managers = [torch.no_grad()]
+    for sim in sim_list:
+        ctx_managers.append(utils.in_eval_mode(sim.model))
+        QuantizationSimModel.prepare_sim_for_compute_encodings(sim)
+
+    with contextlib.ExitStack() as stack:
+        for mgr in ctx_managers:
+            stack.enter_context(mgr)
+        _ = forward_pass_callback([sim.model for sim in sim_list], forward_pass_callback_args)
+
+    for sim in sim_list:
+        QuantizationSimModel.compute_layer_encodings_for_sim(sim)
