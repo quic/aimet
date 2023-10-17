@@ -2753,6 +2753,34 @@ class TestQuantizationSimStaticGrad:
                 onnxsaver_act_names = onnxsaver_encodings['activation_encodings'].keys()
                 assert direct_onnx_act_names != onnxsaver_act_names
 
+    @pytest.mark.parametrize("num_parameters", [1, 8])
+    @pytest.mark.parametrize("config_file", [None, get_path_for_per_channel_config()])
+    def test_export_to_onnx_for_multiple_p_relu_model(self, num_parameters, config_file):
+        model = test_models.MultiplePReluModel(num_parameters)
+        dummy_input = torch.randn(4, 3, 28, 28)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim = QuantizationSimModel(model, dummy_input, QuantScheme.post_training_tf,
+                                       config_file=config_file)
+            sim.compute_encodings(lambda m, _: m(dummy_input), None)
+            filename_prefix = "multiple_p_relu_model"
+
+            onnx_utils.RESTORE_ONNX_MODEL_INITIALIZERS = True
+            sim.export(tmp_dir, filename_prefix, dummy_input)
+            with open(f"{tmp_dir}/{filename_prefix}.encodings") as encodings_file:
+                encodings = json.load(encodings_file)
+
+        param_encodings = encodings["param_encodings"]
+        expected_param_names = ["act1.weight", "act2.weight", "act3.weight"]
+        for param_name in expected_param_names:
+            assert param_name in param_encodings
+
+            if config_file: # Per-channel
+                assert len(param_encodings[param_name]) == num_parameters
+            else:           # Per-tensor
+                assert len(param_encodings[param_name]) == 1
+        onnx_utils.RESTORE_ONNX_MODEL_INITIALIZERS = False
+
     def test_save_encodings_to_json(self):
         model = ModelWithTwoInputsOneToAdd()
         dummy_input = (torch.rand(32, 1, 100, 100), torch.rand(32, 10, 22, 22))

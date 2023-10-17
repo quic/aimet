@@ -1,4 +1,4 @@
-# /usr/bin/env python3.5
+#!/usr/bin/env python3
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
@@ -67,6 +67,10 @@ _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 # TODO: Corner cases exist when ONNX names model nodes with reused modules, or models with recurrent nodes. Do not use
 # this flag in such circumstances.
 EXPORT_TO_ONNX_DIRECT = False
+
+# Flag to enable restoring pruned initializers in ONNX graph
+# By default, the flag is disabled because it is rare case we should restore initializers in most cases
+RESTORE_ONNX_MODEL_INITIALIZERS = False
 
 # runs the second pass of markers for non-leaf torch module and updates names of onnx ops belonging to
 # non-leaf pytorch module
@@ -216,6 +220,16 @@ class OnnxExportApiArgs:
         return {'opset_version': self.opset_version,
                 'input_names': self.input_names,
                 'output_names': self.output_names}
+
+
+@dataclass(frozen=True)
+class PrunedInitializerInfo:
+    """
+    Data carrier containing initializer to be added and identity node to be removed in ONNX graph
+    """
+    initializer: onnx.TensorProto
+    identity_node: onnx.NodeProto
+
 
 class MarkerAttr(IntEnum):
     """ Enumeration for the custom marker attribute to index into the onnx node """
@@ -1064,6 +1078,8 @@ class OnnxSaver:
                                  'temp_onnx_model_with_all_markers.onnx')
 
         cls._export_model_to_onnx(model, dummy_input, temp_file, is_conditional, onnx_export_args)
+        if RESTORE_ONNX_MODEL_INITIALIZERS:
+            restore_onnx_graph_initializers(temp_file, temp_file)
         return cls.load_simply_onnx_model(temp_file)
 
     @classmethod
@@ -1456,3 +1472,78 @@ class OnnxSaver:
                 torch.onnx.export(model, dummy_input, temp_file, **kwargs)
             except torch.onnx.CheckerError:
                 _logger.warning("ONNX Checker has failed but ONNX graph is still generated.")
+
+
+def restore_onnx_graph_initializers(original_model_path: str, restored_model_path: str):
+    """
+    Restore pruned initializers in ONNX graph
+
+    :param original_model_path: Path where the original ONNX artifact was stored
+    :param restored_model_path: Path to store restored ONNX artifact
+    """
+    # pylint: disable=protected-access, no-member
+    model = onnx.load(original_model_path)
+    onnx_graph = model.graph
+
+    initializers = OnnxSaver._get_all_initializers(onnx_graph)
+    initializer_names = [initializer.name for initializer in initializers]
+    pruned_initializer_map = _get_pruned_initializer_map(
+        onnx_graph, initializers, initializer_names
+    )
+
+    for node in onnx_graph.node:
+        for input_tensor in node.input:
+            _restore_pruned_initializer(
+                onnx_graph, input_tensor, pruned_initializer_map
+            )
+
+    onnx.save(model, restored_model_path)
+
+
+def _get_pruned_initializer_map(onnx_graph: onnx.GraphProto,
+                                initializers: List[onnx.TensorProto],
+                                initializer_names: List[str]) -> Dict[str, PrunedInitializerInfo]:
+    """
+    Find pruned ONNX initializers by iterating Identity nodes
+
+    :param onnx_graph: ONNX graph
+    :param initializers: List of ONNX initializers
+    :param initializer_names: List of model initializer names
+    :return: Dictionary with output of identity node as key and PrunedInitializerInfo as value
+    """
+    pruned_initializer_map = {}
+    for node in onnx_graph.node:
+        if node.op_type == "Identity" and node.input[0] in initializer_names:
+            index = initializer_names.index(node.input[0])
+            initializer = copy.deepcopy(initializers[index])
+            pruned_initializer_map[node.output[0]] = PrunedInitializerInfo(
+                initializer, node
+            )
+
+    return pruned_initializer_map
+
+
+def _restore_pruned_initializer(onnx_graph: onnx.GraphProto,
+                                input_tensor: str,
+                                pruned_initializer_map: Dict[str, PrunedInitializerInfo],
+                                new_initializer_name: Optional[str] = None):
+    """
+    Create new Initializer and remove Identity node to restore pruned Initializer
+
+    :param onnx_graph: ONNX graph
+    :param input_tensor: Input tensor name
+    :param pruned_initializer_map: Dictionary with output of identity node as key and PrunedInitializerInfo as value
+    :param new_initializer_name: Name for new initializer
+    """
+    if result := pruned_initializer_map.get(input_tensor):
+        new_initializer = result.initializer
+        existing_identity_node = result.identity_node
+
+        new_initializer.name = new_initializer_name or input_tensor
+        onnx_graph.initializer.append(new_initializer)
+        onnx_graph.node.remove(existing_identity_node)
+        _logger.info(
+            "Added new Initializer `%s` and removed existing Identity node `%s`",
+            new_initializer.name,
+            existing_identity_node.name,
+        )
