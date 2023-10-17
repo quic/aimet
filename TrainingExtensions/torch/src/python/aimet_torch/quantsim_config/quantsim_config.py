@@ -116,7 +116,6 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         self._disable_all_quantizers()
         self._supported_kernels = self._parse_supported_kernels()
         if ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG:
-            change_supported_kernels_in_config_dict(self._quantsim_configs[ConfigDictKeys.OP_TYPE], self._supported_kernels)
             if self.check_correctness_of_dtype_bw_rules(QuantDtypeBwInfo(self._default_data_type, self._default_output_bw,
                                                                          self._default_data_type, self._default_param_bw)):
                 logger.info("Supported Kernel check for valid dtype and bitwidth overrides completed")
@@ -382,10 +381,19 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 continue
             for onnx_type in onnx_types:
                 if onnx_type in op_configs or module.__class__.__name__ in op_configs:
+                    op_config_for_module = {}
+                    op_config = {}
+                    only_module_op_config_has_supported_kernels = False
                     if onnx_type in op_configs:
                         op_config = op_configs[onnx_type]
-                    else:
-                        op_config = op_configs[module.__class__.__name__]
+                    if module.__class__.__name__ in op_configs:
+                        op_config_for_module = op_configs[module.__class__.__name__]
+                        if op_config:
+                            only_module_op_config_has_supported_kernels = ConfigDictKeys.SUPPORTED_KERNELS in op_config_for_module \
+                                                                          and ConfigDictKeys.SUPPORTED_KERNELS not in op_config
+
+                    if not op_config or only_module_op_config_has_supported_kernels:
+                        op_config = op_config_for_module
                     logger.info(' Set op level config for op = {%s}', onnx_type)
                     self._set_config_for_module(input_output_tensor_quantizers, op_config, modified_tensor_quantizers,
                                                 module)
@@ -583,8 +591,8 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 output_quantizer.bitwidth = bitwidth
 
     # pylint: disable=arguments-differ
-    def _override_param_bw_dtype(self, quantize_wrapper: QcQuantizeWrapper, data_type: QuantizationDataType,
-                                 bitwidth: int):
+    def _override_param_bw_dtype(self, quantize_wrapper: QcQuantizeWrapper, data_type: QuantizationDataType = None,
+                                 bitwidth: int = None):
         """
         overrides data type and bitwidth default config for param quantizers of given quantsim wrapper.
         :param quantize_wrapper : Quantize wrapper that to which param override will be applied to.
@@ -593,7 +601,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         :return:
         """
         # Set configs for all params
-        if quantize_wrapper.param_quantizers:
+        if quantize_wrapper.param_quantizers and data_type and bitwidth:
             for param_quantizer in quantize_wrapper.param_quantizers.values():
                 param_quantizer.data_type = data_type
                 param_quantizer.bitwidth = bitwidth
@@ -894,14 +902,3 @@ class DefaultOpInstanceConfigGenerator(OpInstanceConfigGenerator):
         pcq = self._generate_pcq(module)
 
         return supported_kernels, pcq
-
-def change_supported_kernels_in_config_dict(op_type_from_config: Dict, supported_kernels: Dict):
-    """
-    Change supported kernels in config dict according to new supported kernels
-
-    :param op_type_from_config: Dict of op to it's supported kernels
-    :param supported_kernels: Dict of op to it's supported kernels
-    """
-    for op_type in op_type_from_config:
-        if op_type in supported_kernels:
-            op_type_from_config[op_type][ConfigDictKeys.SUPPORTED_KERNELS] = supported_kernels[op_type]

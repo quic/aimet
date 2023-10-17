@@ -1699,10 +1699,13 @@ class QuantizationSimModel:
                 for supported_kernel in module.supported_kernels:
                     # ((activation bitwidth, activation data type), (param bitwidth, param data type))
                     # TODO modify this once reformat_supported_kernels generates of type QuantDtypeBwInfo
-                    supported_kernels.append(
-                        QuantDtypeBwInfo(supported_kernel[0][1], supported_kernel[0][0],
-                                         supported_kernel[1][1], supported_kernel[1][0]))
-
+                    if isinstance(supported_kernel[1], tuple):
+                        supported_kernels.append(
+                            QuantDtypeBwInfo(supported_kernel[0][1], supported_kernel[0][0],
+                                             supported_kernel[1][1], supported_kernel[1][0]))
+                    else:
+                        supported_kernels.append(
+                            QuantDtypeBwInfo(supported_kernel[1], supported_kernel[0]))
                 act_candidates = []
                 param_candidate = ()
                 for quantizer in module.input_quantizers + module.output_quantizers:
