@@ -1130,3 +1130,23 @@ class EmbeddingModel(torch.nn.Module):
         x = self.embedding(input_ids)
         x = self.linear(x)
         return self.softmax(x)
+
+
+class MultiplePReluModel(nn.Module):
+    def __init__(self, num_parameters: int = 1):
+        super().__init__()
+        self.conv1 = nn.Conv2d(3, 8, kernel_size=1)
+        self.act1 = nn.PReLU(num_parameters=num_parameters)
+        self.conv2 = nn.Conv2d(8, 8, kernel_size=3)
+        self.act2 = nn.PReLU(num_parameters=num_parameters)
+        self.conv3 = nn.Conv2d(8, 8, kernel_size=3)
+        self.act3 = nn.PReLU(num_parameters=num_parameters)
+
+    def forward(self, *inputs):
+        x = self.conv1(inputs[0])
+        x = self.act1(x)
+        x = self.conv2(x)
+        x = self.act2(x)
+        x = self.conv3(x)
+        x = self.act3(x)
+        return x
