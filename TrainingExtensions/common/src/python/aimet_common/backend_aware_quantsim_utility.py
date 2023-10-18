@@ -35,7 +35,6 @@
 
 """ Utilities for backend aware quantization """
 
-
 # pylint: disable=import-error, no-name-in-module
 import copy
 import logging
