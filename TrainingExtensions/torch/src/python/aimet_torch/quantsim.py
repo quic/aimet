@@ -138,7 +138,7 @@ class QuantizationSimModel:
     inference accuracy. Also allows the model to be fine-tuned to counter the effects of quantization.
     """
 
-    # pylint: disable=too-many-arguments, too-many-instance-attributes, too-many-locals
+    # pylint: disable=too-many-arguments, too-many-instance-attributes, too-many-locals, too-many-public-methods
     def __init__(self, model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple],
                  quant_scheme: Union[str, QuantScheme] = QuantScheme.post_training_tf_enhanced,
                  rounding_mode: str = 'nearest', default_output_bw: int = 8, default_param_bw: int = 8,
