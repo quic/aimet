@@ -541,6 +541,17 @@ class QuantizationSimModel:
         :param path: Path to save file
         :param filename_prefix: Filename to use for saved file
         """
+        activation_encodings, param_encodings = self.get_activation_param_encodings()
+        encodings_dict = {'activation_encodings': activation_encodings, 'param_encodings': param_encodings}
+        with open(os.path.join(path, filename_prefix + '.json'), 'w') as encoding_json:
+            json.dump(encodings_dict, encoding_json, sort_keys=True, indent=4)
+
+    def get_activation_param_encodings(self):
+        """
+        Get activation and param encodings from sim.model.
+
+        :return: Tuple of activation and param encodings dictionaries mapping torch module names to encodings
+        """
         activation_encodings = {}
         param_encodings = {}
         for layer_name, layer in QuantizationSimModel._get_qc_quantized_layers(self.model):
@@ -564,10 +575,7 @@ class QuantizationSimModel:
 
             for orig_param_name, param_quantizer in layer.param_quantizers.items():
                 self._save_param_encoding(layer_name, orig_param_name, param_quantizer, param_encodings)
-
-        encodings_dict = {'activation_encodings': activation_encodings, 'param_encodings': param_encodings}
-        with open(os.path.join(path, filename_prefix + '.json'), 'w') as encoding_json:
-            json.dump(encodings_dict, encoding_json, sort_keys=True, indent=4)
+        return activation_encodings, param_encodings
 
     @staticmethod
     def _save_activation_encoding(layer_name: str, quantizer_identifier: Union[str, int],
