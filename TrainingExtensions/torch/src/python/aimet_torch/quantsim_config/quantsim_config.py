@@ -378,22 +378,11 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         for module, input_output_tensor_quantizers in self._named_modules_to_tensor_quantizers_dict.items():
             onnx_types = map_torch_types_to_onnx.get(type(module))
             if not onnx_types:
-                continue
+                onnx_types = []
+            onnx_types.append(module.__class__.__name__)
             for onnx_type in onnx_types:
-                if onnx_type in op_configs or module.__class__.__name__ in op_configs:
-                    op_config_for_module = {}
-                    op_config = {}
-                    only_module_op_config_has_supported_kernels = False
-                    if onnx_type in op_configs:
-                        op_config = op_configs[onnx_type]
-                    if module.__class__.__name__ in op_configs:
-                        op_config_for_module = op_configs[module.__class__.__name__]
-                        if op_config:
-                            only_module_op_config_has_supported_kernels = ConfigDictKeys.SUPPORTED_KERNELS in op_config_for_module \
-                                                                          and ConfigDictKeys.SUPPORTED_KERNELS not in op_config
-
-                    if not op_config or only_module_op_config_has_supported_kernels:
-                        op_config = op_config_for_module
+                if onnx_type in op_configs:
+                    op_config = op_configs[onnx_type]
                     logger.info(' Set op level config for op = {%s}', onnx_type)
                     self._set_config_for_module(input_output_tensor_quantizers, op_config, modified_tensor_quantizers,
                                                 module)
