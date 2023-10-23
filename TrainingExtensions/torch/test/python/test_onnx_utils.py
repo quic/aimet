@@ -1,9 +1,9 @@
-# /usr/bin/env python3.5
+#!/usr/bin/env python3
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019-2020, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -37,21 +37,21 @@
 # =============================================================================
 import contextlib
 import copy
-import os
 import logging
+import os
+import tempfile
 from collections import defaultdict
-import pytest
-from packaging.version import Version
 
+import onnx
+import pytest
 import torch
 from torchvision import models
 
 import aimet_torch.elementwise_ops
 from aimet_common.utils import AimetLogger
 from aimet_torch import onnx_utils
-import onnx
-
-from models.test_models import RoiModel, InputOutputDictModel
+from aimet_torch.onnx_utils import restore_onnx_graph_initializers
+from models.test_models import RoiModel, InputOutputDictModel, MultiplePReluModel
 
 
 class OutOfOrderModel(torch.nn.Module):
@@ -887,3 +887,52 @@ class TestOnnxUtils:
 
         if os.path.exists(onnx_path):
             os.remove(onnx_path)
+
+    @pytest.mark.parametrize("num_parameters", [1, 8])
+    def test_set_node_name_for_multiple_p_relu_model(self, num_parameters):
+        model = MultiplePReluModel(num_parameters)
+        dummy_input = torch.randn(4, 3, 28, 28)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            onnx_path = f"{tmp_dir}/multiple_p_relu_model.onnx"
+
+            onnx_utils.RESTORE_ONNX_MODEL_INITIALIZERS = True
+            onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input)
+            onnx_model = onnx.load(onnx_path)
+
+        expected_initializer_names = ["act1.weight", "act2.weight", "act3.weight"]
+        actual_initializer_names = {x.name for x in onnx_model.graph.initializer}
+        for name in expected_initializer_names:
+            assert name in actual_initializer_names
+
+        _, valid_param_set = onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
+        for name in expected_initializer_names:
+            assert name in valid_param_set
+
+        self.check_onnx_node_name_uniqueness(onnx_model)
+        onnx_utils.RESTORE_ONNX_MODEL_INITIALIZERS = False
+
+    def test_restore_onnx_graph_initializers(self):
+        model = MultiplePReluModel()
+        dummy_input = torch.randn(4, 3, 28, 28)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            original_model_path = f"{tmp_dir}/multiple_p_relu_model.onnx"
+            torch.onnx.export(model, dummy_input, original_model_path)
+
+            original_model = onnx.load(original_model_path)
+            identity_node_outputs = {x.output[0] for x in original_model.graph.node if x.op_type == "Identity"}
+            p_relu_slopes = [x.input[1] for x in original_model.graph.node if x.op_type == "PRelu"]
+
+            # At least one slope is related to the identity node in original ONNX model
+            assert any([slope in identity_node_outputs for slope in p_relu_slopes])
+
+            restored_model_path = f"{tmp_dir}/restored_multiple_p_relu_model.onnx"
+            restore_onnx_graph_initializers(original_model_path, restored_model_path)
+            restored_model = onnx.load(restored_model_path)
+
+        # All slope should be initializers in restored ONNX model
+        restored_model_initializers = {x.name for x in restored_model.graph.initializer}
+        restored_p_relu_slopes = [x.input[1] for x in restored_model.graph.node if x.op_type == "PRelu"]
+
+        assert all([slope in restored_model_initializers for slope in restored_p_relu_slopes])
