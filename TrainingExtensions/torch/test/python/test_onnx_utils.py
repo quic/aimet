@@ -49,7 +49,10 @@ from torchvision import models
 import aimet_torch.elementwise_ops
 from aimet_common.utils import AimetLogger
 from aimet_torch import onnx_utils
-from aimet_torch.onnx_utils import restore_onnx_graph_initializers
+from aimet_torch.onnx_utils import (
+    save_initializer_restored_onnx_graph,
+    restore_onnx_graph_initializers,
+)
 from models.test_models import RoiModel, InputOutputDictModel, MultiplePReluModel
 
 
@@ -911,7 +914,7 @@ class TestOnnxUtils:
         self.check_onnx_node_name_uniqueness(onnx_model)
         onnx_utils.RESTORE_ONNX_MODEL_INITIALIZERS = False
 
-    def test_restore_onnx_graph_initializers(self):
+    def test_save_initializer_restored_onnx_graph(self):
         model = MultiplePReluModel()
         dummy_input = torch.randn(4, 3, 28, 28)
 
@@ -927,7 +930,7 @@ class TestOnnxUtils:
             assert any([slope in identity_node_outputs for slope in p_relu_slopes])
 
             restored_model_path = f"{tmp_dir}/restored_multiple_p_relu_model.onnx"
-            restore_onnx_graph_initializers(original_model_path, restored_model_path)
+            save_initializer_restored_onnx_graph(original_model_path, restored_model_path)
             restored_model = onnx.load(restored_model_path)
 
         # All slope should be initializers in restored ONNX model
@@ -935,3 +938,29 @@ class TestOnnxUtils:
         restored_p_relu_slopes = [x.input[1] for x in restored_model.graph.node if x.op_type == "PRelu"]
 
         assert all([slope in restored_model_initializers for slope in restored_p_relu_slopes])
+
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_restore_onnx_graph_initializers(self, inplace):
+        model = MultiplePReluModel()
+        dummy_input = torch.randn(4, 3, 28, 28)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            original_model_path = f"{tmp_dir}/multiple_p_relu_model.onnx"
+            torch.onnx.export(model, dummy_input, original_model_path)
+
+            original_model = onnx.load(original_model_path)
+            restored_model = restore_onnx_graph_initializers(original_model, inplace=inplace)
+
+            # Both inplace=True and inplace=False, restored model should have separate initializers
+            restored_model_initializers = {x.name for x in restored_model.graph.initializer}
+            restored_p_relu_slopes = [x.input[1] for x in restored_model.graph.node if x.op_type == "PRelu"]
+            assert all([slope in restored_model_initializers for slope in restored_p_relu_slopes])
+
+            if inplace:
+                assert id(original_model) == id(restored_model)
+            else:
+                # Original model shouldn't be modified if inplace=False
+                identity_node_outputs = {x.output[0] for x in original_model.graph.node if x.op_type == "Identity"}
+                p_relu_slopes = [x.input[1] for x in original_model.graph.node if x.op_type == "PRelu"]
+                assert any([slope in identity_node_outputs for slope in p_relu_slopes])
+                assert id(original_model) != id(restored_model)

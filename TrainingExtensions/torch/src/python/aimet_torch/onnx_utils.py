@@ -1082,8 +1082,6 @@ class OnnxSaver:
                                  'temp_onnx_model_with_all_markers.onnx')
 
         cls._export_model_to_onnx(model, dummy_input, temp_file, is_conditional, onnx_export_args)
-        if RESTORE_ONNX_MODEL_INITIALIZERS:
-            restore_onnx_graph_initializers(temp_file, temp_file)
         return cls.load_simply_onnx_model(temp_file)
 
     @classmethod
@@ -1094,6 +1092,9 @@ class OnnxSaver:
         :return: Onnx model with optional simply pass
         """
         onnx_model = onnx.load(filepath)
+        if RESTORE_ONNX_MODEL_INITIALIZERS:
+            onnx_model = restore_onnx_graph_initializers(onnx_model, inplace=True)
+
         if simplify_onnx_model:
             onnx_model_simplified, check = onnxsim.simplify(onnx_model)
             if check:
@@ -1478,15 +1479,32 @@ class OnnxSaver:
                 _logger.warning("ONNX Checker has failed but ONNX graph is still generated.")
 
 
-def restore_onnx_graph_initializers(original_model_path: str, restored_model_path: str):
+def save_initializer_restored_onnx_graph(original_model_path: str,
+                                         restored_model_path: str):
     """
-    Restore pruned initializers in ONNX graph
+    Load original ONNX model path and save restored ONNX model to specific path
 
     :param original_model_path: Path where the original ONNX artifact was stored
     :param restored_model_path: Path to store restored ONNX artifact
     """
-    # pylint: disable=protected-access, no-member
     model = onnx.load(original_model_path)
+    restored_model = restore_onnx_graph_initializers(model, inplace=True)
+    onnx.save(restored_model, restored_model_path)
+
+
+def restore_onnx_graph_initializers(model: onnx.ModelProto,
+                                    inplace: bool = False) -> onnx.ModelProto:
+    """
+    Copy original model and restore its pruned initializers
+
+    :param model: Original ONNX ModelProto
+    :param inplace: Whether to modify ModelProto by inplace manner or not
+    :return: Initializer restored ONNX ModelProto
+    """
+    # pylint: disable=protected-access, no-member
+    if not inplace:
+        model = copy.deepcopy(model)
+
     onnx_graph = model.graph
 
     initializers = OnnxSaver._get_all_initializers(onnx_graph)
@@ -1501,7 +1519,7 @@ def restore_onnx_graph_initializers(original_model_path: str, restored_model_pat
                 onnx_graph, input_tensor, pruned_initializer_map
             )
 
-    onnx.save(model, restored_model_path)
+    return model
 
 
 def _get_pruned_initializer_map(onnx_graph: onnx.GraphProto,
