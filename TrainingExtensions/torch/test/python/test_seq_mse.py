@@ -36,11 +36,13 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+import json
 import pytest
 import numpy
 import torch
 from torch.utils.data import Dataset, DataLoader
 
+from aimet_torch.utils import create_fake_data_loader
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QuantScheme
 from aimet_torch.seq_mse import  apply_seq_mse, get_candidates, optimize_module, SeqMseParams
@@ -65,6 +67,62 @@ def unlabeled_data_loader(dummy_input):
 
     dataset = MyDataset([dummy_input[0, :] for _ in range(32)])
     return DataLoader(dataset)
+
+
+def save_config_file_for_checkpoints():
+    checkpoints_config = {
+        "grouped_modules": {
+            "0": ["conv1", "bn1", "relu1", "maxpool"],
+            "1": ["conv2", "bn2", "relu2"],
+            "2": ["conv3", "relu3", "avgpool"],
+            "3": ["conv4", "flatten", "fc"],
+        },
+        "include_static_inputs": [
+            "False",
+            "False",
+            "False",
+            "False"
+        ],
+        "cache_on_cpu": "False"
+    }
+
+    with open('./test_checkpoints.json', 'w') as f:
+        json.dump(checkpoints_config, f)
+
+
+class SplittableModel(torch.nn.Module):
+    """ Use this model for unit testing purposes. Expect input shape (1, 3, 32, 32) """
+    def __init__(self):
+        super(SplittableModel, self).__init__()
+        self.conv1 = torch.nn.Conv2d(3, 32, kernel_size=2, stride=2, padding=2, bias=False)
+        self.bn1 = torch.nn.BatchNorm2d(32)
+        self.relu1 = torch.nn.ReLU(inplace=True)
+        self.maxpool = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
+        self.conv2 = torch.nn.Conv2d(32, 16, kernel_size=2, stride=2, padding=2, bias=False)
+        self.bn2 = torch.nn.BatchNorm2d(16)
+        self.relu2 = torch.nn.ReLU(inplace=True)
+        self.conv3 = torch.nn.Conv2d(16, 8, kernel_size=2, stride=2, padding=2, bias=False)
+        self.relu3 = torch.nn.ReLU(inplace=True)
+        self.avgpool = torch.nn.AvgPool2d(3, stride=1)
+        self.conv4 = torch.nn.Conv2d(8, 4, kernel_size=2, stride=2, padding=2, bias=True)
+        self.flatten = torch.nn.Flatten()
+        self.fc = torch.nn.Linear(36, 12)
+
+    def forward(self, *inputs):
+        x = self.conv1(inputs[0])
+        x = self.bn1(x)
+        x = self.relu1(x)
+        x = self.maxpool(x)
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = self.relu2(x)
+        x = self.conv3(x)
+        x = self.relu3(x)
+        x = self.avgpool(x)
+        x = self.conv4(x)
+        x = self.flatten(x)
+        x = self.fc(x)
+        return x
 
 
 class TestSeqMse:
@@ -133,3 +191,33 @@ class TestSeqMse:
         assert sim.model.fc2.param_quantizers['weight'].is_encoding_frozen
         assert not sim.model.conv1.param_quantizers['weight'].encoding
         assert sim.model.conv2.param_quantizers['weight'].encoding
+
+    @pytest.mark.parametrize("inp_symmetry", ['asym', 'symfp', 'symqt'])
+    @pytest.mark.parametrize("loss_fn", ['mse', 'l1', 'aa'])
+    def test_seq_mse_with_and_without_checkpoints_config(self, inp_symmetry, loss_fn):
+        """ test apply_seq_mse end-to-end with and without checkpoints configs """
+        torch.manual_seed(0)
+
+        data_loader = create_fake_data_loader(dataset_size=2, batch_size=1, image_size=(3, 32, 32))
+        model = SplittableModel().eval()
+        save_config_file_for_checkpoints()
+        dummy_input = torch.randn(1, 3, 32, 32)
+        sim_without = QuantizationSimModel(model, dummy_input, default_param_bw=4,
+                                           quant_scheme=QuantScheme.post_training_tf)
+        sim_with = QuantizationSimModel(model, dummy_input, default_param_bw=4,
+                                        quant_scheme=QuantScheme.post_training_tf)
+        params = SeqMseParams(num_batches=2, inp_symmetry=inp_symmetry, loss_fn=loss_fn)
+
+        # Apply Sequential MSE without checkpoints config
+        apply_seq_mse(model, sim_without, data_loader, params)
+        without_checkpoints_enc = sim_without.model.fc.param_quantizers['weight'].encoding
+
+        # Apply Sequential MSE with checkpoints config
+        apply_seq_mse(model, sim_with, data_loader, params, checkpoints_config="./test_checkpoints.json")
+        with_checkpoints_enc = sim_with.model.fc.param_quantizers['weight'].encoding
+
+        # encodings should be bit-exact
+        assert without_checkpoints_enc.min == with_checkpoints_enc.min
+        assert without_checkpoints_enc.max == with_checkpoints_enc.max
+        assert without_checkpoints_enc.delta == with_checkpoints_enc.delta
+        assert without_checkpoints_enc.offset == with_checkpoints_enc.offset
