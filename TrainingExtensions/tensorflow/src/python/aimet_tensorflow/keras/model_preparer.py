@@ -211,7 +211,9 @@ class _KerasModelPreparer:
         :param model: the 'layer' or 'model' to get the class name
         :return: A set containing the class name
         """
-        return {regex_for_camel_case_to_snake_case.sub("_", model.name).lower()}
+        return {
+            regex_for_camel_case_to_snake_case.sub("_", name).lower() for name in (model.name, model.__class__.__name__)
+        }
 
     @staticmethod
     def _is_nested_layer(layer: tf.keras.layers.Layer) -> bool:
