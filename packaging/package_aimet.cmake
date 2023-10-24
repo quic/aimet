@@ -192,7 +192,11 @@ foreach(package ${package_name_list})
       COMMAND find ${build_packaging_dir} -name "libaimet_tf_ops*.so" -exec ${PATCHELF_EXE} --set-rpath $ORIGIN:$ORIGIN/../../tensorflow:$ORIGIN/../../tensorflow/python {} \;
   )
   # Invoke the setup tools script to create the wheel packages.
-  execute_process(COMMAND python3 setup.py sdist bdist_wheel ${CUDA_OPTION} WORKING_DIRECTORY ${build_packaging_dir} OUTPUT_VARIABLE output_var)
+  execute_process(
+    COMMAND ${PYTHON3_EXECUTABLE} setup.py sdist bdist_wheel ${CUDA_OPTION}
+    WORKING_DIRECTORY ${build_packaging_dir}
+    OUTPUT_VARIABLE output_var
+  )
 
   # Rename and keep a copy of the manifest file for debugging/reference purposes
   configure_file("${build_packaging_dir}/MANIFEST.ini" "${build_packaging_dir}/MANIFEST.ini.${package}" COPYONLY)
