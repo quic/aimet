@@ -270,16 +270,21 @@ else()
   message(STATUS "Set ${AIMET_PYTHONPATH} in ${CMAKE_CURRENT_SOURCE_DIR}")
 endif()
 
-# FIXME
-# Better to include patchefl into docker image, although seems it is not trivial
-include(FetchContent)
-FetchContent_Declare(patchelf
-    URL "https://github.com/NixOS/patchelf/releases/download/0.15.0/patchelf-0.15.0-x86_64.tar.gz"
-)
-if(NOT patchelf_POPULATED)
-    FetchContent_Populate(patchelf)
-    set(PATCHELF_EXE ${patchelf_SOURCE_DIR}/bin/patchelf)
-    message(STATUS "patchelf: ${PATCHELF_EXE}")
+find_program(PATCHELF_EXE patchelf)
+if (PATCHELF_EXE)
+    message(STATUS "Found patchelf in '${PATCHELF_EXE}'")
+else()
+    # FIXME
+    # Better to include patchefl into docker image, although seems it is not trivial
+    include(FetchContent)
+    FetchContent_Declare(patchelf
+        URL "https://github.com/NixOS/patchelf/releases/download/0.15.0/patchelf-0.15.0-x86_64.tar.gz"
+    )
+    if(NOT patchelf_POPULATED)
+        FetchContent_Populate(patchelf)
+        set(PATCHELF_EXE ${patchelf_SOURCE_DIR}/bin/patchelf)
+        message(STATUS "patchelf: ${PATCHELF_EXE}")
+    endif()
 endif()
 
 # -------------------------------
