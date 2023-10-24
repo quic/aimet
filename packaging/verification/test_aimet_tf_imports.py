@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 #==============================================================================
 #  @@-COPYRIGHT-START-@@
 #
@@ -40,10 +39,10 @@
 from aimet_common.defs import QuantScheme
 import aimet_common.defs as aimet_common_defs
 ## import aimet_common.AimetTensorQuantizer
-import aimet_common.libpymo as libpymo 
+import aimet_common.libpymo as libpymo
 
 import tensorflow
-   
+
 from aimet_tensorflow.compress import ModelCompressor
 import aimet_tensorflow.defs as aimet_tensorflow_defs
 from aimet_tensorflow.utils.graph_saver import save_model_to_meta
