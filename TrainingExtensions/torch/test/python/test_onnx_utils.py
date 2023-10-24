@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
@@ -733,8 +732,8 @@ class TestOnnxUtils:
             'layer.mul2.mul',
             'layer.mul2.Mul_15',
             'layer.Mul_18',
-            
-            # names compatible with torch 1.13.1 version 
+
+            # names compatible with torch 1.13.1 version
             '/layer/mul1/Mul',
             '/layer/mul2/Mul',
             '/layer/Mul'
