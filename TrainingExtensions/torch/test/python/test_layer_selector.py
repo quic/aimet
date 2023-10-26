@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2017-2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2017-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -38,6 +38,7 @@
 import unittest
 from unittest.mock import MagicMock
 
+import torch
 import torch.nn as nn
 from torch.nn import Conv2d, Linear
 
@@ -109,3 +110,11 @@ class TestLayerSelector(unittest.TestCase):
 
         layer_selector.select(layer_db, [layer2.module])
         layer_db.mark_picked_layers.assert_called_once_with([layer1, layer3])
+
+    def test_grouped_convolution_support(self):
+        dummy_input = torch.randn(1, 4, 8, 8)
+        grouped_convolution = nn.Conv2d(4, 16, kernel_size=3, groups=2)
+
+        output_shape = grouped_convolution(dummy_input)
+        layer = Layer(grouped_convolution, "grouped_conv", output_shape)
+        assert layer.type_specific_params.groups == 2

@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2017-2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2017-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -34,21 +34,27 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
 import math
 import unittest
 from decimal import Decimal
 
+import torch
 import torch.nn as nn
 
 from aimet_common import cost_calculator as cc
 from aimet_common.defs import CostMetric, LayerCompRatioPair
 from aimet_common.utils import AimetLogger
-
-from aimet_torch.utils import create_rand_tensors_given_shapes, create_fake_data_loader, get_device
+from aimet_torch.channel_pruning.channel_pruner import (
+    InputChannelPruner,
+    ChannelPruningCostCalculator,
+)
 from aimet_torch.layer_database import Layer, LayerDatabase
-from aimet_torch.channel_pruning.channel_pruner import InputChannelPruner, ChannelPruningCostCalculator
-from models import mnist_torch_model
+from aimet_torch.utils import (
+    create_rand_tensors_given_shapes,
+    create_fake_data_loader,
+    get_device,
+)
+from models import mnist_torch_model, test_models
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
@@ -121,6 +127,44 @@ class TestTrainingExtensionsCostCalculator(unittest.TestCase):
 
         self.assertEqual(800 + 51200 + 3211264 + 10240, network_cost.memory)
         self.assertEqual(627200 + 10035200 + 3211264 + 10240, network_cost.mac)
+
+    def test_mac_count_of_grouped_conv_net(self):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        in_channels, out_channels = 6, 12
+        standard_grouped_conv_model = test_models.GroupedConvModel(
+            in_channels, out_channels
+        ).to(device).eval()
+
+        custom_grouped_conv_model = test_models.CustomGroupedConvModel(
+            in_channels // 2, out_channels // 2
+        ).to(device).eval()
+        with torch.no_grad():
+            custom_grouped_conv_model.conv1.weight.copy_(
+                standard_grouped_conv_model.conv.weight[: out_channels // 2]
+            )
+            custom_grouped_conv_model.conv2.weight.copy_(
+                standard_grouped_conv_model.conv.weight[out_channels // 2 :]
+            )
+
+        standard_module_inputs = torch.randn(1, 6, 10, 10, device=device)
+        custom_module_inputs = (
+            standard_module_inputs[:, : in_channels // 2, :, :],
+            standard_module_inputs[:, in_channels // 2 :, :, :],
+        )
+
+        with torch.inference_mode():
+            standard_module_outputs = standard_grouped_conv_model(standard_module_inputs)
+            custom_module_outputs = custom_grouped_conv_model(*custom_module_inputs)
+        self.assertTrue(torch.allclose(standard_module_outputs, custom_module_outputs))
+
+        standard_grouped_conv_db = LayerDatabase(standard_grouped_conv_model, standard_module_inputs)
+        custom_grouped_conv_db = LayerDatabase(custom_grouped_conv_model, custom_module_inputs)
+        cost_calc = cc.CostCalculator()
+
+        standard_grouped_conv_cost = cost_calc.compute_model_cost(standard_grouped_conv_db)
+        custom_grouped_conv_cost = cost_calc.compute_model_cost(custom_grouped_conv_db)
+        self.assertEqual(standard_grouped_conv_cost.mac, custom_grouped_conv_cost.mac)
 
 
 class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
