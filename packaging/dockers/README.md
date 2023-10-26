@@ -1,21 +1,36 @@
-AIMET Installation in Docker
-============================
+AIMET Docker creation
+=====================
 
-This page provides instructions to install AIMET package inside a development docker container.
+This page provides instructions to build a docker image with AIMET packages and start the development docker container.
+
+Setup workspace
+---------------
+
+```console
+WORKSPACE="<absolute_path_to_workspace>"
+mkdir $WORKSPACE && cd $WORKSPACE
+git clone https://github.com/quic/aimet.git
+cd aimet/packaging/dockers
+```
+
+Make sure no wheel file is present in present working directory
+```console
+rm -rf *.whl
+```
 
 Set variant
 ------------
 
 Set the *<variant_string>* to ONE of the following depending on your desired variant
 
-* For the PyTorch 1.13 GPU variant, use **torch-gpu**
-* For the PyTorch 1.13 CPU variant, use **torch-cpu**
-* For the PyTorch 1.9 GPU variant, use **torch-gpu-pt19**
-* For the PyTorch 1.9 CPU variant, use **torch-cpu-pt19**
-* For the TensorFlow GPU variant, use **tf-gpu**
-* For the TensorFlow CPU variant, use **tf-cpu**
-* For the ONNX GPU variant, use **onnx-gpu**
-* For the ONNX CPU variant, use **onnx-cpu**
+* For the PyTorch 1.13 GPU variant, use **torch_gpu**
+* For the PyTorch 1.13 CPU variant, use **torch_cpu**
+* For the PyTorch 1.9 GPU variant, use **torch_gpu_pt19**
+* For the PyTorch 1.9 CPU variant, use **torch_cpu_pt19**
+* For the TensorFlow GPU variant, use **tf_gpu**
+* For the TensorFlow CPU variant, use **tf_cpu**
+* For the ONNX GPU variant, use **onnx_gpu**
+* For the ONNX CPU variant, use **onnx_cpu**
 
 ```console
 export AIMET_VARIANT=<variant_string>
@@ -48,29 +63,34 @@ export wheel_file_suffix="cp38-cp38-linux_x86_64.whl"
 Download the AIMET packages in the order specified below:
 
 ```console
-wget -O $WORKSPACE/aimet/packaging/dockers ${download_url}/AimetCommon-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
+wget ${download_url}/AimetCommon-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
+
 
 # Download ONE of the following depending on the variant
-wget -O $WORKSPACE/aimet/packaging/dockers ${download_url}/AimetTorch-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix} -f https://download.pytorch.org/whl/torch_stable.html
-# OR
-wget -O $WORKSPACE/aimet/packaging/dockers ${download_url}/AimetTensorflow-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
-# OR
-wget -O $WORKSPACE/aimet/packaging/dockers ${download_url}/AimetOnnx-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
+wget ${download_url}/AimetTorch-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
 
-wget -O $WORKSPACE/aimet/packaging/dockers ${download_url}/Aimet-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
+# OR
+
+wget ${download_url}/AimetTensorflow-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
+
+# OR
+
+wget ${download_url}/AimetOnnx-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
+
+
+wget ${download_url}/Aimet-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
 ```
 
-Build docker image locally
----------------------------
+Build docker image
+------------------
 
-Follow these instructions ONLY if you want to build the docker image locally. If not, skip to the next section.
+Follow these instructions in order to build the docker image locally. If not, skip to the next section.
 
 ```console
-WORKSPACE="<absolute_path_to_workspace>"
-docker_image_name="aimet-prod-docker:<any_tag>"
-docker_container_name="aimet-prod-<any_name>"
+docker_image_name="aimet-prod-docker-${AIMET_VARIANT}:<any_tag>"
+docker_container_name="aimet-prod-${AIMET_VARIANT}-<any_name>"
 
-docker build -t ${docker_image_name} -f $WORKSPACE/aimet/packaging/dockers/Dockerfile.${AIMET_VARIANT} .
+docker build -t ${docker_image_name} -f Dockerfile.${AIMET_VARIANT} .
 ```
 
 **NOTE:** Feel free to modify the *docker_image_name* and *docker_container_name* as needed.
