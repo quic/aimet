@@ -1,0 +1,74 @@
+FROM docker-registry.qualcomm.com/library/nvidia/cuda:11.6.2-cudnn8-devel-ubuntu20.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=DontWarn
+
+RUN mv /etc/apt/sources.list.d/cuda.list /etc/apt/sources.list.d/cuda.list.orig && \
+    apt-get update > /dev/null && \
+    apt-get install -y --no-install-recommends apt-utils && \
+    apt-key del --no-tty 7fa2af80 && \
+    apt-key adv --no-tty --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/3bf863cc.pub && \
+    apt-key adv --no-tty --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/7fa2af80.pub && \
+    apt-get update > /dev/null && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update > /dev/null && \
+    apt-get install --no-install-recommends -y \
+        # Bare minimum Packages
+        ca-certificates \
+        git \
+        ssh \
+        sudo \
+        wget \
+        xterm \
+        xauth > /dev/null && \
+        rm -rf /var/lib/apt/lists/*
+
+# Add sudo support
+RUN echo "%users ALL = (ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+RUN apt-get update -y > /dev/null && \
+    apt-get install --no-install-recommends -y \
+        python3.8 \
+        python3-pip && \
+        rm -rf /var/lib/apt/lists/*
+
+# Register the version in alternatives
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1
+# Set python 3.8 as the default python
+RUN update-alternatives --set python3 /usr/bin/python3.8
+
+# Upgrade Python3 pip
+RUN python3 -m pip --no-cache-dir install --upgrade pip
+
+EXPOSE 25000
+RUN apt-get update && apt-get install -y openssh-server && rm -rf /var/lib/apt/lists/*
+RUN mkdir /var/run/sshd
+
+RUN apt-get update && apt-get install -y liblapacke liblapacke-dev && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && apt-get install -y libjpeg8-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Set up symlink to point to the correct python version
+RUN ln -sf /usr/bin/python3.8 /usr/bin/python
+RUN ln -s /usr/lib/x86_64-linux-gnu/libjpeg.so /usr/lib
+
+RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
+    sed -i 's/Port 22/Port 25000/' /etc/ssh/sshd_config
+
+# SSH login fix. Otherwise user is kicked off after login
+RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
+
+# upgrade pip
+RUN python3 -m pip --no-cache-dir install --upgrade pip
+
+# Install the AIMET package wheel files
+COPY *.whl /tmp/
+RUN cd /tmp && python3 -m pip install *.whl -f https://download.pytorch.org/whl/torch_stable.html && rm -f /tmp/*.whl
+
+# Remove onnxruntime install in order to fix onnxruntime-gpu
+RUN export ONNXRUNTIME_VER=$(python3 -c 'import onnxruntime; print(onnxruntime.__version__)') && \
+    python3 -m pip uninstall -y onnxruntime && \
+    python3 -m pip --no-cache-dir install onnxruntime-gpu==$ONNXRUNTIME_VER
+
