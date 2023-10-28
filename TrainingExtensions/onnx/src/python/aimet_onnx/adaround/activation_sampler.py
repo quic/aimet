@@ -38,10 +38,16 @@
 """ Sample output from original module for Adaround feature """
 
 from typing import Tuple, List, Dict, Union
+from packaging import version
 
 import numpy as np
-from onnx import onnx_pb
 import onnxruntime as ort
+import onnx
+# pylint: disable=no-name-in-module
+if version.parse(onnx.__version__) >= version.parse("1.14.0"):
+    from onnx import ModelProto
+else:
+    from onnx.onnx_pb import ModelProto
 
 from aimet_common.utils import AimetLogger
 from aimet_onnx.quantsim import QuantizationSimModel
@@ -56,7 +62,7 @@ class ActivationSampler:
     collect the module's output and input activation data respectively
     """
     def __init__(self, orig_op: str, quant_op: str,
-                 orig_model: onnx_pb.ModelProto, quant_model: QuantizationSimModel, use_cuda: bool,
+                 orig_model: ModelProto, quant_model: QuantizationSimModel, use_cuda: bool,
                  device: int = 0):
         """
         :param orig_op: Single un quantized op from the original session
@@ -132,7 +138,7 @@ class ModuleData:
     Collect input and output data to and from module
     """
 
-    def __init__(self, model: onnx_pb.ModelProto, node_name: str, providers: List):
+    def __init__(self, model: ModelProto, node_name: str, providers: List):
         """
         :param session: ONNX session
         :param node: Module reference

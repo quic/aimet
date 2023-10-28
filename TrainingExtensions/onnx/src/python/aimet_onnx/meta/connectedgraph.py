@@ -46,8 +46,14 @@ result of an operation. Furthermore the graph representation is bi-directional."
 
 
 from typing import List, Union, Dict
-from onnx import onnx_pb
+from packaging import version
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
+import onnx
+# pylint: disable=no-name-in-module
+if version.parse(onnx.__version__) >= version.parse("1.14.0"):
+    from onnx import ModelProto, NodeProto, TensorProto
+else:
+    from onnx.onnx_pb import ModelProto, NodeProto, TensorProto
 
 from aimet_common.connected_graph.connectedgraph import ConnectedGraph as AimetCommonConnectedGraph, get_ordered_ops
 from aimet_common.utils import AimetLogger
@@ -72,7 +78,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
     either module or functional) as producers and consumers of tensors.
     Note that the graph has two kinds of nodes: operations and products."""
 
-    def __init__(self, model: onnx_pb.ModelProto):
+    def __init__(self, model: ModelProto):
         """
         :param: model: ONNX model to create connected graph from
         """
@@ -172,7 +178,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         return input_ops
 
     @staticmethod
-    def _create_ir_op(node: onnx_pb.NodeProto) -> Op:
+    def _create_ir_op(node: NodeProto) -> Op:
         """
         Creates connected graphs internal representation Op
         :param node: ONNX proto node for which Op needs to be created
@@ -192,7 +198,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         return op
 
-    def _add_children_ops_to_op_queue(self, node: onnx_pb.NodeProto, op_queue: List):
+    def _add_children_ops_to_op_queue(self, node: NodeProto, op_queue: List):
         """
         Utility function for adding all children of op to self._op_queue
         :param node: node whose children will be added to op_queue
@@ -226,7 +232,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                     self._create_and_link_product_for_inputs(node_name, input_tensor_name)
 
     @staticmethod
-    def check_if_param(node: onnx_pb.NodeProto, index: int) -> bool:
+    def check_if_param(node: NodeProto, index: int) -> bool:
         """
         Checks if given tensor is a param
 
@@ -278,7 +284,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             consumer_op.add_input(product)
             product.add_consumer(consumer_op)
 
-    def _create_op_if_not_exists(self, node: onnx_pb.NodeProto):
+    def _create_op_if_not_exists(self, node: NodeProto):
         """ Creates a CG op for a node"""
         if node.name not in self._ops:
             op = self._create_ir_op(node)
@@ -287,7 +293,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         else:
             logger.debug("Op %s already exists", node.name)
 
-    def _create_and_link_product_if_not_exists(self, child_node: onnx_pb.NodeProto, parent_node: onnx_pb.NodeProto,
+    def _create_and_link_product_if_not_exists(self, child_node: NodeProto, parent_node: NodeProto,
                                                connecting_tensor_name: str):
         """ Create and link new product if it does not yet exist """
         parent_module_name = parent_node.name
@@ -508,7 +514,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         """ Create products for parameters of select modules """
 
         def create_and_connect_product(param_name: str, product_shape: List, my_op: Op,
-                                       param_tensor: onnx_pb.TensorProto, product_type: Union[str, None]):
+                                       param_tensor: TensorProto, product_type: Union[str, None]):
             """ Create product with given name, shape, and corresponding tensor.  Connect product to my_op. """
 
             product = Product(param_name, product_shape)
@@ -577,7 +583,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             handler(op)
 
 
-def get_op_attributes(node: onnx_pb.NodeProto, attribute_name: str):
+def get_op_attributes(node: NodeProto, attribute_name: str):
     """
     Gets attribute information for layer
 

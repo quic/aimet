@@ -38,9 +38,15 @@
 """ Adaround optimizer """
 
 from typing import Union, Tuple, Dict
+from packaging import version
 import numpy as np
 import onnx
-from onnx import onnx_pb, numpy_helper
+from onnx import numpy_helper
+# pylint: disable=no-name-in-module
+if version.parse(onnx.__version__) >= version.parse("1.14.0"):
+    from onnx import ModelProto
+else:
+    from onnx.onnx_pb import ModelProto
 import torch
 import torch.nn.functional as functional
 from torch.utils.data import Dataset
@@ -70,7 +76,7 @@ class AdaroundOptimizer:
     """
     @classmethod
     def adaround_module(cls, module: ModuleInfo, quantized_input_name: str,
-                        orig_model: onnx_pb.ModelProto, quant_model: QuantizationSimModel,
+                        orig_model: ModelProto, quant_model: QuantizationSimModel,
                         act_func: Union[torch.nn.Module, None], cached_dataset: Dataset,
                         opt_params: AdaroundHyperParameters, param_to_adaround_tensor_quantizer: Dict,
                         use_cuda: bool, device: int = 0):
@@ -100,7 +106,7 @@ class AdaroundOptimizer:
 
     @classmethod
     def _optimize_rounding(cls, module: ModuleInfo, quantized_input_name,
-                           orig_model: onnx_pb.ModelProto, quant_model: QuantizationSimModel,
+                           orig_model: ModelProto, quant_model: QuantizationSimModel,
                            act_func: Union[None, str], cached_dataset: Dataset,
                            opt_params: AdaroundHyperParameters, param_to_adaround_tensor_quantizer: Dict,
                            use_cuda: bool, device: int = 0):

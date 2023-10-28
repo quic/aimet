@@ -39,9 +39,15 @@
 
 import copy
 from typing import List, Dict, Tuple, Union
+from packaging import version
 import numpy as np
 import onnxruntime as ort
-from onnx import onnx_pb
+import onnx
+# pylint: disable=no-name-in-module
+if version.parse(onnx.__version__) >= version.parse("1.14.0"):
+    from onnx import ModelProto
+else:
+    from onnx.onnx_pb import ModelProto
 
 from aimet_common.utils import AimetLogger
 from aimet_common.layer_output_utils import SaveInputOutput, save_layer_output_names
@@ -55,7 +61,7 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.LayerOutputs)
 class LayerOutputUtil:
     """ Implementation to capture and save outputs of intermediate layers of a model (fp32/quantsim) """
 
-    def __init__(self, model: onnx_pb.ModelProto, dir_path: str, device: int = 0):
+    def __init__(self, model: ModelProto, dir_path: str, device: int = 0):
         """
         Constructor - It initializes the utility classes that captures and saves layer-outputs
 
@@ -97,7 +103,7 @@ class LayerOutput:
     """
     This class creates a layer-output name to layer-output dictionary.
     """
-    def __init__(self, model: onnx_pb.ModelProto, providers: List, dir_path: str):
+    def __init__(self, model: ModelProto, providers: List, dir_path: str):
         """
         Constructor - It initializes few lists that are required for capturing and naming layer-outputs.
 
@@ -131,7 +137,7 @@ class LayerOutput:
         return dict(zip(self.sanitized_activation_names, activation_values))
 
     @staticmethod
-    def get_activation_names(model: onnx_pb.ModelProto) -> List[str]:
+    def get_activation_names(model: ModelProto) -> List[str]:
         """
         This function fetches the activation names (layer-output names) of the given onnx model.
 
@@ -153,7 +159,7 @@ class LayerOutput:
         return activation_names
 
     @staticmethod
-    def register_activations(model: onnx_pb.ModelProto, activation_names: List):
+    def register_activations(model: ModelProto, activation_names: List):
         """
         This function adds the intermediate activations into the model's ValueInfoProto so that they can be fetched via
         running the session.

@@ -37,8 +37,15 @@
 """ Utilities for parsing and applying quantsim configurations from json config file """
 from abc import abstractmethod
 from typing import List, Dict, Tuple
+from packaging import version
 
-from onnx import onnx_pb
+import onnx
+# pylint: disable=no-name-in-module
+if version.parse(onnx.__version__) >= version.parse("1.14.0"):
+    from onnx import ModelProto, NodeProto
+else:
+    from onnx.onnx_pb import ModelProto, NodeProto
+
 from aimet_common.defs import QuantizationDataType
 from aimet_common.graph_searcher import GraphSearcher
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
@@ -68,7 +75,7 @@ class OpToQuantizers:
 class SupergroupConfigCallback(AimetCommonSupergroupConfigCallback):
     """ Class acting as a callback for when supergroups are found """
 
-    def __init__(self, model: onnx_pb.ModelProto, op_to_quantizers: Dict):
+    def __init__(self, model: ModelProto, op_to_quantizers: Dict):
         super().__init__()
         self._model = model
         self._op_to_quantizers = op_to_quantizers
@@ -86,7 +93,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
     """ Class for parsing and applying
     quantsim configurations from json config file """
 
-    def __init__(self, model: onnx_pb.ModelProto, conn_graph: ConnectedGraph, config_file: str, quantsim_output_bw: int,
+    def __init__(self, model: ModelProto, conn_graph: ConnectedGraph, config_file: str, quantsim_output_bw: int,
                  quantsim_param_bw: int, quantsim_data_type: QuantizationDataType = QuantizationDataType.int):
         super().__init__(config_file, quantsim_data_type, quantsim_output_bw, quantsim_param_bw)
 
@@ -521,10 +528,10 @@ class OpInstanceConfigGenerator:
         assert ConfigDictKeys.DEFAULTS in self.op_type_pcq
 
     @abstractmethod
-    def generate(self, op: onnx_pb.NodeProto, op_type: str) -> dict:
+    def generate(self, op: NodeProto, op_type: str) -> dict:
         """ generate the config for the given op """
 
-    def _generate_pcq(self, op: onnx_pb.NodeProto) -> bool:
+    def _generate_pcq(self, op: NodeProto) -> bool:
         """
         Helper function to generate the pcq field
         :param op: op instance to generate the pcq value for
@@ -549,7 +556,7 @@ class DefaultOpInstanceConfigGenerator(OpInstanceConfigGenerator):
     Default implementation of OpInstanceConfigGenerator
     """
 
-    def generate(self, op: onnx_pb.NodeProto, op_type: str) -> Tuple[dict, bool]:
+    def generate(self, op: NodeProto, op_type: str) -> Tuple[dict, bool]:
         """
         :param op: op to generate the specialized config
         :param op_type: Type str retrieved from CG op

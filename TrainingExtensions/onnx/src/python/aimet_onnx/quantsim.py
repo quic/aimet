@@ -38,9 +38,16 @@
 
 import os
 from typing import Dict, List, Union
+from packaging import version
 import json
 import numpy as np
-from onnx import helper, onnx_pb
+import onnx
+# pylint: disable=no-name-in-module
+if version.parse(onnx.__version__) >= version.parse("1.14.0"):
+    from onnx import ModelProto
+else:
+    from onnx.onnx_pb import ModelProto
+from onnx import helper
 import onnxruntime as ort
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
@@ -74,7 +81,7 @@ class QuantizationSimModel:
     # pylint: disable=too-many-arguments
     # pylint: disable=too-many-instance-attributes
     def __init__(self,
-                 model: onnx_pb.ModelProto,
+                 model: ModelProto,
                  dummy_input: Dict[str, np.ndarray] = None,
                  quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
                  rounding_mode: str = 'nearest',
@@ -339,7 +346,7 @@ class QuantizationSimModel:
                                                           )
 
     @staticmethod
-    def build_session(model: onnx_pb.ModelProto, providers: List):
+    def build_session(model: ModelProto, providers: List):
         """
         Build and return onnxruntime inference session
 
