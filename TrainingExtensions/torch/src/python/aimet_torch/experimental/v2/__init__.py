@@ -34,3 +34,6 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
+# pylint: disable=missing-docstring
+from . import quantization

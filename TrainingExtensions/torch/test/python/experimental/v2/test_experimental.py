@@ -34,3 +34,6 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
+def test_import():
+    import aimet_torch.experimental.v2 as aimet_torch
