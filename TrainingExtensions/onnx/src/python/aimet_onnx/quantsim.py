@@ -38,15 +38,10 @@
 
 import os
 from typing import Dict, List, Union
-from packaging import version
 import json
 import numpy as np
 import onnx
-# pylint: disable=no-name-in-module
-if version.parse(onnx.__version__) >= version.parse("1.14.0"):
-    from onnx import ModelProto
-else:
-    from onnx.onnx_pb import ModelProto
+
 from onnx import helper
 import onnxruntime as ort
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
@@ -64,6 +59,13 @@ from aimet_onnx.meta.connectedgraph import ConnectedGraph
 from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode, TensorQuantizerParams
 from aimet_onnx.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_onnx.utils import make_dummy_input, add_hook_to_get_activation, remove_activation_hooks
+
+from packaging import version
+# pylint: disable=no-name-in-module, ungrouped-imports
+if version.parse(onnx.__version__) >= version.parse("1.14.0"):
+    from onnx import ModelProto
+else:
+    from onnx.onnx_pb import ModelProto
 
 WORKING_DIR = '/tmp/quantsim/'
 

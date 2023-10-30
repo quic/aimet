@@ -37,19 +37,20 @@
 """ Utility functions for ONNX """
 import itertools
 from typing import Dict, List, Union, Tuple
-from packaging import version
 
 import os
 import pickle
 import numpy as np
 import onnx
-# pylint: disable=no-name-in-module
+from onnx import helper, numpy_helper, mapping
+from aimet_common.utils import AimetLogger
+
+from packaging import version
+# pylint: disable=no-name-in-module, ungrouped-imports
 if version.parse(onnx.__version__) >= version.parse("1.14.0"):
     from onnx import NodeProto, TensorProto, ModelProto, GraphProto, ValueInfoProto
 else:
     from onnx.onnx_pb import NodeProto, TensorProto, ModelProto, GraphProto, ValueInfoProto
-from onnx import helper, numpy_helper, mapping
-from aimet_common.utils import AimetLogger
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 

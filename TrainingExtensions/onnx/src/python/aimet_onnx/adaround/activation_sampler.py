@@ -38,20 +38,21 @@
 """ Sample output from original module for Adaround feature """
 
 from typing import Tuple, List, Dict, Union
-from packaging import version
 
 import numpy as np
 import onnxruntime as ort
 import onnx
-# pylint: disable=no-name-in-module
-if version.parse(onnx.__version__) >= version.parse("1.14.0"):
-    from onnx import ModelProto
-else:
-    from onnx.onnx_pb import ModelProto
 
 from aimet_common.utils import AimetLogger
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.utils import add_hook_to_get_activation, remove_activation_hooks, create_input_dict
+
+from packaging import version
+# pylint: disable=no-name-in-module, ungrouped-imports
+if version.parse(onnx.__version__) >= version.parse("1.14.0"):
+    from onnx import ModelProto
+else:
+    from onnx.onnx_pb import ModelProto
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 

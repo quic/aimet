@@ -44,16 +44,9 @@ operations represent a module or a function that generates a tensor, while produ
 the tensors that are either input to the model (input, constant or parameter) or the
 result of an operation. Furthermore the graph representation is bi-directional."""
 
-
 from typing import List, Union, Dict
-from packaging import version
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
 import onnx
-# pylint: disable=no-name-in-module
-if version.parse(onnx.__version__) >= version.parse("1.14.0"):
-    from onnx import ModelProto, NodeProto, TensorProto
-else:
-    from onnx.onnx_pb import ModelProto, NodeProto, TensorProto
 
 from aimet_common.connected_graph.connectedgraph import ConnectedGraph as AimetCommonConnectedGraph, get_ordered_ops
 from aimet_common.utils import AimetLogger
@@ -61,6 +54,13 @@ from aimet_common.model_module import ONNXModelModule
 from aimet_onnx.meta.operations import Op
 from aimet_onnx.meta.product import Product
 from aimet_onnx.utils import ParamUtils, retrieve_constant_input
+
+from packaging import version
+# pylint: disable=no-name-in-module, ungrouped-imports
+if version.parse(onnx.__version__) >= version.parse("1.14.0"):
+    from onnx import ModelProto, NodeProto, TensorProto
+else:
+    from onnx.onnx_pb import ModelProto, NodeProto, TensorProto
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
 

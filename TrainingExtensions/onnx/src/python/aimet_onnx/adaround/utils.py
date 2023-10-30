@@ -36,16 +36,17 @@
 # =============================================================================
 """ Utilities for Adaround ONNX """
 from typing import Dict
-from packaging import version
 from collections import defaultdict
 import onnx
-# pylint: disable=no-name-in-module
+
+from aimet_onnx.meta.connectedgraph import ConnectedGraph
+
+from packaging import version
+# pylint: disable=no-name-in-module, ungrouped-imports
 if version.parse(onnx.__version__) >= version.parse("1.14.0"):
     from onnx import ModelProto
 else:
     from onnx.onnx_pb import ModelProto
-
-from aimet_onnx.meta.connectedgraph import ConnectedGraph
 
 class ModuleInfo:
     """ Class object containing information about a module """
