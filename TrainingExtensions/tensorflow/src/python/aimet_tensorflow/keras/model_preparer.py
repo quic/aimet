@@ -59,11 +59,13 @@ else:
     from tensorflow.python.keras.engine.keras_tensor import KerasTensor  # pylint: disable=ungrouped-imports
     from tensorflow.python.keras.engine.functional import Functional  # pylint: disable=ungrouped-imports
     from tensorflow.python.keras.layers.core import TFOpLambda  # pylint: disable=ungrouped-imports
-    from tensorflow.python.keras.layers.merge import _Merge as MergeLayersParentClass  # pylint: disable=ungrouped-imports
+    from tensorflow.python.keras.layers.merge import \
+        _Merge as MergeLayersParentClass  # pylint: disable=ungrouped-imports
 
 # pylint: disable=wrong-import-position
 from aimet_tensorflow.keras.utils.model_connection_utils import ModelLayerConnections, ModelLayerConnectionsProperties
-from aimet_tensorflow.keras.utils.model_transform_utils import replace_separable_conv_with_depthwise_pointwise, replace_relu6_with_relu
+from aimet_tensorflow.keras.utils.model_transform_utils import replace_separable_conv_with_depthwise_pointwise, \
+    replace_relu6_with_relu
 from aimet_common.utils import AimetLogger
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ModelPreparer)
@@ -80,22 +82,25 @@ class _KerasModelPreparer:
 
     def __init__(self, original_model: tf.keras.Model = None, input_layer: tf.keras.layers.InputLayer = None):
         if original_model:
-            self.original_model = original_model
             self.input_layer = self._format_input_layer(original_model, input_layer)
-
-            # Used to fix weight names at end of unwrapping
-            # Originally set to the name of the original model's class in the case that there is an inherited model
-            self.class_names = self._get_class_names_in_model(original_model)
 
             if self._inherits_from_keras_model(original_model):
                 _logger.info("This model inherits from tf.keras.Model, connecting model...")
-                self.original_model = self._connect_inherited_model(original_model, input_layer)
+                self.original_model = self._connect_inherited_model(original_model, input_layer, is_original_model=True)
 
-            self.model_layers_connections = ModelLayerConnections.get_model_layers_connection_properties(original_model)
+            else:
+                self.original_model = original_model
+
+            # Used to fix weight names at end of unwrapping
+            # Originally set to the name of the original model's class in the case that there is an inherited model
+            self.class_names = self._get_class_names_in_model(self.original_model)
+
+            self.model_layers_connections = \
+                ModelLayerConnections.get_model_layers_connection_properties(self.original_model)
             self._set_prepared_models_input_layer()
 
             self.model_outputs = []
-            self.original_models_last_layer = original_model.layers[-1]
+            self.original_models_last_layer = self.original_model.layers[-1]
 
             self.prepared_model = None
             self.custom_objects = None
@@ -106,7 +111,7 @@ class _KerasModelPreparer:
             cls, model_layers_connections: ModelLayerConnectionsProperties.TYPE
     ):
         """
-        Special function to __init__ for classes outside of _KerasModelPreparer that want access to useful
+        Special function to __init__ for classes outside _KerasModelPreparer that want access to useful
         functions like _handle_normal_keras_layer. ONLY use this for internal use. For normal Keras Model Preparer,
         please utilize the prepare_model function.
 
@@ -141,9 +146,9 @@ class _KerasModelPreparer:
             for position, weight in enumerate(self.prepared_model.weights)
         }
 
-        # Using the functional model's weights order, get the original model's weights in the same order. The lambda here
-        # uses the weight's name to get position in the functional model's weights order and the sorts the original model's
-        # weights by that position.
+        # Using the functional model's weights order, get the original model's weights in the same order. The lambda
+        # here uses the weight's name to get position in the functional model's weights order and the sorts the
+        # original model's weights by that position.
         weights_in_correct_order = [
             weight for _, weight in
             sorted(original_model_weights.items(), key=lambda weight_info: prepared_model_weight_order[weight_info[0]])
@@ -159,7 +164,7 @@ class _KerasModelPreparer:
         """
 
         assert self.prepared_model, "The prepared model must created before setting weights. Please call " \
-            "prepare_model() before calling set_weights()."
+                                    "prepare_model() before calling set_weights()."
 
         weights_in_correct_order = \
             self._get_original_models_weights_in_functional_model_order()
@@ -196,7 +201,7 @@ class _KerasModelPreparer:
                 raise ValueError("The top layer of this model is subclassed. Please provide an input layer via the "
                                  "\'input_layer\' parameter.")
 
-        if isinstance(input_layer, dict): # Keras allows passing in tensors via tensor_name : tensor
+        if isinstance(input_layer, dict):  # Keras allows passing in tensors via tensor_name : tensor
             input_layer = [tensor for tensor in input_layer.values()]
             if len(input_layer) == 1:
                 return input_layer[0]
@@ -226,12 +231,12 @@ class _KerasModelPreparer:
         keras_defined_subclassed_layer = is_subclassed(layer)
         is_aimet_defined_subclassed = keras_defined_subclassed_layer and any(
             [isinstance(v, tf.keras.layers.Layer) for v in layer.__dict__.values()]
-        ) # check if the subclass is holding subclassed layer attributes. we only care if this is the case.
+        )  # check if the subclass is holding subclassed layer attributes. we only care if this is the case.
 
         return (
-            is_aimet_defined_subclassed or
-            _KerasModelPreparer._is_functional_model(layer) or
-            _KerasModelPreparer._is_sequential_model(layer)
+                is_aimet_defined_subclassed or
+                _KerasModelPreparer._is_functional_model(layer) or
+                _KerasModelPreparer._is_sequential_model(layer)
         )
 
     @staticmethod
@@ -262,7 +267,8 @@ class _KerasModelPreparer:
         def set_input_layer_factory(input_layer: Union[tf.keras.layers.InputLayer, List[tf.keras.layers.InputLayer]]):
             if isinstance(input_layer, list):
                 for inp in input_layer:
-                    self.model_layers_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS].update({inp.name: inp})
+                    self.model_layers_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS].update(
+                        {inp.name: inp})
             else:
                 self.model_layers_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS].update(
                     {input_layer.name: input_layer})
@@ -296,8 +302,11 @@ class _KerasModelPreparer:
                 layer_input = layer_input[0]
         except KeyError:
             layer_input = self._get_most_recently_added_output_tensor()
-            self.model_layers_connections[ModelLayerConnectionsProperties.INBOUND_NODES].update({layer.name: [layer_input.name]})
-            _logger.warning("Could not find input tensor for layer: %s. Using %s as input, the most recent output tensor.", layer.name, layer_input.name)
+            self.model_layers_connections[ModelLayerConnectionsProperties.INBOUND_NODES].update(
+                {layer.name: [layer_input.name]})
+            _logger.warning(
+                "Could not find input tensor for layer: %s. Using %s as input, the most recent output tensor.",
+                layer.name, layer_input.name)
 
         return layer_input
 
@@ -361,7 +370,8 @@ class _KerasModelPreparer:
         :param layer: The layer to get the call keyword arguments of
         :return: The call keyword arguments of the layer
         """
-        if original_call_kwargs := self.model_layers_connections[ModelLayerConnectionsProperties.CALL_KWARGS][layer.name]:
+        if original_call_kwargs := self.model_layers_connections[ModelLayerConnectionsProperties.CALL_KWARGS][
+            layer.name]:
             call_kwargs = {}
             for key, value in original_call_kwargs.items():
                 # The Keras tensor is already in the call args, so we don't need to add it again. call_kwargs are for
@@ -397,10 +407,12 @@ class _KerasModelPreparer:
                     idx = value.index(layer.name)
                     value[idx] = new_name
 
-            self.model_layers_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS].update({new_name: new_output_tensor})
+            self.model_layers_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS].update(
+                {new_name: new_output_tensor})
         else:
             # Set new output tensor (in this case, it will be the same as the original model)
-            self.model_layers_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS].update({layer.name: new_output_tensor})
+            self.model_layers_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS].update(
+                {layer.name: new_output_tensor})
 
         # Save tensor in output list if it is output in the initial model
         # TODO: Update so that the last conditional is only checked when it's not the last layer.
@@ -480,9 +492,11 @@ class _KerasModelPreparer:
         """
         temp_model_input_names = [inp.name for inp in temp_model.input] if isinstance(temp_model.input, List) else [
             temp_model.input.name]
-        layer_inputs_name = [inp.name for inp in (layer_input if isinstance(layer_input, List) else [layer_input])]  # pylint: disable=superfluous-parens
+        layer_inputs_name = [inp.name for inp in (
+            layer_input if isinstance(layer_input, List) else [layer_input])]  # pylint: disable=superfluous-parens
 
-        for layers_name, input_tensor_name in temp_model_model_layers_connections[ModelLayerConnectionsProperties.INBOUND_NODES].items():
+        for layers_name, input_tensor_name in temp_model_model_layers_connections[
+            ModelLayerConnectionsProperties.INBOUND_NODES].items():
             for idx, current_input_name in enumerate(input_tensor_name):
                 if current_input_name in temp_model_input_names:
                     if len(layer_inputs_name) == 1:  # Special case where the same input is feed in multiple times
@@ -609,7 +623,7 @@ class _KerasModelPreparer:
         # Cloning model to remove any references to the original model
         K.clear_session()  # To avoid name conflicts
         self.prepared_model = tf.keras.models.clone_model(self.prepared_model)
-        setattr(self, "custom_objects", # For acceptable subclass layers
+        setattr(self, "custom_objects",  # For acceptable subclass layers
                 self._get_models_custom_objects(self.prepared_model))
         _logger.info("Prepared Model Summary: \n")
         self.prepared_model.summary(print_fn=_logger.info)
@@ -638,10 +652,9 @@ class _KerasModelPreparer:
         return {
             layer.__class__.__name__: layer.__class__
             for layer in model.layers
-            if not getattr(layer, "__module__", None).split(".")[0] == "keras" and # TF 2.10.1 and up
-            not getattr(layer, "__module__", None).split(".")[0] == "tensorflow" # TF 2.4.3 support
+            if not getattr(layer, "__module__", None).split(".")[0] == "keras" and  # TF 2.10.1 and up
+               not getattr(layer, "__module__", None).split(".")[0] == "tensorflow"  # TF 2.4.3 support
         } or None
-
 
     @staticmethod
     def _model_has_nested_layers(model: tf.keras.Model) -> bool:
@@ -666,20 +679,26 @@ class _KerasModelPreparer:
         :return: If the model is inheriting from tf.keras.Model
         """
 
-        return type(model).__bases__[0] == tf.keras.Model and not _KerasModelPreparer._is_functional_model(model) and not _KerasModelPreparer._is_sequential_model(model)
+        return type(model).__bases__[0] == tf.keras.Model and not _KerasModelPreparer._is_functional_model(
+            model) and not _KerasModelPreparer._is_sequential_model(model)
 
     @staticmethod
-    def _connect_inherited_model(model: tf.keras.Model, input_layer: Union[tf.keras.layers.InputLayer, List[tf.keras.layers.InputLayer]]) -> tf.keras.Model:
+    def _connect_inherited_model(model: tf.keras.Model, input_layer: Union[
+            tf.keras.layers.InputLayer, List[tf.keras.layers.InputLayer]],
+                                 is_original_model: bool = False) -> tf.keras.Model:
         """
-        Function to loop through models that inherit from tf.keras.Model and therefore could potentially have no outbound nodes.
+        Function to loop through models that inherit from tf.keras.Model and therefore could potentially have no
+        outbound nodes.
 
         :param model: Model to connect.
         :param input_layer: The input layer to connect the model.
-        :return: A model with the the outbound nodes generated.
+        :
+        :return: A model with the outbound nodes generated.
         """
 
         # TODO: Fix case where the layers are all the same. Maybe user has to?
-        return tf.keras.Model(inputs=input_layer, outputs=model.call(input_layer), name=_TEMP_MODEL_NAME)
+        model = tf.keras.Model(inputs=input_layer, outputs=model.call(input_layer), name=_TEMP_MODEL_NAME)
+        return tf.keras.models.clone_model(model) if is_original_model else model
 
     def verify_prepared_model(self):
         """
@@ -755,7 +774,8 @@ def prepare_model(original_model: tf.keras.Model,
                      "'replace_separable_conv_with_depthwise_pointwise' and 'replace_relu6_with_relu.")
         custom_objects = _KerasModelPreparer._get_models_custom_objects(original_model)
         prepared_model, _ = replace_relu6_with_relu(original_model, custom_objects=custom_objects)
-        prepared_model, _ = replace_separable_conv_with_depthwise_pointwise(prepared_model, custom_objects=custom_objects)
+        prepared_model, _ = replace_separable_conv_with_depthwise_pointwise(prepared_model,
+                                                                            custom_objects=custom_objects)
         return prepared_model
 
     keras_model_preparer = _KerasModelPreparer(original_model, input_layer=input_layer)

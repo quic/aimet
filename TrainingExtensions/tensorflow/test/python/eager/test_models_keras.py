@@ -245,12 +245,12 @@ def transposed_conv_model():
     """
 
     inp = tf.keras.Input((4, 4, 10))
-    x   = tf.keras.layers.Conv2DTranspose(10, 3)(inp)
-    x   = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.Conv2DTranspose(10, 3)(inp)
+    x = tf.keras.layers.BatchNormalization()(x)
 
-    x   = tf.keras.layers.ReLU()(x)
-    x   = tf.keras.layers.Conv2DTranspose(10, 3)(x)
-    x   = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.ReLU()(x)
+    x = tf.keras.layers.Conv2DTranspose(10, 3)(x)
+    x = tf.keras.layers.BatchNormalization()(x)
 
     return tf.keras.Model(inputs=[inp], outputs=[x])
 
@@ -261,10 +261,13 @@ def resnet_34():
 
     Taken from here https://github.com/safwankdb/ResNet34-TF2/blob/master/model.py
     """
+
     class ResBlock(tf.keras.Model):
         def __init__(self, channels, stride=1, name=''):
             super(ResBlock, self).__init__(name=name)
             self.flag = (stride != 1)
+            self.channels = channels
+            self.stride = stride
             self.conv1 = tf.keras.layers.Conv2D(channels, 3, stride, padding='same')
             self.bn1 = tf.keras.layers.BatchNormalization()
             self.conv2 = tf.keras.layers.Conv2D(channels, 3, padding='same')
@@ -274,6 +277,15 @@ def resnet_34():
             if self.flag:
                 self.bn3 = tf.keras.layers.BatchNormalization()
                 self.conv3 = tf.keras.layers.Conv2D(channels, 1, stride)
+
+        def get_config(self):
+            config = super().get_config()
+            config.update({
+                'channels': self.channels,
+                'stride': self.stride,
+                'name': self.name
+            })
+            return config
 
         def call(self, x):
             x1 = self.conv1(x)
@@ -287,7 +299,6 @@ def resnet_34():
             x1 = tf.keras.layers.add([x, x1])
             x1 = self.relu_2(x1)
             return x1
-
 
     class ResNet34(tf.keras.Model):
         def __init__(self):
