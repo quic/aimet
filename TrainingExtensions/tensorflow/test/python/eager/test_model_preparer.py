@@ -49,6 +49,7 @@ from aimet_common.utils import AimetLogger
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.model_preparer import prepare_model, _KerasModelPreparer
+
 get_models_custom_objects = _KerasModelPreparer._get_models_custom_objects
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
 
@@ -56,6 +57,7 @@ from test_models_keras import resnet_34, tiny_conv_net
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 AimetLogger.set_level_for_all_areas(logging.DEBUG)
+
 
 # Begin of Subclass Models to for Testing
 class TwoConvs(tf.keras.layers.Layer):
@@ -79,7 +81,6 @@ class TwoConvs(tf.keras.layers.Layer):
 
 class ConvTimesThree(tf.keras.layers.Layer):
     def __init__(self, **kwargs):
-
         super(ConvTimesThree, self).__init__(**kwargs)
         self.depth_conv = tf.keras.layers.DepthwiseConv2D(depth_multiplier=1,
                                                           kernel_size=(3, 3),
@@ -117,6 +118,7 @@ class CustomerTicketModel(tf.keras.Model):
         department = self.department_classifier(features)
         return priority, department
 
+
 # Functional model that includes subclassed layers
 class Classifier(tf.keras.Model):
     def __init__(self, num_classes=4):
@@ -131,6 +133,7 @@ class Classifier(tf.keras.Model):
 
     def call(self, inputs, **kwargs):
         return self.dense(inputs)
+
 
 # Linear class source: https://keras.io/guides/making_new_layers_and_models_via_subclassing/
 class Linear(tf.keras.layers.Layer):
@@ -166,9 +169,9 @@ class KerasDefinedAndAcceptableDefined(tf.keras.layers.Layer):
 
     def __init__(self):
         super().__init__(name="keras_defined_and_acceptable_defined")
-        self.conv = tf.keras.layers.Conv2D(32,  kernel_size=(3, 3),)
+        self.conv = tf.keras.layers.Conv2D(32, kernel_size=(3, 3), )
         self.linear = Linear()
-        self.relu   = tf.keras.layers.ReLU()
+        self.relu = tf.keras.layers.ReLU()
 
     def call(self, inputs, **kwargs):
         x = self.conv(inputs)
@@ -183,7 +186,7 @@ class TransformerBlock(tf.keras.layers.Layer):
         super(TransformerBlock, self).__init__()
         self.att = tf.keras.layers.MultiHeadAttention(num_heads=num_heads, key_dim=embed_dim)
         self.ffn = tf.keras.Sequential(
-            [tf.keras.layers.Dense(ff_dim, activation="relu"), tf.keras.layers.Dense(embed_dim),]
+            [tf.keras.layers.Dense(ff_dim, activation="relu"), tf.keras.layers.Dense(embed_dim), ]
         )
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6)
@@ -197,7 +200,6 @@ class TransformerBlock(tf.keras.layers.Layer):
         ffn_output = self.ffn(out1)
         ffn_output = self.dropout2(ffn_output, training=training)
         return self.layernorm2(out1 + ffn_output)
-
 
 
 class TokenAndPositionEmbedding(tf.keras.layers.Layer):
@@ -229,6 +231,7 @@ class MultiMathOperations(tf.keras.layers.Layer):
         b = tf.math.multiply(inputs[:, :, :, 2:3], self.b)
         return tf.concat([r, g, b], axis=3)
 
+
 # Layer with multiple inputs
 class TestMultiInput(tf.keras.layers.Layer):
     def __init__(self, **kwargs) -> None:
@@ -239,6 +242,7 @@ class TestMultiInput(tf.keras.layers.Layer):
         input2 = inputs[1]
         return input1 + input2
 
+
 # Layer with multiple outputs
 class TestMultiOut(tf.keras.layers.Layer):
     def __init__(self, **kwargs) -> None:
@@ -248,6 +252,7 @@ class TestMultiOut(tf.keras.layers.Layer):
         out1 = inputs * 2.0
         out2 = inputs * 3.0
         return [out1, out2]
+
 
 class TestModelPreparer:
     """ Class for Testing aimet_tensorflow.keras Model Preparer"""
@@ -265,7 +270,6 @@ class TestModelPreparer:
         model = tf.keras.Model(inputs=inp, outputs=x, name="conv_classes")
         return model
 
-
     @staticmethod
     def get_functional_model_with_subclassed_layers():
         inputs = tf.keras.layers.Input(shape=(3,))
@@ -273,7 +277,6 @@ class TestModelPreparer:
         outputs = Classifier(num_classes=10)(features)
         model = tf.keras.Model(inputs=inputs, outputs=outputs)
         return model
-
 
     @staticmethod
     def get_subclass_model_with_functional_layers():
@@ -293,7 +296,6 @@ class TestModelPreparer:
 
         model = MyFunctionalModel()
         return model
-
 
     @staticmethod
     def get_keras_text_classification_example_model_and_data_input():
@@ -350,7 +352,6 @@ class TestModelPreparer:
 
         return tf.keras.Model(inputs=inputs, outputs=outputs, name=f"multi_output_with_lambda_{use_lambdas}")
 
-
     @staticmethod
     def get_model_with_acceptable_subclass_layers():
         inputs = tf.keras.Input(shape=(32,))
@@ -360,7 +361,6 @@ class TestModelPreparer:
         outputs = tf.keras.layers.ReLU()(x)
 
         return tf.keras.Model(inputs=inputs, outputs=outputs, name="acceptable_subclasses")
-
 
     @staticmethod
     def get_model_with_keras_and_acceptable_subclass_layers_defined():
@@ -379,6 +379,29 @@ class TestModelPreparer:
         else:
             self.random_input = np.random.rand(1, *original_model.input_shape[1:])
         return original_model
+
+    @staticmethod
+    def get_model_inherited_from_Model_without_config() -> tf.keras.Model:
+        class LayerWithoutConfig(tf.keras.Model):  # Note: Inherits from Model
+            def __init__(self, value_to_save_in_config, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.dense = tf.keras.layers.Dense(value_to_save_in_config, 'relu')
+
+            def call(self, inputs, training=None, mask=None):
+                return self.dense(inputs)
+
+
+        class MyTempModel(tf.keras.Model):
+            def __init__(self):
+                super(MyTempModel, self).__init__()
+                self.layer_without_config = LayerWithoutConfig(3)
+
+            def call(self, inputs, training=None, mask=None):
+                return self.layer_without_config(inputs)
+
+        model = MyTempModel()
+        model.build(input_shape=(1, 28, 28, 3))
+        return model
 
     # Tests
     @pytest.fixture(scope="function", autouse=True)
@@ -420,7 +443,6 @@ class TestModelPreparer:
                         tf.keras.Input(shape=(num_samples, num_tags,), name="tags")]
         _ = prepare_model(model, input_layers)
 
-
     @pytest.mark.parametrize("model_func_str", [
         "get_multi_math_op_model",
         "get_model_with_multiple_inputs",
@@ -459,7 +481,6 @@ class TestModelPreparer:
         assert output_ops[0].get_module() == self.prepared_model.layers[-1]
         assert isinstance(output_ops[0].get_module(), type(original_model.layers[-1].dense))
 
-
     def test_input_layer_missing(self):
         model = self.get_subclass_model_with_functional_layers()
         input_shape = (32, 64)
@@ -467,7 +488,6 @@ class TestModelPreparer:
         _ = model(self.random_input)
         with pytest.raises(ValueError):
             prepare_model(model)
-
 
     def test_subclass_model_with_subclassed_layers_to_functional(self):
         original_model = self.get_subclass_model_with_functional_layers()
@@ -492,7 +512,6 @@ class TestModelPreparer:
         assert len(output_ops) == 1
         assert output_ops[0].get_module() == self.prepared_model.layers[-1]
         assert isinstance(output_ops[0].get_module(), type(original_model.layers[-1].layers[-1]))
-
 
     def test_conv_times_three_subclass_to_functional(self):
         original_model = self.get_model_and_set_random_input(self.get_conv_sub_class)
@@ -524,7 +543,6 @@ class TestModelPreparer:
         assert original_model.get_config() == self.prepared_model.get_config(), \
             "Prepare model did not give back the original model. This model does not need to be prepared."
 
-
     def test_multi_output_with_lambdas(self):
         original_model = self.get_model_and_set_random_input(lambda: self.get_model_with_multiple_outputs(True))
 
@@ -540,6 +558,12 @@ class TestModelPreparer:
         assert original_model.get_config() == self.prepared_model.get_config(), \
             "The original model contains acceptable subclass layers. The original model should be returned."
         self.custom_objects = get_models_custom_objects(self.prepared_model)
+
+    def test_model_inherits_from_Model_without_get_config_defined(self):
+        original_model = self.get_model_inherited_from_Model_without_config()
+
+        with pytest.raises(TypeError):
+            prepare_model(original_model, input_layer=tf.keras.Input(shape=[28, 28, 3]))
 
     def test_resnet_34(self):
         original_model = resnet_34()

@@ -59,8 +59,9 @@ else:
     from tensorflow.python.keras.engine.keras_tensor import KerasTensor  # pylint: disable=ungrouped-imports
     from tensorflow.python.keras.engine.functional import Functional  # pylint: disable=ungrouped-imports
     from tensorflow.python.keras.layers.core import TFOpLambda  # pylint: disable=ungrouped-imports
+    # pylint: disable=ungrouped-imports
     from tensorflow.python.keras.layers.merge import \
-        _Merge as MergeLayersParentClass  # pylint: disable=ungrouped-imports
+        _Merge as MergeLayersParentClass
 
 # pylint: disable=wrong-import-position
 from aimet_tensorflow.keras.utils.model_connection_utils import ModelLayerConnections, ModelLayerConnectionsProperties
@@ -234,9 +235,9 @@ class _KerasModelPreparer:
         )  # check if the subclass is holding subclassed layer attributes. we only care if this is the case.
 
         return (
-                is_aimet_defined_subclassed or
-                _KerasModelPreparer._is_functional_model(layer) or
-                _KerasModelPreparer._is_sequential_model(layer)
+            is_aimet_defined_subclassed or
+            _KerasModelPreparer._is_functional_model(layer) or
+            _KerasModelPreparer._is_sequential_model(layer)
         )
 
     @staticmethod
@@ -371,7 +372,7 @@ class _KerasModelPreparer:
         :return: The call keyword arguments of the layer
         """
         if original_call_kwargs := self.model_layers_connections[ModelLayerConnectionsProperties.CALL_KWARGS][
-            layer.name]:
+                layer.name]:
             call_kwargs = {}
             for key, value in original_call_kwargs.items():
                 # The Keras tensor is already in the call args, so we don't need to add it again. call_kwargs are for
@@ -496,7 +497,7 @@ class _KerasModelPreparer:
             layer_input if isinstance(layer_input, List) else [layer_input])]  # pylint: disable=superfluous-parens
 
         for layers_name, input_tensor_name in temp_model_model_layers_connections[
-            ModelLayerConnectionsProperties.INBOUND_NODES].items():
+                ModelLayerConnectionsProperties.INBOUND_NODES].items():
             for idx, current_input_name in enumerate(input_tensor_name):
                 if current_input_name in temp_model_input_names:
                     if len(layer_inputs_name) == 1:  # Special case where the same input is feed in multiple times
@@ -653,7 +654,7 @@ class _KerasModelPreparer:
             layer.__class__.__name__: layer.__class__
             for layer in model.layers
             if not getattr(layer, "__module__", None).split(".")[0] == "keras" and  # TF 2.10.1 and up
-               not getattr(layer, "__module__", None).split(".")[0] == "tensorflow"  # TF 2.4.3 support
+            not getattr(layer, "__module__", None).split(".")[0] == "tensorflow"    # TF 2.4.3 support
         } or None
 
     @staticmethod
@@ -692,13 +693,23 @@ class _KerasModelPreparer:
 
         :param model: Model to connect.
         :param input_layer: The input layer to connect the model.
-        :
+        :param is_original_model: Flag to clone the model if the original model is the one passed in.
+        This is to fix naming issues. Otherwise, the model is not cloned.
         :return: A model with the outbound nodes generated.
         """
 
         # TODO: Fix case where the layers are all the same. Maybe user has to?
         model = tf.keras.Model(inputs=input_layer, outputs=model.call(input_layer), name=_TEMP_MODEL_NAME)
-        return tf.keras.models.clone_model(model) if is_original_model else model
+        if is_original_model:
+            try:
+                return tf.keras.models.clone_model(model)
+            except TypeError as e:
+                _logger.error("The layer %s inherits from tf.keras.Model and has layer that does not have a "
+                              "`get_config` defined. Due to this, Keras cannot clone this layer. Please override the "
+                              "`get_config` function and provide the missing keys mentioned in the Keras error logs.",
+                              model.name)
+                raise e
+        return model
 
     def verify_prepared_model(self):
         """
@@ -768,7 +779,8 @@ def prepare_model(original_model: tf.keras.Model,
 
     # Initial check to see if preparing model is necessary
     # pylint: disable=protected-access
-    if not _KerasModelPreparer._model_has_nested_layers(original_model):
+    if not _KerasModelPreparer._model_has_nested_layers(original_model) and \
+            not _KerasModelPreparer._inherits_from_keras_model(original_model):
         _logger.info("Model does not contain any nested layers. "
                      "Returning original model after going through "
                      "'replace_separable_conv_with_depthwise_pointwise' and 'replace_relu6_with_relu.")
