@@ -814,6 +814,8 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         scale, offset = self.compute_scaling_offset(encoding_min.float(), encoding_max.float())
         assert scale is not None
         assert offset is not None
+        scale = scale.expand_as(encoding_min)
+        offset = offset.expand_as(encoding_min)
 
         if not self.use_symmetric_encodings or self.is_unsigned_symmetric:
             # Calculate 'min' and 'max' based on 'delta' and 'offset'
