@@ -66,43 +66,6 @@ def conv_functional():
     return model
 
 
-# Not used for testing at the moment. This is placed here for future testing.
-class ConvTimesThree(tf.keras.layers.Layer):
-    def __init__(self, **kwargs):
-        super(ConvTimesThree, self).__init__(**kwargs)
-        self.conv = tf.keras.layers.Conv2D(32,
-                                           kernel_size=(3, 3),
-                                           activation='relu',
-                                           name='class_conv')
-        self.conv_transpose = tf.keras.layers.Conv2DTranspose(64,
-                                                              kernel_size=(3, 3),
-                                                              activation='relu',
-                                                              name='class_conv_transpose')
-        self.depth_conv = tf.keras.layers.DepthwiseConv2D(depth_multiplier=1,
-                                                          kernel_size=(3, 3),
-                                                          activation='relu',
-                                                          name='class_conv_depth')
-
-    def call(self, x):
-        x = self.conv(x)
-        x = self.conv_transpose(x)
-        x = self.depth_conv(x)
-        return x
-
-
-# See comment above ConvTimesThree Class
-def conv_sub_class():
-    input_shape = (128, 28, 28, 1)
-    inp = tf.keras.Input(shape=input_shape[1:])
-    x = ConvTimesThree()(inp)
-    x = tf.keras.layers.Flatten()(x)
-    x = tf.keras.layers.Dropout(0.5)(x, training=False)
-    x = tf.keras.layers.Dense(10, activation="softmax")(x)
-
-    model = tf.keras.Model(inputs=inp, outputs=x, name='conv_classes')
-    return model
-
-
 def test_replace_middle_layers():
     with tempfile.TemporaryDirectory() as tmp_dir:
         saved_model_dir = os.path.join(tmp_dir, 'saved_model')
@@ -357,13 +320,6 @@ def test_convert_h5_to_pb_not_h5_file():
 
 def test_convert_h5_to_pb_functional_model():
     check_conversion_tensor_names(conv_functional())
-
-
-@pytest.mark.skip(
-    reason="Subclassed Keras models are not currently supported. "
-           "Created for future testing.")
-def test_convert_h5_to_pb_subclass_model():
-    check_conversion_tensor_names(conv_sub_class())
 
 
 @pytest.mark.skip(reason="This test takes a long time. Only used during development.")
