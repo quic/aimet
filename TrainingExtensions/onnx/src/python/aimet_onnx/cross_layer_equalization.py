@@ -47,6 +47,7 @@ import numpy as np
 import onnx
 from onnx import numpy_helper
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
+from packaging import version
 
 from aimet_common.utils import AimetLogger
 from aimet_common.connected_graph.connectedgraph import get_ordered_ops
@@ -59,7 +60,6 @@ from aimet_onnx.meta.operations import Op
 from aimet_onnx.utils import transpose_tensor, ParamUtils, get_node_attribute, replace_relu6_with_relu
 from aimet_onnx.batch_norm_fold import BNLayer, fold_all_batch_norms_to_weight
 
-from packaging import version
 # pylint: disable=no-name-in-module, ungrouped-imports
 if version.parse(onnx.__version__) >= version.parse("1.14.0"):
     from onnx import NodeProto, ModelProto

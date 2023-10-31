@@ -39,6 +39,7 @@ from abc import abstractmethod
 from typing import List, Dict, Tuple
 
 import onnx
+from packaging import version
 
 from aimet_common.defs import QuantizationDataType
 from aimet_common.graph_searcher import GraphSearcher
@@ -52,7 +53,6 @@ from aimet_onnx.meta.connectedgraph import ConnectedGraph, CONSTANT_TYPE
 from aimet_onnx.utils import get_product_name_from_quantized_name
 from aimet_onnx.qc_quantize_op import OpMode, QcQuantizeOp
 
-from packaging import version
 # pylint: disable=no-name-in-module, ungrouped-imports
 if version.parse(onnx.__version__) >= version.parse("1.14.0"):
     from onnx import ModelProto, NodeProto
