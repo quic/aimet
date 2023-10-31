@@ -46,6 +46,7 @@ from onnx import helper
 import onnxruntime as ort
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
+from packaging import version
 
 from aimet_common import libpymo
 from aimet_common import libquant_info
@@ -60,7 +61,6 @@ from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode, TensorQuantizerParam
 from aimet_onnx.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_onnx.utils import make_dummy_input, add_hook_to_get_activation, remove_activation_hooks
 
-from packaging import version
 # pylint: disable=no-name-in-module, ungrouped-imports
 if version.parse(onnx.__version__) >= version.parse("1.14.0"):
     from onnx import ModelProto

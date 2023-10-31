@@ -38,10 +38,10 @@
 from typing import Dict
 from collections import defaultdict
 import onnx
+from packaging import version
 
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
 
-from packaging import version
 # pylint: disable=no-name-in-module, ungrouped-imports
 if version.parse(onnx.__version__) >= version.parse("1.14.0"):
     from onnx import ModelProto

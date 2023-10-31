@@ -43,9 +43,10 @@ import pickle
 import numpy as np
 import onnx
 from onnx import helper, numpy_helper, mapping
+from packaging import version
+
 from aimet_common.utils import AimetLogger
 
-from packaging import version
 # pylint: disable=no-name-in-module, ungrouped-imports
 if version.parse(onnx.__version__) >= version.parse("1.14.0"):
     from onnx import NodeProto, TensorProto, ModelProto, GraphProto, ValueInfoProto
