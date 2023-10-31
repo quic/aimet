@@ -36,9 +36,16 @@
 # =============================================================================
 """ Utilities for ONNX Connected Graph """
 from typing import Dict, List
-from onnx import onnx_pb
+import onnx
 
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
+
+from packaging import version
+# pylint: disable=no-name-in-module, ungrouped-imports
+if version.parse(onnx.__version__) >= version.parse("1.14.0"):
+    from onnx import ModelProto
+else:
+    from onnx.onnx_pb import ModelProto
 
 
 ActivationTypes = ['Relu', 'Clip', 'Sigmoid', 'Tanh', 'PRelu', 'Softmax']
@@ -75,7 +82,7 @@ def get_param_shape_using_connected_graph(connected_graph: ConnectedGraph, param
                     return param.shape
     return None
 
-def get_module_act_func_pair(model: onnx_pb.ModelProto) -> Dict[str, str]:
+def get_module_act_func_pair(model: ModelProto) -> Dict[str, str]:
     """
     For given model, returns dictionary of module to immediate following activation function else maps
     module to None.
@@ -108,7 +115,7 @@ def get_module_act_func_pair(model: onnx_pb.ModelProto) -> Dict[str, str]:
     return module_act_func_pair
 
 
-def get_ordered_ops(model: onnx_pb.ModelProto) -> List:
+def get_ordered_ops(model: ModelProto) -> List:
     """
     Gets list of ordered ops
 
