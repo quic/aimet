@@ -43,7 +43,7 @@ import contextlib
 import itertools
 import json
 import shutil
-from typing import Tuple, Union, Dict, List, Callable, Any
+from typing import Tuple, Union, Dict, List, Callable, Any, Optional
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -61,6 +61,8 @@ from aimet_torch.tensor_quantizer import StaticGridPerChannelQuantizer, TensorQu
 from aimet_torch.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer
 from aimet_torch.adaround.adaround_optimizer import AdaroundOptimizer
 from aimet_torch.adaround.adaround_loss import AdaroundHyperParameters
+from aimet_torch.adaround.activation_sampler import create_modulelist_for_group_modules, get_block_inputs,\
+    get_block_outputs
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -195,17 +197,22 @@ class Adaround:
 
     @classmethod
     def _adaround_model(cls, model: torch.nn.Module, quant_sim: QuantizationSimModel, module_act_func_pair: Dict,
-                        params: AdaroundParameters, dummy_input: Union[torch.Tensor, Tuple], checkpoints_config: str = None):
+                        params: AdaroundParameters, dummy_input: Union[torch.Tensor, Tuple],
+                        checkpoints_config: str = None):
         """
         Optimize weight rounding of every module (AdaroundSupportedModules) of model in sequential manner
         based on occurrence
+
+        NOTE: When checkpoints_config file is provided, assumption is that the outputs from previous group modules (block)
+         should feed directly into next group modules (block)
+
         :param model: Original fp32 model from which quant_sim was created.
         :param quant_sim: QuantizationSimModel object to optimize weight rounding.
                           The activation quantizers are expected to have been disabled.
         :param module_act_func_pair: Dictionary of module to immediate following activation function
         :param params: Adaround parameters
         :param dummy_input: Dummy input to the model
-        :param checkpoints_config: Config files to split fp32/quant model by checkpoints
+        :param checkpoints_config: Config files to split fp32/quant model by checkpoints to speedup activations sampling
         """
         # pylint: disable=too-many-locals, protected-access, too-many-branches, too-many-statements
 
@@ -222,7 +229,6 @@ class Adaround:
                 num_iterations = 15000
             else:
                 num_iterations = 10000
-
         try:
             # Cache model input data to WORKING_DIR
             cached_dataset = utils.CachedDataset(params.data_loader, params.num_batches, WORKING_DIR)
@@ -233,8 +239,28 @@ class Adaround:
 
             # AdaRound must be applied to modules in the order of occurrence
             if checkpoints_config:
+                # Load the predefined json file for checkpoints info
+                ckpts_file = json.load(open(checkpoints_config))
+                assert 'grouped_modules' in ckpts_file.keys(),\
+                    "Please provide a dictionary of grouped_modules in the file to define checkpoints"
+                assert 'include_static_inputs' in ckpts_file.keys(),\
+                    "Please provide a dictionary of include_static_inputs in the file to define checkpoints"
+                assert 'cache_on_cpu' in ckpts_file.keys(),\
+                    "Please define cache_on_cpu to determine whether to cache intermediate tensors on CPU"
+
+                grouped_modules = ckpts_file['grouped_modules']
+                breakpoint_module_name = ckpts_file['grouped_modules'][list(grouped_modules.keys())[0]][0]
+                include_static_inputs = ckpts_file['include_static_inputs']
+                cache_on_cpu = ckpts_file['cache_on_cpu']
+                cached_fp_dataset, cached_quant_dataset = get_block_inputs(model, quant_sim,
+                                                                           breakpoint_module_name,
+                                                                           cached_dataset, cache_on_cpu,
+                                                                           params.forward_fn, params.num_batches,
+                                                                           WORKING_DIR)
                 # Get the device of model to latter be used to place input tensor on the same device
                 device = utils.get_device(model)
+                model.cpu()
+                quant_sim.model.cpu()
 
                 # Forward function for the ModuleList object
                 def fwd_mod_ls(mod_ls, x):
@@ -242,96 +268,25 @@ class Adaround:
                         x = params.forward_fn(mod, x)
                     return x
 
-                fp32_cache_path = WORKING_DIR+'fp32/'
-                quant_cache_path = WORKING_DIR+'quant/'
+                sub_fp_models, sub_sim_models = create_modulelist_for_group_modules(model, quant_sim, grouped_modules)
+                for i, (fp_block, quant_sim_block, static_input) in enumerate(zip(sub_fp_models,
+                                                                                  sub_sim_models,
+                                                                                  include_static_inputs)):
+                    modules = utils.get_ordered_list_of_modules(fp_block, cached_fp_dataset[0], fwd_mod_ls)
+                    cls._run_adaround_model(modules, fp_block, quant_sim_block,
+                                            module_act_func_pair, opt_params,
+                                            fwd_mod_ls,
+                                            cached_fp_dataset, cached_quant_dataset)
 
-                # Load the predefined json file for checkpoints info
-                ckpts_file = json.load(open(checkpoints_config))
-                assert 'grouped_modules' in ckpts_file.keys(), "Please provide a dictionary of grouped_modules in the file to define checkpoints"
-                assert 'include_static_inputs' in ckpts_file.keys(), "Please provide a dictionary of include_static_inputs in the file to define checkpoints"
-                assert 'cache_on_cpu' in ckpts_file.keys(), "Please define cache_on_cpu to determine whether to cache intermediate tensors on CPU"
+                    # Get the outputs from the current block and assign to be the inputs for next block
+                    # except for the last block
+                    if i < len(sub_fp_models) - 1:
+                        get_block_outputs(fp_block, quant_sim_block, static_input,
+                                          cached_fp_dataset, cached_quant_dataset, cache_on_cpu,
+                                          fwd_mod_ls, device, WORKING_DIR)
 
-                grouped_modules_dict = ckpts_file['grouped_modules']
-                break_point = ckpts_file['grouped_modules'][list(grouped_modules_dict.keys())[0]][0]
-                include_static_inputs = ckpts_file['include_static_inputs']
-                cache_on_cpu = ckpts_file['cache_on_cpu']
-
-                # Cache input data for both fp and quant model
-                if cache_on_cpu:
-                    cached_fp_dataset = utils.cache_intermediate_datasets(cached_dataset, cache_on_cpu, model,
-                                                                          break_point, params.forward_fn)
-                    cached_quant_dataset = utils.cache_intermediate_datasets(cached_dataset, cache_on_cpu,
-                                                                             quant_sim.model, break_point,
-                                                                             params.forward_fn)
-                else:
-                    utils.cache_intermediate_datasets(cached_dataset, cache_on_cpu, model, break_point,
-                                                      params.forward_fn, fp32_cache_path)
-                    utils.cache_intermediate_datasets(cached_dataset, cache_on_cpu, quant_sim.model, break_point,
-                                                      params.forward_fn, quant_cache_path)
-                    cached_fp_dataset = utils.CachedDataset(None, params.num_batches, fp32_cache_path)
-                    cached_quant_dataset = utils.CachedDataset(None, params.num_batches, quant_cache_path)
-
-                # Place fp32/quant model to cpu to save the memory usage of GPU
-                model.cpu()
-                quant_sim.model.cpu()
-
-                # Use torch.nn.ModuleList to group modules
-                sub_fp_models = []
-                sub_sim_models = []
-                for _, modules in grouped_modules_dict.items():
-                    fp_mod_ls = torch.nn.ModuleList()
-                    quant_mod_ls = torch.nn.ModuleList()
-                    for name in modules:
-                        fp_mod_ls.append(utils.get_named_module(model, name))
-                        quant_mod_ls.append(utils.get_named_module(quant_sim.model, name))
-                    sub_fp_models.append(fp_mod_ls)
-                    sub_sim_models.append(quant_mod_ls)
-
-                for n, (fp_model, sim_model, include_static_input) in enumerate(zip(sub_fp_models, sub_sim_models, include_static_inputs)):
-                    # Place sub fp32/quant model to the device
-                    fp_model.to(device)
-                    sim_model.to(device)
-
-                    modules = utils.get_ordered_list_of_modules(fp_model, cached_fp_dataset[0], fwd_mod_ls)
-                    cls._run_adaround_model(modules, fp_model, sim_model, module_act_func_pair, opt_params, fwd_mod_ls, cached_fp_dataset, cached_quant_dataset)
-
-                    if n < len(sub_fp_models) - 1:
-                        # Cache the outputs of current sub fp32/quant model to be the input of next sub fp32/quant model
-                        fp_iterator = iter(cached_fp_dataset)
-                        quant_iterator = iter(cached_quant_dataset)
-                        # pylint: disable=consider-using-enumerate
-                        for idx in range(len(cached_fp_dataset)):
-                            # Place the input tensors on the same device as sub fp32/quant model
-                            fp_data = utils.change_tensor_device_placement(next(fp_iterator), device)
-                            quant_data = utils.change_tensor_device_placement(next(quant_iterator), device)
-                            with utils.in_eval_mode(fp_model), utils.in_eval_mode(sim_model), torch.no_grad():
-                                fp_output = fwd_mod_ls(fp_model, fp_data)
-                                fp_output = fp_output[0].cpu() if isinstance(fp_output, (tuple, list)) else fp_output.cpu()
-                                quant_output = fwd_mod_ls(sim_model, quant_data)
-                                quant_output = quant_output[0].cpu() if isinstance(quant_output, (tuple, list)) else quant_output.cpu()
-
-                                # Check if the next ModuleList needs static inputs or not
-                                if include_static_input == "True":
-                                    fp_data[0] = fp_output
-                                    quant_data[0] = quant_output
-                                else:
-                                    fp_data = [fp_output]
-                                    quant_data = [quant_output]
-
-                                # Cache the outputs on CPU or disk
-                                if cache_on_cpu:
-                                    cached_fp_dataset[idx] = fp_data
-                                    cached_quant_dataset[idx] = quant_data
-                                else:
-                                    utils.save_to_cache(fp_data, fp32_cache_path, idx)
-                                    utils.save_to_cache(quant_data, quant_cache_path, idx)
-
-                        # Place sub fp32/quant model to cpu
-                        fp_model.cpu()
-                        sim_model.cpu()
                 # After finishing Adaround, placing the quant model back to its original device
                 quant_sim.model.to(device)
-
             else:
                 modules = utils.get_ordered_list_of_modules(model, dummy_input)
                 cls._run_adaround_model(modules, model, quant_sim.model, module_act_func_pair, opt_params,
@@ -342,10 +297,14 @@ class Adaround:
                 shutil.rmtree(WORKING_DIR)
 
     @classmethod
-    def _run_adaround_model(cls, modules, model, quant_sim_model, module_act_func_pair, opt_params, forward_fn,
-                            cached_dataset, cached_quant_dataset=None):
+    def _run_adaround_model(cls, modules: List, model: torch.nn.Module, quant_sim_model: torch.nn.Module,
+                            module_act_func_pair: Dict, opt_params: AdaroundHyperParameters, forward_fn: Callable,
+                            cached_dataset: utils.CachedDataset,
+                            cached_quant_dataset: Optional[utils.CachedDataset] = None):
         """
-        Iterate through all modules to find out Adaround supported modules and apply Adaround optimization to those modules
+        Iterate through all modules to find out Adaround supported modules and
+         apply Adaround optimization to those modules
+
         :param modules: Candidate modules
         :param model: Original fp32 model
         :param quant_sim_model: QuantSim model
