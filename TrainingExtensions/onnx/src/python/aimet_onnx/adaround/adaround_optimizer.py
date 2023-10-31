@@ -40,7 +40,7 @@
 from typing import Union, Tuple, Dict
 import numpy as np
 import onnx
-from onnx import onnx_pb, numpy_helper
+from onnx import numpy_helper
 import torch
 import torch.nn.functional as functional
 from torch.utils.data import Dataset
@@ -56,6 +56,13 @@ from aimet_torch.adaround.adaround_loss import AdaroundLoss, AdaroundHyperParame
 from aimet_torch.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer
 from aimet_torch.adaround.adaround_optimizer import AdaroundOptimizer as TorchAdaroundOptimizer
 
+from packaging import version
+# pylint: disable=no-name-in-module, ungrouped-imports
+if version.parse(onnx.__version__) >= version.parse("1.14.0"):
+    from onnx import ModelProto
+else:
+    from onnx.onnx_pb import ModelProto
+
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 BATCH_SIZE = 32
 EMPIRICAL_THRESHOLD = 3 / 4
@@ -70,7 +77,7 @@ class AdaroundOptimizer:
     """
     @classmethod
     def adaround_module(cls, module: ModuleInfo, quantized_input_name: str,
-                        orig_model: onnx_pb.ModelProto, quant_model: QuantizationSimModel,
+                        orig_model: ModelProto, quant_model: QuantizationSimModel,
                         act_func: Union[torch.nn.Module, None], cached_dataset: Dataset,
                         opt_params: AdaroundHyperParameters, param_to_adaround_tensor_quantizer: Dict,
                         use_cuda: bool, device: int = 0):
@@ -100,7 +107,7 @@ class AdaroundOptimizer:
 
     @classmethod
     def _optimize_rounding(cls, module: ModuleInfo, quantized_input_name,
-                           orig_model: onnx_pb.ModelProto, quant_model: QuantizationSimModel,
+                           orig_model: ModelProto, quant_model: QuantizationSimModel,
                            act_func: Union[None, str], cached_dataset: Dataset,
                            opt_params: AdaroundHyperParameters, param_to_adaround_tensor_quantizer: Dict,
                            use_cuda: bool, device: int = 0):

@@ -40,7 +40,9 @@ import os
 from typing import Dict, List, Union
 import json
 import numpy as np
-from onnx import helper, onnx_pb
+import onnx
+
+from onnx import helper
 import onnxruntime as ort
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
@@ -58,6 +60,13 @@ from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode, TensorQuantizerParam
 from aimet_onnx.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_onnx.utils import make_dummy_input, add_hook_to_get_activation, remove_activation_hooks
 
+from packaging import version
+# pylint: disable=no-name-in-module, ungrouped-imports
+if version.parse(onnx.__version__) >= version.parse("1.14.0"):
+    from onnx import ModelProto
+else:
+    from onnx.onnx_pb import ModelProto
+
 WORKING_DIR = '/tmp/quantsim/'
 
 op_types_to_ignore = ["branch", "Flatten", "Gather", "Reshape", "Shape", "Unsqueeze", "Squeeze", "Split",
@@ -74,7 +83,7 @@ class QuantizationSimModel:
     # pylint: disable=too-many-arguments
     # pylint: disable=too-many-instance-attributes
     def __init__(self,
-                 model: onnx_pb.ModelProto,
+                 model: ModelProto,
                  dummy_input: Dict[str, np.ndarray] = None,
                  quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
                  rounding_mode: str = 'nearest',
@@ -339,7 +348,7 @@ class QuantizationSimModel:
                                                           )
 
     @staticmethod
-    def build_session(model: onnx_pb.ModelProto, providers: List):
+    def build_session(model: ModelProto, providers: List):
         """
         Build and return onnxruntime inference session
 

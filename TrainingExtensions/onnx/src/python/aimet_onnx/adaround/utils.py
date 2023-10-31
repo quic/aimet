@@ -37,9 +37,16 @@
 """ Utilities for Adaround ONNX """
 from typing import Dict
 from collections import defaultdict
-from onnx import onnx_pb
+import onnx
 
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
+
+from packaging import version
+# pylint: disable=no-name-in-module, ungrouped-imports
+if version.parse(onnx.__version__) >= version.parse("1.14.0"):
+    from onnx import ModelProto
+else:
+    from onnx.onnx_pb import ModelProto
 
 class ModuleInfo:
     """ Class object containing information about a module """
@@ -55,7 +62,7 @@ class ModelData:
     """
     Class to collect data for each module of a class
     """
-    def __init__(self, model: onnx_pb.ModelProto):
+    def __init__(self, model: ModelProto):
         """
         :param model: ONNX Model
         """
