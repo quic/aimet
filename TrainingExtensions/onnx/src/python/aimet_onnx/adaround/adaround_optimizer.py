@@ -44,6 +44,7 @@ from onnx import numpy_helper
 import torch
 import torch.nn.functional as functional
 from torch.utils.data import Dataset
+from packaging import version
 
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger
@@ -56,7 +57,6 @@ from aimet_torch.adaround.adaround_loss import AdaroundLoss, AdaroundHyperParame
 from aimet_torch.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer
 from aimet_torch.adaround.adaround_optimizer import AdaroundOptimizer as TorchAdaroundOptimizer
 
-from packaging import version
 # pylint: disable=no-name-in-module, ungrouped-imports
 if version.parse(onnx.__version__) >= version.parse("1.14.0"):
     from onnx import ModelProto

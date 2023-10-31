@@ -42,6 +42,7 @@ from typing import List, Dict, Tuple, Union
 import numpy as np
 import onnxruntime as ort
 import onnx
+from packaging import version
 
 from aimet_common.utils import AimetLogger
 from aimet_common.layer_output_utils import SaveInputOutput, save_layer_output_names
@@ -49,7 +50,6 @@ from aimet_common.layer_output_utils import SaveInputOutput, save_layer_output_n
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.utils import create_input_dict, add_hook_to_get_activation
 
-from packaging import version
 # pylint: disable=no-name-in-module, ungrouped-imports
 if version.parse(onnx.__version__) >= version.parse("1.14.0"):
     from onnx import ModelProto

@@ -41,6 +41,7 @@ import contextlib
 import numpy as np
 import onnx
 from onnx import numpy_helper
+from packaging import version
 
 from aimet_common.bias_correction import ConvBnPatternHandler
 from aimet_common.graph_pattern_matcher import PatternType
@@ -54,7 +55,6 @@ from aimet_onnx.meta.connectedgraph import WEIGHT_INDEX, BIAS_INDEX, RUNNING_MEA
 from aimet_onnx.meta.operations import Op
 from aimet_onnx.utils import get_node_attribute, remove_node, transpose_tensor, ParamUtils, retrieve_constant_input
 
-from packaging import version
 # pylint: disable=no-name-in-module, ungrouped-imports
 if version.parse(onnx.__version__) >= version.parse("1.14.0"):
     from onnx import NodeProto, TensorProto, ModelProto
