@@ -51,13 +51,12 @@ from aimet_common.utils import AimetLogger
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.LayerOutputs)
 
 class LayerOutputUtil:
-    """
-    This class captures output of every layer of a keras (fp32/quantsim) model, creates a layer-output name to
-    layer-output dictionary and saves the per layer outputs
-    """
+    """ Implementation to capture and save outputs of intermediate layers of a model (fp32/quantsim) """
+
     def __init__(self, model: tf.keras.Model, save_dir: str = "./KerasLayerOutput"):
         """
-        Constructor - It initializes a few things that are required for capturing and naming layer-outputs.
+        Constructor for LayerOutputUtil.
+
         :param model: Keras (fp32/quantsim) model.
         :param save_dir: Directory to save the layer outputs.
         """
@@ -138,14 +137,11 @@ class LayerOutputUtil:
 
     def generate_layer_outputs(self, input_batch: Union[tf.Tensor, List[tf.Tensor], Tuple[tf.Tensor]]):
         """
-        This method captures output of every layer of a keras model & saves the inputs and corresponding layer-outputs to disk.
-        This allows layer-output comparison either between original fp32 model and quantization simulated model or quantization
-        simulated model and actually quantized model on-target to debug accuracy miss-match issues.
+        This method captures output of every layer of a model & saves the inputs and corresponding layer-outputs to disk.
 
         :param input_batch: Batch of Inputs for which layer output need to be generated
         :return: None
         """
-
         batch_layer_name_to_layer_output = self.get_outputs(input_batch)
         self.save_inp_out_obj.save(np.array(input_batch), batch_layer_name_to_layer_output)
 

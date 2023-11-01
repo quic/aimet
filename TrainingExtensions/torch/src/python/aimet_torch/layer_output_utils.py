@@ -104,7 +104,8 @@ class LayerOutputUtil:
         :return: None
         """
 
-        logger.info("Generating layer-outputs for %d input instances", len(input_batch))
+        input_instance_count = len(input_batch) if isinstance(input_batch, torch.Tensor) else len(input_batch[0])
+        logger.info("Generating layer-outputs for %d input instances", input_instance_count)
 
         # Obtain layer-output name to output dictionary
         layer_output_batch_dict = self.layer_output.get_outputs(input_batch)
@@ -116,7 +117,7 @@ class LayerOutputUtil:
         # Save inputs and layer-outputs
         self.save_input_output.save(input_batch, layer_output_batch_dict)
 
-        logger.info('Successfully generated layer-outputs for %d input instances', len(input_batch))
+        logger.info('Successfully generated layer-outputs for %d input instances', input_instance_count)
 
     @staticmethod
     def _get_input_batch_in_numpy(input_batch: Union[torch.Tensor, List[torch.Tensor], Tuple[torch.Tensor]]) -> \
