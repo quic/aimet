@@ -38,7 +38,6 @@
 """ Code example to generate intermediate layer outputs of a model """
 
 # Step 0. Import statements
-import numpy as np
 import tensorflow as tf
 
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
@@ -46,39 +45,33 @@ from aimet_tensorflow.keras.layer_output_utils import LayerOutputUtil
 # End step 0
 
 # Step 1. Obtain original or quantsim model
-def quantsim_forward_pass_callback(model, dummy_input):
-    _ = model.predict(dummy_input)
+# Load the model.
+model = tf.keras.models.load_model('path/to/aimet_export_artifacts/model.h5')
 
-# Load the baseline/original (FP32) model
-base_model = load_baseline_model()
+# Use same arguments as that were used for the exported QuantSim model. For sake of simplicity only mandatory arguments are passed below.
+quantsim = QuantizationSimModel(model)
 
-dummy_input = np.random.rand(1, 16, 16, 3)
+# Load exported encodings into quantsim object.
+quantsim.load_encodings_to_sim('path/to/aimet_export_artifacts/model.encodings')
 
-# Create QuantizationSim Object
-quantsim_obj = QuantizationSimModel(
-    model=base_model,
-    quant_scheme='tf_enhanced',
-    rounding_mode="nearest",
-    default_output_bw=8,
-    default_param_bw=8,
-    in_place=False,
-    config_file=None
-)
-
-# Compute encodings
-quantsim_obj.compute_encodings(quantsim_forward_pass_callback,
-                      forward_pass_callback_args=dummy_input
-                      )
+# Check whether constructed original and quantsim model are running properly before using Layer Output Generation API.
+_ = model.predict(dummy_input)
+_ = quantsim.predict(dummy_input)
 # End step 1
 
 # Step 2. Obtain pre-processed inputs
-# Get the inputs that are pre-processed using the same manner while computing quantsim encodings
+# Use same input pre-processing pipeline as was used for computing the quantization encodings.
 input_batches = get_pre_processed_inputs()
 # End step 2
 
 # Step 3. Generate outputs
-# Generate layer-outputs
-layer_output_util = LayerOutputUtil(model=quantsim_obj.model, save_dir="./KerasLayerOutput")
+# Use original model to get fp32 layer-outputs
+fp32_layer_output_util = LayerOutputUtil(model=model, save_dir='fp32_layer_outputs')
+
+# Use quantsim model to get quantsim layer-outputs
+quantsim_layer_output_util = LayerOutputUtil(model=quantsim.model, save_dir='quantsim_layer_outputs')
+
 for input_batch in input_batches:
-    layer_output_util.generate_layer_outputs(input_batch=input_batch)
+    fp32_layer_output_util.generate_layer_outputs(input_batch=input_batch)
+    quantsim_layer_output_util.generate_layer_outputs(input_batch=input_batch)
 # End step 3

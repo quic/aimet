@@ -38,48 +38,46 @@
 """ Code example to generate intermediate layer outputs of a model """
 
 # Step 0. Import statements
-import numpy as np
 import tensorflow as tf
 
-from aimet_tensorflow.examples.test_models import keras_model
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.layer_output_utils import LayerOutputUtil
 # End step 0
 
+
 # Step 1. Obtain original or quantsim model
-# Load original model into session
-def cpu_session():
-    tf.compat.v1.reset_default_graph()
-    with tf.device('/cpu:0'):
-        model = keras_model()
-        init = tf.compat.v1.global_variables_initializer()
-    session = tf.compat.v1.Session()
-    session.run(init)
-    return session
+# Load the model into session.
+tf.compat.v1.reset_default_graph()
+session = tf.compat.v1.Session()
+saver = tf.compat.v1.train.import_meta_graph('path/to/aimet_export_artifacts/model.meta')
+saver.restore(session, 'path/to/aimet_export_artifacts/model')
 
-session = cpu_session()
+# Use same arguments as that were used for the exported QuantSim model. For sake of simplicity only mandatory arguments are passed below.
+quantsim = QuantizationSimModel(session, starting_op_names, output_op_names, use_cuda=False)
 
-# Obtain quantsim model session
-def quantsim_forward_pass_callback(session, dummy_input):
-    model_input = session.graph.get_tensor_by_name('conv2d_input:0')
-    model_output = session.graph.get_tensor_by_name('keras_model/Softmax_quantized:0')
-    return session.run(model_output, feed_dict={model_input: dummy_input})
+# Load exported encodings into quantsim object.
+quantsim.load_encodings_to_sim('path/to/aimet_export_artifacts/model.encodings')
 
-dummy_input = np.random.randn(1, 16, 16, 3)
-
-quantsim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
-quantsim.compute_encodings(quantsim_forward_pass_callback, dummy_input)
+# Check whether constructed original and quantsim model are running properly before using Layer Output Generation API.
+_ = session.run(None, feed_dict)
+_ = quantsim.session.run(None, feed_dict)
 # End step 1
 
+
 # Step 2. Obtain pre-processed inputs
-# Get the inputs that are pre-processed using the same manner while computing quantsim encodings
+# Use same input pre-processing pipeline as was used for computing the quantization encodings.
 input_batches = get_pre_processed_inputs()
 # End step 2
 
+
 # Step 3. Generate outputs
-# Generate layer-outputs
-layer_output_util = LayerOutputUtil(session=quantsim.session, starting_op_names=['conv2d_input'],
-                                    output_op_names=['keras_model/Softmax'], dir_path='./layer_output_dump')
+# Use original session to get fp32 layer-outputs
+fp32_layer_output_util = LayerOutputUtil(session, starting_op_names, output_op_names, dir_path='./fp32_layer_outputs')
+
+# Use quantsim session to get quantsim layer-outputs
+quantsim_layer_output_util = LayerOutputUtil(quantsim.session, starting_op_names, output_op_names, dir_path='./quantsim_layer_outputs')
+
 for input_batch in input_batches:
-    layer_output_util.generate_layer_outputs(input_batch)
+    fp32_layer_output_util.generate_layer_outputs(input_batch)
+    quantsim_layer_output_util.generate_layer_outputs(input_batch)
 # End step 3
