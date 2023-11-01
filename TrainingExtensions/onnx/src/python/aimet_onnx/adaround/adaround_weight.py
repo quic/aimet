@@ -43,6 +43,7 @@ import shutil
 import json
 from typing import Tuple, Dict, List, Callable
 from onnx import onnx_pb
+from onnxruntime.quantization.onnx_quantizer import ONNXModel
 from tqdm import tqdm
 
 # Import AIMET specific modules
@@ -139,6 +140,8 @@ class Adaround:
         """
         # pylint: disable=too-many-arguments
         # Create Quant sim with given parameters
+        if not isinstance(model, ONNXModel):
+            model = ONNXModel(model)
         quant_sim = QuantizationSimModel(copy.deepcopy(model), quant_scheme=default_quant_scheme,
                                          default_param_bw=default_param_bw,
                                          config_file=default_config_file)
