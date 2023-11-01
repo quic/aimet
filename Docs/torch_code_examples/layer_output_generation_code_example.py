@@ -39,45 +39,50 @@
 
 # Step 0. Import statements
 import torch
-from torchvision import models
 
-from aimet_torch.onnx_utils import OnnxExportApiArgs
-from aimet_torch.model_preparer import prepare_model
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.quantsim import QuantizationSimModel, load_encodings_to_sim
+
 from aimet_torch.layer_output_utils import LayerOutputUtil, NamingScheme
+from aimet_torch.onnx_utils import OnnxExportApiArgs
 # End step 0
 
-# Step 1. Obtain original or quantsim model
-# Obtain original model
-original_model = models.resnet18()
-original_model.eval()
-original_model = prepare_model(original_model)
 
-# Obtain quantsim model
+# Step 1. Obtain original or quantsim model
+# Load the model on CPU device. Ensure model definition is present in the PYTHONPATH to successfully load the model.
+# If exported on CPU, load this way.
+model = torch.load('path/to/aimet_export_artifacts/model.pth')
+# Or
+# If exported on GPU, load this way.
+# model = torch.load('path/to/aimet_export_artifacts/model.pth', map_location=torch.device('cpu'))
+
 dummy_input = torch.rand(1, 3, 224, 224)
 
-def forward_pass(model: torch.nn.Module, input_batch: torch.Tensor):
-    model.eval()
-    with torch.no_grad():
-        _ = model(input_batch)
+# Use same arguments as that were used for the exported QuantSim model. For sake of simplicity only mandatory arguments are passed below.
+quantsim = QuantizationSimModel(model=model, dummy_input=dummy_input)
 
-quantsim = QuantizationSimModel(model=original_model, quant_scheme='tf_enhanced',
-                                dummy_input=dummy_input, rounding_mode='nearest',
-                                default_output_bw=8, default_param_bw=8, in_place=False)
+# Load exported encodings into quantsim object
+load_encodings_to_sim(quantsim, 'path/to/aimet_export_artifacts/model_torch.encodings')
 
-quantsim.compute_encodings(forward_pass_callback=forward_pass,
-                           forward_pass_callback_args=dummy_input)
+# Check whether constructed original and quantsim model are running properly before using Layer Output Generation API.
+_ = model(dummy_input)
+_ = quantsim.model(dummy_input)
 # End step 1
 
+
 # Step 2. Obtain pre-processed inputs
-# Get the inputs that are pre-processed using the same manner while computing quantsim encodings
+# Use same input pre-processing pipeline as was used for computing the quantization encodings.
 input_batches = get_pre_processed_inputs()
 # End step 2
 
+
 # Step 3. Generate outputs
-# Generate layer-outputs
-layer_output_util = LayerOutputUtil(model=quantsim.model, dir_path='./layer_output_dump', naming_scheme=NamingScheme.ONNX,
-                                    dummy_input=dummy_input, onnx_export_args=OnnxExportApiArgs())
+# Use original model to get fp32 layer-outputs
+fp32_layer_output_util = LayerOutputUtil(model=model, dir_path='./fp32_layer_outputs', naming_scheme=NamingScheme.ONNX,
+                                         dummy_input=dummy_input, onnx_export_args=OnnxExportApiArgs())
+# Use quantsim model to get quantsim layer-outputs
+quantsim_layer_output_util = LayerOutputUtil(model=quantsim.model, dir_path='./quantsim_layer_outputs', naming_scheme=NamingScheme.ONNX,
+                                             dummy_input=dummy_input, onnx_export_args=OnnxExportApiArgs())
 for input_batch in input_batches:
-    layer_output_util.generate_layer_outputs(input_batch)
+    fp32_layer_output_util.generate_layer_outputs(input_batch)
+    quantsim_layer_output_util.generate_layer_outputs(input_batch)
 # End step 3
