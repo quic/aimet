@@ -149,6 +149,11 @@ class AdaroundOptimizer:
         use_cache_acts_data = TorchAdaroundOptimizer._can_cache_acts_data(len(cached_dataset), inp_data_torch.shape,
                                                                           out_data_torch.shape)
 
+        attributes = read_attributes_for_op(module)
+        if len(attributes['pad']) > 2:
+            logger.info("Skipping the Convolution layer because padding size of 4 is not supported for optimization")
+            return
+
         if use_cache_acts_data and AdaroundOptimizer.enable_caching_acts_data():
             logger.debug("Caching intermediate activations data for optimization.")
             all_inp_data, all_orig_out_data = act_sampler.sample_and_place_all_acts_on_cpu(cached_dataset)
@@ -266,7 +271,7 @@ class AdaroundOptimizer:
             if 'bias' in quant_module.params:
                 bias = torch.from_numpy(numpy_helper.to_array(quant_module.params['bias'].tensor)).to(device)
             out_data = functional.conv2d(inp_data, adarounded_weights, bias=bias, stride=attributes['strides'],
-                                         dilation=attributes['dilations'], padding=attributes['pads'][0],
+                                         dilation=attributes['dilations'], padding=attributes['pads'],
                                          groups=attributes['group'])
         elif quant_module.type == 'ConvTranspose':
             attributes = read_attributes_for_op(quant_module)
