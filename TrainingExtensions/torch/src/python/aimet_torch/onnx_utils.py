@@ -346,6 +346,11 @@ class CustomMarker(torch.nn.Module):
             marked_dict_inputs[k] = t
         return marked_dict_inputs
 
+    def __getitem__(self, item):
+        """
+        method to allow forwarding request to the marked module
+        """
+        return self.marked_module[item]
 
     def __getattr__(self, name):
         """
