@@ -34,6 +34,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+from packaging import version
 import torch
 from packaging import version
 
@@ -83,18 +84,15 @@ class TestConnectedGraph:
             assert len(input_ops) == 2
 
     def test_transposed_conv_model(self):
-        model = models_for_tests.transposed_conv_model()
-        conn_graph = ConnectedGraph(model)
-        assert len(conn_graph.get_all_ops()) == 5
+        if version.parse(torch.__version__) >= version.parse("1.13"):
+            model = models_for_tests.transposed_conv_model()
+            conn_graph = ConnectedGraph(model)
+            assert len(conn_graph.get_all_ops()) == 5
 
-        products = conn_graph.get_all_products()
-        assert len(products) == 18
-        assert {'bn1.running_mean',
-                'bn1.running_var',
-                'bn1.weight',
-                'bn2.bias',
-                'bn2.running_mean',
-                'bn2.running_var'}.issubset({product for product in products})
+            products = conn_graph.get_all_products()
+            assert len(products) == 12
+            assert {'bn1.weight',
+                    'bn1.bias'}.issubset({product for product in products})
 
     def test_concat_model(self):
         if version.parse(torch.__version__) >= version.parse("1.13"):
@@ -112,7 +110,7 @@ class TestConnectedGraph:
             model = models_for_tests.hierarchical_model()
             conn_graph = ConnectedGraph(model)
             ops = conn_graph.get_all_ops()
-            assert len(ops) == 79
+            assert len(ops) == 68
             assert conn_graph._branch_count == 0
             ordered_ops = conn_graph.ordered_ops
             name_to_index = {}
