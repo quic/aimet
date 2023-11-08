@@ -67,6 +67,7 @@ substitutable_modules = {
     tf.keras.layers.MultiHeadAttention: QcQuantizableMultiHeadAttention
 }
 
+
 @dataclass
 class QuantizationSimModelParams:
     """
@@ -79,6 +80,7 @@ class QuantizationSimModelParams:
     in_place: bool = False
     config_file: str = None
     default_data_type: QuantizationDataType = QuantizationDataType.int
+
 
 # pylint: disable=too-many-ancestors
 # pylint: disable=too-many-instance-attributes
@@ -116,7 +118,7 @@ class QuantizationSimModel(tf.keras.Model):
             n_weights = len(self._model_without_wrappers.weights)
             self._model_without_wrappers.set_weights(model.get_weights()[:n_weights])
         self._layer_name_to_quant_wrapper = {}
-        self._substituted_layer = {}    # to hold the substituted layers
+        self._substituted_layer = {}  # to hold the substituted layers
         self._validate_model()
         self.connected_graph = ConnectedGraph(self._model_without_wrappers)
         self._quantsim_configurator = self._initialize_quantsim_configurator(quant_scheme, rounding_mode,
@@ -536,7 +538,8 @@ class QuantizationSimModel(tf.keras.Model):
                     if not input_quantizer.is_enabled():
                         _logger.info("Not loading encodings for quantizer: %s as it is disabled", tensor_name)
                         continue
-                    encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(activation_encodings[tensor_name][0])
+                    encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(
+                        activation_encodings[tensor_name][0])
                     input_quantizer.tensor_quantizer.isEncodingValid = True
                     input_quantizer.set_quantizer_encodings(encoding.bw, is_symmetric, encoding,
                                                             libpymo.TensorQuantizerOpMode.quantizeDequantize)
@@ -554,12 +557,14 @@ class QuantizationSimModel(tf.keras.Model):
                         _logger.info("Not loading encodings for parameter: %s as quantizer is disabled", param_name)
                         continue
                     if isinstance(param_quantizer, StaticGridPerChannelQuantizer):
-                        encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(param_encodings[param_name])
+                        encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(
+                            param_encodings[param_name])
                         for tensor_quantizer in param_quantizer.tensor_quantizer:
                             tensor_quantizer.isEncodingValid = True
                         bw = encoding[0].bw
                     else:
-                        encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(param_encodings[param_name][0])
+                        encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(
+                            param_encodings[param_name][0])
                         param_quantizer.tensor_quantizer.isEncodingValid = True
                         bw = encoding.bw
                     param_quantizer.set_quantizer_encodings(bw, is_symmetric, encoding,
@@ -568,7 +573,8 @@ class QuantizationSimModel(tf.keras.Model):
                 else:
                     if param_quantizer.is_enabled():
                         param_quantizer.disable()
-                        _logger.info("Encoding for parameter: %s not present thus disabling this quantizer.", param_name)
+                        _logger.info("Encoding for parameter: %s not present thus disabling this quantizer.",
+                                     param_name)
 
             # Loading encodings means that compute encodings was called. Therefore, these two lines set the correct
             # op mode for the correct quant scheme and if the quantization was per channel or not.
@@ -587,7 +593,8 @@ class QuantizationSimModel(tf.keras.Model):
                     if not output_quantizer.is_enabled():
                         _logger.info("Not loading encodings for quantizer: %s as it is disabled", tensor_name)
                         continue
-                    encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(activation_encodings[tensor_name][0])
+                    encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(
+                        activation_encodings[tensor_name][0])
                     output_quantizer.tensor_quantizer.isEncodingValid = True
                     output_quantizer.set_quantizer_encodings(encoding.bw, is_symmetric, encoding,
                                                              libpymo.TensorQuantizerOpMode.quantizeDequantize)
@@ -631,6 +638,7 @@ class QuantizationSimModel(tf.keras.Model):
         """
         return self._layer_name_to_quant_wrapper.get(layer_name)
 
+    # pylint: disable=too-many-locals
     def _fill_missing_encoding_min_max_gradients(self, gradients: list):
         """
         Computes the encoding min/max gradients and populates the gradients list
@@ -672,6 +680,23 @@ class QuantizationSimModel(tf.keras.Model):
 
                     gradients[enc_min_index] = dloss_by_dmin
                     gradients[enc_max_index] = dloss_by_dmax
+
+        # Go through activation quantizers (Input/Output) and set any ReLU's encoding min to 0
+        relu_quantize_wrappers = [
+            _layer for _layer in self.model.layers
+            if isinstance(_layer, QcQuantizeWrapper) and isinstance(_layer.original_layer, tf.keras.layers.ReLU)
+        ]
+
+        def _set_encoding_min_grad_to_None(quantizer):
+            enc_min_index = weight_name_to_index[quantizer.encoding_min.name]
+            gradients[enc_min_index] = None
+
+        for relu_quantizer in relu_quantize_wrappers:
+            for input_quantizer in relu_quantizer.input_quantizers:
+                _set_encoding_min_grad_to_None(input_quantizer)
+
+            for output_quantizer in relu_quantizer.output_quantizers:
+                _set_encoding_min_grad_to_None(output_quantizer)
 
     # pylint: disable=useless-super-delegation
     def get_config(self):
