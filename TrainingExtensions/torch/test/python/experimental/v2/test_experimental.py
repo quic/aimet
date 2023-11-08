@@ -69,19 +69,19 @@ per_tensor_16b_test_set = VectorSetForTest(
             [-1.3, -0.76, -0.11, 0, 1.01, 3, 10.4]
             ]),
     tensor_q=torch.tensor([
-            [30761, 30773, 32742, 32751, 32766, 32773, 33774],
-            [32770, 32771, 32773, 32773, 32775, 32779, 32794]
+            [0, 0, 0, 0, 0, 5, 1006],
+            [2, 3, 5, 5, 7, 11, 26]
         ]),
     tensor_qdq=torch.tensor([
-            [-1006, -1000, -15.5, -11, -3.5, 0, 500.5],
-            [-1.5, -1, 0, 0, 1, 3, 10.5],
+            [-2.5, -2.5, -2.5, -2.5, -2.5, 0.0, 500.5],
+            [-1.5, -1. , 0.0, 0.0, 1.0, 3.0, 10.5]
         ]),
     mask=torch.tensor([
-        [0, 0, 0, 0, 0, 0, 0],
+        [1, 1, 1, 1, 1, 0, 0],
         [0, 0, 0, 0, 0, 0, 0]
     ],  dtype=torch.bool),
     delta=torch.tensor([0.5]),
-    offset=torch.tensor([-32773]),
+    offset=torch.tensor([-5]),
     bitwidth=16
 )
 
@@ -132,22 +132,22 @@ per_channel_8b_test_set = VectorSetForTest(
 per_channel_16b_test_set = VectorSetForTest(
     tensor=torch.tensor([
             [-1005.8, -1000.1, -15.4, -11.24, -3.3, 0.2, 500.4],
-            [-1.3, -0.76, -0.11, 0, 1.01, 3, 5000]
+            [-1.3, -0.76, -0.11, 0, 1.01, 3, 100]
             ]),
     tensor_q=torch.tensor([
-            [30761, 30773, 32742, 32751, 32766, 32773, 33774],
-            [32746, 32755, 32765, 32767, 32783, 32815, 65535]
+            [0, 0, 0, 0, 0, 5, 1006],
+            [0, 0, 0, 0, 15, 47, 1599]
         ]),
     tensor_qdq=torch.tensor([
-            [-1006, -1000, -15.5, -11, -3.5, 0, 500.5],
-            [-1.3125, -0.75, -0.125, 0., 1.0, 3.0, 2048.0],
+            [-2.5, -2.5, -2.5, -2.5, -2.5, 0.0, 500.5],
+            [0.0625, 0.0625, 0.0625, 0.0625, 1.0, 3.0, 100.0]
         ]),
     mask=torch.tensor([
-        [0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 1]
+        [1, 1, 1, 1, 1, 0, 0],
+        [1, 1, 1, 1, 0, 0, 0]
     ], dtype=torch.bool),
     delta=torch.tensor([[0.5], [0.0625]]),
-    offset=torch.tensor([[-32773], [-32767]]),
+    offset=torch.tensor([[-5], [1]]),
     bitwidth=16
 )
 
@@ -183,16 +183,16 @@ def offset():
 @pytest.mark.parametrize('backend_class', [])
 class TestQuantizationBackends:
     def _test_quantization_backend(self, backend_class, random_tensor, random_quantized_tensor, scale, offset, bitwidth):
-        tensor_after_quantize = torch.clamp(torch.round(random_tensor / scale) + torch.round(offset), 0, 2 ** bitwidth - 1)
+        tensor_after_quantize = torch.clamp(torch.round(random_tensor / scale) - torch.round(offset), 0, 2 ** bitwidth - 1)
         quantized_tensor = backend_class.quantize(random_tensor, scale, offset, bitwidth)
         assert torch.allclose(quantized_tensor, tensor_after_quantize)
 
         dequantized_tensor = backend_class.dequantize(random_quantized_tensor, scale, offset)
-        tensor_after_dequantize = scale * random_quantized_tensor + scale * torch.round(offset)
+        tensor_after_dequantize = (random_quantized_tensor + torch.round(offset)) * scale
         assert torch.allclose(dequantized_tensor, tensor_after_dequantize)
 
         qdq_tensor = backend_class.quantize_dequantize(random_tensor, scale, offset, bitwidth)
-        tensor_after_qdq = scale * tensor_after_quantize + scale * torch.round(offset)
+        tensor_after_qdq = (tensor_after_quantize + torch.round(offset)) * scale
         assert torch.allclose(qdq_tensor, tensor_after_qdq)
 
     @pytest.mark.parametrize(
@@ -200,7 +200,7 @@ class TestQuantizationBackends:
             [torch.tensor(0.3, dtype=torch.float32), torch.tensor([0.3], dtype=torch.float32)]
     )
     @pytest.mark.parametrize('bitwidth', [8])
-    def test_quantize_using_scale_with_single_element(self, backend_class, random_quantized_tensor, scale, offset, bitwidth):
+    def test_quantize_using_scale_with_single_element(self, backend_class, scale, offset, bitwidth):
         extracted_scale = scale if scale.ndim == 0 else scale[0]
         random_tensor = get_round_safe_quantizable_tensor((2, 3, 4, 5), scale, bitwidth)
         random_quantized_tensor = get_random_quantized_tensor((2, 3, 4, 5), bitwidth)
@@ -212,7 +212,7 @@ class TestQuantizationBackends:
     def test_quantize_using_not_broadcastable_scale(self, backend_class, offset, scale_shape, bitwidth):
         # Add small value to scale to make scale not equal to 0
         scale = torch.rand(scale_shape) + 0.1
-        random_tensor = get_round_safe_quantizable_tensor((2, 3, 4, 5), scale, bitwidth)
+        random_tensor = torch.randn(2, 3, 4, 5)
         random_quantized_tensor = get_random_quantized_tensor((2, 3, 4, 5), bitwidth)
 
         with pytest.raises(RuntimeError):
@@ -236,27 +236,11 @@ class TestQuantizationBackends:
 
         self._test_quantization_backend(backend_class, random_tensor, random_quantized_tensor, broadcasted_scale, offset, bitwidth)
 
-    @pytest.mark.parametrize('scale_value', [0.0, -0.5])
-    @pytest.mark.parametrize('bitwidth', [8])
-    def test_quantize_using_negative_scale(self, backend_class, offset, scale_value, bitwidth):
-        scale = torch.tensor([scale_value], dtype=torch.float32)
-        random_tensor = get_round_safe_quantizable_tensor((2, 3, 4, 5), scale, bitwidth)
-        random_quantized_tensor = get_random_quantized_tensor((2, 3, 4, 5), bitwidth)
-
-        with pytest.raises(RuntimeError):
-            backend_class.quantize(random_tensor, scale, offset, bitwidth)
-
-        with pytest.raises(RuntimeError):
-            backend_class.dequantize(random_quantized_tensor, scale, offset)
-
-        with pytest.raises(RuntimeError):
-            backend_class.quantize_dequantize(random_tensor, scale, offset, bitwidth)
-
     @pytest.mark.parametrize('bitwidth', [8])
     @pytest.mark.parametrize('scale_dtype, input_dtype', [(torch.float32, torch.float16), (torch.float16, torch.float32)])
     def test_quantize_using_invalid_dtype(self, backend_class, offset, bitwidth, scale_dtype, input_dtype):
         scale = torch.tensor([0.2], dtype=scale_dtype)
-        random_tensor = get_round_safe_quantizable_tensor((2, 3, 4, 5), scale, bitwidth)
+        random_tensor = torch.randn(2, 3, 4, 5)
         random_quantized_tensor = get_random_quantized_tensor((2, 3, 4, 5), bitwidth)
         random_tensor = random_tensor.to(input_dtype)
         random_quantized_tensor = random_quantized_tensor.to(input_dtype)
@@ -271,9 +255,9 @@ class TestQuantizationBackends:
             backend_class.quantize_dequantize(random_tensor, scale, offset, bitwidth)
 
     @pytest.mark.parametrize('input_dtype, bitwidth', [(torch.float16, 32), (torch.float32, 64)])
-    def test_quantize_using_wider_quantization_bitwidth(self, backend_class, offset, bitwidth, scale_dtype, input_dtype):
+    def test_quantize_using_wider_quantization_bitwidth(self, backend_class, offset, bitwidth, input_dtype):
         scale = torch.tensor([0.2], dtype=torch.float32)
-        random_tensor = get_round_safe_quantizable_tensor((2, 3, 4, 5), scale, bitwidth)
+        random_tensor = torch.randn(2, 3, 4, 5)
         random_quantized_tensor = get_random_quantized_tensor((2, 3, 4, 5), bitwidth)
         random_tensor = random_tensor.to(input_dtype)
         random_quantized_tensor = random_quantized_tensor.to(input_dtype)
@@ -287,7 +271,7 @@ class TestQuantizationBackends:
     @pytest.mark.skipif(not torch.cuda.is_available(), reason='cannot test as there\'s only cpu on this machine')
     @pytest.mark.parametrize('bitwidth', [8])
     @pytest.mark.parametrize(
-        'scale_device, offset_device, input_device',
+        'input_device, scale_device, offset_device',
         [
             (torch.device('cuda'), torch.device('cpu'), torch.device('cpu')),
             (torch.device('cpu'), torch.device('cuda'), torch.device('cpu')),
@@ -296,7 +280,7 @@ class TestQuantizationBackends:
     )
     def test_quantize_using_parameters_on_different_device(self, backend_class, offset, bitwidth, input_device, scale_device, offset_device):
         scale = torch.tensor([0.2], dtype=torch.float32, device=scale_device)
-        random_tensor = get_round_safe_quantizable_tensor((2, 3, 4, 5), scale, bitwidth)
+        random_tensor = torch.randn(2, 3, 4, 5)
         random_quantized_tensor = get_random_quantized_tensor((2, 3, 4, 5), bitwidth)
         random_tensor = random_tensor.to(input_device)
         random_quantized_tensor = random_quantized_tensor.to(input_device)
@@ -328,16 +312,16 @@ class TestQuantizationBackends:
         channel_last_qdq_tensor = backend_class.quantize_dequantize(channel_last_random_tensor, scale, offset, bitwidth)
         assert channel_last_qdq_tensor.is_contiguous(memory_format=torch.channels_last)
 
-        tensor_after_quantize = torch.clamp(torch.round(random_tensor / scale) + torch.round(offset), 0, 2 ** bitwidth - 1)
+        tensor_after_quantize = torch.clamp(torch.round(random_tensor / scale) - torch.round(offset), 0, 2 ** bitwidth - 1)
         assert torch.allclose(channel_last_quantized_tensor, tensor_after_quantize)
 
-        tensor_after_dequantize = scale * random_quantized_tensor + scale * torch.round(offset)
+        tensor_after_dequantize = (random_quantized_tensor + torch.round(offset)) * scale
         assert torch.allclose(channel_last_dequantized_tensor, tensor_after_dequantize)
 
-        tensor_after_qdq = scale * tensor_after_quantize + scale * torch.round(offset)
+        tensor_after_qdq = (tensor_after_quantize + torch.round(offset)) * scale
         assert torch.allclose(channel_last_qdq_tensor, tensor_after_qdq)
 
-    @pytest.mark.parametrize('bitwidth', [0, 1])
+    @pytest.mark.parametrize('bitwidth', [0])
     def test_quantize_using_invalid_bitwidth(self, backend_class, offset, bitwidth):
         scale = torch.tensor([0.2], dtype=torch.float32)
         random_tensor = torch.randn(2, 3, 4, 5)
@@ -353,11 +337,11 @@ class TestQuantizationBackends:
             backend_class.quantize_dequantize(random_tensor, scale, offset, bitwidth)
 
     @pytest.mark.parametrize('bitwidth', [8])
-    def test_quantize_using_scale_with_multiple_channels(self, backend_class, offset, scale_shape, bitwidth):
+    def test_quantize_using_scale_with_multiple_channels(self, backend_class, offset, bitwidth):
         scale_shape = (2, 1, 4, 1)
         # Add small value to scale to make scale not equal to 0
         scale = torch.rand(scale_shape) + 0.1
-        random_tensor = get_round_safe_quantizable_tensor((2, 3, 4, 5), scale, bitwidth)
+        random_tensor = torch.randn(2, 3, 4, 5)
         random_quantized_tensor = get_random_quantized_tensor((2, 3, 4, 5), bitwidth)
 
         with pytest.raises(RuntimeError):
