@@ -189,7 +189,7 @@ RUN python3 -m pip --no-cache-dir install \
         tensorboardX==2.4 \
         timm==0.4.12 \
         torch==1.13.1+cu116 -f https://download.pytorch.org/whl/torch_stable.html \
-        torchaudio==0.13.1 -f https://download.pytorch.org/whl/torch_stable.html \
+        torchaudio==0.13.1+cu116 -f https://download.pytorch.org/whl/torch_stable.html \
         torchtext==0.14.1 \
         torchvision==0.14.1+cu116 -f https://download.pytorch.org/whl/torch_stable.html \
         tqdm \
