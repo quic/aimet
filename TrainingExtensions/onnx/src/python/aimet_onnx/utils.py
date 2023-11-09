@@ -98,7 +98,7 @@ def remove_node(node: ModelProto, onnx_graph: onnx.GraphProto):
                     other_node.input[idx] = node.input[0]
             # Check if removed node output is an output of the graph
             for outputs in onnx_graph.output:
-                if outputs.name in node.output[0] and other_node.output[0] == node.input[0]:
+                if outputs.name == node.output[0] and other_node.output[0] == node.input[0]:
                     other_node.output[0] = outputs.name
     inits_to_remove = []
     # Remove the node's initializers
