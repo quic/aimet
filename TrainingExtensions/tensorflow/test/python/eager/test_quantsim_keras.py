@@ -446,17 +446,17 @@ def test_range_learning():
             wrapper.input_quantizers[0].disable()
 
         qsim.compute_encodings(lambda m, _: m.predict(rand_inp), None)
-        qsim.model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
-                           loss=tf.keras.losses.MeanSquaredError())
+        qsim.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+                     loss=tf.keras.losses.MeanSquaredError())
         # Track weights for dense layer to check that they are updated during fit
         running_weights = [tf.keras.backend.get_value(param) for
-                              param in qsim.model.layers[1]._layer_to_wrap.weights]
+                           param in qsim.model.layers[1]._layer_to_wrap.weights]
         # Track encoding max for dense output quantizer to check that it is updated during fit
         running_dense_output_quantizer_encoding_max = \
             tf.keras.backend.get_value(qsim.model.layers[1].output_quantizers[0]._encoding_max)
 
         for i in range(10):
-            _ = qsim.model.fit(x=rand_inp, y=rand_out, batch_size=1)
+            _ = qsim.fit(x=rand_inp, y=rand_out, batch_size=1)
             ending_weights = [tf.keras.backend.get_value(param) for
                               param in qsim.model.layers[1]._layer_to_wrap.weights]
             new_dense_output_quantizer_encoding_max = \
