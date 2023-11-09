@@ -35,15 +35,20 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """Quantizer utility"""
+import os.path
 from typing import List, Optional, Union
 
 import numpy as np
 import tensorflow as tf
-from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper
 
-from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ParamPerChannelQuantizer, ParamPerTensorQuantizer, TensorQuantizer
+from aimet_common.utils import AimetLogger
+
+from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper
+from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ParamPerChannelQuantizer, ParamPerTensorQuantizer, \
+    TensorQuantizer
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 
+_logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 def get_enabled_param_quantizers(sim: QuantizationSimModel) -> List[TensorQuantizer]:
     """
@@ -93,6 +98,7 @@ def enable_disable_quantizers(quantizers: List[TensorQuantizer],
         for quantizer in quantizers:
             quantizer.disable()
 
+
 # pylint: disable=protected-access
 def get_wrappers_weight_quantizer(param_quantizers: Union[List[ParamPerTensorQuantizer], List[ParamPerChannelQuantizer]]) -> \
     Union[ParamPerTensorQuantizer, ParamPerChannelQuantizer, List[ParamPerTensorQuantizer], List[ParamPerChannelQuantizer]]:
@@ -118,6 +124,7 @@ def get_wrappers_weight_quantizer(param_quantizers: Union[List[ParamPerTensorQua
             return quantizer
 
     raise AttributeError(f"Unable to find kernel quantizer.")
+
 
 # pylint: disable=protected-access
 def get_wrappers_bias_quantizer(param_quantizers: Union[List[ParamPerTensorQuantizer], List[ParamPerChannelQuantizer]]) -> \
@@ -147,6 +154,7 @@ def get_wrappers_bias_quantizer(param_quantizers: Union[List[ParamPerTensorQuant
             return quantizer
     return None
 
+
 def model_contains_only_quantize_wrappers(model: tf.keras.Model) -> bool:
     """
     Helper function to determine if a given model only contains quantize wrappers (besides InputLayers).
@@ -156,3 +164,22 @@ def model_contains_only_quantize_wrappers(model: tf.keras.Model) -> bool:
     """
 
     return np.all(np.vectorize(lambda x: isinstance(x, (tf.keras.layers.InputLayer, QcQuantizeWrapper)))(model.layers))
+
+
+class SaveModelWithoutQuantsimWrappersCallback(tf.keras.callbacks.Callback):
+    """
+    Keras Callback Class to save QuantSim models during QAT
+    """
+    def __init__(self, sim: QuantizationSimModel, save_path: str, filename_prefix: str, custom_objects: dict = None):
+        super(SaveModelWithoutQuantsimWrappersCallback, self).__init__()
+        self.sim = sim
+        self.save_path = os.path.abspath(save_path)
+        self.filename_prefix = filename_prefix
+        self.custom_objects = custom_objects
+
+    def on_epoch_end(self, epoch, logs=None):
+        self.sim.export(self.save_path,
+                        f"{self.filename_prefix}_epoch_{epoch}",
+                        self.custom_objects,
+                        convert_to_pb=False)
+        _logger.info("End epoch %s; successfully exported model.", epoch)
