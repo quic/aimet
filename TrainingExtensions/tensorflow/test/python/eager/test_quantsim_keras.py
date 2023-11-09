@@ -49,6 +49,7 @@ from tensorflow import keras
 
 from aimet_common.defs import QuantScheme, RANGE_LEARNING_SCHEMES
 from aimet_tensorflow.examples.test_models import keras_model
+from aimet_tensorflow.keras.utils.quantizer_utils import SaveModelWithoutQuantsimWrappersCallback
 from aimet_tensorflow.keras.cross_layer_equalization import equalize_model
 from aimet_tensorflow.keras.quant_sim.qc_mha_wrapper import QcQuantizableMultiHeadAttention
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
@@ -420,18 +421,36 @@ def test_qat():
         running_dense_output_quantizer_encoding_max = \
             tf.keras.backend.get_value(qsim.model.layers[1].output_quantizers[0]._encoding_max)
 
-        for i in range(10):
-            _ = qsim.model.fit(x=rand_inp, y=rand_out, batch_size=1)
-            ending_weights = [tf.keras.backend.get_value(param) for
-                              param in qsim.model.layers[1]._layer_to_wrap.weights]
-            new_dense_output_quantizer_encoding_max = \
-                tf.keras.backend.get_value(qsim.model.layers[1].output_quantizers[0]._encoding_max)
-            for idx, weight in enumerate(running_weights):
-                assert not np.array_equal(weight, ending_weights[idx])
-            assert np.array_equal(new_dense_output_quantizer_encoding_max,
-                                  running_dense_output_quantizer_encoding_max)
-            running_weights = ending_weights
-            running_dense_output_quantizer_encoding_max = new_dense_output_quantizer_encoding_max
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            epochs = 10
+            save_model_callback = SaveModelWithoutQuantsimWrappersCallback(qsim, tmp_dir, "test_qat")
+            for i in range(epochs):
+                _ = qsim.model.fit(x=rand_inp, y=rand_out, batch_size=1, callbacks=save_model_callback)
+                ending_weights = [tf.keras.backend.get_value(param) for
+                                  param in qsim.model.layers[1]._layer_to_wrap.weights]
+                new_dense_output_quantizer_encoding_max = \
+                    tf.keras.backend.get_value(qsim.model.layers[1].output_quantizers[0]._encoding_max)
+                for idx, weight in enumerate(running_weights):
+                    assert not np.array_equal(weight, ending_weights[idx])
+                assert np.array_equal(new_dense_output_quantizer_encoding_max,
+                                      running_dense_output_quantizer_encoding_max)
+                running_weights = ending_weights
+                running_dense_output_quantizer_encoding_max = new_dense_output_quantizer_encoding_max
+
+            h5s = encodings = yamls = saved_models_folders = 0
+            for file in os.listdir(tmp_dir):
+                if file.endswith('h5'):
+                    h5s += 1
+                elif file.endswith('encodings'):
+                    encodings += 1
+                elif file.endswith('yaml'):
+                    yamls += 1
+                else:
+                    saved_models_folders += 1
+
+            for file_count in [h5s, encodings, yamls, saved_models_folders]:
+                assert file_count == 1, f"QAT Save Callback did not work"
+
 
 def test_range_learning():
     if version.parse(tf.version.VERSION) >= version.parse("2.00"):
