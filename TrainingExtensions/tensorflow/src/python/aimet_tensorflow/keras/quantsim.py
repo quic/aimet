@@ -430,7 +430,7 @@ class QuantizationSimModel(tf.keras.Model):
                 if param_quantizer.is_enabled():
                     param_quantizer.quant_mode = op_mode
 
-    def export(self, path, filename_prefix, custom_objects=None):
+    def export(self, path, filename_prefix, custom_objects=None, convert_to_pb=True):
         """
         This method exports out the quant-sim model so it is ready to be run on-target.
         Specifically, the following are saved
@@ -447,7 +447,8 @@ class QuantizationSimModel(tf.keras.Model):
 
         # Conversion of saved h5 model to pb model for consumption by SNPE/QNN
         try:
-            convert_h5_model_to_pb_model(f'{model_path}.h5', custom_objects=custom_objects)
+            if convert_to_pb:
+                convert_h5_model_to_pb_model(f'{model_path}.h5', custom_objects=custom_objects)
         except ValueError:
             _logger.error("Could not convert h5 to frozen pb. "
                           "Please call export() again with custom_objects defined.")
