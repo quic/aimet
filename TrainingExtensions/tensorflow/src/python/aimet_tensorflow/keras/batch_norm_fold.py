@@ -432,6 +432,8 @@ def _delete_bn_from_functional(model: tf.keras.Model,
     def wrapped_bn_layer_in_bns_to_remove(layer: tf.keras.layers.Layer) -> bool:
         return isinstance(layer, QcQuantizeWrapper) and layer._layer_to_wrap in bn_layers_to_remove
 
+    tf.keras.backend.clear_session() # clear session to not have tensor name conflicts
+
     # Step 1: Get the inbound and outbound connections for each layer in the model
     model_layer_connections = ModelLayerConnections.get_model_layers_connection_properties(model)
 
@@ -504,6 +506,11 @@ def _delete_bn_from_functional(model: tf.keras.Model,
                 if not isinstance(original_keras_symbolic_tensors_order, List):
                     original_keras_symbolic_tensors_order = [original_keras_symbolic_tensors_order]
 
+                # Considering the KWARGS as well for the keras symbolic tensor order
+                model_connection_kwargs = [keras_tensor for _, keras_tensor in model_layer_connections[
+                    ModelLayerConnectionsProperties.CALL_KWARGS][current_layer.name].items() if keras_tensor is not None]
+                original_keras_symbolic_tensors_order += model_connection_kwargs
+
                 # Check if a Batch Norm that was deleted is in the original keras symbolic order.
                 name_of_bn_replaced = [
                     tensor._keras_history.layer.name
@@ -550,7 +557,6 @@ def _delete_bn_from_functional(model: tf.keras.Model,
         if current_layer.name in model.output_names:
             model_outputs.append(x)
 
-    tf.keras.backend.clear_session() # clear session to not have tensor name conflicts
     return tf.keras.Model(inputs=model.inputs, outputs=model_outputs)
 
 
