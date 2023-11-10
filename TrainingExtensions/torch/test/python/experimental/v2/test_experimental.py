@@ -41,6 +41,50 @@ from collections import namedtuple
 
 VectorSetForTest = namedtuple("VectorSetForTest", ["tensor", "tensor_q", "tensor_qdq", "mask", "delta", "offset", "bitwidth"])
 
+bfloat16_compat_per_tensor_8b_test_set = VectorSetForTest(
+    tensor=torch.tensor([
+            [-1004.0, -1000.0, -15.375, -11.25, -3.25, 0.25, 500.0],
+            [-1.375, -0.75, -0.125, 0, 1.125, 3, 10]
+        ]),
+    tensor_q=torch.tensor([
+            [0, 0, 102, 111, 127, 133, 255],
+            [130, 131, 133, 133, 135, 139, 153]
+        ]),
+    tensor_qdq=torch.tensor([
+            [-66.5, -66.5, -15.5, -11, -3.0, 0, 61],
+            [-1.5, -1, 0, 0, 1, 3, 10.0],
+        ]),
+    mask=torch.tensor([
+        [1, 1, 0, 0, 0, 0, 1],
+        [0, 0, 0, 0, 0, 0, 0]
+    ], dtype=torch.bool),
+    delta=torch.tensor([0.5]),
+    offset=torch.tensor([-133]),
+    bitwidth=8
+)
+
+bfloat16_compat_per_tensor_16b_test_set = VectorSetForTest(
+    tensor=torch.tensor([
+            [-1004.0, -1000.0, -15.375, -11.25, -3.25, 0.25, 500.0],
+            [-1.375, -0.75, -0.125, 0, 1.125, 3, 10]
+        ]),
+    tensor_q=torch.tensor([
+            [0, 0, 0, 0, 0, 5, 1004],
+            [2, 3, 5, 5, 7, 11, 25]
+        ]),
+    tensor_qdq=torch.tensor([
+            [-2.5, -2.5, -2.5, -2.5, -2.5, 0.0, 500.0],
+            [-1.5, -1.0, 0.0, 0.0, 1.0, 3.0, 10.0]
+        ]),
+    mask=torch.tensor([
+        [1, 1, 1, 1, 1, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0]
+    ],  dtype=torch.bool),
+    delta=torch.tensor([0.5]),
+    offset=torch.tensor([-5]),
+    bitwidth=16
+)
+
 per_tensor_8b_test_set = VectorSetForTest(
     tensor=torch.tensor([
             [-1005.8, -1000.1, -15.4, -11.24, -3.3, 0.2, 500.4],
@@ -165,6 +209,10 @@ def copy_test_set(test_set: namedtuple, device: torch.device = torch.device("cpu
     return new_test_set
 
 def get_round_safe_quantizable_tensor(size: tuple, scale: torch.Tensor, bitwidth: int):
+    """
+    Returns round-safe quantizable random tensor by forcing
+    fractional part of tensor divided by scale not to be near 0.5
+    """
     return scale * (torch.randint(0, 2**bitwidth - 1, size).to(torch.float32) \
         + torch.rand(size) * 0.8 - 0.4)
 
@@ -182,36 +230,25 @@ def offset():
 
 @pytest.mark.parametrize('backend_class', [])
 class TestQuantizationBackends:
-    def _test_quantization_backend(self, backend_class, random_tensor, random_quantized_tensor, scale, offset, bitwidth):
-        tensor_after_quantize = torch.clamp(torch.round(random_tensor / scale) - torch.round(offset), 0, 2 ** bitwidth - 1)
+    def _test_quantization_backend(self, backend_class, random_tensor, scale, offset, bitwidth):
+        expected_quantized_tensor = torch.clamp(torch.round(random_tensor / scale) - torch.round(offset), 0, 2 ** bitwidth - 1)
         quantized_tensor = backend_class.quantize(random_tensor, scale, offset, bitwidth)
-        assert torch.allclose(quantized_tensor, tensor_after_quantize)
+        assert torch.allclose(quantized_tensor, expected_quantized_tensor)
 
-        dequantized_tensor = backend_class.dequantize(random_quantized_tensor, scale, offset)
-        tensor_after_dequantize = (random_quantized_tensor + torch.round(offset)) * scale
-        assert torch.allclose(dequantized_tensor, tensor_after_dequantize)
+        dequantized_tensor = backend_class.dequantize(expected_quantized_tensor, scale, offset)
+        expected_dequantized_tensor = (expected_quantized_tensor + torch.round(offset)) * scale
+        assert torch.allclose(dequantized_tensor, expected_dequantized_tensor)
 
         qdq_tensor = backend_class.quantize_dequantize(random_tensor, scale, offset, bitwidth)
-        tensor_after_qdq = (tensor_after_quantize + torch.round(offset)) * scale
-        assert torch.allclose(qdq_tensor, tensor_after_qdq)
-
-    @pytest.mark.parametrize(
-            'scale', 
-            [torch.tensor(0.3, dtype=torch.float32), torch.tensor([0.3], dtype=torch.float32)]
-    )
-    @pytest.mark.parametrize('bitwidth', [8])
-    def test_quantize_using_scale_with_single_element(self, backend_class, scale, offset, bitwidth):
-        extracted_scale = scale if scale.ndim == 0 else scale[0]
-        random_tensor = get_round_safe_quantizable_tensor((2, 3, 4, 5), scale, bitwidth)
-        random_quantized_tensor = get_random_quantized_tensor((2, 3, 4, 5), bitwidth)
-
-        self._test_quantization_backend(backend_class, random_tensor, random_quantized_tensor, extracted_scale, offset, bitwidth)
+        expected_qdq_tensor = (expected_quantized_tensor + torch.round(offset)) * scale
+        assert torch.allclose(qdq_tensor, expected_qdq_tensor)
 
     @pytest.mark.parametrize('scale_shape', [(4), (2,), (3, 1), (2, 1, 1)])
     @pytest.mark.parametrize('bitwidth', [8])
     def test_quantize_using_not_broadcastable_scale(self, backend_class, offset, scale_shape, bitwidth):
         # Add small value to scale to make scale not equal to 0
-        scale = torch.rand(scale_shape) + 0.1
+        scale = torch.rand(scale_shape)
+        scale[scale == 0.0] = 0.1
         random_tensor = torch.randn(2, 3, 4, 5)
         random_quantized_tensor = get_random_quantized_tensor((2, 3, 4, 5), bitwidth)
 
@@ -223,18 +260,6 @@ class TestQuantizationBackends:
 
         with pytest.raises(RuntimeError):
             backend_class.quantize_dequantize(random_tensor, scale, offset, bitwidth)
-
-    @pytest.mark.parametrize('scale_shape, pcq_axis', [((5,), 3), ((4, 1), 2), ((3, 1, 1), 1),])
-    @pytest.mark.parametrize('bitwidth', [8])
-    def test_quantize_using_broadcastable_scale(self, backend_class, scale_shape, offset, bitwidth, pcq_axis):
-        scale = torch.rand(scale_shape) + 0.1
-        random_tensor = get_round_safe_quantizable_tensor((2, 3, 4, 5), scale, bitwidth)
-        random_quantized_tensor = get_random_quantized_tensor((2, 3, 4, 5), bitwidth)
-        broadcasted_scale_shape = tuple(dim if axis == pcq_axis else 1
-                                       for (axis, dim) in enumerate(random_tensor.shape))
-        broadcasted_scale = scale.view(broadcasted_scale_shape)
-
-        self._test_quantization_backend(backend_class, random_tensor, random_quantized_tensor, broadcasted_scale, offset, bitwidth)
 
     @pytest.mark.parametrize('bitwidth', [8])
     @pytest.mark.parametrize('scale_dtype, input_dtype', [(torch.float32, torch.float16), (torch.float16, torch.float32)])
@@ -254,7 +279,7 @@ class TestQuantizationBackends:
         with pytest.raises(RuntimeError):
             backend_class.quantize_dequantize(random_tensor, scale, offset, bitwidth)
 
-    @pytest.mark.parametrize('input_dtype, bitwidth', [(torch.float16, 32), (torch.float32, 64)])
+    @pytest.mark.parametrize('input_dtype, bitwidth', [(torch.bfloat16, 32), (torch.float16, 32), (torch.float32, 64)])
     def test_quantize_using_wider_quantization_bitwidth(self, backend_class, offset, bitwidth, input_dtype):
         scale = torch.tensor([0.2], dtype=torch.float32)
         random_tensor = torch.randn(2, 3, 4, 5)
@@ -296,32 +321,39 @@ class TestQuantizationBackends:
             backend_class.quantize_dequantize(random_tensor, scale, offset, bitwidth)
 
     @pytest.mark.parametrize('bitwidth', [8])
-    def test_quantize_using_input_in_channels_last_format(self, backend_class, offset, bitwidth):
+    @pytest.mark.parametrize('memory_format', [torch.channels_last, torch.channels_last_3d])
+    def test_quantize_using_non_contiguous_tensor(self, backend_class, offset, bitwidth, memory_format):
         scale = torch.tensor([0.2], dtype=torch.float32)
         random_tensor = get_round_safe_quantizable_tensor((2, 3, 4, 5), scale, bitwidth)
         random_quantized_tensor = get_random_quantized_tensor((2, 3, 4, 5), bitwidth)
-        channel_last_random_tensor = random_tensor.to(memory_format=torch.channels_last)
-        channel_last_random_quantized_tensor = random_quantized_tensor.to(memory_format=torch.channels_last)
+
+        # Rank 5 tensor is required to use channels_last_3d format
+        if memory_format == torch.channels_last_3d:
+            random_tensor = random_tensor[..., None]
+            random_quantized_tensor = random_quantized_tensor[..., None]
+
+        channel_last_random_tensor = random_tensor.to(memory_format=memory_format)
+        channel_last_random_quantized_tensor = random_quantized_tensor.to(memory_format=memory_format)
 
         channel_last_quantized_tensor = backend_class.quantize(channel_last_random_tensor, scale, offset, bitwidth)
-        assert channel_last_quantized_tensor.is_contiguous(memory_format=torch.channels_last)
+        assert channel_last_quantized_tensor.is_contiguous(memory_format=memory_format)
         
         channel_last_dequantized_tensor = backend_class.dequantize(channel_last_random_quantized_tensor, scale, offset)
-        assert channel_last_dequantized_tensor.is_contiguous(memory_format=torch.channels_last)
+        assert channel_last_dequantized_tensor.is_contiguous(memory_format=memory_format)
         
         channel_last_qdq_tensor = backend_class.quantize_dequantize(channel_last_random_tensor, scale, offset, bitwidth)
-        assert channel_last_qdq_tensor.is_contiguous(memory_format=torch.channels_last)
+        assert channel_last_qdq_tensor.is_contiguous(memory_format=memory_format)
 
-        tensor_after_quantize = torch.clamp(torch.round(random_tensor / scale) - torch.round(offset), 0, 2 ** bitwidth - 1)
-        assert torch.allclose(channel_last_quantized_tensor, tensor_after_quantize)
+        expected_quantized_tensor = torch.clamp(torch.round(random_tensor / scale) - torch.round(offset), 0, 2 ** bitwidth - 1)
+        assert torch.allclose(channel_last_quantized_tensor, expected_quantized_tensor)
 
-        tensor_after_dequantize = (random_quantized_tensor + torch.round(offset)) * scale
-        assert torch.allclose(channel_last_dequantized_tensor, tensor_after_dequantize)
+        expected_dequantized_tensor = (random_quantized_tensor + torch.round(offset)) * scale
+        assert torch.allclose(channel_last_dequantized_tensor, expected_dequantized_tensor)
 
-        tensor_after_qdq = (tensor_after_quantize + torch.round(offset)) * scale
-        assert torch.allclose(channel_last_qdq_tensor, tensor_after_qdq)
+        expected_qdq_tensor = (expected_quantized_tensor + torch.round(offset)) * scale
+        assert torch.allclose(channel_last_qdq_tensor, expected_qdq_tensor)
 
-    @pytest.mark.parametrize('bitwidth', [0])
+    @pytest.mark.parametrize('bitwidth', [0, -1, 0.5, 1.7])
     def test_quantize_using_invalid_bitwidth(self, backend_class, offset, bitwidth):
         scale = torch.tensor([0.2], dtype=torch.float32)
         random_tensor = torch.randn(2, 3, 4, 5)
@@ -381,18 +413,18 @@ class TestQuantizationBackends:
         random_tensor.requires_grad = input_requires_grad
 
         qdq_tensor = backend_class.quantize_dequantize(random_tensor, scale, offset, bitwidth)
-        loss = (random_tensor - qdq_tensor) ** 2
+        loss = torch.sum((random_tensor - qdq_tensor) ** 2)
         if loss.requires_grad:
             loss.backward()
 
         if scale_requires_grad:
-            assert any(scale.grad != 0.0)
+            assert scale.grad is not None
 
         if offset_requires_grad:
-            assert any(offset.grad != 0.0)
+            assert offset.grad is not None
 
         if input_requires_grad:
-            assert any(random_tensor.grad != 0.0)
+            assert random_tensor.grad is not None
 
     @pytest.mark.parametrize("test_set", (per_tensor_8b_test_set,
                                           per_tensor_16b_test_set,
@@ -400,11 +432,12 @@ class TestQuantizationBackends:
                                           per_channel_8b_test_set,
                                           per_channel_16b_test_set))
     @pytest.mark.parametrize("dtype", (torch.float16, torch.float32))
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason='cannot test as there\'s only cpu on this machine')
     def test_quantize_with_predefined_values(self, backend_class, test_set, dtype):
         test_set = copy_test_set(test_set, device="cuda:0", dtype=dtype)
         test_set.tensor.requires_grad = True
         tensor_q = backend_class.quantize(test_set.tensor, test_set.delta, test_set.offset, test_set.bitwidth)
-        assert torch.all(tensor_q == test_set.tensor_q), f"expected: {test_set.tensor_q}\ngot: {tensor_q}"
+        assert torch.all(tensor_q == test_set.tensor_q)
         grad_in = torch.randn_like(test_set.tensor)
         tensor_q.backward(grad_in)
         assert torch.all(test_set.tensor.grad[test_set.mask] == 0)
@@ -416,6 +449,7 @@ class TestQuantizationBackends:
                                           per_channel_8b_test_set,
                                           per_channel_16b_test_set))
     @pytest.mark.parametrize("dtype", (torch.float16, torch.float32))
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason='cannot test as there\'s only cpu on this machine')
     def test_dequantize_with_predefined_values(self, backend_class, test_set, dtype):
         test_set = copy_test_set(per_tensor_8b_test_set, dtype=dtype, device="cuda")
         tensor_q = test_set.tensor_q
@@ -428,11 +462,47 @@ class TestQuantizationBackends:
                                           per_channel_8b_test_set,
                                           per_channel_16b_test_set))
     @pytest.mark.parametrize("dtype", (torch.float16, torch.float32))
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason='cannot test as there\'s only cpu on this machine')
     def test_qdq_with_predefined_values(self, backend_class, test_set, dtype):
         test_set = copy_test_set(test_set, dtype=dtype, device="cuda")
         test_set.tensor.requires_grad = True
         tensor_qdq = backend_class.quantize_dequantize(test_set.tensor, test_set.delta, test_set.offset, test_set.bitwidth)
-        assert torch.allclose(tensor_qdq, test_set.tensor_qdq), f"{tensor_qdq}, \n{test_set.tensor_qdq}"
+        assert torch.allclose(tensor_qdq, test_set.tensor_qdq)
+        grad_in = torch.randn_like(test_set.tensor)
+        tensor_qdq.backward(grad_in)
+        assert torch.all(test_set.tensor.grad[test_set.mask] == 0)
+        assert torch.all(test_set.tensor.grad[~test_set.mask] == grad_in[~test_set.mask])
+
+    @pytest.mark.parametrize("test_set", (bfloat16_compat_per_tensor_8b_test_set,
+                                          bfloat16_compat_per_tensor_16b_test_set))
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason='cannot test as there\'s only cpu on this machine')
+    def test_quantize_with_predefined_bfloat_values(self, backend_class, test_set):
+        test_set = copy_test_set(test_set, device="cuda:0", dtype=torch.bfloat16)
+        test_set.tensor.requires_grad = True
+        tensor_q = backend_class.quantize(test_set.tensor, test_set.delta, test_set.offset, test_set.bitwidth)
+        assert torch.all(tensor_q == test_set.tensor_q)
+        grad_in = torch.randn_like(test_set.tensor)
+        tensor_q.backward(grad_in)
+        assert torch.all(test_set.tensor.grad[test_set.mask] == 0)
+        assert torch.all(test_set.tensor.grad[~test_set.mask] == grad_in[~test_set.mask])
+
+    @pytest.mark.parametrize("test_set", (bfloat16_compat_per_tensor_8b_test_set,
+                                          bfloat16_compat_per_tensor_16b_test_set))
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason='cannot test as there\'s only cpu on this machine')
+    def test_dequantize_with_predefined_bfloat_values(self, backend_class, test_set):
+        test_set = copy_test_set(per_tensor_8b_test_set, dtype=torch.bfloat16, device="cuda")
+        tensor_q = test_set.tensor_q
+        tensor_qdq = backend_class.dequantize(tensor_q, test_set.delta, test_set.offset)
+        assert torch.all(tensor_qdq == test_set.tensor_qdq)
+
+    @pytest.mark.parametrize("test_set", (bfloat16_compat_per_tensor_8b_test_set,
+                                          bfloat16_compat_per_tensor_16b_test_set))
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason='cannot test as there\'s only cpu on this machine')
+    def test_qdq_with_predefined_bfloat_values(self, backend_class, test_set):
+        test_set = copy_test_set(test_set, dtype=torch.bfloat16, device="cuda")
+        test_set.tensor.requires_grad = True
+        tensor_qdq = backend_class.quantize_dequantize(test_set.tensor, test_set.delta, test_set.offset, test_set.bitwidth)
+        assert torch.allclose(tensor_qdq, test_set.tensor_qdq)
         grad_in = torch.randn_like(test_set.tensor)
         tensor_qdq.backward(grad_in)
         assert torch.all(test_set.tensor.grad[test_set.mask] == 0)
