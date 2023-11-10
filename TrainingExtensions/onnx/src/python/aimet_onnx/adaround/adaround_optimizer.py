@@ -150,7 +150,7 @@ class AdaroundOptimizer:
                                                                           out_data_torch.shape)
 
         attributes = read_attributes_for_op(module)
-        if len(attributes['pad']) > 2:
+        if len(attributes['pads']) > 2:
             logger.info("Skipping the Convolution layer because padding size of 4 is not supported for optimization")
             return
 
