@@ -48,6 +48,7 @@ from enum import IntEnum
 import torch
 import torch.nn as nn
 import torch.onnx.symbolic_caffe2
+import torchvision
 import onnx
 import onnxsim
 import yaml
@@ -105,6 +106,7 @@ map_torch_types_to_onnx = {
     nn.Linear: ['Gemm', 'MatMul'],
     nn.LogSoftmax: ['LogSoftmax'],
     nn.LSTM: ['LSTM'],
+    nn.PixelShuffle: ['DepthToSpace'],
     nn.PReLU: ['PRelu'],
     nn.ReLU: ['Relu'],
     nn.ReLU6: ['Clip'],
@@ -114,6 +116,7 @@ map_torch_types_to_onnx = {
     nn.Softplus: ['Softplus'],
     nn.Tanh: ['Tanh'],
     nn.Upsample: ['Upsample'],
+    nn.UpsamplingNearest2d: ['Upsample'],
     elementwise_ops.Add: ['Add'],
     elementwise_ops.Cast: ['Cast'],
     elementwise_ops.ChannelShuffle: ['ChannelShuffle'],
@@ -130,12 +133,16 @@ map_torch_types_to_onnx = {
     elementwise_ops.Multiply: ['Mul'],
     elementwise_ops.NonZero: ['NonZero'],
     elementwise_ops.Pad: ['Pad'],
+    elementwise_ops.Permute: ['Transpose'],
     elementwise_ops.Reshape: ['Reshape'],
+    elementwise_ops.RoiAlign: ['RoiAlign'],
+    elementwise_ops.ScatterElements: ['ScatterElements'],
     elementwise_ops.Split: ['Split'],
     elementwise_ops.StridedSlice: ['Slice'],
     elementwise_ops.Subtract: ['Sub'],
     elementwise_ops.Tile: ['Tile'],
     elementwise_ops.TopK: ['TopK'],
+    torchvision.ops.RoIPool: ['MaxRoiPool']
 }
 
 # Maps pytorch functional op string names to corresponding onnx types.
