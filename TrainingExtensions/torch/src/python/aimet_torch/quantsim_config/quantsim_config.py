@@ -620,42 +620,8 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         :param data_type: data type as QuantizationDataType
         :param bitwidth: bitwidth
         """
-        # For a standalone kernel supporting fp16, only its parameter quantizer needs to be changed to fp16 because
-        # requantization will happen on the input and output of the kernel (int8 -> fp16 for input and fp16 -> int8 for
-        # output), causing lower precision encodings to be necessary for input and output.
-        # In the case of back to back kernels supporting fp16, no requantization will happen in between, so that
-        # quantizer can be set to fp16.
-        if data_type == QuantizationDataType.float and bitwidth == 16:
-            # pylint: disable=protected-access
-            conn_graph_op = self._conn_graph._module_to_op_dict[quantize_wrapper._module_to_wrap]
-
-            # Checking if input quantizer(s) should be set to fp16. Only set to fp16 if all input ops are also only
-            # fp16 supported.
-            input_ops = conn_graph_op.input_ops
-            all_input_ops_fp16 = True
-            for input_op in input_ops:
-                if not self._op_type_default_override_supported_kernel_lookup(input_op.type, bitwidth, data_type):
-                    all_input_ops_fp16 = False
-                    break
-            if all_input_ops_fp16:
-                for input_quantizer in quantize_wrapper.input_quantizers:
-                    input_quantizer.bitwidth = bitwidth
-                    input_quantizer.data_type = data_type
-
-            # Checking if output quantizer(s) should be set to fp16. Only set to fp16 if all output ops are also only
-            # fp16 supported.
-            output_ops = conn_graph_op.output_ops
-            all_output_ops_fp16 = True
-            for output_op in output_ops:
-                if not self._op_type_default_override_supported_kernel_lookup(output_op.type, bitwidth, data_type):
-                    all_output_ops_fp16 = False
-                    break
-            if all_output_ops_fp16:
-                for output_quantizer in quantize_wrapper.output_quantizers:
-                    output_quantizer.bitwidth = bitwidth
-                    output_quantizer.data_type = data_type
-        else:
-            for quantizer in quantize_wrapper.input_quantizers + quantize_wrapper.output_quantizers:
+        for quantizer in quantize_wrapper.input_quantizers + quantize_wrapper.output_quantizers:
+            if quantizer.enabled:
                 quantizer.bitwidth = bitwidth
                 quantizer.data_type = data_type
 

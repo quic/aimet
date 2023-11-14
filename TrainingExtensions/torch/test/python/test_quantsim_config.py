@@ -1776,8 +1776,7 @@ class TestQuantsimConfig:
         # Then, using config file we apply two levels of overrides.
         # 1) default supported_kernels at index 0 , is used to override default act/param bw dtype with int8 / int8
         # 2) After this, at op level, specifically for Conv types, there is a override provided as fp16/ fp16
-        # So, param quantizers of conv shall be updated to FP16 as a override, while retaining output at int 8 as
-        # configured by default level supported_kernels.
+        # Param and activation quantizers of conv shall be updated to FP16 as a override
 
         quantsim_config = {
             "defaults": {
@@ -1888,8 +1887,8 @@ class TestQuantsimConfig:
         assert(sim.model.conv1.param_quantizers['weight'].bitwidth == 16)
         assert(sim.model.conv1.param_quantizers['weight'].data_type == QuantizationDataType.float)
 
-        assert(sim.model.conv1.output_quantizers[0].bitwidth == 8)
-        assert(sim.model.conv1.output_quantizers[0].data_type == QuantizationDataType.int)
+        assert(sim.model.conv1.output_quantizers[0].bitwidth == 16)
+        assert(sim.model.conv1.output_quantizers[0].data_type == QuantizationDataType.float)
 
         # remove test config created
         qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
@@ -2117,26 +2116,27 @@ class TestQuantsimConfig:
                                    config_file='./data/quantsim_config.json')
         for name, module in sim.quant_wrappers():
             if name == 'prelu2':
-                assert module.input_quantizers[0].bitwidth == 16
-                assert module.input_quantizers[0].data_type == QuantizationDataType.float
-                assert module.output_quantizers[0].bitwidth == 8
-                assert module.output_quantizers[0].data_type == QuantizationDataType.int
-            elif name == 'relu1':
                 assert module.input_quantizers[0].bitwidth == 8
                 assert module.input_quantizers[0].data_type == QuantizationDataType.int
+                assert module.output_quantizers[0].bitwidth == 16
+                assert module.output_quantizers[0].data_type == QuantizationDataType.float
+            elif name == 'relu1':
                 assert module.output_quantizers[0].bitwidth == 8
                 assert module.output_quantizers[0].data_type == QuantizationDataType.int
             elif name == 'add1':
                 assert module.input_quantizers[0].bitwidth == 8
                 assert module.input_quantizers[0].data_type == QuantizationDataType.int
-                assert module.input_quantizers[1].bitwidth == 8
-                assert module.input_quantizers[1].data_type == QuantizationDataType.int
+                # For add1 as quantizer at index 1 is input, quantizers are enabled. So overriding will happen with
+                # op's supported kernels.
+                assert module.input_quantizers[1].bitwidth == 16
+                assert module.input_quantizers[1].data_type == QuantizationDataType.float
                 assert module.output_quantizers[0].bitwidth == 16
                 assert module.output_quantizers[0].data_type == QuantizationDataType.float
             else:
                 for input_q in module.input_quantizers:
-                    assert input_q.bitwidth == 16
-                    assert input_q.data_type == QuantizationDataType.float
+                    if input_q.enabled:
+                        assert input_q.bitwidth == 16
+                        assert input_q.data_type == QuantizationDataType.float
                 for output_q in module.output_quantizers:
                     assert output_q.bitwidth == 16
                     assert output_q.data_type == QuantizationDataType.float
