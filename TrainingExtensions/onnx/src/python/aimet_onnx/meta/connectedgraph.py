@@ -90,6 +90,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         # Maps output to consumer node
         self._input_to_node = {}
         self._get_input_to_node()
+        self._unnamed_op = 0
 
         self.starting_ops = []
         self._branch_count = 0
@@ -216,6 +217,9 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         """
         input_ops = self._get_input_ops()
         for node in input_ops:
+            if not node.name:
+                node.name = str(node.op_type) + '_unnamed_' + str(self._unnamed_op)
+                self._unnamed_op += 1
             node_name = node.name
             if node_name not in self._ops:
                 op = self._create_ir_op(node)
@@ -364,6 +368,9 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         # - Index 1 contains the parent node.
         while op_queue:
             child_node, parent_node, connecting_tensor_name = op_queue.pop()
+            if not child_node.name:
+                child_node.name = str(child_node.op_type) + '_unnamed_' + str(self._unnamed_op)
+                self._unnamed_op += 1
             # new module, create op/product and link to parent
             if child_node.name != parent_node.name:
                 self._create_op_if_not_exists(child_node)
