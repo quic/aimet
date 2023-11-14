@@ -653,7 +653,7 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
             if not self.should_perform_quant_dequant(input_tensor, tensor_quantizers[index]):
                 return input_tensor
 
-            if self._mode is QcQuantizeOpMode.ANALYSIS:
+            if self._mode is QcQuantizeOpMode.ANALYSIS and not tensor_quantizers[index].is_encoding_frozen:
                 if TF_ENHANCED_USE_DOWNSAMPLING and \
                         tensor_quantizers[index].quant_scheme == QuantScheme.post_training_tf_enhanced:
                     # Update stats using downsampled output to speed up tf enhanced
@@ -666,7 +666,7 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
 
                 output = input_tensor
 
-            elif self._mode is QcQuantizeOpMode.ACTIVE:
+            elif self._mode is QcQuantizeOpMode.ACTIVE or (self._mode is QcQuantizeOpMode.ANALYSIS and tensor_quantizers[index].is_encoding_frozen):
                 # if we are not in training, then only nearest rounding should be used
                 # else we should use whatever the user desires (i.e.. stochastic rounding is a valid option)
                 if self.training:
