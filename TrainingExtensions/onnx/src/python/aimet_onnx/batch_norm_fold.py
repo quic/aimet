@@ -407,6 +407,9 @@ def get_input_output_channels(node: NodeProto, model: ModelProto) -> Tuple[int, 
     """
     weight = ParamUtils.get_param(model, node, WEIGHT_INDEX)
     groups = get_node_attribute(node, "group")
+    # If group atttribute does not exist in the node,then default is 1
+    if not groups:
+        groups = 1
     if node.op_type == "Conv":
         num_in_channels = weight.dims[1] * groups
         num_out_channels = weight.dims[0]

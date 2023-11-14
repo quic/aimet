@@ -200,7 +200,8 @@ def make_dummy_input(model: ModelProto, dynamic_size: int = 1) -> Dict[str, np.n
             else:
                 # Else, axis has a fixed dimension size stored in dim.dim_value
                 shape.append(dim.dim_value)
-        input_dict[name] = np.random.randn(*shape).astype(mapping.TENSOR_TYPE_TO_NP_TYPE[dtype])
+        if shape:
+            input_dict[name] = np.random.randn(*shape).astype(mapping.TENSOR_TYPE_TO_NP_TYPE[dtype])
     return input_dict
 
 
