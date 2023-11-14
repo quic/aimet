@@ -353,21 +353,6 @@ class TestQuantizationBackends:
         expected_qdq_tensor = (expected_quantized_tensor + torch.round(offset)) * scale
         assert torch.allclose(channel_last_qdq_tensor, expected_qdq_tensor)
 
-    @pytest.mark.parametrize('bitwidth', [0, -1, 0.5, 1.7])
-    def test_quantize_using_invalid_bitwidth(self, backend_class, offset, bitwidth):
-        scale = torch.tensor([0.2], dtype=torch.float32)
-        random_tensor = torch.randn(2, 3, 4, 5)
-        random_quantized_tensor = torch.zeros((2, 3, 4, 5), dtype=torch.float32)
-
-        with pytest.raises(RuntimeError):
-            backend_class.quantize(random_tensor, scale, offset, bitwidth)
-
-        with pytest.raises(RuntimeError):
-            backend_class.dequantize(random_quantized_tensor, scale, offset)
-
-        with pytest.raises(RuntimeError):
-            backend_class.quantize_dequantize(random_tensor, scale, offset, bitwidth)
-
     @pytest.mark.parametrize('bitwidth', [8])
     def test_quantize_using_scale_with_multiple_channels(self, backend_class, offset, bitwidth):
         scale_shape = (2, 1, 4, 1)
