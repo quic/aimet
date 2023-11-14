@@ -423,6 +423,50 @@ class TestQcQuantizeOpStaticGrid:
         # After clone(), following copy operation should succeed, otherwise throws RuntimeError
         outputs = [out.copy_(tensor_to_be_copied) for out in outputs]
         print(outputs)
+        
+    def test_prefreezed_encodings(self):
+        """ test quantize dequantize ops with prefreezed encodings """
+
+        torch.manual_seed(2023)
+
+        in_features = 200
+        out_features = 100
+
+        x = torch.randn((4, 200))
+        weight = torch.randn((out_features, in_features)).clamp(-1, 1)
+        linear = torch.nn.Linear(in_features, out_features, bias=False)
+        with torch.no_grad():
+            linear.weight.copy_(weight)
+
+        wrapper = StaticGridQuantWrapper(linear, weight_bw=8, activation_bw=8, round_mode='nearest',
+                                         quant_scheme=QuantScheme.post_training_tf)
+
+        # Enable input/output quantizers
+        for quantizer_type in ["input_quantizers", "output_quantizers"]:
+            quantizers = getattr(wrapper, quantizer_type)
+            assert len(quantizers) == 1
+            quantizers[0].enabled = True
+
+        gated_wrapper = copy.deepcopy(wrapper)
+
+        assert torch.allclose(wrapper(x), gated_wrapper(x), rtol=0.1)
+
+        enc = libpymo.TfEncoding()
+        enc.bw, enc.max, enc.min, enc.delta, enc.offset = 8, 0.5, -0.5, 1, 0.2
+
+        for quantizer_type in ["input_quantizers", "output_quantizers"]:
+            quantizers = getattr(gated_wrapper, quantizer_type)
+            assert len(quantizers) == 1
+
+            # Prefreeze encodings
+            quantizers[0].encoding = enc
+            quantizers[0]._is_encoding_frozen = True
+            assert not torch.allclose(wrapper(x), gated_wrapper(x), rtol=0.1)
+
+            # Reset encodings to None and unfreeze encodings
+            quantizers[0]._is_encoding_frozen = False
+            quantizers[0].encoding = None
+            assert torch.allclose(wrapper(x), gated_wrapper(x), rtol=0.1)
 
 
 class RoundStraightThrough(torch.autograd.Function):
