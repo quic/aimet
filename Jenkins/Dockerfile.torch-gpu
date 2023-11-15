@@ -272,3 +272,10 @@ RUN ln -s /usr/bin/run-clang-tidy-11.py /usr/bin/run-clang-tidy.py
 
 # Provide write permission to the python package folder in order to install AIMET in editable mode
 RUN chmod o+w /usr/local/lib/python3.8/dist-packages
+
+# Install cutlass 3.0
+RUN cd /usr/local && \
+    git clone --depth 1 --branch v3.0.0 https://github.com/NVIDIA/cutlass.git && \
+    mv cutlass cutlass-3.0 && \
+    chown -R root:users cutlass-3.0 && \
+    ln -s cutlass-3.0 cutlass
