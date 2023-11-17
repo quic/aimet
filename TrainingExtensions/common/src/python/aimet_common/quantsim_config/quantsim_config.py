@@ -156,9 +156,9 @@ class QuantSimConfigurator(ABC):
         """
         self._set_default_configs(self._quantsim_configs[ConfigDictKeys.DEFAULTS])
         self._set_param_configs(self._quantsim_configs[ConfigDictKeys.PARAMS])
-        self._set_model_input_configs(self._quantsim_configs[ConfigDictKeys.MODEL_INPUT])
         self._set_op_type_configs(self._quantsim_configs[ConfigDictKeys.OP_TYPE])
         self._set_supergroup_configs(self._quantsim_configs[ConfigDictKeys.SUPERGROUPS])
+        self._set_model_input_configs(self._quantsim_configs[ConfigDictKeys.MODEL_INPUT])
         self._set_model_output_configs(self._quantsim_configs[ConfigDictKeys.MODEL_OUTPUT])
 
     def get_supported_kernels(self) -> Dict:
