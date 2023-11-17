@@ -36,4 +36,4 @@
 # =============================================================================
 # pylint: disable=all
 
-from .utils import *
+from .quantize import *
