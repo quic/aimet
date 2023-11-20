@@ -50,6 +50,7 @@ from onnx import helper, numpy_helper, OperatorSetIdProto, TensorProto, load_mod
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
 from torch.nn.modules.batchnorm import _BatchNorm
 from aimet_common import libquant_info
+from torch.nn.modules.instancenorm import _InstanceNorm
 
 from .mobilenet import MockMobileNetV1, MockMobileNetV11
 from aimet_torch import elementwise_ops
@@ -1401,6 +1402,23 @@ class MyModel(torch.nn.Module):
         return x
 
 
+class InstanceNormModel(torch.nn.Module):
+    def __init__(self):
+        super(InstanceNormModel, self).__init__()
+
+        self.conv1 = torch.nn.Conv2d(10, 20, 3)
+        self.in1 = torch.nn.InstanceNorm2d(20)
+        self.relu1 = torch.nn.ReLU()
+
+    def forward(self, x):
+        # Regular case - conv followed by bn
+        x = self.conv1(x)
+        x = self.in1(x)
+        x = self.relu1(x)
+
+        return x
+
+
 class MyModelFoldFoward(torch.nn.Module):
     def __init__(self):
         super(MyModelFoldFoward, self).__init__()
@@ -1681,6 +1699,31 @@ def simple_relu_model():
                       output_names=['output'])
     model_onnx = ONNXModel(load_model('./simple_relu.onnx'))
     return model_onnx
+
+def instance_norm_model():
+    model = InstanceNormModel().eval()
+    for module in model.modules():
+        if isinstance(module, _InstanceNorm) and not module.affine:
+            with torch.no_grad():
+                module.weight = torch.nn.Parameter(torch.randn(20))
+                module.bias = torch.nn.Parameter(torch.randn(20))
+
+    input_shape = (2, 10, 24, 24)
+    x = torch.randn(*input_shape, requires_grad=True)
+
+    # Export the model
+    torch.onnx.export(model,  # model being run
+                      x,  # model input (or a tuple for multiple inputs)
+                      "./model_single_residual.onnx",
+                      # where to save the model (can be a file or file-like object),
+                      training=torch.onnx.TrainingMode.TRAINING,
+                      export_params=True,  # store the trained parameter weights inside the model file
+                      opset_version=12,  # the ONNX version to export the model to
+                      do_constant_folding=False,  # whether to execute constant folding for optimization
+                      input_names=['input'],  # the model's input names
+                      output_names=['output'])
+    model = ONNXModel(load_model('./model_single_residual.onnx'))
+    return model
 
 def custom_add_model():
     class CustomAddModel(nn.Module):
