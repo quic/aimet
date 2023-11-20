@@ -400,23 +400,6 @@ class TestQuantizationBackends:
         assert torch.allclose(channel_last_qdq_tensor, expected_qdq_tensor)
 
     @pytest.mark.parametrize('bitwidth', [8])
-    def test_quantize_using_scale_with_multiple_channels(self, backend_class, offset, bitwidth):
-        scale_shape = (2, 1, 4, 1)
-        scale = torch.rand(scale_shape)
-        scale[scale == 0.0] = 0.1
-        random_tensor = torch.randn(2, 3, 4, 5)
-        random_quantized_tensor = get_random_quantized_tensor((2, 3, 4, 5), bitwidth)
-
-        with pytest.raises(RuntimeError):
-            backend_class.quantize(random_tensor, scale, offset, bitwidth)
-
-        with pytest.raises(RuntimeError):
-            backend_class.dequantize(random_quantized_tensor, scale, offset)
-
-        with pytest.raises(RuntimeError):
-            backend_class.quantize_dequantize(random_tensor, scale, offset, bitwidth)
-
-    @pytest.mark.parametrize('bitwidth', [8])
     def test_quantize_using_inversely_broadcastable_scale(self, backend_class, offset, bitwidth):
         # Add small value to scale to make scale not equal to 0
         scale = torch.rand((5, 1, 1, 1, 1)) + 0.1

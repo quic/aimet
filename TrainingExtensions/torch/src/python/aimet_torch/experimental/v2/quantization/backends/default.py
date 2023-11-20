@@ -35,6 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Default quantization backend for quantizing weights and activations """
+from typing import Union
 import torch
 
 class DefaultOpImpl:
@@ -43,18 +44,26 @@ class DefaultOpImpl:
     quant-dequant using pytorch operations.
     """
     @staticmethod
-    def _validate_arguments(tensor: torch.Tensor, delta: torch.Tensor, offset: torch.Tensor, bitwidth: int = None):
+    def _is_a_broadcasted_to_b(a: torch.Tensor, b: torch.Tensor) -> bool:
+        """
+        Checks any dimensions of tensor a is broadcasted to the corresponding dimension of b
+        """
+        for dim_a, dim_b in zip(a.shape[::-1], b.shape[::-1]):
+            if dim_a == 1 and dim_a < dim_b:
+                return True
+        return False
+
+    @staticmethod
+    def _validate_arguments(tensor: torch.Tensor, delta: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int] = None):
         if not tensor.dtype == delta.dtype == offset.dtype:
             raise RuntimeError("Data type of tensor, delta, and offset are should be the same")
         if bitwidth and torch.finfo(tensor.dtype).bits < bitwidth:
             raise RuntimeError("Quantization bitwidth should be smaller than the number of bits of input dtype")
-        if sum(dim > 1 for dim in delta.shape) > 1:
-            raise RuntimeError("Per-channel quantiztion over multiple dimension is not allowed")
-        if len(tensor.shape) < len(delta.shape):
+        if len(tensor.shape) < len(delta.shape) or DefaultOpImpl._is_a_broadcasted_to_b(tensor, delta):
             raise RuntimeError("Input tensor should not be broadcasted to encoding shape")
 
     @staticmethod
-    def quantize(tensor: torch.Tensor, delta: torch.Tensor, offset: torch.Tensor, bitwidth: int) -> torch.Tensor:
+    def quantize(tensor: torch.Tensor, delta: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int]) -> torch.Tensor:
         """
         Quantize the tensor, using given parameters
 
@@ -81,7 +90,7 @@ class DefaultOpImpl:
         return DequantizeFunc.apply(tensor, delta, offset)
 
     @staticmethod
-    def quantize_dequantize(tensor: torch.Tensor, delta: torch.Tensor, offset: torch.Tensor, bitwidth: int) -> torch.Tensor:
+    def quantize_dequantize(tensor: torch.Tensor, delta: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int]) -> torch.Tensor:
         """
         Quantize-dequantize the tensor, using given parameters
 
@@ -102,19 +111,22 @@ class QuantizeFunc(torch.autograd.Function):
     """
     # pylint: disable=arguments-differ
     @staticmethod
-    def forward(ctx, tensor: torch.Tensor, delta: torch.Tensor, offset: torch.Tensor, bitwidth: int):
+    def forward(ctx, tensor: torch.Tensor, delta: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int]):
         x_round = torch.round(tensor / delta) - torch.round(offset)
-        mask = (x_round >= 0) * (x_round <= (2 ** bitwidth - 1))
-        ctx.save_for_backward(tensor, delta, mask)
+        if tensor.requires_grad or delta.requires_grad or offset.requires_grad:
+            mask = (x_round >= 0) * (x_round <= (2 ** bitwidth - 1))
+        else:
+            mask = None
+        ctx.save_for_backward(tensor, delta, offset, mask)
         return torch.clamp(x_round, 0, 2 ** bitwidth - 1)
 
     # pylint: disable=arguments-differ
     @staticmethod
     def backward(ctx, grad):
-        tensor, delta, mask = ctx.saved_tensors
-        tensor_grad = grad * mask / delta
-        delta_grad = -grad * mask * tensor / (delta ** 2)
-        offset_grad = -grad * mask
+        tensor, delta, offset, mask = ctx.saved_tensors
+        tensor_grad = grad * mask / delta if tensor.requires_grad else None
+        delta_grad = -grad * mask * tensor / (delta ** 2) if delta.requires_grad else None
+        offset_grad = -grad * mask if offset.requires_grad else None
         return tensor_grad, delta_grad, offset_grad, None
 
 
@@ -148,19 +160,23 @@ class QuantDequantFunc(torch.autograd.Function):
     """
     # pylint: disable=arguments-differ
     @staticmethod
-    def forward(ctx, tensor: torch.Tensor, delta: torch.Tensor, offset: torch.Tensor, bitwidth: int):
+    def forward(ctx, tensor: torch.Tensor, delta: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int]):
         rounded_offset = torch.round(offset)
         x_round = torch.round(tensor / delta) - rounded_offset
         x_quant = torch.clamp(x_round, 0, 2 ** bitwidth - 1)
-        mask = (x_round >= 0) * (x_round <= (2 ** bitwidth - 1))
-        ctx.save_for_backward(tensor, delta, rounded_offset, mask, x_quant)
+        if tensor.requires_grad or delta.requires_grad or offset.requires_grad:
+            mask = (x_round >= 0) * (x_round <= (2 ** bitwidth - 1))
+        else:
+            mask = None
+        ctx.save_for_backward(tensor, delta, offset, rounded_offset, mask, x_quant)
         return (x_quant + rounded_offset) * delta
 
     # pylint: disable=arguments-differ
     @staticmethod
     def backward(ctx, grad):
-        tensor, delta, rounded_offset, mask, x_quant = ctx.saved_tensors
-        tensor_grad = grad * mask
-        delta_grad = -grad * (mask * tensor / delta - x_quant - rounded_offset)
-        offset_grad = -grad * (mask * delta - delta)
+        tensor, delta, offset, rounded_offset, mask, x_quant = ctx.saved_tensors
+        tensor_grad = grad * mask if tensor.requires_grad else None
+        delta_grad = -grad * (mask * tensor / delta - x_quant - rounded_offset) \
+            if delta.requires_grad else None
+        offset_grad = -grad * (mask * delta - delta) if offset.requires_grad else None
         return tensor_grad, delta_grad, offset_grad, None
