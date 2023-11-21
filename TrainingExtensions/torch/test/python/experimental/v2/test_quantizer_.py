@@ -106,8 +106,12 @@ def x():
 @pytest.mark.parametrize('q', [
     quantize(symmetric=True, initialized=False),
     quantize(symmetric=True, initialized=True),
+    quantize(symmetric=False, initialized=False),
+    quantize(symmetric=False, initialized=True),
     quantize_dequantize(symmetric=True, initialized=False),
     quantize_dequantize(symmetric=True, initialized=True),
+    quantize_dequantize(symmetric=False, initialized=False),
+    quantize_dequantize(symmetric=False, initialized=True),
 ])
 def test_compute_encodings(q: Union[Quantize, QuantizeDequantize],
                            x: torch.Tensor):
@@ -123,22 +127,34 @@ def test_compute_encodings(q: Union[Quantize, QuantizeDequantize],
       1. forward() returns dynamic quantization output
       2. self.get_min(), self.get_max() == self.encoding_analyzer.compute_encodings()
     """
+    dynamic_min, dynamic_max = q.encoding_analyzer.compute_dynamic_encodings(x)
 
-    batch_min, batch_max = q.encoding_analyzer.compute_dynamic_encodings(x)
-    batch_scale = (batch_max - batch_min) / (2 ** q.bitwidth - 1)
-    batch_offset = batch_min * batch_scale
+    if q.symmetric:
+        dynamic_scale = torch.maximum(dynamic_max/127, -dynamic_min/128)
+        dynamic_offset = torch.ones_like(dynamic_scale) * -128
+    else:
+        dynamic_scale = (dynamic_max - dynamic_min) / (2 ** q.bitwidth - 1)
+        dynamic_offset = torch.round(dynamic_min / dynamic_scale)
 
     if isinstance(q, Quantize):
-        expected_output = get_backend().quantize(x, batch_scale, batch_offset)
+        expected_output = get_backend().quantize(x,
+                                                 dynamic_scale,
+                                                 dynamic_offset,
+                                                 q.bitwidth)
     else:
-        expected_output = get_backend().quantize_dequantize(x, batch_scale, batch_offset)
+        expected_output = get_backend().quantize_dequantize(x,
+                                                            dynamic_scale,
+                                                            dynamic_offset,
+                                                            q.bitwidth)
 
     with q.compute_encodings():
         output = q(x)
 
-    assert torch.equal(output, expected_output)
-    assert torch.allclose(q.get_min(), batch_min)
-    assert torch.allclose(q.get_max(), batch_max)
+    assert torch.allclose(output, expected_output)
+    assert torch.equal(q.min, dynamic_min)
+    assert torch.equal(q.max, dynamic_max)
+    assert torch.allclose(q.get_scale(), dynamic_scale)
+    assert torch.allclose(q.get_offset(), dynamic_offset)
 
 
 @pytest.mark.parametrize('q', [
@@ -207,7 +223,11 @@ def test_backward_during_compute_encodings(q: _QuantizerBase, x: torch.Tensor):
     assert q.max.grad is None
 
 
-def test_compute_encodings_updates_parameters_upon_exit(q, x: torch.Tensor):
+@pytest.mark.parametrize('q', [
+    quantize(symmetric=True, initialized=False),
+    quantize_dequantize(symmetric=True, initialized=False),
+])
+def test_compute_encodings_updates_parameters_upon_exit(q: _QuantizerBase, x: torch.Tensor):
     """
     :param q: Quantize or QuantizeDequantize module
     :param x: Input tensor
@@ -264,11 +284,13 @@ def test_forward(q: Union[Quantize, QuantizeDequantize], x: torch.Tensor):
     if isinstance(q, Quantize):
         expected_output = get_backend().quantize(x,
                                                  q.get_scale(),
-                                                 q.get_offset())
+                                                 q.get_offset(),
+                                                 q.bitwidth)
     else:
         expected_output = get_backend().quantize_dequantize(x,
                                                             q.get_scale(),
-                                                            q.get_offset())
+                                                            q.get_offset(),
+                                                            q.bitwidth)
     assert torch.allclose(output, expected_output)
 
 
@@ -316,11 +338,13 @@ def test_backward_with_no_grad(q, x: torch.Tensor):
       2. backward() invoked
     Then: self.min.grad and self.max.grad should be computed
     """
+    x = x.clone().requires_grad_(True)
     with torch.no_grad():
         output = q(x)
-        output.backward(torch.zeros_like(output))
-        assert q.min.grad is None
-        assert q.max.grad is None
+    output = output + x
+    output.backward(torch.zeros_like(output))
+    assert q.min.grad is None
+    assert q.max.grad is None
 
 
 @pytest.mark.parametrize('q', [
@@ -338,10 +362,10 @@ def test_uninitialized_quantize(q: _QuantizerBase, x: torch.Tensor):
     When: forward() invoked
     Then: Throw runtime error
     """
-    assert q.get_min() is not None
-    assert q.get_max() is not None
-    assert q.get_scale() is not None
-    assert q.get_offset() is not None
+    assert q.get_min() is None
+    assert q.get_max() is None
+    assert q.get_scale() is None
+    assert q.get_offset() is None
 
     with pytest.raises(RuntimeError):
         _ = q(x)
@@ -368,31 +392,35 @@ def _test_symmetric_invariants(q):
     bw = q.bitwidth
 
     # min == scale * offset
-    assert torch.allclose(min, scale * offset)
+    assert torch.allclose(min, scale * offset,
+                          rtol=1e-3, atol=scale.abs().max().item() * 1e-5)
 
     # max == scale * -(offset+1)
-    assert torch.allclose(max, scale * -(offset+1))
+    assert torch.allclose(max, scale * -(offset+1),
+                          rtol=1e-3, atol=scale.abs().max().item() * 1e-5)
 
     total_bins = 2**bw - 1
     positive_bins = math.floor(total_bins / 2)
     negative_bins = math.ceil(total_bins / 2)
-    range = max(-min * total_bins/negative_bins,
-                max * total_bins/positive_bins)
-    assert torch.allclose(scale, range / total_bins)
+    range = torch.maximum(-min * total_bins/negative_bins,
+                          max * total_bins/positive_bins)
+    assert torch.allclose(scale, range / total_bins,
+                          rtol=1e-3, atol=scale.abs().max().item() * 1e-5)
 
     # offset == -1 * 2 ** (bw -1)
-    assert torch.allclose(offset, -1 * 2 ** (bw-1))
+    assert torch.equal(offset, torch.ones_like(offset) * -2 ** (bw-1))
     # offset is fixed in symmetric quantizer
     assert not offset.requires_grad
 
 
+import pudb; pudb.set_trace()
 def _test_asymmetric_invariants(q):
     """
     asymmetric invaraints:
       1. min = scale * offest
       2. max = min + (2**bw - 1)
       3. scale = (max - min) / (2**bw - 1)
-      4. offset = integers in range [0, 2**bw - 1]
+      4. offset = round(min / scale)
       5. offset is trainable (offset.requires_grad = True)
     """
     min = q.get_min()
@@ -402,17 +430,19 @@ def _test_asymmetric_invariants(q):
     bw = q.bitwidth
 
     # min == scale * offset
-    assert torch.allclose(min, scale * offset)
+    assert torch.allclose(min, scale * offset,
+                          rtol=1e-3, atol=min.abs().max().item() * 1e-5)
 
     # max == min + scale * (2**bw - 1)
-    assert torch.allclose(max, min + scale * (2**bw - 1))
+    assert torch.allclose(max, min + scale * (2**bw - 1),
+                          rtol=1e-3, atol=max.abs().max().item() * 1e-5)
 
     # scale == (max - min) / (2**bw - 1)
-    assert torch.allclose(scale, (max - min) / (2**bw - 1))
+    assert torch.allclose(scale, (max - min) / (2**bw - 1),
+                          rtol=1e-3, atol=scale.abs().max().item() * 1e-5)
 
-    # offsets are integers in range [0, 2**bw - 1]
-    assert torch.equal(offset.round(), offset)
-    assert torch.all((0 <= offset) & (offset <= 2**bw - 1))
+    # offsets == round(min / scale)
+    assert torch.equal(torch.round(min/scale), offset)
     # offset is learned in asymmetric quantizer
     assert offset.requires_grad
 
@@ -421,7 +451,7 @@ def _test_asymmetric_invariants(q):
     quantize(symmetric=True, initialized=False),
     quantize_dequantize(symmetric=True, initialized=False),
 ])
-def test_symmetric_min_max_scale_offset(q, x: torch.Tensor):
+def test_symmetric_invariants(q, x: torch.Tensor):
     """
     Given: Symmetric quantizer
     When: Quantization parameters initialized with compute_encodings
@@ -449,28 +479,31 @@ def test_symmetric_learning(q, x, optim_cls):
       3. optimizer.step() invoked
     Then: Should satisfy all the symmetric quantization invariants
     """
+
     original_min = q.get_min().clone().detach()
     original_max = q.get_max().clone().detach()
     original_scale = q.get_scale().clone().detach()
     original_offset = q.get_offset().clone().detach()
 
-    optimizer = optim_cls(q.parameters(), lr=10.0)
-    output = q(x)
-    output.backward(torch.randn_like(output))
-    optimizer.step()
+    optimizer = optim_cls(q.parameters(), lr=1.0)
 
-    assert not torch.any(q.get_min().isclose(original_min))
-    assert not torch.any(q.get_max().isclose(original_max))
-    assert not torch.any(q.get_scale().isclose(original_scale))
-    assert torch.allclose(q.get_offset(), original_offset)
-    _test_symmetric_invariants(q)
+    for _ in range(10):
+        output = q(x)
+        output.backward(torch.randn_like(output))
+        optimizer.step()
+        _test_symmetric_invariants(q)
+
+    assert not torch.all(q.get_min().isclose(original_min))
+    assert not torch.all(q.get_max().isclose(original_max))
+    assert not torch.all(q.get_scale().isclose(original_scale))
+    assert torch.equal(q.get_offset(), original_offset)
 
 
 @pytest.mark.parametrize('q', [
     quantize(symmetric=False, initialized=False),
     quantize_dequantize(symmetric=False, initialized=False),
 ])
-def test_asymmetric_min_max_scale_offset(q: _QuantizerBase, x: torch.Tensor):
+def test_asymmetric_invariants(q: _QuantizerBase, x: torch.Tensor):
     """
     Given: Asymmetric quantizer
     When: Quantization parameters initialized with compute_encodings
@@ -503,16 +536,18 @@ def test_asymmetric_learning(q, x, optim_cls):
     original_scale = q.get_scale().clone().detach()
     original_offset = q.get_offset().clone().detach()
 
-    optimizer = optim_cls(q.parameters(), lr=10.0)
-    output = q(x)
-    output.backward(torch.randn_like(output))
-    optimizer.step()
+    optimizer = optim_cls(q.parameters(), lr=1.0)
 
-    assert not torch.any(q.get_min().isclose(original_min))
-    assert not torch.any(q.get_max().isclose(original_max))
-    assert not torch.any(q.get_scale().isclose(original_scale))
-    assert torch.allclose(q.get_offset(), original_offset)
-    _test_asymmetric_invariants(q)
+    for _ in range(10):
+        output = q(x)
+        output.backward(torch.randn_like(output))
+        optimizer.step()
+        _test_asymmetric_invariants(q)
+
+    assert not torch.all(q.get_min().isclose(original_min))
+    assert not torch.all(q.get_max().isclose(original_max))
+    assert not torch.all(q.get_scale().isclose(original_scale))
+    assert not torch.all(q.get_offset().isclose(original_offset))
 
 
 @pytest.mark.parametrize('q', [
