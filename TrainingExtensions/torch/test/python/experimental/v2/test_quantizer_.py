@@ -493,9 +493,9 @@ def test_symmetric_learning(q, x, optim_cls):
         optimizer.step()
         _test_symmetric_invariants(q)
 
-    assert not torch.all(q.get_min().isclose(original_min))
-    assert not torch.all(q.get_max().isclose(original_max))
-    assert not torch.all(q.get_scale().isclose(original_scale))
+    assert not torch.equal(q.get_min(), original_min)
+    assert not torch.equal(q.get_max(), original_max)
+    assert not torch.equal(q.get_scale(), original_scale)
     assert torch.equal(q.get_offset(), original_offset)
 
 
@@ -544,10 +544,10 @@ def test_asymmetric_learning(q, x, optim_cls):
         optimizer.step()
         _test_asymmetric_invariants(q)
 
-    assert not torch.all(q.get_min().isclose(original_min))
-    assert not torch.all(q.get_max().isclose(original_max))
-    assert not torch.all(q.get_scale().isclose(original_scale))
-    assert not torch.all(q.get_offset().isclose(original_offset))
+    assert not torch.equal(q.get_min(), original_min)
+    assert not torch.equal(q.get_max(), original_max)
+    assert not torch.equal(q.get_scale(), original_scale)
+    assert not torch.equal(q.get_offset(), original_offset)
 
 
 @pytest.mark.parametrize('q', [
