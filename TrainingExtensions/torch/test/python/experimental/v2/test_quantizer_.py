@@ -413,7 +413,6 @@ def _test_symmetric_invariants(q):
     assert not offset.requires_grad
 
 
-import pudb; pudb.set_trace()
 def _test_asymmetric_invariants(q):
     """
     asymmetric invaraints:
