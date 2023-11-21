@@ -124,9 +124,11 @@ class QuantizeFunc(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad):
         tensor, delta, offset, mask = ctx.saved_tensors
-        tensor_grad = grad * mask / delta if tensor.requires_grad else None
-        delta_grad = -grad * mask * tensor / (delta ** 2) if delta.requires_grad else None
-        offset_grad = -grad * mask if offset.requires_grad else None
+        if tensor.requires_grad or delta.requires_grad or offset.requires_grad:
+            masked_grad = grad * mask
+        tensor_grad = masked_grad / delta if tensor.requires_grad else None
+        delta_grad = -masked_grad * tensor / (delta ** 2) if delta.requires_grad else None
+        offset_grad = -masked_grad if offset.requires_grad else None
         return tensor_grad, delta_grad, offset_grad, None
 
 
@@ -140,16 +142,18 @@ class DequantizeFunc(torch.autograd.Function):
     def forward(ctx, tensor: torch.Tensor, delta: torch.Tensor, offset: torch.Tensor):
         rounded_offset = torch.round(offset)
         x_dequant = (tensor + rounded_offset) * delta
-        ctx.save_for_backward(tensor, delta, rounded_offset)
+        ctx.save_for_backward(tensor, delta, offset, rounded_offset)
         return x_dequant
 
     # pylint: disable=arguments-differ
     @staticmethod
     def backward(ctx, grad):
-        tensor, delta, rounded_offset = ctx.saved_tensors
-        tensor_grad = grad * delta
-        delta_grad = grad * (tensor + rounded_offset)
-        offset_grad = grad * delta
+        tensor, delta, offset, rounded_offset = ctx.saved_tensors
+        if tensor.requires_grad or offset.requires_grad:
+            tensor_and_offset_grad = grad * delta
+        tensor_grad = tensor_and_offset_grad if tensor.requires_grad else None
+        delta_grad = grad * (tensor + rounded_offset) if delta.requires_grad else None
+        offset_grad = tensor_and_offset_grad if offset.requires_grad else None
         return tensor_grad, delta_grad, offset_grad
 
 
