@@ -38,70 +38,60 @@
 from typing import Union
 import torch
 
-class DefaultOpImpl:
+def _is_a_broadcasted_to_b(a: torch.Tensor, b: torch.Tensor) -> bool:
     """
-    Default quantization backend class. Supports quantization, dequantization, and
-    quant-dequant using pytorch operations.
+    Checks any dimensions of tensor a is broadcasted to the corresponding dimension of b
     """
-    @staticmethod
-    def _is_a_broadcasted_to_b(a: torch.Tensor, b: torch.Tensor) -> bool:
-        """
-        Checks any dimensions of tensor a is broadcasted to the corresponding dimension of b
-        """
-        for dim_a, dim_b in zip(a.shape[::-1], b.shape[::-1]):
-            if dim_a == 1 and dim_a < dim_b:
-                return True
-        return False
+    for dim_a, dim_b in zip(a.shape[::-1], b.shape[::-1]):
+        if dim_a == 1 and dim_a < dim_b:
+            return True
+    return False
 
-    @staticmethod
-    def _validate_arguments(tensor: torch.Tensor, delta: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int] = None):
-        if not tensor.dtype == delta.dtype == offset.dtype:
-            raise RuntimeError("Data type of tensor, delta, and offset are should be the same")
-        if bitwidth and torch.finfo(tensor.dtype).bits < bitwidth:
-            raise RuntimeError("Quantization bitwidth should be smaller than the number of bits of input dtype")
-        if len(tensor.shape) < len(delta.shape) or DefaultOpImpl._is_a_broadcasted_to_b(tensor, delta):
-            raise RuntimeError("Input tensor should not be broadcasted to encoding shape")
+def _validate_arguments(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int] = None):
+    if not tensor.dtype == scale.dtype == offset.dtype:
+        raise RuntimeError("Data type of tensor, scale, and offset are should be the same")
+    if bitwidth and torch.finfo(tensor.dtype).bits < bitwidth:
+        raise RuntimeError("Quantization bitwidth should be smaller than the number of bits of input dtype")
+    if len(tensor.shape) < len(scale.shape) or _is_a_broadcasted_to_b(tensor, scale):
+        raise RuntimeError("Input tensor should not be broadcasted to encoding shape")
 
-    @staticmethod
-    def quantize(tensor: torch.Tensor, delta: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int]) -> torch.Tensor:
-        """
-        Quantize the tensor, using given parameters
+def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int]) -> torch.Tensor:
+    """
+    Performs differentiable quantization on tensor using scale, offset, and bitwidth parameters.
 
-        :param tensor: Tensor to quantize
-        :param delta: Delta value for quantization
-        :param offset: Offset value for quantization
-        :param bitwidth: Quantization bitwidth
-        :return: Resulting tensor
-        """
-        DefaultOpImpl._validate_arguments(tensor, delta, offset, bitwidth)
-        return QuantizeFunc.apply(tensor, delta, offset, bitwidth)
+    :param tensor: Tensor to quantize
+    :param scale: Scale factor for quantization
+    :param offset: Offset value for quantization
+    :param bitwidth: Output bitwidth of quantized tensor
+    :return: Resulting tensor
+    """
+    _validate_arguments(tensor, scale, offset, bitwidth)
+    return QuantizeFunc.apply(tensor, scale, offset, bitwidth)
 
-    @staticmethod
-    def dequantize(tensor: torch.Tensor, delta: torch.Tensor, offset: torch.Tensor) -> torch.Tensor:
-        """
-        Dequantize the tensor, using given parameters
+def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int]) -> torch.Tensor:
+    """
+    Performs differentiable quantize-dequantize operation on tensor using scale, offset, and bitwidth parameters.
 
-        :param tensor: Tensor to dequantize
-        :param delta: Delta value for dequantization
-        :param offset: Offset value for dequantization
-        :return: Resulting tensor
-        """
-        DefaultOpImpl._validate_arguments(tensor, delta, offset)
-        return DequantizeFunc.apply(tensor, delta, offset)
+    :param tensor: Tensor to quantize-dequantize
+    :param scale: Scale factor for quantization
+    :param offset: Offset value for quantization
+    :param bitwidth: simulated quantization bitwidth
+    :return: Resulting tensor
+    """
+    _validate_arguments(tensor, scale, offset, bitwidth)
+    return QuantDequantFunc.apply(tensor, scale, offset, bitwidth)
 
-    @staticmethod
-    def quantize_dequantize(tensor: torch.Tensor, delta: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int]) -> torch.Tensor:
-        """
-        Quantize-dequantize the tensor, using given parameters
+def dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor) -> torch.Tensor:
+    """
+    Performs differentiable dequantize operation on tensor using scale and offset parameters.
 
-        :param tensor: Tensor to quantize-dequantize
-        :param delta: Delta value for quantize-dequantize
-        :param offset: Offset value for quantize-dequantize
-        :param bitwidth: Quantize-dequantize bitwidth
-        :return: Resulting tensor
-        """
-        DefaultOpImpl._validate_arguments(tensor, delta, offset, bitwidth)
-        return QuantDequantFunc.apply(tensor, delta, offset, bitwidth)
+    :param tensor: Tensor to quantize
+    :param scale: Scale factor for quantization
+    :param offset: Offset value for quantization
+    :return: Resulting tensor
+    """
+    _validate_arguments(tensor, scale, offset)
+    return DequantizeFunc.apply(tensor, scale, offset)
 
 
 # pylint: disable=abstract-method
@@ -111,25 +101,25 @@ class QuantizeFunc(torch.autograd.Function):
     """
     # pylint: disable=arguments-differ
     @staticmethod
-    def forward(ctx, tensor: torch.Tensor, delta: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int]):
-        x_round = torch.round(tensor / delta) - torch.round(offset)
-        if tensor.requires_grad or delta.requires_grad or offset.requires_grad:
+    def forward(ctx, tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int]):
+        x_round = torch.round(tensor / scale) - torch.round(offset)
+        if tensor.requires_grad or scale.requires_grad or offset.requires_grad:
             mask = (x_round >= 0) * (x_round <= (2 ** bitwidth - 1))
         else:
             mask = None
-        ctx.save_for_backward(tensor, delta, offset, mask)
+        ctx.save_for_backward(tensor, scale, offset, mask)
         return torch.clamp(x_round, 0, 2 ** bitwidth - 1)
 
     # pylint: disable=arguments-differ
     @staticmethod
     def backward(ctx, grad):
-        tensor, delta, offset, mask = ctx.saved_tensors
-        if tensor.requires_grad or delta.requires_grad or offset.requires_grad:
+        tensor, scale, offset, mask = ctx.saved_tensors
+        if tensor.requires_grad or scale.requires_grad or offset.requires_grad:
             masked_grad = grad * mask
-        tensor_grad = masked_grad / delta if tensor.requires_grad else None
-        delta_grad = -masked_grad * tensor / (delta ** 2) if delta.requires_grad else None
+        tensor_grad = masked_grad / scale if tensor.requires_grad else None
+        scale_grad = -masked_grad * tensor / (scale ** 2) if scale.requires_grad else None
         offset_grad = -masked_grad if offset.requires_grad else None
-        return tensor_grad, delta_grad, offset_grad, None
+        return tensor_grad, scale_grad, offset_grad, None
 
 
 # pylint: disable=abstract-method
@@ -139,22 +129,22 @@ class DequantizeFunc(torch.autograd.Function):
     """
     # pylint: disable=arguments-differ
     @staticmethod
-    def forward(ctx, tensor: torch.Tensor, delta: torch.Tensor, offset: torch.Tensor):
+    def forward(ctx, tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor):
         rounded_offset = torch.round(offset)
-        x_dequant = (tensor + rounded_offset) * delta
-        ctx.save_for_backward(tensor, delta, offset, rounded_offset)
+        x_dequant = (tensor + rounded_offset) * scale
+        ctx.save_for_backward(tensor, scale, offset, rounded_offset)
         return x_dequant
 
     # pylint: disable=arguments-differ
     @staticmethod
     def backward(ctx, grad):
-        tensor, delta, offset, rounded_offset = ctx.saved_tensors
+        tensor, scale, offset, rounded_offset = ctx.saved_tensors
         if tensor.requires_grad or offset.requires_grad:
-            tensor_and_offset_grad = grad * delta
+            tensor_and_offset_grad = grad * scale
         tensor_grad = tensor_and_offset_grad if tensor.requires_grad else None
-        delta_grad = grad * (tensor + rounded_offset) if delta.requires_grad else None
+        scale_grad = grad * (tensor + rounded_offset) if scale.requires_grad else None
         offset_grad = tensor_and_offset_grad if offset.requires_grad else None
-        return tensor_grad, delta_grad, offset_grad
+        return tensor_grad, scale_grad, offset_grad
 
 
 # pylint: disable=abstract-method
@@ -164,23 +154,23 @@ class QuantDequantFunc(torch.autograd.Function):
     """
     # pylint: disable=arguments-differ
     @staticmethod
-    def forward(ctx, tensor: torch.Tensor, delta: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int]):
+    def forward(ctx, tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int]):
         rounded_offset = torch.round(offset)
-        x_round = torch.round(tensor / delta) - rounded_offset
+        x_round = torch.round(tensor / scale) - rounded_offset
         x_quant = torch.clamp(x_round, 0, 2 ** bitwidth - 1)
-        if tensor.requires_grad or delta.requires_grad or offset.requires_grad:
+        if tensor.requires_grad or scale.requires_grad or offset.requires_grad:
             mask = (x_round >= 0) * (x_round <= (2 ** bitwidth - 1))
         else:
             mask = None
-        ctx.save_for_backward(tensor, delta, offset, rounded_offset, mask, x_quant)
-        return (x_quant + rounded_offset) * delta
+        ctx.save_for_backward(tensor, scale, offset, rounded_offset, mask, x_quant)
+        return (x_quant + rounded_offset) * scale
 
     # pylint: disable=arguments-differ
     @staticmethod
     def backward(ctx, grad):
-        tensor, delta, offset, rounded_offset, mask, x_quant = ctx.saved_tensors
+        tensor, scale, offset, rounded_offset, mask, x_quant = ctx.saved_tensors
         tensor_grad = grad * mask if tensor.requires_grad else None
-        delta_grad = -grad * (mask * tensor / delta - x_quant - rounded_offset) \
-            if delta.requires_grad else None
-        offset_grad = -grad * (mask * delta - delta) if offset.requires_grad else None
-        return tensor_grad, delta_grad, offset_grad, None
+        scale_grad = -grad * (mask * tensor / scale - x_quant - rounded_offset) \
+            if scale.requires_grad else None
+        offset_grad = -grad * (mask * scale - scale) if offset.requires_grad else None
+        return tensor_grad, scale_grad, offset_grad, None
