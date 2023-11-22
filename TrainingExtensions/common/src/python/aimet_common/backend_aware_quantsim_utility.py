@@ -165,15 +165,15 @@ def get_backend_info(op_names: List[str], master_opdef_path: str, backend_opdef_
         for i, op_name in enumerate(op_names):
             op_name_in_opdef = op_names_according_to_backend[i]
 
-            if op_name not in op_and_supported_backend_info_map:
+            if op_name_in_opdef not in op_and_supported_backend_info_map:
 
                 activation_constraints = get_activation_constraints(parser, op_name_in_opdef)
                 weight_constraints = get_weight_constraints(parser, op_name_in_opdef)
 
                 supported_backend_info = SupportedBackendInfo(activation_constraints, weight_constraints)
-                op_and_supported_backend_info_map[op_name] = supported_backend_info
+                op_and_supported_backend_info_map[op_name_in_opdef] = supported_backend_info
 
-                merge_constraints_from_xmls(op_name, supported_backend_info, merged_opname_supported_backend_info_map)
+                merge_constraints_from_xmls(op_name_in_opdef, supported_backend_info, merged_opname_supported_backend_info_map)
 
     return merged_opname_supported_backend_info_map
 
@@ -409,13 +409,12 @@ def populate_supported_kernels_in_json_config(master_opdef_file_path: str,
     with open(json_config_file_path) as file:
         quantsim_config = json.load(file)
 
-    for op_type in supported_kernels_dict:
-        supported_kernels = get_supported_kernels_from_backend_info(supported_kernels_dict[op_type])
-        if op_type in quantsim_config[ConfigDictKeys.OP_TYPE]:
-            quantsim_config[ConfigDictKeys.OP_TYPE][op_type][ConfigDictKeys.SUPPORTED_KERNELS] = supported_kernels
-        else:
-            quantsim_config[ConfigDictKeys.OP_TYPE][op_type] = {}
-            quantsim_config[ConfigDictKeys.OP_TYPE][op_type][ConfigDictKeys.SUPPORTED_KERNELS] = supported_kernels
+    for qnn_op_type in supported_kernels_dict:
+        supported_kernels = get_supported_kernels_from_backend_info(supported_kernels_dict[qnn_op_type])
+        if qnn_op_type not in quantsim_config[ConfigDictKeys.OP_TYPE]:
+            quantsim_config[ConfigDictKeys.OP_TYPE][qnn_op_type] = {}
+
+        quantsim_config[ConfigDictKeys.OP_TYPE][qnn_op_type][ConfigDictKeys.SUPPORTED_KERNELS] = supported_kernels
 
     with open(json_config_file_path, 'w') as file:
         json.dump(quantsim_config, file, indent=4)

@@ -623,7 +623,7 @@ def current_config_in_supported_kernels(current_dtype_bw: QuantDtypeBwInfo, supp
                 if param_config[ConfigDictKeys.DTYPE] == current_dtype_bw.param_dtype and \
                     param_config[ConfigDictKeys.BITWIDTH] == current_dtype_bw.param_bw:
                     return True
-
+                return False
             return True
 
     return False
