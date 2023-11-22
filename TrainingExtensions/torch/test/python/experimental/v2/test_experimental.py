@@ -42,6 +42,28 @@ from aimet_torch.experimental.v2.quantization.backends import default as default
 
 VectorSetForTest = namedtuple("VectorSetForTest", ["tensor", "tensor_q", "tensor_qdq", "mask", "delta", "offset", "bitwidth"])
 
+bfloat16_compat_per_tensor_4b_test_set = VectorSetForTest(
+    tensor=torch.tensor([
+            [-1004.0, -1000.0, -15.375, -11.25, -3.25, 0.25, 500.0],
+            [-1.375, -0.75, -0.125, 0, 1.125, 3, 10]
+        ]),
+    tensor_q=torch.tensor([
+            [0, 0, 0, 0, 0, 5, 15],
+            [2, 3, 5, 5, 7, 11, 15]
+        ]),
+    tensor_qdq=torch.tensor([
+            [-2.5, -2.5, -2.5, -2.5, -2.5, 0.0, 5.0],
+            [-1.5, -1.0, 0.0, 0.0, 1.0, 3.0, 5.0]
+        ]),
+    mask=torch.tensor([
+        [1, 1, 1, 1, 1, 0, 1],
+        [0, 0, 0, 0, 0, 0, 1]
+    ],  dtype=torch.bool),
+    delta=torch.tensor([0.5]),
+    offset=torch.tensor([-5]),
+    bitwidth=4
+)
+
 bfloat16_compat_per_tensor_8b_test_set = VectorSetForTest(
     tensor=torch.tensor([
             [-1004.0, -1000.0, -15.375, -11.25, -3.25, 0.25, 500.0],
@@ -64,26 +86,26 @@ bfloat16_compat_per_tensor_8b_test_set = VectorSetForTest(
     bitwidth=8
 )
 
-bfloat16_compat_per_tensor_16b_test_set = VectorSetForTest(
+per_tensor_4b_test_set = VectorSetForTest(
     tensor=torch.tensor([
-            [-1004.0, -1000.0, -15.375, -11.25, -3.25, 0.25, 500.0],
-            [-1.375, -0.75, -0.125, 0, 1.125, 3, 10]
-        ]),
+            [-1005.8, -1000.1, -15.4, -11.24, -3.3, 0.2, 500.4],
+            [-1.3, -0.76, -0.11, 0, 1.01, 3, 10.4]
+            ]),
     tensor_q=torch.tensor([
-            [0, 0, 0, 0, 0, 5, 1004],
-            [2, 3, 5, 5, 7, 11, 25]
+            [0, 0, 0, 0, 0, 5, 15],
+            [2, 3, 5, 5, 7, 11, 15]
         ]),
     tensor_qdq=torch.tensor([
-            [-2.5, -2.5, -2.5, -2.5, -2.5, 0.0, 500.0],
-            [-1.5, -1.0, 0.0, 0.0, 1.0, 3.0, 10.0]
+            [-2.5, -2.5, -2.5, -2.5, -2.5, 0.0, 5.0],
+            [-1.5, -1.0, 0.0, 0.0, 1.0, 3.0, 5.0]
         ]),
     mask=torch.tensor([
-        [1, 1, 1, 1, 1, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0]
+        [1, 1, 1, 1, 1, 0, 1],
+        [0, 0, 0, 0, 0, 0, 1]
     ],  dtype=torch.bool),
     delta=torch.tensor([0.5]),
     offset=torch.tensor([-5]),
-    bitwidth=16
+    bitwidth=4
 )
 
 per_tensor_8b_test_set = VectorSetForTest(
@@ -106,28 +128,6 @@ per_tensor_8b_test_set = VectorSetForTest(
     delta=torch.tensor([0.5]),
     offset=torch.tensor([-133]),
     bitwidth=8
-)
-
-per_tensor_16b_test_set = VectorSetForTest(
-    tensor=torch.tensor([
-            [-1005.8, -1000.1, -15.4, -11.24, -3.3, 0.2, 500.4],
-            [-1.3, -0.76, -0.11, 0, 1.01, 3, 10.4]
-            ]),
-    tensor_q=torch.tensor([
-            [0, 0, 0, 0, 0, 5, 1006],
-            [2, 3, 5, 5, 7, 11, 26]
-        ]),
-    tensor_qdq=torch.tensor([
-            [-2.5, -2.5, -2.5, -2.5, -2.5, 0.0, 500.5],
-            [-1.5, -1. , 0.0, 0.0, 1.0, 3.0, 10.5]
-        ]),
-    mask=torch.tensor([
-        [1, 1, 1, 1, 1, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0]
-    ],  dtype=torch.bool),
-    delta=torch.tensor([0.5]),
-    offset=torch.tensor([-5]),
-    bitwidth=16
 )
 
 per_channel_4b_test_set = VectorSetForTest(
@@ -172,28 +172,6 @@ per_channel_8b_test_set = VectorSetForTest(
     delta=torch.tensor([[0.5], [0.0625]]),
     offset=torch.tensor([[-133], [-127]]),
     bitwidth=8
-)
-
-per_channel_16b_test_set = VectorSetForTest(
-    tensor=torch.tensor([
-            [-1005.8, -1000.1, -15.4, -11.24, -3.3, 0.2, 500.4],
-            [-1.3, -0.76, -0.11, 0, 1.01, 3, 100]
-            ]),
-    tensor_q=torch.tensor([
-            [0, 0, 0, 0, 0, 5, 1006],
-            [0, 0, 0, 0, 15, 47, 1599]
-        ]),
-    tensor_qdq=torch.tensor([
-            [-2.5, -2.5, -2.5, -2.5, -2.5, 0.0, 500.5],
-            [0.0625, 0.0625, 0.0625, 0.0625, 1.0, 3.0, 100.0]
-        ]),
-    mask=torch.tensor([
-        [1, 1, 1, 1, 1, 0, 0],
-        [1, 1, 1, 1, 0, 0, 0]
-    ], dtype=torch.bool),
-    delta=torch.tensor([[0.5], [0.0625]]),
-    offset=torch.tensor([[-5], [1]]),
-    bitwidth=16
 )
 
 class STE(torch.autograd.Function):
@@ -448,11 +426,10 @@ class TestQuantizationBackends:
         else:
             assert random_tensor.grad is None
 
-    @pytest.mark.parametrize("test_set", (per_tensor_8b_test_set,
-                                          per_tensor_16b_test_set,
+    @pytest.mark.parametrize("test_set", (per_tensor_4b_test_set,
+                                          per_tensor_8b_test_set,
                                           per_channel_4b_test_set,
-                                          per_channel_8b_test_set,
-                                          per_channel_16b_test_set))
+                                          per_channel_8b_test_set))
     @pytest.mark.parametrize("dtype", (torch.float16, torch.float32))
     @pytest.mark.skipif(not torch.cuda.is_available(), reason='cannot test as there\'s only cpu on this machine')
     def test_quantize_with_predefined_values(self, backend_module, test_set, dtype):
@@ -465,11 +442,10 @@ class TestQuantizationBackends:
         assert torch.all(test_set.tensor.grad[test_set.mask] == 0)
         assert torch.allclose(test_set.tensor.grad[~test_set.mask], (grad_in / test_set.delta)[~test_set.mask])
 
-    @pytest.mark.parametrize("test_set", (per_tensor_8b_test_set,
-                                          per_tensor_16b_test_set,
+    @pytest.mark.parametrize("test_set", (per_tensor_4b_test_set,
+                                          per_tensor_8b_test_set,
                                           per_channel_4b_test_set,
-                                          per_channel_8b_test_set,
-                                          per_channel_16b_test_set))
+                                          per_channel_8b_test_set))
     @pytest.mark.parametrize("dtype", (torch.float16, torch.float32))
     @pytest.mark.skipif(not torch.cuda.is_available(), reason='cannot test as there\'s only cpu on this machine')
     def test_dequantize_with_predefined_values(self, backend_module, test_set, dtype):
@@ -478,11 +454,10 @@ class TestQuantizationBackends:
         tensor_qdq = backend_module.dequantize(tensor_q, test_set.delta, test_set.offset)
         assert torch.all(tensor_qdq == test_set.tensor_qdq)
 
-    @pytest.mark.parametrize("test_set", (per_tensor_8b_test_set,
-                                          per_tensor_16b_test_set,
+    @pytest.mark.parametrize("test_set", (per_tensor_4b_test_set,
+                                          per_tensor_8b_test_set,
                                           per_channel_4b_test_set,
-                                          per_channel_8b_test_set,
-                                          per_channel_16b_test_set))
+                                          per_channel_8b_test_set))
     @pytest.mark.parametrize("dtype", (torch.float16, torch.float32))
     @pytest.mark.skipif(not torch.cuda.is_available(), reason='cannot test as there\'s only cpu on this machine')
     def test_qdq_with_predefined_values(self, backend_module, test_set, dtype):
@@ -495,8 +470,8 @@ class TestQuantizationBackends:
         assert torch.all(test_set.tensor.grad[test_set.mask] == 0)
         assert torch.all(test_set.tensor.grad[~test_set.mask] == grad_in[~test_set.mask])
 
-    @pytest.mark.parametrize("test_set", (bfloat16_compat_per_tensor_8b_test_set,
-                                          bfloat16_compat_per_tensor_16b_test_set))
+    @pytest.mark.parametrize("test_set", (bfloat16_compat_per_tensor_4b_test_set,
+                                          bfloat16_compat_per_tensor_8b_test_set))
     @pytest.mark.skipif(not torch.cuda.is_available(), reason='cannot test as there\'s only cpu on this machine')
     def test_quantize_with_predefined_bfloat_values(self, backend_module, test_set):
         test_set = copy_test_set(test_set, device="cuda:0", dtype=torch.bfloat16)
@@ -508,8 +483,8 @@ class TestQuantizationBackends:
         assert torch.all(test_set.tensor.grad[test_set.mask] == 0)
         assert torch.allclose(test_set.tensor.grad[~test_set.mask], (grad_in / test_set.delta)[~test_set.mask])
 
-    @pytest.mark.parametrize("test_set", (bfloat16_compat_per_tensor_8b_test_set,
-                                          bfloat16_compat_per_tensor_16b_test_set))
+    @pytest.mark.parametrize("test_set", (bfloat16_compat_per_tensor_4b_test_set,
+                                          bfloat16_compat_per_tensor_8b_test_set))
     @pytest.mark.skipif(not torch.cuda.is_available(), reason='cannot test as there\'s only cpu on this machine')
     def test_dequantize_with_predefined_bfloat_values(self, backend_module, test_set):
         test_set = copy_test_set(per_tensor_8b_test_set, dtype=torch.bfloat16, device="cuda")
@@ -517,8 +492,8 @@ class TestQuantizationBackends:
         tensor_qdq = backend_module.dequantize(tensor_q, test_set.delta, test_set.offset)
         assert torch.all(tensor_qdq == test_set.tensor_qdq)
 
-    @pytest.mark.parametrize("test_set", (bfloat16_compat_per_tensor_8b_test_set,
-                                          bfloat16_compat_per_tensor_16b_test_set))
+    @pytest.mark.parametrize("test_set", (bfloat16_compat_per_tensor_4b_test_set,
+                                          bfloat16_compat_per_tensor_8b_test_set))
     @pytest.mark.skipif(not torch.cuda.is_available(), reason='cannot test as there\'s only cpu on this machine')
     def test_qdq_with_predefined_bfloat_values(self, backend_module, test_set):
         test_set = copy_test_set(test_set, dtype=torch.bfloat16, device="cuda")
@@ -616,6 +591,6 @@ class TestQuantizationBackends:
         expected_scale_grad = autograd_based_module.scale.grad
         expected_offset_grad = autograd_based_module.offset.grad
 
-        assert torch.allclose(random_tensor.grad, expected_tensor_grad, atol=1e-3)
-        assert torch.allclose(scale.grad, expected_scale_grad, atol=1e-3)
-        assert torch.allclose(offset.grad, expected_offset_grad, atol=1e-3)
+        assert torch.allclose(random_tensor.grad, expected_tensor_grad, rtol=1e-3)
+        assert torch.allclose(scale.grad, expected_scale_grad, rtol=1e-3)
+        assert torch.allclose(offset.grad, expected_offset_grad, rtol=1e-3)
