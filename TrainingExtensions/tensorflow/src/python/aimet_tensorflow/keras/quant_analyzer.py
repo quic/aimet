@@ -120,11 +120,11 @@ class QuantAnalyzer:
     """
     QuantAnalyzer tool provides
 
-     1) model sensitivity to weight and activation quantization
-     2) per layer sensitivity analysis
-     3) per layer encoding (min - max range)
-     4) per PDF analysis and
-     4) per layer MSE analysis
+    1) model sensitivity to weight and activation quantization
+    2) per layer sensitivity analysis
+    3) per layer encoding (min - max range)
+    4) per PDF analysis and
+    5) per layer MSE analysis
     """
 
     def __init__(self,
