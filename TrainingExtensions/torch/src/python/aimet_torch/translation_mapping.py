@@ -193,5 +193,6 @@ op_to_weight_index_map = {'Conv1d' : 1,
                           'FullyConnected': 1,
                           'LayerNorm': 1,
                           'InstanceNorm': 1,
-                          'GroupNorm': 1
+                          'GroupNorm': 1,
+                          'MatMul': 1
                           }
