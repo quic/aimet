@@ -43,6 +43,7 @@ import tensorflow as tf
 
 from aimet_common.defs import QuantScheme
 from aimet_common.utils import CallbackFunc
+from aimet_tensorflow.keras.model_preparer import prepare_model
 from aimet_tensorflow.keras.quant_analyzer import QuantAnalyzer
 
 # Step 0. Prepare toy dataset to run example code
@@ -83,7 +84,6 @@ def forward_pass_callback(model: tf.keras.Model, _: Any = None) -> None:
     # User should create data loader/iterable using representative dataset and simply run
     # forward passes on the model.
     _ = model.predict(unlabeled_dataset)
-
 # End step 1
 
 
@@ -116,13 +116,13 @@ def eval_callback(model: tf.keras.Model, _: Any = None) -> float:
 
     _, acc = model.evaluate(eval_dataset)
     return acc
-
 # End step 2
 
 
 def quant_analyzer_example():
     # Step 3. Prepare model
     model = tf.keras.applications.ResNet50()
+    prepared_model = prepare_model(model)
     # End step 3
 
     # User action required
@@ -131,7 +131,7 @@ def quant_analyzer_example():
     eval_callback_fn = CallbackFunc(eval_callback, func_callback_args=None)
 
     # Step 4. Create QuantAnalyzer object
-    quant_analyzer = QuantAnalyzer(model=model,
+    quant_analyzer = QuantAnalyzer(model=prepared_model,
                                    forward_pass_callback=forward_pass_callback_fn,
                                    eval_callback=eval_callback_fn)
 
