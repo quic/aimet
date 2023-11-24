@@ -126,6 +126,7 @@ class TestQuantSim:
         inputs = torch.randn((2, 10, 24, 24))
         torch.onnx.export(model, inputs, '/tmp/dummy_model.onnx',
                           training=torch.onnx.TrainingMode.PRESERVE,
+                          opset_version=12,
                           input_names=['input'], output_names=['output'],
                           dynamic_axes={
                               'input': {0: 'batch_size'},
