@@ -38,32 +38,24 @@
 from typing import Union
 import torch
 
-def _is_a_broadcastable_to_b(a: torch.Tensor, b: torch.Tensor) -> bool:
+def _is_expandable(a: torch.Tensor, b: torch.Tensor) -> bool:
+    """
+    Returns true if tensor a is expandable to shape of tensor b
+    """
+    if len(a.shape) > len(b.shape):
+        return False
     for dim_a, dim_b in zip(a.shape[::-1], b.shape[::-1]):
-        if dim_a != 1 and dim_b != 1 and dim_a != dim_b:
+        if dim_a not in (1, dim_b):
             return False
     return True
-
-def _is_a_broadcasted_to_b(a: torch.Tensor, b: torch.Tensor) -> bool:
-    # if tensor b has more dimension than tensor a, a should be extended
-    # to match the number of dimension
-    if len(a.shape) < len(b.shape):
-        return True
-    for dim_a, dim_b in zip(a.shape[::-1], b.shape[::-1]):
-        # Tensor a is broadcasted to tensor b in this case
-        if dim_a == 1 and dim_a < dim_b:
-            return True
-    return False
 
 def _validate_arguments(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int] = None):
     if not tensor.dtype == scale.dtype == offset.dtype:
         raise RuntimeError("Data type of tensor, scale, and offset are should be the same")
     if bitwidth and torch.finfo(tensor.dtype).bits <= bitwidth:
         raise RuntimeError(f"Dtype {tensor.dtype} has insufficient bitwidth to perform {bitwidth} quantization")
-    if _is_a_broadcastable_to_b(tensor, scale):
-        raise RuntimeError(f"Input tensor of shape {tensor.shape} cannot be broadcasted to scale tensor of shape {scale.shape}")
-    if _is_a_broadcasted_to_b(tensor, scale):
-        raise RuntimeError(f"Input tensor of shape {tensor.shape} should not be broadcasted to scale tensor of shape {scale.shape}")
+    if not _is_expandable(scale, tensor):
+        raise RuntimeError(f"Scale of shape {scale.shape} cannot be expanded like input tensor of shape {tensor.shape}")
 
 def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int]) -> torch.Tensor:
     """
