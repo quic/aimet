@@ -34,43 +34,198 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-# pylint: disable=all
+# pylint: disable=redefined-builtin
+""" nn.Modules for quantization operators """
+
+from typing import Optional
+import contextlib
+import functools
 
 import torch
+
+from aimet_torch.experimental.v2.utils import patch_attr, patch_param
+from aimet_torch.experimental.v2.quantization.encoding_analyzer import get_encoding_analyzer_cls
+from aimet_torch.experimental.v2.quantization.backends import get_backend
+from aimet_torch.experimental.v2.utils import ste_round
 
 
 __all__ = ['Quantize', 'QuantizeDequantize', 'Dequantize']
 
 
-class _QuantizerBase(torch.nn.Module):
+class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
+    """
+    Base class for quantization modules.
+
+    :param shape: Shape of the quantization parameters.
+    :param bitwidth: Quantization bitwidth.
+    :param symmetric: If True, performs symmetric quantization;
+                      otherwise, performs asymmetric quantization.
+    :param qscheme: Quantization scheme
+    """
+
+    min: torch.nn.Parameter
+    max: torch.nn.Parameter
+
     def __init__(self, shape, bitwidth, symmetric, qscheme):
         super().__init__()
+        self.shape = shape
+        self.bitwidth = bitwidth
+        self.symmetric = symmetric
+        self.qscheme = qscheme
+        self.encoding_analyzer = get_encoding_analyzer_cls(qscheme)(shape)
+
+        # Raw parameters
         self.register_parameter("min", None)
         self.register_parameter("max", None)
-        self.bitwidth = bitwidth
-        ...
 
-    def get_min(self) -> torch.Tensor:
-        ...
+    def get_min(self) -> Optional[torch.Tensor]:
+        """
+        Compute quantization min to be used for forward pass based on raw parameters.
+        :returns: Quantization min
+        """
+        if self.min is None or self.max is None:
+            return None
+        return self.get_scale() * self.get_offset()
 
-    def get_max(self) -> torch.Tensor:
-        ...
+    def get_max(self) -> Optional[torch.Tensor]:
+        """
+        Compute quantization max to be used for forward pass based on raw parameters.
+        :returns: Quantization max
+        """
+        if self.min is None or self.max is None:
+            return None
+        return self.get_scale() * (self.get_offset() + 2 ** self.bitwidth - 1)
 
-    def get_scale(self) -> torch.Tensor:
-        ...
+    def get_scale(self) -> Optional[torch.Tensor]:
+        """
+        Compute quantization scale to be used for forward pass based on raw parameters.
+        :returns: Quantization scale
+        """
+        if self.min is None or self.max is None:
+            return None
 
-    def get_offset(self) -> torch.Tensor:
-        ...
+        num_bins = 2 ** self.bitwidth - 1
 
+        if self.symmetric:
+            positive_bins = num_bins // 2
+            negative_bins = positive_bins + 1
+            scale = torch.maximum(-self.min / negative_bins, self.max / positive_bins)
+        else:
+            scale = (self.max - self.min) / num_bins
+
+        return scale
+
+    def get_offset(self) -> Optional[torch.Tensor]:
+        """
+        Compute quantization offset to be used for forward pass based on raw parameters.
+        :returns: Quantization offset
+        """
+        if self.min is None or self.max is None:
+            return None
+
+        if self.symmetric:
+            with torch.no_grad():
+                offset = -torch.ones_like(self.min) * 2 ** (self.bitwidth - 1)
+        else:
+            offset = ste_round(self.min / self.get_scale())
+
+        return offset
+
+    @contextlib.contextmanager
     def compute_encodings(self):
-        ...
+        """
+        Observe inputs and update quantization parameters based on the input statistics.
+        During ``compute_encodings`` is enabled, the quantizer forward pass performs
+        dynamic quantization using the batch statistics.
+        """
+        original_forward = self.forward
+
+        @functools.wraps(original_forward)
+        def forward_wrapper(input):
+            batch_statistics = self.encoding_analyzer.update_stats(input)
+            dynamic_min, dynamic_max =\
+                    self.encoding_analyzer.compute_encodings_from_stats(batch_statistics,
+                                                                        self.symmetric,
+                                                                        self.bitwidth)
+            with patch_param(self, 'min', dynamic_min),\
+                    patch_param(self, 'max', dynamic_max):
+                return original_forward(input)
+
+        try:
+            with patch_attr(self, 'forward', forward_wrapper):
+                yield
+        except: # pylint: disable=try-except-raise
+            raise
+        else:
+            min, max = self.encoding_analyzer.compute_encodings(self.symmetric, self.bitwidth)
+
+            if min is None or max is None:
+                return
+
+            if self.min is None:
+                self.min = torch.nn.Parameter(torch.empty(self.shape))
+
+            if self.max is None:
+                self.max = torch.nn.Parameter(torch.empty(self.shape))
+
+            with torch.no_grad():
+                self.min.copy_(min)
+                self.max.copy_(max)
+        finally:
+            self.encoding_analyzer.reset_stats()
 
 
 class Quantize(_QuantizerBase):
-    ...
+    """
+    Applies quantization to the input
+    """
+    def forward(self, input: torch.Tensor):
+        # pylint: disable=missing-docstring
+        """
+        :param input: Input to quantize
+        """
+        scale = self.get_scale()
+        offset = self.get_offset()
+        if scale is None:
+            raise RuntimeError
+        if offset is None:
+            raise RuntimeError
+        return get_backend().quantize(input, scale, offset, self.bitwidth)
+
 
 class QuantizeDequantize(_QuantizerBase):
-    ...
+    """
+    Applies quantization followed by dequantization to the input
+    """
+    def forward(self, input: torch.Tensor):
+        # pylint: disable=missing-docstring
+        """
+        :param input: Input to quantize and dequantize
+        """
+        scale = self.get_scale()
+        offset = self.get_offset()
+
+        if scale is None:
+            raise RuntimeError
+
+        if offset is None:
+            raise RuntimeError
+
+        return get_backend().quantize_dequantize(input, scale, offset, self.bitwidth)
+
 
 class Dequantize(torch.nn.Module):
-    ...
+    """
+    Applies dequantization to the input
+    """
+    def forward(self,
+                input: torch.Tensor,
+                scale: torch.Tensor,
+                offset: torch.Tensor):
+        # pylint: disable=no-self-use
+        """
+        :param input: Input to dequantize
+        :param scale: Quantization scale
+        :param offset: Quantization offset
+        """
+        return get_backend().dequantize(input, scale, offset)

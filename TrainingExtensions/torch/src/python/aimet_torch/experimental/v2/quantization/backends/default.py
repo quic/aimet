@@ -38,23 +38,15 @@
 from typing import Union
 import torch
 
-def _is_expandable(a: torch.Tensor, b: torch.Tensor) -> bool:
-    """
-    Returns true if tensor a is expandable to shape of tensor b
-    """
-    if len(a.shape) > len(b.shape):
-        return False
-    for dim_a, dim_b in zip(a.shape[::-1], b.shape[::-1]):
-        if dim_a not in (1, dim_b):
-            return False
-    return True
+from aimet_torch.experimental.v2.utils import _is_expandable
+
 
 def _validate_arguments(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int] = None):
     if not tensor.dtype == scale.dtype == offset.dtype:
         raise RuntimeError("Data type of tensor, scale, and offset are should be the same")
     if bitwidth and torch.finfo(tensor.dtype).bits <= bitwidth:
         raise RuntimeError(f"Dtype {tensor.dtype} has insufficient bitwidth to perform {bitwidth} quantization")
-    if not _is_expandable(scale, tensor):
+    if not _is_expandable(scale.shape, tensor.shape):
         raise RuntimeError(f"Scale of shape {scale.shape} cannot be expanded like input tensor of shape {tensor.shape}")
 
 def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int]) -> torch.Tensor:

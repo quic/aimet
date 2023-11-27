@@ -44,9 +44,6 @@ from aimet_torch.experimental.v2.quantization.modules.quantize import _Quantizer
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 
 
-pytestmark = pytest.mark.skip("not implemented")
-
-
 _PARAMETER_SHAPE = (100,)
 
 def _initialize(q, symmetric):
@@ -127,7 +124,7 @@ def test_compute_encodings(q: Union[Quantize, QuantizeDequantize],
       1. forward() returns dynamic quantization output
       2. self.get_min(), self.get_max() == self.encoding_analyzer.compute_encodings()
     """
-    dynamic_min, dynamic_max = q.encoding_analyzer.compute_dynamic_encodings(x)
+    dynamic_min, dynamic_max = q.encoding_analyzer.compute_dynamic_encodings(x, q.symmetric, q.bitwidth)
 
     if q.symmetric:
         dynamic_scale = torch.maximum(dynamic_max/127, -dynamic_min/128)

@@ -36,11 +36,42 @@
 # =============================================================================
 # pylint: disable=all
 
-def set_backend():
-    ...
+from aimet_torch.experimental.v2.utils import _ContextManager
+
+
+_CURRENT_BACKEND = 'default'
+
+_SUPPORTED_BACKENDS = {
+    'default': None,
+}
+
+
+def set_global_backend(name) -> None:
+    global _CURRENT_BACKEND
+    _CURRENT_BACKEND = name
+
+
+class set_backend(_ContextManager):
+    def __init__(self, name):
+        if name not in _SUPPORTED_BACKENDS:
+            supported_backend_names = ", ".join(_SUPPORTED_BACKENDS.keys())
+            raise RuntimeError(f"Backend '{name}' is not supported. "
+                               f"Please choose one of: {supported_backend_names}")
+
+        old_backend = _CURRENT_BACKEND
+        self._action = lambda: set_global_backend(name)
+        self._cleanup = lambda: set_global_backend(old_backend)
+
+
 
 def get_backend():
-    ...
+    if _SUPPORTED_BACKENDS[_CURRENT_BACKEND] is None:
+        # Lazy import
+        import importlib
+        module_name = f'aimet_torch.experimental.v2.quantization.backends.{_CURRENT_BACKEND}'
+        _SUPPORTED_BACKENDS[_CURRENT_BACKEND] = importlib.import_module(module_name)
+
+    return _SUPPORTED_BACKENDS[_CURRENT_BACKEND]
 
 
-__all__ = ['set_backend', 'get_backend']
+__all__ = ['set_global_backend', 'set_backend', 'get_backend']
