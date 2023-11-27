@@ -166,7 +166,6 @@ def test_compute_encodings(q: Union[Quantize, QuantizeDequantize],
 def test_compute_encodings_with_no_input(q: _QuantizerBase):
     """
     :param q: Quantize or QuantizeDequantize module
-    :param x: Input tensor
 
     Given: During compute_encodings
     When:
@@ -200,6 +199,8 @@ def test_compute_encodings_with_no_input(q: _QuantizerBase):
 @pytest.mark.parametrize('q', [
     quantize(symmetric=True, initialized=True),
     quantize_dequantize(symmetric=True, initialized=True),
+    quantize(symmetric=False, initialized=True),
+    quantize_dequantize(symmetric=False, initialized=True),
 ])
 def test_backward_during_compute_encodings(q: _QuantizerBase, x: torch.Tensor):
     """
@@ -236,7 +237,7 @@ def test_compute_encodings_updates_parameters_upon_exit(q: _QuantizerBase, x: to
     When:
       1. forward() invoked
       2. Exit compute_encodings() context
-    Then: min/max/scale/offset are updated when exiting computge_encodings
+    Then: min/max/scale/offset are updated when exiting compute_encodings
     """
     assert q.get_min() is None
     assert q.get_max() is None
@@ -336,7 +337,7 @@ def test_backward_with_no_grad(q, x: torch.Tensor):
     When:
       1. forward() invoked with torch.no_grad()
       2. backward() invoked
-    Then: self.min.grad and self.max.grad should be computed
+    Then: self.min.grad and self.max.grad should not be computed
     """
     x = x.clone().requires_grad_(True)
     with torch.no_grad():
