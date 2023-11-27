@@ -55,6 +55,7 @@ class TestAdaroundOptimizer:
     Test functions in utils
     """
 
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="This unit-test is meant to be run on GPU")
     @pytest.mark.parametrize("warm_start", [1.0, 0.2])
     def test_optimize_rounding(self, warm_start):
         if version.parse(torch.__version__) >= version.parse("1.13"):
