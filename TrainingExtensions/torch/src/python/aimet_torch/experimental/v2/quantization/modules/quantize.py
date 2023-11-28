@@ -36,4 +36,41 @@
 # =============================================================================
 # pylint: disable=all
 
-from .utils import *
+import torch
+
+
+__all__ = ['Quantize', 'QuantizeDequantize', 'Dequantize']
+
+
+class _QuantizerBase(torch.nn.Module):
+    def __init__(self, shape, bitwidth, symmetric, qscheme):
+        super().__init__()
+        self.register_parameter("min", None)
+        self.register_parameter("max", None)
+        self.bitwidth = bitwidth
+        ...
+
+    def get_min(self) -> torch.Tensor:
+        ...
+
+    def get_max(self) -> torch.Tensor:
+        ...
+
+    def get_scale(self) -> torch.Tensor:
+        ...
+
+    def get_offset(self) -> torch.Tensor:
+        ...
+
+    def compute_encodings(self):
+        ...
+
+
+class Quantize(_QuantizerBase):
+    ...
+
+class QuantizeDequantize(_QuantizerBase):
+    ...
+
+class Dequantize(torch.nn.Module):
+    ...
