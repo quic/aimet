@@ -66,7 +66,7 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
     min: torch.nn.Parameter
     max: torch.nn.Parameter
 
-    def __init__(self, shape, bitwidth, symmetric, qscheme):
+    def __init__(self, shape, bitwidth: int, symmetric: bool, qscheme):
         super().__init__()
         self.shape = shape
         self.bitwidth = bitwidth
@@ -74,16 +74,22 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
         self.qscheme = qscheme
         self.encoding_analyzer = get_encoding_analyzer_cls(qscheme)(shape)
 
-        # Raw parameters
+        # Raw quantization parameters
         self.register_parameter("min", None)
         self.register_parameter("max", None)
+
+    def is_initialized(self) -> bool:
+        """
+        Returns true if the quantization parameters are initialized.
+        """
+        return self.min is not None or self.max is not None
 
     def get_min(self) -> Optional[torch.Tensor]:
         """
         Compute quantization min to be used for forward pass based on raw parameters.
         :returns: Quantization min
         """
-        if self.min is None or self.max is None:
+        if not self.is_initialized():
             return None
         return self.get_scale() * self.get_offset()
 
@@ -92,7 +98,7 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
         Compute quantization max to be used for forward pass based on raw parameters.
         :returns: Quantization max
         """
-        if self.min is None or self.max is None:
+        if not self.is_initialized():
             return None
         return self.get_scale() * (self.get_offset() + 2 ** self.bitwidth - 1)
 
@@ -101,7 +107,7 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
         Compute quantization scale to be used for forward pass based on raw parameters.
         :returns: Quantization scale
         """
-        if self.min is None or self.max is None:
+        if not self.is_initialized():
             return None
 
         num_bins = 2 ** self.bitwidth - 1
@@ -120,7 +126,7 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
         Compute quantization offset to be used for forward pass based on raw parameters.
         :returns: Quantization offset
         """
-        if self.min is None or self.max is None:
+        if not self.is_initialized():
             return None
 
         if self.symmetric:
@@ -162,10 +168,8 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
             if min is None or max is None:
                 return
 
-            if self.min is None:
+            if not self.is_initialized():
                 self.min = torch.nn.Parameter(torch.empty(self.shape))
-
-            if self.max is None:
                 self.max = torch.nn.Parameter(torch.empty(self.shape))
 
             with torch.no_grad():
@@ -184,12 +188,14 @@ class Quantize(_QuantizerBase):
         """
         :param input: Input to quantize
         """
+        if not self.is_initialized():
+            raise RuntimeError(
+                'Failed to run Quantize since quantization parameters are not initialized.'
+                ' Please initialize the quantization parameters using `compute_encodings()`.'
+            )
+
         scale = self.get_scale()
         offset = self.get_offset()
-        if scale is None:
-            raise RuntimeError
-        if offset is None:
-            raise RuntimeError
         return get_backend().quantize(input, scale, offset, self.bitwidth)
 
 
@@ -202,15 +208,14 @@ class QuantizeDequantize(_QuantizerBase):
         """
         :param input: Input to quantize and dequantize
         """
+        if not self.is_initialized():
+            raise RuntimeError(
+                'Failed to run QuantizeDequantize since quantization parameters are not initialized.'
+                ' Please initialize the quantization parameters using `compute_encodings()`.'
+            )
+
         scale = self.get_scale()
         offset = self.get_offset()
-
-        if scale is None:
-            raise RuntimeError
-
-        if offset is None:
-            raise RuntimeError
-
         return get_backend().quantize_dequantize(input, scale, offset, self.bitwidth)
 
 
