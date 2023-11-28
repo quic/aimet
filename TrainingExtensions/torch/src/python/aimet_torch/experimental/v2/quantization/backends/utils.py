@@ -36,4 +36,11 @@
 # =============================================================================
 # pylint: disable=all
 
-from .utils import *
+def set_backend():
+    ...
+
+def get_backend():
+    ...
+
+
+__all__ = ['set_backend', 'get_backend']
