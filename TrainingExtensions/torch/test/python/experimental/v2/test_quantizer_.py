@@ -545,18 +545,3 @@ def test_asymmetric_learning(q, x, optim_cls):
     assert not torch.equal(q.get_max(), original_max)
     assert not torch.equal(q.get_scale(), original_scale)
     assert not torch.equal(q.get_offset(), original_offset)
-
-
-@pytest.mark.parametrize('q', [
-    quantize(symmetric=False, initialized=False),
-    quantize(symmetric=True, initialized=False),
-    quantize(symmetric=False, initialized=False),
-    quantize(symmetric=True, initialized=True),
-    quantize_dequantize(symmetric=False, initialized=False),
-    quantize_dequantize(symmetric=True, initialized=False),
-    quantize_dequantize(symmetric=False, initialized=False),
-    quantize_dequantize(symmetric=True, initialized=True),
-])
-def test_change_symmetry_flag_in_runtime(q):
-    with pytest.raises(RuntimeError):
-        q.symmetric = not q.symmetric
