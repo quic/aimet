@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -34,79 +34,87 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-# pylint: disable=all
-from typing import TypeVar, Generic, Tuple, Type, Optional
-import abc
+# pylint: disable=redefined-builtin
+# pylint: disable=arguments-differ
+# pylint: disable=missing-docstring
+# pylint: disable=no-member
+
+""" Computes statistics and encodings """
+
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-
+from enum import Enum
+from typing import TypeVar, Generic, Tuple, Optional
 import torch
+from aimet_torch.experimental.v2.utils import reduce, StatisticsNotFoundError
 
-from aimet_torch.experimental.v2.utils import reduce
 
-
-@dataclass(frozen=True)
+@dataclass
 class _MinMaxRange:
     min: Optional[torch.Tensor] = None
     max: Optional[torch.Tensor] = None
 
-
 class _Histogram:
     # TODO
-    ...
-
+    pass
 
 _Statistics = TypeVar('_Statistics', _MinMaxRange, _Histogram)
 
+class _Observer(Generic[_Statistics], ABC):
+    """
+    Observes and gathers statistics
+    """
+    def __init__(self, min_max_shape: torch.Tensor):
+        self.shape = min_max_shape
 
-class _Observer(Generic[_Statistics], abc.ABC):
-    def __init__(self, shape):
-        self.shape = shape
+    @abstractmethod
+    def collect_stats(self, input_tensor: torch.Tensor) -> _Statistics:
+        pass
 
-    @abc.abstractmethod
-    def collect_stats(self, x: torch.Tensor) -> _Statistics:
-        ...
-
-    @abc.abstractmethod
+    @abstractmethod
     def merge_stats(self, stats: _Statistics):
-        ...
+        pass
 
-    @abc.abstractmethod
+    @abstractmethod
     def reset_stats(self):
-        ...
+        pass
 
-    @abc.abstractmethod
+    @abstractmethod
     def get_stats(self) -> _Statistics:
-        ...
+        pass
 
 
 class _MinMaxObserver(_Observer[_MinMaxRange]):
-    def __init__(self, shape):
-        super().__init__(shape)
+    """
+    Observer for Min-Max calibration technique
+    """
+    def __init__(self, min_max_shape: torch.Tensor):
+        super().__init__(min_max_shape)
         self.stats = _MinMaxRange()
 
     @torch.no_grad()
-    def collect_stats(self, x: torch.Tensor) -> _MinMaxRange:
-        min = reduce(x, shape=self.shape, reduce_op=torch.min).values
-        max = reduce(x, shape=self.shape, reduce_op=torch.max).values
-        return _MinMaxRange(min, max)
+    def collect_stats(self, input_tensor: torch.Tensor) -> _MinMaxRange:
+        new_min = reduce(input_tensor, shape=self.shape, reduce_op=torch.min).values
+        new_max = reduce(input_tensor, shape=self.shape, reduce_op=torch.max).values
+        return _MinMaxRange(new_min, new_max)
 
     @torch.no_grad()
     def merge_stats(self, new_stats: _MinMaxRange):
-        min = self.stats.min
+        updated_min = self.stats.min
         if new_stats.min is not None:
-            if min is None:
-                min = new_stats.min.clone()
+            if updated_min is None:
+                updated_min = new_stats.min.clone()
             else:
-                min = torch.minimum(min, new_stats.min)
+                updated_min = torch.minimum(updated_min, new_stats.min)
 
-        max = self.stats.max
+        updated_max = self.stats.max
         if new_stats.max is not None:
-            if max is None:
-                max = new_stats.max.clone()
+            if updated_max is None:
+                updated_max = new_stats.max.clone()
             else:
-                max = torch.maximum(max, new_stats.max)
+                updated_max = torch.maximum(updated_max, new_stats.max)
 
-        self.stats = _MinMaxRange(min, max)
+        self.stats = _MinMaxRange(updated_min, updated_max)
 
     def reset_stats(self):
         self.stats = _MinMaxRange()
@@ -114,14 +122,16 @@ class _MinMaxObserver(_Observer[_MinMaxRange]):
     def get_stats(self) -> _MinMaxRange:
         return self.stats
 
-
 class _HistogramObserver(_Observer[_Histogram]):
-    def __init__(self, shape):
-        # TODO
-        raise NotImplementedError
+    """
+    Observer for Histogram based calibration techniques (percentile, MSE)
+    """
+    def __init__(self, min_max_shape: torch.Tensor):
+        super().__init__(min_max_shape)
+        self.stats = _Histogram()
 
     @torch.no_grad()
-    def collect_stats(self, x: torch.Tensor) -> _Histogram:
+    def collect_stats(self, input_tensor: torch.Tensor) -> _Histogram:
         # TODO
         raise NotImplementedError
 
@@ -131,94 +141,133 @@ class _HistogramObserver(_Observer[_Histogram]):
         raise NotImplementedError
 
     def reset_stats(self):
-        # TODO
-        raise NotImplementedError
+        self.stats = _Histogram()
 
     def get_stats(self) -> _Histogram:
-        # TODO
-        raise NotImplementedError
+        return self.stats
 
+class CalibrationMethod(Enum):
+    """
+    Enum for quantization calibration method
+    """
+    MinMax = 0
+    SQNR = 1
+    Percentile = 2
+    MSE = 3
 
-class _EncodingAnalyzer(Generic[_Statistics], abc.ABC):
-    observer_cls: Type[_Observer[_Statistics]]
+def get_encoding_analyzer_cls(calibration_method: CalibrationMethod, min_max_shape: torch.Tensor):
+    """
+    Instantiates an EncodingAnalyzer based on the CalibrationMethod
+    """
+    if calibration_method == CalibrationMethod.MinMax:
+        return MinMaxEncodingAnalyzer(min_max_shape)
+    if calibration_method == CalibrationMethod.SQNR:
+        return SqnrEncodingAnalyzer(min_max_shape)
+    if calibration_method == CalibrationMethod.Percentile:
+        return PercentileEncodingAnalyzer(min_max_shape)
+    if calibration_method == CalibrationMethod.MSE:
+        return MseEncodingAnalyzer(min_max_shape)
+    return ValueError('Calibration type must be one of the following:'
+                      'minmax, sqnr, mse, percentile')
 
-    def __init__(self, shape):
-        self.observer = self.observer_cls(shape)
+class _EncodingAnalyzer(Generic[_Statistics], ABC):
 
     @torch.no_grad()
-    def update_stats(self, x: torch.Tensor) -> _Statistics:
-        new_stats = self.observer.collect_stats(x)
+    def update_stats(self, input_tensor: torch.Tensor) -> _Statistics:
+        new_stats = self.observer.collect_stats(input_tensor)
         self.observer.merge_stats(new_stats)
         return new_stats
 
     def reset_stats(self) -> None:
         self.observer.reset_stats()
 
-    def compute_encodings(self, symmetric: bool, bitwidth: int)\
+    def compute_encodings(self, bitwidth: int, is_symmetric: bool) -> torch.Tensor:
+        return self.compute_encodings_from_stats(self.observer.get_stats(), bitwidth, is_symmetric)
+
+    def compute_dynamic_encodings(self, input_tensor: torch.Tensor, bitwidth: int,\
+                                  is_symmetric: bool)-> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
+        return self.compute_encodings_from_stats(
+            self.observer.collect_stats(input_tensor), bitwidth, is_symmetric)
+
+    @abstractmethod
+    def compute_encodings_from_stats(self, stats: _Statistics, bitwidth: int, is_symmetric: bool)\
             -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
-        return self.compute_encodings_from_stats(self.observer.get_stats(), symmetric, bitwidth)
-
-    def compute_dynamic_encodings(self, x: torch.Tensor, symmetric: bool, bitwidth: int)\
-            -> Tuple[torch.Tensor, torch.Tensor]:
-        return self.compute_encodings_from_stats(self.observer.collect_stats(x), symmetric, bitwidth)
-
-    @abc.abstractmethod
-    def compute_encodings_from_stats(self, stats: _Statistics, symmetric: bool, bitwidth: int)\
-            -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
-        ...
-
+        pass
 
 class MinMaxEncodingAnalyzer(_EncodingAnalyzer[_MinMaxRange]):
-    observer_cls = _MinMaxObserver
+    """
+    Encoding Analyzer for Min-Max calibration technique
+    """
+    def __init__(self, shape):
+        self.observer = _MinMaxObserver(shape)
 
     @torch.no_grad()
-    def compute_encodings_from_stats(self, stats: _MinMaxRange, symmetric: bool, bitwidth: int)\
+    def compute_encodings_from_stats(self, stats: _MinMaxRange, bitwidth: int, is_symmetric: bool)\
             -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
+        if bitwidth <= 0:
+            raise ValueError('Bitwidth cannot be less than or equal to 0.')
+
         if stats.min is None or stats.max is None:
-            return None, None
+            raise StatisticsNotFoundError('No statistics present to compute encodings.')
 
-        if symmetric:
-            min = torch.minimum(stats.min, -stats.max)
-            max = torch.maximum(-stats.min, stats.max)
-        else:
-            min = stats.min
-            max = stats.max
+        updated_min = stats.min
+        updated_max = stats.max
 
-        return min, max
+        tiny_num = torch.finfo(stats.min.dtype).tiny
+        # enforces that 0 is within the min/max
+        min_with_zero = torch.minimum(stats.min, torch.zeros_like(stats.min))
+        max_with_zero = torch.maximum(stats.max, torch.zeros_like(stats.max))
 
+         # adjusts any min/max pairing that are too close
+        tensor_diff = (max_with_zero - min_with_zero) / (2 **(bitwidth - 1))
+        update_min = torch.where(tensor_diff < tiny_num, tiny_num * ((2 **bitwidth) - 1), 0.0)
+        update_max = torch.where(tensor_diff < tiny_num, tiny_num * ((2 **(bitwidth - 1)) - 1), 0.0)
+        updated_max = max_with_zero + update_max
+        updated_min = min_with_zero - update_min
+
+        if is_symmetric:
+            # ensures that min/max pairings are symmetric
+            symmetric_min = torch.minimum(updated_min, -updated_max)
+            symmetric_max = torch.maximum(-updated_min, updated_max)
+            return symmetric_min, symmetric_max
+
+        return updated_min, updated_max
 
 class PercentileEncodingAnalyzer(_EncodingAnalyzer[_Histogram]):
-    observer_cls = _HistogramObserver
+    """
+    Encoding Analyzer for Percentile calibration technique
+    """
+    def __init__(self, shape):
+        self.observer = _HistogramObserver(shape)
 
     @torch.no_grad()
-    def compute_encodings_from_stats(self, stats: _Histogram, symmetric: bool, bitwidth: int)\
+    def compute_encodings_from_stats(self, stats: _Histogram, bitwidth: int, is_symmetric: bool)\
             -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
         # TODO
         raise NotImplementedError
-
 
 class SqnrEncodingAnalyzer(_EncodingAnalyzer[_Histogram]):
-    observer_cls = _HistogramObserver
+    """
+    Encoding Analyzer for SQNR Calibration technique
+    """
+    def __init__(self, shape):
+        self.observer = _HistogramObserver(shape)
 
     @torch.no_grad()
-    def compute_encodings_from_stats(self, stats: _Histogram, symmetric: bool, bitwidth: int)\
+    def compute_encodings_from_stats(self, stats: _Histogram, bitwidth: int, is_symmetric: bool)\
             -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
         # TODO
         raise NotImplementedError
-
 
 class MseEncodingAnalyzer(_EncodingAnalyzer[_Histogram]):
-    observer_cls = _HistogramObserver
+    """
+    Encoding Analyzer for Mean Square Error (MSE) Calibration technique
+    """
+    def __init__(self, shape):
+        self.observer = _HistogramObserver(shape)
 
     @torch.no_grad()
-    def compute_encodings_from_stats(self, stats: _Histogram, symmetric: bool, bitwidth: int)\
+    def compute_encodings_from_stats(self, stats: _Histogram, bitwidth: int, is_symmetric: bool)\
             -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
         # TODO
         raise NotImplementedError
-
-
-def get_encoding_analyzer_cls(qscheme):
-    if qscheme == 'minmax':
-        return MinMaxEncodingAnalyzer
-
-    raise ValueError
