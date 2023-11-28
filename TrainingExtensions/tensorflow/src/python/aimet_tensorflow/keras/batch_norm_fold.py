@@ -57,7 +57,7 @@ from aimet_common.defs import QuantScheme, MAP_ROUND_MODE_TO_PYMO
 
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
-from aimet_tensorflow.keras.model_preparer import _handle_normal_keras_layer
+from aimet_tensorflow.keras.model_preparer import _handle_normal_keras_layer, _is_keras_or_tensor_input
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ParamPerTensorQuantizer
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
@@ -508,7 +508,8 @@ def _delete_bn_from_functional(model: tf.keras.Model,
 
                 # Considering the KWARGS as well for the keras symbolic tensor order
                 model_connection_kwargs = [keras_tensor for _, keras_tensor in model_layer_connections[
-                    ModelLayerConnectionsProperties.CALL_KWARGS][current_layer.name].items() if keras_tensor is not None]
+                    ModelLayerConnectionsProperties.CALL_KWARGS][current_layer.name].items()
+                                           if _is_keras_or_tensor_input(keras_tensor)]
                 original_keras_symbolic_tensors_order += model_connection_kwargs
 
                 # Check if a Batch Norm that was deleted is in the original keras symbolic order.
