@@ -38,6 +38,7 @@
 """ Common utility functions """
 from typing import Callable
 import functools
+import itertools
 
 import torch
 
@@ -63,7 +64,7 @@ def _is_reducible(src_shape, target_shape) -> bool:
     return _is_expandable(target_shape, src_shape)
 
 
-def reduce(input: torch.Tensor, shape, reduce_op, **kwargs):
+def reduce(input: torch.Tensor, shape, reduce_op):
     """
     Reduce input into given shape.
 
@@ -73,7 +74,16 @@ def reduce(input: torch.Tensor, shape, reduce_op, **kwargs):
     """
     if not _is_reducible(input.shape, shape):
         raise RuntimeError
-    return reduce_op(input.view(-1, *shape), dim=0, **kwargs)
+
+    padded_shape = (
+        *itertools.repeat(1, len(input.shape) - len(shape)),
+        *shape
+    )
+    reduce_dims = tuple(axis for axis, dim in enumerate(padded_shape) if dim == 1)
+    other_dims = tuple(axis for axis, dim in enumerate(padded_shape) if dim > 1)
+    permute_dims = reduce_dims + other_dims
+
+    return reduce_op(input.permute(permute_dims).reshape(-1, *shape), dim=0, keepdim=False)
 
 
 class _ContextManager:
