@@ -35,6 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Utilities for parsing and applying quantsim configurations from json config file """
+import copy
 from abc import abstractmethod
 from typing import Dict, List, Tuple, Set, Union
 import torch
@@ -54,9 +55,9 @@ from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch.tensor_quantizer import TensorQuantizer
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.onnx_utils import map_torch_types_to_onnx, pytorch_functional_name_to_onnx_dict
+from aimet_torch.translation_mapping import aimet_op_to_backend_op_name_map
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
-
 MAP_PYTORCH_PARAM_NAME_TO_QUANTSIM_NAME = {
     "bias": "bias",
     "weight": "weight"
@@ -115,19 +116,13 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         self._named_modules_to_tensor_quantizers_dict = self._create_named_modules_to_tensor_quantizers_dict()
         self._elementwise_op_to_tensor_quantizers_dict = self._create_elementwise_op_to_tensor_quantizers_dict()
         self._disable_all_quantizers()
-        # TODO remove the below field and use the wrapper.supported_kernels instead. reformat_supported_kernels missing
-        #  as well
         self._supported_kernels = self._parse_supported_kernels()
-
         if ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG:
-            if self.check_correctness_of_dtype_bw_rules(
-                    QuantDtypeBwInfo(self._default_data_type, self._default_output_bw,
-                                     self._default_data_type, self._default_param_bw)):
+            if self.check_correctness_of_dtype_bw_rules(QuantDtypeBwInfo(self._default_data_type, self._default_output_bw,
+                                                                         self._default_data_type, self._default_param_bw)):
                 logger.info("Supported Kernel check for valid dtype and bitwidth overrides completed")
-
         self._set_quantsim_configs()
         self._generate_and_apply_op_instance_specific_config()
-
 
     def _create_named_modules_to_tensor_quantizers_dict(self) -> Dict[torch.nn.Module, TensorQuantizersTupleType]:
         """
@@ -374,30 +369,61 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                     param_config = param_configs[quantsim_param_name]
                     _set_config_for_param(quantsim_wrapper.param_quantizers[param_name], param_config)
 
+    def _merge_op_types_info(self, op_configs: OpTypeType):
+        """
+        Merges op type info. from ONNX op type to backend op types
+
+        :param op_configs: Dictionary containing configurations for ops of certain types
+        """
+        merged_backend_types = []
+
+        for module, _ in self._named_modules_to_tensor_quantizers_dict.items():
+
+            onnx_types = map_torch_types_to_onnx.get(type(module))
+            backend_type = aimet_op_to_backend_op_name_map.get(module.__class__.__name__)
+
+            if onnx_types and backend_type in op_configs and backend_type not in merged_backend_types:
+                backend_type_op_config = op_configs[backend_type]
+                for onnx_type in onnx_types:
+                    if onnx_type in op_configs and backend_type != onnx_type:
+                        onnx_op_config = op_configs[onnx_type]
+                        op_configs[backend_type] = merge_op_type_config(backend_type_op_config, onnx_op_config)
+                        merged_backend_types.append(backend_type)
+
     def _set_op_type_configs(self, op_configs: OpTypeType):
         """
         Set configurations for all ops of specific types (third level of specificity in configuration file)
         :param op_configs: Dictionary containing configurations for ops of certain types
         """
         modified_tensor_quantizers = {}
+
+        self._merge_op_types_info(op_configs)
+
         # Set op type configs for named modules
         for module, input_output_tensor_quantizers in self._named_modules_to_tensor_quantizers_dict.items():
             onnx_types = map_torch_types_to_onnx.get(type(module))
-            if not onnx_types:
-                continue
-            for onnx_type in onnx_types:
-                if onnx_type in op_configs:
-                    op_config = op_configs[onnx_type]
-                    logger.info(' Set op level config for op = {%s}', onnx_type)
-                    self._set_config_for_module(input_output_tensor_quantizers, op_config, modified_tensor_quantizers,
-                                                module)
+
+            backend_type = aimet_op_to_backend_op_name_map.get(module.__class__.__name__)
+
+            if backend_type in op_configs:
+                self._set_config_for_module(input_output_tensor_quantizers, op_configs[backend_type],
+                                            modified_tensor_quantizers, module)
+            else:
+                if not onnx_types:
+                    continue
+                for onnx_type in onnx_types:
+                    if onnx_type in op_configs:
+                        op_config = op_configs[onnx_type]
+                        logger.info(' Set op level config for op = {%s}', onnx_type)
+                        self._set_config_for_module(input_output_tensor_quantizers, op_config, modified_tensor_quantizers,
+                                                    module)
+
         # Set op type configs for elementwise ops
         for op, input_output_tensor_quantizers in self._elementwise_op_to_tensor_quantizers_dict.items():
             if op.type in op_configs:
                 op_config = op_configs[op.type]
                 logger.info(' Set op level config for elementwise op = {%s}', op.type)
                 self._set_config_for_module(input_output_tensor_quantizers, op_config, modified_tensor_quantizers)
-
 
     def _set_config_for_module(self, input_output_tensor_quantizers: TensorQuantizersTupleType, op_config: OpType,
                                modified_tensor_quantizers: Dict[TensorQuantizer, Set], module: torch.nn.Module = None):
@@ -585,8 +611,8 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 output_quantizer.bitwidth = bitwidth
 
     # pylint: disable=arguments-differ
-    def _override_param_bw_dtype(self, quantize_wrapper: QcQuantizeWrapper, data_type: QuantizationDataType,
-                                 bitwidth: int):
+    def _override_param_bw_dtype(self, quantize_wrapper: QcQuantizeWrapper, data_type: QuantizationDataType = None,
+                                 bitwidth: int = None):
         """
         overrides data type and bitwidth default config for param quantizers of given quantsim wrapper.
         :param quantize_wrapper : Quantize wrapper that to which param override will be applied to.
@@ -595,7 +621,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         :return:
         """
         # Set configs for all params
-        if quantize_wrapper.param_quantizers:
+        if quantize_wrapper.param_quantizers and data_type and bitwidth:
             for param_quantizer in quantize_wrapper.param_quantizers.values():
                 param_quantizer.data_type = data_type
                 param_quantizer.bitwidth = bitwidth
@@ -609,7 +635,6 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         :param data_type: data type as QuantizationDataType
         :param bitwidth: bitwidth
         """
-        # For now, only override activation bw and dtype for fp16 supported kernel.
         # For a standalone kernel supporting fp16, only its parameter quantizer needs to be changed to fp16 because
         # requantization will happen on the input and output of the kernel (int8 -> fp16 for input and fp16 -> int8 for
         # output), causing lower precision encodings to be necessary for input and output.
@@ -644,6 +669,10 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 for output_quantizer in quantize_wrapper.output_quantizers:
                     output_quantizer.bitwidth = bitwidth
                     output_quantizer.data_type = data_type
+        else:
+            for quantizer in quantize_wrapper.input_quantizers + quantize_wrapper.output_quantizers:
+                quantizer.bitwidth = bitwidth
+                quantizer.data_type = data_type
 
     # -----------------------------------[ override support end] --------------------------------------------- #
 
@@ -666,6 +695,22 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 if per_channel_quantization:
                     wrapper.enable_per_channel_quantization()
 
+def merge_op_type_config(backend_type_op_config: Dict, onnx_type_op_config: Dict) -> Dict:
+    """
+    Merges op_type_info from onnx_type_op_config to backend_type_op_config
+    except supported kernels
+
+    :param backend_type_op_config: Op. config generated from backend
+    :param onnx_type_op_config:  ONNX op type config
+    :return: Merged op type config
+    """
+    backend_type_op_config_supported_kernels = backend_type_op_config.get(ConfigDictKeys.SUPPORTED_KERNELS)
+    backend_type_op_config = copy.deepcopy(onnx_type_op_config)
+
+    if backend_type_op_config_supported_kernels:
+        backend_type_op_config[ConfigDictKeys.SUPPORTED_KERNELS] = backend_type_op_config_supported_kernels
+
+    return backend_type_op_config
 
 def config_generator_factory(hw_version, supported_kernels, per_channel_quantization):
     """
@@ -885,8 +930,13 @@ class DefaultOpInstanceConfigGenerator(OpInstanceConfigGenerator):
         :param op_type: Type str retrieved from CG op
         :return: supported_kernels and per_channel_quantization fields
         """
-        supported_kernels = self.op_type_supported_kernels.get(op_type,
-                                                               self.op_type_supported_kernels[ConfigDictKeys.DEFAULTS])
+        supported_kernels = []
+        if module.__class__.__name__ in aimet_op_to_backend_op_name_map:
+            supported_kernels = self.op_type_supported_kernels.get(aimet_op_to_backend_op_name_map[module.__class__.__name__])
+
+        if not supported_kernels:
+            supported_kernels = self.op_type_supported_kernels.get(op_type,
+                                                                   self.op_type_supported_kernels[ConfigDictKeys.DEFAULTS])
         pcq = self._generate_pcq(module)
 
         return supported_kernels, pcq

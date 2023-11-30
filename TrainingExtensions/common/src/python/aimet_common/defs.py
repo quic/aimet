@@ -361,7 +361,7 @@ class QuantDtypeBwInfo:
     QuantDtypeBwInfo holds activation dtype/bw and param dtype/bw
     """
 
-    def __init__(self, act_dtype: QuantizationDataType, act_bw: int, param_dtype: QuantizationDataType, param_bw: int):
+    def __init__(self, act_dtype: QuantizationDataType, act_bw: int, param_dtype: QuantizationDataType = None, param_bw: int = None):
         """
         Data class to hold dtype and bw info
         :param act_dtype: Activation datatype of type QuantizationDataType
@@ -387,11 +387,12 @@ class QuantDtypeBwInfo:
         """
         Validate inputs
         """
-        if self.param_dtype == QuantizationDataType.float and self.param_bw != 16:
-            raise ValueError(
-                'float param_dtype can only be used when param_bw is set to 16, not ' + str(self.param_bw))
+        if self.param_dtype and self.param_bw:
+            if self.param_dtype == QuantizationDataType.float and self.param_bw not in [16, 32]:
+                raise ValueError(
+                    'float param_dtype can only be used when param_bw is set to 16, not ' + str(self.param_bw))
 
-        if self.act_dtype == QuantizationDataType.float and self.act_bw != 16:
+        if self.act_dtype == QuantizationDataType.float and self.act_bw not in [16, 32]:
             raise ValueError(
                 'float act_dtype can only be used when act_bw is set to 16, not ' + str(self.act_bw))
 
