@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -36,7 +36,7 @@
 # =============================================================================
 """ Custom QcQuantizeOp to quantize weights and activations using ONNXRuntime """
 
-from typing import Union, List
+from typing import Union, List, Optional
 import aimet_common.libpymo as libpymo
 from aimet_common.libpymo import TensorQuantizerOpMode
 from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantizationDataType
@@ -237,9 +237,42 @@ class QcQuantizeOp:
         """
         return self.quant_info.encoding
 
-    def load_encodings(self, encoding):
+    def update_quantizer_and_load_encodings(self, encoding: List[libpymo.TfEncoding], is_symmetric: Optional[bool],
+                                            is_strict_symmetric: Optional[bool], is_unsigned_symmetric: Optional[bool],
+                                            data_type: QuantizationDataType):
         """
-        Loads pre-existing encodings to quantizer which can be used during quantize-dequantize
+        Update quantizer settings and load pre-existing encodings to quantizer which can be used during
+        quantize-dequantize.
+
+        :param encoding: The libpymo.TfEncoding object to be used by the C++ op
+        :param is_symmetric: True if encoding is symmetric, False otherwise
+        :param is_strict_symmetric: True if encoding is strict symmetric, False otherwise
+        :param is_unsigned_symmetric: True if encoding is unsigned symmetric, False otherwise
+        :param data_type: Data type of encoding
+        """
+        self.enabled = True
+        self.bitwidth = encoding[0].bw
+        self.data_type = data_type
+        if self.data_type == QuantizationDataType.int:
+            assert self.use_symmetric_encodings is not None
+            assert self.use_strict_symmetric is not None
+            assert self.use_unsigned_symmetric is not None
+
+            self.use_symmetric_encodings = is_symmetric
+            if self.use_symmetric_encodings:
+                self.use_strict_symmetric = is_strict_symmetric
+            # is_unsigned_symmetric is a special case since the flag could be enabled but the encoding can be signed
+            # if the observed tensor had negative values.
+            # To err on the side of caution, only set self.use_unsigned_symmetric if we know for sure that the encodings
+            # were unsigned.
+            if self.use_symmetric_encodings and is_unsigned_symmetric:
+                self.use_unsigned_symmetric = is_unsigned_symmetric
+
+        self.load_encodings(encoding)
+
+    def load_encodings(self, encoding: List[libpymo.TfEncoding]):
+        """
+        Load pre-existing encodings to quantizer which can be used during quantize-dequantize
 
         :param encoding: The libpymo.TfEncoding object to be used by the C++ op
         """
