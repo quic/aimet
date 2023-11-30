@@ -74,7 +74,6 @@ backend_datatype_to_aimet_map = {QnnDatatype.QNN_DATATYPE_INT_8: {'bitwidth': 8,
                                                                    'dtype': QuantizationDataType.int}
                                  }
 
-
 aimet_op_to_backend_op_name_map = {"Conv1d":"Conv1d",
                                    "Conv2d":"Conv2d",
                                    "Conv3d":"Conv3d",
@@ -92,6 +91,8 @@ aimet_op_to_backend_op_name_map = {"Conv1d":"Conv1d",
                                    "Subtract":"ElementWiseSubtract",
                                    "Multiply":"ElementWiseMultiply",
                                    "Divide":"ElementWiseDivide",
+                                   "Mul":"ElementWiseMultiply",
+                                   "Div":"ElementWiseDivide",
                                    "Minimum":"ElementWiseMinimum",
                                    "Maximum":"ElementWiseMaximum",
                                    "Pow":"ElementWisePower",
@@ -150,7 +151,7 @@ aimet_op_to_backend_op_name_map = {"Conv1d":"Conv1d",
                                    "Gather":"Gather",
                                    "ChannelShuffle":"ChannelShuffle",
                                    "Pad":"Pad",
-                                   "ElementwiseUnarySign":"",
+                                   "ElementwiseUnarySign":"ElementWiseUnary",
                                    "RoIPool":"RoiPooling",
                                    "PixelShuffle":"DepthToSpace",
                                    "DepthToSpaceDCRMode":"DepthToSpace",
@@ -192,5 +193,6 @@ op_to_weight_index_map = {'Conv1d' : 1,
                           'FullyConnected': 1,
                           'LayerNorm': 1,
                           'InstanceNorm': 1,
-                          'GroupNorm': 1
+                          'GroupNorm': 1,
+                          'MatMul': 1
                           }
