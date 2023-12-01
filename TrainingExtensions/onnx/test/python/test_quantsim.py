@@ -36,13 +36,14 @@
 # =============================================================================
 import json
 import os
-
 import onnx
 import torch
 import numpy as np
 from onnx import load_model
 import onnxruntime as ort
 import pytest
+from packaging import version
+
 from aimet_common import libquant_info
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
@@ -50,9 +51,7 @@ from aimet_onnx.quantsim import QuantizationSimModel, load_encodings_to_sim
 from aimet_onnx.qc_quantize_op import OpMode
 from aimet_onnx.utils import make_dummy_input
 from models.models_for_tests import SingleResidual
-
-from models.models_for_tests import build_dummy_model, single_residual_model, BNAfterConv, multi_input_with_constant_model, multi_output_model
-from models.models_for_tests import custom_add_model
+from models.models_for_tests import build_dummy_model, single_residual_model, BNAfterConv, multi_input_with_constant_model , multi_output_model, custom_add_model
 
 
 class DummyModel(SingleResidual):
@@ -127,6 +126,7 @@ class TestQuantSim:
         inputs = torch.randn((2, 10, 24, 24))
         torch.onnx.export(model, inputs, '/tmp/dummy_model.onnx',
                           training=torch.onnx.TrainingMode.PRESERVE,
+                          opset_version=12,
                           input_names=['input'], output_names=['output'],
                           dynamic_axes={
                               'input': {0: 'batch_size'},
@@ -224,30 +224,46 @@ class TestQuantSim:
             assert param_encodings_keys == ['bitwidth', 'dtype', 'is_symmetric', 'max', 'min', 'offset', 'scale']
 
     def test_single_residual(self):
-        model = single_residual_model().model
-        sim = QuantizationSimModel(model, use_cuda=False)
-        for quantizer in sim.qc_quantize_op_dict:
-            sim.qc_quantize_op_dict[quantizer].enabled = True
+        if version.parse(torch.__version__) >= version.parse("1.13"):
+            model = single_residual_model().model
+            sim = QuantizationSimModel(model, use_cuda=False)
+            for quantizer in sim.qc_quantize_op_dict:
+                sim.qc_quantize_op_dict[quantizer].enabled = True
 
-        def dummy_callback(session, args):
-            pass
+            def dummy_callback(session, args):
+                pass
 
-        sim.compute_encodings(dummy_callback, None)
-        sim.export('/tmp/', 'quant_sim_model')
+            sim.compute_encodings(dummy_callback, None)
+            sim.export('/tmp/', 'quant_sim_model')
 
-        with open('/tmp/quant_sim_model.encodings', 'rb') as json_file:
-            encoding_data = json.load(json_file)
-        activation_keys = list(encoding_data["activation_encodings"].keys())
-        assert activation_keys == ['20', '21', '24', '25', '26', '28', '29', '30', '31', '33', '34', '44', '47', 'input', 'output']
-        for act in activation_keys:
-            act_encodings_keys = list(encoding_data["activation_encodings"][act][0].keys())
-            assert act_encodings_keys == ['bitwidth', 'dtype', 'is_symmetric', 'max', 'min', 'offset', 'scale']
+            with open('/tmp/quant_sim_model.encodings', 'rb') as json_file:
+                encoding_data = json.load(json_file)
+            activation_keys = list(encoding_data["activation_encodings"].keys())
+            assert activation_keys == ['/Add_output_0',
+                                       '/ada/AveragePool_output_0',
+                                       '/ada/Pad_output_0',
+                                       '/avgpool/AveragePool_output_0',
+                                       '/avgpool/Pad_output_0',
+                                       '/conv1/Conv_output_0',
+                                       '/conv2/Conv_output_0',
+                                       '/conv3/Conv_output_0',
+                                       '/conv4/Conv_output_0',
+                                       '/maxpool/MaxPool_output_0',
+                                       '/relu1/Relu_output_0',
+                                       '/relu2/Relu_output_0',
+                                       '/relu3/Relu_output_0',
+                                       'input',
+                                       'output']
 
-        param_keys = list(encoding_data['param_encodings'].keys())
-        assert param_keys == ['45', '46', '48', '49', 'conv3.weight', 'conv4.bias', 'conv4.weight', 'fc.bias', 'fc.weight']
-        for param in param_keys:
-            param_encodings_keys = list(encoding_data["param_encodings"][param][0].keys())
-            assert param_encodings_keys == ['bitwidth', 'dtype', 'is_symmetric', 'max', 'min', 'offset', 'scale']
+            for act in activation_keys:
+                act_encodings_keys = list(encoding_data["activation_encodings"][act][0].keys())
+                assert act_encodings_keys == ['bitwidth', 'dtype', 'is_symmetric', 'max', 'min', 'offset', 'scale']
+
+            param_keys = list(encoding_data['param_encodings'].keys())
+            assert param_keys == ["conv3.weight", "conv4.bias", "conv4.weight", "fc.bias", "fc.weight", "onnx::Conv_43", "onnx::Conv_44", "onnx::Conv_46", "onnx::Conv_47"]
+            for param in param_keys:
+                param_encodings_keys = list(encoding_data["param_encodings"][param][0].keys())
+                assert param_encodings_keys == ['bitwidth', 'dtype', 'is_symmetric', 'max', 'min', 'offset', 'scale']
 
     @pytest.mark.cuda
     def test_compare_encodings_cpu_gpu(self):
@@ -431,11 +447,12 @@ class TestQuantSim:
 
 
     def test_model_with_constants(self):
-        model = multi_input_with_constant_model()
+        if version.parse(torch.__version__) >= version.parse("1.13"):
+            model = multi_input_with_constant_model()
 
-        sim = QuantizationSimModel(model)
-        assert sim.qc_quantize_op_dict['13'].enabled == True
-        assert sim.qc_quantize_op_dict['7'].enabled == True
+            sim = QuantizationSimModel(model)
+            assert sim.qc_quantize_op_dict['/add0/Constant_output_0'].enabled == True
+            assert sim.qc_quantize_op_dict['/add2/Constant_output_0'].enabled == True
 
 
     def test_multiple_output_quantsim(self):

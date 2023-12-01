@@ -105,6 +105,7 @@ class AdaroundOptimizer:
         # After optimization, set the optimized layer's rounding mode to "Hard rounding"
         param_to_adaround_tensor_quantizer[module.params['weight'].name].use_soft_rounding = False
 
+    # pylint: disable=too-many-statements
     @classmethod
     def _optimize_rounding(cls, module: ModuleInfo, quantized_input_name,
                            orig_model: ModelProto, quant_model: QuantizationSimModel,
@@ -150,9 +151,10 @@ class AdaroundOptimizer:
                                                                           out_data_torch.shape)
 
         attributes = read_attributes_for_op(module)
-        if len(attributes['pads']) > 2:
-            logger.info("Skipping the Convolution layer because padding size of 4 is not supported for optimization")
-            return
+        if 'pads' in attributes:
+            if len(attributes['pads']) > 2:
+                logger.info("Skipping the Convolution layer because padding size greater than 2 is not supported for optimization")
+                return
 
         if use_cache_acts_data and AdaroundOptimizer.enable_caching_acts_data():
             logger.debug("Caching intermediate activations data for optimization.")
