@@ -154,15 +154,16 @@ class _EncodingAnalyzer(Generic[_Statistics], abc.ABC):
     def reset_stats(self) -> None:
         self.observer.reset_stats()
 
-    def compute_encodings(self, symmetric, bitwidth):
+    def compute_encodings(self, symmetric: bool, bitwidth: int)\
+            -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
         return self.compute_encodings_from_stats(self.observer.get_stats(), symmetric, bitwidth)
 
-    def compute_dynamic_encodings(self, x: torch.Tensor, symmetric, bitwidth)\
-            -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
+    def compute_dynamic_encodings(self, x: torch.Tensor, symmetric: bool, bitwidth: int)\
+            -> Tuple[torch.Tensor, torch.Tensor]:
         return self.compute_encodings_from_stats(self.observer.collect_stats(x), symmetric, bitwidth)
 
     @abc.abstractmethod
-    def compute_encodings_from_stats(self, stats: _Statistics, symmetric, bitwidth)\
+    def compute_encodings_from_stats(self, stats: _Statistics, symmetric: bool, bitwidth: int)\
             -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
         ...
 
