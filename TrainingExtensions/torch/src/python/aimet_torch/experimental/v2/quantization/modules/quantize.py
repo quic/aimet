@@ -87,7 +87,8 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
     def get_min(self) -> Optional[torch.Tensor]:
         """
         Compute quantization min to be used for forward pass based on raw parameters.
-        :returns: Quantization min
+
+        :return: Quantization min
         """
         if not self.is_initialized():
             return None
@@ -96,7 +97,8 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
     def get_max(self) -> Optional[torch.Tensor]:
         """
         Compute quantization max to be used for forward pass based on raw parameters.
-        :returns: Quantization max
+
+        :return: Quantization max
         """
         if not self.is_initialized():
             return None
@@ -105,7 +107,8 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
     def get_scale(self) -> Optional[torch.Tensor]:
         """
         Compute quantization scale to be used for forward pass based on raw parameters.
-        :returns: Quantization scale
+
+        :return: Quantization scale
         """
         if not self.is_initialized():
             return None
@@ -124,7 +127,8 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
     def get_offset(self) -> Optional[torch.Tensor]:
         """
         Compute quantization offset to be used for forward pass based on raw parameters.
-        :returns: Quantization offset
+
+        :return: Quantization offset
         """
         if not self.is_initialized():
             return None
@@ -183,10 +187,10 @@ class Quantize(_QuantizerBase):
     """
     Applies quantization to the input
     """
-    def forward(self, input: torch.Tensor):
-        # pylint: disable=missing-docstring
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
         """
         :param input: Input to quantize
+        :return: Quantized output
         """
         if not self.is_initialized():
             raise RuntimeError(
@@ -203,10 +207,10 @@ class QuantizeDequantize(_QuantizerBase):
     """
     Applies quantization followed by dequantization to the input
     """
-    def forward(self, input: torch.Tensor):
-        # pylint: disable=missing-docstring
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
         """
         :param input: Input to quantize and dequantize
+        :return: Quantize-dequantized output
         """
         if not self.is_initialized():
             raise RuntimeError(
@@ -226,11 +230,12 @@ class Dequantize(torch.nn.Module):
     def forward(self,
                 input: torch.Tensor,
                 scale: torch.Tensor,
-                offset: torch.Tensor):
+                offset: torch.Tensor) -> torch.Tensor:
         # pylint: disable=no-self-use
         """
         :param input: Input to dequantize
         :param scale: Quantization scale
         :param offset: Quantization offset
+        :return: Dequantized output
         """
         return get_backend().dequantize(input, scale, offset)
