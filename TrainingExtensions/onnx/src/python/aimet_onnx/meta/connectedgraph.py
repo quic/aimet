@@ -148,15 +148,19 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             for node_output in node.output:
                 output_names[node_output] = node
 
+        # Capture constant tensors associated to a node that has only contant tensor inputs and are not in the form of a constant node.
         for node in self.model.graph.node:
-            for input_name in node.input:
-                if node.op_type not in OPS_WITH_PARAMS and not check_if_node_has_predecessor(node) and input_name not in output_names:
-                    input_tensors_names.append(input_name)
+            if node.op_type != 'Identity' and node.op_type not in OPS_WITH_PARAMS and not check_if_node_has_predecessor(node):
+                for input_name in node.input:
+                    if input_name not in output_names:
+                        input_tensors_names.append(input_name)
 
+        # Capture model input tensors.
         for tensor in self.model.graph.input:
             if tensor.name not in input_tensors_names and tensor.name in self._input_to_node:
                 input_tensors_names.append(tensor.name)
 
+        # Capture nodes having all the inputs as constant tensors and these constants are coming from a constant node.
         input_ops = []
         for node in self.model.graph.node:
             flag = True
@@ -168,13 +172,14 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 else:
                     flag = False
                     break
-            if flag:
+            if flag and node not in input_ops:
                 input_ops.append(node)
 
         for input_tensor_name in input_tensors_names:
             if input_tensor_name in self._input_to_node:
                 for node in self._input_to_node[input_tensor_name]:
-                    input_ops.append(node)
+                    if node not in input_ops:
+                        input_ops.append(node)
 
         return input_ops
 
@@ -560,18 +565,22 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             op = my_op.get_module()
 
             gamma_tensor = ParamUtils.get_param(self.model, op, WEIGHT_INDEX)
-            create_and_connect_product(gamma_tensor.name, gamma_tensor.dims, my_op, gamma_tensor, 'weight')
+            if gamma_tensor:
+                create_and_connect_product(gamma_tensor.name, gamma_tensor.dims, my_op, gamma_tensor, 'weight')
 
             beta_tensor = ParamUtils.get_param(self.model, op, BIAS_INDEX)
-            create_and_connect_product(beta_tensor.name, beta_tensor.dims, my_op, beta_tensor, 'bias')
+            if beta_tensor:
+                create_and_connect_product(beta_tensor.name, beta_tensor.dims, my_op, beta_tensor, 'bias')
 
             moving_mean_tensor = ParamUtils.get_param(self.model, op, RUNNING_MEAN_INDEX)
-            create_and_connect_product(moving_mean_tensor.name, moving_mean_tensor.dims, my_op,
-                                       moving_mean_tensor, None)
+            if moving_mean_tensor:
+                create_and_connect_product(moving_mean_tensor.name, moving_mean_tensor.dims, my_op,
+                                           moving_mean_tensor, None)
 
             moving_variance_tensor = ParamUtils.get_param(self.model, op, RUNNING_VAR_INDEX)
-            create_and_connect_product(moving_variance_tensor.name, moving_variance_tensor.dims, my_op,
-                                       moving_variance_tensor, None)
+            if moving_variance_tensor:
+                create_and_connect_product(moving_variance_tensor.name, moving_variance_tensor.dims, my_op,
+                                           moving_variance_tensor, None)
 
         def handle_default(my_op: Op):
             """ Handler for other modules """

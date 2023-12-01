@@ -41,6 +41,7 @@ from packaging import version
 import numpy as np
 import torch
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
+import pytest
 
 from aimet_onnx.adaround.adaround_weight import Adaround, AdaroundParameters
 import models.models_for_tests as test_models
@@ -50,6 +51,7 @@ class TestAdaround:
     AdaRound Weights Unit Test Cases
     """
 
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="This unit-test is meant to be run on GPU")
     def test_apply_adaround(self):
         if version.parse(torch.__version__) >= version.parse("1.13"):
             np.random.seed(0)
