@@ -35,8 +35,25 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 # pylint: disable=all
+from typing import Protocol
+
+import torch
 
 from aimet_torch.experimental.v2.utils import _ContextManager
+
+
+class _QuantizationBackendProtocol(Protocol):
+    def quantize(self, input: torch.Tensor) -> torch.Tensor:
+        ...
+
+    def dequantize(self,
+                   input: torch.Tensor,
+                   scale: torch.Tensor,
+                   offset: torch.Tensor) -> torch.Tensor:
+        ...
+
+    def quantize_dequantize(self, input: torch.Tensor) -> torch.Tensor:
+        ...
 
 
 _CURRENT_BACKEND = 'default'
@@ -46,25 +63,25 @@ _SUPPORTED_BACKENDS = {
 }
 
 
-def set_global_backend(name) -> None:
+def set_global_backend(name: str):
     global _CURRENT_BACKEND
     _CURRENT_BACKEND = name
 
 
-class set_backend(_ContextManager):
-    def __init__(self, name):
-        if name not in _SUPPORTED_BACKENDS:
-            supported_backend_names = ", ".join(_SUPPORTED_BACKENDS.keys())
-            raise RuntimeError(f"Backend '{name}' is not supported. "
-                               f"Please choose one of: {supported_backend_names}")
+def set_backend(name: str) -> _ContextManager:
+    if name not in _SUPPORTED_BACKENDS:
+        supported_backend_names = ", ".join(_SUPPORTED_BACKENDS.keys())
+        raise RuntimeError(f"Backend '{name}' is not supported. "
+                           f"Please choose one of: {supported_backend_names}")
 
-        old_backend = _CURRENT_BACKEND
-        self._action = lambda: set_global_backend(name)
-        self._cleanup = lambda: set_global_backend(old_backend)
+    old_backend = _CURRENT_BACKEND
+    action = lambda: set_global_backend(name)
+    cleanup = lambda: set_global_backend(old_backend)
+    return _ContextManager(action=action, cleanup=cleanup)
 
 
 
-def get_backend():
+def get_backend() -> _QuantizationBackendProtocol:
     if _SUPPORTED_BACKENDS[_CURRENT_BACKEND] is None:
         # Lazy import
         import importlib

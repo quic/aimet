@@ -36,14 +36,15 @@
 # =============================================================================
 # pylint: disable=redefined-builtin
 """ Common utility functions """
-from typing import Callable
+from typing import Callable, Tuple
 import functools
 import itertools
 
 import torch
 
 
-def _is_expandable(src_shape, target_shape) -> bool:
+def _is_expandable(src_shape: Tuple[int, ...],
+                   target_shape: Tuple[int, ...]) -> bool:
     """
     Returns true if source shape can be expanded as target shape
     """
@@ -57,14 +58,15 @@ def _is_expandable(src_shape, target_shape) -> bool:
     return True
 
 
-def _is_reducible(src_shape, target_shape) -> bool:
+def _is_reducible(src_shape: Tuple[int, ...],
+                  target_shape: Tuple[int, ...]) -> bool:
     """
     Returns true if source shape can be reduced as target shape
     """
     return _is_expandable(target_shape, src_shape)
 
 
-def reduce(input: torch.Tensor, shape, reduce_op):
+def reduce(input: torch.Tensor, shape: Tuple[int, ...], reduce_op: Callable):
     """
     Reduce input into given shape.
 
@@ -73,7 +75,9 @@ def reduce(input: torch.Tensor, shape, reduce_op):
     :param reduce_op: Reduce operation
     """
     if not _is_reducible(input.shape, shape):
-        raise RuntimeError
+        raise RuntimeError(
+            f"Input of shape {list(input.shape)} can't be reduced to shape {list(shape)}"
+        )
 
     padded_shape = (
         *itertools.repeat(1, len(input.shape) - len(shape)),
