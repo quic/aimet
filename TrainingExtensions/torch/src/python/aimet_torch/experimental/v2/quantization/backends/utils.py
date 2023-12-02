@@ -43,7 +43,10 @@ from aimet_torch.experimental.v2.utils import _ContextManager
 
 
 class _QuantizationBackendProtocol(Protocol):
-    def quantize(self, input: torch.Tensor) -> torch.Tensor:
+    def quantize(self,
+                 input: torch.Tensor,
+                 scale: torch.Tensor,
+                 offset: torch.Tensor) -> torch.Tensor:
         ...
 
     def dequantize(self,
@@ -52,7 +55,10 @@ class _QuantizationBackendProtocol(Protocol):
                    offset: torch.Tensor) -> torch.Tensor:
         ...
 
-    def quantize_dequantize(self, input: torch.Tensor) -> torch.Tensor:
+    def quantize_dequantize(self,
+                            input: torch.Tensor,
+                            scale: torch.Tensor,
+                            offset: torch.Tensor) -> torch.Tensor:
         ...
 
 

@@ -37,7 +37,7 @@
 # pylint: disable=redefined-builtin
 """ nn.Modules for quantization operators """
 
-from typing import Optional
+from typing import Optional, Tuple
 import contextlib
 import functools
 
@@ -190,10 +190,10 @@ class Quantize(_QuantizerBase):
     """
     Applies quantization to the input
     """
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
+    def forward(self, input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         :param input: Input to quantize
-        :return: Quantized output
+        :return: Quantized output and scale/offset associated with it
         """
         if not self.is_initialized():
             raise RuntimeError(
@@ -203,7 +203,8 @@ class Quantize(_QuantizerBase):
 
         scale = self.get_scale()
         offset = self.get_offset()
-        return get_backend().quantize(input, scale, offset, self.bitwidth)
+        input_q = get_backend().quantize(input, scale, offset, self.bitwidth)
+        return input_q, scale, offset
 
 
 class QuantizeDequantize(_QuantizerBase):
