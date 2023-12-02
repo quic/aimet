@@ -40,7 +40,7 @@ import pytest
 import torch
 from torch.optim import SGD, RMSprop, Adagrad, Adam, AdamW
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import CalibrationMethod
-from aimet_torch.experimental.v2.quantization import Quantize, QuantizeDequantize
+from aimet_torch.experimental.v2.quantization import Quantize, QuantizeDequantize, Dequantize
 from aimet_torch.experimental.v2.quantization.modules.quantize import _QuantizerBase
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 
@@ -101,20 +101,25 @@ def x():
 
 
 
-@pytest.mark.parametrize('q', [
+def minmax_to_scaleoffset(min, max, symmetric):
+    if symmetric:
+        scale = torch.maximum(max/127, -min/128)
+        offset = torch.ones_like(scale) * -128
+    else:
+        scale = (max - min) / 255
+        offset = torch.round(min / scale)
+    return scale, offset
+
+
+@pytest.mark.parametrize('quantize', [
     quantize(symmetric=True, initialized=False),
     quantize(symmetric=True, initialized=True),
     quantize(symmetric=False, initialized=False),
     quantize(symmetric=False, initialized=True),
-    quantize_dequantize(symmetric=True, initialized=False),
-    quantize_dequantize(symmetric=True, initialized=True),
-    quantize_dequantize(symmetric=False, initialized=False),
-    quantize_dequantize(symmetric=False, initialized=True),
 ])
-def test_compute_encodings(q: Union[Quantize, QuantizeDequantize],
-                           x: torch.Tensor):
+def test_quantize_compute_encodings(quantize: Quantize, x: torch.Tensor):
     """
-    :param q: Quantize or QuantizeDequantize module
+    :param quantize: Quantize module
     :param x: Input tensor
 
     Given: During compute_encodings
@@ -123,36 +128,67 @@ def test_compute_encodings(q: Union[Quantize, QuantizeDequantize],
       2. Exit compute_encodings() context
     Then:
       1. forward() returns dynamic quantization output
-      2. self.get_min(), self.get_max() == self.encoding_analyzer.compute_encodings()
+      2. self.get_scale(), self.get_offset() == dynamic scale/offset of x
     """
-    dynamic_min, dynamic_max = q.encoding_analyzer.compute_dynamic_encodings(x, q.bitwidth, q.symmetric)
+    dynamic_min, dynamic_max =\
+            quantize.encoding_analyzer.compute_dynamic_encodings(x, quantize.bitwidth, quantize.symmetric)
+    dynamic_scale, dynamic_offset = minmax_to_scaleoffset(dynamic_min, dynamic_max, quantize.symmetric)
+    expected_x_int = get_backend().quantize(x,
+                                            dynamic_scale,
+                                            dynamic_offset,
+                                            quantize.bitwidth)
 
-    if q.symmetric:
-        dynamic_scale = torch.maximum(dynamic_max/127, -dynamic_min/128)
-        dynamic_offset = torch.ones_like(dynamic_scale) * -128
-    else:
-        dynamic_scale = (dynamic_max - dynamic_min) / (2 ** q.bitwidth - 1)
-        dynamic_offset = torch.round(dynamic_min / dynamic_scale)
+    with quantize.compute_encodings():
+        x_int, scale_x, offset_x = quantize(x)
 
-    if isinstance(q, Quantize):
-        expected_output = get_backend().quantize(x,
-                                                 dynamic_scale,
-                                                 dynamic_offset,
-                                                 q.bitwidth)
-    else:
-        expected_output = get_backend().quantize_dequantize(x,
-                                                            dynamic_scale,
-                                                            dynamic_offset,
-                                                            q.bitwidth)
+    assert torch.allclose(x_int, expected_x_int)
+    assert torch.allclose(scale_x, dynamic_scale)
+    assert torch.allclose(offset_x, dynamic_offset)
+    assert torch.allclose(quantize.min, dynamic_min)
+    assert torch.allclose(quantize.max, dynamic_max)
+    assert torch.allclose(quantize.get_scale(), dynamic_scale)
+    assert torch.allclose(quantize.get_offset(), dynamic_offset)
 
-    with q.compute_encodings():
-        output = q(x)
+
+@pytest.mark.parametrize('quantize_dequantize', [
+    quantize_dequantize(symmetric=True, initialized=False),
+    quantize_dequantize(symmetric=True, initialized=True),
+    quantize_dequantize(symmetric=False, initialized=False),
+    quantize_dequantize(symmetric=False, initialized=True),
+])
+def test_qdq_compute_encodings(quantize_dequantize: QuantizeDequantize, x: torch.Tensor):
+    """
+    :param q: QuantizeDequantize module
+    :param x: Input tensor
+
+    Given: During compute_encodings
+    When:
+      1. forward() invoked with input x
+      2. Exit compute_encodings() context
+    Then:
+      1. forward() returns dynamic quantization output
+      2. self.get_scale(), self.get_offset() == dynamic scale/offset of x
+    """
+    dynamic_min, dynamic_max =\
+            quantize_dequantize.encoding_analyzer.compute_dynamic_encodings(x,
+                                                                            quantize_dequantize.bitwidth,
+                                                                            quantize_dequantize.symmetric)
+    dynamic_scale, dynamic_offset = minmax_to_scaleoffset(dynamic_min,
+                                                          dynamic_max,
+                                                          quantize_dequantize.symmetric)
+    expected_output = get_backend().quantize_dequantize(x,
+                                                        dynamic_scale,
+                                                        dynamic_offset,
+                                                        quantize_dequantize.bitwidth)
+
+    with quantize_dequantize.compute_encodings():
+        output = quantize_dequantize(x)
 
     assert torch.allclose(output, expected_output)
-    assert torch.equal(q.min, dynamic_min)
-    assert torch.equal(q.max, dynamic_max)
-    assert torch.allclose(q.get_scale(), dynamic_scale)
-    assert torch.allclose(q.get_offset(), dynamic_offset)
+    assert torch.allclose(quantize_dequantize.min, dynamic_min)
+    assert torch.allclose(quantize_dequantize.max, dynamic_max)
+    assert torch.allclose(quantize_dequantize.get_scale(), dynamic_scale)
+    assert torch.allclose(quantize_dequantize.get_offset(), dynamic_offset)
 
 
 @pytest.mark.parametrize('q', [
@@ -215,7 +251,10 @@ def test_backward_during_compute_encodings(q: _QuantizerBase, x: torch.Tensor):
     x = x.clone().requires_grad_(True)
 
     with q.compute_encodings():
-        output = q(x)
+        if isinstance(q, Quantize):
+            output, scale, offset = q(x)
+        else:
+            output = q(x)
         output.backward(torch.zeros_like(output))
 
     assert q.min.grad is None
@@ -262,15 +301,13 @@ def test_compute_encodings_updates_parameters_upon_exit(q: _QuantizerBase, x: to
     assert q.get_offset() is not None
 
 
-@pytest.mark.parametrize('q', [
+@pytest.mark.parametrize('quantize', [
     quantize(symmetric=True, initialized=True),
     quantize(symmetric=False, initialized=True),
-    quantize_dequantize(symmetric=True, initialized=True),
-    quantize_dequantize(symmetric=False, initialized=True),
 ])
-def test_forward(q: Union[Quantize, QuantizeDequantize], x: torch.Tensor):
+def test_quantize_forward(quantize: Quantize, x: torch.Tensor):
     """
-    :param q: Quantize or QuantizeDequantize module
+    :param q: Quantize module
     :param x: Input tensor
 
     Given:
@@ -279,17 +316,34 @@ def test_forward(q: Union[Quantize, QuantizeDequantize], x: torch.Tensor):
     When: forward() invoked
     Then: forward() returns parametric quantization output.
     """
-    output = q(x)
-    if isinstance(q, Quantize):
-        expected_output = get_backend().quantize(x,
-                                                 q.get_scale(),
-                                                 q.get_offset(),
-                                                 q.bitwidth)
-    else:
-        expected_output = get_backend().quantize_dequantize(x,
-                                                            q.get_scale(),
-                                                            q.get_offset(),
-                                                            q.bitwidth)
+    output, scale, offset = quantize(x)
+    expected_output = get_backend().quantize(x,
+                                             quantize.get_scale(),
+                                             quantize.get_offset(),
+                                             quantize.bitwidth)
+    assert torch.allclose(output, expected_output)
+
+
+@pytest.mark.parametrize('quantize_dequantize', [
+    quantize_dequantize(symmetric=True, initialized=True),
+    quantize_dequantize(symmetric=False, initialized=True),
+])
+def test_qdq_forward(quantize_dequantize: QuantizeDequantize, x: torch.Tensor):
+    """
+    :param q: QuantizeDequantize module
+    :param x: Input tensor
+
+    Given:
+      1. Outside compute_encodings
+      2. Quantization parmeters are initialized
+    When: forward() invoked
+    Then: forward() returns parametric quantization output.
+    """
+    output = quantize_dequantize(x)
+    expected_output = get_backend().quantize_dequantize(x,
+                                                        quantize_dequantize.get_scale(),
+                                                        quantize_dequantize.get_offset(),
+                                                        quantize_dequantize.bitwidth)
     assert torch.allclose(output, expected_output)
 
 
@@ -312,7 +366,10 @@ def test_backward(q: _QuantizerBase, x: torch.Tensor):
       2. backward() invoked
     Then: self.min.grad and self.max.grad should be computed
     """
-    output = q(x)
+    if isinstance(q, Quantize):
+        output, scale, offset = q(x)
+    else:
+        output = q(x)
     output.backward(torch.zeros_like(output))
     assert q.min.grad is not None
     assert q.max.grad is not None
@@ -339,7 +396,10 @@ def test_backward_with_no_grad(q, x: torch.Tensor):
     """
     x = x.clone().requires_grad_(True)
     with torch.no_grad():
-        output = q(x)
+        if isinstance(q, Quantize):
+            output, scale, offset = q(x)
+        else:
+            output = q(x)
     output = output + x
     output.backward(torch.zeros_like(output))
     assert q.min.grad is None
@@ -486,7 +546,10 @@ def test_symmetric_learning(q, x, optim_cls):
     optimizer = optim_cls(q.parameters(), lr=1.0)
 
     for _ in range(10):
-        output = q(x)
+        if isinstance(q, Quantize):
+            output, scale, offset = q(x)
+        else:
+            output = q(x)
         output.backward(torch.randn_like(output))
         optimizer.step()
         _test_symmetric_invariants(q)
@@ -537,7 +600,10 @@ def test_asymmetric_learning(q, x, optim_cls):
     optimizer = optim_cls(q.parameters(), lr=1.0)
 
     for _ in range(10):
-        output = q(x)
+        if isinstance(q, Quantize):
+            output, scale, offset = q(x)
+        else:
+            output = q(x)
         output.backward(torch.randn_like(output))
         optimizer.step()
         _test_asymmetric_invariants(q)
