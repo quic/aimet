@@ -39,6 +39,7 @@ import torch
 import pytest
 from collections import namedtuple
 from aimet_torch.experimental.v2.quantization.backends import default as default_backend
+from aimet_torch.experimental.v2.utils import ste_round
 
 VectorSetForTest = namedtuple("VectorSetForTest", ["tensor", "tensor_q", "tensor_qdq", "mask", "delta", "offset", "bitwidth"])
 
@@ -174,15 +175,6 @@ per_channel_8b_test_set = VectorSetForTest(
     bitwidth=8
 )
 
-class STE(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, *x):
-        return torch.round(*x)
-
-    @staticmethod
-    def backward(ctx, *output_grad):
-        return output_grad
-
 class AutogradQuantizationModule(torch.nn.Module):
     def __init__(self, scale, offset, bitwidth):
         super().__init__()
@@ -192,7 +184,7 @@ class AutogradQuantizationModule(torch.nn.Module):
 
     def forward(self, x):
         return torch.clamp(
-            STE.apply(x / self.scale) - STE.apply(self.offset),
+            ste_round(x / self.scale) - ste_round(self.offset),
             0, 2 ** self.bitwidth - 1
         )
 
@@ -204,7 +196,7 @@ class AutogradDequantizationModule(torch.nn.Module):
         self.offset = torch.nn.Parameter(offset.clone())
 
     def forward(self, x):
-        return (x + STE.apply(self.offset)) * self.scale
+        return (x + ste_round(self.offset)) * self.scale
 
 class AutogradQuantDequantModule(torch.nn.Module):
     def __init__(self, scale, offset, bitwidth):
@@ -215,10 +207,10 @@ class AutogradQuantDequantModule(torch.nn.Module):
 
     def forward(self, x):
         x_q = torch.clamp(
-            STE.apply(x / self.scale) - STE.apply(self.offset),
+            ste_round(x / self.scale) - ste_round(self.offset),
             0, 2 ** self.bitwidth - 1
         )
-        x_dq = (x_q + STE.apply(self.offset)) * self.scale
+        x_dq = (x_q + ste_round(self.offset)) * self.scale
         return x_dq
 
 def copy_test_set(test_set: namedtuple, device: torch.device = torch.device("cpu"),
