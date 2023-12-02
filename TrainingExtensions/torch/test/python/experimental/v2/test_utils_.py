@@ -34,61 +34,47 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-# pylint: disable=all
-from typing import Protocol
-
+import pytest
 import torch
 
-from aimet_torch.experimental.v2.utils import _ContextManager
+from aimet_torch.experimental.v2.utils import reduce
 
+@pytest.mark.parametrize('reduce_dim, target_shape', [
+    # | reduce dim   | target shape |
+    # | -------------|--------------|
+    (   [0,1,2,3],     []          ),
 
-class _QuantizationBackendProtocol(Protocol):
-    def quantize(self, input: torch.Tensor) -> torch.Tensor:
-        ...
+    (   [0,1,2],       [6]         ),
+    (   [0,1,2],       [1,6]       ),
+    (   [0,1,2],       [1,1,6]     ),
+    (   [0,1,2],       [1,1,1,6]   ),
+    (   [0,1,3],       [5,1]       ),
+    (   [0,1,3],       [1,5,1]     ),
+    (   [0,1,3],       [1,1,5,1]   ),
+    (   [0,2,3],       [4,1,1]     ),
+    (   [0,2,3],       [1,4,1,1]   ),
+    (   [1,2,3],       [3,1,1,1]   ),
 
-    def dequantize(self,
-                   input: torch.Tensor,
-                   scale: torch.Tensor,
-                   offset: torch.Tensor) -> torch.Tensor:
-        ...
+    (   [0,1],         [5,6]       ),
+    (   [0,1],         [1,5,6]     ),
+    (   [0,1],         [1,1,5,6]   ),
+    (   [0,2],         [4,1,6]     ),
+    (   [0,2],         [1,4,1,6]   ),
+    (   [1,2],         [3,1,1,6]   ),
+    (   [0,3],         [4,5,1]     ),
+    (   [0,3],         [1,4,5,1]   ),
+    (   [1,3],         [3,1,5,1]   ),
+    (   [2,3],         [3,4,1,1]   ),
 
-    def quantize_dequantize(self, input: torch.Tensor) -> torch.Tensor:
-        ...
-
-
-_CURRENT_BACKEND = 'default'
-
-_SUPPORTED_BACKENDS = {
-    'default': None,
-}
-
-
-def set_global_backend(name: str):
-    global _CURRENT_BACKEND
-    _CURRENT_BACKEND = name
-
-
-def set_backend(name: str) -> _ContextManager:
-    if name not in _SUPPORTED_BACKENDS:
-        supported_backend_names = ", ".join(_SUPPORTED_BACKENDS.keys())
-        raise RuntimeError(f"Backend '{name}' is not supported. "
-                           f"Please choose one of: {supported_backend_names}")
-
-    old_backend = _CURRENT_BACKEND
-    action = lambda: set_global_backend(name)
-    cleanup = lambda: set_global_backend(old_backend)
-    return _ContextManager(action=action, cleanup=cleanup)
-
-
-
-def get_backend() -> _QuantizationBackendProtocol:
-    if _SUPPORTED_BACKENDS[_CURRENT_BACKEND] is None:
-        # Lazy import
-        import importlib
-        module_name = f'aimet_torch.experimental.v2.quantization.backends.{_CURRENT_BACKEND}'
-        _SUPPORTED_BACKENDS[_CURRENT_BACKEND] = importlib.import_module(module_name)
-
-    return _SUPPORTED_BACKENDS[_CURRENT_BACKEND]
-
-
-__all__ = ['set_global_backend', 'set_backend', 'get_backend']
+    (   [0],           [4,5,6]     ),
+    (   [0],           [1,4,5,6]   ),
+    (   [1],           [3,1,5,6]   ),
+    (   [2],           [3,4,1,6]   ),
+    (   [3],           [3,4,5,1]   ),
+])
+def test_reduce(reduce_dim, target_shape):
+    x = torch.arange(start=0, end=3*4*5*6).view(3,4,5,6)
+    out = reduce(x, target_shape, torch.sum)
+    expected = torch.sum(x, dim=reduce_dim, keepdim=True)
+    assert list(out.shape) == list(target_shape)
+    assert torch.allclose(out, expected)

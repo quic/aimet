@@ -44,9 +44,6 @@ from aimet_torch.experimental.v2.quantization.modules.quantize import _Quantizer
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 
 
-pytestmark = pytest.mark.skip("not implemented")
-
-
 _PARAMETER_SHAPE = (100,)
 
 def _initialize(q, symmetric):
@@ -127,7 +124,7 @@ def test_compute_encodings(q: Union[Quantize, QuantizeDequantize],
       1. forward() returns dynamic quantization output
       2. self.get_min(), self.get_max() == self.encoding_analyzer.compute_encodings()
     """
-    dynamic_min, dynamic_max = q.encoding_analyzer.compute_dynamic_encodings(x)
+    dynamic_min, dynamic_max = q.encoding_analyzer.compute_dynamic_encodings(x, q.symmetric, q.bitwidth)
 
     if q.symmetric:
         dynamic_scale = torch.maximum(dynamic_max/127, -dynamic_min/128)
@@ -548,18 +545,3 @@ def test_asymmetric_learning(q, x, optim_cls):
     assert not torch.equal(q.get_max(), original_max)
     assert not torch.equal(q.get_scale(), original_scale)
     assert not torch.equal(q.get_offset(), original_offset)
-
-
-@pytest.mark.parametrize('q', [
-    quantize(symmetric=False, initialized=False),
-    quantize(symmetric=True, initialized=False),
-    quantize(symmetric=False, initialized=False),
-    quantize(symmetric=True, initialized=True),
-    quantize_dequantize(symmetric=False, initialized=False),
-    quantize_dequantize(symmetric=True, initialized=False),
-    quantize_dequantize(symmetric=False, initialized=False),
-    quantize_dequantize(symmetric=True, initialized=True),
-])
-def test_change_symmetry_flag_in_runtime(q):
-    with pytest.raises(RuntimeError):
-        q.symmetric = not q.symmetric
