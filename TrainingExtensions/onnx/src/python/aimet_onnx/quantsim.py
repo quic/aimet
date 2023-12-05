@@ -81,17 +81,17 @@ allowed_op_type_for_per_channel = ['Conv', 'Gemm', 'MatMul', 'ConvTranspose']
 data_types_to_quantize = [np.float32]
 
 @dataclass
-class LoadEncodingMismatchInfo:
+class EncodingMismatchInfo:
     """
     Dataclass tracking information about mismatched quantizer vs. encoding settings.
     """
-    quantizer_name = ''
-    enabled_mismatch = None
-    dtype_mismatch = None
-    bitwidth_mismatch = None
-    is_symmetric_mismatch = None
-    is_strict_symmetric_mismatch = None
-    is_unsigned_symmetric_mismatch = None
+    quantizer_name: str
+    enabled_mismatch: Optional[Tuple] = None
+    dtype_mismatch: Optional[Tuple] = None
+    bitwidth_mismatch: Optional[Tuple] = None
+    is_symmetric_mismatch: Optional[Tuple] = None
+    is_strict_symmetric_mismatch: Optional[Tuple] = None
+    is_unsigned_symmetric_mismatch: Optional[Tuple] = None
 
     def has_mismatch(self) -> bool:
         """
@@ -578,7 +578,7 @@ class QuantizationSimModel:
 
 
 def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, onnx_encoding_path: str, strict=True) -> \
-        List[LoadEncodingMismatchInfo]:
+        List[EncodingMismatchInfo]:
     """
     Loads the saved encodings to quant sim model. The encoding filename to load should end in .encodings,
     generated as part of quantsim export.
@@ -589,7 +589,7 @@ def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, onnx_encoding_p
     :param strict: If set to True and encoding settings between encodings to load do not line up with Quantsim
         initialized settings, an assertion will be thrown. If set to False, quantizer settings will update to align with
         encodings to load.
-    :return: List of LoadEncodingMismatchInfo objects containing quantizer names and mismatched settings
+    :return: List of EncodingMismatchInfo objects containing quantizer names and mismatched settings
     """
     mismatched_encodings = []
 
@@ -597,10 +597,30 @@ def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, onnx_encoding_p
     with open(onnx_encoding_path) as json_file:
         encodings = json.load(json_file)
 
+    # First pass through quantizers to check for mismatched encodings
     for quantizer_name, quantizer in quant_sim_model.qc_quantize_op_dict.items():
         if quantizer_name not in encodings['activation_encodings'] and \
                 quantizer_name not in encodings['param_encodings']:
-            validate_encoding_settings(quantizer_name, quantizer, None, mismatched_encodings)
+            mismatched_info = get_encoding_mismatch_info(quantizer_name, quantizer, None)
+            if mismatched_info.has_mismatch():
+                mismatched_encodings.append(mismatched_info)
+            continue
+
+        if quantizer_name in encodings['activation_encodings']:
+            encodings_to_load = encodings['activation_encodings'][quantizer_name]
+        else:
+            encodings_to_load = encodings['param_encodings'][quantizer_name]
+
+        mismatched_info = get_encoding_mismatch_info(quantizer_name, quantizer, encodings_to_load)
+        if mismatched_info.has_mismatch():
+            mismatched_encodings.append(mismatched_info)
+
+    log_and_catch_mismatched_encodings(mismatched_encodings, strict)
+
+    # Second pass through quantizers to set quantizer settings
+    for quantizer_name, quantizer in quant_sim_model.qc_quantize_op_dict.items():
+        if quantizer_name not in encodings['activation_encodings'] and \
+                quantizer_name not in encodings['param_encodings']:
             quantizer.enabled = False
             continue
 
@@ -614,14 +634,12 @@ def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, onnx_encoding_p
         data_type = QuantizationDataType.int if encodings_to_load[0]['dtype'] == 'int' else \
                 QuantizationDataType.float
         libpymo_encodings = _create_libpymo_encodings(encodings_to_load)
-        validate_encoding_settings(quantizer_name, quantizer, encodings_to_load, mismatched_encodings)
         quant_sim_model.qc_quantize_op_dict[quantizer_name].update_quantizer_and_load_encodings(
             libpymo_encodings, is_symmetric, is_strict_symmetric, is_unsigned_symmetric, data_type)
 
-    log_and_catch_mismatched_encodings(mismatched_encodings, strict)
     return mismatched_encodings
 
-def log_and_catch_mismatched_encodings(mismatched_encodings: List[LoadEncodingMismatchInfo], strict: bool):
+def log_and_catch_mismatched_encodings(mismatched_encodings: List[EncodingMismatchInfo], strict: bool):
     """
     If mismatched_encodings is not empty, log details for each entry. If strict is True, raise an AssertionError.
 
@@ -717,18 +735,17 @@ def get_symmetric_properties(encodings: List[Dict]) -> Tuple[Optional[bool], Opt
                 break
     return is_symmetric, is_strict_symmetric, is_unsigned_symmetric
 
-def validate_encoding_settings(quantizer_name: str, quantizer: QcQuantizeOp, encodings_to_load: Optional[List[Dict]],
-                               mismatched_encodings_info: List[LoadEncodingMismatchInfo]):
+def get_encoding_mismatch_info(quantizer_name: str, quantizer: QcQuantizeOp,
+                               encodings_to_load: Optional[List[Dict]]) -> EncodingMismatchInfo:
     """
     Check that quantizer settings align with the settings in encodings_to_load. If settings do not align, track the
-    mismatching settings in a LoadEncodingMismatchInfo object and add it to mismatched_encodings_info list.
+    mismatching settings in a EncodingMismatchInfo object and add it to mismatched_encodings_info list.
 
     :param quantizer_name: Name of quantizer to check
     :param quantizer: Quantizer to check
     :param encodings_to_load: Encodings to check
-    :param mismatched_encodings_info: List holding information of quantizer names with mismatched settings
     """
-    encoding_mismatch_info = LoadEncodingMismatchInfo()
+    encoding_mismatch_info = EncodingMismatchInfo(quantizer_name)
 
     # Match enabled state
     if quantizer.enabled and encodings_to_load is None:
@@ -756,6 +773,4 @@ def validate_encoding_settings(quantizer_name: str, quantizer: QcQuantizeOp, enc
             encoding_mismatch_info.is_unsigned_symmetric_mismatch = (quantizer.use_unsigned_symmetric,
                                                                      is_unsigned_symmetric)
 
-    if encoding_mismatch_info.has_mismatch():
-        encoding_mismatch_info.quantizer_name = quantizer_name
-        mismatched_encodings_info.append(encoding_mismatch_info)
+    return encoding_mismatch_info
