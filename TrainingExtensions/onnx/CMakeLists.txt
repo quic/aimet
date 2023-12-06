@@ -40,8 +40,10 @@ find_path(ONNXRUNTIME_INC "onnxruntime_cxx_api.h" PATH_SUFFIXES onnxruntime_head
 find_package(Eigen3 REQUIRED)
 
 add_subdirectory(src/python)
-add_subdirectory(test)
 
+if (ENABLE_TESTS)
+    add_subdirectory(test)
+endif()
 
 add_library(OnnxCppOps SHARED
         src/QcQuantizeOp.h
