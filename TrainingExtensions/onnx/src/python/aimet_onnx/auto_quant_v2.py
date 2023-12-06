@@ -36,7 +36,8 @@
 # =============================================================================
 # pylint: disable=too-many-lines
 
-"""Temporary buffer file for adding new features to AutoQuant"""
+"""Automatic Post-Training Quantization V2"""
+
 import copy
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
@@ -48,7 +49,6 @@ import sys
 import io
 from unittest.mock import patch
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, Mapping, Iterable
-import torch
 import jinja2
 from tqdm import tqdm
 
@@ -73,11 +73,6 @@ from aimet_common.quantsim import validate_quantsim_inputs
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.AutoQuant)
 
 cache = Cache()
-
-
-# The number of samples to be used for performance evaluation.
-# NOTE: None means "all".
-NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION = None
 
 
 @dataclass(frozen=True)
@@ -136,7 +131,7 @@ _QUANT_SCHEME_CANDIDATES = (
 )
 
 
-def _validate_inputs(model: onnx.ModelProto, # pylint: disable=too-many-arguments
+def _validate_inputs(model: Union[onnx.ModelProto, ONNXModel], # pylint: disable=too-many-arguments
                      data_loader: Iterable[Union[np.ndarray, List[np.ndarray]]],
                      eval_callback: Callable[[ort.InferenceSession], float],
                      dummy_input: Dict[str, np.ndarray],
@@ -159,8 +154,8 @@ def _validate_inputs(model: onnx.ModelProto, # pylint: disable=too-many-argument
     :param output_bw: Output bitwidth
     :param rounding_mode: Rounding mode
     """
-    if not isinstance(model, onnx.ModelProto):
-        raise ValueError('Model must be of type onnx.ModelProto, not ' + str(type(model).__name__))
+    if not isinstance(model, (onnx.ModelProto, ONNXModel)):
+        raise ValueError('Model must be of type onnx.ModelProto or ONNXModel, not ' + str(type(model).__name__))
 
     if not isinstance(data_loader, Iterable):
         raise ValueError('data_loader must be of type Iterable, not ' + str(
@@ -197,10 +192,11 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
 
     def __init__( # pylint: disable=too-many-arguments, too-many-locals
             self,
-            model: onnx.ModelProto,
+            model: Union[onnx.ModelProto, ONNXModel],
             dummy_input: Dict[str, np.ndarray],
             data_loader: Iterable[Union[np.ndarray, List[np.ndarray], Tuple[np.ndarray]]],
-            eval_callback: Callable[[ort.InferenceSession, int], float],
+            eval_callback: Callable[[ort.InferenceSession], float],
+            eval_callback_args=None,
             param_bw: int = 8,
             output_bw: int = 8,
             quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
@@ -215,7 +211,8 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         :param model: Model to be quantized. Assumes model is on the correct device
         :param dummy_input: Dummy input for the model. Assumes that dummy_input is on the correct device
         :param data_loader: A collection that iterates over an unlabeled dataset, used for computing encodings
-        :param eval_callback: Function that calculates the evaluation score
+        :param eval_callback: Function that calculates the evaluation score given the model session
+        :param eval_callback_args: Extra arguments for eval_callback
         :param param_bw: Parameter bitwidth
         :param output_bw: Output bitwidth
         :param quant_scheme: Quantization scheme
@@ -224,15 +221,20 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         :param config_file: Path to configuration file for model quantizers
         :param results_dir: Directory to save the results of PTQ techniques
         :param cache_id: ID associated with cache results
-        :param strict_validation: Flag set to True by default.hen False, AutoQuant will proceed with execution and handle errors internally if possible. This may produce unideal or unintuitive results.
+        :param strict_validation: Flag set to True by default. When False, AutoQuant will proceed with execution and handle errors internally if possible. This may produce unideal or unintuitive results.
         '''
+
         _validate_inputs(model, data_loader, eval_callback, dummy_input, results_dir,
                          strict_validation, quant_scheme, param_bw, output_bw, rounding_mode)
+
+        if not isinstance(model, ONNXModel):
+            model = ONNXModel(model)
 
         self.fp32_model = model
         self.dummy_input = dummy_input
         self.data_loader = data_loader
         self.eval_callback = eval_callback
+        self.eval_callback_args = eval_callback_args
 
         self._quantsim_params = dict(
             param_bw=param_bw,
@@ -245,10 +247,9 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         )
 
         self.results_dir = results_dir
+        self.cache_dir = None
         if cache_id:
             self.cache_dir = os.path.join(results_dir, ".auto_quant_cache", cache_id)
-        else:
-            self.cache_dir = None
 
         def forward_pass_callback(session, _: Any = None):
             for input_data in tqdm(data_loader):
@@ -280,7 +281,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         """
         Evaluate the model performance.
         """
-        return self.eval_callback(session, NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION)
+        return self.eval_callback(session, self.eval_callback_args)
 
     def run_inference(self) -> Tuple[QuantizationSimModel, float]:
         '''
@@ -308,7 +309,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
 
         return sim, acc
 
-    def optimize(self, allowed_accuracy_drop: float = 0.0) -> Tuple[onnx.ModelProto, float, str]:
+    def optimize(self, allowed_accuracy_drop: float = 0.0) -> Tuple[ONNXModel, float, str]:
         """
         Integrate and apply post-training quantization techniques.
 
@@ -332,7 +333,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
 
     def _create_quantsim_and_encodings( # pylint: disable=too-many-arguments, too-many-locals, too-many-branches
             self,
-            fp32_model: onnx.ModelProto,
+            fp32_model: ONNXModel,
             rounding_mode: str = None,
             output_bw: int = None,
             output_quant_scheme: QuantScheme = None,
@@ -389,6 +390,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         param_quantizers, activation_quantizers = sim.get_all_quantizers()
 
         default_quant_scheme = self._quantsim_params.get("quant_scheme")
+
         output_quant_scheme = output_quant_scheme or\
                               default_quant_scheme.output_quant_scheme
         output_percentile = output_percentile or default_quant_scheme.output_percentile
@@ -437,7 +439,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
 
     @staticmethod
     @cache.mark("batchnorm_folding")
-    def _apply_batchnorm_folding(model: onnx.ModelProto)\
+    def _apply_batchnorm_folding(model: ONNXModel)\
             -> Tuple[onnx.ModelProto, Tuple[List]]:
         """
         Apply batchnorm folding.
@@ -453,7 +455,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
 
     @staticmethod
     @cache.mark("cle")
-    def _apply_cross_layer_equalization(model: onnx.ModelProto) -> onnx.ModelProto:
+    def _apply_cross_layer_equalization(model: ONNXModel) -> onnx.ModelProto:
         """
         Apply cross-layer equalization.
 
@@ -467,7 +469,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         return model
 
     @cache.mark("adaround")
-    def _apply_adaround(self, model: onnx.ModelProto) -> Tuple[onnx.ModelProto, str]:
+    def _apply_adaround(self, model: ONNXModel) -> Tuple[onnx.ModelProto, str]:
         """
         Apply adaround.
 
@@ -487,9 +489,6 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         for quantizer in activation_quantizers:
             quantizer.enabled = False
 
-        if not isinstance(model, ONNXModel):
-            model = ONNXModel(model)
-
         model = Adaround._apply_adaround(sim, model, self.adaround_params, # pylint: disable=protected-access
                                          path=self.results_dir, filename_prefix=filename_prefix)
 
@@ -498,7 +497,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
     def _optimize_helper(
             self,
             optimize_fn: Callable,
-            allowed_accuracy_drop: float) -> Tuple[onnx.ModelProto, float, str]:
+            allowed_accuracy_drop: float) -> Tuple[ONNXModel, float, str]:
         """
         Integrate and apply post-training quantization techniques.
 
@@ -522,8 +521,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
                     providers = [('CUDAExecutionProvider', {'device_id': self._quantsim_params['device']}), 'CPUExecutionProvider']
                 else:
                     providers = ['CPUExecutionProvider']
-                fp32_model_session = QuantizationSimModel.build_session(self.fp32_model, providers)
-
+                fp32_model_session = QuantizationSimModel.build_session(self.fp32_model.model, providers)
                 self._fp32_acc = self._evaluate_model_performance(fp32_model_session)
                 target_acc = self._fp32_acc - allowed_accuracy_drop
                 _logger.info("Target eval score: %f", target_acc)
@@ -597,9 +595,12 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         assert candidates
 
         # Find the quant scheme that yields the best eval score
-        return max(candidates, key=eval_fn)
+        best_quant_scheme = max(candidates, key=eval_fn)
+        _logger.info("Best Quant Scheme: %s", best_quant_scheme)
 
-    def _optimize_main(self, fp32_model: torch.nn.Module, target_acc: float):
+        return best_quant_scheme
+
+    def _optimize_main(self, fp32_model: ONNXModel, target_acc: float):
         """
         Helper function of apply().
 
@@ -611,7 +612,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         :return: The best ptq result as a dictionary.
         """
 
-        # Choose quant scheme automatically.
+        # Choose best quant scheme automatically.
         with self.eval_manager.session("QuantScheme Selection") as sess:
             self._quantsim_params["quant_scheme"] = sess.wrap(self._choose_default_quant_scheme)()
 
@@ -675,7 +676,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
 
         # AdaRound
         with self.eval_manager.session("AdaRound", ptq=True) as sess:
-            model, encoding_path = self._apply_adaround(model)
+            model, encoding_path = sess.wrap(self._apply_adaround)(model)
             if sess.ptq_result is None:
                 sess.set_ptq_result(model=model,
                                     encoding_path=encoding_path,
@@ -689,7 +690,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
                 sess.result["target_satisfied"] = True
             return best_result.as_dict()
 
-        raise RuntimeError("None of batchnorm folding, CLE, or Adaround "
+        raise RuntimeError("None of Batchnorm Folding, CLE, or Adaround "
                            "has been finished successfully.")
 
 
@@ -707,12 +708,12 @@ class PtqResult:
     accuracy: float
     applied_techniques: List[str]
 
-    def load_model(self) -> onnx.ModelProto:
+    def load_model(self) -> ONNXModel:
         """
         Load model.
         :return: Loaded model.
         """
-        return onnx.load(self.model_path)
+        return ONNXModel(onnx.load(self.model_path))
 
     def as_dict(self):
         """Convert to dictionary"""
@@ -944,7 +945,7 @@ class _EvalSession: # pylint: disable=too-many-instance-attributes
             return ret
         return wrapper
 
-    def eval(self, model: onnx.ModelProto, **kwargs):
+    def eval(self, model: ONNXModel, **kwargs):
         """
         Evaluate the model.
         :param model: Model to evaluate.
@@ -1140,7 +1141,6 @@ def _build_flowchart_metadata(result: Mapping) -> Dict: # pylint: disable=too-ma
     metadata.update(
         edge_test_w32_eval_score_if_true='data-visited="true"',
     )
-
 
     for ptq_name, ptq_result in result["ptq_techniques"].items():
         status = ptq_result['status']

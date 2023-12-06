@@ -41,6 +41,7 @@ import contextlib
 import numpy as np
 import onnx
 from onnx import numpy_helper
+from onnxruntime.quantization.onnx_quantizer import ONNXModel
 from packaging import version
 
 from aimet_common.bias_correction import ConvBnPatternHandler
@@ -208,6 +209,8 @@ def fold_all_batch_norms_to_weight(model: ModelProto) -> [List]:
     :param model: onnx Model to perform BN fold on
     :return: A list of pairs of layers [(Conv/Linear, BN layer that got folded)]
     """
+    if isinstance(model, ONNXModel):
+        model = model.model
     connected_graph = ConnectedGraph(model)
     model = connected_graph.model
     conv_bn_pairs, bn_conv_pairs = find_all_batch_norms_to_fold(connected_graph)
