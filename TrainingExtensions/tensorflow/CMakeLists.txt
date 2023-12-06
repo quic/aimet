@@ -187,4 +187,7 @@ add_dependencies(whl_prep_ln whl_prep_ln_tensorflow)
 whl_add_whl_action_target(tensorflow)
 
 add_subdirectory(src/python)
-add_subdirectory(test)
+
+if (ENABLE_TESTS)
+    add_subdirectory(test)
+endif()

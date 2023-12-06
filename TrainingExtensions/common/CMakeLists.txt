@@ -35,7 +35,10 @@
 #==============================================================================
 
 add_subdirectory(src/python)
-add_subdirectory(test)
+
+if (ENABLE_TESTS)
+    add_subdirectory(test)
+endif()
 
 add_custom_target(whl_prep_cp_common DEPENDS
     whl_prep_cp_common_DlCompression

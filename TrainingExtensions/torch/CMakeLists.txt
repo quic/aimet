@@ -94,9 +94,10 @@ add_subdirectory(src/python)
 if (ENABLE_ONNX)
     message(STATUS "ONNX is enabled, skipping Torch Unit test")
 else(ENABLE_ONNX)
-    add_subdirectory(test)
+    if (ENABLE_TESTS)
+        add_subdirectory(test)
+    endif()
 endif(ENABLE_ONNX)
-
 
 install(DIRECTORY ${CMAKE_BINARY_DIR}/artifacts/aimet_common/
       DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_common
