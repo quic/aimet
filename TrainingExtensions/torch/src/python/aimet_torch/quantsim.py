@@ -1681,7 +1681,7 @@ class QuantizationSimModel:
             """
             if action != SupportedKernelsAction.allow_error:
                 for k in allowed_supported_kernels:
-                    if k.is_same_activation(act[0], act[1]):
+                    if k.is_same_activation(act[1], act[0]):
                         return
 
                 if action == SupportedKernelsAction.warn_on_error:
