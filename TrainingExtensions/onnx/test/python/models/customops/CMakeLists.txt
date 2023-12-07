@@ -46,24 +46,13 @@ set_target_properties(torch_custom_add PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts/aimet_common/customops"
         )
 
-# This block attempts to find the version number of the installed onnxruntime_headers
-find_path(ONNXRUNTIME_VER "VERSION_NUMBER" PATH_SUFFIXES onnxruntime_headers)
-file(READ ${ONNXRUNTIME_VER}/VERSION_NUMBER VERSION_NUMBER)
-string(REGEX REPLACE "([^0123456789.])" "" VERSION_NUMBER ${VERSION_NUMBER})
-message(STATUS "Found onnxruntime_header version: ${VERSION_NUMBER}")
+find_path(ONNXRUNTIME_INC "onnxruntime_cxx_api.h" PATH_SUFFIXES onnxruntime_headers/include)
+find_library(ONNXRUNTIME_LIBRARY NAMES libonnxruntime.so PATH_SUFFIXES /onnxruntime_headers/lib)
 
-# Only build custom op targets if onnxruntime_headers are from >= v1.15.1
-if(VERSION_NUMBER VERSION_GREATER_EQUAL "1.15.1")
-    find_path(ONNXRUNTIME_INC "onnxruntime_cxx_api.h" PATH_SUFFIXES onnxruntime_headers/include)
-    find_library(ONNXRUNTIME_LIBRARY NAMES libonnxruntime.so PATH_SUFFIXES /onnxruntime_headers/lib)
-
-    add_library(onnx_custom_add SHARED onnx_custom_add.cpp onnx_custom_add.h)
-    target_compile_features(onnx_custom_add PRIVATE cxx_std_14)
-    target_include_directories(onnx_custom_add PRIVATE ${ONNXRUNTIME_INC})
-    target_link_libraries(onnx_custom_add PUBLIC ${ONNXRUNTIME_LIBRARY})
-    set_target_properties(onnx_custom_add PROPERTIES
-            LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts/aimet_common/customops"
-            )
-else()
-    message("onnxruntime headers must be >=v1.15.1 to build onnx customop targets. Skipping onnx custom op targets.")
-endif()
+add_library(onnx_custom_add SHARED onnx_custom_add.cpp onnx_custom_add.h)
+target_compile_features(onnx_custom_add PRIVATE cxx_std_14)
+target_include_directories(onnx_custom_add PRIVATE ${ONNXRUNTIME_INC})
+target_link_libraries(onnx_custom_add PUBLIC ${ONNXRUNTIME_LIBRARY})
+set_target_properties(onnx_custom_add PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts/aimet_common/customops"
+        )
