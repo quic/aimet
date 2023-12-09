@@ -253,7 +253,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
 
         def forward_pass_callback(session, _: Any = None):
             for input_data in tqdm(data_loader):
-                input_data_dict = utils.create_input_dict(model, input_data)
+                input_data_dict = utils.create_input_dict(model.model, input_data)
                 _ = session.run(None, input_data_dict)
 
         self.forward_pass_callback = forward_pass_callback
