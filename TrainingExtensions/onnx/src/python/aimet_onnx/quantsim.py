@@ -82,6 +82,7 @@ class QuantizationSimModel:
     """ Creates a QuantizationSimModel model by adding quantization simulations ops to a given model """
 
     # pylint: disable=too-many-arguments
+    # pylint: disable=too-many-locals
     # pylint: disable=too-many-instance-attributes
     def __init__(self,
                  model: ModelProto,
