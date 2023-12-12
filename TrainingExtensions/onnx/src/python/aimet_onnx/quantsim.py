@@ -136,7 +136,7 @@ class QuantizationSimModel:
             self._use_cuda = False
         if self._use_cuda:
             self._op_domain = "aimet.customop.cuda"
-            self.providers = [('CUDAExecutionProvider', {'device_id': device}), 'CPUExecutionProvider']
+            self.providers = [('CUDAExecutionProvider', {'device_id': device, 'cudnn_conv_algo_search': 'DEFAULT'}), 'CPUExecutionProvider']
         else:
             self._op_domain = "aimet.customop.cpu"
             self.providers = ['CPUExecutionProvider']
