@@ -56,7 +56,8 @@ else:
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
 
-OP_TYPES_WITH_PARAMS = ['Conv', 'Gemm', 'ConvTranspose', 'BatchNormalization', 'MatMul', 'Transpose']
+OP_TYPES_WITH_PARAMS = ['Conv', 'Gemm', 'ConvTranspose', 'BatchNormalization', 'MatMul', 'Transpose',
+                        'InstanceNormalization']
 
 
 def remove_nodes_with_type(node_type: str, onnx_graph: onnx.GraphProto):
