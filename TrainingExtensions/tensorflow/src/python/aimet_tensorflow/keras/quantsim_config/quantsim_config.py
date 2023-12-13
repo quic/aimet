@@ -190,17 +190,20 @@ def _initialize_output_quantizers(layer: layers.Layer, quant_settings: Quantizer
     :return: Output quantizers corresponding to layer
     """
     output_quantizers = []
-    activation_tensor_quantizer = ActivationTensorQuantizer(layer,
-                                                            f"{layer.name}_output_quantizer_0",
-                                                            quant_settings.quant_scheme,
-                                                            quant_settings.round_mode,
-                                                            quant_settings.bitwidth,
-                                                            quant_settings.data_type,
-                                                            quant_settings.is_symmetric,
-                                                            quant_settings.use_strict_symmetric,
-                                                            quant_settings.use_unsigned_symmetric,
-                                                            enabled and layer.output.dtype in QUANT_ALLOWED_DTYPES)
-    output_quantizers.append(activation_tensor_quantizer)
+    num_outputs = max(1, len(layer.outbound_nodes))
+    for idx in range(num_outputs):
+        layer_output_dtype = layer.output[idx].dtype if isinstance(layer.output, List) else layer.output.dtype
+        activation_tensor_quantizer = ActivationTensorQuantizer(layer,
+                                                                f"{layer.name}_output_quantizer_{idx}",
+                                                                quant_settings.quant_scheme,
+                                                                quant_settings.round_mode,
+                                                                quant_settings.bitwidth,
+                                                                quant_settings.data_type,
+                                                                quant_settings.is_symmetric,
+                                                                quant_settings.use_strict_symmetric,
+                                                                quant_settings.use_unsigned_symmetric,
+                                                                enabled and layer_output_dtype in QUANT_ALLOWED_DTYPES)
+        output_quantizers.append(activation_tensor_quantizer)
     return output_quantizers
 
 
