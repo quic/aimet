@@ -591,6 +591,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             "Gemm": create_conv2d_dense_type_params,
             "ConvTranspose": create_conv2d_dense_type_params,
             "BatchNormalization": create_batchnorm_params,
+            "InstanceNormalization": create_batchnorm_params,
             "MatMul": create_matmul_params
         }
 

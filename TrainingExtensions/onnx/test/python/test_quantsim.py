@@ -36,6 +36,7 @@
 # =============================================================================
 import json
 import os
+
 import onnx
 import torch
 import numpy as np
@@ -226,7 +227,7 @@ class TestQuantSim:
     def test_single_residual(self):
         if version.parse(torch.__version__) >= version.parse("1.13"):
             model = single_residual_model().model
-            sim = QuantizationSimModel(model, use_cuda=False)
+            sim = QuantizationSimModel(model, use_cuda=False, simplify_model=False)
             for quantizer in sim.qc_quantize_op_dict:
                 sim.qc_quantize_op_dict[quantizer].enabled = True
 
