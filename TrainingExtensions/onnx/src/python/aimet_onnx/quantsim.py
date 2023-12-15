@@ -37,7 +37,7 @@
 """ Implementation for simulating models running on Quantized hardware """
 
 import os
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Tuple
 import json
 import numpy as np
 import onnx
@@ -541,6 +541,21 @@ class QuantizationSimModel:
                     is_symmetric = True
                 self.qc_quantize_op_dict[quantizer_name].use_symmetric_encodings = is_symmetric
                 self.qc_quantize_op_dict[quantizer_name].freeze_encodings()
+
+    def get_all_quantizers(self) -> Tuple[List, List]:
+        """
+        Returns all QcQuantizeOps through which TensorQuantizer's attributes can be accessed.
+        """
+        param_quantizers = []
+        activation_quantizers = []
+
+        for param in self.param_names:
+            param_quantizers.append(self.qc_quantize_op_dict[param])
+
+        for activation in self.activation_names:
+            activation_quantizers.append(self.qc_quantize_op_dict[activation])
+
+        return param_quantizers, activation_quantizers
 
 
 def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, onnx_encoding_path: str):
