@@ -94,7 +94,7 @@ def _update_grad_to_tf_tensor_if_needed(grad_func: Callable):
     def wrapper(*args, **kwargs):
         grad = args[0]
         if isinstance(grad, tf.IndexedSlices):
-            _logger.debug(f"Converting {grad.name} from tf.IndexedSlices to tf.Tensor")
+            _logger.debug("Converting %s from tf.IndexedSlices to tf.Tensor", grad.name)
             args = (tf.convert_to_tensor(grad),) + args[1:]
         return grad_func(*args, **kwargs)
     return wrapper
