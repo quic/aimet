@@ -42,8 +42,8 @@ import re
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.keras.layers.merge import _Merge as MergeLayersParentClass
-from keras.layers.merging.base_merge import _Merge as MergeLayersParentClass2
-import tensorflow.keras.backend as K
+from keras.layers.merging.base_merge import _Merge as MergeLayersParentClass2 # pylint: disable=ungrouped-imports
+import tensorflow.keras.backend as K # pylint: disable=ungrouped-imports
 from packaging import version
 
 if version.parse(tf.version.VERSION) >= version.parse("2.10"):
@@ -491,7 +491,7 @@ def _handle_normal_keras_layer(layer: tf.keras.layers.Layer,
         else:
             new_output_tensor = layer(*call_args)
     # Special case for "Merge" layers that take a list of inputs such as "tf.keras.layers.Concatenate" and "tf.keras.layers.Add"
-    elif isinstance(layer, MergeLayersParentClass) or isinstance(layer, MergeLayersParentClass2):
+    elif isinstance(layer, (MergeLayersParentClass, MergeLayersParentClass2)):
         new_output_tensor = layer(call_args)
     else:
         new_output_tensor = layer(*call_args)
