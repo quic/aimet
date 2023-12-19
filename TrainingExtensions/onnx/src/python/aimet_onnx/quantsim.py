@@ -597,16 +597,7 @@ def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, onnx_encoding_p
     with open(onnx_encoding_path) as json_file:
         encodings = json.load(json_file)
 
-    # Check that all encoding names in the encodings to load are found in the model
-    encoding_names_not_found = []
-    for quantizer_name in list(encodings['activation_encodings'].keys()) + list(encodings['param_encodings'].keys()):
-        if quantizer_name not in quant_sim_model.qc_quantize_op_dict:
-            encoding_names_not_found.append(quantizer_name)
-    if encoding_names_not_found:
-        logger.error('The following encoding names were present in the encodings to load but not found in the model: '
-                     '%s', str(encoding_names_not_found))
-        raise AssertionError('The following encoding names were present in the encodings to load but not found in the '
-                             'model: ' + str(encoding_names_not_found))
+    validate_encodings_to_load(encodings, quant_sim_model)
 
     # First pass through quantizers to check for mismatched encodings
     for quantizer_name, quantizer in quant_sim_model.qc_quantize_op_dict.items():
@@ -649,6 +640,29 @@ def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, onnx_encoding_p
             libpymo_encodings, is_symmetric, is_strict_symmetric, is_unsigned_symmetric, data_type)
 
     return mismatched_encodings
+
+
+def validate_encodings_to_load(encodings_to_load: Dict, quant_sim_model: QuantizationSimModel):
+    """
+    Validate that all names of encodings to load are found in the model.
+
+    :param encodings_to_load: Encodings to load
+    :param quant_sim_model: Quantsim model to check for encoding names.
+    """
+    # Check that all encoding names in the encodings to load are found in the model. This check only works for verifying
+    # that names in encodings_to_load are valid. The reverse check will not work, since quantizers which are disabled
+    # will not show up in encodings_to_load.
+    encoding_names_not_found = []
+    for quantizer_name in (list(encodings_to_load['activation_encodings'].keys()) +
+                           list(encodings_to_load['param_encodings'].keys())):
+        if quantizer_name not in quant_sim_model.qc_quantize_op_dict:
+            encoding_names_not_found.append(quantizer_name)
+    if encoding_names_not_found:
+        logger.error('The following encoding names were present in the encodings to load but not found in the model: '
+                     '%s', str(encoding_names_not_found))
+        raise AssertionError('The following encoding names were present in the encodings to load but not found in the '
+                             'model: ' + str(encoding_names_not_found))
+
 
 def log_and_catch_mismatched_encodings(mismatched_encodings: List[EncodingMismatchInfo], strict: bool):
     """
