@@ -161,6 +161,7 @@ def _initialize_input_quantizers(layer: layers.Layer, quant_settings: QuantizerS
     :param enabled: Flag for quantized or not
     :return: Input quantizers corresponding to layer
     """
+    
     # `layer.input` will be a list if there is more than one otherwise it's just the single input
     num_inputs = len(layer.input) if isinstance(layer.input, List) else 1
     input_quantizers = []
@@ -189,11 +190,10 @@ def _initialize_output_quantizers(layer: layers.Layer, quant_settings: Quantizer
     :param enabled: Flag for quantized or not
     :return: Output quantizers corresponding to layer
     """
-    output_quantizers = []
-    num_outputs = 1
-    if isinstance(layer.output, List):
-        num_outputs = max(len(layer.output), num_outputs)
 
+    # `layer.output` will be a list if there is more than one otherwise it's just a single output
+    num_outputs = len(layer.output) if isinstance(layer.output, List) else 1
+    output_quantizers = []
     for idx in range(num_outputs):
         layer_output_dtype = layer.output[idx].dtype if isinstance(layer.output, List) else layer.output.dtype
         activation_tensor_quantizer = ActivationTensorQuantizer(layer,
