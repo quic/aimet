@@ -1266,7 +1266,6 @@ def test_quant_scheme_percentile():
             assert np.allclose(quantizer.get_percentile_value(), 99.99)
 
 
-
 def test_quant_scheme_percentile_setting_using_str():
     """
     This test case ensures that the quantization is working fine with percentile scheme
@@ -1282,3 +1281,41 @@ def test_quant_scheme_percentile_setting_using_str():
             assert quantizer.quant_scheme == QuantScheme.post_training_percentile
 
 
+def test_multi_output_model():
+    """
+    Test Quantsim with a model that has multi output layers
+    """
+
+    inputs = tf.keras.Input(shape=(480, 1088, 3))
+    x = tf.keras.layers.Conv2D(
+        filters=3,
+        kernel_size=(3, 3),
+        activation="relu",
+        padding="same"
+    )(inputs)
+
+    # tf operators -> TFOpLambda
+    x = tf.reshape(x, [1, -1, 2])
+    x, y = tf.split(x, 2, axis=2)
+    x = tf.concat([x, y], axis=2)
+
+    output_1 = tf.keras.layers.Dense(units=32)(x)
+    output_2 = tf.keras.layers.Dense(units=32)(x)
+
+    model = tf.keras.Model(inputs=[inputs], outputs=[output_1, output_2])
+
+    sim = QuantizationSimModel(model)
+
+    # Check ConnectedGraph
+    assert sim.connected_graph._split_count == 1
+    for idx in range(2):
+        assert sim.connected_graph._name_to_layer[f"tf.split/split:{idx}"].get_config()["name"] == "tf.split"
+
+    assert len(sim.model.layers[3].output_quantizers) == 2
+
+    sim.compute_encodings(
+        lambda m, _: m(tf.random.uniform(shape=(1, *model.input_shape[1:]))), None
+    )
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        sim.export(tmp_dir, "multi_output_model")

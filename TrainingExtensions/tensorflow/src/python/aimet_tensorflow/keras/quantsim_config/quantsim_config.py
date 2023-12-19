@@ -190,7 +190,10 @@ def _initialize_output_quantizers(layer: layers.Layer, quant_settings: Quantizer
     :return: Output quantizers corresponding to layer
     """
     output_quantizers = []
-    num_outputs = max(1, len(layer.outbound_nodes))
+    num_outputs = 1
+    if isinstance(layer.output, List):
+        num_outputs = max(len(layer.output), num_outputs)
+
     for idx in range(num_outputs):
         layer_output_dtype = layer.output[idx].dtype if isinstance(layer.output, List) else layer.output.dtype
         activation_tensor_quantizer = ActivationTensorQuantizer(layer,
