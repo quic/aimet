@@ -3,7 +3,7 @@
 #
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -64,11 +64,13 @@ else:
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
 
+INPUT_INDEX = 0
 WEIGHT_INDEX = 1
 BIAS_INDEX = 2
+RECURRENT_WEIGHT_INDEX = 2
 RUNNING_MEAN_INDEX = 3
 RUNNING_VAR_INDEX = 4
-OPS_WITH_PARAMS = ["Conv", "Gemm", "ConvTranspose", "BatchNormalization", "MatMul"]
+OPS_WITH_PARAMS = ["Conv", "Gemm", "ConvTranspose", "BatchNormalization", "MatMul", "RNN", "LSTM", "GRU"]
 CONSTANT_TYPE = ['Constant', 'ConstantOfShape']
 
 
@@ -253,6 +255,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         if node.op_type == 'MatMul' and index == WEIGHT_INDEX:
             return True
         if node.op_type == 'BatchNormalization' and index in [WEIGHT_INDEX, BIAS_INDEX, RUNNING_VAR_INDEX, RUNNING_MEAN_INDEX]:
+            return True
+        if node.op_type in ['RNN', 'LSTM', 'GRU'] and index != INPUT_INDEX:
             return True
 
         return False
@@ -560,6 +564,19 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             if weight_tensor:
                 create_and_connect_product(weight_tensor.name, weight_tensor.dims, my_op, weight_tensor, 'weight')
 
+        def create_recurrent_type_params(my_op: Op):
+            """
+            Create products for RNN, LSTM and GRU layer
+
+            :param my_op: Connected Graph Op
+            """
+            op = my_op.get_module()
+            weight_tensor = ParamUtils.get_param(self.model, op, WEIGHT_INDEX)
+            create_and_connect_product(weight_tensor.name, weight_tensor.dims, my_op, weight_tensor, 'weight_x')
+
+            recurrent_weight_tensor = ParamUtils.get_param(self.model, op, RECURRENT_WEIGHT_INDEX)
+            create_and_connect_product(recurrent_weight_tensor.name, recurrent_weight_tensor.dims, my_op, recurrent_weight_tensor, 'weight_r')
+
         def create_batchnorm_params(my_op: Op):
             """ Create products for fusedbatchnorm """
             op = my_op.get_module()
@@ -590,6 +607,9 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             "Conv": create_conv2d_dense_type_params,
             "Gemm": create_conv2d_dense_type_params,
             "ConvTranspose": create_conv2d_dense_type_params,
+            "RNN": create_recurrent_type_params,
+            "LSTM": create_recurrent_type_params,
+            "GRU": create_recurrent_type_params,
             "BatchNormalization": create_batchnorm_params,
             "InstanceNormalization": create_batchnorm_params,
             "MatMul": create_matmul_params

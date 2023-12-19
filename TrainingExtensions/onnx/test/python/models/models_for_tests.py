@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -1017,6 +1017,46 @@ def build_dummy_model():
     model = helper.make_model(onnx_graph, opset_imports=[op])
 
     return model
+
+
+def build_lstm_gru_dummy_model():
+    op = OperatorSetIdProto()
+    op.version = 13
+
+    input_info = helper.make_tensor_value_info(name='input', elem_type=TensorProto.FLOAT,
+                                               shape=[1, 8, 64])
+    output_info = helper.make_tensor_value_info(name='output', elem_type=TensorProto.FLOAT,
+                                                shape=[1, 1, 8, 16])
+
+    lstm_node = helper.make_node('LSTM',
+                                 ['input', 'lstm_w', 'lstm_r_w'],
+                                 ['2'],
+                                 'lstm',
+                                 hidden_size=16)
+    squeeze_node = helper.make_node('Squeeze',
+                                    ['2', 'axis'],
+                                    ['3'],
+                                    'squeeze')
+    gru_node = helper.make_node('GRU',
+                                ['3', 'gru_w', 'gru_r_w'],
+                                ['output'],
+                                'gru',
+                                hidden_size=16)
+
+    lstm_w_init = numpy_helper.from_array(np.random.rand(1, 64, 64).astype(np.float32), 'lstm_w')
+    lstm_r_w_init = numpy_helper.from_array(np.random.rand(1, 64, 16).astype(np.float32), 'lstm_r_w')
+    squeeze_axis_init = numpy_helper.from_array(np.array([1]).astype(np.int64), 'axis')
+    gru_w_init = numpy_helper.from_array(np.random.rand(1, 48, 16).astype(np.float32), 'gru_w')
+    gru_r_w_init = numpy_helper.from_array(np.random.rand(1, 48, 16).astype(np.float32), 'gru_r_w')
+
+    onnx_graph = helper.make_graph([lstm_node, squeeze_node, gru_node],
+                                   'dummy_graph', [input_info], [output_info],
+                                   [lstm_w_init, lstm_r_w_init, squeeze_axis_init, gru_w_init, gru_r_w_init])
+
+    model = helper.make_model(onnx_graph, opset_imports=[op])
+
+    return model
+
 
 def single_residual_model(training=torch.onnx.TrainingMode.EVAL):
     x = torch.randn(1, 3, 32, 32, requires_grad=True)
