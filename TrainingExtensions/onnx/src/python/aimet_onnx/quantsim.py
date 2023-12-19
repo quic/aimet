@@ -597,6 +597,17 @@ def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, onnx_encoding_p
     with open(onnx_encoding_path) as json_file:
         encodings = json.load(json_file)
 
+    # Check that all encoding names in the encodings to load are found in the model
+    encoding_names_not_found = []
+    for quantizer_name in list(encodings['activation_encodings'].keys()) + list(encodings['param_encodings'].keys()):
+        if quantizer_name not in quant_sim_model.qc_quantize_op_dict:
+            encoding_names_not_found.append(quantizer_name)
+    if encoding_names_not_found:
+        logger.error('The following encoding names were present in the encodings to load but not found in the model: '
+                     '%s', str(encoding_names_not_found))
+        raise AssertionError('The following encoding names were present in the encodings to load but not found in the '
+                             'model: ' + str(encoding_names_not_found))
+
     # First pass through quantizers to check for mismatched encodings
     for quantizer_name, quantizer in quant_sim_model.qc_quantize_op_dict.items():
         if quantizer_name not in encodings['activation_encodings'] and \
