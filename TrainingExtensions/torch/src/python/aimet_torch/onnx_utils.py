@@ -102,6 +102,8 @@ map_torch_types_to_onnx = {
     nn.MaxPool2d: ['MaxPool'],
     nn.MaxPool3d: ['MaxPool'],
     nn.LayerNorm: ['LayerNorm'],        # Not a supported op in ONNX, adding this entry for usage by Connected Graph
+    nn.InstanceNorm2d: ['InstanceNormalization'],
+    nn.InstanceNorm1d: ['InstanceNormalization'],
     nn.LeakyReLU: ['LeakyRelu'],
     nn.Linear: ['Gemm', 'MatMul'],
     nn.LogSoftmax: ['LogSoftmax'],
