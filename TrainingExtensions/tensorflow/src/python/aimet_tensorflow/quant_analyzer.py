@@ -402,7 +402,7 @@ class QuantAnalyzer:
 
             # Collect output activation data from quant sim op
             feed_dict = create_input_feed_dict(sim.session.graph, self._start_op_names, model_inputs)
-            quant_op = sim.session.graph.get_operation_by_name(output_op_name)
+            quant_op = sim.session.graph.get_operation_by_name(output_op_name + "_quantized")
             quantized_out_data = sim.session.run(quant_op.outputs[0], feed_dict=feed_dict)
 
             # Calculate MSE loss
