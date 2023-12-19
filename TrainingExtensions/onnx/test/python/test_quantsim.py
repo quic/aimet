@@ -36,8 +36,7 @@
 # =============================================================================
 import json
 import os
-
-import onnx
+import onnx.numpy_helper
 import torch
 import numpy as np
 from onnx import load_model
@@ -446,6 +445,81 @@ class TestQuantSim:
 
         assert np.allclose(out2, out3)
 
+    def test_load_encodings_assertion(self):
+        model = single_residual_model().model
+        sim = QuantizationSimModel(model, config_file=get_path_for_per_channel_config())
+        def callback(session, args):
+            in_tensor = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
+            session.run(None, in_tensor)
+
+        sim.compute_encodings(callback, None)
+        sim.export('./tmp', 'onnx_sim')
+        model = multi_output_model().model
+        sim = QuantizationSimModel(model)
+        with pytest.raises(AssertionError):
+            load_encodings_to_sim(sim, './tmp/onnx_sim.encodings', strict=False)
+
+    @pytest.mark.parametrize('strict', [False, True])
+    def test_load_encodings_strict_and_non_strict(self, strict):
+        model = single_residual_model().model
+
+        # Update weights for testing is_unsigned_symmetric override later
+        weight_initializers = [i.name for i in model.graph.initializer if len(i.dims) > 1]
+        weight_initializer_3 = [i for i in model.graph.initializer if i.name == weight_initializers[3]][0]
+        weight_initializer_3_data = onnx.numpy_helper.to_array(weight_initializer_3)
+        weight_initializer_3.raw_data = np.asarray(np.abs(weight_initializer_3_data), dtype=np.float32).tobytes()
+
+        sim = QuantizationSimModel(model, config_file=get_path_for_per_channel_config())
+
+        conv_ops = [node for node in sim.model.model.graph.node if node.op_type == 'Conv']
+        relu_ops = [node for node in sim.model.model.graph.node if node.op_type == 'Relu']
+        avgpool_ops = [node for node in sim.model.model.graph.node if node.op_type == 'AveragePool']
+
+        act_1 = conv_ops[0].output[0]
+        act_2 = relu_ops[0].output[0]
+        act_3 = avgpool_ops[0].output[0]
+        act_4 = conv_ops[2].output[0]
+        sim.get_qc_quantize_op()[act_1].enabled = True
+        sim.get_qc_quantize_op()[act_2].enabled = False
+        sim.get_qc_quantize_op()[act_3].data_type = QuantizationDataType.float
+        sim.get_qc_quantize_op()[weight_initializers[0]].bitwidth = 16
+        sim.get_qc_quantize_op()[act_4].bitwidth = 4
+        sim.get_qc_quantize_op()[weight_initializers[1]].use_symmetric_encodings = False
+        sim.get_qc_quantize_op()[weight_initializers[2]].use_strict_symmetric = True
+        sim.get_qc_quantize_op()[weight_initializers[3]].use_unsigned_symmetric = True
+
+        def callback(session, args):
+            in_tensor = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
+            session.run(None, in_tensor)
+
+        dummy_tensor = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
+
+        sim.compute_encodings(callback, None)
+        sim.export('./tmp', 'onnx_sim')
+
+        out2 = sim.session.run(None, dummy_tensor)
+
+        del sim
+
+        sim = QuantizationSimModel(model, config_file=get_path_for_per_channel_config())
+        if strict:
+            with pytest.raises(AssertionError):
+                load_encodings_to_sim(sim, './tmp/onnx_sim.encodings', strict=strict)
+        else:
+            mismatched_encodings = load_encodings_to_sim(sim, './tmp/onnx_sim.encodings', strict=strict)
+            out3 = sim.session.run(None, dummy_tensor)
+            sim.export('./tmp', 'loaded_onnx_sim')
+
+            assert sim.get_qc_quantize_op()[act_1].enabled
+            assert not sim.get_qc_quantize_op()[act_2].enabled
+            assert sim.get_qc_quantize_op()[act_3].data_type == QuantizationDataType.float
+            assert sim.get_qc_quantize_op()[weight_initializers[0]].bitwidth == 16
+            assert sim.get_qc_quantize_op()[act_4].bitwidth == 4
+            assert not sim.get_qc_quantize_op()[weight_initializers[1]].use_symmetric_encodings
+            assert sim.get_qc_quantize_op()[weight_initializers[2]].use_strict_symmetric
+            assert sim.get_qc_quantize_op()[weight_initializers[3]].use_unsigned_symmetric
+            assert len(mismatched_encodings) == 8
+            assert np.allclose(out2, out3)
 
     def test_model_with_constants(self):
         if version.parse(torch.__version__) >= version.parse("1.13"):
