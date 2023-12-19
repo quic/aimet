@@ -161,8 +161,8 @@ def _initialize_input_quantizers(layer: layers.Layer, quant_settings: QuantizerS
     :param enabled: Flag for quantized or not
     :return: Input quantizers corresponding to layer
     """
-    layer_input_list = layer.inbound_nodes[0].keras_inputs
-    num_inputs = len(layer_input_list)
+    # `layer.input` will be a list if there is more than one otherwise it's just the single input
+    num_inputs = len(layer.input) if isinstance(layer.input, List) else 1
     input_quantizers = []
     for i in range(num_inputs):
         activation_tensor_quantizer = ActivationTensorQuantizer(layer,
