@@ -161,7 +161,7 @@ def _initialize_input_quantizers(layer: layers.Layer, quant_settings: QuantizerS
     :param enabled: Flag for quantized or not
     :return: Input quantizers corresponding to layer
     """
-    
+
     # `layer.input` will be a list if there is more than one otherwise it's just the single input
     num_inputs = len(layer.input) if isinstance(layer.input, List) else 1
     input_quantizers = []
