@@ -36,16 +36,17 @@
 # =============================================================================
 """ Utilities for parsing and applying quantsim configurations from json config file """
 from typing import List, Tuple, Dict, Union
-from packaging import version
 
 import tensorflow as tf
 from tensorflow.keras import layers
 
+from packaging import version
 if version.parse(tf.version.VERSION) >= version.parse("2.10.1"):
     from keras.layers.core.tf_op_layer import TFOpLambda  # pylint: disable=import-error
 else:
     from tensorflow.python.keras.layers.core import TFOpLambda  # pylint: disable=ungrouped-imports
 
+# pylint: disable=wrong-import-position
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
 from aimet_common.connected_graph.operation import Op
 from aimet_common.defs import QuantScheme, QuantizationDataType
