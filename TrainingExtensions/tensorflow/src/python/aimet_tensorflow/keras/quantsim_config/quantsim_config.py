@@ -36,8 +36,15 @@
 # =============================================================================
 """ Utilities for parsing and applying quantsim configurations from json config file """
 from typing import List, Tuple, Dict, Union
+from packaging import version
 
+import tensorflow as tf
 from tensorflow.keras import layers
+
+if version.parse(tf.version.VERSION) >= version.parse("2.10.1"):
+    from keras.layers.core.tf_op_layer import TFOpLambda  # pylint: disable=import-error
+else:
+    from tensorflow.python.keras.layers.core import TFOpLambda  # pylint: disable=ungrouped-imports
 
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
 from aimet_common.connected_graph.operation import Op
@@ -162,8 +169,10 @@ def _initialize_input_quantizers(layer: layers.Layer, quant_settings: QuantizerS
     :return: Input quantizers corresponding to layer
     """
 
-    # `layer.input` will be a list if there is more than one otherwise it's just the single input
-    num_inputs = len(layer.input) if isinstance(layer.input, List) else 1
+    num_inputs = len(layer.inbound_nodes[0].keras_inputs)
+    # Special case for TFOpLambda layers as the input can be other Keras layers, tf operations, or static tf.tensors
+    if isinstance(layer, TFOpLambda):
+        num_inputs = len(layer.input) if isinstance(layer.input, List) else num_inputs
     input_quantizers = []
     for i in range(num_inputs):
         activation_tensor_quantizer = ActivationTensorQuantizer(layer,
