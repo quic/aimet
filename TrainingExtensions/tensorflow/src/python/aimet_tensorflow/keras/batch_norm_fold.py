@@ -57,7 +57,7 @@ from aimet_common.defs import QuantScheme, MAP_ROUND_MODE_TO_PYMO
 
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
-from aimet_tensorflow.keras.model_preparer import _handle_normal_keras_layer
+from aimet_tensorflow.keras.model_preparer import _get_updated_call_args, _get_call_kwargs
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ParamPerTensorQuantizer
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
@@ -541,7 +541,16 @@ def _delete_bn_from_functional(model: tf.keras.Model,
             current_layer._inbound_nodes = []  # pylint: disable=protected-access
             # Special case for when there is a Lambda opertaion with multiple inputs. For example, z = x + y.
             if isinstance(current_layer, TFOpLambda):
-                x = _handle_normal_keras_layer(current_layer, model_layer_connections)
+                call_args = _get_updated_call_args(current_layer, model_layer_connections)
+                if call_kwargs := _get_call_kwargs(current_layer, model_layer_connections):
+                    # Special case for 'tf.concat' that takes a list of inputs with kwargs attached
+                    # may need to updated in the future...
+                    if 'concat' in current_layer.name:
+                        x = current_layer([*call_args], **call_kwargs)
+                    else:
+                        x = current_layer(*call_args, **call_kwargs)
+                else:
+                    x = current_layer(*call_args)
             else:
                 x = current_layer(layer_input)
             current_layer._outbound_nodes = [] # pylint: disable=protected-access

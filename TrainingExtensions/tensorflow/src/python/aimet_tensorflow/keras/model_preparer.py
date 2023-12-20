@@ -485,11 +485,11 @@ def _handle_normal_keras_layer(layer: tf.keras.layers.Layer,
             # Special case for 'tf.concat' that takes a list of inputs with kwargs attached
             # may need to updated in the future...
             if 'concat' in layer.name:
-                new_output_tensor = layer([*call_args], **call_kwargs)
+                new_output_tensor = layer.call([*call_args], **call_kwargs)
             else:
-                new_output_tensor = layer(*call_args, **call_kwargs)
+                new_output_tensor = layer.call(*call_args, **call_kwargs)
         else:
-            new_output_tensor = layer(*call_args)
+            new_output_tensor = layer.call(*call_args)
     # Special case for "Merge" layers that take a list of inputs such as "tf.keras.layers.Concatenate" and "tf.keras.layers.Add"
     elif isinstance(layer, (MergeLayersParentClass, MergeLayersParentClass2)):
         new_output_tensor = layer(call_args)
