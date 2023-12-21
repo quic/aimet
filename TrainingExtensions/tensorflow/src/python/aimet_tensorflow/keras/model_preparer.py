@@ -40,7 +40,6 @@ import inspect
 from typing import Any, Dict, List, Set, Union
 import re
 
-import keras.engine.keras_tensor
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K # pylint: disable=ungrouped-imports
@@ -331,22 +330,27 @@ def _get_call_kwargs(layer: tf.keras.layers.Layer, model_layers_connections: Mod
         return {}
     return call_kwargs
 
-def _update_call_args_in_model_layer_connections(model_layer_connections, layer, new_output_tensor):
+def _update_call_args_in_model_layer_connections(model_layer_connections: ModelLayerConnectionsProperties.TYPE,
+                                                 layer: tf.keras.layers.Layer, new_output_tensor: KerasTensor):
+    """
+    Helper function to update the call args in model layer connections dictionary.
+
+    :param model_layer_connections: The model layers connections dictionary
+    :param layer: The layer to update the output tensors of
+    :param new_output_tensor: The new output tensor to update with
+    """
     KERAS_SYMBOLIC_TENSORS_INDEX = 0
-    tensor_types = (tf.Tensor, tf.Variable, tf.SparseTensor, tf.RaggedTensor, keras.engine.keras_tensor.KerasTensor)
+    # pylint: disable=protected-access
     for layer_name, keras_tensor in model_layer_connections[ModelLayerConnectionsProperties.CALL_ARGS].items():
         keras_tensor = keras_tensor[KERAS_SYMBOLIC_TENSORS_INDEX]
         if isinstance(keras_tensor, list):
             for idx, each_keras_tensor in enumerate(keras_tensor):
-                # pylint: disable=protected-access
-                if isinstance(each_keras_tensor, tensor_types) and tf.keras.backend.is_keras_tensor(each_keras_tensor) \
-                        and each_keras_tensor._keras_history.layer.name == layer.name:
+                if isinstance(each_keras_tensor, KerasTensor) and \
+                        each_keras_tensor._keras_history.layer.name == layer.name:
                     model_layer_connections[ModelLayerConnectionsProperties.CALL_ARGS][layer_name]\
                         [KERAS_SYMBOLIC_TENSORS_INDEX][idx] = new_output_tensor
         else:
-            # pylint: disable=protected-access
-            if isinstance(keras_tensor, tensor_types) and tf.keras.backend.is_keras_tensor(keras_tensor) and \
-                    keras_tensor._keras_history.layer.name == layer.name:
+            if isinstance(keras_tensor, KerasTensor) and keras_tensor._keras_history.layer.name == layer.name:
                 model_layer_connections[ModelLayerConnectionsProperties.CALL_ARGS][layer_name] = (new_output_tensor,)
 
 
@@ -355,7 +359,8 @@ def _update_output_tensors_in_model_layers_connections(layer: tf.keras.layers.La
                                                        model_layers_connections: ModelLayerConnectionsProperties.TYPE,
                                                        model_outputs: List[KerasTensor]):
     """
-    Helper function to update the output tensors in the model layers connections dictionary.
+    Helper function to update the output tensors in the model layers connections dictionary. It also updates
+    the call_args of model layer connections
 
     :param layer: The layer to update the output tensors of
     :param new_output_tensor: The new output tensor to update with
