@@ -39,7 +39,6 @@
 import inspect
 from typing import Any, Dict, List, Set, Union
 import re
-
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K # pylint: disable=ungrouped-imports
@@ -58,7 +57,7 @@ else:
     from tensorflow.python.keras.engine.keras_tensor import KerasTensor # pylint: disable=ungrouped-imports
     from tensorflow.python.keras.engine.functional import Functional # pylint: disable=ungrouped-imports
     from tensorflow.python.keras.layers.core import TFOpLambda # pylint: disable=ungrouped-imports
-    from tensorflow.python.keras.layers.merge import _Merge as MergeLayersParentClass
+    from tensorflow.python.keras.layers.merge import _Merge as MergeLayersParentClass # pylint: disable=ungrouped-imports
 
 # pylint: disable=wrong-import-position
 from aimet_tensorflow.keras.utils.model_connection_utils import ModelLayerConnections, ModelLayerConnectionsProperties
