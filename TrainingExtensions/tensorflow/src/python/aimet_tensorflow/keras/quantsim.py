@@ -253,6 +253,9 @@ class QuantizationSimModel(tf.keras.Model):
                 config["copy_source_weights"] = layer.get_weights()
 
                 if isinstance(layer, tf.keras.layers.LSTM):
+                    # pylint: disable=protected-access
+                    if self._quantsim_configurator._layer_to_config_dict[layer]["is_input_quantized"]["setting"] is True:
+                        config["is_input_quantized"] = True
                     config["quant_scheme"] = quant_scheme
                     config["rounding_mode"] = rounding_mode
                     config["default_output_bw"] = default_output_bw
@@ -393,7 +396,7 @@ class QuantizationSimModel(tf.keras.Model):
                     # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
                     # inbound_nodes parameter populated, so the name of the quantizer is used instead
                     if not wrapper._layer_to_wrap.inbound_nodes:
-                        tensor_name = "multi_head_attention/" + wrapper.name + "/" + input_quantizer.name
+                        tensor_name = wrapper.name + "/" + input_quantizer.name + ":0"
                     else:
                         tensor_name = wrapper._layer_to_wrap.inbound_nodes[0].keras_inputs[idx].name
                     encoding_dict = self._get_encoding_dict_for_quantizer(input_quantizer)
@@ -410,7 +413,7 @@ class QuantizationSimModel(tf.keras.Model):
                     # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
                     # inbound_nodes parameter populated, so the name of the quantizer is used instead
                     if not wrapper._layer_to_wrap.inbound_nodes:
-                        tensor_name = "multi_head_attention/" + wrapper.name + "/" + output_quantizer.name
+                        tensor_name = wrapper.name + ":0"
                     elif isinstance(wrapper._layer_to_wrap.output, List):
                         tensor_name = wrapper._layer_to_wrap.output[idx].name
                     else:
@@ -483,7 +486,14 @@ class QuantizationSimModel(tf.keras.Model):
         :param custom_objects: If there are custom objects to load, Keras needs a dict of them to map them
         """
         model_path = os.path.join(path, filename_prefix)
-        self._model_without_wrappers.save(model_path)
+
+        #TF Version 2.4 has bug i.e. save() in tf format don't work for unrolled LSTM.
+        for layer in self._model_without_wrappers.layers:
+            if isinstance(layer, tf.keras.layers.LSTM):
+                break
+        else:
+            self._model_without_wrappers.save(model_path)
+
         self._model_without_wrappers.save(model_path + '.h5', save_format='h5')
 
         # Conversion of saved h5 model to pb model for consumption by SNPE/QNN
@@ -560,10 +570,10 @@ class QuantizationSimModel(tf.keras.Model):
 
         for wrapper in self.quant_wrappers():
             for idx, input_quantizer in enumerate(wrapper.input_quantizers):
-                # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
+                # because dense layers in quantizable MHA and RNN are not explicitly sublayers, they don't have their
                 # inbound_nodes parameter populated, so the name of the quantizer is used instead
                 if not wrapper._layer_to_wrap.inbound_nodes:
-                    tensor_name = "multi_head_attention/" + wrapper.name + "/" + input_quantizer.name
+                    tensor_name = wrapper.name + "/" + input_quantizer.name + ":0"
                 else:
                     tensor_name = wrapper._layer_to_wrap.inbound_nodes[0].keras_inputs[idx].name
 
@@ -618,7 +628,7 @@ class QuantizationSimModel(tf.keras.Model):
                 # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
                 # inbound_nodes parameter populated, so the name of the quantizer is used instead
                 if not wrapper._layer_to_wrap.inbound_nodes:
-                    tensor_name = "multi_head_attention/" + wrapper.name + "/" + output_quantizer.name
+                    tensor_name = wrapper.name + ":0"
                 else:
                     tensor_name = wrapper._layer_to_wrap.output.name
 
