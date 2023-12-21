@@ -39,10 +39,10 @@
 import inspect
 from typing import Any, Dict, List, Set, Union
 import re
+
+import keras.engine.keras_tensor
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.keras.layers.merge import _Merge as MergeLayersParentClass
-from keras.layers.merging.base_merge import _Merge as MergeLayersParentClass2 # pylint: disable=ungrouped-imports
 import tensorflow.keras.backend as K # pylint: disable=ungrouped-imports
 from packaging import version
 
@@ -52,12 +52,14 @@ if version.parse(tf.version.VERSION) >= version.parse("2.10"):
     from keras.engine.functional import Functional # pylint: disable=import-error
     from keras.engine.keras_tensor import KerasTensor # pylint: disable=import-error
     from keras.layers.core.tf_op_layer import TFOpLambda # pylint: disable=import-error
+    from keras.layers.merging.base_merge import _Merge as MergeLayersParentClass # pylint: disable=ungrouped-imports
 else:
     # Ignore pylint errors due to conditional imports
     from tensorflow.python.keras.engine.base_layer_utils import is_subclassed # pylint: disable=ungrouped-imports
     from tensorflow.python.keras.engine.keras_tensor import KerasTensor # pylint: disable=ungrouped-imports
     from tensorflow.python.keras.engine.functional import Functional # pylint: disable=ungrouped-imports
     from tensorflow.python.keras.layers.core import TFOpLambda # pylint: disable=ungrouped-imports
+    from tensorflow.python.keras.layers.merge import _Merge as MergeLayersParentClass
 
 # pylint: disable=wrong-import-position
 from aimet_tensorflow.keras.utils.model_connection_utils import ModelLayerConnections, ModelLayerConnectionsProperties
@@ -329,6 +331,24 @@ def _get_call_kwargs(layer: tf.keras.layers.Layer, model_layers_connections: Mod
         return {}
     return call_kwargs
 
+def _update_call_args_in_model_layer_connections(model_layer_connections, layer, new_output_tensor):
+    KERAS_SYMBOLIC_TENSORS_INDEX = 0
+    tensor_types = (tf.Tensor, tf.Variable, tf.SparseTensor, tf.RaggedTensor, keras.engine.keras_tensor.KerasTensor)
+    for layer_name, keras_tensor in model_layer_connections[ModelLayerConnectionsProperties.CALL_ARGS].items():
+        keras_tensor = keras_tensor[KERAS_SYMBOLIC_TENSORS_INDEX]
+        if isinstance(keras_tensor, list):
+            for idx, each_keras_tensor in enumerate(keras_tensor):
+                # pylint: disable=protected-access
+                if isinstance(each_keras_tensor, tensor_types) and tf.keras.backend.is_keras_tensor(each_keras_tensor) \
+                        and each_keras_tensor._keras_history.layer.name == layer.name:
+                    model_layer_connections[ModelLayerConnectionsProperties.CALL_ARGS][layer_name]\
+                        [KERAS_SYMBOLIC_TENSORS_INDEX][idx] = new_output_tensor
+        else:
+            # pylint: disable=protected-access
+            if isinstance(keras_tensor, tensor_types) and tf.keras.backend.is_keras_tensor(keras_tensor) and \
+                    keras_tensor._keras_history.layer.name == layer.name:
+                model_layer_connections[ModelLayerConnectionsProperties.CALL_ARGS][layer_name] = (new_output_tensor,)
+
 
 def _update_output_tensors_in_model_layers_connections(layer: tf.keras.layers.Layer, new_output_tensor: KerasTensor,
                                                        model: tf.keras.Model,
@@ -361,6 +381,9 @@ def _update_output_tensors_in_model_layers_connections(layer: tf.keras.layers.La
         # Set new output tensor (in this case, it will be the same as the original model)
         model_layers_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS].update(
             {layer.name: new_output_tensor})
+
+    # Updating the CALL_ARGS of model layer connections with new output tensor
+    _update_call_args_in_model_layer_connections(model_layers_connections, layer, new_output_tensor)
 
     # Save tensor in output list if it is output in the initial model
     # TODO: Update so that the last conditional is only checked when it's not the last layer.
@@ -491,7 +514,7 @@ def _handle_normal_keras_layer(layer: tf.keras.layers.Layer,
         else:
             new_output_tensor = layer.call(*call_args)
     # Special case for "Merge" layers that take a list of inputs such as "tf.keras.layers.Concatenate" and "tf.keras.layers.Add"
-    elif isinstance(layer, (MergeLayersParentClass, MergeLayersParentClass2)):
+    elif isinstance(layer, MergeLayersParentClass):
         new_output_tensor = layer(call_args)
     else:
         new_output_tensor = layer(*call_args)
