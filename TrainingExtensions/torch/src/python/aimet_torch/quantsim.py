@@ -1599,6 +1599,27 @@ class QuantizationSimModel:
         return QuantSimConfigurator(self.model, self.connected_graph, config_file, default_output_bw,
                                     default_param_bw, default_data_type)
 
+    def set_and_freeze_partial_encodings(self, encoding_path: str):
+        """
+        Functionality to set encodings (both activation and parameter) as per the given encodings JSON file and
+        freeze them.
+
+        :param encoding_path: JSON file path from where to load the encodings.
+        """
+        with open(encoding_path, mode='r') as json_file:
+            encodings_dict = json.load(json_file)
+
+        params_encoding = encodings_dict['param_encodings']
+        activation_encoding = encodings_dict['activation_encodings']
+
+        for name, module in self.model.named_modules():
+            if isinstance(module, QcQuantizeWrapper):
+                module.set_param_encoding(name, params_encoding)
+                module.freeze_param_encoding(name, params_encoding)
+
+                module.set_activation_encoding(name, activation_encoding)
+                module.freeze_activation_encoding(name, activation_encoding)
+
     def set_and_freeze_param_encodings(self, encoding_path: str):
         """
         Set and freeze parameter encodings from encodings JSON file
