@@ -1599,7 +1599,7 @@ class QuantizationSimModel:
         return QuantSimConfigurator(self.model, self.connected_graph, config_file, default_output_bw,
                                     default_param_bw, default_data_type)
 
-    def set_and_freeze_partial_encodings(self, encoding_path: str):
+    def load_and_freeze_encodings(self, encoding_path: str):
         """
         Functionality to set encodings (both activation and parameter) as per the given encodings JSON file and
         freeze them.

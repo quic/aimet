@@ -390,7 +390,7 @@ class QcQuantizeWrapper(nn.Module):
                         raise RuntimeError("The quantsim passed for loading encodings does not have the same "
                                            "configuration as the quantsim which was used to export the encodings")
 
-                    if quantizer._is_encoding_frozen:
+                    if quantizer._is_encoding_frozen: # pylint: disable=protected-access
                         _logger.debug("Encodings are frozen for module %s and quantizer type %s", module_name,
                                       type_of_quantizer)
                         continue
@@ -419,6 +419,7 @@ class QcQuantizeWrapper(nn.Module):
         """
         for orig_param_name, param_quantizer in self.param_quantizers.items():
             param_name = module_name + '.' + orig_param_name
+            # pylint: disable=protected-access
             if param_name in param_encodings and param_quantizer.enabled and not param_quantizer._is_encoding_frozen:
                 encodings = []
                 if param_encodings[param_name][0]['dtype'] == 'int':
