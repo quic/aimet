@@ -236,6 +236,7 @@ def replace_relu6_with_relu(model: ModelProto):
                 )
 
                 model.add_node(relu_node)
+    model.topological_sort()
 
 
 def check_if_clip_node_minimum_is_zero(node: NodeProto, model: ModelProto):
