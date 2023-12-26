@@ -322,7 +322,6 @@ class TestAutoQuant:
                                        dummy_input,
                                        unlabeled_data_loader,
                                        mocks.eval_callback,
-                                       eval_callback_args=None,
                                        results_dir=results_dir)
                 auto_quant.run_inference()
 
@@ -351,7 +350,6 @@ class TestAutoQuant:
                                        dummy_input,
                                        unlabeled_data_loader,
                                        mocks.eval_callback,
-                                       eval_callback_args=None,
                                        results_dir=results_dir)
 
                 # Should return proper model & summary report
@@ -370,7 +368,6 @@ class TestAutoQuant:
                                        dummy_input,
                                        unlabeled_data_loader,
                                        mocks.eval_callback,
-                                       eval_callback_args=None,
                                        results_dir=results_dir)
 
                 # When run_inference() and optimize() are called in back-to-back,
@@ -403,7 +400,6 @@ class TestAutoQuant:
                                        dummy_input,
                                        unlabeled_data_loader,
                                        mocks.eval_callback,
-                                       eval_callback_args=None,
                                        results_dir=results_dir)
                 self._do_test_optimize_auto_quant(
                     auto_quant, model, allowed_accuracy_drop,
