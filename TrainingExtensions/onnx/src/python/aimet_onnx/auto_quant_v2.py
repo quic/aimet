@@ -74,6 +74,10 @@ _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.AutoQuant)
 
 cache = Cache()
 
+# The number of samples to be used for performance evaluation.
+# NOTE: None means "all".
+NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION = None
+
 
 @dataclass(frozen=True)
 class _QuantSchemePair:
@@ -195,8 +199,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
             model: Union[onnx.ModelProto, ONNXModel],
             dummy_input: Dict[str, np.ndarray],
             data_loader: Iterable[Union[np.ndarray, List[np.ndarray], Tuple[np.ndarray]]],
-            eval_callback: Callable[[ort.InferenceSession], float],
-            eval_callback_args=None,
+            eval_callback: Callable[[ort.InferenceSession, int], float],
             param_bw: int = 8,
             output_bw: int = 8,
             quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
@@ -208,11 +211,10 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
             cache_id: str = None,
             strict_validation: bool = True) -> None:
         '''
-        :param model: Model to be quantized. Assumes model is on the correct device
-        :param dummy_input: Dummy input for the model. Assumes that dummy_input is on the correct device
+        :param model: Model to be quantized.
+        :param dummy_input: Dummy input dict for the model.
         :param data_loader: A collection that iterates over an unlabeled dataset, used for computing encodings
         :param eval_callback: Function that calculates the evaluation score given the model session
-        :param eval_callback_args: Extra arguments for eval_callback
         :param param_bw: Parameter bitwidth
         :param output_bw: Output bitwidth
         :param quant_scheme: Quantization scheme
@@ -234,7 +236,6 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         self.dummy_input = dummy_input
         self.data_loader = data_loader
         self.eval_callback = eval_callback
-        self.eval_callback_args = eval_callback_args
 
         self._quantsim_params = dict(
             param_bw=param_bw,
@@ -281,7 +282,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         """
         Evaluate the model performance.
         """
-        return self.eval_callback(session, self.eval_callback_args)
+        return self.eval_callback(session, NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION)
 
     def run_inference(self) -> Tuple[QuantizationSimModel, float]:
         '''
@@ -417,9 +418,6 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         if encoding_path:
             sim.set_and_freeze_param_encodings(encoding_path)
 
-        # TODO: Other frameworks had this second call to fetch tensor quantizers. Need to check if also required for ONNX.
-        # param_quantizers, activation_quantizers = sim.get_all_quantizers()
-
         # Disable activation quantizers, using fp32 to simulate int32.
         if output_bw == 32:
             for quantizer in activation_quantizers:
@@ -552,6 +550,16 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         :return: Candidates for quant scheme search
         """
         return self._quant_scheme_candidates
+
+    def set_quant_scheme_candidates(self, candidates: Tuple[_QuantSchemePair, ...]):
+        """
+        Set candidates for quant scheme search.
+        During :meth:`~AutoQuant.optimize`, the candidate with the highest accuracy
+        will be selected among them.
+
+        :param candidates: Candidates for quant scheme search
+        """
+        self._quant_scheme_candidates = copy.copy(candidates)
 
     def _choose_default_quant_scheme(self):
         def eval_fn(pair: _QuantSchemePair):
