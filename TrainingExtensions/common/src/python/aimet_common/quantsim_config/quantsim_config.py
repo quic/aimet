@@ -353,8 +353,7 @@ class QuantSimConfigurator(ABC):
 
         quant_dtype_bw_info = QuantDtypeBwInfo(self._default_data_type, self._default_output_bw, self._default_data_type,
                                                self._default_param_bw)
-        if (not current_config_in_supported_kernels(quant_dtype_bw_info, op_config[ConfigDictKeys.SUPPORTED_KERNELS]))\
-           and (not is_current_config_same_as_override_option(quant_dtype_bw_info, op_config[ConfigDictKeys.SUPPORTED_KERNELS])):
+        if not current_config_in_supported_kernels(quant_dtype_bw_info, op_config[ConfigDictKeys.SUPPORTED_KERNELS]):
             act_bw = op_config[ConfigDictKeys.SUPPORTED_KERNELS][DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX][
                 ConfigDictKeys.ACTIVATION][ConfigDictKeys.BITWIDTH]
             act_dtype = op_config[ConfigDictKeys.SUPPORTED_KERNELS][DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX][
