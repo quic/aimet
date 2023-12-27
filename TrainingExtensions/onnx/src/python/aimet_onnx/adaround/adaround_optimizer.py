@@ -173,7 +173,7 @@ class AdaroundOptimizer:
                 orig_out_data = all_orig_out_data[indices].to(device)
             else:
                 model_inputs = cached_dataset[np.random.randint(len(cached_dataset))]
-                inp_data, orig_out_data = act_sampler.sample_acts(model_inputs)
+                inp_data, orig_out_data = act_sampler.sample_acts(create_input_dict(orig_model.model, model_inputs))
 
 
             # Clear alpha's gradients before optimization step
