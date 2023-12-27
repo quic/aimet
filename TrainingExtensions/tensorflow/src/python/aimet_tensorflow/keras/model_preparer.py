@@ -50,7 +50,7 @@ if version.parse(tf.version.VERSION) >= version.parse("2.10"):
     from keras.engine.functional import Functional # pylint: disable=import-error
     from keras.engine.keras_tensor import KerasTensor # pylint: disable=import-error
     from keras.layers.core.tf_op_layer import TFOpLambda # pylint: disable=import-error
-    from keras.layers.merging.base_merge import _Merge as MergeLayersParentClass # pylint: disable=ungrouped-imports
+    from keras.layers.merging.base_merge import _Merge as MergeLayersParentClass # pylint: disable=ungrouped-imports, import-error
 else:
     # Ignore pylint errors due to conditional imports
     from tensorflow.python.keras.engine.base_layer_utils import is_subclassed # pylint: disable=ungrouped-imports
