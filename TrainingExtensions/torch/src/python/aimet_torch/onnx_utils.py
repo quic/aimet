@@ -109,6 +109,7 @@ map_torch_types_to_onnx = {
     nn.LogSoftmax: ['LogSoftmax'],
     nn.LSTM: ['LSTM'],
     nn.PixelShuffle: ['DepthToSpace'],
+    nn.PixelUnshuffle: ['SpaceToDepth'],
     nn.PReLU: ['PRelu'],
     nn.ReLU: ['Relu'],
     nn.ReLU6: ['Clip'],
@@ -145,7 +146,8 @@ map_torch_types_to_onnx = {
     elementwise_ops.Tile: ['Tile'],
     elementwise_ops.TopK: ['TopK'],
     torchvision.ops.RoIPool: ['MaxRoiPool'],
-    elementwise_ops.Mean: ['ReduceMean']
+    elementwise_ops.Mean: ['ReduceMean'],
+    elementwise_ops.NonMaxSuppression: ['NonMaxSuppression'],
 }
 
 # Maps pytorch functional op string names to corresponding onnx types.
