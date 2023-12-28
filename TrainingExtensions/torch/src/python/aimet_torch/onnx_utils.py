@@ -144,7 +144,8 @@ map_torch_types_to_onnx = {
     elementwise_ops.Subtract: ['Sub'],
     elementwise_ops.Tile: ['Tile'],
     elementwise_ops.TopK: ['TopK'],
-    torchvision.ops.RoIPool: ['MaxRoiPool']
+    torchvision.ops.RoIPool: ['MaxRoiPool'],
+    elementwise_ops.Mean: ['ReduceMean']
 }
 
 # Maps pytorch functional op string names to corresponding onnx types.
