@@ -93,6 +93,15 @@ class LayerOutputUtil:
         # Obtain layer-output name to output dictionary
         layer_output_batch_dict = self.layer_output.get_outputs(feed_dict)
 
+        # Skip constant scalar layer-outputs
+        const_scalar_layer_name = []
+        for layer_name, layer_output in layer_output_batch_dict.items():
+            if not isinstance(layer_output, np.ndarray):
+                const_scalar_layer_name.append(layer_name)
+        for layer_name in const_scalar_layer_name:
+            logger.info("Skipping constant scalar output of layer %s", layer_name)
+            _ = layer_output_batch_dict.pop(layer_name)
+
         # Save inputs and layer-outputs
         self.save_input_output.save(input_batch, layer_output_batch_dict)
 
