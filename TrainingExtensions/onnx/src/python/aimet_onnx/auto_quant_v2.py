@@ -49,6 +49,7 @@ import sys
 import io
 from unittest.mock import patch
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, Mapping, Iterable
+import shutil
 import jinja2
 from tqdm import tqdm
 
@@ -531,6 +532,10 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
                 if acc is not None:
                     _logger.info("Best eval score: %f", acc)
 
+                    # Save the best model with "best_model_" as prefix
+                    best_res = self.eval_manager.get_best_ptq_result()
+                    best_res.save_result_as("best_model")
+
                     if acc < target_acc:
                         _logger.info(
                             "AutoQuant is unable to match the target accuracy. "
@@ -729,6 +734,21 @@ class PtqResult:
                     accuracy=self.accuracy,
                     encoding_path=self.encoding_path,
                     applied_techniques=self.applied_techniques)
+
+    def save_result_as(self, prefix: str = "best_model"):
+        """
+        Creates the copy of the PTQ result files with the given prefix.
+        :param prefix: prefix to be added to the file's basename
+        """
+        src_files = [self.model_path, self.encoding_path]
+        for file in src_files:
+            name = os.path.basename(file)
+            dirname = os.path.dirname(file)
+            dest = os.path.join(dirname, prefix + "_" + name)
+            if os.path.exists(file):
+                if os.path.exists(dest):
+                    os.remove(dest)
+                shutil.copyfile(file, dest)
 
 
 class _EvalManager:
@@ -972,8 +992,8 @@ class _EvalSession: # pylint: disable=too-many-instance-attributes
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self._ptq_result is not None:
-            _logger.info("Session finished: %s. (eval score: %f)",
-                         self.title, self._ptq_result.accuracy)
+            _logger.info("Session finished: %s. (eval score: %f). Applied techniques: %s",
+                         self.title, self._ptq_result.accuracy, ' '.join(self._ptq_result.applied_techniques))
 
         self._spinner.__exit__(exc_type, exc_val, exc_tb)
 
