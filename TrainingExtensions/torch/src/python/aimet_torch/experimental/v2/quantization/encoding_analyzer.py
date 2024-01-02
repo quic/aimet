@@ -219,8 +219,8 @@ class MinMaxEncodingAnalyzer(_EncodingAnalyzer[_MinMaxRange]):
         max_with_zero = torch.maximum(stats.max, torch.zeros_like(stats.max))
 
          # adjusts any min/max pairing that are too close
-        tensor_diff = (max_with_zero - min_with_zero) / (2 **(bitwidth - 1))
-        update_min = torch.where(tensor_diff < tiny_num, tiny_num * ((2 **bitwidth) - 1), 0.0)
+        tensor_diff = (max_with_zero - min_with_zero) / ((2 **bitwidth) - 1)
+        update_min = torch.where(tensor_diff < tiny_num, tiny_num * (2 **(bitwidth - 1)), 0.0)
         update_max = torch.where(tensor_diff < tiny_num, tiny_num * ((2 **(bitwidth - 1)) - 1), 0.0)
         updated_max = max_with_zero + update_max
         updated_min = min_with_zero - update_min
