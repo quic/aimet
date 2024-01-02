@@ -89,7 +89,7 @@ class TestMinMaxEncodingAnalyzer():
         encoding_analyzer.update_stats(torch.zeros(tuple(encoding_analyzer.observer.shape)))
         
         asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False)
-        updated_min = torch.finfo(asymmetric_min.dtype).tiny * ((2 ** 8) - 1)
+        updated_min = torch.finfo(asymmetric_min.dtype).tiny * (2 ** (8 - 1))
         updated_max = torch.finfo(asymmetric_min.dtype).tiny * ((2 **(8 - 1)) - 1)
         assert torch.all(torch.eq(asymmetric_min,  torch.full(tuple(encoding_analyzer.observer.shape), -updated_min)))
         assert torch.all(torch.eq(asymmetric_max, torch.full(tuple(encoding_analyzer.observer.shape), updated_max)))
