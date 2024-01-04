@@ -39,6 +39,7 @@ import math
 import pytest
 import torch
 from torch.optim import SGD, RMSprop, Adagrad, Adam, AdamW
+from aimet_torch.experimental.v2.quantization.encoding_analyzer import CalibrationMethod
 from aimet_torch.experimental.v2.quantization import Quantize, QuantizeDequantize
 from aimet_torch.experimental.v2.quantization.modules.quantize import _QuantizerBase
 from aimet_torch.experimental.v2.quantization.backends import get_backend
@@ -70,7 +71,7 @@ def quantize(symmetric, initialized):
     quantize = Quantize(shape=_PARAMETER_SHAPE,
                         bitwidth=8,
                         symmetric=symmetric,
-                        qscheme="minmax")
+                        qscheme=CalibrationMethod.MinMax)
     if initialized:
         _initialize(quantize, symmetric)
     return quantize
@@ -80,7 +81,7 @@ def quantize_dequantize(symmetric, initialized):
     quantize_dequantize = QuantizeDequantize(shape=_PARAMETER_SHAPE,
                                              bitwidth=8,
                                              symmetric=symmetric,
-                                             qscheme="minmax")
+                                             qscheme=CalibrationMethod.MinMax)
     if initialized:
         _initialize(quantize_dequantize, symmetric)
     return quantize_dequantize
@@ -124,7 +125,7 @@ def test_compute_encodings(q: Union[Quantize, QuantizeDequantize],
       1. forward() returns dynamic quantization output
       2. self.get_min(), self.get_max() == self.encoding_analyzer.compute_encodings()
     """
-    dynamic_min, dynamic_max = q.encoding_analyzer.compute_dynamic_encodings(x, q.symmetric, q.bitwidth)
+    dynamic_min, dynamic_max = q.encoding_analyzer.compute_dynamic_encodings(x, q.bitwidth, q.symmetric)
 
     if q.symmetric:
         dynamic_scale = torch.maximum(dynamic_max/127, -dynamic_min/128)

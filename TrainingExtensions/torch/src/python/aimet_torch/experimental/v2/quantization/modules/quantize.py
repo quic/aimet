@@ -43,7 +43,7 @@ import functools
 
 import torch
 
-from aimet_torch.experimental.v2.utils import patch_attr, patch_param
+from aimet_torch.experimental.v2.utils import patch_attr, patch_param, StatisticsNotFoundError
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import get_encoding_analyzer_cls
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 from aimet_torch.experimental.v2.utils import ste_round
@@ -72,7 +72,7 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
         self.bitwidth = bitwidth
         self.symmetric = symmetric
         self.qscheme = qscheme
-        self.encoding_analyzer = get_encoding_analyzer_cls(qscheme)(shape)
+        self.encoding_analyzer = get_encoding_analyzer_cls(qscheme, shape)
 
         # Raw quantization parameters
         self.register_parameter("min", None)
@@ -155,8 +155,8 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
             batch_statistics = self.encoding_analyzer.update_stats(input)
             dynamic_min, dynamic_max =\
                     self.encoding_analyzer.compute_encodings_from_stats(batch_statistics,
-                                                                        self.symmetric,
-                                                                        self.bitwidth)
+                                                                        self.bitwidth,
+                                                                        self.symmetric)
             with patch_param(self, 'min', dynamic_min),\
                     patch_param(self, 'max', dynamic_max):
                 return original_forward(input)
@@ -167,7 +167,10 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
         except: # pylint: disable=try-except-raise
             raise
         else:
-            min, max = self.encoding_analyzer.compute_encodings(self.symmetric, self.bitwidth)
+            try:
+                min, max = self.encoding_analyzer.compute_encodings(self.bitwidth, self.symmetric)
+            except StatisticsNotFoundError:
+                return
 
             if min is None or max is None:
                 return
