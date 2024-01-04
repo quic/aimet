@@ -171,3 +171,8 @@ def ste_round(*args, **kwargs):
     Applies straight-through rounding
     """
     return _StraightThroughEstimator.apply(torch.round, *args, **kwargs)
+
+class StatisticsNotFoundError(RuntimeError):
+    '''
+    Error raised when compute_encodings() is invoked without statistics
+    '''
