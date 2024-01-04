@@ -36,8 +36,46 @@
 # =============================================================================
 import torch
 import pytest
-import numpy as np
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import get_encoding_analyzer_cls, CalibrationMethod
+from aimet_torch.experimental.v2.quantization.backends.default import quantize, quantize_dequantize
+
+
+class TestEncodingAnalyzer():
+   @pytest.mark.parametrize('symmetric', [True, False])
+   def test_overflow(self, symmetric):
+       encoding_shape = (1,)
+       float_input = (torch.arange(10) * torch.finfo(torch.float).tiny)
+
+       encoding_analyzer = get_encoding_analyzer_cls(CalibrationMethod.MinMax, encoding_shape)
+       encoding_analyzer.update_stats(float_input)
+       min, max = encoding_analyzer.compute_encodings(bitwidth=8, is_symmetric=symmetric)
+
+       scale = (max - min) / 255
+       # Scale should be at least as large as torch.tiny
+       assert torch.all(torch.isfinite(scale))
+       assert torch.allclose(scale, torch.tensor(torch.finfo(scale.dtype).tiny))
+
+   @pytest.mark.parametrize('dtype', [torch.float, torch.half])
+   @pytest.mark.parametrize('symmetric', [True, False])
+   def test_continuity(self, symmetric, dtype):
+       encoding_shape = (1,)
+       normal_range = torch.arange(-128, 128).to(dtype) / 256
+       encoding_analyzer = get_encoding_analyzer_cls(CalibrationMethod.MinMax, encoding_shape)
+       eps = torch.finfo(dtype).eps
+
+       min_1, max_1 = encoding_analyzer.compute_dynamic_encodings(normal_range * (1 - eps),
+                                                                  bitwidth=8, is_symmetric=symmetric)
+       min_2, max_2 = encoding_analyzer.compute_dynamic_encodings(normal_range,
+                                                                  bitwidth=8, is_symmetric=symmetric)
+       min_3, max_3 = encoding_analyzer.compute_dynamic_encodings(normal_range * (1 + eps),
+                                                                  bitwidth=8, is_symmetric=symmetric)
+
+       assert min_3 <= min_2 <= min_1 <= max_1 <= max_2 <= max_3
+       assert torch.allclose(max_1, max_2, atol=eps)
+       assert torch.allclose(min_1, min_2, atol=eps)
+       assert torch.allclose(max_2, max_3, atol=eps)
+       assert torch.allclose(min_2, min_3, atol=eps)
+
 
 class TestMinMaxEncodingAnalyzer():
    def test_compute_encodings_with_negative_bitwidth(self):
