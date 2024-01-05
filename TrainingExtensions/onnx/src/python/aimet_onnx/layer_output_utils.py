@@ -39,6 +39,7 @@
 
 import copy
 from typing import List, Dict, Tuple, Union
+import re
 import numpy as np
 import onnxruntime as ort
 import onnx
@@ -122,7 +123,7 @@ class LayerOutput:
         LayerOutput.register_activations(self.model, self.activation_names)
 
         self.session = QuantizationSimModel.build_session(self.model, providers)
-        self.sanitized_activation_names = [name[:-len('_updated')] if name.endswith('_updated') else name for name in self.activation_names]
+        self.sanitized_activation_names = [re.sub(r'\W+', "_", name.replace('_updated', '')) for name in self.activation_names]
 
         # Save activation names which are in topological order of model graph. This order can be used while comparing layer-outputs.
         save_layer_output_names(self.sanitized_activation_names, dir_path)
