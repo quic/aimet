@@ -34,13 +34,12 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-from typing import Union
 import math
 import pytest
 import torch
 from torch.optim import SGD, RMSprop, Adagrad, Adam, AdamW
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import CalibrationMethod
-from aimet_torch.experimental.v2.quantization import Quantize, QuantizeDequantize, Dequantize
+from aimet_torch.experimental.v2.quantization import Quantize, QuantizeDequantize
 from aimet_torch.experimental.v2.quantization.modules.quantize import _QuantizerBase
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 
@@ -101,12 +100,15 @@ def x():
 
 
 
-def minmax_to_scaleoffset(min, max, symmetric):
+def minmax_to_scaleoffset(min, max, symmetric, bitwidth):
+    total_bins = 2 ** bitwidth - 1
     if symmetric:
-        scale = torch.maximum(max/127, -min/128)
-        offset = torch.ones_like(scale) * -128
+        positive_bins = total_bins // 2
+        negative_bins = positive_bins + 1
+        scale = torch.maximum(max/positive_bins, -min/negative_bins)
+        offset = torch.ones_like(scale) * -negative_bins
     else:
-        scale = (max - min) / 255
+        scale = (max - min) / total_bins
         offset = torch.round(min / scale)
     return scale, offset
 
@@ -132,7 +134,10 @@ def test_quantize_compute_encodings(quantize: Quantize, x: torch.Tensor):
     """
     dynamic_min, dynamic_max =\
             quantize.encoding_analyzer.compute_dynamic_encodings(x, quantize.bitwidth, quantize.symmetric)
-    dynamic_scale, dynamic_offset = minmax_to_scaleoffset(dynamic_min, dynamic_max, quantize.symmetric)
+    dynamic_scale, dynamic_offset = minmax_to_scaleoffset(dynamic_min,
+                                                          dynamic_max,
+                                                          quantize.symmetric,
+                                                          bitwidth=8)
     expected_x_int = get_backend().quantize(x,
                                             dynamic_scale,
                                             dynamic_offset,
@@ -175,7 +180,8 @@ def test_qdq_compute_encodings(quantize_dequantize: QuantizeDequantize, x: torch
                                                                             quantize_dequantize.symmetric)
     dynamic_scale, dynamic_offset = minmax_to_scaleoffset(dynamic_min,
                                                           dynamic_max,
-                                                          quantize_dequantize.symmetric)
+                                                          quantize_dequantize.symmetric,
+                                                          bitwidth=8)
     expected_output = get_backend().quantize_dequantize(x,
                                                         dynamic_scale,
                                                         dynamic_offset,
