@@ -1011,3 +1011,30 @@ def cache_intermediate_datasets(cached_dataset, cache_on_cpu, model, module_name
         handle.remove()
 
     return cached_data
+
+
+def get_inout_tensors_dtypes_per_module(model: torch.nn.Module, input_tensor) -> Dict:
+    """
+    Get the datatype of input and output tensor of each module in a Pytorch Model.
+
+    :param model: Pytorch Model
+    :param input_tensor: Input tensor to run forward pass for the model.
+                         A tuple of tensors should be passed if model has multiple inputs
+    :return: map of module -> (data type of input tensor, data type of output tensor)
+    """
+    inout_dtypes_map = {}
+
+    def record_dtypes(module, inputs, outputs):
+        input_dtypes = output_dtypes = None
+
+        # pylint: disable=len-as-condition
+        if len(inputs):
+            input_dtypes = inputs[0].dtype if isinstance(inputs, (list, tuple)) else inputs.dtype
+
+        # pylint: disable=len-as-condition
+        if len(outputs):
+            output_dtypes = outputs[0].dtype if isinstance(outputs, (list, tuple)) else outputs.dtype
+        inout_dtypes_map[module] = (input_dtypes, output_dtypes)
+
+    run_hook_for_layers_with_given_input(model, input_tensor, record_dtypes)
+    return inout_dtypes_map
