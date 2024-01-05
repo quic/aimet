@@ -56,7 +56,6 @@ from aimet_common.defs import QuantScheme, QuantizationDataType, SupportedKernel
 from aimet_common.quantsim import encoding_version, validate_quantsim_inputs, extract_global_quantizer_args
 from aimet_common.quant_utils import get_conv_accum_bounds
 
-import aimet_torch
 from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_torch.qc_quantize_op import QcQuantizeStandAloneBase, QcQuantizeWrapper, QcQuantizeOpMode, \
     StaticGridQuantWrapper, LearnedGridQuantWrapper, NativeTorchQuantWrapper, QUANTIZER_TYPE_INPUT, QUANTIZER_TYPE_OUTPUT
@@ -196,7 +195,7 @@ class QuantizationSimModel:
 
         # Add quantization layers
         num_inout_tensors = utils.find_num_inout_tensors_per_module(self.model, dummy_input)
-        inout_tensors_dtypes = utils.get_inout_tensors_dtypes_per_module(self.model, dummy_input)
+        inout_tensors_dtypes_for_cast_ops = utils.get_inout_tensors_dtypes_for_cast_modules(self.model, dummy_input)
 
         self._add_quantization_wrappers(self.model, num_inout_tensors, default_data_type)
         self._set_tensor_quantizers_for_consts()
@@ -212,7 +211,7 @@ class QuantizationSimModel:
 
         self.quant_args = extract_global_quantizer_args(quant_scheme, quantsim_configurator)
 
-        self._enable_output_quantizers_for_specific_cast_ops(inout_tensors_dtypes)
+        self._enable_output_quantizers_for_specific_cast_ops(inout_tensors_dtypes_for_cast_ops)
 
         # pylint: disable=protected-access
         self._hw_version = quantsim_configurator._get_hw_version()
@@ -1835,17 +1834,16 @@ class QuantizationSimModel:
         torch_float_dtypes = {torch.float16, torch.float32, torch.float64}
 
         for module, inout_dtypes in inout_tensors_dtypes.items():
-            if isinstance(module, aimet_torch.elementwise_ops.Cast):
-                input_tensor_dtype = inout_dtypes[0]
-                output_tensor_dtype = inout_dtypes[1]
-                # pylint: disable=protected-access
-                module_name = self.connected_graph._module_to_name[module].split(model_prefix)[-1]
+            input_tensor_dtype = inout_dtypes[0]
+            output_tensor_dtype = inout_dtypes[1]
+            # pylint: disable=protected-access
+            module_name = self.connected_graph._module_to_name[module].split(model_prefix)[-1]
 
-                if input_tensor_dtype != output_tensor_dtype and input_tensor_dtype in torch_int_dtypes and output_tensor_dtype in torch_float_dtypes:
-                    logger.info("Enabling output quantizer for module %s", module_name)
-                    wrapped_module = getattr(self.model, module_name)
-                    for output_quantizer in wrapped_module.output_quantizers:
-                        setattr(output_quantizer, 'enabled', True)
+            if input_tensor_dtype != output_tensor_dtype and input_tensor_dtype in torch_int_dtypes and output_tensor_dtype in torch_float_dtypes:
+                logger.info("Enabling output quantizer for module %s", module_name)
+                wrapped_module = getattr(self.model, module_name)
+                for output_quantizer in wrapped_module.output_quantizers:
+                    setattr(output_quantizer, 'enabled', True)
 
 
 def save_checkpoint(quant_sim_model: QuantizationSimModel, file_path: str):

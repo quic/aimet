@@ -1013,9 +1013,9 @@ def cache_intermediate_datasets(cached_dataset, cache_on_cpu, model, module_name
     return cached_data
 
 
-def get_inout_tensors_dtypes_per_module(model: torch.nn.Module, input_tensor) -> Dict:
+def get_inout_tensors_dtypes_for_cast_modules(model: torch.nn.Module, input_tensor) -> Dict:
     """
-    Get the datatype of input and output tensor of each module in a Pytorch Model.
+    Get the datatype of input and output tensor of Cast modules in a Pytorch Model.
 
     :param model: Pytorch Model
     :param input_tensor: Input tensor to run forward pass for the model.
@@ -1025,16 +1025,9 @@ def get_inout_tensors_dtypes_per_module(model: torch.nn.Module, input_tensor) ->
     inout_dtypes_map = {}
 
     def record_dtypes(module, inputs, outputs):
-        input_dtypes = output_dtypes = None
-
-        # pylint: disable=len-as-condition
-        if len(inputs):
-            input_dtypes = inputs[0].dtype if isinstance(inputs, (list, tuple)) else inputs.dtype
-
-        # pylint: disable=len-as-condition
-        if len(outputs):
-            output_dtypes = outputs[0].dtype if isinstance(outputs, (list, tuple)) else outputs.dtype
-        inout_dtypes_map[module] = (input_dtypes, output_dtypes)
+        # pylint: disable=protected-access
+        if module._get_name() == 'Cast':
+            inout_dtypes_map[module] = (inputs.dtypes, outputs.dtypes)
 
     run_hook_for_layers_with_given_input(model, input_tensor, record_dtypes)
     return inout_dtypes_map
