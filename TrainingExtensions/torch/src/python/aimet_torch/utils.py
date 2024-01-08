@@ -53,6 +53,7 @@ from torchvision import datasets, transforms
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_common.utils import AimetLogger, Handle, log_with_error_and_assert_if_false
 import aimet_common.libpymo as libpymo
+from aimet_torch import elementwise_ops
 
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
@@ -1013,7 +1014,7 @@ def cache_intermediate_datasets(cached_dataset, cache_on_cpu, model, module_name
     return cached_data
 
 
-def get_inout_tensors_dtypes_for_cast_modules(model: torch.nn.Module, input_tensor) -> Dict:
+def get_inout_tensors_dtypes_for_cast_modules(model: torch.nn.Module, input_tensor: Union[torch.Tensor, Tuple[torch.Tensor]]) -> Dict:
     """
     Get the datatype of input and output tensor of Cast modules in a Pytorch Model.
 
@@ -1027,17 +1028,19 @@ def get_inout_tensors_dtypes_for_cast_modules(model: torch.nn.Module, input_tens
     def record_dtypes(module, inputs, outputs):
 
         # pylint: disable=protected-access
-        if module._get_name() == 'Cast':
-            input_dtypes = output_dtypes = None
+        if isinstance(module, elementwise_ops.Cast):
+            input_dtype = None
 
-            # pylint: disable=len-as-condition
-            if len(inputs):
-                input_dtypes = inputs[0].dtype if isinstance(inputs, (list, tuple)) else inputs.dtype
+            if isinstance(inputs, (list, tuple)):
+                input_dtype = inputs[0].dtype
 
-            # pylint: disable=len-as-condition
-            if len(outputs):
-                output_dtypes = outputs[0].dtype if isinstance(outputs, (list, tuple)) else outputs.dtype
-            inout_dtypes_map[module] = (input_dtypes, output_dtypes)
+            elif isinstance(inputs, torch.Tensor):
+                input_dtype = inputs.dtype
+
+            else:
+                raise ValueError
+
+            inout_dtypes_map[module] = (input_dtype, outputs.dtype)
 
     run_hook_for_layers_with_given_input(model, input_tensor, record_dtypes)
     return inout_dtypes_map

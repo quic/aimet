@@ -1823,7 +1823,7 @@ class QuantizationSimModel:
             _validate_torchquantizer(quant_sim_model)
             OnnxSaver._export_model_to_onnx(quant_sim_model, dummy_input, model_path, is_conditional, onnx_export_args) # pylint: disable=protected-access
 
-    def _enable_output_quantizers_for_specific_cast_ops(self, inout_tensors_dtypes):
+    def _enable_output_quantizers_for_specific_cast_ops(self, inout_tensors_dtypes: Dict[torch.nn.Module, Tuple[torch.dtype, torch.dtype]]):
         """
         Enable output quantizer for Cast Ops where datatype of input tensor is int/bool
         and data type of output tensor is float.
