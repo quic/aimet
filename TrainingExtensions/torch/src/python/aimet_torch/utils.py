@@ -53,6 +53,7 @@ from torchvision import datasets, transforms
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_common.utils import AimetLogger, Handle, log_with_error_and_assert_if_false
 import aimet_common.libpymo as libpymo
+from aimet_torch import elementwise_ops
 
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
@@ -1011,3 +1012,35 @@ def cache_intermediate_datasets(cached_dataset, cache_on_cpu, model, module_name
         handle.remove()
 
     return cached_data
+
+
+def get_inout_tensors_dtypes_for_cast_modules(model: torch.nn.Module, input_tensor: Union[torch.Tensor, Tuple[torch.Tensor]]) -> Dict:
+    """
+    Get the datatype of input and output tensor of Cast modules in a Pytorch Model.
+
+    :param model: Pytorch Model
+    :param input_tensor: Input tensor to run forward pass for the model.
+                         A tuple of tensors should be passed if model has multiple inputs
+    :return: map of module -> (data type of input tensor, data type of output tensor)
+    """
+    inout_dtypes_map = {}
+
+    def record_dtypes(module, inputs, outputs):
+
+        # pylint: disable=protected-access
+        if isinstance(module, elementwise_ops.Cast):
+            input_dtype = None
+
+            if isinstance(inputs, (list, tuple)):
+                input_dtype = inputs[0].dtype
+
+            elif isinstance(inputs, torch.Tensor):
+                input_dtype = inputs.dtype
+
+            else:
+                raise ValueError
+
+            inout_dtypes_map[module] = (input_dtype, outputs.dtype)
+
+    run_hook_for_layers_with_given_input(model, input_tensor, record_dtypes)
+    return inout_dtypes_map
