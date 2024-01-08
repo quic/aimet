@@ -1799,6 +1799,28 @@ class QuantizationSimModel:
             _validate_torchquantizer(quant_sim_model)
             OnnxSaver._export_model_to_onnx(quant_sim_model, dummy_input, model_path, is_conditional, onnx_export_args) # pylint: disable=protected-access
 
+    def _enable_output_quantizers_for_specific_cast_ops(self, inout_tensors_dtypes: Dict[torch.nn.Module, Tuple[torch.dtype, torch.dtype]]):
+        """
+        Enable output quantizer for Cast Ops where datatype of input tensor is int/bool
+        and data type of output tensor is float.
+        """
+        # pylint: disable=protected-access
+        model_prefix = self.connected_graph._model_name + '.'
+        torch_int_dtypes = {torch.int8, torch.int16, torch.int32, torch.int64, torch.bool, torch.uint8}
+        torch_float_dtypes = {torch.float16, torch.float32, torch.float64}
+
+        for module, inout_dtypes in inout_tensors_dtypes.items():
+            input_tensor_dtype = inout_dtypes[0]
+            output_tensor_dtype = inout_dtypes[1]
+            # pylint: disable=protected-access
+            module_name = self.connected_graph._module_to_name[module].split(model_prefix)[-1]
+
+            if input_tensor_dtype != output_tensor_dtype and input_tensor_dtype in torch_int_dtypes and output_tensor_dtype in torch_float_dtypes:
+                logger.info("Enabling output quantizer for module %s", module_name)
+                wrapped_module = getattr(self.model, module_name)
+                for output_quantizer in wrapped_module.output_quantizers:
+                    setattr(output_quantizer, 'enabled', True)
+
 
 def save_checkpoint(quant_sim_model: QuantizationSimModel, file_path: str):
     """
