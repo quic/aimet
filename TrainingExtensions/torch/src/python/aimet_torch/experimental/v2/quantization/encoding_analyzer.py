@@ -35,9 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 # pylint: disable=redefined-builtin
-# pylint: disable=arguments-differ
 # pylint: disable=missing-docstring
-# pylint: disable=no-member
 
 """ Computes statistics and encodings """
 
@@ -99,20 +97,20 @@ class _MinMaxObserver(_Observer[_MinMaxRange]):
         return _MinMaxRange(new_min, new_max)
 
     @torch.no_grad()
-    def merge_stats(self, new_stats: _MinMaxRange):
+    def merge_stats(self, stats: _MinMaxRange):
         updated_min = self.stats.min
-        if new_stats.min is not None:
+        if stats.min is not None:
             if updated_min is None:
-                updated_min = new_stats.min.clone()
+                updated_min = stats.min.clone()
             else:
-                updated_min = torch.minimum(updated_min, new_stats.min)
+                updated_min = torch.minimum(updated_min, stats.min)
 
         updated_max = self.stats.max
-        if new_stats.max is not None:
+        if stats.max is not None:
             if updated_max is None:
-                updated_max = new_stats.max.clone()
+                updated_max = stats.max.clone()
             else:
-                updated_max = torch.maximum(updated_max, new_stats.max)
+                updated_max = torch.maximum(updated_max, stats.max)
 
         self.stats = _MinMaxRange(updated_min, updated_max)
 
@@ -136,7 +134,7 @@ class _HistogramObserver(_Observer[_Histogram]):
         raise NotImplementedError
 
     @torch.no_grad()
-    def merge_stats(self, new_stats: _Histogram):
+    def merge_stats(self, stats: _Histogram):
         # TODO
         raise NotImplementedError
 
@@ -171,6 +169,8 @@ def get_encoding_analyzer_cls(calibration_method: CalibrationMethod, min_max_sha
                       'minmax, sqnr, mse, percentile')
 
 class _EncodingAnalyzer(Generic[_Statistics], ABC):
+    def __init__(self, observer: _Observer):
+        self.observer = observer
 
     @torch.no_grad()
     def update_stats(self, input_tensor: torch.Tensor) -> _Statistics:
@@ -199,7 +199,8 @@ class MinMaxEncodingAnalyzer(_EncodingAnalyzer[_MinMaxRange]):
     Encoding Analyzer for Min-Max calibration technique
     """
     def __init__(self, shape):
-        self.observer = _MinMaxObserver(shape)
+        observer = _MinMaxObserver(shape)
+        super().__init__(observer)
 
     @torch.no_grad()
     def compute_encodings_from_stats(self, stats: _MinMaxRange, bitwidth: int, is_symmetric: bool)\
@@ -238,7 +239,8 @@ class PercentileEncodingAnalyzer(_EncodingAnalyzer[_Histogram]):
     Encoding Analyzer for Percentile calibration technique
     """
     def __init__(self, shape):
-        self.observer = _HistogramObserver(shape)
+        observer = _HistogramObserver(shape)
+        super().__init__(observer)
 
     @torch.no_grad()
     def compute_encodings_from_stats(self, stats: _Histogram, bitwidth: int, is_symmetric: bool)\
@@ -251,7 +253,8 @@ class SqnrEncodingAnalyzer(_EncodingAnalyzer[_Histogram]):
     Encoding Analyzer for SQNR Calibration technique
     """
     def __init__(self, shape):
-        self.observer = _HistogramObserver(shape)
+        observer = _HistogramObserver(shape)
+        super().__init__(observer)
 
     @torch.no_grad()
     def compute_encodings_from_stats(self, stats: _Histogram, bitwidth: int, is_symmetric: bool)\
@@ -264,7 +267,8 @@ class MseEncodingAnalyzer(_EncodingAnalyzer[_Histogram]):
     Encoding Analyzer for Mean Square Error (MSE) Calibration technique
     """
     def __init__(self, shape):
-        self.observer = _HistogramObserver(shape)
+        observer = _HistogramObserver(shape)
+        super().__init__(observer)
 
     @torch.no_grad()
     def compute_encodings_from_stats(self, stats: _Histogram, bitwidth: int, is_symmetric: bool)\
