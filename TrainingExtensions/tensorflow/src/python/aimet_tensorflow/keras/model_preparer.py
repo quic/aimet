@@ -82,6 +82,7 @@ This file contains the implementation to automatically prepare keras models for 
 class _KerasModelPreparer:
 
     def __init__(self, original_model: tf.keras.Model = None, input_layer: tf.keras.layers.InputLayer = None):
+        self.model_outputs = []  # Both normal init and "passthrough" init utilize this
         if original_model:
             self.input_layer = self._format_input_layer(original_model, input_layer)
 
@@ -100,7 +101,6 @@ class _KerasModelPreparer:
                 ModelLayerConnections.get_model_layers_connection_properties(self.original_model)
             self._set_prepared_models_input_layer()
 
-            self.model_outputs = []
             self.original_models_last_layer = self.original_model.layers[-1]
 
             self.prepared_model = None
@@ -150,14 +150,12 @@ class _KerasModelPreparer:
         # Using the functional model's weights order, get the original model's weights in the same order. The lambda
         # here uses the weight's name to get position in the functional model's weights order and the sorts the
         # original model's weights by that position.
-        weights_in_correct_order = [
+        self.original_weights_in_prepared_model_order = [
             weight for _, weight in
             sorted(original_model_weights.items(), key=lambda weight_info: prepared_model_weight_order[weight_info[0]])
         ]
 
-        setattr(self, 'original_weights_in_prepared_model_order', weights_in_correct_order)
-
-        return weights_in_correct_order
+        return self.original_weights_in_prepared_model_order
 
     def _set_prepared_models_weights(self):
         """
@@ -175,20 +173,22 @@ class _KerasModelPreparer:
         except ValueError:
             _logger.error(
                 "Could not copy weights from original model to the prepared model. This can occur when "
-                "custom sublayers are defined not in the same order as the sublayers call method. Please ensure that the "
-                "sublayers internal layers are defined in the same order as the sublayers call method.")
+                "custom sublayers are defined not in the same order as the sublayers call method. Please ensure that "
+                "the sublayers internal layers are defined in the same order as the sublayers call method.")
             raise
 
         _logger.debug("Functional model weights copied.")
         _logger.info("Model prepared for AIMET in Functional API format.")
 
     @staticmethod
-    def _format_input_layer(original_model: tf.keras.Model,
-                            input_layer: Union[tf.keras.layers.InputLayer, List[tf.keras.layers.InputLayer]] = None) \
-            -> tf.keras.layers.Layer:
+    def _format_input_layer(
+            original_model: tf.keras.Model,
+            input_layer: Union[tf.keras.layers.InputLayer, List[tf.keras.layers.InputLayer]] = None
+    ) -> tf.keras.layers.Layer:
         """
-        This function formats the input layer by either using the original models input layer or the user provided input layer.
-        This function will also raise an error if the model needs a defined input layer to be prepared for AIMET.
+        This function formats the input layer by either using the original models input layer or the user provided
+        input layer. This function will also raise an error if the model needs a defined input layer to be prepared
+        for AIMET.
 
         :param original_model: The original model to be copied
         :param input_layer: The input layer to be used for the functional model
@@ -199,8 +199,10 @@ class _KerasModelPreparer:
         else:
             _logger.info("Input layer not found. Using input layer passed in.")
             if input_layer is None:
-                raise ValueError("The top layer of this model is subclassed. Please provide an input layer via the "
-                                 "\'input_layer\' parameter.")
+                raise ValueError(
+                    "The top layer of this model is subclassed. Please provide an input layer via the "
+                    "\'input_layer\' parameter."
+                )
 
         if isinstance(input_layer, dict):  # Keras allows passing in tensors via tensor_name : tensor
             input_layer = [tensor for tensor in input_layer.values()]
@@ -218,7 +220,8 @@ class _KerasModelPreparer:
         :return: A set containing the class name
         """
         return {
-            regex_for_camel_case_to_snake_case.sub("_", name).lower() for name in (model.name, model.__class__.__name__)
+            regex_for_camel_case_to_snake_case.sub("_", name).lower()
+            for name in (model.name, model.__class__.__name__)
         }
 
     @staticmethod
@@ -269,10 +272,12 @@ class _KerasModelPreparer:
             if isinstance(input_layer, list):
                 for inp in input_layer:
                     self.model_layers_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS].update(
-                        {inp.name: inp})
+                        {inp.name: inp}
+                    )
             else:
                 self.model_layers_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS].update(
-                    {input_layer.name: input_layer})
+                    {input_layer.name: input_layer}
+                )
 
         try:
             set_input_layer_factory(self.input_layer)
@@ -280,10 +285,11 @@ class _KerasModelPreparer:
             # For models that are not connected
             _logger.info("Model is not connected. Setting input layer to input layer passed in.")
 
-            input_layer_name = [inp.name for inp in self.input_layer] if isinstance(self.input_layer, list) else [
-                self.input_layer.name]
+            input_layer_name = [inp.name for inp in self.input_layer] if isinstance(self.input_layer, list) else \
+                [self.input_layer.name]
             self.model_layers_connections[ModelLayerConnectionsProperties.INBOUND_NODES].update(
-                {self.original_model.layers[0].name: [*input_layer_name]})
+                {self.original_model.layers[0].name: [*input_layer_name]}
+            )
 
             set_input_layer_factory(self.input_layer)
 
@@ -295,19 +301,23 @@ class _KerasModelPreparer:
         :return: The input layer of the layer
         """
         try:
-            layer_input = [self.model_layers_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS][layer_aux]
-                           for layer_aux in
-                           self.model_layers_connections[ModelLayerConnectionsProperties.INBOUND_NODES][layer.name]]
+            layer_input = [
+                self.model_layers_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS][layer_aux]
+                for layer_aux in
+                self.model_layers_connections[ModelLayerConnectionsProperties.INBOUND_NODES][layer.name]
+            ]
 
             if len(layer_input) == 1:
                 layer_input = layer_input[0]
         except KeyError:
             layer_input = self._get_most_recently_added_output_tensor()
             self.model_layers_connections[ModelLayerConnectionsProperties.INBOUND_NODES].update(
-                {layer.name: [layer_input.name]})
+                {layer.name: [layer_input.name]}
+            )
             _logger.warning(
                 "Could not find input tensor for layer: %s. Using %s as input, the most recent output tensor.",
-                layer.name, layer_input.name)
+                layer.name, layer_input.name
+            )
 
         return layer_input
 
@@ -371,8 +381,8 @@ class _KerasModelPreparer:
         :param layer: The layer to get the call keyword arguments of
         :return: The call keyword arguments of the layer
         """
-        if original_call_kwargs := self.model_layers_connections[ModelLayerConnectionsProperties.CALL_KWARGS][
-                layer.name]:
+        if original_call_kwargs := \
+                self.model_layers_connections[ModelLayerConnectionsProperties.CALL_KWARGS][layer.name]:
             call_kwargs = {}
             for key, value in original_call_kwargs.items():
                 # The Keras tensor is already in the call args, so we don't need to add it again. call_kwargs are for
@@ -387,7 +397,11 @@ class _KerasModelPreparer:
         return call_kwargs
 
     def _update_output_tensors_in_model_layers_connections(
-            self, layer: tf.keras.layers.Layer, new_output_tensor: KerasTensor, model: tf.keras.Model):
+            self,
+            layer: tf.keras.layers.Layer,
+            new_output_tensor: KerasTensor,
+            model: tf.keras.Model
+    ):
         """
         Helper function to update the output tensors in the model layers connections dictionary.
 
@@ -398,9 +412,11 @@ class _KerasModelPreparer:
         if layer.name != new_output_tensor.name:
             new_name = new_output_tensor.name
             old_name_of_inputs = self.model_layers_connections[ModelLayerConnectionsProperties.INBOUND_NODES].pop(
-                layer.name)
+                layer.name
+            )
             self.model_layers_connections[ModelLayerConnectionsProperties.INBOUND_NODES].update(
-                {new_name: old_name_of_inputs})
+                {new_name: old_name_of_inputs}
+            )
 
             # Replace values in model_layers_connections[NetworkDictProperties.INBOUND_NODES] with new_name
             for value in self.model_layers_connections[ModelLayerConnectionsProperties.INBOUND_NODES].values():
@@ -409,11 +425,13 @@ class _KerasModelPreparer:
                     value[idx] = new_name
 
             self.model_layers_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS].update(
-                {new_name: new_output_tensor})
+                {new_name: new_output_tensor}
+            )
         else:
             # Set new output tensor (in this case, it will be the same as the original model)
             self.model_layers_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS].update(
-                {layer.name: new_output_tensor})
+                {layer.name: new_output_tensor}
+            )
 
         # Save tensor in output list if it is output in the initial model
         # TODO: Update so that the last conditional is only checked when it's not the last layer.
@@ -443,9 +461,9 @@ class _KerasModelPreparer:
             if missing_weights := original_layer_weights.difference(temp_model_weights):
                 raise ValueError(f"""
     The number of weights in the temporary model for unwrapping layer '{layer.name}' does not match the
-    number of weights of the original layer. The missing weight(s) are {missing_weights}. This occurs when the Keras Symbolic tensor
-    passed into the layers call function does not interact with a layer defined inside of the nested layer. Please refer to
-    the documentation for more information.
+    number of weights of the original layer. The missing weight(s) are {missing_weights}. This occurs when the Keras 
+    Symbolic tensor passed into the layers call function does not interact with a layer defined inside of the nested 
+    layer. Please refer to the documentation for more information.
 
     This is the call function that is causing this error:
     {inspect.getsource(layer.call)}
@@ -470,9 +488,11 @@ class _KerasModelPreparer:
         except TypeError as e:
             if "call() got an unexpected keyword argument 'training'" in e.args:
                 _logger.error(
-                    "Model preparer calls subclassed layers call functions with the parameter 'training=False', in the case "
-                    "that the layer behaves differently during evaluation. Please add **kwargs to your call function for layer '%s.'",
-                    layer.name)
+                    "Model preparer calls subclassed layers call functions with the parameter 'training=False', "
+                    "in the case that the layer behaves differently during evaluation. Please add **kwargs to your "
+                    "call function for layer '%s.'",
+                    layer.name
+                )
             raise
 
         temp_model.summary(print_fn=_logger.debug)
@@ -482,8 +502,10 @@ class _KerasModelPreparer:
 
     @staticmethod
     def _update_temporary_model_layers_connections_inbound_nodes(
-            temp_model_model_layers_connections: ModelLayerConnectionsProperties.TYPE, temp_model: tf.keras.Model,
-            layer_input: tf.keras.layers.Layer):
+            temp_model_model_layers_connections: ModelLayerConnectionsProperties.TYPE,
+            temp_model: tf.keras.Model,
+            layer_input: tf.keras.layers.Layer
+    ):
         """
         Helper function to update the inbound nodes of the temporary model layers connections dictionary.
 
@@ -491,10 +513,11 @@ class _KerasModelPreparer:
         :param temp_model: The temporary model
         :param layer_input: The input layer of the layer
         """
-        temp_model_input_names = [inp.name for inp in temp_model.input] if isinstance(temp_model.input, List) else [
-            temp_model.input.name]
-        layer_inputs_name = [inp.name for inp in (
-            layer_input if isinstance(layer_input, List) else [layer_input])]  # pylint: disable=superfluous-parens
+        temp_model_input_names = [inp.name for inp in temp_model.input] if isinstance(temp_model.input, List) else \
+            [temp_model.input.name]
+        layer_inputs_name = [
+            inp.name for inp in (layer_input if isinstance(layer_input, List) else [layer_input])
+        ]  # pylint: disable=superfluous-parens
 
         for layers_name, input_tensor_name in temp_model_model_layers_connections[
                 ModelLayerConnectionsProperties.INBOUND_NODES].items():
@@ -527,8 +550,9 @@ class _KerasModelPreparer:
         layer_input = self._get_layer_input(layer)
         temp_model = tf.keras.models.clone_model(self._get_temporary_model(layer, layer_input))
 
-        # Get the model layers connections dictionary for the temporary model and merge it with the model layers connections dictionary for the
-        # functional model. This is done, so we can keep track of the sublayer and their inputs and outputs.
+        # Get the model layers connections dictionary for the temporary model and merge it with the model layers
+        # connections dictionary for the functional model. This is done, so we can keep track of the sublayer and
+        # their inputs and outputs.
         temp_model_model_layers_connections = ModelLayerConnections.get_model_layers_connection_properties(temp_model)
         self._update_temporary_model_layers_connections_inbound_nodes(
             temp_model_model_layers_connections, temp_model, layer_input)
@@ -559,7 +583,8 @@ class _KerasModelPreparer:
                     new_output_tensor = layer.call(*call_args, **call_kwargs)
             else:
                 new_output_tensor = layer.call(*call_args)
-        # Special case for "Merge" layers that take a list of inputs such as "tf.keras.layers.Concatenate" and "tf.keras.layers.Add"
+        # Special case for "Merge" layers that take a list of inputs such as "tf.keras.layers.Concatenate" and
+        # "tf.keras.layers.Add"
         elif isinstance(layer, MergeLayersParentClass):
             new_output_tensor = layer(call_args)
         else:
@@ -582,22 +607,22 @@ class _KerasModelPreparer:
             if isinstance(current_layer, tf.keras.layers.InputLayer):
                 continue
 
-            # If the current layer is either a subclassed layer, functional model or sequential model, we need to extract the
-            # layers from the nested layer and add them to the functional model.
+            # If the current layer is either a subclassed layer, functional model or sequential model, we need to
+            # extract the layers from the nested layer and add them to the functional model.
             if self._is_nested_layer(current_layer):
                 new_output_tensor = self._handle_nested_layer(current_layer)
                 # If we are at the end of the original model, we want the model_outputs to be the end model outputs
                 if current_layer == self.original_models_last_layer:
-                    _logger.debug("Last layer was a nested layer. "
-                                  "Using temp model's output from _handle_nested_layer as model_output")
+                    _logger.debug(
+                        "Last layer was a nested layer. "
+                        "Using temp model's output from _handle_nested_layer as model_output"
+                    )
                     continue
                 self.model_outputs.clear()
             else:
                 new_output_tensor = self._handle_normal_keras_layer(current_layer)
 
-            self._update_output_tensors_in_model_layers_connections(current_layer,
-                                                                    new_output_tensor,
-                                                                    model)
+            self._update_output_tensors_in_model_layers_connections(current_layer, new_output_tensor, model)
         return new_output_tensor
 
     def prepare_model(self):
@@ -610,9 +635,11 @@ class _KerasModelPreparer:
         # If the model outputs are empty, then we need to get the most recently added output tensor. This is the case
         # when a model might be sparse and not fully connected or when a Functional model is inside an inherited model.
         if not self.model_outputs:
-            _logger.warning("No model outputs found. This usually occurs when a models is made by inheriting from "
-                            "'tf.keras.Model' and placing a Functional model inside. "
-                            "Using most recently added output tensor as prepared models output.")
+            _logger.warning(
+                "No model outputs found. This usually occurs when a models is made by inheriting from "
+                "'tf.keras.Model' and placing a Functional model inside. Using most recently added output tensor as "
+                "prepared models output."
+            )
             self.model_outputs = self._get_most_recently_added_output_tensor()
 
         setattr(self, "prepared_model", tf.keras.Model(
@@ -624,8 +651,10 @@ class _KerasModelPreparer:
         # Cloning model to remove any references to the original model
         K.clear_session()  # To avoid name conflicts
         self.prepared_model = tf.keras.models.clone_model(self.prepared_model)
-        setattr(self, "custom_objects",  # For acceptable subclass layers
-                self._get_models_custom_objects(self.prepared_model))
+        setattr(
+            self, "custom_objects",  # For acceptable subclass layers
+            self._get_models_custom_objects(self.prepared_model)
+        )
         _logger.info("Prepared Model Summary: \n")
         self.prepared_model.summary(print_fn=_logger.info)
 
@@ -634,10 +663,14 @@ class _KerasModelPreparer:
         self._set_prepared_models_weights()
 
         # Extra prepare step to replace Separable Conv's with Depthwise Pointwise pattern.
-        self.prepared_model, _ = replace_separable_conv_with_depthwise_pointwise(self.prepared_model,
-                                                                                 custom_objects=self.custom_objects)
-        self.prepared_model, _ = replace_relu6_with_relu(self.prepared_model,
-                                                         custom_objects=self.custom_objects)
+        self.prepared_model, _ = replace_separable_conv_with_depthwise_pointwise(
+            self.prepared_model,
+            custom_objects=self.custom_objects
+        )
+        self.prepared_model, _ = replace_relu6_with_relu(
+            self.prepared_model,
+            custom_objects=self.custom_objects
+        )
 
         self.verify_prepared_model()
 
@@ -680,8 +713,11 @@ class _KerasModelPreparer:
         :return: If the model is inheriting from tf.keras.Model
         """
 
-        return type(model).__bases__[0] == tf.keras.Model and not _KerasModelPreparer._is_functional_model(
-            model) and not _KerasModelPreparer._is_sequential_model(model)
+        return (
+            type(model).__bases__[0] == tf.keras.Model and
+            not _KerasModelPreparer._is_functional_model(model) and
+            not _KerasModelPreparer._is_sequential_model(model)
+        )
 
     @staticmethod
     def _connect_inherited_model(model: tf.keras.Model, input_layer: Union[
@@ -725,8 +761,10 @@ class _KerasModelPreparer:
         # Check the weights of the prepared model and the original model
         for original_weight, prepared_weight in zip(
                 self.original_weights_in_prepared_model_order, self.prepared_model.get_weights()):
-            np.testing.assert_array_equal(original_weight, prepared_weight,
-                                          err_msg="Weights of prepared model and original model do not match")
+            np.testing.assert_array_equal(
+                original_weight, prepared_weight,
+                err_msg="Weights of prepared model and original model do not match"
+            )
         _logger.debug("Weights of prepared model and original model match")
 
         # Create a random input to test the prepared model
@@ -744,10 +782,14 @@ class _KerasModelPreparer:
         prepared_model_output = self.prepared_model.predict(random_input, verbose=verbose)
 
         # Check the outputs of the prepared model and the original model
-        err_msg = "Outputs of prepared model and original model do not match. Since the weights match and params match, this is likely due to a mismatch in the model's architecture." + \
-                  "Specifically, if there is a reuse of a layer, then the prepared model will not have the same output as the original model. For example, if a ReLU layer is defined once " + \
-                  "and then used twice, then the prepared model will only have one ReLU layer while the original model will have two ReLU layers. Please check the model's architecture to see if " + \
-                  "there are any layers that are reused."
+        err_msg = """
+        Outputs of prepared model and original model do not match. Since the weights match and params 
+        match, this is likely due to a mismatch in the model's architecture. Specifically, if there is a reuse of a 
+        layer, then the prepared model will not have the same output as the original model. For example, 
+        if a ReLU layer is defined once and then used twice, then the prepared model will only have one ReLU layer 
+        while the original model will have two ReLU layers. Please check the model's architecture to see if there are 
+        any layers that are reused.
+        """
 
         if isinstance(original_model_output, Dict):
             original_model_output = [output for output in original_model_output.values()]
