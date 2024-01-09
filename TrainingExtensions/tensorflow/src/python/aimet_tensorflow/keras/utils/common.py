@@ -611,6 +611,9 @@ def get_number_of_outputs_and_axis_handling(layer, weight_shape, param_type) -> 
     :param param_type: str
     :return: Tuple[int, int]
     """
+    if isinstance(layer, tf.keras.layers.SeparableConv2D):
+        raise AssertionError("SeparableConv2D found in the model. Please run model preparer before calling QuantizationSimModel")
+
     axis_handling = AxisHandling.LAST_AXIS
     num_output_channels = weight_shape[-1]
 
@@ -619,8 +622,7 @@ def get_number_of_outputs_and_axis_handling(layer, weight_shape, param_type) -> 
                           tf.keras.layers.Conv3DTranspose)) and param_type != 'bias':
         num_output_channels = weight_shape[-2]
 
-    elif isinstance(layer, (tf.keras.layers.DepthwiseConv2D,
-                            tf.keras.layers.SeparableConv2D)) and param_type != 'bias':
+    elif isinstance(layer, tf.keras.layers.DepthwiseConv2D) and param_type != 'bias':
         num_output_channels *= weight_shape[-2]
         axis_handling = AxisHandling.LAST_TWO_AXES
 
