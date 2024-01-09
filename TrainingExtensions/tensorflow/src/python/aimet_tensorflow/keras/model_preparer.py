@@ -165,11 +165,8 @@ class _KerasModelPreparer:
         assert self.prepared_model, "The prepared model must created before setting weights. Please call " \
                                     "prepare_model() before calling set_weights()."
 
-        weights_in_correct_order = \
-            self._get_original_models_weights_in_functional_model_order()
-
         try:
-            self.prepared_model.set_weights(weights_in_correct_order)
+            self.prepared_model.set_weights(self._get_original_models_weights_in_functional_model_order())
         except ValueError:
             _logger.error(
                 "Could not copy weights from original model to the prepared model. This can occur when "
@@ -555,10 +552,12 @@ class _KerasModelPreparer:
         # their inputs and outputs.
         temp_model_model_layers_connections = ModelLayerConnections.get_model_layers_connection_properties(temp_model)
         self._update_temporary_model_layers_connections_inbound_nodes(
-            temp_model_model_layers_connections, temp_model, layer_input)
+            temp_model_model_layers_connections, temp_model, layer_input
+        )
 
         self.model_layers_connections = ModelLayerConnections.merge_model_layers_connections(
-            self.model_layers_connections, temp_model_model_layers_connections)
+            self.model_layers_connections, temp_model_model_layers_connections
+        )
 
         return self._prepare_model_helper(temp_model)
 
