@@ -364,26 +364,29 @@ def get_supported_kernels_from_backend_info(supported_backend_info: SupportedBac
     :return: List of supported kernels
     """
     supported_kernels = []
+    # pylint: disable=too-many-nested-blocks
     for activation_constraint in supported_backend_info.activation_constraints:
-        if supported_backend_info.weights_constraints:
-            for weight_constraint in supported_backend_info.weights_constraints:
+        if activation_constraint[ConfigDictKeys.BITWIDTH] != 64:
+            if supported_backend_info.weights_constraints:
+                for weight_constraint in supported_backend_info.weights_constraints:
 
-                if weight_constraint[ConfigDictKeys.DTYPE] == activation_constraint[ConfigDictKeys.DTYPE]:
-                    json_act_constraint = get_constraint_accrording_to_json_config(activation_constraint)
-                    json_param_constraint = get_constraint_accrording_to_json_config(weight_constraint)
+                    if weight_constraint[ConfigDictKeys.BITWIDTH] != 64 and \
+                       (weight_constraint[ConfigDictKeys.DTYPE] == activation_constraint[ConfigDictKeys.DTYPE]):
+                        json_act_constraint = get_constraint_accrording_to_json_config(activation_constraint)
+                        json_param_constraint = get_constraint_accrording_to_json_config(weight_constraint)
 
-                    supported_kernel = {ConfigDictKeys.ACTIVATION: json_act_constraint,
-                                        ConfigDictKeys.PARAM: json_param_constraint}
+                        supported_kernel = {ConfigDictKeys.ACTIVATION: json_act_constraint,
+                                            ConfigDictKeys.PARAM: json_param_constraint}
 
-                    if supported_kernel not in supported_kernels:
-                        supported_kernels.append(supported_kernel)
+                        if supported_kernel not in supported_kernels:
+                            supported_kernels.append(supported_kernel)
 
-        else:
-            json_act_constraint = get_constraint_accrording_to_json_config(activation_constraint)
-            supported_kernel = {ConfigDictKeys.ACTIVATION: json_act_constraint}
+            else:
+                json_act_constraint = get_constraint_accrording_to_json_config(activation_constraint)
+                supported_kernel = {ConfigDictKeys.ACTIVATION: json_act_constraint}
 
-            if supported_kernel not in supported_kernels:
-                supported_kernels.append(supported_kernel)
+                if supported_kernel not in supported_kernels:
+                    supported_kernels.append(supported_kernel)
 
     return supported_kernels
 
