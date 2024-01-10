@@ -528,7 +528,7 @@ def test_multi_output_only_lambda():
     orig_output = original_model(random_input)
 
     functional_model = prepare_model(original_model)
-
+    ConnectedGraph(functional_model)
     functional_model_output = functional_model(random_input)
     model_weights_in_correct_order = _get_original_models_weights_in_functional_model_order(
         original_model, functional_model, class_names=set())

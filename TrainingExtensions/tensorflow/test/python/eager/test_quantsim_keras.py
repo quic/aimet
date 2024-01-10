@@ -104,16 +104,34 @@ def model_with_lambda_operators():
     model = tf.keras.Model(inputs=(inp, inp_2), outputs=x, name="model_with_lambda_operators")
     return model
 
-def model_with_tf_op_lambda_operators():
+
+def model_with_tf_op_lambda_operators_multi_tf_keras_input():
     input_layer = tf.keras.Input(batch_input_shape=(1, 16, 32, 3))
     x1 = tf.keras.layers.Dense(4, activation=tf.nn.relu)(input_layer)
     x2 = tf.transpose(x1, perm=[0, 1, 3, 2])
     output = tf.matmul(x1, x2)
 
-    model = tf.keras.Model(inputs=input_layer, outputs=output, name="model_with_tf_op_lambda_layers")
-    out = model(tf.random.uniform((1, 16, 32, 3)))
+    return tf.keras.Model(
+        inputs=input_layer,
+        outputs=output,
+        name="model_with_tf_op_lambda_operators_multi_tf_keras_input"
+    )
 
-    return model
+
+def model_with_tf_op_lambda_operators_multi_tf_static_inputs():
+    input_1 = tf.keras.Input(shape=(10,))
+    input_2 = tf.keras.Input(shape=(20,))
+    keras_concat = tf.keras.layers.Concatenate(axis=-1)([input_1, input_2])
+    const = tf.constant(3.14, dtype=tf.float32, shape=(1,))
+    const_expanded = tf.expand_dims(const, axis=0)
+    tf_concat = tf.concat([keras_concat, const_expanded], axis=-1)
+    output = tf.keras.layers.Dense(3)(tf_concat)
+
+    return tf.keras.Model(
+        inputs=[input_1, input_2],
+        outputs=output,
+        name="model_with_tf_op_lambda_operators_multi_tf_static_inputs"
+    )
 
 def model_with_reused_layer():
     relu = tf.keras.layers.ReLU()
@@ -384,8 +402,8 @@ def test_model_with_lambda_operators():
         assert len(encodings['param_encodings']) == 2
 
 
-def test_model_with_tf_op_lambda_operators():
-    model = model_with_tf_op_lambda_operators()
+def test_model_with_tf_op_lambda_operators_multi_tf_keras_input():
+    model = model_with_tf_op_lambda_operators_multi_tf_keras_input()
     random_input = tf.random.uniform((1, 16, 32, 3))
 
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -403,6 +421,34 @@ def test_model_with_tf_op_lambda_operators():
         assert len(qsim.model.layers[3].input_quantizers) == 2, "tf.matmul should have 2 input_quantizer for a @ b"
 
         assert len(encodings['activation_encodings']) == 4
+        assert len(encodings['param_encodings']) == 1, "Only the Dense layer in this model should have param_encoding"
+
+
+def test_model_with_tf_op_lambda_operators_multi_tf_static_inputs():
+    model = model_with_tf_op_lambda_operators_multi_tf_static_inputs()
+    random_input = [tf.random.uniform(shape=(1, *shape[1:])) for shape in model.input_shape]
+
+    qsim = QuantizationSimModel(model, quant_scheme="tf")
+    qsim.compute_encodings(lambda m, _: m(random_input), None)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        qsim.export(temp_dir, model.name, convert_to_pb=False)
+
+        with open(os.path.join(temp_dir, f"{model.name}.encodings"), "r") as encodings_file:
+            encodings = json.load(encodings_file)
+
+        assert isinstance(qsim.model.layers[2].original_layer, tf.keras.layers.Concatenate), \
+            "The layer should have a Concatenate layer"
+
+        assert qsim.model.layers[3].original_layer.get_config()["name"] == "tf.concat", \
+            "The layer should have a tf.concat"
+
+        assert len(qsim.model.layers[2].input_quantizers) == 2,\
+            "This QCQuantizeWrapper should have tf.keras.layers.Concatenate and have 2 input_quantizers"
+
+        assert len(qsim.model.layers[3].input_quantizers) == 2, \
+            "This QCQuantizeWrapper should have the tf.concat TFOpLambda layer and have 2 input_quantizers"
+
+        assert len(encodings["activation_encodings"]) == 5
         assert len(encodings['param_encodings']) == 1, "Only the Dense layer in this model should have param_encoding"
 
 def test_qat():
@@ -1266,7 +1312,6 @@ def test_quant_scheme_percentile():
             assert np.allclose(quantizer.get_percentile_value(), 99.99)
 
 
-
 def test_quant_scheme_percentile_setting_using_str():
     """
     This test case ensures that the quantization is working fine with percentile scheme
@@ -1282,3 +1327,41 @@ def test_quant_scheme_percentile_setting_using_str():
             assert quantizer.quant_scheme == QuantScheme.post_training_percentile
 
 
+def test_multi_output_model():
+    """
+    Test Quantsim with a model that has multi output layers
+    """
+
+    inputs = tf.keras.Input(shape=(480, 1088, 3))
+    x = tf.keras.layers.Conv2D(
+        filters=3,
+        kernel_size=(3, 3),
+        activation="relu",
+        padding="same"
+    )(inputs)
+
+    # tf operators -> TFOpLambda
+    x = tf.reshape(x, [1, -1, 2])
+    x, y = tf.split(x, 2, axis=2)
+    x = tf.concat([x, y], axis=2)
+
+    output_1 = tf.keras.layers.Dense(units=32)(x)
+    output_2 = tf.keras.layers.Dense(units=32)(x)
+
+    model = tf.keras.Model(inputs=[inputs], outputs=[output_1, output_2])
+
+    sim = QuantizationSimModel(model)
+
+    # Check ConnectedGraph
+    assert sim.connected_graph._split_count == 1
+    for idx in range(2):
+        assert sim.connected_graph._name_to_layer[f"tf.split/split:{idx}"].get_config()["name"] == "tf.split"
+
+    assert len(sim.model.layers[3].output_quantizers) == 2
+
+    sim.compute_encodings(
+        lambda m, _: m(tf.random.uniform(shape=(1, *model.input_shape[1:]))), None
+    )
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        sim.export(tmp_dir, "multi_output_model")

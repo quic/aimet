@@ -37,8 +37,16 @@
 """ Utilities for parsing and applying quantsim configurations from json config file """
 from typing import List, Tuple, Dict, Union
 
+import tensorflow as tf
 from tensorflow.keras import layers
 
+from packaging import version
+if version.parse(tf.version.VERSION) >= version.parse("2.10.1"):
+    from keras.layers.core.tf_op_layer import TFOpLambda  # pylint: disable=import-error
+else:
+    from tensorflow.python.keras.layers.core import TFOpLambda  # pylint: disable=ungrouped-imports
+
+# pylint: disable=wrong-import-position
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
 from aimet_common.connected_graph.operation import Op
 from aimet_common.defs import QuantScheme, QuantizationDataType
@@ -161,8 +169,11 @@ def _initialize_input_quantizers(layer: layers.Layer, quant_settings: QuantizerS
     :param enabled: Flag for quantized or not
     :return: Input quantizers corresponding to layer
     """
-    layer_input_list = layer.inbound_nodes[0].keras_inputs
-    num_inputs = len(layer_input_list)
+
+    num_inputs = len(layer.inbound_nodes[0].keras_inputs)
+    # Special case for TFOpLambda layers as the input can be other Keras layers, tf operations, or static tf.tensors
+    if isinstance(layer, TFOpLambda):
+        num_inputs = len(layer.input) if isinstance(layer.input, List) else num_inputs
     input_quantizers = []
     for i in range(num_inputs):
         activation_tensor_quantizer = ActivationTensorQuantizer(layer,
@@ -189,18 +200,23 @@ def _initialize_output_quantizers(layer: layers.Layer, quant_settings: Quantizer
     :param enabled: Flag for quantized or not
     :return: Output quantizers corresponding to layer
     """
+
+    # `layer.output` will be a list if there is more than one otherwise it's just a single output
+    num_outputs = len(layer.output) if isinstance(layer.output, List) else 1
     output_quantizers = []
-    activation_tensor_quantizer = ActivationTensorQuantizer(layer,
-                                                            f"{layer.name}_output_quantizer_0",
-                                                            quant_settings.quant_scheme,
-                                                            quant_settings.round_mode,
-                                                            quant_settings.bitwidth,
-                                                            quant_settings.data_type,
-                                                            quant_settings.is_symmetric,
-                                                            quant_settings.use_strict_symmetric,
-                                                            quant_settings.use_unsigned_symmetric,
-                                                            enabled and layer.output.dtype in QUANT_ALLOWED_DTYPES)
-    output_quantizers.append(activation_tensor_quantizer)
+    for idx in range(num_outputs):
+        layer_output_dtype = layer.output[idx].dtype if isinstance(layer.output, List) else layer.output.dtype
+        activation_tensor_quantizer = ActivationTensorQuantizer(layer,
+                                                                f"{layer.name}_output_quantizer_{idx}",
+                                                                quant_settings.quant_scheme,
+                                                                quant_settings.round_mode,
+                                                                quant_settings.bitwidth,
+                                                                quant_settings.data_type,
+                                                                quant_settings.is_symmetric,
+                                                                quant_settings.use_strict_symmetric,
+                                                                quant_settings.use_unsigned_symmetric,
+                                                                enabled and layer_output_dtype in QUANT_ALLOWED_DTYPES)
+        output_quantizers.append(activation_tensor_quantizer)
     return output_quantizers
 
 

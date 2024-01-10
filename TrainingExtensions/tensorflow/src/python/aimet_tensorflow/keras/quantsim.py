@@ -373,15 +373,18 @@ class QuantizationSimModel(tf.keras.Model):
                     # inbound_nodes parameter populated, so the name of the quantizer is used instead
                     if not wrapper._layer_to_wrap.inbound_nodes:
                         tensor_name = "multi_head_attention/" + wrapper.name + "/" + output_quantizer.name
+                    elif isinstance(wrapper._layer_to_wrap.output, List):
+                        tensor_name = wrapper._layer_to_wrap.output[idx].name
                     else:
                         tensor_name = wrapper._layer_to_wrap.output.name
                     encoding_dict = self._get_encoding_dict_for_quantizer(output_quantizer)
                     activation_encodings[tensor_name] = encoding_dict
-        encodings_dict = {'version': encoding_version,
-                          'activation_encodings': activation_encodings,
-                          'param_encodings': param_encodings,
-                          'quantizer_args': self.quant_args if hasattr(self, "quant_args") else {}}
-        return encodings_dict
+        return {
+            'version': encoding_version,
+            'activation_encodings': activation_encodings,
+            'param_encodings': param_encodings,
+            'quantizer_args': self.quant_args if hasattr(self, "quant_args") else {}
+        }
 
     def compute_encodings(self, forward_pass_callback, forward_pass_callback_args):
         """
