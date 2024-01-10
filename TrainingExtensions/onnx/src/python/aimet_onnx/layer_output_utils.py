@@ -123,6 +123,8 @@ class LayerOutput:
         LayerOutput.register_activations(self.model, self.activation_names)
 
         self.session = QuantizationSimModel.build_session(self.model, providers)
+
+        # Replace special characters with underscore. This gives valid file names to store activation tensors.
         self.sanitized_activation_names = [re.sub(r'\W+', "_", name.replace('_updated', '')) for name in self.activation_names]
 
         # Save activation names which are in topological order of model graph. This order can be used while comparing layer-outputs.
