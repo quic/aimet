@@ -322,10 +322,18 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                     name for name, tensor in kwargs.items()
                     if _is_keras_or_tensor_input(tensor) or isinstance(tensor, np.ndarray)
                 ]
+
+                # TF functions like tf.concat could have two inputs in List form. But other layers could match
+                # The TFOpLambda where one input is in inputs and the other(s) are in a kwargs dict
+                num_inputs_to_quantize = len(inputs) if isinstance(inputs, List) else 1
                 # Quantize the input directly first
-                inputs = self._quantize_activation(inputs, [self.input_quantizers[0]], True)
+                inputs = self._quantize_activation(
+                    inputs,
+                    quantizers=self.input_quantizers[:num_inputs_to_quantize],
+                    is_input_quantization=True
+                )
                 # Quantize any subsequent arguments
-                for tensor_name, input_quantizer in zip(kwargs_keys_for_keras_tensors, self.input_quantizers[1:]):
+                for tensor_name, input_quantizer in zip(kwargs_keys_for_keras_tensors, self.input_quantizers[num_inputs_to_quantize:]):
                     kwargs[tensor_name] = self._quantize_activation(kwargs[tensor_name], [input_quantizer], True)
             else:
                 inputs = self._quantize_activation(inputs, self.input_quantizers, True)
@@ -340,7 +348,8 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         try:
             idx_param_quantizer = 0
             for idx, param in enumerate(self._layer_to_wrap.weights):
-                # check and break  if idx_param_quantizer is out of range (Batchnorm fold will update bias tensor, even in case there was no existing bias add op in given conv2D op, use_bias=False)
+                # check and break  if idx_param_quantizer is out of range (Batchnorm fold will update bias tensor,
+                # even in case there was no existing bias add op in given conv2D op, use_bias=False)
                 if idx_param_quantizer == len(self.param_quantizers):
                     break
                 if self._layer_to_wrap.weights[idx].dtype in QUANT_ALLOWED_DTYPES:
