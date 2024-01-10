@@ -71,6 +71,9 @@ class BlockwiseLinear(torch.nn.Module):
 
     def forward(self, inp):
         """ Forward pass """
+        if len(self.linears) == 1:
+            return self.linears[0](inp)
+
         split_inputs = self.split(inp, self.block_size, -1)
         out = None
         for idx, split_input in enumerate(split_inputs):
