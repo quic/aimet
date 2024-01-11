@@ -611,6 +611,10 @@ def get_number_of_outputs_and_axis_handling(layer, weight_shape, param_type) -> 
     :param param_type: str
     :return: Tuple[int, int]
     """
+    # Raising an assertion error incase there's SeparableConv2D because in this case we have two sets of weights: Depthwise
+    # and Pointwise. For depthwise kernels, LAST TWO AXIS should be considered and for pointwise kernels LAST AXIS
+    # should be considered, which is not handled here. Running model preparer beforehand will resolve this as there the
+    # SeparableConv2D is splitted into two layers Depthwise and Pointwise seperately.
     if isinstance(layer, tf.keras.layers.SeparableConv2D):
         raise AssertionError("SeparableConv2D found in the model. Please run model preparer before calling QuantizationSimModel")
 
