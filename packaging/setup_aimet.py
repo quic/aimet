@@ -74,6 +74,7 @@ setup(
     license='NOTICE.txt',
     description='AIMET',
     long_description=open('README.txt').read(),
+    packages=['aimet'],
     install_requires=[],
     dependency_links=dependency_list,
     zip_safe=True,
