@@ -39,6 +39,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 from aimet_torch.experimental.v2.quantization.backends import get_backend
+from aimet_torch.experimental.v2.quantization.modules.quantize import QuantizeDequantize
 from aimet_torch.experimental.v2.quantization.fake_quant import FakeQuantizedSoftmax, _ModuleSpec, _TensorSpec
 
 
@@ -67,19 +68,53 @@ def param_spec():
 
 class TestFakeQuantizedSoftmax:
     def test_no_spec(self, input):
+        """
+        Given: Instantiate a fake-, true-, or auto-quantized module without specific spec
+        """
+
+        """
+        When: Inspect `*_quantizer` attributes
+        Then: All of them are set to `None`
+        """
         quant_softmax = FakeQuantizedSoftmax()
         assert quant_softmax.input_quantizers is None
         assert quant_softmax.output_quantizers is None
 
+        """
+        When: Run forward with an input x
+        Then: The output should be equal to that of the base FP module.
+        """
         expected_output = F.softmax(input, quant_softmax.dim)
         assert torch.equal(quant_softmax(input), expected_output)
 
     def test_input_qtzn(self, input, input_spec):
+        """
+        Given: Instantiate a fake-quantized module with input quantizer spec specified
+        """
         module_spec = _ModuleSpec(input_spec=input_spec,
                                   param_spec=None,
                                   output_spec=None)
         quant_softmax = FakeQuantizedSoftmax(spec=module_spec)
 
+        """
+        When: Inspect `input_quantizer` attribute.
+        Then: `input_quantizer` is set to `QuantizeDequantize` as a submodule
+        """
+        assert isinstance(quant_softmax.input_quantizers[0], QuantizeDequantize)
+        assert quant_softmax.output_quantizers is None
+
+        """
+        When: Invoke forward before the encodings are initialized with `compute_encodings()`
+        Then: Throw runtime error
+        """
+        with pytest.raises(RuntimeError):
+            _ = quant_softmax(input)
+
+        """
+        When: Invoke forward with input x after encodings are initialized
+              with `compute_encodings()`
+        Then: The output should be equal to FP softmax of quantize-dequantized x
+        """
         with quant_softmax.compute_encodings():
             _ = quant_softmax(input)
 
@@ -94,11 +129,33 @@ class TestFakeQuantizedSoftmax:
         assert torch.equal(quant_output, expected_output)
 
     def test_output_qtzn(self, input, output_spec):
+        """
+        Given: Instantiate a fake-quantized module with output quantizer spec specified
+        """
         module_spec = _ModuleSpec(input_spec=None,
                                   param_spec=None,
                                   output_spec=output_spec)
         quant_softmax = FakeQuantizedSoftmax(spec=module_spec)
 
+        """
+        When: Inspect `output_quantizer` attribute.
+        Then: `output_quantizer` is set to `QuantizeDequantize` as a submodule
+        """
+        assert quant_softmax.input_quantizers is None
+        assert isinstance(quant_softmax.output_quantizers[0], QuantizeDequantize)
+
+        """
+        When: Invoke forward before the encodings are initialized with `compute_encodings()`
+        Then: Throw runtime error
+        """
+        with pytest.raises(RuntimeError):
+            _ = quant_softmax(input)
+
+        """
+        When: Invoke forward with input x after encodings are initialized
+              with `compute_encodings()`
+        Then: The output should be equal to quantize-dequantized FP softmax output
+        """
         with quant_softmax.compute_encodings():
             _ = quant_softmax(input)
 
@@ -116,6 +173,10 @@ class TestFakeQuantizedSoftmax:
         assert torch.equal(quant_output, expected_output)
 
     def test_param_qtzn(self, input, param_spec):
+        """
+        When: The baseline module doesn't have `weight` attribute (e.g. torch.nn.ReLU)
+        Then: Throw runtime error in construction time
+        """
         module_spec = _ModuleSpec(input_spec=None,
                                   param_spec=param_spec,
                                   output_spec=None)

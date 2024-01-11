@@ -39,6 +39,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 from aimet_torch.experimental.v2.quantization.backends import get_backend
+from aimet_torch.experimental.v2.quantization.modules.quantize import QuantizeDequantize
 from aimet_torch.experimental.v2.quantization.fake_quant import FakeQuantizedLinear, _ModuleSpec, _TensorSpec
 
 
@@ -77,11 +78,34 @@ class TestFakeQuantizedLinear:
         assert torch.equal(quant_linear(input), expected_output)
 
     def test_input_qtzn(self, input, input_spec):
+        """
+        Given: Instantiate a fake-quantized module with input quantizer spec specified
+        """
         module_spec = _ModuleSpec(input_spec=input_spec,
                                   param_spec=None,
                                   output_spec=None)
         quant_linear = FakeQuantizedLinear(10, 10, spec=module_spec)
+        """
+        When: Inspect `input_quantizer` attribute.
+        Then: `input_quantizer` is set to `QuantizeDequantize` as a submodule
+        """
+        assert isinstance(quant_linear.input_quantizers[0], QuantizeDequantize)
+        assert quant_linear.param_quantizers['weight'] is None
+        assert quant_linear.param_quantizers['bias'] is None
+        assert quant_linear.output_quantizers is None
 
+        """
+        When: Invoke forward before the encodings are initialized with `compute_encodings()`
+        Then: Throw runtime error
+        """
+        with pytest.raises(RuntimeError):
+            _ = quant_linear(input)
+
+        """
+        When: Invoke forward with input x after encodings are initialized
+              with `compute_encodings()`
+        Then: The output should be equal to FP linear with quantize-dequantized x
+        """
         with quant_linear.compute_encodings():
             _ = quant_linear(input)
 
@@ -96,11 +120,35 @@ class TestFakeQuantizedLinear:
         assert torch.equal(quant_output, expected_output)
 
     def test_output_qtzn(self, input, output_spec):
+        """
+        Given: Instantiate a fake-quantized module with output quantizer spec specified
+        """
         module_spec = _ModuleSpec(input_spec=None,
                                   param_spec=None,
                                   output_spec=output_spec)
         quant_linear = FakeQuantizedLinear(10, 10, spec=module_spec)
 
+        """
+        When: Inspect `output_quantizer` attribute.
+        Then: `output_quantizer` is set to `QuantizeDequantize` as a submodule
+        """
+        assert quant_linear.input_quantizers is None
+        assert isinstance(quant_linear.output_quantizers, QuantizeDequantize)
+        assert quant_linear.param_quantizers['weight'] is None
+        assert quant_linear.param_quantizers['bias'] is None
+
+        """
+        When: Invoke forward before the encodings are initialized with `compute_encodings()`
+        Then: Throw runtime error
+        """
+        with pytest.raises(RuntimeError):
+            _ = quant_linear(input)
+
+        """
+        When: Invoke forward with input x after encodings are initialized
+              with `compute_encodings()`
+        Then: The output should be equal to quantize-dequantized FP linear output
+        """
         with quant_linear.compute_encodings():
             _ = quant_linear(input)
 
@@ -118,10 +166,22 @@ class TestFakeQuantizedLinear:
         assert torch.equal(quant_output, expected_output)
 
     def test_param_qtzn(self, input, param_spec):
+        """
+        Given: Instantiate a fake-quantized module with weight quantizer spec specified
+        """
         module_spec = _ModuleSpec(input_spec=None,
                                   param_spec=param_spec,
                                   output_spec=None)
         quant_linear = FakeQuantizedLinear(10, 10, spec=module_spec)
+
+        """
+        When: Inspect `weight_quantizer` attribute.
+        Then: `weight_quantizer` is set to `QuantizeDequantize` as a submodule
+        """
+        assert quant_linear.input_quantizers is None
+        assert quant_linear.output_quantizers is None
+        assert isinstance(quant_linear.param_quantizers['weight'], QuantizeDequantize)
+        assert quant_linear.param_quantizers['bias'] is None
 
         with quant_linear.compute_encodings():
             _ = quant_linear(input)
