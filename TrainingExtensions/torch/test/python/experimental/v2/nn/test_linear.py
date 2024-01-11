@@ -183,9 +183,15 @@ class TestFakeQuantizedLinear:
         assert isinstance(quant_linear.param_quantizers['weight'], QuantizeDequantize)
         assert quant_linear.param_quantizers['bias'] is None
 
-        with quant_linear.compute_encodings():
-            _ = quant_linear(input)
+        """
+        When: Invoke forward before or after the encodings are initialized
+              with `compute_encodings()`
+        Then: The output should be equal to FP linear with quantize-dequantized weight
 
+        NOTE: Weight quantizer alone shouldn't enforce calibration phase since
+              the weights are already present.
+              Only input/output quantizers will strictly require calibration phase
+        """
         quant_output = quant_linear(input)
 
         weight = quant_linear.weight
