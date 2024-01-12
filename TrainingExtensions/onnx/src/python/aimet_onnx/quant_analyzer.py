@@ -40,6 +40,7 @@
 import os
 from typing import Union, Tuple, Dict, List
 import copy
+from collections import defaultdict
 
 import numpy as np
 from onnx import ModelProto
@@ -48,12 +49,13 @@ from onnxruntime.quantization.onnx_model import ONNXModel
 
 from aimet_common.utils import AimetLogger, CallbackFunc
 from aimet_common.defs import QuantScheme
+from aimet_common.quant_analyzer import save_json, export_per_layer_sensitivity_analysis_plot
 
 from aimet_onnx.qc_quantize_op import QcQuantizeOp
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.batch_norm_fold import fold_all_batch_norms_to_weight
 
-_logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
+_logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.QuantAnalyzer)
 
 
 class QuantAnalyzer:
@@ -127,8 +129,14 @@ class QuantAnalyzer:
         # Check model sensitivity to weight and activation quantization individually.
         self.check_model_sensitivity_to_quantization(sim)
 
+        # Perform per layer analysis by enabling its quantizers (OPTION-1).
+        self._perform_per_layer_analysis_by_enabling_quantizers(sim, results_dir)
+
+        # Perform per layer analysis by disabling its quantizers (OPTION-2).
+        self._perform_per_layer_analysis_by_disabling_quantizers(sim, results_dir)
+
     def create_quantsim_and_encodings(self, quant_scheme: QuantScheme, default_param_bw: int,
-                                      default_activation_bw: int, config_file: str) \
+                                       default_activation_bw: int, config_file: str) \
             -> QuantizationSimModel:
         """
         Create Quantsim and compute encodings.
@@ -253,3 +261,144 @@ class QuantAnalyzer:
         """
         for quantizer in quantizers:
             quantizer.enabled = enabled
+
+    def _perform_per_layer_analysis_by_enabling_quantizers(self,
+                                                           sim: QuantizationSimModel,
+                                                           results_dir: str,
+                                                           ) -> Dict:
+        """
+        NOTE: Option 1
+
+        1. All parameter and activation quantizers are disabled.
+        2. For every layer, based on occurrence:
+              i. Each layer's parameters and activations quantizers are enabled as per JSON config file
+                 and set to bit-width specified.
+             ii. Measure and record eval score on subset of dataset.
+            iii. Disable enabled quantizers in step i.
+        3. Returns dictionary containing layer name and corresponding eval score.
+
+        :param sim: Quantsim model.
+        :param results_dir: Directory to save the results.
+        :return: layer wise eval score dictionary. dict[layer_name] = eval_score
+        """
+        results_dir = os.path.abspath(results_dir)
+        os.makedirs(results_dir, exist_ok=True)
+
+        _logger.info("OPTION-1: All the quantizers are disabled. "
+                     "Starting per-layer analysis by enabling layer-specific quantizers as per config file.")
+        layer_wise_eval_score_dict = self._perform_per_layer_analysis(sim,
+                                                                      disable_all_quantizers=True,
+                                                                      enabled_before=True,
+                                                                      enabled_after=False)
+        export_per_layer_sensitivity_analysis_plot(layer_wise_eval_score_dict,
+                                                   results_dir,
+                                                   title="per_layer_quant_enabled")
+        save_json(layer_wise_eval_score_dict,
+                  results_dir,
+                  title="per_layer_quant_enabled.json")
+        _logger.info("Exported per-layer quant analysis (enabled) plot.")
+        return layer_wise_eval_score_dict
+
+    def _perform_per_layer_analysis_by_disabling_quantizers(self,
+                                                            sim: QuantizationSimModel,
+                                                            results_dir: str,
+                                                            ) -> Dict:
+        """
+        NOTE: Option 2
+
+        1. All parameter and activation quantizers are enabled as per JSON config file
+        and set to bit-width specified.
+        2. For every layer, based on occurrence:
+              i. Each layer's parameters and activations quantizers are disabled.
+             ii. Measure and record eval score on subset of dataset.
+            iii. Enable disabled quantizers in step i.
+        3. Returns dictionary containing layer name and corresponding eval score.
+
+        :param sim: Quantsim model.
+        :param results_dir: Directory to save the results.
+        :return: layer wise eval score dictionary. dict[layer_name] = eval_score
+        """
+        results_dir = os.path.abspath(results_dir)
+        os.makedirs(results_dir, exist_ok=True)
+
+        _logger.info("OPTION-2: All the quantizers are enabled as per config file. "
+                     "Starting per-layer analysis by disabling layer-specific quantizers.")
+        layer_wise_eval_score_dict = self._perform_per_layer_analysis(sim,
+                                                                      disable_all_quantizers=False,
+                                                                      enabled_before=False,
+                                                                      enabled_after=True)
+        export_per_layer_sensitivity_analysis_plot(layer_wise_eval_score_dict,
+                                                   results_dir,
+                                                   title="per_layer_quant_disabled")
+        save_json(layer_wise_eval_score_dict,
+                  results_dir,
+                  title="per_layer_quant_disabled.json")
+        _logger.info("Exported per-layer quant analysis (disabled) plot.")
+        return layer_wise_eval_score_dict
+
+    def _perform_per_layer_analysis(self,
+                                    sim: QuantizationSimModel,
+                                    disable_all_quantizers: bool,
+                                    enabled_before: bool,
+                                    enabled_after: bool,
+                                    ) -> Dict:
+        """
+        Helper function for perform_per_layer_analysis_by_enabling_quant_wrappers() and
+        perform_per_layer_analysis_by_disabling_quant_wrappers()
+
+        :param sim: Quantsim model.
+        :param disable_all_quantizers: Flag to disable all the quantizers before per-layer analysis.
+        :param enabled_before: Flag to set enabled for quantizers before computing encodings.
+        :param enabled_after: Flag to set enabled for quantizers after computing encodings.
+        :return: layer wise eval score dictionary. dict[layer_name] = eval_score.
+        """
+
+        # Maps op to its list of enabled quantizers.
+        op_to_quantizers_dict = self._get_enabled_quantizers(sim)
+
+        if disable_all_quantizers:
+            for enabled_quantizers in op_to_quantizers_dict.values():
+                self._enable_disable_quantizers(enabled_quantizers, enabled=False)
+
+        eval_score_dict = {}
+        for op_name, enabled_quantizers in op_to_quantizers_dict.items():
+            self._enable_disable_quantizers(enabled_quantizers, enabled=enabled_before)
+
+            # Record eval score.
+            eval_score_dict[op_name] = self._eval_callback.func(sim.session, self._eval_callback.args)
+            _logger.debug("For layer: %s, the eval score is: %f", op_name, eval_score_dict[op_name])
+
+            self._enable_disable_quantizers(enabled_quantizers, enabled=enabled_after)
+
+        if disable_all_quantizers:
+            for enabled_quantizers in op_to_quantizers_dict.values():
+                self._enable_disable_quantizers(enabled_quantizers, enabled=True)
+
+        return eval_score_dict
+
+    @staticmethod
+    def _get_enabled_quantizers(sim: QuantizationSimModel):
+        enabled_quant_wrappers = defaultdict(list)
+        cg_ops = sim.connected_graph.ordered_ops
+        for op in cg_ops:
+            # Get param quantizers
+            for param in op.parameters:
+                if param in sim.qc_quantize_op_dict and sim.qc_quantize_op_dict[param].enabled:
+                    enabled_quant_wrappers[op.name_op].append(sim.qc_quantize_op_dict[param])
+            # Get output activation quantizers
+            if op.output_ops and op.output_ops[0].type == 'branch':
+                cg_product = op.output_ops[0].output
+            else:
+                cg_product = op.output
+            for output_name in set(cg_product.tensor_dict.values()):
+                if output_name in sim.qc_quantize_op_dict and sim.qc_quantize_op_dict[output_name].enabled:
+                    enabled_quant_wrappers[op.name_op].append(sim.qc_quantize_op_dict[output_name])
+            # Get input activation quantizers if starting op
+            if op in sim.connected_graph.starting_ops:
+                cg_products = [cg_product for cg_product in op.inputs if cg_product.is_model_input]
+                for cg_product in cg_products:
+                    assert len(cg_product.tensor_dict) == 1
+                    input_name = list(cg_product.tensor_dict.values())[0]
+                    if input_name in sim.qc_quantize_op_dict and sim.qc_quantize_op_dict[input_name].enabled:
+                        enabled_quant_wrappers[op.name_op].append(sim.qc_quantize_op_dict[input_name])
+        return enabled_quant_wrappers
