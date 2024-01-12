@@ -123,6 +123,12 @@
             "level": "INFO",
             "handlers": ["console"],
             "propagate": false
+        },
+
+        "QuantAnalyzer": {
+            "level": "INFO",
+            "handlers": ["console"],
+            "propagate": false
         }
 
     },

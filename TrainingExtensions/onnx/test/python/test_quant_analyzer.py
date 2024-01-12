@@ -40,6 +40,7 @@ import json
 import os.path
 import shutil
 from typing import Dict
+from packaging import version
 
 import numpy as np
 import torch
@@ -49,6 +50,7 @@ from aimet_common.utils import CallbackFunc
 
 from aimet_onnx.batch_norm_fold import fold_all_batch_norms_to_weight
 from aimet_onnx.quantsim import QuantizationSimModel
+from aimet_onnx.qc_quantize_op import QcQuantizeOp
 from aimet_onnx.quant_analyzer import QuantAnalyzer
 
 from models import models_for_tests
@@ -117,3 +119,98 @@ class TestQuantAnalyzer:
 
         # total 5 param quantizers are enabled as per default config file.
         assert len(enabled_quantizers) == 5
+
+    def test_get_enabled_quantizers(self):
+        """ test get_enabled_quantizers() """
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(*input_shape)
+        model = models_for_tests._convert_to_onnx(models_for_tests.TinyModel(), dummy_input)
+        dummy_input_dict = {'input': np.random.randn(1, 3, 32, 32).astype(np.float32)}
+        fold_all_batch_norms_to_weight(model)
+        sim = QuantizationSimModel(copy.deepcopy(model), dummy_input_dict)
+        quant_analyzer = QuantAnalyzer(model, dummy_input_dict, CallbackFunc(None), CallbackFunc(None))
+        op_to_quantizers_dict = quant_analyzer._get_enabled_quantizers(sim)
+
+        # Verify all the ops having enabled quantizers are being captured
+        assert len(op_to_quantizers_dict) == 10
+        for op_name, enabled_quantizers in op_to_quantizers_dict.items():
+            assert isinstance(op_name, str)
+            assert all(isinstance(quantizer, QcQuantizeOp) for quantizer in enabled_quantizers)
+
+        # Verify the order of ops in op_to_quantizers_dict is according to its occurence in the model graph
+        if version.parse(torch.__version__) >= version.parse("1.13"):
+            layer_names = list(op_to_quantizers_dict.keys())
+            assert layer_names.index("/conv2/Conv") < layer_names.index("/relu2/Relu")
+            assert layer_names.index("/conv4/Conv") < layer_names.index("/fc/Gemm")
+
+        # Disable all the quantizers and verify op_to_quantizers_dict is empty.
+        for _, qc_quantize_op in sim.qc_quantize_op_dict.items():
+            qc_quantize_op.enabled = False
+        op_to_quantizers_dict = quant_analyzer._get_enabled_quantizers(sim)
+        assert not op_to_quantizers_dict
+
+    def test_perform_per_layer_analysis_by_enabling_quantizers(self):
+        """ test perform per layer analysis by enabling quantizers """
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(*input_shape)
+        model = models_for_tests._convert_to_onnx(models_for_tests.TinyModel(), dummy_input)
+        dummy_input_dict = {'input': np.random.randn(1, 3, 32, 32).astype(np.float32)}
+        layer_names = []
+        for node in model.nodes():
+            layer_names.append(node.name)
+
+        fold_all_batch_norms_to_weight(model)
+        sim = QuantizationSimModel(copy.deepcopy(model), dummy_input_dict)
+        sim.compute_encodings(evaluate, dummy_input_dict)
+        forward_pass_callback = CallbackFunc(calibrate, dummy_input_dict)
+        eval_callback = CallbackFunc(evaluate, dummy_input_dict)
+        quant_analyzer = QuantAnalyzer(model, dummy_input_dict, forward_pass_callback, eval_callback)
+        try:
+            layer_wise_eval_score_dict = \
+                quant_analyzer._perform_per_layer_analysis_by_enabling_quantizers(sim, results_dir="./tmp/")
+            print(layer_wise_eval_score_dict)
+            assert type(layer_wise_eval_score_dict) == dict
+            assert len(layer_wise_eval_score_dict) == 10
+
+            # test whether layer_wise_eval_score_dict consists of correct keys (op names).
+            for op_name in layer_wise_eval_score_dict.keys():
+                assert op_name in layer_names
+
+                # Check if it is exported to correct html file.
+                assert os.path.isfile("./tmp/per_layer_quant_enabled.html")
+        finally:
+            if os.path.isdir("./tmp/"):
+                shutil.rmtree("./tmp/")
+
+    def test_perform_per_layer_analysis_by_disabling_quantizers(self):
+        """ test perform per layer analysis by disabling quantizers """
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(*input_shape)
+        model = models_for_tests._convert_to_onnx(models_for_tests.TinyModel(), dummy_input)
+        dummy_input_dict = {'input': np.random.randn(1, 3, 32, 32).astype(np.float32)}
+        layer_names = []
+        for node in model.nodes():
+            layer_names.append(node.name)
+
+        fold_all_batch_norms_to_weight(model)
+        sim = QuantizationSimModel(copy.deepcopy(model), dummy_input_dict)
+        sim.compute_encodings(evaluate, dummy_input_dict)
+        forward_pass_callback = CallbackFunc(calibrate, dummy_input_dict)
+        eval_callback = CallbackFunc(evaluate, dummy_input_dict)
+        quant_analyzer = QuantAnalyzer(model, dummy_input_dict, forward_pass_callback, eval_callback)
+        try:
+            layer_wise_eval_score_dict = \
+                quant_analyzer._perform_per_layer_analysis_by_disabling_quantizers(sim, results_dir="./tmp/")
+            print(layer_wise_eval_score_dict)
+            assert type(layer_wise_eval_score_dict) == dict
+            assert len(layer_wise_eval_score_dict) == 10
+
+            # test whether layer_wise_eval_score_dict consists of correct keys (op names).
+            for op_name in layer_wise_eval_score_dict.keys():
+                assert op_name in layer_names
+
+                # Check if it is exported to correct html file.
+                assert os.path.isfile("./tmp/per_layer_quant_disabled.html")
+        finally:
+            if os.path.isdir("./tmp/"):
+                shutil.rmtree("./tmp/")
