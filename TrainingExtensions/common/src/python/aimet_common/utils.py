@@ -132,6 +132,7 @@ class AimetLogger(metaclass=SingletonType):
         BatchNormFolding = "BatchNormFolding"
         ModelPreparer = "ModelPreparer"
         LayerOutputs = 'LayerOutputs'
+        QuantAnalyzer = 'QuantAnalyzer'
 
     def __init__(self):
         self._logger = logging.getLogger()
