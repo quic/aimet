@@ -36,7 +36,7 @@
 # =============================================================================
 import torch
 import pytest
-from aimet_torch.experimental.v2.quantization.encoding_analyzer import get_encoding_analyzer_cls, CalibrationMethod
+from aimet_torch.experimental.v2.quantization.encoding_analyzer import get_encoding_analyzer_cls, CalibrationMethod, MseEncodingAnalyzer, PercentileEncodingAnalyzer, SqnrEncodingAnalyzer
 
 
 class TestEncodingAnalyzer():
@@ -162,3 +162,67 @@ class TestMinMaxEncodingAnalyzer():
         encoding_analyzer_1 = get_encoding_analyzer_cls(CalibrationMethod.MinMax, [3, 4])
         with pytest.raises(RuntimeError):
             encoding_analyzer_1.update_stats(torch.randn(2, 3, 5))
+
+@pytest.mark.skip('Tests skipped due to TDD')
+class TestHistogramEncodingAnalyzer:
+    @pytest.fixture
+    def setUp(self, min_max_shape, num_bins):
+        mse_encoding_analyzer = MseEncodingAnalyzer(shape=min_max_shape, num_bins = num_bins)
+        percentile_encoding_analyzer = PercentileEncodingAnalyzer(quantile=0.99, shape=min_max_shape, num_bins = num_bins)
+        sqnr_encoding_analyzer = SqnrEncodingAnalyzer(shape=min_max_shape, num_bins = num_bins)
+        encoding_analyzer_list = [mse_encoding_analyzer, percentile_encoding_analyzer, sqnr_encoding_analyzer]
+        yield encoding_analyzer_list
+
+    @pytest.mark.parametrize('num_bins', [-1, 0])
+    def test_invalid_bin_value(self, num_bins):
+        min_max_shape = (1,)
+        with pytest.raises(ValueError):
+            MseEncodingAnalyzer(num_bins=num_bins)
+        
+        with pytest.raises(ValueError):
+            PercentileEncodingAnalyzer(num_bins = num_bins, quantile=0.99, shape=min_max_shape)
+        
+        with pytest.raises(ValueError):
+            SqnrEncodingAnalyzer(num_bins = num_bins, shape=min_max_shape)
+        
+    @pytest.mark.parametrize('num_bins', [3], indirect=True)
+    @pytest.mark.parametrize('min_max_shape', [(1,)], indirect=True)
+    def test_merge_stats(self, setUp):
+        for encoding_analyzer in setUp:
+            input_tensor_1 = [2.0, 3.0, 4.0, 5.0]
+            encoding_analyzer.update_stats(input_tensor_1)
+            assert encoding_analyzer.stats.min == 2
+            assert encoding_analyzer.stats.max == 5
+            assert encoding_analyzer.stats.histogram == [1, 1, 2]
+            
+            input_tensor_2 = [5.0, 6.0, 7.0, 8.0]
+            encoding_analyzer.update_stats(input_tensor_2)
+            assert encoding_analyzer.stats.min == 2
+            assert encoding_analyzer.stats.max == 8
+            assert encoding_analyzer.stats.histogram == [2, 3, 3]
+    
+    @pytest.mark.parametrize('num_bins', [3], indirect=True)
+    @pytest.mark.parametrize('min_max_shape', [(1,)], indirect=True)
+    def test_merge_stats_same_tensor(self, setUp):
+        for encoding_analyzer in setUp:
+            input_tensor_1 = [2.0, 3.0, 4.0, 5.0]
+            encoding_analyzer.update_stats(input_tensor_1)
+            assert encoding_analyzer.stats.min == 2
+            assert encoding_analyzer.stats.max == 5
+            assert encoding_analyzer.stats.histogram == [1, 1, 2]
+            
+            input_tensor_2 = [2.0, 3.0, 4.0, 5.0]
+            encoding_analyzer.update_stats(input_tensor_2)
+            assert encoding_analyzer.stats.min == 2
+            assert encoding_analyzer.stats.max == 5
+            assert encoding_analyzer.stats.histogram == [2, 2, 4]
+    
+    @pytest.mark.parametrize('num_bins', [3], indirect=True)
+    @pytest.mark.parametrize('min_max_shape', [(1,)], indirect=True)
+    def test_ignore_inf_inputs(self, setUp):
+        for encoding_analyzer in setUp:
+            input_tensor = [-torch.inf, -22, 5, 73, torch.inf]
+            encoding_analyzer.update_stats(input_tensor)
+            assert encoding_analyzer.stats.min == -22
+            assert encoding_analyzer.stats.max == 73
+            assert sum(encoding_analyzer.stats.histogram) == 3
