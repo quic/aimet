@@ -1423,10 +1423,10 @@ class QuantizationSimModel:
             # If modules is in the exclude list, remove the wrapper
             if module_ref in list_of_modules_to_exclude:
 
-                if isinstance(module_ref, QcQuantizeWrapper):
+                if isinstance(module_ref, ExportableQuantModule):
                     # Remove the wrapper, gets auto-deleted
                     # pylint: disable=protected-access
-                    setattr(starting_module, module_name, module_ref._module_to_wrap)
+                    setattr(starting_module, module_name, module_ref.get_fp_layer())
 
                 elif isinstance(module_ref, QcQuantizeStandAloneBase):
                     setattr(starting_module, module_name, torch.nn.Identity())
@@ -1450,17 +1450,23 @@ class QuantizationSimModel:
         QuantizationSimModel._remove_quantization_wrappers(original_model, all_modules_in_original_model)
         return original_model
 
-    def _add_inputs_hook(self, hooks):
+    def _get_leaf_module_to_name_map(self):
+        """
+        Returns a mapping from leaf modules to module name, where any ExportableQuantModule is considered a leaf module,
+        and is therefore not further recursed (since we do not want to retrieve all internal quantizers/modules).
+        """
+        def recursively_populate_map(starting_module, module_map, start_str):
+            for name, module in starting_module.named_children():
+                if isinstance(module, ExportableQuantModule) or utils.is_leaf_module(module):
+                    module_map[module] = start_str + name
+                else:
+                    recursively_populate_map(module, module_map, start_str + name + "/")
         module_to_name_map = {}
-        for name, module in self.model.named_modules():
-            if isinstance(module, QcQuantizeWrapper):
-                # pylint: disable=protected-access
-                module_to_name_map[module._module_to_wrap] = name
+        recursively_populate_map(self.model, module_to_name_map, "")
+        return module_to_name_map
 
-        # Add any leaf modules that are not wrapped by QcQuantizeWrapper (like Identity)
-        for name, module in self.model.named_modules():
-            if utils.is_leaf_module(module) and module not in module_to_name_map.keys():
-                module_to_name_map[module] = name
+    def _add_inputs_hook(self, hooks):
+        module_to_name_map = self._get_leaf_module_to_name_map()
 
         def inputs_hook(module_ref, inputs, _):
             # Need to remove hook here, otherwise the jit trace of CustomMarker with module ref will error since the
@@ -1468,28 +1474,22 @@ class QuantizationSimModel:
             hooks[module_ref].remove()
             del hooks[module_ref]
             module_name = module_to_name_map[module_ref]
+            if isinstance(module_ref, ExportableQuantModule):
+                module_ref = module_ref.get_fp_layer()
             marker_layer = torch.jit.trace(CustomMarker(module_ref, module_name, 'True'),
                                            inputs)
             self._module_marker_map[module_name] = marker_layer
 
         for name, module in self.model.named_modules():
-            if name not in self._module_marker_map and utils.is_leaf_module(module):
+            if name in module_to_name_map.values():
                 hooks[module] = module.register_forward_hook(inputs_hook)
 
     def _validate_module_marker_map(self):
         """
         Check to make sure all leaf modules have traced Custom Markers associated with them.
         """
-        all_leaf_modules = set()
+        all_leaf_modules = self._get_leaf_module_to_name_map().values()
         missing_inputs_entries = []
-        for name, module in self.model.named_modules():
-            if isinstance(module, QcQuantizeWrapper):
-                all_leaf_modules.add(name)
-
-        # Add any modules that are not wrapped by QcQuantizeWrappers (like Identity)
-        for name, module in self.model.named_modules():
-            if utils.is_leaf_module(module) and '_module_to_wrap' not in name:
-                all_leaf_modules.add(name)
 
         for leaf_module in all_leaf_modules:
             if leaf_module not in self._module_marker_map.keys():

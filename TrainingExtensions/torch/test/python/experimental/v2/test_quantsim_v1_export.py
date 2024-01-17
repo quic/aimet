@@ -64,7 +64,11 @@ class DummyMixin(_QuantizationMixin, torch.nn.Module):
 
     def __init__(self, module, num_inputs, num_outputs, has_input_encodings, has_output_encodings):
         super(DummyMixin, self).__init__()
-        self.module = copy.deepcopy(module)
+        # Assign a dummy output quantizer (since a real mixin will have child quantizers)
+        self.output_quantizer = torch.nn.Identity()
+        # Hide module inside list so it doesnt show up as a child (We will not actually have a wrapped module)
+        self.module = [copy.deepcopy(module)]
+        self._parameters = self.module[0]._parameters
         self.num_inputs = num_inputs
         self.num_outputs = num_outputs
         self.has_input_encodings = has_input_encodings
@@ -76,7 +80,7 @@ class DummyMixin(_QuantizationMixin, torch.nn.Module):
         return cls(module, num_inputs, num_outputs, has_input_encodings, has_output_encodings)
 
     def forward(self, *inputs):
-        return self.module(*inputs)
+        return self.output_quantizer(self.module[0](*inputs))
 
     def export_input_encodings(self):
         enc = [self.dummy_encoding] if self.has_input_encodings else None
@@ -88,7 +92,7 @@ class DummyMixin(_QuantizationMixin, torch.nn.Module):
 
     def export_param_encodings(self):
         enc_dict = {}
-        for name, param in self.module.named_parameters():
+        for name, param in self.module[0].named_parameters():
             if name == "weight":
                 enc_dict[name] = [self.dummy_encoding] * param.shape[0]
             else:
@@ -96,7 +100,7 @@ class DummyMixin(_QuantizationMixin, torch.nn.Module):
         return enc_dict
 
     def get_fp_layer(self):
-        return torch.nn.Identity()
+        return copy.deepcopy(self.module[0])
 
 class DummyModel(torch.nn.Module):
 
@@ -273,3 +277,50 @@ class TestQuantsimOnnxExport:
                 encoding_data = json.load(json_file)
 
         assert len(encoding_data["activation_encodings"]) == 3
+
+
+    def test_conditional_export(self):
+        """ Test exporting a model with conditional paths """
+        model = SimpleConditional()
+        model.eval()
+        inp = torch.randn(1, 3)
+        true_tensor = torch.tensor([1])
+        false_tensor = torch.tensor([0])
+
+        def forward_callback(model, _):
+            model(inp, true_tensor)
+            model(inp, false_tensor)
+
+        sim_model = copy.deepcopy(model)
+
+        qsim = QuantizationSimModel(model, dummy_input=(inp, true_tensor))
+        qsim.compute_encodings(forward_callback, None)
+
+        for name, module in sim_model.named_children():
+            qsim_module = getattr(qsim.model, name)
+            has_input_encodings = qsim_module.input_quantizers[0].enabled
+            has_output_encodings = qsim_module.output_quantizers[0].enabled
+            sim_model.__setattr__(name, DummyMixin.from_module(module, 1, 1, has_input_encodings, has_output_encodings))
+
+        qsim.model = sim_model
+
+        with tempfile.TemporaryDirectory() as path:
+            qsim._export_conditional(path, 'simple_cond', dummy_input=(inp, false_tensor),
+                                     forward_pass_callback=forward_callback, forward_pass_callback_args=None)
+
+            with open(os.path.join(path, 'simple_cond.encodings')) as f:
+                encodings = json.load(f)
+                # verifying the encoding against default eAI HW cfg
+                # activation encodings -- input, linear1 out, prelu1 out, linear2 out, prelu2 out, softmax out
+                assert 6 == len(encodings['activation_encodings'])
+                # param encoding -- linear 1 & 2 weight, prelu 1 & 2 weight
+                assert 4 == len(encodings['param_encodings'])
+
+        expected_encoding_keys = {"/linear1/Add_output_0",
+                                  "/linear2/Add_output_0",
+                                  "/prelu1/CustomMarker_1_output_0",
+                                  "/prelu2/PRelu_output_0",
+                                  "/softmax/CustomMarker_1_output_0",
+                                  "_input.1",
+                                  }
+        assert encodings["activation_encodings"].keys() == expected_encoding_keys
