@@ -490,7 +490,7 @@ class QcQuantizeWrapper(nn.Module):
             return False
         return True
 
-    def get_fp_layer(self) -> torch.nn.Module:
+    def get_original_module(self) -> torch.nn.Module:
         """
         Returns the wrapped torch.nn.Module
         """

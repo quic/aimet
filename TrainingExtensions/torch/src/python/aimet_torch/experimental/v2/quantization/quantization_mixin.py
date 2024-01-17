@@ -55,5 +55,5 @@ class _QuantizationMixin(ABC):
         ...
 
     @abstractmethod
-    def get_fp_layer(self):
+    def get_original_module(self):
         ...

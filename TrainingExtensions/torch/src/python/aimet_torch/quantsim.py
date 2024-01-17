@@ -140,7 +140,7 @@ class ExportableQuantModule(Protocol):
         Returns a dict of {param name: param encodings}, with each encoding represented as a List of Dicts
         """
 
-    def get_fp_layer(self) -> torch.nn.Module:
+    def get_original_module(self) -> torch.nn.Module:
         """
         Returns the floating point version of quantized module
         """
@@ -884,7 +884,7 @@ class QuantizationSimModel:
             # TODO: specifically call out dropout layers here since they are specifically switched out during export.
             # These ops should eventually be reworked as part of math invariant ops to ignore quantization altogether.
             # pylint: disable=protected-access
-            if isinstance(layer, QcQuantizeWrapper) and isinstance(layer._module_to_wrap, utils.DROPOUT_TYPES):
+            if isinstance(layer, ExportableQuantModule) and isinstance(layer.get_original_module(), utils.DROPOUT_TYPES):
                 continue
 
             if layer_name not in layers_to_onnx_op_names.keys():
@@ -1426,7 +1426,7 @@ class QuantizationSimModel:
                 if isinstance(module_ref, ExportableQuantModule):
                     # Remove the wrapper, gets auto-deleted
                     # pylint: disable=protected-access
-                    setattr(starting_module, module_name, module_ref.get_fp_layer())
+                    setattr(starting_module, module_name, module_ref.get_original_module())
 
                 elif isinstance(module_ref, QcQuantizeStandAloneBase):
                     setattr(starting_module, module_name, torch.nn.Identity())
@@ -1475,7 +1475,7 @@ class QuantizationSimModel:
             del hooks[module_ref]
             module_name = module_to_name_map[module_ref]
             if isinstance(module_ref, ExportableQuantModule):
-                module_ref = module_ref.get_fp_layer()
+                module_ref = module_ref.get_original_module()
             marker_layer = torch.jit.trace(CustomMarker(module_ref, module_name, 'True'),
                                            inputs)
             self._module_marker_map[module_name] = marker_layer

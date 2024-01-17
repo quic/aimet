@@ -99,7 +99,7 @@ class DummyMixin(_QuantizationMixin, torch.nn.Module):
                 enc_dict[name] = None
         return enc_dict
 
-    def get_fp_layer(self):
+    def get_original_module(self):
         return copy.deepcopy(self.module[0])
 
 class DummyModel(torch.nn.Module):
