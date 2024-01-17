@@ -236,6 +236,13 @@ class QuantizationSimModel(tf.keras.Model):
             if isinstance(layer, tf.keras.Sequential):
                 return tf.keras.models.clone_model(layer, clone_function=wrap_layer)
 
+            if isinstance(layer, tf.keras.layers.SeparableConv2D):
+                # Raising an assertion error incase there's SeparableConv2D because in this case we have two sets of weights: Depthwise
+                # and Pointwise. For depthwise kernels, LAST TWO AXIS should be considered and for pointwise kernels LAST AXIS
+                # should be considered, which is not handled here. Running model preparer beforehand will resolve this as there the
+                # SeparableConv2D is splitted into two layers Depthwise and Pointwise seperately.
+                raise AssertionError("SeparableConv2D found in the model. Please run model preparer before calling QuantizationSimModel")
+
             if isinstance(layer, unquantizable_modules) or layer.submodules:
                 return layer
 

@@ -35,8 +35,6 @@
 # =============================================================================
 """ Unit tests for Keras qc quantize wrapper """
 import random
-
-import pytest
 import tensorflow as tf
 import tensorflow.keras.backend as K
 import numpy as np
@@ -492,7 +490,26 @@ def test_per_channel_qc_quantizer_separable_conv():
     tf.keras.backend.clear_session()
     input_shape = (2, 3, 3, 2)
     inp = tf.keras.layers.Input(shape=input_shape[1:])
-    test_inp = np.random.rand(*input_shape)
+    test_inp = np.array(
+        [[[[1.8811, -1.2067],
+           [-0.8310, -0.1358],
+           [-1.1847, -1.8356]],
+          [[1.7378, -0.4557],
+           [0.7994, -1.1451],
+           [-1.2045, -0.8023]],
+          [[1.0628, -0.1527],
+           [-1.5484, -0.6253],
+           [1.1102, 0.9032]]],
+         [[[2.4775, -0.4758],
+           [1.4877, -0.2516],
+           [0.5612, 1.0585]],
+          [[1.4934, 0.3120],
+           [0.1401, -0.6864],
+           [-0.7637, 1.0061]],
+          [[-0.1268, 0.1278],
+           [-0.8578, 0.4477],
+           [0.7155, 0.2616]]]]
+    )
 
     separable_conv = tf.keras.layers.SeparableConv2D(
         2,
@@ -503,18 +520,43 @@ def test_per_channel_qc_quantizer_separable_conv():
 
     # run forward pass on conv2d_transpose to generate weights
     _ = separable_conv(test_inp)
+    x = QcQuantizeWrapper(
+        separable_conv,
+        QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf', False, False, False),
+        QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf', False, False, False),
+        num_inputs=1,
+        per_channel_quantization_enabled=True
+    )(inp)
 
-    with pytest.raises(AssertionError) as exc_info:
-        _ = QcQuantizeWrapper(
-            separable_conv,
-            QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf', False, False, False),
-            QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf', False, False, False),
-            num_inputs=1,
-            per_channel_quantization_enabled=True
-        )(inp)
+    model = tf.keras.Model(inputs=inp, outputs=x)
+    _ = model.predict(test_inp)
 
-    assert str(exc_info.value) == 'SeparableConv2D found in the model. Please run model preparer before calling ' \
-                                  'QuantizationSimModel'
+    # Check per channel encodings
+    model.layers[1].param_quantizers[0].enable()
+    model.layers[1].param_quantizers[0].compute_encoding()
+
+    per_channel_encodings_expected = [
+        {'bw': 8, 'min': 0.0, 'max': 5.0, 'delta': 0.01960784314, 'offset': 0},  # channel 0
+        {'bw': 8, 'min': 0.0, 'max': 5.0, 'delta': 0.019607843149, 'offset': 0},  # channel 1
+    ]
+
+    all_per_channel_encodings = model.layers[1].param_quantizers[0].encoding
+
+    for expected, current_encoding in zip(per_channel_encodings_expected, all_per_channel_encodings):
+        actual = {
+            'bw': current_encoding.bw,
+            'min': current_encoding.min,
+            'max': current_encoding.max,
+            'delta': current_encoding.delta,
+            'offset': current_encoding.offset
+        }
+
+        # Make new dictionary containing key of encoding parameter with values from both
+        # expected and actual that failed to match
+        incorrect_encodings = {key: [expected[key], actual[key]] for key in expected
+                               if not np.allclose(expected[key], actual[key], rtol=0.01)}
+        assert not incorrect_encodings, f"Key pairs for expected and actual did not match. " \
+                                        f"key: [expected, actual] {incorrect_encodings}"
 
 def test_per_channel_qc_quantizer_Dense():
     """ Tests Dense Per Channel """
