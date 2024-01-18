@@ -120,6 +120,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         encodings.delta = 1
         encodings.offset = 0.2
         sim.model.op1.output_quantizers[0].encoding = encodings
+        sim.model.op1.input_quantizers[1].enabled = False
         sim.model.conv1.output_quantizers[0].encoding = encodings
         sim.model.conv1.param_quantizers['weight'].encoding = encodings
         sim.export(path='./data', filename_prefix='quant_model', dummy_input=dummy_input)
@@ -127,7 +128,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         with open('./data/quant_model.encodings') as f:
             data = json.load(f)
 
-        self.assertTrue(len(data['activation_encodings']) == 3)
+        self.assertTrue(len(data['activation_encodings']) == 2)
         self.assertTrue(len(data['param_encodings']) == 1)
 
     def test_subtract_op(self):

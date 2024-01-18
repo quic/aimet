@@ -40,7 +40,7 @@
 # pylint: disable=too-many-lines
 import abc
 from enum import Enum
-from typing import Dict, Tuple, Union, List, Callable, Type, Any
+from typing import Dict, Tuple, Union, List, Callable, Type, Any, Optional
 import os
 import torch
 from torch import nn
@@ -52,7 +52,7 @@ from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_
 from aimet_torch.custom import custom_tensor_utils
 from aimet_torch import utils
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer, TensorQuantizer, \
-    LearnedGridTensorQuantizer, set_encoding_min_max_gating_threshold
+    LearnedGridTensorQuantizer, set_encoding_min_max_gating_threshold, StaticGridTensorQuantizer
 from aimet_torch.torch_quantizer import TorchQuantizer
 import aimet_torch.quantsim_straight_through_grad as ste
 
@@ -489,6 +489,30 @@ class QcQuantizeWrapper(nn.Module):
                 not tensor_quantizer.enabled:
             return False
         return True
+
+    def get_original_module(self) -> torch.nn.Module:
+        """
+        Returns the wrapped torch.nn.Module
+        """
+        return self._module_to_wrap
+
+    def export_param_encodings(self) -> Dict[str, List]:
+        """
+        Returns the layer's parameter encodings in an exportable format
+        """
+        return {name: export_quantizer_encoding(quantizer) for name, quantizer in self.param_quantizers.items()}
+
+    def export_output_encodings(self) -> List[List[Dict]]:
+        """
+        Returns the layer's output encodings in an exportable format
+        """
+        return [export_quantizer_encoding(quantizer) for quantizer in self.output_quantizers]
+
+    def export_input_encodings(self) -> List[List[Dict]]:
+        """
+        Returns the layer's input encodings in an exportable format
+        """
+        return [export_quantizer_encoding(quantizer) for quantizer in self.input_quantizers]
 
 
 class StaticGridQuantWrapper(QcQuantizeWrapper):
@@ -1324,3 +1348,37 @@ class FusedQdqLinear(torch.autograd.Function):
             dloss_by_db = grad.sum(dim=0)
 
         return dloss_by_dx, dloss_by_dW, dloss_by_db, dloss_by_dmin, dloss_by_dmax, None
+
+
+def get_encoding_by_quantizer(quantizer: Union[StaticGridTensorQuantizer, LearnedGridTensorQuantizer]) \
+        -> Optional[Union[libpymo.TfEncoding, List[libpymo.TfEncoding]]]:
+    """
+    Retrieve encoding object by quantizer type (StaticGridTensorQuantizer or LearnedGridTensorQuantizer)
+    In particular, LearnedGridTensorQuantizer should use get_effective_encoding to achieve true encoding
+
+    :param quantizer: TensorQuantizer (StaticGridTensorQuantizer or LearnedGridTensorQuantizer)
+    :return: TfEncoding or list of TfEncoding. None if quantizer is not enabled
+    """
+    if isinstance(quantizer, LearnedGridTensorQuantizer):
+        return quantizer.get_effective_encoding()
+
+    return quantizer.encoding
+
+
+def export_quantizer_encoding(quantizer: Union[StaticGridTensorQuantizer, LearnedGridTensorQuantizer]) \
+        -> Optional[List[Dict]]:
+    """
+    Returns the encoding of a quantizer in exportable form.
+
+    :param quantizer: Quantizer from which to export the encoding
+    :return: List of encoding dictionaries for the quantizer
+    """
+    if not quantizer.enabled:
+        return None
+    encoding = get_encoding_by_quantizer(quantizer)
+    if isinstance(encoding, List):
+        encoding = [utils.create_encoding_dict(enc, quantizer, False) for enc in encoding]
+    else:
+        encoding = utils.create_encoding_dict(encoding, quantizer, False)
+        encoding = [encoding] if encoding else None
+    return encoding
