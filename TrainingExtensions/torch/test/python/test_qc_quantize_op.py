@@ -1088,3 +1088,46 @@ class TestQcQuantizeOpLearnedGrid:
         out3 = wrapper(torch.randn(2, 3), torch.randn(2, 3), torch.randn(3, 3))
         assert out1.shape == out2.shape
         assert out2.shape == out3.shape
+
+    @pytest.mark.parametrize("wrapper",
+        [StaticGridQuantWrapper(torch.nn.Linear(10, 10),
+                                8, 8, 'nearest',
+                                QuantScheme.post_training_tf_enhanced,
+                                num_inputs=2, num_outputs=2),
+         LearnedGridQuantWrapper(torch.nn.Linear(10, 10),
+                                 8, 8, 'nearest',
+                                 QuantScheme.training_range_learning_with_tf_init,
+                                 torch.device('cpu'),
+                                 num_inputs=2, num_outputs=2)
+         ])
+    def test_export_quantizer_encodings(self, wrapper):
+        wrapper.input_quantizers[0].enabled = True
+        wrapper.input_quantizers[1].enabled = False
+        wrapper.output_quantizers[0].enabled = False
+        wrapper.output_quantizers[1].enabled = True
+        wrapper.param_quantizers["weight"].enabled = True
+        wrapper.param_quantizers["bias"].enabled = False
+        encoding = libpymo.TfEncoding()
+        encoding.max = 127.0
+        encoding.min = -128.0
+        encoding.delta = 1.0
+        encoding.offset = -128
+        encoding.bw = 8
+        encoding_as_dict = {"min": encoding.min, "max": encoding.max, "scale": encoding.delta, "offset": int(encoding.offset),
+                            "bitwidth": encoding.bw, "is_symmetric": "False", "dtype": "int"}
+        wrapper.enable_per_channel_quantization()
+        wrapper.param_quantizers["weight"].encoding = [encoding] * 10
+        wrapper.input_quantizers[0].encoding = encoding
+        wrapper.output_quantizers[1].encoding = encoding
+        input_encodings = wrapper.export_input_encodings()
+        output_encodings = wrapper.export_output_encodings()
+        param_encodings = wrapper.export_param_encodings()
+        assert len(input_encodings) == 2
+        assert input_encodings[0] == [encoding_as_dict]
+        assert input_encodings[1] is None
+        assert len(output_encodings) == 2
+        assert output_encodings[0] is None
+        assert output_encodings[1] == [encoding_as_dict]
+        assert len(param_encodings.items()) == 2
+        assert param_encodings["bias"] is None
+        assert param_encodings["weight"] == [encoding_as_dict] * 10
