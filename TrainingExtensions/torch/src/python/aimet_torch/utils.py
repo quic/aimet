@@ -686,7 +686,8 @@ def change_tensor_device_placement(tensor_data: Union[torch.Tensor, List, Tuple]
     :param device: device
     :return: tensor_data with modified device placement
     """
-    return nested_map(tensor_data, lambda x: x.to(device=device))
+    return nested_map(tensor_data,
+                      lambda x: x.to(device=device) if isinstance(x, (torch.Tensor, torch.nn.Module)) else x)
 
 
 def nested_map(tensor, fn: Callable[[torch.Tensor], torch.Tensor]):
