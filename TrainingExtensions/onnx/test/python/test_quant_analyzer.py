@@ -84,11 +84,11 @@ class TestQuantAnalyzer:
         forward_pass_callback = CallbackFunc(calibrate, dummy_input_dict)
         eval_callback = CallbackFunc(evaluate, dummy_input_dict)
         quant_analyzer = QuantAnalyzer(model, dummy_input_dict, forward_pass_callback, eval_callback)
-        fp32_acc, weight_quantized_acc, act_quantized_acc = quant_analyzer._check_model_sensitivity_to_quantization(sim)
+        fp32_acc, weight_quantized_acc, act_quantized_acc = quant_analyzer.check_model_sensitivity_to_quantization(sim)
 
         assert fp32_acc >= weight_quantized_acc
         assert fp32_acc >= act_quantized_acc
-        assert quant_analyzer._model is model
+        assert quant_analyzer._onnx_model is model
 
     def test_get_enabled_activation_quantizers(self):
         """ test get_enabled_activation_quantizers()  """
