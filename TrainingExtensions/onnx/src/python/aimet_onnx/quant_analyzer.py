@@ -44,7 +44,7 @@ import copy
 import numpy as np
 from onnx import ModelProto
 import onnxruntime as ort
-from onnxruntime.quantization.onnx_quantizer import ONNXModel
+from onnxruntime.quantization.onnx_model import ONNXModel
 
 from aimet_common.utils import AimetLogger, CallbackFunc
 from aimet_common.defs import QuantScheme
@@ -88,9 +88,9 @@ class QuantAnalyzer:
         if not isinstance(eval_callback, CallbackFunc):
             raise ValueError('eval_callback and its argument(s) are not encapsulated by CallbackFunc class.')
 
-        self._model = model
-        if not isinstance(self._model, ONNXModel):
-            self._model = ONNXModel(self._model)
+        self._onnx_model = model
+        if not isinstance(self._onnx_model, ONNXModel):
+            self._onnx_model = ONNXModel(self._onnx_model)
         self._dummy_input = dummy_input
         self._forward_pass_callback = forward_pass_callback
         self._eval_callback = eval_callback
@@ -116,19 +116,19 @@ class QuantAnalyzer:
         :param config_file: Path to configuration file for model quantizers.
         :param results_dir: Directory to save the results.
         """
-        sim = self._create_quantsim_and_encodings(quant_scheme,
-                                                  default_param_bw,
-                                                  default_activation_bw,
-                                                  config_file)
+        sim = self.create_quantsim_and_encodings(quant_scheme,
+                                                 default_param_bw,
+                                                 default_activation_bw,
+                                                 config_file)
 
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
 
         # Check model sensitivity to weight and activation quantization individually.
-        self._check_model_sensitivity_to_quantization(sim)
+        self.check_model_sensitivity_to_quantization(sim)
 
-    def _create_quantsim_and_encodings(self, quant_scheme: QuantScheme, default_param_bw: int,
-                                       default_activation_bw: int, config_file: str) \
+    def create_quantsim_and_encodings(self, quant_scheme: QuantScheme, default_param_bw: int,
+                                      default_activation_bw: int, config_file: str) \
             -> QuantizationSimModel:
         """
         Create Quantsim and compute encodings.
@@ -139,20 +139,20 @@ class QuantAnalyzer:
         :param config_file: Path to configuration file for model quantizers.
         :return: Quantsim model.
         """
-        _ = fold_all_batch_norms_to_weight(self._model)
+        _ = fold_all_batch_norms_to_weight(self._onnx_model)
         kwargs = dict(
             quant_scheme=quant_scheme,
             default_activation_bw=default_activation_bw,
             default_param_bw=default_param_bw,
             config_file=config_file,
         )
-        sim = QuantizationSimModel(copy.deepcopy(self._model), self._dummy_input, **kwargs)
+        sim = QuantizationSimModel(copy.deepcopy(self._onnx_model), self._dummy_input, **kwargs)
         sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
         return sim
 
-    def _check_model_sensitivity_to_quantization(self,
-                                                 sim: QuantizationSimModel,
-                                                 ) -> Tuple[float, float, float]:
+    def check_model_sensitivity_to_quantization(self,
+                                                sim: QuantizationSimModel,
+                                                ) -> Tuple[float, float, float]:
         """
         Perform the sensitivity analysis to weight and activation quantization
         individually.
@@ -161,7 +161,7 @@ class QuantAnalyzer:
         :return: FP32 eval score, weight-quantized eval score, act-quantized eval score.
         """
         # pylint: disable=protected-access
-        fp32_eval_score = self._eval_model(self._model.model)
+        fp32_eval_score = self._eval_model(self._onnx_model.model)
         _logger.info("FP32 eval score (W32A32): %f", fp32_eval_score)
 
         weight_quantized_eval_score = self._eval_weight_quantized_model(sim)
