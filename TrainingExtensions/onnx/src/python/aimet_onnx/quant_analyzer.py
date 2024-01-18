@@ -38,6 +38,7 @@
 """ Quant Analyzer """
 
 import os
+import re
 from typing import Union, Tuple, Dict, List
 import copy
 from collections import defaultdict
@@ -49,7 +50,8 @@ from onnxruntime.quantization.onnx_model import ONNXModel
 
 from aimet_common.utils import AimetLogger, CallbackFunc
 from aimet_common.defs import QuantScheme
-from aimet_common.quant_analyzer import save_json, export_per_layer_sensitivity_analysis_plot
+from aimet_common.quant_analyzer import save_json, export_per_layer_sensitivity_analysis_plot, \
+    create_and_export_min_max_ranges_plot
 
 from aimet_onnx.qc_quantize_op import QcQuantizeOp
 from aimet_onnx.quantsim import QuantizationSimModel
@@ -110,6 +112,7 @@ class QuantAnalyzer:
         Analyze model for quantization and point out sensitive parts/hotspots of the model by performing
             1) model sensitivity to quantization,
             2) perform per layer sensitivity analysis by enabling and disabling quant wrappers,
+            3) export per layer encodings min - max ranges,
 
         :param quant_scheme: Quantization scheme. Supported values are
                 QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced.
@@ -134,6 +137,9 @@ class QuantAnalyzer:
 
         # Perform per layer analysis by disabling its quantizers (OPTION-2).
         self.perform_per_layer_analysis_by_disabling_quantizers(sim, results_dir)
+
+        # Export encoding min-max range.
+        self.export_per_layer_encoding_min_max_range(sim, results_dir)
 
     def create_quantsim_and_encodings(self, quant_scheme: QuantScheme, default_param_bw: int,
                                       default_activation_bw: int, config_file: str) \
@@ -410,3 +416,83 @@ class QuantAnalyzer:
                     if input_name in sim.qc_quantize_op_dict and sim.qc_quantize_op_dict[input_name].enabled:
                         enabled_quantizers[op.name_op].append(sim.qc_quantize_op_dict[input_name])
         return enabled_quantizers
+
+    # pylint: disable=no-self-use, too-many-branches
+    def export_per_layer_encoding_min_max_range(self,
+                                                sim: QuantizationSimModel,
+                                                results_dir: str) \
+            -> Tuple[Dict, Dict]:
+        """
+        Export encoding min and max range for all weights and activations. results_dir should have
+        html files in following format.
+
+        -results_dir
+            -activations.html
+            -weights.html
+
+        If per channel quantization(PCQ) is enabled then,
+
+        -results_dir
+            -activations.html
+            -{wrapped_module_name}_{param_name}.html
+
+        :param sim: Quantsim model.
+        :param results_dir: Directory to save the results.
+        :return: layer wise min-max range for weights and activations.
+        """
+        # pylint: disable=too-many-locals
+        min_max_ranges_dir = os.path.join(results_dir, "min_max_ranges")
+
+        min_max_range_for_activations_dict = {}
+        min_max_range_for_weights_dict = {}
+        cg_ops = sim.connected_graph.ordered_ops
+        for op in cg_ops:
+            # Get input activations' encodings if starting op
+            if op in sim.connected_graph.starting_ops:
+                cg_products = [cg_product for cg_product in op.inputs if cg_product.is_model_input]
+                for index, cg_product in enumerate(cg_products):
+                    assert len(cg_product.tensor_dict) == 1
+                    input_name = list(cg_product.tensor_dict.values())[0]
+                    if input_name in sim.qc_quantize_op_dict and sim.qc_quantize_op_dict[input_name].enabled:
+                        op_name = re.sub(r'\W+', '_', op.name_op)
+                        quantizer = sim.qc_quantize_op_dict[input_name]
+                        name = f"{op_name}_input_{index}"
+                        min_max_range_for_activations_dict[name] = (quantizer.encodings[0].min, quantizer.encodings[0].max)
+
+            # Get output activations' encodings
+            if op.output_ops and op.output_ops[0].type == 'branch':
+                # op having multiple outputs
+                cg_product = op.output_ops[0].output
+            else:
+                # op having single output
+                cg_product = op.output
+            for index, output_name in enumerate(set(cg_product.tensor_dict.values())):
+                if output_name in sim.qc_quantize_op_dict and sim.qc_quantize_op_dict[output_name].enabled:
+                    op_name = re.sub(r'\W+', '_', op.name_op)
+                    quantizer = sim.qc_quantize_op_dict[output_name]
+                    name = f"{op_name}_output_{index}"
+                    min_max_range_for_activations_dict[name] = (quantizer.encodings[0].min, quantizer.encodings[0].max)
+
+            # Get parameters' encodings
+            for param in op.parameters:
+                if param in sim.qc_quantize_op_dict and sim.qc_quantize_op_dict[param].enabled:
+                    quantizer = sim.qc_quantize_op_dict[param]
+                    name = re.sub(r'\W+', '_', f"{op.name_op}_{param}")
+                    if len(quantizer.encodings) > 1: # per-channel
+                        per_channel_encodings = {}
+                        for index, encoding in enumerate(quantizer.encodings):
+                            per_channel_encodings[f"{name}_{index}"] = (encoding.min, encoding.max)
+                        min_max_range_for_weights_dict[name] = per_channel_encodings
+                    else: # per-tensor
+                        min_max_range_for_weights_dict[name] = (quantizer.encodings[0].min, quantizer.encodings[0].max)
+
+        create_and_export_min_max_ranges_plot(min_max_range_for_weights_dict,
+                                              min_max_ranges_dir,
+                                              title="weights")
+        create_and_export_min_max_ranges_plot(min_max_range_for_activations_dict,
+                                              min_max_ranges_dir,
+                                              title="activations")
+        save_json(min_max_range_for_weights_dict, min_max_ranges_dir, title="weights.json")
+        save_json(min_max_range_for_activations_dict, min_max_ranges_dir, title="activations.json")
+        _logger.info("Exported per layer encodings min-max ranges plot(s).")
+        return min_max_range_for_weights_dict, min_max_range_for_activations_dict
