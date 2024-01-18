@@ -214,3 +214,72 @@ class TestQuantAnalyzer:
         finally:
             if os.path.isdir("./tmp/"):
                 shutil.rmtree("./tmp/")
+
+    def test_export_per_layer_encoding_min_max_range(self):
+        """ test export_per_layer_encoding_min_max_range() """
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(*input_shape)
+        model = models_for_tests._convert_to_onnx(models_for_tests.TinyModel(), dummy_input)
+        dummy_input_dict = {'input': np.random.randn(1, 3, 32, 32).astype(np.float32)}
+        fold_all_batch_norms_to_weight(model)
+        sim = QuantizationSimModel(copy.deepcopy(model), dummy_input_dict)
+        sim.compute_encodings(evaluate, dummy_input_dict)
+        forward_pass_callback = CallbackFunc(calibrate, dummy_input_dict)
+        eval_callback = CallbackFunc(evaluate, dummy_input_dict)
+        quant_analyzer = QuantAnalyzer(model, dummy_input_dict, forward_pass_callback, eval_callback)
+        try:
+            quant_analyzer.export_per_layer_encoding_min_max_range(sim, results_dir="./tmp/")
+            assert os.path.isfile("./tmp/min_max_ranges/weights.html")
+            assert os.path.isfile("./tmp/min_max_ranges/activations.html")
+        finally:
+            if os.path.isdir("./tmp/"):
+                shutil.rmtree("./tmp/")
+
+    def test_export_per_layer_encoding_min_max_range_per_channel(self):
+        """ test export_per_layer_encoding_min_max_range() for per channel quantization """
+        results_dir = os.path.abspath("./tmp/")
+        os.makedirs(results_dir, exist_ok=True)
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True"
+                },
+                "params": {
+                    "is_quantized": "True"
+                },
+                "per_channel_quantization": "True",
+            },
+            "params": {
+                "bias": {
+                    "is_quantized": "False"
+                }
+            },
+            "op_type": {"Gemm": {"per_channel_quantization": "False"}},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open("./tmp/quantsim_config.json", 'w') as f:
+            json.dump(quantsim_config, f)
+
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(*input_shape)
+        model = models_for_tests._convert_to_onnx(models_for_tests.TinyModel(), dummy_input)
+        dummy_input_dict = {'input': np.random.randn(1, 3, 32, 32).astype(np.float32)}
+        fold_all_batch_norms_to_weight(model)
+        sim = QuantizationSimModel(copy.deepcopy(model), dummy_input_dict, config_file="./tmp/quantsim_config.json")
+        sim.compute_encodings(evaluate, dummy_input_dict)
+        forward_pass_callback = CallbackFunc(calibrate, dummy_input_dict)
+        eval_callback = CallbackFunc(evaluate, dummy_input_dict)
+        quant_analyzer = QuantAnalyzer(model, dummy_input_dict, forward_pass_callback, eval_callback)
+        try:
+            quant_analyzer.export_per_layer_encoding_min_max_range(sim, results_dir="./tmp/")
+            assert os.path.isfile("./tmp/min_max_ranges/activations.html")
+            if version.parse(torch.__version__) >= version.parse("1.13"):
+                assert os.path.isfile("./tmp/min_max_ranges/_conv1_Conv_onnx_Conv_39.html")
+            # Dense (Gemm) is disabled to per-channel quantization, it should be in weights.html
+            assert os.path.isfile("./tmp/min_max_ranges/weights.html")
+        finally:
+            if os.path.isdir("./tmp/"):
+                shutil.rmtree("./tmp/")
