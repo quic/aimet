@@ -167,17 +167,17 @@ class TestQuantAnalyzer:
         quant_analyzer = QuantAnalyzer(model, dummy_input_dict, forward_pass_callback, eval_callback)
         try:
             layer_wise_eval_score_dict = \
-                quant_analyzer._perform_per_layer_analysis_by_enabling_quantizers(sim, results_dir="./tmp/")
+                quant_analyzer.perform_per_layer_analysis_by_enabling_quantizers(sim, results_dir="./tmp/")
             print(layer_wise_eval_score_dict)
             assert type(layer_wise_eval_score_dict) == dict
             assert len(layer_wise_eval_score_dict) == 10
 
-            # test whether layer_wise_eval_score_dict consists of correct keys (op names).
+            # Test whether layer_wise_eval_score_dict consists of correct keys (op names).
             for op_name in layer_wise_eval_score_dict.keys():
                 assert op_name in layer_names
 
-                # Check if it is exported to correct html file.
-                assert os.path.isfile("./tmp/per_layer_quant_enabled.html")
+            # Check if it is exported to correct html file.
+            assert os.path.isfile("./tmp/per_layer_quant_enabled.html")
         finally:
             if os.path.isdir("./tmp/"):
                 shutil.rmtree("./tmp/")
@@ -200,17 +200,17 @@ class TestQuantAnalyzer:
         quant_analyzer = QuantAnalyzer(model, dummy_input_dict, forward_pass_callback, eval_callback)
         try:
             layer_wise_eval_score_dict = \
-                quant_analyzer._perform_per_layer_analysis_by_disabling_quantizers(sim, results_dir="./tmp/")
+                quant_analyzer.perform_per_layer_analysis_by_disabling_quantizers(sim, results_dir="./tmp/")
             print(layer_wise_eval_score_dict)
             assert type(layer_wise_eval_score_dict) == dict
             assert len(layer_wise_eval_score_dict) == 10
 
-            # test whether layer_wise_eval_score_dict consists of correct keys (op names).
+            # Test whether layer_wise_eval_score_dict consists of correct keys (op names).
             for op_name in layer_wise_eval_score_dict.keys():
                 assert op_name in layer_names
 
-                # Check if it is exported to correct html file.
-                assert os.path.isfile("./tmp/per_layer_quant_disabled.html")
+            # Check if it is exported to correct html file.
+            assert os.path.isfile("./tmp/per_layer_quant_disabled.html")
         finally:
             if os.path.isdir("./tmp/"):
                 shutil.rmtree("./tmp/")

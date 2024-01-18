@@ -130,13 +130,13 @@ class QuantAnalyzer:
         self.check_model_sensitivity_to_quantization(sim)
 
         # Perform per layer analysis by enabling its quantizers (OPTION-1).
-        self._perform_per_layer_analysis_by_enabling_quantizers(sim, results_dir)
+        self.perform_per_layer_analysis_by_enabling_quantizers(sim, results_dir)
 
         # Perform per layer analysis by disabling its quantizers (OPTION-2).
-        self._perform_per_layer_analysis_by_disabling_quantizers(sim, results_dir)
+        self.perform_per_layer_analysis_by_disabling_quantizers(sim, results_dir)
 
     def create_quantsim_and_encodings(self, quant_scheme: QuantScheme, default_param_bw: int,
-                                       default_activation_bw: int, config_file: str) \
+                                      default_activation_bw: int, config_file: str) \
             -> QuantizationSimModel:
         """
         Create Quantsim and compute encodings.
@@ -262,10 +262,10 @@ class QuantAnalyzer:
         for quantizer in quantizers:
             quantizer.enabled = enabled
 
-    def _perform_per_layer_analysis_by_enabling_quantizers(self,
-                                                           sim: QuantizationSimModel,
-                                                           results_dir: str,
-                                                           ) -> Dict:
+    def perform_per_layer_analysis_by_enabling_quantizers(self,
+                                                          sim: QuantizationSimModel,
+                                                          results_dir: str,
+                                                          ) -> Dict:
         """
         NOTE: Option 1
 
@@ -299,10 +299,10 @@ class QuantAnalyzer:
         _logger.info("Exported per-layer quant analysis (enabled) plot.")
         return layer_wise_eval_score_dict
 
-    def _perform_per_layer_analysis_by_disabling_quantizers(self,
-                                                            sim: QuantizationSimModel,
-                                                            results_dir: str,
-                                                            ) -> Dict:
+    def perform_per_layer_analysis_by_disabling_quantizers(self,
+                                                           sim: QuantizationSimModel,
+                                                           results_dir: str,
+                                                           ) -> Dict:
         """
         NOTE: Option 2
 
@@ -343,8 +343,8 @@ class QuantAnalyzer:
                                     enabled_after: bool,
                                     ) -> Dict:
         """
-        Helper function for perform_per_layer_analysis_by_enabling_quant_wrappers() and
-        perform_per_layer_analysis_by_disabling_quant_wrappers()
+        Helper function for perform_per_layer_analysis_by_enabling_quantizers() and
+        perform_per_layer_analysis_by_disabling_quantizers()
 
         :param sim: Quantsim model.
         :param disable_all_quantizers: Flag to disable all the quantizers before per-layer analysis.
@@ -377,22 +377,30 @@ class QuantAnalyzer:
         return eval_score_dict
 
     @staticmethod
-    def _get_enabled_quantizers(sim: QuantizationSimModel):
-        enabled_quant_wrappers = defaultdict(list)
+    def _get_enabled_quantizers(sim: QuantizationSimModel) -> Dict:
+        """
+        This function creates mapping between ops and their enabled quantizers.
+
+        :param sim: Quantsim object
+        :return: Layerwise enabled quantizers
+        """
+        enabled_quantizers = defaultdict(list)
         cg_ops = sim.connected_graph.ordered_ops
         for op in cg_ops:
             # Get param quantizers
             for param in op.parameters:
                 if param in sim.qc_quantize_op_dict and sim.qc_quantize_op_dict[param].enabled:
-                    enabled_quant_wrappers[op.name_op].append(sim.qc_quantize_op_dict[param])
+                    enabled_quantizers[op.name_op].append(sim.qc_quantize_op_dict[param])
             # Get output activation quantizers
             if op.output_ops and op.output_ops[0].type == 'branch':
+                # op having multiple outputs
                 cg_product = op.output_ops[0].output
             else:
+                # op having single output
                 cg_product = op.output
             for output_name in set(cg_product.tensor_dict.values()):
                 if output_name in sim.qc_quantize_op_dict and sim.qc_quantize_op_dict[output_name].enabled:
-                    enabled_quant_wrappers[op.name_op].append(sim.qc_quantize_op_dict[output_name])
+                    enabled_quantizers[op.name_op].append(sim.qc_quantize_op_dict[output_name])
             # Get input activation quantizers if starting op
             if op in sim.connected_graph.starting_ops:
                 cg_products = [cg_product for cg_product in op.inputs if cg_product.is_model_input]
@@ -400,5 +408,5 @@ class QuantAnalyzer:
                     assert len(cg_product.tensor_dict) == 1
                     input_name = list(cg_product.tensor_dict.values())[0]
                     if input_name in sim.qc_quantize_op_dict and sim.qc_quantize_op_dict[input_name].enabled:
-                        enabled_quant_wrappers[op.name_op].append(sim.qc_quantize_op_dict[input_name])
-        return enabled_quant_wrappers
+                        enabled_quantizers[op.name_op].append(sim.qc_quantize_op_dict[input_name])
+        return enabled_quantizers
