@@ -42,6 +42,7 @@ import torch
 
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
 from aimet_common.utils import AimetLogger, log_with_error_and_assert_if_false
+from aimet_torch.utils import get_v1_quant_scheme_for_initialization
 from aimet_torch.qc_quantize_op import QcQuantizeOpMode, QcQuantizeWrapper, StaticGridQuantWrapper, tensor_quantizer_factory
 from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridPerChannelQuantizer
 from aimet_torch.experimental.v2.quantization.wrappers.quantization_mixin import _QuantizationMixin, _ModuleSpec, _TensorSpec
@@ -67,9 +68,6 @@ class LazyQuantizeWrapper(torch.nn.Module):
         if data_type == QuantizationDataType.float and activation_bw not in [8, 16]:
             raise ValueError('activation_bw in [8, 16] is the only supported configuration with floating point data type')
 
-        self._real_quant_scheme = None
-        self._quant_scheme = quant_scheme
-
         # Save those parameters for v1 quant wrapper initialization
         self._weight_bw = weight_bw
         self._activation_bw = activation_bw
@@ -80,7 +78,10 @@ class LazyQuantizeWrapper(torch.nn.Module):
         self._num_inputs = num_inputs
         self._num_outputs = num_outputs
         self._data_type = data_type
+        self._module_to_wrap = module_to_wrap
+        self._mode = QcQuantizeOpMode.ANALYSIS
 
+        # Create quantizer for layer output
         self.output_quantizers = [LazyQuantizer(activation_bw,
                                                 rounding_mode,
                                                 quant_scheme,
@@ -88,9 +89,6 @@ class LazyQuantizeWrapper(torch.nn.Module):
                                                 enabled_by_default=is_output_quantized,
                                                 data_type=data_type)
                                   for _ in range(num_outputs)]
-
-        self._mode = QcQuantizeOpMode.ANALYSIS
-        self._module_to_wrap = module_to_wrap
 
         # Create quantizer for each parameter and compute encodings
         self.param_quantizers = {}
@@ -137,14 +135,14 @@ class LazyQuantizeWrapper(torch.nn.Module):
 
         :param quantized_module: module containing quantizers whose requires_grad need to be updated
         """
-        if self._real_quant_scheme in (QuantScheme.post_training_tf_enhanced,
-                                       QuantScheme.post_training_tf, QuantScheme.post_training_percentile):
+        if self._quant_scheme in (QuantScheme.post_training_tf_enhanced, QuantScheme.post_training_tf, \
+                                  QuantScheme.post_training_percentile):
             for quantizer in itertools.chain(quantized_module.input_quantizers,
                                              quantized_module.output_quantizers,
                                              quantized_module.param_quantizers.values()):
-                if quantizer:
-                    quantizer.min.requires_grad = False
-                    quantizer.max.requires_grad = False
+                if quantizer is not None:
+                    for _, param in quantizer.named_parameters():
+                        param.requires_grad = False
 
     def _apply_quant_param_value_constraints(self, quantized_module: _QuantizationMixin):
         """
@@ -173,8 +171,10 @@ class LazyQuantizeWrapper(torch.nn.Module):
 
         :return: v1 quant wrapper with specified properties
         """
+        quant_scheme_for_initialization = get_v1_quant_scheme_for_initialization(self._quant_scheme)
+
         quantized_module = StaticGridQuantWrapper(self._module_to_wrap, self._weight_bw, self._activation_bw,
-                                                  self._rounding_mode, self._quant_scheme,
+                                                  self._rounding_mode, quant_scheme_for_initialization,
                                                   self._is_output_quantized, self._is_symmetric, self._num_inputs,
                                                   self._num_outputs, self._data_type)
 
@@ -206,11 +206,11 @@ class LazyQuantizeWrapper(torch.nn.Module):
         return quantized_module
 
     @staticmethod
-    def forward(x):
+    def forward(_):
         """
         Dummy forward-pass routine for implementing abstract function.
         """
-        return x
+        raise RuntimeError("forward function of LazyQuantizeWrapper should not be called before it is realized")
 
 
 class LazyQuantizer:
@@ -321,7 +321,9 @@ class LazyQuantizer:
 
         :return: v1 quantizer with specified properties
         """
-        quantizer = tensor_quantizer_factory(self.bitwidth, self.round_mode, self.quant_scheme,
+        quant_scheme_for_initialization = get_v1_quant_scheme_for_initialization(self.quant_scheme)
+
+        quantizer = tensor_quantizer_factory(self.bitwidth, self.round_mode, quant_scheme_for_initialization,
                                              self.use_symmetric_encodings, self.enabled, self.data_type)
 
         self._set_internal_quantizer_properties(quantizer)
@@ -384,9 +386,11 @@ class LazyParamQuantizer(LazyQuantizer):
         :return: v1 quantizer with specified properties
         """
         if self.channel_axis is not None:
+            quant_scheme_for_initialization = get_v1_quant_scheme_for_initialization(self.quant_scheme)
             channel_axis = self.channel_axis if self.channel_axis else 0
             num_channels = self.param_shape[channel_axis]
-            quantizer = StaticGridPerChannelQuantizer(self.bitwidth, self.round_mode, self.quant_scheme,
+
+            quantizer = StaticGridPerChannelQuantizer(self.bitwidth, self.round_mode, quant_scheme_for_initialization,
                                                       self.use_symmetric_encodings, num_channels,
                                                       self.enabled, channel_axis, self.data_type)
 

@@ -1366,25 +1366,15 @@ class QuantizationSimModel:
         # StaticGridQuantWrapper.
         quantizer_wrapper_type = qc_quantize_modules_dict.get(type(module_to_quantize), LazyQuantizeWrapper)
 
-        if self._quant_scheme in [QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced,
-                                  QuantScheme.post_training_percentile]:
+        if quantizer_wrapper_type == LazyQuantizeWrapper:
             quant_scheme_for_initialization = self._quant_scheme
-
-        elif self._quant_scheme == QuantScheme.training_range_learning_with_tf_init:
-            quant_scheme_for_initialization = QuantScheme.post_training_tf
-
-        elif self._quant_scheme == QuantScheme.training_range_learning_with_tf_enhanced_init:
-            quant_scheme_for_initialization = QuantScheme.post_training_tf_enhanced
+        else:
+            quant_scheme_for_initialization = utils.get_v1_quant_scheme_for_initialization(self._quant_scheme)
 
         # TODO add quant_scheme_for_initialization for FP8 case
         quantized_module = quantizer_wrapper_type(module_to_quantize, self._default_param_bw, self._default_output_bw,
                                                   self._rounding_mode, quant_scheme_for_initialization, num_inputs=num_in_tensors,
                                                   num_outputs=num_out_tensors, data_type=data_type)
-
-        # V2 quant wrapper should know real quant scheme
-        if isinstance(quantizer_wrapper_type, LazyQuantizeWrapper):
-            # pylint: disable=protected-access
-            quantizer_wrapper_type._real_quant_scheme = self._quant_scheme
 
         return quantized_module
 

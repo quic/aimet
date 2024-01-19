@@ -38,11 +38,12 @@
 import pytest
 import json
 import os
+import itertools
 import torch
 from unittest.mock import patch, Mock
 from typing import Optional
 from aimet_common.defs import QuantScheme, QuantizationDataType, QuantDtypeBwInfo, SupportedKernelsAction
-from aimet.TrainingExtensions.torch.test.python.experimental.v2.models.test_models_ import SingleResidual, QuantSimTinyModel, MultiInput, SingleResidualWithModuleAdd, \
+from models.test_models_ import SingleResidual, QuantSimTinyModel, MultiInput, SingleResidualWithModuleAdd, \
     SingleResidualWithAvgPool, ModelWithBertCustomLayerNormGelu
 from aimet_torch.experimental.v2.quantization.quantsim import QuantizationSimModel
 import aimet_torch.quantsim
@@ -68,8 +69,12 @@ class DummyQuantizer:
         self.bitwidth = spec.bitwidth
         self.symmetric = spec.symmetric
         self.qscheme = spec.qscheme
-        self.min = self.max = Mock()
-        self.min.dtype = torch.int
+        self.min = Mock()
+        self.max = Mock()
+        self.min.dtype = self.max.dtype = torch.int
+        self.min.requires_grad = self.min.requires_grad = True
+        self.named_parameters = Mock(
+            return_value=[("min", self.min), ("max", self.max)])
     
     def create(spec: _TensorSpec) -> Optional['DummyQuantizer']:
         if spec:
@@ -159,27 +164,27 @@ class TestQuantsimConfig:
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
                                    config_file='./data/quantsim_config.json',
                                    dummy_input=torch.rand(1, 3, 32, 32), in_place=True)
-        for name, module in sim.model.named_modules():
-            if isinstance(module, _QuantizationMixin):
-                # Output of add op is input quantized
-                if name == 'relu3':
-                    assert module.input_quantizers[0] is not None
-                else:
-                    assert module.input_quantizers[0] is None
-                if name in ["conv1", "conv2"]:
-                    # Output quantizers of conv1 and conv2 are
-                    # disabled due to the subsequent batchnorm
-                    assert module.output_quantizers[0] is None
-                else:
-                    assert module.output_quantizers[0] is not None
-                if module.input_quantizers[0] is not None:
-                    assert not module.input_quantizers[0].symmetric
-                if module.output_quantizers[0] is not None:
-                    assert not module.output_quantizers[0].symmetric
+        for name, module in sim.model.named_children():
+            assert isinstance(module, _QuantizationMixin)
+            # Output of add op is input quantized
+            if name == 'relu3':
+                assert module.input_quantizers[0] is not None
+            else:
+                assert module.input_quantizers[0] is None
+            if name in ["conv1", "conv2"]:
+                # Output quantizers of conv1 and conv2 are
+                # disabled due to the subsequent batchnorm
+                assert module.output_quantizers[0] is None
+            else:
+                assert module.output_quantizers[0] is not None
+            if module.input_quantizers[0] is not None:
+                assert not module.input_quantizers[0].symmetric
+            if module.output_quantizers[0] is not None:
+                assert not module.output_quantizers[0].symmetric
 
 
-                for _, param_quantizer in module.param_quantizers.items():
-                    assert param_quantizer is None
+            for _, param_quantizer in module.param_quantizers.items():
+                assert param_quantizer is None
 
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
@@ -216,18 +221,18 @@ class TestQuantsimConfig:
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
                                    config_file='./data/quantsim_config.json',
                                    dummy_input=torch.rand(1, 3, 32, 32))
-        for _, module in sim.model.named_modules():
-            if isinstance(module, _QuantizationMixin):
-                for param_name, param_quantizer in module.param_quantizers.items():
-                    if param_name == 'weight':
-                        if module in (sim.model.bn1, sim.model.bn2):
-                            assert param_quantizer is None
-                        else:
-                            assert param_quantizer is not None
-                        if param_quantizer is not None:
-                            assert not param_quantizer.symmetric
-                    else:
+        for _, module in sim.model.named_children():
+            assert isinstance(module, _QuantizationMixin)
+            for param_name, param_quantizer in module.param_quantizers.items():
+                if param_name == 'weight':
+                    if module in (sim.model.bn1, sim.model.bn2):
                         assert param_quantizer is None
+                    else:
+                        assert param_quantizer is not None
+                    if param_quantizer is not None:
+                        assert not param_quantizer.symmetric
+                else:
+                    assert param_quantizer is None
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
 
@@ -355,33 +360,33 @@ class TestQuantsimConfig:
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
                                    config_file='./data/quantsim_config.json',
                                    dummy_input=torch.rand(1, 3, 32, 32))
-        for name, module in sim.model.named_modules():
-            if isinstance(module, _QuantizationMixin):
-                if isinstance(module, torch.nn.Conv2d):
-                    assert module.input_quantizers[0] is not None
-                    if name in ["conv1", "conv2"]:
-                        assert module.output_quantizers[0] is None
-                    else:
-                        assert module.output_quantizers[0] is not None
+        for name, module in sim.model.named_children():
+            assert isinstance(module, _QuantizationMixin)
+            if isinstance(module, torch.nn.Conv2d):
+                assert module.input_quantizers[0] is not None
+                if name in ["conv1", "conv2"]:
+                    assert module.output_quantizers[0] is None
                 else:
-                    # Output of add op is input quantized
-                    if name == 'relu3':
-                        assert module.input_quantizers[0] is not None
-                    else:
-                        assert module.input_quantizers[0] is None
                     assert module.output_quantizers[0] is not None
+            else:
+                # Output of add op is input quantized
+                if name == 'relu3':
+                    assert module.input_quantizers[0] is not None
+                else:
+                    assert module.input_quantizers[0] is None
+                assert module.output_quantizers[0] is not None
 
-                if module.input_quantizers[0] is not None:
-                    assert not module.input_quantizers[0].symmetric
-                if module.output_quantizers[0] is not None:
-                    assert not module.output_quantizers[0].symmetric
+            if module.input_quantizers[0] is not None:
+                assert not module.input_quantizers[0].symmetric
+            if module.output_quantizers[0] is not None:
+                assert not module.output_quantizers[0].symmetric
 
-                for param_name, param_quantizer in module.param_quantizers.items():
-                    if isinstance(module, torch.nn.Conv2d) and param_name == 'bias':
-                        assert param_quantizer is not None
-                        assert not param_quantizer.symmetric
-                    else:
-                        assert param_quantizer is None
+            for param_name, param_quantizer in module.param_quantizers.items():
+                if isinstance(module, torch.nn.Conv2d) and param_name == 'bias':
+                    assert param_quantizer is not None
+                    assert not param_quantizer.symmetric
+                else:
+                    assert param_quantizer is None
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
 
@@ -436,49 +441,49 @@ class TestQuantsimConfig:
         per_channel_fields = {"defaults": "True", "Conv": "True", "Gemm": "True"}
         sim = self._test_parse_config_file_op_type_per_channel_helper(per_channel_fields)
 
-        for name, module in sim.model.named_modules():
-            if isinstance(module, _QuantizationMixin):
-                if 'weight' in module.param_quantizers:
-                    assert any(dim > 1 for dim in module.param_quantizers['weight'].shape)
+        for name, module in sim.model.named_children():
+            assert isinstance(module, _QuantizationMixin)
+            if 'weight' in module.param_quantizers:
+                assert any(dim > 1 for dim in module.param_quantizers['weight'].shape)
 
 
         # test 2: expect all but Conv to be StaticGridPerChannelQuantizer
         per_channel_fields = {"defaults": "True", "Conv": "False", "Gemm": "True"}
         sim = self._test_parse_config_file_op_type_per_channel_helper(per_channel_fields)
 
-        for name, module in sim.model.named_modules():
-            if isinstance(module, _QuantizationMixin):
-                if 'weight' in module.param_quantizers:
-                    if isinstance(module, torch.nn.Conv2d):
-                        assert all(dim == 1 for dim in module.param_quantizers['weight'].shape)
-                    else:
-                        assert any(dim > 1 for dim in module.param_quantizers['weight'].shape)
+        for name, module in sim.model.named_children():
+            assert isinstance(module, _QuantizationMixin)
+            if 'weight' in module.param_quantizers:
+                if isinstance(module, torch.nn.Conv2d):
+                    assert all(dim == 1 for dim in module.param_quantizers['weight'].shape)
+                else:
+                    assert any(dim > 1 for dim in module.param_quantizers['weight'].shape)
 
 
         # test 3: expect all but Conv and Gemm to be StaticGridPerChannelQuantizer
         per_channel_fields = {"defaults": "True", "Conv": "False", "Gemm": "False"}
         sim = self._test_parse_config_file_op_type_per_channel_helper(per_channel_fields)
 
-        for name, module in sim.model.named_modules():
-            if isinstance(module, _QuantizationMixin):
-                if 'weight' in module.param_quantizers:
-                    if isinstance(module, torch.nn.Conv2d) or isinstance(module, torch.nn.Linear):
-                        assert all(dim == 1 for dim in module.param_quantizers['weight'].shape)
-                    else:
-                        assert any(dim > 1 for dim in module.param_quantizers['weight'].shape)
+        for name, module in sim.model.named_children():
+            assert isinstance(module, _QuantizationMixin)
+            if 'weight' in module.param_quantizers:
+                if isinstance(module, torch.nn.Conv2d) or isinstance(module, torch.nn.Linear):
+                    assert all(dim == 1 for dim in module.param_quantizers['weight'].shape)
+                else:
+                    assert any(dim > 1 for dim in module.param_quantizers['weight'].shape)
 
 
         # test 4: expect all in StaticGridPerTensorQuantizer except Conv which will be in StaticGridPerChannelQuantizer
         per_channel_fields = {"defaults": "False", "Conv": "True", "Gemm": "False"}
         sim = self._test_parse_config_file_op_type_per_channel_helper(per_channel_fields)
 
-        for name, module in sim.model.named_modules():
-            if isinstance(module, _QuantizationMixin):
-                if 'weight' in module.param_quantizers:
-                    if isinstance(module, torch.nn.Conv2d):
-                        assert any(dim > 1 for dim in module.param_quantizers['weight'].shape)
-                    else:
-                        assert all(dim == 1 for dim in module.param_quantizers['weight'].shape)
+        for name, module in sim.model.named_children():
+            assert isinstance(module, _QuantizationMixin)
+            if 'weight' in module.param_quantizers:
+                if isinstance(module, torch.nn.Conv2d):
+                    assert any(dim > 1 for dim in module.param_quantizers['weight'].shape)
+                else:
+                    assert all(dim == 1 for dim in module.param_quantizers['weight'].shape)
 
     def test_hw_version(self):
         """
@@ -601,18 +606,18 @@ class TestQuantsimConfig:
             sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
                                        config_file='./data/quantsim_config.json',
                                        dummy_input=torch.rand(1, 3, 32, 32))
-            for _, module in sim.model.named_modules():
-                if isinstance(module, _QuantizationMixin):
-                    assert len(module.supported_kernels) == 1
-                    if isinstance(module, torch.nn.Conv2d):
-                        if module.param_quantizers['weight'] is not None:
-                            assert all(dim == 1 for dim in module.param_quantizers['weight'].shape)
-                        assert module.supported_kernels == [((16, QuantizationDataType.int), (8, QuantizationDataType.int))]
-                    else:
-                        if module.param_quantizers and module.param_quantizers['weight'] is not None:
-                            assert any(dim > 1 for dim in module.param_quantizers['weight'].shape)
-                        if module.supported_kernels:
-                            assert module.supported_kernels == [((16, QuantizationDataType.float), (16, QuantizationDataType.float))]
+            for _, module in sim.model.named_children():
+                assert isinstance(module, _QuantizationMixin)
+                assert len(module.supported_kernels) == 1
+                if isinstance(module, torch.nn.Conv2d):
+                    if module.param_quantizers['weight'] is not None:
+                        assert all(dim == 1 for dim in module.param_quantizers['weight'].shape)
+                    assert module.supported_kernels == [((16, QuantizationDataType.int), (8, QuantizationDataType.int))]
+                else:
+                    if module.param_quantizers and module.param_quantizers['weight'] is not None:
+                        assert any(dim > 1 for dim in module.param_quantizers['weight'].shape)
+                    if module.supported_kernels:
+                        assert module.supported_kernels == [((16, QuantizationDataType.float), (16, QuantizationDataType.float))]
             del sim
 
     def test_parse_config_file_op_type_supported_kernels(self):
@@ -761,12 +766,12 @@ class TestQuantsimConfig:
                                    dummy_input=torch.rand(1, 3, 32, 32), default_param_bw=16, default_output_bw=16,
                                    default_data_type=QuantizationDataType.int)
 
-        for _, module in sim.model.named_modules():
-            if isinstance(module, _QuantizationMixin):
-                if isinstance(module, torch.nn.Conv2d):
-                    assert module.supported_kernels == [((16, QuantizationDataType.int), (8, QuantizationDataType.int))]
-                else:
-                    assert module.supported_kernels == [((16, QuantizationDataType.int),(16, QuantizationDataType.int))]
+        for _, module in sim.model.named_children():
+            assert isinstance(module, _QuantizationMixin)
+            if isinstance(module, torch.nn.Conv2d):
+                assert module.supported_kernels == [((16, QuantizationDataType.int), (8, QuantizationDataType.int))]
+            else:
+                assert module.supported_kernels == [((16, QuantizationDataType.int),(16, QuantizationDataType.int))]
 
     def test_parse_config_file_supported_kernels_2(self):
         """
@@ -817,9 +822,9 @@ class TestQuantsimConfig:
 
         with pytest.raises(RuntimeError):
             QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
-                                   config_file='./data/quantsim_config.json',
-                                   dummy_input=torch.rand(1, 3, 32, 32), default_param_bw=16, default_output_bw=8,
-                                   default_data_type=QuantizationDataType.int)
+                                 config_file='./data/quantsim_config.json',
+                                 dummy_input=torch.rand(1, 3, 32, 32), default_param_bw=16, default_output_bw=8,
+                                 default_data_type=QuantizationDataType.int)
 
         aimet_torch.quantsim.SUPPORTED_KERNELS_ACTION = SupportedKernelsAction.warn_on_error
 
@@ -868,10 +873,10 @@ class TestQuantsimConfig:
         # Expected supergroups: (square bracket indicates a supergroup)
         # in -> [conv1->bn1->relu1->maxpool] -> [conv2->bn2->relu2] -> [conv3->relu3->avgpool] -> [conv4] -> [fc] -> out
 
-        for _, module in sim.model.named_modules():
-            if isinstance(module, _QuantizationMixin):
-                # All input quantizers are disabled by config
-                assert module.input_quantizers[0] is None
+        for _, module in sim.model.named_children():
+            assert isinstance(module, _QuantizationMixin)
+            # All input quantizers are disabled by config
+            assert module.input_quantizers[0] is None
 
         # First supergroup
         assert sim.model.conv1.output_quantizers[0] is None
@@ -921,14 +926,14 @@ class TestQuantsimConfig:
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
                                    config_file='./data/quantsim_config.json',
                                    dummy_input=torch.rand(1, 3, 32, 32))
-        for name, module in sim.model.named_modules():
-            if isinstance(module, _QuantizationMixin):
-                if name in ['conv3', 'ada']:
-                    # model.conv3 and model.ada are inputs to add
-                    assert module.output_quantizers[0] is not None
-                else:
-                    assert module.output_quantizers[0] is None
-                assert module.input_quantizers[0] is None
+        for name, module in sim.model.named_children():
+            assert isinstance(module, _QuantizationMixin)
+            if name in ['conv3', 'ada']:
+                # model.conv3 and model.ada are inputs to add
+                assert module.output_quantizers[0] is not None
+            else:
+                assert module.output_quantizers[0] is None
+            assert module.input_quantizers[0] is None
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
 
@@ -976,18 +981,18 @@ class TestQuantsimConfig:
 
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf, config_file='./data/quantsim_config.json',
                                    dummy_input=(torch.rand(1, 3, 32, 32), torch.rand(1, 3, 20, 20)), in_place=True)
-        for name, module in sim.model.named_modules():
-            if isinstance(module, _QuantizationMixin):
-                if name in ('conv1', 'conv3'):
-                    assert module.input_quantizers[0] is not None
-                elif name == 'add2':
-                    assert module.input_quantizers[0] is None
-                    assert module.input_quantizers[1] is not None
-                else:
-                    assert module.input_quantizers[0] is None
-                assert module.output_quantizers[0] is None
-                if module.input_quantizers[0] is not None:
-                    assert not module.input_quantizers[0].symmetric
+        for name, module in sim.model.named_children():
+            assert isinstance(module, _QuantizationMixin)
+            if name in ('conv1', 'conv3'):
+                assert module.input_quantizers[0] is not None
+            elif name == 'add2':
+                assert module.input_quantizers[0] is None
+                assert module.input_quantizers[1] is not None
+            else:
+                assert module.input_quantizers[0] is None
+            assert module.output_quantizers[0] is None
+            if module.input_quantizers[0] is not None:
+                assert not module.input_quantizers[0].symmetric
 
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
@@ -1014,14 +1019,14 @@ class TestQuantsimConfig:
             json.dump(quantsim_config, f)
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf, config_file='./data/quantsim_config.json',
                                    dummy_input=torch.rand(1, 3, 32, 32))
-        for name, module in sim.model.named_modules():
-            if isinstance(module, _QuantizationMixin):
-                if name == 'fc':
-                    # model.conv3 and model.ada are inputs to add
-                    assert module.output_quantizers[0] is not None
-                else:
-                    assert module.output_quantizers[0] is None
-                assert module.input_quantizers[0] is None
+        for name, module in sim.model.named_children():
+            assert isinstance(module, _QuantizationMixin)
+            if name == 'fc':
+                # model.conv3 and model.ada are inputs to add
+                assert module.output_quantizers[0] is not None
+            else:
+                assert module.output_quantizers[0] is None
+            assert module.input_quantizers[0] is None
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
 
@@ -1093,15 +1098,15 @@ class TestQuantsimConfig:
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
                                    config_file='./data/quantsim_config.json',
                                    in_place=True, dummy_input=torch.rand(1, 3, 32, 32))
-        for _, module in sim.model.named_modules():
-            if isinstance(module, _QuantizationMixin):
-                # Check configs for starts of supergroups
-                if module in [model.add, model.conv1, model.conv2]:
-                    # If add were not part of the supergroup, relu's input quantizer would be enabled
-                    assert module.output_quantizers[0] is None
-                else:
-                    assert module.output_quantizers[0] is not None
-                assert module.input_quantizers[0] is None
+        for _, module in sim.model.named_children():
+            assert isinstance(module, _QuantizationMixin)
+            # Check configs for starts of supergroups
+            if module in [model.add, model.conv1, model.conv2]:
+                # If add were not part of the supergroup, relu's input quantizer would be enabled
+                assert module.output_quantizers[0] is None
+            else:
+                assert module.output_quantizers[0] is not None
+            assert module.input_quantizers[0] is None
 
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
@@ -1135,17 +1140,17 @@ class TestQuantsimConfig:
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
                                    config_file='./data/quantsim_config.json',
                                    dummy_input=torch.rand(1, 3, 32, 32))
-        for name, module in sim.model.named_modules():
-            if isinstance(module, _QuantizationMixin):
-                for q in module.input_quantizers:
-                    if q is not None:
-                        assert q.symmetric
-                for q in module.output_quantizers:
-                    if q is not None:
-                        assert q.symmetric
-                for q in module.param_quantizers.values():
-                    if q is not None:
-                        assert q.symmetric
+        for _, module in sim.model.named_children():
+            assert isinstance(module, _QuantizationMixin)
+            for q in module.input_quantizers:
+                if q is not None:
+                    assert q.symmetric
+            for q in module.output_quantizers:
+                if q is not None:
+                    assert q.symmetric
+            for q in module.param_quantizers.values():
+                if q is not None:
+                    assert q.symmetric
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
 
@@ -1193,26 +1198,26 @@ class TestQuantsimConfig:
 
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf, config_file='./data/quantsim_config.json',
                                    dummy_input=torch.rand(1, 3, 32, 32).cuda(), in_place=True)
-        for name, module in sim.model.named_modules():
-            if isinstance(module, _QuantizationMixin):
-                # Output of add op is input quantized
-                if name == 'relu3':
-                    assert module.input_quantizers[0] is not None
-                else:
-                    assert module.input_quantizers[0] is None
-                if name in ["conv1", "conv2"]:
-                    # Output quantizers of conv1 and conv2 are
-                    # disabled due to the subsequent batchnorm
-                    assert module.output_quantizers[0] is None
-                else:
-                    assert module.output_quantizers[0] is not None
-                if module.input_quantizers[0] is not None:
-                    assert not module.input_quantizers[0].symmetric
-                if module.output_quantizers[0] is not None:
-                    assert not module.output_quantizers[0].symmetric
+        for name, module in sim.model.named_children():
+            assert isinstance(module, _QuantizationMixin)
+            # Output of add op is input quantized
+            if name == 'relu3':
+                assert module.input_quantizers[0] is not None
+            else:
+                assert module.input_quantizers[0] is None
+            if name in ["conv1", "conv2"]:
+                # Output quantizers of conv1 and conv2 are
+                # disabled due to the subsequent batchnorm
+                assert module.output_quantizers[0] is None
+            else:
+                assert module.output_quantizers[0] is not None
+            if module.input_quantizers[0] is not None:
+                assert not module.input_quantizers[0].symmetric
+            if module.output_quantizers[0] is not None:
+                assert not module.output_quantizers[0].symmetric
 
-                for _, param_quantizer in module.param_quantizers.items():
-                    assert param_quantizer is None
+            for _, param_quantizer in module.param_quantizers.items():
+                assert param_quantizer is None
 
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
@@ -2232,3 +2237,52 @@ class TestQuantsimConfig:
         assert qsim.model.softmax.output_quantizers[0].qscheme ==  CalibrationMethod.MinMax
         assert torch.allclose(qsim.model.softmax.output_quantizers[0].min, torch.tensor([-5.0]), atol=1e-1)
         assert torch.allclose(qsim.model.softmax.output_quantizers[0].max, torch.tensor([5.0]), atol=1e-1)
+
+    @pytest.mark.parametrize("quant_scheme", [QuantScheme.post_training_tf,
+                                              QuantScheme.post_training_percentile,
+                                              QuantScheme.training_range_learning_with_tf_init])
+    def test_requires_grad_is_set_by_quant_scheme(self, quant_scheme):
+        """ Test that requires_grad property of quant params are set correctly with different quant scheme """
+        model = SingleResidual()
+        model.eval()
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "True",
+                    "is_symmetric": "True"
+                },
+                "per_channel_quantization": "True",
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+
+        sim = QuantizationSimModel(model, quant_scheme=quant_scheme,
+                                   config_file='./data/quantsim_config.json',
+                                   dummy_input=torch.rand(1, 3, 32, 32), in_place=True)
+        for _, module in sim.model.named_children():
+            assert isinstance(module, _QuantizationMixin)
+
+            for quantizer in itertools.chain(module.input_quantizers,
+                                             module.output_quantizers,
+                                             module.param_quantizers.values()):
+                if quantizer is not None:
+                    if quant_scheme in (QuantScheme.post_training_tf, QuantScheme.post_training_percentile):
+                        assert not quantizer.min.requires_grad
+                        assert not quantizer.max.requires_grad
+                    else:
+                        assert quantizer.min.requires_grad
+                        assert quantizer.max.requires_grad
+
+        if os.path.exists('./data/quantsim_config.json'):
+            os.remove('./data/quantsim_config.json')
