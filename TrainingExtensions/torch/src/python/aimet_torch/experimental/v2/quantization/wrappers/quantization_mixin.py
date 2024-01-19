@@ -37,7 +37,6 @@
 # pylint: skip-file
 """ Placeholder for _QuantizationMixin definition, to be deleted/moved/updated """
 
-from abc import ABC, abstractmethod
 from typing import Union, Tuple, Iterable, Optional, Mapping
 from dataclasses import dataclass
 from torch import nn
@@ -60,21 +59,30 @@ class _ModuleSpec:
     output_spec: Iterable[Optional[_TensorSpec]]
 
 
-class _QuantizationMixin(ABC):
+class _QuantizationMixin:
     """ Base class for quantized modules """
 
     @classmethod
     def from_module(cls, module: nn.Module, spec: _ModuleSpec) -> Union['_QuantizationMixin', nn.Module]:
         ...
 
-    @abstractmethod
     def input_quantizers(self):
         ...
 
-    @abstractmethod
     def output_quantizers(self):
         ...
 
-    @abstractmethod
     def param_quantizers(self):
+        ...
+
+    def export_input_encodings(self):
+        ...
+
+    def export_output_encodings(self):
+        ...
+
+    def export_param_encodings(self):
+        ...
+
+    def get_original_module(self):
         ...

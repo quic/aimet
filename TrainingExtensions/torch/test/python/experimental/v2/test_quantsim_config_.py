@@ -35,6 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Module for testing quantsim config feature """
+
 import pytest
 import json
 import os
@@ -42,18 +43,22 @@ import itertools
 import torch
 from unittest.mock import patch, Mock
 from typing import Optional
+
 from aimet_common.defs import QuantScheme, QuantizationDataType, QuantDtypeBwInfo, SupportedKernelsAction
-from models.test_models_ import SingleResidual, QuantSimTinyModel, MultiInput, SingleResidualWithModuleAdd, \
-    SingleResidualWithAvgPool, ModelWithBertCustomLayerNormGelu
-from aimet_torch.experimental.v2.quantization.quantsim import QuantizationSimModel
+
 import aimet_torch.quantsim
 from aimet_torch.quantsim_config import quantsim_config as qsim_config
 from aimet_torch.quantsim_config.quantsim_config import get_all_ops_in_neighborhood
 from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.elementwise_ops import Add
+
 from aimet_torch.experimental.v2.quantization.wrappers.quantization_mixin import _QuantizationMixin, _ModuleSpec, _TensorSpec
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import CalibrationMethod
+from aimet_torch.experimental.v2.quantization.quantsim import QuantizationSimModel
+
+from models_.models_to_test import SingleResidual, QuantSimTinyModel, MultiInput, SingleResidualWithModuleAdd, \
+    SingleResidualWithAvgPool, ModelWithBertCustomLayerNormGelu
 
 
 TORCH_INT_DTYPES = (torch.int, torch.int8, torch.int16, torch.int32, torch.int64)
