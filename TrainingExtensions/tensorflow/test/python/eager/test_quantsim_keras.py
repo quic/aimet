@@ -81,6 +81,16 @@ def dense_sequential():
     model.add(tf.keras.layers.Softmax())
     return model
 
+
+def model_with_tf_indexedslices_grad():
+    input_dim = 10
+    output_dim = 5
+    input_layer = keras.Input(shape=(input_dim,))
+    embedding_layer = keras.layers.Embedding(input_dim, output_dim, input_length=input_dim)(input_layer)
+    sum_embedding = tf.reduce_sum(embedding_layer, axis=1)
+    output_layer = keras.layers.Dense(output_dim, activation="relu")(sum_embedding)
+    return keras.Model(inputs=input_layer, outputs=output_layer, name="model_with_tf_indexedslices")
+
 class DenseSubclassing(tf.keras.Model):
     def __init__(self):
         super(DenseSubclassing, self).__init__()
@@ -540,6 +550,42 @@ def test_range_learning():
         assert np.allclose(encodings['activation_encodings']['dense/BiasAdd:0'][0]['max'],
                            running_dense_output_quantizer_encoding_max,
                            atol=encodings['activation_encodings']['dense/BiasAdd:0'][0]['scale'])
+
+
+def test_qat_with_tf_indexedslices():
+    if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+        tf.keras.backend.clear_session()
+
+        epochs = 10
+        model = model_with_tf_indexedslices_grad()
+        X = tf.constant([[1, 0, 0, 1, 0, 0, 0, 0, 1, 0]], dtype=tf.float32)
+        y = tf.constant([[0, 1, 0, 0, 0]], dtype=tf.float32)
+        sim = QuantizationSimModel(
+            model,
+            quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+            default_param_bw=8,
+            default_output_bw=8
+        )
+        for wrapper in sim.quant_wrappers():
+            wrapper.input_quantizers[0].disable()
+
+        sim.compute_encodings(
+            lambda m, _: m.predict(X),
+            forward_pass_callback_args=None
+        )
+        sim.model.compile(
+            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+            loss=tf.keras.losses.MeanSquaredError()
+        )
+
+        # Verify that tf.IndexedSlices should be in the gradients used for training
+        with tf.GradientTape() as tape:
+            outputs = sim.model(X)
+            loss = tf.reduce_sum(tf.square(outputs - y))
+        gradients = tape.gradient(loss, sim.model.trainable_variables)
+        assert isinstance(gradients[0], tf.IndexedSlices), "Should house tf.IndexedSlices type for gradient"
+        _ = sim.model.fit(x=X, y=y, epochs=epochs, batch_size=1)  # Run through and train normal, if it works we're OK
+
 
 def test_assert_on_reused_layer():
     if version.parse(tf.version.VERSION) >= version.parse("2.00"):
