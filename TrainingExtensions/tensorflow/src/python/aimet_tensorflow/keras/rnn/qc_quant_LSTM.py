@@ -39,27 +39,50 @@
 
 from typing import Union
 import tensorflow as tf
-from tensorflow.python.framework import ops
-from tensorflow.python.framework import constant_op
-from tensorflow.python.framework import dtypes
-from tensorflow.python.keras.layers import recurrent
-from tensorflow.python.keras import regularizers
-from tensorflow.python.keras import activations
-from tensorflow.python.keras import backend as K
-from tensorflow.python.keras.engine.input_spec import InputSpec
-from tensorflow.python.framework import config
-from tensorflow.python.ops import nn
-from tensorflow.python.ops import state_ops
 from tensorflow.python.platform import tf_logging as logging
+from packaging import version
+
+if version.parse(tf.version.VERSION) >= version.parse("2.10"):
+    # pylint: disable=ungrouped-imports
+    from tensorflow.compat.v1 import executing_eagerly_outside_functions, assign
+    from tensorflow import config
+
+    # Ignore pylint errors as keras module is not available in TF 2.4
+    from keras import activations # pylint: disable=import-error
+    from keras import backend # pylint: disable=import-error
+    from keras import regularizers # pylint: disable=import-error
+    from keras.engine.input_spec import InputSpec # pylint: disable=import-error
+    from keras.layers.rnn import LSTM # pylint: disable=import-error
+else:
+    from tensorflow.python.framework import config # pylint: disable=ungrouped-imports
+    from tensorflow.python.framework import constant_op # pylint: disable=ungrouped-imports
+    from tensorflow.python.framework import dtypes # pylint: disable=ungrouped-imports
+    from tensorflow.python.framework.ops import executing_eagerly_outside_functions, device # pylint: disable=ungrouped-imports
+    from tensorflow.python.keras import activations # pylint: disable=ungrouped-imports
+    from tensorflow.python.keras import backend # pylint: disable=ungrouped-imports
+    from tensorflow.python.keras import regularizers # pylint: disable=ungrouped-imports
+    from tensorflow.python.keras.engine.input_spec import InputSpec # pylint: disable=ungrouped-imports
+    from tensorflow.python.keras.layers.recurrent import DropoutRNNCellMixin, LSTM # pylint: disable=ungrouped-imports
+    from tensorflow.python.ops import nn # pylint: disable=ungrouped-imports
+    from tensorflow.python.ops.state_ops import assign # pylint: disable=ungrouped-imports
+
+# pylint: disable=wrong-import-position
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_tensorflow.keras.quantsim import QuantizerSettings, QcQuantizeWrapper
 from aimet_tensorflow.keras.rnn.qc_quant_LSTMCell import QcQuantizedLSTMCell
 
+#Manage inheritance as per version
+if version.parse(tf.version.VERSION) >= version.parse("2.10"):
+    base_list = [LSTM]
+else:
+    base_list = [DropoutRNNCellMixin, LSTM]
+
 # pylint: disable=too-many-ancestors
 # pylint: disable=abstract-method
-class QcQuantizedLSTMMain(recurrent.LSTM):
+class QcQuantizedLSTM(*base_list):
 
-    """Class overriding LSTM class from recurrent.py"""
+    """Class merging LSTM class from recurrent.py and recurrent_v1.py in TF2.4
+    , to be in sync with latest tf 2.10 version"""
 
     # pylint: disable=too-many-arguments
     # pylint: disable=too-many-locals
@@ -98,7 +121,7 @@ class QcQuantizedLSTMMain(recurrent.LSTM):
             copy_source_weights=None,
             **kwargs,
     ):
-        """Overriden LSTM recurrent __init__ function"""
+        """Overriden LSTM __init__ function"""
 
         self._wrapped_layers = []
         self.is_input_quantized = is_input_quantized
@@ -156,7 +179,7 @@ class QcQuantizedLSTMMain(recurrent.LSTM):
         )
 
         # pylint: disable=bad-super-call
-        super(recurrent.LSTM, self).__init__(
+        super(LSTM, self).__init__(
             cell,
             return_sequences=return_sequences,
             return_state=return_state,
@@ -166,8 +189,40 @@ class QcQuantizedLSTMMain(recurrent.LSTM):
             unroll=unroll,
             **kwargs)
 
+
         self.activity_regularizer = regularizers.get(activity_regularizer)
         self.input_spec = [InputSpec(ndim=3)]
+
+        #As implementation need all activations and paramencodings from every LSTM cell (unrolled LSTM), create different memory for each cell
+        self._cell_dict = {}
+        self.step_count = 0
+
+        self.state_spec = [
+            InputSpec(shape=(None, dim)) for dim in (self.units, self.units)
+        ]
+
+        if version.parse(tf.version.VERSION) >= version.parse("2.10"):
+            self._could_use_gpu_kernel = (
+                self.activation in (activations.tanh, tf.tanh)
+                and self.recurrent_activation in (activations.sigmoid, tf.sigmoid)
+                and recurrent_dropout == 0
+                and not unroll
+                and use_bias
+                and executing_eagerly_outside_functions())
+        else:
+            self._could_use_gpu_kernel = (
+                self.activation in (activations.tanh, nn.tanh)
+                and self.recurrent_activation in (activations.sigmoid, nn.sigmoid)
+                and recurrent_dropout == 0
+                and not unroll
+                and use_bias
+                and executing_eagerly_outside_functions())
+
+        if config.list_logical_devices('GPU'):
+            # Only show the message when there is GPU available, user will not care
+            # about the cuDNN if there isn't any GPU.
+            if self._could_use_gpu_kernel:
+                logging.debug("CUDNN is not supported")
 
     def get_config(self):
 
@@ -190,7 +245,7 @@ class QcQuantizedLSTMMain(recurrent.LSTM):
             "copy_source_weights":
                 self.copy_source_weights
         }
-        base_config = super(QcQuantizedLSTMMain, self).get_config()
+        base_config = super(QcQuantizedLSTM, self).get_config()
         base_config.update(config)
         return base_config
 
@@ -199,7 +254,7 @@ class QcQuantizedLSTMMain(recurrent.LSTM):
         """RNN build method overriden"""
 
         # pylint: disable=bad-super-call
-        super(QcQuantizedLSTMMain, self).build(input_shape)
+        super(QcQuantizedLSTM, self).build(input_shape)
 
         # pylint: disable=attribute-defined-outside-init
         self._wrapped_lstm_input = self._wrap_layer(tf.keras.layers.Lambda(lambda x: x, name="lstm_input"), 1)
@@ -228,116 +283,22 @@ class QcQuantizedLSTMMain(recurrent.LSTM):
                                     param_quantizers=param_quantizers, name=layer.name, in_quant_enabled=False)
         return wrapper
 
-#Have copied recurrent_v2 code to inherit from QcQuantizedLSTMMain
-# pylint: disable=abstract-method
-class QcQuantizedLSTM(recurrent.DropoutRNNCellMixin, QcQuantizedLSTMMain):
+    if version.parse(tf.version.VERSION) >= version.parse("2.10"):
+        @classmethod
+        def runtime(cls, runtime_name):
 
-    """Class replacing LSTM class of Keras, defined in recurrent_v2.py"""
+            """Used by overriden code to determine runtime"""
 
-    # pylint: disable=too-many-arguments
-    # pylint: disable=too-many-locals
-    def __init__(self,
-                 units,
-                 activation='tanh',
-                 recurrent_activation='sigmoid',
-                 use_bias=True,
-                 kernel_initializer='glorot_uniform',
-                 recurrent_initializer='orthogonal',
-                 bias_initializer='zeros',
-                 unit_forget_bias=True,
-                 kernel_regularizer=None,
-                 recurrent_regularizer=None,
-                 bias_regularizer=None,
-                 activity_regularizer=None,
-                 kernel_constraint=None,
-                 recurrent_constraint=None,
-                 bias_constraint=None,
-                 dropout=0.,
-                 recurrent_dropout=0.,
-                 return_sequences=False,
-                 return_state=False,
-                 go_backwards=False,
-                 stateful=False,
-                 time_major=False,
-                 unroll=False,
-                 is_input_quantized=False,
-                 quant_scheme: Union[QuantScheme, str] = 'tf_enhanced',
-                 rounding_mode: str = 'nearest',
-                 default_output_bw: int = 8,
-                 default_param_bw: int = 8,
-                 default_data_type: QuantizationDataType = QuantizationDataType.int,
-                 copy_source_weights=None,
-                 **kwargs):
+            with tf.device('/cpu:0'):
+                return tf.constant(runtime_name, dtype=tf.float32, name='runtime')
+    else:
+        @classmethod
+        def runtime(cls, runtime_name):
 
-        """Overriden LSTM recurrent_v2 __init__ function. Assuming that CuDNN is not used"""
+            """Used by overriden code to determine runtime"""
 
-        # return_runtime is a flag for testing, which shows the real backend
-        # implementation chosen by grappler in graph mode.
-        self.return_runtime = kwargs.pop('return_runtime', False)
-
-        super(QcQuantizedLSTM, self).__init__(
-            units,
-            activation=activation,
-            recurrent_activation=recurrent_activation,
-            use_bias=use_bias,
-            kernel_initializer=kernel_initializer,
-            recurrent_initializer=recurrent_initializer,
-            bias_initializer=bias_initializer,
-            unit_forget_bias=unit_forget_bias,
-            kernel_regularizer=kernel_regularizer,
-            recurrent_regularizer=recurrent_regularizer,
-            bias_regularizer=bias_regularizer,
-            activity_regularizer=activity_regularizer,
-            kernel_constraint=kernel_constraint,
-            recurrent_constraint=recurrent_constraint,
-            bias_constraint=bias_constraint,
-            dropout=dropout,
-            recurrent_dropout=recurrent_dropout,
-            implementation=kwargs.pop('implementation', 2),
-            return_sequences=return_sequences,
-            return_state=return_state,
-            go_backwards=go_backwards,
-            stateful=stateful,
-            time_major=time_major,
-            unroll=unroll,
-            is_input_quantized=is_input_quantized,
-            quant_scheme=quant_scheme,
-            rounding_mode=rounding_mode,
-            default_output_bw=default_output_bw,
-            default_param_bw=default_param_bw,
-            default_data_type=default_data_type,
-            copy_source_weights=copy_source_weights,
-            **kwargs)
-
-        #As implementation need all activations and params from every cell, unrolled, have different memory for each cell
-        #for i in range(1, input_shape[0]+1):
-        #    print(i)
-
-        self._cell_dict = {}
-        self.step_count = 0
-
-        self.state_spec = [
-            InputSpec(shape=(None, dim)) for dim in (self.units, self.units)
-        ]
-        self._could_use_gpu_kernel = (
-            self.activation in (activations.tanh, nn.tanh) and
-            self.recurrent_activation in (activations.sigmoid, nn.sigmoid) and
-            recurrent_dropout == 0 and not unroll and use_bias and
-            ops.executing_eagerly_outside_functions())
-        if config.list_logical_devices('GPU'):
-            # Only show the message when there is GPU available, user will not care
-            # about the cuDNN if there isn't any GPU.
-            if self._could_use_gpu_kernel:
-                logging.debug("CUDNN is not supported")
-
-    @classmethod
-    def runtime(cls, runtime_name):
-
-        """Used by overriden code to determine runtime"""
-
-        with ops.device('/cpu:0'):
-            return constant_op.constant(
-                runtime_name, dtype=dtypes.float32, name='runtime')
+            with device('/cpu:0'):
+                return constant_op.constant(runtime_name, dtype=dtypes.float32, name='runtime')
 
     def call(self, inputs, mask=None, training=None, initial_state=None):
 
@@ -348,7 +309,7 @@ class QcQuantizedLSTM(recurrent.DropoutRNNCellMixin, QcQuantizedLSTMMain):
 
         # The input should be dense, padded with zeros. If a ragged input is fed
         # into the layer, it is padded and the row lengths are used for masking.
-        inputs, row_lengths = K.convert_inputs_if_ragged(inputs)
+        inputs, row_lengths = backend.convert_inputs_if_ragged(inputs)
         is_ragged_input = (row_lengths is not None)
         self._validate_args_if_ragged(is_ragged_input, mask)
 
@@ -358,7 +319,7 @@ class QcQuantizedLSTM(recurrent.DropoutRNNCellMixin, QcQuantizedLSTMMain):
         if isinstance(mask, list):
             mask = mask[0]
 
-        input_shape = K.int_shape(inputs)
+        input_shape = backend.int_shape(inputs)
         timesteps = input_shape[0] if self.time_major else input_shape[1]
 
         # TODO(b/156447398) Investigate why the cuDNN kernel kernel fails with
@@ -401,7 +362,7 @@ class QcQuantizedLSTM(recurrent.DropoutRNNCellMixin, QcQuantizedLSTMMain):
             if self.is_input_quantized:
                 inputs = self._wrapped_lstm_input(inputs)
 
-            last_output, outputs, states = K.rnn(
+            last_output, outputs, states = backend.rnn(
                 step,
                 inputs,
                 initial_state,
@@ -417,13 +378,13 @@ class QcQuantizedLSTM(recurrent.DropoutRNNCellMixin, QcQuantizedLSTMMain):
 
         if self.stateful:
             updates = [
-                state_ops.assign(self_state, state)
+                assign(self_state, state)
                 for self_state, state in zip(self.states, states)
             ]
             self.add_update(updates)
 
         if self.return_sequences:
-            output = K.maybe_convert_to_ragged(is_ragged_input, outputs, row_lengths)
+            output = backend.maybe_convert_to_ragged(is_ragged_input, outputs, row_lengths)
         else:
             output = last_output
 
