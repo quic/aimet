@@ -41,7 +41,7 @@ from torch import nn
 import torch.nn.functional as F
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 from aimet_torch.experimental.v2.quantization.modules.quantize import QuantizeDequantize
-from aimet_torch.experimental.v2.quantization.fake_quant import FakeQuantizedLinear, _ModuleSpec, _TensorSpec, _FakeQuantizationMixin
+# from aimet_torch.experimental.v2.quantization.fake_quant import FakeQuantizedLinear, _ModuleSpec, _TensorSpec, _FakeQuantizationMixin
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import CalibrationMethod
 
 
