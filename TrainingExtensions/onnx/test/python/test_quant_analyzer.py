@@ -35,7 +35,6 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 import copy
-import pytest
 import json
 import os.path
 import shutil
@@ -280,6 +279,39 @@ class TestQuantAnalyzer:
                 assert os.path.isfile("./tmp/min_max_ranges/_conv1_Conv_onnx_Conv_39.html")
             # Dense (Gemm) is disabled to per-channel quantization, it should be in weights.html
             assert os.path.isfile("./tmp/min_max_ranges/weights.html")
+        finally:
+            if os.path.isdir("./tmp/"):
+                shutil.rmtree("./tmp/")
+
+    def test_export_per_layer_mse_loss(self):
+        """ test export_per_layer_mse_loss() """
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(*input_shape)
+        unlabeled_dataset_iterable = [dummy_input.numpy() for i in range(10)]
+        model = models_for_tests._convert_to_onnx(models_for_tests.TinyModel(), dummy_input)
+        dummy_input_dict = {'input': np.random.randn(1, 3, 32, 32).astype(np.float32)}
+        layer_names = []
+        for node in model.nodes():
+            layer_names.append(node.name)
+
+        fold_all_batch_norms_to_weight(model)
+        sim = QuantizationSimModel(copy.deepcopy(model), dummy_input_dict, simplify_model=False)
+        sim.compute_encodings(evaluate, dummy_input_dict)
+        forward_pass_callback = CallbackFunc(calibrate, dummy_input_dict)
+        eval_callback = CallbackFunc(evaluate, dummy_input_dict)
+        quant_analyzer = QuantAnalyzer(model, dummy_input_dict, forward_pass_callback, eval_callback)
+        quant_analyzer.enable_per_layer_mse_loss(unlabeled_dataset_iterable, num_batches=4)
+        try:
+            layerwise_mse_loss_dict = quant_analyzer.export_per_layer_mse_loss(sim, results_dir="./tmp/")
+            assert type(layerwise_mse_loss_dict) == dict
+            assert len(layerwise_mse_loss_dict) == 11
+
+            # Test whether layerwise_mse_loss_dict consists of correct keys (op names).
+            for op_name in layerwise_mse_loss_dict.keys():
+                assert op_name in layer_names
+
+            # Check if it is exported to correct html file.
+            assert os.path.isfile("./tmp/per_layer_mse_loss.html")
         finally:
             if os.path.isdir("./tmp/"):
                 shutil.rmtree("./tmp/")

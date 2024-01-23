@@ -39,7 +39,7 @@
 
 import os
 import re
-from typing import Union, Tuple, Dict, List
+from typing import Union, Tuple, Dict, List, Iterable
 import copy
 from collections import defaultdict
 
@@ -47,15 +47,18 @@ import numpy as np
 from onnx import ModelProto
 import onnxruntime as ort
 from onnxruntime.quantization.onnx_model import ONNXModel
+from sklearn.metrics import mean_squared_error
 
 from aimet_common.utils import AimetLogger, CallbackFunc
 from aimet_common.defs import QuantScheme
 from aimet_common.quant_analyzer import save_json, export_per_layer_sensitivity_analysis_plot, \
-    create_and_export_min_max_ranges_plot
+    create_and_export_min_max_ranges_plot, export_per_layer_mse_plot
 
 from aimet_onnx.qc_quantize_op import QcQuantizeOp
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.batch_norm_fold import fold_all_batch_norms_to_weight
+from aimet_onnx.adaround.activation_sampler import ModuleData
+from aimet_onnx import utils
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.QuantAnalyzer)
 
@@ -113,6 +116,7 @@ class QuantAnalyzer:
             1) model sensitivity to quantization,
             2) perform per layer sensitivity analysis by enabling and disabling quant wrappers,
             3) export per layer encodings min - max ranges,
+            4) per layer MSE analysis
 
         :param quant_scheme: Quantization scheme. Supported values are
                 QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced.
@@ -140,6 +144,10 @@ class QuantAnalyzer:
 
         # Export encoding min-max range.
         self.export_per_layer_encoding_min_max_range(sim, results_dir)
+
+        # Export per layer MSE loss between fp32 and quantized output activations.
+        if self._unlabeled_dataset_iterable:
+            self.export_per_layer_mse_loss(sim, results_dir)
 
     def create_quantsim_and_encodings(self, quant_scheme: QuantScheme, default_param_bw: int,
                                       default_activation_bw: int, config_file: str) \
@@ -496,3 +504,94 @@ class QuantAnalyzer:
         save_json(min_max_range_for_activations_dict, min_max_ranges_dir, title="activations.json")
         _logger.info("Exported per layer encodings min-max ranges plot(s).")
         return min_max_range_for_weights_dict, min_max_range_for_activations_dict
+
+    def enable_per_layer_mse_loss(self, unlabeled_dataset_iterable: Iterable, num_batches: int):
+        """
+        Enable per layer MSE loss analysis.
+
+        :param unlabeled_dataset_iterable: A collection (i.e. iterable with `__len__`)
+                that iterates over an unlabeled dataset. The values yielded by this iterable are expected
+                to be able to be passed directly to the model.
+        :param num_batches: Number of batches. Approximately 256 samples/images are recommended,
+                so if batch size of data loader is 64, then 4 number of batches leads to 256 samples/images.
+        """
+        if len(unlabeled_dataset_iterable) < num_batches:
+            raise ValueError(f'Can not fetch {num_batches} batches from '
+                             f'a data loader of length {len(unlabeled_dataset_iterable)}.')
+
+        self._unlabeled_dataset_iterable = unlabeled_dataset_iterable
+        self._num_batches = num_batches
+
+    def export_per_layer_mse_loss(self,
+                                  sim: QuantizationSimModel,
+                                  results_dir: str,
+                                  ) -> Dict:
+        """
+        NOTE: Need to pass same model input data through both fp32 and quantsim model to
+        tap output activations of each layer.
+
+        Export MSE loss between fp32 and quantized output activations for each layer.
+        :param sim: Quantsim model.
+        :param results_dir: Directory to save the results.
+        :return layer wise MSE loss. dict[layer_name] = MSE loss.
+        """
+        results_dir = os.path.abspath(results_dir)
+        os.makedirs(results_dir, exist_ok=True)
+
+        mse_loss_dict = {}
+        for op_node in self._onnx_model.nodes():
+            op_output = op_node.output[0]
+            if op_output in sim.qc_quantize_op_dict:
+                quantized_op_output = op_output + '_updated'
+                loss = self._compute_mse_loss(op_output, quantized_op_output, self._onnx_model, sim.model)
+                mse_loss_dict[op_node.name] = loss
+
+        export_per_layer_mse_plot(mse_loss_dict,
+                                  results_dir,
+                                  title="per_layer_mse_loss")
+        save_json(mse_loss_dict, results_dir, title="per_layer_mse_loss.json")
+        _logger.info("Exported per layer MSE loss plot.")
+        return mse_loss_dict
+
+    # pylint: disable=too-many-locals
+    def _compute_mse_loss(self, fp32_act_name: str, quantized_act_name: str,
+                          fp32_model: ONNXModel, quantized_model: ONNXModel) -> float:
+        """
+        Compute MSE loss between fp32 and quantized output activations for each batch, add for
+        all the batches and return averaged mse loss.
+
+        :param fp32_act_name: module from the fp32_model.
+        :param quantized_act_name: Corresponding quant wrapper from the QuantSim model.
+        :param fp32_model: PyTorch model.
+        :param sim: Quantsim model.
+        :return: MSE loss between fp32 and quantized output activations.
+        """
+
+        providers = ['CPUExecutionProvider']
+        if 'CUDAExecutionProvider' in ort.get_available_providers():
+            providers = [('CUDAExecutionProvider', {'cudnn_conv_algo_search': 'DEFAULT'}), 'CPUExecutionProvider']
+
+        # output activations collector.
+        orig_module_collector = ModuleData(fp32_model, fp32_act_name, providers)
+        quant_module_collector = ModuleData(quantized_model, quantized_act_name, providers)
+
+        total = 0
+        loss = 0.0
+        batch_index = 0
+        for model_inputs in self._unlabeled_dataset_iterable:
+            model_inputs = utils.create_input_dict(fp32_model.model, model_inputs)
+            _, quantized_out_acts = quant_module_collector.collect_inp_out_data(model_inputs,
+                                                                                collect_input=False,
+                                                                                collect_output=True)
+            _, fp32_out_acts = orig_module_collector.collect_inp_out_data(model_inputs,
+                                                                          collect_input=False,
+                                                                          collect_output=True)
+            loss += mean_squared_error(fp32_out_acts[0].reshape(fp32_out_acts[0].shape[0], -1),
+                                       quantized_out_acts[0].reshape(fp32_out_acts[0].shape[0], -1)).sum()
+            total += fp32_out_acts[0].shape[0]
+            batch_index += 1
+            if batch_index == self._num_batches:
+                break
+
+        average_loss = loss/total
+        return average_loss
