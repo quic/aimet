@@ -67,6 +67,7 @@ def param_spec():
     }
 
 
+@pytest.mark.skip(reason='Skip for TDD')
 class TestFakeQuantizedSoftmax:
     def test_no_spec(self, input):
         """

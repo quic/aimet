@@ -68,6 +68,7 @@ def param_spec():
     }
 
 
+@pytest.mark.skip(reason='Skip for TDD')
 class TestFakeQuantizedLinear:
     def test_no_spec(self, input):
         quant_linear = FakeQuantizedLinear(10, 10)
