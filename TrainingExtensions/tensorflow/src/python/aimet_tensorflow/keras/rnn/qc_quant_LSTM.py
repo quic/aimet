@@ -189,7 +189,6 @@ class QcQuantizedLSTM(*base_list):
             unroll=unroll,
             **kwargs)
 
-
         self.activity_regularizer = regularizers.get(activity_regularizer)
         self.input_spec = [InputSpec(ndim=3)]
 
@@ -257,8 +256,9 @@ class QcQuantizedLSTM(*base_list):
         super(QcQuantizedLSTM, self).build(input_shape)
 
         # pylint: disable=attribute-defined-outside-init
-        self._wrapped_lstm_input = self._wrap_layer(tf.keras.layers.Lambda(lambda x: x, name="lstm_input"), 1)
-        self._wrapped_layers.append(self._wrapped_lstm_input)
+        if self.is_input_quantized:
+            self._wrapped_lstm_input = self._wrap_layer(tf.keras.layers.Lambda(lambda x: x, name="lstm_input"), 1)
+            self._wrapped_layers.append(self._wrapped_lstm_input)
 
         self.built = True
 
