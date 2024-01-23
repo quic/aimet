@@ -204,6 +204,7 @@ class QuantizationSimModel:
         self._rounding_mode = rounding_mode
         self._default_output_bw = default_output_bw
         self._default_param_bw = default_param_bw
+        self._config_file = config_file
         self._is_conditional = False
         self._module_marker_map = {}
         self._percentile_value = 100 # default percentile value
