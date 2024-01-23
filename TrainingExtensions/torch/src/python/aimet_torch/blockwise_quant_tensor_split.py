@@ -37,7 +37,7 @@
 """ Utilities for implementing blockwise quantization using tensor splitting approach """
 
 import torch
-from aimet_torch import elementwise_ops
+from aimet_torch import elementwise_ops, utils
 from aimet_torch.quantsim import QuantizationSimModel
 
 
@@ -94,9 +94,15 @@ def replace_linears_for_blockwise_quant(model: torch.nn.Module, block_size: int)
     :param model: Model to replace nn.Linears for
     :param block_size: Block size to use
     """
-    for name, module in model.named_modules():
+    linear_layers = []
+    for name, module in model.named_children():
         if isinstance(module, torch.nn.Linear):
-            setattr(model, name, BlockwiseLinear(module, block_size))
+            linear_layers.append((name, module))
+        elif not utils.is_leaf_module(module):
+            replace_linears_for_blockwise_quant(module, block_size)
+
+    for name, module in linear_layers:
+        setattr(model, name, BlockwiseLinear(module, block_size))
 
 
 def tie_blockwise_linear_quantizers(quantsim: QuantizationSimModel):

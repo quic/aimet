@@ -59,6 +59,29 @@ class LinearModel(torch.nn.Module):
         x = self.softmax(x)
         return x
 
+class InnerModel(torch.nn.Module):
+    def __init__(self):
+        super(InnerModel, self).__init__()
+        self.linear1 = torch.nn.Linear(8, 3)
+        self.seq = torch.nn.Sequential(torch.nn.Linear(3, 4), torch.nn.Linear(4, 5), torch.nn.ReLU())
+        self.seq2 = torch.nn.Sequential(torch.nn.Linear(5, 2))
+
+    def forward(self, inp):
+        x = self.linear1(inp)
+        x = self.seq(x)
+        x = self.seq2(x)
+        return x
+
+class NestedModel(torch.nn.Module):
+    def __init__(self):
+        super(NestedModel, self).__init__()
+        self.sigmoid = torch.nn.Sigmoid()
+        self.inner_linears = InnerModel()
+
+    def forward(self, inp):
+        x = self.inner_linears(inp)
+        x = self.sigmoid(x)
+        return x
 
 @pytest.mark.parametrize('model, dummy_input, block_size', [(torch.nn.Linear(8, 3), torch.randn(1, 8), 3),
                                                              (torch.nn.Linear(8, 3, bias=False), torch.randn(1, 8), 3),
@@ -186,3 +209,37 @@ def test_blockwise_quant_with_small_linear():
 
     _ = qsim.model(dummy_input)
     assert len(qsim.connected_graph.get_all_ops()) == 1
+
+def test_nested_sequential_linears():
+    quantsim_config = {
+        "defaults": {
+            "ops": {
+                "is_output_quantized": "True",
+                "is_symmetric": "False"
+            },
+            "params": {
+                "is_quantized": "False",
+                "is_symmetric": "True"
+            },
+            "per_channel_quantization": "True",
+        },
+        "params": {},
+        "op_type": {
+            'Split': {
+                'is_output_quantized': False
+            }
+        },
+        "supergroups": [],
+        "model_input": {},
+        "model_output": {}
+    }
+    with open('./data/quantsim_config.json', 'w') as f:
+        json.dump(quantsim_config, f)
+    dummy_input = torch.randn(1, 8)
+    model = NestedModel()
+    replace_linears_for_blockwise_quant(model, block_size=2)
+    num_blockwise_linears = 0
+    for _, module in model.named_modules():
+        if isinstance(module, BlockwiseLinear):
+            num_blockwise_linears += 1
+    assert num_blockwise_linears == 4
