@@ -41,6 +41,7 @@ import torch.nn.functional as F
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 from aimet_torch.experimental.v2.quantization.modules.quantize import QuantizeDequantize
 from aimet_torch.experimental.v2.quantization.fake_quant import FakeQuantizedSoftmax, _ModuleSpec, _TensorSpec
+from aimet_torch.experimental.v2.quantization.encoding_analyzer import CalibrationMethod
 
 
 @pytest.fixture
@@ -50,18 +51,18 @@ def input():
 
 @pytest.fixture
 def input_spec():
-    return [_TensorSpec((1,), 4, False, 'minmax')]
+    return [_TensorSpec((1,), 4, False, CalibrationMethod.MinMax)]
 
 
 @pytest.fixture
 def output_spec():
-    return [_TensorSpec((1,), 4, False, 'minmax')]
+    return [_TensorSpec((1,), 4, False, CalibrationMethod.MinMax)]
 
 
 @pytest.fixture
 def param_spec():
     return {
-        'weight': _TensorSpec((1,), 4, True, 'minmax'),
+        'weight': _TensorSpec((1,), 4, True, CalibrationMethod.MinMax),
         'bias': None,
     }
 
@@ -181,4 +182,4 @@ class TestFakeQuantizedSoftmax:
                                   param_spec=param_spec,
                                   output_spec=None)
         with pytest.raises(RuntimeError):
-            quant_linear = FakeQuantizedSoftmax(spec=module_spec)
+            quant_softmax = FakeQuantizedSoftmax(spec=module_spec)

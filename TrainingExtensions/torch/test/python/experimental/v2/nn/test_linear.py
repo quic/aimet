@@ -37,10 +37,12 @@
 
 import pytest
 import torch
+from torch import nn
 import torch.nn.functional as F
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 from aimet_torch.experimental.v2.quantization.modules.quantize import QuantizeDequantize
-from aimet_torch.experimental.v2.quantization.fake_quant import FakeQuantizedLinear, _ModuleSpec, _TensorSpec
+from aimet_torch.experimental.v2.quantization.fake_quant import FakeQuantizedLinear, _ModuleSpec, _TensorSpec, _FakeQuantizationMixin
+from aimet_torch.experimental.v2.quantization.encoding_analyzer import CalibrationMethod
 
 
 @pytest.fixture
@@ -50,18 +52,18 @@ def input():
 
 @pytest.fixture
 def input_spec():
-    return [_TensorSpec((1,), 4, False, 'minmax')]
+    return [_TensorSpec((1,), 4, False, CalibrationMethod.MinMax)]
 
 
 @pytest.fixture
 def output_spec():
-    return [_TensorSpec((1,), 4, False, 'minmax')]
+    return [_TensorSpec((1,), 4, False, CalibrationMethod.MinMax)]
 
 
 @pytest.fixture
 def param_spec():
     return {
-        'weight': _TensorSpec((1,), 4, True, 'minmax'),
+        'weight': _TensorSpec((1,), 4, True, CalibrationMethod.MinMax),
         'bias': None,
     }
 
@@ -133,7 +135,7 @@ class TestFakeQuantizedLinear:
         Then: `output_quantizer` is set to `QuantizeDequantize` as a submodule
         """
         assert quant_linear.input_quantizers is None
-        assert isinstance(quant_linear.output_quantizers, QuantizeDequantize)
+        assert isinstance(quant_linear.output_quantizers[0], QuantizeDequantize)
         assert quant_linear.param_quantizers['weight'] is None
         assert quant_linear.param_quantizers['bias'] is None
 
@@ -202,3 +204,70 @@ class TestFakeQuantizedLinear:
 
         expected_output = F.linear(input, weight_qdq, quant_linear.bias)
         assert torch.equal(quant_output, expected_output)
+
+    def test_from_module(self, input, input_spec, param_spec, output_spec):
+        """
+        Given: Instantiate a fake-quantized module using `FakeQuantMixin.from_module` with some spec
+        """
+        module_spec = _ModuleSpec(input_spec, param_spec, output_spec)
+        fp_linear = nn.Linear(10, 10)
+        quant_linear = _FakeQuantizationMixin.from_module(fp_linear, module_spec)
+        with quant_linear.compute_encodings():
+            _ = quant_linear(input)
+
+        """
+        When: Inspect attributes such as
+              `input_quantizer`, `output_quantizer`, `weight_quantizer`, `bias_quantizer`, etc.
+        Then: These attributes should be set to either QuantizedDequantize or None accordingly.
+              (See scenario 3.2.1~3.2.3)
+        """
+        quant_output = quant_linear(input)
+
+        scale = quant_linear.input_quantizers[0].get_scale()
+        offset = quant_linear.input_quantizers[0].get_offset()
+        bitwidth = quant_linear.input_quantizers[0].bitwidth
+        input_qdq = get_backend().quantize_dequantize(input, scale, offset, bitwidth)
+
+        weight = quant_linear.weight
+        scale = quant_linear.param_quantizers['weight'].get_scale()
+        offset = quant_linear.param_quantizers['weight'].get_offset()
+        bitwidth = quant_linear.param_quantizers['weight'].bitwidth
+        weight_qdq = get_backend().quantize_dequantize(weight, scale, offset, bitwidth)
+
+        scale = quant_linear.output_quantizers[0].get_scale()
+        offset = quant_linear.output_quantizers[0].get_offset()
+        bitwidth = quant_linear.output_quantizers[0].bitwidth
+        expected_output = F.linear(input_qdq, weight_qdq, quant_linear.bias)
+        expected_output = get_backend().quantize_dequantize(expected_output,
+                                                            scale,
+                                                            offset,
+                                                            bitwidth)
+        assert torch.equal(quant_output, expected_output)
+
+        """
+        When: Update to the parameter/buffer of the base FP module (or its submodule) using in-place operators.
+              For example,
+                1) fp_module.{param_or_buffer_name}.add_(1)
+                2) fp_module.{submodule_name}.{param_or_buffer_name}.add_(1)
+        Then: The result of in-place operation affects the parameters/buffers of the quantized module.
+              In other words, the parameters/buffers of the quantized module will have been incremented by 1.
+              The vice versa should also hold.
+        NOTE: An aimet.nn quantized module shares the underlying storage (parameters and buffers) with
+              the torch.nn FP module that it was derived from.
+              In a sense, they are somewhat like shallow copies of each other
+        """
+        with torch.no_grad():
+            fp_linear.weight.add_(1)
+        assert torch.equal(fp_linear.weight, quant_linear.weight)
+
+        """
+        When: Reassign a new submodule/parameter/buffer to the base FP module using assignment stmt.
+              For example,
+                1) fp_module.{submodule_name} = torch.nn.Linear(...)
+                2) fp_module.{param_or_buffer_name} = torch.empty(...)
+        Then: The reassignment shouldn't affect the quantized module derived from the FP module.
+              The vice versa should also hold.
+        NOTE: Analogous to shallow copies, reassigning a new attribute to one of them shouldn't affect the other.
+        """
+        fp_linear.weight = nn.Parameter(torch.zeros(10, 10))
+        assert not torch.any(fp_linear.weight == quant_linear.weight)
