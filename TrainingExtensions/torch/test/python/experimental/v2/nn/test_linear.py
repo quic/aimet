@@ -50,52 +50,34 @@ def input():
     return torch.arange(-5, 5) / 10
 
 
-@pytest.fixture
-def input_spec():
-    return [_TensorSpec((1,), 4, False, CalibrationMethod.MinMax)]
-
-
-@pytest.fixture
-def output_spec():
-    return [_TensorSpec((1,), 4, False, CalibrationMethod.MinMax)]
-
-
-@pytest.fixture
-def param_spec():
-    return {
-        'weight': _TensorSpec((1,), 4, True, CalibrationMethod.MinMax),
-        'bias': None,
-    }
-
-
 @pytest.mark.skip(reason='Skip for TDD')
 class TestFakeQuantizedLinear:
     def test_no_spec(self, input):
         quant_linear = FakeQuantizedLinear(10, 10)
-        assert quant_linear.input_quantizers is None
-        assert quant_linear.output_quantizers is None
+        assert quant_linear.input_quantizers[0] is None
+        assert quant_linear.output_quantizers[0] is None
         assert quant_linear.param_quantizers['weight'] is None
         assert quant_linear.param_quantizers['bias'] is None
 
         expected_output = F.linear(input, quant_linear.weight, quant_linear.bias)
         assert torch.equal(quant_linear(input), expected_output)
 
-    def test_input_qtzn(self, input, input_spec):
+    def test_input_qtzn(self, input):
         """
         Given: Instantiate a fake-quantized module with input quantizer spec specified
         """
-        module_spec = _ModuleSpec(input_spec=input_spec,
-                                  param_spec=None,
-                                  output_spec=None)
-        quant_linear = FakeQuantizedLinear(10, 10, spec=module_spec)
+        quant_linear = FakeQuantizedLinear(10, 10)
+        quant_linear.input_quantizers[0] = QuantizeDequantize((1,),
+                                                              bitwidth=8,
+                                                              symmetric=False,
+                                                              qscheme=CalibrationMethod.MinMax)
         """
         When: Inspect `input_quantizer` attribute.
         Then: `input_quantizer` is set to `QuantizeDequantize` as a submodule
         """
-        assert isinstance(quant_linear.input_quantizers[0], QuantizeDequantize)
         assert quant_linear.param_quantizers['weight'] is None
         assert quant_linear.param_quantizers['bias'] is None
-        assert quant_linear.output_quantizers is None
+        assert quant_linear.output_quantizers[0] is None
 
         """
         When: Invoke forward before the encodings are initialized with `compute_encodings()`
@@ -122,21 +104,21 @@ class TestFakeQuantizedLinear:
         expected_output = F.linear(input_qdq, quant_linear.weight, quant_linear.bias)
         assert torch.equal(quant_output, expected_output)
 
-    def test_output_qtzn(self, input, output_spec):
+    def test_output_qtzn(self, input):
         """
         Given: Instantiate a fake-quantized module with output quantizer spec specified
         """
-        module_spec = _ModuleSpec(input_spec=None,
-                                  param_spec=None,
-                                  output_spec=output_spec)
-        quant_linear = FakeQuantizedLinear(10, 10, spec=module_spec)
+        quant_linear = FakeQuantizedLinear(10, 10)
+        quant_linear.output_quantizers[0] = QuantizeDequantize((1,),
+                                                               bitwidth=8,
+                                                               symmetric=False,
+                                                               qscheme=CalibrationMethod.MinMax)
 
         """
         When: Inspect `output_quantizer` attribute.
         Then: `output_quantizer` is set to `QuantizeDequantize` as a submodule
         """
-        assert quant_linear.input_quantizers is None
-        assert isinstance(quant_linear.output_quantizers[0], QuantizeDequantize)
+        assert quant_linear.input_quantizers[0] is None
         assert quant_linear.param_quantizers['weight'] is None
         assert quant_linear.param_quantizers['bias'] is None
 
@@ -168,22 +150,22 @@ class TestFakeQuantizedLinear:
                                                             bitwidth)
         assert torch.equal(quant_output, expected_output)
 
-    def test_param_qtzn(self, input, param_spec):
+    def test_param_qtzn(self, input):
         """
         Given: Instantiate a fake-quantized module with weight quantizer spec specified
         """
-        module_spec = _ModuleSpec(input_spec=None,
-                                  param_spec=param_spec,
-                                  output_spec=None)
-        quant_linear = FakeQuantizedLinear(10, 10, spec=module_spec)
+        quant_linear = FakeQuantizedLinear(10, 10)
+        quant_linear.param_quantizers['weight'] = QuantizeDequantize((10,),
+                                                                     bitwidth=4,
+                                                                     symmetric=True,
+                                                                     qscheme=CalibrationMethod.MinMax)
 
         """
         When: Inspect `weight_quantizer` attribute.
         Then: `weight_quantizer` is set to `QuantizeDequantize` as a submodule
         """
-        assert quant_linear.input_quantizers is None
-        assert quant_linear.output_quantizers is None
-        assert isinstance(quant_linear.param_quantizers['weight'], QuantizeDequantize)
+        assert quant_linear.input_quantizers[0] is None
+        assert quant_linear.output_quantizers[0] is None
         assert quant_linear.param_quantizers['bias'] is None
 
         """
@@ -206,13 +188,24 @@ class TestFakeQuantizedLinear:
         expected_output = F.linear(input, weight_qdq, quant_linear.bias)
         assert torch.equal(quant_output, expected_output)
 
-    def test_from_module(self, input, input_spec, param_spec, output_spec):
+    def test_from_module(self, input):
         """
         Given: Instantiate a fake-quantized module using `FakeQuantMixin.from_module` with some spec
         """
-        module_spec = _ModuleSpec(input_spec, param_spec, output_spec)
         fp_linear = nn.Linear(10, 10)
-        quant_linear = _FakeQuantizationMixin.from_module(fp_linear, module_spec)
+        quant_linear = _FakeQuantizationMixin.from_module(fp_linear)
+        quant_linear.input_quantizers[0] = QuantizeDequantize((1,),
+                                                              bitwidth=8,
+                                                              symmetric=False,
+                                                              qscheme=CalibrationMethod.MinMax)
+        quant_linear.output_quantizers[0] = QuantizeDequantize((1,),
+                                                               bitwidth=8,
+                                                               symmetric=False,
+                                                               qscheme=CalibrationMethod.MinMax)
+        quant_linear.param_quantizers['weight'] = QuantizeDequantize((10,),
+                                                                     bitwidth=4,
+                                                                     symmetric=True,
+                                                                     qscheme=CalibrationMethod.MinMax)
         with quant_linear.compute_encodings():
             _ = quant_linear(input)
 

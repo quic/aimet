@@ -49,24 +49,6 @@ def input():
     return torch.arange(100).view(10, 10) / 100
 
 
-@pytest.fixture
-def input_spec():
-    return [_TensorSpec((1,), 4, False, CalibrationMethod.MinMax)]
-
-
-@pytest.fixture
-def output_spec():
-    return [_TensorSpec((1,), 4, False, CalibrationMethod.MinMax)]
-
-
-@pytest.fixture
-def param_spec():
-    return {
-        'weight': _TensorSpec((1,), 4, True, CalibrationMethod.MinMax),
-        'bias': None,
-    }
-
-
 @pytest.mark.skip(reason='Skip for TDD')
 class TestFakeQuantizedSoftmax:
     def test_no_spec(self, input):
@@ -79,8 +61,8 @@ class TestFakeQuantizedSoftmax:
         Then: All of them are set to `None`
         """
         quant_softmax = FakeQuantizedSoftmax()
-        assert quant_softmax.input_quantizers is None
-        assert quant_softmax.output_quantizers is None
+        assert quant_softmax.input_quantizers[0] is None
+        assert quant_softmax.output_quantizers[0] is None
 
         """
         When: Run forward with an input x
@@ -89,21 +71,22 @@ class TestFakeQuantizedSoftmax:
         expected_output = F.softmax(input, quant_softmax.dim)
         assert torch.equal(quant_softmax(input), expected_output)
 
-    def test_input_qtzn(self, input, input_spec):
+    def test_input_qtzn(self, input):
         """
         Given: Instantiate a fake-quantized module with input quantizer spec specified
         """
-        module_spec = _ModuleSpec(input_spec=input_spec,
-                                  param_spec=None,
-                                  output_spec=None)
-        quant_softmax = FakeQuantizedSoftmax(spec=module_spec)
+        quant_softmax = FakeQuantizedSoftmax()
+        quant_softmax.input_quantizers[0] = QuantizeDequantize((1,),
+                                                               bitwidth=8,
+                                                               symmetric=False,
+                                                               qscheme=CalibrationMethod.MinMax)
 
         """
         When: Inspect `input_quantizer` attribute.
         Then: `input_quantizer` is set to `QuantizeDequantize` as a submodule
         """
         assert isinstance(quant_softmax.input_quantizers[0], QuantizeDequantize)
-        assert quant_softmax.output_quantizers is None
+        assert quant_softmax.output_quantizers[0] is None
 
         """
         When: Invoke forward before the encodings are initialized with `compute_encodings()`
@@ -130,20 +113,21 @@ class TestFakeQuantizedSoftmax:
         expected_output = F.softmax(input_qdq, quant_softmax.dim)
         assert torch.equal(quant_output, expected_output)
 
-    def test_output_qtzn(self, input, output_spec):
+    def test_output_qtzn(self, input):
         """
         Given: Instantiate a fake-quantized module with output quantizer spec specified
         """
-        module_spec = _ModuleSpec(input_spec=None,
-                                  param_spec=None,
-                                  output_spec=output_spec)
-        quant_softmax = FakeQuantizedSoftmax(spec=module_spec)
+        quant_softmax = FakeQuantizedSoftmax()
+        quant_softmax.output_quantizers[0] = QuantizeDequantize((1,),
+                                                                bitwidth=8,
+                                                                symmetric=False,
+                                                                qscheme=CalibrationMethod.MinMax)
 
         """
         When: Inspect `output_quantizer` attribute.
         Then: `output_quantizer` is set to `QuantizeDequantize` as a submodule
         """
-        assert quant_softmax.input_quantizers is None
+        assert quant_softmax.input_quantizers[0] is None
         assert isinstance(quant_softmax.output_quantizers[0], QuantizeDequantize)
 
         """
@@ -173,14 +157,3 @@ class TestFakeQuantizedSoftmax:
                                                             offset,
                                                             bitwidth)
         assert torch.equal(quant_output, expected_output)
-
-    def test_param_qtzn(self, input, param_spec):
-        """
-        When: The baseline module doesn't have `weight` attribute (e.g. torch.nn.ReLU)
-        Then: Throw runtime error in construction time
-        """
-        module_spec = _ModuleSpec(input_spec=None,
-                                  param_spec=param_spec,
-                                  output_spec=None)
-        with pytest.raises(RuntimeError):
-            quant_softmax = FakeQuantizedSoftmax(spec=module_spec)
