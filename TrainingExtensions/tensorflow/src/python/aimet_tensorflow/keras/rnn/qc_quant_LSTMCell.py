@@ -39,19 +39,35 @@
 
 from typing import Union
 import tensorflow as tf
-from tensorflow.python.keras import constraints
-from tensorflow.python.keras import initializers
-from tensorflow.python.keras import regularizers
-from tensorflow.python.keras import backend as K
-from tensorflow.python.keras.engine.base_layer import Layer
-from tensorflow.python.keras.layers import LSTMCell
-from tensorflow.python.keras.layers import Dense
-from tensorflow.python.keras.layers import recurrent
-from tensorflow.python.keras.engine.input_spec import InputSpec
-from aimet_tensorflow.keras.quantsim import QuantizerSettings, QcQuantizeWrapper
+from packaging import version
+
+if version.parse(tf.version.VERSION) >= version.parse("2.10"):
+    # Ignore pylint errors as keras module is not available in TF 2.4
+    from keras import backend # pylint: disable=import-error
+    from keras import constraints # pylint: disable=import-error
+    from keras import initializers # pylint: disable=import-error
+    from keras import regularizers # pylint: disable=import-error
+    from keras.engine.base_layer import Layer # pylint: disable=import-error
+    from keras.engine.input_spec import InputSpec # pylint: disable=import-error
+    from keras.layers import Dense # pylint: disable=import-error
+    from keras.layers.rnn import LSTMCell # pylint: disable=import-error
+    from keras.layers.rnn.rnn_utils import caching_device # pylint: disable=import-error
+else:
+    from tensorflow.python.keras import backend # pylint: disable=ungrouped-imports
+    from tensorflow.python.keras import constraints # pylint: disable=ungrouped-imports
+    from tensorflow.python.keras import initializers # pylint: disable=ungrouped-imports
+    from tensorflow.python.keras import regularizers # pylint: disable=ungrouped-imports
+    from tensorflow.python.keras.engine.base_layer import Layer # pylint: disable=ungrouped-imports
+    from tensorflow.python.keras.engine.input_spec import InputSpec # pylint: disable=ungrouped-imports
+    from tensorflow.python.keras.layers import Dense # pylint: disable=ungrouped-imports
+    from tensorflow.python.keras.layers.recurrent import LSTMCell, _caching_device as caching_device # pylint: disable=ungrouped-imports
+
+# pylint: disable=wrong-import-position
 from aimet_common.defs import QuantScheme, QuantizationDataType
+from aimet_tensorflow.keras.quantsim import QuantizerSettings, QcQuantizeWrapper
 
 # pylint: disable=abstract-method
+# pylint: disable=too-many-ancestors
 class CustomDense(Dense):
 
     """Class using Keras dense with customzations for weight cache"""
@@ -61,7 +77,7 @@ class CustomDense(Dense):
         """Overridden build method, to sync with standard LSTM way of building weights"""
 
         # pylint: disable=protected-access
-        default_caching_device = recurrent._caching_device(self)
+        default_caching_device = caching_device(self)
 
         input_shape = tf.TensorShape(input_shape)
         last_dim = tf.compat.dimension_value(input_shape[-1])
@@ -72,6 +88,7 @@ class CustomDense(Dense):
                 f"Full input shape received: {input_shape}"
             )
         self.input_spec = InputSpec(min_ndim=2, axes={-1: last_dim})
+
         # pylint: disable=attribute-defined-outside-init
         if self.name == "MatMul":
             wt_name = "kernel"
@@ -80,6 +97,7 @@ class CustomDense(Dense):
         else:
             wt_name = "unknown"
 
+        # pylint: disable=unexpected-keyword-arg
         self.kernel = self.add_weight(
             name=wt_name,
             shape=[last_dim, self.units*4],
@@ -93,6 +111,7 @@ class CustomDense(Dense):
         self.bias = None
         self.built = True
 
+# pylint: disable=too-many-ancestors
 class BiasAdd(Layer):
 
     """Layer to add bias"""
@@ -117,9 +136,10 @@ class BiasAdd(Layer):
         """build method"""
 
         # pylint: disable=protected-access
-        default_caching_device = recurrent._caching_device(self)
+        default_caching_device = caching_device(self)
 
         # pylint: disable=attribute-defined-outside-init
+        # pylint: disable=unexpected-keyword-arg
         self.bias = self.add_weight(
             shape=(self.units*4,),
             name="bias",
@@ -129,11 +149,12 @@ class BiasAdd(Layer):
             caching_device=default_caching_device,
         )
 
+    # pylint: disable=arguments-differ
     def call(self, inputs, **kwargs):
 
         """call method"""
 
-        return K.bias_add(inputs, self.bias)
+        return backend.bias_add(inputs, self.bias)
 
     def get_config(self):
 
@@ -162,10 +183,8 @@ class QcQuantizedLSTMCell(LSTMCell):
 
     """Class overriding LSTM Cell from Keras"""
 
-    # pylint: disable=too-many-arguments
     def __init__(self,
                  units,
-                 recurrent_activation='sigmoid',
                  quant_scheme: Union[QuantScheme, str] = 'tf_enhanced',
                  rounding_mode: str = 'nearest',
                  default_output_bw: int = 8,

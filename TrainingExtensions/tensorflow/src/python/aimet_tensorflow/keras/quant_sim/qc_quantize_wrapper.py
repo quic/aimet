@@ -207,30 +207,17 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         if self.input_quantizers is None:
             self.input_quantizers = []
             for i in range(self._num_inputs):
-                if 'in_quant_enabled' in kwargs.keys():
-                    self.input_quantizers.append(
-                        ActivationTensorQuantizer(self._layer_to_wrap,
-                                                  self._layer_to_wrap.name + '_input_quantizer_' + str(i),
-                                                  self._activation_quant_settings.quant_scheme,
-                                                  self._activation_quant_settings.round_mode,
-                                                  self._activation_quant_settings.bitwidth,
-                                                  self._activation_quant_settings.data_type,
-                                                  self._activation_quant_settings.is_symmetric,
-                                                  self._activation_quant_settings.use_strict_symmetric,
-                                                  self._activation_quant_settings.use_unsigned_symmetric,
-                                                  enabled=kwargs['in_quant_enabled']))
-                else:
-                    self.input_quantizers.append(
-                        ActivationTensorQuantizer(self._layer_to_wrap,
-                                                  self._layer_to_wrap.name + '_input_quantizer_' + str(i),
-                                                  self._activation_quant_settings.quant_scheme,
-                                                  self._activation_quant_settings.round_mode,
-                                                  self._activation_quant_settings.bitwidth,
-                                                  self._activation_quant_settings.data_type,
-                                                  self._activation_quant_settings.is_symmetric,
-                                                  self._activation_quant_settings.use_strict_symmetric,
-                                                  self._activation_quant_settings.use_unsigned_symmetric,
-                                                  enabled=True))
+                self.input_quantizers.append(
+                    ActivationTensorQuantizer(self._layer_to_wrap,
+                                              self._layer_to_wrap.name + '_input_quantizer_' + str(i),
+                                              self._activation_quant_settings.quant_scheme,
+                                              self._activation_quant_settings.round_mode,
+                                              self._activation_quant_settings.bitwidth,
+                                              self._activation_quant_settings.data_type,
+                                              self._activation_quant_settings.is_symmetric,
+                                              self._activation_quant_settings.use_strict_symmetric,
+                                              self._activation_quant_settings.use_unsigned_symmetric,
+                                              enabled=kwargs.get('in_quant_enabled', True)))
 
         # Create quantizer variables and quantizers for outputs if not yet existing
         if self.output_quantizers is None:
