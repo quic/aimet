@@ -114,10 +114,9 @@ def tie_blockwise_linear_quantizers(quantsim: QuantizationSimModel):
     :param quantsim: Quantsim model containing BlockwiseLinear modules to tie output quantizers for.
     """
     for module in quantsim.model.modules():
-        if isinstance(module, BlockwiseLinear):
-            output_quantizer = module.linears[0].output_quantizers[0]
+        if isinstance(module, BlockwiseLinear) and module.elementwise_adds is not None:
+            quantizer_to_use = module.elementwise_adds[-1].output_quantizers[0]
             for linear in module.linears:
-                linear.output_quantizers[0] = output_quantizer
-            if module.elementwise_adds is not None:
-                for add in module.elementwise_adds:
-                    add.output_quantizers[0] = output_quantizer
+                linear.output_quantizers[0] = quantizer_to_use
+            for add in module.elementwise_adds:
+                add.output_quantizers[0] = quantizer_to_use

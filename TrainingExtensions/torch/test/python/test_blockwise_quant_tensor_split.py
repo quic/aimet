@@ -83,11 +83,38 @@ class NestedModel(torch.nn.Module):
         x = self.sigmoid(x)
         return x
 
+@pytest.fixture(scope='module')
+def create_per_channel_config():
+    quantsim_config = {
+        "defaults": {
+            "ops": {
+                "is_output_quantized": "True",
+                "is_symmetric": "False"
+            },
+            "params": {
+                "is_quantized": "False",
+                "is_symmetric": "True"
+            },
+            "per_channel_quantization": "True",
+        },
+        "params": {},
+        "op_type": {
+            'Split': {
+                'is_output_quantized': False
+            }
+        },
+        "supergroups": [],
+        "model_input": {},
+        "model_output": {}
+    }
+    with open('./data/quantsim_config.json', 'w') as f:
+        json.dump(quantsim_config, f)
+
 @pytest.mark.parametrize('model, dummy_input, block_size', [(torch.nn.Linear(8, 3), torch.randn(1, 8), 3),
                                                              (torch.nn.Linear(8, 3, bias=False), torch.randn(1, 8), 3),
                                                              (torch.nn.Linear(3, 2), torch.randn(1, 3), 3),
                                                              (torch.nn.Linear(3, 2), torch.randn(1, 3), 4)])
-def test_blockwise_linears(model, dummy_input, block_size):
+def test_blockwise_linear(model, dummy_input, block_size):
     blockwise_linear = BlockwiseLinear(model, block_size=block_size)
     orig_out = model(dummy_input)
     new_out = blockwise_linear(dummy_input)
@@ -111,31 +138,7 @@ def test_replace_linears_for_blockwise_quant():
     new_out = model(dummy_input)
     assert torch.allclose(orig_out, new_out, atol=1e-6)
 
-def test_quantize_blockwise_linear():
-    quantsim_config = {
-        "defaults": {
-            "ops": {
-                "is_output_quantized": "True",
-                "is_symmetric": "False"
-            },
-            "params": {
-                "is_quantized": "False",
-                "is_symmetric": "True"
-            },
-            "per_channel_quantization": "True",
-        },
-        "params": {},
-        "op_type": {
-            'Split': {
-                'is_output_quantized': False
-            }
-        },
-        "supergroups": [],
-        "model_input": {},
-        "model_output": {}
-    }
-    with open('./data/quantsim_config.json', 'w') as f:
-        json.dump(quantsim_config, f)
+def test_quantize_blockwise_linear(create_per_channel_config):
     dummy_input = torch.randn(1, 8)
     model = BlockwiseLinear(torch.nn.Linear(8, 3), 3)
     qsim = QuantizationSimModel(model, dummy_input=dummy_input)
@@ -154,8 +157,8 @@ def test_quantize_blockwise_linear():
     # Temporary hack to enable model input split op input quantizer while handling for CG split op is reworked
     qsim.model.split.input_quantizers[0].enabled = True
 
-    tie_blockwise_linear_quantizers(qsim)
     qsim.compute_encodings(lambda m, _: m(dummy_input), None)
+    tie_blockwise_linear_quantizers(qsim)
     _ = qsim.model(dummy_input)
 
     assert (qsim.model.linears[0].output_quantizers[0].encoding.max ==
@@ -167,31 +170,7 @@ def test_quantize_blockwise_linear():
     assert (qsim.model.linears[0].output_quantizers[0].encoding.max ==
             qsim.model.elementwise_adds[1].output_quantizers[0].encoding.max)
 
-def test_blockwise_quant_with_small_linear():
-    quantsim_config = {
-        "defaults": {
-            "ops": {
-                "is_output_quantized": "True",
-                "is_symmetric": "False"
-            },
-            "params": {
-                "is_quantized": "False",
-                "is_symmetric": "True"
-            },
-            "per_channel_quantization": "True",
-        },
-        "params": {},
-        "op_type": {
-            'Split': {
-                'is_output_quantized': False
-            }
-        },
-        "supergroups": [],
-        "model_input": {},
-        "model_output": {}
-    }
-    with open('./data/quantsim_config.json', 'w') as f:
-        json.dump(quantsim_config, f)
+def test_blockwise_quant_with_small_linear(create_per_channel_config):
     dummy_input = torch.randn(1, 3)
     model = BlockwiseLinear(torch.nn.Linear(3, 2), 3)
     qsim = QuantizationSimModel(model, dummy_input=dummy_input)
@@ -211,31 +190,6 @@ def test_blockwise_quant_with_small_linear():
     assert len(qsim.connected_graph.get_all_ops()) == 1
 
 def test_nested_sequential_linears():
-    quantsim_config = {
-        "defaults": {
-            "ops": {
-                "is_output_quantized": "True",
-                "is_symmetric": "False"
-            },
-            "params": {
-                "is_quantized": "False",
-                "is_symmetric": "True"
-            },
-            "per_channel_quantization": "True",
-        },
-        "params": {},
-        "op_type": {
-            'Split': {
-                'is_output_quantized': False
-            }
-        },
-        "supergroups": [],
-        "model_input": {},
-        "model_output": {}
-    }
-    with open('./data/quantsim_config.json', 'w') as f:
-        json.dump(quantsim_config, f)
-    dummy_input = torch.randn(1, 8)
     model = NestedModel()
     replace_linears_for_blockwise_quant(model, block_size=2)
     num_blockwise_linears = 0
