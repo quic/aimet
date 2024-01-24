@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2020-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2020-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -56,6 +56,7 @@ from aimet_torch.tensor_quantizer import TensorQuantizer
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.onnx_utils import map_torch_types_to_onnx, pytorch_functional_name_to_onnx_dict
 from aimet_torch.translation_mapping import aimet_op_to_backend_op_name_map
+from aimet_torch.experimental.v2.quantization.wrappers.builder import LazyQuantizeWrapper
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 MAP_PYTORCH_PARAM_NAME_TO_QUANTSIM_NAME = {
@@ -735,7 +736,7 @@ def _create_module_to_quantsim_wrapper_dict(model: torch.nn.Module) -> Dict[torc
     """
     module_to_quantsim_wrapper_dict = {}
     for _, module in model.named_modules():
-        if isinstance(module, QcQuantizeWrapper):
+        if isinstance(module, (QcQuantizeWrapper, LazyQuantizeWrapper)):
             module_to_quantsim_wrapper_dict[module._module_to_wrap] = module      # pylint: disable=protected-access
     return module_to_quantsim_wrapper_dict
 

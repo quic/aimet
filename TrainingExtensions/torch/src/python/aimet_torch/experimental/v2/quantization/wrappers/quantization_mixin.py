@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2023-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -37,23 +37,52 @@
 # pylint: skip-file
 """ Placeholder for _QuantizationMixin definition, to be deleted/moved/updated """
 
-from abc import ABC, abstractmethod
+from typing import Union, Tuple, Iterable, Optional, Mapping
+from dataclasses import dataclass
+from torch import nn
 
-class _QuantizationMixin(ABC):
+
+@dataclass
+class _TensorSpec:
+    """ Spec class for quantizer initialization """
+    shape: Tuple[int, ...]
+    bitwidth: int
+    symmetric: bool
+    qscheme: None
+
+
+@dataclass
+class _ModuleSpec:
+    """ Spec class for wrapper initialization """
+    input_spec: Iterable[Optional[_TensorSpec]]
+    param_spec: Mapping[str, Optional[_TensorSpec]]
+    output_spec: Iterable[Optional[_TensorSpec]]
+
+
+class _QuantizationMixin:
     """ Base class for quantized modules """
 
-    @abstractmethod
+    @classmethod
+    def from_module(cls, module: nn.Module, spec: _ModuleSpec) -> Union['_QuantizationMixin', nn.Module]:
+        ...
+
+    def input_quantizers(self):
+        ...
+
+    def output_quantizers(self):
+        ...
+
+    def param_quantizers(self):
+        ...
+
     def export_input_encodings(self):
         ...
 
-    @abstractmethod
     def export_output_encodings(self):
         ...
 
-    @abstractmethod
     def export_param_encodings(self):
         ...
 
-    @abstractmethod
     def get_original_module(self):
         ...
