@@ -61,6 +61,7 @@ def get_original_model_artifacts():
     for node in model.graph.node:
         output_names.extend(node.output)
     input_dict = make_dummy_input(model)
+    output_names = [name.replace('/', '_').replace('.', '_') for name in output_names]  # sanitization to get valid file names
     return model, output_names, input_dict
 
 
@@ -77,6 +78,7 @@ def get_quantsim_artifacts():
     for node in quantsim.model.model.graph.node:
         output_names.extend(node.output)
     output_names = [name[:-len('_updated')] for name in output_names if name.endswith('_updated')]
+    output_names = [name.replace('/', '_').replace('.', '_') for name in output_names]  # sanitization to get valid file names
 
     return quantsim, output_names, input_dict
 
@@ -95,10 +97,10 @@ class TestLayerOutput:
         layer_output = LayerOutput(model, providers, temp_dir_path)
         output_name_to_output_val_dict = layer_output.get_outputs(input_dict)
 
-        # Verify whether outputs are generated for all the layers
+        # Verify whether all outputs are generated and have sanitized names
         for name in output_names:
             assert name in output_name_to_output_val_dict, \
-                "Output not generated for " + name
+                "Output not generated: " + name
 
         # Verify whether captured outputs are correct. This can only be checked for final output of the model
         session = QuantizationSimModel.build_session(model, providers)
@@ -120,10 +122,10 @@ class TestLayerOutput:
         layer_output = LayerOutput(quantsim.model.model, providers, temp_dir_path)
         output_name_to_output_val_dict = layer_output.get_outputs(input_dict)
 
-        # Verify whether outputs are generated for all the layers
+        # Verify whether all outputs are generated and have sanitized names
         for name in output_names:
             assert name in output_name_to_output_val_dict, \
-                "Output not generated for " + name
+                "Output not generated: " + name
 
         # Verify whether captured outputs are correct. This can only be checked for final output of the model
         session = QuantizationSimModel.build_session(quantsim.model.model, providers)
