@@ -1046,6 +1046,7 @@ def get_inout_tensors_dtypes_for_cast_modules(model: torch.nn.Module, input_tens
     run_hook_for_layers_with_given_input(model, input_tensor, record_dtypes)
     return inout_dtypes_map
 
+
 def create_encoding_dict(encoding: libpymo.TfEncoding, quantizer, propagate_encodings: bool) -> Union[Dict, None]:
     """
     Create encoding dictionary from encoding object
@@ -1077,6 +1078,7 @@ def create_encoding_dict(encoding: libpymo.TfEncoding, quantizer, propagate_enco
             enc_dict = None
     return enc_dict
 
+
 def get_propagated_encoding_dict(encoding_dict: List[Dict[str, any]]) -> List[Dict[str, any]]:
     """
     Creates encoding dictionary for intermediate ops (when one PyTorch ops results in multiple ONNX nodes), which are
@@ -1086,3 +1088,19 @@ def get_propagated_encoding_dict(encoding_dict: List[Dict[str, any]]) -> List[Di
     :return: Encoding dictionary for intermediate activations of the op
     """
     return [{"bitwidth": encoding_dict[0]["bitwidth"], "dtype": encoding_dict[0]["dtype"]}]
+
+
+def get_v1_quant_scheme_for_initialization(quant_scheme: QuantScheme) -> QuantScheme:
+    """
+    Convert v1 quant scheme into v1 quant scheme for initialization
+
+    :param quant_scheme: v1 quant scheme from quantsim init parameter
+    :return: v1 quant scheme for initialization
+    """
+    if quant_scheme == QuantScheme.training_range_learning_with_tf_init:
+        return QuantScheme.post_training_tf
+
+    if quant_scheme == QuantScheme.training_range_learning_with_tf_enhanced_init:
+        return QuantScheme.post_training_tf_enhanced
+
+    return quant_scheme

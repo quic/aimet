@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2023-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -42,7 +42,7 @@ import copy
 import os
 import json
 
-from aimet_torch.experimental.v2.quantization.quantization_mixin import _QuantizationMixin
+from aimet_torch.experimental.v2.quantization.wrappers.quantization_mixin import _QuantizationMixin
 from aimet_torch.elementwise_ops import Add
 from aimet_torch import onnx_utils
 from aimet_torch.quantsim import QuantizationSimModel, OnnxExportApiArgs

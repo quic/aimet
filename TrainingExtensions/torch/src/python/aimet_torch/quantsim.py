@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -66,6 +66,7 @@ from aimet_torch import torchscript_utils, utils, transformer_utils, onnx_utils
 from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs, CustomMarker, get_pytorch_name_from_onnx_name
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
+from aimet_torch.experimental.v2.quantization.wrappers.builder import LazyQuantizeWrapper
 
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -232,6 +233,28 @@ class QuantizationSimModel:
         self._hw_version = quantsim_configurator._get_hw_version()
         self._supported_kernels = quantsim_configurator.get_supported_kernels()
         self._validate_supported_kernels_for_quantizers(SUPPORTED_KERNELS_ACTION)
+
+        # Initialize real wrappers using collected information
+        self._realize_quant_wrappers_in_model(self.model)
+
+    def _realize_quant_wrappers_in_model(self, model: torch.nn.Module):
+        """
+        Prepare QuantSim for compute encodings. Resets encodings for each quantizable layer and sets mode to Analysis.
+        Realize quant wrappers using collected information in LazyQuantWrapper.
+
+        :param model: model containing modules wrapped with LazyQuantWrapper
+        """
+        for module_name, module_ref in model.named_children():
+            if isinstance(module_ref, LazyQuantizeWrapper):
+                quantized_module = self._realize_quant_wrapper(module_ref)
+                setattr(model, module_name, quantized_module)
+
+            elif not utils.is_leaf_module(module_ref):
+                self._realize_quant_wrappers_in_model(module_ref)
+
+    @staticmethod
+    def _realize_quant_wrapper(module: torch.nn.Module) -> QcQuantizeWrapper:
+        return module.realize_v1_wrapper()
 
     def get_supported_kernels(self) -> Dict:
         """
@@ -662,7 +685,7 @@ class QuantizationSimModel:
         :return: None
         """
         for module in self.model.modules():
-            if isinstance(module, (QcQuantizeWrapper, QcQuantizeRecurrent)):
+            if isinstance(module, (QcQuantizeWrapper, QcQuantizeRecurrent, LazyQuantizeWrapper)):
                 if param_name_to_exclude in module.param_quantizers:
                     module.param_quantizers[param_name_to_exclude].enabled = False
 
@@ -754,7 +777,7 @@ class QuantizationSimModel:
 
         for attention_head, (mask_add_quantizer_wrapper, mask_add_name) in attention_with_mask_add_quantizer_dict.items():
 
-            assert isinstance(mask_add_quantizer_wrapper, StaticGridQuantWrapper)
+            assert isinstance(mask_add_quantizer_wrapper, (StaticGridQuantWrapper, LazyQuantizeWrapper))
 
             # clamping needs to be done only if data type is int
             if mask_add_quantizer_wrapper.output_quantizers and \
@@ -762,7 +785,7 @@ class QuantizationSimModel:
 
                 module_to_quantize = mask_add_quantizer_wrapper._module_to_wrap
 
-                quantizer_wrapper_type = qc_quantize_modules_dict.get(type(module_to_quantize), StaticGridQuantWrapper)
+                quantizer_wrapper_type = qc_quantize_modules_dict.get(type(module_to_quantize), LazyQuantizeWrapper)
 
                 # Add a quantizer set to tf mode and bw to 16 and copy over remaining attributes
                 # we need 16 bit to retain the max representation for this quantizer.
@@ -1341,17 +1364,12 @@ class QuantizationSimModel:
 
         # Set quantizer to be a module replacer if it is in qc_quantize_modules_dict, otherwise set as
         # StaticGridQuantWrapper.
-        quantizer_wrapper_type = qc_quantize_modules_dict.get(type(module_to_quantize), StaticGridQuantWrapper)
+        quantizer_wrapper_type = qc_quantize_modules_dict.get(type(module_to_quantize), LazyQuantizeWrapper)
 
-        if self._quant_scheme in [QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced,
-                                  QuantScheme.post_training_percentile]:
+        if quantizer_wrapper_type == LazyQuantizeWrapper:
             quant_scheme_for_initialization = self._quant_scheme
-
-        elif self._quant_scheme == QuantScheme.training_range_learning_with_tf_init:
-            quant_scheme_for_initialization = QuantScheme.post_training_tf
-
-        elif self._quant_scheme == QuantScheme.training_range_learning_with_tf_enhanced_init:
-            quant_scheme_for_initialization = QuantScheme.post_training_tf_enhanced
+        else:
+            quant_scheme_for_initialization = utils.get_v1_quant_scheme_for_initialization(self._quant_scheme)
 
         # TODO add quant_scheme_for_initialization for FP8 case
         quantized_module = quantizer_wrapper_type(module_to_quantize, self._default_param_bw, self._default_output_bw,
@@ -1389,7 +1407,7 @@ class QuantizationSimModel:
 
         if self.connected_graph is not None:
             for _, qc_quantize_wrapper in self.quant_wrappers():
-                if isinstance(qc_quantize_wrapper, QcQuantizeWrapper):
+                if isinstance(qc_quantize_wrapper, (QcQuantizeWrapper, LazyQuantizeWrapper)):
                     # Only handling QcQuantWrappers and not QcQuantizeRecurrents
                     # pylint: disable=protected-access
                     conn_graph_op = self.connected_graph._module_to_op_dict.get(qc_quantize_wrapper._module_to_wrap)
@@ -1617,7 +1635,7 @@ class QuantizationSimModel:
         Generator for yielding all quantization wrappers and their names
         """
         for name, module in self.model.named_modules():
-            if isinstance(module, (QcQuantizeWrapper, QcQuantizeRecurrent)):
+            if isinstance(module, (QcQuantizeWrapper, QcQuantizeRecurrent, LazyQuantizeWrapper)):
                 yield name, module
 
     def run_modules_for_traced_custom_marker(self, module_list: List[torch.nn.Module], dummy_input):
@@ -1692,7 +1710,7 @@ class QuantizationSimModel:
 
         # retrieve all the act and param quantizer candidates, and validate them against supported_kernels
         for name, module in self.model.named_modules():
-            if isinstance(module, QcQuantizeWrapper) and module.supported_kernels:
+            if isinstance(module, (QcQuantizeWrapper, LazyQuantizeWrapper)) and module.supported_kernels:
                 supported_kernels = []
                 for supported_kernel in module.supported_kernels:
                     # ((activation bitwidth, activation data type), (param bitwidth, param data type))

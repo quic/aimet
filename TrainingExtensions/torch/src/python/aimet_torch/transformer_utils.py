@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -39,6 +39,7 @@
 from typing import Dict
 import torch
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
+from aimet_torch.experimental.v2.quantization.wrappers.builder import LazyQuantizeWrapper
 
 # current implementation sets mask to -6 by default.
 # user can register for override on mask add op in an attention head.
@@ -97,8 +98,8 @@ def get_attention_with_mask_add_quantizer_dict(model: torch.nn.Module) -> Dict:
                 if name is supported_attention_mask_override_dict[module_name]:
 
                     # Override the quantizer that was added by default, to tf mode
-                    if isinstance(sub_module, QcQuantizeWrapper) and sub_module.output_quantizers \
-                            and sub_module.output_quantizers[0].enabled:
+                    if isinstance(sub_module, (QcQuantizeWrapper, LazyQuantizeWrapper)) \
+                        and sub_module.output_quantizers and sub_module.output_quantizers[0].enabled:
 
                         attention_with_mask_adds_dict[module] = (sub_module, name)
 
