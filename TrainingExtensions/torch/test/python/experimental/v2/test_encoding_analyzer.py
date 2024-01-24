@@ -166,7 +166,7 @@ class TestMinMaxEncodingAnalyzer():
 @pytest.mark.skip('Tests skipped due to TDD')
 class TestHistogramEncodingAnalyzer:
     @pytest.fixture
-    def create_histogram_based_encoding_analyzers(self, request):
+    def histogram_based_encoding_analyzers(self, request):
         min_max_shape = request.param[0]
         num_bins = request.param[1]
 
@@ -188,9 +188,9 @@ class TestHistogramEncodingAnalyzer:
         with pytest.raises(ValueError):
             SqnrEncodingAnalyzer(num_bins = num_bins, shape=min_max_shape)
         
-    @pytest.mark.parametrize("create_histogram_based_encoding_analyzers", [((1,), 3)], indirect=True)
-    def test_merge_stats(self, create_histogram_based_encoding_analyzers):
-        for encoding_analyzer in create_histogram_based_encoding_analyzers:
+    @pytest.mark.parametrize("histogram_based_encoding_analyzers", [((1,), 3)], indirect=True)
+    def test_merge_stats(self, histogram_based_encoding_analyzers):
+        for encoding_analyzer in histogram_based_encoding_analyzers:
             input_tensor_1 = [2.0, 3.5, 4.2, 5.0]
             encoding_analyzer.update_stats(input_tensor_1)
             assert encoding_analyzer.stats.min == 2
@@ -203,9 +203,9 @@ class TestHistogramEncodingAnalyzer:
             assert encoding_analyzer.stats.max == 8
             assert encoding_analyzer.stats.histogram == [2, 3, 3]
     
-    @pytest.mark.parametrize("create_histogram_based_encoding_analyzers", [((1,), 3)], indirect=True)
-    def test_merge_stats_same_tensor(self, create_histogram_based_encoding_analyzers):
-        for encoding_analyzer in create_histogram_based_encoding_analyzers:
+    @pytest.mark.parametrize("histogram_based_encoding_analyzers", [((1,), 3)], indirect=True)
+    def test_merge_stats_same_tensor(self, histogram_based_encoding_analyzers):
+        for encoding_analyzer in histogram_based_encoding_analyzers:
             input_tensor_1 = [2.0, 3.5, 4.2, 5.0]
             encoding_analyzer.update_stats(input_tensor_1)
             assert encoding_analyzer.stats.min == 2
@@ -218,11 +218,11 @@ class TestHistogramEncodingAnalyzer:
             assert encoding_analyzer.stats.max == 5
             assert encoding_analyzer.stats.histogram == [2, 2, 4]
     
-    @pytest.mark.parametrize("create_histogram_based_encoding_analyzers", [((1,), 3)], indirect=True)
-    def test_ignore_inf_inputs(self, create_histogram_based_encoding_analyzers):
-        for encoding_analyzer in create_histogram_based_encoding_analyzers:
+    @pytest.mark.parametrize("histogram_based_encoding_analyzers", [((1,), 3)], indirect=True)
+    def test_handle_inf_inputs(self, histogram_based_encoding_analyzers):
+        for encoding_analyzer in histogram_based_encoding_analyzers:
             input_tensor = [-torch.inf, -22, 5, 73, torch.inf]
             encoding_analyzer.update_stats(input_tensor)
-            assert encoding_analyzer.stats.min == -22
-            assert encoding_analyzer.stats.max == 73
-            assert sum(encoding_analyzer.stats.histogram) == 3
+            assert encoding_analyzer.stats.min == -torch.inf
+            assert encoding_analyzer.stats.max == torch.inf
+            assert sum(encoding_analyzer.stats.histogram) == 5
