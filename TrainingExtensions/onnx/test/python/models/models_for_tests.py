@@ -1631,28 +1631,28 @@ def build_dummy_model_with_dynamic_input():
                                                 shape=['batch_size', 10])
     conv_node = helper.make_node('Conv',
                                  ['input', 'conv_w', 'conv_b'],
-                                 ['3'],
+                                 ['conv/output.3'],
                                  'conv',
                                  kernel_shape=[3, 3],
                                  pads=[1, 1, 1, 1],)
     relu_node = helper.make_node('Relu',
-                                 ['3'],
-                                 ['4'],
+                                 ['conv/output.3'],
+                                 ['relu/output.4'],
                                  'relu')
     maxpool_node = helper.make_node('MaxPool',
-                                    ['4'],
-                                    ['5'],
+                                    ['relu/output.4'],
+                                    ['maxpool/output.5'],
                                     'maxpool',
                                     kernel_shape=[3, 3],
                                     pads=[1, 1, 1, 1],
                                     strides=[2, 2],)
 
     flatten_node = helper.make_node('Flatten',
-                                    ['5'],
-                                    ['6'],
+                                    ['maxpool/output.5'],
+                                    ['flatten/output.6'],
                                     'flatten')
     fc_node = helper.make_node('Gemm',
-                               ['6', 'fc_w', 'fc_b'],
+                               ['flatten/output.6', 'fc_w', 'fc_b'],
                                ['output'],
                                'fc')
 
