@@ -140,7 +140,16 @@ class _QuantizationMixin(abc.ABC):
         Create an instance of quantized module from a regular moudle instance
         """
         # pylint: disable=protected-access
-        qtzn_module_cls = cls.wrap(type(module))
+        module_cls = type(module)
+        qtzn_module_cls = cls.quantized_classes_map.get(module_cls, None)
+
+        if not qtzn_module_cls:
+            raise RuntimeError(
+                f'The quantized module definition of {module_cls} is not registered. '
+                f'Please register the quantized module definition of {module_cls} '
+                f'using `@{cls.__name__}.implements({module_cls.__name__})` decorator.'
+            )
+
         qtzn_module = cls.__new__(qtzn_module_cls)
 
         qtzn_module.__dict__ = module.__dict__.copy()
