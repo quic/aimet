@@ -185,6 +185,9 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
         finally:
             self.encoding_analyzer.reset_stats()
 
+    def extra_repr(self) -> str:
+        return f'shape={self.shape}, bitwidth={self.bitwidth}, symmetric={self.symmetric}'
+
 
 class Quantize(_QuantizerBase):
     """
