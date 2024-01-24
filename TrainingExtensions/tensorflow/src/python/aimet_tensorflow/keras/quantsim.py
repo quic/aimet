@@ -35,6 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Quantsim for Keras """
+from __future__ import annotations
 
 from dataclasses import dataclass
 import json
@@ -149,6 +150,28 @@ class QuantizationSimModel(tf.keras.Model):
             _logger.error(error_msg)
             raise NotImplementedError(error_msg)
 
+        sep_conv_found = self.check_separable_conv(self._model_without_wrappers)
+        if sep_conv_found:
+            # Raising an assertion error incase there's SeparableConv2D in the model because in this case we have two sets of weights: Depthwise
+            # and Pointwise. For depthwise kernels, LAST TWO AXIS should be considered and for pointwise kernels LAST AXIS
+            # should be considered, which is not handled here. Running model preparer beforehand will resolve this as there the
+            # SeparableConv2D is splitted into two layers Depthwise and Pointwise seperately.
+            raise AssertionError("SeparableConv2D found in the model. Please run model preparer before calling QuantizationSimModel")
+
+    def check_separable_conv(self, model: tf.keras.models.Model | tf.keras.Sequential) -> bool:
+        """
+        Checks for SeparableConv2D layer in the model
+        :param model: Keras Model
+        :return: Boolean value, True if SeperableConv layer is found else False
+        """
+        for layer in model.layers:
+            if isinstance(layer, tf.keras.Sequential):
+                if self.check_separable_conv(layer):
+                    return True
+            elif isinstance(layer, tf.keras.layers.SeparableConv2D):
+                return True
+        return False
+
     def _get_quantizer_list(self) -> Tuple[List, List, List]:
         """
         Method to provide a list of input, output and parameter quantizers
@@ -235,13 +258,6 @@ class QuantizationSimModel(tf.keras.Model):
 
             if isinstance(layer, tf.keras.Sequential):
                 return tf.keras.models.clone_model(layer, clone_function=wrap_layer)
-
-            if isinstance(layer, tf.keras.layers.SeparableConv2D):
-                # Raising an assertion error incase there's SeparableConv2D because in this case we have two sets of weights: Depthwise
-                # and Pointwise. For depthwise kernels, LAST TWO AXIS should be considered and for pointwise kernels LAST AXIS
-                # should be considered, which is not handled here. Running model preparer beforehand will resolve this as there the
-                # SeparableConv2D is splitted into two layers Depthwise and Pointwise seperately.
-                raise AssertionError("SeparableConv2D found in the model. Please run model preparer before calling QuantizationSimModel")
 
             if isinstance(layer, unquantizable_modules) or layer.submodules:
                 return layer
