@@ -40,7 +40,7 @@ import torch
 import torch.nn.functional as F
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 from aimet_torch.experimental.v2.quantization.modules.quantize import QuantizeDequantize
-# from aimet_torch.experimental.v2.quantization.fake_quant import FakeQuantizedSoftmax, _ModuleSpec, _TensorSpec
+from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizedSoftmax
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import CalibrationMethod
 
 
@@ -49,7 +49,6 @@ def input():
     return torch.arange(100).view(10, 10) / 100
 
 
-@pytest.mark.skip(reason='Skip for TDD')
 class TestFakeQuantizedSoftmax:
     def test_no_spec(self, input):
         """

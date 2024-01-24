@@ -41,7 +41,7 @@ from torch import nn
 import torch.nn.functional as F
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 from aimet_torch.experimental.v2.quantization.modules.quantize import QuantizeDequantize
-# from aimet_torch.experimental.v2.quantization.fake_quant import FakeQuantizedLinear, _ModuleSpec, _TensorSpec, _FakeQuantizationMixin
+from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizedLinear, FakeQuantizationMixin
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import CalibrationMethod
 
 
@@ -50,7 +50,6 @@ def input():
     return torch.arange(-5, 5) / 10
 
 
-@pytest.mark.skip(reason='Skip for TDD')
 class TestFakeQuantizedLinear:
     def test_no_spec(self, input):
         quant_linear = FakeQuantizedLinear(10, 10)
@@ -193,7 +192,7 @@ class TestFakeQuantizedLinear:
         Given: Instantiate a fake-quantized module using `FakeQuantMixin.from_module` with some spec
         """
         fp_linear = nn.Linear(10, 10)
-        quant_linear = _FakeQuantizationMixin.from_module(fp_linear)
+        quant_linear = FakeQuantizationMixin.from_module(fp_linear)
         quant_linear.input_quantizers[0] = QuantizeDequantize((1,),
                                                               bitwidth=8,
                                                               symmetric=False,
