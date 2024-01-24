@@ -170,9 +170,9 @@ class TestHistogramEncodingAnalyzer:
         min_max_shape = request.param[0]
         num_bins = request.param[1]
 
-        mse_encoding_analyzer = MseEncodingAnalyzer(shape=min_max_shape, num_bins = num_bins)
-        percentile_encoding_analyzer = PercentileEncodingAnalyzer(quantile=0.99, shape=min_max_shape, num_bins = num_bins)
-        sqnr_encoding_analyzer = SqnrEncodingAnalyzer(shape=min_max_shape, num_bins = num_bins)
+        mse_encoding_analyzer = MseEncodingAnalyzer(shape= min_max_shape, num_bins = num_bins)
+        percentile_encoding_analyzer = PercentileEncodingAnalyzer(percentile=99, shape= min_max_shape, num_bins = num_bins)
+        sqnr_encoding_analyzer = SqnrEncodingAnalyzer(shape= min_max_shape, num_bins = num_bins)
         encoding_analyzer_list = [mse_encoding_analyzer, percentile_encoding_analyzer, sqnr_encoding_analyzer]
         yield encoding_analyzer_list
 
@@ -183,7 +183,7 @@ class TestHistogramEncodingAnalyzer:
             MseEncodingAnalyzer(num_bins=num_bins)
         
         with pytest.raises(ValueError):
-            PercentileEncodingAnalyzer(num_bins = num_bins, quantile=0.99, shape=min_max_shape)
+            PercentileEncodingAnalyzer(num_bins = num_bins, percentile=99, shape=min_max_shape)
         
         with pytest.raises(ValueError):
             SqnrEncodingAnalyzer(num_bins = num_bins, shape=min_max_shape)
@@ -196,12 +196,14 @@ class TestHistogramEncodingAnalyzer:
             assert encoding_analyzer.stats.min == 2
             assert encoding_analyzer.stats.max == 5
             assert encoding_analyzer.stats.histogram == [1, 1, 2]
+            assert encoding_analyzer.stats.bin_edges == [2, 3, 4, 5]
             
             input_tensor_2 = [5.3, 6.4, 7.0, 8.0]
             encoding_analyzer.update_stats(input_tensor_2)
             assert encoding_analyzer.stats.min == 2
             assert encoding_analyzer.stats.max == 8
             assert encoding_analyzer.stats.histogram == [2, 3, 3]
+            assert encoding_analyzer.stats.bin_edges == [2, 4, 6, 8]
     
     @pytest.mark.parametrize("histogram_based_encoding_analyzers", [((1,), 3)], indirect=True)
     def test_merge_stats_same_tensor(self, histogram_based_encoding_analyzers):
@@ -211,18 +213,35 @@ class TestHistogramEncodingAnalyzer:
             assert encoding_analyzer.stats.min == 2
             assert encoding_analyzer.stats.max == 5
             assert encoding_analyzer.stats.histogram == [1, 1, 2]
+            assert encoding_analyzer.stats.bin_edges == [2, 3, 4, 5]
             
             input_tensor_2 = [2.0, 3.5, 4.2, 5.0]
             encoding_analyzer.update_stats(input_tensor_2)
             assert encoding_analyzer.stats.min == 2
             assert encoding_analyzer.stats.max == 5
             assert encoding_analyzer.stats.histogram == [2, 2, 4]
+            assert encoding_analyzer.stats.bin_edges == [2, 3, 4, 5]
+    
+    @pytest.mark.parametrize("histogram_based_encoding_analyzers", [((1,), 5)], indirect=True)
+    def test_handle_outliers(self, histogram_based_encoding_analyzers):
+        for encoding_analyzer in histogram_based_encoding_analyzers:
+            input_tensor =  torch.arange(start=0, end=100, step=0.5, dtype=torch.float)
+            outliers = torch.tensor([torch.inf, -torch.inf])
+            input_tensor = torch.cat((input_tensor, outliers), 1)
+            encoding_analyzer.update_stats(input_tensor)
+            assert encoding_analyzer.stats.min == 0
+            assert encoding_analyzer.stats.max == 99.5
+            assert sum(encoding_analyzer.stats.histogram) == [40, 40, 40, 40, 40]
+            assert encoding_analyzer.stats.bin_edge == [0, 19.9, 39.8, 59.7, 79.6, 99.5]
     
     @pytest.mark.parametrize("histogram_based_encoding_analyzers", [((1,), 3)], indirect=True)
     def test_handle_inf_inputs(self, histogram_based_encoding_analyzers):
         for encoding_analyzer in histogram_based_encoding_analyzers:
-            input_tensor = [-torch.inf, -22, 5, 73, torch.inf]
+            data_type = encoding_analyzer.observer.stats.min.dtype
+            min_inputs = torch.tensor([-torch.finfo(data_type).tiny, -torch.finfo(data_type).tiny * 2, -torch.finfo(data_type).tiny * 3])
+            input_tensor = min_inputs.repeat_interleave(100)
             encoding_analyzer.update_stats(input_tensor)
             assert encoding_analyzer.stats.min == -torch.inf
-            assert encoding_analyzer.stats.max == torch.inf
-            assert sum(encoding_analyzer.stats.histogram) == 5
+            assert encoding_analyzer.stats.min == -1.1754944e-38
+            assert encoding_analyzer.stats.bin_edge == [-torch.inf, -3.5264831e-38, -2.3509887e-38, -1.1754944e-38]
+            assert encoding_analyzer.stats.histogram == [100, 100, 200]
