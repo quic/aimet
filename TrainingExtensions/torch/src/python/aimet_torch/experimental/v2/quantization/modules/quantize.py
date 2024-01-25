@@ -42,7 +42,6 @@ import contextlib
 from collections import OrderedDict
 import functools
 import weakref
-import gc
 
 import torch
 from torch import nn
@@ -96,10 +95,6 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
 
     def _is_initialized(self, param_name) -> bool:
         # pylint: disable=protected-access
-
-        # Trigger garbage collection to remove any remaining circular references
-        # that may affect weak pointers
-        gc.collect()
 
         initial_param_weakref, initial_param_version = self._initial_parameters[param_name]
         initial_param = initial_param_weakref()
