@@ -84,8 +84,8 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
         self._initial_parameters = OrderedDict()
 
         # Raw quantization parameters
-        self._register_quantization_parameter('min', nn.Parameter(-torch.ones(self.shape)))
-        self._register_quantization_parameter('max', nn.Parameter(torch.ones(self.shape)))
+        self.register_quantization_parameter('min', nn.Parameter(-torch.ones(self.shape)))
+        self.register_quantization_parameter('max', nn.Parameter(torch.ones(self.shape)))
 
     @torch.no_grad()
     def __deepcopy__(self, memo):
@@ -94,7 +94,7 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
 
         for name, param in self_copy.named_parameters():
             # Register parameters to the copied quantizer
-            self_copy._register_quantization_parameter(name, param)
+            self_copy.register_quantization_parameter(name, param)
 
             # If the parameter has been already initialized,
             # artificially increment the parameter version to mark as initialized
@@ -118,14 +118,17 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
         self._initial_parameters = OrderedDict()
         for param_name, param in self.named_parameters():
             # Register parameters to the loaded quantizer
-            self._register_quantization_parameter(param_name, param)
+            self.register_quantization_parameter(param_name, param)
 
             # If the parameter has been already initialized,
             # artificially increment the parameter version to mark as initialized
             if param_name in initialized_parameters:
                 param.mul_(1.)
 
-    def _register_quantization_parameter(self, name: str, param: nn.Parameter):
+    def register_quantization_parameter(self, name: str, param: nn.Parameter):
+        """
+        Register quantization parameter.
+        """
         # pylint: disable=protected-access
 
         self.register_parameter(name, param)
