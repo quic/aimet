@@ -37,7 +37,7 @@
 """ Utilities for implementing blockwise quantization using tensor splitting approach """
 
 import torch
-from aimet_torch import elementwise_ops
+from aimet_torch import elementwise_ops, utils
 from aimet_torch.quantsim import QuantizationSimModel
 
 
@@ -94,9 +94,15 @@ def replace_linears_for_blockwise_quant(model: torch.nn.Module, block_size: int)
     :param model: Model to replace nn.Linears for
     :param block_size: Block size to use
     """
-    for name, module in model.named_modules():
+    linear_layers = []
+    for name, module in model.named_children():
         if isinstance(module, torch.nn.Linear):
-            setattr(model, name, BlockwiseLinear(module, block_size))
+            linear_layers.append((name, module))
+        elif not utils.is_leaf_module(module):
+            replace_linears_for_blockwise_quant(module, block_size)
+
+    for name, module in linear_layers:
+        setattr(model, name, BlockwiseLinear(module, block_size))
 
 
 def tie_blockwise_linear_quantizers(quantsim: QuantizationSimModel):
@@ -108,10 +114,9 @@ def tie_blockwise_linear_quantizers(quantsim: QuantizationSimModel):
     :param quantsim: Quantsim model containing BlockwiseLinear modules to tie output quantizers for.
     """
     for module in quantsim.model.modules():
-        if isinstance(module, BlockwiseLinear):
-            output_quantizer = module.linears[0].output_quantizers[0]
+        if isinstance(module, BlockwiseLinear) and module.elementwise_adds is not None:
+            quantizer_to_use = module.elementwise_adds[-1].output_quantizers[0]
             for linear in module.linears:
-                linear.output_quantizers[0] = output_quantizer
-            if module.elementwise_adds is not None:
-                for add in module.elementwise_adds:
-                    add.output_quantizers[0] = output_quantizer
+                linear.output_quantizers[0] = quantizer_to_use
+            for add in module.elementwise_adds:
+                add.output_quantizers[0] = quantizer_to_use
