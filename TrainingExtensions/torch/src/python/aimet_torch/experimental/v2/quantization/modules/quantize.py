@@ -39,9 +39,13 @@
 
 from typing import Optional, Tuple
 import contextlib
+from collections import OrderedDict
 import functools
+import weakref
+import gc
 
 import torch
+from torch import nn
 
 from aimet_torch.experimental.v2.utils import patch_attr, patch_param, StatisticsNotFoundError
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import get_encoding_analyzer_cls
@@ -74,15 +78,53 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
         self.qscheme = qscheme
         self.encoding_analyzer = get_encoding_analyzer_cls(qscheme, shape)
 
+        # param_name -> (weakref of initial parameter, version info of the initial parameter)
+        # This info will be used for judging whether the current parameter has ever been
+        # initialized after it was instantiated.
+        self._initial_parameters = OrderedDict()
+
         # Raw quantization parameters
-        self.register_parameter("min", None)
-        self.register_parameter("max", None)
+        self._register_quantization_parameter('min', nn.Parameter(-torch.ones(self.shape)))
+        self._register_quantization_parameter('max', nn.Parameter(torch.ones(self.shape)))
+
+    def _register_quantization_parameter(self, name: str, param: nn.Parameter):
+        # pylint: disable=protected-access
+
+        self.register_parameter(name, param)
+        param = getattr(self, name)
+        self._initial_parameters[name] = (weakref.ref(param), param._version)
+
+    def _is_initialized(self, param_name) -> bool:
+        # pylint: disable=protected-access
+
+        # Trigger garbage collection to remove any remaining circular references
+        # that may affect weak pointers
+        gc.collect()
+
+        initial_param_weakref, initial_param_version = self._initial_parameters[param_name]
+        initial_param = initial_param_weakref()
+
+        if initial_param is None:
+            # The initial parameter object doesn't exist in memory space anymore.
+            return True
+
+        current_param = getattr(self, param_name)
+
+        if current_param is initial_param and current_param._version == initial_param_version:
+            # 1. Current parameter is the identical object as the initial parameter
+            # 2. The version nubmer of the current parameter never changed
+            return False
+
+        return True
 
     def is_initialized(self) -> bool:
         """
         Returns true if the quantization parameters are initialized.
         """
-        return self.min is not None or self.max is not None
+        for param_name, _ in self.named_parameters():
+            if not self._is_initialized(param_name):
+                return False
+        return True
 
     def get_min(self) -> Optional[torch.Tensor]:
         """
@@ -174,10 +216,6 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
 
             if min is None or max is None:
                 return
-
-            if not self.is_initialized():
-                self.min = torch.nn.Parameter(torch.empty(self.shape))
-                self.max = torch.nn.Parameter(torch.empty(self.shape))
 
             with torch.no_grad():
                 self.min.copy_(min)

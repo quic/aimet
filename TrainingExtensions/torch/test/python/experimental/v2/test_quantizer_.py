@@ -37,6 +37,7 @@
 import math
 import pytest
 import torch
+from torch import nn
 from torch.optim import SGD, RMSprop, Adagrad, Adam, AdamW
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import CalibrationMethod
 from aimet_torch.experimental.v2.quantization import Quantize, QuantizeDequantize
@@ -618,3 +619,67 @@ def test_asymmetric_learning(q, x, optim_cls):
     assert not torch.equal(q.get_max(), original_max)
     assert not torch.equal(q.get_scale(), original_scale)
     assert not torch.equal(q.get_offset(), original_offset)
+
+
+@torch.no_grad()
+def test_is_initialized():
+    """
+    When: Instantiate a quantizer object
+    Then:
+      1) All the parameters readily exist as nn.Parameters (not as None or nn.UninitializedParameters)
+      2) quantizer.is_initialized() returns False
+    """
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, qscheme=CalibrationMethod.MinMax)
+    assert isinstance(qdq.min, nn.Parameter) and not isinstance(qdq.min, nn.UninitializedParameter)
+    assert isinstance(qdq.max, nn.Parameter) and not isinstance(qdq.max, nn.UninitializedParameter)
+    assert not qdq.is_initialized()
+
+    """
+    When: Update the parameters using in-place operation
+    Then: is_initialized() returns True
+    """
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, qscheme=CalibrationMethod.MinMax)
+    qdq.min.copy_(torch.zeros(10))
+    assert not qdq.is_initialized() # False; max is not initialized yet
+    qdq.max.add_(3)
+    assert qdq.is_initialized()
+
+    """
+    When: Update the parameters with assignment statement
+    Then: is_initialized() returns True
+    """
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, qscheme=CalibrationMethod.MinMax)
+    qdq.min = nn.Parameter(-torch.ones(10) * 2)
+    assert not qdq.is_initialized() # False; max is not initialized yet
+    qdq.max = nn.Parameter(torch.ones(10) * 2)
+    assert qdq.is_initialized()
+
+    """
+    When: Update the parameters with compute_encodings()
+    Then: is_initialized() returns True
+    """
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, qscheme=CalibrationMethod.MinMax)
+    with qdq.compute_encodings():
+        _ = qdq(torch.arange(-5, 5, dtype=torch.float))
+    assert qdq.is_initialized()
+
+    """
+    When: Invoke load_state_dict() with a state dict that contains all parameters
+    Then: quantizer.is_initialized() returns True
+    """
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, qscheme=CalibrationMethod.MinMax)
+    qdq.load_state_dict({
+        'min': -torch.ones(10) * 2,
+        'max': torch.ones(10) * 2
+    })
+    assert qdq.is_initialized()
+
+    """
+    When: Invoke load_state_dict with insufficient parameters
+    Then: quantizer.is_initialized() returns False
+    """
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=bool, qscheme=CalibrationMethod.MinMax)
+    qdq.load_state_dict({'min': -torch.ones(10) * 2}, strict=False)
+    assert not qdq.is_initialized() # False; max is not initialized yet
+    qdq.load_state_dict({'max': torch.ones(10) * 2}, strict=False)
+    assert qdq.is_initialized()
