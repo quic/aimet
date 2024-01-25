@@ -41,6 +41,8 @@
 
 from typing import List, Set, Union
 from enum import Enum
+
+from aimet_common.connected_graph.connectedgraph_utils import CG_SPLIT
 from aimet_common.utils import ModelApi
 
 
@@ -111,6 +113,7 @@ class OpConnectivity:
                     'Add': ConnectivityType.add,
                     'Concat': ConnectivityType.concat,
                     'Split': ConnectivityType.split,
+                    CG_SPLIT: ConnectivityType.split,
                     'LogSoftmax': ConnectivityType.direct,
                     'Gather': ConnectivityType.skip,
                     'Reshape': ConnectivityType.skip,

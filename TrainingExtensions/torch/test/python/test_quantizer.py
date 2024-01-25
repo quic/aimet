@@ -3067,6 +3067,46 @@ class TestQuantizationSimStaticGrad:
             custom_module_outputs = sim_from_custom.model(*custom_module_inputs)
         assert torch.allclose(standard_module_outputs, custom_module_outputs, atol=1e-5)
 
+    @pytest.mark.parametrize(
+        "test_model", [test_models.ModelWithSplitModule, test_models.ModelWithReluAfterSplit]
+    )
+    def test_quantizer_enable_with_split_module(self, test_model):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = test_model().to(device)
+        model.eval()
+        dummy_input = torch.randn(6, 2, device=device)
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {"is_output_quantized": "True"},
+                "params": {"is_quantized": "True", "is_symmetric": "True"},
+                "strict_symmetric": "False",
+            },
+            "params": {},
+            "op_type": {"Split": {"is_output_quantized": "False"}},
+            "supergroups": [],
+            "model_input": {"is_input_quantized": "True"},
+            "model_output": {},
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = f"{temp_dir}/quantsim_config.json"
+            with open(config_path, "w") as f:
+                json.dump(quantsim_config, f)
+            sim = QuantizationSimModel(model, dummy_input, config_file=config_path)
+
+        if isinstance(model, test_models.ModelWithSplitModule):
+            split_module = sim.model.split
+        else:
+            split_module = sim.model.split_module.split
+
+        # is_input_quantized=True for model input
+        # First input quantizer should be enabled, second input quantizer is disabled as it's constant
+        assert split_module.input_quantizers[0].enabled
+        assert not split_module.input_quantizers[1].enabled
+
+        # All output quantizers of Split should be disabled because op specific config is set
+        for output_quantizer in split_module.output_quantizers:
+            assert not output_quantizer.enabled
 
 class TestQuantizationSimLearnedGrid:
 

@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -45,7 +45,7 @@ import torch.nn.functional as F
 
 import aimet_torch.utils
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops,\
-    get_all_ops_with_constant_inputs
+    get_all_ops_with_constant_inputs, CG_SPLIT
 from models import test_models
 from aimet_common.connected_graph.product import Product
 from aimet_torch.meta.connectedgraph import ConnectedGraph
@@ -367,7 +367,7 @@ class TestConnectedGraph(unittest.TestCase):
         conv7 = conn_graph.get_op_from_module_name('MultiOutputShuffledModel.layer3.conv2')
         conv8 = conn_graph.get_op_from_module_name('MultiOutputShuffledModel.layer3.conv3')
         concat = conn_graph.ordered_ops[-1]
-        split = [op for op in conn_graph.get_all_ops().values() if op.type == 'Split'][0]
+        split = [op for op in conn_graph.get_all_ops().values() if op.type == CG_SPLIT][0]
 
         expected_products = [
             # layer #1 to layer #2
@@ -391,7 +391,7 @@ class TestConnectedGraph(unittest.TestCase):
                 self.assertEqual(product.shape, product.producer.output_shape)
                 expected_products.remove((product.producer, product.consumers[0]))
         self.assertEqual(0, len(expected_products))
-        split_product = conn_graph.get_all_products()['Split_0__to__multiple_ops']
+        split_product = conn_graph.get_all_products()['CG_Split_0__to__multiple_ops']
         self.assertTrue(conv5 in split_product.consumers)
         self.assertTrue(concat in split_product.consumers)
 
@@ -539,6 +539,19 @@ class TestConnectedGraph(unittest.TestCase):
         conn_graph = ConnectedGraph(model, model_input=(rand_inp, (h, c)))
         self.assertEqual(4, len(conn_graph.ordered_ops))
         self.assertEqual(9, len(conn_graph.get_all_products()))
+
+    def test_graph_construction_with_split_module(self):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = test_models.ModelWithReluAfterSplit().to(device)
+        model.eval()
+        dummy_input = torch.randn(6, 2, device=device)
+
+        connected_graph = ConnectedGraph(model, model_input=dummy_input)
+        # Four ops from PyTorch modules (Split, ReLU, ReLU, ReLU) and one SplitOp inserted by ConnectedGraph construction
+        self.assertEqual(4 + 1, len(connected_graph.get_all_ops()))
+
+        # ordered_ops filter out SplitOp inserted by ConnectedGraph
+        self.assertEqual(4, len(connected_graph.ordered_ops))
 
 
 class ModelWithMultipleActivations(nn.Module):
