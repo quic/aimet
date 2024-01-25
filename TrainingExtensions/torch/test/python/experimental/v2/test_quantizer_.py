@@ -678,7 +678,7 @@ def test_is_initialized():
     When: Invoke load_state_dict with insufficient parameters
     Then: quantizer.is_initialized() returns False
     """
-    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=bool, qscheme=CalibrationMethod.MinMax)
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, qscheme=CalibrationMethod.MinMax)
     qdq.load_state_dict({'min': -torch.ones(10) * 2}, strict=False)
     assert not qdq.is_initialized() # False; max is not initialized yet
     qdq.load_state_dict({'max': torch.ones(10) * 2}, strict=False)
