@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -41,7 +41,7 @@ from torch import nn
 import torch.nn.functional as F
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 from aimet_torch.experimental.v2.quantization.modules.quantize import QuantizeDequantize
-# from aimet_torch.experimental.v2.quantization.fake_quant import FakeQuantizedLinear, _ModuleSpec, _TensorSpec, _FakeQuantizationMixin
+from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizedLinear, FakeQuantizationMixin
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import CalibrationMethod
 
 
@@ -50,7 +50,6 @@ def input():
     return torch.arange(-5, 5) / 10
 
 
-@pytest.mark.skip(reason='Skip for TDD')
 class TestFakeQuantizedLinear:
     def test_no_spec(self, input):
         quant_linear = FakeQuantizedLinear(10, 10)
@@ -150,11 +149,12 @@ class TestFakeQuantizedLinear:
                                                             bitwidth)
         assert torch.equal(quant_output, expected_output)
 
-    def test_param_qtzn(self, input):
+    @pytest.mark.parametrize('bias', [True, False])
+    def test_param_qtzn(self, input, bias):
         """
         Given: Instantiate a fake-quantized module with weight quantizer spec specified
         """
-        quant_linear = FakeQuantizedLinear(10, 10)
+        quant_linear = FakeQuantizedLinear(10, 10, bias=bias)
         quant_linear.param_quantizers['weight'] = QuantizeDequantize((10,),
                                                                      bitwidth=4,
                                                                      symmetric=True,
@@ -166,7 +166,6 @@ class TestFakeQuantizedLinear:
         """
         assert quant_linear.input_quantizers[0] is None
         assert quant_linear.output_quantizers[0] is None
-        assert quant_linear.param_quantizers['bias'] is None
 
         """
         When: Invoke forward before or after the encodings are initialized
@@ -193,7 +192,7 @@ class TestFakeQuantizedLinear:
         Given: Instantiate a fake-quantized module using `FakeQuantMixin.from_module` with some spec
         """
         fp_linear = nn.Linear(10, 10)
-        quant_linear = _FakeQuantizationMixin.from_module(fp_linear)
+        quant_linear = FakeQuantizationMixin.from_module(fp_linear)
         quant_linear.input_quantizers[0] = QuantizeDequantize((1,),
                                                               bitwidth=8,
                                                               symmetric=False,

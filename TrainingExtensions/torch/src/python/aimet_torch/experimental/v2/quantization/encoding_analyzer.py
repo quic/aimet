@@ -165,8 +165,8 @@ def get_encoding_analyzer_cls(calibration_method: CalibrationMethod, min_max_sha
         return PercentileEncodingAnalyzer(min_max_shape)
     if calibration_method == CalibrationMethod.MSE:
         return MseEncodingAnalyzer(min_max_shape)
-    return ValueError('Calibration type must be one of the following:'
-                      'minmax, sqnr, mse, percentile')
+    raise ValueError('Calibration type must be one of the following:'
+                     'minmax, sqnr, mse, percentile')
 
 class _EncodingAnalyzer(Generic[_Statistics], ABC):
     def __init__(self, observer: _Observer):
