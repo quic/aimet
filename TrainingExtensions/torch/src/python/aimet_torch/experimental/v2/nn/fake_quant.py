@@ -44,7 +44,7 @@ import abc
 
 import torch.nn as nn
 
-from aimet_torch.experimental.v2.utils import patch_attr
+from aimet_torch.experimental.v2.utils import patch_param
 
 
 class _QuantizationMixin(abc.ABC):
@@ -83,10 +83,8 @@ class _QuantizationMixin(abc.ABC):
         self._compute_param_encodings(overwrite=False)
 
         quantized_inputs = _nested_map(inputs, self.input_quantizers)
-        quantized_params = _nested_map(dict(self.named_parameters(recurse=False)),
-                                       self.param_quantizers)
 
-        with patch_attr(self, '_parameters', quantized_params):
+        with self._patch_quantized_parameters():
             outputs = self._forward(*quantized_inputs, **kwargs)
 
         if not isinstance(outputs, (list, tuple)):
@@ -98,6 +96,17 @@ class _QuantizationMixin(abc.ABC):
             quantized_outputs = quantized_outputs[0]
 
         return quantized_outputs
+
+    @contextlib.contextmanager
+    def _patch_quantized_parameters(self):
+        with contextlib.ExitStack() as stack:
+            for param_name, param_quantizer in self.param_quantizers.items():
+                if param_quantizer:
+                    orig_param = getattr(self, param_name)
+                    quantized_param = param_quantizer(orig_param)
+                    ctx = patch_param(self, param_name, quantized_param)
+                    stack.enter_context(ctx)
+            yield
 
     def _compute_param_encodings(self, overwrite: bool):
         for param_name, param_quantizer in self.param_quantizers.items():

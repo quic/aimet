@@ -149,11 +149,12 @@ class TestFakeQuantizedLinear:
                                                             bitwidth)
         assert torch.equal(quant_output, expected_output)
 
-    def test_param_qtzn(self, input):
+    @pytest.mark.parametrize('bias', [True, False])
+    def test_param_qtzn(self, input, bias):
         """
         Given: Instantiate a fake-quantized module with weight quantizer spec specified
         """
-        quant_linear = FakeQuantizedLinear(10, 10)
+        quant_linear = FakeQuantizedLinear(10, 10, bias=bias)
         quant_linear.param_quantizers['weight'] = QuantizeDequantize((10,),
                                                                      bitwidth=4,
                                                                      symmetric=True,
@@ -165,7 +166,6 @@ class TestFakeQuantizedLinear:
         """
         assert quant_linear.input_quantizers[0] is None
         assert quant_linear.output_quantizers[0] is None
-        assert quant_linear.param_quantizers['bias'] is None
 
         """
         When: Invoke forward before or after the encodings are initialized
