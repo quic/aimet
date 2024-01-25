@@ -66,3 +66,19 @@ class TestFakeQuantizedCustomOp:
         finally:
             # Unregister CustomOp so as not to affect other test functions
             FakeQuantizationMixin.quantized_classes_map.pop(CustomOp)
+
+    def test_custom_op_wrap_registered(self):
+        try:
+            @FakeQuantizationMixin.implements(CustomOp)
+            class FakeQuantizedCustomOp(FakeQuantizationMixin, CustomOp):
+                ...
+
+            quantized_custom_op_cls = FakeQuantizationMixin.wrap(CustomOp)
+            assert quantized_custom_op_cls is FakeQuantizedCustomOp
+
+            quantized_custom_op_cls_ = FakeQuantizationMixin.wrap(CustomOp)
+            assert quantized_custom_op_cls_ is FakeQuantizedCustomOp
+
+        finally:
+            # Unregister CustomOp so as not to affect other test functions
+            FakeQuantizationMixin.quantized_classes_map.pop(CustomOp)
