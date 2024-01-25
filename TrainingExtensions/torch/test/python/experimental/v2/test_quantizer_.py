@@ -622,6 +622,7 @@ def test_asymmetric_learning(q, x, optim_cls):
 
 
 @torch.no_grad()
+@pytest.mark.cuda
 def test_is_initialized():
     """
     When: Instantiate a quantizer object
@@ -632,6 +633,9 @@ def test_is_initialized():
     qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, qscheme=CalibrationMethod.MinMax)
     assert isinstance(qdq.min, nn.Parameter) and not isinstance(qdq.min, nn.UninitializedParameter)
     assert isinstance(qdq.max, nn.Parameter) and not isinstance(qdq.max, nn.UninitializedParameter)
+    assert not qdq.is_initialized()
+
+    qdq.to(device="cuda", dtype=torch.float16)
     assert not qdq.is_initialized()
 
     """
@@ -668,10 +672,7 @@ def test_is_initialized():
     Then: quantizer.is_initialized() returns True
     """
     qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, qscheme=CalibrationMethod.MinMax)
-    qdq.load_state_dict({
-        'min': -torch.ones(10) * 2,
-        'max': torch.ones(10) * 2
-    })
+    qdq.load_state_dict({'min': -torch.ones(10), 'max': torch.ones(10)})
     assert qdq.is_initialized()
 
     """
@@ -679,7 +680,7 @@ def test_is_initialized():
     Then: quantizer.is_initialized() returns False
     """
     qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, qscheme=CalibrationMethod.MinMax)
-    qdq.load_state_dict({'min': -torch.ones(10) * 2}, strict=False)
+    qdq.load_state_dict({'min': -torch.ones(10)}, strict=False)
     assert not qdq.is_initialized() # False; max is not initialized yet
-    qdq.load_state_dict({'max': torch.ones(10) * 2}, strict=False)
+    qdq.load_state_dict({'max': torch.ones(10)}, strict=False)
     assert qdq.is_initialized()
