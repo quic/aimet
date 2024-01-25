@@ -36,9 +36,14 @@
 # =============================================================================
 """ Top level API for performing quantization simulation of a pytorch model """
 
+import contextlib
+
+import torch
+
 from aimet_torch.quantsim import QuantizationSimModel as V1QuantizationSimModel
-from aimet_torch.experimental.v2.quantization.wrappers.quantization_mixin import _QuantizationMixin
+from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizationMixin
 from aimet_torch.experimental.v2.quantization.wrappers.builder import LazyQuantizeWrapper
+from aimet_torch import utils
 
 
 class QuantizationSimModel(V1QuantizationSimModel):
@@ -46,7 +51,7 @@ class QuantizationSimModel(V1QuantizationSimModel):
     Overriden QuantizationSimModel that does off-target quantization simulation using v2 quantsim blocks.
     """
     @staticmethod
-    def _realize_quant_wrapper(module: LazyQuantizeWrapper) -> _QuantizationMixin:
+    def _realize_quant_wrapper(module: LazyQuantizeWrapper) -> FakeQuantizationMixin:
         """
         Make wrapper builder into v2 quant wrapper
 
@@ -54,3 +59,29 @@ class QuantizationSimModel(V1QuantizationSimModel):
         :return: realized v2 quant wrapper
         """
         return module.realize_v2_wrapper()
+
+    def compute_encodings(self, forward_pass_callback, forward_pass_callback_args):
+        """
+        Computes encodings for all quantization sim nodes in the model. It is also used to find initial encodings for
+        Range Learning
+
+        :param forward_pass_callback: A callback function that simply runs forward passes on the model. This callback
+            function should use representative data for the forward pass, so the calculated encodings work for all
+            data samples. This callback internally chooses the number of data samples it wants to use for calculating
+            encodings.
+        :param forward_pass_callback_args: These argument(s) are passed to the forward_pass_callback as-is. Up to
+            the user to determine the type of this parameter. E.g. could be simply an integer representing the number
+            of data samples to use. Or could be a tuple of parameters or an object representing something more complex.
+            If set to None, forward_pass_callback will be invoked with no parameters.
+        :return: None
+
+        """
+        # Run forward iterations so we can collect statistics to compute the appropriate encodings
+        with utils.in_eval_mode(self.model), torch.no_grad():
+            with contextlib.ExitStack() as stack:
+                for module in self.model.modules():
+                    if not isinstance(module, FakeQuantizationMixin):
+                        continue
+                    stack.enter_context(module.compute_encodings())
+
+                _ = forward_pass_callback(self.model, forward_pass_callback_args)
