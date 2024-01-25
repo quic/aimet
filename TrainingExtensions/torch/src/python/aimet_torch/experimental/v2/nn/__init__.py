@@ -34,3 +34,6 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
+# pylint: disable=missing-docstring
+from .fake_quant import *
