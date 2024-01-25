@@ -39,13 +39,15 @@
 import itertools
 from typing import List, Optional, Tuple
 import torch
+from torch import nn
 
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
 from aimet_common.utils import AimetLogger, log_with_error_and_assert_if_false
 from aimet_torch.utils import get_v1_quant_scheme_for_initialization
 from aimet_torch.qc_quantize_op import QcQuantizeOpMode, QcQuantizeWrapper, StaticGridQuantWrapper, tensor_quantizer_factory
 from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridPerChannelQuantizer
-from aimet_torch.experimental.v2.quantization.wrappers.quantization_mixin import _QuantizationMixin, _ModuleSpec, _TensorSpec
+from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizationMixin
+from aimet_torch.experimental.v2.quantization.modules.quantize import QuantizeDequantize
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import CalibrationMethod
 
 
@@ -129,7 +131,7 @@ class LazyQuantizeWrapper(torch.nn.Module):
             # pylint: disable = protected-access
             param_quantizer.enable_per_channel_quantization(channel_axis)
 
-    def _update_quant_param_requires_grad(self, quantized_module: _QuantizationMixin):
+    def _update_quant_param_requires_grad(self, quantized_module: FakeQuantizationMixin):
         """
         Update requres_grad value of quantizers in quantized_module.
 
@@ -144,7 +146,7 @@ class LazyQuantizeWrapper(torch.nn.Module):
                     for _, param in quantizer.named_parameters():
                         param.requires_grad = False
 
-    def _apply_quant_param_value_constraints(self, quantized_module: _QuantizationMixin):
+    def _apply_quant_param_value_constraints(self, quantized_module: FakeQuantizationMixin):
         """
         Update min and max of quantizers if their values are specified in config
 
@@ -186,19 +188,23 @@ class LazyQuantizeWrapper(torch.nn.Module):
 
         return quantized_module
 
-    def realize_v2_wrapper(self) -> _QuantizationMixin:
+    def realize_v2_wrapper(self) -> FakeQuantizationMixin:
         """
         Realizes v2 quant wrapper using collected information
 
         :return: v2 quant wrapper with specified properties
         """
-        input_spec = [quant_builder.get_spec() for quant_builder in self.input_quantizers]
-        output_spec = [quant_builder.get_spec() for quant_builder in self.output_quantizers]
-        param_spec = {param_name: quant_builder.get_spec() \
-                      for (param_name, quant_builder) in self.param_quantizers.items()}
+        quantized_module = FakeQuantizationMixin.from_module(self._module_to_wrap)
 
-        module_spec = _ModuleSpec(input_spec, param_spec, output_spec)
-        quantized_module = _QuantizationMixin.from_module(self._module_to_wrap, module_spec)
+        quantized_module.input_quantizers = nn.ModuleList([
+            quant_builder.realize() for quant_builder in self.input_quantizers
+        ])
+        quantized_module.output_quantizers = nn.ModuleList([
+            quant_builder.realize() for quant_builder in self.output_quantizers
+        ])
+        for param_name, quant_builder in self.param_quantizers.items():
+            quantized_module.param_quantizers[param_name] = quant_builder.realize()
+
         self._apply_quant_param_value_constraints(quantized_module)
         self._update_quant_param_requires_grad(quantized_module)
         quantized_module.supported_kernels = self.supported_kernels
@@ -284,7 +290,7 @@ class LazyQuantizer:
         """
         return [1]
 
-    def get_spec(self) -> _TensorSpec:
+    def realize(self) -> Optional[QuantizeDequantize]:
         """
         Returns spec for v2 quantizer initialization using collected information.
 
@@ -299,7 +305,7 @@ class LazyQuantizer:
 
         quantizer_param_shape = self._get_param_shape()
 
-        return _TensorSpec(quantizer_param_shape, self.bitwidth, self.use_symmetric_encodings, qscheme)
+        return QuantizeDequantize(quantizer_param_shape, self.bitwidth, self.use_symmetric_encodings, qscheme)
 
     def _set_internal_quantizer_properties(self, quantizer: TensorQuantizer):
         """
