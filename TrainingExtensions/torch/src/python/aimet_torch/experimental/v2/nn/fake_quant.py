@@ -42,6 +42,7 @@ from typing import Type
 import torch.nn as nn
 
 from aimet_torch.experimental.v2.nn.quant_base import BaseQuantizationMixin
+import aimet_torch.elementwise_ops as elementwise_ops
 
 
 class FakeQuantizationMixin(BaseQuantizationMixin):
@@ -234,3 +235,15 @@ FakeQuantizedUpsample = FakeQuantizationMixin.wrap(nn.Upsample)
 FakeQuantizedUpsamplingBilinear2d = FakeQuantizationMixin.wrap(nn.UpsamplingBilinear2d)
 FakeQuantizedUpsamplingNearest2d = FakeQuantizationMixin.wrap(nn.UpsamplingNearest2d)
 FakeQuantizedZeroPad2d = FakeQuantizationMixin.wrap(nn.ZeroPad2d)
+
+
+
+### Custom ops
+
+# pylint: disable=missing-docstring, abstract-method
+
+@FakeQuantizationMixin.implements(elementwise_ops.Subtract)
+class FakeQuantizedSubtract(FakeQuantizationMixin, elementwise_ops.Subtract):
+    def __quant_init__(self):
+        super().__quant_init__()
+        self.input_quantizers = nn.ModuleList([None, None])
