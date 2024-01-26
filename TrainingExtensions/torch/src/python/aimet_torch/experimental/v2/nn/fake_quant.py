@@ -186,7 +186,6 @@ _TORCH_NN_UNARY_MODULES = [
     nn.Dropout2d,
     nn.Dropout3d,
     nn.ELU,
-    nn.Embedding,
     nn.FeatureAlphaDropout,
     nn.Flatten,
     nn.Fold,
@@ -214,6 +213,9 @@ _TORCH_NN_UNARY_MODULES = [
     nn.MaxPool1d,
     nn.MaxPool2d,
     nn.MaxPool3d,
+    nn.MaxUnpool1d,
+    nn.MaxUnpool2d,
+    nn.MaxUnpool3d,
     nn.Mish,
     nn.PReLU,
     nn.PixelShuffle,
@@ -251,15 +253,13 @@ _TORCH_NN_BINARY_MODULES = [
     nn.BCELoss,
     nn.BCEWithLogitsLoss,
     nn.Bilinear,
+    nn.CTCLoss,
     nn.CosineSimilarity,
     nn.CrossEntropyLoss,
     nn.HingeEmbeddingLoss,
     nn.HuberLoss,
     nn.KLDivLoss,
     nn.L1Loss,
-    nn.MaxUnpool1d,
-    nn.MaxUnpool2d,
-    nn.MaxUnpool3d,
     nn.MSELoss,
     nn.MultiLabelMarginLoss,
     nn.MultiLabelSoftMarginLoss,
@@ -273,7 +273,6 @@ _TORCH_NN_BINARY_MODULES = [
 ]
 _TORCH_NN_TERNARY_MODULES = [
     nn.CosineEmbeddingLoss,
-    nn.EmbeddingBag,
     nn.GaussianNLLLoss,
     nn.MarginRankingLoss,
     nn.TripletMarginLoss,
@@ -300,6 +299,62 @@ for _module_cls in _TORCH_NN_TERNARY_MODULES:
     _quantized_cls = _FakeQuantizedTernaryOpMixin.wrap(_module_cls)
     _register_global_variable(_quantized_cls.__name__, _quantized_cls)
 
+
+@FakeQuantizationMixin.implements(nn.Embedding)
+class FakeQuantizedEmbedding(FakeQuantizationMixin, nn.Embedding):
+    """
+    Quantized class definition for nn.Embedding.
+    """
+    def __quant_init__(self):
+        super().__quant_init__()
+        self.input_quantizers = nn.ModuleList([]) # nn.Embedding takes no float input
+        self.output_quantizers = nn.ModuleList([None])
+
+    def quantized_forward(self, input: Tensor) -> Tensor: # pylint: disable=arguments-differ
+        """
+        Quantized forward impl for nn.Embedding.
+        """
+        # pylint: disable=redefined-builtin
+
+
+        with self._patch_quantized_parameters():
+            output = super().forward(input)
+
+        if self.output_quantizers[0]:
+            output = self.output_quantizers[0](output)
+
+        return output
+
+
+@FakeQuantizationMixin.implements(nn.EmbeddingBag)
+class FakeQuantizedEmbeddingBag(FakeQuantizationMixin, nn.EmbeddingBag):
+    """
+    Quantized class definition for nn.EmbeddingBag.
+    """
+    def __quant_init__(self):
+        super().__quant_init__()
+        self.input_quantizers = nn.ModuleList([None])
+        self.output_quantizers = nn.ModuleList([None])
+
+    def quantized_forward(self, # pylint: disable=arguments-differ
+                          input: Tensor,
+                          offsets: Optional[Tensor] = None,
+                          per_sample_weights: Optional[Tensor] = None) -> Tensor:
+        """
+        Quantized forward impl for nn.EmbeddingBag.
+        """
+        # pylint: disable=redefined-builtin
+
+        if self.input_quantizers[0]:
+            per_sample_weights = self.input_quantizers[0](per_sample_weights)
+
+        with self._patch_quantized_parameters():
+            output = super().forward(input, offsets, per_sample_weights)
+
+        if self.output_quantizers[0]:
+            output = self.output_quantizers[0](output)
+
+        return output
 
 
 class _FakeQuantizedRNNBaseMixin(FakeQuantizationMixin):
@@ -489,40 +544,6 @@ class FakeQuantizedAdaptiveLogSoftmaxWithLoss(FakeQuantizationMixin, nn.Adaptive
 
         return _ASMoutput(output, loss)
 
-
-@FakeQuantizationMixin.implements(nn.CTCLoss)
-class FakeQuantizedCTCLoss(FakeQuantizationMixin, nn.CTCLoss):
-    """
-    Quantized class definition for nn.CTCLoss.
-    """
-    def __quant_init__(self):
-        super().__quant_init__()
-        self.input_quantizers = nn.ModuleList([None, None, None, None])
-
-    def quantized_forward(self, log_probs: Tensor, targets: Tensor, # pylint: disable=arguments-differ
-                          input_lengths: Tensor, target_lengths: Tensor) -> Tensor:
-        """
-        Quantized forward impl for nn.CTCLoss.
-        """
-        if self.input_quantizers[0]:
-            log_probs = self.input_quantizers[0](log_probs)
-
-        if  self.input_quantizers[1]:
-            targets = self.input_quantizers[1](targets)
-
-        if self.input_quantizers[2]:
-            input_lengths = self.input_quantizers[2](input_lengths)
-
-        if self.input_quantizers[3]:
-            target_lengths = self.input_quantizers[3](target_lengths)
-
-        with self._patch_quantized_parameters():
-            output = super().forward(log_probs, targets, input_lengths, target_lengths)
-
-        if self.output_quantizers[0]:
-            output = self.output_quantizers[0](output)
-
-        return output
 
 
 # Quantized definitions of the following nn.Modules are intentionally omitted:
