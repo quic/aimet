@@ -73,28 +73,16 @@ class BaseQuantizationMixin(abc.ABC):
         self.input_quantizers = nn.ModuleList([None])
         self.output_quantizers = nn.ModuleList([None])
 
-    def quantized_forward(self, *inputs, **kwargs):
+    def __call__(self, *args, **kwargs):
+        self._compute_param_encodings(overwrite=False)
+        return super().__call__(*args, **kwargs)
+
+    @abc.abstractmethod
+    def quantized_forward(self, *args, **kwargs):
         """
         Forward function for quantized module.
         This method will replace the original forward function.
         """
-        # Compute parameter encodings if not already computed
-        self._compute_param_encodings(overwrite=False)
-
-        quantized_inputs = _nested_map(inputs, self.input_quantizers)
-
-        with self._patch_quantized_parameters():
-            outputs = self._forward(*quantized_inputs, **kwargs)
-
-        if not isinstance(outputs, (list, tuple)):
-            outputs = (outputs,)
-
-        quantized_outputs = _nested_map(outputs, self.output_quantizers)
-
-        if len(quantized_outputs) == 1:
-            quantized_outputs = quantized_outputs[0]
-
-        return quantized_outputs
 
     @contextlib.contextmanager
     def _patch_quantized_parameters(self):
@@ -167,42 +155,3 @@ class BaseQuantizationMixin(abc.ABC):
 
         qtzn_module.__quant_init__()
         return qtzn_module
-
-
-def _nested_map(nested_args, nested_fn):
-    """
-    Apply functions in a nested manner.
-    The arguments and functions should share the same nested structure.
-    For example,
-      nested_args: {'arg0': tensor0, 'foo': [tensor1, tensor2]}
-      nested_fn: {'arg0': f0, 'foo': [f1, f2]}
-      output: {'arg0': f0(tensor0), 'foo': [f1(tensor1), f2(tensor2)]}
-    """
-    if nested_fn is None:
-        return nested_args
-
-    if isinstance(nested_fn, nn.ModuleList):
-        nested_fn = list(nested_fn)
-
-    if isinstance(nested_fn, nn.ModuleDict):
-        nested_fn = dict(nested_fn)
-
-    if isinstance(nested_args, (tuple, list)):
-        if not isinstance(nested_fn, (tuple, list)):
-            raise RuntimeError
-        return [_nested_map(arg, fn) for arg, fn in zip(nested_args, nested_fn)]
-
-    if isinstance(nested_args, dict):
-        if not isinstance(nested_fn, dict):
-            raise RuntimeError
-        if nested_args.keys() - nested_fn.keys():
-            raise RuntimeError
-        return {
-            key: _nested_map(nested_args[key], nested_fn[key])
-            for key in nested_args
-        }
-
-    if not isinstance(nested_args, (tuple, list)):
-        nested_args = (nested_args,)
-
-    return nested_fn(*nested_args)
