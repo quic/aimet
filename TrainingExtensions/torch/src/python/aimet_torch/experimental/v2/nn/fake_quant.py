@@ -749,23 +749,24 @@ class FakeQuantizedAimetGroupNorm(FakeQuantizationMixin, aimet_ops.GroupNorm): #
 
 
 @FakeQuantizationMixin.implements(aimet_ops.NonMaxSuppression)
-class FakeQuantizedNonMaxSuppression(_FakeQuantizedBinaryOpMixin, aimet_ops.NonMaxSuppression):
+class FakeQuantizedNonMaxSuppression(FakeQuantizationMixin, aimet_ops.NonMaxSuppression):
     """
     Quantized class definition for aimet_ops.NonMaxSuppression.
     """
+    def __quant_init__(self):
+        super().__quant_init__()
+        self.input_quantizers = nn.ModuleList([None])
+        self.output_quantizers = nn.ModuleList([None])
+
     def quantized_forward(self, *args) -> Tensor: # pylint: disable=arguments-differ
         """
         Quantized forward impl for aimet_ops.NonMaxSuppression.
         """
-        boxes, scores = args
+        boxes, scores = args # boxes are integer tensors
 
         if self.input_quantizers[0]:
-            # Use same input quantizer for all the box tensors
-            boxes = tree_map(self.input_quantizers[0], boxes)
-
-        if self.input_quantizers[1]:
             # Use same input quantizer for all the score tensors
-            scores = tree_map(self.input_quantizers[1], scores)
+            scores = tree_map(self.input_quantizers[0], scores)
 
         super().forward(boxes, scores)
 
