@@ -87,13 +87,13 @@ class _FakeQuantizedUnaryOpMixin(FakeQuantizationMixin):
     def quantized_forward(self, *args, **kwargs) -> Tensor:
         x, *others = args
 
-        if isinstance(x, Tensor) and self.input_quantizers[0]:
+        if isinstance(x, Tensor) and x.is_floating_point() and self.input_quantizers[0]:
             x = self.input_quantizers[0](x)
 
         with self._patch_quantized_parameters():
             output = super().forward(x, *others, **kwargs)
 
-        if isinstance(output, Tensor) and self.output_quantizers[0]:
+        if isinstance(output, Tensor) and output.is_floating_point() and self.output_quantizers[0]:
             output = self.output_quantizers[0](output)
 
         return output
@@ -107,16 +107,16 @@ class _FakeQuantizedBinaryOpMixin(FakeQuantizationMixin):
     def quantized_forward(self, *args, **kwargs) -> Tensor:
         x, y, *others = args
 
-        if isinstance(x, Tensor) and self.input_quantizers[0]:
+        if isinstance(x, Tensor) and x.is_floating_point() and self.input_quantizers[0]:
             x = self.input_quantizers[0](x)
 
-        if isinstance(y, Tensor) and self.input_quantizers[1]:
+        if isinstance(y, Tensor) and y.is_floating_point() and self.input_quantizers[1]:
             y = self.input_quantizers[1](y)
 
         with self._patch_quantized_parameters():
             output = super().forward(x, y, *others, **kwargs)
 
-        if isinstance(output, Tensor) and self.output_quantizers[0]:
+        if isinstance(output, Tensor) and output.is_floating_point() and self.output_quantizers[0]:
             output = self.output_quantizers[0](output)
 
         return output
@@ -130,19 +130,19 @@ class _FakeQuantizedTernaryOpMixin(FakeQuantizationMixin):
     def quantized_forward(self, *args, **kwargs) -> Tensor:
         x, y, z, *others = args
 
-        if isinstance(x, Tensor) and self.input_quantizers[0]:
+        if isinstance(x, Tensor) and x.is_floating_point() and self.input_quantizers[0]:
             x = self.input_quantizers[0](x)
 
-        if isinstance(y, Tensor) and self.input_quantizers[1]:
+        if isinstance(y, Tensor) and y.is_floating_point() and self.input_quantizers[1]:
             y = self.input_quantizers[1](y)
 
-        if isinstance(z, Tensor) and self.input_quantizers[2]:
+        if isinstance(z, Tensor) and z.is_floating_point() and self.input_quantizers[2]:
             z = self.input_quantizers[2](z)
 
         with self._patch_quantized_parameters():
             output = super().forward(x, y, z, *others, **kwargs)
 
-        if isinstance(output, Tensor) and self.output_quantizers[0]:
+        if isinstance(output, Tensor) and output.is_floating_point() and self.output_quantizers[0]:
             output = self.output_quantizers[0](output)
 
         return output
@@ -786,14 +786,15 @@ class FakeQuantizedSplit(_FakeQuantizedUnaryOpMixin, aimet_ops.Split): # pylint:
         """
         x, *others = args
 
-        if isinstance(x, Tensor) and self.input_quantizers[0]:
+        if x.is_floating_point() and self.input_quantizers[0]:
             x = self.input_quantizers[0](x)
 
         outputs = super().forward(x, *others, **kwargs)
 
         if self.output_quantizers[0]:
             # Use same output quantizer for all the output tensors
-            outputs = tree_map(self.output_quantizers[0], outputs)
+            quantize_fn = lambda out: self.output_quantizers[0](out) if out.is_floating_point() else out
+            outputs = tree_map(quantize_fn, outputs)
 
         return outputs
 
@@ -809,11 +810,12 @@ class FakeQuantizedConcat(_FakeQuantizedUnaryOpMixin, aimet_ops.Concat):
         """
         if self.input_quantizers[0]:
             # Use same input quantizer for all the input tensors
-            x = tree_map(self.input_quantizers[0], x)
+            quantize_fn = lambda inp: self.input_quantizers[0](inp) if inp.is_floating_point() else inp
+            x = tree_map(quantize_fn, x)
 
         output = super().forward(*x)
 
-        if self.output_quantizers[0]:
+        if output.is_floating_point() and self.output_quantizers[0]:
             output = self.output_quantizers[0](output)
 
         return output
