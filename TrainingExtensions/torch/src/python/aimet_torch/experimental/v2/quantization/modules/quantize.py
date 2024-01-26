@@ -48,7 +48,7 @@ import torch
 from torch import nn
 
 from aimet_torch.experimental.v2.utils import patch_attr, patch_param, StatisticsNotFoundError
-from aimet_torch.experimental.v2.quantization.encoding_analyzer import get_encoding_analyzer_cls
+from aimet_torch.experimental.v2.quantization.encoding_analyzer import EncodingAnalyzer
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 from aimet_torch.experimental.v2.utils import ste_round
 
@@ -64,19 +64,18 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
     :param bitwidth: Quantization bitwidth.
     :param symmetric: If True, performs symmetric quantization;
                       otherwise, performs asymmetric quantization.
-    :param qscheme: Quantization scheme
+    :param encoding_analyzer: Encoding Analyzer
     """
 
     min: torch.nn.Parameter
     max: torch.nn.Parameter
 
-    def __init__(self, shape, bitwidth: int, symmetric: bool, qscheme):
+    def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer):
         super().__init__()
         self.shape = shape
         self.bitwidth = bitwidth
         self.symmetric = symmetric
-        self.qscheme = qscheme
-        self.encoding_analyzer = get_encoding_analyzer_cls(qscheme, shape)
+        self.encoding_analyzer = encoding_analyzer
 
         # param_name -> (weakref of initial parameter, version info of the initial parameter)
         # This info will be used for judging whether the current parameter has ever been
