@@ -808,7 +808,7 @@ class FakeQuantizedConcat(_FakeQuantizedUnaryOpMixin, aimet_ops.Concat):
         Quantized forward impl for aimet_ops.Concat.
         """
         if self.input_quantizers[0]:
-            # Use same output quantizer for all the input tensors
+            # Use same input quantizer for all the input tensors
             x = tree_map(self.input_quantizers[0], x)
 
         output = super().forward(*x)
