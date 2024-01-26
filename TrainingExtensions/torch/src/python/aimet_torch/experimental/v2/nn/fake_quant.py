@@ -615,6 +615,7 @@ _AIMET_V1_BINARY_MODULES = [
     aimet_ops.LogicalOr,
     aimet_ops.LogicalAnd,
     aimet_ops.CustomGather,
+    aimet_ops.GatherNd,
 ]
 _AIMET_V1_TERNARY_MODULES = [
     aimet_ops.Where,
@@ -624,7 +625,6 @@ _AIMET_V1_TERNARY_MODULES = [
     aimet_ops.ScatterND,
     aimet_ops.DynamicConv2d,
     aimet_ops.RoiAlign,
-    aimet_ops.GatherNd,
     aimet_ops.ScatterElements,
 ]
 
