@@ -425,7 +425,7 @@ class FakeQuantizedLSTMCell(FakeQuantizationMixin, nn.LSTMCell):
     def __quant_init__(self):
         super().__quant_init__()
         self.input_quantizers = nn.ModuleList([None, nn.ModuleList([None, None])])
-        self.output_quantizers = nn.ModuleList([None, None])
+        self.output_quantizers = nn.ModuleList([None])
 
     def quantized_forward(self, input: Tensor, hx: Optional[Tuple[Tensor, Tensor]] = None): # pylint: disable=arguments-differ
         """
