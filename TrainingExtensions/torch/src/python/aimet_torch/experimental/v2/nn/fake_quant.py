@@ -37,7 +37,7 @@
 """Fake-quantized modules"""
 
 from collections import OrderedDict
-from typing import Type, Optional, Tuple, Any, List, Dict
+from typing import Type, Optional, Tuple, List, Dict
 
 from torch import Tensor
 import torch.nn as nn
@@ -50,6 +50,20 @@ import aimet_torch.elementwise_ops as aimet_ops
 
 
 
+def _flatten_nn_module_list(module):
+    """
+    Flatten nested list of nn.Modules into a flat list
+    """
+    def flat_iter(mod):
+        if isinstance(mod, (list, tuple, nn.ModuleList)):
+            for x in mod:
+                yield from flat_iter(x)
+        else:
+            yield mod
+
+    return list(flat_iter(module))
+
+
 class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-method
     """
     Mixin that implements fake-quantization on top of regular pytorch modules.
@@ -58,29 +72,32 @@ class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-m
     cls_to_qcls = OrderedDict() # ouantized class -> original class
     qcls_to_cls = OrderedDict() # original class -> quantized class
 
-    def export_input_encodings(self) -> Dict[str, List[Dict]]:
+    def export_input_encodings(self) -> List[List[Dict]]:
         """
         Returns a list of input encodings, each represented as a List of Dicts
         """
-        fn = lambda quantizer: quantizer.get_encodings() \
-                               if isinstance(quantizer, _QuantizerBase) else None
-        return tree_map(fn, list(self.input_quantizers))
+        return [
+            quantizer.get_encodings() if isinstance(quantizer, _QuantizerBase) else None
+            for quantizer in _flatten_nn_module_list(self.input_quantizers)
+        ]
 
-    def export_output_encodings(self) -> Dict[str, List[Dict]]:
+    def export_output_encodings(self) -> List[List[Dict]]:
         """
         Returns a list of output encodings, each represented as a List of Dicts
         """
-        fn = lambda quantizer: quantizer.get_encodings() \
-                               if isinstance(quantizer, _QuantizerBase) else None
-        return tree_map(fn, list(self.output_quantizers))
+        return [
+            quantizer.get_encodings() if isinstance(quantizer, _QuantizerBase) else None
+            for quantizer in _flatten_nn_module_list(self.output_quantizers)
+        ]
 
     def export_param_encodings(self) -> Dict[str, List[Dict]]:
         """
         Returns a dict of {param name: param encodings}, with each encoding represented as a List of Dicts
         """
-        fn = lambda quantizer: quantizer.get_encodings() \
-                               if isinstance(quantizer, _QuantizerBase) else None
-        return tree_map(fn, dict(self.param_quantizers))
+        return {
+            param_name: quantizer.get_encodings() if isinstance(quantizer, _QuantizerBase) else None
+            for param_name, quantizer in self.param_quantizers.items()
+        }
 
     def get_original_module(self) -> nn.Module:
         """
