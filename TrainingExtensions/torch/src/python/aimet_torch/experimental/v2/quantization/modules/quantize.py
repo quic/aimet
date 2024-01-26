@@ -37,6 +37,7 @@
 # pylint: disable=redefined-builtin
 """ nn.Modules for quantization operators """
 
+import copy
 from typing import Optional, Tuple
 import contextlib
 from collections import OrderedDict
@@ -83,10 +84,51 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
         self._initial_parameters = OrderedDict()
 
         # Raw quantization parameters
-        self._register_quantization_parameter('min', nn.Parameter(-torch.ones(self.shape)))
-        self._register_quantization_parameter('max', nn.Parameter(torch.ones(self.shape)))
+        self.register_quantization_parameter('min', nn.Parameter(-torch.ones(self.shape)))
+        self.register_quantization_parameter('max', nn.Parameter(torch.ones(self.shape)))
 
-    def _register_quantization_parameter(self, name: str, param: nn.Parameter):
+    @torch.no_grad()
+    def __deepcopy__(self, memo):
+        self_copy = self.__new__(type(self))
+        self_copy.__dict__ = copy.deepcopy(self.__dict__, memo)
+
+        for name, param in self_copy.named_parameters():
+            # Register parameters to the copied quantizer
+            self_copy.register_quantization_parameter(name, param)
+
+            # If the parameter has been already initialized,
+            # artificially increment the parameter version to mark as initialized
+            if self._is_initialized(name):
+                param.mul_(1.)
+
+        return self_copy
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state.pop('_initial_parameters')
+        state['initialized_parameters'] = [param_name for param_name, _ in self.named_parameters()
+                                           if self._is_initialized(param_name)]
+        return state
+
+    @torch.no_grad()
+    def __setstate__(self, state):
+        initialized_parameters = state.pop('initialized_parameters')
+        self.__dict__.update(state)
+
+        self._initial_parameters = OrderedDict()
+        for param_name, param in self.named_parameters():
+            # Register parameters to the loaded quantizer
+            self.register_quantization_parameter(param_name, param)
+
+            # If the parameter has been already initialized,
+            # artificially increment the parameter version to mark as initialized
+            if param_name in initialized_parameters:
+                param.mul_(1.)
+
+    def register_quantization_parameter(self, name: str, param: nn.Parameter):
+        """
+        Register quantization parameter.
+        """
         # pylint: disable=protected-access
 
         self.register_parameter(name, param)

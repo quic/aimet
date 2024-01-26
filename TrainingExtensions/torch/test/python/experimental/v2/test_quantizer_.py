@@ -34,7 +34,10 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+import copy
 import math
+import io
+import pickle
 import pytest
 import torch
 from torch import nn
@@ -683,4 +686,32 @@ def test_is_initialized():
     qdq.load_state_dict({'min': -torch.ones(10)}, strict=False)
     assert not qdq.is_initialized() # False; max is not initialized yet
     qdq.load_state_dict({'max': torch.ones(10)}, strict=False)
+    assert qdq.is_initialized()
+
+    """
+    When: Create a deepcopy of quantizer
+    Then: quantizer.is_initialized() flag should be preserved
+    """
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, qscheme=CalibrationMethod.MinMax)
+    qdq = copy.deepcopy(qdq)
+    assert not qdq.is_initialized()
+
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, qscheme=CalibrationMethod.MinMax)
+    qdq.load_state_dict({'min': -torch.ones(10), 'max': torch.ones(10)})
+    qdq = copy.deepcopy(qdq)
+    assert qdq.is_initialized()
+
+    """
+    When: Pickle and unpickle quantizer
+    Then: quantizer.is_initialized() flag should be preserved
+    """
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, qscheme=CalibrationMethod.MinMax)
+    res = pickle.dumps(qdq)
+    qdq = pickle.loads(res)
+    assert not qdq.is_initialized()
+
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, qscheme=CalibrationMethod.MinMax)
+    qdq.load_state_dict({'min': -torch.ones(10), 'max': torch.ones(10)})
+    res = pickle.dumps(qdq)
+    qdq = pickle.loads(res)
     assert qdq.is_initialized()
