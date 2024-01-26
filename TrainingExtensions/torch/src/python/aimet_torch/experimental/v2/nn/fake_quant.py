@@ -552,7 +552,6 @@ _AIMET_V1_UNARY_MODULES = [
     aimet_ops.Cast,
     aimet_ops.DepthToSpaceDCRMode,
     aimet_ops.OneHot,
-    aimet_ops.MatMul,
     aimet_ops.Exponential,
     aimet_ops.Erf,
     aimet_ops.Sqrt,
@@ -592,6 +591,7 @@ _AIMET_V1_UNARY_MODULES = [
     aimet_ops.StridedSlice,
 ]
 _AIMET_V1_BINARY_MODULES = [
+    aimet_ops.MatMul,
     aimet_ops.Add,
     aimet_ops.Multiply,
     aimet_ops.Subtract,
