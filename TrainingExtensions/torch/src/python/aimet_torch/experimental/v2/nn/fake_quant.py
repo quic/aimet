@@ -253,7 +253,6 @@ _TORCH_NN_BINARY_MODULES = [
     nn.Bilinear,
     nn.CosineSimilarity,
     nn.CrossEntropyLoss,
-    nn.EmbeddingBag,
     nn.HingeEmbeddingLoss,
     nn.HuberLoss,
     nn.KLDivLoss,
@@ -274,6 +273,7 @@ _TORCH_NN_BINARY_MODULES = [
 ]
 _TORCH_NN_TERNARY_MODULES = [
     nn.CosineEmbeddingLoss,
+    nn.EmbeddingBag,
     nn.GaussianNLLLoss,
     nn.MarginRankingLoss,
     nn.TripletMarginLoss,
