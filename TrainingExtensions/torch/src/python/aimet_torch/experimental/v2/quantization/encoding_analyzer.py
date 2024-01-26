@@ -63,8 +63,8 @@ class _Observer(Generic[_Statistics], ABC):
     """
     Observes and gathers statistics
     """
-    def __init__(self, min_max_shape: tuple):
-        self.shape = min_max_shape
+    def __init__(self, shape: tuple):
+        self.shape = shape
 
     @abstractmethod
     def collect_stats(self, input_tensor: torch.Tensor) -> _Statistics:
@@ -87,8 +87,8 @@ class _MinMaxObserver(_Observer[_MinMaxRange]):
     """
     Observer for Min-Max calibration technique
     """
-    def __init__(self, min_max_shape: tuple):
-        super().__init__(min_max_shape)
+    def __init__(self, shape: tuple):
+        super().__init__(shape)
         self.stats = _MinMaxRange()
 
     @torch.no_grad()
@@ -125,8 +125,8 @@ class _HistogramObserver(_Observer[_Histogram]):
     """
     Observer for Histogram based calibration techniques (percentile, MSE)
     """
-    def __init__(self, min_max_shape: tuple, num_bins: int):
-        super().__init__(min_max_shape)
+    def __init__(self, shape: tuple, num_bins: int):
+        super().__init__(shape)
         self.stats = _Histogram()
         self.num_bins = num_bins
 
@@ -223,7 +223,7 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
     """
     Encoding Analyzer for Percentile calibration technique
     """
-    def __init__(self, shape: torch.Tensor, num_bins: int = 2048):
+    def __init__(self, shape: tuple, num_bins: int = 2048):
         observer = _HistogramObserver(shape=shape, num_bins=num_bins)
         super().__init__(observer)
 
@@ -237,7 +237,7 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
     """
     Encoding Analyzer for SQNR Calibration technique
     """
-    def __init__(self, shape: torch.Tensor, num_bins: int = 2048):
+    def __init__(self, shape: tuple, num_bins: int = 2048):
         observer = _HistogramObserver(shape=shape, num_bins=num_bins)
         super().__init__(observer)
 
@@ -251,7 +251,7 @@ class MseEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
     """
     Encoding Analyzer for Mean Square Error (MSE) Calibration technique
     """
-    def __init__(self, shape: torch.Tensor, num_bins: int = 2048):
+    def __init__(self, shape: tuple, num_bins: int = 2048):
         observer = _HistogramObserver(shape=shape, num_bins=num_bins)
         super().__init__(observer)
 

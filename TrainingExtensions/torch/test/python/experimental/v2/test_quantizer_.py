@@ -36,7 +36,6 @@
 # =============================================================================
 import copy
 import math
-import io
 import pickle
 import pytest
 import torch
@@ -628,7 +627,6 @@ def test_asymmetric_learning(q, x, optim_cls):
 
 @torch.no_grad()
 @pytest.mark.cuda
-@pytest.mark.skip('Skipping due to removal of CalibrationMethod enum')
 def test_is_initialized():
     """
     When: Instantiate a quantizer object
@@ -636,7 +634,7 @@ def test_is_initialized():
       1) All the parameters readily exist as nn.Parameters (not as None or nn.UninitializedParameters)
       2) quantizer.is_initialized() returns False
     """
-    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, qscheme='MinMax')
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
     assert isinstance(qdq.min, nn.Parameter) and not isinstance(qdq.min, nn.UninitializedParameter)
     assert isinstance(qdq.max, nn.Parameter) and not isinstance(qdq.max, nn.UninitializedParameter)
     assert not qdq.is_initialized()
@@ -648,7 +646,7 @@ def test_is_initialized():
     When: Update the parameters using in-place operation
     Then: is_initialized() returns True
     """
-    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, qscheme='MinMax')
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
     qdq.min.copy_(torch.zeros(10))
     assert not qdq.is_initialized() # False; max is not initialized yet
     qdq.max.add_(3)
@@ -658,7 +656,7 @@ def test_is_initialized():
     When: Update the parameters with assignment statement
     Then: is_initialized() returns True
     """
-    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, qscheme='MinMax')
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
     qdq.min = nn.Parameter(-torch.ones(10) * 2)
     assert not qdq.is_initialized() # False; max is not initialized yet
     qdq.max = nn.Parameter(torch.ones(10) * 2)
@@ -668,7 +666,7 @@ def test_is_initialized():
     When: Update the parameters with compute_encodings()
     Then: is_initialized() returns True
     """
-    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, qscheme='MinMax')
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
     with qdq.compute_encodings():
         _ = qdq(torch.arange(-5, 5, dtype=torch.float))
     assert qdq.is_initialized()
@@ -677,7 +675,7 @@ def test_is_initialized():
     When: Invoke load_state_dict() with a state dict that contains all parameters
     Then: quantizer.is_initialized() returns True
     """
-    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, qscheme='MinMax')
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
     qdq.load_state_dict({'min': -torch.ones(10), 'max': torch.ones(10)})
     assert qdq.is_initialized()
 
@@ -685,7 +683,7 @@ def test_is_initialized():
     When: Invoke load_state_dict with insufficient parameters
     Then: quantizer.is_initialized() returns False
     """
-    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, qscheme='MinMax')
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
     qdq.load_state_dict({'min': -torch.ones(10)}, strict=False)
     assert not qdq.is_initialized() # False; max is not initialized yet
     qdq.load_state_dict({'max': torch.ones(10)}, strict=False)
@@ -695,11 +693,11 @@ def test_is_initialized():
     When: Create a deepcopy of quantizer
     Then: quantizer.is_initialized() flag should be preserved
     """
-    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, qscheme=CalibrationMethod.MinMax)
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
     qdq = copy.deepcopy(qdq)
     assert not qdq.is_initialized()
 
-    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, qscheme=CalibrationMethod.MinMax)
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
     qdq.load_state_dict({'min': -torch.ones(10), 'max': torch.ones(10)})
     qdq = copy.deepcopy(qdq)
     assert qdq.is_initialized()
@@ -708,12 +706,12 @@ def test_is_initialized():
     When: Pickle and unpickle quantizer
     Then: quantizer.is_initialized() flag should be preserved
     """
-    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, qscheme=CalibrationMethod.MinMax)
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
     res = pickle.dumps(qdq)
     qdq = pickle.loads(res)
     assert not qdq.is_initialized()
 
-    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, qscheme=CalibrationMethod.MinMax)
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
     qdq.load_state_dict({'min': -torch.ones(10), 'max': torch.ones(10)})
     res = pickle.dumps(qdq)
     qdq = pickle.loads(res)
