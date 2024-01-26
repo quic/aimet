@@ -316,7 +316,6 @@ class FakeQuantizedEmbedding(FakeQuantizationMixin, nn.Embedding):
         """
         # pylint: disable=redefined-builtin
 
-
         with self._patch_quantized_parameters():
             output = super().forward(input)
 
@@ -639,10 +638,8 @@ _AIMET_V1_BINARY_MODULES = [
     aimet_ops.GatherNd,
 ]
 _AIMET_V1_TERNARY_MODULES = [
-    aimet_ops.Where,
     aimet_ops.Baddbmm,
     aimet_ops.Addmm,
-    aimet_ops.MaskedFill,
     aimet_ops.ScatterND,
     aimet_ops.DynamicConv2d,
     aimet_ops.RoiAlign,
@@ -815,6 +812,61 @@ class FakeQuantizedConcat(_FakeQuantizedUnaryOpMixin, aimet_ops.Concat):
             x = tree_map(quantize_fn, x)
 
         output = super().forward(*x)
+
+        if output.is_floating_point() and self.output_quantizers[0]:
+            output = self.output_quantizers[0](output)
+
+        return output
+
+
+@FakeQuantizationMixin.implements(aimet_ops.Where)
+class FakeQuantizedWhere(FakeQuantizationMixin, aimet_ops.Where): # pylint: disable=abstract-method
+    """
+    Quantized class definition for aimet_ops.Where.
+    """
+    def __quant_init__(self):
+        super().__quant_init__()
+        self.input_quantizers = nn.ModuleList([None, None])
+        self.output_quantizers = nn.ModuleList([None])
+
+    def quantized_forward(self, condition: Tensor, input, other, **kwargs) -> Tensor: # pylint: disable=arguments-differ
+        """
+        Quantized forward impl for aimet_ops.MaskedFill.
+        """
+        # pylint: disable=redefined-builtin
+
+        if isinstance(input, Tensor) and input.is_floating_point() and self.input_quantizers[0]:
+            input = self.input_quantizers[0](input)
+
+        if isinstance(other, Tensor) and other.is_floating_point() and self.input_quantizers[1]:
+            other = self.input_quantizers[1](other)
+
+        output = super().forward(condition, input, other, **kwargs)
+
+        if output.is_floating_point() and self.output_quantizers[0]:
+            output = self.output_quantizers[0](output)
+
+        return output
+
+
+@FakeQuantizationMixin.implements(aimet_ops.MaskedFill)
+class FakeQuantizedMaskedFill(FakeQuantizationMixin, aimet_ops.MaskedFill): # pylint: disable=abstract-method
+    """
+    Quantized class definition for aimet_ops.MaskedFill.
+    """
+    def __quant_init__(self):
+        super().__quant_init__()
+        self.input_quantizers = nn.ModuleList([None])
+        self.output_quantizers = nn.ModuleList([None])
+
+    def quantized_forward(self, mask: Tensor, value) -> Tensor: # pylint: disable=arguments-differ
+        """
+        Quantized forward impl for aimet_ops.MaskedFill.
+        """
+        if isinstance(value, Tensor) and value.is_floating_point() and self.input_quantizers[0]:
+            value = self.input_quantizers[0](value)
+
+        output = super().forward(mask, value)
 
         if output.is_floating_point() and self.output_quantizers[0]:
             output = self.output_quantizers[0](output)
