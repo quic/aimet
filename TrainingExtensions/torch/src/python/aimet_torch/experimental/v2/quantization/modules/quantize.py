@@ -38,7 +38,7 @@
 """ nn.Modules for quantization operators """
 
 import copy
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List, Dict
 import contextlib
 from collections import OrderedDict
 import functools
@@ -225,6 +225,31 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
             offset = ste_round(self.min / self.get_scale())
 
         return offset
+
+    @torch.no_grad()
+    def get_encodings(self) -> Optional[List[Dict]]:
+        """
+        Returns a list of encodings, each represented as a List of Dicts
+        """
+        # pylint: disable=redefined-builtin
+
+        if not self.is_initialized():
+            return None
+
+        min = self.get_min().flatten()
+        max = self.get_max().flatten()
+        scale = self.get_scale().flatten()
+        offset = self.get_offset().flatten()
+        bitwidth = self.bitwidth
+        dtype = "int"
+        is_symmetric = self.symmetric
+
+        return [
+            {'min': float(min_), 'max': float(max_),
+             'scale': float(scale_), 'offset': float(offset_),
+             'bitwidth': bitwidth, 'dtype': dtype, 'is_symmetric': is_symmetric}
+            for min_, max_, scale_, offset_ in zip(min, max, scale, offset)
+        ]
 
     @contextlib.contextmanager
     def compute_encodings(self):

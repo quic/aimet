@@ -39,43 +39,15 @@
 from collections import OrderedDict
 from typing import Type, Optional, Tuple, Any, List, Dict
 
-import torch
 from torch import Tensor
 import torch.nn as nn
 from torch.nn.utils.rnn import PackedSequence
 from torch.utils._pytree import tree_map
 
 from aimet_torch.experimental.v2.nn.quant_base import BaseQuantizationMixin
-from aimet_torch.experimental.v2.quantization.modules.quantize import Dequantize
+from aimet_torch.experimental.v2.quantization.modules.quantize import _QuantizerBase
 import aimet_torch.elementwise_ops as aimet_ops
 
-
-@torch.no_grad()
-def _get_encodings(quantizer):
-    # pylint: disable=redefined-builtin
-    if quantizer is None:
-        return None
-
-    if isinstance(quantizer, Dequantize):
-        return None
-
-    if not quantizer.is_initialized():
-        return None
-
-    min = quantizer.get_min().flatten()
-    max = quantizer.get_max().flatten()
-    scale = quantizer.get_scale().flatten()
-    offset = quantizer.get_offset().flatten()
-    bitwidth = quantizer.bitwidth
-    dtype = "int"
-    is_symmetric = quantizer.symmetric
-
-    return [
-        {'min': float(min_), 'max': float(max_),
-         'scale': float(scale_), 'offset': float(offset_),
-         'bitwidth': bitwidth, 'dtype': dtype, 'is_symmetric': is_symmetric}
-        for min_, max_, scale_, offset_ in zip(min, max, scale, offset)
-    ]
 
 
 class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-method
@@ -90,20 +62,25 @@ class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-m
         """
         Returns a list of input encodings, each represented as a List of Dicts
         """
-        return tree_map(_get_encodings, list(self.input_quantizers))
+        fn = lambda quantizer: quantizer.get_encodings() \
+                               if isinstance(quantizer, _QuantizerBase) else None
+        return tree_map(fn, list(self.input_quantizers))
 
     def export_output_encodings(self) -> Dict[str, List[Dict]]:
         """
         Returns a list of output encodings, each represented as a List of Dicts
         """
-        return tree_map(_get_encodings, list(self.output_quantizers))
+        fn = lambda quantizer: quantizer.get_encodings() \
+                               if isinstance(quantizer, _QuantizerBase) else None
+        return tree_map(fn, list(self.output_quantizers))
 
     def export_param_encodings(self) -> Dict[str, List[Dict]]:
         """
         Returns a dict of {param name: param encodings}, with each encoding represented as a List of Dicts
         """
-        ret = tree_map(_get_encodings, dict(self.param_quantizers))
-        return ret
+        fn = lambda quantizer: quantizer.get_encodings() \
+                               if isinstance(quantizer, _QuantizerBase) else None
+        return tree_map(fn, dict(self.param_quantizers))
 
     def get_original_module(self) -> nn.Module:
         """
