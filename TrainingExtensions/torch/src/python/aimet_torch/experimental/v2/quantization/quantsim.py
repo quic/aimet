@@ -36,11 +36,10 @@
 # =============================================================================
 """ Top level API for performing quantization simulation of a pytorch model """
 
-import contextlib
-
 import torch
 
 from aimet_torch.quantsim import QuantizationSimModel as V1QuantizationSimModel
+from aimet_torch.experimental.v2 import nn as aimet_nn
 from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizationMixin
 from aimet_torch.experimental.v2.quantization.wrappers.builder import LazyQuantizeWrapper
 from aimet_torch import utils
@@ -78,10 +77,5 @@ class QuantizationSimModel(V1QuantizationSimModel):
         """
         # Run forward iterations so we can collect statistics to compute the appropriate encodings
         with utils.in_eval_mode(self.model), torch.no_grad():
-            with contextlib.ExitStack() as stack:
-                for module in self.model.modules():
-                    if not isinstance(module, FakeQuantizationMixin):
-                        continue
-                    stack.enter_context(module.compute_encodings())
-
+            with aimet_nn.compute_encodings(self.model):
                 _ = forward_pass_callback(self.model, forward_pass_callback_args)

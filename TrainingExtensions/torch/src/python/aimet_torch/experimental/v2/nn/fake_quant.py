@@ -37,15 +37,45 @@
 """Fake-quantized modules"""
 
 from collections import OrderedDict
-from typing import Type, Optional, Tuple
+from typing import Type, Optional, Tuple, Any, List, Dict
 
+import torch
 from torch import Tensor
 import torch.nn as nn
 from torch.nn.utils.rnn import PackedSequence
 from torch.utils._pytree import tree_map
 
 from aimet_torch.experimental.v2.nn.quant_base import BaseQuantizationMixin
+from aimet_torch.experimental.v2.quantization.modules.quantize import Dequantize
 import aimet_torch.elementwise_ops as aimet_ops
+
+
+@torch.no_grad()
+def _get_encodings(quantizer):
+    # pylint: disable=redefined-builtin
+    if quantizer is None:
+        return None
+
+    if isinstance(quantizer, Dequantize):
+        return None
+
+    if not quantizer.is_initialized():
+        return None
+
+    min = quantizer.get_min().flatten()
+    max = quantizer.get_max().flatten()
+    scale = quantizer.get_scale().flatten()
+    offset = quantizer.get_offset().flatten()
+    bitwidth = quantizer.bitwidth
+    dtype = "int"
+    is_symmetric = quantizer.symmetric
+
+    return [
+        {'min': float(min_), 'max': float(max_),
+         'scale': float(scale_), 'offset': float(offset_),
+         'bitwidth': bitwidth, 'dtype': dtype, 'is_symmetric': is_symmetric}
+        for min_, max_, scale_, offset_ in zip(min, max, scale, offset)
+    ]
 
 
 class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-method
@@ -53,8 +83,50 @@ class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-m
     Mixin that implements fake-quantization on top of regular pytorch modules.
     """
 
-    # Mapping from a base module class to quantized module class
-    quantized_classes_map = OrderedDict()
+    cls_to_qcls = OrderedDict() # ouantized class -> original class
+    qcls_to_cls = OrderedDict() # original class -> quantized class
+
+    def export_input_encodings(self) -> Dict[str, List[Dict]]:
+        """
+        Returns a list of input encodings, each represented as a List of Dicts
+        """
+        return tree_map(_get_encodings, list(self.input_quantizers))
+
+    def export_output_encodings(self) -> Dict[str, List[Dict]]:
+        """
+        Returns a list of output encodings, each represented as a List of Dicts
+        """
+        return tree_map(_get_encodings, list(self.output_quantizers))
+
+    def export_param_encodings(self) -> Dict[str, List[Dict]]:
+        """
+        Returns a dict of {param name: param encodings}, with each encoding represented as a List of Dicts
+        """
+        ret = tree_map(_get_encodings, dict(self.param_quantizers))
+        return ret
+
+    def get_original_module(self) -> nn.Module:
+        """
+        Returns the floating point version of quantized module
+        """
+        # pylint: disable=protected-access
+
+        qtzn_module_cls = type(self)
+        orig_module_cls = self.qcls_to_cls.get(qtzn_module_cls)
+
+        orig_module = self.__new__(orig_module_cls)
+        orig_module.__dict__ = self.__dict__.copy()
+        del orig_module.__dict__['_forward']
+        del orig_module.__dict__['forward']
+
+        orig_module._parameters = self._parameters.copy()
+        orig_module._buffers = self._buffers.copy()
+        orig_module._modules = self._modules.copy()
+        del orig_module._modules['input_quantizers']
+        del orig_module._modules['output_quantizers']
+        del orig_module._modules['param_quantizers']
+
+        return orig_module
 
     @classmethod
     def wrap(cls, module_cls: Type[nn.Module]) -> Type[nn.Module]:
@@ -64,8 +136,8 @@ class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-m
         if not issubclass(module_cls, nn.Module):
             raise ValueError("Expected module_cls to be a subclass of torch.nn.Module. "
                              f"Got {module_cls}.")
-        if module_cls in cls.quantized_classes_map:
-            return cls.quantized_classes_map[module_cls]
+        if module_cls in cls.cls_to_qcls:
+            return cls.cls_to_qcls[module_cls]
 
         quantized_cls_name = f"FakeQuantized{module_cls.__name__}"
         base_classes = (cls, module_cls)
@@ -78,7 +150,8 @@ class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-m
         Decorator for registering fake-quantized implementation of the given base class.
         """
         def wrapper(quantized_cls):
-            cls.quantized_classes_map[module_cls] = quantized_cls
+            cls.cls_to_qcls[module_cls] = quantized_cls
+            cls.qcls_to_cls[quantized_cls] = module_cls
             return quantized_cls
         return wrapper
 

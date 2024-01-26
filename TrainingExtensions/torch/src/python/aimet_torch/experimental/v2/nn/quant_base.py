@@ -137,7 +137,7 @@ class BaseQuantizationMixin(abc.ABC):
         """
         # pylint: disable=protected-access
         module_cls = type(module)
-        qtzn_module_cls = cls.quantized_classes_map.get(module_cls, None)
+        qtzn_module_cls = cls.cls_to_qcls.get(module_cls, None)
 
         if not qtzn_module_cls:
             raise RuntimeError(

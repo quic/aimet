@@ -67,7 +67,7 @@ class TestFakeQuantizedCustomOp:
 
         finally:
             # Unregister CustomOp so as not to affect other test functions
-            FakeQuantizationMixin.quantized_classes_map.pop(CustomOp)
+            FakeQuantizationMixin.cls_to_qcls.pop(CustomOp)
 
     def test_custom_op_wrap_registered(self):
         try:
@@ -85,4 +85,4 @@ class TestFakeQuantizedCustomOp:
 
         finally:
             # Unregister CustomOp so as not to affect other test functions
-            FakeQuantizationMixin.quantized_classes_map.pop(CustomOp)
+            FakeQuantizationMixin.cls_to_qcls.pop(CustomOp)
