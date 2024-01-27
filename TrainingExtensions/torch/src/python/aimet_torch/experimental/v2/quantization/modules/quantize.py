@@ -37,6 +37,7 @@
 # pylint: disable=redefined-builtin
 """ nn.Modules for quantization operators """
 
+import abc
 import copy
 from typing import Optional, Tuple, List, Dict
 import contextlib
@@ -53,10 +54,10 @@ from aimet_torch.experimental.v2.quantization.backends import get_backend
 from aimet_torch.experimental.v2.utils import ste_round
 
 
-__all__ = ['Quantize', 'QuantizeDequantize', 'Dequantize']
+__all__ = ['QuantizerBase', 'MinMaxQuantizer', 'Quantize', 'QuantizeDequantize', 'Dequantize']
 
 
-class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
+class QuantizerBase(abc.ABC, torch.nn.Module):
     """
     Base class for quantization modules.
 
@@ -67,10 +68,6 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
     :param encoding_analyzer: Encoding analyzer for calibrating quantization encodings.
                               (default: absolute min-max encoding analyzer)
     """
-
-    min: torch.nn.Parameter
-    max: torch.nn.Parameter
-
     def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None):
         super().__init__()
         if isinstance(shape, int):
@@ -89,9 +86,47 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
         # initialized after it was instantiated.
         self._initial_parameters = OrderedDict()
 
-        # Raw quantization parameters
-        self.register_quantization_parameter('min', nn.Parameter(-torch.ones(self.shape)))
-        self.register_quantization_parameter('max', nn.Parameter(torch.ones(self.shape)))
+    @abc.abstractmethod
+    def get_min(self) -> torch.Tensor:
+        """
+        Compute quantization min to be used for forward pass.
+        Return None f the quantizer is not initialized yet.
+
+        :return: Quantization min
+        """
+
+    @abc.abstractmethod
+    def get_max(self) -> torch.Tensor:
+        """
+        Compute quantization max to be used for forward pass.
+        Return None f the quantizer is not initialized yet.
+
+        :return: Quantization max
+        """
+
+    @abc.abstractmethod
+    def get_scale(self) -> torch.Tensor:
+        """
+        Compute quantization scale to be used for forward pass.
+        Return None f the quantizer is not initialized yet.
+
+        :return: Quantization scale
+        """
+
+    @abc.abstractmethod
+    def get_offset(self) -> torch.Tensor:
+        """
+        Compute quantization offset to be used for forward pass.
+        Return None f the quantizer is not initialized yet.
+
+        :return: Quantization offset
+        """
+
+    @abc.abstractmethod
+    def set_range(self, min: torch.Tensor, max: torch.Tensor):
+        """
+        Set quantization parameters to the given min-max range
+        """
 
     @torch.no_grad()
     def __deepcopy__(self, memo):
@@ -169,63 +204,6 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
                 return False
         return True
 
-    def get_min(self) -> Optional[torch.Tensor]:
-        """
-        Compute quantization min to be used for forward pass based on raw parameters.
-
-        :return: Quantization min
-        """
-        if not self.is_initialized():
-            return None
-        return self.get_scale() * self.get_offset()
-
-    def get_max(self) -> Optional[torch.Tensor]:
-        """
-        Compute quantization max to be used for forward pass based on raw parameters.
-
-        :return: Quantization max
-        """
-        if not self.is_initialized():
-            return None
-        return self.get_scale() * (self.get_offset() + 2 ** self.bitwidth - 1)
-
-    def get_scale(self) -> Optional[torch.Tensor]:
-        """
-        Compute quantization scale to be used for forward pass based on raw parameters.
-
-        :return: Quantization scale
-        """
-        if not self.is_initialized():
-            return None
-
-        num_bins = 2 ** self.bitwidth - 1
-
-        if self.symmetric:
-            positive_bins = num_bins // 2
-            negative_bins = positive_bins + 1
-            scale = torch.maximum(-self.min / negative_bins, self.max / positive_bins)
-        else:
-            scale = (self.max - self.min) / num_bins
-
-        return scale
-
-    def get_offset(self) -> Optional[torch.Tensor]:
-        """
-        Compute quantization offset to be used for forward pass based on raw parameters.
-
-        :return: Quantization offset
-        """
-        if not self.is_initialized():
-            return None
-
-        if self.symmetric:
-            with torch.no_grad():
-                offset = -torch.ones_like(self.min) * 2 ** (self.bitwidth - 1)
-        else:
-            offset = ste_round(self.min / self.get_scale())
-
-        return offset
-
     @torch.no_grad()
     def get_encodings(self) -> Optional[List[Dict]]:
         """
@@ -285,9 +263,8 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
             if min is None or max is None:
                 return
 
-            with torch.no_grad():
-                self.min.copy_(min)
-                self.max.copy_(max)
+            self.set_range(min, max)
+
         finally:
             self.encoding_analyzer.reset_stats()
 
@@ -295,7 +272,93 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
         return f'shape={self.shape}, bitwidth={self.bitwidth}, symmetric={self.symmetric}'
 
 
-class Quantize(_QuantizerBase):
+class MinMaxQuantizer(QuantizerBase): # pylint: disable=abstract-method
+    """
+    Linear quantizer with min-max as trainable parameters
+    """
+
+    min: torch.nn.Parameter
+    max: torch.nn.Parameter
+
+    def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None):
+        super().__init__(shape, bitwidth, symmetric, encoding_analyzer)
+
+        self.register_quantization_parameter('min', nn.Parameter(-torch.ones(self.shape)))
+        self.register_quantization_parameter('max', nn.Parameter(torch.ones(self.shape)))
+
+    def get_min(self) -> Optional[torch.Tensor]:
+        """
+        Compute quantization min to be used for forward pass.
+
+        NOTE: self.min may not be equal to self.get_min().
+              self.get_min() returns slightly recalibrated version of self.min.
+
+        :return: Quantization min
+        """
+        if not self.is_initialized():
+            return None
+        return self.get_scale() * self.get_offset()
+
+    def get_max(self) -> Optional[torch.Tensor]:
+        """
+        Compute quantization max to be used for forward pass.
+
+        NOTE: self.max may not be equal to self.get_max()
+              self.get_max() returns slightly recalibrated version of self.max.
+
+        :return: Quantization max
+        """
+        if not self.is_initialized():
+            return None
+        return self.get_scale() * (self.get_offset() + 2 ** self.bitwidth - 1)
+
+    def get_scale(self) -> Optional[torch.Tensor]:
+        """
+        Compute quantization scale to be used for forward pass.
+
+        :return: Quantization scale
+        """
+        if not self.is_initialized():
+            return None
+
+        num_bins = 2 ** self.bitwidth - 1
+
+        if self.symmetric:
+            positive_bins = num_bins // 2
+            negative_bins = positive_bins + 1
+            scale = torch.maximum(-self.min / negative_bins, self.max / positive_bins)
+        else:
+            scale = (self.max - self.min) / num_bins
+
+        return scale
+
+    def get_offset(self) -> Optional[torch.Tensor]:
+        """
+        Compute quantization offset to be used for forward pass.
+
+        :return: Quantization offset
+        """
+        if not self.is_initialized():
+            return None
+
+        if self.symmetric:
+            with torch.no_grad():
+                offset = -torch.ones_like(self.min) * 2 ** (self.bitwidth - 1)
+        else:
+            offset = ste_round(self.min / self.get_scale())
+
+        return offset
+
+    def set_range(self, min: torch.Tensor, max: torch.Tensor):
+        """
+        Set quantization parameters to the given min-max range
+        """
+        with torch.no_grad():
+            self.min.copy_(min)
+            self.max.copy_(max)
+
+
+class Quantize(MinMaxQuantizer):
     """
     Applies quantization to the input
     """
@@ -316,7 +379,7 @@ class Quantize(_QuantizerBase):
         return input_q, scale, offset
 
 
-class QuantizeDequantize(_QuantizerBase):
+class QuantizeDequantize(MinMaxQuantizer):
     """
     Applies quantization followed by dequantization to the input
     """
