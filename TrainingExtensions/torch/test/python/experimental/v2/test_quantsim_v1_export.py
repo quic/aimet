@@ -45,7 +45,7 @@ import json
 import aimet_torch.experimental.v2.nn as aimet_nn
 from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizationMixin
 from aimet_torch.experimental.v2.quantization.modules.quantize import QuantizeDequantize
-from aimet_torch.experimental.v2.quantization.encoding_analyzer import CalibrationMethod
+from aimet_torch.experimental.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 from aimet_torch.elementwise_ops import Add
 from aimet_torch import onnx_utils
 from aimet_torch.quantsim import QuantizationSimModel, OnnxExportApiArgs
@@ -94,20 +94,20 @@ class TestQuantsimOnnxExport:
                 input_quantizer = QuantizeDequantize((1,),
                                                      bitwidth=8,
                                                      symmetric=False,
-                                                     qscheme=CalibrationMethod.MinMax)
+                                                     encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
                 quantized_module.input_quantizers[0] = input_quantizer
             else:
                 output_quantizer = QuantizeDequantize((1,),
                                                       bitwidth=8,
                                                       symmetric=False,
-                                                      qscheme=CalibrationMethod.MinMax)
+                                                      encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
                 quantized_module.output_quantizers[0] = output_quantizer
 
             if hasattr(module, 'weight'):
                 weight_quantizer = QuantizeDequantize((1,),
                                                       bitwidth=4,
                                                       symmetric=True,
-                                                      qscheme=CalibrationMethod.MinMax)
+                                                      encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
                 quantized_module.param_quantizers['weight'] = weight_quantizer
 
             setattr(sim_model, name, quantized_module)
@@ -149,20 +149,20 @@ class TestQuantsimOnnxExport:
                 input_quantizer = QuantizeDequantize((1,),
                                                      bitwidth=8,
                                                      symmetric=False,
-                                                     qscheme=CalibrationMethod.MinMax)
+                                                     encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
                 quantized_module.input_quantizers[0] = input_quantizer
 
             output_quantizer = QuantizeDequantize((1,),
                                                   bitwidth=8,
                                                   symmetric=False,
-                                                  qscheme=CalibrationMethod.MinMax)
+                                                  encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
             quantized_module.output_quantizers[0] = output_quantizer
 
             if hasattr(module, 'weight'):
                 weight_quantizer = QuantizeDequantize((1,),
                                                       bitwidth=4,
                                                       symmetric=True,
-                                                      qscheme=CalibrationMethod.MinMax)
+                                                      encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
                 quantized_module.param_quantizers['weight'] = weight_quantizer
 
             setattr(sim_model, name, quantized_module)
@@ -206,11 +206,11 @@ class TestQuantsimOnnxExport:
         quantized_pixel_shuffle.input_quantizers[0] = QuantizeDequantize((1,),
                                                                          bitwidth=8,
                                                                          symmetric=False,
-                                                                         qscheme=CalibrationMethod.MinMax)
+                                                                         encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
         quantized_pixel_shuffle.output_quantizers[0] = QuantizeDequantize((1,),
                                                                           bitwidth=8,
                                                                           symmetric=False,
-                                                                          qscheme=CalibrationMethod.MinMax)
+                                                                          encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
         sim_model = torch.nn.Sequential(quantized_pixel_shuffle)
         dummy_input = torch.randn(1, 4, 8, 8)
 
@@ -258,12 +258,12 @@ class TestQuantsimOnnxExport:
         sim_model.cust.input_quantizers[0] = QuantizeDequantize((1,),
                                                                 bitwidth=8,
                                                                 symmetric=False,
-                                                                qscheme=CalibrationMethod.MinMax)
+                                                                encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
         for i in range(1, 5):
             sim_model.cust.output_quantizers[i] = QuantizeDequantize((1,),
                                                                      bitwidth=8,
                                                                      symmetric=False,
-                                                                     qscheme=CalibrationMethod.MinMax)
+                                                                     encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
 
         with aimet_nn.compute_encodings(sim_model):
             _ = sim_model(dummy_input)
@@ -292,21 +292,21 @@ class TestQuantsimOnnxExport:
         sim_model.sfmax.input_quantizers[0] = QuantizeDequantize((1,),
                                                                  bitwidth=8,
                                                                  symmetric=False,
-                                                                 qscheme=CalibrationMethod.MinMax)
+                                                                 encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
         sim_model.sfmax.output_quantizers[0] = QuantizeDequantize((1,),
                                                                  bitwidth=8,
                                                                  symmetric=False,
-                                                                 qscheme=CalibrationMethod.MinMax)
+                                                                 encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
 
         sim_model.avgpool = FakeQuantizationMixin.from_module(sim_model.avgpool)
         sim_model.avgpool.input_quantizers[0] = QuantizeDequantize((1,),
                                                                  bitwidth=8,
                                                                  symmetric=False,
-                                                                 qscheme=CalibrationMethod.MinMax)
+                                                                 encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
         sim_model.avgpool.output_quantizers[0] = QuantizeDequantize((1,),
                                                                  bitwidth=8,
                                                                  symmetric=False,
-                                                                 qscheme=CalibrationMethod.MinMax)
+                                                                 encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
         with aimet_nn.compute_encodings(sim_model):
             _ = sim_model(dummy_input)
 
@@ -343,19 +343,19 @@ class TestQuantsimOnnxExport:
                 quantized_module.input_quantizers[0] = QuantizeDequantize((1,),
                                                                           bitwidth=8,
                                                                           symmetric=False,
-                                                                          qscheme=CalibrationMethod.MinMax)
+                                                                          encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
             if qsim_module.output_quantizers[0].enabled:
                 quantized_module.output_quantizers[0] = QuantizeDequantize((1,),
                                                                            bitwidth=8,
                                                                            symmetric=False,
-                                                                           qscheme=CalibrationMethod.MinMax)
+                                                                           encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
             for param_name, qsim_param_quantizer in qsim_module.param_quantizers.items():
                 if not qsim_param_quantizer.enabled:
                     continue
                 quantized_module.param_quantizers[param_name] = QuantizeDequantize((1,),
                                                                                    bitwidth=4,
                                                                                    symmetric=True,
-                                                                                   qscheme=CalibrationMethod.MinMax)
+                                                                                   encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
             setattr(sim_model, name, quantized_module)
 
         with aimet_nn.compute_encodings(sim_model):
