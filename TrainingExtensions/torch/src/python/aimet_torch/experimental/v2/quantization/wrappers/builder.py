@@ -48,7 +48,6 @@ from aimet_torch.qc_quantize_op import QcQuantizeOpMode, QcQuantizeWrapper, Stat
 from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridPerChannelQuantizer
 from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizationMixin
 from aimet_torch.experimental.v2.quantization.modules.quantize import QuantizeDequantize
-from aimet_torch.experimental.v2.quantization.encoding_analyzer import CalibrationMethod
 
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -268,17 +267,6 @@ class LazyQuantizer:
 
         assert self.data_type == QuantizationDataType.int, "Only int quantization is supported in quantsim v1.5"
 
-    def _get_v2_qscheme(self):
-        """
-        Converts v1 quant scheme into v2 quant scheme.
-
-        :return: corresponding v2 quant scheme
-        """
-        if self.quant_scheme in (QuantScheme.post_training_tf, QuantScheme.training_range_learning_with_tf_init):
-            return CalibrationMethod.MinMax
-        if self.quant_scheme == QuantScheme.post_training_percentile:
-            return CalibrationMethod.Percentile
-        raise RuntimeError(f"Quant scheme {self.quant_scheme} in old quantsim is not supported in quantsim v1.5")
 
     @staticmethod
     def _get_param_shape() -> List[int]:
@@ -296,16 +284,8 @@ class LazyQuantizer:
 
         :return: spec for v2 quantizer initialization
         """
-        if not self.enabled:
-            return None
+        raise NotImplementedError
 
-        self._validate_quantizer_properties()
-
-        qscheme = self._get_v2_qscheme()
-
-        quantizer_param_shape = self._get_param_shape()
-
-        return QuantizeDequantize(quantizer_param_shape, self.bitwidth, self.use_symmetric_encodings, qscheme)
 
     def _set_internal_quantizer_properties(self, quantizer: TensorQuantizer):
         """
@@ -337,6 +317,7 @@ class LazyQuantizer:
         return quantizer
 
 
+#pylint: disable=W0223
 class LazyParamQuantizer(LazyQuantizer):
     """
     Quantizer builder class for supporting both v1 and v2 blocks
