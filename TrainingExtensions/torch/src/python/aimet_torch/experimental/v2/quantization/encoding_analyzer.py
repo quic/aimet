@@ -41,7 +41,6 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from enum import Enum
 from typing import TypeVar, Generic, Tuple, Optional
 import torch
 from aimet_torch.experimental.v2.utils import reduce, StatisticsNotFoundError
@@ -53,8 +52,10 @@ class _MinMaxRange:
     max: Optional[torch.Tensor] = None
 
 class _Histogram:
-    # TODO
-    pass
+    histogram: torch.Tensor = None
+    bin_edges: torch.Tensor = None
+    min: Optional[torch.Tensor] = None
+    max: Optional[torch.Tensor] = None
 
 _Statistics = TypeVar('_Statistics', _MinMaxRange, _Histogram)
 
@@ -62,7 +63,7 @@ class _Observer(Generic[_Statistics], ABC):
     """
     Observes and gathers statistics
     """
-    def __init__(self, min_max_shape: torch.Tensor):
+    def __init__(self, min_max_shape: tuple):
         self.shape = min_max_shape
 
     @abstractmethod
@@ -86,7 +87,7 @@ class _MinMaxObserver(_Observer[_MinMaxRange]):
     """
     Observer for Min-Max calibration technique
     """
-    def __init__(self, min_max_shape: torch.Tensor):
+    def __init__(self, min_max_shape: tuple):
         super().__init__(min_max_shape)
         self.stats = _MinMaxRange()
 
@@ -124,9 +125,10 @@ class _HistogramObserver(_Observer[_Histogram]):
     """
     Observer for Histogram based calibration techniques (percentile, MSE)
     """
-    def __init__(self, min_max_shape: torch.Tensor):
+    def __init__(self, min_max_shape: tuple, num_bins: int):
         super().__init__(min_max_shape)
         self.stats = _Histogram()
+        self.num_bins = num_bins
 
     @torch.no_grad()
     def collect_stats(self, input_tensor: torch.Tensor) -> _Histogram:
@@ -144,31 +146,7 @@ class _HistogramObserver(_Observer[_Histogram]):
     def get_stats(self) -> _Histogram:
         return self.stats
 
-class CalibrationMethod(Enum):
-    """
-    Enum for quantization calibration method
-    """
-    MinMax = 0
-    SQNR = 1
-    Percentile = 2
-    MSE = 3
-
-def get_encoding_analyzer_cls(calibration_method: CalibrationMethod, min_max_shape: torch.Tensor):
-    """
-    Instantiates an EncodingAnalyzer based on the CalibrationMethod
-    """
-    if calibration_method == CalibrationMethod.MinMax:
-        return MinMaxEncodingAnalyzer(min_max_shape)
-    if calibration_method == CalibrationMethod.SQNR:
-        return SqnrEncodingAnalyzer(min_max_shape)
-    if calibration_method == CalibrationMethod.Percentile:
-        return PercentileEncodingAnalyzer(min_max_shape)
-    if calibration_method == CalibrationMethod.MSE:
-        return MseEncodingAnalyzer(min_max_shape)
-    raise ValueError('Calibration type must be one of the following:'
-                     'minmax, sqnr, mse, percentile')
-
-class _EncodingAnalyzer(Generic[_Statistics], ABC):
+class EncodingAnalyzer(Generic[_Statistics], ABC):
     def __init__(self, observer: _Observer):
         self.observer = observer
 
@@ -194,7 +172,7 @@ class _EncodingAnalyzer(Generic[_Statistics], ABC):
             -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
         pass
 
-class MinMaxEncodingAnalyzer(_EncodingAnalyzer[_MinMaxRange]):
+class MinMaxEncodingAnalyzer(EncodingAnalyzer[_MinMaxRange]):
     """
     Encoding Analyzer for Min-Max calibration technique
     """
@@ -202,6 +180,7 @@ class MinMaxEncodingAnalyzer(_EncodingAnalyzer[_MinMaxRange]):
         observer = _MinMaxObserver(shape)
         super().__init__(observer)
 
+    #pylint: disable=too-many-locals
     @torch.no_grad()
     def compute_encodings_from_stats(self, stats: _MinMaxRange, bitwidth: int, is_symmetric: bool)\
             -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
@@ -226,6 +205,12 @@ class MinMaxEncodingAnalyzer(_EncodingAnalyzer[_MinMaxRange]):
         updated_max = max_with_zero + update_max
         updated_min = min_with_zero - update_min
 
+        # replace pos and neg inf respectively
+        updated_max[torch.isposinf(updated_max)] = torch.finfo(stats.min.dtype).max
+        updated_min[torch.isposinf(updated_min)] = torch.finfo(stats.min.dtype).max
+        updated_max[torch.isneginf(updated_max)] = -torch.finfo(stats.min.dtype).max
+        updated_min[torch.isneginf(updated_min)] = -torch.finfo(stats.min.dtype).max
+
         if is_symmetric:
             # ensures that min/max pairings are symmetric
             symmetric_min = torch.minimum(updated_min, -updated_max)
@@ -234,12 +219,12 @@ class MinMaxEncodingAnalyzer(_EncodingAnalyzer[_MinMaxRange]):
 
         return updated_min, updated_max
 
-class PercentileEncodingAnalyzer(_EncodingAnalyzer[_Histogram]):
+class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
     """
     Encoding Analyzer for Percentile calibration technique
     """
-    def __init__(self, shape):
-        observer = _HistogramObserver(shape)
+    def __init__(self, shape: torch.Tensor, num_bins: int = 2048):
+        observer = _HistogramObserver(shape=shape, num_bins=num_bins)
         super().__init__(observer)
 
     @torch.no_grad()
@@ -248,12 +233,12 @@ class PercentileEncodingAnalyzer(_EncodingAnalyzer[_Histogram]):
         # TODO
         raise NotImplementedError
 
-class SqnrEncodingAnalyzer(_EncodingAnalyzer[_Histogram]):
+class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
     """
     Encoding Analyzer for SQNR Calibration technique
     """
-    def __init__(self, shape):
-        observer = _HistogramObserver(shape)
+    def __init__(self, shape: torch.Tensor, num_bins: int = 2048):
+        observer = _HistogramObserver(shape=shape, num_bins=num_bins)
         super().__init__(observer)
 
     @torch.no_grad()
@@ -262,12 +247,12 @@ class SqnrEncodingAnalyzer(_EncodingAnalyzer[_Histogram]):
         # TODO
         raise NotImplementedError
 
-class MseEncodingAnalyzer(_EncodingAnalyzer[_Histogram]):
+class MseEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
     """
     Encoding Analyzer for Mean Square Error (MSE) Calibration technique
     """
-    def __init__(self, shape):
-        observer = _HistogramObserver(shape)
+    def __init__(self, shape: torch.Tensor, num_bins: int = 2048):
+        observer = _HistogramObserver(shape=shape, num_bins=num_bins)
         super().__init__(observer)
 
     @torch.no_grad()
