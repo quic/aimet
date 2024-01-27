@@ -47,7 +47,7 @@ import weakref
 import torch
 from torch import nn
 
-from aimet_torch.experimental.v2.utils import patch_attr, patch_param, StatisticsNotFoundError
+from aimet_torch.experimental.v2.utils import patch_attr, patch_param, _is_expandable, StatisticsNotFoundError
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import EncodingAnalyzer, MinMaxEncodingAnalyzer
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 from aimet_torch.experimental.v2.utils import ste_round
@@ -73,10 +73,16 @@ class _QuantizerBase(torch.nn.Module): # pylint: disable=abstract-method
 
     def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None):
         super().__init__()
+        if isinstance(shape, int):
+            shape = (shape,)
         self.shape = shape
         self.bitwidth = bitwidth
         self.symmetric = symmetric
         self.encoding_analyzer = encoding_analyzer or MinMaxEncodingAnalyzer(shape)
+
+        if not _is_expandable(self.encoding_analyzer.observer.shape, self.shape):
+            raise RuntimeError(f'Encoding analyzer of shape {self.encoding_analyzer.observer.shape} '
+                               f'is incompatible with quantizer of shape {self.shape}.')
 
         # param_name -> (weakref of initial parameter, version info of the initial parameter)
         # This info will be used for judging whether the current parameter has ever been

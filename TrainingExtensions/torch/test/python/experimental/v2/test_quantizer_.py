@@ -625,6 +625,33 @@ def test_asymmetric_learning(q, x, optim_cls):
     assert not torch.equal(q.get_offset(), original_offset)
 
 
+def test_invalid_encoding_analyzer():
+    """
+    When: Instantiate a quantizer with an encoding analyzer of unmatching shape
+    Then: Throw runtime error
+    """
+    param_shape = (10, 11)
+
+    encoding_shape = (12,)
+    with pytest.raises(RuntimeError):
+        _ = QuantizeDequantize(param_shape, 8, True, MinMaxEncodingAnalyzer(encoding_shape))
+
+    encoding_shape = (10, 11)
+    _ = QuantizeDequantize(param_shape, 8, True, MinMaxEncodingAnalyzer(encoding_shape))
+
+    encoding_shape = (11,)
+    _ = QuantizeDequantize(param_shape, 8, True, MinMaxEncodingAnalyzer(encoding_shape))
+
+    encoding_shape = (10, 1)
+    _ = QuantizeDequantize(param_shape, 8, True, MinMaxEncodingAnalyzer(encoding_shape))
+
+    encoding_shape = 11
+    _ = QuantizeDequantize(param_shape, 8, True, MinMaxEncodingAnalyzer(encoding_shape))
+
+    encoding_shape = 1
+    _ = QuantizeDequantize(param_shape, 8, True, MinMaxEncodingAnalyzer(encoding_shape))
+
+
 @torch.no_grad()
 @pytest.mark.cuda
 def test_is_initialized():

@@ -64,6 +64,8 @@ class _Observer(Generic[_Statistics], ABC):
     Observes and gathers statistics
     """
     def __init__(self, shape: tuple):
+        if isinstance(shape, int):
+            shape = (shape,)
         self.shape = shape
 
     @abstractmethod
