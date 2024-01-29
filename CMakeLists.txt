@@ -153,9 +153,10 @@ if (ENABLE_TORCH)
                   )
 
   # Update CMAKE_CUDA_ARCHITECTURES with the supported architectures that this pytorch version was compiled for
-  #   1. Remove sm_ prefixes from the CUDA architecture names.
+  #   1. Remove unsupported "sm_90" CUDA architecture for current NVCC version.
+  #   1. Remove "sm_xx" prefixes from the CUDA architecture names.
   #   2. Change python list into a CMake list.
-  execute_process(COMMAND ${Python3_EXECUTABLE} "-c" "import torch; print(';'.join(arch.split('_')[1] for arch in torch.cuda.get_arch_list()))"
+  execute_process(COMMAND ${Python3_EXECUTABLE} "-c" "import torch; print(';'.join(arch.split('_')[1] for arch in torch.cuda.get_arch_list()[:-1]))"
                   RESULT_VARIABLE TORCH_NOT_FOUND
                   OUTPUT_VARIABLE CMAKE_CUDA_ARCHITECTURES
                   OUTPUT_STRIP_TRAILING_WHITESPACE

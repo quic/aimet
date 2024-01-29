@@ -222,7 +222,8 @@ class QuantizableMultiheadAttention(nn.MultiheadAttention):
                 key_padding_mask: Optional[Tensor] = None,
                 need_weights: bool = True,
                 attn_mask: Optional[Tensor] = None,
-                average_attn_weights: bool = True) -> Tuple[Tensor, Optional[Tensor]]:
+                average_attn_weights: bool = True,
+                is_causal: bool = False) -> Tuple[Tensor, Optional[Tensor]]:
         r"""
     Note::
         Please, refer to :func:`~torch.nn.MultiheadAttention.forward` for more
@@ -239,6 +240,16 @@ class QuantizableMultiheadAttention(nn.MultiheadAttention):
         need_weights: output attn_output_weights.
         attn_mask: 2D or 3D mask that prevents attention to certain positions. A 2D mask will be broadcasted for all
             the batches while a 3D mask allows to specify a different mask for the entries of each batch.
+        average_attn_weights: If true, indicates that the returned ``attn_weights`` should be averaged across
+            heads. Otherwise, ``attn_weights`` are provided separately per head. Note that this flag only has an
+            effect when ``need_weights=True``. Default: ``True`` (i.e. average weights across heads)
+        is_causal: If specified, applies a causal mask as attention mask.
+            Default: ``False``.
+            Warning:
+            ``is_causal`` provides a hint that ``attn_mask`` is the
+            causal mask. Providing incorrect hints can result in
+            incorrect execution, including forward and backward
+            compatibility.
 
     Shape:
         - Inputs:
@@ -488,14 +499,24 @@ class QuantizableTransformerEncoderLayer(nn.TransformerEncoderLayer):
         self.add1 = elementwise_ops.Add()
         self.add2 = elementwise_ops.Add()
 
-    def forward(self, src: Tensor, src_mask: Optional[Tensor] = None,
-                src_key_padding_mask: Optional[Tensor] = None) -> Tensor:
+    def forward(self,
+                src: Tensor,
+                src_mask: Optional[Tensor] = None,
+                src_key_padding_mask: Optional[Tensor] = None,
+                is_causal: bool = False) -> Tensor:
         r"""Pass the input through the encoder layer.
 
         Args:
             src: the sequence to the encoder layer (required).
             src_mask: the mask for the src sequence (optional).
             src_key_padding_mask: the mask for the src keys per batch (optional).
+            is_causal: If specified, applies a causal mask as ``src mask``.
+                Default: ``False``.
+                Warning:
+                ``is_causal`` provides a hint that ``src_mask`` is the
+                causal mask. Providing incorrect hints can result in
+                incorrect execution, including forward and backward
+                compatibility.
 
         Shape:
             see the docs in Transformer class.
@@ -609,8 +630,15 @@ class QuantizableTransformerDecoderLayer(nn.TransformerDecoderLayer):
         self.add2 = elementwise_ops.Add()
         self.add3 = elementwise_ops.Add()
 
-    def forward(self, tgt: Tensor, memory: Tensor, tgt_mask: Optional[Tensor] = None, memory_mask: Optional[Tensor] = None,
-                tgt_key_padding_mask: Optional[Tensor] = None, memory_key_padding_mask: Optional[Tensor] = None) -> Tensor:
+    def forward(self,
+                tgt: Tensor,
+                memory: Tensor,
+                tgt_mask: Optional[Tensor] = None,
+                memory_mask: Optional[Tensor] = None,
+                tgt_key_padding_mask: Optional[Tensor] = None,
+                memory_key_padding_mask: Optional[Tensor] = None,
+                tgt_is_causal: bool = False,
+                memory_is_causal: bool = False) -> Tensor:
         r"""Pass the inputs (and mask) through the decoder layer.
 
         Args:
@@ -620,7 +648,18 @@ class QuantizableTransformerDecoderLayer(nn.TransformerDecoderLayer):
             memory_mask: the mask for the memory sequence (optional).
             tgt_key_padding_mask: the mask for the tgt keys per batch (optional).
             memory_key_padding_mask: the mask for the memory keys per batch (optional).
-
+            tgt_is_causal: If specified, applies a causal mask as ``tgt mask``.
+                Default: ``False``.
+                # Warning:
+                ``tgt_is_causal`` provides a hint that ``tgt_mask`` is
+                the causal mask. Providing incorrect hints can result in
+                incorrect execution, including forward and backward compatibility.
+            memory_is_causal: If specified, applies a causal mask as ``memory mask``.
+                Default: ``False``.
+                Warning:
+                ``memory_is_causal`` provides a hint that
+                ``memory_mask`` is the causal mask. Providing incorrect hints
+                 can result in incorrect execution, including forward and backward compatibility.
         Shape:
             see the docs in Transformer class.
         """
