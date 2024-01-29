@@ -146,6 +146,24 @@ class AffineQuantizerBase(QuantizerBase):
             for min_, max_, scale_, offset_ in zip(min, max, scale, offset)
         ]
 
+    def extra_repr(self) -> str:
+        return f'shape={self.shape}, bitwidth={self.bitwidth}, symmetric={self.symmetric}'
+
+
+class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
+    """
+    Affine quantizer with min-max as trainable parameters
+    """
+
+    min: torch.nn.Parameter
+    max: torch.nn.Parameter
+
+    def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None):
+        super().__init__(shape, bitwidth, symmetric, encoding_analyzer)
+
+        self.register_quantization_parameter('min', nn.Parameter(-torch.ones(self.shape)))
+        self.register_quantization_parameter('max', nn.Parameter(torch.ones(self.shape)))
+
     @contextlib.contextmanager
     def compute_encodings(self):
         """
@@ -184,24 +202,6 @@ class AffineQuantizerBase(QuantizerBase):
 
         finally:
             self.encoding_analyzer.reset_stats()
-
-    def extra_repr(self) -> str:
-        return f'shape={self.shape}, bitwidth={self.bitwidth}, symmetric={self.symmetric}'
-
-
-class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
-    """
-    Affine quantizer with min-max as trainable parameters
-    """
-
-    min: torch.nn.Parameter
-    max: torch.nn.Parameter
-
-    def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None):
-        super().__init__(shape, bitwidth, symmetric, encoding_analyzer)
-
-        self.register_quantization_parameter('min', nn.Parameter(-torch.ones(self.shape)))
-        self.register_quantization_parameter('max', nn.Parameter(torch.ones(self.shape)))
 
     def get_min(self) -> Optional[torch.Tensor]:
         """
