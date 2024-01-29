@@ -165,6 +165,19 @@ def quantize_to_fp8(x_float: torch.Tensor,
         new_shape[per_channel_axis] = -1
         maxval = maxval.view(new_shape)
 
+    return fake_cast_to_ieee_float(x_float, maxval, exponent_bits, mantissa_bits)
+
+
+def fake_cast_to_ieee_float(x_float, maxval, exponent_bits, mantissa_bits):
+    """
+    Fake-cast to the given exponent and mantissa bits based on IEEE float representation.
+    IEEE float representation follows the following equation:
+      maximum_representiable_value = (2 - 2**-M) * 2 ** (2**E - bias - 2)
+      (E: exponent bits, M: mantissa bits)
+
+    This function derives the bias from exponent bits, mantissa bits, and
+    maximum representable value based on the above equation.
+    """
     # Math explanation of what happens here:
     # Bias is computed from maxval: $B=2^E - \log_2(M) + \log_2(2 - 2^{-M}) - 1$
     # This follows from maxval $M=(2 - 2^{-M}) \cdot 2^{2^E-1-B}$.
