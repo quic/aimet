@@ -630,6 +630,7 @@ def test_invalid_encoding_analyzer():
     When: Instantiate a quantizer with an encoding analyzer of unmatching shape
     Then: Throw runtime error
     """
+    dummy_input = torch.randn((30, 10, 11))
     param_shape = (10, 11)
 
     encoding_shape = (12,)
@@ -637,19 +638,29 @@ def test_invalid_encoding_analyzer():
         _ = QuantizeDequantize(param_shape, 8, True, MinMaxEncodingAnalyzer(encoding_shape))
 
     encoding_shape = (10, 11)
-    _ = QuantizeDequantize(param_shape, 8, True, MinMaxEncodingAnalyzer(encoding_shape))
+    qdq = QuantizeDequantize(param_shape, 8, True, MinMaxEncodingAnalyzer(encoding_shape))
+    with qdq.compute_encodings():
+        _ = qdq(dummy_input)
 
     encoding_shape = (11,)
-    _ = QuantizeDequantize(param_shape, 8, True, MinMaxEncodingAnalyzer(encoding_shape))
+    qdq = QuantizeDequantize(param_shape, 8, True, MinMaxEncodingAnalyzer(encoding_shape))
+    with qdq.compute_encodings():
+        _ = qdq(dummy_input)
 
     encoding_shape = (10, 1)
-    _ = QuantizeDequantize(param_shape, 8, True, MinMaxEncodingAnalyzer(encoding_shape))
+    qdq = QuantizeDequantize(param_shape, 8, True, MinMaxEncodingAnalyzer(encoding_shape))
+    with qdq.compute_encodings():
+        _ = qdq(dummy_input)
 
     encoding_shape = 11
-    _ = QuantizeDequantize(param_shape, 8, True, MinMaxEncodingAnalyzer(encoding_shape))
+    qdq = QuantizeDequantize(param_shape, 8, True, MinMaxEncodingAnalyzer(encoding_shape))
+    with qdq.compute_encodings():
+        _ = qdq(dummy_input)
 
     encoding_shape = 1
-    _ = QuantizeDequantize(param_shape, 8, True, MinMaxEncodingAnalyzer(encoding_shape))
+    qdq = QuantizeDequantize(param_shape, 8, True, MinMaxEncodingAnalyzer(encoding_shape))
+    with qdq.compute_encodings():
+        _ = qdq(dummy_input)
 
 
 @torch.no_grad()

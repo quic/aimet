@@ -132,7 +132,8 @@ def patch_param(module: torch.nn.Module, param_name: str, new_param: torch.Tenso
     """
     original_param = getattr(module, param_name)
     if original_param is not None:
-        assert original_param.shape == new_param.shape
+        assert _is_expandable(new_param.shape, original_param.shape)
+        new_param = new_param.expand_as(original_param)
 
     # Modify module.__dict__.
     # module.__dict__ is the primary lookup table which has higher priority than __getattr__ method.
