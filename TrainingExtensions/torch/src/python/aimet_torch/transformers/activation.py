@@ -139,7 +139,7 @@ from torch import nn
 import torch.nn.functional as nnF
 from aimet_torch import elementwise_ops
 
-# pylint: disable = too-many-arguments
+# pylint: disable=too-many-arguments
 class QuantizableMultiheadAttention(nn.MultiheadAttention):
     """ quantizable defn of MHA """
     _FLOAT_MODULE = nn.MultiheadAttention
@@ -188,8 +188,8 @@ class QuantizableMultiheadAttention(nn.MultiheadAttention):
         Please, follow the quantization flow to convert the quantizable MHA.
     """
     __constants__ = ['batch_first']
-    # pylint: disable = too-many-arguments
-    # pylint: disable = arguments-differ
+    # pylint: disable=too-many-arguments
+    # pylint: disable=arguments-differ
     def __init__(self, embed_dim: int, num_heads: int,
                  dropout: float = 0., bias: bool = True,
                  add_bias_kv: bool = False, add_zero_attn: bool = False,
@@ -214,7 +214,9 @@ class QuantizableMultiheadAttention(nn.MultiheadAttention):
 
     def _get_name(self):
         return 'QuantizableMultiheadAttention'
-    # pylint: disable = too-many-arguments
+
+    # pylint: disable=too-many-arguments
+    # pylint: disable=unused-argument
     def forward(self,
                 query: Tensor,
                 key: Tensor,
@@ -499,6 +501,8 @@ class QuantizableTransformerEncoderLayer(nn.TransformerEncoderLayer):
         self.add1 = elementwise_ops.Add()
         self.add2 = elementwise_ops.Add()
 
+    # pylint: disable=unused-argument
+    # pylint: disable=arguments-differ
     def forward(self,
                 src: Tensor,
                 src_mask: Optional[Tensor] = None,
@@ -630,6 +634,8 @@ class QuantizableTransformerDecoderLayer(nn.TransformerDecoderLayer):
         self.add2 = elementwise_ops.Add()
         self.add3 = elementwise_ops.Add()
 
+    # pylint: disable=unused-argument
+    # pylint: disable=arguments-differ
     def forward(self,
                 tgt: Tensor,
                 memory: Tensor,
