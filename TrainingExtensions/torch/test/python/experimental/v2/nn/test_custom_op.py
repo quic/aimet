@@ -37,7 +37,7 @@
 
 import pytest
 import torch
-from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizedLinear, FakeQuantizationMixin
+from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizationMixin
 
 
 class CustomOp(torch.nn.Module):
@@ -55,7 +55,9 @@ class TestFakeQuantizedCustomOp:
         try:
             @FakeQuantizationMixin.implements(CustomOp)
             class FakeQuantizedCustomOp(FakeQuantizationMixin, CustomOp):
-                ...
+                def quantized_forward(self, x):
+                    x = super().forward(x)
+                    return self.output_quantizers[0](x)
 
             quantized_custom_op = FakeQuantizationMixin.from_module(CustomOp())
             assert isinstance(quantized_custom_op, FakeQuantizedCustomOp)
@@ -71,7 +73,9 @@ class TestFakeQuantizedCustomOp:
         try:
             @FakeQuantizationMixin.implements(CustomOp)
             class FakeQuantizedCustomOp(FakeQuantizationMixin, CustomOp):
-                ...
+                def quantized_forward(self, x):
+                    x = super().forward(x)
+                    return self.output_quantizers[0](x)
 
             quantized_custom_op_cls = FakeQuantizationMixin.wrap(CustomOp)
             assert quantized_custom_op_cls is FakeQuantizedCustomOp
