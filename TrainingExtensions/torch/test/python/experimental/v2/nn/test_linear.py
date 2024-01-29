@@ -42,14 +42,13 @@ import torch.nn.functional as F
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 from aimet_torch.experimental.v2.quantization.modules.quantize import QuantizeDequantize
 from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizedLinear, FakeQuantizationMixin
-
+from aimet_torch.experimental.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 
 
 @pytest.fixture
 def input():
     return torch.arange(-5, 5) / 10
 
-@pytest.mark.skip('Skipping due to changes in EncodingAnalyzer instantiation')
 class TestFakeQuantizedLinear:
     def test_no_spec(self, input):
         quant_linear = FakeQuantizedLinear(10, 10)
@@ -69,7 +68,7 @@ class TestFakeQuantizedLinear:
         quant_linear.input_quantizers[0] = QuantizeDequantize((1,),
                                                               bitwidth=8,
                                                               symmetric=False,
-                                                              qscheme='MinMax')
+                                                              encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
         """
         When: Inspect `input_quantizer` attribute.
         Then: `input_quantizer` is set to `QuantizeDequantize` as a submodule
@@ -111,7 +110,7 @@ class TestFakeQuantizedLinear:
         quant_linear.output_quantizers[0] = QuantizeDequantize((1,),
                                                                bitwidth=8,
                                                                symmetric=False,
-                                                               qscheme='MinMax')
+                                                               encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
 
         """
         When: Inspect `output_quantizer` attribute.
@@ -158,7 +157,7 @@ class TestFakeQuantizedLinear:
         quant_linear.param_quantizers['weight'] = QuantizeDequantize((10,),
                                                                      bitwidth=4,
                                                                      symmetric=True,
-                                                                     qscheme='MinMax')
+                                                                     encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
 
         """
         When: Inspect `weight_quantizer` attribute.
@@ -196,15 +195,15 @@ class TestFakeQuantizedLinear:
         quant_linear.input_quantizers[0] = QuantizeDequantize((1,),
                                                               bitwidth=8,
                                                               symmetric=False,
-                                                              qscheme='MinMax')
+                                                              encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
         quant_linear.output_quantizers[0] = QuantizeDequantize((1,),
                                                                bitwidth=8,
                                                                symmetric=False,
-                                                               qscheme='MinMax')
+                                                               encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
         quant_linear.param_quantizers['weight'] = QuantizeDequantize((10,),
                                                                      bitwidth=4,
                                                                      symmetric=True,
-                                                                     qscheme='MinMax')
+                                                                     encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
         with quant_linear.compute_encodings():
             _ = quant_linear(input)
 
