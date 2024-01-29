@@ -48,6 +48,7 @@ from aimet_torch.qc_quantize_op import QcQuantizeOpMode, QcQuantizeWrapper, Stat
 from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridPerChannelQuantizer
 from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizationMixin
 from aimet_torch.experimental.v2.quantization.modules.quantize import QuantizeDequantize
+from aimet_torch.experimental.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer, PercentileEncodingAnalyzer
 
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -267,6 +268,17 @@ class LazyQuantizer:
 
         assert self.data_type == QuantizationDataType.int, "Only int quantization is supported in quantsim v1.5"
 
+    def _get_v2_encoding_analyzer(self, shape):
+        """
+        Converts v1 quant scheme into v2 quant scheme.
+
+        :return: corresponding v2 quant scheme
+        """
+        if self.quant_scheme in (QuantScheme.post_training_tf, QuantScheme.training_range_learning_with_tf_init):
+            return MinMaxEncodingAnalyzer(shape)
+        if self.quant_scheme == QuantScheme.post_training_percentile:
+            return PercentileEncodingAnalyzer(shape)
+        raise NotImplementedError(f"Quant scheme {self.quant_scheme} in old quantsim is not supported yet in quantsim v1.5")
 
     @staticmethod
     def _get_param_shape() -> List[int]:
@@ -284,8 +296,17 @@ class LazyQuantizer:
 
         :return: spec for v2 quantizer initialization
         """
-        raise NotImplementedError
+        if not self.enabled:
+            return None
 
+        self._validate_quantizer_properties()
+
+        quantizer_param_shape = self._get_param_shape()
+
+        encoding_analyzer = self._get_v2_encoding_analyzer(quantizer_param_shape)
+
+        return QuantizeDequantize(quantizer_param_shape, self.bitwidth,
+                                  self.use_symmetric_encodings, encoding_analyzer)
 
     def _set_internal_quantizer_properties(self, quantizer: TensorQuantizer):
         """

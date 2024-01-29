@@ -41,7 +41,7 @@ import torch.nn.functional as F
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 from aimet_torch.experimental.v2.quantization.modules.quantize import QuantizeDequantize
 from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizedSoftmax
-
+from aimet_torch.experimental.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 
 
 @pytest.fixture
@@ -70,7 +70,6 @@ class TestFakeQuantizedSoftmax:
         expected_output = F.softmax(input, quant_softmax.dim)
         assert torch.equal(quant_softmax(input), expected_output)
 
-    @pytest.mark.skip('Skipping due to changes in EncodingAnalyzer instantiation')
     def test_input_qtzn(self, input):
         """
         Given: Instantiate a fake-quantized module with input quantizer spec specified
@@ -79,7 +78,7 @@ class TestFakeQuantizedSoftmax:
         quant_softmax.input_quantizers[0] = QuantizeDequantize((1,),
                                                                bitwidth=8,
                                                                symmetric=False,
-                                                               qscheme='MinMax')
+                                                               encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
 
         """
         When: Inspect `input_quantizer` attribute.
@@ -113,7 +112,6 @@ class TestFakeQuantizedSoftmax:
         expected_output = F.softmax(input_qdq, quant_softmax.dim)
         assert torch.equal(quant_output, expected_output)
 
-    @pytest.mark.skip('Skipping due to changes in EncodingAnalyzer instantiation')
     def test_output_qtzn(self, input):
         """
         Given: Instantiate a fake-quantized module with output quantizer spec specified
@@ -122,7 +120,7 @@ class TestFakeQuantizedSoftmax:
         quant_softmax.output_quantizers[0] = QuantizeDequantize((1,),
                                                                 bitwidth=8,
                                                                 symmetric=False,
-                                                                qscheme='MinMax')
+                                                                encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
 
         """
         When: Inspect `output_quantizer` attribute.
