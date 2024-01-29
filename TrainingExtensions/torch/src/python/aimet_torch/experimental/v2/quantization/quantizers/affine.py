@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -35,31 +35,29 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 # pylint: disable=redefined-builtin
-""" nn.Modules for quantization operators """
+""" Affine quantizers """
 
 import abc
-import copy
 from typing import Optional, Tuple, List, Dict
 import contextlib
-from collections import OrderedDict
 import functools
-import weakref
 
 import torch
 from torch import nn
 
 from aimet_torch.experimental.v2.utils import patch_attr, patch_param, _is_expandable, StatisticsNotFoundError
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import EncodingAnalyzer, MinMaxEncodingAnalyzer
+from aimet_torch.experimental.v2.quantization.quantizers.base import QuantizerBase
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 from aimet_torch.experimental.v2.utils import ste_round
 
 
-__all__ = ['QuantizerBase', 'MinMaxQuantizer', 'Quantize', 'QuantizeDequantize', 'Dequantize']
+__all__ = ['AffineQuantizerBase', 'MinMaxQuantizer', 'Quantize', 'QuantizeDequantize', 'Dequantize']
 
 
-class QuantizerBase(abc.ABC, torch.nn.Module):
+class AffineQuantizerBase(QuantizerBase):
     """
-    Base class for quantization modules.
+    Base class for linear quantization modules.
 
     :param shape: Shape of the quantization parameters.
     :param bitwidth: Quantization bitwidth.
@@ -80,11 +78,6 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
         if not _is_expandable(self.encoding_analyzer.observer.shape, self.shape):
             raise RuntimeError(f'Encoding analyzer of shape {self.encoding_analyzer.observer.shape} '
                                f'is incompatible with quantizer of shape {self.shape}.')
-
-        # param_name -> (weakref of initial parameter, version info of the initial parameter)
-        # This info will be used for judging whether the current parameter has ever been
-        # initialized after it was instantiated.
-        self._initial_parameters = OrderedDict()
 
     @abc.abstractmethod
     def get_min(self) -> torch.Tensor:
@@ -127,82 +120,6 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
         """
         Set quantization parameters to the given min-max range
         """
-
-    @torch.no_grad()
-    def __deepcopy__(self, memo):
-        self_copy = self.__new__(type(self))
-        self_copy.__dict__ = copy.deepcopy(self.__dict__, memo)
-
-        for name, param in self_copy.named_parameters():
-            # Register parameters to the copied quantizer
-            self_copy.register_quantization_parameter(name, param)
-
-            # If the parameter has been already initialized,
-            # artificially increment the parameter version to mark as initialized
-            if self._is_initialized(name):
-                param.mul_(1.)
-
-        return self_copy
-
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state.pop('_initial_parameters')
-        state['initialized_parameters'] = [param_name for param_name, _ in self.named_parameters()
-                                           if self._is_initialized(param_name)]
-        return state
-
-    @torch.no_grad()
-    def __setstate__(self, state):
-        initialized_parameters = state.pop('initialized_parameters')
-        self.__dict__.update(state)
-
-        self._initial_parameters = OrderedDict()
-        for param_name, param in self.named_parameters():
-            # Register parameters to the loaded quantizer
-            self.register_quantization_parameter(param_name, param)
-
-            # If the parameter has been already initialized,
-            # artificially increment the parameter version to mark as initialized
-            if param_name in initialized_parameters:
-                param.mul_(1.)
-
-    def register_quantization_parameter(self, name: str, param: nn.Parameter):
-        """
-        Register quantization parameter.
-        """
-        # pylint: disable=protected-access
-
-        self.register_parameter(name, param)
-        param = getattr(self, name)
-        self._initial_parameters[name] = (weakref.ref(param), param._version)
-
-    def _is_initialized(self, param_name) -> bool:
-        # pylint: disable=protected-access
-
-        initial_param_weakref, initial_param_version = self._initial_parameters[param_name]
-        initial_param = initial_param_weakref()
-
-        if initial_param is None:
-            # The initial parameter object doesn't exist in memory space anymore.
-            return True
-
-        current_param = getattr(self, param_name)
-
-        if current_param is initial_param and current_param._version == initial_param_version:
-            # 1. Current parameter is the identical object as the initial parameter
-            # 2. The version nubmer of the current parameter never changed
-            return False
-
-        return True
-
-    def is_initialized(self) -> bool:
-        """
-        Returns true if the quantization parameters are initialized.
-        """
-        for param_name, _ in self.named_parameters():
-            if not self._is_initialized(param_name):
-                return False
-        return True
 
     @torch.no_grad()
     def get_encodings(self) -> Optional[List[Dict]]:
@@ -272,9 +189,9 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
         return f'shape={self.shape}, bitwidth={self.bitwidth}, symmetric={self.symmetric}'
 
 
-class MinMaxQuantizer(QuantizerBase): # pylint: disable=abstract-method
+class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
     """
-    Linear quantizer with min-max as trainable parameters
+    Affine quantizer with min-max as trainable parameters
     """
 
     min: torch.nn.Parameter

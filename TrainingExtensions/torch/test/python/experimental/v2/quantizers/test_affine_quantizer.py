@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -43,7 +43,7 @@ from torch import nn
 from torch.optim import SGD, RMSprop, Adagrad, Adam, AdamW
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 from aimet_torch.experimental.v2.quantization import Quantize, QuantizeDequantize
-from aimet_torch.experimental.v2.quantization.modules.quantize import QuantizerBase
+from aimet_torch.experimental.v2.quantization.quantizers.affine import QuantizerBase
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 
 

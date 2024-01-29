@@ -34,7 +34,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
 # pylint: disable=all
 
-from .quantizers import *
+from .base import *
+from .affine import *

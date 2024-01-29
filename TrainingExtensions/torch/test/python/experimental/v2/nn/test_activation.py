@@ -39,7 +39,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 from aimet_torch.experimental.v2.quantization.backends import get_backend
-from aimet_torch.experimental.v2.quantization.modules.quantize import QuantizeDequantize
+from aimet_torch.experimental.v2.quantization.quantizers.affine import QuantizeDequantize
 from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizedSoftmax
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 
