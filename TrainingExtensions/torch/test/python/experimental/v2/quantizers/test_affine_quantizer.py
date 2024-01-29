@@ -42,8 +42,7 @@ import torch
 from torch import nn
 from torch.optim import SGD, RMSprop, Adagrad, Adam, AdamW
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
-from aimet_torch.experimental.v2.quantization import Quantize, QuantizeDequantize
-from aimet_torch.experimental.v2.quantization.quantizers.affine import QuantizerBase
+from aimet_torch.experimental.v2.quantization.quantizers.affine import AffineQuantizerBase, Quantize, QuantizeDequantize
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 
 
@@ -208,7 +207,7 @@ def test_qdq_compute_encodings(quantize_dequantize: QuantizeDequantize, x: torch
     quantize_dequantize(symmetric=True, initialized=False),
     quantize_dequantize(symmetric=True, initialized=True),
 ])
-def test_compute_encodings_with_no_input(q: QuantizerBase):
+def test_compute_encodings_with_no_input(q: AffineQuantizerBase):
     """
     :param q: Quantize or QuantizeDequantize module
 
@@ -247,7 +246,7 @@ def test_compute_encodings_with_no_input(q: QuantizerBase):
     quantize(symmetric=False, initialized=True),
     quantize_dequantize(symmetric=False, initialized=True),
 ])
-def test_backward_during_compute_encodings(q: QuantizerBase, x: torch.Tensor):
+def test_backward_during_compute_encodings(q: AffineQuantizerBase, x: torch.Tensor):
     """
     :param q: Quantize or QuantizeDequantize module
     :param x: Input tensor
@@ -276,7 +275,7 @@ def test_backward_during_compute_encodings(q: QuantizerBase, x: torch.Tensor):
     quantize(symmetric=True, initialized=False),
     quantize_dequantize(symmetric=True, initialized=False),
 ])
-def test_compute_encodings_updates_parameters_upon_exit(q: QuantizerBase, x: torch.Tensor):
+def test_compute_encodings_updates_parameters_upon_exit(q: AffineQuantizerBase, x: torch.Tensor):
     """
     :param q: Quantize or QuantizeDequantize module
     :param x: Input tensor
@@ -364,7 +363,7 @@ def test_qdq_forward(quantize_dequantize: QuantizeDequantize, x: torch.Tensor):
     quantize_dequantize(symmetric=True, initialized=True),
     quantize_dequantize(symmetric=False, initialized=True),
 ])
-def test_backward(q: QuantizerBase, x: torch.Tensor):
+def test_backward(q: AffineQuantizerBase, x: torch.Tensor):
     """
     :param q: Quantize or QuantizeDequantize module
     :param x: Input tensor
@@ -421,7 +420,7 @@ def test_backward_with_no_grad(q, x: torch.Tensor):
     quantize(symmetric=True, initialized=False),
     quantize_dequantize(symmetric=True, initialized=False),
 ])
-def test_uninitialized_quantize(q: QuantizerBase, x: torch.Tensor):
+def test_uninitialized_quantize(q: AffineQuantizerBase, x: torch.Tensor):
     """
     :param q: Quantize or QuantizeDequantize module
     :param x: Input tensor
@@ -575,7 +574,7 @@ def test_symmetric_learning(q, x, optim_cls):
     quantize(symmetric=False, initialized=False),
     quantize_dequantize(symmetric=False, initialized=False),
 ])
-def test_asymmetric_invariants(q: QuantizerBase, x: torch.Tensor):
+def test_asymmetric_invariants(q: AffineQuantizerBase, x: torch.Tensor):
     """
     Given: Asymmetric quantizer
     When: Quantization parameters initialized with compute_encodings
