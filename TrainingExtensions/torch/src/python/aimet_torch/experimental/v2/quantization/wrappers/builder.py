@@ -43,12 +43,14 @@ from torch import nn
 
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
 from aimet_common.utils import AimetLogger, log_with_error_and_assert_if_false
+from aimet_torch.experimental.v2.quantization.quantizers.float import FloatQuantizeDequantize
 from aimet_torch.utils import get_v1_quant_scheme_for_initialization
 from aimet_torch.qc_quantize_op import QcQuantizeOpMode, QcQuantizeWrapper, StaticGridQuantWrapper, tensor_quantizer_factory
 from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridPerChannelQuantizer
 from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizationMixin
 from aimet_torch.experimental.v2.quantization.quantizers.affine import QuantizeDequantize
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer, PercentileEncodingAnalyzer
+import aimet_torch.fp_quantization as v1_fp_quantization
 
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -266,8 +268,6 @@ class LazyQuantizer:
             assert not self.use_unsigned_symmetric, "Unsigned symmetric is not supported in quantsim v1.5"
             assert not self.is_unsigned_symmetric, "Unsigned symmetric is not supported in quantsim v1.5"
 
-        assert self.data_type == QuantizationDataType.int, "Only int quantization is supported in quantsim v1.5"
-
     def _get_v2_encoding_analyzer(self, shape):
         """
         Converts v1 quant scheme into v2 quant scheme.
@@ -305,8 +305,23 @@ class LazyQuantizer:
 
         encoding_analyzer = self._get_v2_encoding_analyzer(quantizer_param_shape)
 
-        return QuantizeDequantize(quantizer_param_shape, self.bitwidth,
-                                  self.use_symmetric_encodings, encoding_analyzer)
+        if self.data_type == QuantizationDataType.int:
+            quantizer = QuantizeDequantize(quantizer_param_shape, self.bitwidth,
+                                           self.use_symmetric_encodings, encoding_analyzer)
+        else:
+            if self.bitwidth == 16:
+                quantizer = FloatQuantizeDequantize(dtype=torch.float16)
+            else:
+                assert self.bitwidth == 8
+                mantissa_bits = v1_fp_quantization.NUM_MANTISSA_BITS
+                exponent_bits = 7 - mantissa_bits
+                quantizer = FloatQuantizeDequantize(exponent_bits, mantissa_bits,
+                                                    encoding_analyzer=encoding_analyzer)
+            # Float quantizers are not trainable in V1 quantsim
+            for param in quantizer.parameters():
+                param.requires_grad = False
+
+        return quantizer
 
     def _set_internal_quantizer_properties(self, quantizer: TensorQuantizer):
         """
