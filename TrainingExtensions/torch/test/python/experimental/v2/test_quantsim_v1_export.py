@@ -254,6 +254,15 @@ class TestQuantsimOnnxExport:
                 super().__quant_init__()
                 self.output_quantizers = torch.nn.ModuleList([None, None, None, None, None])
 
+            def quantized_forward(self, input):
+                if self.input_quantizers[0]:
+                    input = self.input_quantizers[0](input)
+                outputs = super().forward(input)
+                return tuple(
+                    quantizer(out) if quantizer else out
+                    for out, quantizer in zip(outputs, self.output_quantizers)
+                )
+
         sim_model.cust = FakeQuantizationMixin.from_module(sim_model.cust)
         sim_model.cust.input_quantizers[0] = QuantizeDequantize((1,),
                                                                 bitwidth=8,
