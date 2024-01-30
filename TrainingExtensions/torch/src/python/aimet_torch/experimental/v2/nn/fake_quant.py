@@ -45,7 +45,7 @@ from torch.nn.utils.rnn import PackedSequence
 from torch.utils._pytree import tree_map
 
 from aimet_torch.experimental.v2.nn.quant_base import BaseQuantizationMixin
-from aimet_torch.experimental.v2.quantization.modules.quantize import _QuantizerBase
+from aimet_torch.experimental.v2.quantization.quantizers import QuantizerBase
 import aimet_torch.elementwise_ops as aimet_ops
 
 
@@ -77,7 +77,7 @@ class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-m
         Returns a list of input encodings, each represented as a List of Dicts
         """
         return [
-            quantizer.get_encodings() if isinstance(quantizer, _QuantizerBase) else None
+            quantizer.get_encodings() if isinstance(quantizer, QuantizerBase) else None
             for quantizer in _flatten_nn_module_list(self.input_quantizers)
         ]
 
@@ -86,7 +86,7 @@ class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-m
         Returns a list of output encodings, each represented as a List of Dicts
         """
         return [
-            quantizer.get_encodings() if isinstance(quantizer, _QuantizerBase) else None
+            quantizer.get_encodings() if isinstance(quantizer, QuantizerBase) else None
             for quantizer in _flatten_nn_module_list(self.output_quantizers)
         ]
 
@@ -95,7 +95,7 @@ class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-m
         Returns a dict of {param name: param encodings}, with each encoding represented as a List of Dicts
         """
         return {
-            param_name: quantizer.get_encodings() if isinstance(quantizer, _QuantizerBase) else None
+            param_name: quantizer.get_encodings() if isinstance(quantizer, QuantizerBase) else None
             for param_name, quantizer in self.param_quantizers.items()
         }
 
