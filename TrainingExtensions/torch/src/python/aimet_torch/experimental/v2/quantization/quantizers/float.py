@@ -77,6 +77,8 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
                               will be determined dynamically based on the input statistics
                               for finer precision.
     """
+    maxval: torch.nn.Parameter
+
     def __init__(self,
                  exponent_bits: int = None,
                  mantissa_bits: int = None,
@@ -108,14 +110,12 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
         self.mantissa_bits = mantissa_bits
         self.encoding_analyzer = encoding_analyzer
 
-        self.maxval = None
-
         if self.encoding_analyzer:
             shape = self.encoding_analyzer.observer.shape
             maxval = _ieee_float_max_representable_value(exponent_bits, mantissa_bits)
-            self.register_buffer('maxval', torch.full(shape, maxval))
+            self.register_parameter('maxval', torch.full(shape, maxval))
         else:
-            self.register_buffer('maxval', None)
+            self.register_parameter('maxval', None)
 
     @property
     def bitwidth(self):
