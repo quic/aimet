@@ -108,11 +108,22 @@ class CostCalculator:
         :return: Cost of the layer
         """
         weight_dim = list(layer.weight_shape)
-        additional_act_dim = [layer.output_shape[2], layer.output_shape[3]]
+        if len(weight_dim) > 1:
+            additional_act_dim = [layer.output_shape[-1], layer.output_shape[-2]]
+            mem_cost = reduce(lambda x, y: x * y, weight_dim)
+            mac_dim = weight_dim + additional_act_dim
+            mac_cost = reduce(lambda x, y: x * y, mac_dim)
 
-        mem_cost = reduce(lambda x, y: x*y, weight_dim)
-        mac_dim = weight_dim + additional_act_dim
-        mac_cost = reduce(lambda x, y: x*y, mac_dim)
+        else:  # For Ops w/o weights (or single dim), take the max b/w input and output size to calculate cost
+            output_mac_cost = reduce(lambda x, y: x * y, layer.output_shape)
+            input_mac_cost = 0
+            if layer.input_shape:
+                if not isinstance(layer.input_shape, List):
+                    layer.input_shape = [layer.input_shape]
+                input_mac_cost = max([reduce(lambda x, y: x * y, i_input) for i_input in layer.input_shape])
+
+            mac_cost = max([output_mac_cost, input_mac_cost])
+            mem_cost = mac_cost
 
         return Cost(mem_cost, mac_cost)
 

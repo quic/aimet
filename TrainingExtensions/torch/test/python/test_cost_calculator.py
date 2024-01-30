@@ -44,6 +44,7 @@ import torch.nn as nn
 from aimet_common import cost_calculator as cc
 from aimet_common.defs import CostMetric, LayerCompRatioPair
 from aimet_common.utils import AimetLogger
+from aimet_torch import elementwise_ops
 from aimet_torch.channel_pruning.channel_pruner import (
     InputChannelPruner,
     ChannelPruningCostCalculator,
@@ -112,6 +113,29 @@ class TestTrainingExtensionsCostCalculator(unittest.TestCase):
 
         self.assertEqual(32 * 1 * 5 * 5, cost2.memory)
         self.assertEqual(32 * 1 * 5 * 5 * 14 * 14, cost2.mac)
+
+        linear1 = nn.Linear(10, 15, bias=False)
+        layer3 = Layer(linear1, "linear1", (32, 10, 10))
+        cost3 = cc.CostCalculator.compute_layer_cost(layer3)
+
+        self.assertEqual(15 * 10 * 1 * 1 * 10 * 10, cost3.mac)
+        self.assertEqual(15 * 10, cost3.memory)
+
+
+        sigmoid1 = nn.Sigmoid()
+        layer4 = Layer(sigmoid1, "sigmoid1", (32, 10, 15), (32, 10, 15))
+        cost4 = cc.CostCalculator.compute_layer_cost(layer4)
+
+        self.assertEqual(32 * 10 * 15, cost4.mac)
+        self.assertEqual(32 * 10 * 15, cost4.memory)
+
+        matmul1 = elementwise_ops.MatMul()
+        layer5 = Layer(matmul1, "matmul1", (32, 10, 15), [(32, 10, 15), (32, 10, 15)])
+        cost5 = cc.CostCalculator.compute_layer_cost(layer5)
+
+        self.assertEqual(32 * 10 * 15, cost5.mac)
+        self.assertEqual(32 * 10 * 15, cost5.memory)
+
 
     def test_total_model_cost(self):
 
