@@ -44,7 +44,7 @@ import json
 # from aimet_torch.experimental.v2.quantization.wrappers.quantization_mixin import _QuantizationMixin
 import aimet_torch.experimental.v2.nn as aimet_nn
 from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizationMixin
-from aimet_torch.experimental.v2.quantization.modules.quantize import QuantizeDequantize
+from aimet_torch.experimental.v2.quantization.quantizers.affine import QuantizeDequantize
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 from aimet_torch.elementwise_ops import Add
 from aimet_torch import onnx_utils
