@@ -36,71 +36,28 @@
 # =============================================================================
 import tempfile
 
-import pytest
 import torch.nn
 import copy
 import os
 import json
 
-from aimet_torch.experimental.v2.quantization.wrappers.quantization_mixin import _QuantizationMixin
+# from aimet_torch.experimental.v2.quantization.wrappers.quantization_mixin import _QuantizationMixin
+import aimet_torch.experimental.v2.nn as aimet_nn
+from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizationMixin
+from aimet_torch.experimental.v2.quantization.modules.quantize import QuantizeDequantize
+from aimet_torch.experimental.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 from aimet_torch.elementwise_ops import Add
 from aimet_torch import onnx_utils
 from aimet_torch.quantsim import QuantizationSimModel, OnnxExportApiArgs
 
-from models_.models_to_test import SimpleConditional, ModelWithTwoInputs, ModelWith5Output, SoftMaxAvgPoolModel
+from models_.models_to_test import (
+    SimpleConditional,
+    ModelWithTwoInputs,
+    ModelWith5Output,
+    ModuleWith5Output,
+    SoftMaxAvgPoolModel,
+)
 
-# Key/values don't matter
-dummy_encoding = {"min": 0,
-                  "max": 2,
-                  "scale": 2/255,
-                  "offset": 0,
-                  "bitwidth": 8,
-                  "dtype": "int",
-                  "is_symmetric": "False"}
-
-
-class DummyMixin(_QuantizationMixin, torch.nn.Module):
-    """ Dummy class for testing QuantSim export logic """
-
-    def __init__(self, module, num_inputs, num_outputs, has_input_encodings, has_output_encodings):
-        super(DummyMixin, self).__init__()
-        # Assign a dummy output quantizer (since a real mixin will have child quantizers)
-        self.output_quantizer = torch.nn.Identity()
-        # Hide module inside list so it doesnt show up as a child (We will not actually have a wrapped module)
-        self.module = [copy.deepcopy(module)]
-        self._parameters = self.module[0]._parameters
-        self.num_inputs = num_inputs
-        self.num_outputs = num_outputs
-        self.has_input_encodings = has_input_encodings
-        self.has_output_encodings = has_output_encodings
-        self.dummy_encoding = copy.deepcopy(dummy_encoding)
-
-    @classmethod
-    def from_module(cls, module: torch.nn.Module, num_inputs=1, num_outputs=1, has_input_encodings=False, has_output_encodings=True):
-        return cls(module, num_inputs, num_outputs, has_input_encodings, has_output_encodings)
-
-    def forward(self, *inputs):
-        return self.output_quantizer(self.module[0](*inputs))
-
-    def export_input_encodings(self):
-        enc = [self.dummy_encoding] if self.has_input_encodings else None
-        return [enc] * self.num_inputs
-
-    def export_output_encodings(self):
-        enc = [self.dummy_encoding] if self.has_output_encodings else None
-        return [enc] * self.num_outputs
-
-    def export_param_encodings(self):
-        enc_dict = {}
-        for name, param in self.module[0].named_parameters():
-            if name == "weight":
-                enc_dict[name] = [self.dummy_encoding] * param.shape[0]
-            else:
-                enc_dict[name] = None
-        return enc_dict
-
-    def get_original_module(self):
-        return copy.deepcopy(self.module[0])
 
 class DummyModel(torch.nn.Module):
 
@@ -131,10 +88,32 @@ class TestQuantsimOnnxExport:
         model = DummyModel(in_channels=input_shape[1])
         sim_model = copy.deepcopy(model)
         for name, module in sim_model.named_children():
-            has_input_encodings = False if name != "conv1" else True
-            has_output_encodings = True if name != "conv1" else False
-            num_inputs = 2 if name == "add" else 1
-            sim_model.__setattr__(name, DummyMixin.from_module(module, num_inputs, 1, has_input_encodings, has_output_encodings))
+            quantized_module = FakeQuantizationMixin.from_module(module)
+
+            if name == "conv1":
+                input_quantizer = QuantizeDequantize((1,),
+                                                     bitwidth=8,
+                                                     symmetric=False,
+                                                     encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
+                quantized_module.input_quantizers[0] = input_quantizer
+            else:
+                output_quantizer = QuantizeDequantize((1,),
+                                                      bitwidth=8,
+                                                      symmetric=False,
+                                                      encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
+                quantized_module.output_quantizers[0] = output_quantizer
+
+            if hasattr(module, 'weight'):
+                weight_quantizer = QuantizeDequantize((1,),
+                                                      bitwidth=4,
+                                                      symmetric=True,
+                                                      encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
+                quantized_module.param_quantizers['weight'] = weight_quantizer
+
+            setattr(sim_model, name, quantized_module)
+
+        with aimet_nn.compute_encodings(sim_model):
+            _ = sim_model(torch.randn(input_shape))
 
 
         with tempfile.TemporaryDirectory() as path:
@@ -158,20 +137,38 @@ class TestQuantsimOnnxExport:
         assert set(encoding_dict["activation_encodings"].keys()) == expected_act_keys
         assert set(encoding_dict["param_encodings"].keys()) == expected_param_keys
 
-        for encoding in encoding_dict["activation_encodings"].values():
-            assert encoding[0] == dummy_encoding
-
-
-
     # From: https://github.com/quic/aimet/blob/ce3dafe75d81893cdb8b45ba8abf53a672c28187/TrainingExtensions/torch/test/python/test_quantizer.py#L2731
     def test_export_to_onnx_direct(self):
         model = ModelWithTwoInputs()
         sim_model = copy.deepcopy(model)
         dummy_input = (torch.rand(1, 1, 28, 28), torch.rand(1, 1, 28, 28))
-        for name, layer in sim_model.named_children():
-            has_input_encodings = name == "conv1_a"
-            wrapped_layer = DummyMixin.from_module(layer, has_input_encodings=has_input_encodings)
-            setattr(sim_model, name, wrapped_layer)
+        for name, module in sim_model.named_children():
+            quantized_module = FakeQuantizationMixin.from_module(module)
+
+            if name == "conv1_a":
+                input_quantizer = QuantizeDequantize((1,),
+                                                     bitwidth=8,
+                                                     symmetric=False,
+                                                     encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
+                quantized_module.input_quantizers[0] = input_quantizer
+
+            output_quantizer = QuantizeDequantize((1,),
+                                                  bitwidth=8,
+                                                  symmetric=False,
+                                                  encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
+            quantized_module.output_quantizers[0] = output_quantizer
+
+            if hasattr(module, 'weight'):
+                weight_quantizer = QuantizeDequantize((1,),
+                                                      bitwidth=4,
+                                                      symmetric=True,
+                                                      encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
+                quantized_module.param_quantizers['weight'] = weight_quantizer
+
+            setattr(sim_model, name, quantized_module)
+
+        with aimet_nn.compute_encodings(sim_model):
+            _ = sim_model(*dummy_input)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             onnx_utils.EXPORT_TO_ONNX_DIRECT = True
@@ -202,11 +199,23 @@ class TestQuantsimOnnxExport:
         one onnx node maps to the same torch module
         """
         export_args = OnnxExportApiArgs(opset_version=10, input_names=["input"], output_names=["output"])
-        pixel_shuffel = torch.nn.PixelShuffle(2)
-        model = torch.nn.Sequential(pixel_shuffel)
-        sim_model = torch.nn.Sequential(DummyMixin.from_module(pixel_shuffel, num_inputs=1, has_input_encodings=True,
-                                                               has_output_encodings=True))
+        pixel_shuffle = torch.nn.PixelShuffle(2)
+        model = torch.nn.Sequential(pixel_shuffle)
+
+        quantized_pixel_shuffle = FakeQuantizationMixin.from_module(pixel_shuffle)
+        quantized_pixel_shuffle.input_quantizers[0] = QuantizeDequantize((1,),
+                                                                         bitwidth=8,
+                                                                         symmetric=False,
+                                                                         encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
+        quantized_pixel_shuffle.output_quantizers[0] = QuantizeDequantize((1,),
+                                                                          bitwidth=8,
+                                                                          symmetric=False,
+                                                                          encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
+        sim_model = torch.nn.Sequential(quantized_pixel_shuffle)
         dummy_input = torch.randn(1, 4, 8, 8)
+
+        with aimet_nn.compute_encodings(sim_model):
+            _ = sim_model(dummy_input)
 
         # Save encodings
         with tempfile.TemporaryDirectory() as path:
@@ -238,13 +247,35 @@ class TestQuantsimOnnxExport:
         model = ModelWith5Output()
         dummy_input = torch.randn(1, 3, 224, 224)
         sim_model = copy.deepcopy(model)
-        class DummyMixinWithDisabledOutput(DummyMixin):
-            def export_output_encodings(self):
-                enc = [self.dummy_encoding]
-                return [None] + ([enc] * (self.num_outputs - 1))
 
-        sim_model.cust = DummyMixinWithDisabledOutput.from_module(sim_model.cust, num_inputs=1, num_outputs=5,
-                                                                  has_input_encodings=True, has_output_encodings=True)
+        @FakeQuantizationMixin.implements(ModuleWith5Output)
+        class FakeQuantizationMixinWithDisabledOutput(FakeQuantizationMixin, ModuleWith5Output):
+            def __quant_init__(self):
+                super().__quant_init__()
+                self.output_quantizers = torch.nn.ModuleList([None, None, None, None, None])
+
+            def quantized_forward(self, input):
+                if self.input_quantizers[0]:
+                    input = self.input_quantizers[0](input)
+                outputs = super().forward(input)
+                return tuple(
+                    quantizer(out) if quantizer else out
+                    for out, quantizer in zip(outputs, self.output_quantizers)
+                )
+
+        sim_model.cust = FakeQuantizationMixin.from_module(sim_model.cust)
+        sim_model.cust.input_quantizers[0] = QuantizeDequantize((1,),
+                                                                bitwidth=8,
+                                                                symmetric=False,
+                                                                encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
+        for i in range(1, 5):
+            sim_model.cust.output_quantizers[i] = QuantizeDequantize((1,),
+                                                                     bitwidth=8,
+                                                                     symmetric=False,
+                                                                     encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
+
+        with aimet_nn.compute_encodings(sim_model):
+            _ = sim_model(dummy_input)
 
         with tempfile.TemporaryDirectory() as path:
             QuantizationSimModel.export_onnx_model_and_encodings(path, 'module_with_5_output', model, sim_model,
@@ -255,8 +286,6 @@ class TestQuantsimOnnxExport:
                 activation_encodings = json.load(json_file)['activation_encodings']
                 assert '7' not in activation_encodings
                 assert set(['8', '9', '10', '11', 't.1']).issubset(activation_encodings.keys())
-                for item in activation_encodings.values():
-                    assert item[0] == sim_model.cust.dummy_encoding
 
     # From: https://github.com/quic/aimet/blob/ce3dafe75d81893cdb8b45ba8abf53a672c28187/TrainingExtensions/torch/test/python/test_quantizer.py#L1935
     def test_mapping_encoding_for_torch_module_with_multiple_onnx_ops(self):
@@ -268,8 +297,28 @@ class TestQuantsimOnnxExport:
         model = SoftMaxAvgPoolModel()
 
         sim_model  = copy.deepcopy(model)
-        sim_model.sfmax = DummyMixin.from_module(sim_model.sfmax, 1, 1, True, True)
-        sim_model.avgpool = DummyMixin.from_module(sim_model.avgpool, 1, 1, True, True)
+        sim_model.sfmax = FakeQuantizationMixin.from_module(sim_model.sfmax)
+        sim_model.sfmax.input_quantizers[0] = QuantizeDequantize((1,),
+                                                                 bitwidth=8,
+                                                                 symmetric=False,
+                                                                 encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
+        sim_model.sfmax.output_quantizers[0] = QuantizeDequantize((1,),
+                                                                 bitwidth=8,
+                                                                 symmetric=False,
+                                                                 encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
+
+        sim_model.avgpool = FakeQuantizationMixin.from_module(sim_model.avgpool)
+        sim_model.avgpool.input_quantizers[0] = QuantizeDequantize((1,),
+                                                                 bitwidth=8,
+                                                                 symmetric=False,
+                                                                 encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
+        sim_model.avgpool.output_quantizers[0] = QuantizeDequantize((1,),
+                                                                 bitwidth=8,
+                                                                 symmetric=False,
+                                                                 encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
+        with aimet_nn.compute_encodings(sim_model):
+            _ = sim_model(dummy_input)
+
         with tempfile.TemporaryDirectory() as path:
             QuantizationSimModel.export_onnx_model_and_encodings(path, "sfmaxavgpool_model", model, sim_model,
                                                                  dummy_input, export_args, propagate_encodings=False)
@@ -278,7 +327,7 @@ class TestQuantsimOnnxExport:
 
         assert len(encoding_data["activation_encodings"]) == 3
 
-
+    @torch.no_grad()
     def test_conditional_export(self):
         """ Test exporting a model with conditional paths """
         model = SimpleConditional()
@@ -297,10 +346,29 @@ class TestQuantsimOnnxExport:
         qsim.compute_encodings(forward_callback, None)
 
         for name, module in sim_model.named_children():
+            quantized_module = FakeQuantizationMixin.from_module(module)
             qsim_module = getattr(qsim.model, name)
-            has_input_encodings = qsim_module.input_quantizers[0].enabled
-            has_output_encodings = qsim_module.output_quantizers[0].enabled
-            sim_model.__setattr__(name, DummyMixin.from_module(module, 1, 1, has_input_encodings, has_output_encodings))
+            if qsim_module.input_quantizers[0].enabled:
+                quantized_module.input_quantizers[0] = QuantizeDequantize((1,),
+                                                                          bitwidth=8,
+                                                                          symmetric=False,
+                                                                          encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
+            if qsim_module.output_quantizers[0].enabled:
+                quantized_module.output_quantizers[0] = QuantizeDequantize((1,),
+                                                                           bitwidth=8,
+                                                                           symmetric=False,
+                                                                           encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
+            for param_name, qsim_param_quantizer in qsim_module.param_quantizers.items():
+                if not qsim_param_quantizer.enabled:
+                    continue
+                quantized_module.param_quantizers[param_name] = QuantizeDequantize((1,),
+                                                                                   bitwidth=4,
+                                                                                   symmetric=True,
+                                                                                   encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
+            setattr(sim_model, name, quantized_module)
+
+        with aimet_nn.compute_encodings(sim_model):
+            forward_callback(sim_model, None)
 
         qsim.model = sim_model
 
