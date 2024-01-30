@@ -128,10 +128,13 @@ RUN python3 -m pip --no-cache-dir install \
         cffi==1.12.3 \
         click \
         cumm==0.2.8 \
+        cvxpy \
+        cylp \
         cython==0.29.12 \
         dataclasses \
         Deprecated \
         docutils==0.16 \
+        graphviz \
         grpcio \
         grpcio-tools \
         h5py==2.10.0 \
@@ -144,6 +147,7 @@ RUN python3 -m pip --no-cache-dir install \
         matplotlib>=3 \
         mock \
         nbsphinx==0.8.12 \
+        networkx \
         'numpy<1.24,>=1.16.6' \
         onnx==1.14.1 \
         onnxsim \
@@ -157,6 +161,7 @@ RUN python3 -m pip --no-cache-dir install \
         psutil \
         ptflops \
         pybind11 \
+        pydot \
         pyDOE2 \
         pylint==2.3.1 \
         pymoo==0.4.1 \
