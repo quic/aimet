@@ -1,4 +1,8 @@
+cvxpy
+cylp
+graphviz
 matplotlib>=3
+networkx
 numpy<1.24,>=1.16.6
 onnx==1.14.1
 onnxruntime==1.15.1
@@ -7,5 +11,6 @@ onnxsim
 pandas==1.5.3
 protobuf==3.20.2
 psutil
+pydot
 tensorboardX==2.4
 transformers==4.27.4
