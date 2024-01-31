@@ -41,7 +41,6 @@ import copy
 import os
 import json
 
-# from aimet_torch.experimental.v2.quantization.wrappers.quantization_mixin import _QuantizationMixin
 import aimet_torch.experimental.v2.nn as aimet_nn
 from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizationMixin
 from aimet_torch.experimental.v2.quantization.quantizers.affine import QuantizeDequantize
@@ -50,7 +49,7 @@ from aimet_torch.elementwise_ops import Add
 from aimet_torch import onnx_utils
 from aimet_torch.quantsim import QuantizationSimModel, OnnxExportApiArgs
 
-from models_.models_to_test import (
+from ..models_.models_to_test import (
     SimpleConditional,
     ModelWithTwoInputs,
     ModelWith5Output,
