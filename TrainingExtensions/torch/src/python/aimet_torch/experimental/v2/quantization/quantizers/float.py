@@ -44,7 +44,7 @@ from typing import Optional, List, Dict
 import torch
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import EncodingAnalyzer
 from aimet_torch.experimental.v2.quantization.quantizers.base import QuantizerBase
-from aimet_torch.experimental.v2.utils import StatisticsNotFoundError, patch_attr, patch_param
+from aimet_torch.experimental.v2.utils import StatisticsNotFoundError, patch_attr
 from aimet_torch.fp_quantization import fake_cast_to_ieee_float
 
 
@@ -80,7 +80,7 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
                               will be determined dynamically based on the input statistics
                               for finer precision.
     """
-    maxval: torch.nn.Parameter
+    maxval: torch.Tensor
 
     def __init__(self,
                  exponent_bits: int = None,
@@ -116,9 +116,9 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
         if self.encoding_analyzer:
             shape = self.encoding_analyzer.observer.shape
             maxval = _ieee_float_max_representable_value(exponent_bits, mantissa_bits)
-            self.register_parameter('maxval', torch.full(shape, maxval))
+            self.register_buffer('maxval', torch.full(shape, maxval))
         else:
-            self.register_parameter('maxval', None)
+            self.register_buffer('maxval', None)
 
     @property
     def bitwidth(self):
@@ -165,7 +165,7 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
                                                                         self.bitwidth,
                                                                         is_symmetric=False)
             dynamic_absmax = torch.maximum(dynamic_min.abs(), dynamic_max.abs())
-            with patch_param(self, 'maxval', dynamic_absmax):
+            with patch_attr(self, 'maxval', dynamic_absmax):
                 return original_forward(input)
 
         try:
@@ -183,8 +183,9 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
             if min is None or max is None:
                 return
 
-            absmax = torch.maximum(min.abs(), max.abs())
-            self.maxval = absmax
+            absmax = torch.maximum(min.abs(), max.abs()).expand_as(self.maxval)
+            with torch.no_grad():
+                self.maxval.copy_(absmax)
 
         finally:
             self.encoding_analyzer.reset_stats()
