@@ -42,7 +42,7 @@ import tempfile
 import pytest
 import torch
 
-from models_ import models_to_test
+from ..models_ import models_to_test
 
 from aimet_common.defs import QuantScheme
 
