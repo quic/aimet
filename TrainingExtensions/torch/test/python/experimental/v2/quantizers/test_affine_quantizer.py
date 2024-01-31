@@ -727,6 +727,25 @@ def test_is_initialized():
     assert qdq.is_initialized()
 
     """
+    When: Invoke load_state_dict() with a state dict that contains uninitialized parameters
+    Then: quantizer.is_initialized() returns False
+    """
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
+    uninitialized_state_dict = qdq.state_dict()
+    qdq.load_state_dict(uninitialized_state_dict)
+    assert not qdq.is_initialized()
+
+    qdq.min.mul_(1.)
+    partially_initialized_state_dict = qdq.state_dict()
+    qdq.load_state_dict(partially_initialized_state_dict)
+    assert not qdq.is_initialized()
+
+    qdq.max.mul_(1.)
+    fully_initialized_state_dict = qdq.state_dict()
+    qdq.load_state_dict(fully_initialized_state_dict)
+    assert qdq.is_initialized()
+
+    """
     When: Create a deepcopy of quantizer
     Then: quantizer.is_initialized() flag should be preserved
     """
