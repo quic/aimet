@@ -692,9 +692,6 @@ class QuantizationSimModel(tf.keras.Model):
             gradients[enc_min_index] = None
 
         for relu_quantizer in relu_quantize_wrappers:
-            for input_quantizer in relu_quantizer.input_quantizers:
-                _set_encoding_min_grad_to_None(input_quantizer)
-
             for output_quantizer in relu_quantizer.output_quantizers:
                 _set_encoding_min_grad_to_None(output_quantizer)
 
