@@ -46,6 +46,8 @@ from typing import Optional, List, Dict
 import torch
 from torch import nn
 
+from packaging import version
+
 
 __all__ = ['QuantizerBase']
 
@@ -113,6 +115,17 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
 
         return True
 
+    def state_dict(self, *args, **kwargs): # pylint: disable=arguments-differ
+        state_dict = super().state_dict(*args, **kwargs) # pylint: disable=missing-kwoa
+
+        if version.parse(torch.__version__) < version.parse("1.10"):
+            # This is for backward compatibility with torch < 1.10
+            # which doesn't support get/set_extra_state() hooks
+            prefix = kwargs['prefix']
+            state_dict[f'{prefix}extra_state'] = self.get_extra_state()
+
+        return state_dict
+
     def load_state_dict(self, state_dict, strict: bool = True):
         if '_extra_state' not in state_dict:
             is_initialized = {
@@ -121,9 +134,19 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
             }
             state_dict['_extra_state'] = is_initialized
 
-        return super().load_state_dict(state_dict, strict)
+        ret = super().load_state_dict(state_dict, strict)
+
+        if version.parse(torch.__version__) < version.parse("1.10"):
+            # This is for backward compatibility with torch < 1.10
+            # which doesn't support get/set_extra_state() hooks
+            self.set_extra_state(state_dict['_extra_state'])
+
+        return ret
 
     def get_extra_state(self):
+        """
+        Get extra state that describes which parameters are initialized.
+        """
         return {
             param_name: self._is_initialized(param_name)
             for param_name, _ in self.named_parameters()
@@ -131,48 +154,35 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
 
     @torch.no_grad()
     def set_extra_state(self, state):
+        """
+        Set extra state that describes which parameters are initialized.
+        """
         is_initialized = state
-        for param_name, param in self.named_parameters():
-            # If the parameter hasn't been initialized,
-            # re-register the parameter so that self._is_initialized[param_name]
-            # will return False
-            if param_name in is_initialized and not is_initialized[param_name]:
+        for param_name, param in self._parameters.items():
+            if param_name in is_initialized:
                 self.register_quantization_parameter(param_name, param)
+
+                if is_initialized[param_name]:
+                    # If the parameter has been already initialized,
+                    # artificially increment the parameter version to mark as initialized
+                    param.mul_(1.)
 
     @torch.no_grad()
     def __deepcopy__(self, memo):
         self_copy = self.__new__(type(self))
         self_copy.__dict__ = copy.deepcopy(self.__dict__, memo)
-
-        for name, param in self_copy.named_parameters():
-            # Register parameters to the copied quantizer
-            self_copy.register_quantization_parameter(name, param)
-
-            # If the parameter has been already initialized,
-            # artificially increment the parameter version to mark as initialized
-            if self._is_initialized(name):
-                param.mul_(1.)
-
+        self_copy.set_extra_state(self.get_extra_state())
         return self_copy
 
     def __getstate__(self):
         state = self.__dict__.copy()
         state.pop('_initial_parameters')
-        state['initialized_parameters'] = [param_name for param_name, _ in self.named_parameters()
-                                           if self._is_initialized(param_name)]
+        state['is_initialized'] = self.get_extra_state()
         return state
 
     @torch.no_grad()
     def __setstate__(self, state):
-        initialized_parameters = state.pop('initialized_parameters')
-        self.__dict__.update(state)
-
         self._initial_parameters = OrderedDict()
-        for param_name, param in self.named_parameters():
-            # Register parameters to the loaded quantizer
-            self.register_quantization_parameter(param_name, param)
-
-            # If the parameter has been already initialized,
-            # artificially increment the parameter version to mark as initialized
-            if param_name in initialized_parameters:
-                param.mul_(1.)
+        is_initialized = state.pop('is_initialized')
+        self.__dict__.update(state)
+        self.set_extra_state(is_initialized)
