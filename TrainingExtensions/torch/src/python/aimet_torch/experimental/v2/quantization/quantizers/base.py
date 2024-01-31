@@ -113,6 +113,32 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
 
         return True
 
+    def load_state_dict(self, state_dict, strict: bool = True):
+        if '_extra_state' not in state_dict:
+            is_initialized = {
+                param_name: True for param_name in state_dict
+                if param_name in self._parameters
+            }
+            state_dict['_extra_state'] = is_initialized
+
+        return super().load_state_dict(state_dict, strict)
+
+    def get_extra_state(self):
+        return {
+            param_name: self._is_initialized(param_name)
+            for param_name, _ in self.named_parameters()
+        }
+
+    @torch.no_grad()
+    def set_extra_state(self, state):
+        is_initialized = state
+        for param_name, param in self.named_parameters():
+            # If the parameter hasn't been initialized,
+            # re-register the parameter so that self._is_initialized[param_name]
+            # will return False
+            if param_name in is_initialized and not is_initialized[param_name]:
+                self.register_quantization_parameter(param_name, param)
+
     @torch.no_grad()
     def __deepcopy__(self, memo):
         self_copy = self.__new__(type(self))
