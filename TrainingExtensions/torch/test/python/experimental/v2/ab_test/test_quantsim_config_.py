@@ -57,7 +57,7 @@ from aimet_torch.experimental.v2.quantization.quantsim import QuantizationSimMod
 from aimet_torch.experimental.v2.quantization.quantizers.affine import QuantizeDequantize
 from aimet_torch.experimental.v2.quantization.quantizers.float import FloatQuantizeDequantize
 
-from models_.models_to_test import SingleResidual, QuantSimTinyModel, MultiInput, SingleResidualWithModuleAdd, \
+from ..models_.models_to_test import SingleResidual, QuantSimTinyModel, MultiInput, SingleResidualWithModuleAdd, \
     SingleResidualWithAvgPool, ModelWithBertCustomLayerNormGelu
 
 
