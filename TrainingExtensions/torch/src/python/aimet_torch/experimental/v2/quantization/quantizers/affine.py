@@ -45,7 +45,7 @@ import functools
 import torch
 from torch import nn
 
-from aimet_torch.experimental.v2.utils import patch_attr, patch_param, _is_expandable, StatisticsNotFoundError
+from aimet_torch.experimental.v2.utils import patch_attr, _is_expandable, StatisticsNotFoundError
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import EncodingAnalyzer, MinMaxEncodingAnalyzer
 from aimet_torch.experimental.v2.quantization.quantizers.base import QuantizerBase
 from aimet_torch.experimental.v2.quantization.backends import get_backend
@@ -180,8 +180,8 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
                     self.encoding_analyzer.compute_encodings_from_stats(batch_statistics,
                                                                         self.bitwidth,
                                                                         self.symmetric)
-            with patch_param(self, 'min', dynamic_min),\
-                    patch_param(self, 'max', dynamic_max):
+            with patch_attr(self, 'min', dynamic_min),\
+                    patch_attr(self, 'max', dynamic_max):
                 return original_forward(input)
 
         try:

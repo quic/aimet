@@ -38,3 +38,4 @@
 
 from .base import *
 from .affine import *
+from .float import *

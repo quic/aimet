@@ -55,6 +55,7 @@ from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizationMixin
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 from aimet_torch.experimental.v2.quantization.quantsim import QuantizationSimModel
 from aimet_torch.experimental.v2.quantization.quantizers.affine import QuantizeDequantize
+from aimet_torch.experimental.v2.quantization.quantizers.float import FloatQuantizeDequantize
 
 from models_.models_to_test import SingleResidual, QuantSimTinyModel, MultiInput, SingleResidualWithModuleAdd, \
     SingleResidualWithAvgPool, ModelWithBertCustomLayerNormGelu
@@ -1363,7 +1364,6 @@ class TestQuantsimConfig:
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
 
-    @pytest.mark.skip("Float quantization is not implemented yet in quantsim v1.5")
     def test_default_quantsim_config_in_default_config_file_enforce_true(self):
         """
         Tests application of override config rule for default bitwidth and dtype for params and act.
@@ -1467,7 +1467,6 @@ class TestQuantsimConfig:
             with torch.no_grad():
                 _ = model(torch.randn(INPUT_SHAPE))
 
-        # TODO: float16 quantization is not implemented yet
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
                                    config_file='./data/quantsim_config.json',
                                    dummy_input=torch.rand(1, 3, 32, 32), in_place=True,
@@ -1476,33 +1475,26 @@ class TestQuantsimConfig:
 
         # enforce is true, however default quantsim bw / dtype (fp16) is not the config file supported kernels override at index 0.
         # apply override 0 # activation : bw = 16, float # param : bw = 16, float
-        assert sim.model.conv1.param_quantizers['weight'] is not None
+        assert isinstance(sim.model.conv1.param_quantizers['weight'], FloatQuantizeDequantize)
         assert sim.model.conv1.param_quantizers['weight'].bitwidth == 16
-        assert sim.model.conv1.param_quantizers['weight'].min.dtype in TORCH_FLOAT_DTYPES
-        assert sim.model.conv1.param_quantizers['weight'].max.dtype in TORCH_FLOAT_DTYPES
 
-        assert sim.model.conv1.output_quantizers[0].bitwidth == 16
-        assert sim.model.conv1.output_quantizers[0].min.dtype in TORCH_FLOAT_DTYPES
-        assert sim.model.conv1.output_quantizers[0].max.dtype in TORCH_FLOAT_DTYPES
+        # output quantizer of conv1 is not instantiated due to supergroup config
+        assert sim.model.conv1.output_quantizers[0] is None
 
-        assert sim.model.fc.param_quantizers['weight'] is not None
-        assert sim.model.fc.param_quantizers['bias'] is None
+        assert isinstance(sim.model.fc.param_quantizers['weight'], FloatQuantizeDequantize)
         assert sim.model.fc.param_quantizers['weight'].bitwidth == 16
-        assert sim.model.fc.param_quantizers['weight'].min.dtype in TORCH_FLOAT_DTYPES
-        assert sim.model.fc.param_quantizers['weight'].max.dtype in TORCH_FLOAT_DTYPES
+        assert sim.model.fc.param_quantizers['bias'] is None
+        assert isinstance(sim.model.fc.output_quantizers[0], FloatQuantizeDequantize)
         assert sim.model.fc.output_quantizers[0].bitwidth == 16
-        assert sim.model.fc.output_quantizers[0].min.dtype in TORCH_FLOAT_DTYPES
-        assert sim.model.fc.output_quantizers[0].max.dtype in TORCH_FLOAT_DTYPES
+        assert isinstance(sim.model.relu1.output_quantizers[0], FloatQuantizeDequantize)
         assert sim.model.relu1.output_quantizers[0].bitwidth == 16
-        assert sim.model.relu1.output_quantizers[0].min.dtype in TORCH_FLOAT_DTYPES
-        assert sim.model.relu1.output_quantizers[0].max.dtype in TORCH_FLOAT_DTYPES
 
         # remove test config created
         qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
 
-    @pytest.mark.skip("Float quantization is not implemented yet in quantsim v1.5")
+    @pytest.mark.skip('tf_enhanced is not implemented yet')
     def test_default_quantsim_config_not_in_default_config_file_enforce_true(self):
         """
         Tests application of override config rule for default bitwidth and dtype for params and act.
@@ -1593,26 +1585,19 @@ class TestQuantsimConfig:
         # should be configured with config file default supported kernel [0]
         # activation : bw = 16 , float
         # param : bw = 16, float
-        assert sim.model.conv1.param_quantizers['weight'] is not None
+        assert isinstance(sim.model.conv1.param_quantizers['weight'], FloatQuantizeDequantize)
         assert sim.model.conv1.param_quantizers['weight'].bitwidth == 16
-        assert sim.model.conv1.param_quantizers['weight'].min.dtype in TORCH_FLOAT_DTYPES
-        assert sim.model.conv1.param_quantizers['weight'].max.dtype in TORCH_FLOAT_DTYPES
 
-        assert sim.model.conv1.output_quantizers[0].bitwidth == 16
-        assert sim.model.conv1.output_quantizers[0].min.dtype in TORCH_FLOAT_DTYPES
-        assert sim.model.conv1.output_quantizers[0].max.dtype in TORCH_FLOAT_DTYPES
+        # output quantizer of conv1 is not instantiated due to supergroup config
+        assert sim.model.conv1.output_quantizers[0] is None
 
-        assert sim.model.fc.param_quantizers['weight'] is not None
-        assert sim.model.fc.param_quantizers['bias'] is None
+        assert isinstance(sim.model.fc.param_quantizers['weight'], FloatQuantizeDequantize)
         assert sim.model.fc.param_quantizers['weight'].bitwidth == 16
-        assert sim.model.fc.param_quantizers['weight'].min.dtype in TORCH_FLOAT_DTYPES
-        assert sim.model.fc.param_quantizers['weight'].max.dtype in TORCH_FLOAT_DTYPES
+        assert sim.model.fc.param_quantizers['bias'] is None
+        assert isinstance(sim.model.fc.output_quantizers[0], FloatQuantizeDequantize)
         assert sim.model.fc.output_quantizers[0].bitwidth == 16
-        assert sim.model.fc.output_quantizers[0].min.dtype in TORCH_FLOAT_DTYPES
-        assert sim.model.fc.output_quantizers[0].max.dtype in TORCH_FLOAT_DTYPES
+        assert isinstance(sim.model.relu1.output_quantizers[0], FloatQuantizeDequantize)
         assert sim.model.relu1.output_quantizers[0].bitwidth == 16
-        assert sim.model.relu1.output_quantizers[0].min.dtype in TORCH_FLOAT_DTYPES
-        assert sim.model.relu1.output_quantizers[0].max.dtype in TORCH_FLOAT_DTYPES
 
         # remove test config created
         qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
@@ -1725,7 +1710,7 @@ class TestQuantsimConfig:
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
 
-    @pytest.mark.skip("Float quantization is not implemented yet in quantsim v1.5")
+    @pytest.mark.skip('tf_enhanced is not implemented yet')
     def test_target_rule_enforced_apply_default_and_op_level_overrides_valid_case(self):
         """
         validates Config overrides provided are valid combination and application of both default level as well as
@@ -1841,34 +1826,26 @@ class TestQuantsimConfig:
         # default supported kernels at index DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX (=0 in this case)
         # is not same as default quantsim bw and dtype(int 4/int4), apply default overrides (int8/ int8).
 
-        assert sim.model.fc.param_quantizers['weight'] is not None
-        assert sim.model.fc.param_quantizers['bias'] is None
+        assert isinstance(sim.model.fc.param_quantizers['weight'], QuantizeDequantize)
         assert sim.model.fc.param_quantizers['weight'].bitwidth == 8
-        assert sim.model.fc.param_quantizers['weight'].min.dtype in TORCH_INT_DTYPES
-        assert sim.model.fc.param_quantizers['weight'].max.dtype in TORCH_INT_DTYPES
+        assert sim.model.fc.param_quantizers['bias'] is None
+        assert isinstance(sim.model.fc.output_quantizers[0], QuantizeDequantize)
         assert sim.model.fc.output_quantizers[0].bitwidth == 8
-        assert sim.model.fc.output_quantizers[0].min.dtype in TORCH_INT_DTYPES
-        assert sim.model.fc.output_quantizers[0].max.dtype in TORCH_INT_DTYPES
+        assert isinstance(sim.model.relu1.output_quantizers[0], QuantizeDequantize)
         assert sim.model.relu1.output_quantizers[0].bitwidth == 8
-        assert sim.model.relu1.output_quantizers[0].min.dtype in TORCH_INT_DTYPES
-        assert sim.model.relu1.output_quantizers[0].max.dtype in TORCH_INT_DTYPES
 
         # at op level (for Conv) check param quantizers are updated to fp16 while output is still retained at int8
-        assert sim.model.conv1.param_quantizers['weight'] is not None
+        assert isinstance(sim.model.conv1.param_quantizers['weight'], FloatQuantizeDequantize)
         assert sim.model.conv1.param_quantizers['weight'].bitwidth == 16
-        assert sim.model.conv1.param_quantizers['weight'].min.dtype in TORCH_FLOAT_DTYPES
-        assert sim.model.conv1.param_quantizers['weight'].max.dtype in TORCH_FLOAT_DTYPES
 
-        assert sim.model.conv1.output_quantizers[0].bitwidth == 8
-        assert sim.model.conv1.output_quantizers[0].min.dtype in TORCH_INT_DTYPES
-        assert sim.model.conv1.output_quantizers[0].max.dtype in TORCH_INT_DTYPES
+        # output quantizer of conv1 is not instantiated due to supergroup config
+        assert sim.model.conv1.output_quantizers[0] is None
 
         # remove test config created
         qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
 
-    @pytest.mark.skip("Float quantization is not implemented yet in quantsim v1.5")
     def test_target_rule_enforced_apply_op_level_overrides_fp16(self):
         """
         validates Config overrides provided are valid combination and application of aic100 specific rules.
@@ -1954,16 +1931,13 @@ class TestQuantsimConfig:
 
         # enforce is set to true
         # LayerNorm params should be set to FP 16, and activations as well since it is back to back with GeLU
-        assert sim.model.customln1.param_quantizers['weight'].min.dtype in TORCH_FLOAT_DTYPES
-        assert sim.model.customln1.param_quantizers['weight'].max.dtype in TORCH_FLOAT_DTYPES
+        assert isinstance(sim.model.customln1.param_quantizers['weight'], FloatQuantizeDequantize)
         assert sim.model.customln1.param_quantizers['weight'].bitwidth == 16
-        assert sim.model.customln1.output_quantizers[0].min.dtype in TORCH_FLOAT_DTYPES
-        assert sim.model.customln1.output_quantizers[0].max.dtype in TORCH_FLOAT_DTYPES
+        assert isinstance(sim.model.customln1.output_quantizers[0], FloatQuantizeDequantize)
         assert sim.model.customln1.output_quantizers[0].bitwidth == 16
 
         # gelu output should be set to fp16 as it has no output ops following it
-        assert sim.model.gelu1.output_quantizers[0].min.dtype in TORCH_FLOAT_DTYPES
-        assert sim.model.gelu1.output_quantizers[0].max.dtype in TORCH_FLOAT_DTYPES
+        assert isinstance(sim.model.gelu1.output_quantizers[0], FloatQuantizeDequantize)
         assert sim.model.gelu1.output_quantizers[0].bitwidth == 16
 
         # remove test config created
@@ -1971,7 +1945,6 @@ class TestQuantsimConfig:
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
 
-    @pytest.mark.skip("Float quantization is not implemented yet in quantsim v1.5")
     def test_fp16_back_to_back_overrides(self):
         """
         Test that activation tensors are set to fp16 as expected in case of standalone vs back to back.
@@ -2083,42 +2056,32 @@ class TestQuantsimConfig:
                                    config_file='./data/quantsim_config.json')
         for name, module in sim.quant_wrappers():
             if name == 'prelu2':
+                assert isinstance(module.input_quantizers[0], FloatQuantizeDequantize)
                 assert module.input_quantizers[0].bitwidth == 16
-                assert module.input_quantizers[0].min.dtype in TORCH_FLOAT_DTYPES
-                assert module.input_quantizers[0].max.dtype in TORCH_FLOAT_DTYPES
+                assert isinstance(module.output_quantizers[0], QuantizeDequantize)
                 assert module.output_quantizers[0].bitwidth == 8
-                assert module.output_quantizers[0].min.dtype in TORCH_INT_DTYPES
-                assert module.output_quantizers[0].max.dtype in TORCH_INT_DTYPES
             elif name == 'relu1':
+                assert isinstance(module.input_quantizers[0], QuantizeDequantize)
                 assert module.input_quantizers[0].bitwidth == 8
-                assert module.input_quantizers[0].min.dtype in TORCH_INT_DTYPES
-                assert module.input_quantizers[0].max.dtype in TORCH_INT_DTYPES
+                assert isinstance(module.output_quantizers[0], QuantizeDequantize)
                 assert module.output_quantizers[0].bitwidth == 8
-                assert module.output_quantizers[0].min.dtype in TORCH_INT_DTYPES
-                assert module.output_quantizers[0].max.dtype in TORCH_INT_DTYPES
             elif name == 'add1':
+                assert isinstance(module.input_quantizers[0], QuantizeDequantize)
                 assert module.input_quantizers[0].bitwidth == 8
-                assert module.input_quantizers[0].min.dtype in TORCH_INT_DTYPES
-                assert module.input_quantizers[0].max.dtype in TORCH_INT_DTYPES
+                assert isinstance(module.input_quantizers[1], QuantizeDequantize)
                 assert module.input_quantizers[1].bitwidth == 8
-                assert module.input_quantizers[1].min.dtype in TORCH_INT_DTYPES
-                assert module.input_quantizers[1].max.dtype in TORCH_INT_DTYPES
+                assert isinstance(module.output_quantizers[0], FloatQuantizeDequantize)
                 assert module.output_quantizers[0].bitwidth == 16
-                assert module.output_quantizers[0].min.dtype in TORCH_FLOAT_DTYPES
-                assert module.output_quantizers[0].max.dtype in TORCH_FLOAT_DTYPES
             else:
                 for input_q in module.input_quantizers:
+                    assert isinstance(input_q, FloatQuantizeDequantize)
                     assert input_q.bitwidth == 16
-                    assert input_q.min.dtype in TORCH_FLOAT_DTYPES
-                    assert input_q.max.dtype in TORCH_FLOAT_DTYPES
                 for output_q in module.output_quantizers:
+                    assert isinstance(output_q, FloatQuantizeDequantize)
                     assert output_q.bitwidth == 16
-                    assert output_q.min.dtype in TORCH_FLOAT_DTYPES
-                    assert output_q.max.dtype in TORCH_FLOAT_DTYPES
             for param_q in module.param_quantizers.values():
+                assert isinstance(param_q, FloatQuantizeDequantize)
                 assert param_q.bitwidth == 16
-                assert param_q.min.dtype in TORCH_FLOAT_DTYPES
-                assert param_q.max.dtype in TORCH_FLOAT_DTYPES
 
         # remove test config created
         qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
