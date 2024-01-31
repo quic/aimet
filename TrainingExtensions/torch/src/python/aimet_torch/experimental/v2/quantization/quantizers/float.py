@@ -48,6 +48,9 @@ from aimet_torch.experimental.v2.utils import StatisticsNotFoundError, patch_att
 from aimet_torch.fp_quantization import fake_cast_to_ieee_float
 
 
+__all__ = ['FloatQuantizeDequantize']
+
+
 def _ieee_float_max_representable_value(exponent_bits, mantissa_bits):
     exponent_max = 2 ** exponent_bits - 1
     exponent_bias = exponent_max // 2
