@@ -53,7 +53,6 @@ from ..models_.models_to_test import (
     SimpleConditional,
     ModelWithTwoInputs,
     ModelWith5Output,
-    ModuleWith5Output,
     SoftMaxAvgPoolModel,
 )
 
@@ -246,22 +245,6 @@ class TestQuantsimOnnxExport:
         model = ModelWith5Output()
         dummy_input = torch.randn(1, 3, 224, 224)
         sim_model = copy.deepcopy(model)
-
-        @FakeQuantizationMixin.implements(ModuleWith5Output)
-        class FakeQuantizationMixinWithDisabledOutput(FakeQuantizationMixin, ModuleWith5Output):
-            def __quant_init__(self):
-                super().__quant_init__()
-                self.output_quantizers = torch.nn.ModuleList([None, None, None, None, None])
-
-            def quantized_forward(self, input):
-                if self.input_quantizers[0]:
-                    input = self.input_quantizers[0](input)
-                outputs = super().forward(input)
-                return tuple(
-                    quantizer(out) if quantizer else out
-                    for out, quantizer in zip(outputs, self.output_quantizers)
-                )
-
         sim_model.cust = FakeQuantizationMixin.from_module(sim_model.cust)
         sim_model.cust.input_quantizers[0] = QuantizeDequantize((1,),
                                                                 bitwidth=8,
