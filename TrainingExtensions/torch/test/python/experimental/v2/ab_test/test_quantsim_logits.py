@@ -41,6 +41,8 @@ import json
 import tempfile
 import pytest
 import torch
+import random
+import numpy as np
 
 from ..models_ import models_to_test
 
@@ -189,12 +191,21 @@ def config_path(request):
         yield temp_config_path
 
 
+def set_seed(seed):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+
+
 @pytest.mark.skip("Skip tests until v2 implementation is done")
 @pytest.mark.parametrize('quant_scheme', [QuantScheme.post_training_tf,
-                                            QuantScheme.post_training_percentile,
-                                            QuantScheme.training_range_learning_with_tf_init])
-class TestCompareV1QuantsimAndV2Quantsim:
+                                          # QuantScheme.post_training_percentile, # TODO: not implemented
+                                          # QuantScheme.training_range_learning_with_tf_init, # TODO: not implemented
+                                         ])
+@pytest.mark.parametrize('seed', range(3))
+class TestQuantsimLogits:
     @staticmethod
+    @torch.no_grad()
     def check_qsim_logit_consistency(config, quant_scheme, model, dummy_input):
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = os.path.join(temp_dir, "quantsim_config.json")
@@ -211,43 +222,48 @@ class TestCompareV1QuantsimAndV2Quantsim:
                                             default_output_bw=16,
                                             config_file=config_path)
 
-            v1_sim.compute_encodings(lambda sim_model, _: sim_model(dummy_input),
+            if isinstance(dummy_input, torch.Tensor):
+                dummy_input = (dummy_input,)
+
+            v1_sim.compute_encodings(lambda sim_model, _: sim_model(*dummy_input),
                                     forward_pass_callback_args=None)
 
-            v2_sim.compute_encodings(lambda sim_model, _: sim_model(dummy_input),
+            v2_sim.compute_encodings(lambda sim_model, _: sim_model(*dummy_input),
                                     forward_pass_callback_args=None)
 
-            v1_logits = v1_sim.model(dummy_input)
-            v2_logits = v2_sim.model(dummy_input)
+            v1_logits = v1_sim.model(*dummy_input)
+            v2_logits = v2_sim.model(*dummy_input)
 
             if isinstance(v1_logits, list):
                 assert len(v1_logits) == len(v2_logits)
-                for idx in range(len(v1_logits)):
-                    assert torch.allclose(v1_logits[idx], v2_logits[idx])
+                for v1_logit, v2_logit in zip(v1_logits, v2_logits):
+                    tick = (v1_logit.max() - v1_logit.min()) / (2**16 - 1) # Tolerate off-by-one precision error
+                    assert torch.allclose(v1_logit, v2_logit, rtol=1e-3, atol=tick)
             else:
-                assert torch.allclose(v1_logits, v2_logits)
+                tick = (v1_logits.max() - v1_logits.min()) / (2**16 - 1) # Tolerate off-by-one precision error
+                assert torch.allclose(v1_logits, v2_logits, rtol=1e-3, atol=tick)
 
-    @pytest.mark.parametrize('model_and_input_shape', [(models_to_test.SingleResidual, (1, 3, 32, 32)),
+    @pytest.mark.parametrize('model_cls,input_shape', [(models_to_test.SingleResidual, (1, 3, 32, 32)),
                                                        (models_to_test.SoftMaxAvgPoolModel, (1, 4, 256, 512)),
                                                        (models_to_test.QuantSimTinyModel, (1, 3, 32, 32))])
-    def test_default_config(self, model_and_input_shape, quant_scheme):
-        model_cls, input_shape = model_and_input_shape
+    def test_default_config(self, model_cls, input_shape, quant_scheme, seed):
+        set_seed(seed)
         model = model_cls()
         dummy_input = torch.randn(input_shape)
         self.check_qsim_logit_consistency(CONFIG_DEFAULT, quant_scheme, model, dummy_input)
 
-    @pytest.mark.parametrize('model_and_input_shape', [(models_to_test.SingleResidual, (1, 3, 32, 32)),
+    @pytest.mark.parametrize('model_cls,input_shape', [(models_to_test.SingleResidual, (1, 3, 32, 32)),
                                                        (models_to_test.QuantSimTinyModel, (1, 3, 32, 32))])
-    def test_param_quant(self, model_and_input_shape, quant_scheme):
-        model_cls, input_shape = model_and_input_shape
+    def test_param_quant(self, model_cls, input_shape, quant_scheme, seed):
+        set_seed(seed)
         model = model_cls()
         dummy_input = torch.randn(input_shape)
         self.check_qsim_logit_consistency(CONFIG_PARAM_QUANT, quant_scheme, model, dummy_input)
 
-    @pytest.mark.parametrize('model_and_input_shape', [(models_to_test.SingleResidual, (1, 3, 32, 32)),
+    @pytest.mark.parametrize('model_cls,input_shape', [(models_to_test.SingleResidual, (1, 3, 32, 32)),
                                                        (models_to_test.QuantSimTinyModel, (1, 3, 32, 32))])
-    def test_op_specific_quant(self, model_and_input_shape, quant_scheme):
-        model_cls, input_shape = model_and_input_shape
+    def test_op_specific_quant(self, model_cls, input_shape, quant_scheme, seed):
+        set_seed(seed)
         model = model_cls()
         dummy_input = torch.randn(input_shape)
         # Check per-tensor quantization for conv op
@@ -256,17 +272,20 @@ class TestCompareV1QuantsimAndV2Quantsim:
         # Check per-channel quantization for conv op
         self.check_qsim_logit_consistency(CONFIG_OP_SPECIFIC_QUANT_PER_CHANNEL, quant_scheme, model, dummy_input)
 
-    def test_supergroup(self, quant_scheme):
+    def test_supergroup(self, quant_scheme, seed):
+        set_seed(seed)
         model = models_to_test.QuantSimTinyModel()
         dummy_input = torch.randn(1, 3, 32, 32)
         self.check_qsim_logit_consistency(CONFIG_SUPERGROUP, quant_scheme, model, dummy_input)
 
-    def test_multi_input(self, quant_scheme):
+    def test_multi_input(self, quant_scheme, seed):
+        set_seed(seed)
         model = models_to_test.MultiInput()
         dummy_input = (torch.rand(1, 3, 32, 32), torch.rand(1, 3, 20, 20))
         self.check_qsim_logit_consistency(CONFIG_DEFAULT, quant_scheme, model, dummy_input)
 
-    def test_multi_output(self, quant_scheme):
+    def test_multi_output(self, quant_scheme, seed):
+        set_seed(seed)
         model = models_to_test.ModelWith5Output()
         dummy_input = torch.randn(1, 3, 224, 224)
         self.check_qsim_logit_consistency(CONFIG_DEFAULT, quant_scheme, model, dummy_input)
