@@ -737,6 +737,7 @@ def test_is_initialized():
 
     qdq.min.mul_(1.)
     partially_initialized_state_dict = qdq.state_dict()
+    qdq.load_state_dict(partially_initialized_state_dict)
     assert not qdq.is_initialized()
 
     qdq.max.mul_(1.)
