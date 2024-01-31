@@ -40,6 +40,7 @@ import torch
 from torch import nn
 
 from aimet_torch import elementwise_ops
+from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizationMixin
 
 
 class SimpleConditional(torch.nn.Module):
@@ -395,3 +396,19 @@ class QuantSimTinyModel(nn.Module):
         x = x.view(x.size(0), -1)
         x = self.fc(x)
         return x
+
+
+@FakeQuantizationMixin.implements(ModuleWith5Output)
+class FakeQuantizationModuleWith5Output(FakeQuantizationMixin, ModuleWith5Output):
+    def __quant_init__(self):
+        super().__quant_init__()
+        self.output_quantizers = torch.nn.ModuleList([None, None, None, None, None])
+
+    def quantized_forward(self, input):
+        if self.input_quantizers[0]:
+            input = self.input_quantizers[0](input)
+        outputs = super().forward(input)
+        return tuple(
+            quantizer(out) if quantizer else out
+            for out, quantizer in zip(outputs, self.output_quantizers)
+        )
