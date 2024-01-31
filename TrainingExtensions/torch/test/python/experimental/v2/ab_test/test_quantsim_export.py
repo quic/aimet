@@ -318,7 +318,7 @@ class TestQuantsimOnnxExport:
         assert len(encoding_data["activation_encodings"]) == 3
 
     @torch.no_grad()
-    @pytest.mark.skipif(version.parse(torch.__version__) > version.parse("1.13"),
+    @pytest.mark.skipif(version.parse(torch.__version__) >= version.parse("2.1.2"),
                         reason="Results in RuntimeError when exporting, needs further debugging.")
     def test_conditional_export(self):
         """ Test exporting a model with conditional paths """

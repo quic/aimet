@@ -2363,7 +2363,7 @@ class TestQuantizationSimStaticGrad:
         sim2.compute_encodings(forward_pass, None)
         assert sim2.model.conv2.param_quantizers['weight'].encoding[0].max == pytest.approx(100.0, rel=0.1)
 
-    @pytest.mark.skipif(version.parse(torch.__version__) > version.parse("1.13"),
+    @pytest.mark.skipif(version.parse(torch.__version__) >= version.parse("2.1.2"),
                         reason="Results in RuntimeError when exporting, needs further debugging.")
     def test_conditional_export(self):
         """ Test exporting a model with conditional paths """
