@@ -165,21 +165,39 @@ def quantize_to_fp8(x_float: torch.Tensor,
         new_shape[per_channel_axis] = -1
         maxval = maxval.view(new_shape)
 
+    return fake_cast_to_ieee_float(x_float, maxval, exponent_bits, mantissa_bits)
+
+
+def fake_cast_to_ieee_float(x_float, maxval, exponent_bits, mantissa_bits):
+    """
+    Fake-cast to the given exponent and mantissa bits based on IEEE float representation.
+    IEEE float representation follows the following equation:
+      maximum_representiable_value = (2 - 2**-M) * 2 ** (2**E - bias - 2)
+      (E: exponent bits, M: mantissa bits)
+
+    This function derives the bias from exponent bits, mantissa bits, and
+    maximum representable value based on the above equation.
+    """
+    def log2(x):
+        import numpy as np
+        if isinstance(x, torch.Tensor):
+            return torch.log2(x)
+        return np.log2(x)
     # Math explanation of what happens here:
     # Bias is computed from maxval: $B=2^E - \log_2(M) + \log_2(2 - 2^{-M}) - 1$
     # This follows from maxval $M=(2 - 2^{-M}) \cdot 2^{2^E-1-B}$.
-    bias = 2 ** exponent_bits - torch.log2(maxval) + torch.log2(2 - 2 ** (-mantissa_bits)) - 1
+    bias = 2 ** exponent_bits - log2(maxval) + log2(2 - 2 ** (-mantissa_bits)) - 1
 
     # Ensure no values are greater than the maximum value represented by an 8 bit float system
     # with M mantissa and E exponent bits. torch.min/torch.max are used to allow gradients to
     # flow to maxval
-    x_clipped = torch.min(torch.max(x_float, -maxval), maxval)
+    x_clipped = x_float.clamp(-maxval, maxval)
 
     # FP quantization scale is determined per-element, and is computed as
     # \log_2 s = \left\lfloor \log_2 |x_c| + B \right\rfloor - M - B
     # the addition of bias inside the floor and subtraction outside ensures that a
     # tensor scaling $\alpha \neq 1$ is correctly incorporated
-    log_scales = torch.floor(torch.log2(torch.abs(x_clipped)) + bias).detach()
+    log_scales = torch.floor(log2(torch.abs(x_clipped)) + bias).detach()
 
     # This ensures scales are never smaller than the subnormal scale
     log_scales = torch.clamp(log_scales, 1.)

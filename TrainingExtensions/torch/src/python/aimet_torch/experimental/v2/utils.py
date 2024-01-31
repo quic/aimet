@@ -114,44 +114,58 @@ def patch_attr(obj, attr_name, new_attr)-> _ContextManager:
     """
     Temporarily overwrite object attribute
     """
+    if isinstance(obj, torch.nn.Module):
+        if attr_name in obj._parameters or attr_name in obj._buffers: # pylint: disable=protected-access
+            return _patch_param_or_buffer(obj, attr_name, new_attr)
+
     old_attr = getattr(obj, attr_name)
     action = lambda: setattr(obj, attr_name, new_attr)
     cleanup = lambda: setattr(obj, attr_name, old_attr)
     return _ContextManager(action, cleanup)
 
 
-def patch_param(module: torch.nn.Module, param_name: str, new_param: torch.Tensor) -> _ContextManager:
+def _patch_param_or_buffer(module: torch.nn.Module,
+                           param_or_buffer_name: str,
+                           new_param_or_buffer: torch.Tensor):
     """
     Temporarily substitute the reference to the a parameter with the quantized parameter.
-    Under the scope of this function, ``getattr(module, param_name)`` will return
-    ``new_param`` instead of the original parameter.
+    Under the scope of this function, ``getattr(module, param_or_buffer_name)`` will return
+    ``new_param_or_buffer`` instead of the original parameter.
 
     :param module: Module that owns the parameter
-    :param param_name: Name of the parameter
-    :param new_param: New parameter to replace the original parameter
+    :param param_or_buffer_name: Name of the parameter
+    :param new_param_or_buffer: New parameter to replace the original parameter
     """
-    original_param = getattr(module, param_name)
-    if original_param is not None:
-        assert _is_expandable(new_param.shape, original_param.shape)
-        new_param = new_param.expand_as(original_param)
+    # pylint: disable=protected-access
+
+    orig_param_or_buffer = getattr(module, param_or_buffer_name)
+    if orig_param_or_buffer is not None:
+        assert _is_expandable(new_param_or_buffer.shape, orig_param_or_buffer.shape)
+        new_param_or_buffer = new_param_or_buffer.expand_as(orig_param_or_buffer)
 
     # Modify module.__dict__.
     # module.__dict__ is the primary lookup table which has higher priority than __getattr__ method.
-    # Once we overwrite module.__dict__[param_name] with quantized_params,
-    # getattr(module, param_name) will return module.__dict__[param_name] directly
+    # Once we overwrite module.__dict__[param_or_buffer_name] with quantized_params,
+    # getattr(module, param_or_buffer_name) will return module.__dict__[param_or_buffer_name] directly
     # without falling back to torch.nn.Module's __getattr__ method which returns
-    # the original parameter stored in module._parameters.
-    action = lambda: module.__dict__.update({param_name: new_param})
+    # the original parameter stored in module._parameters or module._buffers.
+    action = lambda: module.__dict__.update({param_or_buffer_name: new_param_or_buffer})
 
-    if param_name in module.__dict__:
+    if param_or_buffer_name in module.__dict__:
         # Some non-standard modules (e.g. replicas of torch.nn.DataParallel) store their parameters
         # directly to module.__dict__. In that case, the cleanup function should restore the dict
-        # so that module.__dict__[param_name] points back to the original parameter again.
-        assert module.__dict__[param_name] is original_param
-        cleanup = lambda: module.__dict__.update({param_name: original_param})
+        # so that module.__dict__[param_or_buffer_name] points back to the original parameter again.
+        assert module.__dict__[param_or_buffer_name] is orig_param_or_buffer
+        cleanup = lambda: module.__dict__.update({param_or_buffer_name: orig_param_or_buffer})
     else:
-        assert module._parameters[param_name] is original_param # pylint: disable=protected-access
-        cleanup = lambda: module.__dict__.pop(param_name)
+        if param_or_buffer_name in module._parameters:
+            assert module._parameters[param_or_buffer_name] is orig_param_or_buffer
+        elif param_or_buffer_name in module._buffers:
+            assert module._buffers[param_or_buffer_name] is orig_param_or_buffer
+        else:
+            raise RuntimeError(f"'{param_or_buffer_name}' is not a valid name of parameter of buffer of {type(module)}.")
+
+        cleanup = lambda: module.__dict__.pop(param_or_buffer_name)
 
 
     return _ContextManager(action, cleanup)

@@ -34,3 +34,97 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
+import pytest
+
+import torch
+from torch.optim import SGD, RMSprop, Adagrad, Adam, AdamW
+from aimet_torch.experimental.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
+from aimet_torch.experimental.v2.quantization.quantizers.float import (
+    FloatQuantizeDequantize,
+    _ieee_float_max_representable_value,
+)
+from aimet_torch.fp_quantization import fake_cast_to_ieee_float
+
+
+@pytest.fixture()
+def x():
+    """
+    Returns [
+        [-2., -1.99, -1.98, ..., -1.01],
+        [-1., -0.99, -0.98, ..., -0.01],
+        [ 0.,  0.01,  0.02, ...,  0.99],
+        [ 1.,  1.01,  1.02, ...,  1.99],
+    ]
+    """
+    return torch.arange(-200, 200).view(4, 100) / 100
+
+
+@torch.no_grad()
+def test_qdq_output_standard_dtypes(x):
+    """
+    Given: Instantiated FloatQuantizeDequantize with a well-known dtype of pytorch
+    When: Run forward
+    Then: Output should be equal to downcasting and upcasting the input
+    """
+    float16_qdq = FloatQuantizeDequantize(dtype=torch.float16)
+    expected_output = x.to(torch.float16).float()
+    assert torch.equal(float16_qdq(x), expected_output)
+
+    bfloat16_qdq = FloatQuantizeDequantize(dtype=torch.bfloat16)
+    expected_output = x.to(torch.bfloat16).float()
+    assert torch.equal(bfloat16_qdq(x), expected_output)
+
+    """
+    Given: Instantiated two quantizers:
+        - FloatQuantizeDequantize(dtype=dtype)
+        - FloatQuantizeDequantize(exponent_bits, mantissa_bits)
+
+        where exponent_bits and mantissa_bits corresponds to dtype
+    When: Run forward
+    Then: The two quantizers should produce same output
+    """
+    float16_qdq_1 = FloatQuantizeDequantize(dtype=torch.float16)
+    float16_qdq_2 = FloatQuantizeDequantize(exponent_bits=5, mantissa_bits=10)
+    assert torch.equal(float16_qdq_1(x), float16_qdq_2(x))
+
+    bfloat16_qdq_1 = FloatQuantizeDequantize(dtype=torch.bfloat16)
+    bfloat16_qdq_2 = FloatQuantizeDequantize(exponent_bits=8, mantissa_bits=7)
+    assert torch.equal(bfloat16_qdq_1(x), bfloat16_qdq_2(x))
+
+
+@torch.no_grad()
+@pytest.mark.parametrize('exponent_bits', [3, 4])
+@pytest.mark.parametrize('mantissa_bits', [3, 4])
+def test_qdq_output_non_standard_dtypes(x, exponent_bits, mantissa_bits):
+    """
+    Given: Instantiated FloatQuantizeDequantize with a non-standard float dtype
+    When: Run forward
+    Then: Output should be equal to fake-casting the input to the non-standard float
+    """
+    float_qdq = FloatQuantizeDequantize(exponent_bits, mantissa_bits)
+    max_representable_value = _ieee_float_max_representable_value(exponent_bits, mantissa_bits)
+    expected_output = fake_cast_to_ieee_float(x,
+                                              max_representable_value,
+                                              exponent_bits,
+                                              mantissa_bits)
+    assert torch.equal(float_qdq(x), expected_output)
+
+
+@torch.no_grad()
+def test_qdq_compute_encodings(x):
+    """
+    Given: Instantiated FloatQuantizeDequantize with a min-max encoding analyzer
+    When: compute_encodings() and run forwad
+    Then: Output should be equal to fake-casting the input
+          with maximum representable value = observed maximum input
+    """
+    encoding_analyzer = MinMaxEncodingAnalyzer((1, 100))
+    float16_qdq = FloatQuantizeDequantize(dtype=torch.float16,
+                                          encoding_analyzer=encoding_analyzer)
+    with float16_qdq.compute_encodings():
+        _ = float16_qdq(x)
+
+    maxval = x.abs().max(dim=0, keepdims=True).values
+    expected_output = fake_cast_to_ieee_float(x, maxval, exponent_bits=5, mantissa_bits=10)
+    assert torch.equal(float16_qdq(x), expected_output)

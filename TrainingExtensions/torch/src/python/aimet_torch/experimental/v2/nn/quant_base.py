@@ -43,7 +43,7 @@ from typing import Type
 
 import torch.nn as nn
 
-from aimet_torch.experimental.v2.utils import patch_param
+from aimet_torch.experimental.v2.utils import patch_attr
 
 
 class BaseQuantizationMixin(abc.ABC):
@@ -91,7 +91,7 @@ class BaseQuantizationMixin(abc.ABC):
                 if param_quantizer:
                     orig_param = getattr(self, param_name)
                     quantized_param = param_quantizer(orig_param)
-                    ctx = patch_param(self, param_name, quantized_param)
+                    ctx = patch_attr(self, param_name, quantized_param)
                     stack.enter_context(ctx)
             yield
 
