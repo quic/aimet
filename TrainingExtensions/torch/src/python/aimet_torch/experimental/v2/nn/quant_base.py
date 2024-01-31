@@ -110,8 +110,6 @@ class BaseQuantizationMixin(abc.ABC):
     def compute_encodings(self):
         """
         Observe inputs and update quantization parameters based on the input statistics.
-        During ``compute_encodings`` is enabled, the input/output quantizers will forward perform
-        dynamic quantization using the batch statistics.
         """
         self._compute_param_encodings(overwrite=True)
 

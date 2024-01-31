@@ -197,7 +197,6 @@ def set_seed(seed):
     random.seed(seed)
 
 
-@pytest.mark.skip("Skip tests until v2 implementation is done")
 @pytest.mark.parametrize('quant_scheme', [QuantScheme.post_training_tf,
                                           # QuantScheme.post_training_percentile, # TODO: not implemented
                                           # QuantScheme.training_range_learning_with_tf_init, # TODO: not implemented
