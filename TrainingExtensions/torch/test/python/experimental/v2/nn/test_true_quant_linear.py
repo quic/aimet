@@ -180,7 +180,7 @@ class TestTrueQuantLinear:
         input_qdq = get_backend().quantize_dequantize(quantized_input.dequantize(), *input_enc)
         output_fp = F.linear(input_qdq, weight_qdq, bias=quant_linear.bias)
         output_expected = get_backend().quantize_dequantize(output_fp, *output_enc)
-        assert torch.allclose(output, output_expected)
+        assert torch.allclose(output.dequantize(), output_expected)
 
 
     def test_no_input_quantizer(self, input):
@@ -309,7 +309,7 @@ class TestTrueQuantLinear:
               4) global backend predicate returns True
         Then: compute the output using the global backend
         """
-        quant_linear.set_backend(FalsePredicateBackend)
+        quant_linear.set_backend(FalsePredicateBackend, strict=False)
         quant_linear(input)
         op_info = quant_linear._last_operator_info
         assert op_info[0] == DummyBackend
@@ -347,7 +347,8 @@ class TestTrueQuantLinear:
               2) Invoke the forward pass
         Then: Pass layer.extra_kwargs as keyword arguments to the kernel call
         """
-        quant_linear.extra_kwargs["assertion"] = True
+        extra_kwargs = {"assertion": True}
+        quant_linear.set_backend(KeywordArgBackend, extra_kwargs=extra_kwargs)
         quant_linear(input)
 
         """
