@@ -51,7 +51,7 @@ class TestEncodingAnalyzer():
         min_max_encoding_analyzer = MinMaxEncodingAnalyzer((1,))
         # TODO: Uncomment after implementation is complete
         # mse_encoding_analyzer = MseEncodingAnalyzer()
-        # percentile_encoding_analyzer = PercentileEncodingAnalyzer(percentile=99)
+        # percentile_encoding_analyzer = PercentileEncodingAnalyzer()
         # sqnr_encoding_analyzer = SqnrEncodingAnalyzer()
         # encoding_analyzer_list = [min_max_encoding_analyzer, mse_encoding_analyzer, percentile_encoding_analyzer, sqnr_encoding_analyzer]
         encoding_analyzer_list = [min_max_encoding_analyzer]
@@ -205,88 +205,115 @@ class TestHistogramEncodingAnalyzer:
         for encoding_analyzer in histogram_based_encoding_analyzers:
             input_tensor_1 = torch.tensor([2.0, 3.5, 4.2, 5.0])
             encoding_analyzer.update_stats(input_tensor_1)
-            assert encoding_analyzer.observer.stats.min == 2
-            assert encoding_analyzer.observer.stats.max == 5
-            assert torch.all(torch.eq(encoding_analyzer.observer.stats.histogram, torch.Tensor([1.0, 1.0, 2.0])))
-            assert torch.all(torch.eq(encoding_analyzer.observer.stats.bin_edges, torch.Tensor([2.0, 3.0, 4.0, 5.0])))
+            assert len(encoding_analyzer.observer.stats) == 1
+            assert encoding_analyzer.observer.stats[0].min == 2
+            assert encoding_analyzer.observer.stats[0].max == 5
+            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].histogram, torch.Tensor([1.0, 1.0, 2.0])))
+            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].bin_edges, torch.Tensor([2.0, 3.0, 4.0, 5.0])))
             
             # update max
             input_tensor_2 = torch.tensor([5.3, 6.4, 7.0, 8.0])
             encoding_analyzer.update_stats(input_tensor_2)
-            assert encoding_analyzer.observer.stats.min == 2
-            assert encoding_analyzer.observer.stats.max == 8
-            assert torch.all(torch.eq(encoding_analyzer.observer.stats.histogram, torch.Tensor([2.0, 3.0, 3.0])))
-            assert torch.all(torch.eq(encoding_analyzer.observer.stats.bin_edges, torch.Tensor([2.0, 4.0, 6.0, 8.0])))
+            assert len(encoding_analyzer.observer.stats) == 1
+            assert encoding_analyzer.observer.stats[0].min == 2
+            assert encoding_analyzer.observer.stats[0].max == 8
+            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].histogram, torch.Tensor([2.0, 3.0, 3.0])))
+            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].bin_edges, torch.Tensor([2.0, 4.0, 6.0, 8.0])))
 
             # update min
             input_tensor_3 = torch.tensor([-4.2, 0, 2.3, 4.5])
             encoding_analyzer.update_stats(input_tensor_3)
-            assert encoding_analyzer.observer.stats.min == -4.2
-            assert encoding_analyzer.observer.stats.max == 8
-            assert torch.all(torch.eq(encoding_analyzer.observer.stats.histogram, torch.Tensor([1, 4, 7])))
-            assert torch.allclose(encoding_analyzer.observer.stats.bin_edges, torch.Tensor([-4.2000, -0.133333, 3.933333, 8.000]))
+            assert len(encoding_analyzer.observer.stats) == 1
+            assert encoding_analyzer.observer.stats[0].min == -4.2
+            assert encoding_analyzer.observer.stats[0].max == 8
+            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].histogram, torch.Tensor([1, 4, 7])))
+            assert torch.allclose(encoding_analyzer.observer.stats[0].bin_edges, torch.Tensor([-4.2000, -0.133333, 3.933333, 8.000]))
+    
+    @pytest.mark.parametrize("histogram_based_encoding_analyzers", [((1,), 3)], indirect=True)
+    def test_merge_stats_resize_histogram_with_ambiguous_bins(self, histogram_based_encoding_analyzers):
+        for encoding_analyzer in histogram_based_encoding_analyzers:
+            input_tensor_1 = torch.tensor([-4.2, 2.4, 7.0, 8.0])
+            encoding_analyzer.update_stats(input_tensor_1)
+            assert len(encoding_analyzer.observer.stats) == 1
+            assert encoding_analyzer.observer.stats[0].min == -4.2
+            assert encoding_analyzer.observer.stats[0].max == 8
+            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].histogram, torch.Tensor([1.0, 1.0, 2.0])))
+            assert torch.allclose(encoding_analyzer.observer.stats[0].bin_edges, torch.Tensor([-4.2000, -0.133333, 3.933333, 8.000]))
 
-            # update min and max
-            input_tensor_4 = torch.tensor([-6.7, -2.4, 7.9, 10.3])
-            encoding_analyzer.update_stats(input_tensor_4)
-            assert encoding_analyzer.observer.stats.min == -6.7
-            assert encoding_analyzer.observer.stats.max == 10.3
-            assert torch.all(torch.eq(encoding_analyzer.observer.stats.histogram, torch.Tensor([3, 6, 7])))
-            assert torch.allclose(encoding_analyzer.observer.stats.bin_edges, torch.Tensor([-6.7000, -1.033333,  4.633333, 10.3000]))
-
+            input_tensor_2 = torch.tensor([-6.7, -2.5, 7.2, 10.3])
+            # hist is [2, 0, 2] for this tensor only
+            encoding_analyzer.update_stats(input_tensor_2) 
+            assert len(encoding_analyzer.observer.stats) == 1
+            assert encoding_analyzer.observer.stats[0].min == -6.7
+            assert encoding_analyzer.observer.stats[0].max == 10.3
+            '''
+            Ambiguity lies when mapping 1st and 3rd bins ex: values in [-4.2, -0.133) could map to [-6.7, -1.033) or [-1.033, 4.633)
+            Value in 1st bin is mapped to destination's 1st bin
+            Value in 3rd bin is mapped to destination's 2nd bin
+            '''
+            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].histogram, torch.Tensor([3.0, 3.0, 2.0])))
+            assert torch.allclose(encoding_analyzer.observer.stats[0].bin_edges, torch.Tensor([-6.7000, -1.03333,  4.63333, 10.3000]))
+        
     
     @pytest.mark.parametrize("histogram_based_encoding_analyzers", [((1,), 3)], indirect=True)
     def test_merge_stats_without_resizing(self, histogram_based_encoding_analyzers):
         for encoding_analyzer in histogram_based_encoding_analyzers:
             input_tensor_1 = torch.tensor([2.0, 3.5, 4.2, 5.0])
             encoding_analyzer.update_stats(input_tensor_1)
-            assert encoding_analyzer.observer.stats.min == 2
-            assert encoding_analyzer.observer.stats.max == 5
-            assert torch.all(torch.eq(encoding_analyzer.observer.stats.histogram, torch.Tensor([1, 1, 2])))
-            assert torch.all(torch.eq(encoding_analyzer.observer.stats.bin_edges, torch.Tensor([2, 3, 4, 5])))
+            assert len(encoding_analyzer.observer.stats) == 1
+            assert encoding_analyzer.observer.stats[0].min == 2
+            assert encoding_analyzer.observer.stats[0].max == 5
+            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].histogram, torch.Tensor([1, 1, 2])))
+            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].bin_edges, torch.Tensor([2, 3, 4, 5])))
             
             # same min, max values
             input_tensor_2 = torch.tensor([2.0, 3.3, 4.8, 5])
             encoding_analyzer.update_stats(input_tensor_2)
-            assert encoding_analyzer.observer.stats.min == 2
-            assert encoding_analyzer.observer.stats.max == 5
-            assert torch.all(torch.eq(encoding_analyzer.observer.stats.histogram, torch.Tensor([2, 2, 4])))
-            assert torch.all(torch.eq(encoding_analyzer.observer.stats.bin_edges, torch.Tensor([2, 3, 4, 5])))
+            assert len(encoding_analyzer.observer.stats) == 1
+            assert encoding_analyzer.observer.stats[0].min == 2
+            assert encoding_analyzer.observer.stats[0].max == 5
+            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].histogram, torch.Tensor([2, 2, 4])))
+            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].bin_edges, torch.Tensor([2, 3, 4, 5])))
 
             # min and max within current range
             input_tensor_3 = torch.tensor([3.1, 3.3, 3.7, 3.9])
             encoding_analyzer.update_stats(input_tensor_3)
-            assert encoding_analyzer.observer.stats.min == 2
-            assert encoding_analyzer.observer.stats.max == 5
-            assert torch.all(torch.eq(encoding_analyzer.observer.stats.histogram, torch.Tensor([2, 6, 4])))
-            assert torch.all(torch.eq(encoding_analyzer.observer.stats.bin_edges, torch.Tensor([2, 3, 4, 5])))
-    
-    @pytest.mark.parametrize("histogram_based_encoding_analyzers", [((1,), 5)], indirect=True)
-    def test_handle_outliers(self, histogram_based_encoding_analyzers):
-        for encoding_analyzer in histogram_based_encoding_analyzers:
-            input_tensor =  torch.arange(start=0, end=100, step=0.5, dtype=torch.float)
-            outliers = torch.tensor([torch.finfo(torch.float).tiny, torch.finfo(torch.float).max])
-            input_tensor = torch.cat((input_tensor, outliers), 0)
-            encoding_analyzer.update_stats(input_tensor)
-            assert encoding_analyzer.observer.stats.min == 0
-            assert encoding_analyzer.observer.stats.max == 99.5
-            assert encoding_analyzer.observer.stats.histogram == [40, 40, 40, 40, 40]
-            assert encoding_analyzer.observer.stats.bin_edge == [0, 19.9, 39.8, 59.7, 79.6, 99.5]
+            assert len(encoding_analyzer.observer.stats) == 1
+            assert encoding_analyzer.observer.stats[0].min == 2
+            assert encoding_analyzer.observer.stats[0].max == 5
+            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].histogram, torch.Tensor([2, 6, 4])))
+            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].bin_edges, torch.Tensor([2, 3, 4, 5])))
+
+    @pytest.mark.parametrize("histogram_based_encoding_analyzers", [((2,1), 3)], indirect=True)
+    def test_merge_stats_multidimensional(self, histogram_based_encoding_analyzers):
+         for encoding_analyzer in histogram_based_encoding_analyzers:
+            input_tensor_1 = torch.tensor([[2.0, 3.5, 4.2, 5.0], [2.0, 3.5, 4.2, 5.0]])
+            encoding_analyzer.update_stats(input_tensor_1)
+            assert len(encoding_analyzer.observer.stats) == 2
+            assert encoding_analyzer.observer.stats[0].min == encoding_analyzer.observer.stats[1].min == 2
+            assert encoding_analyzer.observer.stats[0].max == encoding_analyzer.observer.stats[1].max == 5
+            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].histogram, encoding_analyzer.observer.stats[1].histogram))
+            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].histogram, torch.Tensor([1.0, 1.0, 2.0])))
+            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].bin_edges, encoding_analyzer.observer.stats[1].bin_edges))
+            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].bin_edges, torch.Tensor([2.0, 3.0, 4.0, 5.0])))
+            
 
 @pytest.mark.skip('Tests skipped due to TDD')
 class TestPercentileEncodingAnalyzer():  
     @pytest.mark.parametrize("percentile_value", [-1, 49, 5, 101])
     def test_invalid_percentile_value(self, percentile_value):
         with pytest.raises(ValueError):
-            PercentileEncodingAnalyzer(percentile=percentile_value)
+            encoding_analyzer = PercentileEncodingAnalyzer()
+            encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False, percentile=percentile_value)
+
     
     def test_compute_encodings_asymmetric_normalized(self):
-        encoding_analyzer = PercentileEncodingAnalyzer(percentile=99)
+        encoding_analyzer = PercentileEncodingAnalyzer()
         mean = std_dev = 2
         input_tensor = np.random.normal(mean, std_dev, size=(10000))
         encoding_analyzer.update_stats(input_tensor)
 
-        asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False)
+        asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False, percentile=99)
         # 99.7% of values in a normal disturbtion are within 3 standard deviations of the mean
         assert asymmetric_min < mean - std_dev * 2
         assert asymmetric_min > mean - std_dev * 3
@@ -295,43 +322,43 @@ class TestPercentileEncodingAnalyzer():
         assert asymmetric_max < mean + std_dev * 3   
     
     def test_compute_encodings_asymmetric_sequential(self):
-        encoding_analyzer = PercentileEncodingAnalyzer(num_bins = 500, percentile=99)
+        encoding_analyzer = PercentileEncodingAnalyzer(num_bins = 500)
         input_tensor =  torch.arange(start=0, end=1001, step=1, dtype=torch.float)
         encoding_analyzer.update_stats(input_tensor)
 
-        asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False)
+        asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False, percentile=99)
         
         # encoding max is the histogram bin edge which contains 99% percentile (990.02)
         assert asymmetric_min == 0
         assert asymmetric_max == 990.0
         
     def test_compute_encodings_signed_symmetric_normalized(self):
-        encoding_analyzer = PercentileEncodingAnalyzer(percentile=99)
+        encoding_analyzer = PercentileEncodingAnalyzer()
         mean = std_dev = 2
         input_tensor = np.random.normal(mean, std_dev, size=(10000))
         encoding_analyzer.update_stats(input_tensor)
 
-        symmetric_min, symmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = True)
+        symmetric_min, symmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = True, percentile=99)
         largest_absolute_value = max(abs(element) for element in input_tensor)
         assert symmetric_min > -largest_absolute_value
         assert symmetric_max < largest_absolute_value
     
     def test_compute_encodings_signed_symmetric_sequential(self):
-        encoding_analyzer = PercentileEncodingAnalyzer(num_bins = 500, percentile=99)
+        encoding_analyzer = PercentileEncodingAnalyzer(num_bins = 500)
         input_tensor =  torch.arange(start=0, end=1001, step=1, dtype=torch.float)
         encoding_analyzer.update_stats(input_tensor)
         
-        symmetric_min, symmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = True)
+        symmetric_min, symmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = True, percentile=99)
         assert symmetric_min == -990.0
         assert symmetric_max == 990.0
     
     def test_compute_encodings_100_percentile(self):
-        encoding_analyzer = PercentileEncodingAnalyzer(percentile=100)
+        encoding_analyzer = PercentileEncodingAnalyzer()
         mean = std_dev = 2
         input_tensor = np.random.normal(mean, std_dev, size=(10000))
         encoding_analyzer.update_stats(input_tensor)
 
-        symmetric_min, symmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = True)
+        symmetric_min, symmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = True, percentile=100)
         largest_absolute_value = max(abs(element) for element in input_tensor)
         assert abs(symmetric_min) <= largest_absolute_value
         assert symmetric_max <= largest_absolute_value
@@ -341,14 +368,14 @@ class TestPercentileEncodingAnalyzer():
         assert asymmetric_max == max(input_tensor)
     
     def test_compute_encodings_50_percentile(self):
-        encoding_analyzer = PercentileEncodingAnalyzer(percentile=50)
+        encoding_analyzer = PercentileEncodingAnalyzer()
         input_tensor =  torch.arange(start=0, end=1001, step=1, dtype=torch.float)
         encoding_analyzer.update_stats(input_tensor)
         bw = 8
 
         updated_min = torch.finfo(asymmetric_min.dtype).tiny * (2 ** (bw - 1))
         updated_max = torch.finfo(asymmetric_min.dtype).tiny * ((2 **(bw - 1)) - 1)
-        symmetric_min, symmetric_max = encoding_analyzer.compute_encodings(bitwidth = bw, is_symmetric = True)
+        symmetric_min, symmetric_max = encoding_analyzer.compute_encodings(bitwidth = bw, is_symmetric = True, percentile=50)
         assert symmetric_min == min(-updated_min, -updated_max)
         assert symmetric_max == max(updated_min, updated_max)
 
