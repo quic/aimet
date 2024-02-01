@@ -303,6 +303,40 @@ class MinMaxEncodingAnalyzer(EncodingAnalyzer[_MinMaxRange]):
 
         return updated_min, updated_max
 
+
+def adjust_min_max(curr_min, curr_max, bitwidth, is_symmetric):
+    # ensure that 0 is in the range
+    curr_min = torch.min(curr_min, 0)
+    curr_max = torch.max(curr_max, 0)
+
+    # ensure that min/max are finite
+    if torch.isposinf(curr_max):
+        curr_max = torch.finfo(curr_max.dtype).max
+
+    if torch.isposinf(curr_min):
+        curr_min = torch.finfo(curr_min.dtype).max
+
+    if torch.isneginf(curr_min):
+        curr_min = torch.finfo(curr_max.dtype).min
+
+    if torch.isneginf(curr_max):
+        curr_max = torch.finfo(curr_max.dtype).min
+
+    # ensure that min/max aren't too close
+    tiny_num = torch.finfo(curr_min.dtype).tiny
+    tensor_threshold = (curr_max - curr_min) / (2 **bitwidth) - 1
+
+    if tensor_threshold < tiny_num:
+        curr_min += tiny_num * (2 **(bitwidth - 1))
+        curr_max += tiny_num * ((2 **(bitwidth - 1)) - 1)
+
+    if is_symmetric:
+        symmetric_min = torch.minimum(curr_min, -curr_max)
+        symmetric_max = torch.maximum(-curr_min, curr_max)
+        return symmetric_min, symmetric_max
+
+    return curr_min, curr_max
+
 class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
     """
     Encoding Analyzer for Percentile calibration technique
@@ -321,10 +355,41 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
 
     # pylint: disable=arguments-differ
     @torch.no_grad()
-    def compute_encodings_from_stats(self, stats: _Histogram, bitwidth: int, is_symmetric: bool, percentile: float)\
+    def compute_encodings_from_stats(self, stats: List[_Histogram], bitwidth: int, is_symmetric: bool, percentile: float)\
             -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
-        # TODO
-        raise NotImplementedError
+
+        if percentile <= 49:
+            raise ValueError('Percentile value must be within 50-100 range')
+
+        if not stats:
+            raise StatisticsNotFoundError('No statistics present to compute encodings.')
+
+        encoding_min_list = []
+        encoding_max_list = []
+
+        for list_elem in stats:
+            if percentile != 100:
+                cum_sum = np.cumsum(list_elem.histogram)
+                # trim percentile value from min and max
+                max_index = np.searchsorted(cum_sum, np.percentile(cum_sum, percentile))
+                min_index = np.searchsorted(cum_sum, np.percentile(cum_sum, 100-percentile))
+                curr_min = list_elem.bin_edges[min_index]
+                curr_max = list_elem.bin_edges[max_index]
+            else:
+                curr_min = list_elem.bin_edges[0]
+                curr_max = list_elem.bin_edges[-1]
+
+            # adjust min/max
+            updated_min, updated_max = adjust_min_max(curr_min, curr_max, bitwidth, is_symmetric)
+            encoding_min_list.append(updated_min.item())
+            encoding_max_list.append(updated_max.item())
+
+        encoding_min = torch.Tensor(encoding_min_list)
+        encoding_min = torch.reshape(encoding_min, self.shape)
+
+        encoding_max = torch.Tensor(encoding_max_list)
+        encoding_max = torch.reshape(encoding_max, self.shape)
+        return encoding_min, encoding_max
 
 class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
     """

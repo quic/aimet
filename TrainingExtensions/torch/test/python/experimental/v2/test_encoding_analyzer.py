@@ -49,11 +49,11 @@ class TestEncodingAnalyzer():
     @pytest.fixture
     def encoding_analyzers(self):
         min_max_encoding_analyzer = MinMaxEncodingAnalyzer((1,))
+        percentile_encoding_analyzer = PercentileEncodingAnalyzer()
         # TODO: Uncomment after implementation is complete
-        # percentile_encoding_analyzer = PercentileEncodingAnalyzer()
         # sqnr_encoding_analyzer = SqnrEncodingAnalyzer()
         # encoding_analyzer_list = [min_max_encoding_analyzer, percentile_encoding_analyzer, sqnr_encoding_analyzer]
-        encoding_analyzer_list = [min_max_encoding_analyzer]
+        encoding_analyzer_list = [min_max_encoding_analyzer, percentile_encoding_analyzer]
         yield encoding_analyzer_list
 
     def test_compute_encodings_with_negative_bitwidth(self, encoding_analyzers):
@@ -191,7 +191,7 @@ class TestHistogramEncodingAnalyzer:
         min_max_shape = (1,)
         
         with pytest.raises(ValueError):
-            PercentileEncodingAnalyzer(min_max_shape, num_bins)
+            PercentileEncodingAnalyzer(num_bins = num_bins, shape=min_max_shape)
         
         with pytest.raises(ValueError):
             SqnrEncodingAnalyzer(min_max_shape, num_bins)
@@ -307,7 +307,6 @@ class TestHistogramEncodingAnalyzer:
 
     def test_collect_stats_multidimensional(self):
         x = torch.arange(24, dtype=torch.float).view(2, 3, 4)
-
         shape = (4,)
         observer = _HistogramObserver(shape, num_bins=5)
         histograms = observer.collect_stats(x)
@@ -397,14 +396,14 @@ class TestHistogramEncodingAnalyzer:
         #
         #                                       (new_histogram)
             
-@pytest.mark.skip('Tests skipped due to TDD')
+
+
 class TestPercentileEncodingAnalyzer():  
     @pytest.mark.parametrize("percentile_value", [-1, 49, 5, 101])
     def test_invalid_percentile_value(self, percentile_value):
         with pytest.raises(ValueError):
             encoding_analyzer = PercentileEncodingAnalyzer()
             encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False, percentile=percentile_value)
-
     
     def test_compute_encodings_asymmetric_normalized(self):
         encoding_analyzer = PercentileEncodingAnalyzer()
@@ -478,6 +477,6 @@ class TestPercentileEncodingAnalyzer():
         assert symmetric_min == min(-updated_min, -updated_max)
         assert symmetric_max == max(updated_min, updated_max)
 
-        asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = bw, is_symmetric = False)
+        asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = bw, is_symmetric = False, percentile=50)
         assert asymmetric_min == 0
         assert asymmetric_max == updated_max + updated_min
