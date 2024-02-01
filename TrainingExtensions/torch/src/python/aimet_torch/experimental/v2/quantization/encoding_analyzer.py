@@ -42,9 +42,10 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TypeVar, Generic, Tuple, Optional, List
+import itertools
 import numpy as np
 import torch
-from aimet_torch.experimental.v2.utils import reduce, StatisticsNotFoundError
+from aimet_torch.experimental.v2.utils import reduce, StatisticsNotFoundError, _is_expandable
 
 
 @dataclass
@@ -141,13 +142,33 @@ class _HistogramObserver(_Observer[_Histogram]):
 
     @torch.no_grad()
     def collect_stats(self, input_tensor: torch.Tensor) -> List[_Histogram]:
-        hist_inputs = torch.reshape(input_tensor, (self.num_histograms, -1))
-        hist_stats = []
+        if not _is_expandable(self.shape, input_tensor.shape):
+            raise RuntimeError(f"Shape {self.shape} is incompatible with "
+                           f"input of shape {input_tensor.shape}")
 
-        for index in range(self.num_histograms):
-            hist_input = hist_inputs[index]
+        hist_stats = []
+        input_shape = tuple(input_tensor.shape)
+        histogram_shape = self.shape
+
+        padded_histogram_shape = (
+            *itertools.repeat(1, len(input_shape) - len(histogram_shape)),
+            *histogram_shape
+        )
+
+        for hist_num in range(self.num_histograms):
+            hist_input = input_tensor
+
+            for axis, dim in enumerate(padded_histogram_shape):
+                if dim == 1:
+                    continue
+                # elements in current axis, ex: could be W*C, C, or 1 for input_shape [H, W, C]
+                numel = np.prod(padded_histogram_shape[axis+1:], dtype=int)
+                # index where hist_input at current dimension will be sliced at
+                index = (hist_num // numel) % dim
+                hist_input = hist_input.select(axis, index).unsqueeze(axis)
+
             histogram, bin_edges = torch.histogram(hist_input, self.num_bins)
-            hist_stats.append(_Histogram(histogram, bin_edges, min(hist_input), max(hist_input)))
+            hist_stats.append(_Histogram(histogram, bin_edges, hist_input.min(), hist_input.max()))
 
         return hist_stats
 
@@ -205,8 +226,7 @@ class _HistogramObserver(_Observer[_Histogram]):
         self.stats = []
         for _ in range(self.num_histograms):
             self.stats.append(_Histogram())
-        
-    
+
     def get_stats(self) -> List[_Histogram]:
         return self.stats
 
