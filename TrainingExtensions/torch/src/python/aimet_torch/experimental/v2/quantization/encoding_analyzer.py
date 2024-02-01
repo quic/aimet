@@ -132,18 +132,19 @@ class _HistogramObserver(_Observer[_Histogram]):
     """
     def __init__(self, shape: tuple, num_bins: int):
         super().__init__(shape)
-        self.stats = _Histogram()
         self.num_bins = num_bins
+        self.num_histograms = np.prod(self.shape)
         self.stats = []
+        for _ in range(self.num_histograms):
+            self.stats.append(_Histogram())
 
 
     @torch.no_grad()
     def collect_stats(self, input_tensor: torch.Tensor) -> List[_Histogram]:
-        num_of_histograms = np.prod(self.shape)
-        hist_inputs = torch.reshape(input_tensor, (num_of_histograms, -1))
+        hist_inputs = torch.reshape(input_tensor, (self.num_histograms, -1))
         hist_stats = []
 
-        for index in range(num_of_histograms):
+        for index in range(self.num_histograms):
             hist_input = hist_inputs[index]
             histogram, bin_edges = torch.histogram(hist_input, self.num_bins)
             hist_stats.append(_Histogram(histogram, bin_edges, min(hist_input), max(hist_input)))
@@ -155,9 +156,10 @@ class _HistogramObserver(_Observer[_Histogram]):
             return min(int((data - curr_min) / bin_width), self.num_bins - 1)
         return bin_width
 
+    # pylint: disable=arguments-differ
     @torch.no_grad()
     def merge_stats(self, new_stats_list: List[_Histogram], input_tensor: torch.Tensor):
-        if not self.stats:
+        if self.stats[0].histogram is None:
             self.stats = new_stats_list
             return
         
@@ -182,11 +184,12 @@ class _HistogramObserver(_Observer[_Histogram]):
                     curr_hist = curr_stats.histogram[curr_bin]
                     if curr_hist:
                         src_bin_start = curr_stats.min + src_bin_width * curr_bin
+                        bin_index = self._get_bin_num(dest_bin_width, updated_min, src_bin_start)
+                        dest_bin_end = updated_min + dest_bin_width * (bin_index + 1)
 
                         # split curr_hist if values in source bin cannot neatly fold into dest bin
-                        split_hist_value = torch.round(dest_bin_width / src_bin_width * curr_hist)
+                        split_hist_value = torch.round(((dest_bin_end - src_bin_start) / src_bin_width) * curr_hist)
                         dest_bin_updated = min(split_hist_value, curr_hist)
-                        bin_index = self._get_bin_num(dest_bin_width, updated_min, src_bin_start)
                         # update appropriate bin with either the full or split curr_hist value
                         histogram_updates[bin_index] += dest_bin_updated
                         # if curr_hist is split, update other bin that the remaining values fall into
@@ -200,6 +203,9 @@ class _HistogramObserver(_Observer[_Histogram]):
 
     def reset_stats(self):
         self.stats = []
+        for _ in range(self.num_histograms):
+            self.stats.append(_Histogram())
+        
     
     def get_stats(self) -> List[_Histogram]:
         return self.stats
@@ -234,7 +240,7 @@ class MinMaxEncodingAnalyzer(EncodingAnalyzer[_MinMaxRange]):
     """
     Encoding Analyzer for Min-Max calibration technique
     """
-    def __init__(self, shape):
+    def __init__(self, shape: tuple):
         observer = _MinMaxObserver(shape)
         super().__init__(observer)
 
@@ -284,7 +290,7 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
     def __init__(self, shape: tuple, num_bins: int = 2048):
         if num_bins <= 0:
             raise ValueError('Number of bins cannot be less than or equal to 0.')
-        observer = _HistogramObserver(min_max_shape=shape, num_bins=num_bins)
+        observer = _HistogramObserver(shape=shape, num_bins=num_bins)
         super().__init__(observer)
 
     @torch.no_grad()
@@ -322,24 +328,3 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         # TODO
         raise NotImplementedError
 
-class MseEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
-    """
-    Encoding Analyzer for Mean Square Error (MSE) Calibration technique
-    """
-    def __init__(self, shape: tuple, num_bins: int = 2048):
-        if num_bins <= 0:
-            raise ValueError('Number of bins cannot be less than or equal to 0.')
-        observer = _HistogramObserver(shape=shape, num_bins=num_bins)
-        super().__init__(observer)
-
-    @torch.no_grad()
-    def update_stats(self, input_tensor: torch.Tensor) -> _Statistics:
-        new_stats = self.observer.collect_stats(input_tensor)
-        self.observer.merge_stats(new_stats, input_tensor)
-        return new_stats
-
-    @torch.no_grad()
-    def compute_encodings_from_stats(self, stats: _Histogram, bitwidth: int, is_symmetric: bool)\
-            -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
-        # TODO
-        raise NotImplementedError
