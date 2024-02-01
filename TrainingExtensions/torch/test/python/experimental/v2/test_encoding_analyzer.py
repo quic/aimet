@@ -38,7 +38,7 @@ import torch
 import pytest
 import numpy as np
 import random
-from aimet_torch.experimental.v2.quantization.encoding_analyzer import MseEncodingAnalyzer, SqnrEncodingAnalyzer, PercentileEncodingAnalyzer, MinMaxEncodingAnalyzer
+from aimet_torch.experimental.v2.quantization.encoding_analyzer import MseEncodingAnalyzer, SqnrEncodingAnalyzer, PercentileEncodingAnalyzer, MinMaxEncodingAnalyzer, _HistogramObserver
 
 @pytest.fixture(autouse=True)
 def set_seed():
@@ -248,12 +248,37 @@ class TestHistogramEncodingAnalyzer:
             assert encoding_analyzer.observer.stats[0].max == 10.3
             '''
             Ambiguity lies when mapping 1st and 3rd bins ex: values in [-4.2, -0.133) could map to [-6.7, -1.033) or [-1.033, 4.633)
-            Value in 1st bin is mapped to destination's 1st bin
-            Value in 3rd bin is mapped to destination's 2nd bin
             '''
-            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].histogram, torch.Tensor([3.0, 3.0, 2.0])))
+            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].histogram, torch.Tensor([3.0, 1.0, 4.0])))
             assert torch.allclose(encoding_analyzer.observer.stats[0].bin_edges, torch.Tensor([-6.7000, -1.03333,  4.63333, 10.3000]))
-        
+    
+    @pytest.mark.parametrize("histogram_based_encoding_analyzers", [((1,), 3)], indirect=True)
+    def test_merge_stats_resize_histogram_with_bin_splitting(self, histogram_based_encoding_analyzers):
+        for encoding_analyzer in histogram_based_encoding_analyzers:
+            input_tensor_1 = torch.tensor([1, 7, 5.3, 6, 5.7, 6.8, 6.2, 2.8, 3.9])
+            encoding_analyzer.update_stats(input_tensor_1)
+            assert len(encoding_analyzer.observer.stats) == 1
+            assert encoding_analyzer.observer.stats[0].min == 1
+            assert encoding_analyzer.observer.stats[0].max == 7
+            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].histogram, torch.Tensor([2.0, 1.0, 6.0])))
+            assert torch.allclose(encoding_analyzer.observer.stats[0].bin_edges, torch.Tensor([1, 3, 5, 7]))
+
+            input_tensor_2 = torch.tensor([0, 9, 7.8, 2.5, 4.6, 6.2, 8.8])
+            encoding_analyzer.update_stats(input_tensor_2)
+            assert len(encoding_analyzer.observer.stats) == 1
+            assert encoding_analyzer.observer.stats[0].min == 0
+            assert encoding_analyzer.observer.stats[0].max == 9
+            # 6 values from the source's histograms 3rd bucket are split in half into the destination's 2nd and 3rd bucket
+            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].histogram, torch.Tensor([4.0, 5.0, 7.0])))
+            assert torch.allclose(encoding_analyzer.observer.stats[0].bin_edges, torch.Tensor([0, 3, 6, 9]))
+    
+    @pytest.mark.parametrize("histogram_based_encoding_analyzers", [((1,), 1)], indirect=True)
+    def test_histogram_with_one_bin(self, histogram_based_encoding_analyzers):
+        for encoding_analyzer in histogram_based_encoding_analyzers:
+            input_tensor_1 = torch.tensor([1, 7, 5.3, 6, 5.7, 6.8, 6.2, 2.8, 3.9])
+            encoding_analyzer.update_stats(input_tensor_1)
+            assert encoding_analyzer.observer.stats[0].min == 1
+            assert encoding_analyzer.observer.stats[0].max == 7
     
     @pytest.mark.parametrize("histogram_based_encoding_analyzers", [((1,), 3)], indirect=True)
     def test_merge_stats_without_resizing(self, histogram_based_encoding_analyzers):
@@ -286,7 +311,7 @@ class TestHistogramEncodingAnalyzer:
 
     @pytest.mark.parametrize("histogram_based_encoding_analyzers", [((2,1), 3)], indirect=True)
     def test_merge_stats_multidimensional(self, histogram_based_encoding_analyzers):
-         for encoding_analyzer in histogram_based_encoding_analyzers:
+        for encoding_analyzer in histogram_based_encoding_analyzers:
             input_tensor_1 = torch.tensor([[2.0, 3.5, 4.2, 5.0], [2.0, 3.5, 4.2, 5.0]])
             encoding_analyzer.update_stats(input_tensor_1)
             assert len(encoding_analyzer.observer.stats) == 2
@@ -296,8 +321,36 @@ class TestHistogramEncodingAnalyzer:
             assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].histogram, torch.Tensor([1.0, 1.0, 2.0])))
             assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].bin_edges, encoding_analyzer.observer.stats[1].bin_edges))
             assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].bin_edges, torch.Tensor([2.0, 3.0, 4.0, 5.0])))
-            
+    
+    def test_histogram_during_merging(self):
+        observer = _HistogramObserver((1,), num_bins=10)
+        input = torch.arange(-50, 51, dtype=torch.float)
+        old_histogram = observer.collect_stats(input)
+        observer.merge_stats(old_histogram, input)
 
+        input = torch.arange(-50, 51, dtype=torch.float) * 1.5
+        new_histogram = observer.collect_stats(input)
+        observer.merge_stats(new_histogram, input)
+
+        merged_histogram = observer.stats[0]
+        assert list(merged_histogram.histogram) == [10, 15, 25, 25, 25, 25, 25, 26, 15, 11]
+        assert list(merged_histogram.bin_edges) == [-75, -60, -45, -30, -15, 0, 15, 30, 45, 60, 75]
+
+        #                                       (old_histogram)
+        #
+        #                   10    10    10    10    10    10    10    10    10    11
+        #                 |-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|
+        #                -50 | -40   -30   -20 | -10    0     10 |  20    30    40 |  50
+        #                    |        |        |        |        |        |        |
+        #                    |        |        |        |        |        |        |
+        #                    |        |        |        |        |        |        |
+        #              (+5)  | (+15)  | (+15)  | (+15)  | (+15)  | (+15)  | (+16)  |  (+5)
+        #      10       10   |   10   |   10   |   10   |   10   |   10   |   10   |   10       11
+        #  |--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|
+        # -75      -60      -45      -30      -15       0        15       30       45       60       75
+        #
+        #                                       (new_histogram)
+            
 @pytest.mark.skip('Tests skipped due to TDD')
 class TestPercentileEncodingAnalyzer():  
     @pytest.mark.parametrize("percentile_value", [-1, 49, 5, 101])
