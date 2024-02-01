@@ -37,6 +37,7 @@
 """ Utilities for implementing blockwise quantization using grouped conv approach """
 
 import torch
+from aimet_torch import utils
 
 class ReduceSum(torch.nn.Module):
     """
@@ -109,3 +110,20 @@ class LinearWithGroupedConv(torch.nn.Module):
         x = x.permute(0, 2, 1)
 
         return x
+
+def replace_linears_for_blockwise_quant(model: torch.nn.Module, block_size: int):
+    """
+    Replace all instances of torch.nn.Linears in model with equivalent LinearWithMatMul modules.
+
+    :param model: Model to replace nn.Linears for
+    :param block_size: Block size to use
+    """
+    linear_layers = []
+    for name, module in model.named_children():
+        if isinstance(module, torch.nn.Linear):
+            linear_layers.append((name, module))
+        elif not utils.is_leaf_module(module):
+            replace_linears_for_blockwise_quant(module, block_size)
+
+    for name, module in linear_layers:
+        setattr(model, name, LinearWithGroupedConv(module, block_size))
