@@ -198,6 +198,7 @@ def set_seed(seed):
 
 
 @pytest.mark.parametrize('quant_scheme', [QuantScheme.post_training_tf,
+                                          QuantScheme.training_range_learning_with_tf_init,
                                           # QuantScheme.post_training_percentile, # TODO: not implemented
                                           # QuantScheme.training_range_learning_with_tf_init, # TODO: not implemented
                                          ])
@@ -288,4 +289,3 @@ class TestQuantsimLogits:
         model = models_to_test.ModelWith5Output()
         dummy_input = torch.randn(1, 3, 224, 224)
         self.check_qsim_logit_consistency(CONFIG_DEFAULT, quant_scheme, model, dummy_input)
-
