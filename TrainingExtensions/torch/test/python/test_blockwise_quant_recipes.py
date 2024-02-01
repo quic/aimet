@@ -41,9 +41,9 @@ import pytest
 import torch
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
-from aimet_torch.blockwise_quant_recipes.blockwise_quant_tensor_split import (
-    BlockwiseLinear, replace_linears_for_blockwise_quant, tie_blockwise_linear_quantizers)
 from aimet_torch.blockwise_quant_recipes import blockwise_quant_batched_matmul as bqbm
+from aimet_torch.blockwise_quant_recipes import blockwise_quant_grouped_conv as bqgc
+from aimet_torch.blockwise_quant_recipes import blockwise_quant_tensor_split as bqts
 
 class LinearModel(torch.nn.Module):
     def __init__(self):
@@ -93,7 +93,7 @@ def create_per_channel_config():
                 "is_symmetric": "False"
             },
             "params": {
-                "is_quantized": "False",
+                "is_quantized": "True",
                 "is_symmetric": "True"
             },
             "per_channel_quantization": "True",
@@ -101,7 +101,7 @@ def create_per_channel_config():
         "params": {},
         "op_type": {
             'Split': {
-                'is_output_quantized': False
+                'is_output_quantized': "False"
             }
         },
         "supergroups": [],
@@ -117,7 +117,7 @@ class TestBlockwiseQuantTensorSplitting:
                                                                  (torch.nn.Linear(3, 2), torch.randn(1, 3), 3),
                                                                  (torch.nn.Linear(3, 2), torch.randn(1, 3), 4)])
     def test_blockwise_linear(self, model, dummy_input, block_size):
-        blockwise_linear = BlockwiseLinear(model, block_size=block_size)
+        blockwise_linear = bqts.BlockwiseLinear(model, block_size=block_size)
         orig_out = model(dummy_input)
         new_out = blockwise_linear(dummy_input)
         assert torch.allclose(orig_out, new_out, atol=1e-6)
@@ -127,7 +127,7 @@ class TestBlockwiseQuantTensorSplitting:
         model = LinearModel()
         linear1 = model.linear1
         orig_out = model(dummy_input)
-        replace_linears_for_blockwise_quant(model, 3)
+        bqts.replace_linears_for_blockwise_quant(model, 3)
 
         assert len(model.linear1.linears) == 3
         assert torch.equal(model.linear1.linears[0].bias, linear1.bias)
@@ -142,8 +142,8 @@ class TestBlockwiseQuantTensorSplitting:
 
     def test_quantize_blockwise_linear(self, create_per_channel_config):
         dummy_input = torch.randn(1, 8)
-        model = BlockwiseLinear(torch.nn.Linear(8, 3), 3)
-        qsim = QuantizationSimModel(model, dummy_input=dummy_input)
+        model = bqts.BlockwiseLinear(torch.nn.Linear(8, 3), 3)
+        qsim = QuantizationSimModel(model, dummy_input=dummy_input, config_file='./data/quantsim_config.json')
 
         assert isinstance(qsim.model.split, QcQuantizeWrapper)
         assert isinstance(qsim.model.linears[0], QcQuantizeWrapper)
@@ -160,9 +160,10 @@ class TestBlockwiseQuantTensorSplitting:
         qsim.model.split.input_quantizers[0].enabled = True
 
         qsim.compute_encodings(lambda m, _: m(dummy_input), None)
-        tie_blockwise_linear_quantizers(qsim)
+        bqts.tie_blockwise_linear_quantizers(qsim)
         _ = qsim.model(dummy_input)
 
+        assert len(qsim.model.linears[0].param_quantizers['weight'].encoding) == 3
         assert (qsim.model.linears[0].output_quantizers[0].encoding.max ==
                 qsim.model.linears[1].output_quantizers[0].encoding.max)
         assert (qsim.model.linears[0].output_quantizers[0].encoding.max ==
@@ -174,7 +175,7 @@ class TestBlockwiseQuantTensorSplitting:
 
     def test_blockwise_quant_with_small_linear(self, create_per_channel_config):
         dummy_input = torch.randn(1, 3)
-        model = BlockwiseLinear(torch.nn.Linear(3, 2), 3)
+        model = bqts.BlockwiseLinear(torch.nn.Linear(3, 2), 3)
         qsim = QuantizationSimModel(model, dummy_input=dummy_input)
         # Temporary hack to disable split op output quantizers while handling for CG split op is reworked
         for output_quantizer in qsim.model.split.output_quantizers:
@@ -183,7 +184,7 @@ class TestBlockwiseQuantTensorSplitting:
         # Temporary hack to enable model input split op input quantizer while handling for CG split op is reworked
         qsim.model.split.input_quantizers[0].enabled = True
 
-        tie_blockwise_linear_quantizers(qsim)
+        bqts.tie_blockwise_linear_quantizers(qsim)
         qsim.compute_encodings(lambda m, _: m(dummy_input), None)
         assert len(qsim.model.linears) == 1
         assert qsim.model.elementwise_adds is None
@@ -193,15 +194,15 @@ class TestBlockwiseQuantTensorSplitting:
 
     def test_nested_sequential_linears(self):
         model = NestedModel()
-        replace_linears_for_blockwise_quant(model, block_size=2)
+        bqts.replace_linears_for_blockwise_quant(model, block_size=2)
         num_blockwise_linears = 0
         for _, module in model.named_modules():
-            if isinstance(module, BlockwiseLinear):
+            if isinstance(module, bqts.BlockwiseLinear):
                 num_blockwise_linears += 1
         assert num_blockwise_linears == 4
 
 class TestBlockwiseQuantBatchedMatmul:
-    def test_blockwise_quant_with_batched_matmul(self):
+    def test_blockwise_quant_with_batched_matmul(self, create_per_channel_config):
         torch.manual_seed(0)
         dummy_input = torch.randn(1, 1, 8)
         model = LinearModel()
@@ -213,13 +214,13 @@ class TestBlockwiseQuantBatchedMatmul:
 
         assert torch.allclose(orig_out, new_out, atol=1e-5)
 
-        qsim1 = QuantizationSimModel(model, dummy_input)
+        qsim1 = QuantizationSimModel(model, dummy_input, config_file='./data/quantsim_config.json')
         bqbm.enable_bmm_per_channel_quantizers(qsim1)
         qsim1.compute_encodings(lambda m, _: m(dummy_input), None)
         weight_first_quantized_out = qsim1.model(dummy_input)
 
         model.linear1 = bqbm.LinearWithMatMul(orig_linear, 2, weight_first=False)
-        qsim2 = QuantizationSimModel(model, dummy_input)
+        qsim2 = QuantizationSimModel(model, dummy_input, config_file='./data/quantsim_config.json')
         bqbm.enable_bmm_per_channel_quantizers(qsim2)
         qsim2.compute_encodings(lambda m, _: m(dummy_input), None)
         weight_last_quantized_out = qsim2.model(dummy_input)
@@ -236,3 +237,24 @@ class TestBlockwiseQuantBatchedMatmul:
         assert len(qsim2.model.linear1.batch_matmul.param_quantizers['weight'].encoding) == 12
 
         qsim2.export('./data', 'bmm_blockwise', dummy_input)
+
+class TestBlockwiseQuantGroupedConv:
+    def test_blockwise_quant_with_grouped_conv(self, create_per_channel_config):
+        torch.manual_seed(0)
+        dummy_input = torch.randn(1, 1, 8)
+        model = LinearModel()
+        orig_out = model(dummy_input)
+        orig_linear = model.linear1
+
+        model.linear1 = bqgc.LinearWithGroupedConv(orig_linear, 2)
+        new_out = model(dummy_input)
+
+        assert torch.allclose(orig_out, new_out, atol=1e-5)
+
+        qsim = QuantizationSimModel(model, dummy_input, config_file='./data/quantsim_config.json')
+        qsim.compute_encodings(lambda m, _: m(dummy_input), None)
+        _ = qsim.model(dummy_input)
+
+        assert len(qsim.model.linear1.grouped_conv.param_quantizers['weight'].encoding) == 12
+
+        qsim.export('./data', 'gc_blockwise', dummy_input)
