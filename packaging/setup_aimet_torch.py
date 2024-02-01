@@ -1,7 +1,8 @@
+#!/usr/bin/env python3
 #==============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2020-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -36,50 +37,32 @@
 
 """ Package generation file for aimet torch package """
 
-import os
-import sys
-from setuptools import setup, find_packages, find_namespace_packages
-from packaging_common import bdist_wheel_aimet, get_dependency_packages, get_dependency_urls, get_dependency_wheel
 import setup_cfg # pylint: disable=import-error
 
+from packaging_common import bdist_wheel_aimet, get_package_list, get_pip_dep_packages_list, \
+    get_required_package_data, get_all_dependency_urls
+from setuptools import setup
+
 package_name = "aimet_torch"
+common_package_name ="aimet_common"
 package_url_base = setup_cfg.remote_url + "/releases/download/"+str(setup_cfg.version)
 
-dependency_url_list = []
-common_dep_whl = get_dependency_wheel("AimetCommon")
-if common_dep_whl is not None:
-    common_dep_whl_url = package_url_base + "/" + common_dep_whl
-    dependency_url_list.append(common_dep_whl_url)
-else:
-    sys.exit("Could not find dependency wheel file for package: %s" % package_name)
 
-# Obtain package contents; exclude build and certain other files including those from other packages
-packages_found = find_packages() + \
-    find_namespace_packages(exclude=['*bin', 'pyenv3*', 'build', 'dist', '*bin', '*x86*', '*aimet_common*', '*aimet_tensorflow*', '*aimet_onnx*'])
+# Obtain list of package and sub-packages (including common dependency ones)
+packages_found = get_package_list(package_name)
 
-# Create common dependency list
-package_dependency_files = ['reqs_pip_torch_common.txt']
-install_requires_list = get_dependency_packages(package_name, 'reqs_pip_torch_common.txt')
-if "--gpu" in sys.argv:
-    # Create Torch GPU dependency list
-    package_dependency_files.extend(['reqs_pip_torch_gpu.txt', 'reqs_deb_torch_gpu.txt'])
-    install_requires_list.extend(get_dependency_packages(package_name, 'reqs_pip_torch_gpu.txt'))
-    dependency_url_list.extend(get_dependency_urls(package_name, 'reqs_pip_torch_gpu.txt'))
-    sys.argv.remove("--gpu")
-else:
-    # Create Torch CPU dependency list
-    package_dependency_files.extend(['reqs_pip_torch_cpu.txt'])
-    install_requires_list.extend(get_dependency_packages(package_name, 'reqs_pip_torch_cpu.txt'))
-    dependency_url_list.extend(get_dependency_urls(package_name, 'reqs_pip_torch_cpu.txt'))
+# Obtain list of dependencies for current package
+install_requires_list = get_pip_dep_packages_list(package_name)
+# Obtain non-python artifacts for current package
+required_package_data = get_required_package_data(package_name)
+# Obtain non-PyPi dependency URLs (if any) for current package
+dependency_url_list = get_all_dependency_urls(package_name)
 
-# Loop over package artifacts folder
-required_package_data = ['acceptance_tests/*.*']
-for path, _, filenames in os.walk(package_name):
-    required_package_data += [os.path.join(path, filename) for filename in filenames if
-                              filename.endswith(tuple(package_dependency_files))]
-required_package_data = ['/'.join(files.split('/')[1:]) for files in required_package_data]
-#TODO For some reason, we need to explicitly add HTML files from subfolders like this
-required_package_data += ['*/*.html']
+# Obtain non-python artifacts for common package
+required_common_package_data = get_required_package_data(common_package_name)
+# Obtain non-PyPi dependency URLs (if any) for common package
+dependency_url_list.extend(get_all_dependency_urls(common_package_name))
+
 
 setup(
     name='AimetTorch',
@@ -91,7 +74,7 @@ setup(
     license='NOTICE.txt',
     description='AIMET PyTorch Package',
     long_description=open('README.txt').read(),
-    package_data={package_name:required_package_data},
+    package_data={package_name:required_package_data, common_package_name:required_common_package_data},
     install_requires=install_requires_list,
     dependency_links=dependency_url_list,
     include_package_data=True,
