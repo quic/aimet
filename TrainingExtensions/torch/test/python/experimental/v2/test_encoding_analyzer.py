@@ -309,18 +309,70 @@ class TestHistogramEncodingAnalyzer:
             assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].histogram, torch.Tensor([2, 6, 4])))
             assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].bin_edges, torch.Tensor([2, 3, 4, 5])))
 
-    @pytest.mark.parametrize("histogram_based_encoding_analyzers", [((2,1), 3)], indirect=True)
-    def test_merge_stats_multidimensional(self, histogram_based_encoding_analyzers):
-        for encoding_analyzer in histogram_based_encoding_analyzers:
-            input_tensor_1 = torch.tensor([[2.0, 3.5, 4.2, 5.0], [2.0, 3.5, 4.2, 5.0]])
-            encoding_analyzer.update_stats(input_tensor_1)
-            assert len(encoding_analyzer.observer.stats) == 2
-            assert encoding_analyzer.observer.stats[0].min == encoding_analyzer.observer.stats[1].min == 2
-            assert encoding_analyzer.observer.stats[0].max == encoding_analyzer.observer.stats[1].max == 5
-            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].histogram, encoding_analyzer.observer.stats[1].histogram))
-            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].histogram, torch.Tensor([1.0, 1.0, 2.0])))
-            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].bin_edges, encoding_analyzer.observer.stats[1].bin_edges))
-            assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].bin_edges, torch.Tensor([2.0, 3.0, 4.0, 5.0])))
+    def test_collect_stats_multidimensional(self):
+        x = torch.arange(24, dtype=torch.float).view(2, 3, 4)
+
+        shape = (4,)
+        observer = _HistogramObserver(shape, num_bins=5)
+        histograms = observer.collect_stats(x)
+        for i in range(4):
+            assert torch.equal(histograms[i].min,  x[:,:,i].min())
+            assert torch.equal(histograms[i].max,  x[:,:,i].max())
+
+        shape = (3, 1)
+        observer = _HistogramObserver(shape, num_bins=5)
+        histograms = observer.collect_stats(x)
+        for i in range(3):
+            assert torch.equal(histograms[i].min,  x[:,i,:].min())
+            assert torch.equal(histograms[i].max,  x[:,i,:].max())
+
+        shape = (2, 1, 1)
+        observer = _HistogramObserver(shape, num_bins=5)
+        histograms = observer.collect_stats(x)
+        for i in range(2):
+            assert torch.equal(histograms[i].min,  x[i,:,:].min())
+            assert torch.equal(histograms[i].max,  x[i,:,:].max())
+    
+
+        shape = (3, 4)
+        observer = _HistogramObserver(shape, num_bins=5)
+        histograms = observer.collect_stats(x)
+        for i in range(12):
+            j = i // 4
+            k = i % 4
+            assert torch.equal(histograms[i].min,  x[:,j,k].min())
+            assert torch.equal(histograms[i].max,  x[:,j,k].max())
+
+        shape = (2, 3, 1)
+        observer = _HistogramObserver(shape, num_bins=5)
+        histograms = observer.collect_stats(x)
+        for i in range(6):
+            j = i // 3
+            k = i % 3
+            assert torch.equal(histograms[i].min,  x[j,k,:].min())
+            assert torch.equal(histograms[i].max,  x[j,k,:].max())
+
+        shape = (2, 1, 4)
+        observer = _HistogramObserver(shape, num_bins=5)
+        histograms = observer.collect_stats(x)
+        for i in range(8):
+            j = i // 4
+            k = i % 4
+            assert torch.equal(histograms[i].min,  x[j,:,k].min())
+            assert torch.equal(histograms[i].max,  x[j,:,k].max())
+
+        shape = (2, 3, 4)
+        observer = _HistogramObserver(shape, num_bins=5)
+        histograms = observer.collect_stats(x)
+        for i in range(24):
+            j = i // 12
+            k = (i // 4) % 3
+            m = i % 4
+            assert torch.equal(histograms[i].min,  x[j,k,m].min())
+            assert torch.equal(histograms[i].max,  x[j,k,m].max())
+        
+        assert False
+            
     
     def test_histogram_during_merging(self):
         observer = _HistogramObserver((1,), num_bins=10)
