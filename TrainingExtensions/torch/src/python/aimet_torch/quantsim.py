@@ -765,7 +765,12 @@ class QuantizationSimModel:
         """
         if self._quant_scheme == QuantScheme.training_range_learning_with_tf_init or self._quant_scheme == \
                 QuantScheme.training_range_learning_with_tf_enhanced_init:
-            device = utils.get_device(self.model)
+            try:
+                device = utils.get_device(self.model)
+            except StopIteration:
+                # Model doesn't have any parameter.
+                # Set device to cpu by default.
+                device = torch.device('cpu')
 
             self._replace_quantization_wrapper(self.model, device)
 
