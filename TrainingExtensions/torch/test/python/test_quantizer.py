@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2017-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2017-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -3010,6 +3010,59 @@ class TestQuantizationSimStaticGrad:
         assert actual_param_quant == set(param_quant_checked)
 
         os.remove("./temp_partial_torch_encodings.encodings")
+
+    def test_logits_of_grouped_conv_net(self):
+        torch.manual_seed(42)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        in_channels, out_channels = 6, 12
+        standard_grouped_conv_model = test_models.GroupedConvModel(
+            in_channels, out_channels
+        ).to(device).eval()
+
+        custom_grouped_conv_model = test_models.CustomGroupedConvModel(
+            in_channels // 2, out_channels // 2
+        ).to(device).eval()
+        with torch.no_grad():
+            custom_grouped_conv_model.conv1.weight.copy_(
+                standard_grouped_conv_model.conv.weight[: out_channels // 2]
+            )
+            custom_grouped_conv_model.conv2.weight.copy_(
+                standard_grouped_conv_model.conv.weight[out_channels // 2 :]
+            )
+
+        standard_module_inputs = torch.randn(1, 6, 10, 10, device=device)
+        custom_module_inputs = (
+            standard_module_inputs[:, : in_channels // 2, :, :],
+            standard_module_inputs[:, in_channels // 2 :, :, :],
+        )
+
+        pcq_config_path = get_path_for_per_channel_config()
+        sim_from_standard = QuantizationSimModel(
+            standard_grouped_conv_model, standard_module_inputs, config_file=pcq_config_path
+        )
+        sim_from_custom = QuantizationSimModel(
+            custom_grouped_conv_model, custom_module_inputs, config_file=pcq_config_path
+        )
+
+        # Disable activation quantizers to measure impact of grouped conv weight
+        def _disable_activation_quantizers(sim):
+            for _, wrapper in sim.quant_wrappers():
+                for q in wrapper.input_quantizers:
+                    q.enabled = False
+
+                for q in wrapper.output_quantizers:
+                    q.enabled = False
+
+        _disable_activation_quantizers(sim_from_standard)
+        _disable_activation_quantizers(sim_from_custom)
+
+        sim_from_standard.compute_encodings(lambda m, _: m(standard_module_inputs), None)
+        sim_from_custom.compute_encodings(lambda m, _: m(*custom_module_inputs), None)
+        with torch.inference_mode():
+            standard_module_outputs = sim_from_standard.model(standard_module_inputs)
+            custom_module_outputs = sim_from_custom.model(*custom_module_inputs)
+        assert torch.allclose(standard_module_outputs, custom_module_outputs)
 
 
 class TestQuantizationSimLearnedGrid:

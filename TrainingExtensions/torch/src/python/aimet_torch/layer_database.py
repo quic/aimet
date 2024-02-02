@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2018-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -37,7 +37,7 @@
 
 """Stores and updates Layer Attributes"""
 import copy
-from typing import Tuple, Union
+from typing import Tuple, Union, List
 import torch
 
 from aimet_torch import utils
@@ -56,7 +56,7 @@ class Layer(aimet_common.layer_database.Layer):
             params = aimet_common.layer_database.Conv2dTypeSpecificParams(module.stride, module.padding, module.groups)
             self.type_specific_params = params
 
-    def __init__(self, module: torch.nn.Module, name, output_shape):
+    def __init__(self, module: torch.nn.Module, name: str, output_shape: Union[List, Tuple]):
         """
         Constructor
         :param module: Reference to the layer
@@ -65,10 +65,13 @@ class Layer(aimet_common.layer_database.Layer):
         """
         if isinstance(module, torch.nn.Conv2d):
             if module.groups > 1:
-                assert module.groups == module.in_channels
-                assert module.in_channels == module.out_channels
-
-                weight_shape = (module.out_channels, 1, module.kernel_size[0], module.kernel_size[1])
+                if module.in_channels == module.groups: # Depthwise convolution
+                    assert module.in_channels == module.out_channels
+                    weight_shape = (module.out_channels, 1, module.kernel_size[0], module.kernel_size[1])
+                elif module.in_channels % module.groups == 0: # Grouped convolution
+                    weight_shape = (module.out_channels, module.in_channels // module.groups, module.kernel_size[0], module.kernel_size[1])
+                else:
+                    raise AssertionError("Conv2d with invalid in_channels and groups values")
             else:
                 weight_shape = (module.out_channels, module.in_channels, module.kernel_size[0], module.kernel_size[1])
 
