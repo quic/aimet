@@ -3012,6 +3012,7 @@ class TestQuantizationSimStaticGrad:
         os.remove("./temp_partial_torch_encodings.encodings")
 
     def test_logits_of_grouped_conv_net(self):
+        torch.manual_seed(42)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         in_channels, out_channels = 6, 12

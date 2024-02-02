@@ -129,6 +129,7 @@ class TestTrainingExtensionsCostCalculator(unittest.TestCase):
         self.assertEqual(627200 + 10035200 + 3211264 + 10240, network_cost.mac)
 
     def test_mac_count_of_grouped_conv_net(self):
+        torch.manual_seed(42)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         in_channels, out_channels = 6, 12
