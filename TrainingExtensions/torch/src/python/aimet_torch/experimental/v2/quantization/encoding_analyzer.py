@@ -372,10 +372,10 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
             encoding_max_list.append(updated_max.item())
 
         encoding_min = torch.Tensor(encoding_min_list)
-        encoding_min = torch.reshape(encoding_min, self.shape)
+        encoding_min = torch.reshape(encoding_min, self.observer.shape)
 
         encoding_max = torch.Tensor(encoding_max_list)
-        encoding_max = torch.reshape(encoding_max, self.shape)
+        encoding_max = torch.reshape(encoding_max, self.observer.shape)
         return encoding_min, encoding_max
 
 class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
