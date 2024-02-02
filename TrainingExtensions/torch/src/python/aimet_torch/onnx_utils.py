@@ -200,10 +200,30 @@ def get_pytorch_name_from_onnx_name(onnx_name: str) -> str:
     """
     Extract the PyTorch name from ONNX name, for ONNX names obtained from torch 1.13 ONNX export.
 
+    NOTE: submodule layer2.0.downsample.0 has a following node name in exported
+     ONNX graph: /layer2/layer2.0/downsample/downsample.0/Conv
+    This utility tries to remove redundant information from the node name
+     and returns pytorch name. => layer2.0.downsample.0
+
     :param onnx_name: ONNX name to parse
-    :return: PyTorch name as a string
+    :return: PyTorch name as a string preserving scope information.
     """
-    return '.'.join(onnx_name.split('/')[1:-1])
+    tokens = onnx_name.split('/')[1:-1]
+    updated_tokens = []
+
+    # 1) If the next token has "." and if the next token contains current token then don't add current token
+    # to the updated_tokens list.
+    # 2) If the next token don't have "." then simply add current token to the updated_tokens list.
+    for i in range(len(tokens) - 1):
+        if "." in tokens[i + 1]:
+            if not tokens[i] in tokens[i + 1]:
+                updated_tokens.append(tokens[i])
+        else:
+            updated_tokens.append(tokens[i])
+    # Add the last token to the updated_token list.
+    updated_tokens.extend(tokens[-1:])
+    pytorch_name = '.'.join([token for token in updated_tokens if token])
+    return pytorch_name
 
 
 @dataclass(frozen=True)
