@@ -165,10 +165,15 @@ class _HistogramObserver(_Observer[_Histogram]):
                 index = (hist_num // numel) % dim
                 hist_input = torch.unsqueeze(torch.select(hist_input, axis, index), axis)
 
-            histogram, bin_edges = torch.histogram(hist_input.to(torch.float), self.num_bins)
+            histogram = torch.histc(hist_input, bins=self.num_bins, min=hist_input.min(), max=hist_input.max())
+            bin_edges = self._create_bin_edges(min_val=hist_input.min(), max_val=hist_input.max())
             hist_stats.append(_Histogram(histogram, bin_edges, hist_input.min(), hist_input.max()))
 
         return hist_stats
+
+    def _create_bin_edges(self, min_val, max_val):
+        step = (max_val - min_val) / self.num_bins
+        return torch.range(min_val, max_val, step)
 
     def _get_bin_num(self, bin_width: int, curr_min, data):
         if bin_width:
@@ -217,7 +222,8 @@ class _HistogramObserver(_Observer[_Histogram]):
                             bin_index = self._get_bin_num(dest_bin_width, updated_min, src_bin_start + dest_bin_width)
                             histogram_updates[bin_index] += curr_hist - dest_bin_updated
             # create histogram given input tensor and full range
-            expanded_histogram, expanded_bin_edges = torch.histogram(curr_input, self.num_bins, range=(updated_min.item(), updated_max.item()))
+            expanded_histogram = torch.histc(curr_input, bins=self.num_bins, min=updated_min.item(), max=updated_max.item())
+            expanded_bin_edges = self._create_bin_edges(min_val=updated_min.item(), max_val=updated_max.item())
             expanded_histogram += histogram_updates
             self.stats[index] = _Histogram(expanded_histogram, expanded_bin_edges, updated_min, updated_max)
 
