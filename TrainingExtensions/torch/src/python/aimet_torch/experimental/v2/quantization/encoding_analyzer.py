@@ -166,7 +166,10 @@ class _HistogramObserver(_Observer[_Histogram]):
                 index = (hist_num // numel) % dim
                 hist_input = hist_input.select(axis, index).unsqueeze(axis)
 
-            histogram, bin_edges = torch.histogram(hist_input, self.num_bins)
+            if not torch.is_tensor(hist_input):
+                hist_input = torch.from_numpy(hist_input)
+
+            histogram, bin_edges = torch.histogram(hist_input.to(torch.float), self.num_bins)
             hist_stats.append(_Histogram(histogram, bin_edges, hist_input.min(), hist_input.max()))
 
         return hist_stats
@@ -306,8 +309,8 @@ class MinMaxEncodingAnalyzer(EncodingAnalyzer[_MinMaxRange]):
 
 def adjust_min_max(curr_min, curr_max, bitwidth, is_symmetric):
     # ensure that 0 is in the range
-    curr_min = torch.min(curr_min, 0)
-    curr_max = torch.max(curr_max, 0)
+    curr_min, _ = torch.min(curr_min, 0)
+    curr_max, _ = torch.max(curr_max, 0)
 
     # ensure that min/max are finite
     curr_min.clamp_(min=torch.finfo(curr_max.dtype).min, max=0)
@@ -326,6 +329,7 @@ def adjust_min_max(curr_min, curr_max, bitwidth, is_symmetric):
 
     return curr_min, curr_max
 
+# pylint: disable=arguments-differ
 class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
     """
     Encoding Analyzer for Percentile calibration technique
@@ -342,23 +346,33 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         self.observer.merge_stats(new_stats, input_tensor)
         return new_stats
 
-    # pylint: disable=arguments-differ
+    def compute_dynamic_encodings(self, input_tensor: torch.Tensor, bitwidth: int,\
+                                  is_symmetric: bool, percentile: float)-> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
+        return self.compute_encodings_from_stats(
+            self.observer.collect_stats(input_tensor), bitwidth, is_symmetric, percentile)
+
+    def compute_encodings(self, bitwidth: int, is_symmetric: bool, percentile: float) -> torch.Tensor:
+        return self.compute_encodings_from_stats(self.observer.get_stats(), bitwidth, is_symmetric, percentile)
+
     # pylint: disable=too-many-locals
     @torch.no_grad()
     def compute_encodings_from_stats(self, stats: List[_Histogram], bitwidth: int, is_symmetric: bool, percentile: float)\
             -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
 
+        if bitwidth <= 0:
+            raise ValueError('Bitwidth cannot be less than or equal to 0.')
+
         if percentile < 50 or percentile > 100:
             raise ValueError('Percentile value must be within 50-100 range')
 
-        if not stats:
+        if stats[0].histogram is None:
             raise StatisticsNotFoundError('No statistics present to compute encodings.')
 
         encoding_min_list = []
         encoding_max_list = []
 
         for list_elem in stats:
-            cum_sum = torch.cumsum(list_elem.histogram)
+            cum_sum = torch.cumsum(list_elem.histogram, dim=0)
             # trim percentile value from min and max
             max_index = torch.searchsorted(cum_sum, torch.quantile(cum_sum, percentile/100))
             min_index = torch.searchsorted(cum_sum, torch.quantile(cum_sum, 1 - percentile/100))
