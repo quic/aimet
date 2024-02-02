@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -35,13 +35,11 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Models for use in unit testing """
-
 # pylint: skip-file
 from collections import namedtuple
 from typing import Dict, List
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from torch import nn as nn
 from torchvision.ops import roi_align
@@ -1149,3 +1147,24 @@ class MultiplePReluModel(nn.Module):
         x = self.conv3(x)
         x = self.act3(x)
         return x
+
+
+class GroupedConvModel(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, groups=2, bias=False)
+
+    def forward(self, *inputs):
+        return self.conv(inputs[0])
+
+
+class CustomGroupedConvModel(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int):
+        super().__init__()
+        self.conv1 = nn.Conv2d(in_channels, out_channels, 3, bias=False)
+        self.conv2 = nn.Conv2d(in_channels, out_channels, 3, bias=False)
+
+    def forward(self, *inputs):
+        input1, input2 = inputs
+        output1, output2 = self.conv1(input1), self.conv2(input2)
+        return torch.cat([output1, output2], dim=1)
