@@ -143,8 +143,7 @@ class _HistogramObserver(_Observer[_Histogram]):
     @torch.no_grad()
     def collect_stats(self, input_tensor: torch.Tensor) -> List[_Histogram]:
         if not _is_expandable(self.shape, input_tensor.shape):
-            raise RuntimeError(f"Shape {self.shape} is incompatible with "
-                           f"input of shape {input_tensor.shape}")
+            raise RuntimeError(f"Shape {self.shape} is incompatible with input of shape {input_tensor.shape}")
 
         hist_stats = []
         input_shape = tuple(input_tensor.shape)
@@ -178,12 +177,13 @@ class _HistogramObserver(_Observer[_Histogram]):
         return bin_width
 
     # pylint: disable=arguments-differ
+    # pylint: disable=too-many-locals
     @torch.no_grad()
     def merge_stats(self, new_stats_list: List[_Histogram], input_tensor: torch.Tensor):
         if self.stats[0].histogram is None:
             self.stats = new_stats_list
             return
-        
+
         hist_inputs = torch.reshape(input_tensor, (len(new_stats_list), -1))
 
         for index, new_stats in enumerate(new_stats_list):
@@ -347,4 +347,3 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
             -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
         # TODO
         raise NotImplementedError
-
