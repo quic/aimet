@@ -518,7 +518,7 @@ class FakeQuantizedLSTM(FakeQuantizationMixin, nn.LSTM):
     def __quant_init__(self):
         super().__quant_init__()
         self.input_quantizers = nn.ModuleList([None, nn.ModuleList([None, None])])
-        self.output_quantizers = nn.ModuleList([None, None])
+        self.output_quantizers = nn.ModuleList([None, nn.ModuleList([None, None])])
 
     def quantized_forward(self, input, hx: Optional[Tuple[Tensor, Tensor]] = None): # pylint: disable=arguments-differ
         """
@@ -533,7 +533,13 @@ class FakeQuantizedLSTM(FakeQuantizationMixin, nn.LSTM):
 
         if hx is not None:
             h, c = hx
-            h_quantizer, c_quantizer = self.input_quantizers[1]
+            if isinstance(self.input_quantizers[1], QuantizerBase):
+                # For backward compatibility with V1 quantsim.
+                # Quantsim V1 uses single input quantizer for h and c
+                h_quantizer = c_quantizer = self.input_quantizers[1]
+            else:
+                h_quantizer, c_quantizer = self.input_quantizers[1]
+
             if h_quantizer:
                 h = h_quantizer(h)
             if c_quantizer:
@@ -551,8 +557,19 @@ class FakeQuantizedLSTM(FakeQuantizationMixin, nn.LSTM):
             else:
                 output = self.output_quantizers[0](output)
 
-        if self.output_quantizers[1]:
-            hidden = self.output_quantizers[1](hidden)
+        h_n, c_n = hidden
+        if isinstance(self.output_quantizers[1], QuantizerBase):
+            # For backward compatibility with V1 quantsim.
+            # Quantsim V1 uses single output quantizer for h_n and c_n
+            h_quantizer = c_quantizer = self.output_quantizers[1]
+        else:
+            h_quantizer, c_quantizer = self.output_quantizers[1]
+
+        if h_quantizer:
+            h_n = h_quantizer(h_n)
+        if c_quantizer:
+            c_n = c_quantizer(c_n)
+        hidden = (h_n, c_n)
 
         return output, hidden
 
