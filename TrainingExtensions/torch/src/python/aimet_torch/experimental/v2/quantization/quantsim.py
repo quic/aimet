@@ -41,11 +41,20 @@ import itertools
 import torch
 
 from aimet_torch.quantsim import QuantizationSimModel as V1QuantizationSimModel
+import aimet_torch.quantsim as quantsim_v1
 from aimet_torch.experimental.v2 import nn as aimet_nn
 from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizationMixin
 from aimet_torch.experimental.v2.nn.quant_base import BaseQuantizationMixin
 from aimet_torch.experimental.v2.quantization.wrappers.builder import LazyQuantizeWrapper
+from aimet_torch.experimental.v2.utils import patch_attr
 from aimet_torch import utils
+
+
+qc_quantize_modules_dict = {
+    torch.nn.RNN: LazyQuantizeWrapper,
+    torch.nn.LSTM: LazyQuantizeWrapper,
+    torch.nn.GRU: LazyQuantizeWrapper,
+}
 
 
 class QuantizationSimModel(V1QuantizationSimModel):
@@ -114,3 +123,8 @@ class QuantizationSimModel(V1QuantizationSimModel):
         with utils.in_eval_mode(self.model), torch.no_grad():
             with aimet_nn.compute_encodings(self.model):
                 _ = forward_pass_callback(self.model, forward_pass_callback_args)
+
+    def _create_quantizer_module(self, *args, **kwargs): # pylint: disable=arguments-differ
+        # RNN, LSTM, and GRU don't require special handling in aimet V2
+        with patch_attr(quantsim_v1, 'qc_quantize_modules_dict', qc_quantize_modules_dict):
+            return super()._create_quantizer_module(*args, **kwargs)
