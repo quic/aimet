@@ -44,6 +44,7 @@ import copy
 import pickle
 from typing import Tuple, List, Union, Dict, Callable, Optional, Any, runtime_checkable, Protocol
 from collections.abc import Iterable
+from collections import OrderedDict, defaultdict
 import json
 import torch
 import onnx
@@ -616,86 +617,40 @@ class QuantizationSimModel:
 
         :return: Tuple of activation and param encodings dictionaries mapping torch module names to encodings
         """
-        activation_encodings = {}
-        param_encodings = {}
-        for layer_name, layer in QuantizationSimModel._get_qc_quantized_layers(self.model):
-            if isinstance(layer.input_quantizers, list):
-                for index, quantizer in enumerate(layer.input_quantizers):
-                    self._save_activation_encoding(layer_name, index, quantizer, QUANTIZER_TYPE_INPUT,
-                                                   activation_encodings)
-            else:
-                for quantizer_name, quantizer in layer.input_quantizers.items():
-                    self._save_activation_encoding(layer_name, quantizer_name, quantizer, QUANTIZER_TYPE_INPUT,
-                                                   activation_encodings)
+        activation_encodings = OrderedDict()
+        param_encodings = OrderedDict()
 
-            if isinstance(layer.output_quantizers, list):
-                for index, quantizer in enumerate(layer.output_quantizers):
-                    self._save_activation_encoding(layer_name, index, quantizer, QUANTIZER_TYPE_OUTPUT,
-                                                   activation_encodings)
-            else:
-                for quantizer_name, quantizer in layer.output_quantizers.items():
-                    self._save_activation_encoding(layer_name, quantizer_name, quantizer, QUANTIZER_TYPE_OUTPUT,
-                                                   activation_encodings)
+        for module_name, module in self.model.named_modules():
+            if not isinstance(module, ExportableQuantModule):
+                continue
 
-            for orig_param_name, param_quantizer in layer.param_quantizers.items():
-                self._save_param_encoding(layer_name, orig_param_name, param_quantizer, param_encodings)
+            activation_encodings[module_name] = defaultdict(OrderedDict)
+
+            for i, encoding in enumerate(module.export_input_encodings()):
+                if not encoding:
+                    continue
+                if len(encoding) == 1:
+                    encoding = encoding[0]
+                activation_encodings[module_name]['input'][i] = encoding
+
+            for i, encoding in enumerate(module.export_output_encodings()):
+                if not encoding:
+                    continue
+                if len(encoding) == 1:
+                    encoding = encoding[0]
+                activation_encodings[module_name]['output'][i] = encoding
+
+            if not activation_encodings[module_name]:
+                del activation_encodings[module_name]
+
+            for param_name, encoding in module.export_param_encodings().items():
+                if not encoding:
+                    continue
+                if len(encoding) == 1:
+                    encoding = encoding[0]
+                param_encodings[f'{module_name}.{param_name}'] = encoding
+
         return activation_encodings, param_encodings
-
-    @staticmethod
-    def _save_activation_encoding(layer_name: str, quantizer_identifier: Union[str, int],
-                                  quantizer: Union[StaticGridTensorQuantizer, LearnedGridTensorQuantizer],
-                                  quantizer_type: str, activation_encodings: Dict):
-        """
-        Save activation encoding into a dictionary.
-
-        :param layer_name: Name of layer
-        :param quantizer_identifier: Identifier for the quantizer. Typically either an index or quantizer name
-        :param quantizer: Quantizer to save encoding for
-        :param quantizer_type: 'input' or 'output' depending on position of the quantizer
-        :param activation_encodings: Dictionary to save activation encoding to
-        """
-        if not quantizer.enabled:
-            return
-
-        quantizer_encoding = _get_encoding_by_quantizer(quantizer)
-        encoding = QuantizationSimModel._create_encoding_dict(quantizer_encoding,
-                                                              quantizer,
-                                                              propagate_encodings=False)
-        if layer_name not in activation_encodings:
-            activation_encodings[layer_name] = {}
-        if quantizer_type not in activation_encodings[layer_name]:
-            activation_encodings[layer_name][quantizer_type] = {}
-        activation_encodings[layer_name][quantizer_type][quantizer_identifier] = encoding
-
-    @staticmethod
-    def _save_param_encoding(layer_name: str, param_name: str,
-                             param_quantizer: Union[StaticGridTensorQuantizer, LearnedGridTensorQuantizer],
-                             param_encodings: Dict):
-        """
-        Save param encoding into a dictionary.
-
-        :param layer_name: Name of layer
-        :param param_name: Name of the parameter
-        :param param_quantizer: Quantizer to save encoding for
-        :param param_encodings: Dictionary to save param encoding to
-        """
-        if not param_quantizer.enabled:
-            return
-
-        param_name = layer_name + '.' + param_name
-        if isinstance(param_quantizer.encoding, Iterable):
-            param_encodings[param_name] = []
-            quantizer_encoding = _get_encoding_by_quantizer(param_quantizer)
-            for encoding in quantizer_encoding:
-                enc_dict = QuantizationSimModel._create_encoding_dict(encoding,
-                                                                      param_quantizer,
-                                                                      propagate_encodings=False)
-                param_encodings[param_name].append(enc_dict)
-        else:
-            quantizer_encoding = _get_encoding_by_quantizer(param_quantizer)
-            enc_dict = QuantizationSimModel._create_encoding_dict(quantizer_encoding, param_quantizer,
-                                                                  propagate_encodings=False)
-            param_encodings[param_name] = [enc_dict]
 
     def exclude_layers_from_quantization(self, layers_to_exclude: List[torch.nn.Module]):
         """
