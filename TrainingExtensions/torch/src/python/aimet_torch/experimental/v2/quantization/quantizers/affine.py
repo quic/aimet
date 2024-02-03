@@ -141,7 +141,7 @@ class AffineQuantizerBase(QuantizerBase):
 
         return [
             {'min': float(min_), 'max': float(max_),
-             'scale': float(scale_), 'offset': float(offset_),
+             'scale': float(scale_), 'offset': int(offset_),
              'bitwidth': bitwidth, 'dtype': dtype, 'is_symmetric': str(is_symmetric)}
             for min_, max_, scale_, offset_ in zip(min, max, scale, offset)
         ]
