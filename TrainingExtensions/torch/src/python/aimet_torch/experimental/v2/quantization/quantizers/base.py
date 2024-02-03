@@ -72,10 +72,14 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
         """
 
     @abc.abstractmethod
-    def get_encodings(self) -> Optional[List[Dict]]:
+    def get_legacy_encodings(self) -> Optional[List[Dict]]:
         """
         Returns a list of encodings, each represented as a List of Dicts
         """
+
+    @abc.abstractmethod
+    def set_legacy_encodings(self, encodings: List[Dict]):
+        ...
 
     def register_quantization_parameter(self, name: str, param: nn.Parameter):
         """

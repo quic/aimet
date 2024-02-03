@@ -1744,7 +1744,7 @@ class TestQuantizationSimStaticGrad:
                                    default_data_type=QuantizationDataType.float)
 
         quantizer = sim.model.mul1.output_quantizers[0]
-        assert quantizer.get_encodings() == [{'dtype': 'float', 'bitwidth': 16}]
+        assert quantizer.get_legacy_encodings() == [{'dtype': 'float', 'bitwidth': 16}]
 
     def test_mapping_encoding_for_torch_module_with_multiple_onnx_ops(self):
         """

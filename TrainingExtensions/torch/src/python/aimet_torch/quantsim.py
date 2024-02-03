@@ -148,6 +148,15 @@ class ExportableQuantModule(Protocol):
         Returns a dict of {param name: param encodings}, with each encoding represented as a List of Dicts
         """
 
+    def import_input_encodings(self, encodings: Dict[str, Dict]):
+        ...
+
+    def import_output_encodings(self, encodings: Dict[str, Dict]):
+        ...
+
+    def import_param_encodings(self, encodings: Dict[str, List[Dict]]):
+        ...
+
     def get_original_module(self) -> torch.nn.Module:
         """
         Returns the floating point version of quantized module
@@ -1655,7 +1664,7 @@ class QuantizationSimModel:
         Generator for yielding all quantization wrappers and their names
         """
         for name, module in self.model.named_modules():
-            if isinstance(module, (QcQuantizeWrapper, QcQuantizeRecurrent, LazyQuantizeWrapper)):
+            if isinstance(module, (QcQuantizeWrapper, QcQuantizeRecurrent, LazyQuantizeWrapper, BaseQuantizationMixin)):
                 yield name, module
 
     def run_modules_for_traced_custom_marker(self, module_list: List[torch.nn.Module], dummy_input):
@@ -1932,19 +1941,48 @@ def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, pytorch_encodin
     with open(pytorch_encoding_path) as json_file:
         encodings = json.load(json_file)
 
-    # Set param encodings
-    for name, quant_module in quant_sim_model.model.named_modules():
-        if isinstance(quant_module, QcQuantizeWrapper):
-            quant_module.set_param_encoding(name, encodings['param_encodings'])
-            quant_module.set_mode(QcQuantizeOpMode.ACTIVE)
-            if name in encodings['activation_encodings']:
-                quant_module.set_activation_encoding(name, encodings['activation_encodings'])
+    param_encodings = encodings['param_encodings']
+    activation_encodings = encodings['activation_encodings']
 
-    # Certain quantizers may not have encodings loaded in. This can occur for various reasons:
-    # - the quantizer is for a dropout layer
-    # - the quantizer was originally enabled during compute_encodings(), but was not exercised in the forward pass
+    for module_name, module in quant_sim_model.model.named_modules():
+        if not isinstance(module, ExportableQuantModule):
+            continue
+
+        param_encoding = {
+            param_name: param_encodings[f'{module_name}.{param_name}']
+            for param_name, _ in module.param_quantizers.items()
+            if f'{module_name}.{param_name}' in param_encodings
+        }
+        module.import_param_encodings(param_encoding)
+
+        try:
+            input_encoding = activation_encodings[module_name]['input']
+        except KeyError:
+            input_encoding = {}
+
+        module.import_input_encodings(input_encoding)
+
+        try:
+            output_encoding = activation_encodings[module_name]['output']
+        except KeyError:
+            output_encoding = {}
+
+        module.import_output_encodings(output_encoding)
+
+    def is_enabled(quantizer):
+        if quantizer is None:
+            return False
+        if hasattr(quantizer, 'enabled'):
+            return quantizer.enabled
+        return True
+
+    def is_initialized(quantizer):
+        if hasattr(quantizer, 'is_initialized'):
+            return quantizer.is_initialized()
+        return quantizer.encoding is not None
+
     for name, layer in quant_sim_model.quant_wrappers():
-        if isinstance(layer, QcQuantizeWrapper):
+        if isinstance(layer, ExportableQuantModule):
             input_quantizers = layer.input_quantizers
             output_quantizers = layer.output_quantizers
         else:
@@ -1952,19 +1990,19 @@ def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, pytorch_encodin
             output_quantizers = list(layer.output_quantizers.values())
 
         for idx, quantizer in enumerate(input_quantizers):
-            if quantizer.enabled and quantizer.encoding is None:
-                quantizer.enabled = False
+            if is_enabled(quantizer) and not is_initialized(quantizer):
                 logger.debug('No encoding loaded for input quantizer %s of layer %s', idx, name)
+
         for idx, (param_name, quantizer) in enumerate(layer.param_quantizers.items()):
-            if quantizer.enabled and quantizer.encoding is None:
-                quantizer.enabled = False
+            if is_enabled(quantizer) and not is_initialized(quantizer):
                 logger.debug('No encoding loaded for param quantizer %s of layer %s', param_name, name)
         for idx, quantizer in enumerate(output_quantizers):
-            if quantizer.enabled and quantizer.encoding is None:
-                quantizer.enabled = False
+            if is_enabled(quantizer) and not is_initialized(quantizer):
                 logger.debug('No encoding loaded for output quantizer %s of layer %s', idx, name)
 
-    quant_sim_model.replace_wrappers_for_quantize_dequantize()
+    if type(quant_sim_model) == QuantizationSimModel:
+        # Only for V1 quantsim
+        quant_sim_model.replace_wrappers_for_quantize_dequantize()
 
 
 def has_valid_encodings(qc_quantize_op: ExportableQuantModule) -> bool:
