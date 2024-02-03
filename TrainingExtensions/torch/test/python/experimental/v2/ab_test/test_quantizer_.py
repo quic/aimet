@@ -1628,13 +1628,13 @@ class TestQuantizationSimStaticGrad:
                 elif name in ['conv2', 'conv2_drop', 'relu2', 'relu3', 'dropout', 'fc2', 'log_softmax']:
                     assert not module.output_quantizers[0].is_initialized()
 
-    @pytest.mark.skip("RNN not supported yet")
     def test_rnn_quantization(self):
         """ Test quantizing a model with rnn layer """
         model = SingleLayerRNNModel()
         dummy_input = torch.randn(10, 1, 3)
 
-        sim = QuantizationSimModel(model, dummy_input)
+        sim = QuantizationSimModel(model, dummy_input,
+                                   quant_scheme=QuantScheme.post_training_tf)
         assert isinstance(sim.model.rnn, aimet_nn.FakeQuantizedRNN)
 
     def test_quantizing_qc_quantize_module(self):
@@ -1642,49 +1642,42 @@ class TestQuantizationSimStaticGrad:
         q_rnn = aimet_nn.FakeQuantizedRNN(input_size=3, hidden_size=5, num_layers=1)
         assert not QuantizationSimModel._is_quantizable_module(q_rnn)
 
-    @pytest.mark.skip("RNN not supported yet")
+    @pytest.mark.skip("Exporting RNN is not supported yet")
     def test_export_recurrent_model(self):
         """ Test export functionality with recurrent models """
-        # models = [TwoLayerBidirectionaRNNModel(), TwoLayerBidirectionalLSTMModel(), TwoLayerBidirectionalGRUModel()]
-        models = [TwoLayerBidirectionalLSTMModel()]
+        model = TwoLayerBidirectionalLSTMModel()
         dummy_input = torch.randn(10, 1, 3)
 
         def forward_pass(model, args):
             model.eval()
             model(dummy_input)
 
-        for model in models:
-            sim = QuantizationSimModel(model, dummy_input)
+        sim = QuantizationSimModel(model, dummy_input,
+                                   quant_scheme=QuantScheme.post_training_tf)
 
-            # Quantize
-            sim.compute_encodings(forward_pass, None)
+        # Quantize
+        sim.compute_encodings(forward_pass, None)
 
-            # Edit part of weights tensor to compare with original model before and after removal of quantize module
-            with torch.no_grad():
-                sim.model.recurrent.weight_ih_l0[0][0] = 1
-            edited_weight = sim.model.recurrent.weight_ih_l0.detach().clone()
+        # Edit part of weights tensor to compare with original model before and after removal of quantize module
+        with torch.no_grad():
+            sim.model.recurrent.weight_ih_l0[0][0] = 1
+        edited_weight = sim.model.recurrent.weight_ih_l0.detach().clone()
 
-            # Check that edited weight is different than original weight in module_to_quantize
-            assert not torch.equal(edited_weight, sim.model.recurrent.module_to_quantize.weight_ih_l0)
-
-            sim.export('./data', 'recurrent_save', dummy_input)
-            exported_model = torch.load('./data/recurrent_save.pth')
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, 'recurrent_save', dummy_input)
+            exported_model = torch.load(f'{tmp_dir}/recurrent_save.pth')
 
             # Check that weight from quantized module was copied to original module successfully
             assert isinstance(exported_model.recurrent, (torch.nn.RNN, torch.nn.LSTM, torch.nn.GRU))
             assert torch.equal(edited_weight, exported_model.recurrent.weight_ih_l0)
 
-            with open('./data/recurrent_save.encodings') as f:
+            with open(f'{tmp_dir}/recurrent_save.encodings') as f:
                 encodings = json.load(f)
                 # verifying the encoding against default eAI HW cfg
                 # activation encoding (input only w/o cell state) -- x_l0, h_l0, x_l1 & h_l1
                 assert 8 == len(encodings['activation_encodings'])
                 # param encoding (weight only w/o bias)  -- W_l0, R_l0, W_l1 & R_l1
                 assert 4 == len(encodings['param_encodings'])
-
-            os.remove('./data/recurrent_save.pth')
-            os.remove('./data/recurrent_save.onnx')
-            os.remove('./data/recurrent_save.encodings')
 
     def test_export_dict_input_output(self):
         """ test export functionality on dictionary input and output """
@@ -1997,7 +1990,7 @@ class TestQuantizationSimStaticGrad:
                 encodings = [{key: val} for key, val in encodings.items() if 'scale' in val[0]]
                 assert len(encodings) == 1
 
-    @pytest.mark.skip("RNN not supported yet")
+    @pytest.mark.skip("Exporting RNN is not supported yet")
     def test_encodings_propagation_lstm_model(self):
         """
         Test encodings are propagated correctly when more than
@@ -2011,7 +2004,8 @@ class TestQuantizationSimStaticGrad:
             model(dummy_input)
 
         # verifying the encodings propagation works well while using QcQuantizeRecurrent or QcQuantizeWrapper
-        sim = QuantizationSimModel(model, dummy_input)
+        sim = QuantizationSimModel(model, dummy_input,
+                                   quant_scheme=QuantScheme.post_training_tf)
 
         # Quantize
         sim.compute_encodings(forward_pass, None)
