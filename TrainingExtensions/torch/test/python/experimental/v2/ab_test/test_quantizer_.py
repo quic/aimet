@@ -60,6 +60,7 @@ from aimet_torch import utils, elementwise_ops
 from aimet_torch.model_preparer import prepare_model
 from ..models_.test_models import TwoLayerBidirectionalLSTMModel, SingleLayerRNNModel, \
     ModelWithTwoInputs, SimpleConditional, RoiModel, InputOutputDictModel, Conv3dModel
+from ..models_.models_to_test import ModelWith5Output
 from aimet_torch.onnx_utils import OnnxExportApiArgs
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, \
     StaticGridQuantWrapper, LearnedGridQuantWrapper, enable_recompute, no_recompute
@@ -92,30 +93,6 @@ def dummy_forward_pass(model, args):
     with torch.no_grad():
         output = model(torch.randn((32, 1, 28, 28)))
     return output
-
-
-class SmallMnistNoDropoutWithPassThrough(nn.Module):
-    def __init__(self):
-        super(SmallMnistNoDropoutWithPassThrough, self).__init__()
-        self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
-        self.pt1 = torch.nn.Identity()
-        self.relu1 = nn.ReLU()
-        self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
-        self.pt2 = torch.nn.Identity()
-        self.relu2 = nn.ReLU()
-        self.fc1 = nn.Linear(320, 50)
-        self.relu3 = nn.ReLU()
-        self.fc2 = nn.Linear(50, 10)
-        self.log_softmax = nn.LogSoftmax(dim=1)
-
-    def forward(self, x):
-        x = self.relu1(self.pt1(self.conv1(x)))
-        x = self.conv2(x)
-        x = self.relu2(self.pt2(x))
-        x = x.view(-1, 320)
-        x = self.relu3(self.fc1(x))
-        x = self.fc2(x)
-        return self.log_softmax(x)
 
 
 class SmallMnist(nn.Module):
@@ -284,36 +261,6 @@ class FakeMultiOutputOp(torch.autograd.Function):
     @staticmethod
     def backward(ctx, _grad):  # pylint: disable=arguments-differ
         raise NotImplementedError()
-
-
-class ModuleWith5Output(torch.nn.Module):
-    def forward(self, x):
-        return FakeMultiOutputOp.apply(x)
-
-
-@aimet_nn.FakeQuantizationMixin.implements(ModuleWith5Output)
-class FakeQuantizationModuleWith5Output(aimet_nn.FakeQuantizationMixin, ModuleWith5Output):
-    def __quant_init__(self):
-        super().__quant_init__()
-        self.output_quantizers = torch.nn.ModuleList([None, None, None, None, None])
-
-    def quantized_forward(self, input):
-        if self.input_quantizers[0]:
-            input = self.input_quantizers[0](input)
-        outputs = super().forward(input)
-        return tuple(
-            quantizer(out) if quantizer else out
-            for out, quantizer in zip(outputs, self.output_quantizers)
-        )
-
-
-class ModelWith5Output(torch.nn.Module):
-    def __init__(self):
-        super(ModelWith5Output, self).__init__()
-        self.cust = ModuleWith5Output()
-
-    def forward(self, x):
-        return self.cust(x)
 
 
 class ModuleListModel(nn.Module):
