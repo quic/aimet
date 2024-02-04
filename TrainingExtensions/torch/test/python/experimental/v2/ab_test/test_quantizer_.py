@@ -71,6 +71,7 @@ from aimet_torch.experimental.v2.quantization.quantizers.float import FloatQuant
 from aimet_torch.experimental.v2.quantization.quantsim import QuantizationSimModel
 
 from ..models_ import test_models
+from ..models_ import mnist_torch_model
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
@@ -2713,6 +2714,60 @@ class TestQuantizationSimStaticGrad:
             assert actual_param_quant == set(param_quant_checked)
 
             os.remove("./temp_partial_torch_encodings.encodings")
+
+    @pytest.mark.cuda
+    def test_and_compare_quantizer_no_fine_tuning_CPU_and_GPU(self):
+
+        torch.manual_seed(1)
+        torch.backends.cudnn.deterministic = True
+        dummy_input = torch.rand(1, 1, 28, 28)
+        dummy_input_cuda = dummy_input.cuda()
+
+        # create model on CPU
+        model_cpu = mnist_torch_model.Net().to('cpu').eval()
+
+        model_gpu = copy.deepcopy(model_cpu).to('cuda')
+        cpu_sim_model = QuantizationSimModel(model_cpu, quant_scheme='tf', in_place=True,
+                                             dummy_input=dummy_input)
+        # Quantize
+        cpu_sim_model.compute_encodings(lambda model, input: model(input), dummy_input)
+
+        # create model on GPU
+        gpu_sim_model = QuantizationSimModel(model_gpu, quant_scheme='tf', in_place=True,
+                                             dummy_input=dummy_input_cuda)
+        gpu_sim_model.model.cuda()
+        # Quantize
+        gpu_sim_model.compute_encodings(lambda model, input: model(input), dummy_input_cuda)
+
+        # check the encodings only min and max
+        # Test that first and second are approximately (or not approximately)
+        # equal by computing the difference, rounding to the given number of
+        # decimal places (default 7), and comparing to zero. Note that these
+        # methods round the values to the given number of decimal places
+        # (i.e. like the round() function) and not significant digits
+        # excluding fc1 since it is part of Matmul->Relu supergroup
+        # can't use assertEqual for FC2, so using assertAlmostEquals for FC2
+        assert torch.allclose(model_gpu.conv1.output_quantizers[0].get_min().cpu(),
+                              model_cpu.conv1.output_quantizers[0].get_min())
+        assert torch.allclose(model_gpu.conv1.output_quantizers[0].get_max().cpu(),
+                              model_cpu.conv1.output_quantizers[0].get_max())
+
+        assert torch.allclose(model_gpu.conv2.output_quantizers[0].get_min().cpu(),
+                              model_cpu.conv2.output_quantizers[0].get_min())
+        assert torch.allclose(model_gpu.conv2.output_quantizers[0].get_max().cpu(),
+                              model_cpu.conv2.output_quantizers[0].get_max())
+
+        assert torch.allclose(model_gpu.fc2.output_quantizers[0].get_min().cpu(),
+                              model_cpu.fc2.output_quantizers[0].get_min())
+        assert torch.allclose(model_gpu.fc2.output_quantizers[0].get_max().cpu(),
+                              model_cpu.fc2.output_quantizers[0].get_max())
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            gpu_sim_model.export(tmp_dir, "quantizer_no_fine_tuning__GPU", dummy_input)
+            cpu_sim_model.export(tmp_dir, "quantizer_no_fine_tuning__CPU", dummy_input)
+
+        assert torch.device('cuda:0') == next(model_gpu.parameters()).device
+        assert torch.device('cpu') == next(model_cpu.parameters()).device
 
 
 # From https://github.com/quic/aimet/blob/8ed479b24010834bfea09885cf6879b9bd916e8a/TrainingExtensions/torch/test/python/test_quantizer.py#L3015
