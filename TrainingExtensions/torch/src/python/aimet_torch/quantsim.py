@@ -149,13 +149,34 @@ class ExportableQuantModule(Protocol):
         """
 
     def import_input_encodings(self, encodings: Dict[str, Dict]):
-        ...
+        """
+        Import input encodings represented in below format:
+        {
+            '0': dict,
+            '1': dict,
+            ...
+        }
+        """
 
     def import_output_encodings(self, encodings: Dict[str, Dict]):
-        ...
+        """
+        Import output encodings represented in below format:
+        {
+            '0': dict,
+            '1': dict,
+            ...
+        }
+        """
 
     def import_param_encodings(self, encodings: Dict[str, List[Dict]]):
-        ...
+        """
+        Import parameter encodings represented in below format:
+        {
+            'param_name_0': [dict, dict, ...],
+            'param_name_1': [dict, dict, ...],
+            ...
+        }
+        """
 
     def get_original_module(self) -> torch.nn.Module:
         """
@@ -1937,6 +1958,7 @@ def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, pytorch_encodin
         when encodings were exported.
     :param pytorch_encoding_path: Path of the encodings file to load.
     """
+    # pylint: disable=too-many-locals, too-many-branches
     # Load encodings file
     with open(pytorch_encoding_path) as json_file:
         encodings = json.load(json_file)
@@ -2000,7 +2022,7 @@ def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, pytorch_encodin
             if is_enabled(quantizer) and not is_initialized(quantizer):
                 logger.debug('No encoding loaded for output quantizer %s of layer %s', idx, name)
 
-    if type(quant_sim_model) == QuantizationSimModel:
+    if type(quant_sim_model) == QuantizationSimModel: # pylint: disable=unidiomatic-typecheck
         # Only for V1 quantsim
         quant_sim_model.replace_wrappers_for_quantize_dequantize()
 

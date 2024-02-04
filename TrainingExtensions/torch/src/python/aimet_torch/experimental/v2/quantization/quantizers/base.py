@@ -79,7 +79,9 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
 
     @abc.abstractmethod
     def set_legacy_encodings(self, encodings: List[Dict]):
-        ...
+        """
+        Set encodings represented in the same format as the output of get_legacy_encodings.
+        """
 
     def register_quantization_parameter(self, name: str, param: nn.Parameter):
         """

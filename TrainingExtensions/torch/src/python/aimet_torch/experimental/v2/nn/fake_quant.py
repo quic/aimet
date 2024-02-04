@@ -34,6 +34,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+#pylint: disable=too-many-lines
 """Fake-quantized modules"""
 
 import contextlib
@@ -101,6 +102,14 @@ class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-m
         ]
 
     def import_input_encodings(self, encodings: Dict[str, Dict]):
+        """
+        Import input encodings represented in below format:
+        {
+            '0': dict,
+            '1': dict,
+            ...
+        }
+        """
         for i, quantizer in enumerate(list(self.input_quantizers)):
             encoding = encodings.get(str(i), None)
             if not encoding:
@@ -122,6 +131,14 @@ class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-m
         ]
 
     def import_output_encodings(self, encodings: Dict[str, Dict]):
+        """
+        Import output encodings represented in below format:
+        {
+            '0': dict,
+            '1': dict,
+            ...
+        }
+        """
         for i, quantizer in enumerate(list(self.output_quantizers)):
             encoding = encodings.get(str(i), None)
             if not encoding:
@@ -143,6 +160,14 @@ class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-m
         }
 
     def import_param_encodings(self, encodings: Dict[str, List[Dict]]):
+        """
+        Import parameter encodings represented in below format:
+        {
+            'param_name_0': [dict, dict, ...],
+            'param_name_1': [dict, dict, ...],
+            ...
+        }
+        """
         for param_name, quantizer in dict(self.param_quantizers).items():
             encoding = encodings.get(param_name, None)
             if not encoding:

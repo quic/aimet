@@ -147,7 +147,18 @@ class AffineQuantizerBase(QuantizerBase):
         ]
 
     @torch.no_grad()
-    def set_legacy_encodings(self, encoding: List[Dict]):
+    def set_legacy_encodings(self, encodings: List[Dict]):
+        """
+        Set encodings represented in the same format as the output of get_legacy_encodings as below:
+
+        [
+            {'min': float, 'max': float, 'scale': float, 'offset': float,
+                     'bitwidth': int, 'dtype': str, 'is_symmetric': str},
+            {'min': float, 'max': float, 'scale': float, 'offset': float,
+                     'bitwidth': int, 'dtype': str, 'is_symmetric': str},
+            ...
+        ]
+        """
         def str_to_bool(s: str):
             s = s.lower()
             if s == "false":
@@ -156,10 +167,10 @@ class AffineQuantizerBase(QuantizerBase):
                 return True
             raise ValueError
 
-        self.bitwidth = encoding[0]['bitwidth']
-        self.symmetric = str_to_bool(encoding[0]['is_symmetric'])
-        min_ = torch.tensor([e['min'] for e in encoding])
-        max_ = torch.tensor([e['max'] for e in encoding])
+        self.bitwidth = encodings[0]['bitwidth']
+        self.symmetric = str_to_bool(encodings[0]['is_symmetric'])
+        min_ = torch.tensor([e['min'] for e in encodings])
+        max_ = torch.tensor([e['max'] for e in encodings])
         self.set_range(min_, max_)
 
     def extra_repr(self) -> str:
