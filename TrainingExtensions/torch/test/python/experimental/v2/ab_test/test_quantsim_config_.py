@@ -2186,6 +2186,7 @@ class TestQuantsimConfig:
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
 
+    @pytest.mark.cuda
     def test_quantsim_device_and_dtype(self):
         model = SingleResidual().cuda().half()
 
