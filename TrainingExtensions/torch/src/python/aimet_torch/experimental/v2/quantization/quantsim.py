@@ -43,6 +43,7 @@ import torch
 from aimet_torch.quantsim import QuantizationSimModel as V1QuantizationSimModel
 from aimet_torch.experimental.v2 import nn as aimet_nn
 from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizationMixin
+from aimet_torch.experimental.v2.nn.quant_base import BaseQuantizationMixin
 from aimet_torch.experimental.v2.quantization.wrappers.builder import LazyQuantizeWrapper
 from aimet_torch import utils
 
@@ -78,7 +79,7 @@ class QuantizationSimModel(V1QuantizationSimModel):
                 break
 
         for module in self.model.modules():
-            if not isinstance(module, FakeQuantizationMixin):
+            if not isinstance(module, BaseQuantizationMixin):
                 continue
 
             try:
