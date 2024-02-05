@@ -464,11 +464,12 @@ class TestQuantizationSimStaticGrad:
         for module_name, orig_module in orig_modules.items():
             # if original module class was a quantized module,
             # quantsim should not wrap it again with a quantization mixin
+            quant_module = quant_modules[module_name]
+
             if isinstance(orig_module, aimet_nn.FakeQuantizationMixin):
                 assert type(orig_module) == type(quant_module)
                 continue
 
-            quant_module = quant_modules[module_name]
             orig_cls = type(orig_module)
             quant_cls = aimet_nn.FakeQuantizationMixin.wrap(orig_cls)
             assert isinstance(quant_module, quant_cls)
