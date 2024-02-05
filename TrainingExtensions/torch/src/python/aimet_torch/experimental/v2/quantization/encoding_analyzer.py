@@ -319,7 +319,7 @@ def adjust_min_max(curr_min, curr_max, bitwidth, is_symmetric):
     # ensure that min/max aren't too close
     tiny_num = torch.finfo(curr_min.dtype).tiny
     tensor_threshold = (curr_max - curr_min) / ((2 **bitwidth) - 1)
-    curr_min[tensor_threshold < tiny_num] += tiny_num * (2 **(bitwidth - 1))
+    curr_min[tensor_threshold < tiny_num] -= tiny_num * (2 **(bitwidth - 1))
     curr_max[tensor_threshold < tiny_num] += tiny_num * ((2 **(bitwidth - 1)) - 1)
 
     if is_symmetric:
