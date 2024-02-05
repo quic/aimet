@@ -190,12 +190,11 @@ void TfEnhancedEncodingAnalyzer<DTYPE>::_pickTestCandidatesAsymmetric(
     // deltaMax might not be able to fully cover the whole range.
     for (DTYPE f = 1.0 / 16; f <= 1 + 1.0 / 16; f += 1.0 / 16)
     {
-        DTYPE testDelta = f * deltaMax;
-
         // Compute the offsets we will test.
         // We consider 20 different offsets, equally spaced from -255 to 0.
         for (int i = 0; i <= 20; ++i)
         {
+            DTYPE testDelta = f * deltaMax;
             int testOffset = -numSteps + numSteps / 20.0 * i;
 
             // Clamp test candidates to the observedMin and observedMax range.
