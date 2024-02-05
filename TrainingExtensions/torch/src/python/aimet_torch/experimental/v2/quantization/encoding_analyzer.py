@@ -309,8 +309,8 @@ class MinMaxEncodingAnalyzer(EncodingAnalyzer[_MinMaxRange]):
 
 def adjust_min_max(curr_min, curr_max, bitwidth, is_symmetric):
     # ensure that 0 is in the range
-    curr_min, _ = torch.min(curr_min, 0)
-    curr_max, _ = torch.max(curr_max, 0)
+    curr_min = torch.minimum(curr_min, torch.zeros_like(curr_min))
+    curr_max = torch.maximum(curr_max, torch.zeros_like(curr_max))
 
     # ensure that min/max are finite
     curr_min.clamp_(min=torch.finfo(curr_max.dtype).min, max=0)
@@ -377,9 +377,11 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
             max_index = torch.searchsorted(cum_sum, torch.quantile(cum_sum, percentile/100))
             min_index = torch.searchsorted(cum_sum, torch.quantile(cum_sum, 1 - percentile/100))
 
+            if percentile == 100:
+                min_index = 0
+                max_index = -1
             curr_min = list_elem.bin_edges[min_index]
             curr_max = list_elem.bin_edges[max_index]
-
             # adjust min/max
             updated_min, updated_max = adjust_min_max(curr_min, curr_max, bitwidth, is_symmetric)
             encoding_min_list.append(updated_min.item())
