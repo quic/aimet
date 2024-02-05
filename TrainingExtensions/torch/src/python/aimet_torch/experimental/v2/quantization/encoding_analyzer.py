@@ -181,7 +181,7 @@ class _HistogramObserver(_Observer[_Histogram]):
 
         step = (max_val - min_val) / self.num_bins
         return torch.range(min_val, max_val, step)
-    
+
     def _get_bin_num(self, bin_width: int, curr_min, data):
         if bin_width:
             return min(int((data - curr_min) / bin_width), self.num_bins - 1)
