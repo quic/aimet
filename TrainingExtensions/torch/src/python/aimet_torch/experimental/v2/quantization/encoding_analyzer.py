@@ -172,6 +172,10 @@ class _HistogramObserver(_Observer[_Histogram]):
         return hist_stats
 
     def _create_bin_edges(self, min_val, max_val):
+        if max_val == min_val:
+            min_val -= 0.5
+            max_val += 0.5
+
         step = (max_val - min_val) / self.num_bins
         return torch.range(min_val, max_val, step)
 
