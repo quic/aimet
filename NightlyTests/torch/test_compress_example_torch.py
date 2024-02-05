@@ -501,6 +501,7 @@ class SvdAcceptanceTests(unittest.TestCase):
         self.assertFalse(isinstance(compressed_model.conv1, torch.nn.Sequential))
         self.assertFalse(isinstance(compressed_model.fc, torch.nn.Sequential))
 
+    @pytest.mark.cuda
     def test_svd_manual_rank_sel_weight_svd_deprecated(self):
 
         torch.cuda.empty_cache()
