@@ -212,3 +212,6 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
             maxval = _ieee_float_max_representable_value(exponent_bits, mantissa_bits)
 
         return fake_cast_to_ieee_float(input, maxval, exponent_bits, mantissa_bits)
+
+    def extra_repr(self):
+        return f'exponent_bits={self.exponent_bits}, mantissa_bits={self.mantissa_bits}'
