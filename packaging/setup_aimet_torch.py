@@ -37,6 +37,7 @@
 
 """ Package generation file for aimet torch package """
 
+import sys
 import setup_cfg # pylint: disable=import-error
 
 from packaging_common import bdist_wheel_aimet, get_package_list, get_pip_dep_packages_list, \
@@ -62,6 +63,9 @@ dependency_url_list = get_all_dependency_urls(package_name)
 required_common_package_data = get_required_package_data(common_package_name)
 # Obtain non-PyPi dependency URLs (if any) for common package
 dependency_url_list.extend(get_all_dependency_urls(common_package_name))
+
+if "--gpu" in sys.argv:
+    sys.argv.remove("--gpu")
 
 
 setup(
