@@ -82,11 +82,7 @@ class QuantizationSimModel(V1QuantizationSimModel):
                 device = default_device
 
             # Set quantization parameters to the device of the original module
-            for quantizer in itertools.chain(module.input_quantizers,
-                                             module.output_quantizers,
-                                             module.param_quantizers.values()):
-                if quantizer:
-                    quantizer.to(device=device)
+            module.to(device=device)
 
     @staticmethod
     def _realize_quant_wrapper(module: LazyQuantizeWrapper) -> FakeQuantizationMixin:
