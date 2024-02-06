@@ -156,18 +156,17 @@ class _HistogramObserver(_Observer[_Histogram]):
 
         for hist_num in range(self.num_histograms):
             hist_input = input_tensor
+            if not torch.is_tensor(hist_input):
+                hist_input = torch.from_numpy(hist_input)
 
             for axis, dim in enumerate(padded_histogram_shape):
                 if dim == 1:
                     continue
                 # elements in current axis, ex: could be W*C, C, or 1 for input_shape [H, W, C]
-                numel = np.prod(padded_histogram_shape[axis+1:], dtype=int)
+                numel = torch.prod(torch.Tensor(padded_histogram_shape[axis+1:]), dtype=int)
                 # index where hist_input at current dimension will be sliced at
                 index = (hist_num // numel) % dim
-                hist_input = hist_input.select(axis, index).unsqueeze(axis)
-
-            if not torch.is_tensor(hist_input):
-                hist_input = torch.from_numpy(hist_input)
+                hist_input = torch.unsqueeze(torch.select(hist_input, axis, index), axis)
 
             histogram, bin_edges = torch.histogram(hist_input.to(torch.float), self.num_bins)
             hist_stats.append(_Histogram(histogram, bin_edges, hist_input.min(), hist_input.max()))
