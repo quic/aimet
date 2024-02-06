@@ -564,6 +564,58 @@ class TestPercentileEncodingAnalyzer():
 @pytest.mark.skip("Not Implemented")
 class TestSqnrEncodingAnalyzer:
 
+    def test_computed_encodings_uniform_dist(self):
+        """
+        Given: Update stats on an equally spaced input (no outliers)
+        When: Compute encodings
+        Then: computed encodings should cover then entire input range
+        """
+        x = torch.arange(-100, 101) / 100
+        encoding_analyzer = SqnrEncodingAnalyzer(shape=(1, ), gamma=1)
+        # Expected min/max isn't exactly -1, 1 due to offset rounding
+        observed_delta = torch.tensor(2 / 255.0)
+        observed_offset = torch.round(-1 / observed_delta)
+        observed_min = observed_offset * observed_delta
+        observed_max = observed_min + 255 * observed_delta
+        encoding_analyzer.update_stats(x)
+        qmin, qmax = encoding_analyzer.compute_encodings(bitwidth=8, is_symmetric=False)
+        assert torch.equal(qmin, observed_min)
+        assert torch.equal(qmax, observed_max)
+
+    def test_computed_encodings_with_outliers(self):
+        """
+        Given: Update stats on input with a severe outliers
+        When: Compute encodings
+        Then: Min/max range should be less than the observed min/max
+        """
+        # Aim for an optimal max_encoding of 3/4 the outlier value
+        expected_delta = torch.Tensor([0.1])
+        outlier_val = (255 * expected_delta) / 0.75
+        """
+        Some math required to determine the number of non-outliers to make expected_delta optimal:
+            Let n = number of non outliers
+            Let m = the value of the outlier
+            Assume uniform distribution
+            MSE_non_outlier = Var(Uniform(0, 0.5 delta)) = delta^2 / 12
+            MSE_outlier = (m - 255 * delta)^2 (in unsigned symmetric)
+            MSE = n * delta ^ 2 / 12 + (m - 255 * delta)^2
+            d_MSE / d_delta = n * delta / 6  + 2 * 255^2 * delta - 510 * m
+        Optimal delta at d_MSE / d_delta = 0, solve for n
+            n = 12 * 255 * m / delta - 12 * 255 ^ 2    
+        """
+        # In this case, n should evaluate to 210,100
+        n = round(12 * 255 * outlier_val.item() / expected_delta.item() - 12 * (255 ** 2))
+        encoding_analyzer = SqnrEncodingAnalyzer((1, ), gamma=1.0)
+        x = torch.rand((1, n)) * 255 * expected_delta
+        encoding_analyzer.update_stats(x)
+        outlier = torch.Tensor([outlier_val]).view(1, 1)
+        encoding_analyzer.update_stats(outlier)
+        qmin, qmax = encoding_analyzer.compute_encodings(8, is_symmetric=True)
+        expected_min = torch.Tensor([0])
+        expected_max = expected_delta * 255
+        assert torch.allclose(qmin, expected_min)
+        assert torch.allclose(qmax, expected_max)
+
     def test_compute_encodings_shape(self):
         """
         Given: Encoding analyzer with an arbitrary shape
