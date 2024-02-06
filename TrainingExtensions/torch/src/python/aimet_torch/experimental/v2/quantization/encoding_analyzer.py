@@ -451,36 +451,38 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         device = min_vals.device
         max_delta = (max_vals - min_vals) / num_steps
         observed_offset = torch.round(min_vals / max_delta)
+        observed_min = max_delta * observed_offset
+        observed_max = observed_min + max_delta * num_steps
         num_deltas = self.asym_delta_candidates
-        test_delta_step = max_delta / (num_deltas - 1)
         search_space = torch.arange(start=1, end=(1 + num_deltas), step=1, device=device)
         # test_deltas.shape = (num_histograms, num_tests)
-        test_deltas = test_delta_step[:, None] * search_space[None, :]
+        test_deltas = max_delta[:, None] * search_space[None, :] / (num_deltas - 1)
         # test_offsets.shape = (num_offsets)
         num_offsets = self.num_offset_candidates
         test_offset_step = num_steps / (num_offsets - 2) # subtract 2 because we add the observed offset
-        test_offsets = torch.floor(torch.arange(start=-num_steps, end=test_offset_step, step=test_offset_step, device=device))
+        test_offsets = torch.round(torch.arange(start=-num_steps, end=test_offset_step, step=test_offset_step, device=device))
         test_offsets = test_offsets[None, :].expand(min_vals.shape[0], -1)
         # Add in the observed offset as a candidate, test_offsets.shape = (num_histograms, num_offsets + 1)
         test_offsets = torch.concat((test_offsets, observed_offset[:, None]), dim=1)
-        return self._clamp_delta_offset_values(min_vals, max_vals, num_steps, test_deltas, test_offsets)
+        return self._clamp_delta_offset_values(observed_min, observed_max, num_steps, test_deltas, test_offsets)
 
     def _pick_test_candidates_symmetric(self, min_vals, max_vals, num_steps):
         """
         Selects the set of deltas over which to search for the optimal symmetric encodings
         """
         device = min_vals.device
-        if torch.all(min_vals > 0):
+        if torch.all(min_vals >= 0):
             test_offsets = torch.zeros(1, device=device)
         else:
             test_offsets = torch.full((1, ), (-num_steps) // 2, device=device)
         max_delta = (max_vals - min_vals) / num_steps
         num_deltas = self.sym_delta_candidates
-        test_delta_step = max_delta / (num_deltas - 1)
         search_space = torch.arange(start=1, end=(1 + num_deltas), step=1, device=device)
-        test_deltas = test_delta_step[:, None] * search_space[None, :]
+        test_deltas = max_delta[:, None] * search_space[None, :] / (num_deltas - 1)
         # test_deltas.shape = (num_histograms, num_deltas, 1)
         # test_offsets.shape = (1, 1, 1)
+        min_delta = torch.Tensor([torch.finfo(test_deltas.dtype).tiny], device=test_deltas.device)
+        test_deltas = torch.max(test_deltas, min_delta)
         return test_deltas[:, :, None], test_offsets[:, None, None]
 
     @staticmethod
@@ -489,7 +491,6 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         Clamps delta/offset encodings such that represented range falls within the observed min/max range of inputs
         """
         # test_min shape = (num_histograms, num_deltas, num_offsets)
-        delta = (max_vals - min_vals)/num_steps
         test_min = test_deltas[:, :, None] * test_offsets[:, None, :]
         test_max = test_min + test_deltas[:, :, None] * num_steps
         # Clamp min/max to observed min/max
@@ -498,6 +499,8 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         # Recompute delta/offset with clamped min/max
         # Returned delta/offset shapes = (num_histograms, num_deltas, num_offsets)
         test_deltas = (test_max - test_min) / num_steps
+        min_delta = torch.Tensor([torch.finfo(test_deltas.dtype).tiny], device=test_deltas.device)
+        test_deltas = torch.max(test_deltas, min_delta)
         test_offsets = torch.round(test_min / test_deltas)
         return test_deltas, test_offsets
 
