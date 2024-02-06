@@ -43,7 +43,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TypeVar, Generic, Tuple, Optional, List
 import itertools
-import numpy as np
 import torch
 from aimet_torch.experimental.v2.utils import reduce, StatisticsNotFoundError, _is_expandable
 
@@ -134,7 +133,7 @@ class _HistogramObserver(_Observer[_Histogram]):
     def __init__(self, shape: tuple, num_bins: int):
         super().__init__(shape)
         self.num_bins = num_bins
-        self.num_histograms = np.prod(self.shape)
+        self.num_histograms = torch.prod(torch.Tensor(self.shape), dtype=int).item()
         self.stats = []
         for _ in range(self.num_histograms):
             self.stats.append(_Histogram())
@@ -156,8 +155,6 @@ class _HistogramObserver(_Observer[_Histogram]):
 
         for hist_num in range(self.num_histograms):
             hist_input = input_tensor
-            if not torch.is_tensor(hist_input):
-                hist_input = torch.from_numpy(hist_input)
 
             for axis, dim in enumerate(padded_histogram_shape):
                 if dim == 1:
@@ -201,7 +198,7 @@ class _HistogramObserver(_Observer[_Histogram]):
             else:
                 dest_bin_width = (updated_max - updated_min) / self.num_bins
                 src_bin_width = (curr_stats.max - curr_stats.min) / self.num_bins
-                histogram_updates = np.zeros(self.num_bins)
+                histogram_updates = torch.zeros(self.num_bins)
 
                 for curr_bin in range(self.num_bins):
                     curr_hist = curr_stats.histogram[curr_bin]
