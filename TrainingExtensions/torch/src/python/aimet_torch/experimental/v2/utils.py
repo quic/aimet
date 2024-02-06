@@ -140,8 +140,7 @@ def _patch_param_or_buffer(module: torch.nn.Module,
 
     orig_param_or_buffer = getattr(module, param_or_buffer_name)
     if orig_param_or_buffer is not None:
-        assert _is_expandable(new_param_or_buffer.shape, orig_param_or_buffer.shape)
-        new_param_or_buffer = new_param_or_buffer.expand_as(orig_param_or_buffer)
+        assert new_param_or_buffer.shape == orig_param_or_buffer.shape
 
     # Modify module.__dict__.
     # module.__dict__ is the primary lookup table which has higher priority than __getattr__ method.

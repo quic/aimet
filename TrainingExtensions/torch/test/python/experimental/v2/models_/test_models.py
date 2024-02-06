@@ -998,6 +998,11 @@ class RoiAlignPyTorch(torch.nn.Module):
                          spatial_scale = self.spatial_scale,
                          sampling_ratio = 0)
 
+
+from aimet_torch.experimental.v2.nn.fake_quant import _FakeQuantizedUnaryOpMixin
+FakeQuantizedRoiAlignPyTorch = _FakeQuantizedUnaryOpMixin.wrap(RoiAlignPyTorch)
+
+
 class RoiModel(torch.nn.Module):
 
     def __init__(self, height, width, scale):

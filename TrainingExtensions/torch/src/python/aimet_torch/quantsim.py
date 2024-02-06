@@ -67,12 +67,19 @@ from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs, CustomMarker, g
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.experimental.v2.quantization.wrappers.builder import LazyQuantizeWrapper
+from aimet_torch.experimental.v2.nn.quant_base import BaseQuantizationMixin
 
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 # Types of modules which cannot be quantized
-unquantizable_modules = (QcQuantizeWrapper, QcQuantizeStandAloneBase, QcQuantizeRecurrent, torch.nn.Identity)
+unquantizable_modules = (
+    QcQuantizeWrapper,
+    QcQuantizeStandAloneBase,
+    QcQuantizeRecurrent,
+    BaseQuantizationMixin,
+    torch.nn.Identity,
+)
 
 # If a torch module type is in this dictionary, call the corresponding quantized module constructor instead of wrapping
 # it with QcQuantizeWrapper.
@@ -670,9 +677,13 @@ class QuantizationSimModel:
         # reference count to automatically remove the layers.
         module_to_name_dict = utils.get_module_to_name_dict(self.model)
         quant_layers_to_exclude = []
+        quant_cls = (QcQuantizeWrapper,
+                     QcQuantizeRecurrent,
+                     LazyQuantizeWrapper,
+                     BaseQuantizationMixin)
         for layer in layers_to_exclude:
             for module in layer.modules():
-                if isinstance(module, (QcQuantizeWrapper, QcQuantizeRecurrent)):
+                if isinstance(module, quant_cls):
                     quant_layers_to_exclude.append(module)
                     excluded_module_name = module_to_name_dict.get(module)
                     self._excluded_layer_names.append(excluded_module_name)
@@ -689,6 +700,9 @@ class QuantizationSimModel:
             if isinstance(module, (QcQuantizeWrapper, QcQuantizeRecurrent, LazyQuantizeWrapper)):
                 if param_name_to_exclude in module.param_quantizers:
                     module.param_quantizers[param_name_to_exclude].enabled = False
+            if isinstance(module, BaseQuantizationMixin):
+                if param_name_to_exclude in module.param_quantizers:
+                    module.param_quantizers[param_name_to_exclude] = None
 
     def _replace_quantization_wrapper(self, model, device):
         """
