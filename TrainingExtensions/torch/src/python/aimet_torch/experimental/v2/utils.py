@@ -120,7 +120,16 @@ def patch_attr(obj, attr_name, new_attr)-> _ContextManager:
 
     old_attr = getattr(obj, attr_name)
     action = lambda: setattr(obj, attr_name, new_attr)
-    cleanup = lambda: setattr(obj, attr_name, old_attr)
+
+    def cleanup():
+        try:
+            delattr(obj, attr_name)
+        except AttributeError:
+            pass
+
+        if getattr(obj, attr_name, None) != old_attr:
+            setattr(obj, attr_name, old_attr)
+
     return _ContextManager(action, cleanup)
 
 
