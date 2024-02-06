@@ -43,7 +43,6 @@ import io
 import copy
 import pickle
 from typing import Tuple, List, Union, Dict, Callable, Optional, Any, runtime_checkable, Protocol
-from collections.abc import Iterable
 from collections import OrderedDict, defaultdict
 import json
 import torch
@@ -60,8 +59,7 @@ from aimet_common.quant_utils import get_conv_accum_bounds
 from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_torch.qc_quantize_op import QcQuantizeStandAloneBase, QcQuantizeWrapper, QcQuantizeOpMode, \
     StaticGridQuantWrapper, LearnedGridQuantWrapper, NativeTorchQuantWrapper, QUANTIZER_TYPE_INPUT, QUANTIZER_TYPE_OUTPUT
-from aimet_torch.tensor_quantizer import StaticGridTensorQuantizer, LearnedGridTensorQuantizer, \
-    initialize_learned_grid_quantizer_attributes
+from aimet_torch.tensor_quantizer import initialize_learned_grid_quantizer_attributes
 from aimet_torch.qc_quantize_op import get_encoding_by_quantizer as _get_encoding_by_quantizer
 from aimet_torch import torchscript_utils, utils, transformer_utils, onnx_utils
 from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs, CustomMarker, get_pytorch_name_from_onnx_name
