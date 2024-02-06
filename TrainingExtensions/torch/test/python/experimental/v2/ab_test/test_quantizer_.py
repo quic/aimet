@@ -1637,6 +1637,19 @@ class TestQuantizationSimStaticGrad:
                                    quant_scheme=QuantScheme.post_training_tf)
         assert isinstance(sim.model.rnn, aimet_nn.FakeQuantizedRNN)
 
+        sim.compute_encodings(lambda model, _: model(dummy_input), None) # Should not throw error
+
+    def test_lstm_quantization(self):
+        """ Test quantizing a model with rnn layer """
+        model = TwoLayerBidirectionalLSTMModel()
+        dummy_input = torch.randn(10, 1, 3)
+
+        sim = QuantizationSimModel(model, dummy_input,
+                                   quant_scheme=QuantScheme.post_training_tf)
+        assert isinstance(sim.model.recurrent, aimet_nn.FakeQuantizedLSTM)
+
+        sim.compute_encodings(lambda model, _: model(dummy_input), None) # Should not throw error
+
     def test_quantizing_qc_quantize_module(self):
         """ Test that qc_quantize_module is identified as not quantizable """
         q_rnn = aimet_nn.FakeQuantizedRNN(input_size=3, hidden_size=5, num_layers=1)
