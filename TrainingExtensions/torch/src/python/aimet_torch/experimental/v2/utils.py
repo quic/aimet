@@ -127,7 +127,7 @@ def patch_attr(obj, attr_name, new_attr)-> _ContextManager:
         except AttributeError:
             pass
 
-        if getattr(obj, attr_name, None) != old_attr:
+        if not hasattr(obj, attr_name):
             setattr(obj, attr_name, old_attr)
 
     return _ContextManager(action, cleanup)
