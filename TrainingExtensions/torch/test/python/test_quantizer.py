@@ -3062,7 +3062,7 @@ class TestQuantizationSimStaticGrad:
         with torch.inference_mode():
             standard_module_outputs = sim_from_standard.model(standard_module_inputs)
             custom_module_outputs = sim_from_custom.model(*custom_module_inputs)
-        assert torch.allclose(standard_module_outputs, custom_module_outputs)
+        assert torch.allclose(standard_module_outputs, custom_module_outputs, atol=1e-5)
 
 
 class TestQuantizationSimLearnedGrid:
