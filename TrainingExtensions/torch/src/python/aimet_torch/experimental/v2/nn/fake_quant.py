@@ -129,8 +129,7 @@ class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-m
 
         orig_module = self.__new__(orig_module_cls)
         orig_module.__dict__ = self.__dict__.copy()
-        del orig_module.__dict__['_forward']
-        del orig_module.__dict__['forward']
+        orig_module.__dict__.pop('forward', None)
 
         orig_module._parameters = self._parameters.copy()
         orig_module._buffers = self._buffers.copy()

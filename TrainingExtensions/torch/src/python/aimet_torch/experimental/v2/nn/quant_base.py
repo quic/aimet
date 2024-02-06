@@ -63,9 +63,6 @@ class BaseQuantizationMixin(abc.ABC):
         """
         Initializer for quantized module. This method will be invoked right after __init__.
         """
-        self._forward = self.forward
-        self.forward = self.quantized_forward
-
         self.param_quantizers = nn.ModuleDict({
             name: None for name, _ in self.named_parameters(recurse=False)
         })
@@ -75,7 +72,8 @@ class BaseQuantizationMixin(abc.ABC):
 
     def __call__(self, *args, **kwargs):
         self._compute_param_encodings(overwrite=False)
-        return super().__call__(*args, **kwargs)
+        with patch_attr(self, 'forward', self.quantized_forward):
+            return super().__call__(*args, **kwargs)
 
     @abc.abstractmethod
     def quantized_forward(self, *args, **kwargs):
