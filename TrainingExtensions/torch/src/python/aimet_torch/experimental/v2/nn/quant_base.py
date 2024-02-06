@@ -46,6 +46,20 @@ import torch.nn as nn
 from aimet_torch.experimental.v2.utils import patch_attr
 
 
+def _flatten_nn_module_list(module):
+    """
+    Flatten nested list of nn.Modules into a flat list
+    """
+    def flat_iter(mod):
+        if isinstance(mod, (list, tuple, nn.ModuleList)):
+            for x in mod:
+                yield from flat_iter(x)
+        else:
+            yield mod
+
+    return list(flat_iter(module))
+
+
 class BaseQuantizationMixin(abc.ABC):
     """
     Mixin that implements quantization on top of regular pytorch modules.
@@ -114,7 +128,10 @@ class BaseQuantizationMixin(abc.ABC):
         self._compute_param_encodings(overwrite=True)
 
         with contextlib.ExitStack() as stack:
-            for quantizer in itertools.chain(self.input_quantizers, self.output_quantizers):
+            input_quantizers = _flatten_nn_module_list(self.input_quantizers)
+            output_quantizers = _flatten_nn_module_list(self.output_quantizers)
+
+            for quantizer in itertools.chain(input_quantizers, output_quantizers):
                 if not quantizer:
                     continue
                 ctx = quantizer.compute_encodings()

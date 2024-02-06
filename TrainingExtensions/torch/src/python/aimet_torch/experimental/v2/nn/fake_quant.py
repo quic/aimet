@@ -46,25 +46,11 @@ import torch.nn as nn
 from torch.nn.utils.rnn import PackedSequence
 from torch.utils._pytree import tree_map
 
-from aimet_torch.experimental.v2.nn.quant_base import BaseQuantizationMixin
+from aimet_torch.experimental.v2.nn.quant_base import BaseQuantizationMixin, _flatten_nn_module_list
 from aimet_torch.experimental.v2.quantization.quantizers import QuantizerBase
 from aimet_torch.experimental.v2.utils import patch_attr
 import aimet_torch.elementwise_ops as aimet_ops
 
-
-
-def _flatten_nn_module_list(module):
-    """
-    Flatten nested list of nn.Modules into a flat list
-    """
-    def flat_iter(mod):
-        if isinstance(mod, (list, tuple, nn.ModuleList)):
-            for x in mod:
-                yield from flat_iter(x)
-        else:
-            yield mod
-
-    return list(flat_iter(module))
 
 
 class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-method
@@ -520,7 +506,7 @@ class FakeQuantizedLSTM(FakeQuantizationMixin, nn.LSTM):
         self.input_quantizers = nn.ModuleList([None, nn.ModuleList([None, None])])
         self.output_quantizers = nn.ModuleList([None, nn.ModuleList([None, None])])
 
-    def quantized_forward(self, input, hx: Optional[Tuple[Tensor, Tensor]] = None): # pylint: disable=arguments-differ, too-many-branches
+    def quantized_forward(self, input, hx: Optional[Tuple[Tensor, Tensor]] = None): # pylint: disable=arguments-differ
         """
         Quantized forward impl for nn.LSTM.
         """
@@ -533,12 +519,7 @@ class FakeQuantizedLSTM(FakeQuantizationMixin, nn.LSTM):
 
         if hx is not None:
             h, c = hx
-            if isinstance(self.input_quantizers[1], QuantizerBase):
-                # For backward compatibility with V1 quantsim.
-                # Quantsim V1 uses single input quantizer for h and c
-                h_quantizer = c_quantizer = self.input_quantizers[1]
-            else:
-                h_quantizer, c_quantizer = self.input_quantizers[1]
+            h_quantizer, c_quantizer = self.input_quantizers[1]
 
             if h_quantizer:
                 h = h_quantizer(h)
@@ -558,12 +539,7 @@ class FakeQuantizedLSTM(FakeQuantizationMixin, nn.LSTM):
                 output = self.output_quantizers[0](output)
 
         h_n, c_n = hidden
-        if isinstance(self.output_quantizers[1], QuantizerBase):
-            # For backward compatibility with V1 quantsim.
-            # Quantsim V1 uses single output quantizer for h_n and c_n
-            h_quantizer = c_quantizer = self.output_quantizers[1]
-        else:
-            h_quantizer, c_quantizer = self.output_quantizers[1]
+        h_quantizer, c_quantizer = self.output_quantizers[1]
 
         if h_quantizer:
             h_n = h_quantizer(h_n)
