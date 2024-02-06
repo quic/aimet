@@ -37,7 +37,7 @@
 import pytest
 import torch
 
-from aimet_torch.experimental.v2.utils import reduce
+from aimet_torch.experimental.v2.utils import reduce, patch_attr
 
 @pytest.mark.parametrize('reduce_dim, target_shape', [
     # | reduce dim   | target shape |
@@ -78,3 +78,18 @@ def test_reduce(reduce_dim, target_shape):
     expected = torch.sum(x, dim=reduce_dim, keepdim=True)
     assert list(out.shape) == list(target_shape)
     assert torch.allclose(out, expected)
+
+
+def test_patch_attr():
+    conv = torch.nn.Conv2d(3, 3, 3)
+    old_forward = conv.forward
+    old_dict = conv.__dict__.copy()
+
+    with patch_attr(conv, 'forward', lambda x: x):
+        pass
+
+    assert conv.forward == old_forward
+    assert old_dict == conv.__dict__
+
+    replica = conv._replicate_for_data_parallel()
+    assert replica.forward.__self__ is replica
