@@ -683,6 +683,7 @@ _AIMET_V1_UNARY_MODULES = [
     aimet_ops.Argmax,
     aimet_ops.Gather,
     aimet_ops.Reshape,
+    aimet_ops.RoiAlign,
     aimet_ops.Permute,
     aimet_ops.IndexSelect,
     aimet_ops.TopK,
@@ -728,7 +729,6 @@ _AIMET_V1_TERNARY_MODULES = [
     aimet_ops.Addmm,
     aimet_ops.ScatterND,
     aimet_ops.DynamicConv2d,
-    aimet_ops.RoiAlign,
     aimet_ops.ScatterElements,
 ]
 

@@ -165,6 +165,9 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
                                                                         self.bitwidth,
                                                                         is_symmetric=False)
             dynamic_absmax = torch.maximum(dynamic_min.abs(), dynamic_max.abs())
+            dynamic_absmax = dynamic_absmax.to(dtype=self.maxval.dtype,
+                                               device=self.maxval.device).expand_as(self.maxval)
+
             with patch_attr(self, 'maxval', dynamic_absmax):
                 return original_forward(input)
 

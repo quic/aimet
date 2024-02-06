@@ -303,9 +303,8 @@ class LazyQuantizer:
 
         quantizer_param_shape = self._get_param_shape()
 
-        encoding_analyzer = self._get_v2_encoding_analyzer(quantizer_param_shape)
-
         if self.data_type == QuantizationDataType.int:
+            encoding_analyzer = self._get_v2_encoding_analyzer(quantizer_param_shape)
             quantizer = QuantizeDequantize(quantizer_param_shape, self.bitwidth,
                                            self.use_symmetric_encodings, encoding_analyzer)
         else:
@@ -315,6 +314,7 @@ class LazyQuantizer:
                 assert self.bitwidth == 8
                 mantissa_bits = v1_fp_quantization.NUM_MANTISSA_BITS
                 exponent_bits = 7 - mantissa_bits
+                encoding_analyzer = self._get_v2_encoding_analyzer(quantizer_param_shape)
                 quantizer = FloatQuantizeDequantize(exponent_bits, mantissa_bits,
                                                     encoding_analyzer=encoding_analyzer)
             # Float quantizers are not trainable in V1 quantsim
