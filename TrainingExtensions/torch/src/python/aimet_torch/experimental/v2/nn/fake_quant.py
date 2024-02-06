@@ -520,7 +520,7 @@ class FakeQuantizedLSTM(FakeQuantizationMixin, nn.LSTM):
         self.input_quantizers = nn.ModuleList([None, nn.ModuleList([None, None])])
         self.output_quantizers = nn.ModuleList([None, nn.ModuleList([None, None])])
 
-    def quantized_forward(self, input, hx: Optional[Tuple[Tensor, Tensor]] = None): # pylint: disable=arguments-differ
+    def quantized_forward(self, input, hx: Optional[Tuple[Tensor, Tensor]] = None): # pylint: disable=arguments-differ, too-many-branches
         """
         Quantized forward impl for nn.LSTM.
         """
