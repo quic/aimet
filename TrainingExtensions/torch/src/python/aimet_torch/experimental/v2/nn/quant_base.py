@@ -86,6 +86,11 @@ class BaseQuantizationMixin(abc.ABC):
 
     def __call__(self, *args, **kwargs):
         self._compute_param_encodings(overwrite=False)
+
+        # Patch self.forward with self.quantized_forward.
+        # Under this context, any invocation to self.forward
+        # will be redirected to self.quantized_forward.
+        # Note that super().forward still points to the original fp forward.
         with patch_attr(self, 'forward', self.quantized_forward):
             return super().__call__(*args, **kwargs)
 
