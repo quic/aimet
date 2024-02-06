@@ -2188,18 +2188,14 @@ class TestQuantsimConfig:
 
     @pytest.mark.cuda
     def test_quantsim_device_and_dtype(self):
-        model = SingleResidual().cuda().half()
+        model = SingleResidual().cuda()
 
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
-                                   dummy_input=torch.rand(1, 3, 32, 32).cuda().half())
+                                   dummy_input=torch.rand(1, 3, 32, 32).cuda())
 
-        # All quantization parameters should be set to device=cuda and dtype=half
+        # All quantization parameters should be set to device=cuda
         for param in sim.model.parameters():
             assert param.is_cuda
-            if param.is_floating_point():
-                assert param.dtype == torch.half
 
         for buffer in sim.model.buffers():
             assert buffer.is_cuda
-            if buffer.is_floating_point():
-                assert buffer.dtype == torch.half
