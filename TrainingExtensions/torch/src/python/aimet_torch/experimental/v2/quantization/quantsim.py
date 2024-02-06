@@ -59,7 +59,6 @@ class QuantizationSimModel(V1QuantizationSimModel):
         # Move them to cuda device as necessary
 
         default_device = torch.device('cpu')
-        default_dtype = torch.float
 
         for param_or_buffer in itertools.chain(self.model.parameters(), self.model.buffers()):
             if param_or_buffer.device.type != 'cpu':
@@ -67,15 +66,6 @@ class QuantizationSimModel(V1QuantizationSimModel):
                 # Default device is necessary for the input/output quantizers of
                 # modules without any parameters such as ReLU
                 default_device = param_or_buffer.device
-                break
-
-        for param_or_buffer in itertools.chain(self.model.parameters(), self.model.buffers()):
-            if param_or_buffer.dtype != default_dtype and \
-                    (param_or_buffer.is_floating_point() or param_or_buffer.is_complex()):
-                # Use the first non-float32 dtype as default dtype.
-                # Default dtype is necessary for the input/output quantizers of
-                # modules without any parameters such as ReLU
-                default_dtype = param_or_buffer.dtype
                 break
 
         for module in self.model.modules():
@@ -87,18 +77,16 @@ class QuantizationSimModel(V1QuantizationSimModel):
                 param_or_buffer = next(iter(itertools.chain(module.parameters(recurse=False),
                                                             module.buffers(recurse=False))))
                 device = param_or_buffer.device
-                dtype = param_or_buffer.dtype
             except StopIteration:
                 # If the original module has no parameter, use default device
                 device = default_device
-                dtype = default_dtype
 
-            # Set quantization parameters to the device/dtype of the original module
+            # Set quantization parameters to the device of the original module
             for quantizer in itertools.chain(module.input_quantizers,
                                              module.output_quantizers,
                                              module.param_quantizers.values()):
                 if quantizer:
-                    quantizer.to(device=device, dtype=dtype)
+                    quantizer.to(device=device)
 
     @staticmethod
     def _realize_quant_wrapper(module: LazyQuantizeWrapper) -> FakeQuantizationMixin:
