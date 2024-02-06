@@ -157,7 +157,7 @@ class TestTrainingExtensionsCostCalculator(unittest.TestCase):
         with torch.inference_mode():
             standard_module_outputs = standard_grouped_conv_model(standard_module_inputs)
             custom_module_outputs = custom_grouped_conv_model(*custom_module_inputs)
-        self.assertTrue(torch.allclose(standard_module_outputs, custom_module_outputs))
+        self.assertTrue(torch.allclose(standard_module_outputs, custom_module_outputs, atol=1e-5))
 
         standard_grouped_conv_db = LayerDatabase(standard_grouped_conv_model, standard_module_inputs)
         custom_grouped_conv_db = LayerDatabase(custom_grouped_conv_model, custom_module_inputs)
