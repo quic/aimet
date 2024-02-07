@@ -448,19 +448,19 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         """
         Selects the set of deltas and offsets over which to search for the optimal encodings
         """
-        device = min_vals.device
+        tensor_kwargs = {"device": min_vals.device, "dtype": min_vals.dtype}
         max_delta = (max_vals - min_vals) / num_steps
         observed_offset = torch.round(min_vals / max_delta)
         observed_min = max_delta * observed_offset
         observed_max = observed_min + max_delta * num_steps
         num_deltas = self.asym_delta_candidates
-        search_space = torch.arange(start=1, end=(1 + num_deltas), step=1, device=device)
+        search_space = torch.arange(start=1, end=(1 + num_deltas), step=1, **tensor_kwargs)
         # test_deltas.shape = (num_histograms, num_tests)
         test_deltas = max_delta[:, None] * search_space[None, :] / (num_deltas - 1)
         # test_offsets.shape = (num_offsets)
         num_offsets = self.num_offset_candidates
         test_offset_step = num_steps / (num_offsets - 2) # subtract 2 because we add the observed offset
-        test_offsets = torch.round(torch.arange(start=-num_steps, end=test_offset_step, step=test_offset_step, device=device))
+        test_offsets = torch.round(torch.arange(start=-num_steps, end=test_offset_step, step=test_offset_step, **tensor_kwargs))
         test_offsets = test_offsets[None, :].expand(min_vals.shape[0], -1)
         # Add in the observed offset as a candidate, test_offsets.shape = (num_histograms, num_offsets + 1)
         test_offsets = torch.concat((test_offsets, observed_offset[:, None]), dim=1)
@@ -470,18 +470,18 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         """
         Selects the set of deltas over which to search for the optimal symmetric encodings
         """
-        device = min_vals.device
+        tensor_kwargs = {"device": min_vals.device, "dtype": min_vals.dtype}
         if torch.all(min_vals >= 0):
-            test_offsets = torch.zeros(1, device=device)
+            test_offsets = torch.zeros(1, **tensor_kwargs)
         else:
-            test_offsets = torch.full((1, ), (-num_steps) // 2, device=device)
+            test_offsets = torch.full((1, ), (-num_steps) // 2, **tensor_kwargs)
         max_delta = (max_vals - min_vals) / num_steps
         num_deltas = self.sym_delta_candidates
-        search_space = torch.arange(start=1, end=(1 + num_deltas), step=1, device=device)
+        search_space = torch.arange(start=1, end=(1 + num_deltas), step=1, **tensor_kwargs)
         test_deltas = max_delta[:, None] * search_space[None, :] / (num_deltas - 1)
         # test_deltas.shape = (num_histograms, num_deltas, 1)
         # test_offsets.shape = (1, 1, 1)
-        min_delta = torch.Tensor([torch.finfo(test_deltas.dtype).tiny], device=test_deltas.device)
+        min_delta = torch.Tensor([torch.finfo(test_deltas.dtype).tiny]).to(**tensor_kwargs)
         test_deltas = torch.max(test_deltas, min_delta)
         return test_deltas[:, :, None], test_offsets[:, None, None]
 
@@ -499,7 +499,8 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         # Recompute delta/offset with clamped min/max
         # Returned delta/offset shapes = (num_histograms, num_deltas, num_offsets)
         test_deltas = (test_max - test_min) / num_steps
-        min_delta = torch.Tensor([torch.finfo(test_deltas.dtype).tiny], device=test_deltas.device)
+        min_delta = torch.Tensor([torch.finfo(test_deltas.dtype).tiny]).to(device=test_deltas.device,
+                                                                           dtype=test_deltas.dtype)
         test_deltas = torch.max(test_deltas, min_delta)
         test_offsets = torch.round(test_min / test_deltas)
         return test_deltas, test_offsets
@@ -536,13 +537,10 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         :param gamma: Fudge factor to trade off between saturation cost and quantization cost. When gamma=1.0, this
                       approximates the MSE of the quantization function
         """
-        device = hists.device
-        # min_vals is shape (hists, num_deltas, num_offsets)
-        min_vals = test_deltas * test_offsets
-        max_vals = test_deltas * num_steps + min_vals
+        tensor_kwargs = {"device": test_deltas.device, "dtype": test_deltas.dtype}
         hist_delta = bin_edges[:, 1] - bin_edges[:, 0]
         # hist_midpoints is shape (hists, num_bins)
-        hist_offsets = hist_delta[:, None] * torch.arange(0, bin_edges.shape[1] - 1, device=device)[None, :]
+        hist_offsets = hist_delta[:, None] * torch.arange(0, bin_edges.shape[1] - 1, **tensor_kwargs)[None, :]
         hist_midpoints = (bin_edges[:, 0] + hist_delta/2)[:, None] + hist_offsets
         # hists_midpoints_qdq is shape (hists, num_deltas, num_offsets, num_bins)
         test_offsets_bcast = test_offsets[:, :, :, None]
