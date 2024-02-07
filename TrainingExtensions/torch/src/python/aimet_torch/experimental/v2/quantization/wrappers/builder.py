@@ -221,12 +221,12 @@ class LazyQuantizeWrapper(torch.nn.Module):
             else:
                 raise RuntimeError
 
-        for i, quant_builder in enumerate(self.input_quantizers):
-            quantizer = quant_builder.realize()
+        for i, _ in list(enumerate(quantized_module.input_quantizers)):
+            quantizer = self.input_quantizers[i].realize()
             set_recursive(quantized_module.input_quantizers, i, quantizer)
 
-        for i, quant_builder in enumerate(self.output_quantizers):
-            quantizer = quant_builder.realize()
+        for i, _ in list(enumerate(quantized_module.output_quantizers)):
+            quantizer = self.output_quantizers[i].realize()
             set_recursive(quantized_module.output_quantizers, i, quantizer)
 
         for param_name, quant_builder in self.param_quantizers.items():
