@@ -194,7 +194,7 @@ class QcQuantizeStandAloneBase(nn.Module):
         return outputs
 
 
-class QcQuantizeWrapper(nn.Module):
+class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
     """
     Base class for the quantization custom ops
     """
@@ -366,50 +366,21 @@ class QcQuantizeWrapper(nn.Module):
         :param module_name: name of module
         :param activation_encodings: activation encodings dictionary
         """
-
-        def _set_quantizer_encodings(type_of_quantizer: str, quantizers: List[TensorQuantizer]):
-            """
-            Sets bitwidth, symmetric mode and encodings for quantizer of type input or output
-            :param type_of_quantizer: input or output
-            :param quantizers: input or output quantizers
-            """
-            if module_name in activation_encodings and type_of_quantizer in activation_encodings[module_name]:
-                encodings = activation_encodings[module_name][type_of_quantizer]
-                # The number of quantizers and encodings might not be same. For example, suppose the 1st output
-                # quantizer is disabled out of 4. The number of encodings will be 3, but number of output quantizers
-                # will still be 4.
-                # This can occur if a certain quantizer corresponded to a tensor with unquantizable datatype.
-                for index, quantizer in enumerate(quantizers):
-                    ind = str(index)
-                    if ind not in encodings:
-                        quantizer.enabled = False
-                        _logger.debug("No encoding loaded for %s quantizer %s of layer %s", type_of_quantizer, ind,
-                                      module_name)
-                        continue
-                    if not quantizer.enabled:
-                        raise RuntimeError("The quantsim passed for loading encodings does not have the same "
-                                           "configuration as the quantsim which was used to export the encodings")
-
-                    if quantizer._is_encoding_frozen: # pylint: disable=protected-access
-                        _logger.debug("Encodings are frozen for module %s and quantizer type %s", module_name,
-                                      type_of_quantizer)
-                        continue
-
-                    if encodings[ind]['dtype'] == 'int':
-                        encoding, is_symmetric = utils.create_encoding_from_dict(encodings[ind])
-                        quantizer.bitwidth = encoding.bw
-                        quantizer.use_symmetric_encodings = is_symmetric
-                        quantizer.encoding = encoding
-                    elif encodings[ind]['dtype'] == 'float':
-                        quantizer.bitwidth = encodings[ind]['bitwidth']
-                        quantizer.data_type = QuantizationDataType.float
-                    else:
-                        raise RuntimeError("Unrecognized encodings datatype")
-
         _logger.info("Setting quantization encodings for activation quantizers of: %s", module_name)
 
-        _set_quantizer_encodings(QUANTIZER_TYPE_INPUT, self.input_quantizers)
-        _set_quantizer_encodings(QUANTIZER_TYPE_OUTPUT, self.output_quantizers)
+        try:
+            input_encoding = activation_encodings[module_name]['input']
+        except KeyError:
+            input_encoding = {}
+
+        self.import_input_encodings(input_encoding)
+
+        try:
+            output_encoding = activation_encodings[module_name]['output']
+        except KeyError:
+            output_encoding = {}
+
+        self.import_output_encodings(output_encoding)
 
     def set_param_encoding(self, module_name: str, param_encodings: Dict):
         """
@@ -417,27 +388,12 @@ class QcQuantizeWrapper(nn.Module):
         :param module_name: name of module
         :param param_encodings: parameter encodings dictionary
         """
-        for orig_param_name, param_quantizer in self.param_quantizers.items():
-            param_name = module_name + '.' + orig_param_name
-            # pylint: disable=protected-access
-            if param_name in param_encodings and param_quantizer.enabled and not param_quantizer._is_encoding_frozen:
-                encodings = []
-                if param_encodings[param_name][0]['dtype'] == 'int':
-                    is_symmetric = False
-                    for encoding_dict in param_encodings[param_name]:
-                        if encoding_dict['dtype'] == 'int':
-                            encoding, is_symmetric = utils.create_encoding_from_dict(encoding_dict)
-                            encodings.append(encoding)
-                    param_quantizer.bitwidth = encodings[0].bw
-                    param_quantizer.use_symmetric_encodings = is_symmetric
-                    param_quantizer.encoding = encodings
-                elif param_encodings[param_name][0]['dtype'] == 'float':
-                    param_quantizer.bitwidth = param_encodings[param_name][0]['bitwidth']
-                    param_quantizer.data_type = QuantizationDataType.float
-                else:
-                    raise RuntimeError("Data type does not match int or float in encodings file")
-
-                _logger.info("Setting quantization encodings for parameter: %s", param_name)
+        param_encoding = {
+            param_name: param_encodings[f'{module_name}.{param_name}']
+            for param_name, _ in self.param_quantizers.items()
+            if f'{module_name}.{param_name}' in param_encodings
+        }
+        self.import_param_encodings(param_encoding)
 
     def freeze_param_encoding(self, module_name: str, param_encodings: Dict):
         """
@@ -496,7 +452,7 @@ class QcQuantizeWrapper(nn.Module):
         """
         return self._module_to_wrap
 
-    def export_param_encodings(self) -> Dict[str, List]:
+    def export_param_encodings(self) -> Dict[str, List[Dict]]:
         """
         Returns the layer's parameter encodings in an exportable format
         """
@@ -513,6 +469,89 @@ class QcQuantizeWrapper(nn.Module):
         Returns the layer's input encodings in an exportable format
         """
         return [export_quantizer_encoding(quantizer) for quantizer in self.input_quantizers]
+
+    def import_param_encodings(self, encodings: Dict[str, List[Dict]]):
+        """
+        Import parameter encodings represented in below format:
+        {
+            'param_name_0': [dict, dict, ...],
+            'param_name_1': [dict, dict, ...],
+            ...
+        }
+        """
+        for param_name, quantizer in self.param_quantizers.items():
+            encoding = encodings.get(param_name, None)
+            if not encoding:
+                quantizer.enabled = False
+                continue
+
+            if encoding[0]['dtype'] == 'int':
+                _, is_symmetric = utils.create_encoding_from_dict(encoding[0])
+                quantizer.use_symmetric_encodings = is_symmetric
+                quantizer.bitwidth = encoding[0]['bitwidth']
+                quantizer.encoding = [utils.create_encoding_from_dict(enc_dict)[0] for enc_dict in encoding]
+                quantizer.data_type = QuantizationDataType.int
+            elif encoding[0]['dtype'] == 'float':
+                quantizer.bitwidth = encoding[0]['bitwidth']
+                quantizer.data_type = QuantizationDataType.float
+            else:
+                raise RuntimeError("Data type does not match int or float in encodings file")
+
+            _logger.info("Setting quantization encodings for parameter: %s", param_name)
+
+        self.set_mode(QcQuantizeOpMode.ACTIVE)
+
+    def import_output_encodings(self, encodings: Dict[str, Dict]):
+        """
+        Import output encodings represented in below format:
+        {
+            '0': dict,
+            '1': dict,
+            ...
+        }
+        """
+        self._import_encoding(encodings, self.output_quantizers)
+
+    def import_input_encodings(self, encodings: Dict[str, Dict]):
+        """
+        Import input encodings represented in below format:
+        {
+            '0': dict,
+            '1': dict,
+            ...
+        }
+        """
+        self._import_encoding(encodings, self.input_quantizers)
+
+    def _import_encoding(self, encodings, quantizers):
+        assert quantizers is self.input_quantizers or quantizers is self.output_quantizers
+
+        for i, quantizer in enumerate(quantizers):
+            encoding = encodings.get(str(i), None)
+            if not encoding:
+                quantizer.enabled = False
+                continue
+            if not quantizer.enabled:
+                raise RuntimeError("The quantsim passed for loading encodings does not have the same "
+                                   "configuration as the quantsim which was used to export the encodings")
+            if quantizer._is_encoding_frozen: # pylint: disable=protected-access
+                type_of_quantizer = 'input' if quantizers is self.input_quantizers else 'output'
+                _logger.debug("Encodings are frozen for module %s quantizer of %s",
+                              type_of_quantizer, self._module_to_wrap.__class__)
+                continue
+
+            if encoding['dtype'] == 'int':
+                encoding, is_symmetric = utils.create_encoding_from_dict(encoding)
+                quantizer.bitwidth = encoding.bw
+                quantizer.use_symmetric_encodings = is_symmetric
+                quantizer.encoding = encoding
+            elif encoding['dtype'] == 'float':
+                quantizer.bitwidth = encoding['bitwidth']
+                quantizer.data_type = QuantizationDataType.float
+            else:
+                raise RuntimeError("Unrecognized encodings datatype")
+
+        self.set_mode(QcQuantizeOpMode.ACTIVE)
 
 
 class StaticGridQuantWrapper(QcQuantizeWrapper):

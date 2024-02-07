@@ -34,6 +34,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+#pylint: disable=too-many-lines
 """Fake-quantized modules"""
 
 import contextlib
@@ -82,27 +83,87 @@ class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-m
         Returns a list of input encodings, each represented as a List of Dicts
         """
         return [
-            quantizer.get_encodings() if isinstance(quantizer, QuantizerBase) else None
+            quantizer.get_legacy_encodings() if isinstance(quantizer, QuantizerBase) else None
             for quantizer in _flatten_nn_module_list(self.input_quantizers)
         ]
+
+    def import_input_encodings(self, encodings: Dict[str, Dict]):
+        """
+        Import input encodings represented in below format:
+        {
+            '0': dict,
+            '1': dict,
+            ...
+        }
+        """
+        for i, quantizer in enumerate(list(self.input_quantizers)):
+            encoding = encodings.get(str(i), None)
+            if not encoding:
+                self.input_quantizers[i] = None
+                continue
+            if quantizer is None:
+                raise RuntimeError
+            if isinstance(encoding, dict):
+                encoding = [encoding]
+            quantizer.set_legacy_encodings(encoding)
 
     def export_output_encodings(self) -> List[List[Dict]]:
         """
         Returns a list of output encodings, each represented as a List of Dicts
         """
         return [
-            quantizer.get_encodings() if isinstance(quantizer, QuantizerBase) else None
+            quantizer.get_legacy_encodings() if isinstance(quantizer, QuantizerBase) else None
             for quantizer in _flatten_nn_module_list(self.output_quantizers)
         ]
+
+    def import_output_encodings(self, encodings: Dict[str, Dict]):
+        """
+        Import output encodings represented in below format:
+        {
+            '0': dict,
+            '1': dict,
+            ...
+        }
+        """
+        for i, quantizer in enumerate(list(self.output_quantizers)):
+            encoding = encodings.get(str(i), None)
+            if not encoding:
+                self.output_quantizers[i] = None
+                continue
+            if quantizer is None:
+                raise RuntimeError
+            if isinstance(encoding, dict):
+                encoding = [encoding]
+            quantizer.set_legacy_encodings(encoding)
 
     def export_param_encodings(self) -> Dict[str, List[Dict]]:
         """
         Returns a dict of {param name: param encodings}, with each encoding represented as a List of Dicts
         """
         return {
-            param_name: quantizer.get_encodings() if isinstance(quantizer, QuantizerBase) else None
+            param_name: quantizer.get_legacy_encodings() if isinstance(quantizer, QuantizerBase) else None
             for param_name, quantizer in self.param_quantizers.items()
         }
+
+    def import_param_encodings(self, encodings: Dict[str, List[Dict]]):
+        """
+        Import parameter encodings represented in below format:
+        {
+            'param_name_0': [dict, dict, ...],
+            'param_name_1': [dict, dict, ...],
+            ...
+        }
+        """
+        for param_name, quantizer in dict(self.param_quantizers).items():
+            encoding = encodings.get(param_name, None)
+            if not encoding:
+                self.param_quantizers[param_name] = None
+                continue
+            if quantizer is None:
+                raise RuntimeError
+            if isinstance(encoding, dict):
+                encoding = [encoding]
+            quantizer.set_legacy_encodings(encoding)
 
     def get_original_module(self) -> nn.Module:
         """
