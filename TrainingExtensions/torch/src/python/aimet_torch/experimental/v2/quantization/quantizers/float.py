@@ -141,8 +141,22 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
         return self.exponent_bits == _BFLOAT16_EXPONENT_BITS and \
                self.mantissa_bits == _BFLOAT16_MANTISSA_BITS
 
-    def get_encodings(self) -> Optional[List[Dict]]:
+    def get_legacy_encodings(self) -> Optional[List[Dict]]:
         return [{'bitwidth': self.bitwidth, 'dtype': 'float'}]
+
+    def set_legacy_encodings(self, encodings: List[Dict]):
+        """
+        Set encodings represented in the same format as the output of get_legacy_encodings as below:
+
+        [
+            {'bitwidth': int, 'dtype': str},
+            ...
+        ]
+        """
+        if encodings[0]['bitwidth'] != 16:
+            raise RuntimeError(f"{self.__class__} can only import 16-bit legay encodings.")
+        self.exponent_bits = 5
+        self.mantissa_bits = 10
 
     @contextlib.contextmanager
     def compute_encodings(self):
