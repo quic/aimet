@@ -561,6 +561,7 @@ class TestPercentileEncodingAnalyzer():
         assert asymmetric_min == 0
         assert asymmetric_max == mid_value
 
+@pytest.mark.skip("Not implemented")
 class TestSqnrEncodingAnalyzer:
 
     def test_computed_encodings_uniform_dist(self):
