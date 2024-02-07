@@ -230,7 +230,7 @@ class _HistogramObserver(_Observer[_Histogram]):
                             histogram_updates[bin_index] += curr_hist - dest_bin_updated
             # create histogram given input tensor and full range
             expanded_histogram = torch.histc(curr_input.to(torch.float), bins=self.num_bins, min=updated_min.item(), max=updated_max.item())
-            expanded_bin_edges = self._create_bin_edges(min_val=updated_min.item(), max_val=updated_max.item())
+            expanded_bin_edges = self._create_bin_edges(min_val=updated_min, max_val=updated_max)
             expanded_histogram += histogram_updates
             self.stats[index] = _Histogram(expanded_histogram, expanded_bin_edges, updated_min, updated_max)
 
