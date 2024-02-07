@@ -38,33 +38,34 @@
 
 # Function to create and populate pip package manifest
 function(create_package_manifest package src_packaging_dir build_packaging_dir package_deps_dir)
-    message("Creating package manifest: package = ${package} src_packaging_dir = ${src_packaging_dir} build_packaging_dir = ${build_packaging_dir} package_deps_dir = ${package_deps_dir}")
+    message("Creating package: package = ${package} src_packaging_dir = ${src_packaging_dir} build_packaging_dir = ${build_packaging_dir} package_deps_dir = ${package_deps_dir}")
 
-    # Create empty manifest
+    # Create empty manifest for setuptools to use
     file(WRITE "${build_packaging_dir}/MANIFEST.ini" "")
-
     # Always include aimet_common package contents
     set(package_common "aimet_common")
     file(APPEND "${build_packaging_dir}/MANIFEST.ini" "graft ${package_common}/x86_64-linux-gnu \n")
     file(APPEND "${build_packaging_dir}/MANIFEST.ini" "include ${package_common}/*/*.html \n")
-    # Populate the python code
-    file(COPY ${AIMET_PACKAGE_PATH}/lib/python/${package_common} DESTINATION ${build_packaging_dir}/)
-    # Populate the C++ libraries
-    file(COPY ${AIMET_PACKAGE_PATH}/lib/x86_64-linux-gnu DESTINATION ${build_packaging_dir}/${package_common}/)
-    # Copy over dependency installation files
-    if(EXISTS "${src_packaging_dir}/LICENSE.pdf")
-      configure_file("${src_packaging_dir}/LICENSE.pdf" "${package_deps_dir}/" COPYONLY)
-    endif()
-    configure_file("${src_packaging_dir}/INSTALL.txt" "${package_deps_dir}/" COPYONLY)
-    configure_file("${src_packaging_dir}/envsetup.sh" "${package_deps_dir}/" COPYONLY)
-
-    # Populate AIMET Tensorflow or Torch package contents (manifest and python code)
+    # Populate AIMET Tensorflow or Torch or ONNX package contents
     file(APPEND "${build_packaging_dir}/MANIFEST.ini" "graft ${package}/acceptance_tests \n")
     file(APPEND "${build_packaging_dir}/MANIFEST.ini" "include ${package}/*/*.html \n")
-    file(COPY ${AIMET_PACKAGE_PATH}/lib/python/${package} DESTINATION ${build_packaging_dir}/)
-
-    # Populate top-level AIMET package contents (manifest file)
+    # Populate top-level AIMET package contents
     file(APPEND "${build_packaging_dir}/MANIFEST.ini" "include README.txt NOTICE.txt \n")
+
+    # Populate the python code and and other assets into the package
+    # First include aimet_common python code
+    file(COPY ${AIMET_PACKAGE_PATH}/lib/python/${package_common} DESTINATION ${build_packaging_dir}/)
+    # Populate the C++ libraries within aimet_common
+    file(COPY ${AIMET_PACKAGE_PATH}/lib/x86_64-linux-gnu DESTINATION ${build_packaging_dir}/${package_common}/)
+    # Populate AIMET Tensorflow or Torch or ONNX python code
+    file(COPY ${AIMET_PACKAGE_PATH}/lib/python/${package} DESTINATION ${build_packaging_dir}/)
+    # Finally copy over miscellaneous files
+    if(EXISTS "${src_packaging_dir}/LICENSE.pdf")
+      file(COPY "${src_packaging_dir}/LICENSE.pdf" DESTINATION ${package_deps_dir}/)
+    endif()
+    file(COPY "${src_packaging_dir}/INSTALL.txt" DESTINATION ${package_deps_dir}/)
+    file(COPY "${src_packaging_dir}/envsetup.sh" DESTINATION ${package_deps_dir}/)
+
 endfunction()
 
 
