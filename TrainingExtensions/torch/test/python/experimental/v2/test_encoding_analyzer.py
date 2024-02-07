@@ -561,7 +561,6 @@ class TestPercentileEncodingAnalyzer():
         assert asymmetric_min == 0
         assert asymmetric_max == mid_value
 
-@pytest.mark.skip("Not Implemented")
 class TestSqnrEncodingAnalyzer:
 
     def test_computed_encodings_uniform_dist(self):
@@ -579,8 +578,8 @@ class TestSqnrEncodingAnalyzer:
         observed_max = observed_min + 255 * observed_delta
         encoding_analyzer.update_stats(x)
         qmin, qmax = encoding_analyzer.compute_encodings(bitwidth=8, is_symmetric=False)
-        assert torch.equal(qmin, observed_min)
-        assert torch.equal(qmax, observed_max)
+        assert torch.equal(qmin, observed_min.view((1, )))
+        assert torch.equal(qmax, observed_max.view((1, )))
 
     def test_computed_encodings_with_outliers(self):
         """
@@ -705,7 +704,7 @@ class TestSqnrEncodingAnalyzer:
         When: Encoder selects the search space for symmetric delta/offset combinations
         """
         min_obs = torch.Tensor([-100])
-        max_obs = torch.Tensor([155])
+        max_obs = torch.Tensor([127.5])
         num_steps = 255
         encoding_analyzer = SqnrEncodingAnalyzer(shape=(1,), symmetric_delta_candidates=5)
         deltas, offsets = encoding_analyzer._pick_test_candidates_symmetric(min_obs, max_obs, num_steps)
@@ -738,8 +737,6 @@ class TestSqnrEncodingAnalyzer:
         encoding_analyzer = SqnrEncodingAnalyzer(shape=(2, 1))
         # Get Histogram inputs
         histograms = encoding_analyzer.observer.collect_stats(input)
-        hists = torch.stack([hist.histogram for hist in histograms])
-        bins = torch.stack([hist.bin_edges for hist in histograms])
         # Create a wide range of delta/offsets to search
         deltas = torch.Tensor([0.001, 0.1, 0.5, 1.0])[None, :, None].expand(2, 4, 6)
         offsets = torch.Tensor([-255, -204, -153, -102, -51, 0]).expand_as(deltas)
@@ -749,7 +746,7 @@ class TestSqnrEncodingAnalyzer:
         input_qdq = input[:, None, None, :].div(delta_bc).sub(offset_bc).round().clamp(0, 255).add(offset_bc).mul(delta_bc)
         q_error_exp = torch.pow(input[:, None, None, :] - input_qdq, 2).sum(dim=-1)
         # Estimate the MSE from the observer histogram
-        q_error_est = encoding_analyzer._estimate_clip_and_quant_noise(hists, bins, deltas, offsets, 255, gamma=1.0)
+        q_error_est = encoding_analyzer._estimate_clip_and_quant_noise(histograms, deltas, offsets, 255, gamma=1.0)
         # Estimated and measured errors should be very close
         assert torch.allclose(q_error_exp, q_error_est, rtol=0.01)
 
