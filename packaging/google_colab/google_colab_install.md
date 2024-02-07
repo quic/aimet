@@ -14,14 +14,14 @@ This page provides instructions to install AIMET package in Google colab environ
 
 - Please go to Google Colab website: https://colab.research.google.com/
 - Open a new notebook from main menu option: File -> New notebook
-- Optionally you can use the provided colab notebook and open it in colab
+- Optionally you can use the provided colab notebook located at aimet/packaging/google_colab/Install_AIMET_GoogleColab.ipynb and open it in colab. For convience here is a link to the notebook in the aimet repo: [Aimet Google Colab](https://github.com/quic/aimet/tree/develop/packaging/google_colab/Install_AIMET_GoogleColab.ipynb)
 - Select Hardware Accelerator as GPU in below Google Colab Menu option:
   Runtime -> Change runtime -> Hardware Accelerator(GPU)
 
 ## Google colab environment
 
 Please note there are limitations in Google Colab and this is only documented for short quick, aimet tests and not intended to be leveraged for any production purpose. 
-To start we need to align the python version of colab with out requirement of python 3.8
+To start we need to align the python version of colab with our requirement of python 3.8
 ```python
 python_ver = !python --version
 print(python_ver)
@@ -36,11 +36,16 @@ if('Python 3.8' not in python_ver[0]):
 ```
 
 ## Prepare for AIMET installation
-Go to https://github.com/quic/aimet/releases and identify the release tag of the packages you want to install. Replace `<RELEASE_TAG>` in the steps below with the appropriate tag (ex. "1.14.0"). Then run the aimet-os installatin script.
+Go to https://github.com/quic/aimet/releases and identify the release tag of the packages you want to install. Replace `<RELEASE_TAG>` in the steps below with the appropriate tag (ex. "1.14.0"). Then run the aimet-os installation script.
 
 ```python
 %env PYTHONPATH="/env/python:/usr/local/lib/python3.8/site-packages"
 ```
+## Export variant and release tags variables
+Here we will set the aimet variant and release_tag we are using.
+Variants can be found in the Aimet documentation: https://quic.github.io/aimet-pages/releases/latest/install/index.html
+
+Release tags can be found here: https://github.com/quic/aimet/releases
 
 ```python
 import os
