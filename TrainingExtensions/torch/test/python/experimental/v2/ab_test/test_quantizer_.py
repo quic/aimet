@@ -2489,17 +2489,18 @@ class TestQuantizationSimStaticGrad:
                 assert len(param_encodings[param_name]) == 1
         onnx_utils.RESTORE_ONNX_MODEL_INITIALIZERS = False
 
-    @pytest.mark.skip("save_encodings_to_json not supported yet")
     def test_save_encodings_to_json(self):
         model = ModelWithTwoInputsOneToAdd()
         dummy_input = (torch.rand(32, 1, 100, 100), torch.rand(32, 10, 22, 22))
         qsim = QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf)
         qsim.compute_encodings(lambda m, _: m(*dummy_input), None)
-        qsim.save_encodings_to_json('./data', 'saved_encodings')
-        with open('./data/saved_encodings.json') as encodings_file:
-            encodings = json.load(encodings_file)
-            assert len(encodings['activation_encodings']) == 14
-            assert len(encodings['param_encodings']) == 5
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            qsim.save_encodings_to_json(tmp_dir, 'saved_encodings')
+            with open(f'{tmp_dir}/saved_encodings.json') as encodings_file:
+                encodings = json.load(encodings_file)
+                assert len(encodings['activation_encodings']) == 14
+                assert len(encodings['param_encodings']) == 5
 
     @pytest.mark.skip('compute_encodings_for_sims not supported yet')
     def test_compute_encodings_for_multiple_sims(self):
