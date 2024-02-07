@@ -427,19 +427,20 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         :param is_symmetric: If True, computes symmetric encodings, else computes asymmetric encodings
         :return: Tuple of computed encodings (min, max) as tensors with shape self.shape
         """
-        # min/max.shape = (num_histograms, )
-        min_vals = torch.stack([stat.min for stat in stats])
-        max_vals = torch.stack([stat.max for stat in stats])
-
         num_steps = 2 ** bitwidth - 1
-        test_deltas, test_offsets = self._pick_test_candidates(min_vals, max_vals, num_steps, is_symmetric)
+        test_deltas, test_offsets = self._pick_test_candidates(stats, num_steps, is_symmetric)
         best_delta, best_offset = self._select_best_candidates(test_deltas, test_offsets, stats, num_steps)
         min_enc = best_offset * best_delta
         max_enc = min_enc + num_steps * best_delta
         shape = self.observer.shape
         return min_enc.view(shape), max_enc.view(shape)
 
-    def _pick_test_candidates(self, min_vals, max_vals, num_steps, symmetric):
+    def _pick_test_candidates(self, stats, num_steps, symmetric):
+        # min/max.shape = (num_histograms, )
+        min_vals = torch.stack([stat.min for stat in stats])
+        max_vals = torch.stack([stat.max for stat in stats])
+        min_vals = torch.min(min_vals, torch.zeros_like(min_vals))
+        max_vals = torch.max(max_vals, torch.zeros_like(max_vals))
         if symmetric:
             return self._pick_test_candidates_symmetric(min_vals, max_vals, num_steps)
         return self._pick_test_candidates_asymmetric(min_vals, max_vals, num_steps)
@@ -472,10 +473,11 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         """
         tensor_kwargs = {"device": min_vals.device, "dtype": min_vals.dtype}
         if torch.all(min_vals >= 0):
+            max_delta = max_vals / num_steps
             test_offsets = torch.zeros(1, **tensor_kwargs)
         else:
+            max_delta = 2 * torch.max(max_vals, -min_vals) / num_steps
             test_offsets = torch.full((1, ), (-num_steps) // 2, **tensor_kwargs)
-        max_delta = (max_vals - min_vals) / num_steps
         num_deltas = self.sym_delta_candidates
         search_space = torch.arange(start=1, end=(1 + num_deltas), step=1, **tensor_kwargs)
         test_deltas = max_delta[:, None] * search_space[None, :] / (num_deltas - 1)
@@ -509,17 +511,18 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         """
         Searches all pairs of (delta, offset) in test_deltas, test_offsets to find the set with the lowest expected SQNR
         """
-        hists = torch.stack([stat.histogram for stat in stats])
-        bin_edges = torch.stack([stat.bin_edges for stat in stats])
-        noise = self._estimate_clip_and_quant_noise(hists, bin_edges, test_deltas, test_offsets, num_steps, self.gamma)
+        noise = self._estimate_clip_and_quant_noise(stats, test_deltas, test_offsets, num_steps, self.gamma)
         _, min_idx = torch.min(noise.flatten(start_dim=1), dim=1)
         best_delta = torch.gather(test_deltas.flatten(start_dim=1), dim=1, index=min_idx[:, None])
-        best_offset = torch.gather(test_offsets.flatten(start_dim=1), dim=1, index=min_idx[:, None] % test_offsets.numel())
+        if test_offsets.numel() == 1:
+            best_offset = test_offsets
+        else:
+            best_offset = torch.gather(test_offsets.flatten(start_dim=1), dim=1, index=min_idx[:, None])
         return best_delta, best_offset
 
+    # pylint: disable=too-many-locals
     @staticmethod
-    def _estimate_clip_and_quant_noise(hists: torch.Tensor,
-                                       bin_edges: torch.Tensor,
+    def _estimate_clip_and_quant_noise(stats: List[_Histogram],
                                        test_deltas: torch.Tensor,
                                        test_offsets: torch.Tensor,
                                        num_steps: int,
@@ -529,8 +532,7 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         We approximately reconstruct x from hists by assuming all elements within a given bin fall exactly on the
         midpoint of that bin.
 
-        :param hists: Histogram of observed input values as a tensor with shape (num_hists, num_bins)
-        :param bin_edges: Values of each bin edge in the histogram tensor as a tensor with shape (num_hists, num_bins + 1)
+        :param stats: list of _Histogram objects of observed input values
         :param test_deltas: Tensor holding the values of all deltas to search with shape (num_hists, num_deltas, num_offsets)
         :param test_offsets: Tensor holding values of all offsets to search with shape (num_hists, num_deltas, num_offsets)
         :param num_steps: Number of quantization steps, i.e., (2 ** bitwidth) - 1
@@ -538,6 +540,8 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
                       approximates the MSE of the quantization function
         """
         tensor_kwargs = {"device": test_deltas.device, "dtype": test_deltas.dtype}
+        hists = torch.stack([stat.histogram for stat in stats])
+        bin_edges = torch.stack([stat.bin_edges for stat in stats])
         hist_delta = bin_edges[:, 1] - bin_edges[:, 0]
         # hist_midpoints is shape (hists, num_bins)
         hist_offsets = hist_delta[:, None] * torch.arange(0, bin_edges.shape[1] - 1, **tensor_kwargs)[None, :]
