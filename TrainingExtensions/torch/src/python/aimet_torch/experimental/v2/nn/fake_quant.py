@@ -794,7 +794,7 @@ class FakeQuantizedAimetGroupNorm(FakeQuantizationMixin, aimet_ops.GroupNorm): #
     """
     def __quant_init__(self):
         super().__quant_init__()
-        self.input_quantizers = nn.ModuleList([None, None, None])
+        self.input_quantizers = nn.ModuleList([None, None, None, None])
 
     def quantized_forward(self, # pylint: disable=arguments-differ
                           input: Tensor,
@@ -810,11 +810,11 @@ class FakeQuantizedAimetGroupNorm(FakeQuantizationMixin, aimet_ops.GroupNorm): #
         if self.input_quantizers[0]:
             input = self.input_quantizers[0](input)
 
-        if weight is not None and self.input_quantizers[1]:
-            weight = self.input_quantizers[1](weight)
+        if weight is not None and self.input_quantizers[2]:
+            weight = self.input_quantizers[2](weight)
 
-        if bias is not None and self.input_quantizers[2]:
-            bias = self.input_quantizers[2](bias)
+        if bias is not None and self.input_quantizers[3]:
+            bias = self.input_quantizers[3](bias)
 
         output = super().forward(input, num_groups, weight, bias, eps)
 
@@ -905,7 +905,7 @@ class FakeQuantizedWhere(FakeQuantizationMixin, aimet_ops.Where): # pylint: disa
     """
     def __quant_init__(self):
         super().__quant_init__()
-        self.input_quantizers = nn.ModuleList([None, None])
+        self.input_quantizers = nn.ModuleList([None, None, None])
         self.output_quantizers = nn.ModuleList([None])
 
     def quantized_forward(self, condition: Tensor, input, other, **kwargs) -> Tensor: # pylint: disable=arguments-differ
@@ -914,11 +914,11 @@ class FakeQuantizedWhere(FakeQuantizationMixin, aimet_ops.Where): # pylint: disa
         """
         # pylint: disable=redefined-builtin
 
-        if isinstance(input, Tensor) and input.is_floating_point() and self.input_quantizers[0]:
-            input = self.input_quantizers[0](input)
+        if isinstance(input, Tensor) and input.is_floating_point() and self.input_quantizers[1]:
+            input = self.input_quantizers[1](input)
 
-        if isinstance(other, Tensor) and other.is_floating_point() and self.input_quantizers[1]:
-            other = self.input_quantizers[1](other)
+        if isinstance(other, Tensor) and other.is_floating_point() and self.input_quantizers[2]:
+            other = self.input_quantizers[2](other)
 
         output = super().forward(condition, input, other, **kwargs)
 
@@ -935,15 +935,15 @@ class FakeQuantizedMaskedFill(FakeQuantizationMixin, aimet_ops.MaskedFill): # py
     """
     def __quant_init__(self):
         super().__quant_init__()
-        self.input_quantizers = nn.ModuleList([None])
+        self.input_quantizers = nn.ModuleList([None, None])
         self.output_quantizers = nn.ModuleList([None])
 
     def quantized_forward(self, mask: Tensor, value) -> Tensor: # pylint: disable=arguments-differ
         """
         Quantized forward impl for aimet_ops.MaskedFill.
         """
-        if isinstance(value, Tensor) and value.is_floating_point() and self.input_quantizers[0]:
-            value = self.input_quantizers[0](value)
+        if isinstance(value, Tensor) and value.is_floating_point() and self.input_quantizers[1]:
+            value = self.input_quantizers[1](value)
 
         output = super().forward(mask, value)
 
