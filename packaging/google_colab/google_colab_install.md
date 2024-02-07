@@ -4,9 +4,9 @@ This page provides instructions to install AIMET package in Google colab environ
 > **_NOTE:_** These instructions are *out of date* and may NOT work with the latest releases.
  
 - [Google colab set up](#google-colab-set-up)
-- [Install Dependencies](#Install-Dependency-packages)
+- [Google colab environment](#google-colab-environment)
 - [Install AIMET packages](#Install-AIMET-packages)
-- [Configure](#Configure)
+
 - [Usage](#Usage)
 - [Validation](#Validation)
 
@@ -14,88 +14,88 @@ This page provides instructions to install AIMET package in Google colab environ
 
 - Please go to Google Colab website: https://colab.research.google.com/
 - Open a new notebook from main menu option: File -> New notebook
+- Optionally you can use the provided colab notebook and open it in colab
 - Select Hardware Accelerator as GPU in below Google Colab Menu option:
   Runtime -> Change runtime -> Hardware Accelerator(GPU)
 
-### Install Dependency packages
-```bash
-import os
-os.environ['SRC_URL'] = 'https://raw.githubusercontent.com/quic/aimet/develop/packaging/'
-!curl ${SRC_URL}packages_common.txt | xargs apt-get --assume-yes install
-!curl ${SRC_URL}packages_gpu.txt | xargs apt-get --assume-yes --allow-change-held-packages install 
-!wget ${SRC_URL}requirements.txt
-!pip3 install -r requirements.txt -f https://download.pytorch.org/whl/torch_stable.html
+## Google colab environment
+
+Please note there are limitations in Google Colab and this is only documented for short quick, aimet tests and not intended to be leveraged for any production purpose. 
+To start we need to align the python version of colab with out requirement of python 3.8
+```python
+python_ver = !python --version
+print(python_ver)
+if('Python 3.8' not in python_ver[0]):
+  print(python_ver)
+  !wget -O mini.sh https://repo.anaconda.com/miniconda/Miniconda3-py38_4.8.3-Linux-x86_64.sh
+  !chmod +x mini.sh
+  !bash ./mini.sh -b -f -p /usr/local
+  !conda install -q -y jupyter
+  !conda install -q -y google-colab -c conda-forge
+  !python -m ipykernel install --user --name="py38"
 ```
 
-## Install AIMET packages
-Go to https://github.com/quic/aimet/releases and identify the release tag of the packages you want to install. Replace `<RELEASE_TAG>` in the steps below with the appropriate tag (ex. "1.14.0"). Then run the below commands to install the AIMET packages:
-
-```bash
-import os
-os.environ['release_tag']=<RELEASE_TAG>
-!pip3 install https://github.com/quic/aimet/releases/download/${release_tag}/AimetCommon-${release_tag}-py3-none-any.whl 
-!pip3 install https://github.com/quic/aimet/releases/download/${release_tag}/AimetTorch-${release_tag}-py3-none-any.whl
-!pip3 install https://github.com/quic/aimet/releases/download/${release_tag}/AimetTensorflow-${release_tag}-py3-none-any.whl
-```
-
-Please **restart** Google runtime environment when prompted or from below menu option:
-
-Runtime -> Restart runtime
-
-
-## Configure
+## Prepare for AIMET installation
+Go to https://github.com/quic/aimet/releases and identify the release tag of the packages you want to install. Replace `<RELEASE_TAG>` in the steps below with the appropriate tag (ex. "1.14.0"). Then run the aimet-os installatin script.
 
 ```python
-import sys
-sys.path.append('/usr/local/lib/python3.8/dist-packages/aimet_common')
-
-import os
-os.environ['LD_LIBRARY_PATH'] +=':/usr/local/lib/python3.8/dist-packages/aimet_common'
+%env PYTHONPATH="/env/python:/usr/local/lib/python3.8/site-packages"
 ```
+
+```python
+import os
+os.environ["AIMET_VARIANT"] = "torch_gpu"
+os.environ["release_tag"] = "1.28.0"
+```
+We will also remove the existing nvidia-ml and nvidia-machine-learning apt lists
+
+```python
+!rm -rf /etc/apt/sources.list.d/nvidia-ml.list /etc/apt/sources.list.d/nvidia-machine-learning.list
+```
+```python
+!apt-get update
+```
+
+Clone aimet to the workspace
+```python
+!git clone https://github.com/quic/aimet.git
+```
+
+Run the aimet installation script
+
+```python 
+!/bin/bash aimet/develop/packaging/verification/aimet-os-install.sh
+```
+
+
 
 ## Usage
 You should be able to import the required packages from aimet_common, aimet_torch and aimet_tensorflow to incorporate aimet packages, for additional usage suggestion please refer to the examples from the documentation.
 
+```python
+
+%%bash
+sh /usr/local/lib/python3.8/site-packages/aimet_common/bin/envsetup.sh
+python -c "
+
+from aimet_common.defs import QuantScheme
+import aimet_common.defs as aimet_common_defs
+import aimet_common.libpymo as libpymo
+
+import torch
+from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.compress import ModelCompressor
+
+from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
+from aimet_torch.batch_norm_fold import fold_all_batch_norms
+from aimet_torch.quantsim import QuantizationSimModel
+
+"
+```
 
 ## Validation
 The install could be validated by executing a snippet of code that instantiates a AIMET quantization simulator
 ```
-import torch
-from torchvision import models
-from aimet_torch.quantsim import QuantizationSimModel
-m = models.resnet18()
-sim = QuantizationSimModel(m, (1, 3, 224, 224))
-```
-**Sample output**
-```
-print(sim)
--------------------------
-Quantized Model Report
--------------------------
-Layer: conv1
-    Input: bw=8, encoding-present=False
-    Params:
-        weight: bw=8, encoding-present=False
-    Output: bw=8, encoding-present=False
-Layer: bn1
-    Input: Unquantized
-    Params:
-        weight: bw=8, encoding-present=False
-        bias: Unquantized
-    Output: bw=8, encoding-present=False
-Layer: relu
-    Input: Unquantized
-    Params:
-    Output: bw=8, encoding-present=False
-Layer: maxpool
-    Input: Unquantized
-    Params:
-    Output: bw=8, encoding-present=False
-Layer: layer1.0.conv1
-    Input: Unquantized
-    Params:
-        weight: bw=8, encoding-present=False
-    Output: bw=8, encoding-present=False
-Layer: layer1.0.bn1
-...
+!pip install pytest 
+!pytest test_quantizer_GPU.py
 ```
