@@ -644,8 +644,6 @@ class QuantizationSimModel:
             for param_name, encoding in module.export_param_encodings().items():
                 if not encoding:
                     continue
-                if len(encoding) == 1:
-                    encoding = encoding[0]
                 param_encodings[f'{module_name}.{param_name}'] = encoding
 
         return activation_encodings, param_encodings
