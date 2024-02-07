@@ -34,13 +34,13 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
 import contextlib
 import copy
 import logging
 import os
 import tempfile
 from collections import defaultdict
-
 import onnx
 import pytest
 import torch
@@ -51,9 +51,10 @@ from aimet_common.utils import AimetLogger
 from aimet_torch import onnx_utils
 from aimet_torch.onnx_utils import (
     save_initializer_restored_onnx_graph,
-    restore_onnx_graph_initializers,
+    restore_onnx_graph_initializers, get_pytorch_name_from_onnx_name
 )
-from models.test_models import RoiModel, InputOutputDictModel, MultiplePReluModel
+from models.test_models import RoiModel, InputOutputDictModel, MultiplePReluModel, NestedSeqModel,\
+    NestedModelWithOverlappingNames, ModelWithModuleList
 
 
 class OutOfOrderModel(torch.nn.Module):
@@ -107,6 +108,7 @@ class HierarchicalMultiplyModule(torch.nn.Module):
         x = self.mul1(x)
         return self.mul2(x) * 6
 
+
 # helper method to restore prior state of the flag.
 @contextlib.contextmanager
 def onnx_simply(enable):
@@ -114,6 +116,7 @@ def onnx_simply(enable):
     onnx_utils.simplify_onnx_model = enable
     yield
     onnx_utils.simplify_onnx_model = entry_state
+
 
 class TestOnnxUtils:
 
@@ -964,3 +967,41 @@ class TestOnnxUtils:
                 p_relu_slopes = [x.input[1] for x in original_model.graph.node if x.op_type == "PRelu"]
                 assert any([slope in identity_node_outputs for slope in p_relu_slopes])
                 assert id(original_model) != id(restored_model)
+
+    def test_get_pytorch_name_from_onnx_name(self):
+        """ test get_pytorch_name_from_onnx_name utility """
+        # model w/ nested sequntials
+        model = NestedSeqModel().eval()
+        dummy_input = torch.randn(4, 1, 4, 4)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            original_model_path = f"{tmp_dir}/model.onnx"
+            torch.onnx.export(model, dummy_input, original_model_path)
+            original_model = onnx.load(original_model_path)
+            for node in original_model.graph.node:
+                pytorch_name = get_pytorch_name_from_onnx_name(node.name)
+                print(pytorch_name, "-->", node.name)
+                assert isinstance(model.get_submodule(pytorch_name), torch.nn.Module)
+
+        # model w/ modules having overlapping names
+        model = NestedModelWithOverlappingNames().eval()
+        dummy_input = torch.randn(4, 1, 4, 4)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            original_model_path = f"{tmp_dir}/model.onnx"
+            torch.onnx.export(model, dummy_input, original_model_path)
+            original_model = onnx.load(original_model_path)
+            for node in original_model.graph.node:
+                pytorch_name = get_pytorch_name_from_onnx_name(node.name)
+                print(pytorch_name, "-->", node.name)
+                assert isinstance(model.get_submodule(pytorch_name), torch.nn.Module)
+
+        # model w/ modulelist
+        model = ModelWithModuleList().eval()
+        dummy_input = torch.randn(4, 1, 4, 4)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            original_model_path = f"{tmp_dir}/model.onnx"
+            torch.onnx.export(model, dummy_input, original_model_path)
+            original_model = onnx.load(original_model_path)
+            for node in original_model.graph.node:
+                pytorch_name = get_pytorch_name_from_onnx_name(node.name)
+                print(pytorch_name, "-->", node.name)
+                assert isinstance(model.get_submodule(pytorch_name), torch.nn.Module)
