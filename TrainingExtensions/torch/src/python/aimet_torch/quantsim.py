@@ -1616,7 +1616,7 @@ class QuantizationSimModel:
                 module.set_param_encoding(name, params_encoding)
                 module.freeze_param_encoding(name, params_encoding)
 
-                module.set_activation_encoding(name, activation_encoding)
+                module.set_activation_encoding(name, activation_encoding, ignore_when_quantizer_disabled=True)
                 module.freeze_activation_encoding(name, activation_encoding)
 
     def set_and_freeze_param_encodings(self, encoding_path: str):
