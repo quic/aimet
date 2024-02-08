@@ -41,30 +41,33 @@ function(create_package_manifest package src_packaging_dir build_packaging_dir p
     message("Creating package: package = ${package} src_packaging_dir = ${src_packaging_dir} build_packaging_dir = ${build_packaging_dir} package_deps_dir = ${package_deps_dir}")
 
     # Create empty manifest for setuptools to use
-    file(WRITE "${build_packaging_dir}/MANIFEST.ini" "")
+    file(WRITE "${build_packaging_dir}/MANIFEST.in" "")
     # Always include aimet_common package contents
     set(package_common "aimet_common")
-    file(APPEND "${build_packaging_dir}/MANIFEST.ini" "graft ${package_common}/x86_64-linux-gnu \n")
-    file(APPEND "${build_packaging_dir}/MANIFEST.ini" "include ${package_common}/*/*.html \n")
+    file(APPEND "${build_packaging_dir}/MANIFEST.in" "graft ${package_common}/x86_64-linux-gnu \n")
+    file(APPEND "${build_packaging_dir}/MANIFEST.in" "include ${package_common}/*/*.html \n")
     # Populate AIMET Tensorflow or Torch or ONNX package contents
-    file(APPEND "${build_packaging_dir}/MANIFEST.ini" "graft ${package}/acceptance_tests \n")
-    file(APPEND "${build_packaging_dir}/MANIFEST.ini" "include ${package}/*/*.html \n")
+    file(APPEND "${build_packaging_dir}/MANIFEST.in" "graft ${package}/acceptance_tests \n")
+    file(APPEND "${build_packaging_dir}/MANIFEST.in" "include ${package}/*/*.html \n")
     # Populate top-level AIMET package contents
-    file(APPEND "${build_packaging_dir}/MANIFEST.ini" "include README.txt NOTICE.txt \n")
+    file(APPEND "${build_packaging_dir}/MANIFEST.in" "include README.txt NOTICE.txt \n")
+    if(EXISTS "${src_packaging_dir}/LICENSE.pdf")
+      file(APPEND "${build_packaging_dir}/MANIFEST.in" "include LICENSE.pdf \n")
+    endif()
 
     # Populate the python code and and other assets into the package
-    # First include aimet_common python code
-    file(COPY ${AIMET_PACKAGE_PATH}/lib/python/${package_common} DESTINATION ${build_packaging_dir}/)
     # Populate the C++ libraries within aimet_common
     file(COPY ${AIMET_PACKAGE_PATH}/lib/x86_64-linux-gnu DESTINATION ${build_packaging_dir}/${package_common}/)
+    # First include aimet_common python code
+    file(COPY ${AIMET_PACKAGE_PATH}/lib/python/${package_common} DESTINATION ${build_packaging_dir}/)
     # Populate AIMET Tensorflow or Torch or ONNX python code
     file(COPY ${AIMET_PACKAGE_PATH}/lib/python/${package} DESTINATION ${build_packaging_dir}/)
     # Finally copy over miscellaneous files
+    file(COPY "${src_packaging_dir}/INSTALL.txt" DESTINATION ${package_deps_dir}/)
+    file(COPY "${src_packaging_dir}/envsetup.sh" DESTINATION ${package_deps_dir}/)
     if(EXISTS "${src_packaging_dir}/LICENSE.pdf")
       file(COPY "${src_packaging_dir}/LICENSE.pdf" DESTINATION ${package_deps_dir}/)
     endif()
-    file(COPY "${src_packaging_dir}/INSTALL.txt" DESTINATION ${package_deps_dir}/)
-    file(COPY "${src_packaging_dir}/envsetup.sh" DESTINATION ${package_deps_dir}/)
 
 endfunction()
 
@@ -100,11 +103,14 @@ else()
 endif()
 
 # Copy NOTICE, README, INSTALL, etc files to build folder for package creation
-configure_file("${src_packaging_dir}/NOTICE.txt" "${build_packaging_dir}/NOTICE.txt" COPYONLY)
-configure_file("${src_packaging_dir}/README.txt" "${build_packaging_dir}/README.txt" COPYONLY)
-configure_file("${src_packaging_dir}/INSTALL.txt" "${build_packaging_dir}/INSTALL.txt" COPYONLY)
-configure_file("${src_packaging_dir}/setup_cfg.py" "${build_packaging_dir}/setup_cfg.py" COPYONLY)
-configure_file("${src_packaging_dir}/packaging_common.py" "${build_packaging_dir}/packaging_common.py" COPYONLY)
+file(COPY "${src_packaging_dir}/NOTICE.txt" DESTINATION ${build_packaging_dir}/)
+file(COPY "${src_packaging_dir}/README.txt" DESTINATION ${build_packaging_dir}/)
+file(COPY "${src_packaging_dir}/INSTALL.txt" DESTINATION ${build_packaging_dir}/)
+file(COPY "${src_packaging_dir}/setup_cfg.py" DESTINATION ${build_packaging_dir}/)
+file(COPY "${src_packaging_dir}/packaging_common.py" DESTINATION ${build_packaging_dir}/)
+if(EXISTS "${src_packaging_dir}/LICENSE.pdf")
+  file(COPY "${src_packaging_dir}/LICENSE.pdf" DESTINATION ${build_packaging_dir}/)
+endif()
 
 # Common dependencies
 set(deps_name_list_aimet_common "reqs_deb_common.txt" "reqs_pip_common.txt")
@@ -217,6 +223,6 @@ foreach(package ${package_name_list})
   )
 
   # Rename and keep a copy of the manifest file for debugging/reference purposes
-  configure_file("${build_packaging_dir}/MANIFEST.ini" "${build_packaging_dir}/MANIFEST.ini.${package}" COPYONLY)
+  configure_file("${build_packaging_dir}/MANIFEST.in" "${build_packaging_dir}/MANIFEST.in.${package}" COPYONLY)
 
 endforeach()
