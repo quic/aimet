@@ -172,6 +172,7 @@ class _HistogramObserver(_Observer[_Histogram]):
         return hist_stats
 
     def _create_bin_edges(self, min_val, max_val, device):
+        # Adjust min/max values to be in line with PyTorch's torch.histc implementation
         if max_val == min_val:
             min_val -= 0.5
             max_val += 0.5
@@ -393,10 +394,10 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
             encoding_min_list.append(updated_min)
             encoding_max_list.append(updated_max)
 
-        encoding_min = torch.Tensor(encoding_min_list)
+        encoding_min = torch.tensor(encoding_min_list, device=stats[0].histogram.device)
         encoding_min = torch.reshape(encoding_min, self.observer.shape)
 
-        encoding_max = torch.Tensor(encoding_max_list)
+        encoding_max = torch.tensor(encoding_max_list, device=stats[0].histogram.device)
         encoding_max = torch.reshape(encoding_max, self.observer.shape)
 
         return encoding_min, encoding_max

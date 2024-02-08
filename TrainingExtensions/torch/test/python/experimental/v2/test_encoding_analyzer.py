@@ -406,15 +406,23 @@ class TestHistogramEncodingAnalyzer:
             assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].bin_edges, torch.Tensor([2, 3, 4, 5])))
 
     
+    @pytest.mark.cuda
     @pytest.mark.parametrize('symmetric', [True, False])
+    @pytest.mark.parametrize('device', ['cuda', 'cpu'])
     @pytest.mark.parametrize('shape', [(4,), (3, 1), (2, 1, 1), (3, 4), (2, 3, 1), (2, 1, 4), (2, 3, 4)])
-    def test_compute_encodings_multidimensional(self, symmetric, shape):
-        x = torch.arange(24, dtype=torch.float).view(2, 3, 4)
+    def test_compute_encodings_multidimensional(self, symmetric, device, shape):
+        x = torch.arange(24, dtype=torch.float).view(2, 3, 4).to(device)
         encoding_analyzer = PercentileEncodingAnalyzer(shape=shape)
         encoding_analyzer.update_stats(x)
-        min, max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric=symmetric, percentile=99)
-        assert min.shape == shape
-        assert max.shape == shape
+        encoding_min, encoding_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric=symmetric, percentile=99)
+        assert encoding_min.shape == shape
+        assert encoding_max.shape == shape
+        if device == 'cuda':
+            assert encoding_min.is_cuda
+            assert encoding_max.is_cuda
+        else:
+            assert not encoding_min.is_cuda
+            assert not encoding_max.is_cuda
 
         #TODO: Add SQNR here   
     
