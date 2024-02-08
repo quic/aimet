@@ -560,3 +560,212 @@ class TestPercentileEncodingAnalyzer():
         asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = bw, is_symmetric = False, percentile=50)
         assert asymmetric_min == 0
         assert asymmetric_max == mid_value
+
+@pytest.mark.skip("Not implemented")
+class TestSqnrEncodingAnalyzer:
+
+    def test_computed_encodings_uniform_dist(self):
+        """
+        Given: Update stats on an equally spaced input (no outliers)
+        When: Compute encodings
+        Then: computed encodings should cover then entire input range
+        """
+        x = torch.arange(-100, 101) / 100
+        encoding_analyzer = SqnrEncodingAnalyzer(shape=(1, ), gamma=1)
+        # Expected min/max isn't exactly -1, 1 due to offset rounding
+        observed_delta = torch.tensor(2 / 255.0)
+        observed_offset = torch.round(-1 / observed_delta)
+        observed_min = observed_offset * observed_delta
+        observed_max = observed_min + 255 * observed_delta
+        encoding_analyzer.update_stats(x)
+        qmin, qmax = encoding_analyzer.compute_encodings(bitwidth=8, is_symmetric=False)
+        assert torch.equal(qmin, observed_min.view((1, )))
+        assert torch.equal(qmax, observed_max.view((1, )))
+
+    def test_computed_encodings_with_outliers(self):
+        """
+        Given: Update stats on input with a severe outliers
+        When: Compute encodings
+        Then: Min/max range should be less than the observed min/max
+        """
+        # Aim for an optimal max_encoding of 3/4 the outlier value
+        expected_delta = torch.Tensor([0.1])
+        outlier_val = (255 * expected_delta) / 0.75
+        """
+        Some math required to determine the number of non-outliers to make expected_delta optimal:
+            Let n = number of non outliers
+            Let m = the value of the outlier
+            Assume uniform distribution
+            MSE_non_outlier = Var(Uniform(0, 0.5 delta)) = delta^2 / 12
+            MSE_outlier = (m - 255 * delta)^2 (in unsigned symmetric)
+            MSE = n * delta ^ 2 / 12 + (m - 255 * delta)^2
+            d_MSE / d_delta = n * delta / 6  + 2 * 255^2 * delta - 510 * m
+        Optimal delta at d_MSE / d_delta = 0, solve for n
+            n = 12 * 255 * m / delta - 12 * 255 ^ 2    
+        """
+        # In this case, n should evaluate to 210,100
+        n = round(12 * 255 * outlier_val.item() / expected_delta.item() - 12 * (255 ** 2))
+        encoding_analyzer = SqnrEncodingAnalyzer((1, ), gamma=1.0)
+        x = torch.rand((1, n)) * 255 * expected_delta
+        encoding_analyzer.update_stats(x)
+        outlier = torch.Tensor([outlier_val]).view(1, 1)
+        encoding_analyzer.update_stats(outlier)
+        qmin, qmax = encoding_analyzer.compute_encodings(8, is_symmetric=True)
+        expected_min = torch.Tensor([0])
+        expected_max = expected_delta * 255
+        assert torch.allclose(qmin, expected_min)
+        assert torch.allclose(qmax, expected_max)
+
+    def test_compute_encodings_shape(self):
+        """
+        Given: Encoding analyzer with an arbitrary shape
+        When: Compute encodings
+        Then: Encodings have shape == encoding_analyzer.shape
+        """
+        x = torch.randn(5, 3, 5, 100)
+        shape = (5, 1, 5, 1)
+
+        encoding_analyzer = SqnrEncodingAnalyzer(shape=shape)
+        histograms = encoding_analyzer.observer.collect_stats(x)
+        best_min, best_max = encoding_analyzer.compute_encodings_from_stats(histograms, 8, False)
+        assert best_min.shape == shape
+        assert best_max.shape == shape
+
+    def test_clamp_delta_offset_candidates(self):
+        """
+        Given: A set of delta offset candidates
+        When: Some combinations of delta/offset extend beyond the observed min/max ranged
+        Then: Clamp the delta values such that the min/max encodings fall within the observed min/max range
+        """
+        encoding_analyzer = SqnrEncodingAnalyzer(shape=(1,))
+        num_steps = 255
+        deltas = torch.Tensor([[1 / 4, 3 / 4, 5 / 4]])
+        offsets = torch.Tensor([-255, -128, 0])[None, :]
+        should_clamp = torch.Tensor([
+            [False, False, False],
+            [True,  False, True],
+            [True,  True,  True],
+        ]).to(torch.bool)
+        deltas_clamp, offsets_clamp = encoding_analyzer._clamp_delta_offset_values(torch.Tensor([-128]),
+                                                                                   torch.Tensor([127]),
+                                                                                   num_steps,
+                                                                                   deltas,
+                                                                                   offsets)
+        assert torch.all(torch.where(should_clamp,
+                                     deltas_clamp < deltas[:, :, None],
+                                     deltas_clamp == deltas[:, :, None]))
+        min_after_clamp = deltas_clamp * offsets_clamp
+        max_after_clamp = min_after_clamp + deltas_clamp * num_steps
+        assert torch.all(min_after_clamp > -128.5)
+        assert torch.all(max_after_clamp < 127.5)
+
+
+    def test_pick_test_candidates_asymmetric(self):
+        """
+        Given: An initialized encoding analyzer and min/max observations
+        When: Encoder selects the search space for asymmetric delta/offset combinations
+        """
+        min_obs = torch.Tensor([-128])
+        max_obs = torch.Tensor([127])
+        observed_offset = -128
+        observed_scale = 1.0
+        num_steps = 255
+        encoding_analyzer = SqnrEncodingAnalyzer(shape=(1,), asymmetric_delta_candidates=5, offset_candidates=7)
+        deltas, offsets = encoding_analyzer._pick_test_candidates_asymmetric(min_obs, max_obs, num_steps)
+        """
+        Then: 1) The number of candidates should be equal to num_encodings * num_delta_candidates * num_offset_candidates
+        """
+        assert deltas.shape == (1, 5, 7)
+        assert offsets.shape == (1, 5, 7)
+        """
+        Then: 2) Unclamped delta values should be equally spaced in the range max_delta * [ 1/(n-1)... n/(n-1) ]
+              3) Offset candidates should contain evenly spaced steps between -num_steps and 0
+              4) Offset candidates should contain the observed offset
+        """
+        # Steps of 1 / (5 - 1) = 1 / 4
+        for value in [1/4, 1/2, 3/4, 1]:
+            assert value in deltas
+        # Steps of 255/5 = 51
+        for value in [-255, -204, -153, -102, -51, 0]:
+            assert value in offsets
+        assert observed_offset in offsets
+        assert observed_scale in deltas
+        """
+        Then: 5) None of the candidates should represent values outside of [observed_min, observed_max]
+        """
+        min_val = torch.round(offsets * deltas)
+        max_val = min_val + deltas * num_steps
+        # Allow some room for offset rounding
+        assert torch.all(min_val > -128.5)
+        assert torch.all(max_val < 127.5)
+
+    def test_pick_test_candidates_symmetric(self):
+        """
+        Given: An initialized encoding analyzer and min/max observations
+        When: Encoder selects the search space for symmetric delta/offset combinations
+        """
+        min_obs = torch.Tensor([-100])
+        max_obs = torch.Tensor([127.5])
+        num_steps = 255
+        encoding_analyzer = SqnrEncodingAnalyzer(shape=(1,), symmetric_delta_candidates=5)
+        deltas, offsets = encoding_analyzer._pick_test_candidates_symmetric(min_obs, max_obs, num_steps)
+        """
+        Then: 1) The number of candidates should be equal to num_encodings * num_delta_candidates * num_offset_candidates
+        """
+        assert deltas.shape == (1, 5, 1)
+        """
+        Then: 2) Delta values should be equally spaced in the range max_delta * [ 1/(n-1)... n/(n-1) ]
+              3) Only offset candidate should be -128
+        """
+        # Steps of 1 / (5 - 1) = 1 / 4
+        for value in [1/4, 1/2, 3/4, 1]:
+            assert value in deltas
+        assert torch.all(offsets == -128)
+        assert offsets.numel() == 1
+
+
+    def test_estimate_quantization_noise(self):
+        """
+        Given: 1) A histogram with sufficient granularity
+               2) A set of candidate delta/offset encodings
+        When: Estimate the total quantization noise for each delta/offset candidate
+        Then: The estimated quantization noise should be very close to the actual quantization noise
+        """
+        # Create random input
+        input = torch.randn(2, 1000)
+        # Add some outliers
+        input[0][0] = 100; input[0][1] = -50
+        encoding_analyzer = SqnrEncodingAnalyzer(shape=(2, 1))
+        # Get Histogram inputs
+        histograms = encoding_analyzer.observer.collect_stats(input)
+        # Create a wide range of delta/offsets to search
+        deltas = torch.Tensor([0.001, 0.1, 0.5, 1.0])[None, :, None].expand(2, 4, 6)
+        offsets = torch.Tensor([-255, -204, -153, -102, -51, 0]).expand_as(deltas)
+        # Compute the actual MSE for each encoding candidate:
+        delta_bc = deltas[:, :, :, None]
+        offset_bc = offsets[:, :, :, None]
+        input_qdq = input[:, None, None, :].div(delta_bc).sub(offset_bc).round().clamp(0, 255).add(offset_bc).mul(delta_bc)
+        q_error_exp = torch.pow(input[:, None, None, :] - input_qdq, 2).sum(dim=-1)
+        # Estimate the MSE from the observer histogram
+        q_error_est = encoding_analyzer._estimate_clip_and_quant_noise(histograms, deltas, offsets, 255, gamma=1.0)
+        # Estimated and measured errors should be very close
+        assert torch.allclose(q_error_exp, q_error_est, rtol=0.01)
+
+    def test_select_best_delta_offset(self):
+        """
+        Given: A set of candidate delta offsets and observed histograms
+        When: Call encoding_analyzer._select_best_candidates
+        Then: Return the (delta, offset) pair which results in the lowest SQNR of the candidates
+        """
+        # Channels are in range ([-0.5, 0.5], [0, 2])
+        input = (torch.rand(2, 1000) - torch.Tensor([[0.5], [0.0]])) * torch.Tensor([[1.], [2.]])
+        encoding_analyzer = SqnrEncodingAnalyzer(shape=(2, 1), gamma=1.0)
+        # Get Histogram inputs
+        histograms = encoding_analyzer.observer.collect_stats(input)
+        # best delta offset: delta=[1 / 255.0, 2 / 255.0], offset=[-128, 0]
+        deltas = torch.Tensor([1/510.0, 1/255.0, 2/255.0])[None, :, None].expand(2, 3, 3)
+        offsets = torch.Tensor([-200, -128, 0]).expand_as(deltas)
+        # Find the best delta/offsets based on the candidates
+        best_delta, best_offset = encoding_analyzer._select_best_candidates(deltas, offsets, histograms, 255)
+        assert torch.equal(best_delta, torch.Tensor([1/255.0, 2/255.0]).view(2, 1))
+        assert torch.equal(best_offset, torch.Tensor([-128, 0]).view(2, 1))
