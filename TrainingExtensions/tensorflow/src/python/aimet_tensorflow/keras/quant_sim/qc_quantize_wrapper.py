@@ -325,25 +325,35 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
 
                 # TF functions like tf.concat could have two inputs in List form. But other layers could match
                 # the TFOpLambda where one input is in `inputs` and the other(s) are in the kwargs dict
-                num_inputs_to_quantize = len(inputs) if isinstance(inputs, List) else 1
+                input_quantizer_index = len(inputs) if isinstance(inputs, List) else 1
 
                 # Quantize the input directly first
                 inputs = self._quantize_activation(
                     inputs,
-                    quantizers=self.input_quantizers[:num_inputs_to_quantize],
+                    quantizers=self.input_quantizers[:input_quantizer_index],
                     is_input_quantization=True
                 )
 
-                # Quantize any subsequent arguments.
+                # Quantize any subsequent arguments. We have to flatten the inputs here.
                 # Subsequent arguments could be a signular tensor or a list of tensors (e.g. tf.image.resize's `size`)
-                for tensor_name in kwargs_keys_for_keras_tensors:
-                    adjust_input_quantize_by = len(kwargs[tensor_name]) if isinstance(kwargs[tensor_name], List) else 1
-                    kwargs[tensor_name] = self._quantize_activation(
-                        kwargs[tensor_name],
-                        self.input_quantizers[num_inputs_to_quantize:num_inputs_to_quantize+adjust_input_quantize_by],
-                        True
-                    )
-                    num_inputs_to_quantize += adjust_input_quantize_by
+                def kwarg_tensor_quantize(input_tensor):
+                    nonlocal input_quantizer_index
+                    if isinstance(input_tensor, List):
+                        output = []
+                        for inner_input in input_tensor:
+                            output.append(kwarg_tensor_quantize(inner_input))
+                    else:
+                        output = self._quantize_activation(
+                            input_tensor,
+                            [self.input_quantizers[input_quantizer_index]],
+                            True
+                        )
+                        input_quantizer_index += 1
+                    return output
+
+                for key in kwargs_keys_for_keras_tensors:
+                    kwargs[key] = kwarg_tensor_quantize(kwargs[key])
+
             else:
                 inputs = self._quantize_activation(inputs, self.input_quantizers, True)
             outputs = self._layer_to_wrap(inputs, *args, **kwargs)
