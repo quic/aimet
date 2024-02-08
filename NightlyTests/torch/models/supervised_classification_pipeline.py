@@ -72,7 +72,6 @@ from ignite.engine import Engine, Events, create_supervised_evaluator
 from ignite.metrics import Accuracy, Loss, TopKCategoricalAccuracy
 import torch
 import torch.nn as nn
-from torch._six import string_classes
 
 from aimet_common.utils import AimetLogger
 
@@ -95,7 +94,7 @@ def convert_tensor(input_, device=None, non_blocking=False):
         else:
             input_ = input_.cuda(device=device, non_blocking=non_blocking)
 
-    elif isinstance(input_, string_classes):
+    elif isinstance(input_, str):
         return input_
 
     elif isinstance(input_, collections.Mapping):
