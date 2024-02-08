@@ -427,13 +427,18 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         :param is_symmetric: If True, computes symmetric encodings, else computes asymmetric encodings
         :return: Tuple of computed encodings (min, max) as tensors with shape self.shape
         """
+        if stats[0].histogram is None:
+            raise StatisticsNotFoundError('No statistics present to compute encodings.')
+        if bitwidth <= 0:
+            raise ValueError('Bitwidth cannot be less than or equal to 0.')
+        dtype = stats[0].max.dtype
         num_steps = 2 ** bitwidth - 1
         test_deltas, test_offsets = self._pick_test_candidates(stats, num_steps, is_symmetric)
         best_delta, best_offset = self._select_best_candidates(test_deltas, test_offsets, stats, num_steps)
         min_enc = best_offset * best_delta
         max_enc = min_enc + num_steps * best_delta
         shape = self.observer.shape
-        return min_enc.view(shape), max_enc.view(shape)
+        return min_enc.view(shape).to(dtype), max_enc.view(shape).to(dtype)
 
     def _pick_test_candidates(self, stats, num_steps, symmetric):
         # min/max.shape = (num_histograms, )
@@ -441,6 +446,7 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         max_vals = torch.stack([stat.max for stat in stats])
         min_vals = torch.min(min_vals, torch.zeros_like(min_vals))
         max_vals = torch.max(max_vals, torch.zeros_like(max_vals))
+        max_vals = torch.max(max_vals, min_vals + torch.finfo(min_vals.dtype).tiny * num_steps)
         if symmetric:
             return self._pick_test_candidates_symmetric(min_vals, max_vals, num_steps)
         return self._pick_test_candidates_asymmetric(min_vals, max_vals, num_steps)
@@ -449,8 +455,11 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         """
         Selects the set of deltas and offsets over which to search for the optimal encodings
         """
-        tensor_kwargs = {"device": min_vals.device, "dtype": min_vals.dtype}
-        max_delta = (max_vals - min_vals) / num_steps
+        # Note: casting to float32 for two reason:
+        #       1) float16 on CPU is not well-supported in pytorch
+        #       2) Computing int16 encodings using f16 can result in inf (2 ** 16 - 1 == inf in fp16)
+        tensor_kwargs = {"device": min_vals.device, "dtype": torch.float32}
+        max_delta = (max_vals - min_vals).to(torch.float32) / num_steps
         observed_offset = torch.round(min_vals / max_delta)
         observed_min = max_delta * observed_offset
         observed_max = observed_min + max_delta * num_steps
@@ -459,7 +468,7 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         # test_deltas.shape = (num_histograms, num_tests)
         test_deltas = max_delta[:, None] * search_space[None, :] / (num_deltas - 1)
         # test_offsets.shape = (num_offsets)
-        num_offsets = self.num_offset_candidates
+        num_offsets = min(num_steps + 2, self.num_offset_candidates)
         test_offset_step = num_steps / (num_offsets - 2) # subtract 2 because we add the observed offset
         test_offsets = torch.round(torch.arange(start=-num_steps, end=test_offset_step, step=test_offset_step, **tensor_kwargs))
         test_offsets = test_offsets[None, :].expand(min_vals.shape[0], -1)
@@ -471,13 +480,9 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         """
         Selects the set of deltas over which to search for the optimal symmetric encodings
         """
-        tensor_kwargs = {"device": min_vals.device, "dtype": min_vals.dtype}
-        if torch.all(min_vals >= 0):
-            max_delta = max_vals / num_steps
-            test_offsets = torch.zeros(1, **tensor_kwargs)
-        else:
-            max_delta = 2 * torch.max(max_vals, -min_vals) / num_steps
-            test_offsets = torch.full((1, ), (-num_steps) // 2, **tensor_kwargs)
+        tensor_kwargs = {"device": min_vals.device, "dtype": torch.float32}
+        max_delta = 2 * torch.max(max_vals, -min_vals).to(torch.float32) / num_steps
+        test_offsets = torch.full((1, ), (-num_steps) // 2, **tensor_kwargs)
         num_deltas = self.sym_delta_candidates
         search_space = torch.arange(start=1, end=(1 + num_deltas), step=1, **tensor_kwargs)
         test_deltas = max_delta[:, None] * search_space[None, :] / (num_deltas - 1)

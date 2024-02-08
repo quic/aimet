@@ -50,10 +50,8 @@ class TestEncodingAnalyzer():
     def encoding_analyzers(self):
         min_max_encoding_analyzer = MinMaxEncodingAnalyzer((1,))
         percentile_encoding_analyzer = PercentileEncodingAnalyzer((1,), 3)
-        # TODO: Uncomment after implementation is complete
-        # sqnr_encoding_analyzer = SqnrEncodingAnalyzer()
-        # encoding_analyzer_list = [min_max_encoding_analyzer, percentile_encoding_analyzer, sqnr_encoding_analyzer]
-        encoding_analyzer_list = [min_max_encoding_analyzer, percentile_encoding_analyzer]
+        sqnr_encoding_analyzer = SqnrEncodingAnalyzer((1, ))
+        encoding_analyzer_list = [min_max_encoding_analyzer, percentile_encoding_analyzer, sqnr_encoding_analyzer]
         yield encoding_analyzer_list
 
     def test_compute_encodings_with_negative_bitwidth(self, encoding_analyzers):
@@ -610,7 +608,7 @@ class TestSqnrEncodingAnalyzer:
         encoding_analyzer.update_stats(x)
         outlier = torch.Tensor([outlier_val]).view(1, 1)
         encoding_analyzer.update_stats(outlier)
-        qmin, qmax = encoding_analyzer.compute_encodings(8, is_symmetric=True)
+        qmin, qmax = encoding_analyzer.compute_encodings(8, is_symmetric=False)
         expected_min = torch.Tensor([0])
         expected_max = expected_delta * 255
         assert torch.allclose(qmin, expected_min)
