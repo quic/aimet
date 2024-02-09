@@ -1,0 +1,5 @@
+graft aimet_common
+graft aimet_@package@
+include LICENSE.pdf
+include NOTICE.txt
+include README.txt

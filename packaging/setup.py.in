@@ -2,7 +2,7 @@
 #==============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2020-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -35,15 +35,18 @@
 #  @@-COPYRIGHT-END-@@
 #==============================================================================
 
-""" Common tools for Package generation """
+""" Package generation file for aimet torch package """
 
 import os
 import sys
-import setup_cfg # pylint: disable=import-error
 
 from pathlib import Path
-from setuptools import find_packages, find_namespace_packages
+from setuptools import find_packages, find_namespace_packages, setup
 from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
+
+package_name = "aimet_@package@"
+common_package_name ="aimet_common"
+package_url_base = "@REMOTE_URL@/releases/download/@SW_VERSION@"
 
 
 class bdist_wheel_aimet(_bdist_wheel):
@@ -61,7 +64,7 @@ def get_dependency_wheel(wheel_starts_with):
     ''' Search for and return the dependency wheel file '''
     for _, _, file_list in os.walk("."):
         for file in file_list:
-            if file.startswith(wheel_starts_with + "-" + str(setup_cfg.version)) and file.endswith("whl"):
+            if file.startswith(wheel_starts_with + "-@SW_VERSION@") and file.endswith("whl"):
                 return file
 
     return "None"
@@ -231,3 +234,44 @@ def get_all_dependency_urls(aimet_package_name):
         dependency_url_list.extend(get_dependency_urls(reqs_pip_dep_file))
 
     return dependency_url_list
+
+# Obtain list of package and sub-packages (including common dependency ones)
+packages_found = get_package_list(package_name)
+
+# Obtain list of dependencies for current package
+install_requires_list = get_pip_dep_packages_list(package_name)
+# Obtain non-python artifacts for current package
+required_package_data = get_required_package_data(package_name)
+# Obtain non-PyPi dependency URLs (if any) for current package
+dependency_url_list = get_all_dependency_urls(package_name)
+
+# Obtain non-python artifacts for common package
+required_common_package_data = get_required_package_data(common_package_name)
+# Obtain non-PyPi dependency URLs (if any) for common package
+dependency_url_list.extend(get_all_dependency_urls(common_package_name))
+
+if "--gpu" in sys.argv:
+    sys.argv.remove("--gpu")
+
+
+setup(
+    name='aimet-@package@',
+    version='@SW_VERSION@',
+    author='Qualcomm Innovation Center, Inc.',
+    author_email='aimet.os@quicinc.com',
+    packages=packages_found,
+    url=package_url_base,
+    license='NOTICE.txt',
+    description='AIMET @package@ Package',
+    long_description=open('README.txt').read(),
+    package_data={package_name:required_package_data, common_package_name:required_common_package_data},
+    install_requires=install_requires_list,
+    dependency_links=dependency_url_list,
+    include_package_data=True,
+    zip_safe=True,
+    platforms='x86',
+    python_requires='>=3.8',
+    cmdclass={
+        'bdist_wheel': bdist_wheel_aimet,
+    },
+)

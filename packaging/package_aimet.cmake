@@ -36,42 +36,6 @@
 
 # CMake file to generate AIMET packages
 
-# Function to create and populate pip package manifest
-function(create_package_manifest package src_packaging_dir build_packaging_dir package_deps_dir)
-    message("Creating package: package = ${package} src_packaging_dir = ${src_packaging_dir} build_packaging_dir = ${build_packaging_dir} package_deps_dir = ${package_deps_dir}")
-
-    # Create empty manifest for setuptools to use
-    file(WRITE "${build_packaging_dir}/MANIFEST.in" "")
-    # Always include aimet_common package contents
-    set(package_common "aimet_common")
-    file(APPEND "${build_packaging_dir}/MANIFEST.in" "graft ${package_common}/x86_64-linux-gnu \n")
-    file(APPEND "${build_packaging_dir}/MANIFEST.in" "include ${package_common}/*/*.html \n")
-    # Populate AIMET Tensorflow or Torch or ONNX package contents
-    file(APPEND "${build_packaging_dir}/MANIFEST.in" "graft ${package}/acceptance_tests \n")
-    file(APPEND "${build_packaging_dir}/MANIFEST.in" "include ${package}/*/*.html \n")
-    # Populate top-level AIMET package contents
-    file(APPEND "${build_packaging_dir}/MANIFEST.in" "include README.txt NOTICE.txt \n")
-    if(EXISTS "${src_packaging_dir}/LICENSE.pdf")
-      file(APPEND "${build_packaging_dir}/MANIFEST.in" "include LICENSE.pdf \n")
-    endif()
-
-    # Populate the python code and and other assets into the package
-    # Populate the C++ libraries within aimet_common
-    file(COPY ${AIMET_PACKAGE_PATH}/lib/x86_64-linux-gnu DESTINATION ${build_packaging_dir}/${package_common}/)
-    # First include aimet_common python code
-    file(COPY ${AIMET_PACKAGE_PATH}/lib/python/${package_common} DESTINATION ${build_packaging_dir}/)
-    # Populate AIMET Tensorflow or Torch or ONNX python code
-    file(COPY ${AIMET_PACKAGE_PATH}/lib/python/${package} DESTINATION ${build_packaging_dir}/)
-    # Finally copy over miscellaneous files
-    file(COPY "${src_packaging_dir}/INSTALL.txt" DESTINATION ${package_deps_dir}/)
-    file(COPY "${src_packaging_dir}/envsetup.sh" DESTINATION ${package_deps_dir}/)
-    if(EXISTS "${src_packaging_dir}/LICENSE.pdf")
-      file(COPY "${src_packaging_dir}/LICENSE.pdf" DESTINATION ${package_deps_dir}/)
-    endif()
-
-endfunction()
-
-
 set(src_packaging_dir "${SOURCE_DIR}/packaging")
 set(src_deps_dir "${src_packaging_dir}/dependencies")
 set(build_packaging_dir "${CMAKE_BINARY_DIR}/packaging")
@@ -102,16 +66,6 @@ else()
   endif()
 endif()
 
-# Copy NOTICE, README, INSTALL, etc files to build folder for package creation
-file(COPY "${src_packaging_dir}/NOTICE.txt" DESTINATION ${build_packaging_dir}/)
-file(COPY "${src_packaging_dir}/README.txt" DESTINATION ${build_packaging_dir}/)
-file(COPY "${src_packaging_dir}/INSTALL.txt" DESTINATION ${build_packaging_dir}/)
-file(COPY "${src_packaging_dir}/setup_cfg.py" DESTINATION ${build_packaging_dir}/)
-file(COPY "${src_packaging_dir}/packaging_common.py" DESTINATION ${build_packaging_dir}/)
-if(EXISTS "${src_packaging_dir}/LICENSE.pdf")
-  file(COPY "${src_packaging_dir}/LICENSE.pdf" DESTINATION ${build_packaging_dir}/)
-endif()
-
 # Common dependencies
 set(deps_name_list_aimet_common "reqs_deb_common.txt" "reqs_pip_common.txt")
 
@@ -127,102 +81,109 @@ endif()
 # Setup Tensorflow package dependencies if required
 if(ENABLE_TENSORFLOW)
   # Add AIMET Tensorflow package to package array list
-  list(APPEND package_name_list aimet_tensorflow)
+  list(APPEND package_name_list tensorflow)
 
   # Initialize TF deps list with AIMET Common dependencies
-  set(deps_name_list_aimet_tensorflow ${deps_name_list_aimet_common})
+  set(deps_name_list_tensorflow ${deps_name_list_aimet_common})
 
   # Tensorflow dependencies that are common to CPU and GPU
-  list(APPEND deps_name_list_aimet_tensorflow "reqs_pip_tf_common.txt")
+  list(APPEND deps_name_list_tensorflow "reqs_pip_tf_common.txt")
 
   if(ENABLE_CUDA)
     # Tensorflow GPU dependencies
-    list(APPEND deps_name_list_aimet_tensorflow "reqs_deb_tf_gpu.txt" "reqs_pip_tf_gpu.txt")
+    list(APPEND deps_name_list_tensorflow "reqs_deb_tf_gpu.txt" "reqs_pip_tf_gpu.txt")
   else()
     # Tensorflow CPU dependencies
-    list(APPEND deps_name_list_aimet_tensorflow "reqs_pip_tf_cpu.txt")
+    list(APPEND deps_name_list_tensorflow "reqs_pip_tf_cpu.txt")
   endif()
 endif()
 
 # Setup Torch package dependencies if required
 if(ENABLE_TORCH)
   # Add AIMET Torch package to package array list
-  list(APPEND package_name_list aimet_torch)
+  list(APPEND package_name_list torch)
 
   # Initialize Torch deps list with AIMET Common dependencies
-  set(deps_name_list_aimet_torch ${deps_name_list_aimet_common})
+  set(deps_name_list_torch ${deps_name_list_aimet_common})
 
   # Torch dependencies that are common to CPU and GPU
-  list(APPEND deps_name_list_aimet_torch "reqs_pip_torch_common.txt")
+  list(APPEND deps_name_list_torch "reqs_pip_torch_common.txt")
 
   if(ENABLE_CUDA)
     # Torch GPU dependencies
-    list(APPEND deps_name_list_aimet_torch "reqs_deb_torch_gpu.txt" "reqs_pip_torch_gpu.txt")
+    list(APPEND deps_name_list_torch "reqs_deb_torch_gpu.txt" "reqs_pip_torch_gpu.txt")
   else()
     # Torch CPU dependencies
-    list(APPEND deps_name_list_aimet_torch "reqs_pip_torch_cpu.txt")
+    list(APPEND deps_name_list_torch "reqs_pip_torch_cpu.txt")
   endif()
 endif()
 
 # Setup Onnx package dependencies if required
 if(ENABLE_ONNX)
   # Add AIMET Onnx package to package array list
-  list(APPEND package_name_list aimet_onnx)
+  list(APPEND package_name_list onnx)
 
   # Initialize ONNX deps list with AIMET Common dependencies
-  set(deps_name_list_aimet_onnx ${deps_name_list_aimet_common})
+  set(deps_name_list_onnx ${deps_name_list_aimet_common})
 
   # Onnx dependencies that are common to CPU and GPU
-  list(APPEND deps_name_list_aimet_onnx "reqs_pip_onnx_common.txt")
+  list(APPEND deps_name_list_onnx "reqs_pip_onnx_common.txt")
 
   if(ENABLE_CUDA)
     # Onnx GPU dependencies
-    list(APPEND deps_name_list_aimet_onnx "reqs_deb_onnx_gpu.txt" "reqs_pip_onnx_gpu.txt")
+    list(APPEND deps_name_list_onnx "reqs_deb_onnx_gpu.txt" "reqs_pip_onnx_gpu.txt")
   else()
     # Onnx CPU dependencies
-    list(APPEND deps_name_list_aimet_onnx "reqs_pip_onnx_cpu.txt")
+    list(APPEND deps_name_list_onnx "reqs_pip_onnx_cpu.txt")
   endif()
 endif()
 
 
 # Loop over the package array list to generate wheel files
 foreach(package ${package_name_list})
+  set(dest "${build_packaging_dir}/${package}")
 
-  # Rename the package setup script
-  configure_file("${src_packaging_dir}/setup_${package}.py" "${build_packaging_dir}/setup.py" COPYONLY)
-  # Location of the package folder
-  set(package_dir "${build_packaging_dir}/${package}")
-  # Location of the dependency subfolder within package
-  set(package_deps_dir "${package_dir}/bin")
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${dest}"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${AIMET_PACKAGE_PATH}/lib/python/${package_common}" "${dest}/${package_common}"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${AIMET_PACKAGE_PATH}/lib/python/aimet_${package}" "${dest}/aimet_${package}"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${AIMET_PACKAGE_PATH}/lib/x86_64-linux-gnu" "${dest}/${package_common}/x86_64-linux-gnu"
+    COMMAND ${CMAKE_COMMAND} -E copy
+      "${src_packaging_dir}/NOTICE.txt"
+      "${src_packaging_dir}/README.txt"
+      "${dest}/"
+    )
 
-  # Loop over the dependency list for this package and copy to dependency location
-  file(MAKE_DIRECTORY "${package_deps_dir}")
-  foreach(dependency_file ${deps_name_list_${package}})
-    message(VERBOSE "*** Copied ${src_deps_dir}/${dependency_file} to ${package_deps_dir}/ ***")
-    configure_file("${src_deps_dir}/${variant_name}/${dependency_file}" "${package_deps_dir}/" COPYONLY)
-  endforeach()
+  # convert file names to the absolute paths by preprnding corresponded directory
+  list(TRANSFORM deps_name_list_${package} PREPEND "${src_deps_dir}/${variant_name}/")
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${dest}/aimet_${package}/bin"
+    COMMAND ${CMAKE_COMMAND} -E copy 
+      ${deps_name_list_${package}}
+      "${src_packaging_dir}/INSTALL.txt"
+      "${src_packaging_dir}/envsetup.sh"
+      "${src_packaging_dir}/LICENSE.pdf" # optional, might not be present on host
+      "${dest}/aimet_${package}/bin"
+  )
 
-  create_package_manifest(${package} ${src_packaging_dir} ${build_packaging_dir} ${package_deps_dir})
+  configure_file("${CMAKE_CURRENT_LIST_DIR}/setup.py.in" "${dest}/setup-${package}.py" @ONLY)
+  configure_file(${CMAKE_CURRENT_LIST_DIR}/MANIFEST.in.in ${dest}/MANIFEST.in @ONLY)
 
   # Update RPATH to relative paths ($ORIGIN) to not bother by a path where python is installed
   # Linux loader would be able to resolve dependencies without LD_LIBRARY_PATH
   execute_process(
-      COMMAND find ${build_packaging_dir} -name "AimetTensorQuantizer*.so" -exec ${PATCHELF_EXE} --set-rpath $ORIGIN:$ORIGIN/../torch/lib {} \;
+      COMMAND find ${dest} -name "AimetTensorQuantizer*.so" -exec ${PATCHELF_EXE} --set-rpath $ORIGIN:$ORIGIN/../torch/lib {} \;
   )
   execute_process(
-      COMMAND find ${build_packaging_dir} -name "libaimet_tf_ops*.so" -exec ${PATCHELF_EXE} --set-rpath $ORIGIN:$ORIGIN/../../tensorflow:$ORIGIN/../../tensorflow/python {} \;
+      COMMAND find ${dest} -name "libaimet_tf_ops*.so" -exec ${PATCHELF_EXE} --set-rpath $ORIGIN:$ORIGIN/../../tensorflow:$ORIGIN/../../tensorflow/python {} \;
   )
 
   # Invoke the setup tools script to create the wheel packages.
   message(VERBOSE "*** Running setup script for package ${package} ***")
   execute_process(
-    COMMAND ${PYTHON3_EXECUTABLE} setup.py sdist bdist_wheel ${CUDA_OPTION}
-    WORKING_DIRECTORY ${build_packaging_dir}
+    COMMAND ${PYTHON3_EXECUTABLE} setup-${package}.py sdist bdist_wheel --dist-dir ${build_packaging_dir}/dist ${CUDA_OPTION}
+    WORKING_DIRECTORY ${dest}
     OUTPUT_VARIABLE output_var
     RESULT_VARIABLE setup_return_string
   )
-
-  # Rename and keep a copy of the manifest file for debugging/reference purposes
-  configure_file("${build_packaging_dir}/MANIFEST.in" "${build_packaging_dir}/MANIFEST.in.${package}" COPYONLY)
-
 endforeach()
