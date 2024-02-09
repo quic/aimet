@@ -1615,7 +1615,7 @@ class QuantizationSimModel:
 
         for name, module in self.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
-                module.set_param_encoding(name, params_encoding)
+                module.set_param_encoding(name, params_encoding, ignore_when_quantizer_disabled=ignore_when_quantizer_disabled)
                 module.freeze_param_encoding(name, params_encoding)
 
                 module.set_activation_encoding(name, activation_encoding, ignore_when_quantizer_disabled=ignore_when_quantizer_disabled)
