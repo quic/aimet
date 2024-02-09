@@ -39,6 +39,7 @@
 set(src_packaging_dir "${SOURCE_DIR}/packaging")
 set(src_deps_dir "${src_packaging_dir}/dependencies")
 set(build_packaging_dir "${CMAKE_BINARY_DIR}/packaging")
+set(package_common "aimet_common")
 
 # First delete the existing packaging directory if it exists
 file(REMOVE_RECURSE ${build_packaging_dir})
@@ -144,7 +145,7 @@ foreach(package ${package_name_list})
   set(dest "${build_packaging_dir}/${package}")
 
   execute_process(
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${dest}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${dest}" "${dest}/${package_common}" "${dest}/aimet_${package}" "${dest}/${package_common}/x86_64-linux-gnu"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${AIMET_PACKAGE_PATH}/lib/python/${package_common}" "${dest}/${package_common}"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${AIMET_PACKAGE_PATH}/lib/python/aimet_${package}" "${dest}/aimet_${package}"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${AIMET_PACKAGE_PATH}/lib/x86_64-linux-gnu" "${dest}/${package_common}/x86_64-linux-gnu"
@@ -153,7 +154,10 @@ foreach(package ${package_name_list})
       "${src_packaging_dir}/README.txt"
       "${dest}/"
     )
-
+  execute_process(
+    # Delete binaries from aimet_common which should not be part of the package
+    COMMAND ${CMAKE_COMMAND} -E rm -rf "${dest}/${package_common}/bin"
+  )
   # convert file names to the absolute paths by preprnding corresponded directory
   list(TRANSFORM deps_name_list_${package} PREPEND "${src_deps_dir}/${variant_name}/")
   execute_process(
