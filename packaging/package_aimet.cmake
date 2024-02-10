@@ -142,51 +142,58 @@ endif()
 
 # Loop over the package array list to generate wheel files
 foreach(package ${package_name_list})
-  set(dest "${build_packaging_dir}/${package}")
+  set(pkg_staging_path "${build_packaging_dir}/${package}")
+  set(pkg_common_staging_path "${pkg_staging_path}/${package_common}")
+  set(pkg_variant_staging_path "${pkg_staging_path}/aimet_${package}")
+  set(pkg_deps_staging_path "${pkg_variant_staging_path}/bin")
 
   execute_process(
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${dest}" "${dest}/${package_common}" "${dest}/aimet_${package}" "${dest}/${package_common}/x86_64-linux-gnu"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory "${AIMET_PACKAGE_PATH}/lib/python/${package_common}" "${dest}/${package_common}"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory "${AIMET_PACKAGE_PATH}/lib/python/aimet_${package}" "${dest}/aimet_${package}"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory "${AIMET_PACKAGE_PATH}/lib/x86_64-linux-gnu" "${dest}/${package_common}/x86_64-linux-gnu"
-    COMMAND ${CMAKE_COMMAND} -E copy
-      "${src_packaging_dir}/NOTICE.txt"
-      "${src_packaging_dir}/README.txt"
-      "${dest}/"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${pkg_staging_path}" "${pkg_common_staging_path}"
+      "${pkg_variant_staging_path}" "${pkg_common_staging_path}/x86_64-linux-gnu"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${AIMET_PACKAGE_PATH}/lib/python/${package_common}" "${pkg_common_staging_path}"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${AIMET_PACKAGE_PATH}/lib/python/aimet_${package}" "${pkg_variant_staging_path}"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${AIMET_PACKAGE_PATH}/lib/x86_64-linux-gnu" "${pkg_common_staging_path}/x86_64-linux-gnu"
+    COMMAND ${CMAKE_COMMAND} -E copy "${src_packaging_dir}/NOTICE.txt" "${pkg_staging_path}/"
+    COMMAND ${CMAKE_COMMAND} -E copy "${src_packaging_dir}/README.txt" "${pkg_staging_path}/"
     )
   execute_process(
     # Delete binaries from aimet_common which should not be part of the package
-    COMMAND ${CMAKE_COMMAND} -E rm -rf "${dest}/${package_common}/bin"
+    COMMAND ${CMAKE_COMMAND} -E rm -rf "${pkg_common_staging_path}/bin"
   )
   # convert file names to the absolute paths by preprnding corresponded directory
   list(TRANSFORM deps_name_list_${package} PREPEND "${src_deps_dir}/${variant_name}/")
   execute_process(
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${dest}/aimet_${package}/bin"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${pkg_deps_staging_path}"
     COMMAND ${CMAKE_COMMAND} -E copy 
       ${deps_name_list_${package}}
       "${src_packaging_dir}/INSTALL.txt"
       "${src_packaging_dir}/envsetup.sh"
-      "${src_packaging_dir}/LICENSE.pdf" # optional, might not be present on host
-      "${dest}/aimet_${package}/bin"
+      "${pkg_deps_staging_path}/"
   )
 
-  configure_file("${CMAKE_CURRENT_LIST_DIR}/setup.py.in" "${dest}/setup-${package}.py" @ONLY)
-  configure_file(${CMAKE_CURRENT_LIST_DIR}/MANIFEST.in.in ${dest}/MANIFEST.in @ONLY)
+  if(EXISTS "${src_packaging_dir}/LICENSE.pdf")
+    file(COPY "${src_packaging_dir}/LICENSE.pdf" DESTINATION ${build_packaging_dir}/)
+    # optional, might not be present on host
+    execute_process(COMMAND ${CMAKE_COMMAND} -E copy "${src_packaging_dir}/LICENSE.pdf" "${pkg_deps_staging_path}/")
+  endif()
+
+  configure_file("${CMAKE_CURRENT_LIST_DIR}/setup.py.in" "${pkg_staging_path}/setup-${package}.py" @ONLY)
+  configure_file(${CMAKE_CURRENT_LIST_DIR}/MANIFEST.in.in ${pkg_staging_path}/MANIFEST.in @ONLY)
 
   # Update RPATH to relative paths ($ORIGIN) to not bother by a path where python is installed
   # Linux loader would be able to resolve dependencies without LD_LIBRARY_PATH
   execute_process(
-      COMMAND find ${dest} -name "AimetTensorQuantizer*.so" -exec ${PATCHELF_EXE} --set-rpath $ORIGIN:$ORIGIN/../torch/lib {} \;
+    COMMAND find ${pkg_staging_path} -name "AimetTensorQuantizer*.so" -exec ${PATCHELF_EXE} --set-rpath $ORIGIN:$ORIGIN/../torch/lib {} \;
   )
   execute_process(
-      COMMAND find ${dest} -name "libaimet_tf_ops*.so" -exec ${PATCHELF_EXE} --set-rpath $ORIGIN:$ORIGIN/../../tensorflow:$ORIGIN/../../tensorflow/python {} \;
+    COMMAND find ${pkg_staging_path} -name "libaimet_tf_ops*.so" -exec ${PATCHELF_EXE} --set-rpath $ORIGIN:$ORIGIN/../../tensorflow:$ORIGIN/../../tensorflow/python {} \;
   )
 
   # Invoke the setup tools script to create the wheel packages.
   message(VERBOSE "*** Running setup script for package ${package} ***")
   execute_process(
     COMMAND ${PYTHON3_EXECUTABLE} setup-${package}.py sdist bdist_wheel --dist-dir ${build_packaging_dir}/dist ${CUDA_OPTION}
-    WORKING_DIRECTORY ${dest}
+    WORKING_DIRECTORY ${pkg_staging_path}
     OUTPUT_VARIABLE output_var
     RESULT_VARIABLE setup_return_string
   )
