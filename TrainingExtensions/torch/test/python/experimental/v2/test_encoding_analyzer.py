@@ -271,7 +271,31 @@ class TestHistogramEncodingAnalyzer:
         
         with pytest.raises(ValueError):
             SqnrEncodingAnalyzer(min_max_shape, num_bins)
-        
+
+    @pytest.mark.cuda
+    @pytest.mark.parametrize("histogram_based_encoding_analyzers", [((1,), 3)], indirect=True)
+    @pytest.mark.parametrize('symmetric', [True, False])
+    def test_cuda_inputs(self, histogram_based_encoding_analyzers, symmetric):
+        for encoding_analyzer in histogram_based_encoding_analyzers:
+            input_tensor = torch.tensor([2.0, 3.5, 4.2, 5.0])
+            encoding_analyzer.update_stats(input_tensor.cuda())
+            if isinstance(encoding_analyzer, PercentileEncodingAnalyzer):
+                encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = symmetric, percentile=99)
+            else:
+                encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = symmetric)
+            encoding_analyzer.update_stats(input_tensor.cuda())
+            
+            input_tensor_2 = input_tensor * 1.1 - 0.1 
+            encoding_analyzer.update_stats(input_tensor_2.cuda())
+            
+            if isinstance(encoding_analyzer, PercentileEncodingAnalyzer):
+                encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = symmetric, percentile=99)
+            else:
+                encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = symmetric)
+            
+            assert encoding_analyzer.observer.stats[0].histogram.is_cuda
+            assert encoding_analyzer.observer.stats[0].bin_edges.is_cuda
+
     @pytest.mark.parametrize("histogram_based_encoding_analyzers", [((1,), 3)], indirect=True)
     def test_merge_stats_resize_histogram(self, histogram_based_encoding_analyzers):
         for encoding_analyzer in histogram_based_encoding_analyzers:
@@ -381,6 +405,27 @@ class TestHistogramEncodingAnalyzer:
             assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].histogram, torch.Tensor([2, 6, 4])))
             assert torch.all(torch.eq(encoding_analyzer.observer.stats[0].bin_edges, torch.Tensor([2, 3, 4, 5])))
 
+    
+    @pytest.mark.cuda
+    @pytest.mark.parametrize('symmetric', [True, False])
+    @pytest.mark.parametrize('device', ['cuda', 'cpu'])
+    @pytest.mark.parametrize('shape', [(4,), (3, 1), (2, 1, 1), (3, 4), (2, 3, 1), (2, 1, 4), (2, 3, 4)])
+    def test_compute_encodings_multidimensional(self, symmetric, device, shape):
+        x = torch.arange(24, dtype=torch.float).view(2, 3, 4).to(device)
+        encoding_analyzer = PercentileEncodingAnalyzer(shape=shape)
+        encoding_analyzer.update_stats(x)
+        encoding_min, encoding_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric=symmetric, percentile=99)
+        assert encoding_min.shape == shape
+        assert encoding_max.shape == shape
+        if device == 'cuda':
+            assert encoding_min.is_cuda
+            assert encoding_max.is_cuda
+        else:
+            assert not encoding_min.is_cuda
+            assert not encoding_max.is_cuda
+
+        #TODO: Add SQNR here   
+    
     def test_collect_stats_multidimensional(self):
         x = torch.arange(24, dtype=torch.float).view(2, 3, 4)
         shape = (4,)
@@ -440,8 +485,7 @@ class TestHistogramEncodingAnalyzer:
             k = (i // 4) % 3
             m = i % 4
             assert torch.equal(histograms[i].min,  x[j,k,m].min())
-            assert torch.equal(histograms[i].max,  x[j,k,m].max())
-            
+            assert torch.equal(histograms[i].max,  x[j,k,m].max()) 
     
     def test_histogram_during_merging(self):
         observer = _HistogramObserver((1,), num_bins=10)
