@@ -66,6 +66,23 @@ else:
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_tensorflow.keras.quantsim import QuantizerSettings, QcQuantizeWrapper
 
+#General vs SNPE names map. Values to key are SNPE names
+aimet_SNPE_name_map = {"kernel":"kernel",
+                       "recurrent_kernel":"recurrent_kernel",
+                       "input_matmul":"MatMul",
+                       "hidden_st_matmul":"MatMul_1",
+                       "in_hidden_st_add":"add",
+                       "bias_add":"BiasAdd",
+                       "input_gate":"Sigmoid",
+                       "forget_gate":"Sigmoid_1",
+                       "candidate_cell_state":"Tanh",
+                       "ig_ct_matmul":"mul_1",
+                       "prev_c_fg_matmul":"mul",
+                       "new_cell_state":"add_1",
+                       "output_gate":"Sigmoid_2",
+                       "act_new_cell_state":"Tanh_1",
+                       "new_hidden_state":"mul_2"}
+
 # pylint: disable=abstract-method
 # pylint: disable=too-many-ancestors
 class CustomDense(Dense):
@@ -90,10 +107,10 @@ class CustomDense(Dense):
         self.input_spec = InputSpec(min_ndim=2, axes={-1: last_dim})
 
         # pylint: disable=attribute-defined-outside-init
-        if self.name == "MatMul":
-            wt_name = "kernel"
-        elif self.name == "MatMul_1":
-            wt_name = "recurrent_kernel"
+        if self.name == aimet_SNPE_name_map["input_matmul"]:
+            wt_name = aimet_SNPE_name_map["kernel"]
+        elif self.name == aimet_SNPE_name_map["hidden_st_matmul"]:
+            wt_name = aimet_SNPE_name_map["recurrent_kernel"]
         else:
             wt_name = "unknown"
 
@@ -179,7 +196,7 @@ class BiasAdd(Layer):
 # pylint: disable=too-many-ancestors
 # pylint: disable=too-many-instance-attributes
 # pylint: disable=abstract-method
-class QcQuantizedLSTMCell(LSTMCell):
+class QuantizedLSTMCell(LSTMCell):
 
     """Class overriding LSTM Cell from Keras"""
 
@@ -195,7 +212,7 @@ class QcQuantizedLSTMCell(LSTMCell):
 
         """Overriden LSTM Cell __init__"""
 
-        super(QcQuantizedLSTMCell, self).__init__(units, **kwargs)
+        super(QuantizedLSTMCell, self).__init__(units, **kwargs)
         self.wrapped_layers = []
 
         self.is_first_step = False
@@ -213,7 +230,7 @@ class QcQuantizedLSTMCell(LSTMCell):
         """Method wrapping LSTM Internal Splits"""
 
         #Do Input weight matmul
-        self.input_matmul = CustomDense(self.units, input_shape=input_shape, name="MatMul", use_bias=False,
+        self.input_matmul = CustomDense(self.units, input_shape=input_shape, name=aimet_SNPE_name_map["input_matmul"], use_bias=False,
                                         kernel_initializer=self.kernel_initializer, kernel_regularizer=self.kernel_regularizer,
                                         kernel_constraint=self.kernel_constraint)
 
@@ -226,7 +243,7 @@ class QcQuantizedLSTMCell(LSTMCell):
 
         #Do Hidden State Matmul
         _input_shape = (1, self.units)
-        self.hidden_st_matmul = CustomDense(self.units, input_shape=_input_shape, name="MatMul_1", use_bias=False,
+        self.hidden_st_matmul = CustomDense(self.units, input_shape=_input_shape, name=aimet_SNPE_name_map["hidden_st_matmul"], use_bias=False,
                                             kernel_initializer=self.kernel_initializer, kernel_regularizer=self.kernel_regularizer,
                                             kernel_constraint=self.kernel_constraint)
 
@@ -238,40 +255,40 @@ class QcQuantizedLSTMCell(LSTMCell):
         self._wrapped_hidden_st_matmul = self._wrap_layer(self.hidden_st_matmul, 1)
 
         #Add Input and hidden state outputs and wrap same
-        self.in_hidden_st_add = tf.keras.layers.Add(name="add")
+        self.in_hidden_st_add = tf.keras.layers.Add(name=aimet_SNPE_name_map["in_hidden_st_add"])
         self._wrapped_in_hidden_st_add = self._wrap_layer(self.in_hidden_st_add, 2)
 
         #Wrap Bias Add
         if self.use_bias:
-            self.bias_add = BiasAdd(self.units, name="BiasAdd", bias_initializer=self.bias_initializer,
+            self.bias_add = BiasAdd(self.units, name=aimet_SNPE_name_map["bias_add"], bias_initializer=self.bias_initializer,
                                     bias_regularizer=self.bias_regularizer, bias_constraint=self.bias_constraint)
             self._wrapped_bias_add = self._wrap_layer(self.bias_add, 1)
 
-        self.input_gate = tf.keras.layers.Lambda(self.recurrent_activation, name="Sigmoid")
+        self.input_gate = tf.keras.layers.Lambda(self.recurrent_activation, name=aimet_SNPE_name_map["input_gate"])
         self._wrapped_input_gate = self._wrap_layer(self.input_gate, 1)
 
-        self.forget_gate = tf.keras.layers.Lambda(self.recurrent_activation, name="Sigmoid_1")
+        self.forget_gate = tf.keras.layers.Lambda(self.recurrent_activation, name=aimet_SNPE_name_map["forget_gate"])
         self._wrapped_forget_gate = self._wrap_layer(self.forget_gate, 1)
 
-        self.candidate_cell_state = tf.keras.layers.Lambda(self.activation, name="Tanh")
+        self.candidate_cell_state = tf.keras.layers.Lambda(self.activation, name=aimet_SNPE_name_map["candidate_cell_state"])
         self._wrapped_candidate_cell_state = self._wrap_layer(self.candidate_cell_state, 1)
 
-        self.ig_ct_matmul = tf.keras.layers.Lambda(lambda x: x[0] * x[1], name="mul_1")
+        self.ig_ct_matmul = tf.keras.layers.Lambda(lambda x: x[0] * x[1], name=aimet_SNPE_name_map["ig_ct_matmul"])
         self._wrapped_ig_ct_matmul = self._wrap_layer(self.ig_ct_matmul, 2)
 
-        self.prev_c_fg_matmul = tf.keras.layers.Lambda(lambda x: x[0] * x[1], name="mul")
+        self.prev_c_fg_matmul = tf.keras.layers.Lambda(lambda x: x[0] * x[1], name=aimet_SNPE_name_map["prev_c_fg_matmul"])
         self._wrapped_prev_c_fg_matmul = self._wrap_layer(self.prev_c_fg_matmul, 2)
 
-        self.new_cell_state = tf.keras.layers.Lambda(lambda x: x[0] + x[1], name="add_1")
+        self.new_cell_state = tf.keras.layers.Lambda(lambda x: x[0] + x[1], name=aimet_SNPE_name_map["new_cell_state"])
         self._wrapped_new_cell_state = self._wrap_layer(self.new_cell_state, 2)
 
-        self.output_gate = tf.keras.layers.Lambda(self.recurrent_activation, name="Sigmoid_2")
+        self.output_gate = tf.keras.layers.Lambda(self.recurrent_activation, name=aimet_SNPE_name_map["output_gate"])
         self._wrapped_output_gate = self._wrap_layer(self.output_gate, 1)
 
-        self.act_new_cell_state = tf.keras.layers.Lambda(self.activation, name="Tanh_1")
+        self.act_new_cell_state = tf.keras.layers.Lambda(self.activation, name=aimet_SNPE_name_map["act_new_cell_state"])
         self._wrapped_act_new_cell_state = self._wrap_layer(self.act_new_cell_state, 1)
 
-        self.new_hidden_state = tf.keras.layers.Lambda(lambda x: x[0] * x[1], name="mul_2")
+        self.new_hidden_state = tf.keras.layers.Lambda(lambda x: x[0] * x[1], name=aimet_SNPE_name_map["new_hidden_state"])
         self._wrapped_new_hidden_state = self._wrap_layer(self.new_hidden_state, 2)
 
         if self.is_first_step is False:
@@ -385,6 +402,6 @@ class QcQuantizedLSTMCell(LSTMCell):
                 self.copy_source_weights
         }
         # pylint: disable=bad-super-call
-        base_config = super(QcQuantizedLSTMCell, self).get_config()
+        base_config = super(QuantizedLSTMCell, self).get_config()
         base_config.update(config)
         return base_config

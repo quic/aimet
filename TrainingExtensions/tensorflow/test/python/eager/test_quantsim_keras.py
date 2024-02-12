@@ -53,6 +53,7 @@ from aimet_tensorflow.keras.utils.quantizer_utils import SaveModelWithoutQuantsi
 from aimet_tensorflow.keras.cross_layer_equalization import equalize_model
 from aimet_tensorflow.keras.quant_sim.qc_mha_wrapper import QcQuantizableMultiHeadAttention
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
+from aimet_tensorflow.keras.rnn.qc_quant_LSTM import QuantizedLSTM
 from test_models_keras import tiny_conv_net
 
 
@@ -1439,6 +1440,7 @@ def test_multi_output_model():
     with tempfile.TemporaryDirectory() as tmp_dir:
         sim.export(tmp_dir, "multi_output_model")
 
+
 def test_quantsim_with_separable_conv():
     """Tests Quantsim with seperable conv layer without model preparer """
 
@@ -1463,3 +1465,103 @@ def test_quantsim_with_separable_conv():
 
     assert str(exc_info.value) == 'SeparableConv2D found in the model. Please run model preparer before calling ' \
                                   'QuantizationSimModel'
+
+def test_quantizable_lstm_basic():
+    batch_size = 1
+    timesteps = 10
+    features = 16
+    units = 32
+
+    # STAGE 1 MODEL - Functional model created with layers.lstm
+    stage_1_inputs = keras.Input(shape=(timesteps, features))
+    stage_1_output = keras.layers.LSTM(units, unroll=True)(stage_1_inputs)
+    stage_1_model = keras.Model(inputs=stage_1_inputs, outputs=stage_1_output)
+    
+    # STAGE 2 MODEL - Sequential model created with layers.lstm
+    stage_2_model = keras.models.Sequential(
+        [
+            keras.layers.LSTM(units, input_shape=(timesteps, features), unroll=True),
+        ]
+    )
+
+    # STAGE 3 MODEL - Quantized model created through QuantSim functional original
+    stage_3_model = QuantizationSimModel(stage_1_model)
+    
+    # STAGE 4 MODEL - Quantized model created through QuantSim sequential original
+    stage_4_model = QuantizationSimModel(stage_2_model)
+
+    input_data = np.ones([batch_size, timesteps, features])
+
+    output_1_tensor = stage_1_model(input_data)
+    output_2_tensor = stage_2_model(input_data)
+    output_3_tensor = stage_3_model.model(input_data)
+    output_4_tensor = stage_4_model.model(input_data)
+
+    # check that all output tensors have the same shape
+    assert output_1_tensor.shape == output_3_tensor.shape
+    assert output_2_tensor.shape == output_4_tensor.shape
+
+    # check that QcQuantizableMultiHeadAttention does not exist in original model.layers
+    assert not any(isinstance(layer, QuantizedLSTM) for layer in stage_1_model.layers)
+    assert not any(isinstance(layer, QuantizedLSTM) for layer in stage_2_model.layers)
+
+    # check that QcQuantizableMultiHeadAttention exists in QuantSim model.layers
+    assert any(isinstance(layer, QuantizedLSTM) for layer in stage_3_model.model.layers)
+    assert any(isinstance(layer, QuantizedLSTM) for layer in stage_4_model.model.layers)
+
+@pytest.mark.rish
+def test_quantizable_lstm_export_encodings():
+    batch_size = 1
+    timesteps = 10
+    features = 16
+    units = 32
+
+    # STAGE 1 MODEL - Functional model created with layers.lstm
+    stage_1_inputs = keras.Input(shape=(timesteps, features))
+    stage_1_output = keras.layers.LSTM(units, unroll=True)(stage_1_inputs)
+    stage_1_model = keras.Model(inputs=stage_1_inputs, outputs=stage_1_output)
+    
+    # STAGE 2 MODEL - Sequential model created with layers.lstm
+    stage_2_model = keras.models.Sequential(
+        [
+            keras.layers.LSTM(units, input_shape=(timesteps, features), unroll=True),
+        ]
+    )
+
+    rng = np.random.default_rng(seed=42)
+    rn_input = rng.random([batch_size, timesteps, features])
+
+    # STAGE 3 MODEL - Quantized model created through QuantSim functional original
+    stage_3_model = QuantizationSimModel(stage_1_model)   
+
+    stage_3_model.compute_encodings(lambda m, _: m(rn_input), None)
+    stage_3_model.export('./data', 'lstm_functional')
+
+    # STAGE 4 MODEL - Quantized model created through QuantSim sequential original
+    stage_4_model = QuantizationSimModel(stage_2_model)
+   
+    stage_4_model.compute_encodings(lambda m, _: m(rn_input), None)
+    stage_4_model.export('./data', 'lstm_sequential')
+   
+    #Check QuantizationSimModel model created through originals
+    with open("./data/lstm_functional.encodings", "r") as encodings_file_functional, \
+        open("./data/lstm_sequential.encodings", "r") as encodings_file_sequential:
+        encodings_functional = json.load(encodings_file_functional)
+        encodings_sequential = json.load(encodings_file_sequential)
+
+    for (model_layer, encodings) in (stage_3_model.model.layers[1], encodings_functional), (stage_4_model.model.layers[0], encodings_sequential):
+        for wrapper in model_layer._wrapped_layers:
+            #LSTM input is passing through the wrapper as is. Output and input encoding will be same.
+            for o_quantizer in wrapper.output_quantizers:
+                if o_quantizer.encoding is not None:
+                    tensor_name = wrapper.name + ":0"
+                    encoding_dict = QuantizationSimModel._get_encoding_dict_for_quantizer(o_quantizer)
+                    assert tensor_name in encodings['activation_encodings']
+                    assert encodings['activation_encodings'][tensor_name] == encoding_dict
+            for idx, param_quantizer in enumerate(wrapper.param_quantizers):
+                if param_quantizer.encoding is not None:
+                    param_name = wrapper._layer_to_wrap.weights[idx].name
+                    encoding_dict = QuantizationSimModel._get_encoding_dict_for_quantizer(param_quantizer)
+                    assert param_name in encodings['param_encodings']
+                    assert encodings['param_encodings'][param_name] == encoding_dict
+    
