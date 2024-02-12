@@ -1509,7 +1509,6 @@ def test_quantizable_lstm_basic():
     assert any(isinstance(layer, QuantizedLSTM) for layer in stage_3_model.model.layers)
     assert any(isinstance(layer, QuantizedLSTM) for layer in stage_4_model.model.layers)
 
-@pytest.mark.rish
 def test_quantizable_lstm_export_encodings():
     batch_size = 1
     timesteps = 10
