@@ -348,7 +348,7 @@ class QuantizationSimModel(tf.keras.Model):
         Get encodings dict containing all activation and parameter encodings info in the model
         :return: Dictionary containing all activation and parameter encodings info in the model
         """
-        # pylint: disable=protected-access
+        # pylint: disable=protected-access, too-many-branches
         model_input_tensor_names = [inp.name for inp in self.model.inputs]
         activation_encodings = {}
         param_encodings = {}
