@@ -435,10 +435,9 @@ def test_model_with_tf_op_lambda_operators_multi_tf_keras_input():
         with open(os.path.join(temp_dir, f"{model.name}.encodings"), "r") as encodings_file:
             encodings = json.load(encodings_file)
 
-        assert "transpose" in qsim.model.layers[
-            2].original_layer.name, "This QCQuantizeWrapper should wrap the `tf.transpose` TF Op Lambda Layer"
-        assert "matmul" in qsim.model.layers[
-            3].original_layer.name, "This QCQuantizeWrapper should house the `tf.matmul` TF Op Lambda Layer"
+        assert "transpose" in qsim.model.layers[2].original_layer.name, "This QCQuantizeWrapper should wrap the `tf.transpose` TF Op Lambda Layer"
+        assert "matmul" in qsim.model.layers[5].original_layer.name, "This QCQuantizeWrapper should house the `tf.matmul` TF Op Lambda Layer"
+        assert "image.resize" in qsim.model.layers[8].original_layer.name, "This QCQuantizeWrapper should house the `tf.image.resize` TF Op Lambda Layer"
 
         assert len(qsim.model.layers[2].input_quantizers) == 1, "tf.transpose should have only 1 input_quantizer"
         assert len(qsim.model.layers[5].input_quantizers) == 2, "tf.matmul should have 2 input_quantizer for a @ b"

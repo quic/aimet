@@ -681,6 +681,7 @@ class QuantizationSimModel(tf.keras.Model):
                     gradients[enc_min_index] = dloss_by_dmin
                     gradients[enc_max_index] = dloss_by_dmax
 
+        # TODO: Remove this logic once this has been resolved in QNN/SNPE
         # Go through activation quantizers (Input/Output) and set any ReLU's encoding min to 0
         relu_quantize_wrappers = [
             _layer for _layer in self.model.layers
