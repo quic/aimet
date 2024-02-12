@@ -36,12 +36,15 @@
 # =============================================================================
 
 """ Unit tests for Adaround Weights """
+import os
 import json
 from packaging import version
 import numpy as np
 import torch
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 import pytest
+
+from aimet_common import libquant_info
 
 from aimet_onnx.adaround.adaround_weight import Adaround, AdaroundParameters
 import models.models_for_tests as test_models
@@ -53,61 +56,97 @@ class TestAdaround:
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="This unit-test is meant to be run on GPU")
     def test_apply_adaround(self):
+        np.random.seed(0)
+        torch.manual_seed(0)
+        model = test_models.single_residual_model()
+        data_loader = dataloader(input_shape=(1, 3, 32, 32))
+        dummy_input = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
+        sess = build_session(model, None)
+        out_before_ada = sess.run(None, dummy_input)
+        def callback(session, args):
+            in_tensor = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
+            session.run(None, in_tensor)
+
+        params = AdaroundParameters(data_loader=data_loader, num_batches=1, default_num_iterations=5, forward_fn=callback,
+                                    forward_pass_callback_args=None)
+        ada_rounded_model = Adaround.apply_adaround(model, params, './', 'dummy')
+        sess = build_session(ada_rounded_model, None)
+        out_after_ada = sess.run(None, dummy_input)
+        assert not np.array_equal(out_before_ada[0], out_after_ada[0])
+
+        with open('./dummy.encodings') as json_file:
+            encoding_data = json.load(json_file)
+
+        param_keys = list(encoding_data.keys())
         if version.parse(torch.__version__) >= version.parse("1.13"):
-            np.random.seed(0)
-            torch.manual_seed(0)
-            model = test_models.single_residual_model()
-            data_loader = dataloader()
-            dummy_input = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
-            sess = build_session(model)
-            out_before_ada = sess.run(None, dummy_input)
-            def callback(session, args):
-                in_tensor = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
-                session.run(None, in_tensor)
-
-            params = AdaroundParameters(data_loader=data_loader, num_batches=1, default_num_iterations=5, forward_fn=callback,
-                                        forward_pass_callback_args=None)
-            ada_rounded_model = Adaround.apply_adaround(model, params, './', 'dummy')
-            sess = build_session(ada_rounded_model)
-            out_after_ada = sess.run(None, dummy_input)
-            assert not np.array_equal(out_before_ada[0], out_after_ada[0])
-
-            with open('./dummy.encodings') as json_file:
-                encoding_data = json.load(json_file)
-
-            param_keys = list(encoding_data.keys())
             assert 'onnx::Conv_43' in param_keys
 
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="This unit-test is meant to be run on GPU")
+    def test_apply_adaround_for_custom_op(self):
+        custom_ops_path = os.path.dirname(libquant_info.__file__)
+        custom_ops_path = os.path.join(custom_ops_path, "customops")
+        onnx_library = os.path.join(custom_ops_path, "libonnx_custom_add.so")
 
-def dataloader():
+        np.random.seed(0)
+        torch.manual_seed(0)
+        model = test_models.custom_add_model()
+        data_loader = dataloader(input_shape=(1, 3, 64, 64))
+        dummy_input = {'input': np.random.rand(1, 3, 64, 64).astype(np.float32)}
+        sess = build_session(model, [onnx_library])
+        out_before_ada = sess.run(None, dummy_input)
+        def callback(session, args):
+            in_tensor = {'input': np.random.rand(1, 3, 64, 64).astype(np.float32)}
+            session.run(None, in_tensor)
+
+        params = AdaroundParameters(data_loader=data_loader, num_batches=1, default_num_iterations=5, forward_fn=callback,
+                                    forward_pass_callback_args=None)
+        ada_rounded_model = Adaround.apply_adaround(model, params, './', 'dummy', user_onnx_libs=[onnx_library])
+        sess = build_session(ada_rounded_model, [onnx_library])
+        out_after_ada = sess.run(None, dummy_input)
+        assert not np.array_equal(out_before_ada[0], out_after_ada[0])
+
+        with open('./dummy.encodings') as json_file:
+            encoding_data = json.load(json_file)
+
+        param_keys = list(encoding_data.keys())
+        if version.parse(torch.__version__) >= version.parse("1.13"):
+            assert 'conv.weight' in param_keys
+
+
+def dataloader(input_shape: tuple):
     class DataLoader:
         """
         Example of a Dataloader which can be used for running AMPv2
         """
-        def __init__(self, batch_size: int):
+        def __init__(self, batch_size: int, input_shape: tuple):
             """
             :param batch_size: batch size for data loader
             """
             self.batch_size = batch_size
+            self.input_shape = input_shape
 
         def __iter__(self):
             """Iterates over dataset"""
-            dummy_input = np.random.rand(1, 3, 32, 32).astype(np.float32)
+            dummy_input = np.random.rand(*self.input_shape).astype(np.float32)
             yield dummy_input
 
         def __len__(self):
             return 4
 
-    dummy_dataloader = DataLoader(batch_size=2)
+    dummy_dataloader = DataLoader(batch_size=2, input_shape=input_shape)
     return dummy_dataloader
 
-def build_session(model):
+
+def build_session(model, user_onnx_libs):
     """
     Build and return onnxruntime inference session
     :param providers: providers to execute onnxruntime
     """
     sess_options = SessionOptions()
     sess_options.graph_optimization_level = GraphOptimizationLevel.ORT_DISABLE_ALL
+    if user_onnx_libs is not None:
+        for lib in user_onnx_libs:
+            sess_options.register_custom_ops_library(lib)
     session = InferenceSession(
         path_or_bytes=model.model.SerializeToString(),
         sess_options=sess_options,
