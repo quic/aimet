@@ -36,15 +36,15 @@
 
 # CMake file to generate AIMET packages
 
-
 set(src_packaging_dir "${SOURCE_DIR}/packaging")
 set(src_deps_dir "${src_packaging_dir}/dependencies")
 set(build_packaging_dir "${CMAKE_BINARY_DIR}/packaging")
+set(package_common "aimet_common")
 
 # First delete the existing packaging directory if it exists
 file(REMOVE_RECURSE ${build_packaging_dir})
 
-# set varinat name
+# set variant name
 if(DEFINED ENV{AIMET_VARIANT})
   set(variant_name $ENV{AIMET_VARIANT})
 else()
@@ -67,18 +67,11 @@ else()
   endif()
 endif()
 
-# Copy NOTICE, README, INSTALL, etc files to build folder for package creation
-configure_file("${src_packaging_dir}/NOTICE.txt" "${build_packaging_dir}/NOTICE.txt" COPYONLY)
-configure_file("${src_packaging_dir}/README.txt" "${build_packaging_dir}/README.txt" COPYONLY)
-configure_file("${src_packaging_dir}/INSTALL.txt" "${build_packaging_dir}/INSTALL.txt" COPYONLY)
-configure_file("${src_packaging_dir}/setup_cfg.py" "${build_packaging_dir}/setup_cfg.py" COPYONLY)
-configure_file("${src_packaging_dir}/packaging_common.py" "${build_packaging_dir}/packaging_common.py" COPYONLY)
-
 # Common dependencies
 set(deps_name_list_aimet_common "reqs_deb_common.txt" "reqs_pip_common.txt")
 
-# Initialize package array list with AIMET common package
-set(package_name_list aimet_common)
+# Initialize empty package array list
+set(package_name_list "")
 
 # Set a GPU flag for use by setup scripts
 set(CUDA_OPTION "")
@@ -89,116 +82,119 @@ endif()
 # Setup Tensorflow package dependencies if required
 if(ENABLE_TENSORFLOW)
   # Add AIMET Tensorflow package to package array list
-  list(APPEND package_name_list aimet_tensorflow)
+  list(APPEND package_name_list tensorflow)
+
+  # Initialize TF deps list with AIMET Common dependencies
+  set(deps_name_list_tensorflow ${deps_name_list_aimet_common})
 
   # Tensorflow dependencies that are common to CPU and GPU
-  set(deps_name_list_aimet_tensorflow "reqs_pip_tf_common.txt")
+  list(APPEND deps_name_list_tensorflow "reqs_pip_tf_common.txt")
 
   if(ENABLE_CUDA)
     # Tensorflow GPU dependencies
-    list(APPEND deps_name_list_aimet_tensorflow "reqs_deb_tf_gpu.txt" "reqs_pip_tf_gpu.txt")
+    list(APPEND deps_name_list_tensorflow "reqs_deb_tf_gpu.txt" "reqs_pip_tf_gpu.txt")
   else()
     # Tensorflow CPU dependencies
-    list(APPEND deps_name_list_aimet_tensorflow "reqs_pip_tf_cpu.txt")
+    list(APPEND deps_name_list_tensorflow "reqs_pip_tf_cpu.txt")
   endif()
 endif()
 
 # Setup Torch package dependencies if required
 if(ENABLE_TORCH)
   # Add AIMET Torch package to package array list
-  list(APPEND package_name_list aimet_torch)
+  list(APPEND package_name_list torch)
+
+  # Initialize Torch deps list with AIMET Common dependencies
+  set(deps_name_list_torch ${deps_name_list_aimet_common})
 
   # Torch dependencies that are common to CPU and GPU
-  set(deps_name_list_aimet_torch "reqs_pip_torch_common.txt")
+  list(APPEND deps_name_list_torch "reqs_pip_torch_common.txt")
 
   if(ENABLE_CUDA)
     # Torch GPU dependencies
-    list(APPEND deps_name_list_aimet_torch "reqs_deb_torch_gpu.txt" "reqs_pip_torch_gpu.txt")
+    list(APPEND deps_name_list_torch "reqs_deb_torch_gpu.txt" "reqs_pip_torch_gpu.txt")
   else()
     # Torch CPU dependencies
-    list(APPEND deps_name_list_aimet_torch "reqs_pip_torch_cpu.txt")
+    list(APPEND deps_name_list_torch "reqs_pip_torch_cpu.txt")
   endif()
 endif()
 
 # Setup Onnx package dependencies if required
 if(ENABLE_ONNX)
   # Add AIMET Onnx package to package array list
-  list(APPEND package_name_list aimet_onnx)
+  list(APPEND package_name_list onnx)
+
+  # Initialize ONNX deps list with AIMET Common dependencies
+  set(deps_name_list_onnx ${deps_name_list_aimet_common})
 
   # Onnx dependencies that are common to CPU and GPU
-  set(deps_name_list_aimet_onnx "reqs_pip_onnx_common.txt")
+  list(APPEND deps_name_list_onnx "reqs_pip_onnx_common.txt")
 
   if(ENABLE_CUDA)
     # Onnx GPU dependencies
-    list(APPEND deps_name_list_aimet_onnx "reqs_deb_onnx_gpu.txt" "reqs_pip_onnx_gpu.txt")
+    list(APPEND deps_name_list_onnx "reqs_deb_onnx_gpu.txt" "reqs_pip_onnx_gpu.txt")
   else()
     # Onnx CPU dependencies
-    list(APPEND deps_name_list_aimet_onnx "reqs_pip_onnx_cpu.txt")
+    list(APPEND deps_name_list_onnx "reqs_pip_onnx_cpu.txt")
   endif()
 endif()
-
-# Finally, add AIMET "top-level" package to package array list
-list(APPEND package_name_list aimet)
 
 
 # Loop over the package array list to generate wheel files
 foreach(package ${package_name_list})
+  set(pkg_staging_path "${build_packaging_dir}/${package}")
+  set(pkg_common_staging_path "${pkg_staging_path}/${package_common}")
+  set(pkg_variant_staging_path "${pkg_staging_path}/aimet_${package}")
+  set(pkg_deps_staging_path "${pkg_variant_staging_path}/bin")
 
-  # Rename the package setup script
-  configure_file("${src_packaging_dir}/setup_${package}.py" "${build_packaging_dir}/setup.py" COPYONLY)
-  # Location of the package folder
-  set(package_dir "${build_packaging_dir}/${package}")
-  # Location of the dependency subfolder within package
-  set(package_deps_dir "${package_dir}/bin")
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${pkg_staging_path}" "${pkg_common_staging_path}"
+      "${pkg_variant_staging_path}" "${pkg_common_staging_path}/x86_64-linux-gnu"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${AIMET_PACKAGE_PATH}/lib/python/${package_common}" "${pkg_common_staging_path}"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${AIMET_PACKAGE_PATH}/lib/python/aimet_${package}" "${pkg_variant_staging_path}"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${AIMET_PACKAGE_PATH}/lib/x86_64-linux-gnu" "${pkg_common_staging_path}/x86_64-linux-gnu"
+    COMMAND ${CMAKE_COMMAND} -E copy "${src_packaging_dir}/NOTICE.txt" "${pkg_staging_path}/"
+    COMMAND ${CMAKE_COMMAND} -E copy "${src_packaging_dir}/README.txt" "${pkg_staging_path}/"
+    )
+  execute_process(
+    # Delete binaries from aimet_common which should not be part of the package
+    COMMAND ${CMAKE_COMMAND} -E rm -rf "${pkg_common_staging_path}/bin"
+  )
+  # convert file names to the absolute paths by preprnding corresponded directory
+  list(TRANSFORM deps_name_list_${package} PREPEND "${src_deps_dir}/${variant_name}/")
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${pkg_deps_staging_path}"
+    COMMAND ${CMAKE_COMMAND} -E copy 
+      ${deps_name_list_${package}}
+      "${src_packaging_dir}/INSTALL.txt"
+      "${src_packaging_dir}/envsetup.sh"
+      "${pkg_deps_staging_path}/"
+  )
 
-  # Loop over the dependency list for this package and copy to dependency location
-  file(MAKE_DIRECTORY "${package_deps_dir}")
-  foreach(dependency_file ${deps_name_list_${package}})
-    message(VERBOSE "*** Copied ${src_deps_dir}/${dependency_file} to ${package_deps_dir}/ ***")
-    configure_file("${src_deps_dir}/${variant_name}/${dependency_file}" "${package_deps_dir}/" COPYONLY)
-  endforeach()
-
-  file(WRITE "${build_packaging_dir}/MANIFEST.ini" "")
-  if("${package}" STREQUAL "aimet_common")
-    # NOTE: MANIFEST file is different for different packages
-    file(APPEND "${build_packaging_dir}/MANIFEST.ini" "graft ${package}/x86_64-linux-gnu \n")
-    file(APPEND "${build_packaging_dir}/MANIFEST.ini" "include ${package}/*/*.html \n")
-    # Populate the python code
-    file(COPY ${AIMET_PACKAGE_PATH}/lib/python/${package} DESTINATION ${build_packaging_dir}/)
-    # Populate the C++ libraries
-    file(COPY ${AIMET_PACKAGE_PATH}/lib/x86_64-linux-gnu/ DESTINATION ${package_dir}/x86_64-linux-gnu/)
-
-    # Copy over dependency installation files
-    if(EXISTS "${src_packaging_dir}/LICENSE.pdf")
-      configure_file("${src_packaging_dir}/LICENSE.pdf" "${package_deps_dir}/" COPYONLY)
-    endif()
-    configure_file("${src_packaging_dir}/INSTALL.txt" "${package_deps_dir}/" COPYONLY)
-    configure_file("${src_packaging_dir}/envsetup.sh" "${package_deps_dir}/" COPYONLY)
-  elseif("${package}" STREQUAL "aimet")
-    # Populate top-level AIMET package contents (manifest file)
-    file(APPEND "${build_packaging_dir}/MANIFEST.ini" "include README.txt NOTICE.txt \n")
-  else()
-    # Populate AIMET Tensorflow or Torch package contents (manifest and python code)
-    file(APPEND "${build_packaging_dir}/MANIFEST.ini" "graft ${package}/acceptance_tests \n")
-    file(APPEND "${build_packaging_dir}/MANIFEST.ini" "include ${package}/*/*.html \n")
-    file(COPY ${AIMET_PACKAGE_PATH}/lib/python/${package} DESTINATION ${build_packaging_dir}/)
+  if(EXISTS "${src_packaging_dir}/LICENSE.pdf")
+    file(COPY "${src_packaging_dir}/LICENSE.pdf" DESTINATION ${build_packaging_dir}/)
+    # optional, might not be present on host
+    execute_process(COMMAND ${CMAKE_COMMAND} -E copy "${src_packaging_dir}/LICENSE.pdf" "${pkg_deps_staging_path}/")
   endif()
+
+  configure_file("${CMAKE_CURRENT_LIST_DIR}/setup.py.in" "${pkg_staging_path}/setup-${package}.py" @ONLY)
+  configure_file(${CMAKE_CURRENT_LIST_DIR}/MANIFEST.in.in ${pkg_staging_path}/MANIFEST.in @ONLY)
+
   # Update RPATH to relative paths ($ORIGIN) to not bother by a path where python is installed
   # Linux loader would be able to resolve dependencies without LD_LIBRARY_PATH
   execute_process(
-      COMMAND find ${build_packaging_dir} -name "AimetTensorQuantizer*.so" -exec ${PATCHELF_EXE} --set-rpath $ORIGIN:$ORIGIN/../torch/lib {} \;
+    COMMAND find ${pkg_staging_path} -name "AimetTensorQuantizer*.so" -exec ${PATCHELF_EXE} --set-rpath $ORIGIN:$ORIGIN/../torch/lib {} \;
   )
   execute_process(
-      COMMAND find ${build_packaging_dir} -name "libaimet_tf_ops*.so" -exec ${PATCHELF_EXE} --set-rpath $ORIGIN:$ORIGIN/../../tensorflow:$ORIGIN/../../tensorflow/python {} \;
+    COMMAND find ${pkg_staging_path} -name "libaimet_tf_ops*.so" -exec ${PATCHELF_EXE} --set-rpath $ORIGIN:$ORIGIN/../../tensorflow:$ORIGIN/../../tensorflow/python {} \;
   )
+
   # Invoke the setup tools script to create the wheel packages.
+  message(VERBOSE "*** Running setup script for package ${package} ***")
   execute_process(
-    COMMAND ${PYTHON3_EXECUTABLE} setup.py sdist bdist_wheel ${CUDA_OPTION}
-    WORKING_DIRECTORY ${build_packaging_dir}
+    COMMAND ${PYTHON3_EXECUTABLE} setup-${package}.py sdist bdist_wheel --dist-dir ${build_packaging_dir}/dist ${CUDA_OPTION}
+    WORKING_DIRECTORY ${pkg_staging_path}
     OUTPUT_VARIABLE output_var
+    RESULT_VARIABLE setup_return_string
   )
-
-  # Rename and keep a copy of the manifest file for debugging/reference purposes
-  configure_file("${build_packaging_dir}/MANIFEST.ini" "${build_packaging_dir}/MANIFEST.ini.${package}" COPYONLY)
-
 endforeach()
