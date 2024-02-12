@@ -119,8 +119,8 @@ def model_with_tf_op_lambda_operators_multi_tf_keras_input():
     input_layer = tf.keras.Input(batch_input_shape=(1, 16, 32, 3))
     x1 = tf.keras.layers.Dense(4, activation=tf.nn.relu)(input_layer)
     x2 = tf.transpose(x1, perm=[0, 1, 3, 2])
-    output = tf.matmul(x1, x2)
-
+    x = tf.matmul(x1, x2)
+    output = tf.image.resize(x, [tf.shape(input_layer)[1], tf.shape(input_layer)[2]])
     return tf.keras.Model(
         inputs=input_layer,
         outputs=output,
@@ -425,12 +425,13 @@ def test_model_with_tf_op_lambda_operators_multi_tf_keras_input():
             encodings = json.load(encodings_file)
 
         assert "transpose" in qsim.model.layers[2].original_layer.name, "This QCQuantizeWrapper should wrap the `tf.transpose` TF Op Lambda Layer"
-        assert "matmul" in qsim.model.layers[3].original_layer.name, "This QCQuantizeWrapper should house the `tf.matmul` TF Op Lambda Layer"
+        assert "matmul" in qsim.model.layers[5].original_layer.name, "This QCQuantizeWrapper should house the `tf.matmul` TF Op Lambda Layer"
+        assert "image.resize" in qsim.model.layers[8].original_layer.name, "This QCQuantizeWrapper should house the `tf.image.resize` TF Op Lambda Layer"
 
         assert len(qsim.model.layers[2].input_quantizers) == 1, "tf.transpose should have only 1 input_quantizer"
-        assert len(qsim.model.layers[3].input_quantizers) == 2, "tf.matmul should have 2 input_quantizer for a @ b"
-
-        assert len(encodings['activation_encodings']) == 4
+        assert len(qsim.model.layers[5].input_quantizers) == 2, "tf.matmul should have 2 input_quantizer for a @ b"
+        assert len(qsim.model.layers[8].input_quantizers) == 3, "tf.image.resize should have 3 input_quantizers for input, and the tensors for the new height and width for tf.shape"
+        assert len(encodings['activation_encodings']) == 5
         assert len(encodings['param_encodings']) == 1, "Only the Dense layer in this model should have param_encoding"
 
 
