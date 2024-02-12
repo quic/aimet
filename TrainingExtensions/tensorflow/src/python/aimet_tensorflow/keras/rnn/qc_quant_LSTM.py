@@ -69,7 +69,7 @@ else:
 # pylint: disable=wrong-import-position
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_tensorflow.keras.quantsim import QuantizerSettings, QcQuantizeWrapper
-from aimet_tensorflow.keras.rnn.qc_quant_LSTMCell import QcQuantizedLSTMCell
+from aimet_tensorflow.keras.rnn.qc_quant_LSTMCell import QuantizedLSTMCell
 
 #Manage inheritance as per version
 if version.parse(tf.version.VERSION) >= version.parse("2.10"):
@@ -79,7 +79,7 @@ else:
 
 # pylint: disable=too-many-ancestors
 # pylint: disable=abstract-method
-class QcQuantizedLSTM(*base_list):
+class QuantizedLSTM(*base_list):
 
     """Class merging LSTM class from recurrent.py and recurrent_v1.py in TF2.4
     , to be in sync with latest tf 2.10 version"""
@@ -112,6 +112,7 @@ class QcQuantizedLSTM(*base_list):
             stateful=False,
             time_major=False,
             unroll=False,
+            is_sequential_model=False,
             is_input_quantized=False,
             quant_scheme: Union[QuantScheme, str] = 'tf_enhanced',
             rounding_mode: str = 'nearest',
@@ -123,7 +124,13 @@ class QcQuantizedLSTM(*base_list):
     ):
         """Overriden LSTM __init__ function"""
 
+        #Quantization is supported for urolled LSTM only.
+        if not unroll:
+            logging.error("Only unrolled LSTM can be quantized, as of now. Need to use flag 'unroll=True'")
+            exit()
+
         self._wrapped_layers = []
+        self.is_sequential_model = is_sequential_model
         self.is_input_quantized = is_input_quantized
         self.quant_scheme = quant_scheme
         self.rounding_mode = rounding_mode
@@ -149,7 +156,7 @@ class QcQuantizedLSTM(*base_list):
         else:
             cell_kwargs = {}
 
-        cell = QcQuantizedLSTMCell(
+        cell = QuantizedLSTMCell(
             units,
             activation=activation,
             recurrent_activation=recurrent_activation,
@@ -200,22 +207,15 @@ class QcQuantizedLSTM(*base_list):
             InputSpec(shape=(None, dim)) for dim in (self.units, self.units)
         ]
 
-        if version.parse(tf.version.VERSION) >= version.parse("2.10"):
-            self._could_use_gpu_kernel = (
-                self.activation in (activations.tanh, tf.tanh)
-                and self.recurrent_activation in (activations.sigmoid, tf.sigmoid)
-                and recurrent_dropout == 0
-                and not unroll
-                and use_bias
-                and executing_eagerly_outside_functions())
-        else:
-            self._could_use_gpu_kernel = (
-                self.activation in (activations.tanh, nn.tanh)
-                and self.recurrent_activation in (activations.sigmoid, nn.sigmoid)
-                and recurrent_dropout == 0
-                and not unroll
-                and use_bias
-                and executing_eagerly_outside_functions())
+        (tf_version_sigmoid, tf_version_tanh) = (tf.sigmoid, tf.tanh) if version.parse(tf.version.VERSION) >= version.parse("2.10") \
+                                                                      else (nn.sigmoid, nn.tanh)
+        self._could_use_gpu_kernel = (
+            self.activation in (activations.tanh, tf_version_tanh)
+            and self.recurrent_activation in (activations.sigmoid, tf_version_sigmoid)
+            and recurrent_dropout == 0
+            and not unroll
+            and use_bias
+            and executing_eagerly_outside_functions())
 
         if config.list_logical_devices('GPU'):
             # Only show the message when there is GPU available, user will not care
@@ -229,6 +229,8 @@ class QcQuantizedLSTM(*base_list):
 
         # pylint: disable=redefined-outer-name
         config = {
+            "is_sequential_model":
+                self.is_sequential_model,
             "is_input_quantized":
                 self.is_input_quantized,
             "quant_scheme":
@@ -244,7 +246,7 @@ class QcQuantizedLSTM(*base_list):
             "copy_source_weights":
                 self.copy_source_weights
         }
-        base_config = super(QcQuantizedLSTM, self).get_config()
+        base_config = super(QuantizedLSTM, self).get_config()
         base_config.update(config)
         return base_config
 
@@ -253,11 +255,12 @@ class QcQuantizedLSTM(*base_list):
         """RNN build method overriden"""
 
         # pylint: disable=bad-super-call
-        super(QcQuantizedLSTM, self).build(input_shape)
+        super(QuantizedLSTM, self).build(input_shape)
 
         # pylint: disable=attribute-defined-outside-init
         if self.is_input_quantized:
-            self._wrapped_lstm_input = self._wrap_layer(tf.keras.layers.Lambda(lambda x: x, name="lstm_input"), 1)
+            self._wrapped_lstm_input = self._wrap_layer(tf.keras.layers.Lambda(
+                lambda x: x, name="lstm_input" if self.is_sequential_model else "input_1"), 1)
             self._wrapped_layers.append(self._wrapped_lstm_input)
 
         self.built = True

@@ -122,7 +122,7 @@ class QcQuantizableMultiHeadAttention(MultiHeadAttention):
                                     num_inputs=num_inputs,
                                     input_quantizers=input_quantizers,
                                     output_quantizers=output_quantizers,
-                                    param_quantizers=param_quantizers)
+                                    param_quantizers=param_quantizers, name=layer.name)
         return wrapper
 
     def _build_from_signature(self, query, value, key=None):

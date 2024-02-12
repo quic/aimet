@@ -52,7 +52,7 @@ from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.graphsearchtuils import GraphSearchUtils
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
 from aimet_tensorflow.keras.quant_sim.qc_mha_wrapper import QcQuantizableMultiHeadAttention
-from aimet_tensorflow.keras.rnn.qc_quant_LSTM import QcQuantizedLSTM
+from aimet_tensorflow.keras.rnn.qc_quant_LSTM import QuantizedLSTM
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import TensorQuantizer, ActivationTensorQuantizer, \
     ParamPerTensorQuantizer, StaticGridPerChannelQuantizer, ParamPerChannelQuantizer
 from aimet_tensorflow.keras.quantsim_config.quantsim_config import QuantSimConfigurator, INPUT_QUANTIZERS, \
@@ -67,7 +67,7 @@ _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 unquantizable_modules = (tf.keras.layers.InputLayer, QcQuantizeWrapper)
 substitutable_modules = {
     tf.keras.layers.MultiHeadAttention: QcQuantizableMultiHeadAttention,
-    tf.keras.layers.LSTM: QcQuantizedLSTM
+    tf.keras.layers.LSTM: QuantizedLSTM
 }
 
 
@@ -253,8 +253,11 @@ class QuantizationSimModel(tf.keras.Model):
                 config["copy_source_weights"] = layer.get_weights()
 
                 if isinstance(layer, tf.keras.layers.LSTM):
+                    if isinstance(self._model_without_wrappers, tf.keras.Sequential):
+                        config["is_sequential_model"] = True
+
                     # pylint: disable=protected-access
-                    if self._quantsim_configurator._layer_to_config_dict[layer]["is_input_quantized"]["setting"] is True:
+                    if self._quantsim_configurator._layer_to_config_dict[layer]["is_input_quantized"]["setting"]:
                         config["is_input_quantized"] = True
                     config["quant_scheme"] = quant_scheme
                     config["rounding_mode"] = rounding_mode
