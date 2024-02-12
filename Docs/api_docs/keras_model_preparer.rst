@@ -121,4 +121,50 @@ The AIMET Keras ModelPreparer API has the following limitations:
         x = x + positions
         return x
 
-  
+* The AIMET Keras ModelPreparer API may be able to convert models that are inheriting form the Keras Model class or have
+  layers that inherit from the Keras Model class. However, this is not guaranteed. The API will check these layers weights
+  and verify it has the same number of weights as the layers `__init__` defines them. However, if layers defined in the `__init__`
+  are not used in the `call` function, the API will not be able to verify the weights. Furthermore, if a layer defined in the `__init__`
+  is resued, the API will not be able to see both uses. For example, in the ResBlock class below, the `self.relu` is used twice and the
+  API will miss the second use. If the user defines two separate ReLU's, then the API will be able to convert the layer.::
+
+        # Bad Example
+        class ResBlock(tf.keras.Model):
+            def __init__(self, filters, kernel_size):
+                super(ResBlock, self).__init__()
+                self.conv1 = tf.keras.layers.Conv2D(filters, kernel_size, padding='same')
+                self.bn1 = tf.keras.layers.BatchNormalization()
+                self.conv2 = tf.keras.layers.Conv2D(filters, kernel_size, padding='same')
+                self.bn2 = tf.keras.layers.BatchNormalization()
+                self.relu = tf.keras.layers.ReLU()
+    
+            def call(self, input_tensor, training=False):
+                x = self.conv1(input_tensor)
+                x = self.bn1(x, training=training)
+                x = self.relu(x) # First use of self.relu
+                x = self.conv2(x)
+                x = self.bn2(x, training=training)
+                x = self.relu(x) # Second use of self.relu
+                x = tf.keras.layers.add([x, input_tensor])
+                return x
+        
+        # Good Example
+        class ResBlock(tf.keras.Model):
+            def __init__(self, filters, kernel_size):
+                super(ResBlock, self).__init__()
+                self.conv1 = tf.keras.layers.Conv2D(filters, kernel_size, padding='same')
+                self.bn1 = tf.keras.layers.BatchNormalization()
+                self.conv2 = tf.keras.layers.Conv2D(filters, kernel_size, padding='same')
+                self.bn2 = tf.keras.layers.BatchNormalization()
+                self.relu1 = tf.keras.layers.ReLU()
+                self.relu2 = tf.keras.layers.ReLU()
+    
+            def call(self, input_tensor, training=False):
+                x = self.conv1(input_tensor)
+                x = self.bn1(x, training=training)
+                x = self.relu1(x) # First use of self.relu1
+                x = self.conv2(x)
+                x = self.bn2(x, training=training)
+                x = self.relu2(x) # first use of self.relu2
+                x = tf.keras.layers.add([x, input_tensor])
+                return x

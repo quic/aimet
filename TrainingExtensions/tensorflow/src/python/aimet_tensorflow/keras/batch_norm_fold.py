@@ -57,7 +57,7 @@ from aimet_common.defs import QuantScheme, MAP_ROUND_MODE_TO_PYMO
 
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
-from aimet_tensorflow.keras.model_preparer import _handle_normal_keras_layer, _update_output_tensors_in_model_layers_connections
+from aimet_tensorflow.keras.model_preparer import _KerasModelPreparer
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ParamPerTensorQuantizer
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
@@ -535,20 +535,21 @@ def _delete_bn_from_functional(model: tf.keras.Model,
                     # Sort layer_input based on the above dictionary.
                     layer_input = sorted(layer_input, key=lambda current_input, oi=ordered_inputs: oi[current_input.name])
 
-            # Since we are rerouting around the batch normalization layers, we need to temporarily remove the inbound and
-            # outbound nodes of the batch normalization layers so that the model can be built correctly and not duplicate
-            # the non batch normalization layers inbound/outbound nodes.
+            # Since we are rerouting around the batch normalization layers, we need to temporarily remove the inbound
+            # and outbound nodes of the batch normalization layers so that the model can be built correctly and not
+            # duplicate the non batch normalization layers inbound/outbound nodes.
             current_layer._inbound_nodes = []  # pylint: disable=protected-access
-            # Special case for when there is a Lambda opertaion with multiple inputs. For example, z = x + y.
+            # Special case for when there is a Lambda operation with multiple inputs. For example, z = x + y.
             if isinstance(current_layer, TFOpLambda):
-                x = _handle_normal_keras_layer(current_layer, model_layer_connections)
-                current_layer._outbound_nodes = [] # pylint: disable=protected-access
+                kmp = _KerasModelPreparer.get_instance_for_common_layer_passthrough_functions(model_layer_connections)
+                x = kmp._handle_normal_keras_layer(current_layer)  # pylint: disable=protected-access
                 # Updating the Model layer connections
-                _update_output_tensors_in_model_layers_connections(current_layer, x, model, model_layer_connections,
-                                                                   current_layer._outbound_nodes)
+                kmp._update_output_tensors_in_model_layers_connections(  # pylint: disable=protected-access
+                    current_layer, x, model
+                )
             else:
                 x = current_layer(layer_input)
-            current_layer._outbound_nodes = [] # pylint: disable=protected-access
+            current_layer._outbound_nodes = []  # pylint: disable=protected-access
 
             # Set new output tensor (in this case, it will be the same as the original model)
             model_layer_connections[ModelLayerConnectionsProperties.OUTPUT_TENSORS].update({current_layer.name: x})
