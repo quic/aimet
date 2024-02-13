@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -57,7 +57,7 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
 
 OP_TYPES_WITH_PARAMS = ['Conv', 'Gemm', 'ConvTranspose', 'BatchNormalization', 'MatMul', 'Transpose',
-                        'InstanceNormalization']
+                        'InstanceNormalization', 'RNN', 'LSTM', 'GRU']
 
 
 def remove_nodes_with_type(node_type: str, onnx_graph: onnx.GraphProto):
@@ -203,6 +203,8 @@ def make_dummy_input(model: ModelProto, dynamic_size: int = 1) -> Dict[str, np.n
                 shape.append(dim.dim_value)
         if shape:
             input_dict[name] = np.random.randn(*shape).astype(mapping.TENSOR_TYPE_TO_NP_TYPE[dtype])
+        else:
+            input_dict[name] = np.array(np.random.randn(*shape)).astype(mapping.TENSOR_TYPE_TO_NP_TYPE[dtype])
     return input_dict
 
 
@@ -297,7 +299,7 @@ def get_graph_intermediate_activations(graph: GraphProto) -> List[str]:
     activation_names = []
     for node in graph.node:
         for name in node.input:
-            if name not in activation_names and name not in param_names:
+            if name not in activation_names and name not in param_names and name:
                 activation_names.append(name)
     return activation_names
 
