@@ -359,12 +359,14 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
         supported for learned-grid
         """
 
-    def set_activation_encoding(self, module_name: str, activation_encodings: Dict):
+    def set_activation_encoding(self, module_name: str, activation_encodings: Dict, ignore_when_quantizer_disabled: bool = False):
         """
         Set encoding for activations from encodings dictionary
 
         :param module_name: name of module
         :param activation_encodings: activation encodings dictionary
+        :param ignore_when_quantizer_disabled: ignore raising RuntimeError while setting encodings,
+        when quantizers are disabled.
         """
         _logger.info("Setting quantization encodings for activation quantizers of: %s", module_name)
 
@@ -373,14 +375,14 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
         except KeyError:
             input_encoding = {}
 
-        self.import_input_encodings(input_encoding)
+        self.import_input_encodings(input_encoding, ignore_when_quantizer_disabled)
 
         try:
             output_encoding = activation_encodings[module_name]['output']
         except KeyError:
             output_encoding = {}
 
-        self.import_output_encodings(output_encoding)
+        self.import_output_encodings(output_encoding, ignore_when_quantizer_disabled)
 
     def set_param_encoding(self, module_name: str, param_encodings: Dict):
         """
@@ -416,10 +418,10 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
         """
         for input_quantizer, output_quantizer in zip(self.input_quantizers, self.output_quantizers):
             if name in activation_encoding:
-                if QUANTIZER_TYPE_INPUT in activation_encoding[name]:
+                if QUANTIZER_TYPE_INPUT in activation_encoding[name] and input_quantizer.enabled:
                     input_quantizer.freeze_encoding()
                     _logger.info("Freezing quantization encodings for input activation: %s", name)
-                if QUANTIZER_TYPE_OUTPUT in activation_encoding[name]:
+                if QUANTIZER_TYPE_OUTPUT in activation_encoding[name] and output_quantizer.enabled:
                     output_quantizer.freeze_encoding()
                     _logger.info("Freezing quantization encodings for output activation: %s", name)
 
@@ -501,7 +503,7 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
 
         self.set_mode(QcQuantizeOpMode.ACTIVE)
 
-    def import_output_encodings(self, encodings: Dict[str, Dict]):
+    def import_output_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled: bool = False):
         """
         Import output encodings represented in below format:
         {
@@ -510,9 +512,9 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
             ...
         }
         """
-        self._import_encoding(encodings, self.output_quantizers)
+        self._import_encoding(encodings, self.output_quantizers, ignore_when_quantizer_disabled)
 
-    def import_input_encodings(self, encodings: Dict[str, Dict]):
+    def import_input_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled: bool = False):
         """
         Import input encodings represented in below format:
         {
@@ -521,9 +523,9 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
             ...
         }
         """
-        self._import_encoding(encodings, self.input_quantizers)
+        self._import_encoding(encodings, self.input_quantizers, ignore_when_quantizer_disabled)
 
-    def _import_encoding(self, encodings, quantizers):
+    def _import_encoding(self, encodings, quantizers, ignore_when_quantizer_disabled):
         assert quantizers is self.input_quantizers or quantizers is self.output_quantizers
 
         for i, quantizer in enumerate(quantizers):
@@ -532,8 +534,15 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                 quantizer.enabled = False
                 continue
             if not quantizer.enabled:
-                raise RuntimeError("The quantsim passed for loading encodings does not have the same "
-                                   "configuration as the quantsim which was used to export the encodings")
+                if ignore_when_quantizer_disabled:
+                    type_of_quantizer = 'input' if quantizers is self.input_quantizers else 'output'
+                    _logger.info("%s quantizer %s is disabled, and the provided encoding can't be set",
+                                 type_of_quantizer, str(i))
+                    continue
+                else:
+                    raise RuntimeError("The quantsim passed for loading encodings does not have the same "
+                                       "configuration as the quantsim which was used to export the encodings")
+
             if quantizer._is_encoding_frozen: # pylint: disable=protected-access
                 type_of_quantizer = 'input' if quantizers is self.input_quantizers else 'output'
                 _logger.debug("Encodings are frozen for module %s quantizer of %s",
