@@ -120,8 +120,8 @@ class TestQuantAnalyzer:
         # total 5 param quantizers are enabled as per default config file.
         assert len(enabled_quantizers) == 5
 
-    def test_get_enabled_quantizers(self):
-        """ test get_enabled_quantizers() """
+    def test_get_op_quantizers(self):
+        """ test get op quantizers """
         input_shape = (1, 3, 32, 32)
         dummy_input = torch.randn(*input_shape)
         model = models_for_tests._convert_to_onnx(models_for_tests.TinyModel(), dummy_input)
@@ -129,25 +129,34 @@ class TestQuantAnalyzer:
         fold_all_batch_norms_to_weight(model)
         sim = QuantizationSimModel(copy.deepcopy(model), dummy_input_dict)
         quant_analyzer = QuantAnalyzer(model, dummy_input_dict, CallbackFunc(None), CallbackFunc(None))
-        op_to_quantizers_dict = quant_analyzer._get_enabled_quantizers(sim)
+        conn_graph = sim.connected_graph
+        cg_ops = sim.connected_graph.ordered_ops
 
-        # Verify all the ops having enabled quantizers are being captured
-        assert len(op_to_quantizers_dict) == 10
-        for op_name, enabled_quantizers in op_to_quantizers_dict.items():
-            assert isinstance(op_name, str)
-            assert all(isinstance(quantizer, QcQuantizeOp) for quantizer in enabled_quantizers)
-
-        # Verify the order of ops in op_to_quantizers_dict is according to its occurence in the model graph
+        # Verify the order of ops is according to their occurences in the model graph
         if version.parse(torch.__version__) >= version.parse("1.13"):
-            layer_names = list(op_to_quantizers_dict.keys())
-            assert layer_names.index("/conv2/Conv") < layer_names.index("/relu2/Relu")
-            assert layer_names.index("/conv4/Conv") < layer_names.index("/fc/Gemm")
+            assert cg_ops.index(conn_graph.get_op_from_module_name("/conv2/Conv")) < cg_ops.index(conn_graph.get_op_from_module_name("/relu2/Relu"))
+            assert cg_ops.index(conn_graph.get_op_from_module_name("/conv4/Conv")) < cg_ops.index(conn_graph.get_op_from_module_name("/fc/Gemm"))
 
-        # Disable all the quantizers and verify op_to_quantizers_dict is empty.
+        # Verify op-specific quantizers are captured correctly
+        if version.parse(torch.__version__) >= version.parse("1.13"):
+            input_quantizers, output_quantizers, param_quantizers = quant_analyzer._get_op_quantizers(conn_graph.get_op_from_module_name("/conv1/Conv"), sim)
+            assert len(input_quantizers) == 1
+            assert not output_quantizers
+            assert len(param_quantizers) == 1
+
+            input_quantizers, output_quantizers, param_quantizers = quant_analyzer._get_op_quantizers(conn_graph.get_op_from_module_name("/relu1/Relu"), sim)
+            assert not input_quantizers
+            assert len(output_quantizers) == 1
+            assert not param_quantizers
+
+        # Disable all the quantizers and verify empty items are returned.
         for _, qc_quantize_op in sim.qc_quantize_op_dict.items():
             qc_quantize_op.enabled = False
-        op_to_quantizers_dict = quant_analyzer._get_enabled_quantizers(sim)
-        assert not op_to_quantizers_dict
+        for op in cg_ops:
+            input_quantizers, output_quantizers, param_quantizers = quant_analyzer._get_op_quantizers(op, sim)
+            assert not input_quantizers
+            assert not output_quantizers
+            assert not param_quantizers
 
     def test_perform_per_layer_analysis_by_enabling_quantizers(self):
         """ test perform per layer analysis by enabling quantizers """
