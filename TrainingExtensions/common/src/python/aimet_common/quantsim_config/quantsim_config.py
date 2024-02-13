@@ -565,7 +565,7 @@ def get_setting_type(setting_name: str) -> str:
     raise AssertionError(error_msg)
 
 
-def get_all_ops_in_neighborhood(op: Op, direction: str, neighborhood=None):
+def get_all_ops_in_neighborhood(op: Op, direction: str, neighborhood=None, split_type: str = "Split"):
     """
     Given an op and a direction, populate neighborhood dictionary with all ops adjacent to that op, and which direction
     they are adjacent in.  If a neighboring op has other connections in the same direction as the op we began with, ops
@@ -573,6 +573,7 @@ def get_all_ops_in_neighborhood(op: Op, direction: str, neighborhood=None):
     :param op: Op to find neighboring ops from
     :param direction: Direction to search for neighboring ops (will be 'input' or 'output')
     :param neighborhood: Dictionary mapping neighboring ops to the direction which they connect to op.
+    :param split_type: Type string of ConnectedGraph Split. By default, its value will be "Split"
     """
     if neighborhood is None:
         neighborhood = {}
@@ -583,18 +584,18 @@ def get_all_ops_in_neighborhood(op: Op, direction: str, neighborhood=None):
         for input_op in input_ops:
             if input_op not in neighborhood:
                 neighborhood[input_op] = 'output'
-                if input_op.type == 'Split':
+                if input_op.type == split_type:
                     # Neighborhood ops include input of split, as well as all other consumers of split
-                    get_all_ops_in_neighborhood(input_op, 'input', neighborhood)
-                    get_all_ops_in_neighborhood(input_op, 'output', neighborhood)
+                    get_all_ops_in_neighborhood(input_op, 'input', neighborhood, split_type)
+                    get_all_ops_in_neighborhood(input_op, 'output', neighborhood, split_type)
     elif op.output:
         output_ops = [consumer for consumer in op.output.consumers]
         for output_op in output_ops:
             if output_op not in neighborhood:
                 neighborhood[output_op] = 'input'
-                if output_op.type == 'Split':
+                if output_op.type == split_type:
                     # Neighborhood ops include all consumers of split
-                    get_all_ops_in_neighborhood(output_op, 'output', neighborhood)
+                    get_all_ops_in_neighborhood(output_op, 'output', neighborhood, split_type)
     return neighborhood
 
 

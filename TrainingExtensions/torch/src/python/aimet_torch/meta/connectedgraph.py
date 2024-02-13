@@ -2,7 +2,7 @@
 #
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -45,6 +45,7 @@ result of an operation. Furthermore the graph representation is bi-directional."
 from typing import Tuple, Union, List, Dict, Type, Optional
 import torch
 
+from aimet_common.connected_graph.connectedgraph_utils import CG_SPLIT
 from aimet_common.connected_graph.connectedgraph import ConnectedGraph as AimetCommonConnectedGraph
 from aimet_common.connected_graph.product import Product
 from aimet_common.connected_graph.operation import determine_preceding_op_input_product_index_in_multi_input_op
@@ -86,6 +87,7 @@ MULTI_INPUT_OPS_TO_PARSE = [elementwise_ops.Add, elementwise_ops.Multiply, eleme
 SKIP_LIST_FOR_SUBGRAPH_TRACE = (elementwise_ops.StridedSlice, elementwise_ops.GatherNd, elementwise_ops.ScatterND,
                                 elementwise_ops.CustomGather, elementwise_ops.DepthToSpaceDCRMode,
                                 elementwise_ops.RoiAlign, elementwise_ops.ChannelShuffle)
+
 
 # pylint: disable=too-many-lines
 # pylint: disable=protected-access
@@ -1090,14 +1092,14 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param op: Op to create split op after
         :return: Split op that was created
         """
-        split_name_parts = ['Split_', str(self._split_count)]
+        split_name_parts = [f"{CG_SPLIT}_", str(self._split_count)]
         split_name = ''.join(split_name_parts)
         self._split_count += 1
         split_dotted_name_parts = [self._model_name, split_name]
         split_dotted_name = '.'.join(split_dotted_name_parts)
         is_anonymous = True
         split_op = Op(name=split_name, dotted_name=split_dotted_name, output_shape=op.output_shape,
-                      is_anonymous=is_anonymous, op_type='Split', residing_module=None)
+                      is_anonymous=is_anonymous, op_type=CG_SPLIT, residing_module=None)
         self._ops[split_name] = split_op
         return split_op
 
@@ -1336,7 +1338,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
     def _get_ordered_ops(self):
         op_num_dict = {}
         for op in self.get_all_ops().values():
-            if op.type != 'Split':
+            if op.type != CG_SPLIT:
                 last_underscore_idx = op.name.rfind('_')
                 op_num = int(op.name[last_underscore_idx + 1:])
                 op_num_dict[op_num] = op

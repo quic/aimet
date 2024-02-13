@@ -2,7 +2,7 @@
 #
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019-2020, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -42,6 +42,8 @@ model. The InternalConnectivity and its derived classes encapsulate the internal
 from typing import List, Tuple
 from enum import Enum
 import abc
+
+from aimet_common.connected_graph.connectedgraph_utils import CG_SPLIT
 from aimet_common.connected_graph.operation import Op
 from aimet_common.utils import AimetLogger, api_channel_index_dict, ModelApi
 from aimet_common.winnow.winnow_utils import get_zero_positions_in_binary_mask, OpConnectivity, ConnectivityType, \
@@ -489,7 +491,10 @@ class Mask:
         self._output_channel_masks[index] = out_channel_mask
         new_mask = self._output_channel_masks[index]
         if original_mask != new_mask:
-            if self._op_type == 'Split':
+            # NOTE: aimet_pytorch uses "Split" to CG_SPLIT to distinguish with elementwise_ops.Split
+            #   After migrating to use CG_SPLIT across other frameworks, we can clean up below line
+            split_type = CG_SPLIT if self._model_api == ModelApi.pytorch else "Split"
+            if self._op_type == split_type:
                 logger.debug("For %s, for output mask index: %s mask changed from %s to %s", self._dotted_name, index,
                              get_zero_positions_in_binary_mask(original_mask), get_zero_positions_in_binary_mask(new_mask))
 

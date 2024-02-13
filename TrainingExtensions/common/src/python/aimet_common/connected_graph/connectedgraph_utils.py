@@ -41,6 +41,9 @@ from typing import List, Dict, Tuple, Set
 from aimet_common.connected_graph.connectedgraph import ConnectedGraph, get_ordered_ops
 from aimet_common.connected_graph.operation import Op
 
+# Op type of ConnectedGraph Split to distinguish from native split operation
+CG_SPLIT = "CG_Split"
+
 
 def get_all_input_ops(conn_graph: ConnectedGraph) -> List[Op]:
     """
