@@ -1598,12 +1598,14 @@ class QuantizationSimModel:
         return QuantSimConfigurator(self.model, self.connected_graph, config_file, default_output_bw,
                                     default_param_bw, default_data_type)
 
-    def load_and_freeze_encodings(self, encoding_path: str):
+    def load_and_freeze_encodings(self, encoding_path: str, ignore_when_quantizer_disabled: bool = False):
         """
         Functionality to set encodings (both activation and parameter) as per the given encodings JSON file and
         freeze them.
 
         :param encoding_path: JSON file path from where to load the encodings.
+        :param ignore_when_quantizer_disabled: ignore raising RuntimeError while setting encodings,
+        when quantizers are disabled.
         """
         with open(encoding_path, mode='r') as json_file:
             encodings_dict = json.load(json_file)
@@ -1616,7 +1618,7 @@ class QuantizationSimModel:
                 module.set_param_encoding(name, params_encoding)
                 module.freeze_param_encoding(name, params_encoding)
 
-                module.set_activation_encoding(name, activation_encoding)
+                module.set_activation_encoding(name, activation_encoding, ignore_when_quantizer_disabled=ignore_when_quantizer_disabled)
                 module.freeze_activation_encoding(name, activation_encoding)
 
     def set_and_freeze_param_encodings(self, encoding_path: str):
