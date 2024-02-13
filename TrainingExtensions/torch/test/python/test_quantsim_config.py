@@ -40,6 +40,7 @@ import json
 import os
 import torch
 import numpy as np
+from aimet_common.connected_graph.connectedgraph_utils import CG_SPLIT
 from aimet_common.defs import QuantScheme, QuantizationDataType, QuantDtypeBwInfo, SupportedKernelsAction
 from models.test_models import SingleResidual, QuantSimTinyModel, MultiInput, SingleResidualWithModuleAdd, \
     SingleResidualWithAvgPool
@@ -1133,7 +1134,7 @@ class TestQuantsimConfig:
         conn_graph = ConnectedGraph(model, random_inputs)
         starting_op = conn_graph.get_op_from_module_name('SingleResidual.conv3')
         add_op = [op for op in conn_graph.get_all_ops().values() if op.type == 'Add'][0]
-        neighborhood = get_all_ops_in_neighborhood(starting_op, 'output')
+        neighborhood = get_all_ops_in_neighborhood(starting_op, 'output', split_type=CG_SPLIT)
         assert len(neighborhood) == 2
         assert starting_op in neighborhood
         assert add_op in neighborhood

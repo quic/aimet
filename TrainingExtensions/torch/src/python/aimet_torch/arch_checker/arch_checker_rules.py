@@ -44,6 +44,7 @@ Pattern checks should follow :param connected_graph: :return list[ops]:
 from typing import List, Callable
 import torch
 
+from aimet_common.connected_graph.connectedgraph_utils import CG_SPLIT
 from aimet_common.graph_searcher import GraphSearcher
 from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.utils import AimetLogger
@@ -197,7 +198,7 @@ def _get_split_point_input(input_ops: List):
     """
     input_ops_list = []
     for op in input_ops:
-        if op.type == "Split":
+        if op.type == CG_SPLIT:
             op = op.input_ops[0]
         input_ops_list.append(op)
     return tuple(input_ops_list)

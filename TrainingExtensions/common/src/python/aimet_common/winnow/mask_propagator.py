@@ -40,6 +40,8 @@
 """ Contains functionality related  to all aspects of propagating the masks. """
 
 from typing import List, Union, Dict
+
+from aimet_common.connected_graph.connectedgraph_utils import CG_SPLIT
 from aimet_common.connected_graph.operation import Op, determine_preceding_op_input_product_index_in_multi_input_op, \
     determine_succeeding_op_output_product_index_in_multi_output_op
 from aimet_common.connected_graph.connectedgraph import ConnectedGraph
@@ -249,7 +251,7 @@ class MaskPropagator:
                 for num in range(len(ip_masks)):
                     ip_mask_zero_positions = [i for i in range(len(ip_masks[num])) if ip_masks[num][i] == 0]
                     # TODO: remove 'Add', 'Concat' when old CG is gone
-                    if (op.type in ('Add', 'Concat', 'Split', 'add', 'cat') and
+                    if (op.type in ('Add', 'Concat', 'Split', 'add', 'cat', CG_SPLIT) and
                             self._model_api == ModelApi.pytorch) or \
                             (op.type in ('Add', 'ConcatV2', 'branch') and self._model_api == ModelApi.tensorflow):
                         ip_mask_zero_positions_list.append(ip_mask_zero_positions)
@@ -262,7 +264,7 @@ class MaskPropagator:
                 for num in range(len(op_masks)):
                     op_mask_zero_positions = [i for i in range(len(op_masks[num])) if op_masks[num][i] == 0]
                     # TODO: remove 'Add', 'Concat' when old CG is gone
-                    if (op.type in ('Add', 'Concat', 'Split', 'add', 'cat') and
+                    if (op.type in ('Add', 'Concat', 'Split', 'add', 'cat', CG_SPLIT) and
                             self._model_api == ModelApi.pytorch) or \
                             (op.type in ('Add', 'ConcatV2', 'branch') and self._model_api == ModelApi.tensorflow):
                         op_mask_zero_positions_list.append(op_mask_zero_positions)
@@ -332,7 +334,7 @@ class MaskPropagator:
         input_product = op.inputs[0]
         input_op = input_product.producer
         # TODO: remove 'Add', 'Concat' when old CG is gone
-        if (input_op.type in ('Add', 'Concat', 'Split', 'add', 'cat') and self._model_api == ModelApi.pytorch) or \
+        if (input_op.type in ('Add', 'Concat', 'Split', 'add', 'cat', CG_SPLIT) and self._model_api == ModelApi.pytorch) or \
             (input_op.type in ('Add', 'ConcatV2', 'branch', 'Upsample', 'Downsample') and self._model_api ==
              ModelApi.tensorflow) or isinstance(self._op_to_mask_dict[input_op].internal_connectivity,
                                                 StopInternalConnectivity):
@@ -434,7 +436,7 @@ class MaskPropagator:
                         connection_mask = input_producer_out_masks[product_consumer_index] and \
                                           concat_in_masks[concat_input_op_index]
 
-                        if input_product.producer.type in 'Split':
+                        if input_product.producer.type in 'Split' or input_product.producer.type in CG_SPLIT:
                             logger.debug("Not propagating masks from Concat: %s to Split: %s", concat_op.dotted_name,
                                          input_product.producer.dotted_name)
                             mask_length = len(concat_in_masks[concat_input_op_index])

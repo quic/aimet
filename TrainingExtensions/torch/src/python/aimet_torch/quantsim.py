@@ -51,6 +51,8 @@ from packaging import version
 
 import aimet_common
 import aimet_common.libpymo as libpymo
+
+from aimet_common.connected_graph.connectedgraph_utils import CG_SPLIT
 from aimet_common.utils import AimetLogger, save_json_yaml, log_with_error_and_assert_if_false
 from aimet_common.defs import QuantScheme, QuantizationDataType, SupportedKernelsAction, QuantDtypeBwInfo
 from aimet_common.quantsim import encoding_version, validate_quantsim_inputs, extract_global_quantizer_args
@@ -866,7 +868,7 @@ class QuantizationSimModel:
             if succeeding_op.get_module():
                 downstream_modules.append(succeeding_op.get_module())
 
-            elif succeeding_op.type == 'Split':
+            elif succeeding_op.type == CG_SPLIT:
                 downstream_modules += QuantizationSimModel._find_next_downstream_modules(succeeding_op)
 
         return downstream_modules
