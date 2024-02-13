@@ -365,6 +365,8 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
 
         :param module_name: name of module
         :param activation_encodings: activation encodings dictionary
+        :param ignore_when_quantizer_disabled: ignore raising RuntimeError while setting encodings,
+        when quantizers are disabled.
         """
         _logger.info("Setting quantization encodings for activation quantizers of: %s", module_name)
 
