@@ -348,7 +348,8 @@ class QuantizationSimModel(tf.keras.Model):
         Get encodings dict containing all activation and parameter encodings info in the model
         :return: Dictionary containing all activation and parameter encodings info in the model
         """
-        # pylint: disable=protected-access
+        # pylint: disable=protected-access, too-many-branches
+        model_input_tensor_names = [inp.name for inp in self.model.inputs]
         activation_encodings = {}
         param_encodings = {}
         for wrapper in self.quant_wrappers():
@@ -361,6 +362,8 @@ class QuantizationSimModel(tf.keras.Model):
                     else:
                         tensor_name = wrapper._layer_to_wrap.inbound_nodes[0].keras_inputs[idx].name
                     encoding_dict = self._get_encoding_dict_for_quantizer(input_quantizer)
+                    if tensor_name in model_input_tensor_names:
+                        tensor_name += ":0"
                     activation_encodings[tensor_name] = encoding_dict
             for idx, param_quantizer in enumerate(wrapper.param_quantizers):
                 if param_quantizer.is_encoding_valid() or param_quantizer.data_type == QuantizationDataType.float:
