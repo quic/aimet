@@ -481,10 +481,10 @@ class TestPercentileEncodingAnalyzer():
     @pytest.mark.parametrize("percentile_value", [-1, 49, 5, 101])
     def test_invalid_percentile_value(self, percentile_value):
         with pytest.raises(ValueError):
-            PercentileEncodingAnalyzer((1,), percentile_value, 3)
+            PercentileEncodingAnalyzer((1,), percentile = percentile_value, num_bins = 3)
     
     def test_compute_encodings_asymmetric_normalized(self):
-        encoding_analyzer = PercentileEncodingAnalyzer((1,), 99, 3)
+        encoding_analyzer = PercentileEncodingAnalyzer((1,), percentile = 99, num_bins = 3)
         mean = std_dev = 2
         input_tensor = np.random.normal(mean, std_dev, size=(100000))
         encoding_analyzer.update_stats(torch.from_numpy(input_tensor))
@@ -496,7 +496,7 @@ class TestPercentileEncodingAnalyzer():
         assert asymmetric_max < mean + std_dev * 2.5  
     
     def test_compute_encodings_asymmetric_sequential(self):
-        encoding_analyzer = PercentileEncodingAnalyzer((1,), 99, 500)
+        encoding_analyzer = PercentileEncodingAnalyzer((1,), percentile = 99, num_bins = 500)
         input_tensor =  torch.arange(start=0, end=1001, step=1, dtype=torch.float)
         encoding_analyzer.update_stats(input_tensor)
 
@@ -507,7 +507,7 @@ class TestPercentileEncodingAnalyzer():
         assert asymmetric_max == 990.0
         
     def test_compute_encodings_signed_symmetric_normalized(self):
-        encoding_analyzer = PercentileEncodingAnalyzer((1,), 99, 3)
+        encoding_analyzer = PercentileEncodingAnalyzer((1,), percentile = 99, num_bins = 3)
         mean = std_dev = 2
         input_tensor = np.random.normal(mean, std_dev, size=(10000))
         encoding_analyzer.update_stats(torch.from_numpy(input_tensor))
@@ -518,7 +518,7 @@ class TestPercentileEncodingAnalyzer():
         assert symmetric_max < largest_absolute_value
     
     def test_compute_encodings_signed_symmetric_sequential(self):
-        encoding_analyzer = PercentileEncodingAnalyzer((1,), 99, 500)
+        encoding_analyzer = PercentileEncodingAnalyzer((1,), percentile = 99, num_bins = 500)
         input_tensor =  torch.arange(start=0, end=1001, step=1, dtype=torch.float)
         encoding_analyzer.update_stats(input_tensor)
         
@@ -527,7 +527,7 @@ class TestPercentileEncodingAnalyzer():
         assert symmetric_max == 990.0
     
     def test_compute_encodings_100_percentile(self):
-        encoding_analyzer = PercentileEncodingAnalyzer((1,), 100, 3)
+        encoding_analyzer = PercentileEncodingAnalyzer((1,), percentile = 100, num_bins = 3)
         mean = std_dev = 2
         input_tensor = np.random.normal(mean, std_dev, size=(10000))
         encoding_analyzer.update_stats(torch.from_numpy(input_tensor))
@@ -543,7 +543,7 @@ class TestPercentileEncodingAnalyzer():
 
     
     def test_compute_encodings_50_percentile(self):
-        encoding_analyzer = PercentileEncodingAnalyzer((1,), 50, 3)
+        encoding_analyzer = PercentileEncodingAnalyzer((1,), percentile = 50, num_bins = 3)
         input_tensor =  torch.arange(start=0, end=1001, step=1, dtype=torch.float)
         encoding_analyzer.update_stats(input_tensor)
         bw = 8

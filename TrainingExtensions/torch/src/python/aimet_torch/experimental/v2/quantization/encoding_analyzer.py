@@ -341,7 +341,7 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
     """
     Encoding Analyzer for Percentile calibration technique
     """
-    def __init__(self, shape: tuple, percentile: float, num_bins: int = 2048):
+    def __init__(self, shape: tuple, num_bins: int = 2048, percentile: float = 100):
         if num_bins <= 0:
             raise ValueError('Number of bins cannot be less than or equal to 0.')
 
