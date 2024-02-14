@@ -67,6 +67,7 @@ class Layer:
     Holds attributes for a given layer. This is a training-framework-agnostic abstraction for a layer
     """
 
+    # TODO Remove the default None value for input_shape and retrieve this info from the caller API.
     def __init__(self, module, name, weight_shape, output_shape, input_shape=None):
         """
         Constructor
