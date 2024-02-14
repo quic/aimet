@@ -65,7 +65,7 @@ use_cuda = eval(sys.argv[2]) # pylint: disable=eval-used
 cpu_output_files = os.path.join('./', 'data', 'mnist_trained_on_CPU.pth')
 gpu_output_files = os.path.join('./', 'data', 'mnist_trained_on_GPU.pth')
 
-if os.path.isfile(cpu_output_files) or os.path.isfile(gpu_output_files):
+if (not use_cuda and os.path.isfile(cpu_output_files)) or (use_cuda and os.path.isfile(gpu_output_files)):
     logger.info('Mnist model .pth generation not needed')
 else:
     torch.manual_seed(1)
