@@ -158,12 +158,14 @@ foreach(package ${package_name_list})
     )
   execute_process(
     # Delete binaries from aimet_common which should not be part of the package
-    COMMAND ${CMAKE_COMMAND} -E rm -rf "${pkg_common_staging_path}/bin"
+    COMMAND ${CMAKE_COMMAND} -E rm -rf "${pkg_deps_staging_path}"
   )
-  # convert file names to the absolute paths by preprnding corresponded directory
+  # convert file names to the absolute paths by prepending corresponded directory
   list(TRANSFORM deps_name_list_${package} PREPEND "${src_deps_dir}/${variant_name}/")
+
+  # Copy the dependency and other files into the staging subfolder
+  execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory "${pkg_deps_staging_path}")
   execute_process(
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${pkg_deps_staging_path}"
     COMMAND ${CMAKE_COMMAND} -E copy 
       ${deps_name_list_${package}}
       "${src_packaging_dir}/INSTALL.txt"
@@ -172,8 +174,8 @@ foreach(package ${package_name_list})
   )
 
   if(EXISTS "${src_packaging_dir}/LICENSE.pdf")
-    file(COPY "${src_packaging_dir}/LICENSE.pdf" DESTINATION ${build_packaging_dir}/)
     # optional, might not be present on host
+    file(COPY "${src_packaging_dir}/LICENSE.pdf" DESTINATION ${build_packaging_dir}/)
     execute_process(COMMAND ${CMAKE_COMMAND} -E copy "${src_packaging_dir}/LICENSE.pdf" "${pkg_deps_staging_path}/")
   endif()
 

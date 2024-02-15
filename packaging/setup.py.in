@@ -39,15 +39,15 @@
 
 import os
 import sys
+import shlex
+import subprocess
 
 from pathlib import Path
 from setuptools import find_packages, find_namespace_packages, setup
 from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
 
 package_name = "aimet_@package@"
-common_package_name ="aimet_common"
-package_url_base = "@REMOTE_URL@/releases/download/@SW_VERSION@"
-
+common_package_name = "aimet_common"
 
 class bdist_wheel_aimet(_bdist_wheel):
     '''
@@ -235,6 +235,63 @@ def get_all_dependency_urls(aimet_package_name):
 
     return dependency_url_list
 
+
+def get_package_url():
+    '''
+    Return the package URL
+    '''
+    remote_url_string="@REMOTE_URL@"
+    if remote_url_string:
+        # For now, we continue to support the REMOTE_URL if set
+        package_url_base = "@REMOTE_URL@/releases/download/@SW_VERSION@"
+    else:
+        # This is the package homepage
+        package_url_base = "https://quic.github.io/aimet-pages/index.html"
+
+    return package_url_base
+
+
+def get_package_version(cuda_variant = False):
+    '''
+    Return the package version (append variant to original value of SW_VERSION)
+    '''
+    sw_version = "@SW_VERSION@"
+    package_name = "@package@"
+
+    # For CPU variants, just append "cpu"
+    variant_string = "cpu"
+    # For GPU variants, need to determine CUDA toolkit in the environment
+    if cuda_variant is True:
+        if "torch" in package_name:
+            # For torch variants, obtain cuda toolkit version from installed torch package
+            import torch
+            cuda_toolkit_ver = torch.version.cuda.replace(".", "")
+        else:
+            # For TF and ONNX variants, obtain cuda toolkit version by running the "nvcc" command
+            # and parsing the output
+            nvcc_cmd_str = "nvcc --version"
+            nvcc_cmd_str_list = shlex.split(nvcc_cmd_str)
+            nvcc_output = subprocess.run(nvcc_cmd_str_list, stdout=subprocess.PIPE).stdout.decode('utf-8')
+
+            # Now extract the version X.Y from the line of the format "... release X.Y ..."
+            import re
+            matchObj = re.search(r'release ([0-9]+\.[0-9]+)(.*)', nvcc_output)
+            print("matchObj = %s" % str(matchObj))
+            if matchObj: 
+                cuda_toolkit_ver = matchObj.group(1).upper().replace(".", "")
+                print( "CUDA version: %s" % cuda_toolkit_ver )
+            else:
+                #NOTE: This line has no effect and always returns PASS
+                sys.exit("Could NOT find CUDA toolkit version for GPU variant")
+
+        # Now append the cuda variant per standard convention <version>+cu<X.Y>
+        variant_string = "cu" + cuda_toolkit_ver
+
+    # Append the variant string to the original software version that was passed in
+    package_version = sw_version + "." + variant_string
+    return package_version
+
+
 # Obtain list of package and sub-packages (including common dependency ones)
 packages_found = get_package_list(package_name)
 
@@ -250,13 +307,19 @@ required_common_package_data = get_required_package_data(common_package_name)
 # Obtain non-PyPi dependency URLs (if any) for common package
 dependency_url_list.extend(get_all_dependency_urls(common_package_name))
 
+# Obtain the package home page URL
+package_url_base = get_package_url()
+
+cuda_variant = False
 if "--gpu" in sys.argv:
     sys.argv.remove("--gpu")
+    cuda_variant = True
+package_version = get_package_version(cuda_variant)
 
 
 setup(
     name='aimet-@package@',
-    version='@SW_VERSION@',
+    version=package_version,
     author='Qualcomm Innovation Center, Inc.',
     author_email='aimet.os@quicinc.com',
     packages=packages_found,

@@ -303,29 +303,35 @@ if(NOT DEFINED AIMET_PACKAGE_PATH)
   message(STATUS "Set AIMET_PACKAGE_PATH = ${AIMET_PACKAGE_PATH}")
 endif(NOT DEFINED AIMET_PACKAGE_PATH)
 
-execute_process(COMMAND git config --get remote.origin.url WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} OUTPUT_VARIABLE remote_url)
-if(NOT remote_url STREQUAL "")
-  string(REGEX REPLACE "\n$" "" remote_url "${remote_url}")
-  # Remove the ".git" suffix from the remote repo URL
-  string(REGEX REPLACE "\\.[^.]*$" "" remote_url ${remote_url})
-  string(REGEX REPLACE ".*@" "" remote_post ${remote_url})
-  set(remote_url "https://${remote_post}")
-  message(STATUS "Repo Remote URL = ${remote_url}")
-  set(remote_url_cfg "\"${remote_url}\"")
-  set(sw_version_cfg "\"${SW_VERSION}\"")
+set(remote_url_cmake_opt "-DREMOTE_URL=\"\"")
+if (PIP_INDEX EQUAL "reporelease")
+  execute_process(COMMAND git config --get remote.origin.url WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} OUTPUT_VARIABLE remote_url)
+  if(NOT remote_url STREQUAL "")
+    string(REGEX REPLACE "\n$" "" remote_url "${remote_url}")
+    # Remove the ".git" suffix from the remote repo URL
+    string(REGEX REPLACE "\\.[^.]*$" "" remote_url ${remote_url})
+    string(REGEX REPLACE ".*@" "" remote_post ${remote_url})
+    set(remote_url "https://${remote_post}")
+    message(STATUS "Repo Remote URL = ${remote_url}")
+    set(remote_url_cfg "\"${remote_url}\"")
+    set(sw_version_cfg "\"${SW_VERSION}\"")
 
-  file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/packaging/setup_cfg.py" "version=${sw_version_cfg}\n")
-  file(APPEND "${CMAKE_CURRENT_SOURCE_DIR}/packaging/setup_cfg.py" "remote_url=${remote_url_cfg}")
+    file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/packaging/setup_cfg.py" "version=${sw_version_cfg}\n")
+    file(APPEND "${CMAKE_CURRENT_SOURCE_DIR}/packaging/setup_cfg.py" "remote_url=${remote_url_cfg}")
 
-  add_custom_target(packageaimet
-    # Run the install target first
-    COMMAND "${CMAKE_COMMAND}" --build . --target install
-    # Now run the packaging target to generate wheel files
-    COMMAND ${CMAKE_COMMAND} -DSW_VERSION=${SW_VERSION} -DREMOTE_URL=${remote_url} -DPYTHON3_EXECUTABLE=${Python3_EXECUTABLE} -DAIMET_PACKAGE_PATH=${AIMET_PACKAGE_PATH} -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -DENABLE_CUDA=${ENABLE_CUDA} -DENABLE_TENSORFLOW=${ENABLE_TENSORFLOW} -DENABLE_TORCH=${ENABLE_TORCH} -DENABLE_ONNX=${ENABLE_ONNX} -DPATCHELF_EXE=${PATCHELF_EXE} -P ${CMAKE_CURRENT_SOURCE_DIR}/packaging/package_aimet.cmake
-  )
-else()
-  message(STATUS "Repo Remote URL is blank. Skipping packageaimet target")
+    set(remote_url_cmake_opt "-DREMOTE_URL=${remote_url}")
+  else()
+    message(FATAL_ERROR "Repo Remote URL is blank. Unable to create AIMET wheel package")
+  endif()
 endif()
+
+add_custom_target(packageaimet
+  # Run the install target first
+  COMMAND "${CMAKE_COMMAND}" --build . --target install
+
+  # Now run the packaging target to generate wheel files
+  COMMAND ${CMAKE_COMMAND} -DSW_VERSION=${SW_VERSION} ${remote_url_cmake_opt} -DPYTHON3_EXECUTABLE=${Python3_EXECUTABLE} -DAIMET_PACKAGE_PATH=${AIMET_PACKAGE_PATH} -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -DENABLE_CUDA=${ENABLE_CUDA} -DENABLE_TENSORFLOW=${ENABLE_TENSORFLOW} -DENABLE_TORCH=${ENABLE_TORCH} -DENABLE_ONNX=${ENABLE_ONNX} -DPATCHELF_EXE=${PATCHELF_EXE} -P ${CMAKE_CURRENT_SOURCE_DIR}/packaging/package_aimet.cmake
+)
 
 add_subdirectory(ThirdParty)
 
@@ -361,3 +367,30 @@ set(CPACK_SYSTEM_NAME "build-0.0.0.0")
 set(CPACK_GENERATOR "TGZ")
 set(CPACK_INSTALLED_DIRECTORIES ${AIMET_INSTALL_DIR} .)
 include(CPack)
+
+# -------------------------------
+# Upload pip packages
+# -------------------------------
+
+# Check the pip config file path and set it to a default value (if not set)
+if(NOT DEFINED PIP_CONFIG_FILE)
+  set(PIP_CONFIG_FILE "None")
+endif()
+
+# Check the pip index name and set it to a default value (if not set)
+if(NOT DEFINED PIP_INDEX)
+  set(PIP_INDEX "None")
+endif()
+
+# Check the pip certificate path and set it to a default value (if not set)
+if(NOT DEFINED PIP_CERT_FILE)
+  set(PIP_CERT_FILE "None")
+endif()
+
+#TODO For some reason, this package upload target does NOT work as expected and needs to be debugged
+add_custom_target(upload
+    # Now run the packaging target to upload the pip package
+    COMMAND ${CMAKE_COMMAND} -DPIP_CONFIG_FILE=${PIP_CONFIG_FILE} -DPIP_INDEX=${PIP_INDEX} -DPIP_CERT_FILE=${PIP_CERT_FILE} -P ${CMAKE_CURRENT_SOURCE_DIR}/packaging/upload_aimet.cmake
+)
+
+add_dependencies(upload packageaimet)
