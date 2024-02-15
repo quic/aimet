@@ -41,7 +41,7 @@ from decimal import Decimal
 import torch
 import torch.nn as nn
 
-from aimet_common import cost_calculator as cc
+from aimet_common import cost_calculator as common_cost_calculator
 from aimet_common.defs import CostMetric, LayerCompRatioPair
 from aimet_common.utils import AimetLogger
 from aimet_torch import elementwise_ops
@@ -55,6 +55,8 @@ from aimet_torch.utils import (
     create_fake_data_loader,
     get_device,
 )
+from aimet_torch import cost_calculator as pt_cost_calculator
+
 from models import mnist_torch_model, test_models
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
@@ -95,46 +97,76 @@ class TestTrainingExtensionsCostCalculator(unittest.TestCase):
 
         conv1 = nn.Conv2d(1, 32, kernel_size=5)
         layer1 = Layer(conv1, "conv1", (1, 32, 28, 28))
-        cost1 = cc.CostCalculator.compute_layer_cost(layer1)
+        cost1 = common_cost_calculator.CostCalculator.compute_layer_cost(layer1)
 
         self.assertEqual(32 * 1 * 5 * 5, cost1.memory)
         self.assertEqual(32 * 1 * 5 * 5 * 28 * 28, cost1.mac)
 
         conv2 = nn.Conv2d(32, 64, kernel_size=5)
         layer2 = Layer(conv2, "conv2", (1, 64, 14, 14))
-        cost2 = cc.CostCalculator.compute_layer_cost(layer2)
+        cost2 = common_cost_calculator.CostCalculator.compute_layer_cost(layer2)
 
         self.assertEqual(64 * 32 * 5 * 5, cost2.memory)
         self.assertEqual(64 * 32 * 5 * 5 * 14 * 14, cost2.mac)
 
         conv2 = nn.Conv2d(32, 32, kernel_size=5, groups=32)
         layer2 = Layer(conv2, "conv2", (1, 32, 14, 14))
-        cost2 = cc.CostCalculator.compute_layer_cost(layer2)
+        cost2 = common_cost_calculator.CostCalculator.compute_layer_cost(layer2)
+
+        self.assertEqual(32 * 1 * 5 * 5, cost2.memory)
+        self.assertEqual(32 * 1 * 5 * 5 * 14 * 14, cost2.mac)
+
+
+    def test_compute_layer_cost_pt(self):
+        logger.debug(self.id())
+
+        conv1 = nn.Conv2d(1, 32, kernel_size=5)
+        layer1 = Layer(conv1, "conv1", (1, 32, 28, 28))
+        cost1 = pt_cost_calculator.CostCalculator.compute_layer_cost(layer1)
+
+        self.assertEqual(32 * 1 * 5 * 5, cost1.memory)
+        self.assertEqual(32 * 1 * 5 * 5 * 28 * 28, cost1.mac)
+
+        conv2 = nn.Conv2d(32, 64, kernel_size=5)
+        layer2 = Layer(conv2, "conv2", (1, 64, 14, 14))
+        cost2 = pt_cost_calculator.CostCalculator.compute_layer_cost(layer2)
+
+        self.assertEqual(64 * 32 * 5 * 5, cost2.memory)
+        self.assertEqual(64 * 32 * 5 * 5 * 14 * 14, cost2.mac)
+
+        conv2 = nn.Conv2d(32, 32, kernel_size=5, groups=32)
+        layer2 = Layer(conv2, "conv2", (1, 32, 14, 14))
+        cost2 = pt_cost_calculator.CostCalculator.compute_layer_cost(layer2)
 
         self.assertEqual(32 * 1 * 5 * 5, cost2.memory)
         self.assertEqual(32 * 1 * 5 * 5 * 14 * 14, cost2.mac)
 
         linear1 = nn.Linear(10, 15, bias=False)
         layer3 = Layer(linear1, "linear1", (32, 10, 10))
-        cost3 = cc.CostCalculator.compute_layer_cost(layer3)
+        cost3 = pt_cost_calculator.CostCalculator.compute_layer_cost(layer3)
 
         self.assertEqual(15 * 10 * 1 * 1 * 10 * 10, cost3.mac)
         self.assertEqual(15 * 10, cost3.memory)
 
-
         sigmoid1 = nn.Sigmoid()
         layer4 = Layer(sigmoid1, "sigmoid1", (32, 10, 15), (32, 10, 15))
-        cost4 = cc.CostCalculator.compute_layer_cost(layer4)
+        cost4 = pt_cost_calculator.CostCalculator.compute_layer_cost(layer4)
 
         self.assertEqual(32 * 10 * 15, cost4.mac)
         self.assertEqual(32 * 10 * 15, cost4.memory)
 
         matmul1 = elementwise_ops.MatMul()
         layer5 = Layer(matmul1, "matmul1", (32, 10, 15), [(32, 10, 15), (32, 10, 15)])
-        cost5 = cc.CostCalculator.compute_layer_cost(layer5)
+        cost5 = pt_cost_calculator.CostCalculator.compute_layer_cost(layer5)
 
         self.assertEqual(32 * 10 * 15, cost5.mac)
         self.assertEqual(32 * 10 * 15, cost5.memory)
+
+        layer6 = Layer(torch.nn.AvgPool2d(4), "AvgPool1", (32, 10, 15), (32, 10, 15))
+        cost6 = pt_cost_calculator.CostCalculator.compute_layer_cost(layer6)
+
+        self.assertEqual(32 * 10 * 15, cost6.mac)
+        self.assertEqual(32 * 10 * 15, cost6.memory)
 
 
     def test_total_model_cost(self):
@@ -146,7 +178,7 @@ class TestTrainingExtensionsCostCalculator(unittest.TestCase):
         dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         layer_db = LayerDatabase(model, dummy_input)
 
-        cost_calc = cc.CostCalculator()
+        cost_calc = common_cost_calculator.CostCalculator()
         network_cost = cost_calc.compute_model_cost(layer_db)
 
         self.assertEqual(800 + 51200 + 3211264 + 10240, network_cost.memory)
@@ -185,7 +217,7 @@ class TestTrainingExtensionsCostCalculator(unittest.TestCase):
 
         standard_grouped_conv_db = LayerDatabase(standard_grouped_conv_model, standard_module_inputs)
         custom_grouped_conv_db = LayerDatabase(custom_grouped_conv_model, custom_module_inputs)
-        cost_calc = cc.CostCalculator()
+        cost_calc = common_cost_calculator.CostCalculator()
 
         standard_grouped_conv_cost = cost_calc.compute_model_cost(standard_grouped_conv_db)
         custom_grouped_conv_cost = cost_calc.compute_model_cost(custom_grouped_conv_db)
@@ -199,24 +231,24 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
         conv = nn.Conv2d(32, 64, kernel_size=5, padding=(2, 2))
         layer = Layer(conv, "conv", output_shape=[1, 64, 28, 28])
 
-        self.assertEqual(32 * 5, cc.SpatialSvdCostCalculator.calculate_max_rank(layer))
+        self.assertEqual(32 * 5, common_cost_calculator.SpatialSvdCostCalculator.calculate_max_rank(layer))
 
         comp_ratios_to_check = [0.8, 0.75, 0.5, 0.25, 0.125]
 
-        original_cost = cc.CostCalculator.compute_layer_cost(layer)
+        original_cost = common_cost_calculator.CostCalculator.compute_layer_cost(layer)
 
         for comp_ratio in comp_ratios_to_check:
 
-            rank = cc.SpatialSvdCostCalculator.calculate_rank_given_comp_ratio(layer, comp_ratio, CostMetric.mac)
+            rank = common_cost_calculator.SpatialSvdCostCalculator.calculate_rank_given_comp_ratio(layer, comp_ratio, CostMetric.mac)
             print('Rank = {}, for compression_ratio={}'.format(rank, comp_ratio))
-            compressed_cost = cc.SpatialSvdCostCalculator.calculate_cost_given_rank(layer, rank)
+            compressed_cost = common_cost_calculator.SpatialSvdCostCalculator.calculate_cost_given_rank(layer, rank)
 
             self.assertTrue(math.isclose(compressed_cost.mac/original_cost.mac, comp_ratio, abs_tol=0.01))
 
         # Higher level API
         for comp_ratio in comp_ratios_to_check:
 
-            compressed_cost = cc.SpatialSvdCostCalculator.calculate_per_layer_compressed_cost(layer, comp_ratio,
+            compressed_cost = common_cost_calculator.SpatialSvdCostCalculator.calculate_per_layer_compressed_cost(layer, comp_ratio,
                                                                                               CostMetric.mac)
 
             self.assertTrue(math.isclose(compressed_cost.mac/original_cost.mac, comp_ratio, abs_tol=0.01))
@@ -231,24 +263,24 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
 
         layer = layer_db.find_layer_by_module(linear)
 
-        self.assertEqual(128, cc.SpatialSvdCostCalculator.calculate_max_rank(layer))
+        self.assertEqual(128, common_cost_calculator.SpatialSvdCostCalculator.calculate_max_rank(layer))
 
         comp_ratios_to_check = [1.0, 0.8, 0.75, 0.5, 0.25, 0.125]
 
-        original_cost = cc.CostCalculator.compute_layer_cost(layer)
+        original_cost = common_cost_calculator.CostCalculator.compute_layer_cost(layer)
         self.assertEqual(128 * 256, original_cost.mac)
         self.assertEqual(128 * 256, original_cost.memory)
 
         for comp_ratio in comp_ratios_to_check:
-            rank = cc.SpatialSvdCostCalculator.calculate_rank_given_comp_ratio(layer, comp_ratio, CostMetric.mac)
+            rank = common_cost_calculator.SpatialSvdCostCalculator.calculate_rank_given_comp_ratio(layer, comp_ratio, CostMetric.mac)
             print('Rank = {}, for compression_ratio={}'.format(rank, comp_ratio))
-            compressed_cost = cc.SpatialSvdCostCalculator.calculate_cost_given_rank(layer, rank)
+            compressed_cost = common_cost_calculator.SpatialSvdCostCalculator.calculate_cost_given_rank(layer, rank)
 
             self.assertTrue(math.isclose(compressed_cost.mac / original_cost.mac, comp_ratio, abs_tol=0.01))
 
         # Higher level API
         for comp_ratio in comp_ratios_to_check:
-            compressed_cost = cc.SpatialSvdCostCalculator.calculate_per_layer_compressed_cost(layer, comp_ratio,
+            compressed_cost = common_cost_calculator.SpatialSvdCostCalculator.calculate_per_layer_compressed_cost(layer, comp_ratio,
                                                                                               CostMetric.mac)
 
             self.assertTrue(math.isclose(compressed_cost.mac / original_cost.mac, comp_ratio, abs_tol=0.01))
@@ -258,8 +290,8 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
         conv = nn.Conv2d(32, 64, kernel_size=5, padding=(2, 2), stride=2)
         layer = Layer(conv, "conv", output_shape=[1, 64, 14, 14])
 
-        original_cost = cc.CostCalculator.compute_layer_cost(layer)
-        compressed_cost = cc.SpatialSvdCostCalculator.calculate_cost_given_rank(layer, 40)
+        original_cost = common_cost_calculator.CostCalculator.compute_layer_cost(layer)
+        compressed_cost = common_cost_calculator.SpatialSvdCostCalculator.calculate_cost_given_rank(layer, 40)
 
         self.assertEqual(10035200, original_cost.mac)
         self.assertEqual(5017600, compressed_cost.mac)
@@ -275,7 +307,7 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
         dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         layer_db = LayerDatabase(model, dummy_input)
 
-        model_cost = cc.SpatialSvdCostCalculator.compute_model_cost(layer_db)
+        model_cost = common_cost_calculator.SpatialSvdCostCalculator.compute_model_cost(layer_db)
         self.assertEqual(627200 + 10035200 + 3211264 + 10240, model_cost.mac)
 
         # Compress all layers by 50%
@@ -286,7 +318,7 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
         for layer in layer_db:
             layer_ratio_list.append(LayerCompRatioPair(layer, Decimal(0.5)))
 
-        compressed_cost = cc.SpatialSvdCostCalculator.calculate_compressed_cost(layer_db,
+        compressed_cost = common_cost_calculator.SpatialSvdCostCalculator.calculate_compressed_cost(layer_db,
                                                                                 layer_ratio_list, CostMetric.mac)
         self.assertEqual(5244960
                          + (3136 * 385 + 385 * 1024)
@@ -309,7 +341,7 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
                            (layer_db.find_layer_by_module(model.fc1), 385),
                            (layer_db.find_layer_by_module(model.fc2), 4)]
 
-        compressed_cost = cc.SpatialSvdCostCalculator.calculate_compressed_cost_given_ranks(layer_db,
+        compressed_cost = common_cost_calculator.SpatialSvdCostCalculator.calculate_compressed_cost_given_ranks(layer_db,
                                                                                             layer_rank_list)
         self.assertEqual(5244960
                          + (3136 * 385 + 385 * 1024)
@@ -322,7 +354,7 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
                            (layer_db.find_layer_by_module(model.fc1), 385),
                            (layer_db.find_layer_by_module(model.fc2), None)]
 
-        compressed_cost = cc.SpatialSvdCostCalculator.calculate_compressed_cost_given_ranks(layer_db,
+        compressed_cost = common_cost_calculator.SpatialSvdCostCalculator.calculate_compressed_cost_given_ranks(layer_db,
                                                                                             layer_rank_list)
         self.assertEqual(5244960
                          + (3136 * 385 + 385 * 1024)
@@ -337,17 +369,17 @@ class TestTrainingExtensionsWeightSvdCostCalculator(unittest.TestCase):
         conv = nn.Conv2d(32, 64, kernel_size=5, padding=(2, 2))
         layer = Layer(conv, "conv", output_shape=[1, 64, 28, 28])
 
-        self.assertEqual(32, cc.WeightSvdCostCalculator.calculate_max_rank(layer))
+        self.assertEqual(32, common_cost_calculator.WeightSvdCostCalculator.calculate_max_rank(layer))
 
         comp_ratios_to_check = [0.8, 0.75, 0.5, 0.25, 0.125]
 
-        original_cost = cc.CostCalculator.compute_layer_cost(layer)
+        original_cost = common_cost_calculator.CostCalculator.compute_layer_cost(layer)
 
         for comp_ratio in comp_ratios_to_check:
 
-            rank = cc.WeightSvdCostCalculator.calculate_rank_given_comp_ratio(layer, comp_ratio, CostMetric.mac)
+            rank = common_cost_calculator.WeightSvdCostCalculator.calculate_rank_given_comp_ratio(layer, comp_ratio, CostMetric.mac)
             print('Rank = {}, for compression_ratio={}'.format(rank, comp_ratio))
-            compressed_cost = cc.WeightSvdCostCalculator.calculate_cost_given_rank(layer, rank)
+            compressed_cost = common_cost_calculator.WeightSvdCostCalculator.calculate_cost_given_rank(layer, rank)
             print('Compressed cost={}, compression_ratio={}'.format(compressed_cost,
                                                                     compressed_cost.mac/original_cost.mac))
 
@@ -356,7 +388,7 @@ class TestTrainingExtensionsWeightSvdCostCalculator(unittest.TestCase):
         # Higher level API
         for comp_ratio in comp_ratios_to_check:
 
-            compressed_cost = cc.WeightSvdCostCalculator.calculate_per_layer_compressed_cost(layer, comp_ratio,
+            compressed_cost = common_cost_calculator.WeightSvdCostCalculator.calculate_per_layer_compressed_cost(layer, comp_ratio,
                                                                                              CostMetric.mac)
 
             self.assertTrue(math.isclose(compressed_cost.mac/original_cost.mac, comp_ratio, abs_tol=0.03))
@@ -381,7 +413,7 @@ class TestTrainingExtensionsWeightSvdCostCalculator(unittest.TestCase):
             else:
                 layer_ratio_list.append(LayerCompRatioPair(layer, Decimal('0.5')))
 
-        compressed_cost = cc.WeightSvdCostCalculator.calculate_compressed_cost(layer_db,
+        compressed_cost = common_cost_calculator.WeightSvdCostCalculator.calculate_compressed_cost(layer_db,
                                                                                layer_ratio_list, CostMetric.mac)
 
         self.assertEqual(7031800, compressed_cost.mac)
