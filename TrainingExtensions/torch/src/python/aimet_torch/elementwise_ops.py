@@ -494,3 +494,13 @@ class Expand(torch.nn.Module):
         Forward-pass routine for Expand op
         """
         return tensor.expand(*args)
+
+
+class DynamicLinear(torch.nn.Module):
+    """Custom module for Dynamic Linear / FullyConnected Op"""
+    # pylint:disable=no-self-use
+    def forward(self, x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor = None) -> torch.Tensor:
+        """
+        Forward-pass routine for Dynamic Linear Op
+        """
+        return torch.nn.functional.linear(x, weight, bias)
