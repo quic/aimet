@@ -67,18 +67,21 @@ class Layer:
     Holds attributes for a given layer. This is a training-framework-agnostic abstraction for a layer
     """
 
-    def __init__(self, module, name, weight_shape, output_shape):
+    # TODO Remove the default None value for input_shape and retrieve this info from the caller API.
+    def __init__(self, module, name, weight_shape, output_shape, input_shape=None):
         """
         Constructor
         :param module: Reference to the layer
         :param name: Unique name of the layer
         :param weight_shape: Shape of the weight tensor
         :param output_shape: Shape of the output activations
+        :param input_shape:  Shape of the inputs
         """
         self.module = module
         self.name = str(name)
         self.weight_shape = weight_shape
         self.output_shape = output_shape
+        self.input_shape = input_shape
 
         self.picked_for_compression = False
         self.type_specific_params = None
