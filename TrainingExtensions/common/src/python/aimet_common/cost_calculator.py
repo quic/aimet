@@ -108,7 +108,7 @@ class CostCalculator:
         :return: Cost of the layer
         """
         weight_dim = list(layer.weight_shape)
-        additional_act_dim = [layer.output_shape[2], layer.output_shape[3]]
+        additional_act_dim = [layer.output_shape[-1], layer.output_shape[-2]]
 
         mem_cost = reduce(lambda x, y: x*y, weight_dim)
         mac_dim = weight_dim + additional_act_dim

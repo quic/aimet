@@ -40,9 +40,9 @@ import copy
 from typing import Tuple, Union, List
 import torch
 
-from aimet_torch import utils
 from aimet_common.utils import AimetLogger
 import aimet_common.layer_database
+from aimet_torch import utils, elementwise_ops
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Svd)
 
@@ -56,12 +56,14 @@ class Layer(aimet_common.layer_database.Layer):
             params = aimet_common.layer_database.Conv2dTypeSpecificParams(module.stride, module.padding, module.groups)
             self.type_specific_params = params
 
-    def __init__(self, module: torch.nn.Module, name: str, output_shape: Union[List, Tuple]):
+    def __init__(self, module: torch.nn.Module, name, output_shape: Union[List, Tuple],
+                 input_shape: Union[List, Tuple] = None):
         """
         Constructor
         :param module: Reference to the layer
         :param name: Unique name of the layer
         :param output_shape: Shape of the output activations
+        :param input_shape: Shape of the input activations
         """
         if isinstance(module, torch.nn.Conv2d):
             if module.groups > 1:
@@ -78,9 +80,10 @@ class Layer(aimet_common.layer_database.Layer):
         elif isinstance(module, torch.nn.Linear):
             weight_shape = (module.out_features, module.in_features, 1, 1)
         else:
-            raise AssertionError("Layer currently supports only Conv2D and Linear")
+            logger.info("Module:%s does not have any weight associated. Using default weight dim", name)
+            weight_shape = (1,)
 
-        aimet_common.layer_database.Layer.__init__(self, module, name, weight_shape, output_shape)
+        aimet_common.layer_database.Layer.__init__(self, module, name, weight_shape, output_shape, input_shape)
 
         self.var_name_of_module_in_parent = None
         self.parent_module = None
@@ -207,13 +210,14 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
         # Add the updated layer to the database
         self._compressible_layers[id(new_layer.module)] = new_layer
 
-    def _custom_hook_to_collect_layer_attributes(self, module, _, output):
+    def _custom_hook_to_collect_layer_attributes(self, module, input_tensor, output_tensor):
         """
         Custom hook function which will be applied to all the layers in the model and store following
         information :
         model name (which will be removed), model reference, input shape and output shape
         """
-        output_activation_shape = list(output.size())
+        input_activation_shape = [list(i_input.size()) for i_input in input_tensor]
+        output_activation_shape = list(output_tensor.size())
         # activation dimension for FC layer is (1,1)
         if isinstance(module, torch.nn.Linear):
             # In cases where batch dimension is 1
@@ -227,7 +231,8 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
             if module is module_ref:
                 module_name = name
 
-        self._compressible_layers[id(module)] = Layer(module, module_name, output_activation_shape)
+        self._compressible_layers[id(module)] = Layer(module, module_name, output_activation_shape,
+                                                      input_activation_shape)
 
     @classmethod
     def set_reference_to_parent_module(cls, module, layers):
@@ -259,9 +264,11 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
         :param dummy_input: Dummy input to the model. If the model has more than one input,
                             pass a tuple.
         """
+
+        module_type_for_attaching_hook = (torch.nn.Conv2d, torch.nn.Linear, torch.nn.Sigmoid, torch.nn.AvgPool2d, elementwise_ops.Multiply)
         utils.run_hook_for_layers_with_given_input(model, dummy_input,
                                                    hook=self._custom_hook_to_collect_layer_attributes,
-                                                   module_type_for_attaching_hook=(torch.nn.Conv2d, torch.nn.Linear))
+                                                   module_type_for_attaching_hook=module_type_for_attaching_hook)
 
         # set the parent_class reference
         self.set_reference_to_parent_module(self._model, self._compressible_layers)
