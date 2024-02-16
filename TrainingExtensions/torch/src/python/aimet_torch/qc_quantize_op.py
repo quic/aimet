@@ -521,8 +521,6 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                                        "configuration as the quantsim which was used to export the encodings")
 
 
-        self.set_mode(QcQuantizeOpMode.ACTIVE)
-
     def import_output_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled: bool = False):
         """
         Import output encodings represented in below format:
@@ -579,8 +577,6 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                 quantizer.data_type = QuantizationDataType.float
             else:
                 raise RuntimeError("Unrecognized encodings datatype")
-
-        self.set_mode(QcQuantizeOpMode.ACTIVE)
 
 
 class StaticGridQuantWrapper(QcQuantizeWrapper):

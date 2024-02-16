@@ -1925,6 +1925,9 @@ def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, pytorch_encodin
         if not isinstance(module, ExportableQuantModule):
             continue
 
+        if isinstance(module, QcQuantizeWrapper):
+            module.set_mode(QcQuantizeOpMode.ACTIVE)
+
         param_encoding = {
             param_name: param_encodings[f'{module_name}.{param_name}']
             for param_name, _ in module.param_quantizers.items()
