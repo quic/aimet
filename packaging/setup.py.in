@@ -251,17 +251,21 @@ def get_package_url():
     return package_url_base
 
 
-def get_package_version(cuda_variant = False):
+def get_package_version(cuda_enabled = False, pypi_index = False):
     '''
     Return the package version (append variant to original value of SW_VERSION)
     '''
     sw_version = "@SW_VERSION@"
-    package_name = "@package@"
+
+    if pypi_index:
+        # For PyPi indices, just return the version without appending the variant notation
+        return sw_version
 
     # For CPU variants, just append "cpu"
     variant_string = "cpu"
     # For GPU variants, need to determine CUDA toolkit in the environment
-    if cuda_variant is True:
+    if cuda_enabled is True:
+        cuda_toolkit_ver = ""
         if "torch" in package_name:
             # For torch variants, obtain cuda toolkit version from installed torch package
             import torch
@@ -279,7 +283,7 @@ def get_package_version(cuda_variant = False):
             print("matchObj = %s" % str(matchObj))
             if matchObj: 
                 cuda_toolkit_ver = matchObj.group(1).upper().replace(".", "")
-                print( "CUDA version: %s" % cuda_toolkit_ver )
+                print("CUDA version: %s" % cuda_toolkit_ver)
             else:
                 #NOTE: This line has no effect and always returns PASS
                 sys.exit("Could NOT find CUDA toolkit version for GPU variant")
@@ -288,8 +292,8 @@ def get_package_version(cuda_variant = False):
         variant_string = "cu" + cuda_toolkit_ver
 
     # Append the variant string to the original software version that was passed in
-    package_version = sw_version + "." + variant_string
-    return package_version
+    package_version_with_variant = sw_version + "." + variant_string
+    return package_version_with_variant
 
 
 # Obtain list of package and sub-packages (including common dependency ones)
@@ -314,7 +318,7 @@ cuda_variant = False
 if "--gpu" in sys.argv:
     sys.argv.remove("--gpu")
     cuda_variant = True
-package_version = get_package_version(cuda_variant)
+package_version = get_package_version(cuda_variant, pypi_index=True)
 
 
 setup(
@@ -327,6 +331,7 @@ setup(
     license='NOTICE.txt',
     description='AIMET @package@ Package',
     long_description=open('README.txt').read(),
+    long_description_content_type='text/plain',
     package_data={package_name:required_package_data, common_package_name:required_common_package_data},
     install_requires=install_requires_list,
     dependency_links=dependency_url_list,

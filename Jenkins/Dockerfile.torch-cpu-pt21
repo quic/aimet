@@ -88,7 +88,7 @@ RUN update-alternatives --set python3 /usr/bin/python3.10
 RUN python3 -m pip --no-cache-dir install --upgrade \
         pip \
         setuptools==49.4.0 \
-        wheel==0.33.4
+        wheel
 
 # Ubuntu packages for pytorch aimet
 RUN dpkg --add-architecture i386

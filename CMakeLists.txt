@@ -391,6 +391,5 @@ endif()
 add_custom_target(upload
     # Now run the packaging target to upload the pip package
     COMMAND ${CMAKE_COMMAND} -DPIP_CONFIG_FILE=${PIP_CONFIG_FILE} -DPIP_INDEX=${PIP_INDEX} -DPIP_CERT_FILE=${PIP_CERT_FILE} -P ${CMAKE_CURRENT_SOURCE_DIR}/packaging/upload_aimet.cmake
+    DEPENDS packageaimet
 )
-
-add_dependencies(upload packageaimet)
