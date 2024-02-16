@@ -64,7 +64,7 @@ class ActivationSampler:
     """
     def __init__(self, orig_op: str, quant_op: str,
                  orig_model: ModelProto, quant_model: QuantizationSimModel, use_cuda: bool,
-                 device: int = 0):
+                 device: int = 0, user_onnx_libs: List[str] = None):
         """
         :param orig_op: Single un quantized op from the original session
         :param quant_op: Corresponding quant op from the Quant sim session
@@ -72,6 +72,7 @@ class ActivationSampler:
         :param quant_model: Session with the model with quantization simulations ops
         :param use_cuda: If we should use cuda
         :param device: CUDA device ID
+        :param user_onnx_libs: List of paths to all compiled ONNX custom ops libraries
         :return: Input data to quant op, Output data from original op
         """
         self._org_model = orig_model
@@ -84,8 +85,8 @@ class ActivationSampler:
         else:
             self.providers = ['CPUExecutionProvider']
 
-        self._orig_module_collector = ModuleData(orig_model, orig_op, self.providers)
-        self._quant_module_collector = ModuleData(quant_model, quant_op, self.providers)
+        self._orig_module_collector = ModuleData(orig_model, orig_op, self.providers, user_onnx_libs)
+        self._quant_module_collector = ModuleData(quant_model, quant_op, self.providers, user_onnx_libs)
 
     def sample_and_place_all_acts_on_cpu(self, dataset) -> Tuple:
         """
@@ -139,15 +140,17 @@ class ModuleData:
     Collect input and output data to and from module
     """
 
-    def __init__(self, model: ModelProto, node_name: str, providers: List):
+    def __init__(self, model: ModelProto, node_name: str, providers: List, user_onnx_libs: List[str] = None):
         """
         :param session: ONNX session
         :param node: Module reference
         :param providers: CPU/GPU execution providers
+        :param user_onnx_libs: List of paths to all compiled ONNX custom ops libraries
         """
         self._model = model
         self._module_name = node_name
         self._providers = providers
+        self._user_onnx_libs = user_onnx_libs
 
     def collect_inp_out_data(self, model_input: Dict[str, List[np.ndarray]],
                              collect_input: bool, collect_output: bool) -> Union[Tuple[None, List], Tuple[List, None]]:
@@ -161,7 +164,7 @@ class ModuleData:
         """
 
         handle = add_hook_to_get_activation(self._model.model, self._module_name)
-        sess = QuantizationSimModel.build_session(self._model.model, self._providers)
+        sess = QuantizationSimModel.build_session(self._model.model, self._providers, self._user_onnx_libs)
         outputs = sess.run([self._module_name], model_input)
         remove_activation_hooks(self._model.model, handle)
 

@@ -37,7 +37,7 @@
 
 """ Adaround optimizer """
 
-from typing import Union, Tuple, Dict
+from typing import Union, Tuple, Dict, List
 import numpy as np
 import onnx
 from onnx import numpy_helper
@@ -80,7 +80,7 @@ class AdaroundOptimizer:
                         orig_model: ModelProto, quant_model: QuantizationSimModel,
                         act_func: Union[torch.nn.Module, None], cached_dataset: Dataset,
                         opt_params: AdaroundHyperParameters, param_to_adaround_tensor_quantizer: Dict,
-                        use_cuda: bool, device: int = 0):
+                        use_cuda: bool, device: int = 0, user_onnx_libs: List[str] = None):
         """
         Adaround module
 
@@ -95,12 +95,13 @@ class AdaroundOptimizer:
         :param param_to_adaround_tensor_quantizer: Param name to adaround tensor quantizer dictionary
         :param use_cuda: If we should use cuda
         :param device: CUDA device ID
+        :param user_onnx_libs: List of paths to all compiled ONNX custom ops libraries
         """
         # pylint: disable=too-many-arguments
 
         # Optimize weight rounding
         cls._optimize_rounding(module, quantized_input_name, orig_model, quant_model, act_func, cached_dataset,
-                               opt_params, param_to_adaround_tensor_quantizer, use_cuda, device)
+                               opt_params, param_to_adaround_tensor_quantizer, use_cuda, device, user_onnx_libs)
 
         # After optimization, set the optimized layer's rounding mode to "Hard rounding"
         param_to_adaround_tensor_quantizer[module.params['weight'].name].use_soft_rounding = False
@@ -111,7 +112,7 @@ class AdaroundOptimizer:
                            orig_model: ModelProto, quant_model: QuantizationSimModel,
                            act_func: Union[None, str], cached_dataset: Dataset,
                            opt_params: AdaroundHyperParameters, param_to_adaround_tensor_quantizer: Dict,
-                           use_cuda: bool, device: int = 0):
+                           use_cuda: bool, device: int = 0, user_onnx_libs: List[str] = None):
         """
         Optimizes the weight rounding of quantized wrapper module
         :param module: Original module
@@ -122,6 +123,7 @@ class AdaroundOptimizer:
         :param cached_dataset: Cached dataset
         :param opt_params: Optimization parameters
         :param param_to_adaround_tensor_quantizer: Param name to adaround tensor quantizer dictionary
+        :param user_onnx_libs: List of paths to all compiled ONNX custom ops libraries
         """
         # pylint: disable=too-many-locals, too-many-arguments
         adaround_quantizer = param_to_adaround_tensor_quantizer[module.params['weight'].name]
@@ -144,7 +146,7 @@ class AdaroundOptimizer:
         # Check if we can cache intermediate activation data.
         model_inputs = cached_dataset[0]
         act_sampler = ActivationSampler(module.outputs[0], quantized_input_name, orig_model, quant_model,
-                                        use_cuda, device)
+                                        use_cuda, device, user_onnx_libs)
         inp_data, out_data = act_sampler.sample_acts(create_input_dict(orig_model.model, model_inputs))
         inp_data_torch, out_data_torch = torch.from_numpy(inp_data[0]), torch.from_numpy(out_data[0])
         use_cache_acts_data = TorchAdaroundOptimizer._can_cache_acts_data(len(cached_dataset), inp_data_torch.shape,
@@ -159,11 +161,11 @@ class AdaroundOptimizer:
         if use_cache_acts_data and AdaroundOptimizer.enable_caching_acts_data():
             logger.debug("Caching intermediate activations data for optimization.")
             all_inp_data, all_orig_out_data = act_sampler.sample_and_place_all_acts_on_cpu(cached_dataset)
-            all_inp_data, all_out_data = torch.from_numpy(all_inp_data[0]), \
+            all_inp_data, all_orig_out_data = torch.from_numpy(all_inp_data[0]), \
                                          torch.from_numpy(all_orig_out_data[0])
             # Try to put all cached activations data on GPU for faster optimization if possible.
             if use_cuda:
-                all_inp_data, all_orig_out_data = TorchAdaroundOptimizer._place_cached_acts_data(all_inp_data, all_out_data,
+                all_inp_data, all_orig_out_data = TorchAdaroundOptimizer._place_cached_acts_data(all_inp_data, all_orig_out_data,
                                                                                                  torch_device)
 
         for iteration in range(opt_params.num_iterations):
