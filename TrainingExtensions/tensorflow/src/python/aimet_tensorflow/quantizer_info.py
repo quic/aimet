@@ -104,7 +104,7 @@ class QuantizerInfo:
     Holds information about a given MO Quantizer object and active session
     """
     __slots__ = ['session', 'tensor_quantizer', 'quant_op_name', 'quantizer_type', '_is_encoding_frozen',
-                 '_quant_scheme', 'axis_handling']
+                 '_quant_scheme', 'per_channel_quantization_enabled', 'axis_handling']
 
     def __init__(self, session: tf.compat.v1.Session, tensor_quantizer: libpymo.TensorQuantizer,
                  quant_op_name: str, quantizer_type: QuantizerType, quant_scheme: QuantScheme, per_channel_quantization_enabled: bool, axis_handling=0):
