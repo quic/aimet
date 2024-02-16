@@ -413,7 +413,7 @@ class QuantizerInfo:
         if self.get_op_mode() == int(libpymo.TensorQuantizerOpMode.passThrough):
             if self.quantizer_type == QuantizerType.param:
                 # get the op mode by scheme
-                op_mode = self._get_op_mode_by_scheme(self._quant_scheme)
+                op_mode = int(self._get_op_mode_by_scheme(self._quant_scheme))
             self._validate_tensor_quantizer_encodings()
 
         var_name = self.quant_op_name + '_op_mode'
