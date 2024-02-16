@@ -107,7 +107,7 @@ class QuantizerInfo:
                  '_quant_scheme', 'axis_handling']
 
     def __init__(self, session: tf.compat.v1.Session, tensor_quantizer: libpymo.TensorQuantizer,
-                 quant_op_name: str, quantizer_type: QuantizerType, quant_scheme: QuantScheme, axis_handling=0):
+                 quant_op_name: str, quantizer_type: QuantizerType, quant_scheme: QuantScheme, per_channel_quantization_enabled: bool, axis_handling=0):
         self.session = session
         self.tensor_quantizer = tensor_quantizer
         self.quant_op_name = quant_op_name
@@ -115,6 +115,8 @@ class QuantizerInfo:
         self._is_encoding_frozen = False
         self._quant_scheme = quant_scheme
         self.axis_handling = axis_handling
+        self.per_channel_quantization_enabled = per_channel_quantization_enabled
+
 
     def set_variable(self, var_name, value):
         """
@@ -421,7 +423,6 @@ class QuantizerInfo:
         """
         Returns op mode to use for parameters
         :param quant_scheme: Quantization scheme to use
-        :return:
         """
         if quant_scheme in [QuantScheme.training_range_learning_with_tf_init,
                             QuantScheme.training_range_learning_with_tf_enhanced_init]:
