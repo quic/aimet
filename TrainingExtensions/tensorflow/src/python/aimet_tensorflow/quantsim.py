@@ -1285,7 +1285,7 @@ class QuantizationSimModel:
 
             # Add to quantizer dict
             quantizer_info = QuantizerInfo(self.session, tensor_quantizer, quant_op_name, quantizer_type,
-                                           self._quant_scheme, axis_handling)
+                                           self._quant_scheme, self.per_channel_quantization_enabled, axis_handling)
             quantizer_dict[quant_op_name] = quantizer_info
 
             self.session.run([op_mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,

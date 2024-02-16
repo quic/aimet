@@ -104,10 +104,10 @@ class QuantizerInfo:
     Holds information about a given MO Quantizer object and active session
     """
     __slots__ = ['session', 'tensor_quantizer', 'quant_op_name', 'quantizer_type', '_is_encoding_frozen',
-                 '_quant_scheme', 'axis_handling']
+                 '_quant_scheme', 'per_channel_quantization_enabled', 'axis_handling']
 
     def __init__(self, session: tf.compat.v1.Session, tensor_quantizer: libpymo.TensorQuantizer,
-                 quant_op_name: str, quantizer_type: QuantizerType, quant_scheme: QuantScheme, axis_handling=0):
+                 quant_op_name: str, quantizer_type: QuantizerType, quant_scheme: QuantScheme, per_channel_quantization_enabled: bool, axis_handling=0):
         self.session = session
         self.tensor_quantizer = tensor_quantizer
         self.quant_op_name = quant_op_name
@@ -115,6 +115,8 @@ class QuantizerInfo:
         self._is_encoding_frozen = False
         self._quant_scheme = quant_scheme
         self.axis_handling = axis_handling
+        self.per_channel_quantization_enabled = per_channel_quantization_enabled
+
 
     def set_variable(self, var_name, value):
         """
@@ -410,11 +412,28 @@ class QuantizerInfo:
         op_mode = int(libpymo.TensorQuantizerOpMode.quantizeDequantize)
         if self.get_op_mode() == int(libpymo.TensorQuantizerOpMode.passThrough):
             if self.quantizer_type == QuantizerType.param:
-                op_mode = int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
+                # get the op mode by scheme
+                op_mode = int(self._get_op_mode_by_scheme(self._quant_scheme))
             self._validate_tensor_quantizer_encodings()
 
         var_name = self.quant_op_name + '_op_mode'
         self.set_variable(var_name, op_mode)
+
+    def _get_op_mode_by_scheme(self, quant_scheme) -> libpymo.TensorQuantizerOpMode:
+        """
+        Returns op mode to use for parameters
+        :param quant_scheme: Quantization scheme to use
+        """
+        if quant_scheme in [QuantScheme.training_range_learning_with_tf_init,
+                            QuantScheme.training_range_learning_with_tf_enhanced_init]:
+            op_mode = libpymo.TensorQuantizerOpMode.quantizeDequantize
+        else:
+            op_mode = libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize
+
+        if self.per_channel_quantization_enabled:
+            op_mode = libpymo.TensorQuantizerOpMode.quantizeDequantize
+
+        return op_mode
 
     def _validate_tensor_quantizer_encodings(self):
         """
