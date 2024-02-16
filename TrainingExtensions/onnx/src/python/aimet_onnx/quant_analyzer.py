@@ -607,6 +607,8 @@ class QuantAnalyzer:
 
         mse_loss_dict = {}
         for op_node in self._onnx_model.nodes():
+            if op_node.op_type == 'Constant':
+                continue
             op_output = op_node.output[0]
             if op_output in sim.qc_quantize_op_dict:
                 quantized_op_output = op_output + '_updated'
