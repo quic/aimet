@@ -410,11 +410,29 @@ class QuantizerInfo:
         op_mode = int(libpymo.TensorQuantizerOpMode.quantizeDequantize)
         if self.get_op_mode() == int(libpymo.TensorQuantizerOpMode.passThrough):
             if self.quantizer_type == QuantizerType.param:
-                op_mode = int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
+                # get the op mode by scheme
+                op_mode = self._get_op_mode_by_scheme(self._quant_scheme)
             self._validate_tensor_quantizer_encodings()
 
         var_name = self.quant_op_name + '_op_mode'
         self.set_variable(var_name, op_mode)
+
+    def _get_op_mode_by_scheme(self, quant_scheme) -> libpymo.TensorQuantizerOpMode:
+        """
+        Returns op mode to use for parameters
+        :param quant_scheme: Quantization scheme to use
+        :return:
+        """
+        if quant_scheme in [QuantScheme.training_range_learning_with_tf_init,
+                            QuantScheme.training_range_learning_with_tf_enhanced_init]:
+            op_mode = libpymo.TensorQuantizerOpMode.quantizeDequantize
+        else:
+            op_mode = libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize
+
+        if self.per_channel_quantization_enabled:
+            op_mode = libpymo.TensorQuantizerOpMode.quantizeDequantize
+
+        return op_mode
 
     def _validate_tensor_quantizer_encodings(self):
         """
