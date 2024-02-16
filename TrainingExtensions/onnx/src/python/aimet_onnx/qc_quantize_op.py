@@ -365,3 +365,26 @@ class QcQuantizeOp:
 
             return encodings
         return None
+
+    def get_stats_histogram(self) -> List[List]:
+        """
+        NOTE: Not to invoke when quantization scheme is not TF-Enhanced.
+
+        Get histogram of statistics. Returns list of buckets where each bucket is
+        tuple of two values - the float value representing the left edge of the
+        bucket and a PDF of the values in this bucket relative to all the values
+        seen across all buckets.
+
+        :return: List of buckets where each bucket is (xLeft, PDF).
+        """
+        if self.quant_scheme != QuantScheme.post_training_tf_enhanced:
+            raise RuntimeError("get_stats_histogram() can be invoked only when quantization scheme is TF-Enhanced.")
+
+        if not self.encodings:
+            raise RuntimeError("get_stats_histogram() can be invoked only when encoding is computed.")
+
+        histogram = []
+        for tensor_quantizer in self._tensor_quantizer:
+            histogram.append(tensor_quantizer.getStatsHistogram())
+
+        return histogram

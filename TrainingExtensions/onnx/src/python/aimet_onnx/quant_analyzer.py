@@ -52,13 +52,14 @@ from sklearn.metrics import mean_squared_error
 from aimet_common.utils import AimetLogger, CallbackFunc
 from aimet_common.defs import QuantScheme
 from aimet_common.quant_analyzer import save_json, export_per_layer_sensitivity_analysis_plot, \
-    create_and_export_min_max_ranges_plot, export_per_layer_mse_plot
+    create_and_export_min_max_ranges_plot, export_per_layer_mse_plot, export_stats_histogram_plot
 
 from aimet_onnx.qc_quantize_op import QcQuantizeOp
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.batch_norm_fold import fold_all_batch_norms_to_weight
 from aimet_onnx.adaround.activation_sampler import ModuleData
 from aimet_onnx import utils
+from aimet_onnx.meta.operations import Op
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.QuantAnalyzer)
 
@@ -71,7 +72,7 @@ class QuantAnalyzer:
      2) per layer sensitivity analysis
      3) per layer encoding (min - max range)
      4) per PDF analysis and
-     4) per layer MSE analysis
+     5) per layer MSE analysis
     """
     def __init__(self,
                  model: Union[ModelProto, ONNXModel],
@@ -144,6 +145,10 @@ class QuantAnalyzer:
 
         # Export encoding min-max range.
         self.export_per_layer_encoding_min_max_range(sim, results_dir)
+
+        # Export PDF of statistics.
+        if quant_scheme == QuantScheme.post_training_tf_enhanced:
+            self.export_per_layer_stats_histogram(sim, results_dir)
 
         # Export per layer MSE loss between fp32 and quantized output activations.
         if self._unlabeled_dataset_iterable:
@@ -367,8 +372,15 @@ class QuantAnalyzer:
         :return: layer wise eval score dictionary. dict[layer_name] = eval_score.
         """
 
-        # Maps op to its list of enabled quantizers.
-        op_to_quantizers_dict = self._get_enabled_quantizers(sim)
+        # Mapping of ops and their enabled quantizers
+        op_to_quantizers_dict = defaultdict(list)
+        for op in sim.connected_graph.ordered_ops:
+            input_quantizers, output_quantizers, param_quantizers = self._get_op_quantizers(op, sim)
+            if not input_quantizers and not output_quantizers and not param_quantizers:
+                continue
+            op_to_quantizers_dict[op.name_op].extend(input_quantizers)
+            op_to_quantizers_dict[op.name_op].extend(output_quantizers)
+            op_to_quantizers_dict[op.name_op].extend(list(param_quantizers.values()))
 
         if disable_all_quantizers:
             for enabled_quantizers in op_to_quantizers_dict.values():
@@ -391,45 +403,47 @@ class QuantAnalyzer:
         return eval_score_dict
 
     @staticmethod
-    def _get_enabled_quantizers(sim: QuantizationSimModel) -> Dict:
+    def _get_op_quantizers(op: Op, sim: QuantizationSimModel) -> (List, List, Dict):
         """
-        This function creates mapping between ops and their enabled quantizers.
+        This function returns the enabled input, output and param quantizers of the given connected graph op.
 
-        :param sim: Quantsim object
-        :return: Layerwise enabled quantizers
+        :param op: Connected Graph Op
+        :param sim: QuantSim object
+        :return: list of input quantizers, list of output quantizers and dictionary of param quantizers
         """
-        enabled_quantizers = defaultdict(list)
-        cg_ops = sim.connected_graph.ordered_ops
-        for op in cg_ops:
-            # Get param quantizers
-            for param in op.parameters:
-                if param in sim.qc_quantize_op_dict and sim.qc_quantize_op_dict[param].enabled:
-                    enabled_quantizers[op.name_op].append(sim.qc_quantize_op_dict[param])
-            # Get output activation quantizers
-            if op.output_ops and op.output_ops[0].type == 'branch':
-                # op having multiple outputs
-                cg_product = op.output_ops[0].output
-            else:
-                # op having single output
-                cg_product = op.output
-            for output_name in set(cg_product.tensor_dict.values()):
-                if output_name in sim.qc_quantize_op_dict and sim.qc_quantize_op_dict[output_name].enabled:
-                    enabled_quantizers[op.name_op].append(sim.qc_quantize_op_dict[output_name])
-            # Get input activation quantizers if starting op
-            if op in sim.connected_graph.starting_ops:
-                cg_products = [cg_product for cg_product in op.inputs if cg_product.is_model_input]
-                for cg_product in cg_products:
-                    assert len(cg_product.tensor_dict) == 1
-                    input_name = list(cg_product.tensor_dict.values())[0]
-                    if input_name in sim.qc_quantize_op_dict and sim.qc_quantize_op_dict[input_name].enabled:
-                        enabled_quantizers[op.name_op].append(sim.qc_quantize_op_dict[input_name])
-        return enabled_quantizers
+        input_quantizers = []
+        output_quantizers = []
+        param_quantizers = {}
 
-    # pylint: disable=no-self-use, too-many-branches
-    def export_per_layer_encoding_min_max_range(self,
-                                                sim: QuantizationSimModel,
-                                                results_dir: str) \
-            -> Tuple[Dict, Dict]:
+        # Capture input quantizers if the op is a starting op
+        if op in sim.connected_graph.starting_ops:
+            cg_products = [cg_product for cg_product in op.inputs if cg_product.is_model_input]
+            for cg_product in cg_products:
+                assert len(cg_product.tensor_dict) == 1
+                input_name = list(cg_product.tensor_dict.values())[0]
+                if input_name in sim.qc_quantize_op_dict and sim.qc_quantize_op_dict[input_name].enabled:
+                    input_quantizers.append(sim.qc_quantize_op_dict[input_name])
+
+        # Capture output quantizers of the op
+        if op.output_ops and op.output_ops[0].type == 'branch':
+            # op having multiple outputs
+            cg_product = op.output_ops[0].output
+        else:
+            # op having single output
+            cg_product = op.output
+        for output_name in set(cg_product.tensor_dict.values()):
+            if output_name in sim.qc_quantize_op_dict and sim.qc_quantize_op_dict[output_name].enabled:
+                output_quantizers.append(sim.qc_quantize_op_dict[output_name])
+
+        # Capture param quantizers of the op
+        for param_name in op.parameters:
+            if param_name in sim.qc_quantize_op_dict and sim.qc_quantize_op_dict[param_name].enabled:
+                param_quantizers[param_name] = sim.qc_quantize_op_dict[param_name]
+
+        return (input_quantizers, output_quantizers, param_quantizers)
+
+    # pylint: disable=no-self-use, too-many-branches, too-many-locals
+    def export_per_layer_encoding_min_max_range(self, sim: QuantizationSimModel, results_dir: str) -> Tuple[Dict, Dict]:
         """
         Export encoding min and max range for all weights and activations. results_dir should have
         html files in following format.
@@ -448,62 +462,115 @@ class QuantAnalyzer:
         :param results_dir: Directory to save the results.
         :return: layer wise min-max range for weights and activations.
         """
-        # pylint: disable=too-many-locals
         min_max_ranges_dir = os.path.join(results_dir, "min_max_ranges")
 
         min_max_range_for_activations_dict = {}
         min_max_range_for_weights_dict = {}
-        cg_ops = sim.connected_graph.ordered_ops
-        for op in cg_ops:
+
+        for op in sim.connected_graph.ordered_ops:
+            input_quantizers, output_quantizers, param_quantizers = self._get_op_quantizers(op, sim)
+            op_name = re.sub(r'\W+', '_', op.name_op)
+
             # Get input activations' encodings if starting op
-            if op in sim.connected_graph.starting_ops:
-                cg_products = [cg_product for cg_product in op.inputs if cg_product.is_model_input]
-                for index, cg_product in enumerate(cg_products):
-                    assert len(cg_product.tensor_dict) == 1
-                    input_name = list(cg_product.tensor_dict.values())[0]
-                    if input_name in sim.qc_quantize_op_dict and sim.qc_quantize_op_dict[input_name].enabled:
-                        op_name = re.sub(r'\W+', '_', op.name_op)
-                        quantizer = sim.qc_quantize_op_dict[input_name]
-                        name = f"{op_name}_input_{index}"
-                        min_max_range_for_activations_dict[name] = (quantizer.encodings[0].min, quantizer.encodings[0].max)
+            for index, quantizer in enumerate(input_quantizers):
+                name = f"{op_name}_input_{index}"
+                min_max_range_for_activations_dict[name] = (quantizer.encodings[0].min, quantizer.encodings[0].max)
 
             # Get output activations' encodings
-            if op.output_ops and op.output_ops[0].type == 'branch':
-                # op having multiple outputs
-                cg_product = op.output_ops[0].output
-            else:
-                # op having single output
-                cg_product = op.output
-            for index, output_name in enumerate(set(cg_product.tensor_dict.values())):
-                if output_name in sim.qc_quantize_op_dict and sim.qc_quantize_op_dict[output_name].enabled:
-                    op_name = re.sub(r'\W+', '_', op.name_op)
-                    quantizer = sim.qc_quantize_op_dict[output_name]
-                    name = f"{op_name}_output_{index}"
-                    min_max_range_for_activations_dict[name] = (quantizer.encodings[0].min, quantizer.encodings[0].max)
+            for index, quantizer in enumerate(output_quantizers):
+                name = f"{op_name}_output_{index}"
+                min_max_range_for_activations_dict[name] = (quantizer.encodings[0].min, quantizer.encodings[0].max)
 
             # Get parameters' encodings
-            for param in op.parameters:
-                if param in sim.qc_quantize_op_dict and sim.qc_quantize_op_dict[param].enabled:
-                    quantizer = sim.qc_quantize_op_dict[param]
-                    name = re.sub(r'\W+', '_', f"{op.name_op}_{param}")
-                    if len(quantizer.encodings) > 1: # per-channel
-                        per_channel_encodings = {}
-                        for index, encoding in enumerate(quantizer.encodings):
-                            per_channel_encodings[f"{name}_{index}"] = (encoding.min, encoding.max)
-                        min_max_range_for_weights_dict[name] = per_channel_encodings
-                    else: # per-tensor
-                        min_max_range_for_weights_dict[name] = (quantizer.encodings[0].min, quantizer.encodings[0].max)
+            for param_name, quantizer in param_quantizers.items():
+                name = re.sub(r'\W+', '_', f"{op_name}_{param_name}")
+                if len(quantizer.encodings) > 1: # per-channel
+                    per_channel_encodings = {}
+                    for index, encoding in enumerate(quantizer.encodings):
+                        per_channel_encodings[f"{name}_{index}"] = (encoding.min, encoding.max)
+                    min_max_range_for_weights_dict[name] = per_channel_encodings
+                else: # per-tensor
+                    min_max_range_for_weights_dict[name] = (quantizer.encodings[0].min, quantizer.encodings[0].max)
 
-        create_and_export_min_max_ranges_plot(min_max_range_for_weights_dict,
-                                              min_max_ranges_dir,
-                                              title="weights")
-        create_and_export_min_max_ranges_plot(min_max_range_for_activations_dict,
-                                              min_max_ranges_dir,
-                                              title="activations")
+        create_and_export_min_max_ranges_plot(min_max_range_for_weights_dict, min_max_ranges_dir, title="weights")
+        create_and_export_min_max_ranges_plot(min_max_range_for_activations_dict, min_max_ranges_dir, title="activations")
+
         save_json(min_max_range_for_weights_dict, min_max_ranges_dir, title="weights.json")
         save_json(min_max_range_for_activations_dict, min_max_ranges_dir, title="activations.json")
+
         _logger.info("Exported per layer encodings min-max ranges plot(s).")
+
         return min_max_range_for_weights_dict, min_max_range_for_activations_dict
+
+    # pylint: disable=too-many-branches, too-many-locals
+    def export_per_layer_stats_histogram(self,
+                                         sim: QuantizationSimModel,
+                                         results_dir: str,
+                                         ):
+        """
+        NOTE: Not to invoke when quantization scheme is not TF-Enhanced.
+
+        Export histogram that represents a PDF of collected statistics by a quantizer for every
+        quant wrapper. After invoking this API, results_dir should have html files in following
+        format for every quantizers of quant wrappers.
+
+        -results_dir
+            -activations_pdf
+                name_{input/output}_{index}.html
+            -weights_pdf
+                -name
+                    param_name_{channel_index}.html
+
+        :param sim: Quantsim model.
+        :param results_dir: Directory to save the results.
+        """
+        weights_pdf_dir = os.path.join(results_dir, "weights_pdf")
+        activations_pdf_dir = os.path.join(results_dir, "activations_pdf")
+
+        for op in sim.connected_graph.ordered_ops:
+            input_quantizers, output_quantizers, param_quantizers = self._get_op_quantizers(op, sim)
+            op_name = re.sub(r'\W+', '_', op.name_op)
+
+            # Collect stats histogram of input activation quantizers
+            for index, quantizer in enumerate(input_quantizers):
+                self._create_and_export_stats_histogram_plot(quantizer,
+                                                             activations_pdf_dir,
+                                                             title=f"{op_name}_input_q{index}")
+
+            # Collect stats histogram of output activation quantizers
+            for index, quantizer in enumerate(output_quantizers):
+                self._create_and_export_stats_histogram_plot(quantizer,
+                                                             activations_pdf_dir,
+                                                             title=f"{op_name}_output_q{index}")
+
+            # Collect stats histogram of param quantizers
+            for param_name, quantizer in param_quantizers.items():
+                sanitized_param_name = re.sub(r'\W+', '_', param_name)
+                self._create_and_export_stats_histogram_plot(quantizer,
+                                                             os.path.join(weights_pdf_dir, op_name),
+                                                             title=f"{op_name}_{sanitized_param_name}")
+
+        _logger.info("Exported per layer stats histogram plot(s).")
+
+    @staticmethod
+    def _create_and_export_stats_histogram_plot(quantizer: QcQuantizeOp, results_dir: str, title: str):
+        """
+        For given quantizer, create and export histogram (PDF) of statistics in html format.
+
+        :param quantizer: Quantizer.
+        :param results_dir: Directory to save the results.
+        :param title: Title of the plot.
+        """
+        os.makedirs(results_dir, exist_ok=True)
+
+        histograms = quantizer.get_stats_histogram()
+        encodings = quantizer.encodings
+
+        if not isinstance(encodings, List):
+            encodings = [encodings]
+
+        for index, (histogram, encoding) in enumerate(zip(histograms, encodings)):
+            export_stats_histogram_plot(histogram, encoding, results_dir, title=f"{title}_{index}")
 
     def enable_per_layer_mse_loss(self, unlabeled_dataset_iterable: Iterable, num_batches: int):
         """
