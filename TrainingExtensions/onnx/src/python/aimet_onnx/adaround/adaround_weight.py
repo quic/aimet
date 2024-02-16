@@ -116,7 +116,8 @@ class Adaround:
                        param_bw_override_list: List[Tuple[str, int]] = None,
                        ignore_quant_ops_list: List[str] = None,
                        default_quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
-                       default_config_file: str = None, use_cuda: bool = True, device: int = 0) -> onnx_pb.ModelProto:
+                       default_config_file: str = None, use_cuda: bool = True, device: int = 0,
+                       user_onnx_libs: List[str] = None) -> onnx_pb.ModelProto:
         """
         Returns model with optimized weight rounding of every module (Conv and Linear) and also saves the
         corresponding quantization encodings to a separate JSON-formatted file that can then be imported by
@@ -136,6 +137,7 @@ class Adaround:
         :param default_config_file: Default configuration file for model quantizers
         :param use_cuda: If we should use cuda
         :param device: CUDA device ID
+        :param user_onnx_libs: List of paths to all compiled ONNX custom ops libraries
         :return: Model with Adarounded weights and saves corresponding parameter encodings JSON file at provided path
         """
         # pylint: disable=too-many-arguments
@@ -144,7 +146,8 @@ class Adaround:
             model = ONNXModel(model)
         quant_sim = QuantizationSimModel(copy.deepcopy(model), quant_scheme=default_quant_scheme,
                                          default_param_bw=default_param_bw,
-                                         config_file=default_config_file)
+                                         config_file=default_config_file,
+                                         user_onnx_libs=user_onnx_libs)
 
         # For the params in the param_bw_override_list, override the default parameter bitwidths in the QuantSim
         if param_bw_override_list:
@@ -156,11 +159,12 @@ class Adaround:
         # Compute only param encodings
         cls._compute_param_encodings(quant_sim, params)
 
-        return cls._apply_adaround(quant_sim, model, params, path, filename_prefix, use_cuda, device)
+        return cls._apply_adaround(quant_sim, model, params, path, filename_prefix, use_cuda, device, user_onnx_libs)
 
     @classmethod
     def _apply_adaround(cls, quant_sim: QuantizationSimModel, model: onnx_pb.ModelProto, params: AdaroundParameters,
-                        path: str, filename_prefix: str, use_cuda: bool = True, device: int = 0) -> onnx_pb.ModelProto:
+                        path: str, filename_prefix: str, use_cuda: bool = True, device: int = 0,
+                        user_onnx_libs: List[str] = None) -> onnx_pb.ModelProto:
         """
         Returns model with optimized weight rounding of every module (Conv and Linear) and also saves the
         corresponding quantization encodings to a separate JSON-formatted file that can then be imported by
@@ -174,6 +178,7 @@ class Adaround:
         :param filename_prefix: Prefix to use for filename of the encodings file
         :param use_cuda: If we should use cuda
         :param device: CUDA device ID
+        :param user_onnx_libs: List of paths to all compiled ONNX custom ops libraries
         :return: Model with Adarounded weights and saves corresponding parameter encodings JSON file at provided path
         """
 
@@ -184,7 +189,7 @@ class Adaround:
         # Get the module - activation function pair using ConnectedGraph
         module_act_func_pair = get_module_act_func_pair(model)
 
-        cls._adaround_model(model, quant_sim, module_act_func_pair, params, use_cuda, device)
+        cls._adaround_model(model, quant_sim, module_act_func_pair, params, use_cuda, device, user_onnx_libs)
 
         # Export quantization encodings to JSON-formatted file
         cls._export_encodings_to_json(path, filename_prefix, quant_sim)
@@ -195,7 +200,7 @@ class Adaround:
 
     @classmethod
     def _adaround_model(cls, model: onnx_pb.ModelProto, quant_sim: QuantizationSimModel, module_act_func_pair: Dict,
-                        params: AdaroundParameters, use_cuda: bool = True, device: int = 0):
+                        params: AdaroundParameters, use_cuda: bool = True, device: int = 0, user_onnx_libs: List[str] = None):
         """
         Optimize weight rounding of every module (AdaroundSupportedModules) of model in sequential manner
         based on occurrence
@@ -207,6 +212,7 @@ class Adaround:
         :param params: Adaround parameters
         :param use_cuda: If we should use cuda
         :param device: CUDA device ID
+        :param user_onnx_libs: List of paths to all compiled ONNX custom ops libraries
         """
         # pylint: disable=too-many-locals, protected-access
 
@@ -246,7 +252,7 @@ class Adaround:
                     AdaroundOptimizer.adaround_module(model_data.module_to_info[name], quantized_input_name,
                                                       model, quant_sim.model, act_func,
                                                       cached_dataset, opt_params, param_to_tensor_quantizer_dict,
-                                                      use_cuda, device)
+                                                      use_cuda, device, user_onnx_libs)
 
         finally:
             if os.path.exists(WORKING_DIR):

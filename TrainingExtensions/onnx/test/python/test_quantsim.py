@@ -36,6 +36,8 @@
 # =============================================================================
 import json
 import os
+import shutil
+
 import onnx.numpy_helper
 import torch
 import numpy as np
@@ -577,14 +579,14 @@ class TestQuantSim:
                                    default_param_bw=8)
         sim.session.run(None, {'input': sample_input})
 
-
     def test_model_with_custom_ops(self):
         custom_ops_path = os.path.dirname(libquant_info.__file__)
         custom_ops_path = os.path.join(custom_ops_path, "customops")
         onnx_library = os.path.join(custom_ops_path, "libonnx_custom_add.so")
 
-        def callback(session, args):
-            pass
+        def dummy_callback(session, args):
+            calib_data = {'input': np.random.rand(1, 3, 64, 64).astype(np.float32)}
+            _ = session.run(None, calib_data)
 
         model = custom_add_model()
         sim = QuantizationSimModel(model=model,
@@ -594,8 +596,10 @@ class TestQuantSim:
                                   user_onnx_libs=[onnx_library])
         sim.save_model_graph("./quantized_custom_model")
 
-        def dummy_callback(session, args):
-            pass
-
         sim.compute_encodings(dummy_callback, None)
+
+        os.makedirs('./tmp', exist_ok=True)
         sim.export('./tmp/', 'custom_op_model')
+
+        if os.path.exists('./tmp'):
+            shutil.rmtree('./tmp')
