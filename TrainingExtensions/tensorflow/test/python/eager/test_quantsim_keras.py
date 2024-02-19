@@ -1432,3 +1432,28 @@ def test_multi_output_model():
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         sim.export(tmp_dir, "multi_output_model")
+
+def test_quantsim_with_separable_conv():
+    """Tests Quantsim with seperable conv layer without model preparer """
+
+    tf.keras.backend.clear_session()
+    input_shape = (2, 3, 3, 2)
+    inp = tf.keras.layers.Input(shape=input_shape[1:])
+    test_inp = np.random.rand(*input_shape)
+
+    separable_conv = tf.keras.layers.SeparableConv2D(
+        2,
+        kernel_size=2,
+        depthwise_initializer=tf.initializers.Constant([5.0]),
+        bias_initializer=tf.initializers.Constant([5.0])
+    )(inp)
+    model = tf.keras.models.Model(inputs=[inp], outputs=[separable_conv])
+
+    _ = model(test_inp)
+
+    with pytest.raises(AssertionError) as exc_info:
+        sim = QuantizationSimModel(model, quant_scheme='tf_enhanced', rounding_mode='nearest',
+                                   default_output_bw=8, default_param_bw=8)
+
+    assert str(exc_info.value) == 'SeparableConv2D found in the model. Please run model preparer before calling ' \
+                                  'QuantizationSimModel'
