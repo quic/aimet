@@ -66,3 +66,11 @@ class EncodingBase(abc.ABC):
         """
         Returns the granularity of this encoding
         """
+
+    @abc.abstractmethod
+    def to(self, *args, **kwargs):
+        """
+        Changes dtype of data in quantizer encoding or device where the data is.
+        Returns new encoding with changed dtype and device without changing current encoding
+        as `torch.Tensor.to`.
+        """

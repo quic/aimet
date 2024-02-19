@@ -36,6 +36,8 @@
 # =============================================================================
 """ Affine encoding definition """
 
+from typing import Tuple
+
 import torch
 from torch._C._nn import _parse_to as parse_to_args
 
@@ -59,6 +61,23 @@ def get_symmetry_mode(symmetric=False, signed=False, strict=False) -> str:
         return "unsigned_symmetric"
     raise RuntimeError("No matching symmetry exists for symmetric={}, signed={}, strict={}".format(symmetric, signed, strict))
 
+def get_encoding_property_from_symmetry_mode(symmetry_mode: str) -> Tuple[bool, bool, bool]:
+    """
+    Returns encoding properties from symmetry mode string
+    """
+    signed = strict = symmetric = False
+    if symmetry_mode == "asymmetric":
+        pass
+    elif symmetry_mode == "strict_symmetric":
+        signed = strict = symmetric = True
+    elif symmetry_mode == "signed_symmetric":
+        signed = symmetric = True
+    elif symmetry_mode == "unsigned_symmetric":
+        symmetric = True
+    else:
+        raise RuntimeError(f"Undefined symmetry_mode: {symmetry_mode}")
+    return signed, strict, symmetric
+
 class AffineEncoding(EncodingBase):
     """
     Encoding object for affine quantization
@@ -67,7 +86,7 @@ class AffineEncoding(EncodingBase):
                  signed: bool = False, strict: bool = False):
         self._scale = scale
         self._offset = offset
-        symmetric = (signed and torch.all(offset == 0)) or (not signed and torch.all(offset == - 2 ** (bitwidth - 1)))
+        symmetric = torch.all(offset == 0) or (signed and torch.all(offset == - 2 ** (bitwidth - 1)))
         self._symmetry = get_symmetry_mode(symmetric, signed, strict)
         self._bitwidth = bitwidth
 
@@ -164,16 +183,22 @@ class AffineEncoding(EncodingBase):
 
     def to(self, *args, **kwargs):
         """
-        Changes dtype of data in quantizer encoding or device where the data is
+        Changes dtype of data in quantizer encoding or device where the data is.
+        Behaves similar to torch.Tensor.to
         """
         to_args = parse_to_args(*args, **kwargs)
-        device, dtype_, _, _ = to_args
-        if dtype_ in (torch.float16, torch.bfloat16, torch.float32, torch.float64):
-            self._scale = self._scale.to(dtype_)
-            self._offset = self._offset.to(dtype_)
-        elif dtype_:
-            raise RuntimeError(f"Cannot change encoding data dtype to {dtype_}, "
+        device, dtype, _, _ = to_args
+        dtype = dtype if dtype else self._scale.dtype
+        device = device if device else self._scale.device
+
+        if dtype is self._scale.dtype and device is self._scale.device:
+            return self
+
+        if not dtype.is_floating_point:
+            raise RuntimeError(f"Cannot change encoding data dtype to {dtype}, "
                                "only floating point data types are supported")
-        self._scale = self._scale.to(device)
-        self._offset = self._offset.to(device)
-        return self
+
+        scale = self._scale.to(dtype=dtype, device=device)
+        offset = self._offset.to(dtype=dtype, device=device)
+        signed, strict, _ = get_encoding_property_from_symmetry_mode(self._symmetry)
+        return type(self)(scale, offset, self._bitwidth, signed, strict)

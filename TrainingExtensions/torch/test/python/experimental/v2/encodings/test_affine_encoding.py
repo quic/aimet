@@ -83,7 +83,7 @@ class TestAffineEncoding:
               5) num_steps is 2 ** bitwidth - 1
         """
         bitwidth = 8
-        offset = torch.zeros([])
+        offset = torch.tensor(-128)
         encoding = AffineEncoding(scale, offset, bitwidth=bitwidth, signed=True)
         assert encoding.min == -128
         assert encoding.max == 127
@@ -103,7 +103,7 @@ class TestAffineEncoding:
               5) num_steps is 2 ** bitwidth - 2
         """
         bitwidth = 8
-        offset = torch.zeros([])
+        offset = torch.tensor(-128)
         encoding = AffineEncoding(scale, offset, bitwidth=bitwidth, signed=True, strict=True)
         assert encoding.min == -127
         assert encoding.max == 127
@@ -123,10 +123,10 @@ class TestAffineEncoding:
               5) num_steps is 2 ** bitwidth - 1
         """
         bitwidth = 8
-        offset = torch.tensor(-128)
+        offset = torch.zeros([])
         encoding = AffineEncoding(scale, offset, bitwidth=bitwidth, signed=False)
-        assert encoding.min == -128
-        assert encoding.max == 127
+        assert encoding.min == 0
+        assert encoding.max == 255
         assert encoding.symmetry == "unsigned_symmetric"
         assert encoding.dtype == torch.uint8
         assert encoding.num_steps == 2 ** bitwidth - 1
@@ -146,18 +146,23 @@ class TestAffineEncoding:
 
         """
         When: call encoding.to(new_device)
-        Then: encoding.{min, max, scale, offset} are on new_device
+        Then: 1) original encoding.{min, max, scale, offset} are on device
+              2) returned encoding.{min, max, scale, offset} are on new_device
         """
         new_device = "cpu"
-        encoding.to(new_device)
+        new_encoding = encoding.to(new_device)
+
         for property in [encoding.min, encoding.max, encoding.scale, encoding.offset]:
+            assert property.device == torch.device(device)
+
+        for property in [new_encoding.min, new_encoding.max, new_encoding.scale, new_encoding.offset]:
             assert property.device == torch.device(new_device)
 
     @pytest.mark.parametrize("dtype", (torch.float16, torch.float32))
     def test_create_encoding_correct_dtype(self, dtype):
         """
         When: Create an encoding with tensors of type dtype in {torch.float16, torch.float32}
-        Then: encoding.{min, max, scale, offset} are type dtype
+        Then: encoding.{min, max, scale, offset} are dtype
         """
         scale = torch.ones((1,)).to(dtype)
         offset = torch.ones((1,)).to(dtype)
@@ -167,12 +172,17 @@ class TestAffineEncoding:
 
         """
         When: call encoding.to(new_dtype)
-        Then: encoding.{min, max, scale, offset} are on new_dtype
+        Then: 1) original encoding.{min, max, scale, offset} are dtype
+              2) returned encoding.{min, max, scale, offset} are new_dtype
         """
         new_dtype = torch.float16 if dtype == torch.float32 else torch.float32
-        encoding.to(new_dtype)
-        for property in [encoding.min, encoding.max, encoding.scale, encoding.offset]:
+        new_encoding = encoding.to(new_dtype)
+
+        for property in [new_encoding.min, new_encoding.max, new_encoding.scale, new_encoding.offset]:
             assert property.dtype == new_dtype
+
+        for property in [encoding.min, encoding.max, encoding.scale, encoding.offset]:
+            assert property.dtype == dtype
 
     @pytest.mark.parametrize("dtype", (torch.uint8, torch.int32))
     def test_change_encoding_to_invalid_dtype(self, dtype):
