@@ -166,7 +166,13 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                  per_channel_quantization_enabled: bool = False,
                  shadow_params: Dict[str, tf.Variable] = None,
                  **kwargs):
-        super(QcQuantizeWrapper, self).__init__(**kwargs)
+
+        if 'in_quant_enabled' in kwargs.keys():
+            new_kwargs = dict(kwargs)
+            new_kwargs.pop('in_quant_enabled')
+            super(QcQuantizeWrapper, self).__init__(**new_kwargs)
+        else:
+            super(QcQuantizeWrapper, self).__init__(**kwargs)
         self._layer_to_wrap = layer_to_wrap
         self._activation_quant_settings = activation_quant_settings
         self._param_quant_settings = param_quant_settings
@@ -178,7 +184,10 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         self._shadow_params = shadow_params
         self._is_lambda_operator_layer = keras_common_utils.is_lambda_operator(layer_to_wrap)
         self._is_a_tf_op_lambda_layer = keras_common_utils.is_a_tf_op_lambda_layer(layer_to_wrap)
-        self._set_quantizers(per_channel_quantization_enabled)
+        if 'in_quant_enabled' in kwargs.keys():
+            self._set_quantizers(per_channel_quantization_enabled, in_quant_enabled=kwargs['in_quant_enabled'])
+        else:
+            self._set_quantizers(per_channel_quantization_enabled)
 
         # This is needed since Model Transformer reconstructs the layer, with the layer to wrap weights being empty
         # during the time of this init call.
@@ -188,7 +197,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         if self._shadow_params is None:
             self._shadow_params = dict(zip([param.name for param in self._layer_to_wrap.weights], [tf.Variable(param, trainable=False) for param in self._layer_to_wrap.weights]))
 
-    def _set_quantizers(self, per_channel_quantization_enabled):
+    def _set_quantizers(self, per_channel_quantization_enabled, **kwargs):
         """
         Set the input, output, and param quantizers
         :param per_channel_quantization_enabled: A flag for the param quantizers to be ParamPerChannelQuantizers
@@ -208,7 +217,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                                               self._activation_quant_settings.is_symmetric,
                                               self._activation_quant_settings.use_strict_symmetric,
                                               self._activation_quant_settings.use_unsigned_symmetric,
-                                              enabled=True))
+                                              enabled=kwargs.get('in_quant_enabled', True)))
 
         # Create quantizer variables and quantizers for outputs if not yet existing
         if self.output_quantizers is None:

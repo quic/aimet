@@ -52,6 +52,7 @@ from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.graphsearchtuils import GraphSearchUtils
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
 from aimet_tensorflow.keras.quant_sim.qc_mha_wrapper import QcQuantizableMultiHeadAttention
+from aimet_tensorflow.keras.rnn.qc_quant_LSTM import QuantizedLSTM
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import TensorQuantizer, ActivationTensorQuantizer, \
     ParamPerTensorQuantizer, StaticGridPerChannelQuantizer, ParamPerChannelQuantizer
 from aimet_tensorflow.keras.quantsim_config.quantsim_config import QuantSimConfigurator, INPUT_QUANTIZERS, \
@@ -65,7 +66,8 @@ _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 unquantizable_modules = (tf.keras.layers.InputLayer, QcQuantizeWrapper)
 substitutable_modules = {
-    tf.keras.layers.MultiHeadAttention: QcQuantizableMultiHeadAttention
+    tf.keras.layers.MultiHeadAttention: QcQuantizableMultiHeadAttention,
+    tf.keras.layers.LSTM: QuantizedLSTM
 }
 
 
@@ -245,15 +247,24 @@ class QuantizationSimModel(tf.keras.Model):
             :param layer: Layer to wrap
             :return: Wrapped layer, or original layer if layer is not to be wrapped
             """
-            activation_quant_settings = QuantizerSettings(default_output_bw, default_data_type, rounding_mode,
-                                                          quant_scheme, False, False, False)
-            param_quant_settings = QuantizerSettings(default_param_bw, default_data_type, rounding_mode,
-                                                     quant_scheme, False, False, False)
-
             if isinstance(layer, tuple(substitutable_modules.keys())):
                 new_class = substitutable_modules[type(layer)]
                 config = layer.get_config()
                 config["copy_source_weights"] = layer.get_weights()
+
+                if isinstance(layer, tf.keras.layers.LSTM):
+                    if isinstance(self._model_without_wrappers, tf.keras.Sequential):
+                        config["is_sequential_model"] = True
+
+                    # pylint: disable=protected-access
+                    if self._quantsim_configurator._layer_to_config_dict[layer]["is_input_quantized"]["setting"]:
+                        config["is_input_quantized"] = True
+                    config["quant_scheme"] = quant_scheme
+                    config["rounding_mode"] = rounding_mode
+                    config["default_output_bw"] = default_output_bw
+                    config["default_param_bw"] = default_param_bw
+                    config["default_data_type"] = default_data_type
+
                 wrapped_layer = new_class.from_config(config)
                 self._substituted_layer[layer] = wrapped_layer
                 return wrapped_layer
@@ -263,6 +274,11 @@ class QuantizationSimModel(tf.keras.Model):
 
             if isinstance(layer, unquantizable_modules) or layer.submodules:
                 return layer
+
+            activation_quant_settings = QuantizerSettings(default_output_bw, default_data_type, rounding_mode,
+                                                          quant_scheme, False, False, False)
+            param_quant_settings = QuantizerSettings(default_param_bw, default_data_type, rounding_mode,
+                                                     quant_scheme, False, False, False)
 
             input_quantizers, output_quantizers, param_quantizers = self._get_quantizers_by_layer(layer)
             wrapper = QcQuantizeWrapper(layer, activation_quant_settings, param_quant_settings,
@@ -383,7 +399,7 @@ class QuantizationSimModel(tf.keras.Model):
                     # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
                     # inbound_nodes parameter populated, so the name of the quantizer is used instead
                     if not wrapper._layer_to_wrap.inbound_nodes:
-                        tensor_name = "multi_head_attention/" + wrapper.name + "/" + input_quantizer.name
+                        tensor_name = wrapper.name + "/" + input_quantizer.name + ":0"
                     else:
                         tensor_name = wrapper._layer_to_wrap.inbound_nodes[0].keras_inputs[idx].name
                     encoding_dict = self._get_encoding_dict_for_quantizer(input_quantizer)
@@ -400,7 +416,7 @@ class QuantizationSimModel(tf.keras.Model):
                     # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
                     # inbound_nodes parameter populated, so the name of the quantizer is used instead
                     if not wrapper._layer_to_wrap.inbound_nodes:
-                        tensor_name = "multi_head_attention/" + wrapper.name + "/" + output_quantizer.name
+                        tensor_name = wrapper.name + ":0"
                     elif isinstance(wrapper._layer_to_wrap.output, List):
                         tensor_name = wrapper._layer_to_wrap.output[idx].name
                     else:
@@ -473,7 +489,14 @@ class QuantizationSimModel(tf.keras.Model):
         :param custom_objects: If there are custom objects to load, Keras needs a dict of them to map them
         """
         model_path = os.path.join(path, filename_prefix)
-        self._model_without_wrappers.save(model_path)
+
+        #TF Version 2.4 has bug i.e. save() in tf format don't work for unrolled LSTM.
+        for layer in self._model_without_wrappers.layers:
+            if isinstance(layer, tf.keras.layers.LSTM):
+                break
+        else:
+            self._model_without_wrappers.save(model_path)
+
         self._model_without_wrappers.save(model_path + '.h5', save_format='h5')
 
         # Conversion of saved h5 model to pb model for consumption by SNPE/QNN
@@ -550,10 +573,10 @@ class QuantizationSimModel(tf.keras.Model):
 
         for wrapper in self.quant_wrappers():
             for idx, input_quantizer in enumerate(wrapper.input_quantizers):
-                # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
+                # because dense layers in quantizable MHA and RNN are not explicitly sublayers, they don't have their
                 # inbound_nodes parameter populated, so the name of the quantizer is used instead
                 if not wrapper._layer_to_wrap.inbound_nodes:
-                    tensor_name = "multi_head_attention/" + wrapper.name + "/" + input_quantizer.name
+                    tensor_name = wrapper.name + "/" + input_quantizer.name + ":0"
                 else:
                     tensor_name = wrapper._layer_to_wrap.inbound_nodes[0].keras_inputs[idx].name
 
@@ -608,7 +631,7 @@ class QuantizationSimModel(tf.keras.Model):
                 # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
                 # inbound_nodes parameter populated, so the name of the quantizer is used instead
                 if not wrapper._layer_to_wrap.inbound_nodes:
-                    tensor_name = "multi_head_attention/" + wrapper.name + "/" + output_quantizer.name
+                    tensor_name = wrapper.name + ":0"
                 else:
                     tensor_name = wrapper._layer_to_wrap.output.name
 
@@ -646,7 +669,7 @@ class QuantizationSimModel(tf.keras.Model):
         for layer in self.model.layers:
             if isinstance(layer, QcQuantizeWrapper):
                 yield layer
-            if isinstance(layer, QcQuantizableMultiHeadAttention):
+            if isinstance(layer, tuple(substitutable_modules.values())):
                 yield from layer.quant_wrappers()
 
             # For Getting Quantizers from Sequantial Block
@@ -765,7 +788,7 @@ def quant_wrappers_for_sequential_block(seq_block: tf.keras.Sequential):
     for layer in seq_block.layers:
         if isinstance(layer, QcQuantizeWrapper):
             yield layer
-        if isinstance(layer, QcQuantizableMultiHeadAttention):
+        if isinstance(layer, tuple(substitutable_modules.values())):
             yield from layer.quant_wrappers()
 
         # in cases of nested Sequential Block
