@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -37,12 +37,12 @@
 
 """ Custom modules for functional operations defined under torch and torch.nn.functional packages """
 
-from typing import Callable, Any, Tuple, Union, List
 import itertools
-import torchvision
+from typing import Callable, Any, Tuple, Union, List
+
 import torch
 import torch.nn
-
+import torchvision
 
 
 def forward_function_wrapper(functional: Callable) -> Any:
@@ -436,7 +436,7 @@ class GatherNd(torch.nn.Module):
             else batch_dims_shape + list(indices.shape)[self.batch_dims:-1] + list(data.shape)[self.batch_dims + indices.shape[-1]:])
 
         if torch.jit.is_tracing():
-            return torch.zeros(*output_shape)
+            return torch.zeros(*output_shape, device=data.device)
 
         output_data_buffer = []
 
@@ -450,7 +450,7 @@ class GatherNd(torch.nn.Module):
                 output_data_buffer.append(reshaped_data[(batch_dim, *gather_index)])
 
         if output_data_buffer[0].dim() == 0:
-            return torch.tensor(output_data_buffer).reshape(output_shape)
+            return torch.tensor(output_data_buffer, device=data.device).reshape(output_shape)
         return torch.cat(output_data_buffer).reshape(output_shape)
 
 

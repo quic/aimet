@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -37,10 +37,13 @@
 
 import json
 import unittest.mock
+from unittest import mock
+
+import aimet_common.libpymo as libpymo
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
-import aimet_common.libpymo as libpymo
+
 from aimet_common.defs import QuantScheme
 from aimet_torch import elementwise_ops
 from aimet_torch.quantsim import QuantizationSimModel
@@ -583,3 +586,16 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
         custom_module_out = model(inputs, indices, updates)
         self.assertTrue(np.allclose(custom_module_out, original_module_out))
+
+    def test_gather_nd_jit_trace(self):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        gather_nd = elementwise_ops.GatherNd(batch_dim=0)
+        data = torch.tensor([[0, 1], [2, 3]], device=device)
+        indices = torch.tensor([[0, 0], [1, 1]], device=device)
+
+        # Patch torch.jit.is_tracing() as True
+        with mock.patch("torch.jit.is_tracing", lambda: True), torch.inference_mode():
+            outputs = gather_nd(data, indices)
+
+        assert data.device == outputs.device
