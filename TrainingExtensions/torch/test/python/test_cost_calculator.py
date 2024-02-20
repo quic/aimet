@@ -155,8 +155,8 @@ class TestTrainingExtensionsCostCalculator(unittest.TestCase):
         self.assertEqual(32 * 10 * 15, cost4.mac)
         self.assertEqual(32 * 10 * 15, cost4.memory)
 
-        matmul1 = elementwise_ops.MatMul()
-        layer5 = Layer(matmul1, "matmul1", (32, 10, 15), [(32, 10, 15), (32, 10, 15)])
+        multiply1 = elementwise_ops.Multiply()
+        layer5 = Layer(multiply1, "multiply1", (32, 10, 15), [(32, 10, 15), (32, 10, 15)])
         cost5 = pt_cost_calculator.CostCalculator.compute_layer_cost(layer5)
 
         self.assertEqual(32 * 10 * 15, cost5.mac)
