@@ -79,8 +79,15 @@ class QuantizedTensor(torch.Tensor):
         :param dequant_fn: Mapping function from the quantized representation back to floating point representation
         """
         super().__init__()
-        self.encoding = encoding
-        self.dequant_fn = dequant_fn
+        self._encoding = encoding
+        self._dequant_fn = dequant_fn
+
+    @property
+    def encoding(self) -> EncodingBase:
+        """
+        Returns the QuantizedTensor's encoding
+        """
+        return self._encoding
 
     def attach_encoding(self, encoding, dequant_fn):
         """
@@ -89,15 +96,15 @@ class QuantizedTensor(torch.Tensor):
         :param encoding: Encoding object holding quantization parameters
         :param dequant_fn: Function used to dequantize to a floating point tensor
         """
-        self.encoding = encoding
-        self.dequant_fn = dequant_fn
+        self._encoding = encoding
+        self._dequant_fn = dequant_fn
         return self
 
     def dequantize(self) -> torch.Tensor:
         """
         Dequantize to a floating point torch.Tensor object
         """
-        return self.dequant_fn(self)
+        return self._dequant_fn(self)
 
     def quantized_repr(self) -> torch.Tensor:
         """
@@ -122,7 +129,7 @@ class QuantizedTensor(torch.Tensor):
             return self
         data = super().to(dtype=dtype, device=device, non_blocking=non_blocking, memory_format=mem_format)
         enc = self.encoding.to(dtype=dtype, device=device, non_blocking=non_blocking)
-        return type(self)(data, enc, self.dequant_fn)
+        return type(self)(data, enc, self._dequant_fn)
 
     @classmethod
     def __torch_function__(cls, func, types, args=(), kwargs=None):
@@ -136,7 +143,8 @@ class QuantizedTensor(torch.Tensor):
         if func in PASSTHROUGH_OPS:
             for arg in args:
                 if isinstance(arg, QuantizedTensor):
-                    encoding, dequant_fn = arg.encoding, arg.dequant_fn
+                    # pylint:disable = protected-access
+                    encoding, dequant_fn = arg.encoding, arg._dequant_fn
                     break
             output = super().__torch_function__(func, types, args, kwargs)
             return tree_map_only(QuantizedTensor, lambda qt: qt.attach_encoding(encoding, dequant_fn), output)
