@@ -49,7 +49,7 @@ class TestEncodingAnalyzer():
     @pytest.fixture
     def encoding_analyzers(self):
         min_max_encoding_analyzer = MinMaxEncodingAnalyzer((1,))
-        percentile_encoding_analyzer = PercentileEncodingAnalyzer((1,), 3)
+        percentile_encoding_analyzer = PercentileEncodingAnalyzer((1,), num_bins=3, percentile=99)
         sqnr_encoding_analyzer = SqnrEncodingAnalyzer((1, ))
         encoding_analyzer_list = [min_max_encoding_analyzer, percentile_encoding_analyzer, sqnr_encoding_analyzer]
         yield encoding_analyzer_list
@@ -58,9 +58,6 @@ class TestEncodingAnalyzer():
         for encoding_analyzer in encoding_analyzers:
             encoding_analyzer.update_stats(torch.randn(3, 4))
             with pytest.raises(ValueError):
-                if isinstance(encoding_analyzer, PercentileEncodingAnalyzer):
-                    encoding_analyzer.compute_encodings(bitwidth = 0, is_symmetric = False, percentile=99)
-                else:
                     encoding_analyzer.compute_encodings(bitwidth = 0, is_symmetric = False)
     
     def test_reset_stats(self, encoding_analyzers):
@@ -84,10 +81,7 @@ class TestEncodingAnalyzer():
     def test_compute_encodings_with_no_stats(self, encoding_analyzers):
         for encoding_analyzer in encoding_analyzers:
             with pytest.raises(RuntimeError):
-                if isinstance(encoding_analyzer, PercentileEncodingAnalyzer):
-                    encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False, percentile = 99)
-                else:
-                    encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False)
+               encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False)
 
     @pytest.mark.parametrize('dtype', [torch.float, torch.half])
     @pytest.mark.parametrize('symmetric', [True, False])
@@ -96,24 +90,12 @@ class TestEncodingAnalyzer():
             normal_range = torch.arange(-128, 128).to(dtype) / 256
             eps = torch.finfo(dtype).eps
 
-            if isinstance(encoding_analyzer, PercentileEncodingAnalyzer):
-                percentile_val = 99
-                min_1, max_1 = encoding_analyzer.compute_dynamic_encodings(normal_range * (1 - eps),
-                                                                        bitwidth=8, is_symmetric=symmetric,
-                                                                        percentile=percentile_val)
-                min_2, max_2 = encoding_analyzer.compute_dynamic_encodings(normal_range,
-                                                                        bitwidth=8, is_symmetric=symmetric,
-                                                                        percentile=percentile_val)
-                min_3, max_3 = encoding_analyzer.compute_dynamic_encodings(normal_range * (1 + eps),
-                                                                    bitwidth=8, is_symmetric=symmetric,
-                                                                    percentile=percentile_val)
-            else:
-                min_1, max_1 = encoding_analyzer.compute_dynamic_encodings(normal_range * (1 - eps),
-                                                                        bitwidth=8, is_symmetric=symmetric)
-                min_2, max_2 = encoding_analyzer.compute_dynamic_encodings(normal_range,
-                                                                        bitwidth=8, is_symmetric=symmetric)
-                min_3, max_3 = encoding_analyzer.compute_dynamic_encodings(normal_range * (1 + eps),
-                                                                        bitwidth=8, is_symmetric=symmetric)
+            min_1, max_1 = encoding_analyzer.compute_dynamic_encodings(normal_range * (1 - eps),
+                                                                    bitwidth=8, is_symmetric=symmetric)
+            min_2, max_2 = encoding_analyzer.compute_dynamic_encodings(normal_range,
+                                                                    bitwidth=8, is_symmetric=symmetric)
+            min_3, max_3 = encoding_analyzer.compute_dynamic_encodings(normal_range * (1 + eps),
+                                                                    bitwidth=8, is_symmetric=symmetric)
 
             assert min_3 <= min_2 <= min_1 <= max_1 <= max_2 <= max_3
             assert torch.allclose(max_1, max_2, atol=eps)
@@ -205,7 +187,7 @@ class TestHistogramEncodingAnalyzer:
         min_max_shape = request.param[0]
         num_bins = request.param[1]
 
-        percentile_encoding_analyzer = PercentileEncodingAnalyzer(min_max_shape, num_bins)
+        percentile_encoding_analyzer = PercentileEncodingAnalyzer(min_max_shape, num_bins = num_bins, percentile = 99)
         #sqnr_encoding_analyzer = SqnrEncodingAnalyzer(min_max_shape, num_bins)
         encoding_analyzer_list = [percentile_encoding_analyzer]
         yield encoding_analyzer_list
@@ -219,20 +201,13 @@ class TestHistogramEncodingAnalyzer:
             cum_sum = torch.cumsum(stats.histogram, dim=0)
             index = torch.searchsorted(cum_sum, torch.quantile(cum_sum, 99/100))
             max_val = stats.bin_edges[index]
-
-            if isinstance(encoding_analyzer, PercentileEncodingAnalyzer):
-                asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False, percentile=99)
-            else:
-                asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False)
-            
+           
+            asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False)
             assert torch.allclose(asymmetric_min, torch.full(tuple(encoding_analyzer.observer.shape), 0.0))
             assert torch.allclose(asymmetric_max, torch.full(tuple(encoding_analyzer.observer.shape), max_val))
 
-            if isinstance(encoding_analyzer, PercentileEncodingAnalyzer):
-                symmetric_min , symmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = True, percentile = 99)
-            else:
-                symmetric_min , symmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = True)
             
+            symmetric_min , symmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = True)
             assert torch.allclose(symmetric_min, torch.full(tuple(encoding_analyzer.observer.shape), -1 * max_val))
             assert torch.allclose(symmetric_max, torch.full(tuple(encoding_analyzer.observer.shape), max_val))
     
@@ -245,20 +220,12 @@ class TestHistogramEncodingAnalyzer:
             cum_sum = torch.cumsum(stats.histogram, dim=0)
             index = torch.searchsorted(cum_sum, torch.quantile(cum_sum, 99/100))
             min_value = stats.bin_edges[index]
-
-            if isinstance(encoding_analyzer, PercentileEncodingAnalyzer):
-                asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False, percentile=99)
-            else:
-                asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False)
-
+           
+            asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False)
             assert torch.allclose(asymmetric_min,  torch.full(tuple(encoding_analyzer.observer.shape), min_value))
             assert torch.all(torch.eq(asymmetric_max, torch.full(tuple(encoding_analyzer.observer.shape), 0)))
-
-            if isinstance(encoding_analyzer, PercentileEncodingAnalyzer):
-                symmetric_min , symmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = True, percentile = 99)
-            else:
-                symmetric_min , symmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = True)
             
+            symmetric_min , symmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = True)
             assert torch.allclose(symmetric_min, torch.full(tuple(encoding_analyzer.observer.shape), min_value))
             assert torch.allclose(symmetric_max, torch.full(tuple(encoding_analyzer.observer.shape), -1 * min_value))
         
@@ -267,7 +234,7 @@ class TestHistogramEncodingAnalyzer:
         min_max_shape = (1,)
         
         with pytest.raises(ValueError):
-            PercentileEncodingAnalyzer(num_bins = num_bins, shape=min_max_shape)
+            PercentileEncodingAnalyzer(num_bins = num_bins, shape=min_max_shape, percentile  = 99)
         
         with pytest.raises(ValueError):
             SqnrEncodingAnalyzer(min_max_shape, num_bins)
@@ -279,19 +246,12 @@ class TestHistogramEncodingAnalyzer:
         for encoding_analyzer in histogram_based_encoding_analyzers:
             input_tensor = torch.tensor([2.0, 3.5, 4.2, 5.0])
             encoding_analyzer.update_stats(input_tensor.cuda())
-            if isinstance(encoding_analyzer, PercentileEncodingAnalyzer):
-                encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = symmetric, percentile=99)
-            else:
-                encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = symmetric)
+            encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = symmetric)
             encoding_analyzer.update_stats(input_tensor.cuda())
             
             input_tensor_2 = input_tensor * 1.1 - 0.1 
             encoding_analyzer.update_stats(input_tensor_2.cuda())
-            
-            if isinstance(encoding_analyzer, PercentileEncodingAnalyzer):
-                encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = symmetric, percentile=99)
-            else:
-                encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = symmetric)
+            encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = symmetric)
             
             assert encoding_analyzer.observer.stats[0].histogram.is_cuda
             assert encoding_analyzer.observer.stats[0].bin_edges.is_cuda
@@ -412,9 +372,9 @@ class TestHistogramEncodingAnalyzer:
     @pytest.mark.parametrize('shape', [(4,), (3, 1), (2, 1, 1), (3, 4), (2, 3, 1), (2, 1, 4), (2, 3, 4)])
     def test_compute_encodings_multidimensional(self, symmetric, device, shape):
         x = torch.arange(24, dtype=torch.float).view(2, 3, 4).to(device)
-        encoding_analyzer = PercentileEncodingAnalyzer(shape=shape)
+        encoding_analyzer = PercentileEncodingAnalyzer(shape=shape, percentile = 99)
         encoding_analyzer.update_stats(x)
-        encoding_min, encoding_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric=symmetric, percentile=99)
+        encoding_min, encoding_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric=symmetric)
         assert encoding_min.shape == shape
         assert encoding_max.shape == shape
         if device == 'cuda':
@@ -521,75 +481,74 @@ class TestPercentileEncodingAnalyzer():
     @pytest.mark.parametrize("percentile_value", [-1, 49, 5, 101])
     def test_invalid_percentile_value(self, percentile_value):
         with pytest.raises(ValueError):
-            encoding_analyzer = PercentileEncodingAnalyzer((1,), 3)
-            encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False, percentile=percentile_value)
+            PercentileEncodingAnalyzer((1,), percentile = percentile_value, num_bins = 3)
     
     def test_compute_encodings_asymmetric_normalized(self):
-        encoding_analyzer = PercentileEncodingAnalyzer((1,), 3)
+        encoding_analyzer = PercentileEncodingAnalyzer((1,), percentile = 99, num_bins = 3)
         mean = std_dev = 2
         input_tensor = np.random.normal(mean, std_dev, size=(100000))
         encoding_analyzer.update_stats(torch.from_numpy(input_tensor))
 
-        asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False, percentile=99)
+        asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False)
         
         # 99% of the population is within 2 1/2 standard deviations of the mean
         assert asymmetric_min > mean - std_dev * 2.5
         assert asymmetric_max < mean + std_dev * 2.5  
     
     def test_compute_encodings_asymmetric_sequential(self):
-        encoding_analyzer = PercentileEncodingAnalyzer((1,), 500)
+        encoding_analyzer = PercentileEncodingAnalyzer((1,), percentile = 99, num_bins = 500)
         input_tensor =  torch.arange(start=0, end=1001, step=1, dtype=torch.float)
         encoding_analyzer.update_stats(input_tensor)
 
-        asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False, percentile=99)
+        asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False)
         
         # encoding max is the histogram bin edge which contains 99% percentile (990.02)
         assert asymmetric_min == 0
         assert asymmetric_max == 990.0
         
     def test_compute_encodings_signed_symmetric_normalized(self):
-        encoding_analyzer = PercentileEncodingAnalyzer((1,), 3)
+        encoding_analyzer = PercentileEncodingAnalyzer((1,), percentile = 99, num_bins = 3)
         mean = std_dev = 2
         input_tensor = np.random.normal(mean, std_dev, size=(10000))
         encoding_analyzer.update_stats(torch.from_numpy(input_tensor))
 
-        symmetric_min, symmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = True, percentile=99)
+        symmetric_min, symmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = True)
         largest_absolute_value = max(abs(element) for element in input_tensor)
         assert symmetric_min > -largest_absolute_value
         assert symmetric_max < largest_absolute_value
     
     def test_compute_encodings_signed_symmetric_sequential(self):
-        encoding_analyzer = PercentileEncodingAnalyzer((1,), 500)
+        encoding_analyzer = PercentileEncodingAnalyzer((1,), percentile = 99, num_bins = 500)
         input_tensor =  torch.arange(start=0, end=1001, step=1, dtype=torch.float)
         encoding_analyzer.update_stats(input_tensor)
         
-        symmetric_min, symmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = True, percentile=99)
+        symmetric_min, symmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = True)
         assert symmetric_min == -990.0
         assert symmetric_max == 990.0
     
     def test_compute_encodings_100_percentile(self):
-        encoding_analyzer = PercentileEncodingAnalyzer((1,), 3)
+        encoding_analyzer = PercentileEncodingAnalyzer((1,), percentile = 100, num_bins = 3)
         mean = std_dev = 2
         input_tensor = np.random.normal(mean, std_dev, size=(10000))
         encoding_analyzer.update_stats(torch.from_numpy(input_tensor))
 
-        symmetric_min, symmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = True, percentile=100)
+        symmetric_min, symmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = True)
         largest_absolute_value = max(abs(element) for element in input_tensor)
         assert abs(symmetric_min) <= largest_absolute_value
         assert symmetric_max <= largest_absolute_value
 
-        asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False, percentile=100)
+        asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False)
         assert np.allclose(asymmetric_min.item(), min(input_tensor))
         assert np.allclose(asymmetric_max.item(), max(input_tensor))
 
     
     def test_compute_encodings_50_percentile(self):
-        encoding_analyzer = PercentileEncodingAnalyzer((1,), 3)
+        encoding_analyzer = PercentileEncodingAnalyzer((1,), percentile = 50, num_bins = 3)
         input_tensor =  torch.arange(start=0, end=1001, step=1, dtype=torch.float)
         encoding_analyzer.update_stats(input_tensor)
         bw = 8
 
-        symmetric_min, symmetric_max = encoding_analyzer.compute_encodings(bitwidth = bw, is_symmetric = True, percentile=50)
+        symmetric_min, symmetric_max = encoding_analyzer.compute_encodings(bitwidth = bw, is_symmetric = True)
         
         stats = encoding_analyzer.observer.stats[0]
         cum_sum = torch.cumsum(stats.histogram, dim=0)
@@ -599,7 +558,7 @@ class TestPercentileEncodingAnalyzer():
         assert symmetric_min == -1 * mid_value
         assert symmetric_max == mid_value
 
-        asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = bw, is_symmetric = False, percentile=50)
+        asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = bw, is_symmetric = False)
         assert asymmetric_min == 0
         assert asymmetric_max == mid_value
 
