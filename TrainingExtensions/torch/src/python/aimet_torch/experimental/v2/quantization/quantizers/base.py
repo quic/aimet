@@ -139,7 +139,7 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
 
         return state_dict
 
-    def load_state_dict(self, state_dict, strict: bool = True):
+    def load_state_dict(self, state_dict, strict: bool = True): # pylint:disable=arguments-differ
         if '_extra_state' not in state_dict:
             is_initialized = {
                 param_name: True for param_name in state_dict
