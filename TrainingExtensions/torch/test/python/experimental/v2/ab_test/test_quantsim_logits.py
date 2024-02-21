@@ -228,8 +228,8 @@ def _compute_sqnr(orig_tensor: torch.Tensor,
 
 @pytest.mark.parametrize('quant_scheme', [QuantScheme.post_training_tf,
                                           QuantScheme.training_range_learning_with_tf_init,
-                                          # QuantScheme.post_training_percentile, # TODO: not implemented
-                                          # QuantScheme.training_range_learning_with_tf_init, # TODO: not implemented
+                                          QuantScheme.post_training_percentile,
+                                          QuantScheme.post_training_tf_enhanced,
                                          ])
 @pytest.mark.parametrize('seed', range(3))
 class TestQuantsimLogits:
@@ -300,7 +300,7 @@ class TestQuantsimLogits:
         dummy_input = torch.randn(input_shape)
         self.check_qsim_logit_consistency(CONFIG_PARAM_QUANT, quant_scheme, model, dummy_input)
 
-    @pytest.mark.parametrize('model_cls,input_shape', [# (models_to_test.SingleResidual, (10, 3, 32, 32)),
+    @pytest.mark.parametrize('model_cls,input_shape', [(models_to_test.SingleResidual, (10, 3, 32, 32)),
                                                        (models_to_test.QuantSimTinyModel, (10, 3, 32, 32))])
     def test_op_specific_quant(self, model_cls, input_shape, quant_scheme, seed):
         set_seed(seed)
