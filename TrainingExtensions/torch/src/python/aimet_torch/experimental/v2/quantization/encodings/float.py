@@ -100,14 +100,20 @@ class FloatEncoding(EncodingBase):
 
     def to(self, *args, **kwargs):
         """
-        Changes dtype of data in quantizer encoding or device where the data is
+        Changes dtype of data in quantizer encoding or device where the data is.
+        Behaves similar to torch.Tensor.to
         """
         to_args = parse_to_args(*args, **kwargs)
-        device, dtype_, _, _ = to_args
-        if dtype_ in (torch.float16, torch.bfloat16, torch.float32, torch.float64):
-            self._maxval = self._maxval.to(dtype_)
-        elif dtype_:
-            raise RuntimeError(f"Cannot change encoding data dtype to {dtype_}, "
+        device, dtype, _, _ = to_args
+        dtype = dtype if dtype else self._maxval.dtype
+        device = device if device else self._maxval.device
+
+        if dtype is self._maxval.dtype and device is self._maxval.device:
+            return self
+
+        if not dtype.is_floating_point:
+            raise RuntimeError(f"Cannot change encoding data dtype to {dtype}, "
                                "only floating point data types are supported")
-        self._maxval = self._maxval.to(device)
-        return self
+
+        maxval = self._maxval.to(dtype=dtype, device=device)
+        return type(self)(self._mantissa_bits, self._exponent_bits, maxval)

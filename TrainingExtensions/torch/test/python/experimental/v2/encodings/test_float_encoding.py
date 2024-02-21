@@ -63,11 +63,12 @@ class TestFloatEncoding:
         assert encoding.mapping == "float"
 
     @pytest.mark.cuda()
-    @pytest.mark.parametrize("device", ("cuda:0",))
-    def test_create_encoding_correct_device(self, device):
+    @pytest.mark.parametrize("device, new_device", (("cuda:0", "cpu"),
+                                                    ("cpu", "cuda:0")))
+    def test_create_encoding_correct_device(self, device, new_device):
         """
         When: Create an encoding with tensors on device
-        Then: encoding.{min, max, scale, offset} are on device
+        Then: encoding.maxval is on device
         """
         mantissa_bits = 5
         exponent_bits = 10
@@ -77,17 +78,19 @@ class TestFloatEncoding:
 
         """
         When: call encoding.to(new_device)
-        Then: encoding.{min, max, scale, offset} are on new_device
+        Then: 1) original encoding.maxval is on device
+              2) returned encoding.maxval is on new_device
         """
-        new_device = "cpu"
-        encoding.to(new_device)
-        assert encoding.maxval.device == torch.device(new_device)
+        new_encoding = encoding.to(new_device)
+        assert encoding.maxval.device == torch.device(device)
+        assert new_encoding.maxval.device == torch.device(new_device)
 
-    @pytest.mark.parametrize("dtype", (torch.float16, torch.float32))
-    def test_create_encoding_correct_dtype(self, dtype):
+    @pytest.mark.parametrize("dtype, new_dtype", ((torch.float16, torch.float32),
+                                                  (torch.float32, torch.float16)))
+    def test_create_encoding_correct_dtype(self, dtype, new_dtype):
         """
         When: Create an encoding with tensors of type dtype in {torch.float16, torch.float32}
-        Then: encoding.{min, max, scale, offset} are type dtype
+        Then: encoding.maxval is dtype
         """
         mantissa_bits = 5
         exponent_bits = 10
@@ -97,11 +100,12 @@ class TestFloatEncoding:
 
         """
         When: call encoding.to(new_dtype)
-        Then: encoding.{min, max, scale, offset} are on new_dtype
+        Then: 1) original encoding.maxval is dtype
+              2) returned encoding.maxval is new_dtype
         """
-        new_dtype = torch.float16 if dtype == torch.float32 else torch.float32
-        encoding.to(new_dtype)
-        assert encoding.maxval.dtype == new_dtype
+        new_encoding = encoding.to(new_dtype)
+        assert encoding.maxval.dtype == dtype
+        assert new_encoding.maxval.dtype == new_dtype
 
     @pytest.mark.parametrize("shape", ((10, 1), (10,)))
     def test_perchannel_encoding(self, shape):

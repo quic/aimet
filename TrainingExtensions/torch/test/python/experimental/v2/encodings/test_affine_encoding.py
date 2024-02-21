@@ -132,8 +132,9 @@ class TestAffineEncoding:
         assert encoding.num_steps == 2 ** bitwidth - 1
 
     @pytest.mark.cuda()
-    @pytest.mark.parametrize("device", ("cuda:0",))
-    def test_create_encoding_correct_device(self, scale, device):
+    @pytest.mark.parametrize("device, new_device", (("cuda:0", "cpu"),
+                                                    ("cpu", "cuda:0")))
+    def test_create_encoding_correct_device(self, scale, device, new_device):
         """
         When: Create an encoding with tensors on device
         Then: encoding.{min, max, scale, offset} are on device
@@ -149,7 +150,6 @@ class TestAffineEncoding:
         Then: 1) original encoding.{min, max, scale, offset} are on device
               2) returned encoding.{min, max, scale, offset} are on new_device
         """
-        new_device = "cpu"
         new_encoding = encoding.to(new_device)
 
         for property in [encoding.min, encoding.max, encoding.scale, encoding.offset]:
@@ -158,8 +158,9 @@ class TestAffineEncoding:
         for property in [new_encoding.min, new_encoding.max, new_encoding.scale, new_encoding.offset]:
             assert property.device == torch.device(new_device)
 
-    @pytest.mark.parametrize("dtype", (torch.float16, torch.float32))
-    def test_create_encoding_correct_dtype(self, dtype):
+    @pytest.mark.parametrize("dtype, new_dtype", ((torch.float16, torch.float32),
+                                                  (torch.float32, torch.float16)))
+    def test_create_encoding_correct_dtype(self, dtype, new_dtype):
         """
         When: Create an encoding with tensors of type dtype in {torch.float16, torch.float32}
         Then: encoding.{min, max, scale, offset} are dtype
@@ -175,7 +176,6 @@ class TestAffineEncoding:
         Then: 1) original encoding.{min, max, scale, offset} are dtype
               2) returned encoding.{min, max, scale, offset} are new_dtype
         """
-        new_dtype = torch.float16 if dtype == torch.float32 else torch.float32
         new_encoding = encoding.to(new_dtype)
 
         for property in [new_encoding.min, new_encoding.max, new_encoding.scale, new_encoding.offset]:
