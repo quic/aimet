@@ -49,12 +49,13 @@ from torchvision import models
 import aimet_torch.elementwise_ops
 from aimet_common.utils import AimetLogger
 from aimet_torch import onnx_utils
+from aimet_torch.model_preparer import prepare_model
 from aimet_torch.onnx_utils import (
     save_initializer_restored_onnx_graph,
     restore_onnx_graph_initializers, get_pytorch_name_from_onnx_name
 )
 from models.test_models import RoiModel, InputOutputDictModel, MultiplePReluModel, NestedSeqModel,\
-    NestedModelWithOverlappingNames, ModelWithModuleList
+    NestedModelWithOverlappingNames, ModelWithModuleList, ModelWithReusedInitializers
 
 
 class OutOfOrderModel(torch.nn.Module):
@@ -1005,3 +1006,34 @@ class TestOnnxUtils:
                 pytorch_name = get_pytorch_name_from_onnx_name(node.name)
                 print(pytorch_name, "-->", node.name)
                 assert isinstance(model.get_submodule(pytorch_name), torch.nn.Module)
+
+    @pytest.mark.parametrize("inplace", [True])
+    def test_restore_onnx_graph_reused_initializers(self, inplace):
+        """ test to verify that Initializers are added and correponding Identity nodes are removed correctly """
+        repetition = 2
+        model = ModelWithReusedInitializers(repetition).eval()
+        dummy_input = torch.randn(1, 256)
+        prepared_model = prepare_model(model)
+        assert torch.equal(model(dummy_input), prepared_model(dummy_input))
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            original_model_path = f"{tmp_dir}/reused_initializers.onnx"
+            torch.onnx.export(prepared_model, dummy_input, original_model_path)
+
+            original_model = onnx.load(original_model_path)
+            identity_nodes = [node for node in original_model.graph.node if node.op_type == "Identity"]
+            assert len(identity_nodes) == 6
+            initializers = [ini for ini in original_model.graph.initializer]
+            assert len(initializers) == 6
+
+            restored_model = restore_onnx_graph_initializers(original_model, inplace=inplace)
+            identity_nodes = [node for node in restored_model.graph.node if node.op_type == "Identity"]
+            # There shouldn't be any "Identity" type nodes in the restored model.
+            assert len(identity_nodes) == 0
+            initializers = [ini for ini in restored_model.graph.initializer]
+            # There will be 6 more initializers added for newly added modules.
+            assert len(initializers) == 6 * repetition
+
+            # Ensure that the graph is correct
+            self.check_onnx_node_name_uniqueness(restored_model)
+            onnx.checker.check_model(restored_model)
