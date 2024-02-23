@@ -203,10 +203,11 @@ class TestBlockwiseQuantTensorSplitting:
         assert num_blockwise_linears == 4
 
 class TestBlockwiseQuantBatchedMatmul:
-    def test_blockwise_quant_with_batched_matmul(self, create_per_channel_config):
+    @pytest.mark.parametrize('device', ['cpu', 'cuda'])
+    def test_blockwise_quant_with_batched_matmul(self, create_per_channel_config, device):
         torch.manual_seed(0)
-        dummy_input = torch.randn(1, 1, 9)
-        model = LinearModel()
+        dummy_input = torch.randn(1, 1, 9, device=device)
+        model = LinearModel().to(device)
         orig_out = model(dummy_input)
         orig_linear = model.linear1
 
@@ -237,13 +238,14 @@ class TestBlockwiseQuantBatchedMatmul:
         assert torch.equal(weight_first_quantized_out, weight_last_quantized_out)
         assert len(qsim2.model.linear1.batch_matmul.param_quantizers['weight'].encoding) == 9
 
-        qsim2.export('./data', 'bmm_blockwise', dummy_input)
+        qsim2.export('./data', 'bmm_blockwise', dummy_input.to('cpu'))
 
 class TestBlockwiseQuantGroupedConv:
-    def test_blockwise_quant_with_grouped_conv(self, create_per_channel_config):
+    @pytest.mark.parametrize('device', ['cpu', 'cuda'])
+    def test_blockwise_quant_with_grouped_conv(self, create_per_channel_config, device):
         torch.manual_seed(0)
-        dummy_input = torch.randn(1, 1, 9)
-        model = LinearModel()
+        dummy_input = torch.randn(1, 1, 9, device=device)
+        model = LinearModel().to(device)
         orig_out = model(dummy_input)
         orig_linear = model.linear1
 
@@ -258,7 +260,7 @@ class TestBlockwiseQuantGroupedConv:
 
         assert len(qsim.model.linear1.grouped_conv.param_quantizers['weight'].encoding) == 9
 
-        qsim.export('./data', 'gc_blockwise', dummy_input)
+        qsim.export('./data', 'gc_blockwise', dummy_input.to('cpu'))
 
 def test_parity_of_blockwise_quant_formulations(create_per_channel_config):
 
