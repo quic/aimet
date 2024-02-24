@@ -37,12 +37,12 @@
 
 import pytest
 import torch
+import mock
 import torch.nn.functional as F
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 from aimet_torch.experimental.v2.quantization.quantizers.affine import Quantize
-#from aimet_torch.experimental.v2.nn.true_quant import TrueQuantizedLinear, TrueQuantizationMixin, set_true_quant_backend
-#from aimet_torch.experimental.v2.quantization import AffineEncoding, QuantizedTensor
-from functools import partial
+#from aimet_torch.experimental.v2.nn.true_quant import TrueQuantizedLinear, TrueQuantizationMixin, set_default_true_quant_backend
+from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensor, affine_quantize
 
 class DummyBackend:
 
@@ -58,17 +58,16 @@ class DummyBackend:
 
     @staticmethod
     def linear(input, weight, bias=None, *, output_encodings=None):
-        output = F.linear(input.dequantize(), weight.dequantize(), bias)
-        output = get_backend().quantize(output, output_encodings.scale, output_encodings.offset, output_encodings.bitwidth)
-        output.encodings = output_encodings
-        output.dequantize = lambda : get_backend().dequantize(output, output_encodings.scale, output_encodings.offset)
-        return output
+        return affine_quantize(input.mm(weight.t()) + bias,
+                               output_encodings.scale,
+                               output_encodings.offset,
+                               output_encodings.bitwidth)
 
     @classmethod
     def get_kernel(cls, op_key: str):
         if op_key == "linear":
-            return cls.linear_predicate, cls.linear
-        return None
+            return [(cls.linear_predicate, cls.linear)]
+        return []
 
 class TruePredicateBackend(DummyBackend):
 
@@ -84,9 +83,9 @@ class FalsePredicateBackend(DummyBackend):
 
 @pytest.fixture
 def input():
-    return torch.arange(-5, 5) / 10
+    return torch.arange(-5, 5).expand(10, 10) / 10
 
-#set_true_quant_backend(DummyBackend)
+#set_default_true_quant_backend(DummyBackend)
 
 @pytest.mark.skip("Not Implemented")
 class TestTrueQuantLinear:
@@ -124,7 +123,7 @@ class TestTrueQuantLinear:
         """
         Given: TrueQuantLinear with input, output, and param quantizers
         """
-        set_true_quant_backend(DummyBackend)
+        set_default_true_quant_backend(DummyBackend)
         quant_linear = TrueQuantizedLinear(10, input.shape[-1])
         quant_linear.input_quantizers[0] = Quantize((1, ), bitwidth=8, symmetric=False)
         quant_linear.output_quantizers[0] = Quantize((1, ), bitwidth=8, symmetric=False)
@@ -138,7 +137,7 @@ class TestTrueQuantLinear:
 
         """
         When: Invoke forward pass within compute_encodings context
-        Then: Output should be equal to fake quant forward pass
+        Then: Output should be equal to fake quant forward pass with activation quantizers disabled
         """
         with quant_linear.compute_encodings():
             output = quant_linear(input)
@@ -152,11 +151,9 @@ class TestTrueQuantLinear:
         weight_enc = (quant_linear.param_quantizers["weight"].get_scale(),
                       quant_linear.param_quantizers["weight"].get_offset(),
                       quant_linear.param_quantizers["weight"].bitwidth)
-        input_qdq = get_backend().quantize_dequantize(input, *input_enc)
         weight_qdq = get_backend().quantize_dequantize(quant_linear.weight, *weight_enc)
-        output_fp = F.linear(input_qdq, weight_qdq, bias=quant_linear.bias)
-        output_expected = get_backend().quantize_dequantize(output_fp, *output_enc)
-        assert torch.all(output == output_expected)
+        output_expected = F.linear(input, weight_qdq, bias=quant_linear.bias)
+        assert torch.equal(output, output_expected)
 
         """
         When: Invoke forward pass outside of compute_encodings context with an unquantized tensor
@@ -164,18 +161,18 @@ class TestTrueQuantLinear:
               2) output should be a quantized tensor
               3) output should be close to fake quant output after dequantization
         """
+        input_qdq = get_backend().quantize_dequantize(input, *input_enc)
+        output_fp = F.linear(input_qdq, weight_qdq, bias=quant_linear.bias)
+        output_expected = get_backend().quantize_dequantize(output_fp, *output_enc)
         output_quant = quant_linear(input)
         assert isinstance(output_quant, QuantizedTensor)
-        assert quant_linear._last_operator_info[0] == DummyBackend
-        assert quant_linear._last_operator_info[1] == DummyBackend.linear
         assert torch.allclose(output_quant.dequantize(), output_expected)
 
         """
         When: Invoke forward pass outside of compute_encodings context with a quantized tensor
         Then: Dequantized output should be close to running fake quant on the dequantized input tensor
         """
-        encoding = AffineEncoding(scale=0.01, offset=0, bitwidth=8)
-        quantized_input = QuantizedTensor.quantize(input, encoding)
+        quantized_input = affine_quantize(input, torch.tensor(0.01), torch.tensor(0.), 8)
         output = quant_linear(quantized_input)
         input_qdq = get_backend().quantize_dequantize(quantized_input.dequantize(), *input_enc)
         output_fp = F.linear(input_qdq, weight_qdq, bias=quant_linear.bias)
@@ -187,7 +184,7 @@ class TestTrueQuantLinear:
         """
         Given: TrueQuantLinear with output and param quantizers and computed encodings
         """
-        set_true_quant_backend(DummyBackend)
+        set_default_true_quant_backend(DummyBackend)
         quant_linear = TrueQuantizedLinear(10, input.shape[-1])
         quant_linear.output_quantizers[0] = Quantize((1, ), bitwidth=8, symmetric=False)
         quant_linear.param_quantizers["weight"] = Quantize((10, ), bitwidth=8, symmetric=True)
@@ -211,7 +208,8 @@ class TestTrueQuantLinear:
         input_q = quantizer(input)
         output = quant_linear(input_q)
         assert isinstance(output, QuantizedTensor)
-        assert output.encoding == quant_linear.output_quantizer[0].encoding
+        assert output.encoding.scale == quant_linear.output_quantizers[0].get_scale()
+        assert output.encoding.offset == quant_linear.output_quantizers[0].get_offset()
 
     def test_set_global_backend(self, input):
         """
@@ -221,41 +219,47 @@ class TestTrueQuantLinear:
         quant_linear.input_quantizers[0] = Quantize((1, ), bitwidth=8, symmetric=False)
         quant_linear.output_quantizers[0] = Quantize((1, ), bitwidth=8, symmetric=False)
         quant_linear.param_quantizers["weight"] = Quantize((10, ), bitwidth=8, symmetric=True)
+        with quant_linear.compute_encodings():
+            quant_linear(input)
         """
-        Given: called set_true_quant_backend(backend)
-        When: call set_true_quant_backend(backend)
+        Given: called set_default_true_quant_backend(backend)
+        When: call set_default_true_quant_backend(backend)
         Then: forward pass is computed with backend
         """
-        set_true_quant_backend(TruePredicateBackend)
-        quant_linear(input)
-        assert quant_linear._last_operator_info[0] == TruePredicateBackend
+        set_default_true_quant_backend(TruePredicateBackend)
+        with mock.patch.object(TruePredicateBackend, "linear") as mock_linear:
+            quant_linear(input)
+            assert mock_linear.call_count == 1
+
 
         """
-        Given: called set_true_quant_backend([b1, b2])
+        Given: called set_default_true_quant_backend([b1, b2])
         
         When: 1) Invoke layer forward pass
               2) Both predicates return True
         Then: forward pass is computed with b1
         """
-        set_true_quant_backend([TruePredicateBackend, DummyBackend])
-        quant_linear(input)
-        assert quant_linear._last_operator_info[0] == TruePredicateBackend
+        set_default_true_quant_backend([TruePredicateBackend, DummyBackend])
+        with mock.patch.object(TruePredicateBackend, "linear") as mock_linear:
+            quant_linear(input)
+            assert mock_linear.call_count == 1
 
         """
         When: 1) Invoke layer forward pass
               2) b1 predicate returns False, b2 predicate returns True
         Then: forward pass is computed with b2
         """
-        set_true_quant_backend([FalsePredicateBackend, TruePredicateBackend])
-        quant_linear(input)
-        assert quant_linear._last_operator_info[0] == TruePredicateBackend
+        set_default_true_quant_backend([FalsePredicateBackend, TruePredicateBackend])
+        with mock.patch.object(TruePredicateBackend, "linear") as mock_linear:
+            quant_linear(input)
+            assert mock_linear.call_count == 1
 
         """
         When: 1) Invoke layer forward pass
               2) All backend predicates return False
         Then: raise RuntimeError
         """
-        set_true_quant_backend([FalsePredicateBackend])
+        set_default_true_quant_backend([FalsePredicateBackend])
         with pytest.raises(RuntimeError):
             quant_linear(input)
 
@@ -263,7 +267,7 @@ class TestTrueQuantLinear:
         """
         Given: TrueQuantLinear with valid quantizers and computed encodings
         """
-        set_true_quant_backend(DummyBackend)
+        set_default_true_quant_backend(DummyBackend)
         quant_linear = TrueQuantizedLinear(10, input.shape[-1])
         quant_linear.input_quantizers[0] = Quantize((1, ), bitwidth=8, symmetric=False)
         quant_linear.output_quantizers[0] = Quantize((1, ), bitwidth=8, symmetric=False)
@@ -277,9 +281,9 @@ class TestTrueQuantLinear:
         Then: Compute the output using backend
         """
         quant_linear.set_backend(TruePredicateBackend)
-        quant_linear(input)
-        op_info = quant_linear._last_operator_info
-        assert op_info[0] == TruePredicateBackend
+        with mock.patch.object(TruePredicateBackend, "linear") as mock_linear:
+            quant_linear(input)
+            assert mock_linear.call_count == 1
 
         """
         When: 1) Call layer.set_backend(backend)
@@ -298,21 +302,21 @@ class TestTrueQuantLinear:
         Then: Compute the output using b2
         """
         quant_linear.set_backend([FalsePredicateBackend, TruePredicateBackend])
-        quant_linear(input)
-        op_info = quant_linear._last_operator_info
-        assert op_info[0] == TruePredicateBackend
+        with mock.patch.object(TruePredicateBackend, "linear") as mock_linear:
+            quant_linear(input)
+            assert mock_linear.call_count == 1
 
         """
-        When: 1) Call layer.set_backend(backend, strict=False)
+        When: 1) Call layer.set_backend(backend, allow_fallback=True)
               2) Invoke forward pass
               3) backend predicate returns False
               4) global backend predicate returns True
         Then: compute the output using the global backend
         """
-        quant_linear.set_backend(FalsePredicateBackend, strict=False)
-        quant_linear(input)
-        op_info = quant_linear._last_operator_info
-        assert op_info[0] == DummyBackend
+        quant_linear.set_backend(FalsePredicateBackend, allow_fallback=True)
+        with mock.patch.object(DummyBackend, "linear") as mock_linear:
+            quant_linear(input)
+            assert mock_linear.call_count == 1
 
     def test_backend_specific_kwargs(self, input):
         """
@@ -331,7 +335,11 @@ class TestTrueQuantLinear:
             @staticmethod
             def linear(input, weight, bias=False, assertion=False, output_encodings=None):
                 assert assertion
-                return super().linear(input, weight, bias, output_encodings=output_encodings)
+                return TruePredicateBackend.linear(input, weight, bias, output_encodings=output_encodings)
+
+            @staticmethod
+            def linear_predicate(input, weight, bias=False, assertion=False, output_encodings=None):
+                return True
 
         quant_linear.set_backend(KeywordArgBackend)
 
@@ -347,16 +355,16 @@ class TestTrueQuantLinear:
               2) Invoke the forward pass
         Then: Pass layer.extra_kwargs as keyword arguments to the kernel call
         """
-        extra_kwargs = {"assertion": True}
-        quant_linear.set_backend(KeywordArgBackend, extra_kwargs=extra_kwargs)
+        quant_linear.set_backend(KeywordArgBackend)
+        quant_linear.set_backend_kwargs(KeywordArgBackend, assertion=True)
         quant_linear(input)
 
         """
         When: Layer contains keyword arguments which are not supported by the chosen backend
-        Then: raise RuntimeError
+        Then: raise TypeError
         """
-        quant_linear.extra_kwargs["unsupported"] = True
-        with pytest.raises(RuntimeError):
+        quant_linear.set_backend_kwargs(KeywordArgBackend, unsupported_kwarg=True)
+        with pytest.raises(TypeError):
             quant_linear(input)
 
     def test_from_module(self, input):
