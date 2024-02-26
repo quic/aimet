@@ -46,6 +46,10 @@ from aimet_torch.blockwise_quant_recipes import blockwise_quant_batched_matmul a
 from aimet_torch.blockwise_quant_recipes import blockwise_quant_grouped_conv as bqgc
 from aimet_torch.blockwise_quant_recipes import blockwise_quant_tensor_split as bqts
 
+DEVICES = ['cpu']
+if torch.cuda.is_available():
+    DEVICES.append('cuda')
+
 class LinearModel(torch.nn.Module):
     def __init__(self):
         super(LinearModel, self).__init__()
@@ -203,7 +207,7 @@ class TestBlockwiseQuantTensorSplitting:
         assert num_blockwise_linears == 4
 
 class TestBlockwiseQuantBatchedMatmul:
-    @pytest.mark.parametrize('device', ['cpu', 'cuda'])
+    @pytest.mark.parametrize('device', DEVICES)
     def test_blockwise_quant_with_batched_matmul(self, create_per_channel_config, device):
         torch.manual_seed(0)
         dummy_input = torch.randn(1, 1, 9, device=device)
@@ -241,7 +245,7 @@ class TestBlockwiseQuantBatchedMatmul:
         qsim2.export('./data', 'bmm_blockwise', dummy_input.to('cpu'))
 
 class TestBlockwiseQuantGroupedConv:
-    @pytest.mark.parametrize('device', ['cpu', 'cuda'])
+    @pytest.mark.parametrize('device', DEVICES)
     def test_blockwise_quant_with_grouped_conv(self, create_per_channel_config, device):
         torch.manual_seed(0)
         dummy_input = torch.randn(1, 1, 9, device=device)
