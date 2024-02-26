@@ -47,6 +47,8 @@ from torch import nn
 
 from aimet_torch.experimental.v2.utils import patch_attr, _is_expandable, StatisticsNotFoundError
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import EncodingAnalyzer, MinMaxEncodingAnalyzer
+from aimet_torch.experimental.v2.quantization.encodings import AffineEncoding
+from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensor
 from aimet_torch.experimental.v2.quantization.quantizers.base import QuantizerBase
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 from aimet_torch.experimental.v2.utils import ste_round
@@ -311,7 +313,7 @@ class Quantize(MinMaxQuantizer):
     """
     Applies quantization to the input
     """
-    def forward(self, input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, input: torch.Tensor) -> QuantizedTensor:
         """
         :param input: Input to quantize
         :return: Quantized output and scale/offset associated with it
@@ -324,8 +326,9 @@ class Quantize(MinMaxQuantizer):
 
         scale = self.get_scale()
         offset = self.get_offset()
-        input_q = get_backend().quantize(input, scale, offset, self.bitwidth)
-        return input_q, scale, offset
+        return QuantizedTensor(get_backend().quantize(input, scale, offset, self.bitwidth),
+                               AffineEncoding(scale, offset, self.bitwidth),
+                               lambda x: get_backend().dequantize(torch.Tensor(x), scale, offset))
 
 
 class QuantizeDequantize(MinMaxQuantizer):
@@ -352,15 +355,10 @@ class Dequantize(torch.nn.Module):
     """
     Applies dequantization to the input
     """
-    def forward(self,
-                input: torch.Tensor,
-                scale: torch.Tensor,
-                offset: torch.Tensor) -> torch.Tensor:
+    def forward(self, input: QuantizedTensor) -> torch.Tensor:
         # pylint: disable=no-self-use
         """
         :param input: Input to dequantize
-        :param scale: Quantization scale
-        :param offset: Quantization offset
         :return: Dequantized output
         """
-        return get_backend().dequantize(input, scale, offset)
+        return input.dequantize()

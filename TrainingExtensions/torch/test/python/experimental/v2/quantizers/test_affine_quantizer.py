@@ -42,7 +42,8 @@ import torch
 from torch import nn
 from torch.optim import SGD, RMSprop, Adagrad, Adam, AdamW
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
-from aimet_torch.experimental.v2.quantization.quantizers.affine import AffineQuantizerBase, Quantize, QuantizeDequantize
+from aimet_torch.experimental.v2.quantization.quantizers.affine import AffineQuantizerBase, Quantize, \
+    QuantizeDequantize, Dequantize
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 
 
@@ -772,3 +773,19 @@ def test_is_initialized():
     res = pickle.dumps(qdq)
     qdq = pickle.loads(res)
     assert qdq.is_initialized()
+
+
+@torch.no_grad()
+@pytest.mark.parametrize('symmetric', [True, False])
+def test_quantize_dequantize_then_quantize_and_dequantize_equality(x, symmetric):
+    qdq = QuantizeDequantize((1,), 8, symmetric)
+    q = Quantize((1,), 8, symmetric)
+    dq = Dequantize()
+
+    with qdq.compute_encodings(), q.compute_encodings():
+        _ = qdq(x)
+        _ = q(x)
+
+    a = qdq(x)
+    b = dq(q(x))
+    assert torch.allclose(a, b)
