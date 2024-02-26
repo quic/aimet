@@ -51,6 +51,8 @@ from aimet_torch.experimental.v2.quantization.encodings import AffineEncoding
 from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensor
 from aimet_torch.experimental.v2.quantization.quantizers.base import QuantizerBase
 from aimet_torch.experimental.v2.quantization.backends import get_backend
+from aimet_torch.experimental.v2.quantization.quantized_tensor import affine_quantize
+from aimet_torch.experimental.v2.quantization.encodings import AffineEncoding
 from aimet_torch.experimental.v2.utils import ste_round
 
 
@@ -122,6 +124,11 @@ class AffineQuantizerBase(QuantizerBase):
         """
         Set quantization parameters to the given min-max range
         """
+
+    def get_encoding(self) -> Optional[AffineEncoding]:
+        if self.is_initialized():
+            return AffineEncoding(self.get_scale(), self.get_offset(), self.bitwidth, signed=self.symmetric)
+        return None
 
     @torch.no_grad()
     def get_legacy_encodings(self) -> Optional[List[Dict]]:

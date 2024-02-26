@@ -47,6 +47,7 @@ import torch
 from torch import nn
 
 from packaging import version
+from aimet_torch.experimental.v2.quantization.encodings import EncodingBase
 
 
 __all__ = ['QuantizerBase']
@@ -81,6 +82,12 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
     def set_legacy_encodings(self, encodings: List[Dict]):
         """
         Set encodings represented in the same format as the output of get_legacy_encodings.
+        """
+
+    @abc.abstractmethod
+    def get_encoding(self) -> Optional[EncodingBase]:
+        """
+        Return the quantizer's encodings as an EncodingBase object
         """
 
     def register_quantization_parameter(self, name: str, param: nn.Parameter):
