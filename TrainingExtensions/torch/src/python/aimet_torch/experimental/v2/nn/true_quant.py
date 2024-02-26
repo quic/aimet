@@ -52,7 +52,7 @@ from aimet_torch.experimental.v2.quantization.quantizers.base import QuantizerBa
 from aimet_torch.experimental.v2.utils import patch_attr
 
 OpArgs = Any
-_CURRENT_TRUE_QUANT_BACKEND = []
+_CURRENT_OPERATOR_LIBRARIES = []
 
 
 class _QuantizedOpLibrary(Protocol):
@@ -69,21 +69,21 @@ class _QuantizedOpLibrary(Protocol):
         """
 
 
-def set_default_true_quant_backend(backends: Union[List[_QuantizedOpLibrary], _QuantizedOpLibrary]):
+def set_default_operator_library(op_libraries: Union[List[_QuantizedOpLibrary], _QuantizedOpLibrary]):
     """
     Set the default operator library(s0) for true-quantized modules
     """
-    if not isinstance(backends, (list, tuple)):
-        backends = [backends]
-    global _CURRENT_TRUE_QUANT_BACKEND # pylint:disable = global-statement
-    _CURRENT_TRUE_QUANT_BACKEND = backends
+    if not isinstance(op_libraries, (list, tuple)):
+        op_libraries = [op_libraries]
+    global _CURRENT_OPERATOR_LIBRARIES # pylint:disable = global-statement
+    _CURRENT_OPERATOR_LIBRARIES = op_libraries
 
 
-def get_true_quant_backend() -> List[_QuantizedOpLibrary]:
+def get_default_operator_library() -> List[_QuantizedOpLibrary]:
     """
     Get the current default true-quant operator libraries
     """
-    return _CURRENT_TRUE_QUANT_BACKEND.copy()
+    return _CURRENT_OPERATOR_LIBRARIES.copy()
 
 
 # pylint:disable = protected-access
@@ -119,21 +119,21 @@ class TrueQuantizationMixin(BaseQuantizationMixin, ABC):
     cls_to_qcls = OrderedDict()  # quantized class -> original class
     qcls_to_cls = OrderedDict()  # original class -> quantized class
     op_key: str
-    allow_backend_fallback: bool
+    allow_library_fallback: bool
     allow_float_fallback: bool
-    _backends: List[_QuantizedOpLibrary]
-    _backend_kwargs: Dict[_QuantizedOpLibrary, Dict[str, Any]]
+    _op_libraries: List[_QuantizedOpLibrary]
+    _library_kwargs: Dict[_QuantizedOpLibrary, Dict[str, Any]]
     quantized_classes_map = OrderedDict()
 
     def __init__(self,
                  *args,
-                 backend: Union[_QuantizedOpLibrary, List[_QuantizedOpLibrary]] = None,
+                 op_library: Union[_QuantizedOpLibrary, List[_QuantizedOpLibrary]] = None,
                  float_fallback: bool = False,
-                 backend_fallback: bool = False,
+                 library_fallback: bool = False,
                  **kwargs):
         super().__init__(*args, **kwargs)
-        self.set_backend(backend, backend_fallback)
-        self._backend_kwargs = {}
+        self.set_operator_library(op_library, library_fallback)
+        self._library_kwargs = {}
         self.allow_float_fallback = float_fallback
 
     @contextlib.contextmanager
@@ -147,71 +147,71 @@ class TrueQuantizationMixin(BaseQuantizationMixin, ABC):
                     continue
                 # NOTE: This behavior is for backawrd-compatibility with V1 quantsim.
                 stack.enter_context(patch_attr(quantizer, 'forward', no_op))
-            stack.enter_context(patch_attr(self, "call_operator", self.fallback_operator))
+            stack.enter_context(patch_attr(self, "quantized_operator", self.fallback_operator))
             with super().compute_encodings():
                 yield
 
-    def available_backends(self) -> List[_QuantizedOpLibrary]:
+    def available_operator_libraries(self) -> List[_QuantizedOpLibrary]:
         """
         Retrieve all operator libraries available to the layer
         """
-        if self.allow_backend_fallback or not self._backends:
-            return self._backends + get_true_quant_backend()
-        return self._backends.copy()
+        if self.allow_library_fallback or not self._op_libraries:
+            return self._op_libraries + get_default_operator_library()
+        return self._op_libraries.copy()
 
-    def set_backend(self,
-                    backend: Union[List[_QuantizedOpLibrary], _QuantizedOpLibrary],
-                    allow_fallback=False):
+    def set_operator_library(self,
+                             library: Union[List[_QuantizedOpLibrary], _QuantizedOpLibrary],
+                             allow_fallback=False):
         """
         Set the layer's operator library
 
-        :param backend: library or list of libraries to call into
+        :param library: operator library or list of libraries to call into
         :param allow_fallback: If True, allow fallback to default operator libraries
         """
-        if backend is None:
-            backend = []
-        self.allow_backend_fallback = allow_fallback
-        if not isinstance(backend, (list, tuple)):
-            backend = [backend]
-        self._backends = backend
+        if library is None:
+            library = []
+        self.allow_library_fallback = allow_fallback
+        if not isinstance(library, (list, tuple)):
+            library = [library]
+        self._op_libraries = library
 
-    def set_backend_kwargs(self, backend: _QuantizedOpLibrary, **kwargs):
+    def set_library_kwargs(self, library: _QuantizedOpLibrary, **kwargs):
         """
-        Sets additional keyword arguments to pass to the specified backend when selected
+        Sets additional keyword arguments to pass to the specified operator library when selected
 
-        :param backend: the operator library for which to add keyword arguments
+        :param library: the operator library for which to add keyword arguments
         """
-        self._backend_kwargs[backend] = kwargs
+        self._library_kwargs[library] = kwargs
 
-    def get_backend_kwargs(self, backend) -> Dict[str, Any]:
+    def get_library_kwargs(self, library: _QuantizedOpLibrary) -> Dict[str, Any]:
         """
-        Retrieves the keyword arguments for the specified backend
+        Retrieves the keyword arguments for the specified operator library
 
-        :param backend: Backend to retrieve keyword arguments for
+        :param library: operator library to retrieve keyword arguments for
         """
-        return self._backend_kwargs.get(backend, {})
+        return self._library_kwargs.get(library, {})
 
     def select_operator(self, args, kwargs) -> Tuple[Callable, Tuple, Dict]:
         """
         Returns the first kernel (and kernel arguments) for which the predicate function returns True.
         Predicates are tested in the following order:
-            1) First local backend --> last local backend
-            2) (if self.allow_backend_fallback)  First global backend --> last global backend
+            1) First local op library --> last local op library
+            2) (if self.allow_library_fallback)  First global op library --> last global op library
             3) (if self.allow_float_fallback) Fake-quant forward pass
 
         :return: Tuple of operator, operator positional arguments, operator keyword arguments
         """
         op_args, op_kwargs = self.functional_op_arguments(*args, **kwargs)
         op_kwargs["output_encodings"] = pytree.tree_map_only(QuantizerBase, lambda q: q.get_encoding(), self.output_quantizer_tree())
-        for backend in self.available_backends():
-            backend_kwargs = self._add_backend_kwargs(backend, **kwargs)
-            for predicate, operator in backend.get_kernel(self.op_key):
-                if predicate(*op_args, **backend_kwargs):
-                    return operator, op_args, backend_kwargs
+        for op_lib in self.available_operator_libraries():
+            lib_kwargs = self._add_library_kwargs(op_lib, **op_kwargs)
+            for predicate, operator in op_lib.get_kernel(self.op_key):
+                if predicate(*op_args, **lib_kwargs):
+                    return operator, op_args, lib_kwargs
         if self.allow_float_fallback:
             return self.fallback_operator, args, kwargs
         raise RuntimeError(f"No compatible operator found for function {self.op_key} in libraries "
-                           f"{self.available_backends()} with input arguments: {op_args}, {op_kwargs}")
+                           f"{self.available_operator_libraries()} with input arguments: {op_args}, {op_kwargs}")
 
     @abstractmethod
     def functional_op_arguments(self, *args, **kwargs):
@@ -221,8 +221,8 @@ class TrueQuantizationMixin(BaseQuantizationMixin, ABC):
         as the torch.nn.functional kwargs, with the addition of 'output_encodings'
         """
 
-    def _add_backend_kwargs(self, backend, **kwargs):
-        additional_kwargs = self.get_backend_kwargs(backend)
+    def _add_library_kwargs(self, library, **kwargs):
+        additional_kwargs = self.get_library_kwargs(library)
         kwargs.update(additional_kwargs)
         return kwargs
 

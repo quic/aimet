@@ -41,7 +41,7 @@ import mock
 import torch.nn.functional as F
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 from aimet_torch.experimental.v2.quantization.quantizers.affine import Quantize
-#from aimet_torch.experimental.v2.nn.true_quant import TrueQuantizedLinear, TrueQuantizationMixin, set_default_operator_library
+from aimet_torch.experimental.v2.nn.true_quant import TrueQuantizedLinear, TrueQuantizationMixin, set_default_operator_library
 from aimet_torch.experimental.v2.quantization.encodings import AffineEncoding
 from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensor
 
@@ -102,9 +102,8 @@ class FalsePredicateBackend(DummyBackend):
 def input():
     return torch.arange(-5, 5).expand(10, 10) / 10
 
-#set_default_operator_library(DummyBackend)
+set_default_operator_library(DummyBackend)
 
-@pytest.mark.skip("Not Implemented")
 class TestTrueQuantLinear:
 
     def test_no_quantizers(self, input):
