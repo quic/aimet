@@ -60,16 +60,17 @@ class TestAffineEncoding:
         """
         bitwidth = 8
         offset = torch.tensor(-5)
-        encoding = AffineEncoding(scale, offset, bitwidth=bitwidth, signed=False)
+        encoding = AffineEncoding(scale, offset, bitwidth=bitwidth)
         for property in [encoding.min, encoding.max, encoding.scale, encoding.offset]:
             assert isinstance(property, torch.Tensor)
             assert property.shape == ()
         assert encoding.min == -5.0
         assert encoding.max == 2 ** bitwidth - 1 + offset
+        assert encoding.offset == -5
         assert encoding.bitwidth == bitwidth
         assert encoding.granularity == "pertensor"
         assert encoding.mapping == "affine"
-        assert encoding.symmetry == "asymmetric"
+        assert encoding.symmetry == False
         assert encoding.dtype == torch.uint8
         assert encoding.num_steps == 2 ** bitwidth - 1
 
@@ -84,51 +85,13 @@ class TestAffineEncoding:
         """
         bitwidth = 8
         offset = torch.tensor(-128)
-        encoding = AffineEncoding(scale, offset, bitwidth=bitwidth, signed=True)
+        encoding = AffineEncoding(scale, offset, bitwidth=bitwidth)
         assert encoding.min == -128
         assert encoding.max == 127
-        assert encoding.offset == 0
+        assert encoding.offset == -128
         assert encoding.scale == 1.0
-        assert encoding.symmetry == "signed_symmetric"
+        assert encoding.symmetry == True
         assert encoding.dtype == torch.int8
-        assert encoding.num_steps == 2 ** bitwidth - 1
-
-    def test_create_signed_strict_symmetric_encoding(self, scale):
-        """
-        When: Create an 8-bit encoding with offset=0 and signed=True and strict=True
-        Then: 1) encoding.min is scale * (num_negative_bins - 1)
-              2) encoding.max is scale * num_positive_bins
-              3) symmetry is "strict_symmetric"
-              4) dtype is torch.int8
-              5) num_steps is 2 ** bitwidth - 2
-        """
-        bitwidth = 8
-        offset = torch.tensor(-128)
-        encoding = AffineEncoding(scale, offset, bitwidth=bitwidth, signed=True, strict=True)
-        assert encoding.min == -127
-        assert encoding.max == 127
-        assert encoding.offset == 0
-        assert encoding.scale == 1.0
-        assert encoding.symmetry == "strict_symmetric"
-        assert encoding.dtype == torch.int8
-        assert encoding.num_steps == 2 ** bitwidth - 2
-
-    def test_create_unsigned_symmetric_encoding(self, scale):
-        """
-        When: Create an 8-bit encoding with offset=0 and signed=False
-        Then: 1) encoding.min is 0
-              2) encoding.max is scale * num_bins
-              3) symmetry is "unsigned_symmetric"
-              4) dtype is torch.uint8
-              5) num_steps is 2 ** bitwidth - 1
-        """
-        bitwidth = 8
-        offset = torch.zeros([])
-        encoding = AffineEncoding(scale, offset, bitwidth=bitwidth, signed=False)
-        assert encoding.min == 0
-        assert encoding.max == 255
-        assert encoding.symmetry == "unsigned_symmetric"
-        assert encoding.dtype == torch.uint8
         assert encoding.num_steps == 2 ** bitwidth - 1
 
     @pytest.mark.cuda()
@@ -141,7 +104,7 @@ class TestAffineEncoding:
         """
         scale = torch.ones((1,)).to(device)
         offset = torch.ones((1,)).to(device)
-        encoding = AffineEncoding(scale, offset, bitwidth=8, signed=False)
+        encoding = AffineEncoding(scale, offset, bitwidth=8)
         for property in [encoding.min, encoding.max, encoding.scale, encoding.offset]:
             assert property.device == torch.device(device)
 
@@ -167,7 +130,7 @@ class TestAffineEncoding:
         """
         scale = torch.ones((1,)).to(dtype)
         offset = torch.ones((1,)).to(dtype)
-        encoding = AffineEncoding(scale, offset, bitwidth=8, signed=False)
+        encoding = AffineEncoding(scale, offset, bitwidth=8)
         for property in [encoding.min, encoding.max, encoding.scale, encoding.offset]:
             assert property.dtype == dtype
 
@@ -192,7 +155,7 @@ class TestAffineEncoding:
         """
         scale = torch.ones((1,), dtype=torch.float32)
         offset = torch.ones((1,), dtype=torch.float32)
-        encoding = AffineEncoding(scale, offset, bitwidth=8, signed=False)
+        encoding = AffineEncoding(scale, offset, bitwidth=8)
         with pytest.raises(RuntimeError):
             encoding.to(dtype)
 

@@ -36,8 +36,6 @@
 # =============================================================================
 """ Affine encoding definition """
 
-from typing import Tuple
-
 import torch
 from torch._C._nn import _parse_to as parse_to_args
 
@@ -47,47 +45,14 @@ from aimet_torch.experimental.v2.quantization.encodings.base import EncodingBase
 __all__ = ["AffineEncoding"]
 
 
-def get_symmetry_mode(symmetric=False, signed=False, strict=False) -> str:
-    """
-    Returns matched symmetry mode string from encoding property flags
-    """
-    if not symmetric:
-        return "asymmetric"
-    if (signed, strict) == (True, True):
-        return "strict_symmetric"
-    if (signed, strict) == (True, False):
-        return "signed_symmetric"
-    if (signed, strict) == (False, False):
-        return "unsigned_symmetric"
-    raise RuntimeError("No matching symmetry exists for symmetric={}, signed={}, strict={}".format(symmetric, signed, strict))
-
-def get_encoding_property_from_symmetry_mode(symmetry_mode: str) -> Tuple[bool, bool, bool]:
-    """
-    Returns encoding properties from symmetry mode string
-    """
-    signed = strict = symmetric = False
-    if symmetry_mode == "asymmetric":
-        pass
-    elif symmetry_mode == "strict_symmetric":
-        signed = strict = symmetric = True
-    elif symmetry_mode == "signed_symmetric":
-        signed = symmetric = True
-    elif symmetry_mode == "unsigned_symmetric":
-        symmetric = True
-    else:
-        raise RuntimeError(f"Undefined symmetry_mode: {symmetry_mode}")
-    return signed, strict, symmetric
-
 class AffineEncoding(EncodingBase):
     """
     Encoding object for affine quantization
     """
-    def __init__(self, scale: torch.Tensor, offset: torch.Tensor, bitwidth: int,
-                 signed: bool = False, strict: bool = False):
+    def __init__(self, scale: torch.Tensor, offset: torch.Tensor, bitwidth: int):
         self._scale = scale
         self._offset = offset
-        symmetric = torch.all(offset == 0) or (signed and torch.all(offset == - 2 ** (bitwidth - 1)))
-        self._symmetry = get_symmetry_mode(symmetric, signed, strict)
+        self._symmetry = bool(torch.all(offset == - 2 ** (bitwidth - 1)))
         self._bitwidth = bitwidth
 
     @property
@@ -104,7 +69,9 @@ class AffineEncoding(EncodingBase):
         """
         if self.scale.shape in (torch.Size([]), torch.Size([1])):
             return "pertensor"
-        return "perchannel"
+        if any(dim > 1 for dim in self.scale.shape):
+            return "perchannel"
+        return "unknown"
 
     @property
     def scale(self) -> torch.Tensor:
@@ -118,8 +85,6 @@ class AffineEncoding(EncodingBase):
         """
         Returns the offset of the quantizer encoding
         """
-        if self.symmetry in ("strict_symmetric", "signed_symmetric"):
-            return torch.zeros_like(self._offset)
         return self._offset
 
     @property
@@ -127,8 +92,6 @@ class AffineEncoding(EncodingBase):
         """
         Returns the number of steps of the quantizer encoding
         """
-        if self.symmetry == "strict_symmetric":
-            return 2 ** self.bitwidth - 2
         return 2 ** self.bitwidth - 1
 
     @property
@@ -136,10 +99,6 @@ class AffineEncoding(EncodingBase):
         """
         Returns the min value of the quantizer encoding
         """
-        if self.symmetry == "strict_symmetric":
-            return - (2 ** (self.bitwidth - 1) - 1) / self.scale
-        if self.symmetry == "signed_symmetric":
-            return - (2 ** (self.bitwidth - 1)) / self.scale
         return self.offset / self.scale
 
     @property
@@ -147,12 +106,10 @@ class AffineEncoding(EncodingBase):
         """
         Returns the max value of the quantizer encoding
         """
-        if self.symmetry in ("signed_symmetric", "strict_symmetric"):
-            return (2 ** (self.bitwidth - 1) - 1) / self.scale
         return (self._offset + self.num_steps) / self.scale
 
     @property
-    def symmetry(self) -> str:
+    def symmetry(self) -> bool:
         """
         Returns the symmetry mode of the quantizer encoding
         """
@@ -170,7 +127,7 @@ class AffineEncoding(EncodingBase):
         """
         Returns the dtype of the quantizer encoding
         """
-        if self.symmetry in ("unsigned_symmetric", "asymmetric"):
+        if not self.symmetry:
             if self.bitwidth <= 8:
                 return torch.uint8
             # No torch.uint16
@@ -200,5 +157,4 @@ class AffineEncoding(EncodingBase):
 
         scale = self._scale.to(dtype=dtype, device=device)
         offset = self._offset.to(dtype=dtype, device=device)
-        signed, strict, _ = get_encoding_property_from_symmetry_mode(self._symmetry)
-        return type(self)(scale, offset, self._bitwidth, signed, strict)
+        return type(self)(scale, offset, self._bitwidth)
