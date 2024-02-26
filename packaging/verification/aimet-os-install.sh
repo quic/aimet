@@ -78,8 +78,7 @@ if [[ "$AIMET_VARIANT" == *"gpu"* ]]; then
                 libcurand-dev-11-6 \
                 libcusolver-dev-11-6 \
                 libcusparse-dev-11-6 \
-                libcublas-11-6 \
-                cuda-libraries-11-6 -y --no-install-recommends \
+                libcublas-11-6 -y --no-install-recommends \
                 && rm -rf /var/lib/apt/lists/*
 
         wget http://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu2004/x86_64/nvidia-machine-learning-repo-ubuntu2004_1.0.0-1_amd64.deb
@@ -108,8 +107,7 @@ if [[ "$AIMET_VARIANT" == *"gpu"* ]]; then
                 libcurand-dev-11-2 \
                 libcusolver-dev-11-2 \
                 libcusparse-dev-11-2=11.4.1.1152-1 \
-                libcublas-11-2=11.4.1.1043-1 \
-                cuda-libraries-11-2=11.2.2-1 -y --no-install-recommends \
+                libcublas-11-2=11.4.1.1043-1 --no-install-recommends \
                 && rm -rf /var/lib/apt/lists/*
 
         wget http://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu2004/x86_64/nvidia-machine-learning-repo-ubuntu2004_1.0.0-1_amd64.deb
@@ -140,26 +138,26 @@ fi
 
 python3 -m pip install ${download_url}/Aimet-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
 
-cat ${PACKAGE_ROOT}/aimet_common/bin/reqs_deb_common.txt | xargs apt-get --assume-yes install
+cat ${PACKAGE_ROOT}/aimet_common/bin/reqs_deb_common.txt | xargs apt-get --assume-yes --allow-change-held-packages install
 
 
 if [[ "$AIMET_VARIANT" == *"torch"* ]]; then
-    cat ${PACKAGE_ROOT}/aimet_onnx/bin/reqs_deb_torch_common.txt | xargs apt-get --assume-yes install
+    cat ${PACKAGE_ROOT}/aimet_onnx/bin/reqs_deb_torch_common.txt | xargs apt-get --assume-yes --allow-change-held-packages install
     if [[ "$AIMET_VARIANT" == *"gpu"* ]]; then
-        cat ${PACKAGE_ROOT}/aimet_torch/bin/reqs_deb_torch_gpu.txt | xargs apt-get --assume-yes install
+        cat ${PACKAGE_ROOT}/aimet_torch/bin/reqs_deb_torch_gpu.txt | xargs apt-get --assume-yes --allow-change-held-packages install
     fi
 fi
 
 if [[ "$AIMET_VARIANT" == *"onnx"* ]]; then
-    cat ${PACKAGE_ROOT}/aimet_onnx/bin/reqs_deb_onnx_common.txt | xargs apt-get --assume-yes install
+    cat ${PACKAGE_ROOT}/aimet_onnx/bin/reqs_deb_onnx_common.txt | xargs apt-get --assume-yes --allow-change-held-packages install
     if [[ "$AIMET_VARIANT" == *"gpu"* ]]; then
-        cat ${PACKAGE_ROOT}/aimet_onnx/bin/reqs_deb_onnx_gpu.txt | xargs apt-get --assume-yes install
+        cat ${PACKAGE_ROOT}/aimet_onnx/bin/reqs_deb_onnx_gpu.txt | xargs apt-get --assume-yes --allow-change-held-packages install
     fi
 fi
 
 if [[ "$AIMET_VARIANT" == *"tf"* ]]; then
     if [[ "$AIMET_VARIANT" == *"gpu"* ]]; then
-        cat ${PACKAGE_ROOT}/aimet_tensorflow/bin/reqs_deb_tf_gpu.txt | xargs apt-get --assume-yes install
+        cat ${PACKAGE_ROOT}/aimet_tensorflow/bin/reqs_deb_tf_gpu.txt | xargs apt-get --assume-yes --allow-change-held-packages install
     fi
 fi
 
@@ -174,13 +172,21 @@ if [[ "$AIMET_VARIANT" == *"torch"* ]]; then
     fi
 fi
 
-ln -s /usr/lib/x86_64-linux-gnu/libjpeg.so /usr/lib
-
-if [[ "$AIMET_VARIANT" == "tf_gpu" ]]; then
-    ln -s /usr/local/cuda-11.2 /usr/local/cuda
-elif [[ "$AIMET_VARIANT" == "torch_gpu" ]]; then
-    ln -s /usr/local/cuda-11.6 /usr/local/cuda
+if [[ -f !/usr/lib/libjpeg.so ]]; then
+	ln -s /usr/lib/x86_64-linux-gnu/libjpeg.so /usr/lib
 fi
 
-source ${PACKAGE_ROOT}/aimet_common/bin/envsetup.sh
+if [[ "$AIMET_VARIANT" == "tf_gpu" ]]; then
+  if [[ -f !/usr/local/cuda ]]; then 
+      ln -s /usr/local/cuda-11.2 /usr/local/cuda
+  fi
+elif [[ "$AIMET_VARIANT" == "torch_gpu" ]]; then
+    if [[ -f !/usr/local/cuda ]]; then
+        ln -s /usr/local/cuda-11.6 /usr/local/cuda
+    fi
+fi
+
+apt-get install liblapacke-dev
+
+./${PACKAGE_ROOT}/aimet_common/bin/envsetup.sh
 
