@@ -1980,7 +1980,7 @@ def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, pytorch_encodin
             if is_enabled(quantizer) and not is_initialized(quantizer):
                 logger.debug('No encoding loaded for output quantizer %s of layer %s', idx, name)
 
-    if type(quant_sim_model) == QuantizationSimModel: # pylint: disable=unidiomatic-typecheck
+    if isinstance(quant_sim_model, QuantizationSimModel):
         # Only for V1 quantsim
         quant_sim_model.replace_wrappers_for_quantize_dequantize()
 
