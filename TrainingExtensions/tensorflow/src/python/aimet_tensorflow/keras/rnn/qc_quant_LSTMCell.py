@@ -262,6 +262,12 @@ class QuantizedLSTMCell(LSTMCell):
         if self.use_bias:
             self.bias_add = BiasAdd(self.units, name=aimet_SNPE_name_map["bias_add"], bias_initializer=self.bias_initializer,
                                     bias_regularizer=self.bias_regularizer, bias_constraint=self.bias_constraint)
+
+            #Call build() to initialize weights.
+            self.bias_add.build(_input_shape)
+            self.bias_add.set_weights([self.copy_source_weights[2]])
+
+            #Wrap Bias Add
             self._wrapped_bias_add = self._wrap_layer(self.bias_add, 1)
 
         self.input_gate = tf.keras.layers.Lambda(self.recurrent_activation, name=aimet_SNPE_name_map["input_gate"])
