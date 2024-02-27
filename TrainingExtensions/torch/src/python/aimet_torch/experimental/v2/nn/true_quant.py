@@ -191,7 +191,7 @@ class TrueQuantizationMixin(BaseQuantizationMixin, ABC):
         """
         return self._library_kwargs.get(library, {})
 
-    def select_operator(self, args, kwargs) -> Tuple[Callable, Tuple, Dict]:
+    def select_operator(self, *args, **kwargs) -> Tuple[Callable, Dict]:
         """
         Returns the first kernel (and kernel arguments) for which the predicate function returns True.
         Predicates are tested in the following order:
@@ -201,39 +201,31 @@ class TrueQuantizationMixin(BaseQuantizationMixin, ABC):
 
         :return: Tuple of operator, operator positional arguments, operator keyword arguments
         """
-        op_args, op_kwargs = self.functional_op_arguments(*args, **kwargs)
-        op_kwargs["output_encodings"] = pytree.tree_map_only(QuantizerBase, lambda q: q.get_encoding(), self.output_quantizer_tree())
         for op_lib in self.available_operator_libraries():
-            lib_kwargs = self._add_library_kwargs(op_lib, **op_kwargs)
+            lib_kwargs = self.get_library_kwargs(op_lib)
             for predicate, operator in op_lib.get_kernel(self.op_key):
-                if predicate(*op_args, **lib_kwargs):
-                    return operator, op_args, lib_kwargs
+                if self.call_operator(predicate, *args, **kwargs, **lib_kwargs):
+                    return operator, lib_kwargs
         if self.allow_float_fallback:
-            return self.fallback_operator, args, kwargs
+            return self.fallback_operator, {}
         raise RuntimeError(f"No compatible operator found for function {self.op_key} in libraries "
-                           f"{self.available_operator_libraries()} with input arguments: {op_args}, {op_kwargs}")
-
-    @abstractmethod
-    def functional_op_arguments(self, *args, **kwargs):
-        """
-        Return the args and kwargs needed to call the layer's functional operator.
-        The ordering of args should match the torch.nn.functional equivalent function, and kwargs should be the same
-        as the torch.nn.functional kwargs, with the addition of 'output_encodings'
-        """
-
-    def _add_library_kwargs(self, library, **kwargs):
-        additional_kwargs = self.get_library_kwargs(library)
-        kwargs.update(additional_kwargs)
-        return kwargs
+                           f"{self.available_operator_libraries()} with input arguments: {args}, {kwargs}")
 
     def quantized_operator(self, *quantized_inputs, **kwargs):
         """
         Selects the first operator which can evaluate successfully and returns its output
         """
-        operator, op_args, op_kwargs = self.select_operator(quantized_inputs, kwargs)
-        return operator(*op_args, **op_kwargs)
+        output_encodings = pytree.tree_map_only(QuantizerBase, lambda q: q.get_encoding(), self.output_quantizer_tree())
+        operator, extra_kwargs = self.select_operator(*quantized_inputs, **kwargs, output_encodings=output_encodings)
+        return self.call_operator(operator, *quantized_inputs, output_encodings=output_encodings, **kwargs, **extra_kwargs)
 
-    def fallback_operator(self, *quantized_inputs, **kwargs):
+    @abstractmethod
+    def call_operator(self, operator: Callable, *args, output_encodings=None, **kwargs):
+        """
+        Calls into functional operator using standard signature
+        """
+
+    def fallback_operator(self, *quantized_inputs, output_encodings=None, **kwargs): # pylint:disable = unused-argument
         """
         Implements the fake-quant fallback mechanism:
             1) All quantized tensors will be automatically dequantized in the super().forward() call
@@ -318,8 +310,8 @@ class TrueQuantizedLinear(_TrueQuantizedUnaryOpMixin, nn.Linear):
     """ True-quantized linear """
     op_key = "linear"
 
-    def functional_op_arguments(self, input_tensor):
-        return (input_tensor, self.weight), {"bias": self.bias}
+    def call_operator(self, linear_op, input_tensor, output_encodings=None, **kwargs):
+        return linear_op(input_tensor, self.weight, bias=self.bias, output_encodings=output_encodings, **kwargs)
 
 
 @TrueQuantizationMixin.implements(nn.GELU)
@@ -327,8 +319,8 @@ class TrueQuantizedGelu(_TrueQuantizedUnaryOpMixin, nn.GELU):
     """ True-quantized Gelu """
     op_key = "gelu"
 
-    def functional_op_arguments(self, input_tensor):
-        return (input_tensor,), {"approximate": self.approximate}
+    def call_operator(self, gelu_op, input_tensor, output_encodings=None, **kwargs):
+        return gelu_op(input_tensor, approximate=self.approximate, output_encodings=output_encodings, **kwargs)
 
 
 @TrueQuantizationMixin.implements(nn.LayerNorm)
@@ -336,11 +328,6 @@ class TrueQuantizedLayerNorm(_TrueQuantizedUnaryOpMixin, nn.LayerNorm):
     """ True-quantized layernorm """
     op_key = "layer_norm"
 
-    def functional_op_arguments(self, input_tensor):
-        args = (input_tensor, self.normalized_shape)
-        kwargs = {
-            "weight": self.weight,
-            "bias": self.bias,
-            "eps": self.eps
-        }
-        return args, kwargs
+    def call_operator(self, layernorm_op, input_tensor, output_encodings=None, **kwargs):
+        return layernorm_op(input_tensor, self.normalized_shape, weight=self.weight, bias=self.bias, eps=self.eps,
+                            output_encodings=output_encodings, **kwargs)
