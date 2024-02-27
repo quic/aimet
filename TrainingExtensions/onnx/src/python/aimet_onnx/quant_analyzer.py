@@ -66,12 +66,12 @@ _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.QuantAnalyzer)
 
 class QuantAnalyzer:
     """
-    QuantAnalyzer tool provides
+    QuantAnalyzer provides following utilities:
 
      1) model sensitivity to weight and activation quantization
      2) per layer sensitivity analysis
      3) per layer encoding (min - max range)
-     4) per PDF analysis and
+     4) per layer quantizer historgram analysis and
      5) per layer MSE analysis
     """
     def __init__(self,
@@ -113,11 +113,12 @@ class QuantAnalyzer:
                 results_dir: str = "./tmp/",
                 ):
         """
-        Analyze model for quantization and point out sensitive parts/hotspots of the model by performing
+        Analyzes model for quantization and point out sensitive parts/hotspots of the model by performing
             1) model sensitivity to quantization,
-            2) perform per layer sensitivity analysis by enabling and disabling quant wrappers,
+            2) perform per layer sensitivity analysis by enabling and disabling quantizers,
             3) export per layer encodings min - max ranges,
-            4) per layer MSE analysis
+            4) export per layer quantizer stats histogram,
+            5) per layer MSE analysis
 
         :param quant_scheme: Quantization scheme. Supported values are
                 QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced.
@@ -158,13 +159,13 @@ class QuantAnalyzer:
                                       default_activation_bw: int, config_file: str) \
             -> QuantizationSimModel:
         """
-        Create Quantsim and compute encodings.
+        Creates quantsim object and computes encodings.
 
         :param quant_scheme: Quantization scheme.
         :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters.
         :param default_activation_bw: Default bitwidth (4-31) to use for quantizing layer inputs and outputs.
         :param config_file: Path to configuration file for model quantizers.
-        :return: Quantsim model.
+        :return: Quantsim object.
         """
         _ = fold_all_batch_norms_to_weight(self._onnx_model)
         kwargs = dict(
@@ -181,8 +182,7 @@ class QuantAnalyzer:
                                                 sim: QuantizationSimModel,
                                                 ) -> Tuple[float, float, float]:
         """
-        Perform the sensitivity analysis to weight and activation quantization
-        individually.
+        Performs model sensitivity analysis to weight and activation quantization individually.
 
         :param sim: Quantsim model.
         :return: FP32 eval score, weight-quantized eval score, act-quantized eval score.
@@ -286,14 +286,14 @@ class QuantAnalyzer:
                                                           results_dir: str,
                                                           ) -> Dict:
         """
-        NOTE: Option 1
+        Performs layer-wise quantization sensitivity analysis by enabling its quantizers
 
         1. All parameter and activation quantizers are disabled.
         2. For every layer, based on occurrence:
-              i. Each layer's parameters and activations quantizers are enabled as per JSON config file
+              a. Each layer's parameters and activations quantizers are enabled as per JSON config file
                  and set to bit-width specified.
-             ii. Measure and record eval score on subset of dataset.
-            iii. Disable enabled quantizers in step i.
+              b. Measure and record eval score on subset of dataset.
+              c. Disable enabled quantizers in step a.
         3. Returns dictionary containing layer name and corresponding eval score.
 
         :param sim: Quantsim model.
@@ -323,14 +323,14 @@ class QuantAnalyzer:
                                                            results_dir: str,
                                                            ) -> Dict:
         """
-        NOTE: Option 2
+        Performs layer-wise quantization sensitivity analysis by disabling its quantizers
 
         1. All parameter and activation quantizers are enabled as per JSON config file
-        and set to bit-width specified.
+           and set to bit-width specified.
         2. For every layer, based on occurrence:
-              i. Each layer's parameters and activations quantizers are disabled.
-             ii. Measure and record eval score on subset of dataset.
-            iii. Enable disabled quantizers in step i.
+              a. Each layer's parameters and activations quantizers are disabled.
+              b. Measure and record eval score on subset of dataset.
+              c. Enable disabled quantizers in step a.
         3. Returns dictionary containing layer name and corresponding eval score.
 
         :param sim: Quantsim model.
@@ -445,18 +445,18 @@ class QuantAnalyzer:
     # pylint: disable=no-self-use, too-many-branches, too-many-locals
     def export_per_layer_encoding_min_max_range(self, sim: QuantizationSimModel, results_dir: str) -> Tuple[Dict, Dict]:
         """
-        Export encoding min and max range for all weights and activations. results_dir should have
+        Exports encoding min and max range for all weights and activations. results_dir has
         html files in following format.
 
         -results_dir
-            -activations.html
+            -activations.html,
             -weights.html
 
         If per channel quantization(PCQ) is enabled then,
 
         -results_dir
-            -activations.html
-            -{wrapped_module_name}_{param_name}.html
+            -activations.html,
+            -{layer_name}_{param_name}.html
 
         :param sim: Quantsim model.
         :param results_dir: Directory to save the results.
@@ -510,9 +510,9 @@ class QuantAnalyzer:
         """
         NOTE: Not to invoke when quantization scheme is not TF-Enhanced.
 
-        Export histogram that represents a PDF of collected statistics by a quantizer for every
-        quant wrapper. After invoking this API, results_dir should have html files in following
-        format for every quantizers of quant wrappers.
+        Exports histogram that represents a PDF of collected statistics by a quantizer.
+        After invoking this API, results_dir should have html files in following
+        format for every quantizers in the model.
 
         -results_dir
             -activations_pdf
@@ -574,7 +574,7 @@ class QuantAnalyzer:
 
     def enable_per_layer_mse_loss(self, unlabeled_dataset_iterable: Iterable, num_batches: int):
         """
-        Enable per layer MSE loss analysis.
+        Enables per layer MSE loss analysis.
 
         :param unlabeled_dataset_iterable: A collection (i.e. iterable with `__len__`)
                 that iterates over an unlabeled dataset. The values yielded by this iterable are expected
@@ -589,18 +589,13 @@ class QuantAnalyzer:
         self._unlabeled_dataset_iterable = unlabeled_dataset_iterable
         self._num_batches = num_batches
 
-    def export_per_layer_mse_loss(self,
-                                  sim: QuantizationSimModel,
-                                  results_dir: str,
-                                  ) -> Dict:
+    def export_per_layer_mse_loss(self, sim: QuantizationSimModel, results_dir: str) -> Dict:
         """
-        NOTE: Need to pass same model input data through both fp32 and quantsim model to
-        tap output activations of each layer.
+        Exports MSE loss between fp32 and quantized output activations for each layer.
 
-        Export MSE loss between fp32 and quantized output activations for each layer.
         :param sim: Quantsim model.
         :param results_dir: Directory to save the results.
-        :return layer wise MSE loss. dict[layer_name] = MSE loss.
+        :return: layer wise MSE loss. dict[layer_name] = MSE loss.
         """
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
