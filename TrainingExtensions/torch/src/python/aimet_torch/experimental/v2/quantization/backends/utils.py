@@ -35,10 +35,11 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 # pylint: disable=all
-from typing import Protocol
-
+import importlib.util
 import torch
+import aimet_torch.experimental.v2.quantization.backends.default as default
 
+from typing import Protocol
 from aimet_torch.experimental.v2.utils import _ContextManager
 
 
@@ -65,7 +66,7 @@ class _QuantizationBackendProtocol(Protocol):
 _CURRENT_BACKEND = 'default'
 
 _SUPPORTED_BACKENDS = {
-    'default': None,
+    'default': default,
 }
 
 
@@ -86,15 +87,15 @@ def set_backend(name: str) -> _ContextManager:
     return _ContextManager(action=action, cleanup=cleanup)
 
 
-
 def get_backend() -> _QuantizationBackendProtocol:
-    if _SUPPORTED_BACKENDS[_CURRENT_BACKEND] is None:
-        # Lazy import
-        import importlib
-        module_name = f'aimet_torch.experimental.v2.quantization.backends.{_CURRENT_BACKEND}'
-        _SUPPORTED_BACKENDS[_CURRENT_BACKEND] = importlib.import_module(module_name)
-
     return _SUPPORTED_BACKENDS[_CURRENT_BACKEND]
 
 
-__all__ = ['set_global_backend', 'set_backend', 'get_backend']
+def add_backend(name: str, module: _QuantizationBackendProtocol):
+    if name in _SUPPORTED_BACKENDS:
+        return RuntimeError(f'{name} is exist.')
+
+    _SUPPORTED_BACKENDS[name] = module
+
+
+__all__ = ['set_global_backend', 'set_backend', 'get_backend', 'add_backend']
