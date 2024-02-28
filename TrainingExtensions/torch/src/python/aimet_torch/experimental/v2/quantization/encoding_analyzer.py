@@ -181,14 +181,9 @@ class _HistogramObserver(_Observer[_Histogram]):
         return torch.arange(min_val, max_val + 0.5 * step, step, device=device)
 
     def _get_bin_num(self, bin_width: int, curr_min, data):
-        if bin_width:
-            if torch.is_tensor(data):
-                bin_tensor = torch.full(data.shape, self.num_bins - 1, device=data.device)
-                index_tensor = (data - curr_min) / bin_width
-                return torch.minimum(index_tensor.to(torch.int32), bin_tensor)
-
-            return min(int((data - curr_min) / bin_width), self.num_bins - 1)
-        return bin_width
+        bin_tensor = torch.full(data.shape, self.num_bins - 1, device=data.device)
+        index_tensor = (data - curr_min) / bin_width
+        return torch.minimum(index_tensor.to(torch.int32), bin_tensor)
 
     # pylint: disable=arguments-differ
     # pylint: disable=too-many-locals
@@ -235,8 +230,8 @@ class _HistogramObserver(_Observer[_Histogram]):
 
             # create histogram given input tensor and full range
             expanded_histogram = torch.histc(curr_input.to(torch.float), bins=self.num_bins, min=updated_min, max=updated_max)
-            expanded_bin_edges = self._create_bin_edges(min_val=updated_min, max_val=updated_max, device=expanded_histogram.device)
             expanded_histogram += histogram_updates.to(expanded_histogram.device)
+            expanded_bin_edges = self._create_bin_edges(min_val=updated_min, max_val=updated_max, device=expanded_histogram.device)
             self.stats[index] = _Histogram(expanded_histogram, expanded_bin_edges, updated_min, updated_max)
 
     def reset_stats(self):
