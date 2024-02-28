@@ -678,38 +678,38 @@ def get_ordered_lists_of_conv_fc(model: torch.nn.Module, input_shapes: Tuple,
     return module_list
 
 
-def change_tensor_device_placement(tensor_data: Union[torch.Tensor, List, Tuple], device: torch.device):
+def change_tensor_device_placement(input_data: Union[torch.Tensor, List, Tuple], device: torch.device):
     """
     Change the tensor_data's device placement
 
-    :param tensor_data: torch.tensor , list of torch.tensors, or tuple of torch.tensors
+    :param input_data: torch.tensor , list of torch.tensors, or tuple of torch.tensors
     :param device: device
     :return: tensor_data with modified device placement
     """
-    return nested_map(tensor_data,
-                      lambda x: x.to(device=device) if isinstance(x, (torch.Tensor, torch.nn.Module)) else x)
+    return nested_map(input_data, lambda x: x.to(device=device))
 
 
-def nested_map(tensor, fn: Callable[[torch.Tensor], torch.Tensor]):
+def nested_map(data, fn: Callable[[torch.Tensor], torch.Tensor]):
     """
     Apply a function to a nested tuple, list, or dict of tensors.
-    :param tensor: Tensor, or a nested tuple, list, or dict of tensors.
+    :param data: Tensor, or a nested tuple, list, or dict of tensors.
     :param fn: Function to apply to the tensors
     :return: Nested structure of tensors with function applied
     """
-    if isinstance(tensor, torch.Tensor):
-        return fn(tensor)
+    if isinstance(data, torch.Tensor):
+        return fn(data)
 
-    if isinstance(tensor, (tuple, list)):
-        cls = tuple if isinstance(tensor, tuple) else list
-        return cls(nested_map(x, fn) for x in tensor)
+    if isinstance(data, (tuple, list)):
+        cls = tuple if isinstance(data, tuple) else list
+        return cls(nested_map(x, fn) for x in data)
 
-    if isinstance(tensor, dict):
+    if isinstance(data, dict):
         return {
-            key: nested_map(value, fn) for key, value in tensor.items()
+            key: nested_map(value, fn) for key, value in data.items()
         }
 
-    raise TypeError(f'Input should be torch.Tensor, tuple, list, or dict. Got {type(tensor)}')
+    logger.warning('unexpected input type=%s, expecting torch.Tensor, tuple, list, or dict. skipping..', type(data))
+    return data
 
 
 def find_num_inout_tensors_per_module(model: torch.nn.Module, input_tensor) -> Dict:
