@@ -72,13 +72,13 @@ bool CudaSynchronize();
 const int CUDA_NUM_THREADS = 512;
 
 // Compute the number of blocks based on the total number of threads.
-inline int CUDA_NUM_BLOCKS(const int N)
+inline size_t CUDA_NUM_BLOCKS(const size_t N)
 {
     return (N + CUDA_NUM_THREADS - 1) / CUDA_NUM_THREADS;
 }
 
 // Loop over data in kernel (stride: grid)
-#define CUDA_KERNEL_LOOP(i, n) for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < (n); i += blockDim.x * gridDim.x)
+#define CUDA_KERNEL_LOOP(i, n) for (size_t i = blockIdx.x * blockDim.x + threadIdx.x; i < (n); i += blockDim.x * gridDim.x)
 
 }   // End of namespace DlQuantization
 
