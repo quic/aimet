@@ -40,13 +40,15 @@ from typing import Callable
 
 import torch
 from torch._C._nn import _parse_to
-from torch.utils._pytree import tree_map_only
+from torch.utils._pytree import tree_map
 
-from aimet_torch.experimental.v2.quantization.backends import get_backend
-from aimet_torch.experimental.v2.quantization.encodings import EncodingBase, AffineEncoding
+from aimet_torch.experimental.v2.quantization.encodings import EncodingBase
 
 # Operations that encodings can propagate through without change (to be populated)
 PASSTHROUGH_OPS = {}
+
+def _tree_map_only(cls, func, tree):
+    return tree_map(lambda t: func(t) if isinstance(t, cls) else t, tree)
 
 
 class QuantizedTensor(torch.Tensor):
@@ -147,23 +149,7 @@ class QuantizedTensor(torch.Tensor):
                     encoding, dequant_fn = arg.encoding, arg._dequant_fn
                     break
             output = super().__torch_function__(func, types, args, kwargs)
-            return tree_map_only(QuantizedTensor, lambda qt: qt.attach_encoding(encoding, dequant_fn), output)
-        args, kwargs = tree_map_only(QuantizedTensor, lambda qt: qt.dequantize(), (args, kwargs))
+            return _tree_map_only(QuantizedTensor, lambda qt: qt.attach_encoding(encoding, dequant_fn), output)
+        args, kwargs = _tree_map_only(QuantizedTensor, lambda qt: qt.dequantize(), (args, kwargs))
         output = super().__torch_function__(func, types, args, kwargs)
-        return tree_map_only(QuantizedTensor, torch.Tensor, output)
-
-
-def affine_quantize(tensor: torch.Tensor,
-                    scale: torch.Tensor,
-                    offset: torch.Tensor, bitwidth: int,
-                    signed: bool = False,
-                    strict: bool = False) -> QuantizedTensor:
-    """
-    Quantizes the input tensor into a QuantizedTensor using the quantization parameters
-    """
-    tensor_q = get_backend().quantize(tensor, scale, offset, bitwidth)
-    encoding = AffineEncoding(scale, offset, bitwidth, signed, strict)
-    dequant = get_backend().dequantize
-    dequant_fn = lambda t: dequant(torch.Tensor(t), t.encoding.scale, t.encoding.offset)
-    qtensor = QuantizedTensor(tensor_q, encoding, dequant_fn=dequant_fn)
-    return qtensor
+        return _tree_map_only(QuantizedTensor, torch.Tensor, output)

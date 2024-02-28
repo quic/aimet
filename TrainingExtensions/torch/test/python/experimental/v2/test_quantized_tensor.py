@@ -38,7 +38,8 @@ import pytest
 import torch
 import torch.nn.functional as F
 from aimet_torch.experimental.v2.quantization.backends import get_backend
-from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensor, affine_quantize
+from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensor
+from aimet_torch.experimental.v2.quantization.encodings import AffineEncoding
 
 
 @pytest.fixture
@@ -52,6 +53,22 @@ def offset():
 @pytest.fixture
 def bitwidth():
     return 8
+
+
+def affine_quantize(tensor: torch.Tensor,
+                    scale: torch.Tensor,
+                    offset: torch.Tensor,
+                    bitwidth: int,
+                    signed: bool = False) -> QuantizedTensor:
+    """
+    Quantizes the input tensor into a QuantizedTensor using the quantization parameters
+    """
+    tensor_q = get_backend().quantize(tensor, scale, offset, bitwidth)
+    encoding = AffineEncoding(scale, offset, bitwidth)
+    dequant = get_backend().dequantize
+    dequant_fn = lambda t: dequant(torch.Tensor(t), t.encoding.scale, t.encoding.offset)
+    qtensor = QuantizedTensor(tensor_q, encoding, dequant_fn=dequant_fn)
+    return qtensor
 
 class TestQuantizedTensor:
 
