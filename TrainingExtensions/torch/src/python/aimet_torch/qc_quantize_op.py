@@ -55,6 +55,7 @@ from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGri
     LearnedGridTensorQuantizer, set_encoding_min_max_gating_threshold, StaticGridTensorQuantizer
 from aimet_torch.torch_quantizer import TorchQuantizer
 import aimet_torch.quantsim_straight_through_grad as ste
+from aimet_torch.utils import compute_partial_encoding
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -498,7 +499,7 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                 if isinstance(quantizer, StaticGridPerTensorQuantizer) and len(encoding) != 1:
                     raise ValueError(f"Invalid PerTensor encodings for {param_name}, the quantizer is a "
                                      f"PerTensorQuantizer. To avoid this, enable per_channel_quantization")
-
+                encoding = [compute_partial_encoding(quantizer, enc) for enc in encoding]
                 if encoding[0]['dtype'] == 'int':
                     _, is_symmetric = utils.create_encoding_from_dict(encoding[0])
                     quantizer.use_symmetric_encodings = is_symmetric
@@ -567,6 +568,7 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                               type_of_quantizer, self._module_to_wrap.__class__)
                 continue
 
+            encoding = compute_partial_encoding(quantizer, encoding)
             if encoding['dtype'] == 'int':
                 encoding, is_symmetric = utils.create_encoding_from_dict(encoding)
                 quantizer.bitwidth = encoding.bw

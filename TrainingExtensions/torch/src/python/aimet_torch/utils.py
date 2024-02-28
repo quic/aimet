@@ -54,7 +54,7 @@ from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEM
 from aimet_common.utils import AimetLogger, Handle, log_with_error_and_assert_if_false
 import aimet_common.libpymo as libpymo
 from aimet_torch import elementwise_ops
-
+from aimet_torch.tensor_quantizer import TensorQuantizer
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
@@ -1104,3 +1104,35 @@ def get_v1_quant_scheme_for_initialization(quant_scheme: QuantScheme) -> QuantSc
         return QuantScheme.post_training_tf_enhanced
 
     return quant_scheme
+
+
+def compute_partial_encoding(quantizer: TensorQuantizer, encoding_dict: Dict) -> Dict:
+    """
+    Generates the full encoding from partially provided encoding.
+
+    :param quantizer:  Quantizer object for which the encoding needs to be computed.
+    :param encoding_dict: Partial Encoding
+    :return: Full encoding
+    """
+
+    encoding = libpymo.TfEncoding()
+    encoding.bw = encoding_dict.get('bitwidth')
+    encoding.max = encoding_dict.get('max', 0)
+    encoding.min = encoding_dict.get('min', 0)
+    encoding.delta = encoding_dict.get('scale', 0)
+    encoding.offset = encoding_dict.get('offset', 0)
+
+    if not (encoding.max == 0 and encoding.min == 0) and encoding.delta != 0:
+        return encoding_dict
+
+    partial_quantizer = libpymo.TensorQuantizer(libpymo.QuantizationMode.QUANTIZATION_TF, quantizer.round_mode)
+    partial_quantizer.computePartialEncoding(encoding.bw, encoding, quantizer.use_symmetric_encodings,
+                                             quantizer.use_unsigned_symmetric, quantizer.use_strict_symmetric)
+
+    encoding_dict['max'] = encoding.max
+    encoding_dict['min'] = encoding.min
+    encoding_dict['scale'] = encoding.delta
+    encoding_dict['offset'] = encoding.offset
+    encoding_dict['is_symmetric'] = 'True' if quantizer.use_symmetric_encodings else 'False'
+
+    return encoding_dict
