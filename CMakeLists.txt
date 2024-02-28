@@ -118,6 +118,12 @@ if (NOT (DEFINED ENABLE_ONNX))
 endif(NOT (DEFINED ENABLE_ONNX))
 
 if (ENABLE_ONNX)
+  execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import onnx; print(onnx.__version__)"
+                  OUTPUT_VARIABLE ONNX_VERSION
+                  OUTPUT_STRIP_TRAILING_WHITESPACE)
+  set(FMWORK_VERSION ${ONNX_VERSION})
+  message(STATUS "Found ONNX version: ${ONNX_VERSION}")
+
   if (NOT ENABLE_TORCH)
     message(STATUS "Enabling Torch as it is required by ONNX")
     set(ENABLE_TORCH ON CACHE BOOL "" FORCE)
@@ -141,8 +147,11 @@ message(STATUS "AIMET - ENABLE_TORCH: ${ENABLE_TORCH}" )
 
 if (ENABLE_TORCH)
   execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import torch; print(torch.__version__)"
-  OUTPUT_VARIABLE TORCH_VERSION
-  OUTPUT_STRIP_TRAILING_WHITESPACE)
+                  OUTPUT_VARIABLE TORCH_VERSION
+                  OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if (NOT ENABLE_ONNX)
+    set(FMWORK_VERSION ${TORCH_VERSION})
+  endif()
   message(STATUS "Found Torch version: ${TORCH_VERSION}")
 
   set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/torch/src/python")
@@ -224,11 +233,16 @@ endif(NOT (DEFINED ENABLE_TENSORFLOW))
 
 if (ENABLE_TENSORFLOW)
   # Get Tensorflow version
-  execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import tensorflow as tf; print(tf.__version__)" OUTPUT_VARIABLE TF_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
+  execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import tensorflow as tf; print(tf.__version__)"
+                  OUTPUT_VARIABLE TF_VERSION
+                  OUTPUT_STRIP_TRAILING_WHITESPACE)
+  set(FMWORK_VERSION ${TF_VERSION})
 
   if(NOT DEFINED TF_LIB_DIR)
     # Get location of TensorFlow library
-    execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import tensorflow as tf; print(tf.sysconfig.get_lib())" OUTPUT_VARIABLE TF_LIB_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
+    execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import tensorflow as tf; print(tf.sysconfig.get_lib())"
+                    OUTPUT_VARIABLE TF_LIB_DIR
+                    OUTPUT_STRIP_TRAILING_WHITESPACE)
     message(STATUS "Found TensorFlow version: ${TF_VERSION} TensorFlow library path: ${TF_LIB_DIR}")
   else(TF_LIB_DIR)
     message(STATUS "TensorFlow version and TensorFlow library already set.")
@@ -330,7 +344,7 @@ add_custom_target(packageaimet
   COMMAND "${CMAKE_COMMAND}" --build . --target install
 
   # Now run the packaging target to generate wheel files
-  COMMAND ${CMAKE_COMMAND} -DSW_VERSION=${SW_VERSION} ${remote_url_cmake_opt} -DPYTHON3_EXECUTABLE=${Python3_EXECUTABLE} -DAIMET_PACKAGE_PATH=${AIMET_PACKAGE_PATH} -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -DENABLE_CUDA=${ENABLE_CUDA} -DENABLE_TENSORFLOW=${ENABLE_TENSORFLOW} -DENABLE_TORCH=${ENABLE_TORCH} -DENABLE_ONNX=${ENABLE_ONNX} -DPATCHELF_EXE=${PATCHELF_EXE} -P ${CMAKE_CURRENT_SOURCE_DIR}/packaging/package_aimet.cmake
+  COMMAND ${CMAKE_COMMAND} -DSW_VERSION=${SW_VERSION} ${remote_url_cmake_opt} -DPYTHON3_EXECUTABLE=${Python3_EXECUTABLE} -DAIMET_PACKAGE_PATH=${AIMET_PACKAGE_PATH} -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -DENABLE_CUDA=${ENABLE_CUDA} -DENABLE_TENSORFLOW=${ENABLE_TENSORFLOW} -DENABLE_TORCH=${ENABLE_TORCH} -DENABLE_ONNX=${ENABLE_ONNX} -DPATCHELF_EXE=${PATCHELF_EXE} -DFMWORK_VERSION=${FMWORK_VERSION} -P ${CMAKE_CURRENT_SOURCE_DIR}/packaging/package_aimet.cmake
 )
 
 add_subdirectory(ThirdParty)

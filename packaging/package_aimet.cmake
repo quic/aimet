@@ -140,6 +140,12 @@ if(ENABLE_ONNX)
 endif()
 
 
+# Pull just the version from the string (ex. 1.13+c116 --> 1.13)
+execute_process(COMMAND bash -c "echo ${FMWORK_VERSION} | tr -s ' ' | cut -d\"+\" -f1"
+                OUTPUT_VARIABLE fmwork_ver_bare
+                OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+
 # Loop over the package array list to generate wheel files
 foreach(package ${package_name_list})
   set(pkg_staging_path "${build_packaging_dir}/${package}")
@@ -179,6 +185,7 @@ foreach(package ${package_name_list})
     execute_process(COMMAND ${CMAKE_COMMAND} -E copy "${src_packaging_dir}/LICENSE.pdf" "${pkg_deps_staging_path}/")
   endif()
 
+  configure_file("${CMAKE_CURRENT_LIST_DIR}/pypi_readme.md.in" "${pkg_staging_path}/pypi_readme_${package}.md" @ONLY)
   configure_file("${CMAKE_CURRENT_LIST_DIR}/setup.py.in" "${pkg_staging_path}/setup-${package}.py" @ONLY)
   configure_file(${CMAKE_CURRENT_LIST_DIR}/MANIFEST.in.in ${pkg_staging_path}/MANIFEST.in @ONLY)
 
