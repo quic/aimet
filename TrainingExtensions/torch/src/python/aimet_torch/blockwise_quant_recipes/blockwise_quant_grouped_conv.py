@@ -89,7 +89,8 @@ class LinearWithGroupedConv(torch.nn.Module):
                                             out_channels=out_feature * self.num_blocks,
                                             kernel_size=1,
                                             groups=self.num_blocks,
-                                            bias=False)
+                                            bias=False,
+                                            device=linear.weight.device)
         self.grouped_conv.weight.data.copy_(weight)
         self.reducesum = ReduceSum(dim=1)
 
