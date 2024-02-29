@@ -141,7 +141,7 @@ class QuantizationSimModel:
                                  Note that the mode default_data_type=QuantizationDataType.float is only supported with
                                  default_output_bw=16 and default_param_bw=16
         :param simplify_model: Default True, uses onnx simplifier to simplify model
-        :param: user_onnx_libs: List of paths to all compiled ONNX custom ops libraries
+        :param user_onnx_libs: List of paths to all compiled ONNX custom ops libraries
         """
         self.model = model
         if not isinstance(model, ONNXModel):
