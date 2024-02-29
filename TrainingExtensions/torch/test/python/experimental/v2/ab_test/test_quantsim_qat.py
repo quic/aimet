@@ -66,9 +66,13 @@ class STE(torch.autograd.Function):
 
 class AutogradBasedQuantDequant:
     @staticmethod
-    def quantize_dequantize(tensor, scale, offset, bitwidth) -> torch.Tensor:
+    def quantize_dequantize(tensor, scale, offset, bitwidth, signed=False) -> torch.Tensor:
+        if signed:
+            clip_min, clip_max = - 2 ** (bitwidth - 1), 2 ** (bitwidth - 1) - 1
+        else:
+            clip_min, clip_max = 0, 2 ** bitwidth - 1
         x_round = STE.apply(tensor / scale) - offset
-        x_quant = torch.clamp(x_round, 0, 2 ** bitwidth - 1)
+        x_quant = torch.clamp(x_round, clip_min, clip_max)
         return (x_quant + offset) * scale
 
 # get_backend function for simulating autograd-based backend

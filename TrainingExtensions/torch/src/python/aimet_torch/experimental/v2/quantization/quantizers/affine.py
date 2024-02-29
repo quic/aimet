@@ -74,7 +74,9 @@ class AffineQuantizerBase(QuantizerBase):
             shape = (shape,)
         self.shape = shape
         self.bitwidth = bitwidth
-        self.symmetric = symmetric
+        self._symmetric = symmetric
+        # We support two quantization modes: (unsigned) asymmetric and signed-symmetric
+        self._signed = symmetric
         self.encoding_analyzer = encoding_analyzer or MinMaxEncodingAnalyzer(shape)
 
         if not _is_expandable(self.encoding_analyzer.observer.shape, self.shape):
@@ -145,6 +147,8 @@ class AffineQuantizerBase(QuantizerBase):
         max = self.get_max().flatten()
         scale = self.get_scale().flatten()
         offset = self.get_offset().flatten()
+        if self._signed: # Legacy behavior is to use offset = 2 ** (bitwidth - 1) for signed symmetric
+            offset -= 2 ** (self.bitwidth - 1)
         bitwidth = self.bitwidth
         dtype = "int"
         is_symmetric = self.symmetric
@@ -185,6 +189,23 @@ class AffineQuantizerBase(QuantizerBase):
 
     def extra_repr(self) -> str:
         return f'shape={self.shape}, bitwidth={self.bitwidth}, symmetric={self.symmetric}'
+
+    @property
+    def symmetric(self) -> bool:
+        """
+        Indicates whether this quantizer uses symmetric quantization
+        """
+        return self._symmetric
+
+    @symmetric.setter
+    def symmetric(self, symmetric: bool):
+        """
+        Set the quantizer to use signed-symmetric or unsigned asymmetric encodings
+
+        :param symmetric: If True, use signed-symmetric encodings. Else, use unsigned asymmetric encodings
+        """
+        self._symmetric = symmetric
+        self._signed = symmetric
 
 
 class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
@@ -256,7 +277,8 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
         """
         if not self.is_initialized():
             return None
-        return self.get_scale() * self.get_offset()
+        num_negative_steps = 2 ** (self.bitwidth - 1) if self._signed else 0
+        return self.get_scale() * (self.get_offset() - num_negative_steps)
 
     def get_max(self) -> Optional[torch.Tensor]:
         """
@@ -269,7 +291,8 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
         """
         if not self.is_initialized():
             return None
-        return self.get_scale() * (self.get_offset() + 2 ** self.bitwidth - 1)
+        num_positive_steps = 2 ** (self.bitwidth - 1) - 1 if self._signed else 2 ** self.bitwidth - 1
+        return self.get_scale() * (self.get_offset() + num_positive_steps)
 
     def get_scale(self) -> Optional[torch.Tensor]:
         """
@@ -295,10 +318,12 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
             return None
 
         if self.symmetric:
-            with torch.no_grad():
-                offset = -torch.ones_like(self.min) * 2 ** (self.bitwidth - 1)
-        else:
-            offset = ste_round(self.min / self.get_scale())
+            return torch.zeros_like(self.min, requires_grad=False)
+
+        offset = ste_round(self.min / self.get_scale())
+
+        if self._signed:
+            offset += 2 ** (self.bitwidth - 1)
 
         return offset.to(dtype=self.min.dtype)
 
@@ -328,7 +353,7 @@ class Quantize(MinMaxQuantizer):
 
         scale = self.get_scale()
         offset = self.get_offset()
-        return QuantizedTensor(get_backend().quantize(input, scale, offset, self.bitwidth),
+        return QuantizedTensor(get_backend().quantize(input, scale, offset, self.bitwidth, signed=self._signed),
                                AffineEncoding(scale, offset, self.bitwidth),
                                lambda x: get_backend().dequantize(torch.Tensor(x), scale, offset))
 
@@ -350,7 +375,7 @@ class QuantizeDequantize(MinMaxQuantizer):
 
         scale = self.get_scale()
         offset = self.get_offset()
-        return get_backend().quantize_dequantize(input, scale, offset, self.bitwidth)
+        return get_backend().quantize_dequantize(input, scale, offset, self.bitwidth, signed=self._signed)
 
 
 class Dequantize(torch.nn.Module):

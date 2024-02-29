@@ -109,9 +109,7 @@ def minmax_to_scaleoffset(min, max, symmetric, bitwidth):
     total_bins = 2 ** bitwidth - 1
     scale = (max - min) / total_bins
     if symmetric:
-        positive_bins = total_bins // 2
-        negative_bins = positive_bins + 1
-        offset = torch.ones_like(scale) * -negative_bins
+        offset = torch.zeros_like(scale)
     else:
         offset = torch.round(min / scale)
     return scale, offset
@@ -145,7 +143,8 @@ def test_quantize_compute_encodings(quantize: Quantize, x: torch.Tensor):
     expected_x_int = get_backend().quantize(x,
                                             dynamic_scale,
                                             dynamic_offset,
-                                            quantize.bitwidth)
+                                            quantize.bitwidth,
+                                            quantize._signed)
 
     with quantize.compute_encodings():
         x_int = quantize(x)
@@ -189,7 +188,8 @@ def test_qdq_compute_encodings(quantize_dequantize: QuantizeDequantize, x: torch
     expected_output = get_backend().quantize_dequantize(x,
                                                         dynamic_scale,
                                                         dynamic_offset,
-                                                        quantize_dequantize.bitwidth)
+                                                        quantize_dequantize.bitwidth,
+                                                        quantize_dequantize._signed)
 
     with quantize_dequantize.compute_encodings():
         output = quantize_dequantize(x)
@@ -330,7 +330,8 @@ def test_quantize_forward(quantize: Quantize, x: torch.Tensor):
     expected_output = get_backend().quantize(x,
                                              quantize.get_scale(),
                                              quantize.get_offset(),
-                                             quantize.bitwidth)
+                                             quantize.bitwidth,
+                                             quantize._signed)
     assert torch.allclose(output.quantized_repr(), expected_output.to(output.encoding.dtype))
 
 
@@ -451,7 +452,7 @@ def _test_symmetric_invariants(q):
                total_bins = 2**bw - 1
                negative_bins = 2 ** (bw - 1)
                positive_bins = negative_bins - 1
-      4. offset = -1 * 2 ** (bw - 1)
+      4. offset = 0
       5. offset is fixed (offset.requires_grad = False)
     """
     min = q.get_min()
@@ -460,24 +461,25 @@ def _test_symmetric_invariants(q):
     offset = q.get_offset()
     bw = q.bitwidth
 
-    # min == scale * offset
-    assert torch.allclose(min, scale * offset,
-                          rtol=1e-3, atol=scale.abs().max().item() * 1e-5)
-
-    # max == scale * -(offset+1)
-    assert torch.allclose(max, scale * -(offset+1),
-                          rtol=1e-3, atol=scale.abs().max().item() * 1e-5)
-
     total_bins = 2**bw - 1
     positive_bins = math.floor(total_bins / 2)
     negative_bins = math.ceil(total_bins / 2)
+
+    # min == scale * offset
+    assert torch.allclose(min, - scale * negative_bins,
+                          rtol=1e-3, atol=scale.abs().max().item() * 1e-5)
+
+    # max == scale * -(offset+1)
+    assert torch.allclose(max, scale * positive_bins,
+                          rtol=1e-3, atol=scale.abs().max().item() * 1e-5)
+
     range = torch.maximum(-min * total_bins/negative_bins,
                           max * total_bins/positive_bins)
     assert torch.allclose(scale, range / total_bins,
                           rtol=1e-3, atol=scale.abs().max().item() * 1e-5)
 
     # offset == -1 * 2 ** (bw -1)
-    assert torch.equal(offset, torch.ones_like(offset) * -2 ** (bw-1))
+    assert torch.equal(offset, torch.zeros_like(offset))
     # offset is fixed in symmetric quantizer
     assert not offset.requires_grad
 

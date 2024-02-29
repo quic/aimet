@@ -420,17 +420,20 @@ class TestQuantizationBackends:
         else:
             assert random_tensor.grad is None
 
+    @pytest.mark.parametrize("signed", (False, True))
     @pytest.mark.parametrize("test_set", (per_tensor_4b_test_set,
                                           per_tensor_8b_test_set,
                                           per_channel_4b_test_set,
                                           per_channel_8b_test_set))
     @pytest.mark.parametrize("dtype", (torch.float16, torch.float32))
     @pytest.mark.skipif(not torch.cuda.is_available(), reason='cannot test as there\'s only cpu on this machine')
-    def test_quantize_with_predefined_values(self, backend_module, test_set, dtype):
+    def test_quantize_with_predefined_values(self, backend_module, test_set, dtype, signed):
         test_set = copy_test_set(test_set, device="cuda:0", dtype=dtype)
         test_set.tensor.requires_grad = True
-        tensor_q = backend_module.quantize(test_set.tensor, test_set.delta, test_set.offset, test_set.bitwidth)
-        assert torch.all(tensor_q == test_set.tensor_q)
+        offset = test_set.offset if not signed else test_set.offset + 2 ** (test_set.bitwidth - 1)
+        tensor_q = backend_module.quantize(test_set.tensor, test_set.delta, offset, test_set.bitwidth, signed)
+        expected_tensor_q = test_set.tensor_q if not signed else test_set.tensor_q - 2 ** (test_set.bitwidth - 1)
+        assert torch.all(tensor_q == expected_tensor_q), f"\n{tensor_q}, \n{expected_tensor_q}"
         grad_in = torch.randn_like(test_set.tensor)
         tensor_q.backward(grad_in)
         assert torch.all(test_set.tensor.grad[test_set.mask] == 0)
@@ -448,16 +451,18 @@ class TestQuantizationBackends:
         tensor_qdq = backend_module.dequantize(tensor_q, test_set.delta, test_set.offset)
         assert torch.all(tensor_qdq == test_set.tensor_qdq)
 
+    @pytest.mark.parametrize("signed", (False, True))
     @pytest.mark.parametrize("test_set", (per_tensor_4b_test_set,
                                           per_tensor_8b_test_set,
                                           per_channel_4b_test_set,
                                           per_channel_8b_test_set))
     @pytest.mark.parametrize("dtype", (torch.float16, torch.float32))
     @pytest.mark.skipif(not torch.cuda.is_available(), reason='cannot test as there\'s only cpu on this machine')
-    def test_qdq_with_predefined_values(self, backend_module, test_set, dtype):
+    def test_qdq_with_predefined_values(self, backend_module, test_set, dtype, signed):
         test_set = copy_test_set(test_set, dtype=dtype, device="cuda")
         test_set.tensor.requires_grad = True
-        tensor_qdq = backend_module.quantize_dequantize(test_set.tensor, test_set.delta, test_set.offset, test_set.bitwidth)
+        offset = test_set.offset if not signed else test_set.offset + 2 ** (test_set.bitwidth - 1)
+        tensor_qdq = backend_module.quantize_dequantize(test_set.tensor, test_set.delta, offset, test_set.bitwidth, signed)
         assert torch.allclose(tensor_qdq, test_set.tensor_qdq)
         grad_in = torch.randn_like(test_set.tensor)
         tensor_qdq.backward(grad_in)
