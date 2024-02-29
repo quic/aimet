@@ -38,7 +38,7 @@
 """ Affine quantizers """
 
 import abc
-from typing import Optional, Tuple, List, Dict
+from typing import Optional, List, Dict
 import contextlib
 import functools
 
