@@ -42,7 +42,8 @@ import torch
 from torch import nn
 from torch.optim import SGD, RMSprop, Adagrad, Adam, AdamW
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
-from aimet_torch.experimental.v2.quantization.quantizers.affine import AffineQuantizerBase, Quantize, QuantizeDequantize
+from aimet_torch.experimental.v2.quantization.quantizers.affine import AffineQuantizerBase, Quantize, \
+    QuantizeDequantize, Dequantize
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 
 
@@ -148,11 +149,11 @@ def test_quantize_compute_encodings(quantize: Quantize, x: torch.Tensor):
                                             quantize.bitwidth)
 
     with quantize.compute_encodings():
-        x_int, scale_x, offset_x = quantize(x)
+        x_int = quantize(x)
 
-    assert torch.allclose(x_int, expected_x_int)
-    assert torch.allclose(scale_x, dynamic_scale)
-    assert torch.allclose(offset_x, dynamic_offset)
+    assert torch.allclose(x_int.quantized_repr(), expected_x_int.to(x_int.encoding.dtype))
+    assert torch.allclose(x_int.encoding.scale, dynamic_scale)
+    assert torch.allclose(x_int.encoding.offset, dynamic_offset)
     assert torch.allclose(quantize.min, dynamic_min)
     assert torch.allclose(quantize.max, dynamic_max)
     assert torch.allclose(quantize.get_scale(), dynamic_scale)
@@ -262,7 +263,7 @@ def test_backward_during_compute_encodings(q: AffineQuantizerBase, x: torch.Tens
 
     with q.compute_encodings():
         if isinstance(q, Quantize):
-            output, scale, offset = q(x)
+            output = q(x)
         else:
             output = q(x)
         output.backward(torch.zeros_like(output))
@@ -326,12 +327,12 @@ def test_quantize_forward(quantize: Quantize, x: torch.Tensor):
     When: forward() invoked
     Then: forward() returns parametric quantization output.
     """
-    output, scale, offset = quantize(x)
+    output = quantize(x)
     expected_output = get_backend().quantize(x,
                                              quantize.get_scale(),
                                              quantize.get_offset(),
                                              quantize.bitwidth)
-    assert torch.allclose(output, expected_output)
+    assert torch.allclose(output.quantized_repr(), expected_output.to(output.encoding.dtype))
 
 
 @pytest.mark.parametrize('quantize_dequantize', [
@@ -377,7 +378,7 @@ def test_backward(q: AffineQuantizerBase, x: torch.Tensor):
     Then: self.min.grad and self.max.grad should be computed
     """
     if isinstance(q, Quantize):
-        output, scale, offset = q(x)
+        output = q(x)
     else:
         output = q(x)
     output.backward(torch.zeros_like(output))
@@ -407,7 +408,7 @@ def test_backward_with_no_grad(q, x: torch.Tensor):
     x = x.clone().requires_grad_(True)
     with torch.no_grad():
         if isinstance(q, Quantize):
-            output, scale, offset = q(x)
+            output = q(x)
         else:
             output = q(x)
     output = output + x
@@ -557,7 +558,7 @@ def test_symmetric_learning(q, x, optim_cls):
 
     for _ in range(10):
         if isinstance(q, Quantize):
-            output, scale, offset = q(x)
+            output = q(x)
         else:
             output = q(x)
         output.backward(torch.randn_like(output))
@@ -611,7 +612,7 @@ def test_asymmetric_learning(q, x, optim_cls):
 
     for _ in range(10):
         if isinstance(q, Quantize):
-            output, scale, offset = q(x)
+            output = q(x)
         else:
             output = q(x)
         output.backward(torch.randn_like(output))
@@ -772,3 +773,19 @@ def test_is_initialized():
     res = pickle.dumps(qdq)
     qdq = pickle.loads(res)
     assert qdq.is_initialized()
+
+
+@torch.no_grad()
+@pytest.mark.parametrize('symmetric', [True, False])
+def test_quantize_dequantize_then_quantize_and_dequantize_equality(x, symmetric):
+    qdq = QuantizeDequantize((1,), 8, symmetric)
+    q = Quantize((1,), 8, symmetric)
+    dq = Dequantize()
+
+    with qdq.compute_encodings(), q.compute_encodings():
+        _ = qdq(x)
+        _ = q(x)
+
+    a = qdq(x)
+    b = dq(q(x))
+    assert torch.allclose(a, b)
