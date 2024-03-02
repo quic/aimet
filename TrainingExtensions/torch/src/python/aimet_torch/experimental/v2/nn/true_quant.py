@@ -232,6 +232,7 @@ class TrueQuantizationMixin(BaseQuantizationMixin, ABC):
             2) The output(s) of super().forward() are quantized by mapping self.output_quantizer_tree()
                to the outputs
         """
+        quantized_inputs, kwargs = pytree.tree_map_only(QuantizerBase, lambda q: q.dequantize(), (quantized_inputs, kwargs))
         outputs = super().forward(*quantized_inputs, **kwargs)
         outputs = _tree_map(_maybe_quantize, outputs, self.output_quantizer_tree())
         return outputs
@@ -284,7 +285,8 @@ class TrueQuantizationMixin(BaseQuantizationMixin, ABC):
 
 class _TrueQuantizedUnaryOpMixin(TrueQuantizationMixin, ABC):
 
-    def quantized_forward(self, x, *args, **kwargs):
+    def quantized_forward(self, *args, **kwargs):
+        x, *args = args
         x = _maybe_quantize(x, self.input_quantizers[0])
 
         with self._patch_quantized_parameters():
@@ -297,7 +299,8 @@ class _TrueQuantizedBinaryOpMixin(TrueQuantizationMixin, ABC):
         super().__quant_init__()
         self.input_quantizers = nn.ModuleList([None, None])
 
-    def quantized_forward(self, x, y, *args, **kwargs):
+    def quantized_forward(self, *args, **kwargs):
+        x, y, *args = args
         x = _maybe_quantize(x, self.input_quantizers[0])
         y = _maybe_quantize(y, self.input_quantizers[1])
 
