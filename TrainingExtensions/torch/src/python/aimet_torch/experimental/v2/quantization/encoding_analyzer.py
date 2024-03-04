@@ -181,9 +181,9 @@ class _HistogramObserver(_Observer[_Histogram]):
         return torch.arange(min_val, max_val + 0.5 * step, step, device=device)
 
     def _get_bin_num(self, bin_width: int, curr_min, data):
-        if bin_width:
-            return min(int((data - curr_min) / bin_width), self.num_bins - 1)
-        return bin_width
+        bin_tensor = torch.full(data.shape, self.num_bins - 1, device=data.device)
+        index_tensor = (data - curr_min) / bin_width
+        return torch.minimum(index_tensor.to(torch.int32), bin_tensor)
 
     # pylint: disable=arguments-differ
     # pylint: disable=too-many-locals
@@ -194,7 +194,6 @@ class _HistogramObserver(_Observer[_Histogram]):
             return
 
         hist_inputs = torch.reshape(input_tensor, (len(new_stats_list), -1))
-
         for index, new_stats in enumerate(new_stats_list):
             curr_stats = self.stats[index]
             curr_input = hist_inputs[index]
@@ -210,26 +209,29 @@ class _HistogramObserver(_Observer[_Histogram]):
                 src_bin_width = (curr_stats.max - curr_stats.min) / self.num_bins
                 histogram_updates = torch.zeros(self.num_bins).to(input_tensor.device)
 
-                for curr_bin in range(self.num_bins):
-                    curr_hist = curr_stats.histogram[curr_bin]
-                    if curr_hist:
-                        src_bin_start = curr_stats.min + src_bin_width * curr_bin
-                        bin_index = self._get_bin_num(dest_bin_width, updated_min, src_bin_start)
-                        dest_bin_end = updated_min + dest_bin_width * (bin_index + 1)
+                src_bin_start = curr_stats.min + (src_bin_width * torch.arange(0, self.num_bins, device=input_tensor.device))
+                dest_bin_index = self._get_bin_num(dest_bin_width, updated_min, src_bin_start)
+                dest_bin_end = updated_min + dest_bin_width * (dest_bin_index + 1)
 
-                        # split curr_hist if values in source bin cannot neatly fold into dest bin
-                        split_hist_value = torch.round(((dest_bin_end - src_bin_start) / src_bin_width) * curr_hist)
-                        dest_bin_updated = min(split_hist_value, curr_hist)
-                        # update appropriate bin with either the full or split curr_hist value
-                        histogram_updates[bin_index] += dest_bin_updated
-                        # if curr_hist is split, update other bin that the remaining values fall into
-                        if dest_bin_updated < curr_hist:
-                            bin_index = self._get_bin_num(dest_bin_width, updated_min, src_bin_start + dest_bin_width)
-                            histogram_updates[bin_index] += curr_hist - dest_bin_updated
+                # split curr_hist if values in source bin cannot neatly fold into dest bin
+                split_hist_value = torch.round(((dest_bin_end - src_bin_start) / src_bin_width) * curr_stats.histogram)
+                dest_bin_updates = torch.minimum(split_hist_value, curr_stats.histogram)
+
+                # update appropriate bin with either the full or split curr_hist value
+                for i, dest_bin in enumerate(dest_bin_index):
+                    histogram_updates[dest_bin] += dest_bin_updates[i]
+
+                # if curr_hist is split, update other bin that the remaining values fall into
+                other_bins = torch.nonzero(torch.where(dest_bin_updates < curr_stats.histogram, 1, 0))
+                other_bin_index = self._get_bin_num(dest_bin_width, updated_min, src_bin_start + dest_bin_width)
+                other_bin_updates = curr_stats.histogram - dest_bin_updates
+                for bin_num in other_bins:
+                    histogram_updates[other_bin_index[bin_num]] += other_bin_updates[bin_num]
+
             # create histogram given input tensor and full range
             expanded_histogram = torch.histc(curr_input.to(torch.float), bins=self.num_bins, min=updated_min, max=updated_max)
-            expanded_bin_edges = self._create_bin_edges(min_val=updated_min, max_val=updated_max, device=expanded_histogram.device)
             expanded_histogram += histogram_updates.to(expanded_histogram.device)
+            expanded_bin_edges = self._create_bin_edges(min_val=updated_min, max_val=updated_max, device=expanded_histogram.device)
             self.stats[index] = _Histogram(expanded_histogram, expanded_bin_edges, updated_min, updated_max)
 
     def reset_stats(self):
