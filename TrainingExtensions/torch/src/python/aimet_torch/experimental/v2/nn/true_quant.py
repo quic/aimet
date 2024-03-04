@@ -111,6 +111,10 @@ def _tree_map(fn: Callable, tree: pytree.PyTree, *others: pytree.PyTree):
     return pytree.tree_unflatten(list(map(fn, leaves, *others)), spec)
 
 
+def _tree_map_only(cls, func, tree, *others):
+    return _tree_map(lambda t: func(t) if isinstance(t, cls) else t, tree, *others)
+
+
 class TrueQuantizationMixin(BaseQuantizationMixin, ABC):
     """
     Mixin that allows dispatch to quantized operator libraries in place of native pytorch operations
@@ -215,7 +219,7 @@ class TrueQuantizationMixin(BaseQuantizationMixin, ABC):
         """
         Selects the first operator which can evaluate successfully and returns its output
         """
-        output_encodings = pytree.tree_map_only(QuantizerBase, lambda q: q.get_encoding(), self.output_quantizer_tree())
+        output_encodings = _tree_map_only(QuantizerBase, lambda q: q.get_encoding(), self.output_quantizer_tree())
         operator, extra_kwargs = self.select_operator(*quantized_inputs, **kwargs, output_encodings=output_encodings)
         return self.call_operator(operator, *quantized_inputs, output_encodings=output_encodings, **kwargs, **extra_kwargs)
 
@@ -232,7 +236,7 @@ class TrueQuantizationMixin(BaseQuantizationMixin, ABC):
             2) The output(s) of super().forward() are quantized by mapping self.output_quantizer_tree()
                to the outputs
         """
-        quantized_inputs, kwargs = pytree.tree_map_only(QuantizerBase, lambda q: q.dequantize(), (quantized_inputs, kwargs))
+        quantized_inputs, kwargs = _tree_map_only(QuantizerBase, lambda q: q.dequantize(), (quantized_inputs, kwargs))
         outputs = super().forward(*quantized_inputs, **kwargs)
         outputs = _tree_map(_maybe_quantize, outputs, self.output_quantizer_tree())
         return outputs
