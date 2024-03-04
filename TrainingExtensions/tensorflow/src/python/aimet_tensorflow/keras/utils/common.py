@@ -57,7 +57,7 @@ per_channel_quantizeable_layers = (tf.keras.layers.Conv2D, tf.keras.layers.Conv2
                                    tf.keras.layers.DepthwiseConv2D, tf.keras.layers.SeparableConv2D,
                                    tf.keras.layers.Dense)
 
-SUBMODULES_TO_SKIP = (tf.keras.layers.MultiHeadAttention,)
+SUBMODULES_TO_SKIP = (tf.keras.layers.MultiHeadAttention, tf.keras.layers.LSTM,)
 
 def to_functional(func: Callable) -> tf.keras.Model:
     """
