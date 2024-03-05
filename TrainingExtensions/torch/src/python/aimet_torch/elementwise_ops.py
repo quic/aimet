@@ -388,9 +388,10 @@ class NonMaxSuppression(torch.nn.Module):
                 res_per_class = res_per_class[:self.max_output_boxes_per_class]
                 res.extend(res_per_class)
 
-        res = torch.Tensor(res).type(torch.int64)
-        out = torch.zeros(batch_scores.shape[0] * batch_scores.shape[1] * self.max_output_boxes_per_class, 3, dtype=torch.int64)
-        indices = torch.arange(0, len(res) * 3, dtype=torch.int64)
+        res = torch.tensor(res, dtype=torch.int64, device=args[0].device)
+        out = torch.zeros(batch_scores.shape[0] * batch_scores.shape[1] * self.max_output_boxes_per_class, 3,
+                          dtype=torch.int64, device=args[0].device)
+        indices = torch.arange(0, len(res) * 3, dtype=torch.int64, device=args[0].device)
         out.put_(indices, res)
         return out
 
