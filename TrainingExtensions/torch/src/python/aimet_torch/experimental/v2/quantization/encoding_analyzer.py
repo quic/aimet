@@ -164,13 +164,41 @@ class _HistogramObserver(_Observer[_Histogram]):
                 # index where hist_input at current dimension will be sliced at
                 index = (hist_num // numel) % dim
                 hist_input = torch.unsqueeze(torch.select(hist_input, axis, index), axis)
+            
+            hist_min, hist_max = self._handle_inf_inputs(hist_input)
+            histogram = torch.histc(hist_input.to(torch.float), bins=self.num_bins, min=hist_min, max=hist_max)
 
-            histogram = torch.histc(hist_input.to(torch.float), bins=self.num_bins, min=hist_input.min(), max=hist_input.max())
-            bin_edges = self._create_bin_edges(min_val=hist_input.min(), max_val=hist_input.max(), device=histogram.device)
-            hist_stats.append(_Histogram(histogram, bin_edges, hist_input.min(), hist_input.max()))
+            # clip inf values to hist_min and hist_max
+            histogram[0] += torch.sum(hist_input == -float('inf'))
+            histogram[-1] += torch.sum(hist_input == float('inf'))
+            
+            bin_edges = self._create_bin_edges(min_val=hist_min, max_val=hist_max, device=histogram.device)
+            hist_stats.append(_Histogram(histogram, bin_edges, hist_min, hist_max))
 
         return hist_stats
+   
+    def _handle_inf_inputs(self, hist_input):
+        min = hist_input.min()
+        max = hist_input.max()
 
+        input = torch.flatten(torch.unique(hist_input))
+
+        if torch.isneginf(min):
+            # clip min to lowest finite value
+            min = torch.kthvalue(input, 2).values
+        elif torch.isposinf(min):
+            # clip min to highest finite value
+            min = torch.kthvalue(input, len(input) - 1).values
+        
+        if torch.isneginf(max):
+            # clip max to lowest finite value
+            max = torch.kthvalue(input, 2).values
+        elif torch.isposinf(max):
+            # clip max to highest finite value
+            max = torch.kthvalue(input, len(input) - 1).values
+        
+        return min, max
+    
     def _create_bin_edges(self, min_val, max_val, device):
         # Adjust min/max values to be in line with PyTorch's torch.histc implementation
         if max_val == min_val:
@@ -178,6 +206,7 @@ class _HistogramObserver(_Observer[_Histogram]):
             max_val += 0.5
 
         step = (max_val - min_val) / self.num_bins
+        
         return torch.arange(min_val, max_val + 0.5 * step, step, device=device)
 
     def _get_bin_num(self, bin_width: int, curr_min, data):
@@ -205,6 +234,7 @@ class _HistogramObserver(_Observer[_Histogram]):
             if updated_min == curr_stats.min and updated_max == curr_stats.max:
                 histogram_updates = curr_stats.histogram
             else:
+                
                 dest_bin_width = (updated_max - updated_min) / self.num_bins
                 src_bin_width = (curr_stats.max - curr_stats.min) / self.num_bins
                 histogram_updates = torch.zeros(self.num_bins).to(input_tensor.device)
