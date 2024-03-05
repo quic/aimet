@@ -47,7 +47,8 @@ class _QuantizationBackendProtocol(Protocol):
     def quantize(self,
                  input: torch.Tensor,
                  scale: torch.Tensor,
-                 offset: torch.Tensor) -> torch.Tensor:
+                 offset: torch.Tensor,
+                 bitwidth: int) -> torch.Tensor:
         ...
 
     def dequantize(self,
@@ -59,7 +60,8 @@ class _QuantizationBackendProtocol(Protocol):
     def quantize_dequantize(self,
                             input: torch.Tensor,
                             scale: torch.Tensor,
-                            offset: torch.Tensor) -> torch.Tensor:
+                            offset: torch.Tensor,
+                            bitwidth: int) -> torch.Tensor:
         ...
 
 
