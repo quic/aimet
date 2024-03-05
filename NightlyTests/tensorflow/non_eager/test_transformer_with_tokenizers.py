@@ -57,7 +57,8 @@ tf.compat.v1.disable_eager_execution()
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
-@pytest.mark.tf2
+# @pytest.mark.tf2
+@pytest.mark.skip(reason="Temporarily disabled due to connection issue")
 class TransformerQuantizationAcceptanceTests(unittest.TestCase):
     def test_hf_bert_with_tokenizer(self):
         tf.compat.v1.reset_default_graph()
