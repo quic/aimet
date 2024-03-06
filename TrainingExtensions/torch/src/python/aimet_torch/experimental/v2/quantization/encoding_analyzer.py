@@ -167,22 +167,22 @@ class _HistogramObserver(_Observer[_Histogram]):
                 hist_input = torch.unsqueeze(torch.select(hist_input, axis, index), axis)
 
             hist_min, hist_max = self._handle_inf_inputs(hist_input)
-            histogram = torch.histc(hist_input.to(torch.float), bins=self.num_bins, min=hist_min, max=hist_max)
-
+            bin_edges = self._create_bin_edges(min_val=torch.clone(hist_min), max_val=torch.clone(hist_max), device=input_tensor.device)
+            histogram = torch.histc(hist_input.to(torch.float), bins=self.num_bins, min=bin_edges[0], max=bin_edges[-1])
             # clip inf values to hist_min and hist_max
             histogram[0] += torch.sum(hist_input == -float('inf'))
             histogram[-1] += torch.sum(hist_input == float('inf'))
 
-            bin_edges = self._create_bin_edges(min_val=hist_min, max_val=hist_max, device=histogram.device)
             hist_stats.append(_Histogram(histogram, bin_edges, hist_min, hist_max))
 
         return hist_stats
 
+    # pylint: disable=no-self-use
     def _handle_inf_inputs(self, hist_input):
         min = hist_input.min()
         max = hist_input.max()
 
-        input = torch.flatten(torch.unique(hist_input))
+        input = torch.flatten(torch.unique(hist_input.to(float)))
 
         if torch.all(torch.isinf(input)):
             raise ValueError('Input tensor cannot contain only infinite values')
@@ -200,10 +200,6 @@ class _HistogramObserver(_Observer[_Histogram]):
         elif torch.isposinf(max):
             # clip max to highest finite value
             max = torch.kthvalue(input, len(input) - 1).values
-        
-        if min == max:
-            min -= 0.5
-            max += 0.5
 
         return min, max
 
@@ -226,7 +222,6 @@ class _HistogramObserver(_Observer[_Histogram]):
     # pylint: disable=too-many-locals
     @torch.no_grad()
     def merge_stats(self, new_stats_list: List[_Histogram], input_tensor: torch.Tensor):
-        # import pdb; pdb.set_trace()
 
         if self.stats[0].histogram is None:
             self.stats = new_stats_list
@@ -271,10 +266,11 @@ class _HistogramObserver(_Observer[_Histogram]):
             # create histogram given input tensor and full range
             expanded_histogram = torch.histc(curr_input.to(torch.float), bins=self.num_bins, min=updated_min, max=updated_max)
             expanded_histogram += histogram_updates.to(expanded_histogram.device)
+
             # clip inf values to hist_min and hist_max
             expanded_histogram[0] += torch.sum(curr_input == -float('inf'))
             expanded_histogram[-1] += torch.sum(curr_input == float('inf'))
-            
+
             expanded_bin_edges = self._create_bin_edges(min_val=updated_min, max_val=updated_max, device=expanded_histogram.device)
             self.stats[index] = _Histogram(expanded_histogram, expanded_bin_edges, updated_min, updated_max)
 
