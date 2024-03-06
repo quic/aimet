@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -67,6 +67,13 @@ TfEncoding getComputedEncodings(uint8_t bw, double min, double max, bool useSymm
     }
     encoding.bw = bw;
 
+    //To handle the cases where the min/max can be infinite values
+    if (isinf(min) != 0)
+       min = std::numeric_limits<float>::lowest();
+
+    if (isinf(max) != 0)
+        max = std::numeric_limits<float>::max();
+
     // Special case for symmetric encodings. If all values are positive or 0, we can treat the
     // symmetric encodings as unsigned, which essentially translates to asymmetric
 
@@ -108,13 +115,25 @@ TfEncoding getComputedEncodings(uint8_t bw, double min, double max, bool useSymm
             encoding.offset = round(min / encoding.delta);
         }
 
-        // Calculate 'min' and 'max' based on 'delta' and 'offset'.
-        // Note this min and max can vary from the one in 'stats'. This min and max
-        // can really be represented with the integer offset.
-        encoding.min = encoding.delta * encoding.offset;
+        // Check that the recalculated min/max should be in range of float
+        if (encoding.delta * encoding.offset >= std::numeric_limits<float>::lowest() && encoding.delta * encoding.offset <= std::numeric_limits<float>::max())
+        {
+            // Calculate 'min' and 'max' based on 'delta' and 'offset'.
+            // Note this min and max can vary from the one in 'stats'. This min and max
+            // can really be represented with the integer offset.
+            encoding.min = encoding.delta * encoding.offset;
+        }
+        else
+        {
+            // As min value is out of range set it to float min
+            encoding.min = std::numeric_limits<float>::lowest();
+        }
+
         // We want to calculate: max = delta * numSteps + min.
         // To avoid numerical accuracy issues on Linaro, we simplify the math.
         encoding.max = max - min + encoding.min;
+        if (encoding.max > std::numeric_limits<float>::max())
+            encoding.max = std::numeric_limits<float>::max();
     }
     return encoding;
 }
