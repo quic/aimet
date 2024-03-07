@@ -34,7 +34,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-""" True-quantized modules"""
+""" Quantized modules"""
 
 import contextlib
 import itertools
@@ -71,7 +71,7 @@ class _QuantizedOpLibrary(Protocol):
 
 def set_default_operator_library(op_libraries: Union[List[_QuantizedOpLibrary], _QuantizedOpLibrary]):
     """
-    Set the default operator library(s0) for true-quantized modules
+    Set the default operator library(s0) for quantized modules
     """
     if not isinstance(op_libraries, (list, tuple)):
         op_libraries = [op_libraries]
@@ -81,7 +81,7 @@ def set_default_operator_library(op_libraries: Union[List[_QuantizedOpLibrary], 
 
 def get_default_operator_library() -> List[_QuantizedOpLibrary]:
     """
-    Get the current default true-quant operator libraries
+    Get the current default quantized operator libraries
     """
     return _CURRENT_OPERATOR_LIBRARIES.copy()
 
@@ -115,7 +115,7 @@ def _tree_map_only(cls, func, tree, *others):
     return _tree_map(lambda t: func(t) if isinstance(t, cls) else t, tree, *others)
 
 
-class TrueQuantizationMixin(BaseQuantizationMixin, ABC):
+class QuantizationMixin(BaseQuantizationMixin, ABC):
     """
     Mixin that allows dispatch to quantized operator libraries in place of native pytorch operations
     """
@@ -127,13 +127,12 @@ class TrueQuantizationMixin(BaseQuantizationMixin, ABC):
     allow_float_fallback: bool
     _op_libraries: List[_QuantizedOpLibrary]
     _library_kwargs: Dict[_QuantizedOpLibrary, Dict[str, Any]]
-    quantized_classes_map = OrderedDict()
 
     def __init__(self,
                  *args,
                  op_library: Union[_QuantizedOpLibrary, List[_QuantizedOpLibrary]] = None,
                  float_fallback: bool = False,
-                 library_fallback: bool = False,
+                 library_fallback: bool = True,
                  **kwargs):
         super().__init__(*args, **kwargs)
         self.set_operator_library(op_library, library_fallback)
@@ -147,9 +146,9 @@ class TrueQuantizationMixin(BaseQuantizationMixin, ABC):
 
         with contextlib.ExitStack() as stack:
             for quantizer in itertools.chain(self.input_quantizers, self.output_quantizers):
-                if not quantizer:
+                if not isinstance(quantizer, QuantizerBase):
                     continue
-                # NOTE: This behavior is for backawrd-compatibility with V1 quantsim.
+                # NOTE: This behavior is for backward-compatibility with V1 quantsim.
                 stack.enter_context(patch_attr(quantizer, 'forward', no_op))
             stack.enter_context(patch_attr(self, "quantized_operator", self.fallback_operator))
             with super().compute_encodings():
@@ -159,9 +158,12 @@ class TrueQuantizationMixin(BaseQuantizationMixin, ABC):
         """
         Retrieve all operator libraries available to the layer
         """
-        if self.allow_library_fallback or not self._op_libraries:
-            return self._op_libraries + get_default_operator_library()
-        return self._op_libraries.copy()
+        op_libs = self._op_libraries.copy()
+        if self.allow_library_fallback:
+            for item in get_default_operator_library():
+                if item not in op_libs:
+                    op_libs.append(item)
+        return op_libs
 
     def set_operator_library(self,
                              library: Union[List[_QuantizedOpLibrary], _QuantizedOpLibrary],
@@ -258,7 +260,7 @@ class TrueQuantizationMixin(BaseQuantizationMixin, ABC):
     @classmethod
     def wrap(cls, module_cls: Type[nn.Module]) -> Type[nn.Module]:
         """
-        Wrap a regular module class into a true-quantized module class
+        Wrap a regular module class into a quantized module class
         """
         if not issubclass(module_cls, nn.Module):
             raise ValueError("Expected module_cls to be a subclass of torch.nn.Module. "
@@ -266,18 +268,19 @@ class TrueQuantizationMixin(BaseQuantizationMixin, ABC):
         if module_cls in cls.cls_to_qcls:
             return cls.cls_to_qcls[module_cls]
 
-        quantized_cls_name = f"TrueQuantized{module_cls.__name__}"
+        quantized_cls_name = f"Quantized{module_cls.__name__}"
         base_classes = (cls, module_cls)
         quantized_cls = type(quantized_cls_name, base_classes, {'__module__': __name__})
         return cls.implements(module_cls)(quantized_cls)
 
     @classmethod
-    def implements(cls, module_cls):
+    def implements(cls, module_cls, op_key=None):
         """
-        Decorator for registering true-quantized implementation of the given base class.
+        Decorator for registering quantized implementation of the given base class.
         """
 
         def wrapper(quantized_cls):
+            quantized_cls.op_key = op_key or module_cls.__name__.lower()
             cls.cls_to_qcls[module_cls] = quantized_cls
             cls.qcls_to_cls[quantized_cls] = module_cls
             return quantized_cls
@@ -287,7 +290,7 @@ class TrueQuantizationMixin(BaseQuantizationMixin, ABC):
 
 # pylint: disable=arguments-differ, abstract-method
 
-class _TrueQuantizedUnaryOpMixin(TrueQuantizationMixin, ABC):
+class _QuantizedUnaryOpMixin(QuantizationMixin, ABC):
 
     def quantized_forward(self, *args, **kwargs):
         x, *args = args
@@ -297,7 +300,7 @@ class _TrueQuantizedUnaryOpMixin(TrueQuantizationMixin, ABC):
             return self.quantized_operator(x, *args, **kwargs)
 
 
-class _TrueQuantizedBinaryOpMixin(TrueQuantizationMixin, ABC):
+class _QuantizedBinaryOpMixin(QuantizationMixin, ABC):
 
     def __quant_init__(self):
         super().__quant_init__()
@@ -312,28 +315,24 @@ class _TrueQuantizedBinaryOpMixin(TrueQuantizationMixin, ABC):
             return self.quantized_operator(x, y, *args, **kwargs)
 
 
-@TrueQuantizationMixin.implements(nn.Linear)
-class TrueQuantizedLinear(_TrueQuantizedUnaryOpMixin, nn.Linear):
-    """ True-quantized linear """
-    op_key = "linear"
-
+@QuantizationMixin.implements(nn.Linear)
+class QuantizedLinear(_QuantizedUnaryOpMixin, nn.Linear):
+    """ Quantized Linear """
     def call_operator(self, linear_op, input_tensor, output_encodings=None, **kwargs):
         return linear_op(input_tensor, self.weight, bias=self.bias, output_encodings=output_encodings, **kwargs)
 
 
-@TrueQuantizationMixin.implements(nn.GELU)
-class TrueQuantizedGelu(_TrueQuantizedUnaryOpMixin, nn.GELU):
-    """ True-quantized Gelu """
-    op_key = "gelu"
+@QuantizationMixin.implements(nn.GELU)
+class QuantizedGELU(_QuantizedUnaryOpMixin, nn.GELU):
+    """ Quantized GELU """
 
     def call_operator(self, gelu_op, input_tensor, output_encodings=None, **kwargs):
         return gelu_op(input_tensor, approximate=self.approximate, output_encodings=output_encodings, **kwargs)
 
 
-@TrueQuantizationMixin.implements(nn.LayerNorm)
-class TrueQuantizedLayerNorm(_TrueQuantizedUnaryOpMixin, nn.LayerNorm):
-    """ True-quantized layernorm """
-    op_key = "layer_norm"
+@QuantizationMixin.implements(nn.LayerNorm)
+class QuantizedLayerNorm(_QuantizedUnaryOpMixin, nn.LayerNorm):
+    """ Quantized LayerNorm """
 
     def call_operator(self, layernorm_op, input_tensor, output_encodings=None, **kwargs):
         return layernorm_op(input_tensor, self.normalized_shape, weight=self.weight, bias=self.bias, eps=self.eps,

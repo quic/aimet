@@ -41,7 +41,7 @@ import mock
 import torch.nn.functional as F
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 from aimet_torch.experimental.v2.quantization.quantizers.affine import Quantize
-from aimet_torch.experimental.v2.nn.true_quant import TrueQuantizedLinear, TrueQuantizationMixin, set_default_operator_library
+from aimet_torch.experimental.v2.nn.true_quant import QuantizedLinear, QuantizationMixin, set_default_operator_library
 from aimet_torch.experimental.v2.quantization.encodings import AffineEncoding
 from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensor
 
@@ -110,7 +110,7 @@ class TestTrueQuantLinear:
         """
         Given: TrueQuantLinear with no input, output, or param quantizers
         """
-        quant_linear = TrueQuantizedLinear(10, input.shape[-1])
+        quant_linear = QuantizedLinear(10, input.shape[-1])
         """
         When: inspect input/output/param quantizers
         Then: quantizers are None
@@ -140,7 +140,7 @@ class TestTrueQuantLinear:
         Given: TrueQuantLinear with input, output, and param quantizers
         """
         set_default_operator_library(DummyBackend)
-        quant_linear = TrueQuantizedLinear(10, input.shape[-1])
+        quant_linear = QuantizedLinear(10, input.shape[-1])
         quant_linear.input_quantizers[0] = Quantize((1, ), bitwidth=8, symmetric=False)
         quant_linear.output_quantizers[0] = Quantize((1, ), bitwidth=8, symmetric=False)
         quant_linear.param_quantizers["weight"] = Quantize((10, ), bitwidth=8, symmetric=True)
@@ -201,7 +201,7 @@ class TestTrueQuantLinear:
         Given: TrueQuantLinear with output and param quantizers and computed encodings
         """
         set_default_operator_library(DummyBackend)
-        quant_linear = TrueQuantizedLinear(10, input.shape[-1])
+        quant_linear = QuantizedLinear(10, input.shape[-1])
         quant_linear.output_quantizers[0] = Quantize((1, ), bitwidth=8, symmetric=False)
         quant_linear.param_quantizers["weight"] = Quantize((10, ), bitwidth=8, symmetric=True)
         with quant_linear.compute_encodings():
@@ -231,7 +231,7 @@ class TestTrueQuantLinear:
         """
         Given: TrueQuantLinear with valid quantizers and computed encodings
         """
-        quant_linear = TrueQuantizedLinear(10, input.shape[-1])
+        quant_linear = QuantizedLinear(10, input.shape[-1])
         quant_linear.input_quantizers[0] = Quantize((1, ), bitwidth=8, symmetric=False)
         quant_linear.output_quantizers[0] = Quantize((1, ), bitwidth=8, symmetric=False)
         quant_linear.param_quantizers["weight"] = Quantize((10, ), bitwidth=8, symmetric=True)
@@ -284,7 +284,7 @@ class TestTrueQuantLinear:
         Given: TrueQuantLinear with valid quantizers and computed encodings
         """
         set_default_operator_library(DummyBackend)
-        quant_linear = TrueQuantizedLinear(10, input.shape[-1])
+        quant_linear = QuantizedLinear(10, input.shape[-1])
         quant_linear.input_quantizers[0] = Quantize((1, ), bitwidth=8, symmetric=False)
         quant_linear.output_quantizers[0] = Quantize((1, ), bitwidth=8, symmetric=False)
         quant_linear.param_quantizers["weight"] = Quantize((10, ), bitwidth=8, symmetric=True)
@@ -339,7 +339,7 @@ class TestTrueQuantLinear:
         Given: 1) TrueQuantLinear with valid quantizers and computed encodings
                2) Backend with support for additional specific kwargs
         """
-        quant_linear = TrueQuantizedLinear(10, input.shape[-1])
+        quant_linear = QuantizedLinear(10, input.shape[-1])
         quant_linear.input_quantizers[0] = Quantize((1, ), bitwidth=8, symmetric=False)
         quant_linear.output_quantizers[0] = Quantize((1, ), bitwidth=8, symmetric=False)
         quant_linear.param_quantizers["weight"] = Quantize((10, ), bitwidth=8, symmetric=True)
@@ -390,7 +390,7 @@ class TestTrueQuantLinear:
         When: Inspect {input, output, param}_quantizers, they are the correct length
         """
         fp_linear = torch.nn.Linear(10, input.shape[-1])
-        quant_linear = TrueQuantizationMixin.from_module(fp_linear)
+        quant_linear = QuantizationMixin.from_module(fp_linear)
 
         assert len(quant_linear.input_quantizers) == 1
         assert len(quant_linear.output_quantizers) == 1
