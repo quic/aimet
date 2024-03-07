@@ -168,6 +168,7 @@ class _HistogramObserver(_Observer[_Histogram]):
 
             hist_min, hist_max = self._handle_inf_inputs(hist_input)
             bin_edges = self._create_bin_edges(min_val=torch.clone(hist_min), max_val=torch.clone(hist_max), device=input_tensor.device)
+
             histogram = torch.histc(hist_input.to(torch.float), bins=self.num_bins, min=bin_edges[0], max=bin_edges[-1])
             # clip inf values to hist_min and hist_max
             histogram[0] += torch.sum(hist_input == -float('inf'))
@@ -179,27 +180,11 @@ class _HistogramObserver(_Observer[_Histogram]):
 
     # pylint: disable=no-self-use
     def _handle_inf_inputs(self, hist_input):
-        min = hist_input.min()
-        max = hist_input.max()
-
-        input = torch.flatten(torch.unique(hist_input.to(float)))
-
-        if torch.all(torch.isinf(input)):
+        if torch.all(torch.isinf(hist_input)):
             raise ValueError('Input tensor cannot contain only infinite values')
 
-        if torch.isneginf(min):
-            # clip min to lowest finite value
-            min = torch.kthvalue(input, 2).values
-        elif torch.isposinf(min):
-            # clip min to highest finite value
-            min = torch.kthvalue(input, len(input) - 1).values
-
-        if torch.isneginf(max):
-            # clip max to lowest finite value
-            max = torch.kthvalue(input, 2).values
-        elif torch.isposinf(max):
-            # clip max to highest finite value
-            max = torch.kthvalue(input, len(input) - 1).values
+        min = hist_input[hist_input.isfinite()].min()
+        max = hist_input[hist_input.isfinite()].max()
 
         return min, max
 
