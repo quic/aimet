@@ -105,14 +105,7 @@ def read_attributes_for_op(module_info: ModuleInfo) -> Dict:
             if attribute.name == 'dilations':
                 attributes['dilations'] = list(attribute.ints)
             elif attribute.name == 'pads':
-                padding = list(attribute.ints)
-                unique_vals = set()
-                new_padding = []
-                for val in padding:
-                    if val not in unique_vals:
-                        unique_vals.add(val)
-                        new_padding.append(val)
-                attributes['pads'] = new_padding
+                attributes['pads'] = list(attribute.ints)
             elif attribute.name == 'strides':
                 attributes['strides'] = list(attribute.ints)
             elif attribute.name == 'group':
