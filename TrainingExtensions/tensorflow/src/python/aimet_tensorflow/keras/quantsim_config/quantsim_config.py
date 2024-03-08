@@ -185,7 +185,7 @@ def _initialize_input_quantizers(layer: layers.Layer, quant_settings: QuantizerS
                                                                 quant_settings.is_symmetric,
                                                                 quant_settings.use_strict_symmetric,
                                                                 quant_settings.use_unsigned_symmetric,
-                                                                enabled and layer.output.dtype in QUANT_ALLOWED_DTYPES)
+                                                                enabled and (layer.input[i].dtype if num_inputs > 1 else layer.input.dtype) in QUANT_ALLOWED_DTYPES)
         input_quantizers.append(activation_tensor_quantizer)
     return input_quantizers
 
