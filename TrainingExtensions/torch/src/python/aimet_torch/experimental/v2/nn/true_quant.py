@@ -96,7 +96,7 @@ pytree._register_pytree_node(torch.nn.ModuleDict,
                              pytree._dict_unflatten)
 
 
-def _maybe_quantize(data: Any, quantizer: Optional[QuantizerBase]):
+def _quantize_if_applicable(data: Any, quantizer: Optional[QuantizerBase]):
     """
     Quantize data if it is a quantizable type and quantize is not None
     """
@@ -146,7 +146,7 @@ class QuantizationMixin(BaseQuantizationMixin, ABC):
 
         with contextlib.ExitStack() as stack:
             for quantizer in itertools.chain(self.input_quantizers, self.output_quantizers):
-                if not isinstance(quantizer, QuantizerBase):
+                if quantizer is None:
                     continue
                 # NOTE: This behavior is for backward-compatibility with V1 quantsim.
                 stack.enter_context(patch_attr(quantizer, 'forward', no_op))
@@ -217,11 +217,10 @@ class QuantizationMixin(BaseQuantizationMixin, ABC):
         raise RuntimeError(f"No compatible operator found for function {self.op_key} in libraries "
                            f"{self.available_operator_libraries()} with input arguments: {args}, {kwargs}")
 
-    def quantized_operator(self, *quantized_inputs, **kwargs):
+    def quantized_operator(self, *quantized_inputs, output_encodings=None, **kwargs):
         """
         Selects the first operator which can evaluate successfully and returns its output
         """
-        output_encodings = _tree_map_only(QuantizerBase, lambda q: q.get_encoding(), self.output_quantizer_tree())
         operator, extra_kwargs = self.select_operator(*quantized_inputs, **kwargs, output_encodings=output_encodings)
         return self.call_operator(operator, *quantized_inputs, output_encodings=output_encodings, **kwargs, **extra_kwargs)
 
@@ -239,23 +238,8 @@ class QuantizationMixin(BaseQuantizationMixin, ABC):
                to the outputs
         """
         quantized_inputs, kwargs = _tree_map_only(QuantizerBase, lambda q: q.dequantize(), (quantized_inputs, kwargs))
-        outputs = super().forward(*quantized_inputs, **kwargs)
-        outputs = _tree_map(_maybe_quantize, outputs, self.output_quantizer_tree())
-        return outputs
-
-    def output_quantizer_tree(self):
-        """
-        Returns output quantizers as a nested structure with the same pattern as the layer outputs. In layers with
-        multiple outputs, this defines both:
-            1) which output quantizer will be applied to which output during fake-quant
-            2) which output encoding corresponds to which output during true-quant
-
-        such that these two cases cannot become misaligned.
-
-        This must be overridden in the case that the structure of self.output_quantizers does not already match the
-        structure of outputs.
-        """
-        return self.output_quantizers[0] if len(self.output_quantizers) == 1 else self.output_quantizers
+        output = super().forward(*quantized_inputs, **kwargs)
+        return _quantize_if_applicable(output, self.output_quantizers[0])
 
     @classmethod
     def wrap(cls, module_cls: Type[nn.Module]) -> Type[nn.Module]:
@@ -294,10 +278,11 @@ class _QuantizedUnaryOpMixin(QuantizationMixin, ABC):
 
     def quantized_forward(self, *args, **kwargs):
         x, *args = args
-        x = _maybe_quantize(x, self.input_quantizers[0])
+        x = _quantize_if_applicable(x, self.input_quantizers[0])
 
         with self._patch_quantized_parameters():
-            return self.quantized_operator(x, *args, **kwargs)
+            output_encodings = self.output_quantizers[0].get_encoding() if self.output_quantizers[0] else None
+            return self.quantized_operator(x, *args, **kwargs, output_encodings=output_encodings)
 
 
 class _QuantizedBinaryOpMixin(QuantizationMixin, ABC):
@@ -308,11 +293,12 @@ class _QuantizedBinaryOpMixin(QuantizationMixin, ABC):
 
     def quantized_forward(self, *args, **kwargs):
         x, y, *args = args
-        x = _maybe_quantize(x, self.input_quantizers[0])
-        y = _maybe_quantize(y, self.input_quantizers[1])
+        x = _quantize_if_applicable(x, self.input_quantizers[0])
+        y = _quantize_if_applicable(y, self.input_quantizers[1])
 
         with self._patch_quantized_parameters():
-            return self.quantized_operator(x, y, *args, **kwargs)
+            output_encodings = self.output_quantizers[0].get_encoding() if self.output_quantizers[0] else None
+            return self.quantized_operator(x, y, *args, **kwargs, output_encodings=output_encodings)
 
 
 @QuantizationMixin.implements(nn.Linear)
