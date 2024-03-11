@@ -40,60 +40,91 @@ import contextlib
 import itertools
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from typing import Type, Any, List, Callable, Protocol, Tuple, Union, Sequence, Dict, Optional
+from typing import Type, Any, Tuple, Dict, Optional, overload
 
 import torch
 import torch.nn as nn
-import torch.utils._pytree as pytree
 from torch import Tensor
 
 from aimet_torch.experimental.v2.nn.quant_base import BaseQuantizationMixin
+from aimet_torch.experimental.v2.nn.dispatcher import KernelDispatcher, _QuantizedOpLibrary
 from aimet_torch.experimental.v2.quantization.quantizers.base import QuantizerBase
-from aimet_torch.experimental.v2.utils import patch_attr
-
-OpArgs = Any
-_CURRENT_OPERATOR_LIBRARIES = []
+from aimet_torch.experimental.v2.utils import patch_attr, _ContextManager
 
 
-class _QuantizedOpLibrary(Protocol):
+_DEFAULT_DISPATCHER = KernelDispatcher([], strict=True)
+
+def set_default_functional_library(library: _QuantizedOpLibrary, strict=True):
     """
-    Protocol for integer operator libraries to follow for AIMET compatibility
+    Set the default operator library(s) for quantized modules
+    """
+    global _DEFAULT_DISPATCHER # pylint: disable=global-statement
+    _DEFAULT_DISPATCHER.set_libraries(library, strict)
+
+
+def _set_default_dispatcher(dispatcher: KernelDispatcher):
+    """
+    Set the default operator library(s) for quantized modules
+    """
+    global _DEFAULT_DISPATCHER # pylint: disable=global-statement
+    _DEFAULT_DISPATCHER = dispatcher
+
+@contextlib.contextmanager
+def _set_module_dispatcher(modules, library, strict):
+    modules = modules if isinstance(modules, list) else [modules]
+    dispatcher = KernelDispatcher(library, strict)
+    with contextlib.ExitStack() as stack:
+        for module in modules:
+            for m in module.modules():
+                if isinstance(m, QuantizationMixin):
+                    ctx = patch_attr(m, "dispatcher", lambda: dispatcher)
+                    stack.enter_context(ctx)
+
+            if isinstance(module, QuantizationMixin):
+                ctx = patch_attr(module, "dispatcher", lambda: dispatcher)
+                stack.enter_context(ctx)
+        yield
+
+
+def _set_global_dispatcher(library, strict):
+    dispatcher = KernelDispatcher(library, strict)
+    old_dispatcher = _DEFAULT_DISPATCHER
+    action = lambda: _set_default_dispatcher(dispatcher)
+    cleanup = lambda: _set_default_dispatcher(old_dispatcher)
+    return _ContextManager(action=action, cleanup=cleanup)
+
+
+@overload
+def set_library(model: torch.nn.Module, library: _QuantizedOpLibrary, *, strict=True): # pylint:disable = unused-argument, function-redefined
+    """
+    Set the functional library for a given model
+
+    :param model: torch.nn.Module(s) to set the library for
+    :param library: operator library(s) to use
+    :param strict: If True, raise an error when no valid kernel is found
     """
 
-    @staticmethod
-    def get_kernel(op_key: str) -> Sequence[Tuple[Callable[[OpArgs], bool], Callable[[OpArgs], Any]]]:
-        """
-        Takes the kernel name as an argument and returns a sequence of (predicate, operator) pairs which take identical
-        arguments. The predicate function will return True if the operator can be successfully called with the given
-        inputs, False otherwise.
-        """
-
-
-def set_default_operator_library(op_libraries: Union[List[_QuantizedOpLibrary], _QuantizedOpLibrary]):
+@overload
+def set_library(library: _QuantizedOpLibrary, *, strict=True): # pylint:disable = unused-argument, function-redefined
     """
-    Set the default operator library(s0) for quantized modules
+    Set the functional library for a given model
+
+    :param library: operator library(s) to use
+    :param strict: If True, raise an error when no valid kernel is found
     """
-    if not isinstance(op_libraries, (list, tuple)):
-        op_libraries = [op_libraries]
-    global _CURRENT_OPERATOR_LIBRARIES # pylint:disable = global-statement
-    _CURRENT_OPERATOR_LIBRARIES = op_libraries
 
 
-def get_default_operator_library() -> List[_QuantizedOpLibrary]:
+def set_library(*args, strict=True): # pylint:disable = function-redefined
     """
-    Get the current default quantized operator libraries
+    Sets the functional library used by quantized layers
     """
-    return _CURRENT_OPERATOR_LIBRARIES.copy()
-
-
-# pylint:disable = protected-access
-pytree._register_pytree_node(torch.nn.ModuleList,
-                             pytree._list_flatten,
-                             pytree._list_unflatten)
-
-pytree._register_pytree_node(torch.nn.ModuleDict,
-                             pytree._dict_flatten,
-                             pytree._dict_unflatten)
+    if len(args) == 1:
+        library = args[0]
+        return _set_global_dispatcher(library, strict)
+    if len(args) == 2:
+        modules, library = args
+        return _set_module_dispatcher(modules, library, strict)
+    raise RuntimeError("Invalid arguments, expected either (model, library, strict) or (library, strict)")
 
 
 def _quantize_if_applicable(data: Any, quantizer: Optional[QuantizerBase]):
@@ -105,17 +136,7 @@ def _quantize_if_applicable(data: Any, quantizer: Optional[QuantizerBase]):
     return data
 
 
-def _tree_map(fn: Callable, tree: pytree.PyTree, *others: pytree.PyTree):
-    leaves, spec = pytree.tree_flatten(tree)
-    others = [pytree.tree_flatten(other)[0] for other in others]
-    return pytree.tree_unflatten(list(map(fn, leaves, *others)), spec)
-
-
-def _tree_map_only(cls, func, tree, *others):
-    return _tree_map(lambda t: func(t) if isinstance(t, cls) else t, tree, *others)
-
-
-class QuantizationMixin(BaseQuantizationMixin, ABC):
+class QuantizationMixin(BaseQuantizationMixin, ABC): # pylint: disable=abstract-method
     """
     Mixin that allows dispatch to quantized operator libraries in place of native pytorch operations
     """
@@ -123,21 +144,6 @@ class QuantizationMixin(BaseQuantizationMixin, ABC):
     cls_to_qcls = OrderedDict()  # quantized class -> original class
     qcls_to_cls = OrderedDict()  # original class -> quantized class
     op_key: str
-    allow_library_fallback: bool
-    allow_float_fallback: bool
-    _op_libraries: List[_QuantizedOpLibrary]
-    _library_kwargs: Dict[_QuantizedOpLibrary, Dict[str, Any]]
-
-    def __init__(self,
-                 *args,
-                 op_library: Union[_QuantizedOpLibrary, List[_QuantizedOpLibrary]] = None,
-                 float_fallback: bool = False,
-                 library_fallback: bool = True,
-                 **kwargs):
-        super().__init__(*args, **kwargs)
-        self.set_operator_library(op_library, library_fallback)
-        self._library_kwargs = {}
-        self.allow_float_fallback = float_fallback
 
     @contextlib.contextmanager
     def compute_encodings(self):
@@ -150,96 +156,17 @@ class QuantizationMixin(BaseQuantizationMixin, ABC):
                     continue
                 # NOTE: This behavior is for backward-compatibility with V1 quantsim.
                 stack.enter_context(patch_attr(quantizer, 'forward', no_op))
-            stack.enter_context(patch_attr(self, "quantized_operator", self.fallback_operator))
+            dummy_dispatcher = KernelDispatcher([], strict=False)
+            stack.enter_context(patch_attr(self, "dispatcher", lambda: dummy_dispatcher))
             with super().compute_encodings():
                 yield
 
-    def available_operator_libraries(self) -> List[_QuantizedOpLibrary]:
+    @staticmethod
+    def dispatcher():
         """
-        Retrieve all operator libraries available to the layer
+        Return the kernel dispatcher
         """
-        op_libs = self._op_libraries.copy()
-        if self.allow_library_fallback:
-            for item in get_default_operator_library():
-                if item not in op_libs:
-                    op_libs.append(item)
-        return op_libs
-
-    def set_operator_library(self,
-                             library: Union[List[_QuantizedOpLibrary], _QuantizedOpLibrary],
-                             allow_fallback=False):
-        """
-        Set the layer's operator library
-
-        :param library: operator library or list of libraries to call into
-        :param allow_fallback: If True, allow fallback to default operator libraries
-        """
-        if library is None:
-            library = []
-        self.allow_library_fallback = allow_fallback
-        if not isinstance(library, (list, tuple)):
-            library = [library]
-        self._op_libraries = library
-
-    def set_library_kwargs(self, library: _QuantizedOpLibrary, **kwargs):
-        """
-        Sets additional keyword arguments to pass to the specified operator library when selected
-
-        :param library: the operator library for which to add keyword arguments
-        """
-        self._library_kwargs[library] = kwargs
-
-    def get_library_kwargs(self, library: _QuantizedOpLibrary) -> Dict[str, Any]:
-        """
-        Retrieves the keyword arguments for the specified operator library
-
-        :param library: operator library to retrieve keyword arguments for
-        """
-        return self._library_kwargs.get(library, {})
-
-    def select_operator(self, *args, **kwargs) -> Tuple[Callable, Dict]:
-        """
-        Returns the first kernel (and kernel arguments) for which the predicate function returns True.
-        Predicates are tested in the following order:
-            1) First local op library --> last local op library
-            2) (if self.allow_library_fallback)  First global op library --> last global op library
-            3) (if self.allow_float_fallback) Fake-quant forward pass
-
-        :return: Tuple of operator, operator positional arguments, operator keyword arguments
-        """
-        for op_lib in self.available_operator_libraries():
-            lib_kwargs = self.get_library_kwargs(op_lib)
-            for predicate, operator in op_lib.get_kernel(self.op_key):
-                if self.call_operator(predicate, *args, **kwargs, **lib_kwargs):
-                    return operator, lib_kwargs
-        if self.allow_float_fallback:
-            return self.fallback_operator, {}
-        raise RuntimeError(f"No compatible operator found for function {self.op_key} in libraries "
-                           f"{self.available_operator_libraries()} with input arguments: {args}, {kwargs}")
-
-    def quantized_operator(self, *quantized_inputs, output_encodings=None, **kwargs):
-        """
-        Selects the first operator which can evaluate successfully and returns its output
-        """
-        operator, extra_kwargs = self.select_operator(*quantized_inputs, **kwargs, output_encodings=output_encodings)
-        return self.call_operator(operator, *quantized_inputs, output_encodings=output_encodings, **kwargs, **extra_kwargs)
-
-    @abstractmethod
-    def call_operator(self, operator: Callable, *args, output_encodings=None, **kwargs):
-        """
-        Calls into functional operator using standard signature
-        """
-
-    def fallback_operator(self, *quantized_inputs, output_encodings=None, **kwargs): # pylint:disable = unused-argument
-        """
-        Implements the fake-quant fallback mechanism:
-            1) All quantized tensors will be automatically dequantized in the super().forward() call
-            2) The output(s) of super().forward() are quantized by mapping self.output_quantizer_tree()
-               to the outputs
-        """
-        quantized_inputs, kwargs = _tree_map_only(QuantizerBase, lambda q: q.dequantize(), (quantized_inputs, kwargs))
-        output = super().forward(*quantized_inputs, **kwargs)
-        return _quantize_if_applicable(output, self.output_quantizers[0])
+        return _DEFAULT_DISPATCHER
 
     @classmethod
     def wrap(cls, module_cls: Type[nn.Module]) -> Type[nn.Module]:
@@ -281,8 +208,23 @@ class _QuantizedUnaryOpMixin(QuantizationMixin, ABC):
         x = _quantize_if_applicable(x, self.input_quantizers[0])
 
         with self._patch_quantized_parameters():
+            kernel_args, kernel_kwargs = self.get_functional_args(x, *args, **kwargs)
             output_encodings = self.output_quantizers[0].get_encoding() if self.output_quantizers[0] else None
-            return self.quantized_operator(x, *args, **kwargs, output_encodings=output_encodings)
+            kernel = self.dispatcher().get_kernel(self.op_key, *kernel_args, **kernel_kwargs, output_encodings=output_encodings)
+
+            if kernel:
+                output = kernel(*kernel_args, **kernel_kwargs, output_encodings=output_encodings)
+            else:
+                output = super().forward(x.dequantize(), *args, **kwargs)
+                output = _quantize_if_applicable(output, self.output_quantizers[0])
+
+        return output
+
+    @abstractmethod
+    def get_functional_args(self, x, *args, **kwargs) -> Tuple[Tuple, Dict]:
+        """
+        Return the args and keyword args to the layer's kernel call
+        """
 
 
 class _QuantizedBinaryOpMixin(QuantizationMixin, ABC):
@@ -297,29 +239,58 @@ class _QuantizedBinaryOpMixin(QuantizationMixin, ABC):
         y = _quantize_if_applicable(y, self.input_quantizers[1])
 
         with self._patch_quantized_parameters():
-            output_encodings = self.output_quantizers[0].get_encoding() if self.output_quantizers[0] else None
-            return self.quantized_operator(x, y, *args, **kwargs, output_encodings=output_encodings)
+            kernel_args, kernel_kwargs = self.get_functional_args(x, y, *args, **kwargs)
+            output_encodings = self.output_quantizers[0].get_encoding if self.output_quantizers[0] else None
+            kernel = self.dispatcher().get_kernel(self.op_key, *kernel_args, **kernel_kwargs,
+                                                  output_encodings=output_encodings)
+
+            if kernel:
+                output = kernel(*args, **kwargs, output_encodings=output_encodings)
+            else:
+                output = super().forward(x.dequantize(), y.dequantize(), *args, **kwargs)
+                output = _quantize_if_applicable(output, self.output_quantizers[0])
+
+        return output
+
+    @abstractmethod
+    def get_functional_args(self, x, y, *args, **kwargs) -> Tuple[Tuple, Dict]:
+        """
+        Return the args and keyword args to the layer's kernel call
+        """
 
 
 @QuantizationMixin.implements(nn.Linear)
 class QuantizedLinear(_QuantizedUnaryOpMixin, nn.Linear):
     """ Quantized Linear """
-    def call_operator(self, linear_op, input_tensor, output_encodings=None, **kwargs):
-        return linear_op(input_tensor, self.weight, bias=self.bias, output_encodings=output_encodings, **kwargs)
+    def get_functional_args(self, x):
+        return (x, self.weight), {"bias": self.bias}
 
 
 @QuantizationMixin.implements(nn.GELU)
 class QuantizedGELU(_QuantizedUnaryOpMixin, nn.GELU):
     """ Quantized GELU """
 
-    def call_operator(self, gelu_op, input_tensor, output_encodings=None, **kwargs):
-        return gelu_op(input_tensor, approximate=self.approximate, output_encodings=output_encodings, **kwargs)
+    def get_functional_args(self, x):
+        return (x, ), {"approximate": self.approximate}
 
 
 @QuantizationMixin.implements(nn.LayerNorm)
 class QuantizedLayerNorm(_QuantizedUnaryOpMixin, nn.LayerNorm):
     """ Quantized LayerNorm """
 
-    def call_operator(self, layernorm_op, input_tensor, output_encodings=None, **kwargs):
-        return layernorm_op(input_tensor, self.normalized_shape, weight=self.weight, bias=self.bias, eps=self.eps,
-                            output_encodings=output_encodings, **kwargs)
+    def get_functional_args(self, x):
+        return (x, self.normalized_shape), {"weight": self.weight, "bias": self.bias, "eps": self.eps}
+
+@QuantizationMixin.implements(nn.Softmax)
+class QuantizedSoftmax(_QuantizedUnaryOpMixin, nn.Softmax):
+    """ Quantized Softmax """
+
+    def get_functional_args(self, x):
+        return (x, self.dim), {}
+
+@QuantizationMixin.implements(nn.Sigmoid)
+class QuantizedSigmoid(_QuantizedUnaryOpMixin, nn.Sigmoid):
+    """ Quantized Sigmoid """
+
+    def get_functional_args(self, x):
+        return (x, ), {}
