@@ -43,6 +43,7 @@ from typing import Type
 
 import torch.nn as nn
 
+from aimet_torch.experimental.v2.quantization.quantizers.base import QuantizerBase
 from aimet_torch.experimental.v2.utils import patch_attr
 
 
@@ -135,7 +136,7 @@ class BaseQuantizationMixin(abc.ABC):
             output_quantizers = _flatten_nn_module_list(self.output_quantizers)
 
             for quantizer in itertools.chain(input_quantizers, output_quantizers):
-                if not quantizer:
+                if not isinstance(quantizer, QuantizerBase):
                     continue
                 ctx = quantizer.compute_encodings()
                 stack.enter_context(ctx)
