@@ -47,55 +47,52 @@ import torch.nn as nn
 from torch import Tensor
 
 from aimet_torch.experimental.v2.nn.quant_base import BaseQuantizationMixin
-from aimet_torch.experimental.v2.nn.dispatcher import KernelDispatcher, _QuantizedOpLibrary
+from aimet_torch.experimental.v2.nn.function_selector import FunctionSelector, _FunctionalLibrary
 from aimet_torch.experimental.v2.quantization.quantizers.base import QuantizerBase
 from aimet_torch.experimental.v2.utils import patch_attr, _ContextManager
 
 
-_DEFAULT_DISPATCHER = KernelDispatcher([], strict=True)
+_FUNCTION_SELECTOR = FunctionSelector([], strict=True)
 
-def set_default_functional_library(library: _QuantizedOpLibrary, strict=True):
+def set_default_functional_library(library: _FunctionalLibrary, strict=True):
     """
     Set the default operator library(s) for quantized modules
     """
-    global _DEFAULT_DISPATCHER # pylint: disable=global-statement
-    _DEFAULT_DISPATCHER.set_libraries(library, strict)
+    global _FUNCTION_SELECTOR # pylint: disable=global-statement
+    _FUNCTION_SELECTOR.set_libraries(library, strict)
 
 
-def _set_default_dispatcher(dispatcher: KernelDispatcher):
-    """
-    Set the default operator library(s) for quantized modules
-    """
-    global _DEFAULT_DISPATCHER # pylint: disable=global-statement
-    _DEFAULT_DISPATCHER = dispatcher
+def _set_default_function_selector(selector: FunctionSelector):
+    global _FUNCTION_SELECTOR # pylint: disable=global-statement
+    _FUNCTION_SELECTOR = selector
 
 @contextlib.contextmanager
-def _set_module_dispatcher(modules, library, strict):
+def _set_module_selector(modules, library, strict):
     modules = modules if isinstance(modules, list) else [modules]
-    dispatcher = KernelDispatcher(library, strict)
+    selector = FunctionSelector(library, strict)
     with contextlib.ExitStack() as stack:
         for module in modules:
             for m in module.modules():
                 if isinstance(m, QuantizationMixin):
-                    ctx = patch_attr(m, "dispatcher", lambda: dispatcher)
+                    ctx = patch_attr(m, "_func_selector", lambda: selector)
                     stack.enter_context(ctx)
 
             if isinstance(module, QuantizationMixin):
-                ctx = patch_attr(module, "dispatcher", lambda: dispatcher)
+                ctx = patch_attr(module, "_func_selector", lambda: selector)
                 stack.enter_context(ctx)
         yield
 
 
-def _set_global_dispatcher(library, strict):
-    dispatcher = KernelDispatcher(library, strict)
-    old_dispatcher = _DEFAULT_DISPATCHER
-    action = lambda: _set_default_dispatcher(dispatcher)
-    cleanup = lambda: _set_default_dispatcher(old_dispatcher)
+def _set_global_function_selector(library, strict):
+    selector = FunctionSelector(library, strict)
+    old_selector = _FUNCTION_SELECTOR
+    action = lambda: _set_default_function_selector(selector)
+    cleanup = lambda: _set_default_function_selector(old_selector)
     return _ContextManager(action=action, cleanup=cleanup)
 
 
 @overload
-def set_library(model: torch.nn.Module, library: _QuantizedOpLibrary, *, strict=True): # pylint:disable = unused-argument, function-redefined
+def set_functional_library(model: torch.nn.Module, library: _FunctionalLibrary, *, strict=True): # pylint:disable = unused-argument, function-redefined
     """
     Set the functional library for a given model
 
@@ -105,7 +102,7 @@ def set_library(model: torch.nn.Module, library: _QuantizedOpLibrary, *, strict=
     """
 
 @overload
-def set_library(library: _QuantizedOpLibrary, *, strict=True): # pylint:disable = unused-argument, function-redefined
+def set_functional_library(library: _FunctionalLibrary, *, strict=True): # pylint:disable = unused-argument, function-redefined
     """
     Set the functional library for a given model
 
@@ -114,16 +111,16 @@ def set_library(library: _QuantizedOpLibrary, *, strict=True): # pylint:disable 
     """
 
 
-def set_library(*args, strict=True): # pylint:disable = function-redefined
+def set_functional_library(*args, strict=True): # pylint:disable = function-redefined
     """
     Sets the functional library used by quantized layers
     """
     if len(args) == 1:
         library = args[0]
-        return _set_global_dispatcher(library, strict)
+        return _set_global_function_selector(library, strict)
     if len(args) == 2:
         modules, library = args
-        return _set_module_dispatcher(modules, library, strict)
+        return _set_module_selector(modules, library, strict)
     raise RuntimeError("Invalid arguments, expected either (model, library, strict) or (library, strict)")
 
 
@@ -156,17 +153,13 @@ class QuantizationMixin(BaseQuantizationMixin, ABC): # pylint: disable=abstract-
                     continue
                 # NOTE: This behavior is for backward-compatibility with V1 quantsim.
                 stack.enter_context(patch_attr(quantizer, 'forward', no_op))
-            dummy_dispatcher = KernelDispatcher([], strict=False)
-            stack.enter_context(patch_attr(self, "dispatcher", lambda: dummy_dispatcher))
+            dummy_funciton_selector = FunctionSelector([], strict=False)
+            stack.enter_context(patch_attr(self, "_func_selector", lambda: dummy_funciton_selector))
             with super().compute_encodings():
                 yield
 
-    @staticmethod
-    def dispatcher():
-        """
-        Return the kernel dispatcher
-        """
-        return _DEFAULT_DISPATCHER
+    def _func_selector(self): # pylint:disable = no-self-use
+        return _FUNCTION_SELECTOR
 
     @classmethod
     def wrap(cls, module_cls: Type[nn.Module]) -> Type[nn.Module]:
@@ -210,7 +203,7 @@ class _QuantizedUnaryOpMixin(QuantizationMixin, ABC):
         with self._patch_quantized_parameters():
             kernel_args, kernel_kwargs = self.get_functional_args(x, *args, **kwargs)
             output_encodings = self.output_quantizers[0].get_encoding() if self.output_quantizers[0] else None
-            kernel = self.dispatcher().get_kernel(self.op_key, *kernel_args, **kernel_kwargs, output_encodings=output_encodings)
+            kernel = self._func_selector().get_impl(self.op_key, *kernel_args, **kernel_kwargs, output_encodings=output_encodings)
 
             if kernel:
                 output = kernel(*kernel_args, **kernel_kwargs, output_encodings=output_encodings)
@@ -241,8 +234,8 @@ class _QuantizedBinaryOpMixin(QuantizationMixin, ABC):
         with self._patch_quantized_parameters():
             kernel_args, kernel_kwargs = self.get_functional_args(x, y, *args, **kwargs)
             output_encodings = self.output_quantizers[0].get_encoding if self.output_quantizers[0] else None
-            kernel = self.dispatcher().get_kernel(self.op_key, *kernel_args, **kernel_kwargs,
-                                                  output_encodings=output_encodings)
+            kernel = self._func_selector().get_impl(self.op_key, *kernel_args, **kernel_kwargs,
+                                                    output_encodings=output_encodings)
 
             if kernel:
                 output = kernel(*args, **kwargs, output_encodings=output_encodings)

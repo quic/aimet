@@ -34,16 +34,16 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-""" Kernel dispatcher for quantized modules """
+""" Function selector for quantized modules """
 
 
 from typing import Any, List, Callable, Protocol, Tuple, Union, Sequence, Optional
 
 OpArgs = Any
 
-class _QuantizedOpLibrary(Protocol):
+class _FunctionalLibrary(Protocol):
     """
-    Protocol for integer operator libraries to follow for AIMET compatibility
+    Protocol for quantized operator libraries to follow for AIMET compatibility
     """
 
     @staticmethod
@@ -55,21 +55,20 @@ class _QuantizedOpLibrary(Protocol):
         """
 
 
-class KernelDispatcher:
+class FunctionSelector:
     """
     Handles kernel selection for multiple operator libraries for QuantizedModules
     """
 
     def __init__(self,
-                 functional_library: Union[List[_QuantizedOpLibrary], _QuantizedOpLibrary],
+                 functional_library: Union[List[_FunctionalLibrary], _FunctionalLibrary],
                  strict=False):
         super().__init__()
         self._functional_libraries = functional_library if isinstance(functional_library, list) else [functional_library]
-        self._strict_overrides = set()
         self.strict = strict
 
     def set_libraries(self,
-                      library: Union[List[_QuantizedOpLibrary], _QuantizedOpLibrary],
+                      library: Union[List[_FunctionalLibrary], _FunctionalLibrary],
                       strict: bool = False):
         """
         Set the dispatcher's operator library
@@ -80,7 +79,7 @@ class KernelDispatcher:
         self._functional_libraries = library if isinstance(library, list) else [library]
         self.strict = strict
 
-    def get_libraries(self) -> List[_QuantizedOpLibrary]:
+    def get_libraries(self) -> List[_FunctionalLibrary]:
         """
         Get the current operator libraries
 
@@ -89,12 +88,12 @@ class KernelDispatcher:
         return self._functional_libraries.copy()
 
 
-    def get_kernel(self, op_key: str, *args, **kwargs) -> Optional[Callable]:
+    def get_impl(self, op_key: str, *args, **kwargs) -> Optional[Callable]:
         """
-        Return the first kernel with key op_key for which the predicate function returns True
+        Return the first function implementation with key op_key for which the predicate function returns True
 
         :param op_key: the key indicated which op type to retrieve
-        :return: A valid kernel for the given operation if it exists
+        :return: A valid implementation for the given operation if it exists
         """
         for op_lib in self._functional_libraries:
             for predicate, operator in op_lib.get_kernel(op_key):
@@ -102,6 +101,6 @@ class KernelDispatcher:
                     return operator
 
         if self.strict:
-            raise RuntimeError(f"No valid kernel found for op_key {op_key} with arguments "
+            raise RuntimeError(f"No valid implementation found for op_key {op_key} with arguments "
                                f"{args}, {kwargs}")
         return None

@@ -42,7 +42,7 @@ import torch.nn.functional as F
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 from aimet_torch.experimental.v2.quantization.quantizers.affine import Quantize, QuantizeDequantize
 from aimet_torch.experimental.v2.nn.true_quant import QuantizedLinear, QuantizationMixin, set_default_functional_library, \
-    set_library
+    set_functional_library
 from aimet_torch.experimental.v2.quantization.encodings import AffineEncoding
 from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensor
 from aimet_torch.experimental.v2.nn import fake_quant
@@ -298,7 +298,7 @@ class TestTrueQuantLinear:
               2) Invoke forward pass and backend predicate function returns True
         Then: Compute the output using backend
         """
-        with set_library(quant_linear, TruePredicateBackend, strict=True):
+        with set_functional_library(quant_linear, TruePredicateBackend, strict=True):
             with mock.patch.object(TruePredicateBackend, "linear") as mock_linear:
                 quant_linear(input)
                 assert mock_linear.call_count == 1
@@ -308,7 +308,7 @@ class TestTrueQuantLinear:
               2) Invoke forward pass and backend predicate function returns False
         Then: raise RuntimeError
         """
-        with set_library(quant_linear, FalsePredicateBackend, strict=True):
+        with set_functional_library(quant_linear, FalsePredicateBackend, strict=True):
             with pytest.raises(RuntimeError):
                 quant_linear(input)
 
@@ -319,7 +319,7 @@ class TestTrueQuantLinear:
               4) b2 predicate function returns True
         Then: Compute the output using b2
         """
-        with set_library(quant_linear, [FalsePredicateBackend, TruePredicateBackend], strict=True):
+        with set_functional_library(quant_linear, [FalsePredicateBackend, TruePredicateBackend], strict=True):
             with mock.patch.object(TruePredicateBackend, "linear") as mock_linear:
                 quant_linear(input)
                 assert mock_linear.call_count == 1
@@ -331,7 +331,7 @@ class TestTrueQuantLinear:
               4) global backend predicate returns True
         Then: compute the output using the global backend
         """
-        with set_library([FalsePredicateBackend, TruePredicateBackend],  strict=False):
+        with set_functional_library([FalsePredicateBackend, TruePredicateBackend], strict=False):
             with mock.patch.object(TruePredicateBackend, "linear") as mock_linear:
                 quant_linear(input)
                 assert mock_linear.call_count == 1
@@ -369,7 +369,6 @@ class TestTrueQuantLinear:
         assert torch.equal(fp_linear.weight, quant_linear.weight)
         with quant_linear.compute_encodings():
             quant_linear(input)
-        print(quant_linear.dispatcher)
 
         """
         When: Reassign a new submodule/parameter/buffer to the base FP module using assignment stmt.
@@ -426,7 +425,7 @@ class TestQuantizedLayers:
         fq_output = fq_layer(input)
 
 
-        with set_library(WrappedFunctional, strict=True):
+        with set_functional_library(WrappedFunctional, strict=True):
             with tq_layer.compute_encodings():
                 tq_layer(input)
             tq_output = tq_layer(input)
@@ -450,7 +449,7 @@ class TestQuantizedLayers:
         fq_output = fq_layer(input)
 
 
-        with set_library(WrappedFunctional, strict=True):
+        with set_functional_library(WrappedFunctional, strict=True):
             with tq_layer.compute_encodings():
                 tq_layer(input)
             tq_output = tq_layer(input)

@@ -36,7 +36,7 @@
 # =============================================================================
 
 
-from aimet_torch.experimental.v2.nn.dispatcher import KernelDispatcher
+from aimet_torch.experimental.v2.nn.function_selector import FunctionSelector
 import pytest
 
 
@@ -68,24 +68,24 @@ class OtherLib(Lib):
         if op_key == "unknown":
             return [( self.true_pred, self.kernel_1)]
 
-class TestKernelDispatcher:
+class TestFunctionSelector:
 
     def test_kernel_retrieval(self):
 
         lib = Lib()
-        dispatcher = KernelDispatcher(lib, strict=True)
-        assert dispatcher.get_kernel("kernel") == lib.kernel_1
+        selector = FunctionSelector(lib, strict=True)
+        assert selector.get_impl("kernel") == lib.kernel_1
         lib_2 = Lib()
-        dispatcher.set_libraries(lib_2, strict=True)
-        assert dispatcher.get_kernel("kernel") == lib_2.kernel_1
+        selector.set_libraries(lib_2, strict=True)
+        assert selector.get_impl("kernel") == lib_2.kernel_1
         with pytest.raises(RuntimeError):
-            dispatcher.get_kernel("unknown")
+            selector.get_impl("unknown")
 
-        dispatcher.set_libraries([lib, lib_2], strict=False)
-        assert dispatcher.get_kernel("kernel") == lib.kernel_1
-        assert dispatcher.get_kernel("unknown") is None
+        selector.set_libraries([lib, lib_2], strict=False)
+        assert selector.get_impl("kernel") == lib.kernel_1
+        assert selector.get_impl("unknown") is None
 
         lib_3 = OtherLib()
-        dispatcher.set_libraries([lib_3, lib, lib_2], strict=True)
-        assert dispatcher.get_kernel("kernel") == lib_3.kernel_2
-        assert dispatcher.get_kernel("unknown") == lib_3.kernel_1
+        selector.set_libraries([lib_3, lib, lib_2], strict=True)
+        assert selector.get_impl("kernel") == lib_3.kernel_2
+        assert selector.get_impl("unknown") == lib_3.kernel_1
