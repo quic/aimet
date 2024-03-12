@@ -1630,6 +1630,10 @@ class QuantizationSimModel:
         with open(encoding_path) as json_file:
             param_encodings = json.load(json_file)
 
+            # In case of full encoding file is provided, param_encoding is nested inside the top level encoding structure
+            if 'param_encodings' in param_encodings:
+                param_encodings = param_encodings['param_encodings']
+
         for name, quant_module in self.model.named_modules():
             if isinstance(quant_module, QcQuantizeWrapper):
                 quant_module.set_param_encoding(name, param_encodings)
