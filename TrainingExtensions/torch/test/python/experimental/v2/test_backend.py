@@ -433,7 +433,7 @@ class TestQuantizationBackends:
         offset = test_set.offset if not signed else test_set.offset + 2 ** (test_set.bitwidth - 1)
         tensor_q = backend_module.quantize(test_set.tensor, test_set.delta, offset, test_set.bitwidth, signed)
         expected_tensor_q = test_set.tensor_q if not signed else test_set.tensor_q - 2 ** (test_set.bitwidth - 1)
-        assert torch.all(tensor_q == expected_tensor_q), f"\n{tensor_q}, \n{expected_tensor_q}"
+        assert torch.all(tensor_q == expected_tensor_q)
         grad_in = torch.randn_like(test_set.tensor)
         tensor_q.backward(grad_in)
         assert torch.all(test_set.tensor.grad[test_set.mask] == 0)

@@ -200,12 +200,27 @@ class AffineQuantizerBase(QuantizerBase):
     @symmetric.setter
     def symmetric(self, symmetric: bool):
         """
-        Set the quantizer to use signed-symmetric or unsigned asymmetric encodings
+        Set the quantizer symmetry
 
-        :param symmetric: If True, use signed-symmetric encodings. Else, use unsigned asymmetric encodings
+        :param symmetric: If True, use symmetric encodings. Else, use asymmetric encodings
         """
         self._symmetric = symmetric
-        self._signed = symmetric
+
+    @property
+    def signed(self)-> bool:
+        """
+        Indicates whether this quantizer uses signed quantization
+        """
+        return self._signed
+
+    @signed.setter
+    def signed(self, signed: bool):
+        """
+        Set the quantizer to use signed or unsigned quantization
+
+        :param signed: If True, use signed encodings, else use unsigned encodings
+        """
+        self._signed = signed
 
 
 class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
