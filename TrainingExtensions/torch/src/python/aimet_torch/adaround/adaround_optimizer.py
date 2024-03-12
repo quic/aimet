@@ -116,7 +116,13 @@ class AdaroundOptimizer:
                            forward_fn: Callable[[torch.nn.Module, Any], Any],
                            opt_params: AdaroundHyperParameters, cached_quant_dataset: Dataset = None):
         """
-        Optimizes the weight rounding of quantized wrapper module
+        Optimizes the weight rounding of quantized wrapper module.
+
+        NOTE:
+        1) Tries to cache intermediate activation data on CPU RAM. If succeeds, tries to place cached intermediate
+         activation data on GPU else keep it on CPU RAM only and incur CPU-GPU memory transfer.
+        2) If 1) fails, reads model inputs dirctly from the disk.
+
         :param module: Original module
         :param quant_module: Quantized wrapper module
         :param orig_model: The original, un quantized, model
@@ -144,11 +150,13 @@ class AdaroundOptimizer:
 
         if use_cache_acts_data and AdaroundOptimizer.enable_caching_acts_data():
             logger.debug("Caching intermediate activations data for optimization.")
-            all_inp_data, all_orig_out_data = act_sampler.sample_and_place_all_acts_on_cpu(cached_dataset, cached_quant_dataset)
+            all_inp_data, all_orig_out_data = act_sampler.sample_and_place_all_acts_on_cpu(cached_dataset,
+                                                                                           cached_quant_dataset)
             # Try to put all cached activations data on GPU for faster optimization if possible.
             device = utils.get_device(module)
             if 'cuda' in str(device):
                 all_inp_data, all_orig_out_data = cls._place_cached_acts_data(all_inp_data, all_orig_out_data, device)
+
         for iteration in range(opt_params.num_iterations):
             if use_cache_acts_data and AdaroundOptimizer.enable_caching_acts_data():
                 indices = torch.randperm(all_inp_data.size(0))[:BATCH_SIZE]
@@ -160,26 +168,30 @@ class AdaroundOptimizer:
 
             # Clear alpha's gradients before optimization step
             optimizer.zero_grad()
-            # Get the module's output activations using AdaRounded weights
-            quant_out_data = cls._compute_output_with_adarounded_weights(quant_module, inp_data)
 
-            # If followed by an activation function
-            if act_func is not None:
-                orig_out_data = act_func(orig_out_data)
-                quant_out_data = act_func(quant_out_data)
+            try:
+                quant_out_data = cls._compute_output_with_adarounded_weights(quant_module, inp_data)
+                if act_func is not None:
+                    orig_out_data = act_func(orig_out_data)
+                    quant_out_data = act_func(quant_out_data)
 
-            # Calculate total loss
-            recon_loss = AdaroundLoss.compute_recon_loss(quant_out_data, orig_out_data)
-            round_loss = AdaroundLoss.compute_round_loss(adaround_quantizer.alpha, opt_params, iteration)
-            total_loss = recon_loss + round_loss
+                # Calculate total loss
+                recon_loss = AdaroundLoss.compute_recon_loss(quant_out_data, orig_out_data)
+                round_loss = AdaroundLoss.compute_round_loss(adaround_quantizer.alpha, opt_params, iteration)
+                total_loss = recon_loss + round_loss
+                total_loss.backward()
 
-            # Back propagate and Update the parameter 'alpha'
-            total_loss.backward()
+            except RuntimeError as error:
+                if use_cache_acts_data and 'cuda' in str(device) and AdaroundOptimizer.enable_caching_acts_data():
+                    logger.debug("Not enough CUDA memory for adaround optimization,"
+                                 " placing cached activations data back to CPU. %s", str(error))
+                    all_inp_data = all_inp_data.cpu()
+                    all_orig_out_data = all_orig_out_data.cpu()
+                else:
+                    raise error
+
             optimizer.step()
 
-            if iteration == 0 or iteration % 100 == 0:
-                logger.debug("After iterations=%d, Total loss=%5f, Recons. loss=%5f, Rounding loss=%5f",
-                             iteration, float(total_loss), float(recon_loss), float(round_loss))
 
     @classmethod
     def _compute_recons_metrics(cls, quant_module: StaticGridQuantWrapper, act_func, inp_data: torch.Tensor,
@@ -303,9 +315,15 @@ class AdaroundOptimizer:
         req_mem += reduce(lambda x, y: x * y, out_data.size()) * DATA_SIZE_IN_BITS / (1024 * 1024 * 1024 * 8)
 
         if req_mem < threshold_mem:
-            inp_data = inp_data.to(device)
-            out_data = out_data.to(device)
-            logger.debug("Placing cached activations data on GPU.")
+            try:
+                inp_data = inp_data.to(device)
+                out_data = out_data.to(device)
+                logger.debug("Placing cached activations data on GPU.")
+            except RuntimeError as error:
+                inp_data = inp_data.cpu()
+                out_data = out_data.cpu()
+                logger.debug("Could not place cached activations data on GPU,"
+                             " placing cached activations data back to CPU. %s", str(error))
 
         return inp_data, out_data
 
