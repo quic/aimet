@@ -49,6 +49,7 @@ from torch import Tensor
 from aimet_torch.experimental.v2.nn.quant_base import BaseQuantizationMixin
 from aimet_torch.experimental.v2.nn.function_selector import FunctionSelector, _FunctionalLibrary
 from aimet_torch.experimental.v2.quantization.quantizers.base import QuantizerBase
+from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensor
 from aimet_torch.experimental.v2.utils import patch_attr, _ContextManager
 
 
@@ -132,6 +133,9 @@ def _quantize_if_applicable(data: Any, quantizer: Optional[QuantizerBase]):
         return quantizer(data)
     return data
 
+def _dequantize_if_applicable(data: torch.Tensor):
+    return data.dequantize() if isinstance(data, QuantizedTensor) else data
+
 
 class QuantizationMixin(BaseQuantizationMixin, ABC): # pylint: disable=abstract-method
     """
@@ -157,6 +161,15 @@ class QuantizationMixin(BaseQuantizationMixin, ABC): # pylint: disable=abstract-
             stack.enter_context(patch_attr(self, "_func_selector", lambda: dummy_funciton_selector))
             with super().compute_encodings():
                 yield
+
+    @contextlib.contextmanager
+    def _patch_dequantized_parameters(self):
+        with contextlib.ExitStack() as stack:
+            for param_name, _ in self.param_quantizers.items():
+                qparam = getattr(self, param_name)
+                ctx = patch_attr(self, param_name, _dequantize_if_applicable(qparam))
+                stack.enter_context(ctx)
+            yield
 
     def _func_selector(self): # pylint:disable = no-self-use
         return _FUNCTION_SELECTOR
@@ -208,7 +221,8 @@ class _QuantizedUnaryOpMixin(QuantizationMixin, ABC):
             if kernel:
                 output = kernel(*kernel_args, **kernel_kwargs, output_encodings=output_encodings)
             else:
-                output = super().forward(x.dequantize(), *args, **kwargs)
+                with self._patch_dequantized_parameters():
+                    output = super().forward(_dequantize_if_applicable(x), *args, **kwargs)
                 output = _quantize_if_applicable(output, self.output_quantizers[0])
 
         return output
@@ -240,7 +254,8 @@ class _QuantizedBinaryOpMixin(QuantizationMixin, ABC):
             if kernel:
                 output = kernel(*args, **kwargs, output_encodings=output_encodings)
             else:
-                output = super().forward(x.dequantize(), y.dequantize(), *args, **kwargs)
+                with self._patch_dequantized_parameters():
+                    output = super().forward(_dequantize_if_applicable(x), _dequantize_if_applicable(y), *args, **kwargs)
                 output = _quantize_if_applicable(output, self.output_quantizers[0])
 
         return output
