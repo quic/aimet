@@ -110,9 +110,7 @@ class EncodingMismatchInfo:
 class QuantizationSimModel:
     """ Creates a QuantizationSimModel model by adding quantization simulations ops to a given model """
 
-    # pylint: disable=too-many-arguments
-    # pylint: disable=too-many-locals
-    # pylint: disable=too-many-instance-attributes
+    # pylint: disable=too-many-arguments, too-many-locals, too-many-instance-attributes
     def __init__(self,
                  model: ModelProto,
                  dummy_input: Dict[str, np.ndarray] = None,
@@ -148,7 +146,11 @@ class QuantizationSimModel:
             self.model = ONNXModel(model)
 
         if simplify_model:
-            self.model.model, _ = simplify(self.model.model)
+            try:
+                self.model.model, _ = simplify(self.model.model)
+            # pylint: disable=bare-except
+            except:
+                logger.info('ONNX Simplifier failed. Proceeding with unsimplified model.')
 
         if not dummy_input:
             dummy_input = make_dummy_input(self.model.model)
