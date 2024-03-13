@@ -43,7 +43,8 @@ import psutil
 import numpy as np
 import torch
 import torch.nn.functional as functional
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Subset
+import torch.distributed as dist
 
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger
@@ -132,6 +133,17 @@ class AdaroundOptimizer:
          yielded from the data loader
         :param opt_params: Optimization parameters
         """
+        if dist.is_initialized():
+            rank = dist.get_rank()
+            world_size = dist.get_world_size()
+        else:
+            rank = 0
+            world_size = 1
+
+        # Shard dataset
+        indices = tuple(range(rank, len(cached_dataset), world_size))
+        cached_dataset = Subset(cached_dataset, indices=indices)
+
         # pylint: disable=too-many-locals, too-many-arguments
         adaround_quantizer = quant_module.param_quantizers['weight']
         assert adaround_quantizer.use_soft_rounding, 'optimization should use soft rounding only.'
@@ -139,6 +151,9 @@ class AdaroundOptimizer:
 
         # Create and set up Adam optimizer with parameter 'alpha' to be optimized
         optimizer = torch.optim.Adam([adaround_quantizer.alpha])
+
+        for group in optimizer.param_groups:
+            group['lr'] *= world_size # Scale up learning rate by world_size
 
         # Check if we can cache intermediate activation data.
         model_inputs = cached_dataset[0]
@@ -191,6 +206,10 @@ class AdaroundOptimizer:
                     all_orig_out_data = all_orig_out_data.cpu()
                 else:
                     raise error
+
+            if dist.is_initialized():
+                dist.all_reduce(adaround_quantizer.alpha.grad)
+            adaround_quantizer.alpha.grad /= world_size
 
             optimizer.step()
 
