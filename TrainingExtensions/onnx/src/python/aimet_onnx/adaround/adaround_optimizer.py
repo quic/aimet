@@ -150,7 +150,7 @@ class AdaroundOptimizer:
         inp_data, out_data = act_sampler.sample_acts(create_input_dict(orig_model.model, model_inputs))
         inp_data_torch, out_data_torch = torch.from_numpy(inp_data[0]), torch.from_numpy(out_data[0])
         use_cache_acts_data = TorchAdaroundOptimizer._can_cache_acts_data(len(cached_dataset), inp_data_torch.shape,
-                                                                          out_data_torch.shape)
+                                                                          out_data_torch.shape, inp_data_torch.dtype)
 
         attributes = read_attributes_for_op(module)
         if 'pads' in attributes:
