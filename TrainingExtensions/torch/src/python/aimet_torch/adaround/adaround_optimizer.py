@@ -135,7 +135,6 @@ class AdaroundOptimizer:
         """
         # pylint: disable=too-many-locals, too-many-arguments
         adaround_quantizer = quant_module.param_quantizers['weight']
-
         assert adaround_quantizer.use_soft_rounding, 'optimization should use soft rounding only.'
         assert adaround_quantizer.alpha is not None, 'alpha parameter should be initialized.'
 
@@ -149,12 +148,12 @@ class AdaroundOptimizer:
         use_cache_acts_data = cls._can_cache_acts_data(len(cached_dataset), inp_data.shape, out_data.shape)
         del inp_data, out_data
 
+        device = utils.get_device(module)
         if use_cache_acts_data and AdaroundOptimizer.enable_caching_acts_data():
             all_inp_data, all_orig_out_data = act_sampler.sample_and_place_all_acts_on_cpu(cached_dataset,
                                                                                            cached_quant_dataset)
             # Place both the models temporarily to CPU
             # Try to put all cached activations data on GPU for faster optimization if possible.
-            device = utils.get_device(module)
             if 'cuda' in str(device):
                 orig_model.cpu()
                 quant_model.cpu()
@@ -195,7 +194,7 @@ class AdaroundOptimizer:
 
             optimizer.step()
 
-        # Place both the models back to GPU
+        # Place both the models back to original device
         orig_model.to(device)
         quant_model.to(device)
 
