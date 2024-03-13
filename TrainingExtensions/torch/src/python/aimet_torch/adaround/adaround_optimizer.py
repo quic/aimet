@@ -147,14 +147,17 @@ class AdaroundOptimizer:
         act_sampler = ActivationSampler(module, quant_module, orig_model, quant_model, forward_fn)
         inp_data, out_data = act_sampler.sample_acts(model_inputs)
         use_cache_acts_data = cls._can_cache_acts_data(len(cached_dataset), inp_data.shape, out_data.shape)
+        del inp_data, out_data
 
         if use_cache_acts_data and AdaroundOptimizer.enable_caching_acts_data():
-            logger.debug("Caching intermediate activations data for optimization.")
             all_inp_data, all_orig_out_data = act_sampler.sample_and_place_all_acts_on_cpu(cached_dataset,
                                                                                            cached_quant_dataset)
+            # Place both the models temporarily to CPU
             # Try to put all cached activations data on GPU for faster optimization if possible.
             device = utils.get_device(module)
             if 'cuda' in str(device):
+                orig_model.cpu()
+                quant_model.cpu()
                 all_inp_data, all_orig_out_data = cls._place_cached_acts_data(all_inp_data, all_orig_out_data, device)
 
         for iteration in range(opt_params.num_iterations):
@@ -183,8 +186,8 @@ class AdaroundOptimizer:
 
             except RuntimeError as error:
                 if use_cache_acts_data and 'cuda' in str(device) and AdaroundOptimizer.enable_caching_acts_data():
-                    logger.debug("Not enough CUDA memory for adaround optimization,"
-                                 " placing cached activations data back to CPU. %s", str(error))
+                    logger.debug("Not enough CUDA memory for adaround optimization."
+                                 " Placed cached activations data on CPU. RuntimeError: %s", str(error))
                     all_inp_data = all_inp_data.cpu()
                     all_orig_out_data = all_orig_out_data.cpu()
                 else:
@@ -192,6 +195,9 @@ class AdaroundOptimizer:
 
             optimizer.step()
 
+        # Place both the models back to GPU
+        orig_model.to(device)
+        quant_model.to(device)
 
     @classmethod
     def _compute_recons_metrics(cls, quant_module: StaticGridQuantWrapper, act_func, inp_data: torch.Tensor,
@@ -239,6 +245,8 @@ class AdaroundOptimizer:
         adaround_quantizer = quant_module.param_quantizers['weight']
 
         # Compute adarounded weights
+        device = inp_data.device
+        quant_module.to(device)
         adarounded_weights = adaround_quantizer.adaround_weights(module.weight)
 
         if isinstance(module, torch.nn.Conv2d):
@@ -284,6 +292,8 @@ class AdaroundOptimizer:
 
         if req_mem < threshold_mem:
             can_cache_data = True
+        logger.debug("Placing cached activations data on CPU: %s, required_memory: %f GB, available_memory: %f GB",
+                     str(can_cache_data), req_mem, threshold_mem)
 
         return can_cache_data
 
@@ -318,12 +328,12 @@ class AdaroundOptimizer:
             try:
                 inp_data = inp_data.to(device)
                 out_data = out_data.to(device)
-                logger.debug("Placing cached activations data on GPU.")
+                logger.debug("Placed cached activations data on GPU.")
             except RuntimeError as error:
                 inp_data = inp_data.cpu()
                 out_data = out_data.cpu()
-                logger.debug("Could not place cached activations data on GPU,"
-                             " placing cached activations data back to CPU. %s", str(error))
+                logger.debug("Could not place cached activations data on GPU."
+                             " Placed cached activations data on CPU. RuntimeError: %s", str(error))
 
         return inp_data, out_data
 
