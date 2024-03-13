@@ -244,7 +244,7 @@ class TestAdaround:
     def test_apply_adaround(self):
         """ test apply_adaround end to end using tiny model """
         torch.manual_seed(10)
-        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+        AimetLogger.set_level_for_all_areas(logging.INFO)
 
         # create fake data loader with image size (3, 32, 32)
         data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
@@ -334,7 +334,7 @@ class TestAdaround:
     def test_apply_adaround_per_channel(self):
         """ test apply_adaround end to end using tiny model when using per-channel mode """
 
-        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+        AimetLogger.set_level_for_all_areas(logging.INFO)
 
         # create fake data loader with image size (3, 32, 32)
         data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
@@ -441,7 +441,7 @@ class TestAdaround:
 
     def test_adaround_conv_only_model_weight_binning(self):
         """ test AdaRound weight binning """
-        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+        AimetLogger.set_level_for_all_areas(logging.INFO)
 
         # create fake data loader with image size (3, 32, 32)
         data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
@@ -474,7 +474,7 @@ class TestAdaround:
 
     def test_unused_module_model(self):
         """ test AdaRound weight binning """
-        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+        AimetLogger.set_level_for_all_areas(logging.INFO)
 
         # create fake data loader with image size (3, 32, 32)
         data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
@@ -511,7 +511,7 @@ class TestAdaround:
 
     def test_out_of_sequence_module_model(self):
         """ test  out of sequence modules """
-        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+        AimetLogger.set_level_for_all_areas(logging.INFO)
 
         # create fake data loader with image size (3, 32, 32)
         data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
@@ -547,7 +547,7 @@ class TestAdaround:
     def test_conv_transpose_2d_model(self):
         """ test a model that has a ConveTranspose2d module """
 
-        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+        AimetLogger.set_level_for_all_areas(logging.INFO)
 
         # create fake data loader with image size (3, 32, 32)
         data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 24, 24))
@@ -590,7 +590,7 @@ class TestAdaround:
     def test_conv_transpose_2d_model_per_channel(self):
         """ test a model that has a ConvTranspose2d module in per channel mode """
 
-        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+        AimetLogger.set_level_for_all_areas(logging.INFO)
 
         # create fake data loader with image size (3, 32, 32)
         data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 24, 24))
@@ -633,7 +633,7 @@ class TestAdaround:
     def test_overriding_default_parameter_bitwidths(self):
         """ Override the default parameter bitwidths for a model """
 
-        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+        AimetLogger.set_level_for_all_areas(logging.INFO)
 
         # create fake data loader with image size (3, 32, 32)
         data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
@@ -672,7 +672,7 @@ class TestAdaround:
     def test_overriding_default_parameter_bitwidths_with_empty_list(self):
         """ Override the default parameter bitwidths for a model """
 
-        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+        AimetLogger.set_level_for_all_areas(logging.INFO)
 
         # create fake data loader with image size (3, 32, 32)
         data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
@@ -741,7 +741,7 @@ class TestAdaround:
     def test_apply_adaround_with_ignore_list(self):
         """ Test the apply_adaround() API with ignore list """
 
-        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+        AimetLogger.set_level_for_all_areas(logging.INFO)
 
         # create fake data loader with image size (3, 32, 32)
         data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
@@ -844,7 +844,7 @@ class TestAdaround:
     def test_apply_adaround_using_gpu(self, dtype):
         """ test apply_adaround end to end using tiny model """
         torch.manual_seed(10)
-        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+        AimetLogger.set_level_for_all_areas(logging.INFO)
 
         # create fake data loader with image size (3, 32, 32)
         data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
@@ -882,7 +882,7 @@ class TestAdaround:
     def test_apply_adaround_using_gpu_caching_disabled(self, dtype):
         """ test apply_adaround end to end using tiny model """
         torch.manual_seed(10)
-        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+        AimetLogger.set_level_for_all_areas(logging.INFO)
 
         # Disable caching activation data
         from aimet_torch.adaround.adaround_optimizer import AdaroundOptimizer

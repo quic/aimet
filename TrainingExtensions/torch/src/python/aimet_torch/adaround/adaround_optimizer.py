@@ -55,7 +55,6 @@ from aimet_torch.adaround.adaround_loss import AdaroundLoss, AdaroundHyperParame
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 BATCH_SIZE = 32
 EMPIRICAL_THRESHOLD = 3 / 4
-DATA_SIZE_IN_BITS = 32
 
 
 class AdaroundOptimizer:
@@ -135,7 +134,6 @@ class AdaroundOptimizer:
         """
         # pylint: disable=too-many-locals, too-many-arguments
         adaround_quantizer = quant_module.param_quantizers['weight']
-
         assert adaround_quantizer.use_soft_rounding, 'optimization should use soft rounding only.'
         assert adaround_quantizer.alpha is not None, 'alpha parameter should be initialized.'
 
@@ -146,15 +144,19 @@ class AdaroundOptimizer:
         model_inputs = cached_dataset[0]
         act_sampler = ActivationSampler(module, quant_module, orig_model, quant_model, forward_fn)
         inp_data, out_data = act_sampler.sample_acts(model_inputs)
-        use_cache_acts_data = cls._can_cache_acts_data(len(cached_dataset), inp_data.shape, out_data.shape)
+        use_cache_acts_data = cls._can_cache_acts_data(len(cached_dataset), inp_data.shape, out_data.shape,
+                                                       inp_data.dtype)
+        del inp_data, out_data
 
+        device = utils.get_device(module)
         if use_cache_acts_data and AdaroundOptimizer.enable_caching_acts_data():
-            logger.debug("Caching intermediate activations data for optimization.")
             all_inp_data, all_orig_out_data = act_sampler.sample_and_place_all_acts_on_cpu(cached_dataset,
                                                                                            cached_quant_dataset)
+            # Place both the models temporarily to CPU
             # Try to put all cached activations data on GPU for faster optimization if possible.
-            device = utils.get_device(module)
             if 'cuda' in str(device):
+                orig_model.cpu()
+                quant_model.cpu()
                 all_inp_data, all_orig_out_data = cls._place_cached_acts_data(all_inp_data, all_orig_out_data, device)
 
         for iteration in range(opt_params.num_iterations):
@@ -183,8 +185,8 @@ class AdaroundOptimizer:
 
             except RuntimeError as error:
                 if use_cache_acts_data and 'cuda' in str(device) and AdaroundOptimizer.enable_caching_acts_data():
-                    logger.debug("Not enough CUDA memory for adaround optimization,"
-                                 " placing cached activations data back to CPU. %s", str(error))
+                    logger.debug("Not enough CUDA memory for adaround optimization."
+                                 " Placed cached activations data on CPU. RuntimeError: %s", str(error))
                     all_inp_data = all_inp_data.cpu()
                     all_orig_out_data = all_orig_out_data.cpu()
                 else:
@@ -192,6 +194,9 @@ class AdaroundOptimizer:
 
             optimizer.step()
 
+        # Place both the models back to original device
+        orig_model.to(device)
+        quant_model.to(device)
 
     @classmethod
     def _compute_recons_metrics(cls, quant_module: StaticGridQuantWrapper, act_func, inp_data: torch.Tensor,
@@ -239,6 +244,8 @@ class AdaroundOptimizer:
         adaround_quantizer = quant_module.param_quantizers['weight']
 
         # Compute adarounded weights
+        device = inp_data.device
+        quant_module.to(device)
         adarounded_weights = adaround_quantizer.adaround_weights(module.weight)
 
         if isinstance(module, torch.nn.Conv2d):
@@ -258,7 +265,8 @@ class AdaroundOptimizer:
         return out_data
 
     @staticmethod
-    def _can_cache_acts_data(num_batches: int, input_shape: torch.Size, output_shape: torch.Size) -> bool:
+    def _can_cache_acts_data(num_batches: int, input_shape: torch.Size, output_shape: torch.Size, dtype: torch.dtype)\
+            -> bool:
         """
         Function to check whether activations data can be cached and fit in CPU memory for given
         input and output shape in advance. The threshold CPU memory is determined by multiplying threshold and
@@ -269,6 +277,7 @@ class AdaroundOptimizer:
         :param num_batches: Number of batches.
         :param input_shape: Shape of input activations data.
         :param output_shape: Shape of output activations data.
+        :param dtype: Data type of input/output activations data
         :return: True if we can cache, false otherwise.
         """
         can_cache_data = False
@@ -278,12 +287,15 @@ class AdaroundOptimizer:
         threshold_mem = threshold_mem * EMPIRICAL_THRESHOLD
 
         # required CPU memory in GB.
+        data_size_in_bits = 16 if dtype == torch.half else 32
         req_mem = 0
-        req_mem += reduce(lambda x, y: x * y, input_shape) * num_batches * DATA_SIZE_IN_BITS / (1024 * 1024 * 1024 * 8)
-        req_mem += reduce(lambda x, y: x * y, output_shape) * num_batches * DATA_SIZE_IN_BITS / (1024 * 1024 * 1024 * 8)
+        req_mem += reduce(lambda x, y: x * y, input_shape) * num_batches * data_size_in_bits / (1024 * 1024 * 1024 * 8)
+        req_mem += reduce(lambda x, y: x * y, output_shape) * num_batches * data_size_in_bits / (1024 * 1024 * 1024 * 8)
 
         if req_mem < threshold_mem:
             can_cache_data = True
+        logger.debug("Placing cached activations data on CPU: %s, required_memory: %f GB, available_memory: %f GB",
+                     str(can_cache_data), req_mem, threshold_mem)
 
         return can_cache_data
 
@@ -310,20 +322,21 @@ class AdaroundOptimizer:
         threshold_mem = threshold_mem * EMPIRICAL_THRESHOLD
 
         # required GPU memory in GB
+        data_size_in_bits = 16 if inp_data.dtype == torch.half else 32
         req_mem = 0
-        req_mem += reduce(lambda x, y: x * y, inp_data.size())  * DATA_SIZE_IN_BITS / (1024 * 1024 * 1024 * 8)
-        req_mem += reduce(lambda x, y: x * y, out_data.size()) * DATA_SIZE_IN_BITS / (1024 * 1024 * 1024 * 8)
+        req_mem += reduce(lambda x, y: x * y, inp_data.size())  * data_size_in_bits / (1024 * 1024 * 1024 * 8)
+        req_mem += reduce(lambda x, y: x * y, out_data.size()) * data_size_in_bits / (1024 * 1024 * 1024 * 8)
 
         if req_mem < threshold_mem:
             try:
                 inp_data = inp_data.to(device)
                 out_data = out_data.to(device)
-                logger.debug("Placing cached activations data on GPU.")
+                logger.debug("Placed cached activations data on GPU.")
             except RuntimeError as error:
                 inp_data = inp_data.cpu()
                 out_data = out_data.cpu()
-                logger.debug("Could not place cached activations data on GPU,"
-                             " placing cached activations data back to CPU. %s", str(error))
+                logger.debug("Could not place cached activations data on GPU."
+                             " Placed cached activations data on CPU. RuntimeError: %s", str(error))
 
         return inp_data, out_data
 
