@@ -1251,3 +1251,19 @@ class ModelWithReusedInitializers(torch.nn.Module):
         for i in range(self.repetition):
             x = self.modulelist(x)
         return x
+
+
+class TinyModelWithNoMathInvariantOps(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=2, stride=2, padding=2, bias=False)
+        self.mul1 = elementwise_ops.Multiply()
+        self.mul2 = elementwise_ops.Multiply()
+        self.add1 = elementwise_ops.Add()
+
+    def forward(self, x):
+        conv_output = self.conv1(x)
+        y = self.mul1(conv_output, 2)
+        m = self.add1(y, 3)
+        z = self.mul2(m, 5)
+        return z
