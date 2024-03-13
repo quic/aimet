@@ -55,7 +55,6 @@ from aimet_torch.adaround.adaround_loss import AdaroundLoss, AdaroundHyperParame
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 BATCH_SIZE = 32
 EMPIRICAL_THRESHOLD = 3 / 4
-DATA_SIZE_IN_BITS = 32
 
 
 class AdaroundOptimizer:
@@ -145,7 +144,8 @@ class AdaroundOptimizer:
         model_inputs = cached_dataset[0]
         act_sampler = ActivationSampler(module, quant_module, orig_model, quant_model, forward_fn)
         inp_data, out_data = act_sampler.sample_acts(model_inputs)
-        use_cache_acts_data = cls._can_cache_acts_data(len(cached_dataset), inp_data.shape, out_data.shape)
+        use_cache_acts_data = cls._can_cache_acts_data(len(cached_dataset), inp_data.shape, out_data.shape,
+                                                       inp_data.dtype)
         del inp_data, out_data
 
         device = utils.get_device(module)
@@ -265,7 +265,8 @@ class AdaroundOptimizer:
         return out_data
 
     @staticmethod
-    def _can_cache_acts_data(num_batches: int, input_shape: torch.Size, output_shape: torch.Size) -> bool:
+    def _can_cache_acts_data(num_batches: int, input_shape: torch.Size, output_shape: torch.Size, dtype: torch.dtype)\
+            -> bool:
         """
         Function to check whether activations data can be cached and fit in CPU memory for given
         input and output shape in advance. The threshold CPU memory is determined by multiplying threshold and
@@ -276,6 +277,7 @@ class AdaroundOptimizer:
         :param num_batches: Number of batches.
         :param input_shape: Shape of input activations data.
         :param output_shape: Shape of output activations data.
+        :param dtype: Data type of input/output activations data
         :return: True if we can cache, false otherwise.
         """
         can_cache_data = False
@@ -285,9 +287,10 @@ class AdaroundOptimizer:
         threshold_mem = threshold_mem * EMPIRICAL_THRESHOLD
 
         # required CPU memory in GB.
+        data_size_in_bits = 16 if dtype == torch.half else 32
         req_mem = 0
-        req_mem += reduce(lambda x, y: x * y, input_shape) * num_batches * DATA_SIZE_IN_BITS / (1024 * 1024 * 1024 * 8)
-        req_mem += reduce(lambda x, y: x * y, output_shape) * num_batches * DATA_SIZE_IN_BITS / (1024 * 1024 * 1024 * 8)
+        req_mem += reduce(lambda x, y: x * y, input_shape) * num_batches * data_size_in_bits / (1024 * 1024 * 1024 * 8)
+        req_mem += reduce(lambda x, y: x * y, output_shape) * num_batches * data_size_in_bits / (1024 * 1024 * 1024 * 8)
 
         if req_mem < threshold_mem:
             can_cache_data = True
@@ -319,9 +322,10 @@ class AdaroundOptimizer:
         threshold_mem = threshold_mem * EMPIRICAL_THRESHOLD
 
         # required GPU memory in GB
+        data_size_in_bits = 16 if inp_data.dtype == torch.half else 32
         req_mem = 0
-        req_mem += reduce(lambda x, y: x * y, inp_data.size())  * DATA_SIZE_IN_BITS / (1024 * 1024 * 1024 * 8)
-        req_mem += reduce(lambda x, y: x * y, out_data.size()) * DATA_SIZE_IN_BITS / (1024 * 1024 * 1024 * 8)
+        req_mem += reduce(lambda x, y: x * y, inp_data.size())  * data_size_in_bits / (1024 * 1024 * 1024 * 8)
+        req_mem += reduce(lambda x, y: x * y, out_data.size()) * data_size_in_bits / (1024 * 1024 * 1024 * 8)
 
         if req_mem < threshold_mem:
             try:
