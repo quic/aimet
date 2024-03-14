@@ -174,7 +174,7 @@ class AdaroundOptimizer:
                 quant_model.cpu()
                 all_inp_data, all_orig_out_data = cls._place_cached_acts_data(all_inp_data, all_orig_out_data, device)
 
-        for iteration in range(opt_params.num_iterations):
+        for iteration in range(opt_params.num_iterations // world_size):
             if use_cache_acts_data and AdaroundOptimizer.enable_caching_acts_data():
                 indices = torch.randperm(all_inp_data.size(0))[:BATCH_SIZE]
                 inp_data = all_inp_data[indices].to(device)
