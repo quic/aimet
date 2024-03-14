@@ -133,6 +133,7 @@ class AdaroundOptimizer:
          yielded from the data loader
         :param opt_params: Optimization parameters
         """
+        # pylint: disable=too-many-locals, too-many-arguments, too-many-branches, too-many-statements
         if dist.is_initialized():
             rank = dist.get_rank()
             world_size = dist.get_world_size()
@@ -144,7 +145,6 @@ class AdaroundOptimizer:
         indices = tuple(range(rank, len(cached_dataset), world_size))
         cached_dataset = Subset(cached_dataset, indices=indices)
 
-        # pylint: disable=too-many-locals, too-many-arguments
         adaround_quantizer = quant_module.param_quantizers['weight']
         assert adaround_quantizer.use_soft_rounding, 'optimization should use soft rounding only.'
         assert adaround_quantizer.alpha is not None, 'alpha parameter should be initialized.'
