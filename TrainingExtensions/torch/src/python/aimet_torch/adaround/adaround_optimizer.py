@@ -144,6 +144,8 @@ class AdaroundOptimizer:
         # Shard dataset
         indices = tuple(range(rank, len(cached_dataset), world_size))
         cached_dataset = Subset(cached_dataset, indices=indices)
+        if cached_quant_dataset is not None:
+            cached_quant_dataset = Subset(cached_quant_dataset, indices=indices)
 
         adaround_quantizer = quant_module.param_quantizers['weight']
         assert adaround_quantizer.use_soft_rounding, 'optimization should use soft rounding only.'
