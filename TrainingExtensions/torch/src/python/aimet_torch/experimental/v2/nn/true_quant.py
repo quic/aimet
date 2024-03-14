@@ -247,12 +247,12 @@ class _QuantizedBinaryOpMixin(QuantizationMixin, ABC):
 
         with self._patch_quantized_parameters():
             kernel_args, kernel_kwargs = self.get_functional_args(x, y, *args, **kwargs)
-            output_encodings = self.output_quantizers[0].get_encoding if self.output_quantizers[0] else None
+            output_encodings = self.output_quantizers[0].get_encoding() if self.output_quantizers[0] else None
             kernel = self._func_selector().get_impl(self.op_key, *kernel_args, **kernel_kwargs,
                                                     output_encodings=output_encodings)
 
             if kernel:
-                output = kernel(*args, **kwargs, output_encodings=output_encodings)
+                output = kernel(*kernel_args, **kernel_kwargs, output_encodings=output_encodings)
             else:
                 with self._patch_dequantized_parameters():
                     output = super().forward(_dequantize_if_applicable(x), _dequantize_if_applicable(y), *args, **kwargs)
