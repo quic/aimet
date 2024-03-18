@@ -84,9 +84,10 @@ MULTI_INPUT_OPS_TO_PARSE = [elementwise_ops.Add, elementwise_ops.Multiply, eleme
                             elementwise_ops.Divide, elementwise_ops.Pow]
 
 # We want to consider following operations as leaf nodes while creating op for connected graph.
-SKIP_LIST_FOR_SUBGRAPH_TRACE = (elementwise_ops.StridedSlice, elementwise_ops.GatherNd, elementwise_ops.ScatterND,
+SKIP_LIST_FOR_SUBGRAPH_TRACE = [elementwise_ops.StridedSlice, elementwise_ops.GatherNd, elementwise_ops.ScatterND,
                                 elementwise_ops.CustomGather, elementwise_ops.DepthToSpaceDCRMode,
-                                elementwise_ops.RoiAlign, elementwise_ops.ChannelShuffle)
+                                elementwise_ops.RoiAlign, elementwise_ops.ChannelShuffle, elementwise_ops.NonMaxSuppression,
+                                elementwise_ops.DepthToSpaceCRDMode, ]
 
 
 # pylint: disable=too-many-lines
@@ -532,7 +533,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         # We don't want to further trace some custom implementation from elementwise_ops
         if input_name in node_name_to_subgraph_model and \
-                not isinstance(node_name_to_subgraph_model[input_name][0], SKIP_LIST_FOR_SUBGRAPH_TRACE):
+                not isinstance(node_name_to_subgraph_model[input_name][0], tuple(SKIP_LIST_FOR_SUBGRAPH_TRACE)):
             elementwise_info = None
             subgraph_model, getattr_node_info = node_name_to_subgraph_model[input_name]
             # For elementwise ops, we need to parse the callmethod interior, but want to retain information about the
