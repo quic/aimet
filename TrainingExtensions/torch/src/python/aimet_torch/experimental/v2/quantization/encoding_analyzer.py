@@ -167,12 +167,12 @@ class _HistogramObserver(_Observer[_Histogram]):
                 hist_input = torch.unsqueeze(torch.select(hist_input, axis, index), axis)
 
             hist_min, hist_max = self._handle_inf_inputs(hist_input)
-            bin_edges = self._create_bin_edges(min_val=torch.clone(hist_min), max_val=torch.clone(hist_max), device=input_tensor.device)
-
+            bin_edges = self._create_bin_edges(min_val=hist_min, max_val=hist_max, device=input_tensor.device)
             histogram = torch.histc(hist_input.to(torch.float), bins=self.num_bins, min=bin_edges[0], max=bin_edges[-1])
-            # clip inf values to hist_min and hist_max
-            histogram[0] += torch.sum(hist_input == -float('inf'))
-            histogram[-1] += torch.sum(hist_input == float('inf'))
+
+            # clip inf values to hist_min and hist_max and adjust for any fp errors
+            histogram[0] += torch.sum(hist_input < bin_edges[0])
+            histogram[-1] += torch.sum(hist_input > bin_edges[-1])
 
             hist_stats.append(_Histogram(histogram, bin_edges, hist_min, hist_max))
 
@@ -191,8 +191,8 @@ class _HistogramObserver(_Observer[_Histogram]):
     def _create_bin_edges(self, min_val, max_val, device):
         # Adjust min/max values to be in line with PyTorch's torch.histc implementation
         if max_val == min_val:
-            min_val -= 0.5
-            max_val += 0.5
+            min_val = min_val - 0.5
+            max_val = max_val + 0.5
 
         step = (max_val - min_val) / self.num_bins
 
