@@ -123,6 +123,14 @@ class AffineQuantizerBase(QuantizerBase):
         Set quantization parameters to the given min-max range
         """
 
+    def get_encoding(self) -> Optional[AffineEncoding]:
+        """
+        Return the quantizer's encodings as an AffineEncoding object
+        """
+        if self.is_initialized():
+            return AffineEncoding(self.get_scale(), self.get_offset(), self.bitwidth)
+        return None
+
     @torch.no_grad()
     def get_legacy_encodings(self) -> Optional[List[Dict]]:
         """
