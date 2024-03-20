@@ -336,6 +336,44 @@ class TestHistogramEncodingAnalyzer:
             assert encoding_analyzer.observer.stats[0].min == 1
             assert encoding_analyzer.observer.stats[0].max == 7
     
+    @pytest.mark.parametrize("histogram_based_encoding_analyzers", [((1,), 10)], indirect=True)
+    def test_handle_inf_inputs(self, histogram_based_encoding_analyzers):
+        for encoding_analyzer in histogram_based_encoding_analyzers:
+            input_tensor_1 = torch.tensor([1, 7, 5.3, 6, float('inf'), float('inf')])
+            encoding_analyzer.update_stats(input_tensor_1)
+            assert encoding_analyzer.observer.stats[0].min == 1
+            assert encoding_analyzer.observer.stats[0].max == 7
+            # 2 inf values are clipped to 7
+            assert encoding_analyzer.observer.stats[0].histogram[9] == 3
+            assert torch.allclose(encoding_analyzer.observer.stats[0].bin_edges, 
+                                      torch.Tensor([1.0000, 1.6000, 2.2000, 2.8000, 3.4000, 4.0000, 4.6000, 5.2000, 5.8000, 6.4000, 7.0000]))
+
+
+            input_tensor_2 = torch.tensor([0, 17, -5, 3, -float('inf'), float('inf'), -float('inf')])
+            encoding_analyzer.update_stats(input_tensor_2)
+            assert encoding_analyzer.observer.stats[0].min == -5
+            assert encoding_analyzer.observer.stats[0].max == 17
+            # 1 inf value clipped to 17
+            assert encoding_analyzer.observer.stats[0].histogram[9] == 2
+            # 2 neg inf value clipped to -5
+            assert encoding_analyzer.observer.stats[0].histogram[0] == 3
+            old_histogram = encoding_analyzer.observer.stats[0].histogram
+            assert torch.allclose(encoding_analyzer.observer.stats[0].bin_edges, 
+                                      torch.Tensor([-5.0000, -2.8000, -0.6000,  1.6000,  3.8000,  6.0000,  8.2000, 10.4000, 12.6000, 14.8000, 17.0000]))
+
+            
+            input_tensor_3 = torch.tensor([10, -float('inf'), float('inf'), -float('inf')])
+            encoding_analyzer.update_stats(input_tensor_3)
+            assert encoding_analyzer.observer.stats[0].histogram[0] == old_histogram[0] + 2
+            assert encoding_analyzer.observer.stats[0].histogram[-1] == old_histogram[-1] + 1
+
+    @pytest.mark.parametrize("histogram_based_encoding_analyzers", [((1,), 10)], indirect=True)
+    def test_handle_only_inf_inputs(self, histogram_based_encoding_analyzers):
+        for encoding_analyzer in histogram_based_encoding_analyzers:
+            input_tensor_1 = torch.tensor([float('inf'), -float('inf'), -float('inf'), float('inf'), float('inf')])
+            with pytest.raises(ValueError):
+                encoding_analyzer.update_stats(input_tensor_1)
+    
     @pytest.mark.parametrize("histogram_based_encoding_analyzers", [((1,), 3)], indirect=True)
     def test_merge_stats_without_resizing(self, histogram_based_encoding_analyzers):
         for encoding_analyzer in histogram_based_encoding_analyzers:
@@ -383,8 +421,7 @@ class TestHistogramEncodingAnalyzer:
         else:
             assert not encoding_min.is_cuda
             assert not encoding_max.is_cuda
-
-        #TODO: Add SQNR here   
+ 
     
     def test_collect_stats_multidimensional(self):
         x = torch.arange(24, dtype=torch.float).view(2, 3, 4)
@@ -445,7 +482,7 @@ class TestHistogramEncodingAnalyzer:
             k = (i // 4) % 3
             m = i % 4
             assert torch.equal(histograms[i].min,  x[j,k,m].min())
-            assert torch.equal(histograms[i].max,  x[j,k,m].max()) 
+            assert torch.equal(histograms[i].max,  x[j,k,m].max())
     
     def test_histogram_during_merging(self):
         observer = _HistogramObserver((1,), num_bins=10)
