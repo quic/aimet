@@ -113,7 +113,7 @@ class ModuleData:
         :return: Module's input and output data
         """
         def adjust_input_dtype(module, inp):
-            if hasattr(module, 'weight'):
+            if hasattr(module, 'weight') and module.weight is not None:
                 dtype = module.weight.dtype
                 # Cast input to dtype only if it is a floating point tensor (float, half, bfloat16, etc.).
                 # If input is a non-float tensor (e.g. long, bool), leave the input uncasted.
