@@ -1685,6 +1685,13 @@ class QuantizationSimModel:
         # Load parameter encodings file
         with open(encoding_path) as json_file:
             param_encodings = json.load(json_file)
+            if 'param_encodings' in param_encodings:
+                param_encodings = param_encodings['param_encodings']
+            else:
+                logger.warning("An older AdaRound exported encoding file type has been detected! "
+                               "Please regenerate it using the AdaRound export function from the latest "
+                               "AIMET (version 1.32 or higher) if necessary. "
+                               "Support for this encoding file will be deprecated in AIMET version 1.33.0.")
 
         self._set_param_encodings(param_encodings,
                                   freeze=True,
