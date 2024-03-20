@@ -282,6 +282,7 @@ class TestQuantsimLogits:
                     v1_sqnr = _compute_sqnr(fp_logit, v1_logit)
                     v2_sqnr = _compute_sqnr(fp_logit, v2_logit)
                     assert v1_sqnr * 0.95 < v2_sqnr
+                    
 
     @pytest.mark.parametrize('model_cls,input_shape', [(models_to_test.SingleResidual, (10, 3, 32, 32)),
                                                        (models_to_test.SoftMaxAvgPoolModel, (10, 4, 256, 512)),
