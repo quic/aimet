@@ -93,3 +93,8 @@ def test_patch_attr():
 
     replica = conv._replicate_for_data_parallel()
     assert replica.forward.__self__ is replica
+
+    with patch_attr(conv, 'no_exist_attribute', 1):
+        assert conv.no_exist_attribute == 1
+
+    assert not hasattr(conv, 'no_exist_attribute')
