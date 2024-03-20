@@ -291,9 +291,11 @@ class Adaround:
                 cls._run_adaround_model(modules, model, quant_sim.model, module_act_func_pair, opt_params,
                                         params.forward_fn, cached_dataset)
         finally:
-            if os.path.exists(WORKING_DIR):
+            try:
                 logger.info('Deleting model inputs from location: %s', WORKING_DIR)
                 shutil.rmtree(WORKING_DIR)
+            except FileNotFoundError:
+                pass
 
     @classmethod
     def _run_adaround_model(cls, modules: List, model: torch.nn.Module, quant_sim_model: torch.nn.Module,

@@ -43,7 +43,8 @@ import psutil
 import numpy as np
 import torch
 import torch.nn.functional as functional
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Subset
+import torch.distributed as dist
 
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger
@@ -132,13 +133,29 @@ class AdaroundOptimizer:
          yielded from the data loader
         :param opt_params: Optimization parameters
         """
-        # pylint: disable=too-many-locals, too-many-arguments
+        # pylint: disable=too-many-locals, too-many-arguments, too-many-branches, too-many-statements
+        if dist.is_initialized():
+            rank = dist.get_rank()
+            world_size = dist.get_world_size()
+        else:
+            rank = 0
+            world_size = 1
+
+        # Shard dataset
+        indices = tuple(range(rank, len(cached_dataset), world_size))
+        cached_dataset = Subset(cached_dataset, indices=indices)
+        if cached_quant_dataset is not None:
+            cached_quant_dataset = Subset(cached_quant_dataset, indices=indices)
+
         adaround_quantizer = quant_module.param_quantizers['weight']
         assert adaround_quantizer.use_soft_rounding, 'optimization should use soft rounding only.'
         assert adaround_quantizer.alpha is not None, 'alpha parameter should be initialized.'
 
         # Create and set up Adam optimizer with parameter 'alpha' to be optimized
         optimizer = torch.optim.Adam([adaround_quantizer.alpha])
+
+        for group in optimizer.param_groups:
+            group['lr'] *= world_size # Scale up learning rate by world_size
 
         # Check if we can cache intermediate activation data.
         model_inputs = cached_dataset[0]
@@ -159,7 +176,7 @@ class AdaroundOptimizer:
                 quant_model.cpu()
                 all_inp_data, all_orig_out_data = cls._place_cached_acts_data(all_inp_data, all_orig_out_data, device)
 
-        for iteration in range(opt_params.num_iterations):
+        for iteration in range(opt_params.num_iterations // world_size):
             if use_cache_acts_data and AdaroundOptimizer.enable_caching_acts_data():
                 indices = torch.randperm(all_inp_data.size(0))[:BATCH_SIZE]
                 inp_data = all_inp_data[indices].to(device)
@@ -191,6 +208,10 @@ class AdaroundOptimizer:
                     all_orig_out_data = all_orig_out_data.cpu()
                 else:
                     raise error
+
+            if dist.is_initialized():
+                dist.all_reduce(adaround_quantizer.alpha.grad)
+            adaround_quantizer.alpha.grad /= world_size
 
             optimizer.step()
 
