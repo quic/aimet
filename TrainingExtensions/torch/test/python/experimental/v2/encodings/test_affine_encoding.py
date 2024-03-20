@@ -84,14 +84,35 @@ class TestAffineEncoding:
               5) num_steps is 2 ** bitwidth - 1
         """
         bitwidth = 8
-        offset = torch.tensor(-128)
-        encoding = AffineEncoding(scale, offset, bitwidth=bitwidth)
+        offset = torch.tensor(0)
+        encoding = AffineEncoding(scale, offset, bitwidth=bitwidth, signed=True)
         assert encoding.min == -128
         assert encoding.max == 127
-        assert encoding.offset == -128
+        assert encoding.offset == 0
         assert encoding.scale == 1.0
         assert encoding.symmetry == True
         assert encoding.dtype == torch.int8
+        assert encoding.num_steps == 2 ** bitwidth - 1
+
+    def test_create_unsigned_symmetric_encoding(self):
+        """
+        When: Create an 8-bit encoding with offset=0 and signed=True
+        Then: 1) encoding.min is scale * num_negative_bins
+              2) encoding.max is scale * num_positive_bins
+              3) symmetry is "signed_symmetric"
+              4) dtype is torch.int8
+              5) num_steps is 2 ** bitwidth - 1
+        """
+        bitwidth = 8
+        offset = torch.tensor(0)
+        scale = torch.tensor(0.5)
+        encoding = AffineEncoding(scale, offset, bitwidth=bitwidth, signed=False)
+        assert encoding.min == 0
+        assert encoding.max == 255.0/2
+        assert encoding.offset == 0
+        assert encoding.scale == 0.5
+        assert encoding.symmetry == True
+        assert encoding.dtype == torch.uint8
         assert encoding.num_steps == 2 ** bitwidth - 1
 
     @pytest.mark.cuda()

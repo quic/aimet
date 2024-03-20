@@ -130,7 +130,7 @@ class AffineQuantizerBase(QuantizerBase):
         Return the quantizer's encodings as an AffineEncoding object
         """
         if self.is_initialized():
-            return AffineEncoding(self.get_scale(), self.get_offset(), self.bitwidth)
+            return AffineEncoding(self.get_scale(), self.get_offset(), self.bitwidth, self._signed)
         return None
 
     @torch.no_grad()
@@ -369,7 +369,7 @@ class Quantize(MinMaxQuantizer):
         scale = self.get_scale()
         offset = self.get_offset()
         return QuantizedTensor(get_backend().quantize(input, scale, offset, self.bitwidth, signed=self._signed),
-                               AffineEncoding(scale, offset, self.bitwidth),
+                               self.get_encoding(),
                                lambda x: get_backend().dequantize(torch.Tensor(x), scale, offset))
 
 
