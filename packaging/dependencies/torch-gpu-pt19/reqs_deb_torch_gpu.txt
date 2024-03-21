@@ -1,9 +1,0 @@
-libcublas-11-0
-libcufft-11-0
-libcurand-11-0
-libcusolver-11-0
-libcusparse-11-0
-libcudnn8=8.0.5.39-1+cuda11.0
-libnccl-dev=2.8.4-1+cuda11.0
-libnccl2=2.8.4-1+cuda11.0
-cuda-command-line-tools-11-0
