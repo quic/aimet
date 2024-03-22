@@ -49,7 +49,7 @@ Clone the google test repo as follows:
 cd aimet
 mkdir -p ./ThirdParty/googletest
 pushd ./ThirdParty/googletest
-git clone https://github.com/google/googletest.git -b release-1.8.0 googletest-release-1.8.0
+git clone https://github.com/google/googletest.git -b v1.14.0 googletest-release-1.14.0
 popd
 ```
 

@@ -1,6 +1,6 @@
 bokeh==1.2.0
 dataclasses
-h5py==2.10.0
+h5py
 holoviews==1.12.7
 hvplot==0.4.0
 Jinja2==3.0.3
