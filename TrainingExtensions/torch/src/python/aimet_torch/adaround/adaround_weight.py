@@ -244,6 +244,7 @@ class Adaround:
                 checkpoint_type = ckpts_file.get('checkpoint_type', 'sequential')
                 assert 'cache_on_cpu' in ckpts_file.keys(), \
                     "Please define cache_on_cpu to determine whether to cache intermediate tensors on CPU"
+                cache_on_cpu = ckpts_file['cache_on_cpu']
 
                 if checkpoint_type == 'sequential':
                     assert 'grouped_modules' in ckpts_file.keys(), \
@@ -254,7 +255,6 @@ class Adaround:
                     grouped_modules = ckpts_file['grouped_modules']
                     breakpoint_module_name = ckpts_file['grouped_modules'][list(grouped_modules.keys())[0]][0]
                     include_static_inputs = ckpts_file['include_static_inputs']
-                    cache_on_cpu = ckpts_file['cache_on_cpu']
                     cached_fp_dataset, cached_quant_dataset = get_block_inputs(model, quant_sim,
                                                                                breakpoint_module_name,
                                                                                cached_dataset, cache_on_cpu,
@@ -293,7 +293,6 @@ class Adaround:
                 else:
                     assert 'cached_blocks' in ckpts_file.keys(), \
                         "Please provide a list of modules that  can be cached"
-                    cache_on_cpu = ckpts_file['cache_on_cpu']
 
                     block_list = create_cached_block_schedule_list(
                         model, dummy_input, ckpts_file['cached_blocks'], AdaroundSupportedModules)

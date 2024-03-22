@@ -262,8 +262,7 @@ def create_cached_block_schedule_list(model: torch.nn.Module, dummy_input, block
     """
     Creates a schedule for modules with corresponding block if applicable.
 
-     :param model: Original FP model.
-    :param model: True if collect input data of the quant module, False otherwise
+    :param model: Original FP model.
     :param dummy_input: Model inputs.
     :param block_names: List of block names to generate caching point.
     :param supported_modules: module types that can be adaround'ed.

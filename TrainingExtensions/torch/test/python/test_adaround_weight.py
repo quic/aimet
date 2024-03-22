@@ -389,7 +389,8 @@ class TestAdaround:
         checkpoints_config = {
             "checkpoint_type": "disjoint",
             "cached_blocks": [
-                "block1"
+                "block1",
+                "block2"
             ],
             "cache_on_cpu": "False"
         }
@@ -402,7 +403,6 @@ class TestAdaround:
         for (name, param), (name_ckpts, param_ckpts) in zip(ada_rounded_model.named_parameters(),
                                                             ada_rounded_model_ckpts.named_parameters()):
             assert name == name_ckpts
-            print(name)
             assert torch.equal(param, param_ckpts)
 
         # Test export functionality
