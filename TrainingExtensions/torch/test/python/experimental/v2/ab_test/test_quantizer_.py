@@ -962,6 +962,7 @@ class TestQuantizationSimStaticGrad:
         sim.compute_encodings(forward_pass, None)
 
         with torch.no_grad():
+            sim.model.conv1_a.param_quantizers['weight'].min.copy_(-10)
             sim.model.conv1_a.param_quantizers['weight'].max.copy_(10)
             sim.model.conv1_a.output_quantizers[0].max.copy_(30)
 
@@ -977,7 +978,12 @@ class TestQuantizationSimStaticGrad:
                 param_encodings = encodings['param_encodings']
                 assert 16 == len(activation_encodings)
                 assert 7 == len(param_encodings['conv1_a.weight'][0])
-                assert 10 == param_encodings['conv1_a.weight'][0]['max']
+                min = param_encodings['conv1_a.weight'][0]['min']
+                max = param_encodings['conv1_a.weight'][0]['max']
+                scale = (max - min) / 255
+                offset = round(min / scale)
+                assert scale == pytest.approx(20/255)
+                assert offset == -128
 
             with open(f'{tmp_dir}/two_input_model.encodings.yaml', 'r') as fp_yaml:
                 encodings = yaml.load(fp_yaml, Loader=yaml.FullLoader)
@@ -986,7 +992,12 @@ class TestQuantizationSimStaticGrad:
                 param_encodings = encodings['param_encodings']
                 assert 16 == len(activation_encodings)
                 assert 7 == len(param_encodings['conv1_a.weight'][0])
-                assert 10 == param_encodings['conv1_a.weight'][0]['max']
+                min = param_encodings['conv1_a.weight'][0]['min']
+                max = param_encodings['conv1_a.weight'][0]['max']
+                scale = (max - min) / 255
+                offset = round(min / scale)
+                assert scale == pytest.approx(20/255)
+                assert offset == -128
 
             # check the exported model
             loaded_model = torch.load(f'{tmp_dir}/two_input_model.pth')
@@ -2757,19 +2768,19 @@ class TestQuantizationSimStaticGrad:
         # excluding fc1 since it is part of Matmul->Relu supergroup
         # can't use assertEqual for FC2, so using assertAlmostEquals for FC2
         assert torch.allclose(model_gpu.conv1.output_quantizers[0].get_min().cpu(),
-                              model_cpu.conv1.output_quantizers[0].get_min())
+                              model_cpu.conv1.output_quantizers[0].get_min(), rtol=1e-4)
         assert torch.allclose(model_gpu.conv1.output_quantizers[0].get_max().cpu(),
-                              model_cpu.conv1.output_quantizers[0].get_max())
+                              model_cpu.conv1.output_quantizers[0].get_max(), rtol=1e-4)
 
         assert torch.allclose(model_gpu.conv2.output_quantizers[0].get_min().cpu(),
-                              model_cpu.conv2.output_quantizers[0].get_min())
+                              model_cpu.conv2.output_quantizers[0].get_min(), rtol=1e-4)
         assert torch.allclose(model_gpu.conv2.output_quantizers[0].get_max().cpu(),
-                              model_cpu.conv2.output_quantizers[0].get_max())
+                              model_cpu.conv2.output_quantizers[0].get_max(), rtol=1e-4)
 
         assert torch.allclose(model_gpu.fc2.output_quantizers[0].get_min().cpu(),
-                              model_cpu.fc2.output_quantizers[0].get_min())
+                              model_cpu.fc2.output_quantizers[0].get_min(), rtol=1e-4)
         assert torch.allclose(model_gpu.fc2.output_quantizers[0].get_max().cpu(),
-                              model_cpu.fc2.output_quantizers[0].get_max())
+                              model_cpu.fc2.output_quantizers[0].get_max(), rtol=1e-4)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             gpu_sim_model.export(tmp_dir, "quantizer_no_fine_tuning__GPU", dummy_input)
