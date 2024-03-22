@@ -60,8 +60,9 @@ from aimet_torch.tensor_quantizer import StaticGridPerChannelQuantizer, TensorQu
 from aimet_torch.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer
 from aimet_torch.adaround.adaround_optimizer import AdaroundOptimizer
 from aimet_torch.adaround.adaround_loss import AdaroundHyperParameters
-from aimet_torch.adaround.activation_sampler import create_modulelist_for_group_modules, get_block_inputs,\
-    get_block_outputs
+from aimet_torch.adaround.activation_sampler import create_modulelist_for_group_modules, get_block_inputs, \
+    get_block_outputs, create_cached_block_schedule_list
+from aimet_torch.utils import get_named_module
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -240,52 +241,85 @@ class Adaround:
             if checkpoints_config:
                 # Load the predefined json file for checkpoints info
                 ckpts_file = json.load(open(checkpoints_config))
-                assert 'grouped_modules' in ckpts_file.keys(),\
-                    "Please provide a dictionary of grouped_modules in the file to define checkpoints"
-                assert 'include_static_inputs' in ckpts_file.keys(),\
-                    "Please provide a dictionary of include_static_inputs in the file to define checkpoints"
-                assert 'cache_on_cpu' in ckpts_file.keys(),\
+                checkpoint_type = ckpts_file.get('checkpoint_type', 'sequential')
+                assert 'cache_on_cpu' in ckpts_file.keys(), \
                     "Please define cache_on_cpu to determine whether to cache intermediate tensors on CPU"
 
-                grouped_modules = ckpts_file['grouped_modules']
-                breakpoint_module_name = ckpts_file['grouped_modules'][list(grouped_modules.keys())[0]][0]
-                include_static_inputs = ckpts_file['include_static_inputs']
-                cache_on_cpu = ckpts_file['cache_on_cpu']
-                cached_fp_dataset, cached_quant_dataset = get_block_inputs(model, quant_sim,
-                                                                           breakpoint_module_name,
-                                                                           cached_dataset, cache_on_cpu,
-                                                                           params.forward_fn, params.num_batches,
-                                                                           WORKING_DIR)
-                # Get the device of model to latter be used to place input tensor on the same device
-                device = utils.get_device(model)
-                model.cpu()
-                quant_sim.model.cpu()
+                if checkpoint_type == 'sequential':
+                    assert 'grouped_modules' in ckpts_file.keys(), \
+                        "Please provide a dictionary of grouped_modules in the file to define checkpoints"
+                    assert 'include_static_inputs' in ckpts_file.keys(), \
+                        "Please provide a dictionary of include_static_inputs in the file to define checkpoints"
 
-                # Forward function for the ModuleList object
-                def fwd_mod_ls(mod_ls, x):
-                    for mod in mod_ls:
-                        x = params.forward_fn(mod, x)
-                    return x
+                    grouped_modules = ckpts_file['grouped_modules']
+                    breakpoint_module_name = ckpts_file['grouped_modules'][list(grouped_modules.keys())[0]][0]
+                    include_static_inputs = ckpts_file['include_static_inputs']
+                    cache_on_cpu = ckpts_file['cache_on_cpu']
+                    cached_fp_dataset, cached_quant_dataset = get_block_inputs(model, quant_sim,
+                                                                               breakpoint_module_name,
+                                                                               cached_dataset, cache_on_cpu,
+                                                                               params.forward_fn, params.num_batches,
+                                                                               WORKING_DIR)
+                    # Get the device of model to latter be used to place input tensor on the same device
+                    device = utils.get_device(model)
+                    model.cpu()
+                    quant_sim.model.cpu()
 
-                sub_fp_models, sub_sim_models = create_modulelist_for_group_modules(model, quant_sim, grouped_modules)
-                for i, (fp_block, quant_sim_block, static_input) in enumerate(zip(sub_fp_models,
-                                                                                  sub_sim_models,
-                                                                                  include_static_inputs)):
-                    modules = utils.get_ordered_list_of_modules(fp_block, cached_fp_dataset[0], fwd_mod_ls)
-                    cls._run_adaround_model(modules, fp_block, quant_sim_block,
-                                            module_act_func_pair, opt_params,
-                                            fwd_mod_ls,
-                                            cached_fp_dataset, cached_quant_dataset)
+                    # Forward function for the ModuleList object
+                    def fwd_mod_ls(mod_ls, x):
+                        for mod in mod_ls:
+                            x = params.forward_fn(mod, x)
+                        return x
 
-                    # Get the outputs from the current block and assign to be the inputs for next block
-                    # except for the last block
-                    if i < len(sub_fp_models) - 1:
-                        get_block_outputs(fp_block, quant_sim_block, static_input,
-                                          cached_fp_dataset, cached_quant_dataset, cache_on_cpu,
-                                          fwd_mod_ls, device, WORKING_DIR)
+                    sub_fp_models, sub_sim_models = create_modulelist_for_group_modules(model, quant_sim, grouped_modules)
+                    for i, (fp_block, quant_sim_block, static_input) in enumerate(zip(sub_fp_models,
+                                                                                      sub_sim_models,
+                                                                                      include_static_inputs)):
+                        modules = utils.get_ordered_list_of_modules(fp_block, cached_fp_dataset[0], fwd_mod_ls)
+                        cls._run_adaround_model(modules, fp_block, quant_sim_block,
+                                                module_act_func_pair, opt_params,
+                                                fwd_mod_ls,
+                                                cached_fp_dataset, cached_quant_dataset)
 
-                # After finishing Adaround, placing the quant model back to its original device
-                quant_sim.model.to(device)
+                        # Get the outputs from the current block and assign to be the inputs for next block
+                        # except for the last block
+                        if i < len(sub_fp_models) - 1:
+                            get_block_outputs(fp_block, quant_sim_block, static_input,
+                                              cached_fp_dataset, cached_quant_dataset, cache_on_cpu,
+                                              fwd_mod_ls, device, WORKING_DIR)
+
+                    # After finishing Adaround, placing the quant model back to its original device
+                    quant_sim.model.to(device)
+                else:
+                    assert 'cached_blocks' in ckpts_file.keys(), \
+                        "Please provide a list of modules that  can be cached"
+                    cache_on_cpu = ckpts_file['cache_on_cpu']
+
+                    block_list = create_cached_block_schedule_list(
+                        model, dummy_input, ckpts_file['cached_blocks'], AdaroundSupportedModules)
+
+                    for block_cfg, modules in tqdm(block_list, desc='block'):
+                        if block_cfg is None: # doesn't belong to a cached block
+                            cls._run_adaround_model(modules, model, quant_sim.model, module_act_func_pair, opt_params,
+                                                    params.forward_fn, cached_dataset)
+                        else:
+                            block_name, fp_block = block_cfg
+                            quant_sim_block: torch.nn.Module = get_named_module(quant_sim.model, block_name)
+
+                            cached_fp_dataset, cached_quant_dataset = get_block_inputs(model, quant_sim,
+                                                                                       block_name,
+                                                                                       cached_dataset, cache_on_cpu,
+                                                                                       params.forward_fn,
+                                                                                       params.num_batches,
+                                                                                       WORKING_DIR,
+                                                                                       incl_kwargs=True)
+
+                            def block_fwd(_model, x):
+                                return _model(*x)
+
+                            cls._run_adaround_model(modules, fp_block, quant_sim_block, module_act_func_pair,
+                                                    opt_params,
+                                                    block_fwd, cached_fp_dataset, cached_quant_dataset)
             else:
                 modules = utils.get_ordered_list_of_modules(model, dummy_input)
                 cls._run_adaround_model(modules, model, quant_sim.model, module_act_func_pair, opt_params,
