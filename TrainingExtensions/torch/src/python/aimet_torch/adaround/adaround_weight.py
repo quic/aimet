@@ -48,7 +48,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 # Import AIMET specific modules
-from aimet_common.utils import AimetLogger
+from aimet_common.utils import AimetLogger, convert_configs_values_to_bool
 from aimet_common.defs import QuantScheme, QuantizationDataType
 
 from aimet_torch import utils
@@ -240,21 +240,23 @@ class Adaround:
             # AdaRound must be applied to modules in the order of occurrence
             if checkpoints_config:
                 # Load the predefined json file for checkpoints info
-                ckpts_file = json.load(open(checkpoints_config))
-                checkpoint_type = ckpts_file.get('checkpoint_type', 'sequential')
-                assert 'cache_on_cpu' in ckpts_file.keys(), \
-                    "Please define cache_on_cpu to determine whether to cache intermediate tensors on CPU"
-                cache_on_cpu = ckpts_file['cache_on_cpu']
+                checkpoint_config = json.load(open(checkpoints_config))
+                convert_configs_values_to_bool(checkpoint_config)
 
+                assert 'cache_on_cpu' in checkpoint_config.keys(), \
+                    "Please define cache_on_cpu to determine whether to cache intermediate tensors on CPU"
+                cache_on_cpu = checkpoint_config['cache_on_cpu']
+
+                checkpoint_type = checkpoint_config.get('checkpoint_type', 'sequential')
                 if checkpoint_type == 'sequential':
-                    assert 'grouped_modules' in ckpts_file.keys(), \
+                    assert 'grouped_modules' in checkpoint_config.keys(), \
                         "Please provide a dictionary of grouped_modules in the file to define checkpoints"
-                    assert 'include_static_inputs' in ckpts_file.keys(), \
+                    assert 'include_static_inputs' in checkpoint_config.keys(), \
                         "Please provide a dictionary of include_static_inputs in the file to define checkpoints"
 
-                    grouped_modules = ckpts_file['grouped_modules']
-                    breakpoint_module_name = ckpts_file['grouped_modules'][list(grouped_modules.keys())[0]][0]
-                    include_static_inputs = ckpts_file['include_static_inputs']
+                    grouped_modules = checkpoint_config['grouped_modules']
+                    breakpoint_module_name = checkpoint_config['grouped_modules'][list(grouped_modules.keys())[0]][0]
+                    include_static_inputs = checkpoint_config['include_static_inputs']
                     cached_fp_dataset, cached_quant_dataset = get_block_inputs(model, quant_sim,
                                                                                breakpoint_module_name,
                                                                                cached_dataset, cache_on_cpu,
@@ -291,11 +293,11 @@ class Adaround:
                     # After finishing Adaround, placing the quant model back to its original device
                     quant_sim.model.to(device)
                 else:
-                    assert 'cached_blocks' in ckpts_file.keys(), \
+                    assert 'cached_blocks' in checkpoint_config.keys(), \
                         "Please provide a list of modules that  can be cached"
 
                     block_list = create_cached_block_schedule_list(
-                        model, dummy_input, ckpts_file['cached_blocks'], AdaroundSupportedModules)
+                        model, dummy_input, checkpoint_config['cached_blocks'], AdaroundSupportedModules)
 
                     for block_cfg, modules in tqdm(block_list, desc='block'):
                         if block_cfg is None: # doesn't belong to a cached block
@@ -319,6 +321,8 @@ class Adaround:
                             cls._run_adaround_model(modules, fp_block, quant_sim_block, module_act_func_pair,
                                                     opt_params,
                                                     block_fwd, cached_fp_dataset, cached_quant_dataset)
+                            del cached_fp_dataset
+                            del cached_quant_dataset
             else:
                 modules = utils.get_ordered_list_of_modules(model, dummy_input)
                 cls._run_adaround_model(modules, model, quant_sim.model, module_act_func_pair, opt_params,
