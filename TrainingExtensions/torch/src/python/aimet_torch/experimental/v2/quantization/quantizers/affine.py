@@ -282,13 +282,7 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
 
         num_bins = 2 ** self.bitwidth - 1
 
-        if self.symmetric:
-            positive_bins = num_bins // 2
-            negative_bins = positive_bins + 1
-            scale = torch.maximum(-self.min / negative_bins, self.max / positive_bins)
-        else:
-            scale = (self.max - self.min) / num_bins
-
+        scale = (self.max - self.min) / num_bins
         return scale.to(dtype=self.min.dtype)
 
     def get_offset(self) -> Optional[torch.Tensor]:
