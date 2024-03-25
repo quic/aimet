@@ -227,7 +227,7 @@ class TestSeqMse:
         without_checkpoints_enc = sim_without.model.fc.param_quantizers['weight'].encoding
 
         # Apply Sequential MSE with checkpoints config
-        apply_seq_mse(model, sim_with, data_loader, params) #, checkpoints_config="./test_checkpoints.json")
+        apply_seq_mse(model, sim_with, data_loader, params, checkpoints_config="./test_checkpoints.json")
         with_checkpoints_enc = sim_with.model.fc.param_quantizers['weight'].encoding
 
         # encodings should be bit-exact
