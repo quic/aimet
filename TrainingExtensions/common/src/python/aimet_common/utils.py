@@ -133,6 +133,7 @@ class AimetLogger(metaclass=SingletonType):
         ModelPreparer = "ModelPreparer"
         LayerOutputs = 'LayerOutputs'
         QuantAnalyzer = 'QuantAnalyzer'
+        SeqMse = 'SeqMse'
 
     def __init__(self):
         self._logger = logging.getLogger()

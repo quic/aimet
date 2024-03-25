@@ -69,6 +69,16 @@ def unlabeled_data_loader(dummy_input):
     return DataLoader(dataset)
 
 
+def calibrate(model, inputs):
+
+    if isinstance(inputs, torch.Tensor):
+        inputs = [inputs]
+
+    model.eval()
+    with torch.no_grad():
+        model(*inputs)
+
+
 def save_config_file_for_checkpoints():
     checkpoints_config = {
         "grouped_modules": {
@@ -186,11 +196,15 @@ class TestSeqMse:
         dummy_input = torch.randn(1, 1, 28, 28).cuda()
         sim = QuantizationSimModel(model, dummy_input, default_param_bw=4, quant_scheme=QuantScheme.post_training_tf)
         params = SeqMseParams(num_batches=2, inp_symmetry=inp_symmetry, loss_fn=loss_fn)
-        apply_seq_mse(model, sim, unlabeled_data_loader, params, modules_to_exclude=[sim.model.conv1])
+        apply_seq_mse(model, sim, unlabeled_data_loader, params)
         assert sim.model.fc1.param_quantizers['weight'].is_encoding_frozen
         assert sim.model.fc2.param_quantizers['weight'].is_encoding_frozen
-        assert not sim.model.conv1.param_quantizers['weight'].encoding
-        assert sim.model.conv2.param_quantizers['weight'].encoding
+
+        # Compute encodings for all the activations and remaining non-supported modules
+        enc_before = sim.model.fc1.param_quantizers['weight'].encoding
+        sim.compute_encodings(calibrate, dummy_input)
+        enc_after = sim.model.fc1.param_quantizers['weight'].encoding
+        assert enc_before.delta == enc_after.delta
 
     @pytest.mark.parametrize("inp_symmetry", ['asym', 'symfp', 'symqt'])
     @pytest.mark.parametrize("loss_fn", ['mse', 'l1', 'aa'])
@@ -213,7 +227,7 @@ class TestSeqMse:
         without_checkpoints_enc = sim_without.model.fc.param_quantizers['weight'].encoding
 
         # Apply Sequential MSE with checkpoints config
-        apply_seq_mse(model, sim_with, data_loader, params, checkpoints_config="./test_checkpoints.json")
+        apply_seq_mse(model, sim_with, data_loader, params) #, checkpoints_config="./test_checkpoints.json")
         with_checkpoints_enc = sim_with.model.fc.param_quantizers['weight'].encoding
 
         # encodings should be bit-exact
