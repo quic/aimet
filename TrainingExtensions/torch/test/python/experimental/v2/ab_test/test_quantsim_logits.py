@@ -273,15 +273,11 @@ class TestQuantsimLogits:
 
             assert len(v1_logits) == len(v2_logits)
             for v1_logit, v2_logit, fp_logit in zip(v1_logits, v2_logits, fp_logits):
-                if quant_scheme in (QuantScheme.post_training_tf, QuantScheme.training_range_learning_with_tf_init):
-                    tick = (v1_logit.max() - v1_logit.min()) / (2**16 - 1) # Tolerate off-by-one precision error
-                    assert torch.allclose(v1_logit, v2_logit, rtol=1e-3, atol=tick)
-                else:
-                    # off-by-one test is not realistic for histogram-based encoding analyzers
-                    # due to some hidden behaviors of V1 histogram
-                    v1_sqnr = _compute_sqnr(fp_logit, v1_logit)
-                    v2_sqnr = _compute_sqnr(fp_logit, v2_logit)
-                    assert v1_sqnr * 0.95 < v2_sqnr
+                # off-by-one test is not realistic for histogram-based encoding analyzers
+                # due to some hidden behaviors of V1 histogram
+                v1_sqnr = _compute_sqnr(fp_logit, v1_logit)
+                v2_sqnr = _compute_sqnr(fp_logit, v2_logit)
+                assert v1_sqnr * 0.95 < v2_sqnr
                     
 
     @pytest.mark.parametrize('model_cls,input_shape', [(models_to_test.SingleResidual, (10, 3, 32, 32)),

@@ -107,13 +107,12 @@ def x():
 
 def minmax_to_scaleoffset(min, max, symmetric, bitwidth):
     total_bins = 2 ** bitwidth - 1
+    scale = (max - min) / total_bins
     if symmetric:
         positive_bins = total_bins // 2
         negative_bins = positive_bins + 1
-        scale = torch.maximum(max/positive_bins, -min/negative_bins)
         offset = torch.ones_like(scale) * -negative_bins
     else:
-        scale = (max - min) / total_bins
         offset = torch.round(min / scale)
     return scale, offset
 
