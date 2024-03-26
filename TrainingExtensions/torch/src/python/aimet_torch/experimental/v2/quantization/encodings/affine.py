@@ -49,11 +49,12 @@ class AffineEncoding(EncodingBase):
     """
     Encoding object for affine quantization
     """
-    def __init__(self, scale: torch.Tensor, offset: torch.Tensor, bitwidth: int):
+    def __init__(self, scale: torch.Tensor, offset: torch.Tensor, bitwidth: int, signed=False, symmetry=False):
         self._scale = scale
         self._offset = offset
-        self._symmetry = bool(torch.all(offset == - 2 ** (bitwidth - 1)))
+        self._symmetry = symmetry
         self._bitwidth = bitwidth
+        self._signed = signed
 
     @property
     def mapping(self) -> str:
@@ -95,18 +96,34 @@ class AffineEncoding(EncodingBase):
         return 2 ** self.bitwidth - 1
 
     @property
+    def num_negative_steps(self):
+        """
+        Returns the number of negative steps of the quantizer encoding
+        """
+        return self.num_steps - self.num_positive_steps
+
+    @property
+    def num_positive_steps(self):
+        """
+        Returns the number of positive steps of the quantizer encoding
+        """
+        if self._signed:
+            return 2 ** (self.bitwidth - 1) - 1
+        return self.num_steps
+
+    @property
     def min(self) -> torch.Tensor:
         """
         Returns the min value of the quantizer encoding
         """
-        return self.offset / self.scale
+        return (self.offset - self.num_negative_steps) * self.scale
 
     @property
     def max(self) -> torch.Tensor:
         """
         Returns the max value of the quantizer encoding
         """
-        return (self._offset + self.num_steps) / self.scale
+        return (self._offset + self.num_positive_steps) * self.scale
 
     @property
     def symmetry(self) -> bool:
@@ -114,6 +131,13 @@ class AffineEncoding(EncodingBase):
         Returns the symmetry mode of the quantizer encoding
         """
         return self._symmetry
+
+    @property
+    def signed(self) -> bool:
+        """
+        Returns whether the encoding uses signed integer representation
+        """
+        return self._signed
 
     @property
     def bitwidth(self) -> int:
@@ -127,7 +151,7 @@ class AffineEncoding(EncodingBase):
         """
         Returns the dtype of the quantizer encoding
         """
-        if not self.symmetry:
+        if not self._signed:
             if self.bitwidth <= 8:
                 return torch.uint8
             # No torch.uint16

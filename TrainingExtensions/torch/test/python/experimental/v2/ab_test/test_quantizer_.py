@@ -1604,7 +1604,7 @@ class TestQuantizationSimStaticGrad:
         assert 8 == sim.model.conv1.param_quantizers['weight'].bitwidth
 
         # Check that offset is still symmetric
-        assert sim.model.conv1.param_quantizers['weight'].get_offset().item() == -128.0
+        assert sim.model.conv1.param_quantizers['weight'].get_offset().item() == 0
 
         # Change param quantizer to symmetric and new bitwidth
         sim.model.conv1.param_quantizers['weight'].symmetric = False
@@ -1615,7 +1615,7 @@ class TestQuantizationSimStaticGrad:
         assert 4 == sim.model.conv1.param_quantizers['weight'].bitwidth
 
         # Check that offset is not relatively symmetric
-        assert not sim.model.conv1.param_quantizers['weight'].get_offset().item() in [-127, -128]
+        assert not sim.model.conv1.param_quantizers['weight'].get_offset().item() == 0
 
         # Check that mins and maxes have been recomputed
         assert not torch.allclose(asym_min, sym_min)

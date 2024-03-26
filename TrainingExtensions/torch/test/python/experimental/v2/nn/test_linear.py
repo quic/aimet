@@ -181,7 +181,7 @@ class TestFakeQuantizedLinear:
         scale = quant_linear.param_quantizers['weight'].get_scale()
         offset = quant_linear.param_quantizers['weight'].get_offset()
         bitwidth = quant_linear.param_quantizers['weight'].bitwidth
-        weight_qdq = get_backend().quantize_dequantize(weight, scale, offset, bitwidth)
+        weight_qdq = get_backend().quantize_dequantize(weight, scale, offset, bitwidth, signed=True)
 
         expected_output = F.linear(input, weight_qdq, quant_linear.bias)
         assert torch.equal(quant_output, expected_output)
@@ -224,7 +224,7 @@ class TestFakeQuantizedLinear:
         scale = quant_linear.param_quantizers['weight'].get_scale()
         offset = quant_linear.param_quantizers['weight'].get_offset()
         bitwidth = quant_linear.param_quantizers['weight'].bitwidth
-        weight_qdq = get_backend().quantize_dequantize(weight, scale, offset, bitwidth)
+        weight_qdq = get_backend().quantize_dequantize(weight, scale, offset, bitwidth, signed=True)
 
         scale = quant_linear.output_quantizers[0].get_scale()
         offset = quant_linear.output_quantizers[0].get_offset()
