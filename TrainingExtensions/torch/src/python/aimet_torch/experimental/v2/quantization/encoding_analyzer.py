@@ -433,7 +433,18 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
                  asymmetric_delta_candidates=17,
                  symmetric_delta_candidates=101,
                  offset_candidates=21,
+                 max_parallelism=64,
                  gamma=3.0):
+        """
+        :param shape: Shape of calculated encoding
+        :param num_bins: number of bins to use per histogram
+        :param asymmetric_delta_candidates: number of delta values to search over in asymmetric mode
+        :param symmetric_delta_candidates: number of delta values to search over in symmetric mode
+        :param offset_candidates: number of offset values to search over in asymmetric mode
+        :param max_parallelism: maximum number of encodings to process parallely (higher number results in higher
+            memory usage but faster computation)
+        :param gamma: weighting factor on clipping noise (higher value results in less clipping noise)
+        """
         if num_bins <= 0:
             raise ValueError('Number of bins cannot be less than or equal to 0.')
         observer = _HistogramObserver(shape=shape, num_bins=num_bins)
@@ -442,6 +453,7 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         self.sym_delta_candidates = symmetric_delta_candidates
         self.num_offset_candidates = offset_candidates
         self.gamma = gamma
+        self.max_parallelism = max_parallelism
 
     @torch.no_grad()
     def update_stats(self, input_tensor: torch.Tensor) -> _Statistics:
@@ -464,14 +476,20 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
             raise StatisticsNotFoundError('No statistics present to compute encodings.')
         if bitwidth <= 0:
             raise ValueError('Bitwidth cannot be less than or equal to 0.')
-        dtype = stats[0].max.dtype
         num_steps = 2 ** bitwidth - 1
-        test_deltas, test_offsets = self._pick_test_candidates(stats, num_steps, is_symmetric)
-        best_delta, best_offset = self._select_best_candidates(test_deltas, test_offsets, stats, num_steps)
+        chunked_stats = [stats[i:min(i+self.max_parallelism, len(stats))] for i in range(0, len(stats), self.max_parallelism)]
+        best_deltas, best_offsets = [], []
+        for stats_ in chunked_stats:
+            test_deltas, test_offsets = self._pick_test_candidates(stats_, num_steps, is_symmetric)
+            best_delta, best_offset = self._select_best_candidates(test_deltas, test_offsets, stats_, num_steps)
+            best_deltas.append(best_delta)
+            best_offsets.append(best_offset)
+        best_offset = best_offsets[0] if is_symmetric else torch.cat(best_offsets)
+        best_delta = torch.cat(best_deltas)
         min_enc = best_offset * best_delta
         max_enc = min_enc + num_steps * best_delta
-        shape = self.observer.shape
-        return min_enc.view(shape).to(dtype), max_enc.view(shape).to(dtype)
+        return min_enc.view(self.observer.shape).to(stats[0].max.dtype), \
+               max_enc.view(self.observer.shape).to(stats[0].max.dtype)
 
     def _pick_test_candidates(self, stats, num_steps, symmetric):
         # min/max.shape = (num_histograms, )
@@ -591,8 +609,8 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         if gamma != 1.0:
             clipped = torch.logical_or(hist_midpoints_qdq < 0,
                                        hist_midpoints_qdq > num_steps)
-        hist_midpoints_qdq = hist_midpoints_qdq.clamp(0, num_steps).add(test_offsets_bcast).mul(test_deltas_bcast)
-        square_error = (hist_midpoints[:, None, None, :] - hist_midpoints_qdq).pow(2) * hists[:, None, None, :]
+        hist_midpoints_qdq = hist_midpoints_qdq.clamp_(0, num_steps).add_(test_offsets_bcast).mul_(test_deltas_bcast)
+        square_error = hist_midpoints_qdq.sub_(hist_midpoints[:, None, None, :]).pow_(2).mul_(hists[:, None, None, :])
         if gamma != 1.0:
             # Apply the gamma "fudge factor" to the clipped errors
             square_error = torch.where(clipped, square_error * gamma, square_error)
