@@ -37,6 +37,7 @@
 """ Utilities that are used for different AIMET PyTorch features """
 
 import importlib
+import inspect
 import itertools
 from typing import List, Tuple, Union, Dict, Callable, Any, Iterable
 import contextlib
@@ -708,7 +709,7 @@ def nested_map(data, fn: Callable[[torch.Tensor], torch.Tensor]):
             key: nested_map(value, fn) for key, value in data.items()
         }
 
-    logger.warning('unexpected input type=%s, expecting torch.Tensor, tuple, list, or dict. skipping..', type(data))
+    logger.debug('unexpected input type=%s, expecting torch.Tensor, tuple, list, or dict. skipping..', type(data))
     return data
 
 
@@ -980,7 +981,31 @@ def get_named_module(model, name):
     return functools.reduce(getattr, name.split("."), model)
 
 
-def cache_intermediate_datasets(cached_dataset, cache_on_cpu, model, module_name, forward_fn, path=None):
+def add_foward_fn_kwargs_to_inputs(module: torch.nn.Module, *args: Tuple[Any], **kwargs: Dict[str, Any]) -> Tuple[Any]:
+    """
+    flattens input in the format of '*args, **kwargs' to tuple along with adding defaults when value not provided.
+    :param module: torch module corresponding to the input provided
+    :return: input as tuple.
+    """
+    add_args = []
+    parameter_defaults = inspect.signature(module.forward).parameters
+    param_keys = list(parameter_defaults.keys())
+    if param_keys[0] == "self":
+        param_keys = param_keys[1:]
+    for k in param_keys[len(args):]: # capture additional args with either kwargs or defaults
+        if k in kwargs:
+            add_args.append(kwargs[k])
+        else:
+            default = parameter_defaults[k]
+            if default != inspect.Parameter.empty:
+                add_args.append(default)
+            else:
+                ValueError(f'no value provided for kwarg={k}, which has no defaults')
+    return tuple([*args, *add_args])
+
+
+def cache_intermediate_datasets(
+        cached_dataset, cache_on_cpu, model, module_name, forward_fn, path=None, incl_kwargs: bool = False):
     """
     Cache the input tensor of the target module and save to CPU or disk for latter usage
     :param cached_dataset: Cached dataset
@@ -989,21 +1014,29 @@ def cache_intermediate_datasets(cached_dataset, cache_on_cpu, model, module_name
     :param module_name: Name of the target module
     :param forward_fn: Forward function that performs forward pass given a model and inputs
     :param path: Location to save cached data if caching to dick
+    :param incl_kwargs: if True, capture kwargs, normalize and attach to inputs.
     :return: Cached data on CPU
     """
     # pylint: disable=cell-var-from-loop
     cached_data = []
-
+    module = get_named_module(model, module_name)
     iterator = iter(cached_dataset)
     for idx in range(len(cached_dataset)):
         def fn(_, inputs):
+            if incl_kwargs:
+                module_forward_fn = inspect.currentframe().f_back
+                assert inspect.getframeinfo(module_forward_fn).function == '_call_impl'  # forward function proxy
+                kwargs = module_forward_fn.f_locals['kwargs']
+                if kwargs:
+                    inputs = add_foward_fn_kwargs_to_inputs(module, *inputs, **kwargs)
+
             inputs = [*inputs]
             if cache_on_cpu:
-                cached_data.append([inp.cpu() for inp in inputs])
+                cached_data.append(change_tensor_device_placement(inputs, torch.device('cpu')))
             else:
                 save_to_cache(inputs, path, idx)
             raise StopForwardException
-        handle = get_named_module(model, module_name).register_forward_pre_hook(fn)
+        handle = module.register_forward_pre_hook(fn)
         data = next(iterator)
         try:
             with in_eval_mode(model), torch.no_grad():

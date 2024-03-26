@@ -215,26 +215,47 @@ class SplittableModel(torch.nn.Module):
         x = self.fc(x)
         return x
 
-
-def save_config_file_for_checkpoints():
-    checkpoints_config = {
-        "grouped_modules": {
-            "0": ["conv1", "bn1", "relu1", "maxpool"],
-            "1": ["conv2", "bn2", "relu2"],
-            "2": ["conv3", "relu3", "avgpool"],
-            "3": ["conv4", "flatten", "fc"],
-        },
-        "include_static_inputs": [
-            "False",
-            "False",
-            "False",
-            "False"
-        ],
-        "cache_on_cpu": "False"
-    }
-
-    with open('./test_checkpoints.json', 'w') as f:
+def save_config_file_for_checkpoints(checkpoints_config, config_file):
+    with open(config_file, 'w') as f:
         json.dump(checkpoints_config, f)
+
+
+class TwoConvModel(torch.nn.Module):
+    """ Use this model for unit testing purposes. Expect input shape (1, 3, 32, 32) """
+
+    def __init__(self):
+        super(TwoConvModel, self).__init__()
+        self.conv1 = torch.nn.Conv2d(4, 4, kernel_size=1, bias=False)
+        self.relu = torch.nn.ReLU(inplace=True)
+        self.conv2 = torch.nn.Conv2d(4, 4, kernel_size=1, bias=False)
+
+    def forward(self, *inputs):
+        #return self.conv1(inputs[0])
+        #return self.relu(self.conv1(inputs[0]))
+        x = self.conv1(inputs[0])
+        x =  self.relu(x)
+        return self.conv2(x)
+
+
+class MultiBlockModel(torch.nn.Module):
+    """ Use this model for unit testing purposes. Expect input shape (1, 3, 32, 32) """
+
+    def __init__(self):
+        super(MultiBlockModel, self).__init__()
+        self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=1, bias=False)
+        self.block1 = TwoConvModel()
+        self.conv2 = torch.nn.Conv2d(4, 4, kernel_size=1, bias=False)
+        self.relu = torch.nn.ReLU(inplace=True)
+        self.block2 = TwoConvModel()
+        self.conv3 = torch.nn.Conv2d(4, 4, kernel_size=1, bias=False)
+
+    def forward(self, *inputs):
+        x = self.conv1(inputs[0])
+        x = self.block1(x)
+        x = self.conv2(x)
+        x = self.relu(x)
+        x = self.block2(x)
+        return self.conv3(x)
 
 class TestAdaround:
     """
@@ -294,10 +315,90 @@ class TestAdaround:
 
         params = AdaroundParameters(data_loader=data_loader, num_batches=1, default_num_iterations=5,
                                     forward_fn=dummy_fwd)
-        save_config_file_for_checkpoints()
+        checkpoints_config = {
+            "grouped_modules": {
+                "0": ["conv1", "bn1", "relu1", "maxpool"],
+                "1": ["conv2", "bn2", "relu2"],
+                "2": ["conv3", "relu3", "avgpool"],
+                "3": ["conv4", "flatten", "fc"],
+            },
+            "include_static_inputs": [
+                "False",
+                "False",
+                "False",
+                "False"
+            ],
+            "cache_on_cpu": "False"
+        }
+        config_file = "./test_checkpoints.json"
+        save_config_file_for_checkpoints(checkpoints_config, config_file)
         ada_rounded_model = Adaround.apply_adaround(model, inp_tensor_list, params, './', 'dummy')
         ada_rounded_model_ckpts = Adaround.apply_adaround_with_cache(model, inp_tensor_list, params, './', 'dummy_checkpoints',
-                                                                     checkpoints_config="./test_checkpoints.json")
+                                                                     checkpoints_config=config_file)
+
+        for (name, param), (name_ckpts, param_ckpts) in zip(ada_rounded_model.named_parameters(),
+                                                            ada_rounded_model_ckpts.named_parameters()):
+            assert name == name_ckpts
+            assert torch.equal(param, param_ckpts)
+
+        # Test export functionality
+        with open('./dummy.encodings') as json_file:
+            encoding_data = json.load(json_file)
+            print(encoding_data)
+
+        with open('./dummy_checkpoints.encodings') as json_file:
+            encoding_data_ckpts = json.load(json_file)
+            print(encoding_data_ckpts)
+
+        assert list(encoding_data.keys()) == list(encoding_data_ckpts.keys())
+
+        for key in list(encoding_data.keys()):
+            enc = encoding_data[key][0]
+            enc_ckpts = encoding_data_ckpts[key][0]
+            assert list(enc.keys()) == list(enc_ckpts.keys())
+            # Check all encodings are match
+            for k in list(enc.keys()):
+                assert enc[k] == enc_ckpts[k]
+
+        # Delete encodings files and checkpoint config json file
+        if os.path.exists("./dummy.encodings"):
+            os.remove("./dummy.encodings")
+        if os.path.exists("./dummy_checkpoints.encodings"):
+            os.remove("./dummy_checkpoints.encodings")
+        if os.path.exists("./test_checkpoints.json"):
+            os.remove("./test_checkpoints.json")
+
+    def test_adaround_with_disjoint_checkpoints_config(self):
+        """ Test disjoint checkpoint for two blocks model """
+        def dummy_fwd(model, inputs):
+            return model(*inputs) if isinstance(inputs, (list, tuple)) else model(inputs)
+        torch.manual_seed(10)
+
+        # create fake data loader with image size (3, 32, 32)
+        data_loader = create_fake_data_loader(dataset_size=1, batch_size=1, image_size=(3, 32, 32))
+
+        net = MultiBlockModel().eval()
+        model = net.to(torch.device('cpu'))
+
+        input_shape = (1, 3, 32, 32)
+
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape, get_device(model))
+
+        params = AdaroundParameters(data_loader=data_loader, num_batches=1, default_num_iterations=5,
+                                    forward_fn=dummy_fwd)
+        checkpoints_config = {
+            "checkpoint_type": "disjoint",
+            "cached_blocks": [
+                "block1",
+                "block2"
+            ],
+            "cache_on_cpu": "False"
+        }
+        config_file ='./disjoint_checkpoints.json'
+        save_config_file_for_checkpoints(checkpoints_config, config_file)
+        ada_rounded_model = Adaround.apply_adaround(model, inp_tensor_list, params, './', 'dummy')
+        ada_rounded_model_ckpts = Adaround.apply_adaround_with_cache(model, inp_tensor_list, params, './', 'dummy_checkpoints',
+                                                                     checkpoints_config=config_file)
 
         for (name, param), (name_ckpts, param_ckpts) in zip(ada_rounded_model.named_parameters(),
                                                             ada_rounded_model_ckpts.named_parameters()):
