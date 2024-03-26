@@ -49,7 +49,7 @@ def _validate_arguments(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
     if not _is_expandable(scale.shape, tensor.shape):
         raise RuntimeError(f"Scale of shape {scale.shape} cannot be expanded like input tensor of shape {tensor.shape}")
 
-def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int]) -> torch.Tensor:
+def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int], signed: bool = False) -> torch.Tensor:
     """
     Performs differentiable quantization on tensor using scale, offset, and bitwidth parameters.
 
@@ -60,9 +60,9 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bi
     :return: Resulting tensor
     """
     _validate_arguments(tensor, scale, offset, bitwidth)
-    return QuantizeFunc.apply(tensor, scale, offset, bitwidth)
+    return QuantizeFunc.apply(tensor, scale, offset, bitwidth, signed)
 
-def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int]) -> torch.Tensor:
+def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int], signed: bool = False) -> torch.Tensor:
     """
     Performs differentiable quantize-dequantize operation on tensor using scale, offset, and bitwidth parameters.
 
@@ -73,7 +73,7 @@ def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
     :return: Resulting tensor
     """
     _validate_arguments(tensor, scale, offset, bitwidth)
-    return QuantDequantFunc.apply(tensor, scale, offset, bitwidth)
+    return QuantDequantFunc.apply(tensor, scale, offset, bitwidth, signed)
 
 def dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor) -> torch.Tensor:
     """
@@ -95,17 +95,21 @@ class QuantizeFunc(torch.autograd.Function):
     """
     # pylint: disable=arguments-differ
     @staticmethod
-    def forward(ctx, tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int]):
+    def forward(ctx, tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int], signed):
+        if signed:
+            clip_min, clip_max = - 2 ** (bitwidth - 1), 2 ** (bitwidth - 1) - 1
+        else:
+            clip_min, clip_max = 0, 2 ** bitwidth - 1
         x_round = torch.round(tensor / scale) - offset
         if tensor.requires_grad or scale.requires_grad or offset.requires_grad:
-            mask = (x_round >= 0) * (x_round <= (2 ** bitwidth - 1))
+            mask = (x_round >= clip_min) * (x_round <= clip_max)
         else:
             mask = None
         ctx.tensor_requires_grad = tensor.requires_grad
         ctx.scale_requires_grad = scale.requires_grad
         ctx.offset_requires_grad = offset.requires_grad
         ctx.save_for_backward(tensor, scale, mask)
-        return torch.clamp(x_round, 0, 2 ** bitwidth - 1)
+        return torch.clamp(x_round, clip_min, clip_max)
 
     # pylint: disable=arguments-differ
     @staticmethod
@@ -116,7 +120,7 @@ class QuantizeFunc(torch.autograd.Function):
         tensor_grad = masked_grad / scale if ctx.tensor_requires_grad else None
         scale_grad = -masked_grad * tensor / scale / scale if ctx.scale_requires_grad else None
         offset_grad = -masked_grad if ctx.offset_requires_grad else None
-        return tensor_grad, scale_grad, offset_grad, None
+        return tensor_grad, scale_grad, offset_grad, None, None
 
 
 # pylint: disable=abstract-method
@@ -153,18 +157,22 @@ class QuantDequantFunc(torch.autograd.Function):
     """
     # pylint: disable=arguments-differ
     @staticmethod
-    def forward(ctx, tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int]):
+    def forward(ctx, tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int], signed):
+        if signed:
+            clip_min, clip_max = - 2 ** (bitwidth - 1), 2 ** (bitwidth - 1) - 1
+        else:
+            clip_min, clip_max = 0, 2 ** bitwidth - 1
         x_round = torch.round(tensor / scale) - offset
-        x_quant = torch.clamp(x_round, 0, 2 ** bitwidth - 1)
+        x_quant = torch.clamp(x_round, clip_min, clip_max)
         if tensor.requires_grad or scale.requires_grad or offset.requires_grad:
-            mask = (x_round >= 0) * (x_round <= (2 ** bitwidth - 1))
+            mask = (x_round >= clip_min) * (x_round <= clip_max)
         else:
             mask = None
         x_dequant = (x_quant + offset) * scale
 
         # Downcast x_quant if bitwidth is less than or equal to 8 to reduce memory consumption
         if bitwidth <= 8:
-            x_quant = x_quant.to(dtype=torch.uint8)
+            x_quant = x_quant.to(dtype=torch.uint8) if not signed else x_quant.to(torch.int8)
 
         ctx.tensor_requires_grad = tensor.requires_grad
         ctx.scale_requires_grad = scale.requires_grad
@@ -181,4 +189,4 @@ class QuantDequantFunc(torch.autograd.Function):
         scale_grad = grad * (x_quant + offset - mask * tensor / scale) \
             if ctx.scale_requires_grad else None
         offset_grad = -grad * (mask * scale - scale) if ctx.offset_requires_grad else None
-        return tensor_grad, scale_grad, offset_grad, None
+        return tensor_grad, scale_grad, offset_grad, None, None

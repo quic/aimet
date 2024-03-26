@@ -169,7 +169,7 @@ class TestTrueQuantLinear:
         weight_enc = (quant_linear.param_quantizers["weight"].get_scale(),
                       quant_linear.param_quantizers["weight"].get_offset(),
                       quant_linear.param_quantizers["weight"].bitwidth)
-        weight_qdq = get_backend().quantize_dequantize(quant_linear.weight, *weight_enc)
+        weight_qdq = get_backend().quantize_dequantize(quant_linear.weight, *weight_enc, signed=True)
         output_expected = F.linear(input, weight_qdq, bias=quant_linear.bias)
         assert torch.equal(output, output_expected)
 
