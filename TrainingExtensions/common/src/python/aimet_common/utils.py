@@ -48,7 +48,7 @@ import subprocess
 import threading
 import time
 from enum import Enum
-from typing import Callable
+from typing import Callable, Dict, List
 
 import yaml
 from tqdm import tqdm
@@ -432,3 +432,24 @@ class Handle:
 
     def __exit__(self, *_):
         self.remove()
+
+
+def convert_configs_values_to_bool(dictionary: Dict):
+    """
+    Recursively traverse all key value pairs in dictionary and set any string values representing booleans to
+    booleans.
+    :param dictionary: Dictionary to set values to True or False if applicable
+    """
+    for key, value in dictionary.items():
+        if value == 'True':
+            dictionary[key] = True
+        elif value == 'False':
+            dictionary[key] = False
+        elif isinstance(value, List):
+            for item in value:
+                if isinstance(item, Dict):
+                    convert_configs_values_to_bool(item)
+        elif isinstance(value, Dict):
+            convert_configs_values_to_bool(value)
+        else:
+            pass

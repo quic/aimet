@@ -42,7 +42,7 @@ from typing import Dict, List, Union
 from jsonschema import validate
 
 from aimet_common.quantsim_config.quantsim_config_schema import QUANTSIM_CONFIG_SCHEMA
-from aimet_common.utils import AimetLogger
+from aimet_common.utils import AimetLogger, convert_configs_values_to_bool
 from aimet_common.defs import QuantizationDataType
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -105,7 +105,7 @@ class JsonConfigImporter:
                 raise RuntimeError('Error parsing json config file') from e
 
         _validate_syntax(quantsim_configs)
-        _convert_configs_values_to_bool(quantsim_configs)
+        convert_configs_values_to_bool(quantsim_configs)
         _convert_dtype_to_quantization_data_type(quantsim_configs)
         _validate_semantics(quantsim_configs)
         return quantsim_configs
@@ -185,25 +185,6 @@ def _validate_semantics(quantsim_config: ConfigDictType):
             logger.error('IS_OUTPUT_QUANTIZED for model output can only be set to True')
             raise NotImplementedError('IS_OUTPUT_QUANTIZED for model output can only be set to True')
 
-def _convert_configs_values_to_bool(dictionary: Dict):
-    """
-    Recursively traverse all key value pairs in dictionary and set any string values representing booleans to
-    booleans.
-    :param dictionary: Dictionary to set values to True or False if applicable
-    """
-    for key, value in dictionary.items():
-        if value == 'True':
-            dictionary[key] = True
-        elif value == 'False':
-            dictionary[key] = False
-        elif isinstance(value, List):
-            for item in value:
-                if isinstance(item, Dict):
-                    _convert_configs_values_to_bool(item)
-        elif isinstance(value, Dict):
-            _convert_configs_values_to_bool(value)
-        else:
-            pass
 
 def _convert_str_to_quantization_data_type_helper(supported_kernels: List):
     """

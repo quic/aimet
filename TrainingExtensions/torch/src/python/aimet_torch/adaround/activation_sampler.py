@@ -36,15 +36,14 @@
 # =============================================================================
 
 """ Sample input to quantized wrapper module and output from original module for Adaround feature """
-
-from typing import Tuple, Union, List, Callable, Any, Dict
+from typing import Tuple, Union, List, Callable, Any, Dict, Type, Optional
 import torch
 from torch.utils.data import Dataset
 
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger
 from aimet_torch.utils import CachedDataset, ModuleData, get_named_module, cache_intermediate_datasets,\
-    change_tensor_device_placement, in_eval_mode, save_to_cache
+    change_tensor_device_placement, in_eval_mode, save_to_cache, get_ordered_list_of_modules
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch.quantsim import QuantizationSimModel
 
@@ -77,8 +76,10 @@ def create_modulelist_for_group_modules(model: torch.nn.Module, sim: Quantizatio
 
 def get_block_inputs(model: torch.nn.Module, sim: QuantizationSimModel,
                      breakpoint_module_name: str, cached_dataset: CachedDataset,
-                     cache_on_cpu: bool, forward_fn: Callable, num_batches: int, working_dir: str)\
+                     cache_on_cpu: bool, forward_fn: Callable, num_batches: int, working_dir: str,
+                     incl_kwargs: bool = False) \
         -> Union[Tuple[List, List], Tuple[CachedDataset, CachedDataset]]:
+    # pylint: disable=too-many-arguments
     """
     Get inputs to block/module from FP32 and QuantizationSimModel models
 
@@ -92,21 +93,23 @@ def get_block_inputs(model: torch.nn.Module, sim: QuantizationSimModel,
       as second argument.
     :param num_batches: Number of batches
     :param working_dir: Working to directory to save block inputs data to disk
+    :param incl_kwargs: if True, capture kwargs, normalize and attach to inputs.
     :return: Inputs to block from FP32 and QuantizationSimModel models
     """
     # Cache input data to first block from both FP32 and quant models
     if cache_on_cpu:
         cached_fp_dataset = cache_intermediate_datasets(cached_dataset, cache_on_cpu, model,
-                                                        breakpoint_module_name, forward_fn)
+                                                        breakpoint_module_name, forward_fn, incl_kwargs=incl_kwargs)
         cached_quant_dataset = cache_intermediate_datasets(cached_dataset, cache_on_cpu,
-                                                           sim.model, breakpoint_module_name, forward_fn)
+                                                           sim.model, breakpoint_module_name, forward_fn,
+                                                           incl_kwargs=incl_kwargs)
     else:
         fp32_cache_path = working_dir + 'fp32/'
         quant_cache_path = working_dir + 'quant/'
         cache_intermediate_datasets(cached_dataset, cache_on_cpu, model, breakpoint_module_name,
-                                    forward_fn, fp32_cache_path)
+                                    forward_fn, fp32_cache_path, incl_kwargs=incl_kwargs)
         cache_intermediate_datasets(cached_dataset, cache_on_cpu, sim.model, breakpoint_module_name,
-                                    forward_fn, quant_cache_path)
+                                    forward_fn, quant_cache_path, incl_kwargs=incl_kwargs)
         cached_fp_dataset = CachedDataset(None, num_batches, fp32_cache_path)
         cached_quant_dataset = CachedDataset(None, num_batches, quant_cache_path)
     return cached_fp_dataset, cached_quant_dataset
@@ -253,3 +256,46 @@ class ActivationSampler:
                                                                            collect_input=False,
                                                                            collect_output=True)
         return inp_data, out_data
+
+def create_cached_block_schedule_list(model: torch.nn.Module, dummy_input, block_names: List[str], supported_modules: Tuple[Type]) \
+        -> List[Tuple[Optional[Tuple[torch.nn.Module, str]], List[Tuple[str, torch.nn.Module]]]]:
+    """
+    Creates a schedule for modules with corresponding block if applicable.
+
+    :param model: Original FP model.
+    :param dummy_input: Model inputs.
+    :param block_names: List of block names to generate caching point.
+    :param supported_modules: module types that can be adaround'ed.
+    :return: Schedule list containing tuple of group (if True) and order modules in sequence of forward pass.
+    """
+    # pylint: disable=too-many-locals
+    modules = get_ordered_list_of_modules(model, dummy_input)
+    modules = [m for m in modules if isinstance(m[1], supported_modules)]
+    caching_modules = {module: {'block': None, 'name': name} for name, module in modules}
+
+    for name in block_names:
+        parent_module: torch.nn.Module = get_named_module(model, name)
+        for _, module in parent_module.named_modules():
+            if module in caching_modules:
+                module_name = caching_modules[module]['name']
+                caching_modules[module].update(
+                    {
+                        'block':(name, parent_module),
+                        'name': module_name[len(name)+1:]
+                    })
+
+    block_list = []
+    block = None
+    for module, value in caching_modules.items():
+        block_module = value['block']
+        name_module_pair = [value['name'], module]
+        if block is None: # init ?
+            block = (block_module, [name_module_pair])
+        elif block[0] != block_module: # end of block ?
+            block_list.append(block)
+            block = (block_module, [name_module_pair])
+        else:
+            block[1].append(name_module_pair)
+    block_list.append(block) # last block
+
+    return block_list
