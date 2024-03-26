@@ -354,7 +354,8 @@ def test_qdq_forward(quantize_dequantize: QuantizeDequantize, x: torch.Tensor):
     expected_output = get_backend().quantize_dequantize(x,
                                                         quantize_dequantize.get_scale(),
                                                         quantize_dequantize.get_offset(),
-                                                        quantize_dequantize.bitwidth)
+                                                        quantize_dequantize.bitwidth,
+                                                        quantize_dequantize._signed)
     assert torch.allclose(output, expected_output)
 
 

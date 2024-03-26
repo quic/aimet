@@ -49,10 +49,10 @@ class AffineEncoding(EncodingBase):
     """
     Encoding object for affine quantization
     """
-    def __init__(self, scale: torch.Tensor, offset: torch.Tensor, bitwidth: int, signed=False):
+    def __init__(self, scale: torch.Tensor, offset: torch.Tensor, bitwidth: int, signed=False, symmetry=False):
         self._scale = scale
         self._offset = offset
-        self._symmetry = bool(torch.all(offset == 0))
+        self._symmetry = symmetry
         self._bitwidth = bitwidth
         self._signed = signed
 

@@ -130,7 +130,7 @@ class AffineQuantizerBase(QuantizerBase):
         Return the quantizer's encodings as an AffineEncoding object
         """
         if self.is_initialized():
-            return AffineEncoding(self.get_scale(), self.get_offset(), self.bitwidth, self._signed)
+            return AffineEncoding(self.get_scale(), self.get_offset(), self.bitwidth, self._signed, self._symmetric)
         return None
 
     @torch.no_grad()

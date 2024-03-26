@@ -85,7 +85,7 @@ class TestAffineEncoding:
         """
         bitwidth = 8
         offset = torch.tensor(0)
-        encoding = AffineEncoding(scale, offset, bitwidth=bitwidth, signed=True)
+        encoding = AffineEncoding(scale, offset, bitwidth=bitwidth, signed=True, symmetry=True)
         assert encoding.min == -128
         assert encoding.max == 127
         assert encoding.offset == 0
@@ -106,7 +106,7 @@ class TestAffineEncoding:
         bitwidth = 8
         offset = torch.tensor(0)
         scale = torch.tensor(0.5)
-        encoding = AffineEncoding(scale, offset, bitwidth=bitwidth, signed=False)
+        encoding = AffineEncoding(scale, offset, bitwidth=bitwidth, signed=False, symmetry=True)
         assert encoding.min == 0
         assert encoding.max == 255.0/2
         assert encoding.offset == 0
