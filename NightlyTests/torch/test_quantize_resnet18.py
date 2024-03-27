@@ -61,7 +61,7 @@ from aimet_torch.model_preparer import prepare_model
 two_class_image_dir = './data/tiny-imagenet-2'
 image_size = 224
 batch_size = 50
-num_workers = 1
+num_workers = 0
 
 
 def _get_data_loader():
