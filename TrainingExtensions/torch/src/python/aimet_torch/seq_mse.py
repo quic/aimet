@@ -83,8 +83,8 @@ class SeqMseParams:
 
     :param num_batches: Number of batches.
     :param num_candidates: Number of candidates to perform grid search. Default 20.
-    :param inp_symmetry: Input symmetry. Default 'symqt'.
-    :param loss_fn: Loss function. Default 'mse'.
+    :param inp_symmetry: Input symmetry. Available options are 'asym', 'symfp' and 'symqt'. Default 'symqt'.
+    :param loss_fn: Loss function. Available options are 'mse', 'l1' and 'sqnr'. Default 'mse'.
     :param forward_fn: Optional adapter function that performs forward pass given a model and inputs
      yielded from the data loader. The function expects model as first argument and inputs to model as second argument.
     """
@@ -411,6 +411,7 @@ def optimize_module(quant_module: QcQuantizeWrapper,
             total_loss.append(loss)
 
     best_indices = torch.stack(total_loss).min(0, keepdim=True)[1]
+    _logger.debug("Indices of optimal candidate: %s", best_indices.squeeze(0)[:params.num_candidates].tolist())
     best_max = torch.stack([cand_max for cand_max, _ in candidates]).gather(0, best_indices)[0]
     best_min = torch.stack([cand_min for _, cand_min in candidates]).gather(0, best_indices)[0]
 
@@ -463,7 +464,7 @@ def compute_outputs(quant_module: QcQuantizeWrapper,
 
 def compute_recon_loss(xqwq: torch.Tensor, xw: torch.Tensor, params: SeqMseParams):
     """
-    Compute reconsturction loss
+    Compute reconsturction loss and return the sum by reducing over all the dimensions except last channel dimension.
 
     :param xqwq: X^Q^ quantized-dequantized values
     :param xw: XW FP32 values
@@ -474,9 +475,15 @@ def compute_recon_loss(xqwq: torch.Tensor, xw: torch.Tensor, params: SeqMseParam
         loss_fn = functional.mse_loss
     elif params.loss_fn == "l1":
         loss_fn = functional.l1_loss
-    else:
+    elif params.loss_fn == "sqnr":
         loss_fn = neg_sqnr
-    loss = loss_fn(xqwq, xw, reduction="none").sum((0, 1))
+    else:
+        raise ValueError(f"Loss function '{params.loss_fn}' is not supported.")
+
+    channel_dim = xqwq.shape[-1]
+    xqwq = xqwq.reshape(-1, channel_dim)
+    xw = xw.reshape(-1, channel_dim)
+    loss = loss_fn(xqwq, xw, reduction="none").sum(0)
     return loss
 
 
@@ -492,8 +499,8 @@ def neg_sqnr(pred: torch.Tensor, target: torch.Tensor, eps=1e-10, reduction="non
     """
     # pylint: disable=unused-argument
     quant_error = target - pred
-    exp_noise = torch.mean(quant_error ** 2, (0, 1), keepdim=True) + eps
-    exp_signal = torch.mean(target ** 2, (0, 1), keepdim=True)
+    exp_noise = torch.mean(quant_error ** 2, 0, keepdim=True) + eps
+    exp_signal = torch.mean(target ** 2, 0, keepdim=True)
     sqnr = exp_signal / exp_noise
     sqnr_db = 10 * torch.log10(sqnr)
     return -sqnr_db

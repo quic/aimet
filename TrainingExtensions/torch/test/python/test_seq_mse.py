@@ -150,7 +150,8 @@ class TestSeqMse:
 
     @pytest.mark.parametrize("enable_pcq", [True, False])
     @pytest.mark.parametrize("param_bw", [2, 31])
-    def test_optimize_module_linear(self, enable_pcq, param_bw):
+    @pytest.mark.parametrize("loss_fn", ['mse', 'l1', 'sqnr'])
+    def test_optimize_module_linear(self, enable_pcq, param_bw, loss_fn):
         """ test optimize module for linear """
         torch.manual_seed(0)
         linear = torch.nn.Linear(64, 128)
@@ -165,7 +166,7 @@ class TestSeqMse:
         wrapper.param_quantizers['weight'].update_encoding_stats(wrapper.weight.data)
         wrapper.param_quantizers['weight'].compute_encoding()
         before = wrapper.param_quantizers['weight'].encoding
-        params = SeqMseParams(num_batches=32)
+        params = SeqMseParams(num_batches=32, loss_fn=loss_fn)
         optimize_module(wrapper, xq, xq, params)
         after = wrapper.param_quantizers['weight'].encoding
 
@@ -188,7 +189,7 @@ class TestSeqMse:
 
     @pytest.mark.cuda()
     @pytest.mark.parametrize("inp_symmetry", ['asym', 'symfp', 'symqt'])
-    @pytest.mark.parametrize("loss_fn", ['mse', 'l1', 'aa'])
+    @pytest.mark.parametrize("loss_fn", ['mse', 'l1', 'sqnr'])
     def test_apply_seq_mse(self, unlabeled_data_loader, inp_symmetry, loss_fn):
         """ test apply_seq_mse end-to-end """
         torch.manual_seed(0)
@@ -207,7 +208,7 @@ class TestSeqMse:
         assert enc_before.delta == enc_after.delta
 
     @pytest.mark.parametrize("inp_symmetry", ['asym', 'symfp', 'symqt'])
-    @pytest.mark.parametrize("loss_fn", ['mse', 'l1', 'aa'])
+    @pytest.mark.parametrize("loss_fn", ['mse', 'l1', 'sqnr'])
     def test_seq_mse_with_and_without_checkpoints_config(self, inp_symmetry, loss_fn):
         """ test apply_seq_mse end-to-end with and without checkpoints configs """
         torch.manual_seed(0)
