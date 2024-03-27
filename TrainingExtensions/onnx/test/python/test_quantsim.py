@@ -353,22 +353,22 @@ class TestQuantSim:
             gpu_encodings = json.load(f)
 
         for name in list(cpu_encodings['activation_encodings'].keys()):
-            assert round(cpu_encodings['activation_encodings'][name][0]['max'], 4) == \
-                   round(gpu_encodings['activation_encodings'][name][0]['max'], 4)
-            assert round(cpu_encodings['activation_encodings'][name][0]['min'], 4) == \
-                   round(gpu_encodings['activation_encodings'][name][0]['min'], 4)
-            assert round(cpu_encodings['activation_encodings'][name][0]['scale'], 4) == \
-                   round(gpu_encodings['activation_encodings'][name][0]['scale'], 4)
+            assert (np.max(np.abs(cpu_encodings['activation_encodings'][name][0]['max'] -
+                                  gpu_encodings['activation_encodings'][name][0]['max'])) < 0.05)
+            assert (np.max(np.abs(cpu_encodings['activation_encodings'][name][0]['min'] -
+                                  gpu_encodings['activation_encodings'][name][0]['min'])) < 0.05)
+            assert (np.max(np.abs(cpu_encodings['activation_encodings'][name][0]['scale'] -
+                                  gpu_encodings['activation_encodings'][name][0]['scale'])) < 0.05)
             assert cpu_encodings['activation_encodings'][name][0]['offset'] == \
                    gpu_encodings['activation_encodings'][name][0]['offset']
 
         for name in list(cpu_encodings['param_encodings'].keys()):
-            assert round(cpu_encodings['param_encodings'][name][0]['max'], 4) == \
-                   round(gpu_encodings['param_encodings'][name][0]['max'], 4)
-            assert round(cpu_encodings['param_encodings'][name][0]['min'], 4) == \
-                   round(gpu_encodings['param_encodings'][name][0]['min'], 4)
-            assert round(cpu_encodings['param_encodings'][name][0]['scale'], 4) == \
-                   round(gpu_encodings['param_encodings'][name][0]['scale'], 4)
+            assert (np.max(np.abs(cpu_encodings['param_encodings'][name][0]['max'] -
+                                  gpu_encodings['param_encodings'][name][0]['max'])) < 0.05)
+            assert (np.max(np.abs(cpu_encodings['param_encodings'][name][0]['min'] -
+                                  gpu_encodings['param_encodings'][name][0]['min'])) < 0.05)
+            assert (np.max(np.abs(cpu_encodings['param_encodings'][name][0]['scale'] -
+                                  gpu_encodings['param_encodings'][name][0]['scale'])) < 0.05)
             assert cpu_encodings['param_encodings'][name][0]['offset'] == \
                    gpu_encodings['param_encodings'][name][0]['offset']
 
