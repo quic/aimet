@@ -45,11 +45,11 @@ import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
 from aimet_torch.quantsim import QuantizationSimModel
-from aimet_torch.qc_quantize_op import QcQuantizeWrapper
+from aimet_torch.qc_quantize_op import QcQuantizeWrapper, StaticGridQuantWrapper
 from models.test_models import TinyModel
 from aimet_torch.utils import create_fake_data_loader
 from aimet_torch.adaround.activation_sampler import ActivationSampler
-from aimet_torch.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer
+from aimet_torch.adaround.adaround_wrapper import AdaroundWrapper
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
@@ -125,9 +125,9 @@ class TestAdaroundActivationSampler(unittest.TestCase):
 
     def test_adaround_tensor_quantizer(self):
         """ Test the Adarounding of a Tensor """
-        weight_tensor = torch.randn(1, 3, 64, 64)
-        ada_quantizer = AdaroundTensorQuantizer(bitwidth=4, round_mode='Adaptive', quant_scheme=QuantScheme.post_training_tf_enhanced,
-                                                use_symmetric_encodings=True, enabled_by_default=True, channel_axis=0)
+        modules_to_test = [torch.nn.Linear(12, 8),
+                          torch.nn.Conv2d(12, 8, 3),
+                          torch.nn.ConvTranspose2d(12, 8, 3)]
 
         nearest_encoding = libpymo.TfEncoding()
         nearest_encoding.bw = 4
@@ -135,7 +135,12 @@ class TestAdaroundActivationSampler(unittest.TestCase):
         nearest_encoding.min = 0.19699306
         nearest_encoding.offset = -127.0
         nearest_encoding.delta = 0.001551126479
-        ada_quantizer.encoding = nearest_encoding
 
-        ada_quantized = ada_quantizer.quantize_dequantize(weight_tensor, 'Adaptive')
-        self.assertFalse(torch.equal(weight_tensor, ada_quantized))
+        for module in modules_to_test:
+            with self.subTest(module):
+                weight_tensor = torch.randn(module.weight.shape)
+                wrapper = StaticGridQuantWrapper(module, weight_bw=4, activation_bw=4, round_mode='nearest', quant_scheme=QuantScheme.post_training_tf_enhanced)
+                wrapper.param_quantizers['weight'].encoding = nearest_encoding
+                ada_wrapper = AdaroundWrapper(wrapper)
+                ada_quantized = ada_wrapper.apply_adaround(weight_tensor)
+                self.assertFalse(torch.equal(weight_tensor, ada_quantized))
