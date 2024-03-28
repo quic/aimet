@@ -338,6 +338,13 @@ def run_hook_for_layers_with_given_input(model: torch.nn.Module,
             else:
                 if isinstance(input_tensor, (list, tuple)):
                     _ = model(*input_tensor)
+                elif isinstance(input_tensor, dict):
+                    try:
+                        _ = model(**input_tensor)
+                    except TypeError:
+                        # Some models require inputs as dict.
+                        # https://github.com/pytorch/vision/blob/ef2920cc80bac61282b3b19a775b3c33de4e7551/torchvision/ops/feature_pyramid_network.py#L172
+                        _ = model(input_tensor)
                 else:
                     _ = model(input_tensor)
 
