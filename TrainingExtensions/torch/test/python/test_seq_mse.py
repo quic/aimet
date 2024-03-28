@@ -85,7 +85,7 @@ def save_config_file_for_checkpoints():
             "0": ["conv1", "bn1", "relu1", "maxpool"],
             "1": ["conv2", "bn2", "relu2"],
             "2": ["conv3", "relu3", "avgpool"],
-            "3": ["conv4", "flatten", "fc"],
+            "3": ["conv4", "flatten", "fc1", "fc2"],
         },
         "include_static_inputs": [
             "False",
@@ -116,7 +116,8 @@ class SplittableModel(torch.nn.Module):
         self.avgpool = torch.nn.AvgPool2d(3, stride=1)
         self.conv4 = torch.nn.Conv2d(8, 4, kernel_size=2, stride=2, padding=2, bias=True)
         self.flatten = torch.nn.Flatten()
-        self.fc = torch.nn.Linear(36, 12)
+        self.fc1 = torch.nn.Linear(36, 12)
+        self.fc2 = torch.nn.Linear(12, 10)
 
     def forward(self, *inputs):
         x = self.conv1(inputs[0])
@@ -131,7 +132,8 @@ class SplittableModel(torch.nn.Module):
         x = self.avgpool(x)
         x = self.conv4(x)
         x = self.flatten(x)
-        x = self.fc(x)
+        x = self.fc1(x)
+        x = self.fc2(x)
         return x
 
 
@@ -224,15 +226,31 @@ class TestSeqMse:
         params = SeqMseParams(num_batches=2, inp_symmetry=inp_symmetry, loss_fn=loss_fn)
 
         # Apply Sequential MSE without checkpoints config
-        apply_seq_mse(model, sim_without, data_loader, params)
-        without_checkpoints_enc = sim_without.model.fc.param_quantizers['weight'].encoding
+        apply_seq_mse(model, sim_without, data_loader, params, modules_to_exclude=[model.fc1])
+        assert not sim_without.model.fc1.param_quantizers['weight'].is_encoding_frozen
+        assert sim_without.model.fc2.param_quantizers['weight'].is_encoding_frozen
+        without_checkpoints_enc = sim_without.model.fc2.param_quantizers['weight'].encoding
 
         # Apply Sequential MSE with checkpoints config
-        apply_seq_mse(model, sim_with, data_loader, params, checkpoints_config="./test_checkpoints.json")
-        with_checkpoints_enc = sim_with.model.fc.param_quantizers['weight'].encoding
+        apply_seq_mse(model, sim_with, data_loader, params, checkpoints_config="./test_checkpoints.json",
+                      modules_to_exclude=[model.fc1])
+        assert not sim_with.model.fc1.param_quantizers['weight'].is_encoding_frozen
+        assert sim_with.model.fc2.param_quantizers['weight'].is_encoding_frozen
+        with_checkpoints_enc = sim_with.model.fc2.param_quantizers['weight'].encoding
 
         # encodings should be bit-exact
         assert without_checkpoints_enc.min == with_checkpoints_enc.min
         assert without_checkpoints_enc.max == with_checkpoints_enc.max
         assert without_checkpoints_enc.delta == with_checkpoints_enc.delta
         assert without_checkpoints_enc.offset == with_checkpoints_enc.offset
+
+    def test_apply_seq_mse_with_modules_to_exclude(self, unlabeled_data_loader):
+        """ test apply_seq_mse end-to-end with exclusion list """
+        torch.manual_seed(0)
+        model = Net().eval()
+        dummy_input = torch.randn(1, 1, 28, 28)
+        sim = QuantizationSimModel(model, dummy_input, default_param_bw=4, quant_scheme=QuantScheme.post_training_tf)
+        params = SeqMseParams(num_batches=2)
+        apply_seq_mse(model, sim, unlabeled_data_loader, params, modules_to_exclude=[model.fc1])
+        assert not sim.model.fc1.param_quantizers['weight'].is_encoding_frozen
+        assert sim.model.fc2.param_quantizers['weight'].is_encoding_frozen
