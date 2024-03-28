@@ -34,6 +34,10 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+#
+# This file contains code adapted from channel-pruning (https://github.com/yihui-he/channel-pruning)
+# Copyright (c) 2018 Yihui He 何宜晖
+# Licensed under the MIT License (see https://github.com/yihui-he/channel-pruning/blob/master/LICENSE for details)
 
 """ Prunes layers using Channel Pruning scheme """
 
