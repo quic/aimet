@@ -44,7 +44,7 @@ from aimet_torch.experimental.v2.quantization.quantizers.affine import Quantize,
 from aimet_torch.experimental.v2.nn.true_quant import QuantizedLinear, QuantizationMixin, set_default_functional_library, \
     set_functional_library
 from aimet_torch.experimental.v2.quantization.encodings import AffineEncoding
-from aimet_torch.experimental.v2.quantization.quantizers.affine import QuantizedTensor
+from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensor
 from aimet_torch.experimental.v2.nn import fake_quant
 
 

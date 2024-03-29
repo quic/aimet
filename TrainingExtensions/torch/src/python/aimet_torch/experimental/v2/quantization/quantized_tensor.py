@@ -45,6 +45,9 @@ from torch.utils._pytree import tree_map, tree_any
 from aimet_torch.experimental.v2.quantization.encodings import EncodingBase
 
 
+__all__ = ['QuantizedTensorBase', 'QuantizedTensor', 'DequantizedTensor', 'EncodingError']
+
+
 class QuantizedTensorBase(torch.Tensor):
     """
     Represents a quantized tensor as a subclass of torch.Tensor which also holds the quantization encodings. This is
@@ -130,6 +133,60 @@ class QuantizedTensorBase(torch.Tensor):
             return qtensor
 
         return tree_map(lambda t: set_encoding(t) if isinstance(t, cls) else t, ret)
+
+
+class QuantizedTensor(QuantizedTensorBase):
+    def quantize(self) -> "QuantizedTensor":
+        if self.encoding is None:
+            raise EncodingError("Encoding does not exist")
+        return self
+
+    def dequantize(self) -> "DequantizedTensor":
+        """
+        Dequantize to a floating point torch.Tensor object
+        """
+        if self.encoding is None:
+            raise EncodingError("Encoding does not exist")
+
+        qtensor = self.encoding.dequantize(self.as_subclass(torch.Tensor))
+        qtensor = qtensor.as_subclass(DequantizedTensor)
+        qtensor.encoding = copy.copy(self.encoding)
+        return qtensor
+
+    def quantized_repr(self) -> torch.Tensor:
+        """
+        Return the quantized representation of the tensor as a torch.Tensor with data type self.encoding.dtype
+        """
+        # FIXME(kyunggeu): This only works for affine encodings.
+        #                  Needs to be generalized for any kind of encodings
+        return self.quantize().as_subclass(torch.Tensor).to(self.encoding.dtype)
+
+
+class DequantizedTensor(QuantizedTensorBase):
+    def quantize(self) -> QuantizedTensor:
+        if self.encoding is None:
+            raise EncodingError("Encoding does not exist")
+
+        qtensor = self.encoding.quantize(self.as_subclass(torch.Tensor))
+        qtensor = qtensor.as_subclass(QuantizedTensor)
+        qtensor.encoding = copy.copy(self.encoding)
+        return qtensor
+
+    def dequantize(self) -> "DequantizedTensor":
+        """
+        Dequantize to a floating point torch.Tensor object
+        """
+        if self.encoding is None:
+            raise EncodingError("Encoding does not exist")
+        return self
+
+    def quantized_repr(self) -> torch.Tensor:
+        """
+        Return the quantized representation of the tensor as a torch.Tensor with data type self.encoding.dtype
+        """
+        # FIXME(kyunggeu): This only works for affine encodings.
+        #                  Needs to be generalized for any kind of encodings
+        return self.quantize().as_subclass(torch.Tensor).to(self.encoding.dtype)
 
 
 class EncodingError(RuntimeError):

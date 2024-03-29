@@ -34,6 +34,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+# pylint: disable=redefined-builtin
 """ Float encoding definition """
 
 import torch
@@ -117,3 +118,9 @@ class FloatEncoding(EncodingBase):
 
         maxval = self._maxval.to(dtype=dtype, device=device)
         return type(self)(self._mantissa_bits, self._exponent_bits, maxval)
+
+    def quantize(self, input: torch.Tensor) -> torch.Tensor:
+        raise NotImplementedError
+
+    def dequantize(self, input: torch.Tensor) -> torch.Tensor:
+        raise NotImplementedError

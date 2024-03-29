@@ -38,7 +38,6 @@
 """ Affine quantizers """
 
 import abc
-import copy
 from typing import Optional, List, Dict
 import contextlib
 import functools
@@ -49,98 +48,13 @@ from torch import nn
 from aimet_torch.experimental.v2.utils import patch_attr, _is_expandable, StatisticsNotFoundError
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import EncodingAnalyzer, MinMaxEncodingAnalyzer
 from aimet_torch.experimental.v2.quantization.encodings import AffineEncoding
-from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensorBase, EncodingError
+from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensor, DequantizedTensor
 from aimet_torch.experimental.v2.quantization.quantizers.base import QuantizerBase
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 from aimet_torch.experimental.v2.utils import ste_round
 
 
-__all__ = ['AffineQuantizerBase', 'MinMaxQuantizer', 'Quantize', 'QuantizeDequantize', 'Dequantize',
-           'QuantizedTensor', 'DequantizedTensor']
-
-
-class QuantizedTensor(QuantizedTensorBase):
-    """QuantizedTensor with affine encoding"""
-
-    encoding: AffineEncoding
-
-    def quantize(self) -> "QuantizedTensor":
-        if self.encoding is None:
-            raise EncodingError("Encoding does not exist")
-        return self
-
-    def dequantize(self) -> "DequantizedTensor":
-        """
-        Dequantize to a floating point torch.Tensor object
-        """
-        if self.encoding is None:
-            raise EncodingError("Encoding does not exist")
-
-        scale = self.encoding.scale
-        offset = self.encoding.offset
-
-        # Use dtype with more precision
-        if torch.finfo(self.dtype).bits >= torch.finfo(scale.dtype).bits:
-            dtype = self.dtype
-        else:
-            dtype = scale.dtype
-
-        qtensor = get_backend().dequantize(self.to(dtype),
-                                           scale.to(dtype),
-                                           offset.to(dtype)).to(self.dtype)
-        qtensor = qtensor.as_subclass(DequantizedTensor)
-        qtensor.encoding = copy.copy(self.encoding)
-        return qtensor
-
-    def quantized_repr(self) -> torch.Tensor:
-        """
-        Return the quantized representation of the tensor as a torch.Tensor with data type self.encoding.dtype
-        """
-        return self.quantize().as_subclass(torch.Tensor).to(self.encoding.dtype)
-
-
-class DequantizedTensor(QuantizedTensorBase):
-    """DequantizedTensor with affine encoding"""
-
-    encoding: AffineEncoding
-
-    def quantize(self) -> QuantizedTensor:
-        if self.encoding is None:
-            raise EncodingError("Encoding does not exist")
-
-        scale = self.encoding.scale
-        offset = self.encoding.offset
-        bitwidth = self.encoding.bitwidth
-        signed = self.encoding.signed
-
-        # Use dtype with more precision
-        if torch.finfo(self.dtype).bits >= torch.finfo(scale.dtype).bits:
-            dtype = self.dtype
-        else:
-            dtype = scale.dtype
-
-        qtensor = get_backend().quantize(self.to(dtype),
-                                         scale.to(dtype),
-                                         offset.to(dtype),
-                                         bitwidth,
-                                         signed).to(self.dtype)
-        qtensor = qtensor.as_subclass(QuantizedTensor)
-        qtensor.encoding = copy.copy(self.encoding)
-        return qtensor
-
-    def dequantize(self) -> "DequantizedTensor":
-        """
-        Dequantize to a floating point torch.Tensor object
-        """
-        if self.encoding is None:
-            raise EncodingError("Encoding does not exist")
-        return self
-
-    def quantized_repr(self) -> torch.Tensor:
-        """
-        Return the quantized representation of the tensor as a torch.Tensor with data type self.encoding.dtype
-        """
-        return self.quantize().as_subclass(torch.Tensor).to(self.encoding.dtype)
+__all__ = ['AffineQuantizerBase', 'MinMaxQuantizer', 'Quantize', 'QuantizeDequantize', 'Dequantize']
 
 
 class AffineQuantizerBase(QuantizerBase):
