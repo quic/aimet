@@ -100,9 +100,11 @@ class QuantizedTensorBase(torch.Tensor):
 
     @classmethod
     def __new__(cls, *args, **kwargs):
+        encoding = kwargs.pop('encoding', None)
         ret = super().__new__(*args, **kwargs)
-        if not ret.dtype.is_floating_point:
+        if not ret.is_floating_point():
             raise RuntimeError(f"Non-floating point dtype `{ret.dtype}` is not allowed for quantized tensors.")
+        ret.encoding = encoding
         return ret
 
     @classmethod
