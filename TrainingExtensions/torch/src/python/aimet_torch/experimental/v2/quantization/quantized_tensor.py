@@ -40,7 +40,7 @@ import abc
 import copy
 
 import torch
-from torch.utils._pytree import tree_map, tree_any
+from torch.utils._pytree import tree_map, tree_flatten
 
 from aimet_torch.experimental.v2.quantization.encodings import EncodingBase
 
@@ -109,7 +109,8 @@ class QuantizedTensorBase(torch.Tensor):
     def __torch_function__(cls, func, types, args=(), kwargs=None):
         ret = super().__torch_function__(func, types, args, kwargs)
 
-        if tree_any(lambda x: x is ret, (args, kwargs)):
+        flattened_args, _ = tree_flatten((args, kwargs))
+        if any(ret is arg for arg in flattened_args):
             # Return value is the same object as one of the arguments.
             # This implies that func is likely (but not necessarily) an in-place operator.
             return ret
