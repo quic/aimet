@@ -49,7 +49,7 @@ from torch import Tensor
 from aimet_torch.experimental.v2.nn.quant_base import BaseQuantizationMixin
 from aimet_torch.experimental.v2.nn.function_selector import FunctionSelector, _FunctionalLibrary
 from aimet_torch.experimental.v2.quantization.quantizers.base import QuantizerBase
-from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensor
+from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensorBase, EncodingError
 from aimet_torch.experimental.v2.utils import patch_attr, _ContextManager
 
 
@@ -129,12 +129,19 @@ def _quantize_if_applicable(data: Any, quantizer: Optional[QuantizerBase]):
     """
     Quantize data if it is a quantizable type and quantize is not None
     """
+    if isinstance(data, QuantizedTensorBase):
+        try:
+            return data.quantize()
+        except EncodingError:
+            pass
+
     if quantizer and isinstance(data, Tensor) and data.is_floating_point():
         return quantizer(data)
+
     return data
 
 def _dequantize_if_applicable(data: torch.Tensor):
-    return data.dequantize() if isinstance(data, QuantizedTensor) else data
+    return data.dequantize() if isinstance(data, QuantizedTensorBase) else data
 
 
 class QuantizationMixin(BaseQuantizationMixin, ABC): # pylint: disable=abstract-method

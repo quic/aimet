@@ -36,9 +36,8 @@
 # =============================================================================
 import pytest
 import torch
-import torch.nn.functional as F
 from aimet_torch.experimental.v2.quantization.backends import get_backend
-from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensor
+from aimet_torch.experimental.v2.quantization.quantizers.affine import QuantizedTensor, DequantizedTensor
 from aimet_torch.experimental.v2.quantization.encodings import AffineEncoding
 
 
@@ -65,12 +64,105 @@ def affine_quantize(tensor: torch.Tensor,
     """
     tensor_q = get_backend().quantize(tensor, scale, offset, bitwidth)
     encoding = AffineEncoding(scale, offset, bitwidth)
-    dequant = get_backend().dequantize
-    dequant_fn = lambda t: dequant(torch.Tensor(t), t.encoding.scale, t.encoding.offset)
-    qtensor = QuantizedTensor(tensor_q, encoding, dequant_fn=dequant_fn)
+    qtensor = tensor_q.as_subclass(QuantizedTensor)
+    qtensor.encoding = encoding
     return qtensor
 
+
 class TestQuantizedTensor:
+    @pytest.mark.cuda
+    def test_qtensor_sanity(self, scale, offset, bitwidth):
+        """
+        When: Instantiate QuantizedTensor from a torch.Tensor.as_subclass
+        Then: The created QuantizedTensor is equal to the input tensor
+        """
+        data = torch.arange(256, dtype=torch.float) # actual content of qtensor
+        qtensor = data.clone().as_subclass(QuantizedTensor)
+        qtensor.encoding = AffineEncoding(scale, offset, bitwidth)
+        assert torch.equal(qtensor, data)
+
+        """
+        Given: QuantizedTensor with fp32 dtype on cpu
+        When: Call float() / cpu() / to(device='cpu', dtype=torch.float32)
+        Then: The output tensor is the identical object as itself
+        """
+        assert qtensor.float() is qtensor
+        assert qtensor.cpu() is qtensor
+        assert qtensor.to(torch.float32) is qtensor
+        assert qtensor.to('cpu') is qtensor
+        assert qtensor.to('cpu', torch.float32) is qtensor
+
+        """
+        When: Call dequantize()
+        Then: 1) The output tensor is an instance of DequantizedTensor
+              2) The output tensor inherits a shallow copy of its input tensor's encoding
+        """
+        qtensor_dq = qtensor.dequantize()
+        assert isinstance(qtensor_dq, DequantizedTensor)
+        assert qtensor_dq.encoding is not qtensor.encoding
+        assert torch.equal(qtensor_dq.encoding.scale, qtensor.encoding.scale)
+        assert torch.equal(qtensor_dq.encoding.offset, qtensor.encoding.offset)
+        assert qtensor_dq.encoding.bitwidth == qtensor.encoding.bitwidth
+        assert qtensor_dq.encoding.signed == qtensor.encoding.signed
+
+
+        for cast_fn in [torch.Tensor.half, torch.Tensor.double, torch.Tensor.cuda]:
+            """
+            Given: QuantizedTensor with fp32 dtype on cpu
+            When: Cast to different dtype or device
+            Then: 1) The output tensor is an instance of QuantizedTensor with the same value
+            """
+            data = torch.arange(256, dtype=torch.float) # actual content of qtensor
+            qtensor = data.clone().as_subclass(QuantizedTensor)
+            qtensor.encoding = AffineEncoding(scale, offset, bitwidth)
+            qtensor_casted = cast_fn(qtensor)
+
+            assert qtensor_casted is not qtensor
+            assert isinstance(qtensor_casted, QuantizedTensor)
+            assert torch.equal(qtensor_casted, cast_fn(data))
+
+            """
+            Then: 2) The output tensor inherits a shallow copy of its input tensor's encoding
+            """
+            assert qtensor_casted.encoding is not qtensor.encoding
+            assert torch.equal(qtensor_casted.encoding.scale.cpu(), qtensor.encoding.scale)
+            assert torch.equal(qtensor_casted.encoding.offset.cpu(), qtensor.encoding.offset)
+            assert qtensor_casted.encoding.bitwidth == qtensor.encoding.bitwidth
+            assert qtensor_casted.encoding.signed == qtensor.encoding.signed
+
+            """
+            Then: 3) The result of dequantization should be similar before/after casting
+            """
+            assert torch.allclose(qtensor_casted.dequantize().cpu().float(), qtensor.dequantize(), atol=scale)
+
+            """
+            When: Cast twice
+            Then: The output tensor is the identical object as itself
+            """
+            assert cast_fn(qtensor_casted) is qtensor_casted
+
+
+        """
+        When: Instantiate QuantizedTensor with wrong non-floating point dtype directly using __new__
+        Then: Throw error
+        """
+        data = torch.arange(256, dtype=torch.long) # actual content of qtensor
+        with pytest.raises(RuntimeError):
+            _ = QuantizedTensor(data)
+
+        for cast_fn in [torch.Tensor.char, torch.Tensor.short, torch.Tensor.int, torch.Tensor.long]:
+            """
+            Given: QuantizedTensor
+            When: Cast to non-floating point dtypes
+            Then: Throw error
+            """
+            data = torch.arange(256, dtype=torch.float) # actual content of qtensor
+            qtensor = data.clone().as_subclass(QuantizedTensor)
+            qtensor.encoding = AffineEncoding(scale, offset, bitwidth)
+
+            with pytest.raises(RuntimeError):
+                _ = cast_fn(qtensor)
+
 
     @pytest.mark.parametrize("scale, offset, bitwidth, signed", 
                              [(torch.tensor(0.1), torch.tensor(-125.), 8, False),
@@ -157,6 +249,7 @@ class TestQuantizedTensor:
         """
         assert qtensor_d2.quantized_repr().device == device_2
 
+    @pytest.mark.skip(reason="implicit dequantization is not supported yet")
     @pytest.mark.parametrize("scale, offset, bitwidth, signed",
                              [(torch.tensor(0.1), torch.tensor(-125.), 8, False)])
     def test_propagate_gradient(self, scale, offset, bitwidth, signed):
@@ -189,6 +282,7 @@ class TestQuantizedTensor:
         fp_output.backward(grad_in)
         assert torch.allclose(tensor_grad, tensor.grad)
 
+    @pytest.mark.skip(reason="implicit dequantization is not supported yet")
     @pytest.mark.parametrize("scale, offset, bitwidth, signed",
                              [(torch.tensor(0.1), torch.tensor(-125.), 8, False)])
     def test_fallback_to_dequantize(self, scale, offset, bitwidth, signed):
@@ -203,7 +297,6 @@ class TestQuantizedTensor:
         tensor = torch.randn(input_shape)
         tensor_qdq = qdq(tensor, scale, offset, bitwidth)
         qtensor = affine_quantize(tensor, scale, offset, bitwidth, signed)
-        print(qtensor)
         other = torch.randn_like(tensor)
         
         qtensor_out = qtensor + other
@@ -225,4 +318,3 @@ class TestQuantizedTensor:
         qtensor_out = torch.nn.functional.linear(qother, qtensor)
         assert not isinstance(qtensor_out, QuantizedTensor)
         assert torch.allclose(qtensor_out, torch.nn.functional.linear(other_qdq, tensor_qdq))
-        

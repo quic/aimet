@@ -36,120 +36,101 @@
 # =============================================================================
 """ Quantized tensor class implementation """
 
-from typing import Callable
+import abc
+import copy
 
 import torch
-from torch._C._nn import _parse_to
-from torch.utils._pytree import tree_map
+from torch.utils._pytree import tree_map, tree_any
 
 from aimet_torch.experimental.v2.quantization.encodings import EncodingBase
 
-# Operations that encodings can propagate through without change (to be populated)
-PASSTHROUGH_OPS = {}
 
-def _tree_map_only(cls, func, tree):
-    return tree_map(lambda t: func(t) if isinstance(t, cls) else t, tree)
-
-
-class QuantizedTensor(torch.Tensor):
+class QuantizedTensorBase(torch.Tensor):
     """
     Represents a quantized tensor as a subclass of torch.Tensor which also holds the quantization encodings. This is
     used to safely pass encoding information between layers of a torch model and into operator libraries.
-
-    If a floating point operation is called on a QuantizedTensor, it will dequantize itself to a floating point
-    representation before calling the operation.
     """
 
-    # pylint:disable = unused-argument
-    def __new__(cls, data, encoding, *args, **kwargs):
+    encoding: EncodingBase
 
-        # data.as_subclass will return a QuantizedTensor with the same data pointer as data
-        # At this point, the data is still in floating point, but with quantized values
-        return data.as_subclass(cls)
+    _cast_ops = [
+        torch.Tensor.half,
+        torch.Tensor.float,
+        torch.Tensor.double,
+        torch.Tensor.char,
+        torch.Tensor.short,
+        torch.Tensor.int,
+        torch.Tensor.long,
+        torch.Tensor.cuda,
+        torch.Tensor.cpu,
+        torch.Tensor.to,
+    ]
 
-    # pylint:disable = unused-argument
-    def __init__(self,
-                 data: torch.Tensor,
-                 encoding: EncodingBase,
-                 dequant_fn: Callable[["QuantizedTensor"], torch.Tensor],
-                 *args, **kwargs) -> "QuantizedTensor":
+    @abc.abstractmethod
+    def quantize(self) -> "QuantizedTensorBase":
         """
-        Creates a QuantizedTensor object which contains both quantized tensor data and quantization encodings.
+        Quantize tensor with the associated encoding
+        """
+        raise NotImplementedError
 
-        :param data: torch tensor containing quantized values in a floating point representation
-        :param encoding: Encoding object storing quantization parameters
-        :param dequant_fn: Mapping function from the quantized representation back to floating point representation
+    @abc.abstractmethod
+    def dequantize(self) -> "QuantizedTensorBase":
         """
-        super().__init__()
-        self._encoding = encoding
-        self._dequant_fn = dequant_fn
+        Dequantize tensor with the associated encoding
+        """
+        raise NotImplementedError
 
-    @property
-    def encoding(self) -> EncodingBase:
-        """
-        Returns the QuantizedTensor's encoding
-        """
-        return self._encoding
-
-    def attach_encoding(self, encoding, dequant_fn):
-        """
-        Attach a new encoding and dequantization function to the given tensor
-
-        :param encoding: Encoding object holding quantization parameters
-        :param dequant_fn: Function used to dequantize to a floating point tensor
-        """
-        self._encoding = encoding
-        self._dequant_fn = dequant_fn
-        return self
-
-    def dequantize(self) -> torch.Tensor:
-        """
-        Dequantize to a floating point torch.Tensor object
-        """
-        return self._dequant_fn(self)
-
+    @abc.abstractmethod
     def quantized_repr(self) -> torch.Tensor:
         """
         Return the quantized representation of the tensor as a torch.Tensor with data type self.encoding.dtype
         """
-        return torch.Tensor(self).to(self.encoding.dtype)
+        raise NotImplementedError
 
-    def __str__(self):
-        return f"QuantizedTensor({self.quantized_repr()}, encoding: {self.encoding})"
-
-    def to(self, *args, **kwargs):
-        """
-        Must behave similar to torch.Tensor.to, i.e., return a copy of self with the specified device/dtype
-        without altering any attributes of self
-        """
-        device, dtype, non_blocking, mem_format = _parse_to(*args, **kwargs)
-        dtype = dtype if dtype else self.dtype
-        device = device if device else self.device
-        if not dtype.is_floating_point:
-            raise RuntimeError("Cannot send QuantizedTensor to a non-floating point data type")
-        if dtype is self.dtype and device is self.device:
-            return self
-        data = super().to(dtype=dtype, device=device, non_blocking=non_blocking, memory_format=mem_format)
-        enc = self.encoding.to(dtype=dtype, device=device, non_blocking=non_blocking)
-        return type(self)(data, enc, self._dequant_fn)
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        ret = super().__new__(*args, **kwargs)
+        if not ret.dtype.is_floating_point:
+            raise RuntimeError(f"Non-floating point dtype `{ret.dtype}` is not allowed for quantized tensors.")
+        return ret
 
     @classmethod
     def __torch_function__(cls, func, types, args=(), kwargs=None):
-        """
-        This function will be called anytime a torch operation is called with a QuantizedTensor as one of the
-        arguments. Here, we dequantize all QuantizedTensors before calling into any torch function which has not been
-        designated as passthrough (aka "math invariant")
-        """
-        if kwargs is None:
-            kwargs = {}
-        if func in PASSTHROUGH_OPS:
-            for arg in args:
-                if isinstance(arg, QuantizedTensor):
-                    # pylint:disable = protected-access
-                    encoding, dequant_fn = arg.encoding, arg._dequant_fn
-                    break
-            output = super().__torch_function__(func, types, args, kwargs)
-            return _tree_map_only(QuantizedTensor, lambda qt: qt.attach_encoding(encoding, dequant_fn), output)
-        args, kwargs = _tree_map_only(QuantizedTensor, lambda qt: qt.dequantize(), (args, kwargs))
-        output = super().__torch_function__(func, types, args, kwargs)
-        return _tree_map_only(QuantizedTensor, torch.Tensor, output)
+        ret = super().__torch_function__(func, types, args, kwargs)
+
+        if tree_any(lambda x: x is ret, (args, kwargs)):
+            # Return value is the same object as one of the arguments.
+            # This implies that func is likely (but not necessarily) an in-place operator.
+            return ret
+
+        if func in cls._cast_ops:
+            if not ret.dtype.is_floating_point:
+                raise RuntimeError(
+                    f"Type casting to non-floating point dtype `{ret.dtype}` is not allowed for quantized tensors. "
+                    "To cast quantized tensors to integer, use `qtensor.quantzed_repr()`."
+                )
+
+            # Outputs of cast ops can inherit the same encoding as its parents
+            self, *_ = args
+            ret.encoding = copy.copy(self.encoding) # shallow copy
+
+        def set_encoding(qtensor):
+            if not hasattr(qtensor, 'encoding'):
+                qtensor.encoding = None
+
+            if qtensor.encoding is None:
+                # If encoding does not exist, return a plain torch.Tensor
+                return qtensor.as_subclass(torch.Tensor)
+
+            # Change device of encoding
+            # NOTE: We don't change the dtypes of encoding because scale/offset
+            #       are sensitive to dtype
+            qtensor.encoding = qtensor.encoding.to(device=qtensor.device)
+
+            return qtensor
+
+        return tree_map(lambda t: set_encoding(t) if isinstance(t, cls) else t, ret)
+
+
+class EncodingError(RuntimeError):
+    """Error that indicates an encoding is missing or invalid"""
