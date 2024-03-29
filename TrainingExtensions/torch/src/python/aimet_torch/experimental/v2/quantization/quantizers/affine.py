@@ -499,9 +499,4 @@ class Dequantize(torch.nn.Module):
         :param input: Input to dequantize
         :return: Dequantized output
         """
-        scale = input.encoding.scale
-        offset = input.encoding.offset
-        output = get_backend().dequantize(input, scale, offset)
-        output = output.as_subclass(DequantizedTensor)
-        output.encoding = input.encoding
-        return output
+        return input.dequantize()
