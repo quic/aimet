@@ -34,9 +34,6 @@ Please visit :ref:`AIMET Installation <ug-installation>` for installation instru
 
    Installation <../install/index>
    tutorials/quickstart
-   tutorials/quantization_overview
-   tutorials/aimet_models
-   tutorials/extending_aimet
 
 
 .. toctree::
@@ -55,9 +52,6 @@ Please visit :ref:`AIMET Installation <ug-installation>` for installation instru
    :maxdepth: 1
 
     Adaptive Rounding (AdaRound) <../user_guide/adaround>
-    Cross-Layer Equalization <../user_guide/post_training_quant_techniques>
-    BN Re-estimation<../user_guide/bn_reestimation>
-
 
 .. toctree::
    :maxdepth: 2
