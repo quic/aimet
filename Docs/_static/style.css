@@ -85,7 +85,7 @@ color: var(--aimet-dark-blue);
     top: 0;
     bottom: 0;
     left: 0;
-    padding-bottom: 42px;
+    padding-bottom: 2em;
     width: 300px;
     overflow-x: hidden;
     overflow-y: hidden;
@@ -228,10 +228,12 @@ padding: .4045em 1.618em;
  * Version selector color configuration
  */
 .rst-versions {
+    position: sticky;
     background: var(--aimet-white);
 }
 
 .rst-versions .rst-current-version {
+    text-align: center;
     background-color: var(--aimet-white);
     color: black;
 }
