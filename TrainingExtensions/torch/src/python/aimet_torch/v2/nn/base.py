@@ -124,7 +124,17 @@ class BaseQuantizationMixin(abc.ABC):
     @contextlib.contextmanager
     def compute_encodings(self):
         """
-        Observe inputs and update quantization parameters based on the input statistics.
+        Enters the `compute_encodings` context for all `QuantizerBase` objects in the layer. Inside this context,
+        each quantizer will observe all inputs passed to the quantizer and will compute quantization encodings upon
+        exiting the context.
+
+        Examples::
+            >>> qlinear = QuantizedLinear(10, 10)
+            >>> qlinear.output_quantizers[0] = Quantize((1, ), 8, symmetric=False)
+            >>> with qlinear.compute_encodings():
+            >>>     qlinear(torch.randn(16, 10))
+            >>> print(qlinear.output_quantizers[0].is_initialized())
+            True
         """
         self._compute_param_encodings(overwrite=True)
 
@@ -148,8 +158,24 @@ class BaseQuantizationMixin(abc.ABC):
 
     @classmethod
     def from_module(cls, module: nn.Module):
-        """
-        Create an instance of quantized module from a regular moudle instance
+        r"""
+        Create an instance of quantized module from a regular module instance. The resulting quantized module contains
+        the same attributes and parameters as the original module, but may be assigned input, output and parameter
+        quantizers.
+
+        :param module: Floating point module to quantize
+        :return: Quantized version of the original module
+
+        Examples::
+            >>> linear = torch.nn.linear(10, 10)
+            >>> quantized_linear = FakeQuantizationMixin.from_module(linear)
+            >>> print(quantized_linear.weight is linear.weight)
+            True
+            >>> print(quantized_linear.param_quantizers)
+            ModuleDict(
+                (weight): None
+                (bias): None
+            )
         """
         # pylint: disable=protected-access
         module_cls = type(module)

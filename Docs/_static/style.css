@@ -23,7 +23,7 @@ nav .hideitem {
 
 :root {
   --aimet-blue: #3253dc;
-  --aimet-dark-blue: #0000ff
+  --aimet-dark-blue: #0000ff;
   --aimet-white: #ffffff;
   --aimet-border-grey: #e0e0e0;
   --aimet-menu-hover: #e3efff;
@@ -85,7 +85,7 @@ color: var(--aimet-dark-blue);
     top: 0;
     bottom: 0;
     left: 0;
-    padding-bottom: 2em;
+    padding-bottom: 42px;
     width: 300px;
     overflow-x: hidden;
     overflow-y: hidden;
@@ -222,3 +222,34 @@ padding: .4045em 1.618em;
 .wy-menu-vertical li.toctree-l3, .wy-menu-vertical li.toctree-l4 {
   font-size: 14px;
 }
+
+
+/*
+ * Version selector color configuration
+ */
+.rst-versions {
+    background: var(--aimet-white);
+}
+
+.rst-versions a {
+    color: var(--aimet-menu-font-active);
+}
+
+.rst-versions .rst-current-version {
+    background-color: var(--aimet-white);
+    color: black;
+}
+
+.rst-versions .rst-current-version-link {
+    background-color: var(--aimet-white);
+    color: var(--aimet-menu-font-active);
+}
+
+.rst-versions .rst-other-versions dd a {
+    color: var(--aimet-menu-font-active)
+}
+
+.rst-versions .rst-other-versions dt {
+    color: black
+}
+
