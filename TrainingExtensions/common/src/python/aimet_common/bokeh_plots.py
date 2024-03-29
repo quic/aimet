@@ -131,7 +131,7 @@ class ProgressBar:
         self.current_source_index = 0
         self.source = self.create_column_data_source()
 
-        plot = Plot(plot_width=1000, plot_height=50, min_border=0, toolbar_location=None, outline_line_color=None)
+        plot = Plot(width=1000, height=50, min_border=0, toolbar_location=None, outline_line_color=None)
 
         glyph = Rect(x="x_coordinate", y=0, width=1, height=1, angle=-0.0, fill_color="color", line_color="color",
                      line_alpha=0.3, fill_alpha=0.3)
