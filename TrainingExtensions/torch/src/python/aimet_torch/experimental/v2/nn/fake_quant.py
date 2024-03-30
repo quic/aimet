@@ -113,7 +113,7 @@ class _FakeQuantizedUnaryOpMixin(FakeQuantizationMixin):
             x = self.input_quantizers[0](x)
 
         with self._patch_quantized_parameters():
-            output = super().forward(x, *others, **kwargs)
+            output = self._super_forward(x, *others, **kwargs)
 
         if isinstance(output, Tensor) and output.is_floating_point() and self.output_quantizers[0]:
             output = self.output_quantizers[0](output)
@@ -136,7 +136,7 @@ class _FakeQuantizedBinaryOpMixin(FakeQuantizationMixin):
             y = self.input_quantizers[1](y)
 
         with self._patch_quantized_parameters():
-            output = super().forward(x, y, *others, **kwargs)
+            output = self._super_forward(x, y, *others, **kwargs)
 
         if isinstance(output, Tensor) and output.is_floating_point() and self.output_quantizers[0]:
             output = self.output_quantizers[0](output)
@@ -162,7 +162,7 @@ class _FakeQuantizedTernaryOpMixin(FakeQuantizationMixin):
             z = self.input_quantizers[2](z)
 
         with self._patch_quantized_parameters():
-            output = super().forward(x, y, z, *others, **kwargs)
+            output = self._super_forward(x, y, z, *others, **kwargs)
 
         if isinstance(output, Tensor) and output.is_floating_point() and self.output_quantizers[0]:
             output = self.output_quantizers[0](output)
@@ -339,7 +339,7 @@ class FakeQuantizedEmbedding(FakeQuantizationMixin, nn.Embedding):
         # pylint: disable=redefined-builtin
 
         with self._patch_quantized_parameters():
-            output = super().forward(input)
+            output = self._super_forward(input)
 
         if self.output_quantizers[0]:
             output = self.output_quantizers[0](output)
@@ -370,7 +370,7 @@ class FakeQuantizedEmbeddingBag(FakeQuantizationMixin, nn.EmbeddingBag):
             per_sample_weights = self.input_quantizers[0](per_sample_weights)
 
         with self._patch_quantized_parameters():
-            output = super().forward(input, offsets, per_sample_weights)
+            output = self._super_forward(input, offsets, per_sample_weights)
 
         if self.output_quantizers[0]:
             output = self.output_quantizers[0](output)
@@ -402,7 +402,7 @@ class _FakeQuantizedRNNBaseMixin(FakeQuantizationMixin):
             hx = self.input_quantizers[1](hx)
 
         with self._patch_quantized_parameters():
-            output, hidden = super().forward(input, hx)
+            output, hidden = self._super_forward(input, hx)
 
         if self.output_quantizers[0]:
             if isinstance(output, PackedSequence):
@@ -435,7 +435,7 @@ class _FakeQuantizedRNNCellBaseMixin(_FakeQuantizedBinaryOpMixin):
             hx = self.input_quantizers[1](hx)
 
         with self._patch_quantized_parameters():
-            output = super().forward(input, hx)
+            output = self._super_forward(input, hx)
 
         if self.output_quantizers[0]:
             output = self.output_quantizers[0](output)
@@ -478,7 +478,7 @@ class FakeQuantizedLSTM(FakeQuantizationMixin, nn.LSTM):
             hx = (h, c)
 
         with self._patch_quantized_parameters():
-            output, hidden = super().forward(input, hx)
+            output, hidden = self._super_forward(input, hx)
 
         if self.output_quantizers[0]:
             if isinstance(output, PackedSequence):
@@ -529,7 +529,7 @@ class FakeQuantizedLSTMCell(FakeQuantizationMixin, nn.LSTMCell):
             hx = (h, c)
 
         with self._patch_quantized_parameters():
-            output = super().forward(input, hx)
+            output = self._super_forward(input, hx)
 
         if self.output_quantizers[0]:
             output = self.output_quantizers[0](output)
@@ -560,7 +560,7 @@ class FakeQuantizedAdaptiveLogSoftmaxWithLoss(FakeQuantizationMixin, nn.Adaptive
             target_ = self.input_quantizers[1](target_)
 
         with self._patch_quantized_parameters():
-            outputs = super().forward(input_, target_)
+            outputs = self._super_forward(input_, target_)
 
         output, loss = outputs
 
@@ -728,8 +728,8 @@ class FakeQuantizedBatchNorm(FakeQuantizationMixin, aimet_ops.BatchNorm): # pyli
         if bias is not None and self.input_quantizers[4]:
             bias = self.input_quantizers[4](bias)
 
-        output = super().forward(input, running_mean, running_var,
-                                 weight, bias, training, momentum, eps)
+        output = self._super_forward(input, running_mean, running_var,
+                                     weight, bias, training, momentum, eps)
 
         if self.output_quantizers[0]:
             output = self.output_quantizers[0](output)
@@ -766,7 +766,7 @@ class FakeQuantizedAimetGroupNorm(FakeQuantizationMixin, aimet_ops.GroupNorm): #
         if bias is not None and self.input_quantizers[3]:
             bias = self.input_quantizers[3](bias)
 
-        output = super().forward(input, num_groups, weight, bias, eps)
+        output = self._super_forward(input, num_groups, weight, bias, eps)
 
         if self.output_quantizers[0]:
             output = self.output_quantizers[0](output)
@@ -794,7 +794,7 @@ class FakeQuantizedNonMaxSuppression(FakeQuantizationMixin, aimet_ops.NonMaxSupp
             # Use same input quantizer for all the score tensors
             scores = tree_map(self.input_quantizers[0], scores)
 
-        super().forward(boxes, scores)
+        self._super_forward(boxes, scores)
 
         if self.output_quantizers[0]:
             output = self.output_quantizers[0](output)
@@ -816,7 +816,7 @@ class FakeQuantizedSplit(_FakeQuantizedUnaryOpMixin, aimet_ops.Split): # pylint:
         if x.is_floating_point() and self.input_quantizers[0]:
             x = self.input_quantizers[0](x)
 
-        outputs = super().forward(x, *others, **kwargs)
+        outputs = self._super_forward(x, *others, **kwargs)
 
         if self.output_quantizers[0]:
             # Use same output quantizer for all the output tensors
@@ -840,7 +840,7 @@ class FakeQuantizedConcat(_FakeQuantizedUnaryOpMixin, aimet_ops.Concat):
             quantize_fn = lambda inp: self.input_quantizers[0](inp) if inp.is_floating_point() else inp
             x = tree_map(quantize_fn, x)
 
-        output = super().forward(*x)
+        output = self._super_forward(*x)
 
         if output.is_floating_point() and self.output_quantizers[0]:
             output = self.output_quantizers[0](output)
@@ -870,7 +870,7 @@ class FakeQuantizedWhere(FakeQuantizationMixin, aimet_ops.Where): # pylint: disa
         if isinstance(other, Tensor) and other.is_floating_point() and self.input_quantizers[2]:
             other = self.input_quantizers[2](other)
 
-        output = super().forward(condition, input, other, **kwargs)
+        output = self._super_forward(condition, input, other, **kwargs)
 
         if output.is_floating_point() and self.output_quantizers[0]:
             output = self.output_quantizers[0](output)
@@ -895,7 +895,7 @@ class FakeQuantizedMaskedFill(FakeQuantizationMixin, aimet_ops.MaskedFill): # py
         if isinstance(value, Tensor) and value.is_floating_point() and self.input_quantizers[1]:
             value = self.input_quantizers[1](value)
 
-        output = super().forward(mask, value)
+        output = self._super_forward(mask, value)
 
         if output.is_floating_point() and self.output_quantizers[0]:
             output = self.output_quantizers[0](output)

@@ -92,8 +92,9 @@ class BaseQuantizationMixin(abc.ABC):
         # Under this context, any invocation to self.forward
         # will be redirected to self.quantized_forward.
         # Note that super().forward still points to the original fp forward.
-        with patch_attr(self, 'forward', self.quantized_forward):
-            return super().__call__(*args, **kwargs)
+        with patch_attr(self, '_super_forward', super().forward):
+            with patch_attr(self, 'forward', self.quantized_forward):
+                return super().__call__(*args, **kwargs)
 
     @abc.abstractmethod
     def quantized_forward(self, *args, **kwargs):
