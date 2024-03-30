@@ -53,13 +53,12 @@ from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedT
 from aimet_torch.experimental.v2.utils import patch_attr, _ContextManager
 
 
-_FUNCTION_SELECTOR = FunctionSelector([], strict=True)
+_FUNCTION_SELECTOR = FunctionSelector([], strict=False)
 
 def set_default_functional_library(library: _FunctionalLibrary, strict=True):
     """
     Set the default operator library(s) for quantized modules
     """
-    global _FUNCTION_SELECTOR # pylint: disable=global-statement
     _FUNCTION_SELECTOR.set_libraries(library, strict)
 
 
@@ -134,6 +133,9 @@ def _quantize_if_applicable(data: Any, quantizer: Optional[QuantizerBase]):
             data = data.dequantize()
         return quantizer(data)
 
+    if isinstance(data, QuantizedTensorBase):
+        return data.quantize()
+
     return data
 
 def _dequantize_if_applicable(data: torch.Tensor):
@@ -207,7 +209,6 @@ class QuantizationMixin(BaseQuantizationMixin, ABC): # pylint: disable=abstract-
 
         return wrapper
 
-
 # pylint: disable=arguments-differ, abstract-method
 
 class _QuantizedUnaryOpMixin(QuantizationMixin, ABC):
@@ -226,7 +227,11 @@ class _QuantizedUnaryOpMixin(QuantizationMixin, ABC):
             else:
                 with self._patch_dequantized_parameters():
                     output = super().forward(_dequantize_if_applicable(x), *args, **kwargs)
-                output = _quantize_if_applicable(output, self.output_quantizers[0])
+
+        output = _quantize_if_applicable(output, self.output_quantizers[0])
+
+        if isinstance(output, QuantizedTensorBase):
+            output = output.dequantize()
 
         return output
 
@@ -259,7 +264,11 @@ class _QuantizedBinaryOpMixin(QuantizationMixin, ABC):
             else:
                 with self._patch_dequantized_parameters():
                     output = super().forward(_dequantize_if_applicable(x), _dequantize_if_applicable(y), *args, **kwargs)
-                output = _quantize_if_applicable(output, self.output_quantizers[0])
+
+        output = _quantize_if_applicable(output, self.output_quantizers[0])
+
+        if isinstance(output, QuantizedTensorBase):
+            output = output.dequantize()
 
         return output
 
