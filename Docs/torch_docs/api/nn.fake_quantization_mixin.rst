@@ -1,4 +1,4 @@
-:orphan:
+
 .. _api-torch-fake-quantization-mixin:
 
 .. warning::
@@ -7,9 +7,9 @@
 .. currentmodule:: aimet_torch.experimental.v2.nn
 
 
-=====================
+========================
 nn.FakeQuantizationMixin
-=====================
+========================
 
 
 Top-level API

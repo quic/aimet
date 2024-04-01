@@ -47,6 +47,8 @@ sys.path.append(os.path.join(cur_dir, '..'))
 # First import all universal settings from the base Docs/conf.py file
 from conf import *
 
+html_theme_options['navigation_depth'] = 1
+
 # Overwrite the master document and exclude irrelevant files from the build
 master_doc = 'torch_docs/index'
 
