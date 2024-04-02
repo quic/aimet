@@ -1,8 +1,8 @@
-bokeh==1.2.0
+bokeh==3.2.2
 dataclasses
 h5py
-holoviews==1.12.7
-hvplot==0.4.0
+holoviews==1.18.3
+hvplot==0.9.2
 Jinja2==3.0.3
 jsonschema
 osqp

@@ -180,7 +180,7 @@ Please run below commands to fetch AIMET, and googletest from github repo, and c
 
 %pushd ./ThirdParty/googletest
 
-!git clone https://github.com/google/googletest.git -b v1.14.0 googletest-release-1.14.0
+!git clone https://github.com/google/googletest.git -b release-1.12.1  googletest-release-1.12.1
 
 %popd
 

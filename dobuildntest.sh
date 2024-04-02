@@ -262,11 +262,11 @@ if [ $run_prep -eq 1 ]; then
     echo -e "Using ${github_url} for public repos..."
 
     # Clone the google test repo if not already present
-    google_test_path="${workspaceFolder}/ThirdParty/googletest/googletest-release-1.14.0"
+    google_test_path="${workspaceFolder}/ThirdParty/googletest/googletest-release-1.12.1"
     if [ ! -e ${google_test_path} ]; then
         mkdir -p $workspaceFolder/ThirdParty/googletest
         pushd $workspaceFolder/ThirdParty/googletest
-        git clone ${github_url}/google/googletest.git -b v1.14.0 googletest-release-1.14.0
+        git clone ${github_url}/google/googletest.git -b release-1.12.1 googletest-release-1.12.1
         popd
         check_stage $? "Preparation" "true"
     fi
