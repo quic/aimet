@@ -103,8 +103,8 @@ def line_plot_changes_in_summary_stats(data_before, data_after, x_axis_label=Non
     plot = figure(x_axis_label=x_axis_label, y_axis_label=y_axis_label,
                   title=title,
                   tools="pan, box_zoom, crosshair, reset, save",
-                  plot_width=950, plot_height=600, sizing_mode='stretch_both', output_backend="webgl")
-    plot.line(x='index', y='min', line_width=2, line_color="#2171b5", line_dash='dotted', legend="Before Optimization",
+                  width=950, height=600, sizing_mode='stretch_both', output_backend="webgl")
+    plot.line(x='index', y='min', line_width=2, line_color="#2171b5", line_dash='dotted', legend_label="Before Optimization",
               source=layer_weights_old_model, name="old model")
     plot.line(x='index', y='max', line_width=2, line_color="green", line_dash='dotted', source=layer_weights_old_model,
               name="old model")
@@ -112,7 +112,7 @@ def line_plot_changes_in_summary_stats(data_before, data_after, x_axis_label=Non
               source=layer_weights_old_model, name="old model")
 
     plot.line(x='index', y='min', line_width=2, line_color="#2171b5",
-              legend="After Optimization", source=layer_weights_new_model, name="new model")
+              legend_label="After Optimization", source=layer_weights_new_model, name="new model")
     plot.line(x='index', y='max', line_width=2, line_color="green",
               source=layer_weights_new_model, name="new model")
     plot.line(x='index', y='mean', line_width=2, line_color="orange",
@@ -324,11 +324,11 @@ def line_plot_summary_statistics_model(layer_name, layer_weights_data_frame, hei
                   tools="pan, box_zoom, crosshair, reset, save",
                   width=width, height=height, output_backend="webgl")
     plot.line(x='index', y='min', line_width=2, line_color="#2171b5",
-              legend="Minimum", source=layer_weights)
+              legend_label="Minimum", source=layer_weights)
     plot.line(x='index', y='max', line_width=2, line_color="green",
-              legend="Maximum", source=layer_weights)
+              legend_label="Maximum", source=layer_weights)
     plot.line(x='index', y='mean', line_width=2, line_color="orange",
-              legend="Average", source=layer_weights)
+              legend_label="Average", source=layer_weights)
 
     plot.legend.location = "top_left"
     plot.legend.click_policy = "hide"

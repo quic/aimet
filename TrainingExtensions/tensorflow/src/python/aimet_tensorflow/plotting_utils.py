@@ -115,11 +115,11 @@ def line_plot_changes_in_summary_stats(data_before, data_after, x_axis_label=Non
                   title=title,
                   tools="pan, box_zoom, crosshair, reset, save",
                   width_policy="max", sizing_mode='stretch_both', output_backend="webgl")
-    plot.line(x='index', y='min', line_width=2, line_color="#2171b5", legend="Minimum After Optimization",
+    plot.line(x='index', y='min', line_width=2, line_color="#2171b5", legend_label="Minimum After Optimization",
               source=layer_weights_old_model, name="new model")
-    plot.line(x='index', y='max', line_width=2, line_color="green", legend="Maximum After Optimization", source=layer_weights_old_model,
+    plot.line(x='index', y='max', line_width=2, line_color="green", legend_label="Maximum After Optimization", source=layer_weights_old_model,
               name="new model")
-    plot.line(x='index', y='mean', line_width=2, line_color="orange", legend="Mean After Optimization",
+    plot.line(x='index', y='mean', line_width=2, line_color="orange", legend_label="Mean After Optimization",
               source=layer_weights_old_model, name="new model")
 
     plot.line(x='index', y='min', line_width=2, line_color="#2171b5", line_dash='dotted',
