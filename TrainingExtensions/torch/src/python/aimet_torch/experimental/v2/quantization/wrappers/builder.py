@@ -48,6 +48,7 @@ from aimet_torch.utils import get_v1_quant_scheme_for_initialization
 from aimet_torch.qc_quantize_op import QcQuantizeOpMode, QcQuantizeWrapper, StaticGridQuantWrapper, tensor_quantizer_factory
 from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridPerChannelQuantizer
 from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizationMixin
+from aimet_torch.experimental.v2.nn.true_quant import QuantizationMixin
 from aimet_torch.experimental.v2.quantization.quantizers.affine import QuantizeDequantize
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer, PercentileEncodingAnalyzer, \
     SqnrEncodingAnalyzer
@@ -197,7 +198,10 @@ class LazyQuantizeWrapper(torch.nn.Module):
 
         :return: v2 quant wrapper with specified properties
         """
-        quantized_module = FakeQuantizationMixin.from_module(self._module_to_wrap)
+        if type(self._module_to_wrap) in QuantizationMixin.cls_to_qcls: # pylint: disable=unidiomatic-typecheck
+            quantized_module = QuantizationMixin.from_module(self._module_to_wrap)
+        else:
+            quantized_module = FakeQuantizationMixin.from_module(self._module_to_wrap)
 
         def set_recursive(module_list, i, quantizer):
             """

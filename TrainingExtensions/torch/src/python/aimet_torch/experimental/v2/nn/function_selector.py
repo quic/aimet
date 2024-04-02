@@ -104,3 +104,9 @@ class FunctionSelector:
             raise RuntimeError(f"No valid implementation found for op_key {op_key} with arguments "
                                f"{args}, {kwargs}")
         return None
+
+    def is_empty(self):
+        """
+        Returns true if function selector has no registered library
+        """
+        return not bool(self._functional_libraries)

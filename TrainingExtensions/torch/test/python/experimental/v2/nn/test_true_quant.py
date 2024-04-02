@@ -41,10 +41,9 @@ import mock
 import torch.nn.functional as F
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 from aimet_torch.experimental.v2.quantization.quantizers.affine import Quantize, QuantizeDequantize
-from aimet_torch.experimental.v2.nn.true_quant import QuantizedLinear, QuantizationMixin, set_default_functional_library, \
-    set_functional_library
+from aimet_torch.experimental.v2.nn.true_quant import QuantizedLinear, QuantizationMixin, set_functional_library
 from aimet_torch.experimental.v2.quantization.encodings import AffineEncoding
-from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensor
+from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensor, DequantizedTensor
 from aimet_torch.experimental.v2.nn import fake_quant
 
 
@@ -107,7 +106,12 @@ class FalsePredicateBackend(DummyBackend):
 def input():
     return torch.arange(-5, 5).expand(10, 10) / 10
 
-set_default_functional_library(DummyBackend)
+
+@pytest.fixture(autouse=True)
+def default_backend():
+    with set_functional_library(DummyBackend):
+        yield
+
 
 class TestTrueQuantLinear:
 
@@ -139,12 +143,11 @@ class TestTrueQuantLinear:
         with pytest.raises(RuntimeError):
             quant_linear(input)
 
-
+    @set_functional_library(DummyBackend)
     def test_fully_specified_quantizers(self, input):
         """
         Given: TrueQuantLinear with input, output, and param quantizers
         """
-        set_default_functional_library(DummyBackend)
         quant_linear = QuantizedLinear(10, input.shape[-1])
         quant_linear.input_quantizers[0] = Quantize((1, ), bitwidth=8, symmetric=False)
         quant_linear.output_quantizers[0] = Quantize((1, ), bitwidth=8, symmetric=False)
@@ -186,7 +189,7 @@ class TestTrueQuantLinear:
         output_fp = F.linear(input_qdq, weight_qdq, bias=quant_linear.bias)
         output_expected = get_backend().quantize_dequantize(output_fp, *output_enc)
         output_quant = quant_linear(input)
-        assert isinstance(output_quant, QuantizedTensor)
+        assert isinstance(output_quant, DequantizedTensor)
         assert torch.allclose(output_quant.dequantize(), output_expected)
 
         """
@@ -201,11 +204,11 @@ class TestTrueQuantLinear:
         assert torch.allclose(output.dequantize(), output_expected)
 
 
+    @set_functional_library(DummyBackend)
     def test_no_input_quantizer(self, input):
         """
         Given: TrueQuantLinear with output and param quantizers and computed encodings
         """
-        set_default_functional_library(DummyBackend)
         quant_linear = QuantizedLinear(10, input.shape[-1])
         quant_linear.output_quantizers[0] = Quantize((1, ), bitwidth=8, symmetric=False)
         quant_linear.param_quantizers["weight"] = Quantize((10, ), bitwidth=8, symmetric=True)
@@ -228,7 +231,7 @@ class TestTrueQuantLinear:
 
         input_q = quantizer(input)
         output = quant_linear(input_q)
-        assert isinstance(output, QuantizedTensor)
+        assert isinstance(output, DequantizedTensor)
         assert output.encoding.scale == quant_linear.output_quantizers[0].get_scale()
         assert output.encoding.offset == quant_linear.output_quantizers[0].get_offset()
 
@@ -243,58 +246,58 @@ class TestTrueQuantLinear:
         with quant_linear.compute_encodings():
             quant_linear(input)
         """
-        Given: called set_default_functional_library(backend)
-        When: call set_default_functional_library(backend)
+        Given: called with set_functional_library(backend)
+        When: call with set_functional_library(backend)
         Then: forward pass is computed with backend
         """
-        set_default_functional_library(TruePredicateBackend)
-        with mock.patch.object(TruePredicateBackend, "linear") as mock_linear:
-            quant_linear(input)
-            assert mock_linear.call_count == 1
+        with set_functional_library(TruePredicateBackend):
+            with mock.patch.object(TruePredicateBackend, "linear") as mock_linear:
+                quant_linear(input)
+                assert mock_linear.call_count == 1
 
 
         """
-        Given: called set_default_functional_library([b1, b2])
+        Given: called with set_functional_library([b1, b2])
         
         When: 1) Invoke layer forward pass
               2) Both predicates return True
         Then: forward pass is computed with b1
         """
-        set_default_functional_library([TruePredicateBackend, DummyBackend])
-        with mock.patch.object(TruePredicateBackend, "linear") as mock_linear:
-            quant_linear(input)
-            assert mock_linear.call_count == 1
+        with set_functional_library([TruePredicateBackend, DummyBackend]):
+            with mock.patch.object(TruePredicateBackend, "linear") as mock_linear:
+                quant_linear(input)
+                assert mock_linear.call_count == 1
 
         """
         When: 1) Invoke layer forward pass
               2) b1 predicate returns False, b2 predicate returns True
         Then: forward pass is computed with b2
         """
-        set_default_functional_library([FalsePredicateBackend, TruePredicateBackend])
-        with mock.patch.object(TruePredicateBackend, "linear") as mock_linear:
-            quant_linear(input)
-            assert mock_linear.call_count == 1
+        with set_functional_library([FalsePredicateBackend, TruePredicateBackend]):
+            with mock.patch.object(TruePredicateBackend, "linear") as mock_linear:
+                quant_linear(input)
+                assert mock_linear.call_count == 1
 
         """
         When: 1) Invoke layer forward pass
               2) All backend predicates return False
         Then: raise RuntimeError
         """
-        set_default_functional_library([FalsePredicateBackend])
-        with pytest.raises(RuntimeError):
-            quant_linear(input)
+        with set_functional_library([FalsePredicateBackend]):
+            with pytest.raises(RuntimeError):
+                quant_linear(input)
 
     def test_layer_level_backend(self, input):
         """
         Given: TrueQuantLinear with valid quantizers and computed encodings
         """
-        set_default_functional_library(DummyBackend)
-        quant_linear = QuantizedLinear(10, input.shape[-1])
-        quant_linear.input_quantizers[0] = Quantize((1, ), bitwidth=8, symmetric=False)
-        quant_linear.output_quantizers[0] = Quantize((1, ), bitwidth=8, symmetric=False)
-        quant_linear.param_quantizers["weight"] = Quantize((10, ), bitwidth=8, symmetric=True)
-        with quant_linear.compute_encodings():
-            quant_linear(input)
+        with set_functional_library(DummyBackend):
+            quant_linear = QuantizedLinear(10, input.shape[-1])
+            quant_linear.input_quantizers[0] = Quantize((1, ), bitwidth=8, symmetric=False)
+            quant_linear.output_quantizers[0] = Quantize((1, ), bitwidth=8, symmetric=False)
+            quant_linear.param_quantizers["weight"] = Quantize((10, ), bitwidth=8, symmetric=True)
+            with quant_linear.compute_encodings():
+                quant_linear(input)
 
         """
         When: 1) Call layer.set_operator_library(backend)
@@ -444,7 +447,7 @@ class TestQuantizedLayers:
         fq_layer.param_quantizers["weight"] = QuantizeDequantize(shape=(1,), bitwidth=8, symmetric=True)
         tq_layer.input_quantizers[0] = Quantize(shape=(1,), bitwidth=8, symmetric=False)
         tq_layer.output_quantizers[0] = Quantize(shape=(1,), bitwidth=8, symmetric=False)
-        tq_layer.param_quantizers["weight"] = QuantizeDequantize(shape=(1,), bitwidth=8, symmetric=True)
+        tq_layer.param_quantizers["weight"] = Quantize(shape=(1,), bitwidth=8, symmetric=True)
 
         with fq_layer.compute_encodings():
             fq_layer(input)
