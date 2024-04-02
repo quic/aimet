@@ -48,7 +48,7 @@ from torch import nn
 from aimet_torch.experimental.v2.utils import patch_attr, _is_expandable, StatisticsNotFoundError
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import EncodingAnalyzer, MinMaxEncodingAnalyzer
 from aimet_torch.experimental.v2.quantization.encodings import AffineEncoding
-from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensor
+from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensor, DequantizedTensor
 from aimet_torch.experimental.v2.quantization.quantizers.base import QuantizerBase
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 from aimet_torch.experimental.v2.utils import ste_round
@@ -366,18 +366,22 @@ class Quantize(MinMaxQuantizer):
                 ' Please initialize the quantization parameters using `compute_encodings()`.'
             )
 
-        scale = self.get_scale()
-        offset = self.get_offset()
-        return QuantizedTensor(get_backend().quantize(input, scale, offset, self.bitwidth, signed=self._signed),
-                               self.get_encoding(),
-                               lambda x: get_backend().dequantize(torch.Tensor(x), scale, offset))
+        encoding = self.get_encoding()
+        output = get_backend().quantize(input,
+                                        encoding.scale,
+                                        encoding.offset,
+                                        encoding.bitwidth,
+                                        encoding.signed)
+        output = output.as_subclass(QuantizedTensor)
+        output.encoding = encoding
+        return output
 
 
 class QuantizeDequantize(MinMaxQuantizer):
     """
     Applies quantization followed by dequantization to the input
     """
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
+    def forward(self, input: torch.Tensor) -> DequantizedTensor:
         """
         :param input: Input to quantize and dequantize
         :return: Quantize-dequantized output
@@ -388,16 +392,22 @@ class QuantizeDequantize(MinMaxQuantizer):
                 ' Please initialize the quantization parameters using `compute_encodings()`.'
             )
 
-        scale = self.get_scale()
-        offset = self.get_offset()
-        return get_backend().quantize_dequantize(input, scale, offset, self.bitwidth, signed=self._signed)
+        encoding = self.get_encoding()
+        output = get_backend().quantize_dequantize(input,
+                                                   encoding.scale,
+                                                   encoding.offset,
+                                                   encoding.bitwidth,
+                                                   encoding.signed)
+        output = output.as_subclass(DequantizedTensor)
+        output.encoding = encoding
+        return output
 
 
 class Dequantize(torch.nn.Module):
     """
     Applies dequantization to the input
     """
-    def forward(self, input: QuantizedTensor) -> torch.Tensor:
+    def forward(self, input: QuantizedTensor) -> DequantizedTensor:
         # pylint: disable=no-self-use
         """
         :param input: Input to dequantize

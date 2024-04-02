@@ -34,12 +34,14 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+# pylint: disable=redefined-builtin
 """ Affine encoding definition """
 
 import torch
 from torch._C._nn import _parse_to as parse_to_args
 
 from aimet_torch.experimental.v2.quantization.encodings.base import EncodingBase
+from aimet_torch.experimental.v2.quantization.backends import get_backend
 
 
 __all__ = ["AffineEncoding"]
@@ -182,3 +184,35 @@ class AffineEncoding(EncodingBase):
         scale = self._scale.to(dtype=dtype, device=device)
         offset = self._offset.to(dtype=dtype, device=device)
         return type(self)(scale, offset, self._bitwidth)
+
+    def quantize(self, input: torch.Tensor) -> torch.Tensor:
+        scale = self.scale
+        offset = self.offset
+        bitwidth = self.bitwidth
+        signed = self.signed
+
+        # Use dtype with more precision
+        if torch.finfo(input.dtype).bits >= torch.finfo(scale.dtype).bits:
+            dtype = input.dtype
+        else:
+            dtype = scale.dtype
+
+        return get_backend().quantize(input.to(dtype),
+                                      scale.to(dtype),
+                                      offset.to(dtype),
+                                      bitwidth,
+                                      signed).to(input.dtype)
+
+    def dequantize(self, input: torch.Tensor) -> torch.Tensor:
+        scale = self.scale
+        offset = self.offset
+
+        # Use dtype with more precision
+        if torch.finfo(input.dtype).bits >= torch.finfo(scale.dtype).bits:
+            dtype = input.dtype
+        else:
+            dtype = scale.dtype
+
+        return get_backend().dequantize(input.to(dtype),
+                                        scale.to(dtype),
+                                        offset.to(dtype)).to(input.dtype)

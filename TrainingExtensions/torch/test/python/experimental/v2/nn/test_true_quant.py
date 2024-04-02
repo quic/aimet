@@ -57,9 +57,8 @@ def affine_quantize(tensor: torch.Tensor,
     """
     tensor_q = get_backend().quantize(tensor, scale, offset, bitwidth)
     encoding = AffineEncoding(scale, offset, bitwidth)
-    dequant = get_backend().dequantize
-    dequant_fn = lambda t: dequant(torch.Tensor(t), t.encoding.scale, t.encoding.offset)
-    qtensor = QuantizedTensor(tensor_q, encoding, dequant_fn=dequant_fn)
+    qtensor = tensor_q.as_subclass(QuantizedTensor)
+    qtensor.encoding = encoding
     return qtensor
 
 
@@ -77,6 +76,10 @@ class DummyBackend:
 
     @staticmethod
     def linear(input, weight, bias=None, *, output_encodings=None):
+        # Implicit dequantization is not supported yet
+        input = input.dequantize()
+        weight = weight.dequantize()
+
         return affine_quantize(input.mm(weight.t()) + bias,
                                output_encodings.scale,
                                output_encodings.offset,
@@ -190,9 +193,9 @@ class TestTrueQuantLinear:
         When: Invoke forward pass outside of compute_encodings context with a quantized tensor
         Then: Dequantized output should be close to running fake quant on the dequantized input tensor
         """
-        quantized_input = affine_quantize(input, torch.tensor(0.01), torch.tensor(0.), 8)
+        quantized_input = affine_quantize(input, *input_enc)
         output = quant_linear(quantized_input)
-        input_qdq = get_backend().quantize_dequantize(quantized_input.dequantize(), *input_enc)
+        input_qdq = get_backend().dequantize(quantized_input, *input_enc[:2])
         output_fp = F.linear(input_qdq, weight_qdq, bias=quant_linear.bias)
         output_expected = get_backend().quantize_dequantize(output_fp, *output_enc)
         assert torch.allclose(output.dequantize(), output_expected)
@@ -430,7 +433,7 @@ class TestQuantizedLayers:
                 tq_layer(input)
             tq_output = tq_layer(input)
 
-        assert torch.allclose(fq_output, tq_output)
+        assert torch.allclose(fq_output, tq_output.dequantize())
 
     @pytest.mark.parametrize("layer", (torch.nn.Linear(10, 10), torch.nn.LayerNorm(10)))
     def test_layers_with_weight(self, input, layer):
@@ -454,5 +457,4 @@ class TestQuantizedLayers:
                 tq_layer(input)
             tq_output = tq_layer(input)
 
-        assert torch.allclose(fq_output, tq_output)
-
+        assert torch.allclose(fq_output, tq_output.dequantize())
