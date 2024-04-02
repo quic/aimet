@@ -468,12 +468,10 @@ class TestQuantizationSimStaticGrad:
                 assert type(orig_module) == type(quant_module)
                 continue
 
-            # TODO(kyunggeu): uncomment these
-            # orig_cls = type(orig_module)
-            # quant_cls = aimet_nn.FakeQuantizationMixin.wrap(orig_cls)
-            # assert isinstance(quant_module, quant_cls)
-            # assert isinstance(aimet_nn.FakeQuantizationMixin.get_original_module(quant_module),
-            #                   orig_cls)
+            orig_cls = type(orig_module)
+            assert isinstance(quant_module, aimet_nn.BaseQuantizationMixin) and \
+                   isinstance(quant_module, orig_cls)
+            assert isinstance(quant_module.get_original_module(), orig_cls)
 
     def test_add_quantization_wrappers_one_deep(self):
         """With a one-deep model"""
