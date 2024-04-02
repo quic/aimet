@@ -37,6 +37,7 @@
 """ Quantized modules"""
 
 import contextlib
+from functools import partial
 import itertools
 from abc import ABC, abstractmethod
 from collections import OrderedDict
@@ -47,19 +48,21 @@ import torch.nn as nn
 from torch import Tensor
 
 from aimet_torch.experimental.v2.nn.quant_base import BaseQuantizationMixin
+from aimet_torch.experimental.v2.nn.fake_quant import _FakeQuantizedUnaryOpMixin, _FakeQuantizedBinaryOpMixin
 from aimet_torch.experimental.v2.nn.function_selector import FunctionSelector, _FunctionalLibrary
 from aimet_torch.experimental.v2.quantization.quantizers.base import QuantizerBase
+from aimet_torch.experimental.v2.quantization.quantizers import affine
+from aimet_torch.experimental.v2.quantization.quantizers.float import FloatQuantizeDequantize
 from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensorBase
 from aimet_torch.experimental.v2.utils import patch_attr, _ContextManager
 
 
-_FUNCTION_SELECTOR = FunctionSelector([], strict=True)
+_FUNCTION_SELECTOR = FunctionSelector([], strict=False)
 
 def set_default_functional_library(library: _FunctionalLibrary, strict=True):
     """
     Set the default operator library(s) for quantized modules
     """
-    global _FUNCTION_SELECTOR # pylint: disable=global-statement
     _FUNCTION_SELECTOR.set_libraries(library, strict)
 
 
@@ -134,6 +137,9 @@ def _quantize_if_applicable(data: Any, quantizer: Optional[QuantizerBase]):
             data = data.dequantize()
         return quantizer(data)
 
+    if isinstance(data, QuantizedTensorBase):
+        return data.quantize()
+
     return data
 
 def _dequantize_if_applicable(data: torch.Tensor):
@@ -207,12 +213,51 @@ class QuantizationMixin(BaseQuantizationMixin, ABC): # pylint: disable=abstract-
 
         return wrapper
 
+    @contextlib.contextmanager
+    def _unsafe_view_as_fakequant(self):
+        def _view_as_qdq(quantizer):
+            if not quantizer:
+                return contextlib.nullcontext()
+
+            if isinstance(quantizer, affine.QuantizeDequantize):
+                return contextlib.nullcontext()
+
+            if isinstance(quantizer, FloatQuantizeDequantize):
+                return contextlib.nullcontext()
+
+            if 'forward' in quantizer.__dict__:
+                # forward is already monkey-patched probably due to compute_encodings()
+                # Leave it as-is
+                return contextlib.nullcontext()
+
+            return patch_attr(quantizer, 'forward',
+                              partial(affine.QuantizeDequantize.forward, quantizer))
+
+        with contextlib.ExitStack() as stack:
+            for quantizer in itertools.chain(self.input_quantizers,
+                                             self.output_quantizers,
+                                             self.param_quantizers.values()):
+                ctx = _view_as_qdq(quantizer)
+                stack.enter_context(ctx)
+            yield
+
 
 # pylint: disable=arguments-differ, abstract-method
 
 class _QuantizedUnaryOpMixin(QuantizationMixin, ABC):
 
     def quantized_forward(self, *args, **kwargs):
+        if self._func_selector().is_empty() and not self._func_selector().strict:
+            # Fast track: Fall back to fake quantization without further check
+            # Most of the users who never use integer kernels will always end up
+            # taking this path, making QuantizedModule behave the same as FakeQuantizedModule
+            # which is currently much more performant in terms of both speed and memory
+
+            # NOTE: This is a quick temporary solution that may not be robust
+            #       for the quantized modules to be added in the future.
+            with self._unsafe_view_as_fakequant():
+                return _FakeQuantizedUnaryOpMixin.quantized_forward(self, *args, **kwargs)
+
         x, *args = args
         x = _quantize_if_applicable(x, self.input_quantizers[0])
 
@@ -226,7 +271,11 @@ class _QuantizedUnaryOpMixin(QuantizationMixin, ABC):
             else:
                 with self._patch_dequantized_parameters():
                     output = super().forward(_dequantize_if_applicable(x), *args, **kwargs)
-                output = _quantize_if_applicable(output, self.output_quantizers[0])
+
+        output = _quantize_if_applicable(output, self.output_quantizers[0])
+
+        if isinstance(output, QuantizedTensorBase):
+            output = output.dequantize()
 
         return output
 
@@ -244,6 +293,17 @@ class _QuantizedBinaryOpMixin(QuantizationMixin, ABC):
         self.input_quantizers = nn.ModuleList([None, None])
 
     def quantized_forward(self, *args, **kwargs):
+        if self._func_selector().is_empty() and not self._func_selector().strict:
+            # Fast track: Fall back to fake quantization without further check
+            # Most of the users who never use integer kernels will always end up
+            # taking this path, making QuantizedModule behave the same as FakeQuantizedModule
+            # which is currently much more performant in terms of both speed and memory
+
+            # NOTE: This is a quick temporary solution that may not be robust
+            #       for the quantized modules to be added in the future.
+            with self._unsafe_view_as_fakequant():
+                return _FakeQuantizedBinaryOpMixin.quantized_forward(self, *args, **kwargs)
+
         x, y, *args = args
         x = _quantize_if_applicable(x, self.input_quantizers[0])
         y = _quantize_if_applicable(y, self.input_quantizers[1])
@@ -259,7 +319,11 @@ class _QuantizedBinaryOpMixin(QuantizationMixin, ABC):
             else:
                 with self._patch_dequantized_parameters():
                     output = super().forward(_dequantize_if_applicable(x), _dequantize_if_applicable(y), *args, **kwargs)
-                output = _quantize_if_applicable(output, self.output_quantizers[0])
+
+        output = _quantize_if_applicable(output, self.output_quantizers[0])
+
+        if isinstance(output, QuantizedTensorBase):
+            output = output.dequantize()
 
         return output
 
