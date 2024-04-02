@@ -38,6 +38,8 @@
 """ Base encoding definition """
 import abc
 
+import torch
+
 
 __all__ = ['EncodingBase']
 
@@ -73,4 +75,22 @@ class EncodingBase(abc.ABC):
         Changes dtype of data in quantizer encoding or device where the data is.
         Returns new encoding with changed dtype and device without changing current encoding
         as `torch.Tensor.to`.
+        """
+
+    @abc.abstractmethod
+    def quantize(self, input: torch.Tensor) -> torch.Tensor:
+        """
+        Quantize the input with the encoding
+
+        :param input: Tensor to be quantized
+        :return: Quantized tensor
+        """
+
+    @abc.abstractmethod
+    def dequantize(self, input: torch.Tensor) -> torch.Tensor:
+        """
+        Dequantize the input with the encoding
+
+        :param input: Tensor to be dequantized
+        :return: Dequantized tensor
         """
