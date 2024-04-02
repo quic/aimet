@@ -61,7 +61,7 @@ from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridPerTensorQua
 from aimet_torch.quantsim import QuantizationSimModel
 
 # The following modules with weights are supported
-SUPPORTED_MODULES = (torch.nn.Linear, )
+SUPPORTED_MODULES = (torch.nn.Linear, torch.nn.Conv2d, )
 
 # Skip running Sequential MSE if param BW is higher than supported PARAM_BW.
 SUPPORTED_PARAM_BW = 4
@@ -409,6 +409,34 @@ class SequentialMse:
             # into the param tensor quantizer's quantize_dequantize() if the mode isn't PASSTHROUGH.
             quant_wrapper.set_mode(QcQuantizeOpMode.ACTIVE)
 
+    @classmethod
+    def _get_per_channel_min_and_max(cls, quant_module: QcQuantizeWrapper) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Get per channel min/max values across output channel.
+
+        :param quant_module: Quant module to be optimized
+        :return:
+        """
+        # pylint: disable=protected-access
+        module = quant_module._module_to_wrap
+
+        if isinstance(module, torch.nn.Conv2d):
+            channel_dim = quant_module.out_channels
+            weight = quant_module.weight.reshape(channel_dim, -1)
+        elif isinstance(module, torch.nn.Linear):
+            weight = quant_module.weight
+        else:
+            raise ValueError('Unsupported module: ', module)
+
+        if cls._is_symmetric_quantizer(quant_module.param_quantizers["weight"]):
+            per_channel_max = torch.max(weight.abs(), dim=1)[0].detach()
+            per_channel_min = None
+        else:
+            per_channel_max = torch.max(weight, dim=1)[0].detach()
+            per_channel_min = torch.min(weight, dim=1)[0].detach()
+
+        return per_channel_min, per_channel_max
+    
     @staticmethod
     def get_candidates(num_candidates: int,
                        per_channel_max: torch.Tensor,
@@ -449,12 +477,7 @@ class SequentialMse:
         :param params: Sequenial MSE parameters
         """
         # pylint: disable=too-many-locals
-        if cls._is_symmetric_quantizer(quant_module.param_quantizers["weight"]):
-            per_channel_max = torch.max(quant_module.weight.abs(), dim=1)[0].detach()
-            per_channel_min = None
-        else:
-            per_channel_max = torch.max(quant_module.weight, dim=1)[0].detach()
-            per_channel_min = torch.min(quant_module.weight, dim=1)[0].detach()
+        per_channel_min, per_channel_max = cls._get_per_channel_min_and_max(quant_module)
         candidates = cls.get_candidates(params.num_candidates, per_channel_max, per_channel_min)
 
         total_loss = []
@@ -517,6 +540,13 @@ class SequentialMse:
         if isinstance(module, torch.nn.Linear):
             xqwq = functional.linear(xq, wq, module.bias)
             xw = functional.linear(x, w, module.bias)
+        elif isinstance(module, torch.nn.Conv2d):
+            xqwq = functional.conv2d(xq, wq, bias=module.bias, stride=module.stride, dilation=module.dilation,
+                                     padding=module.padding, groups=module.groups)
+            xw = functional.conv2d(x, w, bias=module.bias, stride=module.stride, dilation=module.dilation,
+                                   padding=module.padding, groups=module.groups)
+            xqwq = xqwq.permute(0, 2, 3, 1)
+            xw = xw.permute(0, 2, 3, 1)
         else:
             raise ValueError('Unsupported module: ', module)
         return xqwq, xw
