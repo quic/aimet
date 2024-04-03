@@ -379,6 +379,18 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         super().__init__(observer)
         self.percentile = percentile
 
+    def set_percentile(self, percentile):
+        """
+        Set the clipping percentile of the encoding analyzer. The encoding analyzer will clip the (100% - percentile)
+        largest and smallest observed values from the encoding range when computing encodings.
+
+        :param percentile: Value from 50.0 to 100.0 indicating the clipping percentile
+        """
+        if percentile < 50 or percentile > 100:
+            raise ValueError('Percentile value must be within 50-100 range')
+
+        self.percentile = percentile
+
     @torch.no_grad()
     def update_stats(self, input_tensor: torch.Tensor) -> _Statistics:
         new_stats = self.observer.collect_stats(input_tensor)

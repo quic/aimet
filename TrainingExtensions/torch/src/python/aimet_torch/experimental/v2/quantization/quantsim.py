@@ -46,6 +46,8 @@ from aimet_torch.experimental.v2 import nn as aimet_nn
 from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizationMixin
 from aimet_torch.experimental.v2.nn.quant_base import BaseQuantizationMixin
 from aimet_torch.experimental.v2.quantization.wrappers.builder import LazyQuantizeWrapper
+from aimet_torch.experimental.v2.quantization.quantizers import QuantizerBase
+from aimet_torch.experimental.v2.quantization.encoding_analyzer import PercentileEncodingAnalyzer
 from aimet_torch.experimental.v2.utils import patch_attr
 from aimet_torch import utils
 
@@ -128,3 +130,13 @@ class QuantizationSimModel(V1QuantizationSimModel):
         # RNN, LSTM, and GRU don't require special handling in aimet V2
         with patch_attr(quantsim_v1, 'qc_quantize_modules_dict', qc_quantize_modules_dict):
             return super()._create_quantizer_module(*args, **kwargs)
+
+    def set_percentile_value(self, percentile_value: float):
+        """
+        Set the percentile value to be used while computing encodings
+        """
+        self._percentile_value = percentile_value
+        for module in self.model.modules():
+            if isinstance(module, QuantizerBase):
+                if isinstance(module.encoding_analyzer, PercentileEncodingAnalyzer):
+                    module.encoding_analyzer.set_percentile(percentile_value)
