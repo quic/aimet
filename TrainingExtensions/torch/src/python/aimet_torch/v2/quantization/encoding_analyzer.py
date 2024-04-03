@@ -506,18 +506,17 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
             raise StatisticsNotFoundError('No statistics present to compute encodings.')
         if bitwidth <= 0:
             raise ValueError('Bitwidth cannot be less than or equal to 0.')
-        num_steps = 2 ** bitwidth - 1
         chunked_stats = [stats[i:min(i+self.max_parallelism, len(stats))] for i in range(0, len(stats), self.max_parallelism)]
         best_deltas, best_offsets = [], []
         for stats_ in chunked_stats:
-            test_deltas, test_offsets = self._pick_test_candidates(stats_, num_steps, is_symmetric)
-            best_delta, best_offset = self._select_best_candidates(test_deltas, test_offsets, stats_, num_steps)
+            test_deltas, test_offsets = self._pick_test_candidates(stats_, num_quant_bins, is_symmetric)
+            best_delta, best_offset = self._select_best_candidates(test_deltas, test_offsets, stats_, num_quant_bins)
             best_deltas.append(best_delta)
             best_offsets.append(best_offset)
         best_offset = best_offsets[0] if is_symmetric else torch.cat(best_offsets)
         best_delta = torch.cat(best_deltas)
         min_enc = best_offset * best_delta
-        max_enc = min_enc + num_steps * best_delta
+        max_enc = min_enc + num_quant_bins * best_delta
         return min_enc.view(self.observer.shape).to(stats[0].max.dtype), \
                max_enc.view(self.observer.shape).to(stats[0].max.dtype)
 
