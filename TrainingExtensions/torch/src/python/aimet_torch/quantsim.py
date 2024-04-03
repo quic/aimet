@@ -1615,10 +1615,10 @@ class QuantizationSimModel:
 
         for name, module in self.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
-                module.set_param_encoding(name, params_encoding, ignore_when_quantizer_disabled=ignore_when_quantizer_disabled)
+                module.set_param_encoding(name, params_encoding, ignore_when_quantizer_disabled, False)
                 module.freeze_param_encoding(name, params_encoding)
 
-                module.set_activation_encoding(name, activation_encoding, ignore_when_quantizer_disabled=ignore_when_quantizer_disabled)
+                module.set_activation_encoding(name, activation_encoding, ignore_when_quantizer_disabled, False)
                 module.freeze_activation_encoding(name, activation_encoding)
 
     def set_and_freeze_param_encodings(self, encoding_path: str):
