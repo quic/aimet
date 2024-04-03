@@ -152,7 +152,8 @@ if (ENABLE_TORCH)
                   OUTPUT_STRIP_TRAILING_WHITESPACE
                   )
 
-  # Update CMAKE_CUDA_ARCHITECTURES with the supported architectures that this pytorch version was compiled for
+  # Update CMAKE_CUDA_ARCHITECTURES with the supported architectures that this pytorch version was
+  # compiled for:
   #   1. Remove sm_ prefixes from the CUDA architecture names.
   #   2. Change python list into a CMake list.
   execute_process(COMMAND ${Python3_EXECUTABLE} "-c" "import torch; print(';'.join(arch.split('_')[1] for arch in torch.cuda.get_arch_list()))"
@@ -161,6 +162,12 @@ if (ENABLE_TORCH)
                   OUTPUT_STRIP_TRAILING_WHITESPACE
                   )
   message(STATUS "** Updated CMAKE_CUDA_ARCHITECTURES to ${CMAKE_CUDA_ARCHITECTURES} **")
+
+  # We remove certain architectures that are not supported
+  set(UNSUPPORTED_CUDA_ARCHITECTURES_TORCH 90)
+  list(REMOVE_ITEM CMAKE_CUDA_ARCHITECTURES ${UNSUPPORTED_CUDA_ARCHITECTURES_TORCH})
+  message(STATUS "** Removed unsupported archs (${UNSUPPORTED_CUDA_ARCHITECTURES_TORCH}), \
+                  Now CMAKE_CUDA_ARCHITECTURES = ${CMAKE_CUDA_ARCHITECTURES} **")
 
   # Set torch cuda architecture list variable
   # Convert to the proper format (Reference: https://stackoverflow.com/a/74962874)
