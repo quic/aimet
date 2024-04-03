@@ -40,6 +40,8 @@ import itertools
 
 import torch
 
+import io
+
 from aimet_torch.quantsim import QuantizationSimModel as V1QuantizationSimModel
 import aimet_torch.quantsim as quantsim_v1
 from aimet_torch.v2 import nn as aimet_nn
@@ -140,3 +142,11 @@ class QuantizationSimModel(V1QuantizationSimModel):
             if isinstance(module, QuantizerBase):
                 if isinstance(module.encoding_analyzer, PercentileEncodingAnalyzer):
                     module.encoding_analyzer.set_percentile(percentile_value)
+
+    def __str__(self):
+        stream = io.StringIO(newline='\n')
+        stream.write("-------------------------\n")
+        stream.write("Quantized Model Report\n")
+        stream.write("-------------------------\n")
+        stream.write(f"{self.model}\n")
+        return stream.getvalue()
