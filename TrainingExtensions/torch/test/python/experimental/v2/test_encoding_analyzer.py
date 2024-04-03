@@ -113,14 +113,33 @@ class TestMinMaxEncodingAnalyzer():
         assert torch.all(torch.isclose(asymmetric_min, torch.zeros(tuple(encoding_analyzer.observer.shape))))
         assert torch.all(torch.isclose(asymmetric_max, torch.full(tuple(encoding_analyzer.observer.shape), 25.5)))
 
-    def test_compute_encodings_signed_symmetric(self):
+    def test_compute_encodings_strict_symmetric(self):
         encoding_analyzer = MinMaxEncodingAnalyzer((1,))
         input_tensor =  torch.arange(start=0, end=26, step=0.5, dtype=torch.float)
         encoding_analyzer.update_stats(input_tensor)
 
-        symmetric_min, symmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = True)
-        assert torch.all(torch.isclose(symmetric_min, torch.full(tuple(encoding_analyzer.observer.shape), -25.5)))
-        assert torch.all(torch.isclose(symmetric_max, torch.full(tuple(encoding_analyzer.observer.shape), 25.5)))
+        symmetric_min_1, symmetric_max_1 = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = True)
+        assert torch.all(torch.isclose(symmetric_min_1, torch.full(tuple(encoding_analyzer.observer.shape), -25.5)))
+        assert torch.all(torch.isclose(symmetric_max_1, torch.full(tuple(encoding_analyzer.observer.shape), 25.5)))
+
+        num_bins = pow(2, 8) - 2
+        symmetric_min_2, symmetric_max_2 = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = True, num_quant_bins = num_bins)
+        assert torch.all(torch.isclose(symmetric_min_2, torch.full(tuple(encoding_analyzer.observer.shape), -25.5)))
+        assert torch.all(torch.isclose(symmetric_max_2, torch.full(tuple(encoding_analyzer.observer.shape), 25.5)))
+
+        assert torch.allclose(symmetric_min_1, symmetric_min_2)
+        assert torch.allclose(symmetric_max_1, symmetric_max_2)
+    
+    def test_compute_encodings_non_strict_symmetric(self):
+        encoding_analyzer = MinMaxEncodingAnalyzer((1,))
+        input_tensor =  torch.arange(start=-2, end=10, step=1, dtype=torch.float)
+        print(input_tensor)
+        encoding_analyzer.update_stats(input_tensor)
+
+        num_bins = pow(2, 3) - 1
+        non_strict_symmetric_min, non_strict_symmetric_max = encoding_analyzer.compute_encodings(bitwidth = 3, is_symmetric = True, num_quant_bins = num_bins)
+        assert torch.all(torch.isclose(non_strict_symmetric_min, torch.full(tuple(encoding_analyzer.observer.shape), -12.0)))
+        assert torch.all(torch.isclose(non_strict_symmetric_max, torch.full(tuple(encoding_analyzer.observer.shape), -9.0)))
 
     @pytest.mark.parametrize("min_max_size", [[3,4], [2, 3, 1], [4], [1]])
     def test_update_stats_with_different_dimensions(self,min_max_size):
@@ -191,7 +210,7 @@ class TestHistogramEncodingAnalyzer:
         #sqnr_encoding_analyzer = SqnrEncodingAnalyzer(min_max_shape, num_bins)
         encoding_analyzer_list = [percentile_encoding_analyzer]
         yield encoding_analyzer_list
-
+    
     @pytest.mark.parametrize("histogram_based_encoding_analyzers", [((1,), 3)], indirect=True)
     def test_compute_encodings_with_same_nonzero_tensor(self, histogram_based_encoding_analyzers):
         for encoding_analyzer in histogram_based_encoding_analyzers:
@@ -562,6 +581,16 @@ class TestPercentileEncodingAnalyzer():
         symmetric_min, symmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = True)
         assert symmetric_min == -990.0
         assert symmetric_max == 990.0
+    
+    def test_compute_encodings_non_strict_symmetric(self):
+        encoding_analyzer = PercentileEncodingAnalyzer((1,), percentile = 100, num_bins = 1)
+        input_tensor =  torch.arange(start=-2, end=10, step=1, dtype=torch.float)
+        encoding_analyzer.update_stats(input_tensor)
+
+        num_bins = pow(2, 3) - 1
+        non_strict_symmetric_min, non_strict_symmetric_max = encoding_analyzer.compute_encodings(bitwidth = 3, is_symmetric = True, num_quant_bins = num_bins)
+        assert torch.all(torch.isclose(non_strict_symmetric_min, torch.full(tuple(encoding_analyzer.observer.shape), -12.0)))
+        assert torch.all(torch.isclose(non_strict_symmetric_max, torch.full(tuple(encoding_analyzer.observer.shape), -9.0)))
     
     def test_compute_encodings_100_percentile(self):
         encoding_analyzer = PercentileEncodingAnalyzer((1,), percentile = 100, num_bins = 3)
