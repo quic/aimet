@@ -521,7 +521,7 @@ class TestPercentileEncodingAnalyzer():
             PercentileEncodingAnalyzer((1,), percentile = percentile_value, num_bins = 3)
     
     def test_compute_encodings_asymmetric_normalized(self):
-        encoding_analyzer = PercentileEncodingAnalyzer((1,), percentile = 99, num_bins = 3)
+        encoding_analyzer = PercentileEncodingAnalyzer((1,), percentile = 99)
         mean = std_dev = 2
         input_tensor = np.random.normal(mean, std_dev, size=(100000))
         encoding_analyzer.update_stats(torch.from_numpy(input_tensor))
@@ -598,6 +598,15 @@ class TestPercentileEncodingAnalyzer():
         asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = bw, is_symmetric = False)
         assert asymmetric_min == 0
         assert asymmetric_max == mid_value
+
+    def test_compute_percentile_encodings_with_outliers(self):
+        encoding_analyzer = PercentileEncodingAnalyzer(num_bins=2048, shape=(1, ), percentile=90.)
+        input_tensor = torch.arange(start=0, end=101, step=1, dtype=torch.float)
+        input_tensor[-1] = 1000
+        input_tensor[-2] = 800
+        encoding_analyzer.update_stats(input_tensor)
+        asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth=8, is_symmetric=False)
+        assert asymmetric_max < 91 and asymmetric_max > 89
 
 
 class TestSqnrEncodingAnalyzer:
