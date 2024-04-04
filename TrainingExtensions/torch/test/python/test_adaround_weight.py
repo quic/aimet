@@ -49,8 +49,7 @@ from torchvision import models
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import calculate_delta_offset
-from aimet_torch.tensor_quantizer import StaticGridTensorQuantizer
-from aimet_torch.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer
+from aimet_torch.adaround.adaround_wrapper import AdaroundWrapper
 from aimet_torch.utils import create_fake_data_loader, create_rand_tensors_given_shapes, get_device
 from models.test_models import TinyModel
 from aimet_torch.quantsim import QuantizationSimModel
@@ -525,7 +524,8 @@ class TestAdaround:
         out_rounding_to_nearest = quant_module(dummy_input)
 
         # replace the tensor quantizer
-        Adaround._replace_tensor_quantizer(quant_module)  # pylint: disable=protected-access
+        Adaround._replace_quantization_layer(sim.model, 'conv1')  # pylint: disable=protected-access
+        quant_module = sim.model.conv1
         out_soft_quant = quant_module(dummy_input)
 
         soft_quant_rec = functional.mse_loss(out_soft_quant, out_float32)
@@ -533,7 +533,7 @@ class TestAdaround:
         assert soft_quant_rec < 1
 
         # enable hard rounding
-        quant_module.param_quantizers['weight'].use_soft_rounding = False
+        quant_module.use_soft_rounding = False
         out_hard_quant = quant_module(dummy_input)
         hard_quant_rec = functional.mse_loss(out_hard_quant, out_rounding_to_nearest)
 
@@ -1083,21 +1083,18 @@ class TestAdaround:
         adaround_module = AdaroundOptimizer.adaround_module
 
         def _adaround_module(module, wrapper, model, sim_model, *args, **kwargs):
-            # Assert all the weight quantizers are StaticGridTensorQuantizer
-            # except for the quant wrapper that is currently being optimized
+            # Assert all the wrappers are QcQuantizeWrapper
+            # except for the wrapper that is currently being optimized
             for module_ in sim_model.modules():
-                if not isinstance(module_, QcQuantizeWrapper):
-                    continue
-
-                if 'weight' not in module_.param_quantizers:
+                if not isinstance(module_, (QcQuantizeWrapper, AdaroundWrapper)):
                     continue
 
                 if module_ is wrapper:
-                    expected_weight_quantizer_cls = AdaroundTensorQuantizer
+                    expected_weight_quantizer_cls = AdaroundWrapper
                 else:
-                    expected_weight_quantizer_cls = StaticGridTensorQuantizer
+                    expected_weight_quantizer_cls = QcQuantizeWrapper
 
-                assert isinstance(module_.param_quantizers['weight'], expected_weight_quantizer_cls)
+                assert isinstance(module_, expected_weight_quantizer_cls)
 
             return adaround_module(module, wrapper, model, sim_model, *args, **kwargs)
 

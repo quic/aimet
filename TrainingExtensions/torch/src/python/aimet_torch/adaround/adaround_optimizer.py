@@ -52,6 +52,7 @@ from aimet_torch import utils
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
 from aimet_torch.adaround.activation_sampler import ActivationSampler
 from aimet_torch.adaround.adaround_loss import AdaroundLoss, AdaroundHyperParameters
+from aimet_torch.adaround.adaround_wrapper import AdaroundWrapper
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 BATCH_SIZE = 32
@@ -82,8 +83,7 @@ class AdaroundOptimizer:
         :param opt_params: Optimization parameters
         """
         # pylint: disable=too-many-locals, too-many-arguments
-        assert isinstance(quant_module, StaticGridQuantWrapper), '%s is not wrapper module.' % quant_module
-        assert quant_module.param_quantizers['weight'], '%s does not have weight quantizer.' % quant_module
+        assert isinstance(quant_module, AdaroundWrapper), '%s is not adaround wrapper module.' % quant_module
 
         # Get input and output data of batch size to compute reconstruction error of output activations
         # before and after optimization
@@ -107,10 +107,10 @@ class AdaroundOptimizer:
                      recons_err_hard)
 
         # After optimization, set the optimized layer's rounding mode to "Hard rounding"
-        quant_module.param_quantizers['weight'].use_soft_rounding = False
+        quant_module.use_soft_rounding = False
 
     @classmethod
-    def _optimize_rounding(cls, module: torch.nn.Module, quant_module: StaticGridQuantWrapper,
+    def _optimize_rounding(cls, module: torch.nn.Module, quant_module: AdaroundWrapper,
                            orig_model: torch.nn.Module, quant_model: torch.nn.Module,
                            act_func: Union[torch.nn.Module, None], cached_dataset: Dataset,
                            forward_fn: Callable[[torch.nn.Module, Any], Any],
@@ -124,7 +124,7 @@ class AdaroundOptimizer:
         2) If 1) fails, reads model inputs dirctly from the disk.
 
         :param module: Original module
-        :param quant_module: Quantized wrapper module
+        :param quant_module: Adaround wrapper module
         :param orig_model: The original, un quantized, model
         :param quant_model: QuantSim model
         :param act_func: Activation function
@@ -147,12 +147,12 @@ class AdaroundOptimizer:
         if cached_quant_dataset is not None:
             cached_quant_dataset = Subset(cached_quant_dataset, indices=indices)
 
-        adaround_quantizer = quant_module.param_quantizers['weight']
-        assert adaround_quantizer.use_soft_rounding, 'optimization should use soft rounding only.'
-        assert adaround_quantizer.alpha is not None, 'alpha parameter should be initialized.'
+        assert isinstance(quant_module, AdaroundWrapper), '%s is not adaround wrapper module.' % quant_module
+        assert quant_module.use_soft_rounding, 'optimization should use soft rounding only.'
+        assert quant_module.alpha is not None, 'alpha parameter should be initialized.'
 
         # Create and set up Adam optimizer with parameter 'alpha' to be optimized
-        optimizer = torch.optim.Adam([adaround_quantizer.alpha])
+        optimizer = torch.optim.Adam([quant_module.alpha])
 
         for group in optimizer.param_groups:
             group['lr'] *= world_size # Scale up learning rate by world_size
@@ -196,7 +196,7 @@ class AdaroundOptimizer:
 
                 # Calculate total loss
                 recon_loss = AdaroundLoss.compute_recon_loss(quant_out_data, orig_out_data)
-                round_loss = AdaroundLoss.compute_round_loss(adaround_quantizer.alpha, opt_params, iteration)
+                round_loss = AdaroundLoss.compute_round_loss(quant_module.alpha, opt_params, iteration)
                 total_loss = recon_loss + round_loss
                 total_loss.backward()
 
@@ -210,8 +210,8 @@ class AdaroundOptimizer:
                     raise error
 
             if dist.is_initialized():
-                dist.all_reduce(adaround_quantizer.alpha.grad)
-            adaround_quantizer.alpha.grad /= world_size
+                dist.all_reduce(quant_module.alpha.grad)
+            quant_module.alpha.grad /= world_size
 
             optimizer.step()
 
@@ -220,25 +220,24 @@ class AdaroundOptimizer:
         quant_model.to(device)
 
     @classmethod
-    def _compute_recons_metrics(cls, quant_module: StaticGridQuantWrapper, act_func, inp_data: torch.Tensor,
+    def _compute_recons_metrics(cls, quant_module: AdaroundWrapper, act_func, inp_data: torch.Tensor,
                                 out_data: torch.Tensor) -> Tuple[float, float]:
         """
         Compute Mean square error of output activations using soft rounding which maps alpha parameter
         between zero and one and hard rounding which maps to exact zero and one
-        :param quant_module: Quantized wrapper module
+        :param quant_module: Adaround wrapper module
         :param act_func: Activation function
         :param inp_data: Input data to quantized wrapper module
         :param out_data: Output data from module
         :return: Reconstruction error using hard rounding and soft rounding
         """
-        adaround_quantizer = quant_module.param_quantizers['weight']
 
-        # Enable hard rounding and get quantized wrapper module's output
-        adaround_quantizer.use_soft_rounding = False
+        # Enable hard rounding and get adaround wrapper module's output
+        quant_module.use_soft_rounding = False
         out_data_hard = cls._compute_output_with_adarounded_weights(quant_module, inp_data)
 
-        # Enable soft rounding and get quantized wrapper module's output
-        adaround_quantizer.use_soft_rounding = True
+        # Enable soft rounding and get adaround wrapper module's output
+        quant_module.use_soft_rounding = True
         out_data_soft = cls._compute_output_with_adarounded_weights(quant_module, inp_data)
 
         # If followed by an activation function
@@ -253,21 +252,19 @@ class AdaroundOptimizer:
         return float(recons_err_hard), float(recons_err_soft)
 
     @staticmethod
-    def _compute_output_with_adarounded_weights(quant_module: StaticGridQuantWrapper, inp_data: torch.Tensor):
+    def _compute_output_with_adarounded_weights(quant_module: AdaroundWrapper, inp_data: torch.Tensor):
         """
         Compute output of AdaroundSupportedModules with adarounded weights
-        :param quant_module: Quantized wrapper module
+        :param quant_module: Adaround wrapper module
         :param inp_data: The input data to be used for computing the output
         :return: output of the module computed with AdaRounded weights
         """
-        # pylint: disable=protected-access
-        module = quant_module._module_to_wrap
-        adaround_quantizer = quant_module.param_quantizers['weight']
+        module = quant_module.get_original_module()
 
         # Compute adarounded weights
         device = inp_data.device
         quant_module.to(device)
-        adarounded_weights = adaround_quantizer.adaround_weights(module.weight)
+        adarounded_weights = quant_module.apply_adaround(quant_module.weight)
 
         if isinstance(module, torch.nn.Conv2d):
             out_data = functional.conv2d(inp_data, adarounded_weights, bias=module.bias, stride=module.stride,

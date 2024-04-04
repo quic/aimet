@@ -56,8 +56,8 @@ from aimet_torch.save_utils import SaveUtils
 from aimet_torch.meta import connectedgraph_utils
 from aimet_torch.quantsim import QuantizationSimModel, QcQuantizeWrapper
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QcQuantizeOpMode
-from aimet_torch.tensor_quantizer import StaticGridPerChannelQuantizer, TensorQuantizer
-from aimet_torch.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer
+from aimet_torch.tensor_quantizer import TensorQuantizer
+from aimet_torch.adaround.adaround_wrapper import AdaroundWrapper
 from aimet_torch.adaround.adaround_optimizer import AdaroundOptimizer
 from aimet_torch.adaround.adaround_loss import AdaroundHyperParameters
 from aimet_torch.adaround.activation_sampler import create_modulelist_for_group_modules, get_block_inputs, \
@@ -361,23 +361,23 @@ class Adaround:
                 if not quant_wrapper:
                     continue
 
-                # Temporarily replace quant module's tensor quantizer with Adaround tensor quantizer
-                with cls._replace_tensor_quantizer(quant_wrapper):
+                # Wraps the quant module with adaround wrapper
+                # and temporarily replace quant module with wrapped module
+                with cls._replace_quantization_layer(quant_sim_model, name) as adaround_wrapper:
 
                     # Get module's next following activation function
                     act_func = module_act_func_pair[module]
 
                     logger.info("Started Optimizing weight rounding of module: %s", name)
-                    AdaroundOptimizer.adaround_module(module, quant_wrapper, model, quant_sim_model, act_func,
+                    AdaroundOptimizer.adaround_module(module, adaround_wrapper, model, quant_sim_model, act_func,
                                                       cached_dataset, forward_fn, opt_params, cached_quant_dataset)
-                    weight = quant_wrapper._module_to_wrap.weight
-                    quantizer = quant_wrapper.param_quantizers['weight']
+                    weight = adaround_wrapper.weight
 
                     # Fold trained alpha to weight
                     with torch.no_grad():
                         # Use soft rounding to compute Adarounded weight
-                        quantizer.use_soft_rounding = True
-                        adarounded_weight = quantizer.adaround_weights(weight)
+                        adaround_wrapper.use_soft_rounding = True
+                        adarounded_weight = adaround_wrapper.apply_adaround(weight)
                         weight.copy_(adarounded_weight)
                         del adarounded_weight
 
@@ -408,34 +408,37 @@ class Adaround:
 
     @staticmethod
     @contextlib.contextmanager
-    def _replace_tensor_quantizer(quant_module: StaticGridQuantWrapper):
+    def _patch_module_layer(model, layer_name, new_layer):
+        """
+        Temporarily replace model layer
+        """
+        original_layer = getattr(model, layer_name)
+        setattr(model, layer_name, new_layer)
+        yield
+        setattr(model, layer_name, original_layer)
+
+    @classmethod
+    @contextlib.contextmanager
+    def _replace_quantization_layer(cls, quant_sim_model: torch.nn.Module, module_name: str):
         """
         Replace the quantized module's weight tensor quantizer with the Adaround tensor quantizer
         :param quant_module: quant module
         """
+        quant_module = utils.get_named_module(quant_sim_model, module_name)
         assert quant_module.param_quantizers['weight'], '%s does not have weight parameter.' % quant_module
         assert quant_module.param_quantizers['weight'].encoding, '%s encoding needs to be set.' % quant_module
 
-        quantizer = quant_module.param_quantizers['weight']
-        ch_axis = 0
-        if isinstance(quantizer, StaticGridPerChannelQuantizer):
-            # pylint: disable=protected-access
-            ch_axis = quantizer._ch_axis
+        adaround_layer = AdaroundWrapper(quant_module)
 
-        adaround_quantizer = AdaroundTensorQuantizer(quantizer.bitwidth, 'Adaptive', quantizer.quant_scheme,
-                                                     quantizer.use_symmetric_encodings, quantizer.enabled, ch_axis)
-        adaround_quantizer.use_strict_symmetric = quantizer.use_strict_symmetric
-        adaround_quantizer.use_unsigned_symmetric = quantizer.use_unsigned_symmetric
+        # We need to look for the container to patch for modules inside submodule
+        upper_module = quant_sim_model
+        upper_module_name, _, target_module_name = module_name.rpartition('.')
+        if upper_module_name:
+            upper_module = utils.get_named_module(quant_sim_model, upper_module_name)
 
-        # Set the encodings and replace by Adaround tensor quantizer
-        adaround_quantizer.encoding = quantizer.encoding
-
-        try:
-            quant_module.param_quantizers['weight'] = adaround_quantizer
-            yield
-        finally:
-            # Restore original quantizer
-            quant_module.param_quantizers['weight'] = quantizer
+        # Temporarily replace quant module with wrapped module
+        with cls._patch_module_layer(upper_module, target_module_name, adaround_layer):
+            yield adaround_layer
 
     @staticmethod
     def _get_quant_wrapper(quant_sim_model: torch.nn.Module, module_name: str) -> Union[StaticGridQuantWrapper, None]:
