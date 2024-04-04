@@ -41,7 +41,8 @@ from functools import partial
 import itertools
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from typing import Type, Any, Tuple, Dict, Optional, overload
+from typing import Type, Any, Tuple, Dict, Optional, Callable
+from weakref import WeakKeyDictionary
 
 import torch
 import torch.nn as nn
@@ -49,83 +50,12 @@ from torch import Tensor
 
 from aimet_torch.experimental.v2.nn.quant_base import BaseQuantizationMixin
 from aimet_torch.experimental.v2.nn.fake_quant import _FakeQuantizedUnaryOpMixin, _FakeQuantizedBinaryOpMixin
-from aimet_torch.experimental.v2.nn.function_selector import FunctionSelector, _FunctionalLibrary
 from aimet_torch.experimental.v2.quantization.quantizers.base import QuantizerBase
 from aimet_torch.experimental.v2.quantization.quantizers import affine
 from aimet_torch.experimental.v2.quantization.quantizers.float import FloatQuantizeDequantize
 from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensorBase
 from aimet_torch.experimental.v2.utils import patch_attr, _ContextManager
 
-
-_FUNCTION_SELECTOR = FunctionSelector([], strict=False)
-
-def set_default_functional_library(library: _FunctionalLibrary, strict=True):
-    """
-    Set the default operator library(s) for quantized modules
-    """
-    _FUNCTION_SELECTOR.set_libraries(library, strict)
-
-
-def _set_default_function_selector(selector: FunctionSelector):
-    global _FUNCTION_SELECTOR # pylint: disable=global-statement
-    _FUNCTION_SELECTOR = selector
-
-@contextlib.contextmanager
-def _set_module_selector(modules, library, strict):
-    modules = modules if isinstance(modules, list) else [modules]
-    selector = FunctionSelector(library, strict)
-    with contextlib.ExitStack() as stack:
-        for module in modules:
-            for m in module.modules():
-                if isinstance(m, QuantizationMixin):
-                    ctx = patch_attr(m, "_func_selector", lambda: selector)
-                    stack.enter_context(ctx)
-
-            if isinstance(module, QuantizationMixin):
-                ctx = patch_attr(module, "_func_selector", lambda: selector)
-                stack.enter_context(ctx)
-        yield
-
-
-def _set_global_function_selector(library, strict):
-    selector = FunctionSelector(library, strict)
-    old_selector = _FUNCTION_SELECTOR
-    action = lambda: _set_default_function_selector(selector)
-    cleanup = lambda: _set_default_function_selector(old_selector)
-    return _ContextManager(action=action, cleanup=cleanup)
-
-
-@overload
-def set_functional_library(model: torch.nn.Module, library: _FunctionalLibrary, *, strict=True): # pylint:disable = unused-argument, function-redefined
-    """
-    Set the functional library for a given model
-
-    :param model: torch.nn.Module(s) to set the library for
-    :param library: operator library(s) to use
-    :param strict: If True, raise an error when no valid kernel is found
-    """
-
-@overload
-def set_functional_library(library: _FunctionalLibrary, *, strict=True): # pylint:disable = unused-argument, function-redefined
-    """
-    Set the functional library for a given model
-
-    :param library: operator library(s) to use
-    :param strict: If True, raise an error when no valid kernel is found
-    """
-
-
-def set_functional_library(*args, strict=True): # pylint:disable = function-redefined
-    """
-    Sets the functional library used by quantized layers
-    """
-    if len(args) == 1:
-        library = args[0]
-        return _set_global_function_selector(library, strict)
-    if len(args) == 2:
-        modules, library = args
-        return _set_module_selector(modules, library, strict)
-    raise RuntimeError("Invalid arguments, expected either (model, library, strict) or (library, strict)")
 
 
 def _quantize_if_applicable(data: Any, quantizer: Optional[QuantizerBase]):
@@ -146,6 +76,24 @@ def _dequantize_if_applicable(data: torch.Tensor):
     return data.dequantize() if isinstance(data, QuantizedTensorBase) else data
 
 
+_QUANTIZED_MODULES_UNDER_COMPUTE_ENCODINGS = WeakKeyDictionary()
+
+
+def _is_computing_encodings(qmodule):
+    return _QUANTIZED_MODULES_UNDER_COMPUTE_ENCODINGS.get(qmodule, 0) > 0
+
+
+def _enter_computing_encodings(qmodule):
+    if qmodule not in _QUANTIZED_MODULES_UNDER_COMPUTE_ENCODINGS:
+        _QUANTIZED_MODULES_UNDER_COMPUTE_ENCODINGS[qmodule] = 0
+    _QUANTIZED_MODULES_UNDER_COMPUTE_ENCODINGS[qmodule] += 1
+
+
+def _exit_compute_encodings(qmodule):
+    assert _QUANTIZED_MODULES_UNDER_COMPUTE_ENCODINGS[qmodule] > 0
+    _QUANTIZED_MODULES_UNDER_COMPUTE_ENCODINGS[qmodule] -= 1
+
+
 class QuantizationMixin(BaseQuantizationMixin, ABC): # pylint: disable=abstract-method
     """
     Mixin that allows dispatch to quantized operator libraries in place of native pytorch operations
@@ -153,7 +101,53 @@ class QuantizationMixin(BaseQuantizationMixin, ABC): # pylint: disable=abstract-
 
     cls_to_qcls = OrderedDict()  # quantized class -> original class
     qcls_to_cls = OrderedDict()  # original class -> quantized class
-    op_key: str
+
+    _default_kernel: Optional[Callable] = None
+    _kernels = WeakKeyDictionary() # instance -> instance_kernel
+
+    def __quant_init__(self):
+        super().__quant_init__()
+        QuantizationMixin._kernels[self] = None
+
+    @classmethod
+    def set_default_kernel(cls, kernel: Callable):
+        """
+        Set default kernel for the class.
+
+        :param kernel: Callable object to be used as the default kernel
+                       by all the instances of this class.
+        """
+        cls._default_kernel = kernel
+
+    @classmethod
+    def get_default_kernel(cls) -> Optional[Callable]:
+        """
+        Return the default kernel of the class
+
+        :return: Default kernel of the class. None if the default kernel is not set.
+        """
+        return cls._default_kernel
+
+    def set_kernel(self, kernel: Callable):
+        """
+        Set kernel for this instance of quantized module.
+
+        :param kernel: Callable object to be used as the underlying kernel.
+        """
+        QuantizationMixin._kernels[self] = kernel
+
+    def get_kernel(self) -> Optional[Callable]:
+        """
+        Return the kernel to be used by this instance of quantized module.
+        If the current instance does not have any kernel set,
+        it will try to use the default kernel of the class.
+
+        :return: Kernel to be used by this instance.
+        """
+        kernel = QuantizationMixin._kernels.get(self, None)
+        if kernel:
+            return kernel
+        return self.get_default_kernel()
 
     @contextlib.contextmanager
     def compute_encodings(self):
@@ -166,8 +160,11 @@ class QuantizationMixin(BaseQuantizationMixin, ABC): # pylint: disable=abstract-
                     continue
                 # NOTE: This behavior is for backward-compatibility with V1 quantsim.
                 stack.enter_context(patch_attr(quantizer, 'forward', no_op))
-            dummy_funciton_selector = FunctionSelector([], strict=False)
-            stack.enter_context(patch_attr(self, "_func_selector", lambda: dummy_funciton_selector))
+
+            ctx = _ContextManager(action=lambda: _enter_computing_encodings(self),
+                                  cleanup=lambda: _exit_compute_encodings(self))
+            stack.enter_context(ctx)
+
             with super().compute_encodings():
                 yield
 
@@ -179,9 +176,6 @@ class QuantizationMixin(BaseQuantizationMixin, ABC): # pylint: disable=abstract-
                 ctx = patch_attr(self, param_name, _dequantize_if_applicable(qparam))
                 stack.enter_context(ctx)
             yield
-
-    def _func_selector(self): # pylint:disable = no-self-use
-        return _FUNCTION_SELECTOR
 
     @classmethod
     def wrap(cls, module_cls: Type[nn.Module]) -> Type[nn.Module]:
@@ -200,13 +194,12 @@ class QuantizationMixin(BaseQuantizationMixin, ABC): # pylint: disable=abstract-
         return cls.implements(module_cls)(quantized_cls)
 
     @classmethod
-    def implements(cls, module_cls, op_key=None):
+    def implements(cls, module_cls):
         """
         Decorator for registering quantized implementation of the given base class.
         """
 
         def wrapper(quantized_cls):
-            quantized_cls.op_key = op_key or module_cls.__name__.lower()
             cls.cls_to_qcls[module_cls] = quantized_cls
             cls.qcls_to_cls[quantized_cls] = module_cls
             return quantized_cls
@@ -245,9 +238,10 @@ class QuantizationMixin(BaseQuantizationMixin, ABC): # pylint: disable=abstract-
 # pylint: disable=arguments-differ, abstract-method
 
 class _QuantizedUnaryOpMixin(QuantizationMixin, ABC):
-
     def quantized_forward(self, *args, **kwargs):
-        if self._func_selector().is_empty() and not self._func_selector().strict:
+        kernel = self.get_kernel()
+
+        if not kernel or _is_computing_encodings(self):
             # Fast track: Fall back to fake quantization without further check
             # Most of the users who never use integer kernels will always end up
             # taking this path, making QuantizedModule behave the same as FakeQuantizedModule
@@ -261,23 +255,15 @@ class _QuantizedUnaryOpMixin(QuantizationMixin, ABC):
         x, *args = args
         x = _quantize_if_applicable(x, self.input_quantizers[0])
 
+        if not isinstance(x, QuantizedTensorBase):
+            raise RuntimeError
+
         with self._patch_quantized_parameters():
             kernel_args, kernel_kwargs = self.get_functional_args(x, *args, **kwargs)
             output_encodings = self.output_quantizers[0].get_encoding() if self.output_quantizers[0] else None
-            kernel = self._func_selector().get_impl(self.op_key, *kernel_args, **kernel_kwargs, output_encodings=output_encodings)
+            output = kernel(*kernel_args, **kernel_kwargs, output_encodings=output_encodings)
 
-            if kernel:
-                output = kernel(*kernel_args, **kernel_kwargs, output_encodings=output_encodings)
-            else:
-                with self._patch_dequantized_parameters():
-                    output = super().forward(_dequantize_if_applicable(x), *args, **kwargs)
-
-        output = _quantize_if_applicable(output, self.output_quantizers[0])
-
-        if isinstance(output, QuantizedTensorBase):
-            output = output.dequantize()
-
-        return output
+        return output.dequantize()
 
     @abstractmethod
     def get_functional_args(self, x, *args, **kwargs) -> Tuple[Tuple, Dict]:
@@ -287,13 +273,14 @@ class _QuantizedUnaryOpMixin(QuantizationMixin, ABC):
 
 
 class _QuantizedBinaryOpMixin(QuantizationMixin, ABC):
-
     def __quant_init__(self):
         super().__quant_init__()
         self.input_quantizers = nn.ModuleList([None, None])
 
     def quantized_forward(self, *args, **kwargs):
-        if self._func_selector().is_empty() and not self._func_selector().strict:
+        kernel = self.get_kernel()
+
+        if not kernel or _is_computing_encodings(self):
             # Fast track: Fall back to fake quantization without further check
             # Most of the users who never use integer kernels will always end up
             # taking this path, making QuantizedModule behave the same as FakeQuantizedModule
@@ -308,24 +295,18 @@ class _QuantizedBinaryOpMixin(QuantizationMixin, ABC):
         x = _quantize_if_applicable(x, self.input_quantizers[0])
         y = _quantize_if_applicable(y, self.input_quantizers[1])
 
+        if not isinstance(x, QuantizedTensorBase):
+            raise RuntimeError
+
+        if not isinstance(y, QuantizedTensorBase):
+            raise RuntimeError
+
         with self._patch_quantized_parameters():
             kernel_args, kernel_kwargs = self.get_functional_args(x, y, *args, **kwargs)
             output_encodings = self.output_quantizers[0].get_encoding() if self.output_quantizers[0] else None
-            kernel = self._func_selector().get_impl(self.op_key, *kernel_args, **kernel_kwargs,
-                                                    output_encodings=output_encodings)
+            output = kernel(*kernel_args, **kernel_kwargs, output_encodings=output_encodings)
 
-            if kernel:
-                output = kernel(*kernel_args, **kernel_kwargs, output_encodings=output_encodings)
-            else:
-                with self._patch_dequantized_parameters():
-                    output = super().forward(_dequantize_if_applicable(x), _dequantize_if_applicable(y), *args, **kwargs)
-
-        output = _quantize_if_applicable(output, self.output_quantizers[0])
-
-        if isinstance(output, QuantizedTensorBase):
-            output = output.dequantize()
-
-        return output
+        return output.dequantize()
 
     @abstractmethod
     def get_functional_args(self, x, y, *args, **kwargs) -> Tuple[Tuple, Dict]:
