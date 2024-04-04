@@ -286,7 +286,7 @@ class EncodingAnalyzer(Generic[_Statistics], ABC):
     def compute_encodings(self, num_quant_bins: int, is_symmetric: bool) -> torch.Tensor:
         return self.compute_encodings_from_stats(self.observer.get_stats(), num_quant_bins, is_symmetric)
 
-    def compute_dynamic_encodings(self, input_tensor: torch.Tensor, num_quant_bins: int ,\
+    def compute_dynamic_encodings(self, input_tensor: torch.Tensor, num_quant_bins: int,
                                   is_symmetric: bool)-> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
         return self.compute_encodings_from_stats(
             self.observer.collect_stats(input_tensor), num_quant_bins, is_symmetric)
@@ -330,24 +330,23 @@ class MinMaxEncodingAnalyzer(EncodingAnalyzer[_MinMaxRange]):
         updated_max = max_with_zero + update_max
         updated_min = min_with_zero - update_min
 
-        # replace pos and neg inf respectively
-        updated_max[torch.isposinf(updated_max)] = torch.finfo(stats.min.dtype).max
-        updated_min[torch.isposinf(updated_min)] = torch.finfo(stats.min.dtype).max
-        updated_max[torch.isneginf(updated_max)] = -torch.finfo(stats.min.dtype).max
-        updated_min[torch.isneginf(updated_min)] = -torch.finfo(stats.min.dtype).max
-
         if is_symmetric:
             num_pos_bins = math.floor(num_quant_bins / 2)
             num_neg_bins = math.ceil(num_quant_bins / 2)
             delta = max(updated_max / num_pos_bins, -updated_min / num_neg_bins)
             offset = -1 * num_neg_bins
             updated_min = offset * delta
-            updated_max = update_min + delta
+            updated_max = updated_min + delta
             # handles strict symmetric case
             if num_neg_bins == num_pos_bins:
-                  return torch.minimum(updated_min, -updated_max), torch.maximum(-updated_min, updated_max)
+                updated_min = torch.minimum(offset * delta, -delta * num_pos_bins)
+                updated_max = torch.maximum(-offset * delta, delta * num_pos_bins)
 
-
+        # replace pos and neg inf respectively
+        updated_max[torch.isposinf(updated_max)] = torch.finfo(stats.min.dtype).max
+        updated_min[torch.isposinf(updated_min)] = torch.finfo(stats.min.dtype).max
+        updated_max[torch.isneginf(updated_max)] = -torch.finfo(stats.min.dtype).max
+        updated_min[torch.isneginf(updated_min)] = -torch.finfo(stats.min.dtype).max
         return updated_min, updated_max
 
 
@@ -372,13 +371,13 @@ def adjust_min_max(curr_min, curr_max, num_bins, is_symmetric):
         num_neg_bins = math.ceil(num_bins / 2)
         delta = max(curr_max / num_pos_bins, -curr_min / num_neg_bins)
         offset = -1 * num_neg_bins
-        
+
         curr_min = offset * delta
         curr_max = curr_min + delta
         # handles strict symmetric case
         if num_neg_bins == num_pos_bins:
             return torch.minimum(curr_min, -curr_max), torch.maximum(-curr_min, curr_max)
-        
+
     return curr_min, curr_max
 
 # pylint: disable=arguments-differ
