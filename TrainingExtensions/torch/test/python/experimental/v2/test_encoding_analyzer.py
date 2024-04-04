@@ -521,7 +521,7 @@ class TestPercentileEncodingAnalyzer():
             PercentileEncodingAnalyzer((1,), percentile = percentile_value, num_bins = 3)
     
     def test_compute_encodings_asymmetric_normalized(self):
-        encoding_analyzer = PercentileEncodingAnalyzer((1,), percentile = 99, num_bins = 3)
+        encoding_analyzer = PercentileEncodingAnalyzer((1,), percentile = 99)
         mean = std_dev = 2
         input_tensor = np.random.normal(mean, std_dev, size=(100000))
         encoding_analyzer.update_stats(torch.from_numpy(input_tensor))
