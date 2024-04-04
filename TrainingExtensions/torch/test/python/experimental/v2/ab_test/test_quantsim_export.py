@@ -49,7 +49,8 @@ from aimet_torch.experimental.v2.quantization.quantizers.affine import QuantizeD
 from aimet_torch.experimental.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 from aimet_torch.elementwise_ops import Add
 from aimet_torch import onnx_utils
-from aimet_torch.quantsim import QuantizationSimModel, OnnxExportApiArgs
+from aimet_torch.experimental.v2.quantization.quantsim import QuantizationSimModel
+from aimet_torch.quantsim import OnnxExportApiArgs
 
 from ..models_.models_to_test import (
     SimpleConditional,
@@ -332,37 +333,11 @@ class TestQuantsimOnnxExport:
             model(inp, true_tensor)
             model(inp, false_tensor)
 
-        sim_model = copy.deepcopy(model)
-
         qsim = QuantizationSimModel(model, dummy_input=(inp, true_tensor))
         qsim.compute_encodings(forward_callback, None)
 
-        for name, module in sim_model.named_children():
-            quantized_module = FakeQuantizationMixin.from_module(module)
-            qsim_module = getattr(qsim.model, name)
-            if qsim_module.input_quantizers[0].enabled:
-                quantized_module.input_quantizers[0] = QuantizeDequantize((1,),
-                                                                          bitwidth=8,
-                                                                          symmetric=False,
-                                                                          encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
-            if qsim_module.output_quantizers[0].enabled:
-                quantized_module.output_quantizers[0] = QuantizeDequantize((1,),
-                                                                           bitwidth=8,
-                                                                           symmetric=False,
-                                                                           encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
-            for param_name, qsim_param_quantizer in qsim_module.param_quantizers.items():
-                if not qsim_param_quantizer.enabled:
-                    continue
-                quantized_module.param_quantizers[param_name] = QuantizeDequantize((1,),
-                                                                                   bitwidth=4,
-                                                                                   symmetric=True,
-                                                                                   encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
-            setattr(sim_model, name, quantized_module)
-
-        with aimet_nn.compute_encodings(sim_model):
-            forward_callback(sim_model, None)
-
-        qsim.model = sim_model
+        with aimet_nn.compute_encodings(qsim.model):
+            forward_callback(qsim.model, None)
 
         with tempfile.TemporaryDirectory() as path:
             qsim._export_conditional(path, 'simple_cond', dummy_input=(inp, false_tensor),
