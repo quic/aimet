@@ -69,10 +69,10 @@ def _initialize(q, symmetric):
     q.max = torch.nn.Parameter(max)
 
 
-def quantize(symmetric, initialized):
+def quantize(symmetric, initialized, bitwidth=8):
     encoding_analyzer = MinMaxEncodingAnalyzer(shape=_PARAMETER_SHAPE)
     quantize = Quantize(shape=_PARAMETER_SHAPE,
-                        bitwidth=8,
+                        bitwidth=bitwidth,
                         symmetric=symmetric,
                         encoding_analyzer=encoding_analyzer)
     if initialized:
@@ -80,10 +80,10 @@ def quantize(symmetric, initialized):
     return quantize
 
 
-def quantize_dequantize(symmetric, initialized):
+def quantize_dequantize(symmetric, initialized, bitwidth=8):
     encoding_analyzer = MinMaxEncodingAnalyzer(shape=_PARAMETER_SHAPE)
     quantize_dequantize = QuantizeDequantize(shape=_PARAMETER_SHAPE,
-                                             bitwidth=8,
+                                             bitwidth=bitwidth,
                                              symmetric=symmetric,
                                              encoding_analyzer=encoding_analyzer)
     if initialized:
@@ -791,3 +791,47 @@ def test_quantize_dequantize_then_quantize_and_dequantize_equality(x, symmetric)
     a = qdq(x)
     b = dq(q(x))
     assert torch.allclose(a, b)
+
+
+@pytest.mark.cuda
+@pytest.mark.parametrize("symmetric", [True, False])
+def test_high_bitwidth(x, symmetric):
+    """
+    Given: QuantizeDequantize of bitwidth=16
+    When: Run forward with input of dtype float16, float32, and bfloat16
+    Then:
+      1) All of them should produce outputs normally without any nan value.
+      2) The output dtype should be the same as the input dtype
+    """
+    x = x.cuda()
+    for param_dtype in (torch.float32, torch.bfloat16, torch.float16):
+        for input_dtype in (torch.float16, torch.float32, torch.bfloat16):
+            qdq = quantize_dequantize(symmetric=symmetric, initialized=True, bitwidth=16).to(param_dtype).cuda()
+            out = qdq(x.to(input_dtype))
+            assert not torch.any(out.isnan())
+            assert out.dtype == input_dtype
+
+    """
+    Given: Quantize of bitwidth=16
+    When: Run forward with input of dtype float32, and bfloat16
+    Then:
+      1) All of them should produce outputs normally without any nan value.
+      2) The output dtype should be the same as the input dtype
+    """
+    for param_dtype in (torch.float32, torch.bfloat16, torch.float16):
+        for input_dtype in (torch.float32, torch.bfloat16):
+            q = quantize(symmetric=symmetric, initialized=True, bitwidth=16).to(param_dtype).cuda()
+            out = q(x.to(input_dtype))
+            assert not torch.any(out.isnan())
+            assert out.dtype == input_dtype
+
+    """
+    Given: Quantize of bitwidth=16
+    When: Run forward with input of dtype float16
+    Then: Throw runtime error. float16 cannot represent the range [0, 2**16-1].
+    """
+    for param_dtype in (torch.float32, torch.bfloat16, torch.float16):
+        for input_dtype in (torch.float16,):
+            q = quantize(symmetric=symmetric, initialized=True, bitwidth=16).to(param_dtype).cuda()
+            with pytest.raises(RuntimeError):
+                out = q(x.to(input_dtype))
