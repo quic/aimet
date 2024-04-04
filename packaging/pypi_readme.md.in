@@ -1,4 +1,9 @@
 # AI Model Efficiency Toolkit (AIMET) for @package@
+
+[[**GitHub**](https://github.com/quic/aimet)]
+[[**Docs**](https://quic.github.io/aimet-pages/releases/latest/user_guide/index.html)]
+[[**Forums**](https://forums.quicinc.com)]
+
 [AIMET](https://quic.github.io/aimet-pages/index.html) is a library that provides advanced model quantization and compression techniques for trained neural network models. It provides features that have been proven to improve run-time performance of deep learning neural network models with  lower compute and memory requirements and minimal impact to task accuracy. AIMET is designed to work with [PyTorch](https://pytorch.org), [TensorFlow](https://tensorflow.org) and [ONNX](https://onnx.ai) models.
 
 ## Table of Contents
@@ -58,9 +63,9 @@ The DFQ method applied to several popular networks, such as MobileNet-v2 and Res
 
 <table style="width:50%">
   <tr>
-    <th style="width:80px">Models</th>
-    <th>FP32</th>
-    <th>INT8 Simulation </th>
+    <th style="text-align: center; vertical-align: middle; width:80px">Models</th>
+    <th style="text-align: center; vertical-align: middle;">FP32</th>
+    <th style="text-align: center; vertical-align: middle;">INT8 Simulation </th>
   </tr>
   <tr>
     <td>MobileNet v2 (top1)</td>
@@ -85,8 +90,8 @@ The DFQ method applied to several popular networks, such as MobileNet-v2 and Res
 <p>For this example ADAS object detection model, which was challenging to quantize to 8-bit precision, AdaRound can recover the accuracy to within 1% of the FP32 accuracy.</p>
 <table style="width:50%">
   <tr>
-    <th style="width:80px" colspan="15">Configuration</th>
-    <th>mAP - Mean Average Precision</th>
+    <th style="text-align: center; vertical-align: middle; width:80px" colspan="15">Configuration</th>
+    <th style="text-align: center; vertical-align: middle;">mAP - Mean Average Precision</th>
   </tr>
   <tr>
     <td colspan="15">FP32</td>
@@ -106,8 +111,8 @@ The DFQ method applied to several popular networks, such as MobileNet-v2 and Res
 <p>For some models like the DeepLabv3 semantic segmentation model, AdaRound can even quantize the model weights to 4-bit precision without a significant drop in accuracy.</p>
 <table style="width:50%">
   <tr>
-    <th style="width:80px" colspan="15">Configuration</th>
-    <th>mIOU - Mean intersection over union</th>
+    <th style="text-align: center; vertical-align: middle; width:80px" colspan="15">Configuration</th>
+    <th style="text-align: center; vertical-align: middle;">mIOU - Mean intersection over union</th>
   </tr>
   <tr>
     <td colspan="15">FP32</td>
@@ -129,8 +134,8 @@ The DFQ method applied to several popular networks, such as MobileNet-v2 and Res
 
 <table style="width:50%">
   <tr>
-    <th>DeepSpeech2 <br>(using bi-directional LSTMs)</th>
-    <th>Word Error Rate</th>
+    <th style="text-align: center; vertical-align: middle;">DeepSpeech2 <br>(using bi-directional LSTMs)</th>
+    <th style="text-align: center; vertical-align: middle;">Word Error Rate</th>
   </tr>
   <tr>
     <td>FP32</td>
@@ -149,9 +154,9 @@ The DFQ method applied to several popular networks, such as MobileNet-v2 and Res
 
 <table style="width:50%">
   <tr>
-    <th>Models</th>
-    <th>Uncompressed model</th>
-    <th>50% Compressed model</th>
+    <th style="text-align: center; vertical-align: middle;">Models</th>
+    <th style="text-align: center; vertical-align: middle;">Uncompressed model</th>
+    <th style="text-align: center; vertical-align: middle;">50% Compressed model</th>
   </tr>
   <tr>
     <td>ResNet18 (top1)</td>
