@@ -372,11 +372,20 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         if num_bins <= 0:
             raise ValueError('Number of bins cannot be less than or equal to 0.')
 
+        observer = _HistogramObserver(shape=shape, num_bins=num_bins)
+        super().__init__(observer)
+        self.set_percentile(percentile)
+
+    def set_percentile(self, percentile):
+        """
+        Set the clipping percentile of the encoding analyzer. The encoding analyzer will clip the (100% - percentile)
+        largest and smallest observed values from the encoding range when computing encodings.
+
+        :param percentile: Value from 50.0 to 100.0 indicating the clipping percentile
+        """
         if percentile < 50 or percentile > 100:
             raise ValueError('Percentile value must be within 50-100 range')
 
-        observer = _HistogramObserver(shape=shape, num_bins=num_bins)
-        super().__init__(observer)
         self.percentile = percentile
 
     @torch.no_grad()
@@ -402,8 +411,8 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         for list_elem in stats:
             cum_sum = torch.cumsum(list_elem.histogram, dim=0)
             # trim percentile value from min and max
-            max_index = torch.searchsorted(cum_sum, torch.quantile(cum_sum, self.percentile/100))
-            min_index = torch.searchsorted(cum_sum, torch.quantile(cum_sum, 1 - self.percentile/100))
+            max_index = torch.searchsorted(cum_sum, cum_sum[-1] * self.percentile/100)
+            min_index = torch.searchsorted(cum_sum, cum_sum[-1] * (1 - self.percentile/100))
 
             if self.percentile == 100:
                 min_index = 0
@@ -422,6 +431,7 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         encoding_max = torch.reshape(encoding_max, self.observer.shape)
 
         return encoding_min, encoding_max
+
 
 class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
     """
