@@ -37,7 +37,7 @@
 import pytest
 import torch
 
-from aimet_torch.experimental.v2.utils import reduce, patch_attr
+from aimet_torch.experimental.v2.utils import allow_recompute, enable_recompute, reduce, patch_attr
 
 @pytest.mark.parametrize('reduce_dim, target_shape', [
     # | reduce dim   | target shape |
@@ -98,3 +98,70 @@ def test_patch_attr():
         assert conv.no_exist_attribute == 1
 
     assert not hasattr(conv, 'no_exist_attribute')
+
+
+@pytest.fixture
+def use_deterministic_algorithms():
+    orig_flag = torch.are_deterministic_algorithms_enabled()
+    torch.use_deterministic_algorithms(True)
+    yield
+    torch.use_deterministic_algorithms(orig_flag)
+
+
+@pytest.mark.cuda
+def test_allow_recompute(use_deterministic_algorithms):
+    class Model(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.conv1 = torch.nn.Conv2d(3, 3, 3)
+            self.relu1 = torch.nn.ReLU()
+            self.conv2 = torch.nn.Conv2d(3, 3, 3)
+            self.relu2 = torch.nn.ReLU()
+
+        @allow_recompute
+        def forward(self, x):
+            x = self.conv1(x)
+            x = self.relu1(x)
+            x = self.conv2(x)
+            x = self.relu2(x)
+            return x
+
+    model = Model().cuda()
+    x = torch.randn((100, 3, 224, 224), device="cuda:0")
+
+    torch.cuda.empty_cache()
+    with enable_recompute():
+        out = model(x)
+    torch.cuda.synchronize()
+    mem_with_recompute = torch.cuda.memory_allocated()
+
+    out.backward(torch.ones_like(out))
+    conv1_grad_with_recompute = model.conv1.weight.grad.clone().detach().cpu()
+    conv2_grad_with_recompute = model.conv2.weight.grad.clone().detach().cpu()
+
+    del out
+    model.conv1.weight.grad = None
+    model.conv2.weight.grad = None
+
+    torch.cuda.empty_cache()
+    out = model(x)
+    torch.cuda.synchronize()
+    mem_without_recompute = torch.cuda.memory_allocated()
+
+    out.backward(torch.ones_like(out))
+    conv1_grad_without_recompute = model.conv1.weight.grad.clone().detach().cpu()
+    conv2_grad_without_recompute = model.conv2.weight.grad.clone().detach().cpu()
+
+    # Expected memory saving:
+    #   - relu1 & 2 saves a mask (1 byte per elem) of shape [100 * 3 * 224 * 224]
+    #   - conv2 saves a float32 input of shape [100 * 3 * 224 * 224]
+    expected_memory_saving = x.numel() * (4 * 1 * 1)
+    actual_memory_saving = mem_without_recompute - mem_with_recompute
+
+    # Considering noise factors, actual memory saving should be no less than
+    # 99% of the expected memory saving
+    assert expected_memory_saving * 0.99 <= actual_memory_saving
+
+
+    assert torch.equal(conv1_grad_with_recompute, conv1_grad_without_recompute)
+    assert torch.equal(conv2_grad_with_recompute, conv2_grad_without_recompute)

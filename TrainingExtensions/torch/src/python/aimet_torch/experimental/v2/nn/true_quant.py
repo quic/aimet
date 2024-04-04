@@ -54,7 +54,7 @@ from aimet_torch.experimental.v2.quantization.quantizers.base import QuantizerBa
 from aimet_torch.experimental.v2.quantization.quantizers import affine
 from aimet_torch.experimental.v2.quantization.quantizers.float import FloatQuantizeDequantize
 from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensorBase
-from aimet_torch.experimental.v2.utils import patch_attr, _ContextManager
+from aimet_torch.experimental.v2.utils import patch_attr, _ContextManager, allow_recompute
 
 
 
@@ -318,6 +318,13 @@ class _QuantizedBinaryOpMixin(QuantizationMixin, ABC):
 @QuantizationMixin.implements(nn.Linear)
 class QuantizedLinear(_QuantizedUnaryOpMixin, nn.Linear):
     """ Quantized Linear """
+
+    # Only allow activation recompute (a.k.a activation checkpointing) for QuantizedLinear.
+    # This is mainly to reduce memory footprint of QAT of large language models.
+    @allow_recompute
+    def quantized_forward(self, *args, **kwargs):
+        return super().quantized_forward(*args, **kwargs)
+
     def get_functional_args(self, x):
         return (x, self.weight), {"bias": self.bias}
 
