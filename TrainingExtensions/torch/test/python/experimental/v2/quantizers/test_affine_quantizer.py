@@ -134,8 +134,9 @@ def test_quantize_compute_encodings(quantize: Quantize, x: torch.Tensor):
       1. forward() returns dynamic quantization output
       2. self.get_scale(), self.get_offset() == dynamic scale/offset of x
     """
+    num_quant_bins = math.pow(2, quantize.bitwidth) - 1
     dynamic_min, dynamic_max =\
-            quantize.encoding_analyzer.compute_dynamic_encodings(x, quantize.bitwidth, quantize.symmetric)
+            quantize.encoding_analyzer.compute_dynamic_encodings(x, num_quant_bins, quantize.symmetric)
     dynamic_scale, dynamic_offset = minmax_to_scaleoffset(dynamic_min,
                                                           dynamic_max,
                                                           quantize.symmetric,
@@ -177,9 +178,10 @@ def test_qdq_compute_encodings(quantize_dequantize: QuantizeDequantize, x: torch
       1. forward() returns dynamic quantization output
       2. self.get_scale(), self.get_offset() == dynamic scale/offset of x
     """
+    num_quant_bins = math.pow(2, quantize_dequantize.bitwidth) - 1
     dynamic_min, dynamic_max =\
             quantize_dequantize.encoding_analyzer.compute_dynamic_encodings(x,
-                                                                            quantize_dequantize.bitwidth,
+                                                                            num_quant_bins,
                                                                             quantize_dequantize.symmetric)
     dynamic_scale, dynamic_offset = minmax_to_scaleoffset(dynamic_min,
                                                           dynamic_max,
