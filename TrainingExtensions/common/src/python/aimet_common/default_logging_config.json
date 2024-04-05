@@ -129,6 +129,12 @@
             "level": "INFO",
             "handlers": ["console"],
             "propagate": false
+        },
+
+        "SeqMse": {
+            "level": "INFO",
+            "handlers": ["console"],
+            "propagate": false
         }
 
     },
