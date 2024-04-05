@@ -38,3 +38,4 @@
 # pylint: disable=all
 
 from .quantizers import *
+from .tensor import *

@@ -53,7 +53,7 @@ from aimet_torch.v2.quantization.nn.fake_quant import _FakeQuantizedUnaryOpMixin
 from aimet_torch.v2.quantization.quantizers.base import QuantizerBase
 from aimet_torch.v2.quantization.quantizers import affine
 from aimet_torch.v2.quantization.quantizers.float import FloatQuantizeDequantize
-from aimet_torch.v2.quantization.quantized_tensor import QuantizedTensorBase
+from aimet_torch.v2.quantization.tensor import QuantizedTensorBase
 from aimet_torch.v2.utils import patch_attr, _ContextManager, allow_recompute
 import aimet_torch.elementwise_ops as aimet_ops
 

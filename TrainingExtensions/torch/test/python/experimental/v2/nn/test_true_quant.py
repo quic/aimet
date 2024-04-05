@@ -58,7 +58,7 @@ from aimet_torch.v2.quantization.nn.true_quant import (
     QuantizedSubtract,
 )
 from aimet_torch.v2.quantization.encodings import AffineEncoding
-from aimet_torch.v2.quantization.quantized_tensor import QuantizedTensor, DequantizedTensor
+from aimet_torch.v2.quantization.tensor import QuantizedTensor, DequantizedTensor
 from aimet_torch.v2.quantization.nn import fake_quant
 from aimet_torch.v2.utils import enable_recompute
 import aimet_torch.elementwise_ops as aimet_ops
