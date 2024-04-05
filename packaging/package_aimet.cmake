@@ -182,7 +182,7 @@ foreach(package ${package_name_list})
   if(EXISTS "${src_packaging_dir}/LICENSE.pdf")
     # optional, might not be present on host
     file(COPY "${src_packaging_dir}/LICENSE.pdf" DESTINATION ${build_packaging_dir}/)
-    execute_process(COMMAND ${CMAKE_COMMAND} -E copy "${src_packaging_dir}/LICENSE.pdf" "${pkg_deps_staging_path}/")
+    file(COPY "${src_packaging_dir}/LICENSE.pdf" DESTINATION ${pkg_deps_staging_path}/)
   endif()
 
   configure_file("${CMAKE_CURRENT_LIST_DIR}/pypi_readme.md.in" "${pkg_staging_path}/pypi_readme_${package}.md" @ONLY)

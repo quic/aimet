@@ -251,48 +251,18 @@ def get_package_url():
     return package_url_base
 
 
-def get_package_version(cuda_enabled = False, pypi_index = False):
+def get_package_version():
     '''
     Return the package version (append variant to original value of SW_VERSION)
     '''
     sw_version = "@SW_VERSION@"
 
-    if pypi_index:
+    if "pypi" in "@PIP_INDEX@":
         # For PyPi indices, just return the version without appending the variant notation
         return sw_version
 
-    # For CPU variants, just append "cpu"
-    variant_string = "cpu"
-    # For GPU variants, need to determine CUDA toolkit in the environment
-    if cuda_enabled is True:
-        cuda_toolkit_ver = ""
-        if "torch" in package_name:
-            # For torch variants, obtain cuda toolkit version from installed torch package
-            import torch
-            cuda_toolkit_ver = torch.version.cuda.replace(".", "")
-        else:
-            # For TF and ONNX variants, obtain cuda toolkit version by running the "nvcc" command
-            # and parsing the output
-            nvcc_cmd_str = "nvcc --version"
-            nvcc_cmd_str_list = shlex.split(nvcc_cmd_str)
-            nvcc_output = subprocess.run(nvcc_cmd_str_list, stdout=subprocess.PIPE).stdout.decode('utf-8')
-
-            # Now extract the version X.Y from the line of the format "... release X.Y ..."
-            import re
-            matchObj = re.search(r'release ([0-9]+\.[0-9]+)(.*)', nvcc_output)
-            print("matchObj = %s" % str(matchObj))
-            if matchObj: 
-                cuda_toolkit_ver = matchObj.group(1).upper().replace(".", "")
-                print("CUDA version: %s" % cuda_toolkit_ver)
-            else:
-                #NOTE: This line has no effect and always returns PASS
-                sys.exit("Could NOT find CUDA toolkit version for GPU variant")
-
-        # Now append the cuda variant per standard convention <version>+cu<X.Y>
-        variant_string = "cu" + cuda_toolkit_ver
-
     # Append the variant string to the original software version that was passed in
-    package_version_with_variant = sw_version + "." + variant_string
+    package_version_with_variant = sw_version + "+" + "@CUDA_VER_STRING@"
     return package_version_with_variant
 
 
@@ -314,11 +284,10 @@ dependency_url_list.extend(get_all_dependency_urls(common_package_name))
 # Obtain the package home page URL
 package_url_base = get_package_url()
 
-cuda_variant = False
+
 if "--gpu" in sys.argv:
     sys.argv.remove("--gpu")
-    cuda_variant = True
-package_version = get_package_version(cuda_variant, pypi_index=True)
+package_version = get_package_version()
 
 
 setup(

@@ -78,9 +78,9 @@ find_package(Threads)
 if (NOT (DEFINED ENABLE_CUDA))
   message("Compiling with CUDA not explicitly disabled. Enabling implicitly")
   set(ENABLE_CUDA ON CACHE BOOL "")
-
 endif(NOT (DEFINED ENABLE_CUDA))
 
+set(CUDA_VER_STRING "cpu")
 if (ENABLE_CUDA)
   message("Compiling with CUDA enabled")
 
@@ -92,6 +92,12 @@ if (ENABLE_CUDA)
 
   enable_language(CUDA)
 
+  # Find CUDA toolkit version
+  find_package(CUDAToolkit QUIET)
+  # Truncate the string for use in version string ex. 11.6.124 --> cu116
+  string(REGEX REPLACE "^([0-9]+)\\.([0-9]+)\\.*[0-9]*" "cu\\1\\2" CUDA_VER_STRING ${CUDAToolkit_VERSION})
+  message(STATUS "Found CUDA toolkit version ${CUDAToolkit_VERSION}, using ${CUDA_VER_STRING}")
+  
 else(ENABLE_CUDA)
   message("Compiling with CUDA disabled")
 
@@ -344,7 +350,7 @@ add_custom_target(packageaimet
   COMMAND "${CMAKE_COMMAND}" --build . --target install
 
   # Now run the packaging target to generate wheel files
-  COMMAND ${CMAKE_COMMAND} -DSW_VERSION=${SW_VERSION} ${remote_url_cmake_opt} -DPYTHON3_EXECUTABLE=${Python3_EXECUTABLE} -DAIMET_PACKAGE_PATH=${AIMET_PACKAGE_PATH} -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -DENABLE_CUDA=${ENABLE_CUDA} -DENABLE_TENSORFLOW=${ENABLE_TENSORFLOW} -DENABLE_TORCH=${ENABLE_TORCH} -DENABLE_ONNX=${ENABLE_ONNX} -DPATCHELF_EXE=${PATCHELF_EXE} -DFMWORK_VERSION=${FMWORK_VERSION} -P ${CMAKE_CURRENT_SOURCE_DIR}/packaging/package_aimet.cmake
+  COMMAND ${CMAKE_COMMAND} -DSW_VERSION=${SW_VERSION} -DCUDA_VER_STRING=${CUDA_VER_STRING} -DPIP_INDEX=${PIP_INDEX} ${remote_url_cmake_opt} -DPYTHON3_EXECUTABLE=${Python3_EXECUTABLE} -DAIMET_PACKAGE_PATH=${AIMET_PACKAGE_PATH} -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -DENABLE_CUDA=${ENABLE_CUDA} -DENABLE_TENSORFLOW=${ENABLE_TENSORFLOW} -DENABLE_TORCH=${ENABLE_TORCH} -DENABLE_ONNX=${ENABLE_ONNX} -DPATCHELF_EXE=${PATCHELF_EXE} -DFMWORK_VERSION=${FMWORK_VERSION} -P ${CMAKE_CURRENT_SOURCE_DIR}/packaging/package_aimet.cmake
 )
 
 add_subdirectory(ThirdParty)
