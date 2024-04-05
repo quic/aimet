@@ -185,7 +185,7 @@ class BaseQuantizationMixin(abc.ABC):
             for quantizer in _flatten_nn_module_list(self.input_quantizers)
         ]
 
-    def import_input_encodings(self, encodings: Dict[str, Dict]):
+    def import_input_encodings(self, encodings: Dict[str, Dict], freeze: bool = False):
         """
         Import input encodings represented in below format:
         {
@@ -193,6 +193,9 @@ class BaseQuantizationMixin(abc.ABC):
             '1': dict,
             ...
         }
+
+        :param encodings: Dictionary mapping quantizer index (str) to encoding (dict)
+        :param freeze: If True, freezes the quantizer's encodings after loading
         """
         for i, quantizer in enumerate(list(self.input_quantizers)):
             encoding = encodings.get(str(i), None)
@@ -204,6 +207,8 @@ class BaseQuantizationMixin(abc.ABC):
             if isinstance(encoding, dict):
                 encoding = [encoding]
             quantizer.set_legacy_encodings(encoding)
+            if freeze:
+                quantizer.freeze_encoding()
 
     def export_output_encodings(self) -> List[List[Dict]]:
         """
@@ -214,7 +219,7 @@ class BaseQuantizationMixin(abc.ABC):
             for quantizer in _flatten_nn_module_list(self.output_quantizers)
         ]
 
-    def import_output_encodings(self, encodings: Dict[str, Dict]):
+    def import_output_encodings(self, encodings: Dict[str, Dict], freeze: bool = False):
         """
         Import output encodings represented in below format:
         {
@@ -222,6 +227,9 @@ class BaseQuantizationMixin(abc.ABC):
             '1': dict,
             ...
         }
+
+        :param encodings: Dictionary mapping quantizer index (str) to encoding (dict)
+        :param freeze: If True, freezes the quantizer's encodings after loading
         """
         for i, quantizer in enumerate(list(self.output_quantizers)):
             encoding = encodings.get(str(i), None)
@@ -233,6 +241,8 @@ class BaseQuantizationMixin(abc.ABC):
             if isinstance(encoding, dict):
                 encoding = [encoding]
             quantizer.set_legacy_encodings(encoding)
+            if freeze:
+                quantizer.freeze_encoding()
 
     def export_param_encodings(self) -> Dict[str, List[Dict]]:
         """
@@ -243,7 +253,7 @@ class BaseQuantizationMixin(abc.ABC):
             for param_name, quantizer in self.param_quantizers.items()
         }
 
-    def import_param_encodings(self, encodings: Dict[str, List[Dict]]):
+    def import_param_encodings(self, encodings: Dict[str, List[Dict]], freeze: bool = False):
         """
         Import parameter encodings represented in below format:
         {
@@ -251,6 +261,9 @@ class BaseQuantizationMixin(abc.ABC):
             'param_name_1': [dict, dict, ...],
             ...
         }
+
+        :param encodings: Dictionary mapping quantizer parameter name (str) to encodings (dict)
+        :param freeze: If True, freezes the quantizer's encodings after loading
         """
         for param_name, quantizer in dict(self.param_quantizers).items():
             encoding = encodings.get(param_name, None)
@@ -262,6 +275,8 @@ class BaseQuantizationMixin(abc.ABC):
             if isinstance(encoding, dict):
                 encoding = [encoding]
             quantizer.set_legacy_encodings(encoding)
+            if freeze:
+                quantizer.freeze_encoding()
 
     def get_original_module(self) -> nn.Module:
         """

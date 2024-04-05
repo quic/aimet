@@ -48,6 +48,7 @@ from torch import nn
 
 from packaging import version
 from aimet_torch.experimental.v2.quantization.encodings import EncodingBase
+from aimet_torch.experimental.v2.quantization.encoding_analyzer import EncodingAnalyzer
 
 
 __all__ = ['QuantizerBase']
@@ -57,6 +58,8 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
     """
     Quantizer base class
     """
+    encoding_analyzer: EncodingAnalyzer
+
     def __init__(self):
         super().__init__()
 
@@ -199,3 +202,21 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
         is_initialized = state.pop('is_initialized')
         self.__dict__.update(state)
         self.set_extra_state(is_initialized)
+
+    def freeze_encoding(self):
+        """
+        Freeze the encoding params so they won't be updated during training or compute_encodings
+        """
+        for param in self.parameters():
+            param.requires_grad = False
+        self.encoding_analyzer = None
+
+    @property
+    def is_encoding_frozen(self):
+        """
+        Returns true if the encodings are frozen
+        """
+        for param in self.parameters():
+            if param.requires_grad:
+                return True
+        return self.encoding_analyzer is None

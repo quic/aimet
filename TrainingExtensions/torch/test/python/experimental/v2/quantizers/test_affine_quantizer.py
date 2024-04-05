@@ -835,3 +835,34 @@ def test_high_bitwidth(x, symmetric):
             q = quantize(symmetric=symmetric, initialized=True, bitwidth=16).to(param_dtype).cuda()
             with pytest.raises(RuntimeError):
                 out = q(x.to(input_dtype))
+
+@pytest.mark.parametrize("q", (Quantize(_PARAMETER_SHAPE, 8, False),
+                               QuantizeDequantize(_PARAMETER_SHAPE, 8, True)))
+def test_freeze_encodings(x, q):
+    with q.compute_encodings():
+        q(x)
+
+    q_min, q_max = q.min.detach().clone(), q.max.detach().clone()
+    assert q.min.requires_grad
+    assert q.max.requires_grad
+
+    q.freeze_encoding()
+    assert q.is_encoding_frozen
+    """
+    Given: Called quantizer.freeze_encoding()
+    When: Inspect parameter requires_grad() attributes
+    Then: requires_grad = False for all parameters
+    """
+    assert not q.min.requires_grad
+    assert not q.max.requires_grad
+
+    """
+    When: Try to recompute encodings
+    Then: Encodings do not change
+    """
+    with q.compute_encodings():
+        q(x * 10)
+
+    assert torch.equal(q_min, q.min)
+    assert torch.equal(q_max, q.max)
+
