@@ -37,9 +37,8 @@
 """ Top level API for performing quantization simulation of a pytorch model """
 
 import itertools
-
-import torch
 import json
+import torch
 
 from aimet_torch.quantsim import QuantizationSimModel as V1QuantizationSimModel
 import aimet_torch.quantsim as quantsim_v1
@@ -192,7 +191,7 @@ class QuantizationSimModel(V1QuantizationSimModel):
         Functionality to set encodings (both activation and parameter) as per the given encodings JSON file and
         freeze them.
         .. note:
-            The encodings JSON file should be the {model_name}_torch.encodings
+            The encodings JSON file should be the {model_name}_torch.encodings json exported during sim.export()
 
         :param encoding_path: JSON file path from where to load the encodings.
         :param ignore_when_quantizer_disabled: ignore raising RuntimeError while setting encodings,
