@@ -369,7 +369,6 @@ class TestQuantsimOnnxExport:
         from aimet_torch.quantsim import QuantizationSimModel as QuantizationSimModelV1
         from aimet_torch.experimental.v2.quantization.quantsim import QuantizationSimModel
 
-        torch.use_deterministic_algorithms(True)
         torch.manual_seed(0)
 
         model = resnet18(pretrained=True).eval()
