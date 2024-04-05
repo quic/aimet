@@ -69,13 +69,23 @@ def unlabeled_data_loader(dummy_input):
     return DataLoader(dataset)
 
 
+def calibrate(model, inputs):
+
+    if isinstance(inputs, torch.Tensor):
+        inputs = [inputs]
+
+    model.eval()
+    with torch.no_grad():
+        model(*inputs)
+
+
 def save_config_file_for_checkpoints():
     checkpoints_config = {
         "grouped_modules": {
             "0": ["conv1", "bn1", "relu1", "maxpool"],
             "1": ["conv2", "bn2", "relu2"],
             "2": ["conv3", "relu3", "avgpool"],
-            "3": ["conv4", "flatten", "fc"],
+            "3": ["conv4", "flatten", "fc1", "fc2"],
         },
         "include_static_inputs": [
             "False",
@@ -106,7 +116,8 @@ class SplittableModel(torch.nn.Module):
         self.avgpool = torch.nn.AvgPool2d(3, stride=1)
         self.conv4 = torch.nn.Conv2d(8, 4, kernel_size=2, stride=2, padding=2, bias=True)
         self.flatten = torch.nn.Flatten()
-        self.fc = torch.nn.Linear(36, 12)
+        self.fc1 = torch.nn.Linear(36, 12)
+        self.fc2 = torch.nn.Linear(12, 10)
 
     def forward(self, *inputs):
         x = self.conv1(inputs[0])
@@ -121,7 +132,8 @@ class SplittableModel(torch.nn.Module):
         x = self.avgpool(x)
         x = self.conv4(x)
         x = self.flatten(x)
-        x = self.fc(x)
+        x = self.fc1(x)
+        x = self.fc2(x)
         return x
 
 
@@ -140,7 +152,8 @@ class TestSeqMse:
 
     @pytest.mark.parametrize("enable_pcq", [True, False])
     @pytest.mark.parametrize("param_bw", [2, 31])
-    def test_optimize_module_linear(self, enable_pcq, param_bw):
+    @pytest.mark.parametrize("loss_fn", ['mse', 'l1', 'sqnr'])
+    def test_optimize_module_linear(self, enable_pcq, param_bw, loss_fn):
         """ test optimize module for linear """
         torch.manual_seed(0)
         linear = torch.nn.Linear(64, 128)
@@ -155,7 +168,7 @@ class TestSeqMse:
         wrapper.param_quantizers['weight'].update_encoding_stats(wrapper.weight.data)
         wrapper.param_quantizers['weight'].compute_encoding()
         before = wrapper.param_quantizers['weight'].encoding
-        params = SeqMseParams(num_batches=32)
+        params = SeqMseParams(num_batches=32, loss_fn=loss_fn)
         optimize_module(wrapper, xq, xq, params)
         after = wrapper.param_quantizers['weight'].encoding
 
@@ -178,7 +191,7 @@ class TestSeqMse:
 
     @pytest.mark.cuda()
     @pytest.mark.parametrize("inp_symmetry", ['asym', 'symfp', 'symqt'])
-    @pytest.mark.parametrize("loss_fn", ['mse', 'l1', 'aa'])
+    @pytest.mark.parametrize("loss_fn", ['mse', 'l1', 'sqnr'])
     def test_apply_seq_mse(self, unlabeled_data_loader, inp_symmetry, loss_fn):
         """ test apply_seq_mse end-to-end """
         torch.manual_seed(0)
@@ -186,14 +199,18 @@ class TestSeqMse:
         dummy_input = torch.randn(1, 1, 28, 28).cuda()
         sim = QuantizationSimModel(model, dummy_input, default_param_bw=4, quant_scheme=QuantScheme.post_training_tf)
         params = SeqMseParams(num_batches=2, inp_symmetry=inp_symmetry, loss_fn=loss_fn)
-        apply_seq_mse(model, sim, unlabeled_data_loader, params, modules_to_exclude=[sim.model.conv1])
+        apply_seq_mse(model, sim, unlabeled_data_loader, params)
         assert sim.model.fc1.param_quantizers['weight'].is_encoding_frozen
         assert sim.model.fc2.param_quantizers['weight'].is_encoding_frozen
-        assert not sim.model.conv1.param_quantizers['weight'].encoding
-        assert sim.model.conv2.param_quantizers['weight'].encoding
+
+        # Compute encodings for all the activations and remaining non-supported modules
+        enc_before = sim.model.fc1.param_quantizers['weight'].encoding
+        sim.compute_encodings(calibrate, dummy_input)
+        enc_after = sim.model.fc1.param_quantizers['weight'].encoding
+        assert enc_before.delta == enc_after.delta
 
     @pytest.mark.parametrize("inp_symmetry", ['asym', 'symfp', 'symqt'])
-    @pytest.mark.parametrize("loss_fn", ['mse', 'l1', 'aa'])
+    @pytest.mark.parametrize("loss_fn", ['mse', 'l1', 'sqnr'])
     def test_seq_mse_with_and_without_checkpoints_config(self, inp_symmetry, loss_fn):
         """ test apply_seq_mse end-to-end with and without checkpoints configs """
         torch.manual_seed(0)
@@ -209,15 +226,31 @@ class TestSeqMse:
         params = SeqMseParams(num_batches=2, inp_symmetry=inp_symmetry, loss_fn=loss_fn)
 
         # Apply Sequential MSE without checkpoints config
-        apply_seq_mse(model, sim_without, data_loader, params)
-        without_checkpoints_enc = sim_without.model.fc.param_quantizers['weight'].encoding
+        apply_seq_mse(model, sim_without, data_loader, params, modules_to_exclude=[model.fc1])
+        assert not sim_without.model.fc1.param_quantizers['weight'].is_encoding_frozen
+        assert sim_without.model.fc2.param_quantizers['weight'].is_encoding_frozen
+        without_checkpoints_enc = sim_without.model.fc2.param_quantizers['weight'].encoding
 
         # Apply Sequential MSE with checkpoints config
-        apply_seq_mse(model, sim_with, data_loader, params, checkpoints_config="./test_checkpoints.json")
-        with_checkpoints_enc = sim_with.model.fc.param_quantizers['weight'].encoding
+        apply_seq_mse(model, sim_with, data_loader, params, checkpoints_config="./test_checkpoints.json",
+                      modules_to_exclude=[model.fc1])
+        assert not sim_with.model.fc1.param_quantizers['weight'].is_encoding_frozen
+        assert sim_with.model.fc2.param_quantizers['weight'].is_encoding_frozen
+        with_checkpoints_enc = sim_with.model.fc2.param_quantizers['weight'].encoding
 
         # encodings should be bit-exact
         assert without_checkpoints_enc.min == with_checkpoints_enc.min
         assert without_checkpoints_enc.max == with_checkpoints_enc.max
         assert without_checkpoints_enc.delta == with_checkpoints_enc.delta
         assert without_checkpoints_enc.offset == with_checkpoints_enc.offset
+
+    def test_apply_seq_mse_with_modules_to_exclude(self, unlabeled_data_loader):
+        """ test apply_seq_mse end-to-end with exclusion list """
+        torch.manual_seed(0)
+        model = Net().eval()
+        dummy_input = torch.randn(1, 1, 28, 28)
+        sim = QuantizationSimModel(model, dummy_input, default_param_bw=4, quant_scheme=QuantScheme.post_training_tf)
+        params = SeqMseParams(num_batches=2)
+        apply_seq_mse(model, sim, unlabeled_data_loader, params, modules_to_exclude=[model.fc1])
+        assert not sim.model.fc1.param_quantizers['weight'].is_encoding_frozen
+        assert sim.model.fc2.param_quantizers['weight'].is_encoding_frozen
