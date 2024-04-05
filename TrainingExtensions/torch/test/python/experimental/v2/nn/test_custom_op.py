@@ -37,7 +37,7 @@
 
 import pytest
 import torch
-from aimet_torch.v2.quantization.nn.fake_quant import FakeQuantizationMixin
+from aimet_torch.v2.quantization.nn import FakeQuantizationMixin
 
 
 class CustomOp(torch.nn.Module):

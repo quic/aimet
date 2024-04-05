@@ -49,7 +49,7 @@ from unittest.mock import patch
 from aimet_common.defs import QuantScheme
 
 from aimet_torch.v2.quantization.quantsim import QuantizationSimModel
-from aimet_torch.v2.quantization.nn.fake_quant import FakeQuantizationMixin
+from aimet_torch.v2.quantization.nn import FakeQuantizationMixin
 from aimet_torch.utils import get_named_module, is_leaf_module
 
 

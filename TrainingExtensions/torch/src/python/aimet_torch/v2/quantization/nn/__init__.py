@@ -40,6 +40,7 @@ import contextlib
 import torch
 from .fake_quant import *
 from .true_quant import *
+from .base import *
 
 
 @contextlib.contextmanager
