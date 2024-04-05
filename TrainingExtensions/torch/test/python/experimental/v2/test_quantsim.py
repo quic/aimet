@@ -56,7 +56,7 @@ def encodings_are_close(quantizer_1: AffineQuantizerBase, quantizer_2: AffineQua
 
 
 class TestPercentileScheme:
-    """ Test Percentile quantization scheme """ 
+    """ Test Percentile quantization scheme """
 
     def test_set_percentile_value(self):
         """ Test pecentile scheme by setting different percentile values """
@@ -186,3 +186,20 @@ class TestPercentileScheme:
             # conv param quantizer needs to be enabled
             assert sim.model.conv1.param_quantizers['weight'] is not None
 
+
+
+class TestQuantsimUtilities:
+
+    def test_populate_marker_map(self):
+        model = test_models.BasicConv2d(kernel_size=3)
+        dummy_input = torch.rand(1, 64, 16, 16)
+        sim = QuantizationSimModel(model, dummy_input)
+        conv_layer = sim.model.conv
+        for name, module in sim.model.named_modules():
+            if module is conv_layer:
+                conv_name = name
+                break
+        assert conv_name not in sim._module_marker_map.keys()
+        sim.run_modules_for_traced_custom_marker([conv_layer], dummy_input)
+        assert conv_name in sim._module_marker_map.keys()
+        assert torch.equal(sim._module_marker_map[conv_name](dummy_input), conv_layer.get_original_module()(dummy_input))

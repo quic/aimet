@@ -1484,7 +1484,7 @@ class QuantizationSimModel:
                 if isinstance(module, ExportableQuantModule) or utils.is_leaf_module(module):
                     module_map[module] = start_str + name
                 else:
-                    recursively_populate_map(module, module_map, start_str + name + "/")
+                    recursively_populate_map(module, module_map, start_str + name + ".")
         module_to_name_map = {}
         recursively_populate_map(self.model, module_to_name_map, "")
         return module_to_name_map
@@ -1703,26 +1703,21 @@ class QuantizationSimModel:
         """
         Given a list of modules to run and dummy input for the module, create a traced CustomMarker for each module
         and store it in the module_marker map. The same dummy input will be used for all modules.
+
         :param module_list: List of modules to create traced CustomMarkers for
         :param dummy_input: Dummy input for all modules
         """
-        module_to_name_map = {}
-        for name, module in self.model.named_modules():
-            if utils.is_leaf_module(module):
-                if '._module_to_wrap' in name:
-                    module_to_name_map[module] = name[:MODULE_TO_WRAP_STRING_REVERSE_INDEX]
-                else:
-                    module_to_name_map[module] = name
+
+        module_to_name_map = self._get_leaf_module_to_name_map()
 
         for module in module_list:
-            if isinstance(module, QcQuantizeWrapper):
-                module = getattr(module, '_module_to_wrap')
             # Only perform init and trace if the given module is a leaf module, and we have not recorded it before
             if module in module_to_name_map and module_to_name_map[module] not in self._module_marker_map:
+                name = module_to_name_map[module]
+                module = module.get_original_module() if isinstance(module, ExportableQuantModule) else module
                 with utils.in_eval_mode(module), torch.no_grad():
-                    marker_layer = torch.jit.trace(CustomMarker(module, module_to_name_map[module], 'True'),
-                                                   dummy_input)
-                self._module_marker_map[module_to_name_map[module]] = marker_layer
+                    marker_layer = torch.jit.trace(CustomMarker(module, name, True), dummy_input)
+                    self._module_marker_map[name] = marker_layer
 
     def _validate_supported_kernels_for_quantizers(self, action: SupportedKernelsAction):
         """
