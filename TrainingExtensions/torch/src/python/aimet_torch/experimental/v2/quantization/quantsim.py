@@ -37,7 +37,7 @@
 """ Top level API for performing quantization simulation of a pytorch model """
 
 import itertools
-import json
+
 import torch
 
 from aimet_torch.quantsim import QuantizationSimModel as V1QuantizationSimModel
@@ -140,72 +140,3 @@ class QuantizationSimModel(V1QuantizationSimModel):
             if isinstance(module, QuantizerBase):
                 if isinstance(module.encoding_analyzer, PercentileEncodingAnalyzer):
                     module.encoding_analyzer.set_percentile(percentile_value)
-
-    def _set_param_encodings(self, param_encoding_dict: dict, freeze=False):
-        for module_name, module in self.model.named_modules():
-            if not isinstance(module, BaseQuantizationMixin):
-                continue
-            param_encoding = {
-                param_name: param_encoding_dict[f'{module_name}.{param_name}']
-                for param_name, _ in module.param_quantizers.items()
-                if f'{module_name}.{param_name}' in param_encoding_dict
-            }
-            module.import_param_encodings(param_encoding, freeze=freeze)
-
-    def _set_activation_encodings(self, activation_encoding_dict: dict, freeze=False):
-        for module_name, module in self.model.named_modules():
-            if not isinstance(module, BaseQuantizationMixin):
-                continue
-
-            try:
-                input_encoding = activation_encoding_dict[module_name]['input']
-            except KeyError:
-                input_encoding = {}
-
-            module.import_input_encodings(input_encoding, freeze=freeze)
-
-            try:
-                output_encoding = activation_encoding_dict[module_name]['output']
-            except KeyError:
-                output_encoding = {}
-
-            module.import_output_encodings(output_encoding, freeze=freeze)
-
-    def set_and_freeze_param_encodings(self, encoding_path: str):
-        """
-        Set and freeze parameter encodings from encodings JSON file.
-        .. note:
-            The loaded json file should contain ONLY weight encodings. This is different from the json file used in
-            `load_and_freeze_encodings`, which contains both weight and activation dictionaries.
-
-        :param encoding_path: path from where to load parameter encodings file
-        """
-        # Load parameter encodings file
-        with open(encoding_path) as json_file:
-            param_encodings = json.load(json_file)
-
-        self._set_param_encodings(param_encodings, freeze=True)
-
-    def load_and_freeze_encodings(self, encoding_path: str, ignore_when_quantizer_disabled: bool = False):
-        """
-        Functionality to set encodings (both activation and parameter) as per the given encodings JSON file and
-        freeze them.
-        .. note:
-            The encodings JSON file should be the {model_name}_torch.encodings json exported during sim.export()
-
-        :param encoding_path: JSON file path from where to load the encodings.
-        :param ignore_when_quantizer_disabled: ignore raising RuntimeError while setting encodings,
-            when quantizers are disabled.
-        """
-        if ignore_when_quantizer_disabled:
-            raise NotImplementedError("Ignoring disabled quantizers is currently not implemented, please use "
-                                      "the v1 QuantizationSimModel to get this functionality")
-
-        with open(encoding_path, mode='r') as json_file:
-            encodings_dict = json.load(json_file)
-
-        param_encodings = encodings_dict['param_encodings']
-        activation_encodings = encodings_dict['activation_encodings']
-
-        self._set_param_encodings(param_encodings, freeze=True)
-        self._set_activation_encodings(activation_encodings, freeze=True)

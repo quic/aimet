@@ -149,7 +149,7 @@ class ExportableQuantModule(Protocol):
         Returns a dict of {param name: param encodings}, with each encoding represented as a List of Dicts
         """
 
-    def import_input_encodings(self, encodings: Dict[str, Dict]):
+    def import_input_encodings(self, encodings: Dict[str, Dict], freeze=False, ignore_when_quantizer_disabled=False):
         """
         Import input encodings represented in below format:
         {
@@ -159,7 +159,7 @@ class ExportableQuantModule(Protocol):
         }
         """
 
-    def import_output_encodings(self, encodings: Dict[str, Dict]):
+    def import_output_encodings(self, encodings: Dict[str, Dict], freeze=False, ignore_when_quantizer_disabled=False):
         """
         Import output encodings represented in below format:
         {
@@ -169,7 +169,7 @@ class ExportableQuantModule(Protocol):
         }
         """
 
-    def import_param_encodings(self, encodings: Dict[str, List[Dict]]):
+    def import_param_encodings(self, encodings: Dict[str, List[Dict]], freeze=False, ignore_when_quantizer_disabled=False):
         """
         Import parameter encodings represented in below format:
         {
@@ -1602,38 +1602,68 @@ class QuantizationSimModel:
         """
         Functionality to set encodings (both activation and parameter) as per the given encodings JSON file and
         freeze them.
+        .. note:
+            The encodings JSON file should be the {prefix}_torch.encodings json exported during sim.export()
 
         :param encoding_path: JSON file path from where to load the encodings.
         :param ignore_when_quantizer_disabled: ignore raising RuntimeError while setting encodings,
-        when quantizers are disabled.
+            when quantizers are disabled.
         """
         with open(encoding_path, mode='r') as json_file:
             encodings_dict = json.load(json_file)
 
-        params_encoding = encodings_dict['param_encodings']
-        activation_encoding = encodings_dict['activation_encodings']
+        self._set_param_encodings(encodings_dict['param_encodings'],
+                                  freeze=True,
+                                  ignore_when_quantizer_disabled=ignore_when_quantizer_disabled)
+        self._set_activation_encodings(encodings_dict['activation_encodings'],
+                                       freeze=True,
+                                       ignore_when_quantizer_disabled=ignore_when_quantizer_disabled)
 
-        for name, module in self.model.named_modules():
-            if isinstance(module, QcQuantizeWrapper):
-                module.set_param_encoding(name, params_encoding, ignore_when_quantizer_disabled, False)
-                module.freeze_param_encoding(name, params_encoding)
 
-                module.set_activation_encoding(name, activation_encoding, ignore_when_quantizer_disabled, False)
-                module.freeze_activation_encoding(name, activation_encoding)
+    def _set_param_encodings(self, encoding_dict: Dict, freeze=False, ignore_when_quantizer_disabled=False):
+        for name, quant_module in self.model.named_modules():
+            if isinstance(quant_module, ExportableQuantModule):
+                param_encoding = {
+                    param_name: encoding_dict[f'{name}.{param_name}']
+                    for param_name, _ in quant_module.param_quantizers.items()
+                    if f'{name}.{param_name}' in encoding_dict
+                }
+                quant_module.import_param_encodings(param_encoding, freeze=freeze, ignore_when_quantizer_disabled=ignore_when_quantizer_disabled)
+
+    def _set_activation_encodings(self, activation_encoding_dict: dict, freeze=False, ignore_when_quantizer_disabled=False):
+        for module_name, module in self.model.named_modules():
+            if not isinstance(module, ExportableQuantModule):
+                continue
+
+            try:
+                input_encoding = activation_encoding_dict[module_name]['input']
+            except KeyError:
+                input_encoding = {}
+
+            module.import_input_encodings(input_encoding, freeze=freeze, ignore_when_quantizer_disabled=ignore_when_quantizer_disabled)
+
+            try:
+                output_encoding = activation_encoding_dict[module_name]['output']
+            except KeyError:
+                output_encoding = {}
+
+            module.import_output_encodings(output_encoding, freeze=freeze, ignore_when_quantizer_disabled=ignore_when_quantizer_disabled)
+
 
     def set_and_freeze_param_encodings(self, encoding_path: str):
         """
-        Set and freeze parameter encodings from encodings JSON file
+        Set and freeze parameter encodings from encodings JSON file.
+        .. note:
+            The loaded json file should contain ONLY weight encodings. This is different from the json file used in
+            `load_and_freeze_encodings`, which contains both weight and activation dictionaries.
+
         :param encoding_path: path from where to load parameter encodings file
         """
         # Load parameter encodings file
         with open(encoding_path) as json_file:
             param_encodings = json.load(json_file)
 
-        for name, quant_module in self.model.named_modules():
-            if isinstance(quant_module, QcQuantizeWrapper):
-                quant_module.set_param_encoding(name, param_encodings)
-                quant_module.freeze_param_encoding(name, param_encodings)
+        self._set_param_encodings(param_encodings, freeze=True)
 
     def quant_wrappers(self):
         """
