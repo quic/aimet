@@ -41,11 +41,9 @@ import torch
 from aimet_torch.experimental.v2.utils import _is_expandable
 
 
-def _validate_arguments(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int] = None):
+def _validate_arguments(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor):
     if not tensor.dtype == scale.dtype == offset.dtype:
         raise RuntimeError("Data type of tensor, scale, and offset are should be the same")
-    if bitwidth and torch.finfo(tensor.dtype).bits <= bitwidth:
-        raise RuntimeError(f"Dtype {tensor.dtype} has insufficient bitwidth to perform {bitwidth} quantization")
     if not _is_expandable(scale.shape, tensor.shape):
         raise RuntimeError(f"Scale of shape {scale.shape} cannot be expanded like input tensor of shape {tensor.shape}")
 
@@ -59,7 +57,7 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bi
     :param bitwidth: Output bitwidth of quantized tensor
     :return: Resulting tensor
     """
-    _validate_arguments(tensor, scale, offset, bitwidth)
+    _validate_arguments(tensor, scale, offset)
     return QuantizeFunc.apply(tensor, scale, offset, bitwidth, signed)
 
 def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int], signed: bool = False) -> torch.Tensor:
@@ -72,7 +70,7 @@ def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
     :param bitwidth: simulated quantization bitwidth
     :return: Resulting tensor
     """
-    _validate_arguments(tensor, scale, offset, bitwidth)
+    _validate_arguments(tensor, scale, offset)
     return QuantDequantFunc.apply(tensor, scale, offset, bitwidth, signed)
 
 def dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor) -> torch.Tensor:
