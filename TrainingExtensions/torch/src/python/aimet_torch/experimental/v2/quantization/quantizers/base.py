@@ -218,5 +218,5 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
         """
         for param in self.parameters():
             if param.requires_grad:
-                return True
+                return False
         return self.encoding_analyzer is None

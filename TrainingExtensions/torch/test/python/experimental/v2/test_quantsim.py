@@ -111,7 +111,7 @@ class TestPercentileScheme:
 
         """
         When: Compare sim_2 param encodings to sim_1 param encodings
-        Then: Encodings should matchn\n\n\n
+        Then: Encodings should matchn
         """
         assert encodings_are_close(sim.model.conv.param_quantizers["weight"], sim_2.model.conv.param_quantizers["weight"])
 
