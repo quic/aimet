@@ -63,6 +63,8 @@ class AdaroundOptimizer:
     """
     Optimizes the weight rounding of quantized wrapper module
     """
+    is_activation_caching_enabled = True
+
     @classmethod
     def adaround_module(cls, module: torch.nn.Module, quant_module: StaticGridQuantWrapper,
                         orig_model: torch.nn.Module, quant_model: torch.nn.Module,
@@ -363,4 +365,4 @@ class AdaroundOptimizer:
         """
         Function to enable/disable caching intermediate activation data. By default, it returns True.
         """
-        return True
+        return AdaroundOptimizer.is_activation_caching_enabled

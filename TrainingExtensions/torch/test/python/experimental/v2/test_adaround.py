@@ -61,6 +61,17 @@ from aimet_torch.experimental.v2.nn.quant_base import BaseQuantizationMixin
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
 
+@pytest.fixture
+def disable_activation_caching():
+    # Disable caching activation data
+    orig_flag = AdaroundOptimizer.is_activation_caching_enabled
+    try:
+        AdaroundOptimizer.is_activation_caching_enabled = False
+        yield
+    finally:
+        AdaroundOptimizer.is_activation_caching_enabled = orig_flag
+
+
 def dummy_forward_pass(model, inp_shape):
     """ Dummy forward pass"""
     model.eval()
@@ -300,7 +311,6 @@ class TestAdaround:
         if os.path.exists("./dummy.encodings"):
             os.remove("./dummy.encodings")
 
-    @pytest.skip('Failed only on CI pipeline')
     def test_adaround_with_and_without_checkpoints_config(self):
         def dummy_fwd(model, inputs):
             return model(*inputs) if isinstance(inputs, (list, tuple)) else model(inputs)
@@ -371,7 +381,6 @@ class TestAdaround:
         if os.path.exists("./test_checkpoints.json"):
             os.remove("./test_checkpoints.json")
 
-    @pytest.skip('Failed only on CI pipeline')
     def test_adaround_with_disjoint_checkpoints_config(self):
         """ Test disjoint checkpoint for two blocks model """
         def dummy_fwd(model, inputs):
@@ -987,23 +996,13 @@ class TestAdaround:
 
     @pytest.mark.cuda
     @pytest.mark.parametrize('dtype', [torch.float, torch.half])
-    def test_apply_adaround_using_gpu_caching_disabled(self, dtype):
+    def test_apply_adaround_using_gpu_caching_disabled(self, dtype, disable_activation_caching):
         """ test apply_adaround end to end using tiny model """
         if dtype == torch.half:
             pytest.skip('float16 tests will be enabled after fixing qsim dtype issue')
 
         torch.manual_seed(10)
         AimetLogger.set_level_for_all_areas(logging.INFO)
-
-        # Disable caching activation data
-        from aimet_torch.adaround.adaround_optimizer import AdaroundOptimizer
-        def enable_caching_acts_data() -> bool:
-            """
-            Function to enable/disable caching intermediate activation data.
-            """
-            return False
-
-        AdaroundOptimizer.enable_caching_acts_data = enable_caching_acts_data
 
         # create fake data loader with image size (3, 32, 32)
         data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
