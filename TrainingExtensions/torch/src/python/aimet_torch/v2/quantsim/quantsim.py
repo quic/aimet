@@ -39,10 +39,9 @@
 import itertools
 
 import torch
-
 import io
 
-from aimet_torch.quantsim import QuantizationSimModel as V1QuantizationSimModel
+from aimet_torch.quantsim import QuantizationSimModel as V1QuantizationSimModel, logger
 import aimet_torch.quantsim as quantsim_v1
 from aimet_torch.v2 import nn as aimet_nn
 from aimet_torch.v2.nn import FakeQuantizationMixin
@@ -150,3 +149,29 @@ class QuantizationSimModel(V1QuantizationSimModel):
         stream.write("-------------------------\n")
         stream.write(f"{self.model}\n")
         return stream.getvalue()
+
+    @staticmethod
+    def compute_layer_encodings_for_sim(sim: 'QuantizationSimModel'):
+        raise NotImplementedError("QuantizationSimModel.compute_layer_encodings_for_sim has been removed.")
+
+    @staticmethod
+    def prepare_sim_for_compute_encodings(sim: 'QuantizationSimModel'):
+        logger.warning("QuantizationSimModel.prepare_sim_for_compute_encodings has been deprecated and is no longer necessary. "
+                       "Any calls can be safely removed.")
+
+    @classmethod
+    def set_mode_for_recurrent_module(cls, layer, name: str):
+        raise NotImplementedError("QuantizationSimModel.set_mode_for_recurrent_module has been removed.")
+
+    @staticmethod
+    def save_model_with_embedded_quantization_nodes(sim_model, path: str, filename_prefix: str,
+                                                    dummy_input, onnx_export_args=None,
+                                                    export_to_torchscript=False, is_conditional=False):
+        raise NotImplementedError("QuantizationSimModel.save_model_with_embedded_quantization_nodes has been removed.")
+
+    @staticmethod
+    def _replace_quantization_wrapper_with_native_torch_quantization_nodes(quant_sim_model, device: torch.device):
+        raise NotImplementedError()
+
+    def _clamp_transformer_attention_mask_encoding(self):
+        raise NotImplementedError()
