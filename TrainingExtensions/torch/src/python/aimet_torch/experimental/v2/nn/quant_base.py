@@ -208,7 +208,7 @@ class BaseQuantizationMixin(abc.ABC):
                 encoding = [encoding]
             quantizer.set_legacy_encodings(encoding)
             if freeze:
-                quantizer._freeze_encoding()
+                quantizer._freeze_encoding() # pylint:disable = protected-access
 
     def export_output_encodings(self) -> List[List[Dict]]:
         """
@@ -242,7 +242,7 @@ class BaseQuantizationMixin(abc.ABC):
                 encoding = [encoding]
             quantizer.set_legacy_encodings(encoding)
             if freeze:
-                quantizer._freeze_encoding()
+                quantizer._freeze_encoding() # pylint:disable = protected-access
 
     def export_param_encodings(self) -> Dict[str, List[Dict]]:
         """
@@ -276,7 +276,7 @@ class BaseQuantizationMixin(abc.ABC):
                 encoding = [encoding]
             quantizer.set_legacy_encodings(encoding)
             if freeze:
-                quantizer._freeze_encoding()
+                quantizer._freeze_encoding() # pylint:disable = protected-access
 
     def get_original_module(self) -> nn.Module:
         """
