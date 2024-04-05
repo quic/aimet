@@ -36,7 +36,7 @@
 # =============================================================================
 
 
-from aimet_torch.v2.nn.function_selector import FunctionSelector
+from aimet_torch.v2.quantization.nn.function_selector import FunctionSelector
 import pytest
 
 

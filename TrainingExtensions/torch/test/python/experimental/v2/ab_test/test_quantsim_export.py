@@ -45,8 +45,8 @@ from packaging import version
 
 from torchvision.models import resnet18
 
-import aimet_torch.v2.nn as aimet_nn
-from aimet_torch.v2.nn.fake_quant import FakeQuantizationMixin
+import aimet_torch.v2.quantization.nn as aimet_nn
+from aimet_torch.v2.quantization.nn.fake_quant import FakeQuantizationMixin
 from aimet_torch.v2.quantization.quantizers.affine import QuantizeDequantize
 from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 from aimet_torch.elementwise_ops import Add

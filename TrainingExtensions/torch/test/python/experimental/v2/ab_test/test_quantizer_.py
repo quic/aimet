@@ -62,8 +62,8 @@ from ..models_.models_to_test import ModelWith5Output
 from aimet_torch.onnx_utils import OnnxExportApiArgs
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, StaticGridQuantWrapper
 from aimet_torch.quantsim import check_accumulator_overflow, compute_encodings_for_sims
-import aimet_torch.v2.nn as aimet_nn
-from aimet_torch.v2.nn.fake_quant import _FakeQuantizedUnaryOpMixin
+import aimet_torch.v2.quantization.nn as aimet_nn
+from aimet_torch.v2.quantization.nn.fake_quant import _FakeQuantizedUnaryOpMixin
 from aimet_torch.v2.quantization.quantizers.affine import QuantizeDequantize
 from aimet_torch.v2.quantization.quantizers.float import FloatQuantizeDequantize
 from aimet_torch.v2.quantization.quantsim import QuantizationSimModel

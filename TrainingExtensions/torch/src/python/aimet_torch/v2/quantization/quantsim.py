@@ -43,8 +43,8 @@ import torch
 from aimet_torch.quantsim import QuantizationSimModel as V1QuantizationSimModel
 import aimet_torch.quantsim as quantsim_v1
 from aimet_torch.v2 import nn as aimet_nn
-from aimet_torch.v2.nn.fake_quant import FakeQuantizationMixin
-from aimet_torch.v2.nn.quant_base import BaseQuantizationMixin
+from aimet_torch.v2.quantization.nn.fake_quant import FakeQuantizationMixin
+from aimet_torch.v2.quantization.nn.quant_base import BaseQuantizationMixin
 from aimet_torch.v2.quantization.wrappers.builder import LazyQuantizeWrapper
 from aimet_torch.v2.quantization.quantizers import QuantizerBase
 from aimet_torch.v2.quantization.encoding_analyzer import PercentileEncodingAnalyzer

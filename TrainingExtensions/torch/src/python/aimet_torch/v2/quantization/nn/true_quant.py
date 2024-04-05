@@ -48,8 +48,8 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from aimet_torch.v2.nn.quant_base import BaseQuantizationMixin
-from aimet_torch.v2.nn.fake_quant import _FakeQuantizedUnaryOpMixin, _FakeQuantizedBinaryOpMixin
+from aimet_torch.v2.quantization.nn.quant_base import BaseQuantizationMixin
+from aimet_torch.v2.quantization.nn.fake_quant import _FakeQuantizedUnaryOpMixin, _FakeQuantizedBinaryOpMixin
 from aimet_torch.v2.quantization.quantizers.base import QuantizerBase
 from aimet_torch.v2.quantization.quantizers import affine
 from aimet_torch.v2.quantization.quantizers.float import FloatQuantizeDequantize

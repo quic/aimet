@@ -55,7 +55,7 @@ from .models_ import test_models
 from aimet_torch.adaround.adaround_weight import AdaroundOptimizer, AdaroundParameters
 from aimet_torch.v2.quantization.quantsim import QuantizationSimModel
 from aimet_torch.v2.adaround import Adaround
-from aimet_torch.v2.nn.quant_base import BaseQuantizationMixin
+from aimet_torch.v2.quantization.nn.quant_base import BaseQuantizationMixin
 
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)

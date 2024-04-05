@@ -40,7 +40,7 @@ import torch
 from torch import nn
 
 from aimet_torch import elementwise_ops
-from aimet_torch.v2.nn.fake_quant import FakeQuantizationMixin
+from aimet_torch.v2.quantization.nn.fake_quant import FakeQuantizationMixin
 
 
 class SimpleConditional(torch.nn.Module):

@@ -52,7 +52,7 @@ from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.elementwise_ops import Add
 
-from aimet_torch.v2.nn.quant_base import BaseQuantizationMixin
+from aimet_torch.v2.quantization.nn.quant_base import BaseQuantizationMixin
 from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 from aimet_torch.v2.quantization.quantsim import QuantizationSimModel
 from aimet_torch.v2.quantization.quantizers.affine import QuantizeDequantize

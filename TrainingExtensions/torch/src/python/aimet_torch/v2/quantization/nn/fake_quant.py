@@ -47,7 +47,7 @@ import torch.nn as nn
 from torch.nn.utils.rnn import PackedSequence
 from torch.utils._pytree import tree_map
 
-from aimet_torch.v2.nn.quant_base import BaseQuantizationMixin
+from aimet_torch.v2.quantization.nn.quant_base import BaseQuantizationMixin
 from aimet_torch.v2.utils import patch_attr
 import aimet_torch.elementwise_ops as aimet_ops
 
