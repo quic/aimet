@@ -44,8 +44,8 @@ from typing import Type, List, Dict
 
 import torch.nn as nn
 
-from aimet_torch.experimental.v2.quantization.quantizers.base import QuantizerBase
-from aimet_torch.experimental.v2.utils import patch_attr
+from aimet_torch.v2.quantization.quantizers.base import QuantizerBase
+from aimet_torch.v2.utils import patch_attr
 
 
 def _flatten_nn_module_list(module):

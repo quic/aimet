@@ -38,7 +38,7 @@ import torch
 import pytest
 import numpy as np
 import random
-from aimet_torch.experimental.v2.quantization.encoding_analyzer import SqnrEncodingAnalyzer, PercentileEncodingAnalyzer, MinMaxEncodingAnalyzer, _HistogramObserver
+from aimet_torch.v2.quantization.encoding_analyzer import SqnrEncodingAnalyzer, PercentileEncodingAnalyzer, MinMaxEncodingAnalyzer, _HistogramObserver
 
 @pytest.fixture(autouse=True)
 def set_seed():

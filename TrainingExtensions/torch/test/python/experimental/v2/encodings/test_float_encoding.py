@@ -37,7 +37,7 @@
 import pytest
 import torch
 
-from aimet_torch.experimental.v2.quantization.encodings.float import FloatEncoding
+from aimet_torch.v2.quantization.encodings.float import FloatEncoding
 
 @pytest.fixture
 def maxval():

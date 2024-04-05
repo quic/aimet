@@ -39,8 +39,8 @@ import pytest
 
 import torch
 from torch.optim import SGD, RMSprop, Adagrad, Adam, AdamW
-from aimet_torch.experimental.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
-from aimet_torch.experimental.v2.quantization.quantizers.float import (
+from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
+from aimet_torch.v2.quantization.quantizers.float import (
     FloatQuantizeDequantize,
     _ieee_float_max_representable_value,
 )

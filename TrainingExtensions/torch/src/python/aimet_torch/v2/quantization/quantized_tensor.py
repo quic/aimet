@@ -42,7 +42,7 @@ import copy
 import torch
 from torch.utils._pytree import tree_map, tree_flatten
 
-from aimet_torch.experimental.v2.quantization.encodings import EncodingBase
+from aimet_torch.v2.quantization.encodings import EncodingBase
 
 
 __all__ = ['QuantizedTensorBase', 'QuantizedTensor', 'DequantizedTensor', 'EncodingError']

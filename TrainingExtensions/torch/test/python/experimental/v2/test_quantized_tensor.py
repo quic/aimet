@@ -36,9 +36,9 @@
 # =============================================================================
 import pytest
 import torch
-from aimet_torch.experimental.v2.quantization.backends import get_backend
-from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensor, DequantizedTensor
-from aimet_torch.experimental.v2.quantization.encodings import AffineEncoding
+from aimet_torch.v2.quantization.backends import get_backend
+from aimet_torch.v2.quantization.quantized_tensor import QuantizedTensor, DequantizedTensor
+from aimet_torch.v2.quantization.encodings import AffineEncoding
 
 
 @pytest.fixture

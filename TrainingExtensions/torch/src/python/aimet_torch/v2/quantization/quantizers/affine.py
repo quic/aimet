@@ -45,13 +45,13 @@ import functools
 import torch
 from torch import nn
 
-from aimet_torch.experimental.v2.utils import patch_attr, _is_expandable, StatisticsNotFoundError
-from aimet_torch.experimental.v2.quantization.encoding_analyzer import EncodingAnalyzer, MinMaxEncodingAnalyzer
-from aimet_torch.experimental.v2.quantization.encodings import AffineEncoding
-from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensor, DequantizedTensor
-from aimet_torch.experimental.v2.quantization.quantizers.base import QuantizerBase
-from aimet_torch.experimental.v2.quantization.backends import get_backend
-from aimet_torch.experimental.v2.utils import ste_round
+from aimet_torch.v2.utils import patch_attr, _is_expandable, StatisticsNotFoundError
+from aimet_torch.v2.quantization.encoding_analyzer import EncodingAnalyzer, MinMaxEncodingAnalyzer
+from aimet_torch.v2.quantization.encodings import AffineEncoding
+from aimet_torch.v2.quantization.quantized_tensor import QuantizedTensor, DequantizedTensor
+from aimet_torch.v2.quantization.quantizers.base import QuantizerBase
+from aimet_torch.v2.quantization.backends import get_backend
+from aimet_torch.v2.utils import ste_round
 
 
 __all__ = ['AffineQuantizerBase', 'MinMaxQuantizer', 'Quantize', 'QuantizeDequantize', 'Dequantize']

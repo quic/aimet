@@ -38,8 +38,8 @@ import random
 import torch
 import pytest
 from collections import namedtuple
-from aimet_torch.experimental.v2.quantization.backends import default as default_backend
-from aimet_torch.experimental.v2.utils import ste_round
+from aimet_torch.v2.quantization.backends import default as default_backend
+from aimet_torch.v2.utils import ste_round
 
 VectorSetForTest = namedtuple("VectorSetForTest", ["tensor", "tensor_q", "tensor_qdq", "mask", "delta", "offset", "bitwidth"])
 

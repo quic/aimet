@@ -48,8 +48,8 @@ from unittest.mock import patch
 
 from aimet_common.defs import QuantScheme
 
-from aimet_torch.experimental.v2.quantization.quantsim import QuantizationSimModel
-from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizationMixin
+from aimet_torch.v2.quantization.quantsim import QuantizationSimModel
+from aimet_torch.v2.nn.fake_quant import FakeQuantizationMixin
 from aimet_torch.utils import get_named_module, is_leaf_module
 
 
@@ -176,7 +176,7 @@ class TestQuantsimV2QAT:
 
         aimetgrad_qsim.model(dummy_input).sum().backward()
         # Patch backend of auto_grad_qsim to autograd-based backend
-        with patch('aimet_torch.experimental.v2.quantization.quantizers.affine.get_backend', autograd_get_backend):
+        with patch('aimet_torch.v2.quantization.quantizers.affine.get_backend', autograd_get_backend):
             autograd_qsim.model(dummy_input).sum().backward()
 
         # Make sure that all the assertions are not being bypassed

@@ -45,13 +45,13 @@ from packaging import version
 
 from torchvision.models import resnet18
 
-import aimet_torch.experimental.v2.nn as aimet_nn
-from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizationMixin
-from aimet_torch.experimental.v2.quantization.quantizers.affine import QuantizeDequantize
-from aimet_torch.experimental.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
+import aimet_torch.v2.nn as aimet_nn
+from aimet_torch.v2.nn.fake_quant import FakeQuantizationMixin
+from aimet_torch.v2.quantization.quantizers.affine import QuantizeDequantize
+from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 from aimet_torch.elementwise_ops import Add
 from aimet_torch import onnx_utils
-from aimet_torch.experimental.v2.quantization.quantsim import QuantizationSimModel
+from aimet_torch.v2.quantization.quantsim import QuantizationSimModel
 from aimet_torch.quantsim import OnnxExportApiArgs
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch.utils import get_layer_by_name
@@ -367,7 +367,7 @@ class TestQuantsimOnnxExport:
     @torch.no_grad()
     def test_json_interchangeable(self):
         from aimet_torch.quantsim import QuantizationSimModel as QuantizationSimModelV1
-        from aimet_torch.experimental.v2.quantization.quantsim import QuantizationSimModel
+        from aimet_torch.v2.quantization.quantsim import QuantizationSimModel
 
         torch.manual_seed(0)
 

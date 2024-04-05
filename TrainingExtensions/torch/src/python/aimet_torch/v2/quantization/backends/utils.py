@@ -37,10 +37,10 @@
 # pylint: disable=all
 import importlib.util
 import torch
-import aimet_torch.experimental.v2.quantization.backends.default as default
+import aimet_torch.v2.quantization.backends.default as default
 
 from typing import Protocol
-from aimet_torch.experimental.v2.utils import _ContextManager
+from aimet_torch.v2.utils import _ContextManager
 
 
 class _QuantizationBackendProtocol(Protocol):
