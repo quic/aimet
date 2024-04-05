@@ -42,7 +42,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from aimet_torch.v2.quantization.backends import get_backend
-from aimet_torch.v2.quantization.quantizers.affine import Quantize, QuantizeDequantize
+from aimet_torch.v2.quantization.affine import Quantize, QuantizeDequantize
 from aimet_torch.v2.quantization.nn.true_quant import (
     QuantizedConv1d,
     QuantizedConv2d,
@@ -57,7 +57,7 @@ from aimet_torch.v2.quantization.nn.true_quant import (
     QuantizedMultiply,
     QuantizedSubtract,
 )
-from aimet_torch.v2.quantization.encodings import AffineEncoding
+from aimet_torch.v2.quantization.affine import AffineEncoding
 from aimet_torch.v2.quantization.tensor import QuantizedTensor, DequantizedTensor
 from aimet_torch.v2.quantization.nn import fake_quant
 from aimet_torch.v2.utils import enable_recompute

@@ -64,8 +64,8 @@ from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, 
 from aimet_torch.quantsim import check_accumulator_overflow, compute_encodings_for_sims
 import aimet_torch.v2.quantization.nn as aimet_nn
 from aimet_torch.v2.quantization.nn.fake_quant import _FakeQuantizedUnaryOpMixin
-from aimet_torch.v2.quantization.quantizers.affine import QuantizeDequantize
-from aimet_torch.v2.quantization.quantizers.float import FloatQuantizeDequantize
+from aimet_torch.v2.quantization.affine import QuantizeDequantize
+from aimet_torch.v2.quantization.float import FloatQuantizeDequantize
 from aimet_torch.v2.quantization.quantsim import QuantizationSimModel
 
 from ..models_ import test_models

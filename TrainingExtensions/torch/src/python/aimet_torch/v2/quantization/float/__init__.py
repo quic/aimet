@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -37,7 +37,5 @@
 
 # pylint: disable=all
 
-from .base import *
-from .affine import *
-from .float import *
-from .tensor import *
+from .encoding import *
+from .quantizer import *

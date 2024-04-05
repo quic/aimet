@@ -89,10 +89,10 @@ def get_quantized_modules(model: torch.nn.Module):
     for _, module in model.named_children():
         if isinstance(module, FakeQuantizationMixin):
             module_names.append(module)
-        
+
         elif not is_leaf_module(module):
             module_names = module_names + get_quantized_modules(module)
-            
+
     return module_names
 
 def get_enabled_quantizers_from_quantized_module(module: FakeQuantizationMixin):
@@ -165,10 +165,10 @@ class TestQuantsimV2QAT:
     def test_grad_correctness(self, model_cls, input_shape, quant_scheme, config_path):
         model = model_cls()
         dummy_input = torch.randn(input_shape)
-        
+
         aimetgrad_qsim = QuantizationSimModel(model, dummy_input, quant_scheme, config_file=config_path, default_param_bw=8, default_output_bw=4)
         autograd_qsim = QuantizationSimModel(model, dummy_input, quant_scheme, config_file=config_path, default_param_bw=8, default_output_bw=4)
-        
+
         aimetgrad_qsim.compute_encodings(lambda sim_model, _: sim_model(dummy_input),
                                          forward_pass_callback_args=None)
         autograd_qsim.compute_encodings(lambda sim_model, _: sim_model(dummy_input),
@@ -176,7 +176,7 @@ class TestQuantsimV2QAT:
 
         aimetgrad_qsim.model(dummy_input).sum().backward()
         # Patch backend of auto_grad_qsim to autograd-based backend
-        with patch('aimet_torch.v2.quantization.quantizers.affine.get_backend', autograd_get_backend):
+        with patch('aimet_torch.v2.quantization.affine.quantizer.get_backend', autograd_get_backend):
             autograd_qsim.model(dummy_input).sum().backward()
 
         # Make sure that all the assertions are not being bypassed

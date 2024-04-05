@@ -46,7 +46,7 @@ from aimet_torch.v2 import nn as aimet_nn
 from aimet_torch.v2.quantization.nn.fake_quant import FakeQuantizationMixin
 from aimet_torch.v2.quantization.nn.quant_base import BaseQuantizationMixin
 from aimet_torch.v2.quantization.wrappers.builder import LazyQuantizeWrapper
-from aimet_torch.v2.quantization.quantizers import QuantizerBase
+from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.encoding_analyzer import PercentileEncodingAnalyzer
 from aimet_torch.v2.utils import patch_attr
 from aimet_torch import utils

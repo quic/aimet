@@ -55,8 +55,8 @@ from aimet_torch.elementwise_ops import Add
 from aimet_torch.v2.quantization.nn.quant_base import BaseQuantizationMixin
 from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 from aimet_torch.v2.quantization.quantsim import QuantizationSimModel
-from aimet_torch.v2.quantization.quantizers.affine import QuantizeDequantize
-from aimet_torch.v2.quantization.quantizers.float import FloatQuantizeDequantize
+from aimet_torch.v2.quantization.affine import QuantizeDequantize
+from aimet_torch.v2.quantization.float import FloatQuantizeDequantize
 
 from ..models_.models_to_test import SingleResidual, QuantSimTinyModel, MultiInput, SingleResidualWithModuleAdd, \
     SingleResidualWithAvgPool, ModelWithBertCustomLayerNormGelu

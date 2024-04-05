@@ -34,8 +34,8 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
 # pylint: disable=all
 
-from .base import *
-from .affine import *
-from .float import *
+from .encoding import *
+from .quantizer import *

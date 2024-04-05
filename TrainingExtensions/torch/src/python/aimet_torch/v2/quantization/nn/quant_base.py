@@ -44,7 +44,7 @@ from typing import Type, List, Dict
 
 import torch.nn as nn
 
-from aimet_torch.v2.quantization.quantizers.base import QuantizerBase
+from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.utils import patch_attr
 
 

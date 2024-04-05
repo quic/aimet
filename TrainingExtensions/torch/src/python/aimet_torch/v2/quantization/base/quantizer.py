@@ -47,7 +47,7 @@ import torch
 from torch import nn
 
 from packaging import version
-from aimet_torch.v2.quantization.encodings import EncodingBase
+from aimet_torch.v2.quantization.base import EncodingBase
 from aimet_torch.v2.quantization.encoding_analyzer import EncodingAnalyzer
 
 

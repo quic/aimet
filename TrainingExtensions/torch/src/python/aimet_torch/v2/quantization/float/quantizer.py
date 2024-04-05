@@ -43,8 +43,8 @@ from typing import Optional, List, Dict
 
 import torch
 from aimet_torch.v2.quantization.encoding_analyzer import EncodingAnalyzer
-from aimet_torch.v2.quantization.quantizers.base import QuantizerBase
-from aimet_torch.v2.quantization.encodings import FloatEncoding
+from aimet_torch.v2.quantization.base import QuantizerBase
+from aimet_torch.v2.quantization.float import FloatEncoding
 from aimet_torch.v2.utils import StatisticsNotFoundError, patch_attr
 from aimet_torch.fp_quantization import fake_cast_to_ieee_float
 

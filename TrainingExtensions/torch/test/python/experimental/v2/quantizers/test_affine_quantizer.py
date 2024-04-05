@@ -42,7 +42,7 @@ import torch
 from torch import nn
 from torch.optim import SGD, RMSprop, Adagrad, Adam, AdamW
 from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
-from aimet_torch.v2.quantization.quantizers.affine import AffineQuantizerBase, Quantize, \
+from aimet_torch.v2.quantization.affine import AffineQuantizerBase, Quantize, \
     QuantizeDequantize, Dequantize
 from aimet_torch.v2.quantization.backends import get_backend
 
