@@ -269,7 +269,7 @@ class FigurePlot:
         :return: None
         """
         # has new, identical-length updates for all columns in source
-        new_data = {'x': [new_x_coordinate], 'y': [new_y_coordinate]}
+        new_data = {'x': [float(new_x_coordinate)], 'y': [new_y_coordinate]}
         self.source.stream(new_data)
 
     def update_title(self, new_title):
