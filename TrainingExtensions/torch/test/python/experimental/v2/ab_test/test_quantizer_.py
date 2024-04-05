@@ -62,8 +62,8 @@ from ..models_.models_to_test import ModelWith5Output
 from aimet_torch.onnx_utils import OnnxExportApiArgs
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, StaticGridQuantWrapper
 from aimet_torch.quantsim import check_accumulator_overflow, compute_encodings_for_sims
-import aimet_torch.experimental.v2.nn.fake_quant as aimet_nn
-from aimet_torch.experimental.v2.nn.true_quant import QuantizedLinear
+import aimet_torch.experimental.v2.nn as aimet_nn
+from aimet_torch.experimental.v2.nn.fake_quant import _FakeQuantizedUnaryOpMixin
 from aimet_torch.experimental.v2.quantization.quantizers.affine import QuantizeDequantize
 from aimet_torch.experimental.v2.quantization.quantizers.float import FloatQuantizeDequantize
 from aimet_torch.experimental.v2.quantization.quantsim import QuantizationSimModel
@@ -368,7 +368,7 @@ class Clamp(torch.nn.Module):
         return x.clamp(0)
 
 
-FakeQuantizedClamp = aimet_nn._FakeQuantizedUnaryOpMixin.wrap(Clamp)
+FakeQuantizedClamp = _FakeQuantizedUnaryOpMixin.wrap(Clamp)
 
 
 class ModelInputsSharedConstantIntermediate(nn.Module):
@@ -433,7 +433,7 @@ class ModelWithConstantQuantization(torch.nn.Module):
 class TestQuantizationSimStaticGrad:
     def test_is_quantizable_module_negative(self):
         """With a non-quantizable module"""
-        conv1 = aimet_nn.FakeQuantizedConv2d(1, 10, 5)
+        conv1 = aimet_nn.QuantizedConv2d(1, 10, 5)
         assert not QuantizationSimModel._is_quantizable_module(conv1)
 
     def verify_quantization_wrappers(self, original_model, quantized_model):
@@ -634,7 +634,7 @@ class TestQuantizationSimStaticGrad:
 
     def test_add_quantization_wrappers_with_modulelist(self):
         """With a one-deep model using ModuleList"""
-        q_conv2d = aimet_nn.FakeQuantizedConv2d(1, 10, 5)
+        q_conv2d = aimet_nn.QuantizedConv2d(1, 10, 5)
         q_conv2d.output_quantizers[0] = QuantizeDequantize(shape=(1,),
                                                            bitwidth=8,
                                                            symmetric=False)
@@ -663,7 +663,7 @@ class TestQuantizationSimStaticGrad:
 
     def test_add_quantization_wrappers_with_modulelist_two_deep(self):
         """With a two-deep model using ModuleList"""
-        q_conv2d = aimet_nn.FakeQuantizedConv2d(1, 10, 5)
+        q_conv2d = aimet_nn.QuantizedConv2d(1, 10, 5)
         q_conv2d.output_quantizers[0] = QuantizeDequantize(shape=(1,),
                                                            bitwidth=8,
                                                            symmetric=False)
@@ -706,15 +706,15 @@ class TestQuantizationSimStaticGrad:
         layers_to_exclude = [sim.model.layers_deep[1], sim.model.layers_deep[3], sim.model.layers_deep[5]]
         sim.exclude_layers_from_quantization(layers_to_exclude)
 
-        assert isinstance(sim.model.layers[0], QuantizedLinear)
-        assert isinstance(sim.model.layers[1], QuantizedLinear)
-        assert isinstance(sim.model.layers[2], aimet_nn.FakeQuantizedConv2d)
+        assert isinstance(sim.model.layers[0], aimet_nn.QuantizedLinear)
+        assert isinstance(sim.model.layers[1], aimet_nn.QuantizedLinear)
+        assert isinstance(sim.model.layers[2], aimet_nn.QuantizedConv2d)
 
         assert isinstance(sim.model.layers_deep[0][0], aimet_nn.FakeQuantizedBatchNorm2d)
         assert isinstance(sim.model.layers_deep[0][1], aimet_nn.FakeQuantizedReLU)
 
         assert type(sim.model.layers_deep[1]) == nn.Linear # layer ignored, so no QcQuantizeWrapper wrapper
-        assert isinstance(sim.model.layers_deep[2], QuantizedLinear)
+        assert isinstance(sim.model.layers_deep[2], aimet_nn.QuantizedLinear)
 
         assert type(sim.model.layers_deep[3]) == nn.Conv2d # layer ignored, so no QcQuantizeWrapper wrapper
 
@@ -790,7 +790,7 @@ class TestQuantizationSimStaticGrad:
             load_encodings_to_sim(sim, encoding_file_path_pytorch)
 
         layer = sim.model.conv1_a
-        assert isinstance(layer, aimet_nn.FakeQuantizedConv2d)
+        assert isinstance(layer, aimet_nn.QuantizedConv2d)
 
         assert isinstance(layer.input_quantizers[0], FloatQuantizeDequantize)
         assert layer.input_quantizers[0].is_float16()
@@ -1007,7 +1007,7 @@ class TestQuantizationSimStaticGrad:
 
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
                                    dummy_input=torch.rand(1, 1, 12, 12))
-        assert isinstance(sim.model.conv1, aimet_nn.FakeQuantizedConv2d)
+        assert isinstance(sim.model.conv1, aimet_nn.QuantizedConv2d)
 
         # Find encodings
         sim.compute_encodings(dummy_forward_pass, None)
@@ -1474,7 +1474,7 @@ class TestQuantizationSimStaticGrad:
 
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
                                    dummy_input=torch.rand(1, 1, 28, 28))
-        assert isinstance(sim.model.conv1, aimet_nn.FakeQuantizedConv2d)
+        assert isinstance(sim.model.conv1, aimet_nn.QuantizedConv2d)
 
         # Find encodings
         sim.compute_encodings(dummy_forward_pass, None)
@@ -1515,7 +1515,7 @@ class TestQuantizationSimStaticGrad:
 
         # Check
         assert type(sim.model.conv1) == nn.Conv2d
-        assert isinstance(sim.model.conv2, aimet_nn.FakeQuantizedConv2d)
+        assert isinstance(sim.model.conv2, aimet_nn.QuantizedConv2d)
         assert type(sim.model.fc2) == nn.Linear
 
         # export and check encodings file has excluded layers listed as string
@@ -2890,7 +2890,7 @@ class TestQuantizationSimLearnedGrid:
 
     def test_qc_trainable_wrapper(self):
         torch.manual_seed(0)
-        q_conv1 = aimet_nn.FakeQuantizedConv2d(1, 32, kernel_size=5)
+        q_conv1 = aimet_nn.QuantizedConv2d(1, 32, kernel_size=5)
         q_conv1.param_quantizers['weight'] = QuantizeDequantize(shape=(1,),
                                                                 bitwidth=8,
                                                                 symmetric=False)

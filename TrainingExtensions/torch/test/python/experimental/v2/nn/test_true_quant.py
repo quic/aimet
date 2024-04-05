@@ -35,23 +35,33 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+import functools
+
 import pytest
 import torch
+from torch import nn
 import torch.nn.functional as F
 from aimet_torch.experimental.v2.quantization.backends import get_backend
 from aimet_torch.experimental.v2.quantization.quantizers.affine import Quantize, QuantizeDequantize
 from aimet_torch.experimental.v2.nn.true_quant import (
+    QuantizedConv1d,
+    QuantizedConv2d,
+    QuantizedConv3d,
     QuantizedGELU,
     QuantizedLinear,
     QuantizationMixin,
     QuantizedSigmoid,
     QuantizedSoftmax,
     QuantizedLayerNorm,
+    QuantizedAdd,
+    QuantizedMultiply,
+    QuantizedSubtract,
 )
 from aimet_torch.experimental.v2.quantization.encodings import AffineEncoding
 from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensor, DequantizedTensor
 from aimet_torch.experimental.v2.nn import fake_quant
 from aimet_torch.experimental.v2.utils import enable_recompute
+import aimet_torch.elementwise_ops as aimet_ops
 
 
 def affine_quantize(tensor: torch.Tensor,
@@ -68,9 +78,14 @@ def affine_quantize(tensor: torch.Tensor,
     return qtensor
 
 
+def _input(*shape):
+    numel = functools.reduce(lambda x, y: x * y, shape)
+    return torch.arange(numel).view(*shape) / numel
+
+
 @pytest.fixture
 def input():
-    return torch.arange(-5, 5).expand(10, 10) / 10
+    return _input(10, 10)
 
 
 @pytest.fixture(autouse=True)
@@ -91,6 +106,31 @@ def register_int_linear():
     QuantizedLinear.set_default_kernel(int_linear)
     yield
     QuantizedLinear.set_default_kernel(None)
+
+
+@pytest.fixture(autouse=True)
+def register_int_conv():
+    def int_convnd(kernel, input, weight, bias=None, stride=1, padding=0, dilation=1, groups=1, *, output_encodings=None):
+        # Implicit dequantization is not supported yet
+        assert isinstance(input, QuantizedTensor)
+        assert isinstance(weight, QuantizedTensor)
+
+        input = input.dequantize()
+        weight = weight.dequantize()
+
+        output = kernel(input, weight, bias, stride, padding, dilation, groups)
+        return affine_quantize(output,
+                               output_encodings.scale,
+                               output_encodings.offset,
+                               output_encodings.bitwidth)
+
+    QuantizedConv1d.set_default_kernel(functools.partial(int_convnd, F.conv1d))
+    QuantizedConv2d.set_default_kernel(functools.partial(int_convnd, F.conv2d))
+    QuantizedConv3d.set_default_kernel(functools.partial(int_convnd, F.conv3d))
+    yield
+    QuantizedConv3d.set_default_kernel(None)
+    QuantizedConv2d.set_default_kernel(None)
+    QuantizedConv1d.set_default_kernel(None)
 
 
 @pytest.fixture(autouse=True)
@@ -132,6 +172,24 @@ def register_int_layernorm():
     QuantizedLayerNorm.set_default_kernel(int_layernorm)
     yield
     QuantizedLayerNorm.set_default_kernel(None)
+
+
+@pytest.fixture(autouse=True)
+def register_int_elementwise():
+    def int_elementwise(kernel, x, y, *, output_encodings=None):
+        # Implicit dequantization is not supported yet
+        assert isinstance(x, QuantizedTensor)
+        assert isinstance(y, QuantizedTensor)
+        output = kernel(x.dequantize(), y.dequantize())
+        return affine_quantize(output, output_encodings.scale, output_encodings.offset, output_encodings.bitwidth)
+
+    QuantizedAdd.set_default_kernel(functools.partial(int_elementwise, torch.add))
+    QuantizedMultiply.set_default_kernel(functools.partial(int_elementwise, torch.multiply))
+    QuantizedSubtract.set_default_kernel(functools.partial(int_elementwise, torch.subtract))
+    yield
+    QuantizedMultiply.set_default_kernel(None)
+    QuantizedSubtract.set_default_kernel(None)
+    QuantizedAdd.set_default_kernel(None)
 
 
 
@@ -303,29 +361,40 @@ class TestTrueQuantLinear:
 
 class TestQuantizedLayers:
 
-    @pytest.mark.parametrize("layer", (torch.nn.Softmax(dim=1), torch.nn.Sigmoid(), torch.nn.GELU()))
-    def test_layers_no_params(self, input, layer):
+    @pytest.mark.parametrize("layer,inputs", ((torch.nn.Softmax(dim=1), (_input(10, 10),)),
+                                              (torch.nn.Sigmoid(), (_input(10, 10),)),
+                                              (torch.nn.GELU(), (_input(10, 10),)),
+                                              (aimet_ops.Add(), (_input(10, 10), _input(10, 10))),
+                                              (aimet_ops.Multiply(), (_input(10, 10), _input(10, 10))),
+                                              (aimet_ops.Subtract(), (_input(10, 10), _input(10, 10)))))
+    def test_layers_no_params(self, layer, inputs):
         fq_layer = fake_quant.FakeQuantizationMixin.from_module(layer)
         tq_layer = QuantizationMixin.from_module(layer)
-        fq_layer.input_quantizers[0] = QuantizeDequantize(shape=(1,), bitwidth=8, symmetric=False)
+        for i, _ in enumerate(inputs):
+            fq_layer.input_quantizers[i] = QuantizeDequantize(shape=(1,), bitwidth=8, symmetric=False)
+            tq_layer.input_quantizers[i] = Quantize(shape=(1,), bitwidth=8, symmetric=False)
+
         fq_layer.output_quantizers[0] = QuantizeDequantize(shape=(1, ), bitwidth=8, symmetric=False)
-        tq_layer.input_quantizers[0] = Quantize(shape=(1,), bitwidth=8, symmetric=False)
         tq_layer.output_quantizers[0] = Quantize(shape=(1,), bitwidth=8, symmetric=False)
 
         with fq_layer.compute_encodings():
-            fq_layer(input)
+            fq_layer(*inputs)
 
-        fq_output = fq_layer(input)
+        fq_output = fq_layer(*inputs)
 
 
         with tq_layer.compute_encodings():
-            tq_layer(input)
-        tq_output = tq_layer(input)
+            tq_layer(*inputs)
+        tq_output = tq_layer(*inputs)
 
         assert torch.allclose(fq_output, tq_output.dequantize())
 
-    @pytest.mark.parametrize("layer", (torch.nn.Linear(10, 10), torch.nn.LayerNorm(10)))
-    def test_layers_with_weight(self, input, layer):
+    @pytest.mark.parametrize("layer,input", ((torch.nn.Linear(10, 10), _input(10, 10)),
+                                             (torch.nn.LayerNorm(10), _input(10, 10)),
+                                             (torch.nn.Conv1d(3, 3, 3), _input(1, 3, 10)),
+                                             (torch.nn.Conv2d(3, 3, 3), _input(1, 3, 10, 10)),
+                                             (torch.nn.Conv3d(3, 3, 3), _input(1, 3, 10, 10, 10))))
+    def test_layers_with_weight(self, layer, input):
         fq_layer = fake_quant.FakeQuantizationMixin.from_module(layer)
         tq_layer = QuantizationMixin.from_module(layer)
         fq_layer.input_quantizers[0] = QuantizeDequantize(shape=(1,), bitwidth=8, symmetric=False)
@@ -414,3 +483,10 @@ class TestQuantizedLayers:
 
         for grad_0, grad_1 in zip(grads_with_recompute, grads_without_recompute):
             assert torch.equal(grad_0, grad_1)
+
+class TestQuantizedConvNd:
+    @pytest.mark.parametrize('cls', (nn.Conv1d, nn.Conv2d, nn.Conv3d))
+    def test_padding_mode(self, cls):
+        convnd = cls(3, 3, 3, padding_mode="reflect")
+        with pytest.raises(NotImplementedError):
+            _ = QuantizationMixin.from_module(convnd)
