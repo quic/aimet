@@ -41,7 +41,7 @@ import pytest
 import torch
 from torch import nn
 import torch.nn.functional as F
-from aimet_torch.v2.quantization.backends import get_backend
+from aimet_torch.v2.quantization.affine.backends import get_backend
 from aimet_torch.v2.quantization.affine import Quantize, QuantizeDequantize
 from aimet_torch.v2.quantization.nn.true_quant import (
     QuantizedConv1d,

@@ -36,7 +36,7 @@
 # =============================================================================
 # pylint: disable=all
 import torch
-from aimet_torch.v2.quantization.backends import torch_builtins
+from aimet_torch.v2.quantization.affine.backends import torch_builtins
 
 from typing import Protocol
 from aimet_torch.v2.utils import _ContextManager

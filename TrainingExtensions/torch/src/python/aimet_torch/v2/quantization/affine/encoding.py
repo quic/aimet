@@ -41,7 +41,7 @@ import torch
 from torch._C._nn import _parse_to as parse_to_args
 
 from aimet_torch.v2.quantization.base import EncodingBase
-from aimet_torch.v2.quantization.backends import get_backend
+from aimet_torch.v2.quantization.affine.backends import get_backend
 
 
 __all__ = ["AffineEncoding"]

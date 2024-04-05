@@ -50,7 +50,7 @@ from aimet_torch.v2.quantization.encoding_analyzer import EncodingAnalyzer, MinM
 from aimet_torch.v2.quantization.affine import AffineEncoding
 from aimet_torch.v2.quantization.tensor import QuantizedTensor, DequantizedTensor
 from aimet_torch.v2.quantization.base import QuantizerBase
-from aimet_torch.v2.quantization.backends import get_backend
+from aimet_torch.v2.quantization.affine.backends import get_backend
 from aimet_torch.v2.utils import ste_round
 
 
