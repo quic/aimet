@@ -202,3 +202,56 @@ class StatisticsNotFoundError(RuntimeError):
     '''
     Error raised when compute_encodings() is invoked without statistics
     '''
+
+
+_ENABLE_RECOMPUTE = False
+
+
+def _set_enable_recompute(mode: bool):
+    original_mode = _ENABLE_RECOMPUTE
+
+    def action():
+        global _ENABLE_RECOMPUTE # pylint: disable=global-statement
+        _ENABLE_RECOMPUTE = mode
+
+    def cleanup():
+        global _ENABLE_RECOMPUTE # pylint: disable=global-statement
+        _ENABLE_RECOMPUTE = original_mode
+
+    return _ContextManager(action, cleanup)
+
+
+def is_recompute_enabled():
+    """
+    Returns True if recomputation for memory saving is enabled; False otherwise.
+    """
+    return _ENABLE_RECOMPUTE
+
+
+def enable_recompute():
+    """
+    Enable recomputation for memory saving.
+    """
+    return _set_enable_recompute(True)
+
+
+def no_recompute():
+    """
+    Disable recomputation for memory saving.
+    """
+    return _set_enable_recompute(False)
+
+
+def allow_recompute(fn):
+    """
+    Allow recomputation of activation of the given function during training
+    if recompute is enabled.
+    """
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        if is_recompute_enabled():
+            # Enable activation recompute (a.k.a. activataion checkpointing)
+            # to reduce memory footprint of training
+            return torch.utils.checkpoint.checkpoint(fn, *args, use_reentrant=False, **kwargs)
+        return fn(*args, **kwargs)
+    return wrapper

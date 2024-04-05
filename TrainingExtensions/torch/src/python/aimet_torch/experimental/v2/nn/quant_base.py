@@ -38,6 +38,7 @@
 
 import abc
 import contextlib
+import functools
 import itertools
 from typing import Type, List, Dict
 
@@ -88,13 +89,8 @@ class BaseQuantizationMixin(abc.ABC):
     def __call__(self, *args, **kwargs):
         self._compute_param_encodings(overwrite=False)
 
-        # Patch self.forward with self.quantized_forward.
-        # Under this context, any invocation to self.forward
-        # will be redirected to self.quantized_forward.
-        # Note that super().forward still points to the original fp forward.
-        with patch_attr(self, '_super_forward', super().forward):
-            with patch_attr(self, 'forward', self.quantized_forward):
-                return super().__call__(*args, **kwargs)
+        with patch_attr(self, 'forward', self.quantized_forward):
+            return super().__call__(*args, **kwargs)
 
     @abc.abstractmethod
     def quantized_forward(self, *args, **kwargs):
@@ -284,3 +280,30 @@ class BaseQuantizationMixin(abc.ABC):
         del orig_module._modules['param_quantizers']
 
         return orig_module
+
+    @property
+    def _super_forward(self):
+        # This is a manually/explicitly rewritten version of super().forward.
+        # NOTE: This is an ad-hoc solution and will be removed in the later versions
+        is_staticmethod = False
+        is_classmethod = False
+
+        for cls in type(self).__mro__:
+            if not 'forward' in cls.__dict__:
+                continue
+            super_forward = cls.__dict__['forward']
+
+            if isinstance(super_forward, staticmethod):
+                is_staticmethod = True
+            if isinstance(super_forward, classmethod):
+                is_classmethod = True
+            break
+        else:
+            raise RuntimeError
+
+        super_forward = self.qcls_to_cls[type(self)].forward
+
+        if is_staticmethod or is_classmethod:
+            return super_forward
+
+        return functools.partial(super_forward, self)
