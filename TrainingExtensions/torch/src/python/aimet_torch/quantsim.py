@@ -149,8 +149,8 @@ class ExportableQuantModule(Protocol):
         Returns a dict of {param name: param encodings}, with each encoding represented as a List of Dicts
         """
 
-    def import_input_encodings(self, encodings: Dict[str, Dict], freeze=False, ignore_when_quantizer_disabled=False,
-                               disable_quantizer_without_encoding=True):
+    def import_input_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled=False,
+                               disable_quantizer_without_encoding=True, freeze=False):
         """
         Import input encodings represented in below format:
         {
@@ -160,8 +160,8 @@ class ExportableQuantModule(Protocol):
         }
         """
 
-    def import_output_encodings(self, encodings: Dict[str, Dict], freeze=False, ignore_when_quantizer_disabled=False,
-                                disable_quantizer_without_encoding=True):
+    def import_output_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled=False,
+                                disable_quantizer_without_encoding=True, freeze=False):
         """
         Import output encodings represented in below format:
         {
@@ -171,8 +171,8 @@ class ExportableQuantModule(Protocol):
         }
         """
 
-    def import_param_encodings(self, encodings: Dict[str, List[Dict]], freeze=False, ignore_when_quantizer_disabled=False,
-                               disable_quantizer_without_encoding=True):
+    def import_param_encodings(self, encodings: Dict[str, List[Dict]], ignore_when_quantizer_disabled=False,
+                               disable_quantizer_without_encoding=True, freeze=False):
         """
         Import parameter encodings represented in below format:
         {
