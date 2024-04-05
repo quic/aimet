@@ -84,38 +84,42 @@ class AffineQuantizerBase(QuantizerBase):
                                f'is incompatible with quantizer of shape {self.shape}.')
 
     @abc.abstractmethod
-    def get_min(self) -> torch.Tensor:
+    def get_min(self, dtype=None) -> torch.Tensor:
         """
         Compute quantization min to be used for forward pass.
         Return None f the quantizer is not initialized yet.
 
+        :param dtype: dtype of the computed min
         :return: Quantization min
         """
 
     @abc.abstractmethod
-    def get_max(self) -> torch.Tensor:
+    def get_max(self, dtype=None) -> torch.Tensor:
         """
         Compute quantization max to be used for forward pass.
         Return None f the quantizer is not initialized yet.
 
+        :param dtype: dtype of the computed max
         :return: Quantization max
         """
 
     @abc.abstractmethod
-    def get_scale(self) -> torch.Tensor:
+    def get_scale(self, dtype=None) -> torch.Tensor:
         """
         Compute quantization scale to be used for forward pass.
         Return None f the quantizer is not initialized yet.
 
+        :param dtype: dtype of the computed scale
         :return: Quantization scale
         """
 
     @abc.abstractmethod
-    def get_offset(self) -> torch.Tensor:
+    def get_offset(self, dtype=None) -> torch.Tensor:
         """
         Compute quantization offset to be used for forward pass.
         Return None f the quantizer is not initialized yet.
 
+        :param dtype: dtype of the computed offset
         :return: Quantization offset
         """
 
@@ -130,7 +134,9 @@ class AffineQuantizerBase(QuantizerBase):
         Return the quantizer's encodings as an AffineEncoding object
         """
         if self.is_initialized():
-            return AffineEncoding(self.get_scale(), self.get_offset(), self.bitwidth, self._signed, self._symmetric)
+            return AffineEncoding(self.get_scale(dtype=torch.float32),
+                                  self.get_offset(dtype=torch.float32),
+                                  self.bitwidth, self._signed, self._symmetric)
         return None
 
     @torch.no_grad()
@@ -143,10 +149,10 @@ class AffineQuantizerBase(QuantizerBase):
         if not self.is_initialized():
             return None
 
-        min = self.get_min().flatten()
-        max = self.get_max().flatten()
-        scale = self.get_scale().flatten()
-        offset = self.get_offset().flatten()
+        min = self.get_min(dtype=torch.float32).flatten()
+        max = self.get_max(dtype=torch.float32).flatten()
+        scale = self.get_scale(dtype=torch.float32).flatten()
+        offset = self.get_offset(dtype=torch.float32).flatten()
         if self._signed: # Legacy behavior is to use offset = 2 ** (bitwidth - 1) for signed symmetric
             offset -= 2 ** (self.bitwidth - 1)
         bitwidth = self.bitwidth
@@ -281,66 +287,73 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
         finally:
             self.encoding_analyzer.reset_stats()
 
-    def get_min(self) -> Optional[torch.Tensor]:
+    def get_min(self, dtype=None) -> Optional[torch.Tensor]:
         """
         Compute quantization min to be used for forward pass.
 
         NOTE: self.min may not be equal to self.get_min().
               self.get_min() returns slightly recalibrated version of self.min.
 
+        :param dtype: dtype of the computed min. Use of self.min.dtype by default.
         :return: Quantization min
         """
         if not self.is_initialized():
             return None
         num_negative_steps = 2 ** (self.bitwidth - 1) if self._signed else 0
-        return self.get_scale() * (self.get_offset() - num_negative_steps)
+        return self.get_scale(dtype) * (self.get_offset(dtype) - num_negative_steps)
 
-    def get_max(self) -> Optional[torch.Tensor]:
+    def get_max(self, dtype=None) -> Optional[torch.Tensor]:
         """
         Compute quantization max to be used for forward pass.
 
         NOTE: self.max may not be equal to self.get_max()
               self.get_max() returns slightly recalibrated version of self.max.
 
+        :param dtype: dtype of the computed max. Use of self.min.dtype by default.
         :return: Quantization max
         """
         if not self.is_initialized():
             return None
         num_positive_steps = 2 ** (self.bitwidth - 1) - 1 if self._signed else 2 ** self.bitwidth - 1
-        return self.get_scale() * (self.get_offset() + num_positive_steps)
+        return self.get_scale(dtype) * (self.get_offset(dtype) + num_positive_steps)
 
-    def get_scale(self) -> Optional[torch.Tensor]:
+    def get_scale(self, dtype=None) -> Optional[torch.Tensor]:
         """
         Compute quantization scale to be used for forward pass.
 
+        :param dtype: dtype of the computed scale. Use of self.min.dtype by default.
         :return: Quantization scale
         """
         if not self.is_initialized():
             return None
 
+        dtype = dtype or self.min.dtype
         num_bins = 2 ** self.bitwidth - 1
 
-        scale = (self.max - self.min) / num_bins
-        return scale.to(dtype=self.min.dtype)
+        scale = (self.max.to(dtype) - self.min.to(dtype)) / num_bins
+        return scale.to(dtype)
 
-    def get_offset(self) -> Optional[torch.Tensor]:
+    def get_offset(self, dtype=None) -> Optional[torch.Tensor]:
         """
         Compute quantization offset to be used for forward pass.
 
+        :param dtype: dtype of the computed offset. Use of self.min.dtype by default.
         :return: Quantization offset
         """
         if not self.is_initialized():
             return None
 
+        dtype = dtype or self.min.dtype
+
         if self.symmetric:
-            return torch.zeros_like(self.min, requires_grad=False)
+            offset = torch.zeros_like(self.min, requires_grad=False, dtype=dtype)
+        else:
+            offset = ste_round(self.min.to(dtype) / self.get_scale(dtype))
 
-        offset = ste_round(self.min / self.get_scale())
+            if self._signed:
+                offset += 2 ** (self.bitwidth - 1)
 
-        if self._signed:
-            offset += 2 ** (self.bitwidth - 1)
-
-        return offset.to(dtype=self.min.dtype)
+        return offset.to(dtype)
 
     def set_range(self, min: torch.Tensor, max: torch.Tensor):
         """
@@ -366,15 +379,23 @@ class Quantize(MinMaxQuantizer):
                 ' Please initialize the quantization parameters using `compute_encodings()`.'
             )
 
+        dtype = input.dtype
+
+        if torch.finfo(dtype).max < 2 ** self.bitwidth - 1:
+            msg = f"{dtype} is unable to represent quantized output "\
+                  f"of range [0, 2**(bitwidth={self.bitwidth})-1]. "\
+                  "Please consider lowering the quantization bitwidth."
+            raise RuntimeError(msg)
+
         encoding = self.get_encoding()
-        output = get_backend().quantize(input,
-                                        encoding.scale,
-                                        encoding.offset,
+        output = get_backend().quantize(input.to(dtype),
+                                        encoding.scale.to(dtype),
+                                        encoding.offset.to(dtype),
                                         encoding.bitwidth,
                                         encoding.signed)
         output = output.as_subclass(QuantizedTensor)
         output.encoding = encoding
-        return output
+        return output.to(dtype)
 
 
 class QuantizeDequantize(MinMaxQuantizer):
@@ -392,15 +413,25 @@ class QuantizeDequantize(MinMaxQuantizer):
                 ' Please initialize the quantization parameters using `compute_encodings()`.'
             )
 
+        output_dtype = internal_dtype = input.dtype
+
+        if torch.finfo(internal_dtype).max < 2 ** self.bitwidth - 1:
+            internal_dtype = torch.float32
+            if torch.finfo(internal_dtype).max < 2 ** self.bitwidth - 1:
+                msg = f"{internal_dtype} is unable to represent quantized output "\
+                      f"of range [0, 2**(bitwidth={self.bitwidth})-1]. "\
+                      "Please consider lowering the quantization bitwidth."
+                raise RuntimeError(msg)
+
         encoding = self.get_encoding()
-        output = get_backend().quantize_dequantize(input,
-                                                   encoding.scale,
-                                                   encoding.offset,
+        output = get_backend().quantize_dequantize(input.to(internal_dtype),
+                                                   encoding.scale.to(internal_dtype),
+                                                   encoding.offset.to(internal_dtype),
                                                    encoding.bitwidth,
                                                    encoding.signed)
         output = output.as_subclass(DequantizedTensor)
         output.encoding = encoding
-        return output
+        return output.to(output_dtype)
 
 
 class Dequantize(torch.nn.Module):
