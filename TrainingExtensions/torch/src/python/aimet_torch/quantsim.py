@@ -149,7 +149,8 @@ class ExportableQuantModule(Protocol):
         Returns a dict of {param name: param encodings}, with each encoding represented as a List of Dicts
         """
 
-    def import_input_encodings(self, encodings: Dict[str, Dict], freeze=False, ignore_when_quantizer_disabled=False):
+    def import_input_encodings(self, encodings: Dict[str, Dict], freeze=False, ignore_when_quantizer_disabled=False,
+                               disable_quantizer_without_encoding=True):
         """
         Import input encodings represented in below format:
         {
@@ -159,7 +160,8 @@ class ExportableQuantModule(Protocol):
         }
         """
 
-    def import_output_encodings(self, encodings: Dict[str, Dict], freeze=False, ignore_when_quantizer_disabled=False):
+    def import_output_encodings(self, encodings: Dict[str, Dict], freeze=False, ignore_when_quantizer_disabled=False,
+                                disable_quantizer_without_encoding=True):
         """
         Import output encodings represented in below format:
         {
@@ -169,7 +171,8 @@ class ExportableQuantModule(Protocol):
         }
         """
 
-    def import_param_encodings(self, encodings: Dict[str, List[Dict]], freeze=False, ignore_when_quantizer_disabled=False):
+    def import_param_encodings(self, encodings: Dict[str, List[Dict]], freeze=False, ignore_when_quantizer_disabled=False,
+                               disable_quantizer_without_encoding=True):
         """
         Import parameter encodings represented in below format:
         {
@@ -1614,13 +1617,20 @@ class QuantizationSimModel:
 
         self._set_param_encodings(encodings_dict['param_encodings'],
                                   freeze=True,
-                                  ignore_when_quantizer_disabled=ignore_when_quantizer_disabled)
+                                  ignore_when_quantizer_disabled=ignore_when_quantizer_disabled,
+                                  disable_quantizer_without_encoding=False)
+
         self._set_activation_encodings(encodings_dict['activation_encodings'],
                                        freeze=True,
-                                       ignore_when_quantizer_disabled=ignore_when_quantizer_disabled)
+                                       ignore_when_quantizer_disabled=ignore_when_quantizer_disabled,
+                                       disable_quantizer_without_encoding=False)
 
 
-    def _set_param_encodings(self, encoding_dict: Dict, freeze=False, ignore_when_quantizer_disabled=False):
+    def _set_param_encodings(self,
+                             encoding_dict: Dict,
+                             freeze: bool,
+                             ignore_when_quantizer_disabled: bool,
+                             disable_quantizer_without_encoding: bool):
         for name, quant_module in self.model.named_modules():
             if isinstance(quant_module, ExportableQuantModule):
                 param_encoding = {
@@ -1628,9 +1638,16 @@ class QuantizationSimModel:
                     for param_name, _ in quant_module.param_quantizers.items()
                     if f'{name}.{param_name}' in encoding_dict
                 }
-                quant_module.import_param_encodings(param_encoding, freeze=freeze, ignore_when_quantizer_disabled=ignore_when_quantizer_disabled)
+                quant_module.import_param_encodings(param_encoding,
+                                                    freeze=freeze,
+                                                    ignore_when_quantizer_disabled=ignore_when_quantizer_disabled,
+                                                    disable_quantizer_without_encoding=disable_quantizer_without_encoding)
 
-    def _set_activation_encodings(self, activation_encoding_dict: dict, freeze=False, ignore_when_quantizer_disabled=False):
+    def _set_activation_encodings(self,
+                                  activation_encoding_dict: dict,
+                                  freeze: bool,
+                                  ignore_when_quantizer_disabled: bool,
+                                  disable_quantizer_without_encoding: bool):
         for module_name, module in self.model.named_modules():
             if not isinstance(module, ExportableQuantModule):
                 continue
@@ -1640,14 +1657,20 @@ class QuantizationSimModel:
             except KeyError:
                 input_encoding = {}
 
-            module.import_input_encodings(input_encoding, freeze=freeze, ignore_when_quantizer_disabled=ignore_when_quantizer_disabled)
+            module.import_input_encodings(input_encoding,
+                                          freeze=freeze,
+                                          ignore_when_quantizer_disabled=ignore_when_quantizer_disabled,
+                                          disable_quantizer_without_encoding=disable_quantizer_without_encoding)
 
             try:
                 output_encoding = activation_encoding_dict[module_name]['output']
             except KeyError:
                 output_encoding = {}
 
-            module.import_output_encodings(output_encoding, freeze=freeze, ignore_when_quantizer_disabled=ignore_when_quantizer_disabled)
+            module.import_output_encodings(output_encoding,
+                                           freeze=freeze,
+                                           ignore_when_quantizer_disabled=ignore_when_quantizer_disabled,
+                                           disable_quantizer_without_encoding=disable_quantizer_without_encoding)
 
 
     def set_and_freeze_param_encodings(self, encoding_path: str):
@@ -1663,7 +1686,10 @@ class QuantizationSimModel:
         with open(encoding_path) as json_file:
             param_encodings = json.load(json_file)
 
-        self._set_param_encodings(param_encodings, freeze=True)
+        self._set_param_encodings(param_encodings,
+                                  freeze=True,
+                                  ignore_when_quantizer_disabled=False,
+                                  disable_quantizer_without_encoding=True)
 
     def quant_wrappers(self):
         """

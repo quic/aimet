@@ -152,3 +152,37 @@ class TestPercentileScheme:
                     continue
                 assert encodings_are_close(quantizer_1, quantizer_2)
 
+    def test_load_and_freeze_with_partial_encodings(self):
+        """ Test load_and_freeze encoding API with partial_encodings """
+        model = test_models.TinyModelWithNoMathInvariantOps()
+        dummy_input = torch.randn([1, 3, 24, 24])
+
+        sample_encoding = {"min": -4, "max": 4, "scale": 0.03, "offset": 8,
+                           "bitwidth": 8, "is_symmetric": "False", "dtype": "int"}
+
+        sample_partial_encodings_list = [{"activation_encodings": {"conv1": {"input": {"0": sample_encoding}},
+                                                                   "mul1": {"output": {"0": sample_encoding}}},
+                                          "param_encodings": {}},
+                                         {"activation_encodings": {"add1": {"output": {"0": sample_encoding}}},
+                                          "param_encodings": {}},
+                                         {"activation_encodings": {"mul1": {"output": {"0": sample_encoding}}},
+                                          "param_encodings": {"conv1.weight": [sample_encoding]}}]
+
+        for partial_encodings in sample_partial_encodings_list:
+            with open('./data/partial_encoding.json', 'w') as f:
+                json.dump(partial_encodings, f)
+
+            sim = QuantizationSimModel(model, dummy_input)
+
+            sim.load_and_freeze_encodings('./data/partial_encoding.json', ignore_when_quantizer_disabled=True)
+
+            # all output quantizers and model input quantizer need to enabled (no op specific config)
+            assert sim.model.mul1.output_quantizers[0] is not None
+            assert sim.model.mul2.output_quantizers[0] is not None
+            assert sim.model.add1.output_quantizers[0] is not None
+            assert sim.model.conv1.output_quantizers[0] is not None
+            assert sim.model.conv1.input_quantizers[0] is not None
+
+            # conv param quantizer needs to be enabled
+            assert sim.model.conv1.param_quantizers['weight'] is not None
+

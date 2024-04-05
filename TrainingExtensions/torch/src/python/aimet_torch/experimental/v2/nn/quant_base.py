@@ -185,7 +185,8 @@ class BaseQuantizationMixin(abc.ABC):
             for quantizer in _flatten_nn_module_list(self.input_quantizers)
         ]
 
-    def import_input_encodings(self, encodings: Dict[str, Dict], freeze: bool = False, ignore_when_quantizer_disabled=False):
+    def import_input_encodings(self, encodings: Dict[str, Dict], freeze: bool = False, ignore_when_quantizer_disabled=False,
+                               disable_quantizer_without_encoding=True):
         """
         Import input encodings represented in below format:
         {
@@ -197,11 +198,13 @@ class BaseQuantizationMixin(abc.ABC):
         :param encodings: Dictionary mapping quantizer index (str) to encoding (dict)
         :param freeze: If True, freezes the quantizer's encodings after loading
         :param ignore_when_quantizer_disabled: If True, does not raise RuntimeError when a quantizer is disabled
+        :param disable_quantizer_without_encoding: If True, disable any quantizer without an encoding in `encodings`
         """
         for i, quantizer in enumerate(list(self.input_quantizers)):
             encoding = encodings.get(str(i), None)
             if not encoding:
-                self.input_quantizers[i] = None
+                if disable_quantizer_without_encoding:
+                    self.input_quantizers[i] = None
                 continue
             if quantizer is None and not ignore_when_quantizer_disabled:
                 raise RuntimeError
@@ -220,7 +223,8 @@ class BaseQuantizationMixin(abc.ABC):
             for quantizer in _flatten_nn_module_list(self.output_quantizers)
         ]
 
-    def import_output_encodings(self, encodings: Dict[str, Dict], freeze: bool = False, ignore_when_quantizer_disabled=False):
+    def import_output_encodings(self, encodings: Dict[str, Dict], freeze: bool = False, ignore_when_quantizer_disabled=False,
+                                disable_quantizer_without_encoding=True):
         """
         Import output encodings represented in below format:
         {
@@ -231,11 +235,14 @@ class BaseQuantizationMixin(abc.ABC):
 
         :param encodings: Dictionary mapping quantizer index (str) to encoding (dict)
         :param freeze: If True, freezes the quantizer's encodings after loading
+        :param ignore_when_quantizer_disabled: If True, does not raise RuntimeError when a quantizer is disabled
+        :param disable_quantizer_without_encoding: If True, disable any quantizer without an encoding in `encodings`
         """
         for i, quantizer in enumerate(list(self.output_quantizers)):
             encoding = encodings.get(str(i), None)
             if not encoding:
-                self.output_quantizers[i] = None
+                if disable_quantizer_without_encoding:
+                    self.output_quantizers[i] = None
                 continue
             if quantizer is None and not ignore_when_quantizer_disabled:
                 raise RuntimeError
@@ -254,7 +261,8 @@ class BaseQuantizationMixin(abc.ABC):
             for param_name, quantizer in self.param_quantizers.items()
         }
 
-    def import_param_encodings(self, encodings: Dict[str, List[Dict]], freeze: bool = False, ignore_when_quantizer_disabled=False):
+    def import_param_encodings(self, encodings: Dict[str, List[Dict]], freeze: bool = False, ignore_when_quantizer_disabled=False,
+                               disable_quantizer_without_encoding=True):
         """
         Import parameter encodings represented in below format:
         {
@@ -265,11 +273,14 @@ class BaseQuantizationMixin(abc.ABC):
 
         :param encodings: Dictionary mapping quantizer parameter name (str) to encodings (dict)
         :param freeze: If True, freezes the quantizer's encodings after loading
+        :param ignore_when_quantizer_disabled: If True, does not raise RuntimeError when a quantizer is disabled
+        :param disable_quantizer_without_encoding: If True, disable any quantizer without an encoding in `encodings`
         """
         for param_name, quantizer in dict(self.param_quantizers).items():
             encoding = encodings.get(param_name, None)
             if not encoding:
-                self.param_quantizers[param_name] = None
+                if disable_quantizer_without_encoding:
+                    self.param_quantizers[param_name] = None
                 continue
             if quantizer is None and not ignore_when_quantizer_disabled:
                 raise RuntimeError
