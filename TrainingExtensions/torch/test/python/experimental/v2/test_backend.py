@@ -38,7 +38,7 @@ import random
 import torch
 import pytest
 from collections import namedtuple
-from aimet_torch.v2.quantization.backends import default as default_backend
+from aimet_torch.v2.quantization.backends import torch_builtins
 from aimet_torch.v2.utils import ste_round
 
 VectorSetForTest = namedtuple("VectorSetForTest", ["tensor", "tensor_q", "tensor_qdq", "mask", "delta", "offset", "bitwidth"])
@@ -246,7 +246,7 @@ def set_seed():
 def offset():
     return torch.randint(-5, 5, []).to(torch.float32)
 
-@pytest.mark.parametrize('backend_module', [default_backend])
+@pytest.mark.parametrize('backend_module', [torch_builtins])
 class TestQuantizationBackends:
     def _test_quantization_backend(self, backend_module, random_tensor, scale, offset, bitwidth):
         expected_quantized_tensor = torch.clamp(torch.round(random_tensor / scale) - torch.round(offset), 0, 2 ** bitwidth - 1)
