@@ -845,10 +845,10 @@ def test_freeze_encodings(x, q):
     q_min, q_max = q.min.detach().clone(), q.max.detach().clone()
     assert q.min.requires_grad
     assert q.max.requires_grad
-    assert not q.is_encoding_frozen
+    assert not q._is_encoding_frozen()
 
-    q.freeze_encoding()
-    assert q.is_encoding_frozen
+    q._freeze_encoding()
+    assert q._is_encoding_frozen()
     """
     Given: Called quantizer.freeze_encoding()
     When: Inspect parameter requires_grad() attributes

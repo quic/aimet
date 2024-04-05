@@ -117,10 +117,10 @@ class TestPercentileScheme:
 
         """
         When: Inspect param quantizers
-        Then: param_quantizer.is_encoding_frozen == True
+        Then: param_quantizer._is_encoding_frozen() == True
         """
-        assert sim_2.model.conv.param_quantizers["weight"].is_encoding_frozen
-        assert not sim_2.model.conv.output_quantizers[0].is_encoding_frozen
+        assert sim_2.model.conv.param_quantizers["weight"]._is_encoding_frozen()
+        assert not sim_2.model.conv.output_quantizers[0]._is_encoding_frozen()
 
     def test_load_and_freeze_encodings(self):
         model = test_models.TinyModel()
@@ -137,7 +137,7 @@ class TestPercentileScheme:
 
         for module in sim_2.model.modules():
             if isinstance(module, QuantizerBase):
-                assert module.is_encoding_frozen
+                assert module._is_encoding_frozen()
 
         for name, child in sim.model.named_children():
             child_2 = getattr(sim_2.model, name)

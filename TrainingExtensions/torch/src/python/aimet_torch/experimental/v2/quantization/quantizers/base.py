@@ -203,7 +203,7 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
         self.__dict__.update(state)
         self.set_extra_state(is_initialized)
 
-    def freeze_encoding(self):
+    def _freeze_encoding(self):
         """
         Freeze the encoding params so they won't be updated during training or compute_encodings
         """
@@ -211,8 +211,7 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
             param.requires_grad = False
         self.encoding_analyzer = None
 
-    @property
-    def is_encoding_frozen(self):
+    def _is_encoding_frozen(self):
         """
         Returns true if the encodings are frozen
         """
