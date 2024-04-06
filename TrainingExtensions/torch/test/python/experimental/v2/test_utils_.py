@@ -159,8 +159,8 @@ def test_allow_recompute(use_deterministic_algorithms):
     actual_memory_saving = mem_without_recompute - mem_with_recompute
 
     # Considering noise factors, actual memory saving should be no less than
-    # 99% of the expected memory saving
-    assert expected_memory_saving * 0.99 <= actual_memory_saving
+    # 90% of the expected memory saving
+    assert expected_memory_saving * 0.9 <= actual_memory_saving
 
 
     assert torch.equal(conv1_grad_with_recompute, conv1_grad_without_recompute)

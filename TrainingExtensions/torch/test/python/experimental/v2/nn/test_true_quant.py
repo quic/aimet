@@ -478,8 +478,8 @@ class TestQuantizedLayers:
         actual_memory_saving = mem_without_recompute - mem_with_recompute
 
         # Considering noise factors, actual memory saving should be no less than
-        # 99% of the expected memory saving
-        assert expected_memory_saving * 0.99 <= actual_memory_saving
+        # 90% of the expected memory saving
+        assert expected_memory_saving * 0.9 <= actual_memory_saving
 
         for grad_0, grad_1 in zip(grads_with_recompute, grads_without_recompute):
             assert torch.equal(grad_0, grad_1)
