@@ -483,7 +483,7 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
         return [export_quantizer_encoding(quantizer) for quantizer in self.input_quantizers]
 
     def import_param_encodings(self, encodings: Dict[str, List[Dict]], ignore_when_quantizer_disabled: bool = False,
-                               disable_quantizer_without_encoding: bool = True):
+                               disable_quantizer_without_encoding: bool = True, freeze=False):
         """
         Import parameter encodings represented in below format:
         {
@@ -519,6 +519,8 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                     quantizer.data_type = QuantizationDataType.float
                 else:
                     raise RuntimeError("Data type does not match int or float in encodings file")
+                if freeze:
+                    quantizer.freeze_encoding()
 
                 _logger.info("Setting quantization encodings for parameter: %s", param_name)
             else:
@@ -531,7 +533,7 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
 
 
     def import_output_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled: bool = False,
-                                disable_quantizer_without_encoding: bool = True):
+                                disable_quantizer_without_encoding: bool = True, freeze=False):
         """
         Import output encodings represented in below format:
         {
@@ -540,10 +542,11 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
             ...
         }
         """
-        self._import_encoding(encodings, self.output_quantizers, ignore_when_quantizer_disabled, disable_quantizer_without_encoding)
+        self._import_encoding(encodings, self.output_quantizers, ignore_when_quantizer_disabled, disable_quantizer_without_encoding,
+                              freeze=freeze)
 
     def import_input_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled: bool = False,
-                               disable_quantizer_without_encoding: bool = True):
+                               disable_quantizer_without_encoding: bool = True, freeze=False):
         """
         Import input encodings represented in below format:
         {
@@ -552,10 +555,11 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
             ...
         }
         """
-        self._import_encoding(encodings, self.input_quantizers, ignore_when_quantizer_disabled, disable_quantizer_without_encoding)
+        self._import_encoding(encodings, self.input_quantizers, ignore_when_quantizer_disabled, disable_quantizer_without_encoding,
+                              freeze=freeze)
 
     def _import_encoding(self, encodings, quantizers, ignore_when_quantizer_disabled,
-                         disable_quantizer_without_encoding: bool = True):
+                         disable_quantizer_without_encoding: bool = True, freeze=False):
         assert quantizers is self.input_quantizers or quantizers is self.output_quantizers
 
         for i, quantizer in enumerate(quantizers):
@@ -591,6 +595,8 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                 quantizer.data_type = QuantizationDataType.float
             else:
                 raise RuntimeError("Unrecognized encodings datatype")
+            if freeze:
+                quantizer.freeze_encoding()
 
 
 class StaticGridQuantWrapper(QcQuantizeWrapper):

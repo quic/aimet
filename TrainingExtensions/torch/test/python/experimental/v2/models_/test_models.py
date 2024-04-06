@@ -1173,3 +1173,18 @@ class CustomGroupedConvModel(nn.Module):
         input1, input2 = inputs
         output1, output2 = self.conv1(input1), self.conv2(input2)
         return torch.cat([output1, output2], dim=1)
+
+class TinyModelWithNoMathInvariantOps(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=2, stride=2, padding=2, bias=False)
+        self.mul1 = elementwise_ops.Multiply()
+        self.mul2 = elementwise_ops.Multiply()
+        self.add1 = elementwise_ops.Add()
+
+    def forward(self, x):
+        conv_output = self.conv1(x)
+        y = self.mul1(conv_output, 2)
+        m = self.add1(y, 3)
+        z = self.mul2(m, 5)
+        return z

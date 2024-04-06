@@ -43,6 +43,8 @@ import os
 import json
 from packaging import version
 
+from torchvision.models import resnet18
+
 import aimet_torch.experimental.v2.nn as aimet_nn
 from aimet_torch.experimental.v2.nn.fake_quant import FakeQuantizationMixin
 from aimet_torch.experimental.v2.quantization.quantizers.affine import QuantizeDequantize
@@ -51,6 +53,8 @@ from aimet_torch.elementwise_ops import Add
 from aimet_torch import onnx_utils
 from aimet_torch.experimental.v2.quantization.quantsim import QuantizationSimModel
 from aimet_torch.quantsim import OnnxExportApiArgs
+from aimet_torch.qc_quantize_op import QcQuantizeWrapper
+from aimet_torch.utils import get_layer_by_name
 
 from ..models_.models_to_test import (
     SimpleConditional,
@@ -359,3 +363,109 @@ class TestQuantsimOnnxExport:
                                   "_input.1",
                                   }
         assert encodings["activation_encodings"].keys() == expected_encoding_keys
+
+    @torch.no_grad()
+    def test_json_interchangeable(self):
+        from aimet_torch.quantsim import QuantizationSimModel as QuantizationSimModelV1
+        from aimet_torch.experimental.v2.quantization.quantsim import QuantizationSimModel
+
+        torch.manual_seed(0)
+
+        model = resnet18(pretrained=True).eval()
+        dummy_input = torch.randn(1, 3, 224, 224)
+
+        sim_v1 = QuantizationSimModelV1(model, dummy_input)
+        sim_v2 = QuantizationSimModel(model, dummy_input)
+
+        sim_v1.compute_encodings(lambda model, _: model(dummy_input), None)
+        sim_v2.compute_encodings(lambda model, _: model(dummy_input), None)
+
+        """
+        When: export using v1 and v2 quantsim with the same model
+        Then: the output encoding json file should have the same structure
+              (same list of params/activations, each with same bitwidth/dtype/symmetry)
+        """
+        with tempfile.TemporaryDirectory() as path:
+            sim_v1.export(path, 'v1', dummy_input)
+            with open(os.path.join(path, 'v1_torch.encodings')) as f:
+                v1_saved_encoding = json.load(f)
+
+        with tempfile.TemporaryDirectory() as path:
+            sim_v2.export(path, 'v2', dummy_input)
+            with open(os.path.join(path, 'v2_torch.encodings')) as f:
+                v2_saved_encoding = json.load(f)
+
+        _assert_same_structure(v1_saved_encoding, v2_saved_encoding)
+
+
+        """
+        When: Import the same encoding to v1 and v2 quantsim
+        Then:
+            1) All the quantizers enabled/disabled in v1 quantsim should be equally enabled/disabled in v2
+            2) The inference results of v1 and v2 should be close enough
+        """
+        with tempfile.TemporaryDirectory() as path:
+            v1_encoding_path = os.path.join(path, 'v1_torch.encodings')
+            with open(v1_encoding_path, 'w') as f:
+                json.dump(v1_saved_encoding, f)
+
+            sim_v1.load_and_freeze_encodings(v1_encoding_path)
+            sim_v2.load_and_freeze_encodings(v1_encoding_path)
+
+        for name, module in sim_v1.model.named_modules():
+            if not isinstance(module, QcQuantizeWrapper):
+                continue
+            wrapper = module
+            qmodule = get_layer_by_name(sim_v2.model, name)
+
+            assert wrapper.input_quantizers[0].enabled == (qmodule.input_quantizers[0] is not None)
+            assert wrapper.output_quantizers[0].enabled == (qmodule.output_quantizers[0] is not None)
+            if hasattr(qmodule, 'weight'):
+                assert wrapper.param_quantizers['weight'].enabled == (qmodule.param_quantizers['weight'] is not None)
+
+
+
+        v1_logits = sim_v1.model(dummy_input)
+        v2_logits = sim_v2.model(dummy_input)
+
+        scale = v2_logits.encoding.scale.item()
+        assert torch.allclose(v1_logits, v2_logits, atol=scale * 3) # Allow off-by-3 error
+
+
+
+def _assert_same_structure(v1_saved_encoding, v2_saved_encoding):
+    assert v1_saved_encoding.keys() == v2_saved_encoding.keys()
+    assert v1_saved_encoding['quantizer_args'] == v2_saved_encoding['quantizer_args']
+    assert v1_saved_encoding['excluded_layers'] == v2_saved_encoding['excluded_layers']
+    assert v1_saved_encoding['version'] == v2_saved_encoding['version']
+
+    v1_activation_encodings = v1_saved_encoding['activation_encodings']
+    v2_activation_encodings = v2_saved_encoding['activation_encodings']
+    assert v1_activation_encodings.keys() == v2_activation_encodings.keys()
+
+
+    def assert_encoding_equal(encoding, other):
+        assert encoding.keys() == other.keys()
+        assert encoding['bitwidth'] == other['bitwidth']
+        assert encoding['dtype'] == other['dtype']
+        assert encoding['is_symmetric'] == other['is_symmetric']
+
+        # NOTE: scale/offset/min/max may not be exactly equal
+        # assert encoding['scale'] == other['scale']
+        # assert encoding['offset'] == other['offset']
+        # assert encoding['min'] == other['min']
+        # assert encoding['max'] == other['max']
+
+    for v1_encoding, v2_encoding in zip(v1_activation_encodings.values(), v2_activation_encodings.values()):
+        for v1_enc, v2_enc in zip(v1_encoding.values(), v2_encoding.values()):
+            for v1, v2 in zip(v1_enc.values(), v2_enc.values()):
+                assert_encoding_equal(v1, v2)
+
+    v1_param_encodings = v1_saved_encoding['param_encodings']
+    v2_param_encodings = v2_saved_encoding['param_encodings']
+    assert v1_param_encodings.keys() == v2_param_encodings.keys()
+
+    for key in v1_param_encodings:
+        assert len(v1_param_encodings[key]) == len(v2_param_encodings[key])
+        for v1_enc, v2_enc in zip(v1_param_encodings[key], v2_param_encodings[key]):
+            assert_encoding_equal(v1_enc, v2_enc)
