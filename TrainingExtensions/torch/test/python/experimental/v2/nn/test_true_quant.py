@@ -43,7 +43,7 @@ from torch import nn
 import torch.nn.functional as F
 from aimet_torch.v2.quantization.affine.backends import get_backend
 from aimet_torch.v2.quantization.affine import Quantize, QuantizeDequantize
-from aimet_torch.v2.quantization.nn import (
+from aimet_torch.v2.nn import (
     QuantizedConv1d,
     QuantizedConv2d,
     QuantizedConv3d,
@@ -56,10 +56,10 @@ from aimet_torch.v2.quantization.nn import (
     QuantizedAdd,
     QuantizedMultiply,
     QuantizedSubtract,
+    FakeQuantizationMixin,
 )
 from aimet_torch.v2.quantization.affine import AffineEncoding
 from aimet_torch.v2.quantization.tensor import QuantizedTensor, DequantizedTensor
-from aimet_torch.v2.quantization.nn import fake_quant
 from aimet_torch.v2.utils import enable_recompute
 import aimet_torch.elementwise_ops as aimet_ops
 
@@ -368,7 +368,7 @@ class TestQuantizedLayers:
                                               (aimet_ops.Multiply(), (_input(10, 10), _input(10, 10))),
                                               (aimet_ops.Subtract(), (_input(10, 10), _input(10, 10)))))
     def test_layers_no_params(self, layer, inputs):
-        fq_layer = fake_quant.FakeQuantizationMixin.from_module(layer)
+        fq_layer = FakeQuantizationMixin.from_module(layer)
         tq_layer = QuantizationMixin.from_module(layer)
         for i, _ in enumerate(inputs):
             fq_layer.input_quantizers[i] = QuantizeDequantize(shape=(1,), bitwidth=8, symmetric=False)
@@ -395,7 +395,7 @@ class TestQuantizedLayers:
                                              (torch.nn.Conv2d(3, 3, 3), _input(1, 3, 10, 10)),
                                              (torch.nn.Conv3d(3, 3, 3), _input(1, 3, 10, 10, 10))))
     def test_layers_with_weight(self, layer, input):
-        fq_layer = fake_quant.FakeQuantizationMixin.from_module(layer)
+        fq_layer = FakeQuantizationMixin.from_module(layer)
         tq_layer = QuantizationMixin.from_module(layer)
         fq_layer.input_quantizers[0] = QuantizeDequantize(shape=(1,), bitwidth=8, symmetric=False)
         fq_layer.output_quantizers[0] = QuantizeDequantize(shape=(1, ), bitwidth=8, symmetric=False)

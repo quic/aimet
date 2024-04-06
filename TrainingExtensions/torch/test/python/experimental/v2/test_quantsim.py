@@ -40,7 +40,7 @@ import torch
 import tempfile
 import os
 import json
-from aimet_torch.v2.quantization.quantsim import QuantizationSimModel
+from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.quantization.encoding_analyzer import PercentileEncodingAnalyzer
 from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.affine import AffineQuantizerBase

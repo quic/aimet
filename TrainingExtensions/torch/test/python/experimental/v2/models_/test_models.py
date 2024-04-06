@@ -999,7 +999,7 @@ class RoiAlignPyTorch(torch.nn.Module):
                          sampling_ratio = 0)
 
 
-from aimet_torch.v2.quantization.nn.fake_quant import _FakeQuantizedUnaryOpMixin
+from aimet_torch.v2.nn.fake_quant import _FakeQuantizedUnaryOpMixin
 FakeQuantizedRoiAlignPyTorch = _FakeQuantizedUnaryOpMixin.wrap(RoiAlignPyTorch)
 
 
