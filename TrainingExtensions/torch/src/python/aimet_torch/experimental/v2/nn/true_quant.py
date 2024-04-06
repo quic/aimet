@@ -55,6 +55,7 @@ from aimet_torch.experimental.v2.quantization.quantizers import affine
 from aimet_torch.experimental.v2.quantization.quantizers.float import FloatQuantizeDequantize
 from aimet_torch.experimental.v2.quantization.quantized_tensor import QuantizedTensorBase
 from aimet_torch.experimental.v2.utils import patch_attr, _ContextManager, allow_recompute
+import aimet_torch.elementwise_ops as aimet_ops
 
 
 
@@ -315,6 +316,45 @@ class _QuantizedBinaryOpMixin(QuantizationMixin, ABC):
         """
 
 
+class _QuantizedConvNdMixin(_QuantizedUnaryOpMixin): # pylint: disable=too-many-ancestors
+    """ Quantized ConvNd """
+    def __quant_init__(self):
+        if self.padding_mode != 'zeros':
+            msg = f'padding_mode other than "zeros" is currently not supported. (got {self.padding_mode})'
+            raise NotImplementedError(msg)
+        super().__quant_init__()
+
+    def quantized_forward(self, *args, **kwargs):
+        if self.padding_mode != 'zeros':
+            msg = f'padding_mode other than "zeros" is currently not supported. (got {self.padding_mode})'
+            raise NotImplementedError(msg)
+        return super().quantized_forward(*args, **kwargs)
+
+    def get_functional_args(self, x):
+        args = (x, self.weight)
+        kwargs = {"bias": self.bias,
+                  "stride": self.stride,
+                  "padding": self.padding,
+                  "dilation": self.dilation,
+                  "groups": self.groups}
+        return args, kwargs
+
+
+@QuantizationMixin.implements(nn.Conv1d)
+class QuantizedConv1d(_QuantizedConvNdMixin, nn.Conv1d): # pylint: disable=too-many-ancestors
+    """ Quantized Conv1d """
+
+
+@QuantizationMixin.implements(nn.Conv2d)
+class QuantizedConv2d(_QuantizedConvNdMixin, nn.Conv2d): # pylint: disable=too-many-ancestors
+    """ Quantized Conv2d """
+
+
+@QuantizationMixin.implements(nn.Conv3d)
+class QuantizedConv3d(_QuantizedConvNdMixin, nn.Conv3d): # pylint: disable=too-many-ancestors
+    """ Quantized Conv3d """
+
+
 @QuantizationMixin.implements(nn.Linear)
 class QuantizedLinear(_QuantizedUnaryOpMixin, nn.Linear):
     """ Quantized Linear """
@@ -357,3 +397,27 @@ class QuantizedSigmoid(_QuantizedUnaryOpMixin, nn.Sigmoid):
 
     def get_functional_args(self, x):
         return (x, ), {}
+
+
+@QuantizationMixin.implements(aimet_ops.Add)
+class QuantizedAdd(_QuantizedBinaryOpMixin, aimet_ops.Add):
+    """ Quantized Add """
+
+    def get_functional_args(self, x, y):
+        return (x, y), {}
+
+
+@QuantizationMixin.implements(aimet_ops.Multiply)
+class QuantizedMultiply(_QuantizedBinaryOpMixin, aimet_ops.Multiply):
+    """ Quantized Multiply """
+
+    def get_functional_args(self, x, y):
+        return (x, y), {}
+
+
+@QuantizationMixin.implements(aimet_ops.Subtract)
+class QuantizedSubtract(_QuantizedBinaryOpMixin, aimet_ops.Subtract):
+    """ Quantized Subtract """
+
+    def get_functional_args(self, x, y):
+        return (x, y), {}
