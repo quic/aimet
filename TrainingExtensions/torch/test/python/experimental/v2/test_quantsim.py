@@ -44,6 +44,7 @@ from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.quantization.encoding_analyzer import PercentileEncodingAnalyzer
 from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.affine import AffineQuantizerBase
+from aimet_torch.v2.nn import BaseQuantizationMixin
 from .models_ import test_models
 
 def encodings_are_close(quantizer_1: AffineQuantizerBase, quantizer_2: AffineQuantizerBase):
@@ -210,3 +211,13 @@ class TestQuantsimUtilities:
         sim = QuantizationSimModel(model, dummy_input)
         conv_layer = sim.model.conv
         assert ("conv", conv_layer) in sim._get_qc_quantized_layers(sim.model)
+
+    def test_get_leaf_module_to_name_map(self):
+        model = test_models.NestedConditional()
+        dummy_input = torch.rand(1, 3), torch.tensor([True])
+        sim = QuantizationSimModel(model, dummy_input)
+        leaf_modules = sim._get_leaf_module_to_name_map()
+        for name, module in sim.model.named_modules():
+            if isinstance(module, BaseQuantizationMixin):
+                assert module in leaf_modules.keys()
+                assert leaf_modules[module] == name
