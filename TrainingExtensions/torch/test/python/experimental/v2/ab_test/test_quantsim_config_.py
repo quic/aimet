@@ -105,6 +105,10 @@ class TestQuantsimConfig:
             "model_input": {},
             "model_output": {}
         }
+        # TODO: this is a temporary solution, this folder creation should happen once per test suite.
+        if not os.path.exists('./data/'):
+            os.makedirs('./data/')
+
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
 
@@ -765,15 +769,15 @@ class TestQuantsimConfig:
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
 
-        aimet_torch.quantsim.SUPPORTED_KERNELS_ACTION = SupportedKernelsAction.assert_on_error
-
-        with pytest.raises(RuntimeError):
-            QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
-                                 config_file='./data/quantsim_config.json',
-                                 dummy_input=torch.rand(1, 3, 32, 32), default_param_bw=16, default_output_bw=8,
-                                 default_data_type=QuantizationDataType.int)
-
-        aimet_torch.quantsim.SUPPORTED_KERNELS_ACTION = SupportedKernelsAction.warn_on_error
+        try:
+            aimet_torch.quantsim.SUPPORTED_KERNELS_ACTION = SupportedKernelsAction.assert_on_error
+            with pytest.raises(RuntimeError):
+                QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
+                                     config_file='./data/quantsim_config.json',
+                                     dummy_input=torch.rand(1, 3, 32, 32), default_param_bw=16, default_output_bw=8,
+                                     default_data_type=QuantizationDataType.int)
+        finally:
+            aimet_torch.quantsim.SUPPORTED_KERNELS_ACTION = SupportedKernelsAction.warn_on_error
 
     def test_parse_config_file_supergroups(self):
         """ Test that supergroup quantization parameters are set correctly when using json config file """
