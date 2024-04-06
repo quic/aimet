@@ -37,9 +37,8 @@
 """ Top level API for performing quantization simulation of a pytorch model """
 
 import itertools
-
-import torch
 import io
+import torch
 
 from aimet_torch.quantsim import QuantizationSimModel as V1QuantizationSimModel, logger
 import aimet_torch.quantsim as quantsim_v1
