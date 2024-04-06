@@ -128,3 +128,30 @@ def test_qdq_compute_encodings(x):
     maxval = x.abs().max(dim=0, keepdims=True).values
     expected_output = fake_cast_to_ieee_float(x, maxval, exponent_bits=5, mantissa_bits=10)
     assert torch.equal(float16_qdq(x), expected_output)
+
+
+def test_freeze_encodings(x):
+    exponent_bits, mantissa_bits = 3, 4
+    q = FloatQuantizeDequantize(exponent_bits, mantissa_bits, encoding_analyzer=MinMaxEncodingAnalyzer((1, 100)))
+    with q.compute_encodings():
+        q(x)
+
+    q_max = q.maxval.detach().clone()
+
+    q._freeze_encoding()
+    assert q._is_encoding_frozen()
+    """
+    Given: Called quantizer.freeze_encoding()
+    When: Inspect parameter requires_grad() attributes
+    Then: requires_grad = False for all parameters
+    """
+    assert not q.maxval.requires_grad
+
+    """
+    When: Try to recompute encodings
+    Then: Encodings do not change
+    """
+    with q.compute_encodings():
+        q(x * 10)
+
+    assert torch.equal(q_max, q.maxval)

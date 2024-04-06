@@ -250,6 +250,10 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
         During ``compute_encodings`` is enabled, the quantizer forward pass performs
         dynamic quantization using the batch statistics.
         """
+        if not self.encoding_analyzer:
+            yield
+            return
+
         original_forward = self.forward
 
         @functools.wraps(original_forward)
