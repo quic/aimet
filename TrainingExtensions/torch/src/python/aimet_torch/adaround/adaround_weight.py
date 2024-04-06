@@ -54,7 +54,7 @@ from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_torch import utils
 from aimet_torch.save_utils import SaveUtils
 from aimet_torch.meta import connectedgraph_utils
-from aimet_torch.quantsim import QuantizationSimModel, QcQuantizeWrapper
+from aimet_torch.quantsim import QuantizationSimModel, QcQuantizeWrapper, ExportableQuantModule
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QcQuantizeOpMode
 from aimet_torch.tensor_quantizer import TensorQuantizer
 from aimet_torch.adaround.adaround_wrapper import AdaroundWrapper
@@ -141,9 +141,9 @@ class Adaround:
         """
         # pylint: disable=too-many-arguments
         # Create Quant sim with given parameters
-        quant_sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=default_quant_scheme,
-                                         default_param_bw=default_param_bw,
-                                         config_file=default_config_file)
+        quant_sim = cls._get_quantsim(model, dummy_input=dummy_input, quant_scheme=default_quant_scheme,
+                                      default_param_bw=default_param_bw,
+                                      config_file=default_config_file)
 
         # For the modules in the param_bw_override_list, override the default parameter bitwidths in the QuantSim
         if param_bw_override_list:
@@ -179,9 +179,7 @@ class Adaround:
         """
 
         # Sanity check: All the input/output quantizers should be disabled
-        _, input_quantizers, output_quantizers = utils.get_all_quantizers(quant_sim.model)
-        for quantizer in itertools.chain(input_quantizers, output_quantizers):
-            assert not quantizer.enabled
+        cls._check_input_output_quantizers_for_adaround(quant_sim.model)
 
         # Get the module - activation function pair using ConnectedGraph
         module_act_func_pair = connectedgraph_utils.get_module_act_func_pair(model, dummy_input)
@@ -191,7 +189,7 @@ class Adaround:
         # Export quantization encodings to JSON-formatted file
         cls._export_encodings_to_json(path, filename_prefix, quant_sim)
 
-        SaveUtils.remove_quantization_wrappers(quant_sim.model)
+        cls._remove_quantization_wrappers(quant_sim.model)
         logger.info('Completed Adarounding Model')
         return quant_sim.model
 
@@ -219,11 +217,7 @@ class Adaround:
         num_iterations = params.num_iterations
 
         if num_iterations is None:
-            param_quantizers, _, _ = utils.get_all_quantizers(quant_sim.model)
-            lowest_weight_bw = min(
-                quantizer.bitwidth for quantizer in param_quantizers
-                if quantizer.enabled and quantizer.data_type == QuantizationDataType.int
-            )
+            lowest_weight_bw = cls._get_lowest_weight_bw(quant_sim.model)
             # If the lowest wegith bitwidth is < 8, then set num_iterations to 15K by default
             if lowest_weight_bw < 8:
                 num_iterations = 15000
@@ -407,6 +401,21 @@ class Adaround:
                 quant_module.set_mode(QcQuantizeOpMode.ACTIVE)
 
     @staticmethod
+    def _get_quantsim(model: torch.nn.Module, dummy_input: torch.Tensor,
+                      quant_scheme: QuantScheme, default_param_bw: int, config_file: str):
+        return QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=quant_scheme,
+                                    default_param_bw=default_param_bw,
+                                    config_file=config_file)
+
+    @staticmethod
+    def _get_adaround_wrapper(quant_module: QcQuantizeWrapper):
+        return AdaroundWrapper(quant_module)
+
+    @staticmethod
+    def _remove_quantization_wrappers(module: torch.nn.Module):
+        SaveUtils.remove_quantization_wrappers(module)
+
+    @staticmethod
     @contextlib.contextmanager
     def _patch_module_layer(model, layer_name, new_layer):
         """
@@ -417,6 +426,25 @@ class Adaround:
         yield
         setattr(model, layer_name, original_layer)
 
+    @staticmethod
+    def _validate_quant_module_for_adaround(quant_module: StaticGridQuantWrapper):
+        assert quant_module.param_quantizers['weight'], '%s does not have weight parameter.' % quant_module
+        assert quant_module.param_quantizers['weight'].encoding, '%s encoding needs to be set.' % quant_module
+
+    @staticmethod
+    def _check_input_output_quantizers_for_adaround(quant_model: torch.nn.Module):
+        _, input_quantizers, output_quantizers = utils.get_all_quantizers(quant_model)
+        for quantizer in itertools.chain(input_quantizers, output_quantizers):
+            assert not quantizer.enabled
+
+    @staticmethod
+    def _get_lowest_weight_bw(quant_model: torch.nn.Module):
+        param_quantizers, _, _ = utils.get_all_quantizers(quant_model)
+        return min(
+            quantizer.bitwidth for quantizer in param_quantizers
+            if quantizer.enabled and quantizer.data_type == QuantizationDataType.int
+        )
+
     @classmethod
     @contextlib.contextmanager
     def _replace_quantization_layer(cls, quant_sim_model: torch.nn.Module, module_name: str):
@@ -425,10 +453,8 @@ class Adaround:
         :param quant_module: quant module
         """
         quant_module = utils.get_named_module(quant_sim_model, module_name)
-        assert quant_module.param_quantizers['weight'], '%s does not have weight parameter.' % quant_module
-        assert quant_module.param_quantizers['weight'].encoding, '%s encoding needs to be set.' % quant_module
-
-        adaround_layer = AdaroundWrapper(quant_module)
+        cls._validate_quant_module_for_adaround(quant_module)
+        adaround_layer = cls._get_adaround_wrapper(quant_module)
 
         # We need to look for the container to patch for modules inside submodule
         upper_module = quant_sim_model
@@ -470,11 +496,10 @@ class Adaround:
         param_encodings = {}
 
         for name, quant_module in quant_sim.model.named_modules():
-            if isinstance(quant_module, StaticGridQuantWrapper) and \
-                    isinstance(quant_module._module_to_wrap, AdaroundSupportedModules):
-                quantizer = quant_module.param_quantizers['weight']
+            if isinstance(quant_module, ExportableQuantModule) and \
+                    isinstance(quant_module.get_original_module(), AdaroundSupportedModules):
 
-                if isinstance(quantizer, TensorQuantizer):
+                if 'weight' in quant_module.param_quantizers:
                     cls._update_param_encodings_dict(quant_module, name, param_encodings)
 
         # export encodings to JSON file
@@ -484,17 +509,16 @@ class Adaround:
             json.dump(param_encodings, encoding_fp, sort_keys=True, indent=4)
 
     @classmethod
-    def _update_param_encodings_dict(cls, quant_module: StaticGridQuantWrapper, name: str, param_encodings: Dict):
+    def _update_param_encodings_dict(cls, quant_module: ExportableQuantModule, name: str, param_encodings: Dict):
         """
         Add module's weight parameter encodings to dictionary to be used for exporting encodings
         :param quant_module: quant module
         :param name: name of module
         :param param_encodings: Dictionary of param encodings
         """
-        for orig_param_name, param_quantizer in quant_module.param_quantizers.items():
-            if orig_param_name == 'weight':
+        for orig_param_name, encodings in quant_module.export_param_encodings().items():
+            if orig_param_name == 'weight' and encodings:
                 param_name = name + '.' + orig_param_name
-                encodings = cls._create_encodings_dict_for_quantizer(param_quantizer)
                 param_encodings[param_name] = encodings
 
     @staticmethod
@@ -540,8 +564,8 @@ class Adaround:
         # Create a mapping of QuantSim model's AdaRoundable module name and their module
         name_to_module = {}
         for q_name, q_module in quant_sim.model.named_modules():
-            if isinstance(q_module, QcQuantizeWrapper):
-                if isinstance(q_module._module_to_wrap, AdaroundSupportedModules):  # pylint: disable=protected-access
+            if isinstance(q_module, ExportableQuantModule):
+                if isinstance(q_module.get_original_module(), AdaroundSupportedModules):  # pylint: disable=protected-access
                     name_to_module[q_name] = q_module
 
         # For the modules specified in the param_bw_override_list, set the weight quantizer bitwidth
@@ -605,9 +629,9 @@ class Adaround:
         # pylint: disable=too-many-arguments
         assert checkpoints_config is not None, "To run Adaround with cached tensors, please provide a JSON file with checkpoints defined"
         # Create Quant sim with given parameters
-        quant_sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=default_quant_scheme,
-                                         default_param_bw=default_param_bw,
-                                         config_file=default_config_file)
+        quant_sim = cls._get_quantsim(model, dummy_input=dummy_input, quant_scheme=default_quant_scheme,
+                                      default_param_bw=default_param_bw,
+                                      config_file=default_config_file)
 
         # For the modules in the param_bw_override_list, override the default parameter bitwidths in the QuantSim
         if param_bw_override_list:
