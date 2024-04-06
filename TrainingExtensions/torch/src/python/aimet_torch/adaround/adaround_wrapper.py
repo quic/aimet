@@ -91,7 +91,7 @@ class AdaroundWrapperBase(abc.ABC, torch.nn.Module):
 
 class AdaroundWrapper(AdaroundWrapperBase):
     """
-    Basic adaround class for AIMET v1
+    Basic adaround wrapper class for AIMET v1
     """
     def __init__(self, module: QcQuantizeWrapper):
         super().__init__()
@@ -142,7 +142,7 @@ class AdaroundWrapper(AdaroundWrapperBase):
         tensor = tensor + h_alpha
 
         # Quantize and de-quantize the tensor
-        tensor_quant = torch.clamp(tensor - self.broadcasted_offset, 0, 2 ** self.bitwidth - 1)
+        tensor_quant = torch.clamp(tensor - self.broadcasted_offset, self.clip_min, self.clip_max)
         tensor_dequant = (tensor_quant + self.broadcasted_offset) * self.broadcasted_delta
 
         return tensor_dequant
@@ -183,8 +183,12 @@ class AdaroundWrapper(AdaroundWrapperBase):
         if isinstance(quantizer.encoding, list):
             # pylint: disable = protected-access
             cpp_op = AimetTensorQuantizer.AimetTensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[quantizer.quant_scheme])
-            return cpp_op.makeDeltaOffsetTensor(self.weight.device, quantizer.encoding)
-        return quantizer.encoding.delta, quantizer.encoding.offset
+            delta, offset = cpp_op.makeDeltaOffsetTensor(self.weight.device, quantizer.encoding)
+        else:
+            delta, offset = quantizer.encoding.delta, quantizer.encoding.offset
+
+        ch_axis = self._get_weight_quantizer_channel_axis()
+        return broadcast_to_tensor(self.weight, delta, ch_axis), broadcast_to_tensor(self.weight, offset, ch_axis)
 
     def _get_weight_quantizer_bitwidth(self) -> int:
         """
@@ -197,15 +201,12 @@ class AdaroundWrapper(AdaroundWrapperBase):
         """
         Initialize adaround parameter using the original module
         """
-        delta, offset = self._get_weight_quantizer_delta_and_offset()
-        ch_axis = self._get_weight_quantizer_channel_axis()
-        weight = self.weight
-
-        self.broadcasted_delta = broadcast_to_tensor(weight, delta, ch_axis)
-        self.broadcasted_offset = broadcast_to_tensor(weight, offset, ch_axis)
-        self.alpha = self._generate_alpha_parameter(weight, self.broadcasted_delta)
+        self.broadcasted_delta, self.broadcasted_offset = self._get_weight_quantizer_delta_and_offset()
+        self.alpha = self._generate_alpha_parameter(self.weight, self.broadcasted_delta)
         self.bitwidth = self._get_weight_quantizer_bitwidth()
         self.use_soft_rounding = True
+        self.clip_max = 2 ** self.bitwidth - 1
+        self.clip_min = 0
 
     @staticmethod
     def _generate_alpha_parameter(tensor: torch.Tensor, delta: torch.Tensor) -> torch.nn.Parameter:
