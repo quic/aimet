@@ -1337,7 +1337,7 @@ class QuantizationSimModel:
     def _get_qc_quantized_layers(model) -> List[Tuple[str, QcQuantizeWrapper]]:
         quantized_layers = []
         for name, module in model.named_modules():
-            if isinstance(module, (QcQuantizeWrapper, QcQuantizeRecurrent)):
+            if isinstance(module, (QcQuantizeWrapper, QcQuantizeRecurrent, LazyQuantizeWrapper, BaseQuantizationMixin)):
                 quantized_layers.append((name, module))
         return quantized_layers
 

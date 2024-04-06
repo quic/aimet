@@ -203,3 +203,10 @@ class TestQuantsimUtilities:
         sim.run_modules_for_traced_custom_marker([conv_layer], dummy_input)
         assert conv_name in sim._module_marker_map.keys()
         assert torch.equal(sim._module_marker_map[conv_name](dummy_input), conv_layer.get_original_module()(dummy_input))
+
+    def test_get_qc_quantized_modules(self):
+        model = test_models.BasicConv2d(kernel_size=3)
+        dummy_input = torch.rand(1, 64, 16, 16)
+        sim = QuantizationSimModel(model, dummy_input)
+        conv_layer = sim.model.conv
+        assert ("conv", conv_layer) in sim._get_qc_quantized_layers(sim.model)
