@@ -39,7 +39,7 @@
 from typing import Dict
 import torch
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
-from aimet_torch.experimental.v2.quantization.wrappers.builder import LazyQuantizeWrapper
+from aimet_torch.v2.quantization.builder import LazyQuantizeWrapper
 
 # current implementation sets mask to -6 by default.
 # user can register for override on mask add op in an attention head.

@@ -67,8 +67,8 @@ from aimet_torch import torchscript_utils, utils, transformer_utils, onnx_utils
 from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs, CustomMarker, get_pytorch_name_from_onnx_name
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
-from aimet_torch.experimental.v2.quantization.wrappers.builder import LazyQuantizeWrapper
-from aimet_torch.experimental.v2.nn.quant_base import BaseQuantizationMixin
+from aimet_torch.v2.quantization.builder import LazyQuantizeWrapper
+from aimet_torch.v2.nn import BaseQuantizationMixin
 
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)

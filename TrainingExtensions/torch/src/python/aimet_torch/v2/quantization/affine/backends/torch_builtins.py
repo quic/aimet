@@ -38,7 +38,7 @@
 from typing import Union
 import torch
 
-from aimet_torch.experimental.v2.utils import _is_expandable
+from aimet_torch.v2.utils import _is_expandable
 
 
 def _validate_arguments(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor):

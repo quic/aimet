@@ -35,26 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-# pylint: disable=missing-docstring
-import contextlib
-import torch
-from .fake_quant import *
-from .true_quant import *
+# pylint: disable=all
 
-
-@contextlib.contextmanager
-def compute_encodings(model: torch.nn.Module):
-    """
-    Compute encodings of all quantized modules in the model
-    """
-    with contextlib.ExitStack() as stack:
-        for module in model.modules():
-            if isinstance(module, BaseQuantizationMixin):
-                ctx = module.compute_encodings()
-                stack.enter_context(ctx)
-
-        if isinstance(model, BaseQuantizationMixin):
-            ctx = model.compute_encodings()
-            stack.enter_context(ctx)
-
-        yield
+from .encoding import *
+from .quantizer import *
