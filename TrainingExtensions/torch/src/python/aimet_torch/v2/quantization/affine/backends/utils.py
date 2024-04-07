@@ -35,12 +35,11 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 # pylint: disable=all
-import importlib.util
 import torch
-import aimet_torch.experimental.v2.quantization.backends.default as default
+from aimet_torch.v2.quantization.affine.backends import torch_builtins
 
 from typing import Protocol
-from aimet_torch.experimental.v2.utils import _ContextManager
+from aimet_torch.v2.utils import _ContextManager
 
 
 class _QuantizationBackendProtocol(Protocol):
@@ -67,10 +66,10 @@ class _QuantizationBackendProtocol(Protocol):
         ...
 
 
-_CURRENT_BACKEND = 'default'
+_CURRENT_BACKEND = 'torch_builtins'
 
 _SUPPORTED_BACKENDS = {
-    'default': default,
+    'torch_builtins': torch_builtins,
 }
 
 

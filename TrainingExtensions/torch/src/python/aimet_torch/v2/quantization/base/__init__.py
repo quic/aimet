@@ -34,55 +34,8 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-# pylint: skip-file
-""" Placeholder for _QuantizationMixin definition, to be deleted/moved/updated """
 
-from typing import Union, Tuple, Iterable, Optional, Mapping
-from dataclasses import dataclass
-from torch import nn
+# pylint: disable=all
 
-
-@dataclass
-class _TensorSpec:
-    """ Spec class for quantizer initialization """
-    shape: Tuple[int, ...]
-    bitwidth: int
-    symmetric: bool
-    qscheme: None
-
-
-@dataclass
-class _ModuleSpec:
-    """ Spec class for wrapper initialization """
-    input_spec: Iterable[Optional[_TensorSpec]]
-    param_spec: Mapping[str, Optional[_TensorSpec]]
-    output_spec: Iterable[Optional[_TensorSpec]]
-
-
-class _QuantizationMixin:
-    """ Base class for quantized modules """
-
-    @classmethod
-    def from_module(cls, module: nn.Module, spec: _ModuleSpec) -> Union['_QuantizationMixin', nn.Module]:
-        ...
-
-    def input_quantizers(self):
-        ...
-
-    def output_quantizers(self):
-        ...
-
-    def param_quantizers(self):
-        ...
-
-    def export_input_encodings(self):
-        ...
-
-    def export_output_encodings(self):
-        ...
-
-    def export_param_encodings(self):
-        ...
-
-    def get_original_module(self):
-        ...
+from .encoding import *
+from .quantizer import *

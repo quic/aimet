@@ -37,7 +37,7 @@
 import pytest
 import torch
 
-from aimet_torch.experimental.v2.utils import allow_recompute, enable_recompute, reduce, patch_attr
+from aimet_torch.v2.utils import allow_recompute, enable_recompute, reduce, patch_attr
 
 @pytest.mark.parametrize('reduce_dim, target_shape', [
     # | reduce dim   | target shape |

@@ -53,9 +53,9 @@ from aimet_torch.adaround.adaround_wrapper import AdaroundWrapper
 from aimet_torch.utils import create_fake_data_loader, create_rand_tensors_given_shapes, get_device
 from .models_ import test_models
 from aimet_torch.adaround.adaround_weight import AdaroundOptimizer, AdaroundParameters
-from aimet_torch.experimental.v2.quantization.quantsim import QuantizationSimModel
-from aimet_torch.experimental.v2.adaround import Adaround
-from aimet_torch.experimental.v2.nn.quant_base import BaseQuantizationMixin
+from aimet_torch.v2.quantsim import QuantizationSimModel
+from aimet_torch.v2.adaround import Adaround
+from aimet_torch.v2.nn import BaseQuantizationMixin
 
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)

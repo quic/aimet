@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2023-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -36,5 +36,26 @@
 # =============================================================================
 
 # pylint: disable=missing-docstring
-from . import quantization
-from . import nn
+import contextlib
+import torch
+from .fake_quant import *
+from .true_quant import *
+from .base import *
+
+
+@contextlib.contextmanager
+def compute_encodings(model: torch.nn.Module):
+    """
+    Compute encodings of all quantized modules in the model
+    """
+    with contextlib.ExitStack() as stack:
+        for module in model.modules():
+            if isinstance(module, BaseQuantizationMixin):
+                ctx = module.compute_encodings()
+                stack.enter_context(ctx)
+
+        if isinstance(model, BaseQuantizationMixin):
+            ctx = model.compute_encodings()
+            stack.enter_context(ctx)
+
+        yield

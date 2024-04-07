@@ -37,13 +37,13 @@
 import itertools
 
 import torch
-import torch.nn as nn
 import tempfile
 import os
 import json
-from aimet_torch.experimental.v2.quantization.quantsim import QuantizationSimModel
-from aimet_torch.experimental.v2.quantization.encoding_analyzer import PercentileEncodingAnalyzer
-from aimet_torch.experimental.v2.quantization.quantizers import AffineQuantizerBase, QuantizerBase
+from aimet_torch.v2.quantsim import QuantizationSimModel
+from aimet_torch.v2.quantization.encoding_analyzer import PercentileEncodingAnalyzer
+from aimet_torch.v2.quantization.base import QuantizerBase
+from aimet_torch.v2.quantization.affine import AffineQuantizerBase
 from .models_ import test_models
 
 def encodings_are_close(quantizer_1: AffineQuantizerBase, quantizer_2: AffineQuantizerBase):

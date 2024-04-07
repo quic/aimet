@@ -43,7 +43,7 @@ import torch.nn as nn
 import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme
 from aimet_torch import elementwise_ops
-from aimet_torch.experimental.v2.quantization.quantsim import QuantizationSimModel
+from aimet_torch.v2.quantsim import QuantizationSimModel
 
 
 class Model2(nn.Module):

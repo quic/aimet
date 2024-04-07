@@ -44,7 +44,7 @@ from dataclasses import dataclass
 from typing import TypeVar, Generic, Tuple, Optional, List
 import itertools
 import torch
-from aimet_torch.experimental.v2.utils import reduce, StatisticsNotFoundError, _is_expandable
+from aimet_torch.v2.utils import reduce, StatisticsNotFoundError, _is_expandable
 
 
 @dataclass

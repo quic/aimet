@@ -37,7 +37,7 @@
 import pytest
 import torch
 
-from aimet_torch.experimental.v2.quantization.encodings.affine import AffineEncoding
+from aimet_torch.v2.quantization.affine import AffineEncoding
 
 
 @pytest.fixture
