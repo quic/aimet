@@ -314,7 +314,6 @@ class MinMaxEncodingAnalyzer(EncodingAnalyzer[_MinMaxRange]):
         if stats.min is None or stats.max is None:
             raise StatisticsNotFoundError('No statistics present to compute encodings.')
 
-        bitwidth = math.log2(num_quant_bins + 1)
         updated_min = stats.min
         updated_max = stats.max
 
@@ -324,9 +323,9 @@ class MinMaxEncodingAnalyzer(EncodingAnalyzer[_MinMaxRange]):
         max_with_zero = torch.maximum(stats.max, torch.zeros_like(stats.max))
 
          # adjusts any min/max pairing that are too close
-        tensor_diff = (max_with_zero - min_with_zero) / ((2 **bitwidth) - 1)
-        update_min = torch.where(tensor_diff < tiny_num, tiny_num * (2 **(bitwidth - 1)), 0.0)
-        update_max = torch.where(tensor_diff < tiny_num, tiny_num * ((2 **(bitwidth - 1)) - 1), 0.0)
+        tensor_diff = (max_with_zero - min_with_zero) / num_quant_bins
+        update_min = torch.where(tensor_diff < tiny_num, tiny_num * math.ceil(num_quant_bins / 2), 0.0)
+        update_max = torch.where(tensor_diff < tiny_num, tiny_num * math.floor(num_quant_bins / 2), 0.0)
         updated_max = max_with_zero + update_max
         updated_min = min_with_zero - update_min
 
@@ -336,7 +335,7 @@ class MinMaxEncodingAnalyzer(EncodingAnalyzer[_MinMaxRange]):
             delta = max(updated_max / num_pos_bins, -updated_min / num_neg_bins)
             offset = -1 * num_neg_bins
             updated_min = offset * delta
-            updated_max = updated_min + delta
+            updated_max = num_pos_bins * delta
             # handles strict symmetric case
             if num_neg_bins == num_pos_bins:
                 updated_min = torch.minimum(offset * delta, -delta * num_pos_bins)
@@ -373,10 +372,7 @@ def adjust_min_max(curr_min, curr_max, num_bins, is_symmetric):
         offset = -1 * num_neg_bins
 
         curr_min = offset * delta
-        curr_max = curr_min + delta
-        # handles strict symmetric case
-        if num_neg_bins == num_pos_bins:
-            return torch.minimum(curr_min, -curr_max), torch.maximum(-curr_min, curr_max)
+        curr_max = num_pos_bins * delta
 
     return curr_min, curr_max
 

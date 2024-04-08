@@ -133,7 +133,7 @@ class TestMinMaxEncodingAnalyzer():
         num_bins = pow(2, 3) - 1
         non_strict_symmetric_min, non_strict_symmetric_max = encoding_analyzer.compute_encodings(is_symmetric = True, num_quant_bins = num_bins)
         assert torch.all(torch.isclose(non_strict_symmetric_min, torch.full(tuple(encoding_analyzer.observer.shape), -12.0)))
-        assert torch.all(torch.isclose(non_strict_symmetric_max, torch.full(tuple(encoding_analyzer.observer.shape), -9.0)))
+        assert torch.all(torch.isclose(non_strict_symmetric_max, torch.full(tuple(encoding_analyzer.observer.shape), 9.0)))
 
     @pytest.mark.parametrize("min_max_size", [[3,4], [2, 3, 1], [4], [1]])
     def test_update_stats_with_different_dimensions(self,min_max_size):
@@ -178,7 +178,7 @@ class TestMinMaxEncodingAnalyzer():
         delta = max(updated_max / num_pos_bins, updated_min / num_neg_bins)
         offset = -1 * num_neg_bins
         updated_min = offset * delta
-        updated_max = updated_min + delta
+        updated_max = num_pos_bins * delta
         assert torch.all(torch.eq(symmetric_min, torch.full(tuple(encoding_analyzer.observer.shape), updated_min)))
         assert torch.all(torch.eq(symmetric_max, torch.full(tuple(encoding_analyzer.observer.shape), updated_max)))
     
@@ -599,7 +599,7 @@ class TestPercentileEncodingAnalyzer():
         num_bins = pow(2, 3) - 1
         non_strict_symmetric_min, non_strict_symmetric_max = encoding_analyzer.compute_encodings(is_symmetric = True, num_quant_bins = num_bins)
         assert torch.all(torch.isclose(non_strict_symmetric_min, torch.full(tuple(encoding_analyzer.observer.shape), -12.0)))
-        assert torch.all(torch.isclose(non_strict_symmetric_max, torch.full(tuple(encoding_analyzer.observer.shape), -9.0)))
+        assert torch.all(torch.isclose(non_strict_symmetric_max, torch.full(tuple(encoding_analyzer.observer.shape), 9.0)))
     
     def test_compute_encodings_100_percentile(self):
         encoding_analyzer = PercentileEncodingAnalyzer((1,), percentile = 100, num_bins = 3)

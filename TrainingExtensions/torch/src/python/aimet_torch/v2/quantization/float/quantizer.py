@@ -40,6 +40,7 @@
 import contextlib
 import functools
 from typing import Optional, List, Dict
+import math
 
 import torch
 from aimet_torch.v2.quantization.encoding_analyzer import EncodingAnalyzer
