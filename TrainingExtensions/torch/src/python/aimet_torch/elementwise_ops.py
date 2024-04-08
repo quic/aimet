@@ -40,9 +40,10 @@
 import itertools
 from typing import Callable, Any, Tuple, Union, List
 
+import torchvision
 import torch
 import torch.nn
-import torchvision
+
 
 
 def forward_function_wrapper(functional: Callable) -> Any:
@@ -321,8 +322,12 @@ class DepthToSpaceDCRMode(torch.nn.Module):
 
 class ScatterND(torch.nn.Module):
     """ ScatterND op implementation """
-    @staticmethod
-    def forward(data: torch.Tensor, indices: torch.Tensor, updates: torch.Tensor) -> torch.Tensor:
+
+    def __init__(self, reduction: int = 0):
+        super().__init__()
+        self.reduction = reduction
+
+    def forward(self, data: torch.Tensor, indices: torch.Tensor, updates: torch.Tensor) -> torch.Tensor:
         """
         Forward-pass routine for ScatterND op
         """
@@ -336,11 +341,20 @@ class ScatterND(torch.nn.Module):
         update_indices = indices.size()[:-1]
         update_indices = itertools.product(*(range(index) for index in update_indices))
 
+        if self.reduction == 1:
+            f = torch.add
+        elif self.reduction == 2:
+            f = torch.mul
+        else:
+            f = None
+
         # For each index, update output using the updates variable
         for idx in update_indices:
             idx_list = tuple(indices[idx].tolist())
-            output[idx_list] = updates[idx]
-
+            if f:
+                output[idx_list] = f(output[idx_list], updates[idx])
+            else:
+                output[idx_list] = updates[idx]
         return output
 
 
