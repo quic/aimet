@@ -570,9 +570,9 @@ class TestPercentileEncodingAnalyzer():
         encoding_analyzer.update_stats(torch.from_numpy(input_tensor))
 
         symmetric_min, symmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = True)
-        largest_absolute_value = max(abs(element) for element in input_tensor)
-        assert abs(symmetric_min) <= largest_absolute_value
-        assert symmetric_max <= largest_absolute_value
+        largest_absolute_value = torch.from_numpy(input_tensor).float().abs().max()
+        assert torch.allclose(abs(symmetric_min), largest_absolute_value)
+        assert torch.allclose(symmetric_max, largest_absolute_value)
 
         asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth = 8, is_symmetric = False)
         assert np.allclose(asymmetric_min.item(), min(input_tensor))
