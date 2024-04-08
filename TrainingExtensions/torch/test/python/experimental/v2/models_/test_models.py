@@ -1174,6 +1174,35 @@ class CustomGroupedConvModel(nn.Module):
         output1, output2 = self.conv1(input1), self.conv2(input2)
         return torch.cat([output1, output2], dim=1)
 
+class LinearPrelu(torch.nn.Module):
+    def __init__(self, in_features, out_features):
+        super(LinearPrelu, self).__init__()
+        self.prelu = torch.nn.PReLU(init=.3)
+        self.linear = torch.nn.Linear(in_features, out_features)
+
+    def forward(self, _input):
+        x = self.linear(_input)
+        x = self.prelu(x)
+        return x
+
+class NestedConditional(torch.nn.Module):
+    """
+    Model using conditional paths
+    Expected input shape = (1, 3)
+    """
+
+    def __init__(self):
+        super(NestedConditional, self).__init__()
+        self.true_branch = LinearPrelu(3, 2)
+        self.false_branch = LinearPrelu(3, 10)
+
+    def forward(self, _input, condition):
+        if condition:
+            return self.true_branch(_input)
+        x = self.false_branch(_input)
+        x = self.softmax(x)
+        return x
+
 class TinyModelWithNoMathInvariantOps(torch.nn.Module):
     def __init__(self):
         super().__init__()
