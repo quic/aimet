@@ -40,12 +40,12 @@ import abc
 import contextlib
 import functools
 import itertools
-from typing import Type, List, Dict
+from typing import Type, List, Dict, Union, Iterable
 
 import torch.nn as nn
 
 from aimet_torch.v2.quantization.base import QuantizerBase
-from aimet_torch.v2.utils import patch_attr
+from aimet_torch.v2.utils import patch_attr, _ContextManager
 
 
 def _flatten_nn_module_list(module):
@@ -334,3 +334,59 @@ class BaseQuantizationMixin(abc.ABC):
             return super_forward
 
         return functools.partial(super_forward, self)
+
+    def _remove_input_quantizers(self, indices: Union[int, Iterable[int]] = None):
+        """
+        Remove input quantizers
+        :param indices: Indices of input quantizers to remove.
+                If None, all input quantizers will be removed.
+        """
+        if isinstance(indices, int):
+            indices = [indices]
+        elif indices is None:
+            indices = list(range(len(self.input_quantizers)))
+        return _remove_quantizers(self.input_quantizers, indices)
+
+    def _remove_param_quantizers(self, keys: Union[str, Iterable[str]] = None):
+        """
+        Remove parameter quantizers
+        :param indices: Indices of parameter quantizers to remove.
+                If None, all input quantizers will be removed.
+        """
+        if isinstance(keys, str):
+            keys = [keys]
+        elif keys is None:
+            keys = list(self.param_quantizers.keys())
+        return _remove_quantizers(self.param_quantizers, keys)
+
+    def _remove_output_quantizers(self, indices: Union[int, Iterable[int]] = None):
+        """
+        Remove output quantizers
+        :param indices: Indices of input quantizers to remove.
+                If None, all input quantizers will be removed.
+        """
+        if isinstance(indices, int):
+            indices = [indices]
+        elif indices is None:
+            indices = list(range(len(self.output_quantizers)))
+        return _remove_quantizers(self.output_quantizers, indices)
+
+
+def _remove_quantizers(quantizers, keys):
+    orig_quantizers = {key: quantizers[key] for key in keys}
+
+    def restore_quantizers():
+        for key, orig_qtzr in orig_quantizers.items():
+            quantizers[key] = orig_qtzr
+
+    ctx = _ContextManager(action=lambda: None,
+                          cleanup=restore_quantizers)
+
+    try:
+        for key in keys:
+            quantizers[key] = None
+    except Exception:
+        ctx._cleanup() # pylint: disable=protected-access
+        raise
+    else:
+        return ctx
