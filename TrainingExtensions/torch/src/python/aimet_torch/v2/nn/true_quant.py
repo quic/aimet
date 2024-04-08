@@ -106,10 +106,6 @@ class QuantizationMixin(BaseQuantizationMixin, ABC): # pylint: disable=abstract-
     _default_kernel: Optional[Callable] = None
     _kernels = WeakKeyDictionary() # instance -> instance_kernel
 
-    def __quant_init__(self):
-        super().__quant_init__()
-        QuantizationMixin._kernels[self] = None
-
     @classmethod
     def set_default_kernel(cls, kernel: Callable):
         """
@@ -145,9 +141,8 @@ class QuantizationMixin(BaseQuantizationMixin, ABC): # pylint: disable=abstract-
 
         :return: Kernel to be used by this instance.
         """
-        kernel = QuantizationMixin._kernels.get(self, None)
-        if kernel:
-            return kernel
+        if self in QuantizationMixin._kernels:
+            return QuantizationMixin._kernels[self]
         return self.get_default_kernel()
 
     @contextlib.contextmanager
