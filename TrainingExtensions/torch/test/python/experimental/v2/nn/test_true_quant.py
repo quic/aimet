@@ -426,7 +426,7 @@ class TestQuantizedLayers:
 
         # Using dummy backend is no good for testing memory saving in real life.
         # Set kernel to None so as to use FakeQuantizedLinear under the hood.
-        qlinear.set_default_kernel(None)
+        qlinear.set_kernel(None)
 
         x = torch.randn((100, 4096), device="cuda:0")
 
@@ -483,6 +483,62 @@ class TestQuantizedLayers:
 
         for grad_0, grad_1 in zip(grads_with_recompute, grads_without_recompute):
             assert torch.equal(grad_0, grad_1)
+
+    def test_remove_quantizers(self, input):
+        qlinear = QuantizedLinear(10, 10, bias=False)
+        qlinear.input_quantizers[0] = input_qtzr = Quantize(shape=(1,), bitwidth=8, symmetric=False)
+        qlinear.output_quantizers[0] = output_qtzr = Quantize(shape=(1,), bitwidth=8, symmetric=False)
+        qlinear.param_quantizers["weight"] = weight_qtzr = Quantize(shape=(1,), bitwidth=8, symmetric=True)
+        with qlinear.compute_encodings():
+            qlinear(input)
+
+        qlinear.set_kernel(None) # Set kernel to None since removing quantizers does not work with integer kernels
+
+        """
+        When: ``with _remove_{input, param, output}_quantizers``
+        Then:
+            1) The corresponding quantizers are set to None under the context.
+               (Output should be computed without input, param, and output quantization respectively)
+            2) The corresponding quantizers are restored when exiting the context.
+        """
+        with qlinear._remove_input_quantizers(0):
+            assert qlinear.input_quantizers[0] is None
+            expected_out = output_qtzr(
+                F.linear(
+                    input, weight_qtzr(qlinear.weight).dequantize()
+                )
+            ).dequantize()
+            assert torch.equal(qlinear(input), expected_out)
+        assert qlinear.input_quantizers[0] is input_qtzr
+
+        with qlinear._remove_param_quantizers('weight'):
+            assert qlinear.param_quantizers['weight'] is None
+            expected_out = output_qtzr(
+                F.linear(
+                    input_qtzr(input).dequantize(), qlinear.weight
+                )
+            ).dequantize()
+            assert torch.equal(qlinear(input), expected_out)
+        assert qlinear.param_quantizers['weight'] is weight_qtzr
+
+        with qlinear._remove_output_quantizers(0):
+            assert qlinear.output_quantizers[0] is None
+            expected_out = F.linear(input_qtzr(input).dequantize(),
+                                    weight_qtzr(qlinear.weight).dequantize())
+            assert torch.equal(qlinear(input), expected_out)
+        assert qlinear.output_quantizers[0] is output_qtzr
+
+        """
+        When: Call ``_remove_{input, param, output}_quantizers`` without ``with`` statement
+        Then: The corresponding quantizers are set to None permanently
+        """
+        qlinear._remove_input_quantizers(0)
+        assert qlinear.input_quantizers[0] is None
+        qlinear._remove_param_quantizers('weight')
+        assert qlinear.param_quantizers['weight'] is None
+        qlinear._remove_output_quantizers(0)
+        assert qlinear.output_quantizers[0] is None
+
 
 class TestQuantizedConvNd:
     @pytest.mark.parametrize('cls', (nn.Conv1d, nn.Conv2d, nn.Conv3d))
