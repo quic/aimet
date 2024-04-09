@@ -1,7 +1,7 @@
 bert-tensorflow
-numpy==1.21.0
+numpy=='numpy<1.24,>=1.20.0'
 pandas==1.4.3
 protobuf==3.19.2
 tensorflow-hub
 tensorflow-model-optimization
-transformers==4.11.3
+transformers==4.38.1
