@@ -646,7 +646,8 @@ class TestPercentileEncodingAnalyzer():
         input_tensor[-1] = 1000
         input_tensor[-2] = 800
         encoding_analyzer.update_stats(input_tensor)
-        asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(bitwidth=8, is_symmetric=False)
+        bins = math.pow(2, 8) - 1
+        asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(num_quant_bins=bins, is_symmetric=False)
         assert asymmetric_max < 91 and asymmetric_max > 89
 
 

@@ -332,7 +332,7 @@ class MinMaxEncodingAnalyzer(EncodingAnalyzer[_MinMaxRange]):
         if is_symmetric:
             num_pos_bins = math.floor(num_quant_bins / 2)
             num_neg_bins = math.ceil(num_quant_bins / 2)
-            delta = max(updated_max / num_pos_bins, -updated_min / num_neg_bins)
+            delta = torch.maximum(updated_max / num_pos_bins, -updated_min / num_neg_bins)
             offset = -1 * num_neg_bins
             updated_min = offset * delta
             updated_max = num_pos_bins * delta
