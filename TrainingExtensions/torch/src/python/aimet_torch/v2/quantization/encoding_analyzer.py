@@ -194,9 +194,11 @@ class _HistogramObserver(_Observer[_Histogram]):
             min_val = min_val - 0.5
             max_val = max_val + 0.5
 
+        min_val, max_val = min_val.float(), max_val.float()
+
         step = (max_val - min_val) / self.num_bins
 
-        return torch.arange(min_val, max_val + 0.5 * step, step, device=device)
+        return torch.arange(0, self.num_bins + 1, device=device) * step + min_val
 
     def _get_bin_num(self, bin_width: int, curr_min, data):
         bin_tensor = torch.full(data.shape, self.num_bins - 1, device=data.device)

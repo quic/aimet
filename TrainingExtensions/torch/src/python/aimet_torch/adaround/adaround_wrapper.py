@@ -125,6 +125,7 @@ class AdaroundWrapper(AdaroundWrapperBase):
         """
         Apply adaround to the input tensor
         """
+        input_dtype = tensor.dtype
         alpha = self.alpha.to(device=tensor.device, dtype=tensor.dtype)
 
         # Scale the tensor
@@ -145,7 +146,7 @@ class AdaroundWrapper(AdaroundWrapperBase):
         tensor_quant = torch.clamp(tensor - self.broadcasted_offset, self.clip_min, self.clip_max)
         tensor_dequant = (tensor_quant + self.broadcasted_offset) * self.broadcasted_delta
 
-        return tensor_dequant
+        return tensor_dequant.to(input_dtype)
 
     @contextlib.contextmanager
     def _disable_weight_quantizer(self):
