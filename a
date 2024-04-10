@@ -1,0 +1,57 @@
+diff --git a/packaging/dependencies/onnx-gpu/reqs_deb_onnx_gpu.txt b/packaging/dependencies/onnx-gpu/reqs_deb_onnx_gpu.txt
+index 50718248..57e15241 100644
+--- a/packaging/dependencies/onnx-gpu/reqs_deb_onnx_gpu.txt
++++ b/packaging/dependencies/onnx-gpu/reqs_deb_onnx_gpu.txt
+@@ -1,9 +1,9 @@
+-libcublas-11-0
+-libcufft-11-0
+-libcurand-11-0
+-libcusolver-11-0
+-libcusparse-11-0
+-libcudnn8=8.0.5.39-1+cuda11.0
+-libnccl-dev=2.8.4-1+cuda11.0
+-libnccl2=2.8.4-1+cuda11.0
+-cuda-command-line-tools-11-0
+\ No newline at end of file
++libcublas-11-7
++libcufft-11-7
++libcurand-11-7
++libcusolver-11-7
++libcusparse-11-7
++libcudnn8=8.0.5.39-1+cuda11.7
++libnccl-dev=2.8.4-1+cuda11.7
++libnccl2=2.8.4-1+cuda11.7
++cuda-command-line-tools-11-7
+\ No newline at end of file
+diff --git a/packaging/dependencies/onnx-gpu/reqs_pip_onnx_gpu.txt b/packaging/dependencies/onnx-gpu/reqs_pip_onnx_gpu.txt
+index 98e46bbd..d7de33b5 100644
+--- a/packaging/dependencies/onnx-gpu/reqs_pip_onnx_gpu.txt
++++ b/packaging/dependencies/onnx-gpu/reqs_pip_onnx_gpu.txt
+@@ -1,4 +1,4 @@
+ cumm-cu111==0.2.8
+ spconv-cu111==2.1.20
+-torch==1.9.1+cu111 -f https://download.pytorch.org/whl/torch_stable.html
+-torchvision==0.10.1+cu111 -f https://download.pytorch.org/whl/torch_stable.html
++torch==1.13.1+cu117 -f https://download.pytorch.org/whl/torch_stable.html
++torchvision==0.14.1+cu117 -f https://download.pytorch.org/whl/torch_stable.html
+diff --git a/packaging/dependencies/reqs_pip_tf_common.txt b/packaging/dependencies/reqs_pip_tf_common.txt
+index ae1bb99f..4b95876f 100644
+--- a/packaging/dependencies/reqs_pip_tf_common.txt
++++ b/packaging/dependencies/reqs_pip_tf_common.txt
+@@ -1,5 +1,5 @@
+ bert-tensorflow
+-'numpy<1.24,>=1.20.0'
++numpy<1.24,>=1.20.0
+ pandas==1.4.3
+ protobuf==3.19.2
+ tensorflow-hub
+diff --git a/packaging/dependencies/reqs_pip_torch_common_legacy.txt b/packaging/dependencies/reqs_pip_torch_common_legacy.txt
+index 05a9194b..8693bcfc 100644
+--- a/packaging/dependencies/reqs_pip_torch_common_legacy.txt
++++ b/packaging/dependencies/reqs_pip_torch_common_legacy.txt
+@@ -11,4 +11,4 @@ pandas==1.4.3
+ protobuf==3.20.2
+ psutil
+ tensorboardX==2.4
+-transformers==4.11.3
++transformers==4.27.4
