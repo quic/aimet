@@ -957,8 +957,6 @@ class TestAdaround:
     @pytest.mark.parametrize('dtype', [torch.float, torch.half])
     def test_apply_adaround_using_gpu(self, dtype):
         """ test apply_adaround end to end using tiny model """
-        if dtype == torch.half:
-            pytest.skip('float16 tests will be enabled after fixing qsim dtype issue')
 
         torch.manual_seed(10)
         AimetLogger.set_level_for_all_areas(logging.INFO)
@@ -998,8 +996,6 @@ class TestAdaround:
     @pytest.mark.parametrize('dtype', [torch.float, torch.half])
     def test_apply_adaround_using_gpu_caching_disabled(self, dtype, disable_activation_caching):
         """ test apply_adaround end to end using tiny model """
-        if dtype == torch.half:
-            pytest.skip('float16 tests will be enabled after fixing qsim dtype issue')
 
         torch.manual_seed(10)
         AimetLogger.set_level_for_all_areas(logging.INFO)
