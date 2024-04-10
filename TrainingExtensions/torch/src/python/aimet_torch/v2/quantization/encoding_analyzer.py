@@ -336,10 +336,6 @@ class MinMaxEncodingAnalyzer(EncodingAnalyzer[_MinMaxRange]):
             offset = -1 * num_neg_bins
             updated_min = offset * delta
             updated_max = num_pos_bins * delta
-            # handles strict symmetric case
-            if num_neg_bins == num_pos_bins:
-                updated_min = torch.minimum(offset * delta, -delta * num_pos_bins)
-                updated_max = torch.maximum(-offset * delta, delta * num_pos_bins)
 
         # replace pos and neg inf respectively
         updated_max[torch.isposinf(updated_max)] = torch.finfo(stats.min.dtype).max
@@ -360,10 +356,9 @@ def adjust_min_max(curr_min, curr_max, num_bins, is_symmetric):
 
     # ensure that min/max aren't too close
     tiny_num = torch.finfo(curr_min.dtype).tiny
-    bitwidth = math.log2(num_bins + 1)
-    tensor_threshold = (curr_max - curr_min) / ((2 **bitwidth) - 1)
-    curr_min[tensor_threshold < tiny_num] -= tiny_num * (2 **(bitwidth - 1))
-    curr_max[tensor_threshold < tiny_num] += tiny_num * ((2 **(bitwidth - 1)) - 1)
+    tensor_threshold = (curr_max - curr_min) / num_bins
+    curr_min[tensor_threshold < tiny_num] -= tiny_num * math.ceil(num_bins / 2)
+    curr_max[tensor_threshold < tiny_num] += tiny_num * math.floor(num_bins / 2)
 
     if is_symmetric:
         num_pos_bins = math.floor(num_bins / 2)
