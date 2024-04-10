@@ -299,7 +299,7 @@ class TestAdaround:
 
         # Test export functionality
         with open('./dummy.encodings') as json_file:
-            encoding_data = json.load(json_file)
+            encoding_data = json.load(json_file)['param_encodings']
             print(encoding_data)
 
         param_keys = list(encoding_data.keys())
@@ -356,11 +356,11 @@ class TestAdaround:
 
         # Test export functionality
         with open('./dummy.encodings') as json_file:
-            encoding_data = json.load(json_file)
+            encoding_data = json.load(json_file)['param_encodings']
             print(encoding_data)
 
         with open('./dummy_checkpoints.encodings') as json_file:
-            encoding_data_ckpts = json.load(json_file)
+            encoding_data_ckpts = json.load(json_file)['param_encodings']
             print(encoding_data_ckpts)
 
         assert list(encoding_data.keys()) == list(encoding_data_ckpts.keys())
@@ -420,11 +420,11 @@ class TestAdaround:
 
         # Test export functionality
         with open('./dummy.encodings') as json_file:
-            encoding_data = json.load(json_file)
+            encoding_data = json.load(json_file)['param_encodings']
             print(encoding_data)
 
         with open('./dummy_checkpoints.encodings') as json_file:
-            encoding_data_ckpts = json.load(json_file)
+            encoding_data_ckpts = json.load(json_file)['param_encodings']
             print(encoding_data_ckpts)
 
         assert list(encoding_data.keys()) == list(encoding_data_ckpts.keys())
@@ -495,7 +495,7 @@ class TestAdaround:
 
         # Test export functionality
         with open('./dummy.encodings') as json_file:
-            encoding_data = json.load(json_file)
+            encoding_data = json.load(json_file)['param_encodings']
             print(encoding_data)
 
         param_keys = list(encoding_data.keys())
@@ -732,7 +732,7 @@ class TestAdaround:
         _ = ada_model(*inp_tensor_list)
 
         with open('./dummy.encodings') as json_file:
-            encoding_data = json.load(json_file)
+            encoding_data = json.load(json_file)['param_encodings']
 
         assert len(encoding_data['trans_conv1.weight']) == 2
 
@@ -769,7 +769,7 @@ class TestAdaround:
 
         # Read exported param encodings JSON file
         with open('./dummy.encodings') as json_file:
-            encoding_data = json.load(json_file)
+            encoding_data = json.load(json_file)['param_encodings']
 
         # Verify Conv2 weight encoding bitwidth is set to 8
         conv2_encoding = encoding_data["conv2.weight"][0]
@@ -807,7 +807,7 @@ class TestAdaround:
 
         # Read exported param encodings JSON file
         with open('./dummy.encodings') as json_file:
-            encoding_data = json.load(json_file)
+            encoding_data = json.load(json_file)['param_encodings']
 
         # Verify Conv2 weight encoding bitwidth is set to the default value of 4
         conv2_encoding = encoding_data["conv2.weight"][0]
@@ -878,7 +878,7 @@ class TestAdaround:
 
         # Read exported param encodings JSON file
         with open('./dummy.encodings') as json_file:
-            encoding_data = json.load(json_file)
+            encoding_data = json.load(json_file)['param_encodings']
 
         # Verify Conv2 weight encoding bitwidth is set to the default value of 4
         conv2_encoding = encoding_data["conv2.weight"][0]
@@ -943,7 +943,7 @@ class TestAdaround:
 
         # Read exported param encodings JSON file
         with open('./dummy.encodings') as json_file:
-            encoding_data = json.load(json_file)
+            encoding_data = json.load(json_file)['param_encodings']
 
         # Verify Conv2 weight encoding bitwidth is set to the default value of 4
         conv2_encoding = encoding_data["conv2.weight"][0]
@@ -980,7 +980,7 @@ class TestAdaround:
 
         # Test export functionality
         with open('./dummy.encodings') as json_file:
-            encoding_data = json.load(json_file)
+            encoding_data = json.load(json_file)['param_encodings']
             print(encoding_data)
 
         param_keys = list(encoding_data.keys())
@@ -1019,7 +1019,7 @@ class TestAdaround:
 
         # Test export functionality
         with open('./dummy.encodings') as json_file:
-            encoding_data = json.load(json_file)
+            encoding_data = json.load(json_file)['param_encodings']
             print(encoding_data)
 
         param_keys = list(encoding_data.keys())
@@ -1043,7 +1043,7 @@ class TestAdaround:
                                         ignore_quant_ops_list=[model.layer1, model.layer2, model.layer3,
                                                                model.layer4, model.fc])
             with open('./resnet18.encodings') as json_file:
-                encoding_data = json.load(json_file)
+                encoding_data = json.load(json_file)['param_encodings']
 
             assert len(encoding_data) == 1 # Only model.conv1 layer is adarounded.
         finally:
