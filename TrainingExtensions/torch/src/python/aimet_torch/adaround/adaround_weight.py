@@ -502,11 +502,13 @@ class Adaround:
                 if 'weight' in quant_module.param_quantizers:
                     cls._update_param_encodings_dict(quant_module, name, param_encodings)
 
+        # Unify the encoding format to be same as that of full encoding export file
+        encoding = {'param_encodings': param_encodings}
         # export encodings to JSON file
         os.makedirs(os.path.abspath(path), exist_ok=True)
         encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
         with open(encoding_file_path, 'w') as encoding_fp:
-            json.dump(param_encodings, encoding_fp, sort_keys=True, indent=4)
+            json.dump(encoding, encoding_fp, sort_keys=True, indent=4)
 
     @classmethod
     def _update_param_encodings_dict(cls, quant_module: ExportableQuantModule, name: str, param_encodings: Dict):

@@ -99,7 +99,7 @@ class AdaroundAcceptanceTests(unittest.TestCase):
 
         # Test exported encodings JSON file
         with open('./resnet18.encodings') as json_file:
-            encoding_data = json.load(json_file)
+            encoding_data = json.load(json_file)['param_encodings']
             print(encoding_data)
 
         self.assertTrue(isinstance(encoding_data["conv1.weight"], list))
@@ -136,7 +136,7 @@ class AdaroundAcceptanceTests(unittest.TestCase):
 
         # Read exported param encodings JSON file
         with open('./resnet18.encodings') as json_file:
-            encoding_data = json.load(json_file)
+            encoding_data = json.load(json_file)['param_encodings']
 
         encoding = encoding_data["conv1.weight"][0]
         before_min, before_max, before_delta, before_offset = encoding.get('min'), encoding.get('max'),\
