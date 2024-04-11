@@ -1,10 +1,10 @@
 matplotlib>=3
 numpy<1.24,>=1.16.6
-onnx==1.11.0
-onnxruntime==1.11.0
+onnx==1.14.1
+onnxruntime==1.15.1
 onnxruntime-extensions
 onnxsim
 pandas==1.4.3
 psutil
 tensorboardX==2.4
-transformers==4.11.3
+transformers==4.27.4
