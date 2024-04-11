@@ -36,4 +36,91 @@
 # =============================================================================
 # pylint: disable=all
 
+import math
+from typing import overload, Union, Tuple
+import torch
 from .utils import *
+
+
+@overload
+def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
+             bitwidth: Union[int, float], signed: bool = False):
+    ...
+
+@overload
+def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
+             num_bins: int, signed: bool = False):
+    ...
+
+@overload
+def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
+             qmin: int, qmax: int):
+    """
+    return x_q := clamp(x/scale - offset, qmin, qmax)
+    """
+    ...
+
+
+def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
+             *args, **kwargs):
+    qmin, qmax = _parse_args(args, kwargs)
+    return get_backend().quantize(tensor, scale, offset, qmin, qmax)
+
+
+@overload
+def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
+                        bitwidth: Union[int, float], signed: bool = False):
+    ...
+
+@overload
+def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
+                        num_bins: int, signed: bool = False):
+    ...
+
+@overload
+def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
+                        qmin: int, qmax: int):
+    """
+    return x_qdq := (x_q + offset) * scale
+        where x_q := clamp(x/scale - offset, qmin, qmax)
+    """
+    ...
+
+
+def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
+                        *args, **kwargs):
+    qmin, qmax = _parse_args(args, kwargs)
+    return get_backend().quantize_dequantize(tensor, scale, offset, qmin, qmax)
+
+
+def _parse_args(args, kwargs) -> Tuple[int, int]:
+    bitwidth = num_bins = signed = qmin = qmax = None
+
+    if len(args) == 2:
+        bitwidth, signed = args
+    elif len(args) == 1:
+        bitwidth = args[0]
+        signed = kwargs['signed']
+    else:
+        if 'bitwidth' in kwargs:
+            bitwidth, signed = kwargs['bitwidth'], kwargs['signed']
+        elif 'num_bins' in kwargs:
+            num_bins, signed = kwargs['num_bins'], kwargs['signed']
+        else:
+            qmin, qmax = kwargs['qmin'], kwargs['qmax']
+
+    if bitwidth is not None:
+        num_bins = 2 ** bitwidth - 1
+
+    if num_bins is not None:
+        if signed:
+            qmin = -math.ceil(num_bins/2)
+            qmax = math.floor(num_bins/2)
+        else:
+            qmin = 0
+            qmax = num_bins
+
+    assert qmin is not None
+    assert qmax is not None
+
+    return qmin, qmax
