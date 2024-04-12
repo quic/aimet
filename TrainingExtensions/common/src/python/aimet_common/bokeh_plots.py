@@ -183,7 +183,7 @@ class ProgressBar:
         """
         data_frame = pd.DataFrame(index=np.arange(self.total), columns=["x", "color"])
         data_frame["color"] = ["white" for i in range(self.total)]
-        data_frame["x_coordinate"] = [i for i in range(self.total)]
+        data_frame["x_coordinate"] = list(range(self.total))
         return ColumnDataSource(data=data_frame)
 
 
@@ -306,7 +306,7 @@ class LinePlot(FigurePlot):
     """ Creates an updating line plot with x,y coordinates for each point marked with dots."""
 
     def __init__(self, x_axis_label, y_axis_label, title, bokeh_document: BokehDocument):
-        super(LinePlot, self).__init__(x_axis_label, y_axis_label, title)
+        super().__init__(x_axis_label, y_axis_label, title)
         self.bokeh_document = bokeh_document
 
         self.plot = figure(x_axis_label=self.x_axis_label, y_axis_label=self.y_axis_label,
@@ -332,7 +332,7 @@ class ScatterPlot(FigurePlot):
     """ Creates an updating scatter with x,y coordinates for each point marked with dots."""
 
     def __init__(self, x_axis_label, y_axis_label, title, bokeh_document: BokehDocument):
-        super(ScatterPlot, self).__init__(x_axis_label, y_axis_label, title)
+        super().__init__(x_axis_label, y_axis_label, title)
 
         tooltips = [(f"({self.x_axis_label},{self.y_axis_label})", "($x, $y)")]
         self.plot = figure(x_axis_label=self.x_axis_label, y_axis_label=self.y_axis_label,

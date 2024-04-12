@@ -208,7 +208,7 @@ def validate_quantsim_inputs(
     """
     _validate_quant_scheme(quant_scheme)
     _validate_rounding_mode(rounding_mode)
-    _validate_bitwidth(default_param_bw, default_output_bw, data_type)
+    _validate_bitwidth(default_output_bw, default_param_bw, data_type)
 
 
 def _validate_quant_scheme(quant_scheme: Union[str, QuantScheme]):
