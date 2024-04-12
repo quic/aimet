@@ -37,19 +37,36 @@
 """ Default quantization backend for quantizing weights and activations """
 import torch
 
-from aimet_torch.v2.utils import _is_expandable, PrecisionError
+from aimet_torch.v2.utils import _is_expandable
+
+
+def _is_value_representable(dtype: torch.dtype, value):
+    """
+    Return whether a value can be represented with the given dtype
+    """
+    finfo = torch.finfo(dtype)
+    return finfo.min < value < finfo.max
+
+
+def _is_range_representable(dtype: torch.dtype, qmin: int, qmax: int):
+    """
+    Return whether a range can be represented with the given dtype
+    """
+    return _is_value_representable(dtype, qmax) and \
+            _is_value_representable(dtype, qmin) and \
+            _is_value_representable(dtype, qmax - qmin)
 
 
 def _is_numerically_stable(dtype: torch.dtype, qmin: int, qmax: int):
-    finfo = torch.finfo(dtype)
-    if finfo.max < qmax:
-        return False
-    if finfo.min > qmin:
+    """
+    Return whether a range can be **stably** represented with the given dtype
+    """
+    if not _is_range_representable(dtype, qmin, qmax):
         return False
 
     # NOTE: This is a heuristic criteria. It doesn't perfectly guarantee numerical stability
     #       This criteria allows 8-bit quantization of float16, but it needs more discussion
-    if finfo.tiny > 1e-1 / (qmax - qmin):
+    if torch.finfo(dtype).tiny > 1e-1 / (qmax - qmin):
         return False
 
     return True
@@ -62,16 +79,9 @@ def _validate_arguments(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
     if not _is_expandable(scale.shape, tensor.shape):
         raise RuntimeError(f"Scale of shape {scale.shape} cannot be expanded like input tensor of shape {tensor.shape}")
 
-    if qmin is None and qmax is None:
-        return
-
-    if qmin >= qmax:
-        raise RuntimeError(f"qmin ({qmin}) must be smaller than qmax ({qmax})")
-
-    if not _is_numerically_stable(tensor.dtype, qmin, qmax):
-        msg = f"{tensor.dtype} is not numerically stable enough to represent quantized output "\
-              f"of range [{qmin}, {qmax}]."
-        raise PrecisionError(msg)
+    if qmin is not None and qmax is not None:
+        if qmin >= qmax:
+            raise RuntimeError(f"qmin ({qmin}) must be smaller than qmax ({qmax})")
 
 
 def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
@@ -86,6 +96,11 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
     :param qmax: Maximum value of the quantization range
     """
     _validate_arguments(tensor, scale, offset, qmin, qmax)
+
+    if not _is_range_representable(tensor.dtype, qmin, qmax):
+        msg = f"{tensor.dtype} is unable to represent quantized output of range [{qmin}, {qmax}]."
+        raise RuntimeError(msg)
+
     return QuantizeFunc.apply(tensor, scale, offset, qmin, qmax)
 
 def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
@@ -100,7 +115,20 @@ def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
     :param qmax: Maximum value of the quantization range
     """
     _validate_arguments(tensor, scale, offset, qmin, qmax)
-    return QuantDequantFunc.apply(tensor, scale, offset, qmin, qmax)
+
+    output_dtype = internal_dtype = tensor.dtype
+
+    if not _is_numerically_stable(internal_dtype, qmin, qmax):
+        internal_dtype = torch.float32
+
+    if not _is_range_representable(internal_dtype, qmin, qmax):
+        msg = f"{internal_dtype} is unable to represent quantized output of range [{qmin}, {qmax}]."
+        raise RuntimeError(msg)
+
+    return QuantDequantFunc.apply(tensor.to(internal_dtype),
+                                  scale.to(internal_dtype),
+                                  offset.to(internal_dtype),
+                                  qmin, qmax).to(output_dtype)
 
 def dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor) -> torch.Tensor:
     """

@@ -306,22 +306,58 @@ class TestQuantizationBackends:
         with pytest.raises(RuntimeError):
             backend_module.quantize_dequantize(random_tensor, scale, offset, qmin, qmax)
 
-    @pytest.mark.parametrize('input_dtype, qmin, qmax', [(torch.float16, 0, 2**32-1),
-                                                         (torch.float32, 0, 2**64-1)])
-    def test_quantize_using_wider_quantization_bitwidth(self, backend_module, offset, input_dtype, qmin, qmax):
+    def test_quantize_using_wide_quantization_range(self, backend_module, offset):
         scale = torch.tensor([0.2])
         random_tensor = torch.randn(2, 3, 4, 5)
-        random_tensor = random_tensor.to(input_dtype)
 
-        with pytest.raises(RuntimeError):
-            backend_module.quantize(random_tensor.to(input_dtype),
-                                    scale.to(input_dtype),
-                                    offset.to(input_dtype), qmin, qmax)
+        float = torch.float32
+        half = torch.half
 
+        """
+        When: [qmin, qmax] = [0, 2**16-1]
+        Then: quantize() with float16 input throws runtime error
+        """
+        qmin, qmax = 0, 2**16-1
         with pytest.raises(RuntimeError):
-            backend_module.quantize_dequantize(random_tensor.to(input_dtype),
-                                               scale.to(input_dtype),
-                                               offset.to(input_dtype), qmin, qmax)
+            # float16 is unable to represent output of [0, 2**16-1]
+            backend_module.quantize(random_tensor.to(half), scale.to(half), offset.to(half), qmin, qmax)
+        backend_module.quantize(random_tensor.to(float), scale.to(float), offset.to(float), qmin, qmax)
+
+        # No runtime error; Internally fall back to float32 to perform qdq
+        backend_module.quantize_dequantize(random_tensor.to(half), scale.to(half), offset.to(half), qmin, qmax)
+        backend_module.quantize_dequantize(random_tensor.to(float), scale.to(float), offset.to(float), qmin, qmax)
+
+        """
+        When: [qmin, qmax] = [0, 2**32-1]
+        Then: quantize() with float16 input throws runtime error
+        """
+        qmin, qmax = 0, 2**32-1
+        with pytest.raises(RuntimeError):
+            # float16 is unable to represent output of [0, 2**32-1]
+            backend_module.quantize(random_tensor.to(half), scale.to(half), offset.to(half), qmin, qmax)
+        backend_module.quantize(random_tensor.to(float), scale.to(float), offset.to(float), qmin, qmax)
+
+        # No runtime error; Internally fall back to float32 to perform qdq
+        backend_module.quantize_dequantize(random_tensor.to(half), scale.to(half), offset.to(half), qmin, qmax)
+        backend_module.quantize_dequantize(random_tensor.to(float), scale.to(float), offset.to(float), qmin, qmax)
+
+        """
+        When: [qmin, qmax] = [0, 2**64-1]
+        Then: quantize() and quantize_dequantize() of both float16 and float32 input throw runtime error
+        """
+        qmin, qmax = 0, 2**64-1
+        with pytest.raises(RuntimeError):
+            # Both float32 and float16 are unable to represent output of [0, 2**64-1]
+            backend_module.quantize(random_tensor.to(half), scale.to(half), offset.to(half), qmin, qmax)
+        with pytest.raises(RuntimeError):
+            # Both float32 and float16 are unable to represent output of [0, 2**64-1]
+            backend_module.quantize(random_tensor.to(float), scale.to(float), offset.to(float), qmin, qmax)
+        with pytest.raises(RuntimeError):
+            # Intermediate ouput of [0, 2**64-1] cannot be represented by internal dtype float32
+            backend_module.quantize_dequantize(random_tensor.to(half), scale.to(half), offset.to(half), qmin, qmax)
+        with pytest.raises(RuntimeError):
+            # Intermediate ouput of [0, 2**64-1] cannot be represented by internal dtype float32
+            backend_module.quantize_dequantize(random_tensor.to(float), scale.to(float), offset.to(float), qmin, qmax)
 
     @pytest.mark.cuda
     def test_quantize_using_parameters_on_different_device(self, backend_module, offset):
