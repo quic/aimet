@@ -45,20 +45,45 @@ from .utils import *
 @overload
 def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
              bitwidth: Union[int, float], signed: bool = False):
-    ...
+    """
+    Performs differentiable quantization given scale, offset, and bitwidth.
+    (Equivalent to ``quantize(tensor, scale, offset, num_bins=2**bitwidth-1, signed=signed)``)
+
+    :param tensor: Tensor to quantize
+    :param scale: Scale factor for quantization
+    :param offset: Offset value for quantization
+    :param bitwidth: Output bitwidth of quantized tensor
+    :param signed: If False, the output tensor will be mapped to ``[0, num_bins]``;
+        otherwise, the output tensor will be mapped to ``[-ceil(num_bins/2), floor(num_bins/2)]``
+        where ``num_bins = 2 ** bitwidth - 1``
+    """
 
 @overload
 def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
              num_bins: int, signed: bool = False):
-    ...
+    """
+    Performs differentiable quantization given scale, offset, and the number of bins in the quantization range.
+
+    :param tensor: Tensor to quantize
+    :param scale: Scale factor for quantization
+    :param offset: Offset value for quantization
+    :param num_bins: The number of bins in the quantization range
+    :param signed: If False, the output tensor will be mapped to ``[0, num_bins]``;
+        otherwise, the output tensor will be mapped to ``[-ceil(num_bins/2), floor(num_bins/2)]``
+    """
 
 @overload
 def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
              qmin: int, qmax: int):
     """
-    return x_q := clamp(x/scale - offset, qmin, qmax)
+    Performs differentiable quantization given scale, offset, and quantization range.
+
+    :param tensor: Tensor to quantize
+    :param scale: Scale factor for quantization
+    :param offset: Offset value for quantization
+    :param qmin: Minimum value of the quantization range
+    :param qmax: Maximum value of the quantization range
     """
-    ...
 
 
 def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
@@ -70,27 +95,55 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
 @overload
 def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
                         bitwidth: Union[int, float], signed: bool = False):
-    ...
+    """
+    Performs differentiable quantize-dequantize given scale, offset, and bitwidth.
+    (Equivalent to ``quantize_dequantize(tensor, scale, offset, num_bins=2**bitwidth-1, signed=signed)``)
+
+    :param tensor: Tensor to quantize
+    :param scale: Scale factor for quantization
+    :param offset: Offset value for quantization
+    :param bitwidth: Output bitwidth of quantized tensor
+    :param signed: If False, the output tensor will be mapped to ``[0, num_bins]``;
+        otherwise, the output tensor will be mapped to ``[-ceil(num_bins/2), floor(num_bins/2)]``
+        where ``num_bins = 2 ** bitwidth - 1``
+    """
 
 @overload
 def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
                         num_bins: int, signed: bool = False):
-    ...
+    """
+    Performs differentiable quantize-dequantize given scale, offset, and the number of bins in the quantization range.
+
+    :param tensor: Tensor to quantize
+    :param scale: Scale factor for quantization
+    :param offset: Offset value for quantization
+    :param num_bins: The number of bins in the quantization range
+    :param signed: If False, the output tensor will be mapped to ``[0, num_bins]``;
+        otherwise, the output tensor will be mapped to ``[-ceil(num_bins/2), floor(num_bins/2)]``
+    """
 
 @overload
 def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
                         qmin: int, qmax: int):
     """
-    return x_qdq := (x_q + offset) * scale
-        where x_q := clamp(x/scale - offset, qmin, qmax)
+    Performs differentiable quantize-dequantize given scale, offset, and quantization range.
+
+    :param tensor: Tensor to quantize
+    :param scale: Scale factor for quantization
+    :param offset: Offset value for quantization
+    :param qmin: Minimum value of the quantization range
+    :param qmax: Maximum value of the quantization range
     """
-    ...
 
 
 def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
                         *args, **kwargs):
     qmin, qmax = _parse_args(args, kwargs)
     return get_backend().quantize_dequantize(tensor, scale, offset, qmin, qmax)
+
+
+def dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor):
+    return get_backend().dequantize(tensor, scale, offset)
 
 
 def _parse_args(args, kwargs) -> Tuple[int, int]:
@@ -100,12 +153,12 @@ def _parse_args(args, kwargs) -> Tuple[int, int]:
         bitwidth, signed = args
     elif len(args) == 1:
         bitwidth = args[0]
-        signed = kwargs['signed']
+        signed = kwargs.get('signed', False)
     else:
         if 'bitwidth' in kwargs:
-            bitwidth, signed = kwargs['bitwidth'], kwargs['signed']
+            bitwidth, signed = kwargs['bitwidth'], kwargs.get('signed', False)
         elif 'num_bins' in kwargs:
-            num_bins, signed = kwargs['num_bins'], kwargs['signed']
+            num_bins, signed = kwargs['num_bins'], kwargs.get('signed', False)
         else:
             qmin, qmax = kwargs['qmin'], kwargs['qmax']
 

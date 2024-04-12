@@ -36,7 +36,7 @@
 # =============================================================================
 import pytest
 import torch
-from aimet_torch.v2.quantization.affine.backends import get_backend
+from aimet_torch.v2.quantization.affine import quantize, quantize_dequantize
 from aimet_torch.v2.quantization.tensor import QuantizedTensor, DequantizedTensor
 from aimet_torch.v2.quantization.affine import AffineEncoding
 
@@ -62,7 +62,7 @@ def affine_quantize(tensor: torch.Tensor,
     """
     Quantizes the input tensor into a QuantizedTensor using the quantization parameters
     """
-    tensor_q = get_backend().quantize(tensor, scale, offset, bitwidth)
+    tensor_q = quantize(tensor, scale, offset, bitwidth)
     encoding = AffineEncoding(scale, offset, bitwidth)
     qtensor = tensor_q.as_subclass(QuantizedTensor)
     qtensor.encoding = encoding
@@ -182,7 +182,7 @@ class TestQuantizedTensor:
         """
         Then: 2) Quantized values are equal to calling quantize(tensor, encoding.scale, encoding.offset, encoding.bitwidth)
         """
-        assert torch.allclose(quant_repr.to(torch.float32), get_backend().quantize(tensor, scale, offset, bitwidth))
+        assert torch.allclose(quant_repr.to(torch.float32), quantize(tensor, scale, offset, bitwidth))
 
     @pytest.mark.cuda()
     @pytest.mark.parametrize("dtype", [torch.float32, torch.float16])
@@ -206,7 +206,7 @@ class TestQuantizedTensor:
         """
         Then: 2) Returned tensor has values equivalent to calling quantize_dequantize(tensor, encoding.scale, encoding.offset, encoding.bitwidth)
         """
-        assert torch.allclose(dq_tensor, get_backend().quantize_dequantize(tensor, scale, offset, bitwidth))
+        assert torch.allclose(dq_tensor, quantize_dequantize(tensor, scale, offset, bitwidth))
        
     @pytest.mark.cuda() 
     @pytest.mark.parametrize("devices", [(torch.device("cpu"), torch.device("cuda:0")),
@@ -278,7 +278,7 @@ class TestQuantizedTensor:
         qoutput.backward(grad_in)
         tensor_grad = tensor.grad.clone()
         tensor.grad.zero_()
-        fp_output = get_backend().quantize_dequantize(tensor, scale, offset, bitwidth) * 2
+        fp_output = quantize_dequantize(tensor, scale, offset, bitwidth) * 2
         fp_output.backward(grad_in)
         assert torch.allclose(tensor_grad, tensor.grad)
 
@@ -292,7 +292,7 @@ class TestQuantizedTensor:
         Then: 1) Dequantize qtensor before calling the operation
               2) Output is not a QuantizedTensor
         """
-        qdq = get_backend().quantize_dequantize
+        qdq = quantize_dequantize
         input_shape = (16, 16)
         tensor = torch.randn(input_shape)
         tensor_qdq = qdq(tensor, scale, offset, bitwidth)

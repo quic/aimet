@@ -37,47 +37,73 @@
 """ Default quantization backend for quantizing weights and activations """
 import torch
 
-from aimet_torch.v2.utils import _is_expandable
+from aimet_torch.v2.utils import _is_expandable, PrecisionError
 
 
-def _validate_arguments(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor):
+def _is_numerically_stable(dtype: torch.dtype, qmin: int, qmax: int):
+    finfo = torch.finfo(dtype)
+    if finfo.max < qmax:
+        return False
+    if finfo.min > qmin:
+        return False
+
+    # NOTE: this is a heuristic criteria. It doesn't perfectly guarantee numerical stability
+    if finfo.tiny > 1e-3 / (qmax - qmin):
+        return False
+
+    return True
+
+
+def _validate_arguments(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
+                        qmin: int = None, qmax: int = None):
     if not tensor.dtype == scale.dtype == offset.dtype:
         raise RuntimeError("Data type of tensor, scale, and offset are should be the same")
     if not _is_expandable(scale.shape, tensor.shape):
         raise RuntimeError(f"Scale of shape {scale.shape} cannot be expanded like input tensor of shape {tensor.shape}")
 
+    if qmin is None and qmax is None:
+        return
+
+    if qmin >= qmax:
+        raise RuntimeError(f"qmin ({qmin}) must be smaller than qmax ({qmax})")
+
+    if not _is_numerically_stable(tensor.dtype, qmin, qmax):
+        msg = f"{tensor.dtype} is not numerically stable enough to represent quantized output "\
+              f"of range [{qmin}, {qmax}]."
+        raise PrecisionError(msg)
+
+
 def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
              qmin: int, qmax: int) -> torch.Tensor:
     """
-    Return x_q := clamp(x/scale - offset, qmin, qmax)
+    Performs differentiable quantization given scale, offset, and quantization range.
 
     :param tensor: Tensor to quantize
     :param scale: Scale factor for quantization
     :param offset: Offset value for quantization
-    :param bitwidth: simulated quantization bitwidth
-    :return: Resulting tensor
+    :param qmin: Minimum value of the quantization range
+    :param qmax: Maximum value of the quantization range
     """
-    _validate_arguments(tensor, scale, offset)
+    _validate_arguments(tensor, scale, offset, qmin, qmax)
     return QuantizeFunc.apply(tensor, scale, offset, qmin, qmax)
 
 def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
                         qmin: int, qmax: int) -> torch.Tensor:
     """
-    Return x_qdq := (x_q + offset) * scale
-        where x_q := clamp(x/scale - offset, qmin, qmax)
+    Performs differentiable quantize-dequantize given scale, offset, and quantization range.
 
-    :param tensor: Tensor to quantize-dequantize
+    :param tensor: Tensor to quantize
     :param scale: Scale factor for quantization
     :param offset: Offset value for quantization
-    :param bitwidth: simulated quantization bitwidth
-    :return: Resulting tensor
+    :param qmin: Minimum value of the quantization range
+    :param qmax: Maximum value of the quantization range
     """
-    _validate_arguments(tensor, scale, offset)
+    _validate_arguments(tensor, scale, offset, qmin, qmax)
     return QuantDequantFunc.apply(tensor, scale, offset, qmin, qmax)
 
 def dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor) -> torch.Tensor:
     """
-    Performs differentiable dequantize operation on tensor using scale and offset parameters.
+    Performs differentiable dequantize operation given scale and offset.
 
     :param tensor: Tensor to quantize
     :param scale: Scale factor for quantization
@@ -151,7 +177,7 @@ class QuantDequantFunc(torch.autograd.Function):
     """
     Custom gradient function for quant-dequant
     """
-    # pylint: disable=arguments-differ
+    # pylint: disable=arguments-differ, misplaced-comparison-constant
     @staticmethod
     def forward(ctx, tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, qmin: int, qmax: int):
         x_round = torch.round(tensor / scale) - offset

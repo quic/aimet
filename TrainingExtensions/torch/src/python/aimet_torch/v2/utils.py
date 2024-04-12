@@ -204,6 +204,12 @@ class StatisticsNotFoundError(RuntimeError):
     '''
 
 
+class PrecisionError(RuntimeError):
+    """
+    Error thrown when an operation is expected to produce nan values due to numerical instability.
+    """
+
+
 _ENABLE_RECOMPUTE = False
 
 

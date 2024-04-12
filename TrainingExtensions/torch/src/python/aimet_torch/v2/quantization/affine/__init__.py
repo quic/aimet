@@ -39,3 +39,4 @@
 
 from .encoding import *
 from .quantizer import *
+from .backends import *
