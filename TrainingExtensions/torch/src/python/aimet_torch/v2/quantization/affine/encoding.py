@@ -190,29 +190,10 @@ class AffineEncoding(EncodingBase):
         offset = self.offset
         bitwidth = self.bitwidth
         signed = self.signed
-
-        # Use dtype with more precision
-        if torch.finfo(input.dtype).bits >= torch.finfo(scale.dtype).bits:
-            dtype = input.dtype
-        else:
-            dtype = scale.dtype
-
-        return get_backend().quantize(input.to(dtype),
-                                      scale.to(dtype),
-                                      offset.to(dtype),
-                                      bitwidth,
-                                      signed).to(input.dtype)
+        return get_backend().quantize(input, scale.to(input.dtype), offset.to(input.dtype),
+                                      bitwidth, signed)
 
     def dequantize(self, input: torch.Tensor) -> torch.Tensor:
         scale = self.scale
         offset = self.offset
-
-        # Use dtype with more precision
-        if torch.finfo(input.dtype).bits >= torch.finfo(scale.dtype).bits:
-            dtype = input.dtype
-        else:
-            dtype = scale.dtype
-
-        return get_backend().dequantize(input.to(dtype),
-                                        scale.to(dtype),
-                                        offset.to(dtype)).to(input.dtype)
+        return get_backend().dequantize(input, scale.to(input.dtype), offset.to(input.dtype))
