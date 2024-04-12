@@ -189,8 +189,8 @@ class AffineQuantizerBase(QuantizerBase):
 
         self.bitwidth = encodings[0]['bitwidth']
         self.symmetric = str_to_bool(encodings[0]['is_symmetric'])
-        min_ = torch.tensor([e['min'] for e in encodings])
-        max_ = torch.tensor([e['max'] for e in encodings])
+        min_ = torch.tensor([e['min'] for e in encodings]).view(self.shape)
+        max_ = torch.tensor([e['max'] for e in encodings]).view(self.shape)
         self.set_range(min_, max_)
 
     def extra_repr(self) -> str:
