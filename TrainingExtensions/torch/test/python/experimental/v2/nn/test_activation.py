@@ -38,7 +38,7 @@
 import pytest
 import torch
 import torch.nn.functional as F
-from aimet_torch.v2.quantization.affine.backends import get_backend
+from aimet_torch.v2.quantization.affine.backends import quantize_dequantize
 from aimet_torch.v2.quantization.affine import QuantizeDequantize
 from aimet_torch.v2.nn import FakeQuantizedSoftmax
 from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
@@ -107,7 +107,7 @@ class TestFakeQuantizedSoftmax:
         scale = quant_softmax.input_quantizers[0].get_scale()
         offset = quant_softmax.input_quantizers[0].get_offset()
         bitwidth = quant_softmax.input_quantizers[0].bitwidth
-        input_qdq = get_backend().quantize_dequantize(input, scale, offset, bitwidth)
+        input_qdq = quantize_dequantize(input, scale, offset, bitwidth)
 
         expected_output = F.softmax(input_qdq, quant_softmax.dim)
         assert torch.equal(quant_output, expected_output)
@@ -151,8 +151,5 @@ class TestFakeQuantizedSoftmax:
         bitwidth = quant_softmax.output_quantizers[0].bitwidth
 
         fp_output = F.softmax(input, quant_softmax.dim)
-        expected_output = get_backend().quantize_dequantize(fp_output,
-                                                            scale,
-                                                            offset,
-                                                            bitwidth)
+        expected_output = quantize_dequantize(fp_output, scale, offset, bitwidth)
         assert torch.equal(quant_output, expected_output)

@@ -41,7 +41,7 @@ import pytest
 import torch
 from torch import nn
 import torch.nn.functional as F
-from aimet_torch.v2.quantization.affine.backends import get_backend
+from aimet_torch.v2.quantization.affine.backends import quantize, quantize_dequantize, dequantize
 from aimet_torch.v2.quantization.affine import Quantize, QuantizeDequantize
 from aimet_torch.v2.nn import (
     QuantizedConv1d,
@@ -71,7 +71,7 @@ def affine_quantize(tensor: torch.Tensor,
     """
     Quantizes the input tensor into a QuantizedTensor using the quantization parameters
     """
-    tensor_q = get_backend().quantize(tensor, scale, offset, bitwidth)
+    tensor_q = quantize(tensor, scale, offset, bitwidth)
     encoding = AffineEncoding(scale, offset, bitwidth)
     qtensor = tensor_q.as_subclass(QuantizedTensor)
     qtensor.encoding = encoding
@@ -254,7 +254,7 @@ class TestTrueQuantLinear:
         weight_enc = (quant_linear.param_quantizers["weight"].get_scale(),
                       quant_linear.param_quantizers["weight"].get_offset(),
                       quant_linear.param_quantizers["weight"].bitwidth)
-        weight_qdq = get_backend().quantize_dequantize(quant_linear.weight, *weight_enc, signed=True)
+        weight_qdq = quantize_dequantize(quant_linear.weight, *weight_enc, signed=True)
         output_expected = F.linear(input, weight_qdq, bias=quant_linear.bias)
         assert torch.equal(output, output_expected)
 
@@ -264,9 +264,9 @@ class TestTrueQuantLinear:
               2) output should be a quantized tensor
               3) output should be close to fake quant output after dequantization
         """
-        input_qdq = get_backend().quantize_dequantize(input, *input_enc)
+        input_qdq = quantize_dequantize(input, *input_enc)
         output_fp = F.linear(input_qdq, weight_qdq, bias=quant_linear.bias)
-        output_expected = get_backend().quantize_dequantize(output_fp, *output_enc)
+        output_expected = quantize_dequantize(output_fp, *output_enc)
         output_quant = quant_linear(input)
         assert isinstance(output_quant, DequantizedTensor)
         assert torch.allclose(output_quant.dequantize(), output_expected)
@@ -277,9 +277,9 @@ class TestTrueQuantLinear:
         """
         quantized_input = affine_quantize(input, *input_enc)
         output = quant_linear(quantized_input)
-        input_qdq = get_backend().dequantize(quantized_input, *input_enc[:2])
+        input_qdq = dequantize(quantized_input, *input_enc[:2])
         output_fp = F.linear(input_qdq, weight_qdq, bias=quant_linear.bias)
-        output_expected = get_backend().quantize_dequantize(output_fp, *output_enc)
+        output_expected = quantize_dequantize(output_fp, *output_enc)
         assert torch.allclose(output.dequantize(), output_expected)
 
     def test_no_input_quantizer(self, input):
