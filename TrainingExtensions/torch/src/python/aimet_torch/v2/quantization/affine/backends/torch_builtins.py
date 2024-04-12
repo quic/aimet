@@ -47,8 +47,9 @@ def _is_numerically_stable(dtype: torch.dtype, qmin: int, qmax: int):
     if finfo.min > qmin:
         return False
 
-    # NOTE: this is a heuristic criteria. It doesn't perfectly guarantee numerical stability
-    if finfo.tiny > 1e-3 / (qmax - qmin):
+    # NOTE: This is a heuristic criteria. It doesn't perfectly guarantee numerical stability
+    #       This criteria allows 8-bit quantization of float16, but it needs more discussion
+    if finfo.tiny > 1e-1 / (qmax - qmin):
         return False
 
     return True
