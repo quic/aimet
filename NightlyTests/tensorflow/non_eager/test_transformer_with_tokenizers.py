@@ -79,7 +79,7 @@ class TransformerQuantizationAcceptanceTests(unittest.TestCase):
         sim = QuantizationSimModel(sess, [input_ids.op.name], [outputs['pooler_output'].op.name], use_cuda=False)
 
         def dummy_forward_pass(sess, args):
-            model_output = sess.graph.get_tensor_by_name('tf_bert_model/bert/pooler/dense/Tanh_quantized:0')
+            model_output = sess.graph.get_tensor_by_name('tf_bert_model/bert_1/pooler/dense/Tanh_quantized:0')
             encoded_value = tokenizer('Hello World', return_tensors='np', padding='max_length')
             model_inputs = {
                 sess.graph.get_tensor_by_name('input_ids:0'): encoded_value['input_ids']
@@ -92,9 +92,9 @@ class TransformerQuantizationAcceptanceTests(unittest.TestCase):
         quant_ops_to_check = []
 
         # Add Embedding quant ops
-        embedding_path = 'tf_bert_model/bert/embeddings'
-        embedding_add_1_quant = ('{}/add/add_1_quantized'.format(embedding_path), True)
-        embedding_add_quant = ('{}/add/add_quantized'.format(embedding_path), True)
+        embedding_path = 'tf_bert_model/bert_1/embeddings'
+        embedding_add_1_quant = ('{}/add_1_quantized'.format(embedding_path), True)
+        embedding_add_quant = ('{}/add_quantized'.format(embedding_path), True)
         embedding_token_quant = ('{}/Gather_2_quantized'.format(embedding_path), True)
         embedding_position_quant = ('{}/Identity_1_quantized'.format(embedding_path), True)
         embedding_word_quant = ('{}/Gather_quantized'.format(embedding_path), True)
@@ -103,8 +103,8 @@ class TransformerQuantizationAcceptanceTests(unittest.TestCase):
                                embedding_position_quant]
 
         # Add LayerNorm quant ops
-        layernorm_paths = ['tf_bert_model/bert/embeddings', 'tf_bert_model/bert/encoder/layer_._0/attention/output',
-                           'tf_bert_model/bert/encoder/layer_._0/output']
+        layernorm_paths = ['tf_bert_model/bert_1/embeddings', 'tf_bert_model/bert_1/encoder/layer_._0/attention/output',
+                           'tf_bert_model/bert_1/encoder/layer_._0/output']
 
         for layernorm_path in layernorm_paths:
             output_quant_op = ('{}/LayerNorm/batchnorm/add_1_quantized'.format(layernorm_path), True)
@@ -114,13 +114,13 @@ class TransformerQuantizationAcceptanceTests(unittest.TestCase):
             quant_ops_to_check += [output_quant_op, beta_quant_op, gamma_quant_op]
 
         # Add GeLU quant ops
-        gelu_path = 'tf_bert_model/bert/encoder/layer_._0/intermediate'
+        gelu_path = 'tf_bert_model/bert_1/encoder/layer_._0/intermediate'
         output_quant_op = ('{}/Gelu/mul_1_quantized'.format(gelu_path), True)
 
         quant_ops_to_check += [output_quant_op]
 
         # Add Query, Key, and Value quant ops
-        self_attention_path = 'tf_bert_model/bert/encoder/layer_._0/attention/self'
+        self_attention_path = 'tf_bert_model/bert_1/encoder/layer_._0/attention/self'
         for dense_type in ['query', 'key', 'value']:
             output_quant_op = ('{}/{}/BiasAdd_quantized'.format(self_attention_path, dense_type), True)
             parameter_quant_op = ('{}/{}/Tensordot/ReadVariableOp_quantized'
@@ -177,9 +177,9 @@ class TransformerQuantizationAcceptanceTests(unittest.TestCase):
         quant_ops_to_check = []
 
         # Add LayerNorm quant ops
-        layernorm_paths = ['tf_distil_bert_model/distilbert/embeddings/LayerNorm',
-                           'tf_distil_bert_model/distilbert/transformer/layer_._0/sa_layer_norm',
-                           'tf_distil_bert_model/distilbert/transformer/layer_._0/output_layer_norm']
+        layernorm_paths = ['tf_distil_bert_model/distilbert_1/embeddings/LayerNorm',
+                           'tf_distil_bert_model/distilbert_1/transformer/layer_._0/sa_layer_norm',
+                           'tf_distil_bert_model/distilbert_1/transformer/layer_._0/output_layer_norm']
 
         for layernorm_path in layernorm_paths:
             output_quant_op = ('{}/batchnorm/add_1_quantized'.format(layernorm_path), True)
@@ -189,13 +189,13 @@ class TransformerQuantizationAcceptanceTests(unittest.TestCase):
             quant_ops_to_check += [output_quant_op, beta_quant_op, gamma_quant_op]
 
         # Add GeLU quant ops
-        gelu_path = 'tf_distil_bert_model/distilbert/transformer/layer_._0/ffn/Gelu'
+        gelu_path = 'tf_distil_bert_model/distilbert_1/transformer/layer_._0/ffn/Gelu'
         output_quant_op = ('{}/mul_1_quantized'.format(gelu_path), True)
 
         quant_ops_to_check += [output_quant_op]
 
         # Add Query, Key, and Value quant ops
-        self_attention_path = 'tf_distil_bert_model/distilbert/transformer/layer_._0/attention'
+        self_attention_path = 'tf_distil_bert_model/distilbert_1/transformer/layer_._0/attention'
         for dense_type in ['q_lin', 'k_lin', 'v_lin']:
             output_quant_op = ('{}/{}/BiasAdd_quantized'.format(self_attention_path, dense_type), True)
             parameter_quant_op = ('{}/{}/Tensordot/ReadVariableOp_quantized'
