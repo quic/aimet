@@ -52,9 +52,6 @@ from aimet_torch.v2.utils import patch_attr
 from aimet_torch import utils
 
 
-__all__ = ['QuantizationSimModel']
-
-
 qc_quantize_modules_dict = {
     torch.nn.RNN: LazyQuantizeWrapper,
     torch.nn.LSTM: LazyQuantizeWrapper,
