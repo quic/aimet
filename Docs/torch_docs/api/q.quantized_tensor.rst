@@ -2,7 +2,7 @@
 .. _api-torch-quantized-tensor:
 
 
-.. currentmodule:: aimet_torch.experimental.v2.quantization.quantized_tensor
+.. currentmodule:: aimet_torch.v2.quantization.tensor
 
 
 ============================
@@ -15,3 +15,5 @@ Top-level API
 .. autoclass:: QuantizedTensor
    :members:
 
+.. autoclass:: DequantizedTensor
+   :members:

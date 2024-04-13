@@ -1,6 +1,6 @@
 .. _api-torch-quantized-modules:
 
-.. currentmodule:: aimet_torch.experimental.v2.nn
+.. currentmodule:: aimet_torch.v2.nn
 
 .. warning::
     This feature is under heavy development and API changes may occur without notice in future verions.
@@ -32,7 +32,7 @@ all quantized modules share the same basic structure for configuring and exporti
 Top-level API
 =============
 
-.. autoclass:: aimet_torch.experimental.v2.nn.quant_base.BaseQuantizationMixin
+.. autoclass:: aimet_torch.v2.nn.base.BaseQuantizationMixin
    :exclude-members: wrap
    :members:
    :special-members: __quant_init__

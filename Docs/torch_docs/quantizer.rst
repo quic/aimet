@@ -3,7 +3,7 @@
 .. _api-torch-quantizers:
 
 
-.. currentmodule:: aimet_torch.experimental.v2.quantization.quantizers
+.. currentmodule:: aimet_torch.v2.quantization.affine.quantizer
 
 
 ==========
@@ -15,7 +15,7 @@ Top-level API
 =============
 
 .. autoclass:: QuantizerBase
-    :exclude-members: get_extra_stat, load_state_dict, set_extra_state, state_dict
+    :exclude-members: get_extra_state, load_state_dict, set_extra_state, state_dict
     :members:
 
 .. autoclass:: QuantizeDequantize
