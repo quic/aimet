@@ -43,7 +43,7 @@ from typing import Callable, Union, List, Dict, Tuple, AnyStr
 import tensorflow as tf
 from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_from_session_graph
 from tensorflow.python.framework.graph_util_impl import remove_training_nodes
-from packaging import version
+from packaging import version  # pylint: disable=wrong-import-order
 
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger, log_with_error_and_assert_if_false
@@ -98,6 +98,7 @@ def is_lambda_operator(layer: tf.keras.layers.Layer) -> bool:
     return False
 
 
+# pylint: disable=import-error,import-outside-toplevel
 def is_a_tf_op_lambda_layer(layer: tf.keras.layers.Layer) -> bool:
     """
     Check if a layer is a TFOpLambda layer. These occur typically when a user is using built in TensorFlow operations
@@ -106,7 +107,6 @@ def is_a_tf_op_lambda_layer(layer: tf.keras.layers.Layer) -> bool:
     :return True if the layer is a TFOpLambda layer, otherwise False.
     """
     if version.parse(tf.version.VERSION) >= version.parse("2.10"):
-        # pylint: disable=import-error
         from keras.layers.core.tf_op_layer import TFOpLambda
     else:
         from tensorflow.python.keras.layers.core import TFOpLambda

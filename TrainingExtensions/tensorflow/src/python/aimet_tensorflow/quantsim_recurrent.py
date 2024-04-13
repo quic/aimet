@@ -67,7 +67,7 @@ def _get_internal_ops_to_quantize_params_for(graph: tf.Graph, internal_ops: List
     """
 
     query = core.OpQuery(graph, ops_to_ignore=None)
-    valid_tf_ops = [op for op in query.get_weight_ops(ops=internal_ops)]
+    valid_tf_ops = [op for op in query.get_weight_ops(ops=internal_ops)]  # pylint: disable=unnecessary-comprehension
     ops_with_param_names = set()
     for tf_op in valid_tf_ops:
         ops_with_param_names.add(tf_op.name)

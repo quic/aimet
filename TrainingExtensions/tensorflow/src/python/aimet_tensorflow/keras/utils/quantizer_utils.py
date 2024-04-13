@@ -123,7 +123,7 @@ def get_wrappers_weight_quantizer(param_quantizers: Union[List[ParamPerTensorQua
         if 'kernel' in quantizer._name:
             return quantizer
 
-    raise AttributeError(f"Unable to find kernel quantizer.")
+    raise AttributeError("Unable to find kernel quantizer.")
 
 
 # pylint: disable=protected-access
@@ -171,7 +171,7 @@ class SaveModelWithoutQuantsimWrappersCallback(tf.keras.callbacks.Callback):
     Keras Callback Class to save QuantSim models during QAT
     """
     def __init__(self, sim: QuantizationSimModel, save_path: str, filename_prefix: str, custom_objects: dict = None):
-        super(SaveModelWithoutQuantsimWrappersCallback, self).__init__()
+        super().__init__()
         self.sim = sim
         self.save_path = os.path.abspath(save_path)
         self.filename_prefix = filename_prefix

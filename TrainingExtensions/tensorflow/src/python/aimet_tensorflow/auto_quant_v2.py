@@ -52,10 +52,13 @@ import contextlib
 from dataclasses import dataclass
 import os
 from typing import Any, Callable, Dict, List, Optional, Tuple, Mapping
+import pickle
+from uuid import uuid4
 import tensorflow as tf
 from tqdm import tqdm
 
 import jinja2
+from bokeh.resources import CDN
 
 from aimet_tensorflow.adaround.adaround_weight import Adaround, AdaroundParameters
 from aimet_tensorflow.cross_layer_equalization import equalize_model
@@ -187,7 +190,7 @@ def _validate_inputs(session: tf.compat.v1.Session,  # pylint: disable=too-many-
         raise ValueError('dataset must be of type Dataset, not ' + str(
             type(dataset).__name__))
 
-    if not isinstance(eval_callback, Callable):
+    if not isinstance(eval_callback, Callable):  # pylint: disable=isinstance-second-argument-not-valid-type
         raise ValueError('eval_callback must be of type Callable, not ' + str(type(eval_callback).__name__))
 
     if not isinstance(results_dir, str):
@@ -299,7 +302,6 @@ class AutoQuant:  # pylint: disable=too-many-instance-attributes
 
         # Use at most 2000 samples for AdaRound.
         num_samples = min(data_count, 2000)
-        batch_size = batch_size
         num_batches = math.floor(num_samples / batch_size)
         self.adaround_params = AdaroundParameters(self.dataset, num_batches)
 
@@ -689,7 +691,7 @@ class AutoQuant:  # pylint: disable=too-many-instance-attributes
         with self.eval_manager.session("QuantScheme Selection") as sess:
             self._quantsim_params["quant_scheme"] = self._choose_default_quant_scheme()
 
-        with self.eval_manager.session(f"W32 Evaluation") as sess:
+        with self.eval_manager.session("W32 Evaluation") as sess:
             w32_eval_score = sess.eval(sess=fp32_model, param_bw=32)
             _logger.info("Evaluation finished: W32A%d (eval score: %f)",
                          self._quantsim_params["output_bw"], w32_eval_score)
@@ -896,7 +898,6 @@ class _EvalManager:
         template = env.get_template(os.path.basename(self.HTML_TEMPLATE_FILE))
 
         if any(sess.diagnostics.contains_bokeh() for sess in self._all_sessions.values()):
-            from bokeh.resources import CDN
             head = CDN.render()
         else:
             head = "<title>AutoQuant V2 Result Diagnostics</title>"
@@ -1028,9 +1029,6 @@ class _EvalSession:  # pylint: disable=too-many-instance-attributes, too-many-ar
         Will provide a wrapper later on to cache the results as per the fn's return type.
         :returns: Function whose return value is cached.
         """
-        import pickle
-        from uuid import uuid4
-
         results_dir = self._results_dir
 
         class CachedResult:

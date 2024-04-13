@@ -44,7 +44,7 @@ import numpy as np
 import tensorflow as tf
 
 import tensorflow.keras.backend as K
-from packaging import version
+from packaging import version  # pylint: disable=wrong-import-order
 
 if version.parse(tf.version.VERSION) >= version.parse("2.10"):
     # Ignore pylint errors as keras module is not available in TF 2.4
@@ -202,7 +202,7 @@ class _KerasModelPreparer:
                 )
 
         if isinstance(input_layer, dict):  # Keras allows passing in tensors via tensor_name : tensor
-            input_layer = [tensor for tensor in input_layer.values()]
+            input_layer = list(input_layer.values())
             if len(input_layer) == 1:
                 return input_layer[0]
 
@@ -230,6 +230,7 @@ class _KerasModelPreparer:
         :return: True if the layer is a nested layer, False otherwise
         """
         keras_defined_subclassed_layer = is_subclassed(layer)
+        # pylint: disable=use-a-generator
         is_aimet_defined_subclassed = keras_defined_subclassed_layer and any(
             [isinstance(v, tf.keras.layers.Layer) for v in layer.__dict__.values()]
         )  # check if the subclass is holding subclassed layer attributes. we only care if this is the case.
@@ -386,8 +387,7 @@ class _KerasModelPreparer:
                 # keyword arguments that are not Keras tensors such as 'axis', 'training', etc.
                 if self._is_tf_or_keras_tensor_input(value):
                     continue
-                else:
-                    call_kwargs[key] = value
+                call_kwargs[key] = value
         else:
             _logger.debug("No kwargs for layer: '%s'", layer.name)
             return {}
@@ -791,7 +791,7 @@ class _KerasModelPreparer:
         """
 
         if isinstance(original_model_output, Dict):
-            original_model_output = [output for output in original_model_output.values()]
+            original_model_output = list(original_model_output.values())
             if len(original_model_output) == 1:
                 original_model_output = original_model_output[0]
 

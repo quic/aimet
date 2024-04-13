@@ -41,7 +41,7 @@ from typing import Iterable, Optional, Tuple, Union, List, Dict, Set
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
-from packaging import version
+from packaging import version  # pylint: disable=wrong-import-order
 
 if version.parse(tf.version.VERSION) >= version.parse("2.10"):
     # Ignore pylint errors as keras module is not available in TF 2.4
@@ -886,7 +886,7 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
     :param conv_wrapper: QcQuantizeWrapper that wraps conv or linear layer
     :param bn_wrapper: QcQuantizeWrapper that wraps the Batch Norm layer
     """
-    # pylint: disable=protected-access, bad-whitespace, too-many-statements, too-many-locals
+    # pylint: disable=protected-access, too-many-statements, too-many-locals
     conv = conv_wrapper._layer_to_wrap
     bn = bn_wrapper._layer_to_wrap
 

@@ -138,7 +138,7 @@ class DataSubSampler:
                 all_sub_sampled_out_data.append(sub_sampled_out_data)
 
             except tf.errors.OutOfRangeError:
-
+                # pylint: disable=raise-missing-from
                 raise StopIteration("There are insufficient batches of data in the provided dataset for the purpose of"
                                     " weight reconstruction! Either reduce number of reconstruction samples or increase"
                                     " data in dataset")
