@@ -545,6 +545,8 @@ class SequentialMse:
                                      padding=module.padding, groups=module.groups)
             xw = functional.conv2d(x, w, bias=module.bias, stride=module.stride, dilation=module.dilation,
                                    padding=module.padding, groups=module.groups)
+
+            # [N, C, H, W] --> [N, H, W, C], so that loss can be computed across channel dimension.
             xqwq = xqwq.permute(0, 2, 3, 1)
             xw = xw.permute(0, 2, 3, 1)
         else:
