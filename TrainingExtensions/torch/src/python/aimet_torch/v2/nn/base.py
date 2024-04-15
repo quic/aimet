@@ -127,7 +127,6 @@ class BaseQuantizationMixin(abc.ABC):
         Enters the `compute_encodings` context for all `QuantizerBase` objects in the layer. Inside this context,
         each quantizer will observe all inputs passed to the quantizer and will compute quantization encodings upon
         exiting the context.
-
         Examples::
             >>> qlinear = QuantizedLinear(10, 10)
             >>> qlinear.output_quantizers[0] = Quantize((1, ), 8, symmetric=False)

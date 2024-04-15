@@ -11,6 +11,8 @@
 nn.FakeQuantizationMixin
 ========================
 
+Mixin for adding fake-quantization functionality to `nn.Module` subclasses.
+
 
 Top-level API
 ===================
