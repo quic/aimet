@@ -38,6 +38,7 @@
 """ Affine quantizers """
 
 import abc
+import math
 from typing import Optional, List, Dict
 import contextlib
 import functools
@@ -259,9 +260,10 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
         @functools.wraps(original_forward)
         def forward_wrapper(input):
             batch_statistics = self.encoding_analyzer.update_stats(input)
+            num_quant_bins = math.pow(2, self.bitwidth) - 1
             dynamic_min, dynamic_max =\
                     self.encoding_analyzer.compute_encodings_from_stats(batch_statistics,
-                                                                        self.bitwidth,
+                                                                        num_quant_bins,
                                                                         self.symmetric)
             dynamic_min = dynamic_min.to(dtype=self.min.dtype,
                                          device=self.min.device).expand_as(self.min)
@@ -279,7 +281,8 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
             raise
         else:
             try:
-                min, max = self.encoding_analyzer.compute_encodings(self.bitwidth, self.symmetric)
+                num_quant_bins = math.pow(2, self.bitwidth) - 1
+                min, max = self.encoding_analyzer.compute_encodings(num_quant_bins, self.symmetric)
             except StatisticsNotFoundError:
                 return
 
