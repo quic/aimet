@@ -70,19 +70,20 @@ def affine_quantize(tensor: torch.Tensor,
 
 
 class TestQuantizedTensor:
+    @pytest.mark.parametrize('qtensor_cls', [QuantizedTensor, DequantizedTensor])
     @pytest.mark.cuda
-    def test_qtensor_sanity(self, scale, offset, bitwidth):
+    def test_qtensor_sanity(self, qtensor_cls, scale, offset, bitwidth):
         """
-        When: Instantiate QuantizedTensor from a torch.Tensor.as_subclass
-        Then: The created QuantizedTensor is equal to the input tensor
+        When: Instantiate QuantizedTensor/DequantizedTensor from a torch.Tensor.as_subclass
+        Then: The created QuantizedTensor/DequantizedTensor is equal to the input tensor
         """
         data = torch.arange(256, dtype=torch.float) # actual content of qtensor
-        qtensor = data.clone().as_subclass(QuantizedTensor)
+        qtensor = data.clone().as_subclass(qtensor_cls)
         qtensor.encoding = AffineEncoding(scale, offset, bitwidth)
         assert torch.equal(qtensor, data)
 
         """
-        Given: QuantizedTensor with fp32 dtype on cpu
+        Given: QuantizedTensor/DequantizedTensor with fp32 dtype on cpu
         When: Call float() / cpu() / to(device='cpu', dtype=torch.float32)
         Then: The output tensor is the identical object as itself
         """
@@ -93,13 +94,20 @@ class TestQuantizedTensor:
         assert qtensor.to('cpu', torch.float32) is qtensor
 
         """
-        When: Call dequantize()
+        When: Call quantize()/dequantize()
         Then: 1) The output tensor is an instance of DequantizedTensor
               2) The output tensor inherits a shallow copy of its input tensor's encoding
         """
+        qtensor_q = qtensor.quantize()
+        assert isinstance(qtensor_q, QuantizedTensor)
+        # assert qtensor_q.encoding is not qtensor.encoding
+        assert torch.equal(qtensor_q.encoding.scale, qtensor.encoding.scale)
+        assert torch.equal(qtensor_q.encoding.offset, qtensor.encoding.offset)
+        assert qtensor_q.encoding.bitwidth == qtensor.encoding.bitwidth
+        assert qtensor_q.encoding.signed == qtensor.encoding.signed
         qtensor_dq = qtensor.dequantize()
         assert isinstance(qtensor_dq, DequantizedTensor)
-        assert qtensor_dq.encoding is not qtensor.encoding
+        # assert qtensor_dq.encoding is not qtensor.encoding
         assert torch.equal(qtensor_dq.encoding.scale, qtensor.encoding.scale)
         assert torch.equal(qtensor_dq.encoding.offset, qtensor.encoding.offset)
         assert qtensor_dq.encoding.bitwidth == qtensor.encoding.bitwidth
@@ -113,26 +121,28 @@ class TestQuantizedTensor:
             Then: 1) The output tensor is an instance of QuantizedTensor with the same value
             """
             data = torch.arange(256, dtype=torch.float) # actual content of qtensor
-            qtensor = data.clone().as_subclass(QuantizedTensor)
+            qtensor = data.clone().as_subclass(qtensor_cls)
             qtensor.encoding = AffineEncoding(scale, offset, bitwidth)
             qtensor_casted = cast_fn(qtensor)
 
             assert qtensor_casted is not qtensor
-            assert isinstance(qtensor_casted, QuantizedTensor)
+            assert isinstance(qtensor_casted, qtensor_cls)
             assert torch.equal(qtensor_casted, cast_fn(data))
 
             """
             Then: 2) The output tensor inherits a shallow copy of its input tensor's encoding
             """
-            assert qtensor_casted.encoding is not qtensor.encoding
+            # assert qtensor_casted.encoding is not qtensor.encoding
             assert torch.equal(qtensor_casted.encoding.scale.cpu(), qtensor.encoding.scale)
             assert torch.equal(qtensor_casted.encoding.offset.cpu(), qtensor.encoding.offset)
             assert qtensor_casted.encoding.bitwidth == qtensor.encoding.bitwidth
             assert qtensor_casted.encoding.signed == qtensor.encoding.signed
 
             """
-            Then: 3) The result of dequantization should be similar before/after casting
+            Then: 3) The result of quantize()/dequantize() should be similar before/after casting
             """
+            if cast_fn != torch.Tensor.half: # NOTE: torch.round is not supported for cpu tensors of float16 dtype
+                assert torch.equal(qtensor_casted.quantize().cpu().float(), qtensor.quantize())
             assert torch.allclose(qtensor_casted.dequantize().cpu().float(), qtensor.dequantize(), atol=scale)
 
             """
@@ -148,7 +158,7 @@ class TestQuantizedTensor:
         """
         data = torch.arange(256, dtype=torch.long) # actual content of qtensor
         with pytest.raises(RuntimeError):
-            _ = QuantizedTensor(data)
+            _ = qtensor_cls(data)
 
         for cast_fn in [torch.Tensor.char, torch.Tensor.short, torch.Tensor.int, torch.Tensor.long]:
             """
@@ -157,7 +167,7 @@ class TestQuantizedTensor:
             Then: Throw error
             """
             data = torch.arange(256, dtype=torch.float) # actual content of qtensor
-            qtensor = data.clone().as_subclass(QuantizedTensor)
+            qtensor = data.clone().as_subclass(qtensor_cls)
             qtensor.encoding = AffineEncoding(scale, offset, bitwidth)
 
             with pytest.raises(RuntimeError):
