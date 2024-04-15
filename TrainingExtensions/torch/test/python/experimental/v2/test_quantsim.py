@@ -40,6 +40,8 @@ import torch
 import tempfile
 import os
 import json
+import pytest
+from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.quantization.encoding_analyzer import PercentileEncodingAnalyzer
 from aimet_torch.v2.quantization.base import QuantizerBase
@@ -86,29 +88,24 @@ class TestPercentileScheme:
 
         assert torch.all(weight_max_99p9.gt(weight_max_90p0))
 
-    def test_set_and_freeze_param_encodings(self):
+    @pytest.mark.parametrize("config_file", (None, get_path_for_per_channel_config()))
+    def test_set_and_freeze_param_encodings(self, config_file):
         model = test_models.BasicConv2d(kernel_size=3)
         dummy_input = torch.rand(1, 64, 16, 16)
-        sim = QuantizationSimModel(model, dummy_input)
+        sim = QuantizationSimModel(model, dummy_input, config_file=config_file)
         sim.compute_encodings(lambda model, _: model(dummy_input), None)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             fname = "test_model"
             sim.export(temp_dir, fname, dummy_input)
             file_path = os.path.join(temp_dir, fname + '.encodings')
-            with open(file_path) as f:
-                encoding_dict = json.load(f)
-            # Manually create a json holding only encoding_dict["param_encodings"]
-            weight_encoding_filepath =  os.path.join(temp_dir, fname + '.param_encodings')
-            with open(weight_encoding_filepath, 'w') as encoding_json:
-                json.dump(encoding_dict["param_encodings"], encoding_json, sort_keys=True, indent=4)
 
-            sim_2 = QuantizationSimModel(model, dummy_input)
+            sim_2 = QuantizationSimModel(model, dummy_input, config_file=config_file)
 
             """
             Given: call set_and_freeze_param_encodigns
             """
-            sim_2.set_and_freeze_param_encodings(weight_encoding_filepath)
+            sim_2.set_and_freeze_param_encodings(file_path)
 
         """
         When: Compare sim_2 param encodings to sim_1 param encodings
@@ -123,17 +120,18 @@ class TestPercentileScheme:
         assert sim_2.model.conv.param_quantizers["weight"]._is_encoding_frozen()
         assert not sim_2.model.conv.output_quantizers[0]._is_encoding_frozen()
 
-    def test_load_and_freeze_encodings(self):
+    @pytest.mark.parametrize("config_file", (None, get_path_for_per_channel_config()))
+    def test_load_and_freeze_encodings(self, config_file):
         model = test_models.TinyModel()
         dummy_input = torch.rand(1, 3, 32, 32)
-        sim = QuantizationSimModel(model, dummy_input)
+        sim = QuantizationSimModel(model, dummy_input, config_file=config_file)
         sim.compute_encodings(lambda model, _: model(dummy_input), None)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             fname = "test_model"
             sim.export(temp_dir, fname, dummy_input)
             file_path = os.path.join(temp_dir, fname + '_torch.encodings')
-            sim_2 = QuantizationSimModel(test_models.TinyModel(), dummy_input)
+            sim_2 = QuantizationSimModel(test_models.TinyModel(), dummy_input, config_file=config_file)
             sim_2.load_and_freeze_encodings(file_path)
 
         for module in sim_2.model.modules():
