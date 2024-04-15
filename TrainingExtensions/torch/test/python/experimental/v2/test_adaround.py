@@ -503,6 +503,16 @@ class TestAdaround:
         assert param_keys[0] == "conv1.weight"
         assert len(encoding_data["conv1.weight"]) == 32
 
+        # Test that encodings can be correctly loaded into sim
+        sim = QuantizationSimModel(ada_rounded_model, torch.randn(input_shape), config_file='./data/quantsim_config.json')
+        sim.set_and_freeze_param_encodings("./dummy.encodings")
+
+        # Test that we after computing encodings, the param encodings are the same
+        assert sim.model.conv1.param_quantizers["weight"].is_initialized()
+        scale_before_compute_enc = sim.model.conv1.param_quantizers["weight"].get_scale().clone()
+        sim.compute_encodings(dummy_forward_pass, input_shape)
+        assert torch.equal(scale_before_compute_enc, sim.model.conv1.param_quantizers["weight"].get_scale())
+
         # Delete encodings file
         if os.path.exists("./dummy.encodings"):
             os.remove("./dummy.encodings")
