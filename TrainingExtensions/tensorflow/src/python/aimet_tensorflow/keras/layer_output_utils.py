@@ -142,7 +142,17 @@ class LayerOutputUtil:
         :param input_batch: Batch of Inputs for which layer output need to be generated
         :return: None
         """
-        batch_layer_name_to_layer_output = self.get_outputs(input_batch)
-        self.save_inp_out_obj.save(np.array(input_batch), batch_layer_name_to_layer_output)
+        layer_output_batch_dict = self.get_outputs(input_batch)
+
+        # Skip constant scalar layer-outputs
+        const_scalar_layer_name = []
+        for layer_name, layer_output in layer_output_batch_dict.items():
+            if not isinstance(layer_output, np.ndarray):
+                const_scalar_layer_name.append(layer_name)
+        for layer_name in const_scalar_layer_name:
+            logger.info("Skipping constant scalar output of layer %s", layer_name)
+            _ = layer_output_batch_dict.pop(layer_name)
+
+        self.save_inp_out_obj.save(np.array(input_batch), layer_output_batch_dict)
 
         logger.info("Layer Outputs Saved")
