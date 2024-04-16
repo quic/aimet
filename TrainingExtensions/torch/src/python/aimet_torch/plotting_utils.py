@@ -120,15 +120,15 @@ def line_plot_changes_in_summary_stats(data_before, data_after, x_axis_label=Non
 
     plot.varea(x=data_after.index,
                y1=data_after['min'],
-               y2=data_before['min'], fill_alpha=0.3, legend="shaded region", name="new model")
+               y2=data_before['min'], fill_alpha=0.3, legend_label="shaded region", name="new model")
 
     plot.varea(x=data_after.index,
                y1=data_after['max'],
-               y2=data_before['max'], fill_color="green", fill_alpha=0.3, legend="shaded region")
+               y2=data_before['max'], fill_color="green", fill_alpha=0.3, legend_label="shaded region")
 
     plot.varea(x=data_after.index,
                y1=data_after['mean'],
-               y2=data_before['mean'], fill_color="orange", fill_alpha=0.3, legend="shaded region")
+               y2=data_before['mean'], fill_color="orange", fill_alpha=0.3, legend_label="shaded region")
 
     plot.legend.location = "top_left"
     plot.legend.click_policy = "hide"
@@ -144,7 +144,7 @@ def line_plot_changes_in_summary_stats(data_before, data_after, x_axis_label=Non
                                  ("Minimum Before Optimization", "@min{0.00}"),
                                  ("Maximum Before Optimization", "@max{0.00}"),
                                  ("25 Percentile Before Optimization", "@{25%}{0.00}"),
-                                 ("75 Percentile Before Optimization", "@{75%}{0.00}")], names=['old model'],
+                                 ("75 Percentile Before Optimization", "@{75%}{0.00}")], name='old model',
                        mode='mouse'
                        )
     hover2 = HoverTool(tooltips=[("Output Channel", "$index"),
@@ -152,7 +152,7 @@ def line_plot_changes_in_summary_stats(data_before, data_after, x_axis_label=Non
                                  ("Minimum After Optimization", "@min{0.00}"),
                                  ("Maximum After Optimization", "@max{0.00}"),
                                  ("25 Percentile After Optimization", "@{25%}{0.00}"),
-                                 ("75 Percentile After Optimization", "@{75%}{0.00}")], names=['new model'],
+                                 ("75 Percentile After Optimization", "@{75%}{0.00}")], name='new model',
                        mode='mouse'
                        )
     plot.add_tools(hover1)
