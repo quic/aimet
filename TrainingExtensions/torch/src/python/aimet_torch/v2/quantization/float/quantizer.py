@@ -50,7 +50,7 @@ from aimet_torch.v2.utils import StatisticsNotFoundError, patch_attr
 from aimet_torch.fp_quantization import fake_cast_to_ieee_float
 
 
-__all__ = ['FloatQuantizeDequantize']
+__all__ = ['QuantizeDequantize', 'FloatQuantizeDequantize']
 
 
 def _ieee_float_max_representable_value(exponent_bits, mantissa_bits):
@@ -238,3 +238,6 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
 
     def extra_repr(self):
         return f'exponent_bits={self.exponent_bits}, mantissa_bits={self.mantissa_bits}'
+
+
+QuantizeDequantize = FloatQuantizeDequantize
