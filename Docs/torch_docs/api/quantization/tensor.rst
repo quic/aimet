@@ -5,13 +5,14 @@
 .. currentmodule:: aimet_torch.v2.quantization.tensor
 
 
-============================
-quantization.QuantizedTensor
-============================
 
+===================
+quantization.tensor
+===================
 
-Top-level API
-=============
+Classes
+-------
+
 .. autoclass:: QuantizedTensor
    :members:
 

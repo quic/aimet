@@ -50,8 +50,30 @@ __all__ = ['QuantizedTensorBase', 'QuantizedTensor', 'DequantizedTensor', 'Encod
 
 class QuantizedTensorBase(torch.Tensor):
     """
-    Represents a quantized or dequantized tensor as a subclass of torch.Tensor which also holds the quantization encodings.
-    This is used to safely pass encoding information between layers of a torch model and into operator libraries.
+    Abstract base class to define quantized tensor behavior.
+    Represents a quantized or dequantized tensor as a subclass of :class:`torch.Tensor` which also holds the quantization encodings.
+    This object can be safely quantized or dequantized through the :meth:`quantize` and :meth:`dequantize` methods without
+    changing the represented data values.
+
+    Example:
+
+        >>> from aimet_torch.v2 import quantization as Q
+        >>> quantizer = Q.affine.Quantize(shape=(2, 1), bitwidth=8, symmetric=True)
+        >>> x = torch.tensor([[-1.20, 4.1, -0.21, 2.3],
+        ...                   [0.2, 5.6, -1.0, -.1]])
+        >>> with quantizer.compute_encodings():
+        ...     x_q = quantizer(x)
+        >>> torch.equal(x_q.encoding.scale, quantizer.get_scale())
+        True
+        >>> x_q
+        QuantizedTensor([[-37., 127.,  -7.,  71.],
+                         [  5., 127., -23.,  -2.]])
+        >>> x_q.quantized_repr()
+        tensor([[-37, 127,  -7,  71],
+                [  5, 127, -23,  -2]], dtype=torch.int8)
+        >>> x_q.dequantize()
+        DequantizedTensor([[-1.1945,  4.1000, -0.2260,  2.2921],
+                           [ 0.2205,  5.6000, -1.0142, -0.0882]])
     """
 
     encoding: EncodingBase
@@ -70,31 +92,51 @@ class QuantizedTensorBase(torch.Tensor):
     ]
 
     @abc.abstractmethod
-    def quantize(self) -> "QuantizedTensorBase":
+    def quantize(self) -> "QuantizedTensor":
         """
-        Quantize tensor with the associated encoding
+        Quantizes ``self`` with the associated encoding
 
-        NOTE: This method must be an IDEMPOTENT function.
-              The result of calling this method multiple times should be equal to calling it only once.
-              In other words, calling this method multiple times should not result in duplicate quantization.
+        .. note::
+            This method must be an IDEMPOTENT function.
+            The result of calling this method multiple times should be equal to calling it only once.
+            In other words, calling this method multiple times should not result in duplicate quantization.
         """
         raise NotImplementedError
 
     @abc.abstractmethod
-    def dequantize(self) -> "QuantizedTensorBase":
+    def dequantize(self) -> "DequantizedTensor":
         """
-        Dequantize tensor with the associated encoding
+        Dequantizes ``self`` with the associated encoding
 
-        NOTE: This method must be an IDEMPOTENT function.
-              The result of calling this method multiple times should be equal to calling it only once.
-              In other words, calling this method multiple times should not result in duplicate dequantization.
+        .. note::
+            This method must be an IDEMPOTENT function.
+            The result of calling this method multiple times should be equal to calling it only once.
+            In other words, calling this method multiple times should not result in duplicate dequantization.
         """
         raise NotImplementedError
 
     @abc.abstractmethod
     def quantized_repr(self) -> torch.Tensor:
         """
-        Return the quantized representation of the tensor as a torch.Tensor with data type self.encoding.dtype
+        Return the quantized representation of ``self`` as a :class:`torch.Tensor` with data type :attr:`self.encoding.dtype`
+
+        .. note::
+            The result of this function may not be able to carry a gradient depending on the quantized data type.
+            Thus, it may be necessary to call this only within an autograd function to allow for backpropagation.
+
+        Example:
+
+            >>> from aimet_torch.v2 import quantization as Q
+            >>> quantizer = Q.affine.Quantize(shape=(2, 1), bitwidth=8, symmetric=True)
+            >>> x = torch.randn((2, 4), requires_grad=True)
+            >>> with quantizer.compute_encodings():
+            ...     x_q = quantizer(x)
+            >>> x_q
+            QuantizedTensor([[  11.,  -57., -128.,   38.],
+                             [  28.,   -0., -128.,  -40.]], grad_fn=<AliasBackward0>)
+            >>> x_q.quantized_repr()
+            tensor([[  11,  -57, -128,   38],
+                    [  28,    0, -128,  -40]], dtype=torch.int8)
         """
         raise NotImplementedError
 
@@ -148,14 +190,47 @@ class QuantizedTensorBase(torch.Tensor):
 
 class QuantizedTensor(QuantizedTensorBase):
     """
-    Represents quantized tensors
+    Represents a quantized tensor object. The object holds quantized values stored in a floating-point tensor along with
+    an :class:`EncodingBase` object which holds the information necessary to map the quantized values back to the
+    real/represented values.
+
+    .. warning::
+        A the raw data stored in a :class:`QuantizedTensor` object does not reflect the real values represented by the :class:`QuantizedTensor`
+        and should not be used directly in floating point operations. To correctly use a :class:`QuantizedTensor` in a floating point
+        operation, it should first be dequantized.
     """
+
     def quantize(self) -> "QuantizedTensor":
+        """
+        Returns ``self``
+        """
         if self.encoding is None:
             raise EncodingError("Encoding does not exist")
         return self
 
     def dequantize(self) -> "DequantizedTensor":
+        """
+        Dequantizes ``self`` using :attr:`self.encoding` to produce a :class:`DequantizedTensor` with the same encoding
+        information.
+
+        Example:
+
+            >>> from aimet_torch.v2.quantization as Q
+            >>> x = torch.tensor([[2.57, -2.312],
+            ...                   [0.153, 0.205]])
+            >>> quantizer = Q.affine.Quantize(shape=(1, ), bitwidth=8, symmetric=True)
+            >>> quantizer.set_range(-128 * 0.1, 127 * 0.1)
+            >>> x_q = quantizer(x)
+            >>> x_q
+            QuantizedTensor([[ 26., -23.],
+                             [  2.,   2.]], grad_fn=<AliasBackward0>)
+            >>> x_dq = x_q.dequantize()
+            >>> x_dq
+            DequantizedTensor([[ 2.6000, -2.3000],
+                               [ 0.2000,  0.2000]], grad_fn=<AliasBackward0>)
+            >>> torch.equal(x_dq.encoding.scale, x_q.encoding.scale)
+            True
+        """
         if self.encoding is None:
             raise EncodingError("Encoding does not exist")
 
@@ -172,9 +247,31 @@ class QuantizedTensor(QuantizedTensorBase):
 
 class DequantizedTensor(QuantizedTensorBase):
     """
-    Represents dequantized tensors
+    Represents a tensor which has been quantized and subsequently dequantized. This object contains real floating point
+    data as well as an :class:`EncodingBase` object which holds information about the quantization parameters with which
+    the data was quantized. With this, a :class:`DequantizedTensor` can be converted back to its quantized representation
+    without further loss in information.
     """
+
     def quantize(self) -> QuantizedTensor:
+        """
+        Quantizes ``self`` using :attr:`self.encoding` to produce a :class:`DequantizedTensor` with the same encoding
+        information.
+
+        Example:
+
+            >>> import aimet_torch.v2.quantization as Q
+            >>> x = torch.tensor([[0.39, 51.0], [3.521, 9.41]])
+            >>> quant_dequant = Q.affine.QuantizeDequantize((1, ), 8, symmetric=False)
+            >>> quant_dequant.set_range(-10, 41)
+            >>> x_qdq = quant_dequant(x)
+            >>> x_qdq
+            DequantizedTensor([[ 0.4000, 41.0000],
+                               [ 3.6000,  9.4000]], grad_fn=<AliasBackward0>)
+            >>> x_qdq.quantize()
+            QuantizedTensor([[ 52., 255.],
+                             [ 68.,  97.]], grad_fn=<AliasBackward0>)
+        """
         if self.encoding is None:
             raise EncodingError("Encoding does not exist")
 
@@ -184,11 +281,35 @@ class DequantizedTensor(QuantizedTensorBase):
         return qtensor
 
     def dequantize(self) -> "DequantizedTensor":
+        """
+        Returns ``self``
+        """
         if self.encoding is None:
             raise EncodingError("Encoding does not exist")
         return self
 
     def quantized_repr(self) -> torch.Tensor:
+        """
+        Return the quantized representation of ``self`` as a :class:`torch.Tensor` with data type :attr:`self.encoding.dtype`.
+
+        .. note::
+            The result of this function may not be able to carry a gradient depending on the quantized data type.
+            Thus, it may be necessary to call this only within an autograd function to allow for backpropagation.
+
+        Example:
+
+            >>> import aimet_torch.v2.quantization as Q
+            >>> x = torch.tensor([[0.39, 51.0], [3.521, 9.41]])
+            >>> quant_dequant = Q.affine.QuantizeDequantize((1, ), 8, symmetric=False)
+            >>> quant_dequant.set_range(-10, 41)
+            >>> x_qdq = quant_dequant(x)
+            >>> x_qdq
+            DequantizedTensor([[ 0.4000, 41.0000],
+                               [ 3.6000,  9.4000]], grad_fn=<AliasBackward0>)
+            >>> x_qdq.quantized_repr()
+            tensor([[ 52, 255],
+                    [ 68,  97]], dtype=torch.uint8)
+        """
         # FIXME(kyunggeu): This only works for affine encodings.
         #                  Needs to be generalized for any kind of encodings
         return self.quantize().as_subclass(torch.Tensor).to(self.encoding.dtype)
