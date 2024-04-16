@@ -36,3 +36,5 @@
 # =============================================================================
 
 # pylint: disable=missing-docstring
+from . import nn
+from . import quantization
