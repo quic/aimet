@@ -39,6 +39,9 @@
 from collections import defaultdict
 import torch.nn as nn
 import torch
+
+# pylint: disable=import-error
+# pylint: disable=no-name-in-module
 from peft.tuners.lora.layer import LoraLayer
 
 from aimet_torch.utils import replace_modules_of_type1_using_constructor
@@ -46,7 +49,14 @@ from aimet_torch.elementwise_ops import Add
 
 
 class QcLoraLayer(torch.nn.Module):
+    """
+    Quantizable lora layer
+    """
+    # pylint: disable=too-many-instance-attributes
     def __init__(self, lora_layer: LoraLayer):
+        """
+        :param lora_layer: Lora layer we want to replace
+        """
         super().__init__()
         self.base_layer = lora_layer.base_layer
         self.r = lora_layer.r
@@ -74,6 +84,7 @@ class QcLoraLayer(torch.nn.Module):
                 self.active_adapters[adapter_name] = False
 
     def forward(self, x: torch.Tensor, *args, **kwargs) -> torch.Tensor:
+        """ Forward pass for replaced layer"""
         result = self.base_layer(x, *args, **kwargs)
         torch_result_dtype = result.dtype
         for active_adapter in self.active_adapters:
