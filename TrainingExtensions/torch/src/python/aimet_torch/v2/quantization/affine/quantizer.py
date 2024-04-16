@@ -372,8 +372,75 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
 
 
 class Quantize(MinMaxQuantizer):
-    """
-    Applies quantization to the input
+    r"""
+    Applies quantization to the input.
+
+    Precisely,
+
+    .. math::
+        out = clamp\left(\left\lceil\frac{input}{scale}\right\rfloor - offset, qmin, qmax\right)
+
+    where :math:`scale` and :math:`offset` are derived from learnable parameters
+    :math:`\theta_{min}` and :math:`\theta_{max}`.
+
+    :param shape: Shape of the quantization parameters
+    :type shape: tuple
+    :param bitwidth: Quantization bitwidth
+    :type bitwidth: int
+    :param symmetric: If True, performs symmetric quantization;
+                      otherwise, performs asymmetric quantization
+    :type symmetric: bool
+    :param encoding_analyzer: Encoding analyzer for calibrating quantization encodings
+                              (default: absolute min-max encoding analyzer)
+    :type encoding_analyzer: EncodingAnalyzer, optional
+
+
+    :ivar Tensor min: :math:`\theta_{min}` from which scale and offset will be derived.
+    :ivar Tensor max: :math:`\theta_{max}` from which scale and offset will be derived.
+
+    Note:
+        :class:`Quantize` cannot run :meth:`forward` until :attr:`min` and :attr:`max` are properly initialized,
+        which can be done based on input statistics using :meth:`compute_encodings` or
+        by manually assigning a new value to :attr:`min` and :attr:`max`.
+        See the examples below.
+
+    Examples:
+
+        >>> import aimet_torch.v2.quantization as Q
+        >>> input = torch.randn(5, 10)
+        >>> q = Q.affine.Quantize(shape=(5, 1), bitwidth=8, symmetric=False)
+        >>> q.is_initialized()
+        False
+        >>> with q.compute_encodings():
+        ...     _ = q(input)
+        ...
+        >>> q.is_initialized()
+        True
+        >>> q(input)
+        QuantizedTensor([[247.,   0.,  98.,  62.,  25.,  42., 209.,  71., 255., 129.],
+                         [209., 152., 211., 163.,   0.,  90., 255., 221.,  87.,  67.],
+                         [119., 245., 178., 255., 100., 182., 188., 150., 162.,   0.],
+                         [204., 102.,   0., 255., 224., 249., 190., 176., 207., 137.],
+                         [  0., 189.,  13., 255., 109.,  23.,  93.,  59.,  82., 195.]],
+                        grad_fn=<AliasBackward0>)
+
+
+        >>> import aimet_torch.v2.quantization as Q
+        >>> input = torch.randn(5, 10)
+        >>> q = Q.affine.Quantize(shape=(5, 1), bitwidth=8, symmetric=False)
+        >>> q.is_initialized()
+        False
+        >>> q.min = torch.nn.Parameter(-torch.ones_like(q.min))
+        >>> q.max = torch.nn.Parameter(torch.ones_like(q.max))
+        >>> q.is_initialized()
+        True
+        >>> q(input)
+        QuantizedTensor([[255.,   0.,  90.,  21.,   0.,   0., 255.,  38., 255., 148.],
+                         [208., 108., 212., 127.,   0.,   0., 255., 230.,   0.,   0.],
+                         [100., 255., 193., 255.,  70., 199., 208., 150., 168.,   0.],
+                         [220.,  70.,   0., 255., 249., 255., 200., 180., 225., 121.],
+                         [104., 248., 114., 255., 187., 121., 175., 149., 167., 253.]],
+                        grad_fn=<AliasBackward0>)
     """
     def forward(self, input: torch.Tensor) -> QuantizedTensor:
         """
@@ -398,8 +465,90 @@ class Quantize(MinMaxQuantizer):
 
 
 class QuantizeDequantize(MinMaxQuantizer):
-    """
-    Applies quantization followed by dequantization to the input
+    r"""
+    Applies fake-quantization by quantizing and dequantizing the input.
+
+    Precisely,
+
+    .. math::
+        out = (x_{int} + offset) * scale
+
+    where
+
+    .. math::
+        x_{int} = clamp\left(\left\lceil\frac{input}{scale}\right\rfloor - offset, qmin, qmax\right)
+
+    and :math:`scale` and :math:`offset` are derived from learnable parameters
+    :math:`\theta_{min}` and :math:`\theta_{max}`.
+
+    :param shape: Shape of the quantization parameters
+    :type shape: tuple
+    :param bitwidth: Quantization bitwidth
+    :type bitwidth: int
+    :param symmetric: If True, performs symmetric quantization;
+                      otherwise, performs asymmetric quantization
+    :type symmetric: bool
+    :param encoding_analyzer: Encoding analyzer for calibrating quantization encodings
+                              (default: absolute min-max encoding analyzer)
+    :type encoding_analyzer: EncodingAnalyzer, optional
+
+
+    :ivar Tensor min: :math:`\theta_{min}` from which scale and offset will be derived.
+    :ivar Tensor max: :math:`\theta_{max}` from which scale and offset will be derived.
+
+    Note:
+        :class:`QuantizeDequantize` cannot run :meth:`forward` until :attr:`min` and :attr:`max` are properly initialized,
+        which can be done based on input statistics using :meth:`compute_encodings` or
+        by manually assigning a new value to :attr:`min` and :attr:`max`.
+        See the examples below.
+
+    Examples:
+
+        >>> import aimet_torch.v2.quantization as Q
+        >>> input = torch.randn(5, 10)
+        >>> qdq = Q.affine.QuantizeDequantize(shape=(5, 1), bitwidth=8, symmetric=False)
+        >>> qdq.is_initialized()
+        False
+        >>> with qdq.compute_encodings():
+        ...     _ = qdq(input)
+        ...
+        >>> qdq.is_initialized()
+        True
+        >>> qdq(input)
+        DequantizedTensor([[ 1.9185, -1.7549, -0.2974, -0.8328, -1.3831, -1.1303,
+                             1.3534, -0.6990,  2.0375,  0.1636],
+                           [ 0.6366, -0.1522,  0.6643,  0.0000, -2.2559, -1.0103,
+                             1.2733,  0.8027, -1.0518, -1.3286],
+                           [-0.2097,  1.3444,  0.5180,  1.4677, -0.4440,  0.5674,
+                             0.6414,  0.1727,  0.3207, -1.6774],
+                           [ 0.7324, -0.4534, -1.6393,  1.3254,  0.9650,  1.2556,
+                             0.5697,  0.4069,  0.7673, -0.0465],
+                           [-0.1790,  0.9488, -0.1014,  1.3427,  0.4714, -0.0418,
+                             0.3759,  0.1731,  0.3103,  0.9846]],
+                          grad_fn=<AliasBackward0>)
+
+
+        >>> import aimet_torch.v2.quantization as Q
+        >>> input = torch.randn(5, 10)
+        >>> qdq = Q.affine.QuantizeDequantize(shape=(5, 1), bitwidth=8, symmetric=False)
+        >>> qdq.is_initialized()
+        False
+        >>> qdq.min = torch.nn.Parameter(-torch.ones_like(qdq.min))
+        >>> qdq.max = torch.nn.Parameter(torch.ones_like(qdq.max))
+        >>> qdq.is_initialized()
+        True
+        >>> qdq(input)
+        DequantizedTensor([[ 1.0039, -0.9961, -0.2902, -0.8314, -0.9961, -0.9961,
+                             1.0039, -0.6980,  1.0039,  0.1647],
+                           [ 0.6353, -0.1490,  0.6667,  0.0000, -0.9961, -0.9961,
+                             1.0039,  0.8078, -0.9961, -0.9961],
+                           [-0.2118,  1.0039,  0.5176,  1.0039, -0.4471,  0.5647,
+                             0.6353,  0.1804,  0.3216, -0.9961],
+                           [ 0.7294, -0.4471, -0.9961,  1.0039,  0.9569,  1.0039,
+                             0.5725,  0.4157,  0.7686, -0.0471],
+                           [-0.1804,  0.9490, -0.1020,  1.0039,  0.4706, -0.0471,
+                             0.3765,  0.1725,  0.3137,  0.9882]],
+                          grad_fn=<AliasBackward0>)
     """
     def forward(self, input: torch.Tensor) -> DequantizedTensor:
         """
