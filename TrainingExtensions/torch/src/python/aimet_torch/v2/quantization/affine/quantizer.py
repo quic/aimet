@@ -398,7 +398,7 @@ class Quantize(MinMaxQuantizer):
     :ivar Tensor min: :math:`\theta_{min}` from which scale and offset will be derived.
     :ivar Tensor max: :math:`\theta_{max}` from which scale and offset will be derived.
 
-    Note:
+    .. note::
         :class:`Quantize` cannot run :meth:`forward` until :attr:`min` and :attr:`max` are properly initialized,
         which can be done based on input statistics using :meth:`compute_encodings` or
         by manually assigning a new value to :attr:`min` and :attr:`max`.
@@ -496,7 +496,7 @@ class QuantizeDequantize(MinMaxQuantizer):
     :ivar Tensor min: :math:`\theta_{min}` from which scale and offset will be derived.
     :ivar Tensor max: :math:`\theta_{max}` from which scale and offset will be derived.
 
-    Note:
+    .. note::
         :class:`QuantizeDequantize` cannot run :meth:`forward` until :attr:`min` and :attr:`max` are properly initialized,
         which can be done based on input statistics using :meth:`compute_encodings` or
         by manually assigning a new value to :attr:`min` and :attr:`max`.
