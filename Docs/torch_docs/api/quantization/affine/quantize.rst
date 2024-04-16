@@ -6,4 +6,4 @@
 quantization.affine.quantize
 ==========
 
-.. autofunction:: aimet_torch.v2.quantization.affine.backends.torch_builtins.quantize
+.. autofunction:: aimet_torch.v2.quantization.affine.quantize
