@@ -37,7 +37,4 @@
 
 # pylint: disable=all
 
-from .base import *
-from .affine import *
-from .float import *
 from .tensor import *
