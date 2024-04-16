@@ -23,7 +23,7 @@ nav .hideitem {
 
 :root {
   --aimet-blue: #3253dc;
-  --aimet-dark-blue: #0000ff
+  --aimet-dark-blue: #0000ff;
   --aimet-white: #ffffff;
   --aimet-border-grey: #e0e0e0;
   --aimet-menu-hover: #e3efff;
@@ -222,3 +222,35 @@ padding: .4045em 1.618em;
 .wy-menu-vertical li.toctree-l3, .wy-menu-vertical li.toctree-l4 {
   font-size: 14px;
 }
+
+
+/*
+ * Version selector color configuration
+ */
+.rst-versions {
+    position: sticky;
+    background: var(--aimet-white);
+}
+
+.rst-versions .rst-current-version {
+    text-align: center;
+    background-color: var(--aimet-white);
+    color: black;
+}
+
+.rst-versions .rst-current-version-name {
+    color: var(--aimet-menu-font-active);
+}
+
+.rst-versions .rst-current-version .fa-caret-down {
+    color: black;
+}
+
+.rst-versions .rst-other-versions dd a {
+    color: var(--aimet-menu-font-active)
+}
+
+.rst-versions .rst-other-versions dt {
+    color: black
+}
+

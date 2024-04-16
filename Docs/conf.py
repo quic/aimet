@@ -115,7 +115,7 @@ language = None
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path .
-exclude_patterns = []
+exclude_patterns = ["torch_docs/*"]
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = 'sphinx'
@@ -148,6 +148,7 @@ html_theme_options = {
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
+html_css_files = ['style.css']
 
 # Custom sidebar templates, must be a dictionary that maps document names
 # to template names.
@@ -228,3 +229,13 @@ autoclass_content = 'both'
 
 nbsphinx_allow_errors = True
 nbsphinx_execute = 'never'
+
+docs_root_url = "https://quic.github.io/aimet-pages/releases/latest/"
+
+# Version here refers to the AIMET torch v1/v2 version, not the AIMET release number
+html_context = {
+  'current_version' : "Universal",
+  'versions' : [["Universal", docs_root_url + "user_guide/index.html"],
+                ["PyTorch", docs_root_url + "torch_v2/torch_docs/index.html"]],
+  'display_version_tab': True
+}
