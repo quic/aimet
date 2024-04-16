@@ -54,15 +54,26 @@ Please visit :ref:`AIMET Installation <ug-installation>` for installation instru
     Adaptive Rounding (AdaRound) <../user_guide/adaround>
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :titlesonly:
-   :glob:
    :caption: AIMET PyTorch API
 
    quantized_modules
    quantizer
    encoding_analyzer
-   api/*
+   api/nn.fake_quantization_mixin
+   api/nn.quantization_mixin
+
+   api/quantization/affine/index
+   api/quantization/affine/quantize
+   api/quantization/affine/dequantize
+   api/quantization/affine/quantize_dequantize
+   api/quantization/affine/Quantize
+   api/quantization/affine/QuantizeDequantize
+
+   api/quantization/float/index
+   api/quantization/float/FloatQuantizeDequantize
+   api/quantization/float/QuantizeDequantize
 
 
 
