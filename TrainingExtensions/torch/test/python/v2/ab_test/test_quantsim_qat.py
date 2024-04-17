@@ -64,20 +64,15 @@ class STE(torch.autograd.Function):
         return output_grad
 
 
-class AutogradBasedQuantDequant:
-    @staticmethod
-    def quantize_dequantize(tensor, scale, offset, bitwidth, signed=False) -> torch.Tensor:
-        if signed:
-            clip_min, clip_max = - 2 ** (bitwidth - 1), 2 ** (bitwidth - 1) - 1
-        else:
-            clip_min, clip_max = 0, 2 ** bitwidth - 1
-        x_round = STE.apply(tensor / scale) - offset
-        x_quant = torch.clamp(x_round, clip_min, clip_max)
-        return (x_quant + offset) * scale
+def autograd_based_qdq(tensor, scale, offset, bitwidth, signed=False) -> torch.Tensor:
+    if signed:
+        clip_min, clip_max = - 2 ** (bitwidth - 1), 2 ** (bitwidth - 1) - 1
+    else:
+        clip_min, clip_max = 0, 2 ** bitwidth - 1
+    x_round = STE.apply(tensor / scale) - offset
+    x_quant = torch.clamp(x_round, clip_min, clip_max)
+    return (x_quant + offset) * scale
 
-# get_backend function for simulating autograd-based backend
-def autograd_get_backend():
-    return AutogradBasedQuantDequant
 
 # Wrap resnet function to mimic model class instantiation
 def resnet18():
@@ -176,7 +171,7 @@ class TestQuantsimV2QAT:
 
         aimetgrad_qsim.model(dummy_input).sum().backward()
         # Patch backend of auto_grad_qsim to autograd-based backend
-        with patch('aimet_torch.v2.quantization.affine.quantizer.get_backend', autograd_get_backend):
+        with patch('aimet_torch.v2.quantization.affine.quantizer.quantize_dequantize', autograd_based_qdq):
             autograd_qsim.model(dummy_input).sum().backward()
 
         # Make sure that all the assertions are not being bypassed

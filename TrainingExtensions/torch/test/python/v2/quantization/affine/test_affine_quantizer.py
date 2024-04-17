@@ -44,7 +44,7 @@ from torch.optim import SGD, RMSprop, Adagrad, Adam, AdamW
 from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 from aimet_torch.v2.quantization.affine import AffineQuantizerBase, Quantize, \
     QuantizeDequantize, Dequantize
-from aimet_torch.v2.quantization.affine.backends import get_backend
+import aimet_torch.v2.quantization as Q
 
 
 _PARAMETER_SHAPE = (100,)
@@ -141,7 +141,7 @@ def test_quantize_compute_encodings(quantize: Quantize, x: torch.Tensor):
                                                           dynamic_max,
                                                           quantize.symmetric,
                                                           bitwidth=8)
-    expected_x_int = get_backend().quantize(x,
+    expected_x_int = Q.affine.quantize(x,
                                             dynamic_scale,
                                             dynamic_offset,
                                             quantize.bitwidth,
@@ -187,7 +187,7 @@ def test_qdq_compute_encodings(quantize_dequantize: QuantizeDequantize, x: torch
                                                           dynamic_max,
                                                           quantize_dequantize.symmetric,
                                                           bitwidth=8)
-    expected_output = get_backend().quantize_dequantize(x,
+    expected_output = Q.affine.quantize_dequantize(x,
                                                         dynamic_scale,
                                                         dynamic_offset,
                                                         quantize_dequantize.bitwidth,
@@ -329,7 +329,7 @@ def test_quantize_forward(quantize: Quantize, x: torch.Tensor):
     Then: forward() returns parametric quantization output.
     """
     output = quantize(x)
-    expected_output = get_backend().quantize(x,
+    expected_output = Q.affine.quantize(x,
                                              quantize.get_scale(),
                                              quantize.get_offset(),
                                              quantize.bitwidth,
@@ -353,7 +353,7 @@ def test_qdq_forward(quantize_dequantize: QuantizeDequantize, x: torch.Tensor):
     Then: forward() returns parametric quantization output.
     """
     output = quantize_dequantize(x)
-    expected_output = get_backend().quantize_dequantize(x,
+    expected_output = Q.affine.quantize_dequantize(x,
                                                         quantize_dequantize.get_scale(),
                                                         quantize_dequantize.get_offset(),
                                                         quantize_dequantize.bitwidth,

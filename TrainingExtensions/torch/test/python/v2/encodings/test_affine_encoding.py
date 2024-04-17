@@ -209,3 +209,19 @@ class TestAffineEncoding:
             assert property.shape == shape
         assert encoding.granularity == "pertensor"
         assert encoding.mapping == "affine"
+
+    def test_block_size_per_channel_equivalence(self):
+        scale = torch.randn(2, 2, 2, 2)
+        offset = torch.zeros(size=(2, 2, 2, 2))
+        bq_encoding = AffineEncoding(scale, offset, 8, block_size=[1, 1, 1, 1])
+        pc_encoding = AffineEncoding(scale, offset, 8)
+        inp = torch.randn(2, 2, 2, 2)
+
+        bq_quant = bq_encoding.quantize(inp)
+        pc_quant = pc_encoding.quantize(inp)
+
+        bq_dequant = bq_encoding.dequantize(bq_quant)
+        pc_dequant = bq_encoding.dequantize(pc_quant)
+
+        assert torch.equal(bq_quant, pc_quant)
+        assert torch.equal(bq_dequant, pc_dequant)
