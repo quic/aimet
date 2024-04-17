@@ -107,7 +107,7 @@ class TestFakeQuantizedSoftmax:
         scale = quant_softmax.input_quantizers[0].get_scale()
         offset = quant_softmax.input_quantizers[0].get_offset()
         bitwidth = quant_softmax.input_quantizers[0].bitwidth
-        input_qdq = quantize_dequantize().quantize_dequantize(input, scale, offset, bitwidth)
+        input_qdq = quantize_dequantize(input, scale, offset, bitwidth)
 
         expected_output = F.softmax(input_qdq, quant_softmax.dim)
         assert torch.equal(quant_output, expected_output)

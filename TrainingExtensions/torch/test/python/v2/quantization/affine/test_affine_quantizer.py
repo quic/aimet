@@ -142,10 +142,10 @@ def test_quantize_compute_encodings(quantize: Quantize, x: torch.Tensor):
                                                           quantize.symmetric,
                                                           bitwidth=8)
     expected_x_int = Q.affine.quantize(x,
-                                            dynamic_scale,
-                                            dynamic_offset,
-                                            quantize.bitwidth,
-                                            quantize._signed)
+                                       dynamic_scale,
+                                       dynamic_offset,
+                                       quantize.bitwidth,
+                                       quantize._signed)
 
     with quantize.compute_encodings():
         x_int = quantize(x)
@@ -188,10 +188,10 @@ def test_qdq_compute_encodings(quantize_dequantize: QuantizeDequantize, x: torch
                                                           quantize_dequantize.symmetric,
                                                           bitwidth=8)
     expected_output = Q.affine.quantize_dequantize(x,
-                                                        dynamic_scale,
-                                                        dynamic_offset,
-                                                        quantize_dequantize.bitwidth,
-                                                        quantize_dequantize._signed)
+                                                   dynamic_scale,
+                                                   dynamic_offset,
+                                                   quantize_dequantize.bitwidth,
+                                                   quantize_dequantize._signed)
 
     with quantize_dequantize.compute_encodings():
         output = quantize_dequantize(x)
@@ -330,10 +330,10 @@ def test_quantize_forward(quantize: Quantize, x: torch.Tensor):
     """
     output = quantize(x)
     expected_output = Q.affine.quantize(x,
-                                             quantize.get_scale(),
-                                             quantize.get_offset(),
-                                             quantize.bitwidth,
-                                             quantize._signed)
+                                        quantize.get_scale(),
+                                        quantize.get_offset(),
+                                        quantize.bitwidth,
+                                        quantize._signed)
     assert torch.allclose(output.quantized_repr(), expected_output.to(output.encoding.dtype))
 
 
@@ -354,10 +354,10 @@ def test_qdq_forward(quantize_dequantize: QuantizeDequantize, x: torch.Tensor):
     """
     output = quantize_dequantize(x)
     expected_output = Q.affine.quantize_dequantize(x,
-                                                        quantize_dequantize.get_scale(),
-                                                        quantize_dequantize.get_offset(),
-                                                        quantize_dequantize.bitwidth,
-                                                        quantize_dequantize._signed)
+                                                   quantize_dequantize.get_scale(),
+                                                   quantize_dequantize.get_offset(),
+                                                   quantize_dequantize.bitwidth,
+                                                   quantize_dequantize._signed)
     assert torch.allclose(output, expected_output)
 
 
