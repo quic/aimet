@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -38,6 +38,7 @@ import random
 import torch
 import pytest
 from collections import namedtuple
+from aimet_torch.v2.quantization import affine
 from aimet_torch.v2.quantization.affine.backends import torch_builtins
 from aimet_torch.v2.utils import ste_round
 
@@ -640,3 +641,117 @@ class TestQuantizationBackends:
         assert torch.allclose(random_tensor.grad, expected_tensor_grad, rtol=1e-3)
         assert torch.allclose(scale.grad, expected_scale_grad, rtol=1e-3)
         assert torch.allclose(offset.grad, expected_offset_grad, rtol=1e-3)
+
+    def test_block_size(self, backend_module):
+        scale = torch.randn(4, 3, 8, 1)
+        offset = torch.randint(low=-128, high=127, size=(4, 3, 8, 1)).to(dtype=scale.dtype)
+        inp = torch.randn(8, 6, 8, 3)
+        block_size = [-1, 2, 1, 3]
+
+        reshaped_inp = backend_module._reshape_tensor_for_blocks(inp, scale, block_size)
+        assert reshaped_inp.shape == (4, 2, 3, 2, 8, 1, 1, 3)
+
+        reshaped_scale = backend_module._reshape_encoding_param_for_blocks(scale, block_size)
+        assert reshaped_scale.shape == (4, 1, 3, 1, 8, 1, 1, 1)
+
+        q = affine.quantize(inp, scale, offset, 8, True, block_size=block_size)
+        dq = affine.dequantize(q, scale, offset, block_size=block_size)
+        qdq = affine.quantize_dequantize(inp, scale, offset, 8, True, block_size=block_size)
+
+        assert q.shape == inp.shape
+        assert dq.shape == inp.shape
+        assert qdq.shape == inp.shape
+
+    @pytest.mark.parametrize('scale, offset, block_size, output',
+                             [[torch.tensor([[0.03, 0.02]]), torch.zeros(1, 2), [2, 1], torch.tensor([[-40, 120], [-20, -9]])],
+                              [torch.tensor([[0.03, 0.02]]), torch.zeros(1, 2), [-1, 1], torch.tensor([[-40, 120], [-20, -9]])],
+                              [torch.tensor([[0.03, 0.02]]), torch.zeros(1, 2), None, torch.tensor([[-40, 120], [-20, -9]])],
+                              [torch.tensor([[0.03], [0.02]]), torch.zeros(2, 1), [1, 2], torch.tensor([[-40, 80], [-30, -9]])],
+                              [torch.tensor([[0.03], [0.02]]), torch.zeros(2, 1), [1, -1], torch.tensor([[-40, 80], [-30, -9]])],
+                              [torch.tensor([[0.03], [0.02]]), torch.zeros(2, 1), None, torch.tensor([[-40, 80], [-30, -9]])],
+                              [torch.tensor([[0.03, 0.02], [0.01, 0.09]]), torch.zeros(2, 2), [1, 1], torch.tensor([[-40, 120], [-60, -2]])]
+                              ])
+    def test_block_quant(self, backend_module, scale, offset, block_size, output):
+        inp = torch.tensor([[-1.2, 2.4], [-.6, -.18]])
+
+        q = affine.quantize(inp, scale, offset.to(scale.dtype), 8, True, block_size=block_size)
+        assert torch.equal(q, output.to(q.dtype))
+
+        dq = affine.dequantize(q, scale, offset.to(scale.dtype), block_size=block_size)
+        assert torch.allclose(dq, inp, atol=1e-6)
+
+        qdq = affine.quantize_dequantize(inp, scale, offset.to(scale.dtype), 8, True, block_size=block_size)
+        assert torch.allclose(qdq, inp, atol=1e-6)
+
+    def test_block_quant_2(self, backend_module):
+        inp = torch.randn(3, 5, 4, 6, 12, 9)
+        scale = torch.randn(2, 1, 4, 9)
+        offset = torch.randint(low=-128, high=127, size=(2, 1, 4, 9)).to(dtype=scale.dtype)
+        block_size = [2, 6, 3, 1]
+        q = affine.quantize(inp, scale, offset, 8, block_size=block_size)
+        dq = affine.dequantize(q, scale, offset, block_size=block_size)
+        qdq = affine.quantize_dequantize(inp, scale, offset, 8, block_size=block_size)
+
+        for i in range(scale.shape[0]):
+            for j in range(scale.shape[1]):
+                for k in range(scale.shape[2]):
+                    for l in range(scale.shape[3]):
+                        inp_block = inp[...,
+                                    i * block_size[0]: (i + 1) * block_size[0],
+                                    j * block_size[1]: (j + 1) * block_size[1],
+                                    k * block_size[2]: (k + 1) * block_size[2],
+                                    l * block_size[3]: (l + 1) * block_size[3],
+                                    ]
+                        q_block = q[...,
+                                    i * block_size[0]: (i + 1) * block_size[0],
+                                    j * block_size[1]: (j + 1) * block_size[1],
+                                    k * block_size[2]: (k + 1) * block_size[2],
+                                    l * block_size[3]: (l + 1) * block_size[3],
+                                    ]
+                        dq_block = dq[...,
+                                     i * block_size[0]: (i + 1) * block_size[0],
+                                     j * block_size[1]: (j + 1) * block_size[1],
+                                     k * block_size[2]: (k + 1) * block_size[2],
+                                     l * block_size[3]: (l + 1) * block_size[3],
+                                     ]
+                        qdq_block = qdq[...,
+                                        i * block_size[0]: (i + 1) * block_size[0],
+                                        j * block_size[1]: (j + 1) * block_size[1],
+                                         k * block_size[2]: (k + 1) * block_size[2],
+                                         l * block_size[3]: (l + 1) * block_size[3],
+                                         ]
+
+                        assert torch.equal(q_block, affine.quantize(inp_block,
+                                                                    scale[i, j, k, l],
+                                                                    offset[i, j, k, l],
+                                                                    8))
+                        assert torch.equal(dq_block, affine.dequantize(q_block,
+                                                                       scale[i, j, k, l],
+                                                                       offset[i, j, k, l]))
+                        assert torch.equal(qdq_block, affine.quantize_dequantize(inp_block,
+                                                                                 scale[i, j, k, l],
+                                                                                 offset[i, j, k, l],
+                                                                                 8))
+
+    def test_invalid_block_size(self, backend_module):
+
+        # Block size length must match scale
+        with pytest.raises(RuntimeError):
+            backend_module._validate_arguments(torch.randn(4, 8), torch.randn(2, 2), torch.randn(2, 2),
+                                               block_size=[2, 4, 1])
+        backend_module._validate_arguments(torch.randn(4, 8), torch.randn(2, 2), torch.randn(2, 2),
+                                           block_size=[2, 4])
+
+        # Scale dimension must divide evenly with input dimension
+        with pytest.raises(RuntimeError):
+            backend_module._validate_arguments(torch.randn(1, 4), torch.randn(1, 3), torch.randn(1, 2),
+                                               block_size=[1, -1])
+        backend_module._validate_arguments(torch.randn(1, 4), torch.randn(1, 2), torch.randn(1, 2),
+                                           block_size=[1, -1])
+
+        # Block dim size * scale dim size must equal input dim size
+        with pytest.raises(RuntimeError):
+            backend_module._validate_arguments(torch.randn(1, 4), torch.randn(1, 4), torch.randn(1, 2),
+                                               block_size=[1, 3])
+        backend_module._validate_arguments(torch.randn(1, 4), torch.randn(1, 2), torch.randn(1, 2),
+                                           block_size=[1, 2])
