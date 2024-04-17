@@ -132,24 +132,24 @@ class QuantAnalyzer:
         os.makedirs(results_dir, exist_ok=True)
 
         # Check model sensitivity to weight and activation quantization individually.
-        self._check_model_sensitivity_to_quantization(sim)
+        self.check_model_sensitivity_to_quantization(sim)
 
         # Perform per layer analysis by enabling each quant wrapper (OPTION-1).
-        self._perform_per_layer_analysis_by_enabling_quant_wrappers(sim, results_dir)
+        self.perform_per_layer_analysis_by_enabling_quant_wrappers(sim, results_dir)
 
         # Perform per layer analysis by disabling each quant wrapper (OPTION-2).
-        self._perform_per_layer_analysis_by_disabling_quant_wrappers(sim, results_dir)
+        self.perform_per_layer_analysis_by_disabling_quant_wrappers(sim, results_dir)
 
         # Export encoding min-max range.
-        self._export_per_layer_encoding_min_max_range(sim, results_dir)
+        self.export_per_layer_encoding_min_max_range(sim, results_dir)
 
         # Export PDF of statistics.
         if quant_scheme == QuantScheme.post_training_tf_enhanced:
-            self._export_per_layer_stats_histogram(sim, results_dir)
+            self.export_per_layer_stats_histogram(sim, results_dir)
 
         # Export per layer MSE loss between fp32 and quantized output activations.
         if self._unlabeled_dataset_iterable:
-            self._export_per_layer_mse_loss(sim, results_dir)
+            self.export_per_layer_mse_loss(sim, results_dir)
 
     def enable_per_layer_mse_loss(self, unlabeled_dataset_iterable: Union[DataLoader, Collection], num_batches: int):
         """
@@ -404,9 +404,9 @@ class QuantAnalyzer:
         for index, (histogram, encoding) in enumerate(zip(histograms, encodings)):
             export_stats_histogram_plot(histogram, encoding, results_dir, title=f"{title}_{index}")
 
-    def _check_model_sensitivity_to_quantization(self,
-                                                 sim: QuantizationSimModel,
-                                                 ) -> Tuple[float, float, float]:
+    def check_model_sensitivity_to_quantization(self,
+                                                sim: QuantizationSimModel,
+                                                ) -> Tuple[float, float, float]:
         """
         Perform the sensitivity analysis to weight and activation quantization
         individually.
@@ -428,19 +428,18 @@ class QuantAnalyzer:
 
         return fp32_eval_score, weight_quantized_eval_score, act_quantized_eval_score
 
-    def _perform_per_layer_analysis_by_enabling_quant_wrappers(self,
-                                                               sim: QuantizationSimModel,
-                                                               results_dir: str,
-                                                               ) -> Dict:
+    def perform_per_layer_analysis_by_enabling_quant_wrappers(self,
+                                                              sim: QuantizationSimModel,
+                                                              results_dir: str,
+                                                              ) -> Dict:
         """
         NOTE: Option 1
 
         1. All quant wrappers' parameters and activations quantizers are disabled.
-        2. For every quant wrappers, based on occurrence:
-              i. Each quant wrapper's parameters and activations quantizers are enabled as per JSON config file
-                 and set to bit-width specified.
-             ii. Measure and record eval score on subset of dataset.
-            iii. Disable enabled quantizers in step i.
+        2. Based on occurrence for every quant wrappers
+            - Each quant wrapper's parameters and activations quantizers are enabled as per JSON config file and set to bit-width specified.
+            - Measure and record eval score on subset of dataset.
+            - Disable enabled quantizers in step 1.
         3. Returns dictionary containing quant wrapper name and corresponding eval score.
 
         :param sim: Quantsim model.
@@ -465,19 +464,18 @@ class QuantAnalyzer:
         _logger.info("Exported per-layer quant analysis (enabled) plot.")
         return layer_wise_eval_score_dict
 
-    def _perform_per_layer_analysis_by_disabling_quant_wrappers(self,
-                                                                sim: QuantizationSimModel,
-                                                                results_dir: str,
-                                                                ) -> Dict:
+    def perform_per_layer_analysis_by_disabling_quant_wrappers(self,
+                                                               sim: QuantizationSimModel,
+                                                               results_dir: str,
+                                                               ) -> Dict:
         """
         NOTE: Option 2
 
-        1. All quant wrappers' parameters and activations quantizers are enabled as per JSON config file
-        and set to bit-width specified.
-        2. For every quant wrappers, based on occurrence:
-              i. Each quant wrapper's parameters and activations quantizers are disabled.
-             ii. Measure and record eval score on subset of dataset.
-            iii. Enable disabled quantizers in step i.
+        1. All quant wrappers' parameters and activations quantizers are enabled as per JSON config file and set to bit-width specified.
+        2. Based on occurrence for every quant wrappers
+            - Each quant wrapper's parameters and activations quantizers are disabled.
+            - Measure and record eval score on subset of dataset.
+            - Enable disabled quantizers in step 1.
         3. Returns dictionary containing quant wrapper name and corresponding eval score.
 
         :param sim: Quantsim model.
@@ -503,10 +501,10 @@ class QuantAnalyzer:
         return layer_wise_eval_score_dict
 
     # pylint: disable=no-self-use
-    def _export_per_layer_encoding_min_max_range(self,
-                                                 sim: QuantizationSimModel,
-                                                 results_dir: str,
-                                                 ) -> Tuple[Dict, Dict]:
+    def export_per_layer_encoding_min_max_range(self,
+                                                sim: QuantizationSimModel,
+                                                results_dir: str,
+                                                ) -> Tuple[Dict, Dict]:
         """
         Export encoding min and max range for all weights and activations. results_dir should have
         html files in following format.
@@ -566,10 +564,10 @@ class QuantAnalyzer:
         _logger.info("Exported per layer encodings min-max ranges plot(s).")
         return min_max_range_for_weights_dict, min_max_range_for_activations_dict
 
-    def _export_per_layer_stats_histogram(self,
-                                          sim: QuantizationSimModel,
-                                          results_dir: str,
-                                          ):
+    def export_per_layer_stats_histogram(self,
+                                         sim: QuantizationSimModel,
+                                         results_dir: str,
+                                         ):
         """
         NOTE: Not to invoke when quantization scheme is not TF-Enhanced.
 
@@ -613,10 +611,10 @@ class QuantAnalyzer:
                                                                  title=f"{wrapped_module_name}_{param_name}")
         _logger.info("Exported per layer stats histogram plot(s).")
 
-    def _export_per_layer_mse_loss(self,
-                                   sim: QuantizationSimModel,
-                                   results_dir: str,
-                                   ) -> Dict:
+    def export_per_layer_mse_loss(self,
+                                  sim: QuantizationSimModel,
+                                  results_dir: str,
+                                  ) -> Dict:
         """
         NOTE: Need to pass same model input data through both fp32 and quantsim model to
         tap output activations of each layer.

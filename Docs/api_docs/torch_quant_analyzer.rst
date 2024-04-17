@@ -20,8 +20,34 @@ For an end-to-end notebook showing how to use PyTorch QuantAnalyzer, please see 
 
 Top-level API
 =============
+
+.. autoclass:: aimet_common.utils.CallbackFunc
+|
 .. autoclass:: aimet_torch.quant_analyzer.QuantAnalyzer
-    :members:
+|
+.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.enable_per_layer_mse_loss
+|
+.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.analyze
+|
+
+Run specific utility
+====================
+We can avoid running all the utilities that QuantAnalyzer offers and only run those of our interest. For this we
+need to have the QuantizationSimModel object, Then we call the desired QuantAnalyzer utility of our interest and pass
+the same object to it.
+
+.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.check_model_sensitivity_to_quantization
+|
+.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.perform_per_layer_analysis_by_enabling_quant_wrappers
+|
+.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.perform_per_layer_analysis_by_disabling_quant_wrappers
+|
+.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.export_per_layer_encoding_min_max_range
+|
+.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.export_per_layer_stats_histogram
+|
+.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.export_per_layer_mse_loss
+|
 
 Code Examples
 =============
