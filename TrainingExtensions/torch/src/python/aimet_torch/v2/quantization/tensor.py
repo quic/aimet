@@ -193,11 +193,6 @@ class QuantizedTensor(QuantizedTensorBase):
     Represents a quantized tensor object. The object holds quantized values stored in a floating-point tensor along with
     an :class:`EncodingBase` object which holds the information necessary to map the quantized values back to the
     real/represented values.
-
-    .. warning::
-        A the raw data stored in a :class:`QuantizedTensor` object does not reflect the real values represented by the :class:`QuantizedTensor`
-        and should not be used directly in floating point operations. To correctly use a :class:`QuantizedTensor` in a floating point
-        operation, it should first be dequantized.
     """
 
     def quantize(self) -> "QuantizedTensor":
@@ -255,7 +250,7 @@ class DequantizedTensor(QuantizedTensorBase):
 
     def quantize(self) -> QuantizedTensor:
         """
-        Quantizes ``self`` using :attr:`self.encoding` to produce a :class:`DequantizedTensor` with the same encoding
+        Quantizes ``self`` using :attr:`self.encoding` to produce a :class:`QuantizedTensor` with the same encoding
         information.
 
         Example:
