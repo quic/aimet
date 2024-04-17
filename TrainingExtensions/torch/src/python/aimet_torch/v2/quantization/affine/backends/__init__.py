@@ -37,14 +37,14 @@
 # pylint: disable=all
 
 import math
-from typing import overload, Union, Tuple
+from typing import overload, Union, Tuple, Optional, List
 import torch
 from .utils import *
 
 
 @overload
 def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
-             bitwidth: Union[int, float], signed: bool = False):
+             bitwidth: Union[int, float], signed: bool = False, block_size: Optional[List] = None):
     """
     Performs differentiable quantization given scale, offset, and bitwidth.
     (Equivalent to ``quantize(tensor, scale, offset, num_bins=2**bitwidth-1, signed=signed)``)
@@ -60,7 +60,7 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
 
 @overload
 def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
-             num_bins: int, signed: bool = False):
+             num_bins: int, signed: bool = False, block_size: Optional[List] = None):
     """
     Performs differentiable quantization given scale, offset, and the number of bins in the quantization range.
 
@@ -74,7 +74,7 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
 
 @overload
 def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
-             qmin: int, qmax: int):
+             qmin: int, qmax: int, block_size: Optional[List] = None):
     """
     Performs differentiable quantization given scale, offset, and quantization range.
 
@@ -88,13 +88,13 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
 
 def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
              *args, **kwargs):
-    qmin, qmax = _parse_args(args, kwargs)
-    return get_backend().quantize(tensor, scale, offset, qmin, qmax)
+    qmin, qmax, block_size = _parse_args(args, kwargs)
+    return get_backend().quantize(tensor, scale, offset, qmin, qmax, block_size)
 
 
 @overload
 def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
-                        bitwidth: Union[int, float], signed: bool = False):
+                        bitwidth: Union[int, float], signed: bool = False, block_size: Optional[List] = None):
     """
     Performs differentiable quantize-dequantize given scale, offset, and bitwidth.
     (Equivalent to ``quantize_dequantize(tensor, scale, offset, num_bins=2**bitwidth-1, signed=signed)``)
@@ -110,7 +110,7 @@ def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
 
 @overload
 def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
-                        num_bins: int, signed: bool = False):
+                        num_bins: int, signed: bool = False, block_size: Optional[List] = None):
     """
     Performs differentiable quantize-dequantize given scale, offset, and the number of bins in the quantization range.
 
@@ -124,7 +124,7 @@ def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
 
 @overload
 def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
-                        qmin: int, qmax: int):
+                        qmin: int, qmax: int, block_size: Optional[List] = None):
     """
     Performs differentiable quantize-dequantize given scale, offset, and quantization range.
 
@@ -138,16 +138,17 @@ def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
 
 def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
                         *args, **kwargs):
-    qmin, qmax = _parse_args(args, kwargs)
-    return get_backend().quantize_dequantize(tensor, scale, offset, qmin, qmax)
+    qmin, qmax, block_size = _parse_args(args, kwargs)
+    return get_backend().quantize_dequantize(tensor, scale, offset, qmin, qmax, block_size)
 
 
-def dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor):
-    return get_backend().dequantize(tensor, scale, offset)
+def dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, block_size: Optional[List] = None):
+    return get_backend().dequantize(tensor, scale, offset, block_size)
 
 
-def _parse_args(args, kwargs) -> Tuple[int, int]:
+def _parse_args(args, kwargs) -> Tuple[int, int, Optional[List]]:
     bitwidth = num_bins = signed = qmin = qmax = None
+    block_size = kwargs.get('block_size')
 
     if len(args) == 2:
         bitwidth, signed = args
@@ -176,4 +177,4 @@ def _parse_args(args, kwargs) -> Tuple[int, int]:
     assert qmin is not None
     assert qmax is not None
 
-    return qmin, qmax
+    return qmin, qmax, block_size

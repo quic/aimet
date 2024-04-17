@@ -37,6 +37,7 @@
 # pylint: disable=redefined-builtin
 """ Affine encoding definition """
 
+from typing import List, Optional
 import torch
 from torch._C._nn import _parse_to as parse_to_args
 
@@ -51,12 +52,14 @@ class AffineEncoding(EncodingBase):
     """
     Encoding object for affine quantization
     """
-    def __init__(self, scale: torch.Tensor, offset: torch.Tensor, bitwidth: int, signed=False, symmetry=False):
+    def __init__(self, scale: torch.Tensor, offset: torch.Tensor, bitwidth: int, signed=False, symmetry=False,
+                 block_size: Optional[List] = None):
         self._scale = scale
         self._offset = offset
         self._symmetry = symmetry
         self._bitwidth = bitwidth
         self._signed = signed
+        self._block_size = block_size
 
     @property
     def mapping(self) -> str:
@@ -164,6 +167,13 @@ class AffineEncoding(EncodingBase):
             return torch.int16
         return torch.int32
 
+    @property
+    def block_size(self) -> Optional[List]:
+        """
+        Returns the block sizes of the quantizer encoding
+        """
+        return self._block_size
+
     def to(self, *args, **kwargs):
         """
         Changes dtype of data in quantizer encoding or device where the data is.
@@ -190,9 +200,11 @@ class AffineEncoding(EncodingBase):
         offset = self.offset
         bitwidth = self.bitwidth
         signed = self.signed
-        return quantize(input, scale.to(input.dtype), offset.to(input.dtype), bitwidth, signed)
+        block_size = self.block_size
+        return quantize(input, scale.to(input.dtype), offset.to(input.dtype), bitwidth, signed, block_size=block_size)
 
     def dequantize(self, input: torch.Tensor) -> torch.Tensor:
         scale = self.scale
         offset = self.offset
-        return dequantize(input, scale.to(input.dtype), offset.to(input.dtype))
+        block_size = self.block_size
+        return dequantize(input, scale.to(input.dtype), offset.to(input.dtype), block_size=block_size)

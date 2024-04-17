@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -38,7 +38,7 @@
 import torch
 from aimet_torch.v2.quantization.affine.backends import torch_builtins
 
-from typing import Protocol
+from typing import List, Optional, Protocol
 from aimet_torch.v2.utils import _ContextManager
 
 
@@ -48,13 +48,15 @@ class _QuantizationBackendProtocol(Protocol):
                  scale: torch.Tensor,
                  offset: torch.Tensor,
                  qmin: int,
-                 qmax: int) -> torch.Tensor:
+                 qmax: int,
+                 block_size: Optional[List] = None) -> torch.Tensor:
         ...
 
     def dequantize(self,
                    input: torch.Tensor,
                    scale: torch.Tensor,
-                   offset: torch.Tensor) -> torch.Tensor:
+                   offset: torch.Tensor,
+                   block_size: Optional[List] = None) -> torch.Tensor:
         ...
 
     def quantize_dequantize(self,
@@ -62,7 +64,8 @@ class _QuantizationBackendProtocol(Protocol):
                             scale: torch.Tensor,
                             offset: torch.Tensor,
                             qmin: int,
-                            qmax: int) -> torch.Tensor:
+                            qmax: int,
+                            block_size: Optional[List] = None) -> torch.Tensor:
         ...
 
 
