@@ -54,7 +54,7 @@ from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 
-_logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
+_logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.QuantAnalyzer)
 
 DEFAULT_BOKEH_FIGURE_HEIGHT = 300
 
@@ -67,7 +67,7 @@ class QuantAnalyzer:
      2) per layer sensitivity analysis
      3) per layer encoding (min - max range)
      4) per PDF analysis and
-     4) per layer MSE analysis
+     5) per layer MSE analysis
     """
     def __init__(self,
                  model: torch.nn.Module,
