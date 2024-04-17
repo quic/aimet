@@ -54,7 +54,7 @@ Please visit :ref:`AIMET Installation <ug-installation>` for installation instru
     Adaptive Rounding (AdaRound) <../user_guide/adaround>
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
    :titlesonly:
    :caption: AIMET PyTorch API
 
