@@ -9,7 +9,6 @@ quantization.float
 
 
 .. toctree::
-   :hidden:
 
    FloatQuantizeDequantize <FloatQuantizeDequantize>
    QuantizeDequantize <QuantizeDequantize>

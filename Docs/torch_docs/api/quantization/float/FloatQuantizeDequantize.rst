@@ -3,7 +3,7 @@
 
 
 ==========
-quantization.float.FloatQuantizeDequantize
+FloatQuantizeDequantize
 ==========
 
 .. autoclass:: aimet_torch.v2.quantization.float.FloatQuantizeDequantize

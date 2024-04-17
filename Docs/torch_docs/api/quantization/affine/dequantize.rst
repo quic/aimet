@@ -3,7 +3,7 @@
 
 
 ==========
-quantization.affine.dequantize
+dequantize
 ==========
 
 .. autofunction:: aimet_torch.v2.quantization.affine.dequantize

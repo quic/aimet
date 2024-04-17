@@ -9,9 +9,7 @@ quantization.affine
 
 
 .. toctree::
-   :hidden:
 
-   AffineQuantizerBase <AffineQuantizerBase>
    Quantize <Quantize>
    QuantizeDequantize <QuantizeDequantize>
    quantize <quantize>
