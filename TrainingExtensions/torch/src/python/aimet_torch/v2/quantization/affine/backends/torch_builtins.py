@@ -35,47 +35,104 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Default quantization backend for quantizing weights and activations """
-from typing import Union
 import torch
 
 from aimet_torch.v2.utils import _is_expandable
 
 
-def _validate_arguments(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor):
+def _is_value_representable(dtype: torch.dtype, value):
+    """
+    Return whether a value can be represented with the given dtype
+    """
+    finfo = torch.finfo(dtype)
+    return finfo.min < value < finfo.max
+
+
+def _is_range_representable(dtype: torch.dtype, qmin: int, qmax: int):
+    """
+    Return whether a range can be represented with the given dtype
+    """
+    return _is_value_representable(dtype, qmax) and \
+            _is_value_representable(dtype, qmin) and \
+            _is_value_representable(dtype, qmax - qmin)
+
+
+def _is_numerically_stable(dtype: torch.dtype, qmin: int, qmax: int):
+    """
+    Return whether a range can be **stably** represented with the given dtype
+    """
+    if not _is_range_representable(dtype, qmin, qmax):
+        return False
+
+    # NOTE: This is a heuristic criteria. It doesn't perfectly guarantee numerical stability
+    #       This criteria allows 8-bit quantization of float16, but it needs more discussion
+    if torch.finfo(dtype).tiny > 1e-1 / (qmax - qmin):
+        return False
+
+    return True
+
+
+def _validate_arguments(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
+                        qmin: int = None, qmax: int = None):
     if not tensor.dtype == scale.dtype == offset.dtype:
         raise RuntimeError("Data type of tensor, scale, and offset are should be the same")
     if not _is_expandable(scale.shape, tensor.shape):
         raise RuntimeError(f"Scale of shape {scale.shape} cannot be expanded like input tensor of shape {tensor.shape}")
 
-def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int], signed: bool = False) -> torch.Tensor:
+    if qmin is not None and qmax is not None:
+        if qmin >= qmax:
+            raise RuntimeError(f"qmin ({qmin}) must be smaller than qmax ({qmax})")
+
+
+def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
+             qmin: int, qmax: int) -> torch.Tensor:
     """
-    Performs differentiable quantization on tensor using scale, offset, and bitwidth parameters.
+    Performs differentiable quantization given scale, offset, and quantization range.
 
     :param tensor: Tensor to quantize
     :param scale: Scale factor for quantization
     :param offset: Offset value for quantization
-    :param bitwidth: Output bitwidth of quantized tensor
-    :return: Resulting tensor
+    :param qmin: Minimum value of the quantization range
+    :param qmax: Maximum value of the quantization range
     """
-    _validate_arguments(tensor, scale, offset)
-    return QuantizeFunc.apply(tensor, scale, offset, bitwidth, signed)
+    _validate_arguments(tensor, scale, offset, qmin, qmax)
 
-def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int], signed: bool = False) -> torch.Tensor:
+    if not _is_range_representable(tensor.dtype, qmin, qmax):
+        msg = f"{tensor.dtype} is unable to represent quantized output of range [{qmin}, {qmax}]."
+        raise RuntimeError(msg)
+
+    return QuantizeFunc.apply(tensor, scale, offset, qmin, qmax)
+
+def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
+                        qmin: int, qmax: int) -> torch.Tensor:
     """
-    Performs differentiable quantize-dequantize operation on tensor using scale, offset, and bitwidth parameters.
+    Performs differentiable quantize-dequantize given scale, offset, and quantization range.
 
-    :param tensor: Tensor to quantize-dequantize
+    :param tensor: Tensor to quantize
     :param scale: Scale factor for quantization
     :param offset: Offset value for quantization
-    :param bitwidth: simulated quantization bitwidth
-    :return: Resulting tensor
+    :param qmin: Minimum value of the quantization range
+    :param qmax: Maximum value of the quantization range
     """
-    _validate_arguments(tensor, scale, offset)
-    return QuantDequantFunc.apply(tensor, scale, offset, bitwidth, signed)
+    _validate_arguments(tensor, scale, offset, qmin, qmax)
+
+    output_dtype = internal_dtype = tensor.dtype
+
+    if not _is_numerically_stable(internal_dtype, qmin, qmax):
+        internal_dtype = torch.float32
+
+    if not _is_range_representable(internal_dtype, qmin, qmax):
+        msg = f"{internal_dtype} is unable to represent quantized output of range [{qmin}, {qmax}]."
+        raise RuntimeError(msg)
+
+    return QuantDequantFunc.apply(tensor.to(internal_dtype),
+                                  scale.to(internal_dtype),
+                                  offset.to(internal_dtype),
+                                  qmin, qmax).to(output_dtype)
 
 def dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor) -> torch.Tensor:
     """
-    Performs differentiable dequantize operation on tensor using scale and offset parameters.
+    Performs differentiable dequantize operation given scale and offset.
 
     :param tensor: Tensor to quantize
     :param scale: Scale factor for quantization
@@ -93,21 +150,17 @@ class QuantizeFunc(torch.autograd.Function):
     """
     # pylint: disable=arguments-differ
     @staticmethod
-    def forward(ctx, tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int], signed):
-        if signed:
-            clip_min, clip_max = - 2 ** (bitwidth - 1), 2 ** (bitwidth - 1) - 1
-        else:
-            clip_min, clip_max = 0, 2 ** bitwidth - 1
+    def forward(ctx, tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, qmin: int, qmax: int):
         x_round = torch.round(tensor / scale) - offset
         if tensor.requires_grad or scale.requires_grad or offset.requires_grad:
-            mask = (x_round >= clip_min) * (x_round <= clip_max)
+            mask = (x_round >= qmin) * (x_round <= qmax)
         else:
             mask = None
         ctx.tensor_requires_grad = tensor.requires_grad
         ctx.scale_requires_grad = scale.requires_grad
         ctx.offset_requires_grad = offset.requires_grad
         ctx.save_for_backward(tensor, scale, mask)
-        return torch.clamp(x_round, clip_min, clip_max)
+        return torch.clamp(x_round, qmin, qmax)
 
     # pylint: disable=arguments-differ
     @staticmethod
@@ -153,24 +206,22 @@ class QuantDequantFunc(torch.autograd.Function):
     """
     Custom gradient function for quant-dequant
     """
-    # pylint: disable=arguments-differ
+    # pylint: disable=arguments-differ, misplaced-comparison-constant
     @staticmethod
-    def forward(ctx, tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, bitwidth: Union[torch.Tensor, int], signed):
-        if signed:
-            clip_min, clip_max = - 2 ** (bitwidth - 1), 2 ** (bitwidth - 1) - 1
-        else:
-            clip_min, clip_max = 0, 2 ** bitwidth - 1
+    def forward(ctx, tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, qmin: int, qmax: int):
         x_round = torch.round(tensor / scale) - offset
-        x_quant = torch.clamp(x_round, clip_min, clip_max)
+        x_quant = torch.clamp(x_round, qmin, qmax)
         if tensor.requires_grad or scale.requires_grad or offset.requires_grad:
-            mask = (x_round >= clip_min) * (x_round <= clip_max)
+            mask = (x_round >= qmin) * (x_round <= qmax)
         else:
             mask = None
         x_dequant = (x_quant + offset) * scale
 
         # Downcast x_quant if bitwidth is less than or equal to 8 to reduce memory consumption
-        if bitwidth <= 8:
-            x_quant = x_quant.to(dtype=torch.uint8) if not signed else x_quant.to(torch.int8)
+        if 0 <= qmin and qmax <= 255:
+            x_quant = x_quant.to(dtype=torch.uint8)
+        elif -128 <= qmin and qmax <= 127:
+            x_quant = x_quant.to(torch.int8)
 
         ctx.tensor_requires_grad = tensor.requires_grad
         ctx.scale_requires_grad = scale.requires_grad

@@ -51,7 +51,7 @@ from aimet_torch.v2.quantization.encoding_analyzer import EncodingAnalyzer, MinM
 from aimet_torch.v2.quantization.affine import AffineEncoding
 from aimet_torch.v2.quantization.tensor import QuantizedTensor, DequantizedTensor
 from aimet_torch.v2.quantization.base import QuantizerBase
-from aimet_torch.v2.quantization.affine.backends import get_backend
+from aimet_torch.v2.quantization.affine.backends import quantize, quantize_dequantize
 from aimet_torch.v2.utils import ste_round
 
 
@@ -386,23 +386,15 @@ class Quantize(MinMaxQuantizer):
                 ' Please initialize the quantization parameters using `compute_encodings()`.'
             )
 
-        dtype = input.dtype
-
-        if torch.finfo(dtype).max < 2 ** self.bitwidth - 1:
-            msg = f"{dtype} is unable to represent quantized output "\
-                  f"of range [0, 2**(bitwidth={self.bitwidth})-1]. "\
-                  "Please consider lowering the quantization bitwidth."
-            raise RuntimeError(msg)
-
         encoding = self.get_encoding()
-        output = get_backend().quantize(input.to(dtype),
-                                        encoding.scale.to(dtype),
-                                        encoding.offset.to(dtype),
-                                        encoding.bitwidth,
-                                        encoding.signed)
+        output = quantize(input,
+                          encoding.scale.to(input.dtype),
+                          encoding.offset.to(input.dtype),
+                          encoding.bitwidth,
+                          encoding.signed)
         output = output.as_subclass(QuantizedTensor)
         output.encoding = encoding
-        return output.to(dtype)
+        return output
 
 
 class QuantizeDequantize(MinMaxQuantizer):
@@ -420,25 +412,15 @@ class QuantizeDequantize(MinMaxQuantizer):
                 ' Please initialize the quantization parameters using `compute_encodings()`.'
             )
 
-        output_dtype = internal_dtype = input.dtype
-
-        if torch.finfo(internal_dtype).max < 2 ** self.bitwidth - 1:
-            internal_dtype = torch.float32
-            if torch.finfo(internal_dtype).max < 2 ** self.bitwidth - 1:
-                msg = f"{internal_dtype} is unable to represent quantized output "\
-                      f"of range [0, 2**(bitwidth={self.bitwidth})-1]. "\
-                      "Please consider lowering the quantization bitwidth."
-                raise RuntimeError(msg)
-
         encoding = self.get_encoding()
-        output = get_backend().quantize_dequantize(input.to(internal_dtype),
-                                                   encoding.scale.to(internal_dtype),
-                                                   encoding.offset.to(internal_dtype),
-                                                   encoding.bitwidth,
-                                                   encoding.signed)
+        output = quantize_dequantize(input,
+                                     encoding.scale.to(input.dtype),
+                                     encoding.offset.to(input.dtype),
+                                     encoding.bitwidth,
+                                     encoding.signed)
         output = output.as_subclass(DequantizedTensor)
         output.encoding = encoding
-        return output.to(output_dtype)
+        return output
 
 
 class Dequantize(torch.nn.Module):

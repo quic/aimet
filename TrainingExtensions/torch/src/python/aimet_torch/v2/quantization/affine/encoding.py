@@ -41,7 +41,7 @@ import torch
 from torch._C._nn import _parse_to as parse_to_args
 
 from aimet_torch.v2.quantization.base import EncodingBase
-from aimet_torch.v2.quantization.affine.backends import get_backend
+from aimet_torch.v2.quantization.affine.backends import quantize, dequantize
 
 
 __all__ = ["AffineEncoding"]
@@ -190,29 +190,9 @@ class AffineEncoding(EncodingBase):
         offset = self.offset
         bitwidth = self.bitwidth
         signed = self.signed
-
-        # Use dtype with more precision
-        if torch.finfo(input.dtype).bits >= torch.finfo(scale.dtype).bits:
-            dtype = input.dtype
-        else:
-            dtype = scale.dtype
-
-        return get_backend().quantize(input.to(dtype),
-                                      scale.to(dtype),
-                                      offset.to(dtype),
-                                      bitwidth,
-                                      signed).to(input.dtype)
+        return quantize(input, scale.to(input.dtype), offset.to(input.dtype), bitwidth, signed)
 
     def dequantize(self, input: torch.Tensor) -> torch.Tensor:
         scale = self.scale
         offset = self.offset
-
-        # Use dtype with more precision
-        if torch.finfo(input.dtype).bits >= torch.finfo(scale.dtype).bits:
-            dtype = input.dtype
-        else:
-            dtype = scale.dtype
-
-        return get_backend().dequantize(input.to(dtype),
-                                        scale.to(dtype),
-                                        offset.to(dtype)).to(input.dtype)
+        return dequantize(input, scale.to(input.dtype), offset.to(input.dtype))
