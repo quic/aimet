@@ -309,8 +309,8 @@ class QuantizedLSTMCell(LSTMCell):
 
         """Overridden build to call wrap method"""
 
-        # pylint: disable=bad-super-call
-        super().build(input_shape)
+        # pylint: disable=bad-super-call,super-with-arguments
+        super(LSTMCell, self).build(input_shape)
 
         self.wrap_LSTM_internals(input_shape)
 
