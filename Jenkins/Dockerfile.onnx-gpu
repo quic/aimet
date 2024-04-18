@@ -82,7 +82,6 @@ RUN echo "%users ALL = (ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 RUN apt-get update -y > /dev/null && \
     apt-get install --no-install-recommends -y \
-
         # Python
         python3.10 \
         python3.10-dev \
