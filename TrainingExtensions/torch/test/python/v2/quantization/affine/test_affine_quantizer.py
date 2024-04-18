@@ -44,6 +44,7 @@ from torch.optim import SGD, RMSprop, Adagrad, Adam, AdamW
 from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 from aimet_torch.v2.quantization.affine import AffineQuantizerBase, Quantize, \
     QuantizeDequantize, Dequantize
+from aimet_torch.v2.quantization import affine
 import aimet_torch.v2.quantization as Q
 
 
@@ -869,3 +870,64 @@ def test_freeze_encodings(x, q):
     assert torch.equal(q_min, q.min)
     assert torch.equal(q_max, q.max)
 
+def test_bq_compute_encodings_and_forward():
+    torch.manual_seed(0)
+    shape = (2, 2, 4)
+    bq = QuantizeDequantize(shape=shape,
+                            bitwidth=4,
+                            symmetric=True,
+                            block_size=[2, 4, 3])
+    assert bq.encoding_analyzer.observer.shape == [2, 1, 2, 1, 4, 1]
+
+    bq.eval()
+    param_tensor = torch.randn(4, 8, 12)
+    with bq.compute_encodings():
+        _ = bq(param_tensor)
+
+    out = bq(param_tensor)
+    assert bq.get_min().shape == shape
+    assert out.shape == param_tensor.shape
+
+    qdq_out = affine.quantize_dequantize(param_tensor, bq.get_scale(), bq.get_offset(), bitwidth=bq.bitwidth,
+                                         signed=bq.signed, block_size=bq.block_size)
+    assert torch.equal(out, qdq_out)
+
+@pytest.mark.parametrize('shape, block_sizes', [[(4, 1, 1), [1, 4, 4]],
+                                                [(1, 4, 1), [4, 1, 4]],
+                                                [(1, 1, 4), [4, 4, 1]]])
+def test_bq_vs_per_channel_sanity(shape, block_sizes):
+    torch.manual_seed(0)
+    bq = QuantizeDequantize(shape=shape,
+                            bitwidth=4,
+                            symmetric=True,
+                            block_size=block_sizes)
+
+    pc = QuantizeDequantize(shape=shape,
+                            bitwidth=4,
+                            symmetric=True)
+
+    bq.eval()
+    pc.eval()
+    param_tensor = torch.randn(4, 4, 4)
+    with bq.compute_encodings():
+        _ = bq(param_tensor)
+
+    with pc.compute_encodings():
+        _ = pc(param_tensor)
+
+    assert torch.equal(bq(param_tensor), pc(param_tensor))
+
+def test_quantized_tensor_with_block_size():
+    torch.manual_seed(0)
+    shape = (2, 2, 4)
+    tensor = torch.randn(4, 8, 12)
+    bq = Quantize(shape=shape,
+                  bitwidth=4,
+                  symmetric=True,
+                  block_size=[2, 4, 3])
+    with bq.compute_encodings():
+        _ = bq(tensor)
+    assert bq.get_encoding().block_size == bq.block_size
+    q = bq(tensor)
+    assert q.encoding.block_size == bq.block_size
+    assert torch.equal(q.dequantize(), affine.dequantize(q, bq.get_scale(), bq.get_offset(), bq.block_size))

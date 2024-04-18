@@ -48,6 +48,8 @@ from unittest.mock import patch
 
 from aimet_common.defs import QuantScheme
 
+from aimet_torch.v2.quantization import affine
+from aimet_torch.v2.quantization.affine.backends import torch_builtins
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.nn import FakeQuantizationMixin
 from aimet_torch.utils import get_named_module, is_leaf_module
@@ -64,14 +66,19 @@ class STE(torch.autograd.Function):
         return output_grad
 
 
-def autograd_based_qdq(tensor, scale, offset, bitwidth, signed=False) -> torch.Tensor:
+def autograd_based_qdq(tensor, scale, offset, bitwidth, signed=False, block_size=None) -> torch.Tensor:
+    orig_tensor_shape = tensor.shape
+    tensor = torch_builtins.reshape_tensor_for_blocks(tensor, scale.shape, block_size)
+    scale = scale.view(torch_builtins.get_encoding_shape_with_blocks(scale.shape, block_size))
+    offset = offset.view(torch_builtins.get_encoding_shape_with_blocks(offset.shape, block_size))
+
     if signed:
         clip_min, clip_max = - 2 ** (bitwidth - 1), 2 ** (bitwidth - 1) - 1
     else:
         clip_min, clip_max = 0, 2 ** bitwidth - 1
     x_round = STE.apply(tensor / scale) - offset
     x_quant = torch.clamp(x_round, clip_min, clip_max)
-    return (x_quant + offset) * scale
+    return ((x_quant + offset) * scale).view(orig_tensor_shape)
 
 
 # Wrap resnet function to mimic model class instantiation
@@ -278,3 +285,14 @@ class TestQuantsimV2QAT:
                 param_name = ".".join(param_name.split(".")[1:])
             if param.requires_grad:
                 assert torch.allclose(param.grad, single_gpu_grad[param_name], rtol=1e-3, atol=1e-3)
+
+def test_autograd_based_qdq():
+    torch.manual_seed(0)
+    tensor = torch.randn(4, 8, 12)
+    block_size = [2, 4, 3]
+    scale = torch.randn(2, 2, 4)
+    offset = torch.randint(low=-128, high=127, size=(2, 2, 4), dtype=scale.dtype)
+    autograd_based_qdq_out = autograd_based_qdq(tensor, scale, offset, 8, False, block_size)
+    affine_qdq_out = affine.quantize_dequantize(tensor, scale, offset, bitwidth=8, signed=False,
+                                                block_size=block_size)
+    assert torch.equal(autograd_based_qdq_out, affine_qdq_out)

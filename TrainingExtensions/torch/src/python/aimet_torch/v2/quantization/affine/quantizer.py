@@ -51,7 +51,7 @@ from aimet_torch.v2.quantization.encoding_analyzer import EncodingAnalyzer, MinM
 from aimet_torch.v2.quantization.affine import AffineEncoding
 from aimet_torch.v2.quantization.tensor import QuantizedTensor, DequantizedTensor
 from aimet_torch.v2.quantization.base import QuantizerBase
-from aimet_torch.v2.quantization.affine.backends import quantize, quantize_dequantize
+from aimet_torch.v2.quantization.affine.backends import quantize, quantize_dequantize, torch_builtins
 from aimet_torch.v2.utils import ste_round
 
 
@@ -69,18 +69,23 @@ class AffineQuantizerBase(QuantizerBase):
     :param encoding_analyzer: Encoding analyzer for calibrating quantization encodings.
                               (default: absolute min-max encoding analyzer)
     """
-    def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None):
+    def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None,
+                 block_size: Optional[list] = None):
         super().__init__()
         if isinstance(shape, int):
             shape = (shape,)
         self.shape = shape
+        self.block_size = block_size
         self.bitwidth = bitwidth
         self._symmetric = symmetric
         # We support two quantization modes: (unsigned) asymmetric and signed-symmetric
         self._signed = symmetric
-        self.encoding_analyzer = encoding_analyzer or MinMaxEncodingAnalyzer(shape)
 
-        if not _is_expandable(self.encoding_analyzer.observer.shape, self.shape):
+        self.encoding_analyzer = encoding_analyzer or \
+                                 MinMaxEncodingAnalyzer(torch_builtins.get_encoding_shape_with_blocks(self.shape,
+                                                                                                      self.block_size))
+
+        if self.block_size is None and not _is_expandable(self.encoding_analyzer.observer.shape, self.shape):
             raise RuntimeError(f'Encoding analyzer of shape {self.encoding_analyzer.observer.shape} '
                                f'is incompatible with quantizer of shape {self.shape}.')
 
@@ -137,7 +142,7 @@ class AffineQuantizerBase(QuantizerBase):
         if self.is_initialized():
             return AffineEncoding(self.get_scale(dtype=torch.float32),
                                   self.get_offset(dtype=torch.float32),
-                                  self.bitwidth, self._signed, self._symmetric)
+                                  self.bitwidth, self._signed, self._symmetric, self.block_size)
         return None
 
     @torch.no_grad()
@@ -238,8 +243,9 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
     min: torch.nn.Parameter
     max: torch.nn.Parameter
 
-    def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None):
-        super().__init__(shape, bitwidth, symmetric, encoding_analyzer)
+    def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None,
+                 block_size: Optional[List[int]] = None):
+        super().__init__(shape, bitwidth, symmetric, encoding_analyzer, block_size)
 
         self.register_quantization_parameter('min', nn.Parameter(-torch.ones(self.shape)))
         self.register_quantization_parameter('max', nn.Parameter(torch.ones(self.shape)))
@@ -259,12 +265,16 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
 
         @functools.wraps(original_forward)
         def forward_wrapper(input):
-            batch_statistics = self.encoding_analyzer.update_stats(input)
+            expanded_input = torch_builtins.reshape_tensor_for_blocks(input, self.shape, self.block_size)
+            batch_statistics = self.encoding_analyzer.update_stats(expanded_input)
             num_quant_bins = math.pow(2, self.bitwidth) - 1
             dynamic_min, dynamic_max =\
                     self.encoding_analyzer.compute_encodings_from_stats(batch_statistics,
                                                                         num_quant_bins,
                                                                         self.symmetric)
+            if self.block_size is not None:
+                dynamic_min = dynamic_min.view(self.min.shape)
+                dynamic_max = dynamic_max.view(self.max.shape)
             dynamic_min = dynamic_min.to(dtype=self.min.dtype,
                                          device=self.min.device).expand_as(self.min)
             dynamic_max = dynamic_max.to(dtype=self.max.dtype,
@@ -282,14 +292,18 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
         else:
             try:
                 num_quant_bins = math.pow(2, self.bitwidth) - 1
-                min, max = self.encoding_analyzer.compute_encodings(num_quant_bins, self.symmetric)
+                enc_min, enc_max = self.encoding_analyzer.compute_encodings(num_quant_bins, self.symmetric)
+                if self.block_size is not None:
+                    enc_min = enc_min.view(self.min.shape)
+                    enc_max = enc_max.view(self.max.shape)
+
             except StatisticsNotFoundError:
                 return
 
-            if min is None or max is None:
+            if enc_min is None or enc_max is None:
                 return
 
-            self.set_range(min, max)
+            self.set_range(enc_min, enc_max)
 
         finally:
             self.encoding_analyzer.reset_stats()
@@ -458,7 +472,8 @@ class Quantize(MinMaxQuantizer):
                           encoding.scale.to(input.dtype),
                           encoding.offset.to(input.dtype),
                           encoding.bitwidth,
-                          encoding.signed)
+                          encoding.signed,
+                          block_size=self.block_size)
         output = output.as_subclass(QuantizedTensor)
         output.encoding = encoding
         return output
@@ -566,7 +581,8 @@ class QuantizeDequantize(MinMaxQuantizer):
                                      encoding.scale.to(input.dtype),
                                      encoding.offset.to(input.dtype),
                                      encoding.bitwidth,
-                                     encoding.signed)
+                                     encoding.signed,
+                                     block_size=self.block_size)
         output = output.as_subclass(DequantizedTensor)
         output.encoding = encoding
         return output
