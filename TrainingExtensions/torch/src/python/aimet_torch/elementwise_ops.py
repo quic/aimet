@@ -178,7 +178,7 @@ class Multiply(torch.nn.Module):
 class Concat(torch.nn.Module):
     """ Concat module for a functional concat"""
     def __init__(self, axis: int = 0):
-        super(Concat, self).__init__()
+        super().__init__()
         self._axis = axis
 
     # pylint:disable=arguments-differ

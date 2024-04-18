@@ -39,6 +39,7 @@ import copy
 from abc import abstractmethod
 from typing import Dict, List, Tuple, Set, Union
 import torch
+from torch.nn.modules import ConvTranspose2d
 
 from aimet_common.utils import AimetLogger, log_with_error_and_assert_if_false
 from aimet_common.graph_searcher import GraphSearcher
@@ -486,7 +487,6 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
             conv_bn_pairs = []
 
             def handler(_, op_list):
-                from torch.nn.modules import ConvTranspose2d
                 conv, bn = op_list
                 conv_module = conv.get_module()
                 # Transposed depthwise convolutions are not supported for batchnorm folding

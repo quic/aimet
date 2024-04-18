@@ -57,6 +57,8 @@ from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEM
 from aimet_common.utils import AimetLogger, Handle, log_with_error_and_assert_if_false
 import aimet_common.libpymo as libpymo
 from aimet_torch import elementwise_ops
+from aimet_torch.qc_quantize_op import QcQuantizeWrapper
+from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.tensor_quantizer import TensorQuantizer
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
@@ -917,9 +919,6 @@ def get_all_quantizers(model: torch.nn.Module):
     :param model: Root module
     :returns: List of parameter, input, and output quantizers
     """
-    from aimet_torch.qc_quantize_op import QcQuantizeWrapper
-    from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
-
     param_quantizers = []
     input_quantizers = []
     output_quantizers = []

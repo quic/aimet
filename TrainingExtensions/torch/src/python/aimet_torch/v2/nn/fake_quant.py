@@ -44,6 +44,7 @@ from typing import Type, Optional, Tuple
 
 from torch import Tensor
 import torch.nn as nn
+from torch.nn.modules.adaptive import _ASMoutput
 from torch.nn.utils.rnn import PackedSequence
 from torch.utils._pytree import tree_map
 
@@ -551,8 +552,6 @@ class FakeQuantizedAdaptiveLogSoftmaxWithLoss(FakeQuantizationMixin, nn.Adaptive
         """
         Quantized forward impl for nn.AdaptiveLogSoftmaxWithLoss.
         """
-        from torch.nn.modules.adaptive import _ASMoutput
-
         if  self.input_quantizers[0]:
             input_ = self.input_quantizers[0](input_)
 

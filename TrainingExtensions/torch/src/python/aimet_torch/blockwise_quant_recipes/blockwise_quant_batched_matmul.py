@@ -162,7 +162,7 @@ class StaticGridMultiDimPerChannelQuantizer(StaticGridTensorQuantizer):
     def __init__(self, bitwidth: int, round_mode: libpymo.RoundingMode, quant_scheme: QuantScheme,
                  use_symmetric_encodings: bool, num_channels: int, enabled_by_default: bool, ch_axes: Union[int, list],
                  data_type: QuantizationDataType = QuantizationDataType.int):
-        super(StaticGridMultiDimPerChannelQuantizer, self).__init__(
+        super().__init__(
             bitwidth, round_mode, quant_scheme, use_symmetric_encodings, enabled_by_default, data_type=data_type)
 
         quant_scheme = MAP_QUANT_SCHEME_TO_PYMO[quant_scheme]

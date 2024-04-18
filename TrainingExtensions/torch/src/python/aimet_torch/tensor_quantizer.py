@@ -77,7 +77,7 @@ class TensorQuantizer:
         :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
         :param data_type: Data type for quantization (e.g. int, float)
         """
-        super(TensorQuantizer, self).__init__()
+        super().__init__()
         self.round_mode = round_mode
         self._quant_scheme = quant_scheme
         self.use_symmetric_encodings = use_symmetric_encodings
@@ -157,7 +157,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
         :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
         """
-        super(StaticGridTensorQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
+        super().__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
                                                         enabled_by_default, data_type)
         self._cppOp = None
         self._encoding = None
@@ -306,6 +306,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
                 # NOTE: Check feasibility about unsigned symmetric case
                 #   whether encoding range is all positive
                 is_in_positive_range = lambda enc_min, enc_max: enc_min >= 0 and enc_max >= 0
+                # pylint: disable=consider-using-generator
                 self.is_unsigned_symmetric = self.use_symmetric_encodings and \
                                              self.use_unsigned_symmetric and \
                                              all([is_in_positive_range(enc.min, enc.max) for enc in self._encoding])
@@ -416,7 +417,7 @@ class StaticGridPerTensorQuantizer(StaticGridTensorQuantizer):
         :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
         :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
         """
-        super(StaticGridPerTensorQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
+        super().__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
                                                            enabled_by_default, data_type)
 
         quant_scheme = MAP_QUANT_SCHEME_TO_PYMO[quant_scheme]
@@ -499,7 +500,7 @@ class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
         :param ch_axis: Channel Axis to use for per-channel quantization
         :param data_type: data type of type QuantizationDataType to be used
         """
-        super(StaticGridPerChannelQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
+        super().__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
                                                             enabled_by_default, data_type=data_type)
         quant_scheme = MAP_QUANT_SCHEME_TO_PYMO[quant_scheme]
         self._cppOp = [AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme) for _ in range(num_channels)]
@@ -591,7 +592,7 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         if data_type != QuantizationDataType.int:
             raise ValueError('Only QuantizationDataType.int is supported for LearnedGridTensorQuantizer')
 
-        super(LearnedGridTensorQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
+        super().__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
                                                          enabled_by_default, data_type)
         self.wrapper_ref = None
         self.name = None

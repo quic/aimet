@@ -1020,7 +1020,7 @@ class QuantizationSimModel:
             param_name = layer_name + '.' + orig_param_name
             if param_encoding is None:
                 continue
-            elif param_name not in valid_param_set:
+            if param_name not in valid_param_set:
                 logger.error('Param tensor {%s} not found in valid param set', param_name)
                 continue
             param_encodings[param_name] = param_encoding
@@ -1472,6 +1472,7 @@ class QuantizationSimModel:
         :return: Model without quantization wrappers.
         """
         original_model = copy.deepcopy(model)
+        # pylint: disable=unnecessary-comprehension
         all_modules_in_original_model = [module for module in original_model.modules()]
         QuantizationSimModel._remove_quantization_wrappers(original_model, all_modules_in_original_model)
         return original_model
@@ -2039,6 +2040,7 @@ def has_valid_encodings(qc_quantize_op: ExportableQuantModule) -> bool:
     if isinstance(qc_quantize_op, ExportableQuantModule):
         all_encodings = qc_quantize_op.export_output_encodings() + qc_quantize_op.export_input_encodings() + \
                         list(qc_quantize_op.export_param_encodings().values())
+        # pylint: disable=consider-using-generator
         return any([encoding is not None for encoding in all_encodings])
     input_quantizers = list(qc_quantize_op.input_quantizers.values())
     output_quantizers = list(qc_quantize_op.output_quantizers.values())

@@ -53,7 +53,10 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union, Mapping
 import torch
 from torch.utils.data import DataLoader
 import jinja2
+from bokeh.resources import CDN
 from tqdm import tqdm
+import pickle
+from uuid import uuid4
 
 from aimet_torch import utils
 from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
@@ -695,7 +698,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         with self.eval_manager.session("QuantScheme Selection") as sess:
             self._quantsim_params["quant_scheme"] = sess.wrap(self._choose_default_quant_scheme)()
 
-        with self.eval_manager.session(f"W32 Evaluation") as sess:
+        with self.eval_manager.session("W32 Evaluation") as sess:
             w32_eval_score = sess.wrap(sess.eval)(model=fp32_model, param_bw=32)
             _logger.info("Evaluation finished: W32A%d (eval score: %f)",
                          self._quantsim_params["output_bw"], w32_eval_score)
@@ -885,7 +888,6 @@ class _EvalManager:
         template = env.get_template(os.path.basename(self.HTML_TEMPLATE_FILE))
 
         if any(sess.diagnostics.contains_bokeh() for sess in self._all_sessions.values()):
-            from bokeh.resources import CDN
             head = CDN.render()
         else:
             head = ""
@@ -1008,8 +1010,6 @@ class _EvalSession: # pylint: disable=too-many-instance-attributes
         :param fn: Function to wrap.
         :returns: Function whose return value is cached.
         """
-        import pickle
-        from uuid import uuid4
 
         results_dir = self._results_dir
         class CachedResult:

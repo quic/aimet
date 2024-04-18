@@ -297,7 +297,7 @@ class CustomMarker(torch.nn.Module):
     """
 
     def __init__(self, module, identifier, is_leaf):
-        super(CustomMarker, self).__init__()
+        super().__init__()
         self.marked_module = module
         self.identifier = identifier
         self.is_leaf = is_leaf
@@ -461,6 +461,7 @@ class OnnxSaver:
         :param onnx_model: ONNX model object
         :param pytorch_model: Equivalent PyTorch model instance
         """
+        # pylint: disable=consider-using-generator
         root_module_names = tuple([local_module_name for local_module_name, _ in pytorch_model.named_children()])
         node_names = [node.name  for node in onnx_model.graph.node if not node.name.startswith('Constant')]
         num_nodes = len(node_names)

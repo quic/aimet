@@ -310,6 +310,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         self._create_param_products()
 
         # For each split in the model, insert a corresponding split Op in the connected graph.
+        # pylint: disable=unnecessary-comprehension
         ops_list = [op for op in self._ops.values()]
         for op in ops_list:
             self._determine_split_behavior_for_op_and_insert_split_op_in_connected_graph(op)
@@ -322,6 +323,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param model: Pytorch model to create connected graph from
         """
         module_to_jit_trace = self._generate_trace_lookup_table(model, trace)
+        # pylint: disable=unnecessary-comprehension
         top_level_inputs = [inp for inp in trace.graph.inputs()][1:]
         output_map = {}
         for idx, inp in enumerate(top_level_inputs):
@@ -353,6 +355,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             node currently being processed
         :return: the outputs of the traced module
         """
+        # pylint: disable=unnecessary-comprehension
         curr_inputs = [inp for inp in trace.graph.inputs()]
 
         # curr_inputs[0] corresponds to an identifier for the current graph node.
@@ -375,6 +378,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         curr_level_tensors = []
 
         for node in trace.graph.nodes():
+            # pylint: disable=unnecessary-comprehension
             outputs = [output for output in node.outputs()]
 
             # retrieving a module reference
@@ -414,6 +418,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                     op_type = self._get_functional_node_type(node)
                     op = self._create_new_multi_output_op(op_type, residing_module=model)
                 # For prim and aten nodes, inputs[0] is a regular input to the module, so no need to take inputs[1:]
+                # pylint: disable=unnecessary-comprehension
                 self._add_products_for_op(op, [inp for inp in node.inputs()], outputs, output_map)
                 for output in outputs:
                     curr_level_tensors.append(output)
@@ -480,6 +485,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         subgraph_model = ConnectedGraph._get_module_instance(node, node_name_to_module)
         if isinstance(subgraph_model, torch.Tensor):
             op = self._create_new_multi_output_op('Constant', residing_module=residing_module)
+            # pylint: disable=unnecessary-comprehension
             self._add_products_for_op(op, [inp for inp in node.inputs()], outputs, output_map)
             for output in outputs:
                 curr_level_tensors.append(output)
@@ -526,9 +532,11 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param residing_module: Torch module in which the current node is situated
         :param module_to_jit_trace: Dictionary mapping torch modules to their traces
         """
+        # pylint: disable=unnecessary-comprehension
         inputs = [inp for inp in node.inputs()]
         # 1st input is a reference on which the call method is being invoked.
         input_name: str = inputs[0].debugName()
+        # pylint: disable=unnecessary-comprehension
         outputs = [output for output in node.outputs()]
 
         # We don't want to further trace some custom implementation from elementwise_ops
@@ -648,7 +656,9 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         # %2 : ... prim::GetAttr[name="_layer0"](%1)
         # Here, to call into %2 from the current trace, we must call .model._layer0. Tracking inputs to
         # the GetAttr nodes tells us this path (%2 comes from %1 which comes from %self.1, the current module)
+        # pylint: disable=unnecessary-comprehension
         node_input = [inp for inp in node.inputs()][0].debugName()
+        # pylint: disable=unnecessary-comprehension
         node_alias = [output for output in node.outputs()][0].debugName()
         node_name = ConnectedGraph._get_attribute_name(node).get('name')
         return GetAttrNodeInfo(node_alias, node_name, node_input)
@@ -710,6 +720,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         for op in self.get_all_ops().values():
             if op.type in self.passthrough_graph_nodes or op.type in self.input_graph_nodes_to_ignore:
                 assert len(op.output_products) == 1
+                # pylint: disable=unnecessary-comprehension
                 consumers = [consumer for consumer in op.output_products[0].consumers]
 
                 if not op.inputs:
@@ -759,6 +770,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             if op.type in ['TupleConstruct', 'ListConstruct']:
                 assert len(op.output_products) == 1
                 output = op.output_products[0]
+                # pylint: disable=unnecessary-comprehension
                 consumers = [consumer for consumer in output.consumers]
 
                 # For each consumer, update their inputs by replacing the connection from Tuple/ListConstruct to the

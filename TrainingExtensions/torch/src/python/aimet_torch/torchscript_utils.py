@@ -124,12 +124,14 @@ def _parse_graph(graph: torch._C.Graph, model: torch.nn.Module) -> List[IrNode]:
     :return List of IrNodes created from traversing the trace graph
     """
     ir_nodes_list = []
+    # pylint: disable=unnecessary-comprehension
     curr_inputs = [inp for inp in graph.inputs()]
 
     # A map of sub-graph models and node name that requires recursive parsing
     # modules that are being referenced within the sub-graph
     node_name_to_module = {curr_inputs[0].debugName(): model}
     for node in graph.nodes():
+        # pylint: disable=unnecessary-comprehension
         outputs = [output for output in node.outputs()]
 
         # retrieving a module reference
@@ -143,6 +145,7 @@ def _parse_graph(graph: torch._C.Graph, model: torch.nn.Module) -> List[IrNode]:
         else:
             op_type: str = ConnectedGraph._parse_op_type(node)
             if "Constant" not in op_type:
+                # pylint: disable=unnecessary-comprehension
                 outputs = [output for output in node.outputs()]
                 ir_node = IrNode(node_type=op_type,
                                  inputs=[inp for inp in node.inputs() if
@@ -234,6 +237,7 @@ def get_node_to_io_tensor_names_map(model: torch.nn.Module,
 
     run_hook_for_layers_with_given_input(model, inputs, forward_hook)
     index = 0
+    # pylint: disable=unnecessary-comprehension
     module_types = [types for types in op_type_map.values()]
     for node in ir_nodes_list:
         if node.module is None:
