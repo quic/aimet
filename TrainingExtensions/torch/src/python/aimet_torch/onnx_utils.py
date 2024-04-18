@@ -52,7 +52,7 @@ import torchvision
 import onnx
 import onnxsim
 import yaml
-from packaging import version
+from packaging import version  # pylint: disable=wrong-import-order
 
 from aimet_common.utils import AimetLogger
 import aimet_torch.utils

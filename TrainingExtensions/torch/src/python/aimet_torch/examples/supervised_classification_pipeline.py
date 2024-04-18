@@ -97,10 +97,10 @@ def convert_tensor(input_, device=None, non_blocking=False):
     elif isinstance(input_, str):
         return input_
 
-    elif isinstance(input_, collections.Mapping):
+    elif isinstance(input_, collections.Mapping):  # pylint: disable=no-member
         return {k: convert_tensor(sample, device=device) for k, sample in input_.items()}
 
-    elif isinstance(input_, collections.Sequence):
+    elif isinstance(input_, collections.Sequence):  # pylint: disable=no-member
         return [convert_tensor(sample, device=device) for sample in input_]
 
     else:

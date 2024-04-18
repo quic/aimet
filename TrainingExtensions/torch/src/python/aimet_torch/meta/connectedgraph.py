@@ -241,7 +241,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         try:
             trace = module_to_jit_trace[module]
         except:
-            raise KeyError(f"Couldn't find corresponding JIT trace for module : {module}")
+            raise KeyError(f"Couldn't find corresponding JIT trace for module : {module}")  # pylint: disable=raise-missing-from
 
         nodes = self._find_aten_nodes_in_forward_pass(trace)
         return nodes

@@ -50,13 +50,13 @@ import sys
 import io
 from unittest.mock import patch
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, Mapping
+import pickle
+from uuid import uuid4
 import torch
 from torch.utils.data import DataLoader
 import jinja2
 from bokeh.resources import CDN
 from tqdm import tqdm
-import pickle
-from uuid import uuid4
 
 from aimet_torch import utils
 from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
@@ -169,7 +169,7 @@ def _validate_inputs(model: torch.nn.Module, # pylint: disable=too-many-argument
         raise ValueError('data_loader must be of type DataLoader, not ' + str(
             type(data_loader).__name__))
 
-    if not isinstance(eval_callback, Callable):
+    if not isinstance(eval_callback, Callable):  # pylint: disable=isinstance-second-argument-not-valid-type
         raise ValueError('eval_callback must be of type Callable, not ' + str(type(eval_callback).__name__))
 
     if not isinstance(dummy_input, (torch.Tensor, Tuple)):
