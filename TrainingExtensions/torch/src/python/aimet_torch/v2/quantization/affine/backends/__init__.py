@@ -129,6 +129,34 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
        :param Tensor offset: Offset for quantization
        :param int qmin: Minimum value of the quantization range
        :param int qmax: Maximum value of the quantization range
+
+
+    Examples:
+
+        >>> import aimet_torch.v2.quantization as Q
+        >>> input = torch.arange(start=-0.3, end=1.3, step=0.05)
+        >>> print(input)
+        tensor([-3.0000e-01, -2.5000e-01, -2.0000e-01, -1.5000e-01, -1.0000e-01,
+                -5.0000e-02, -1.1921e-08,  5.0000e-02,  1.0000e-01,  1.5000e-01,
+                2.0000e-01,  2.5000e-01,  3.0000e-01,  3.5000e-01,  4.0000e-01,
+                4.5000e-01,  5.0000e-01,  5.5000e-01,  6.0000e-01,  6.5000e-01,
+                7.0000e-01,  7.5000e-01,  8.0000e-01,  8.5000e-01,  9.0000e-01,
+                9.5000e-01,  1.0000e+00,  1.0500e+00,  1.1000e+00,  1.1500e+00,
+                1.2000e+00,  1.2500e+00])
+        >>> scale = torch.tensor(1/15)
+        >>> offset = torch.tensor(0.0)
+        >>> Q.affine.quantize(input, scale, offset, bitwidth=4)
+        tensor([ 0.,  0.,  0.,  0.,  0.,  0., -0.,  1.,  2.,  2.,  3.,  4.,  4.,  5.,
+                 6.,  7.,  7.,  8.,  9., 10., 10., 11., 12., 13., 13., 14., 15., 15.,
+                 15., 15., 15., 15.])
+        >>> Q.affine.quantize(input, scale, offset, num_bins=15)
+        tensor([ 0.,  0.,  0.,  0.,  0.,  0., -0.,  1.,  2.,  2.,  3.,  4.,  4.,  5.,
+                 6.,  7.,  7.,  8.,  9., 10., 10., 11., 12., 13., 13., 14., 15., 15.,
+                 15., 15., 15., 15.])
+        >>> Q.affine.quantize(input, scale, offset, qmin=0, qmax=15)
+        tensor([ 0.,  0.,  0.,  0.,  0.,  0., -0.,  1.,  2.,  2.,  3.,  4.,  4.,  5.,
+                 6.,  7.,  7.,  8.,  9., 10., 10., 11., 12., 13., 13., 14., 15., 15.,
+                 15., 15., 15., 15.])
     """
     qmin, qmax, block_size = _parse_args(args, kwargs)
     return get_backend().quantize(tensor, scale, offset, qmin, qmax, block_size)
@@ -226,6 +254,37 @@ def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
        :param Tensor offset: Offset for quantization
        :param int qmin: Minimum value of the quantization range
        :param int qmax: Maximum value of the quantization range
+
+
+    Examples:
+
+        >>> import aimet_torch.v2.quantization as Q
+        >>> input = torch.arange(start=-0.3, end=1.3, step=0.05)
+        >>> print(input)
+        tensor([-3.0000e-01, -2.5000e-01, -2.0000e-01, -1.5000e-01, -1.0000e-01,
+                -5.0000e-02, -1.1921e-08,  5.0000e-02,  1.0000e-01,  1.5000e-01,
+                2.0000e-01,  2.5000e-01,  3.0000e-01,  3.5000e-01,  4.0000e-01,
+                4.5000e-01,  5.0000e-01,  5.5000e-01,  6.0000e-01,  6.5000e-01,
+                7.0000e-01,  7.5000e-01,  8.0000e-01,  8.5000e-01,  9.0000e-01,
+                9.5000e-01,  1.0000e+00,  1.0500e+00,  1.1000e+00,  1.1500e+00,
+                1.2000e+00,  1.2500e+00])
+        >>> scale = torch.tensor(1/15)
+        >>> offset = torch.tensor(0.0)
+        >>> Q.affine.quantize_dequantize(input, scale, offset, bitwidth=4)
+        tensor([0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0667, 0.1333,
+                0.1333, 0.2000, 0.2667, 0.2667, 0.3333, 0.4000, 0.4667, 0.4667, 0.5333,
+                0.6000, 0.6667, 0.6667, 0.7333, 0.8000, 0.8667, 0.8667, 0.9333, 1.0000,
+                1.0000, 1.0000, 1.0000, 1.0000, 1.0000])
+        >>> Q.affine.quantize_dequantize(input, scale, offset, num_bins=15)
+        tensor([0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0667, 0.1333,
+                0.1333, 0.2000, 0.2667, 0.2667, 0.3333, 0.4000, 0.4667, 0.4667, 0.5333,
+                0.6000, 0.6667, 0.6667, 0.7333, 0.8000, 0.8667, 0.8667, 0.9333, 1.0000,
+                1.0000, 1.0000, 1.0000, 1.0000, 1.0000])
+        >>> Q.affine.quantize_dequantize(input, scale, offset, qmin=0, qmax=15)
+        tensor([0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0667, 0.1333,
+                0.1333, 0.2000, 0.2667, 0.2667, 0.3333, 0.4000, 0.4667, 0.4667, 0.5333,
+                0.6000, 0.6667, 0.6667, 0.7333, 0.8000, 0.8667, 0.8667, 0.9333, 1.0000,
+                1.0000, 1.0000, 1.0000, 1.0000, 1.0000])
     """
     qmin, qmax, block_size = _parse_args(args, kwargs)
     return get_backend().quantize_dequantize(tensor, scale, offset, qmin, qmax, block_size)
