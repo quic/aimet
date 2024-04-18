@@ -12,6 +12,6 @@ quantization.affine
 
    Quantize <Quantize>
    QuantizeDequantize <QuantizeDequantize>
-   quantize <quantize>
+   quantize <quantize_>
    quantize_dequantize <quantize_dequantize>
    dequantize <dequantize>

@@ -45,49 +45,91 @@ from .utils import *
 @overload
 def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
              bitwidth: Union[int, float], signed: bool = False, block_size: Optional[List] = None):
-    """
-    Performs differentiable quantization given scale, offset, and bitwidth.
-    (Equivalent to ``quantize(tensor, scale, offset, num_bins=2**bitwidth-1, signed=signed)``)
-
-    :param tensor: Tensor to quantize
-    :param scale: Scale factor for quantization
-    :param offset: Offset value for quantization
-    :param bitwidth: Output bitwidth of quantized tensor
-    :param signed: If False, the output tensor will be mapped to ``[0, num_bins]``;
-        otherwise, the output tensor will be mapped to ``[-ceil(num_bins/2), floor(num_bins/2)]``
-        where ``num_bins = 2 ** bitwidth - 1``
-    """
+    ...
 
 @overload
 def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
              num_bins: int, signed: bool = False, block_size: Optional[List] = None):
-    """
-    Performs differentiable quantization given scale, offset, and the number of bins in the quantization range.
-
-    :param tensor: Tensor to quantize
-    :param scale: Scale factor for quantization
-    :param offset: Offset value for quantization
-    :param num_bins: The number of bins in the quantization range
-    :param signed: If False, the output tensor will be mapped to ``[0, num_bins]``;
-        otherwise, the output tensor will be mapped to ``[-ceil(num_bins/2), floor(num_bins/2)]``
-    """
+    ...
 
 @overload
 def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
              qmin: int, qmax: int, block_size: Optional[List] = None):
-    """
-    Performs differentiable quantization given scale, offset, and quantization range.
-
-    :param tensor: Tensor to quantize
-    :param scale: Scale factor for quantization
-    :param offset: Offset value for quantization
-    :param qmin: Minimum value of the quantization range
-    :param qmax: Maximum value of the quantization range
-    """
+    ...
 
 
 def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
              *args, **kwargs):
+    r"""
+    Applies quantization to the input.
+
+    Precisely,
+
+    .. math::
+        out = clamp\left(\left\lceil\frac{input}{scale}\right\rfloor - offset, qmin, qmax\right)
+
+
+    This function is overloaded with the signatures listed below:
+
+
+    .. function:: quantize(tensor, scale, offset, bitwidth, signed=False, block_size=None)
+       :noindex:
+
+       Equivalent to:
+
+       .. math::
+           qmin= 
+           \begin{cases}
+               -\left\lceil\frac{2^{bitwidth}-1}{2}\right\rceil,& \text{if } signed\\
+               0,                                          & \text{otherwise   (default)}
+           \end{cases}
+           qmax= 
+           \begin{cases}
+               \left\lfloor\frac{2^{bitwidth}-1}{2}\right\rfloor,& \text{if } signed\\
+               2^{bitwidth}-1,                                   & \text{otherwise   (default)}
+           \end{cases}
+
+       :param Tensor tensor: Tensor to quantize
+       :param Tensor scale: Scale for quantization
+       :param Tensor offset: Offset for quantization
+       :param int bitwidth: Bitwidth of quantized tensor based on which :math:`qmin` and :math:`qmax` will be derived
+       :param bool signed: If false, the output will be mapped to positive integers only.
+           Otherwise, it will range over both positive and negative integers.
+
+    .. function:: quantize(tensor, scale, offset, *, num_bins, signed=False, block_size=None)
+       :noindex:
+
+       Equivalent to:
+
+       .. math::
+           qmin= 
+           \begin{cases}
+               -\left\lceil\frac{num\_bins}{2}\right\rceil,& \text{if } signed\\
+               0,                                          & \text{otherwise   (default)}
+           \end{cases}
+           qmax= 
+           \begin{cases}
+               \left\lfloor\frac{num\_bins}{2}\right\rfloor,& \text{if } signed\\
+               num\_bins,                                   & \text{otherwise   (default)}
+           \end{cases}
+
+
+       :param Tensor tensor: Tensor to quantize
+       :param Tensor scale: Scale for quantization
+       :param Tensor offset: Offset for quantization
+       :param int num_bins: The number of bins in the quantization range based on which :math:`qmin` and :math:`qmax` will be derived
+       :param bool signed: If false, the output will be mapped to positive integers only.
+           Otherwise, it will range over both positive and negative integers.
+
+    .. function:: quantize(tensor, scale, offset, *, qmin, qmax, block_size=None)
+       :noindex:
+
+       :param Tensor tensor: Tensor to quantize
+       :param Tensor scale: Scale for quantization
+       :param Tensor offset: Offset for quantization
+       :param int qmin: Minimum value of the quantization range
+       :param int qmax: Maximum value of the quantization range
+    """
     qmin, qmax, block_size = _parse_args(args, kwargs)
     return get_backend().quantize(tensor, scale, offset, qmin, qmax, block_size)
 
@@ -95,49 +137,96 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
 @overload
 def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
                         bitwidth: Union[int, float], signed: bool = False, block_size: Optional[List] = None):
-    """
-    Performs differentiable quantize-dequantize given scale, offset, and bitwidth.
-    (Equivalent to ``quantize_dequantize(tensor, scale, offset, num_bins=2**bitwidth-1, signed=signed)``)
-
-    :param tensor: Tensor to quantize
-    :param scale: Scale factor for quantization
-    :param offset: Offset value for quantization
-    :param bitwidth: Output bitwidth of quantized tensor
-    :param signed: If False, the output tensor will be mapped to ``[0, num_bins]``;
-        otherwise, the output tensor will be mapped to ``[-ceil(num_bins/2), floor(num_bins/2)]``
-        where ``num_bins = 2 ** bitwidth - 1``
-    """
+    ...
 
 @overload
 def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
                         num_bins: int, signed: bool = False, block_size: Optional[List] = None):
-    """
-    Performs differentiable quantize-dequantize given scale, offset, and the number of bins in the quantization range.
-
-    :param tensor: Tensor to quantize
-    :param scale: Scale factor for quantization
-    :param offset: Offset value for quantization
-    :param num_bins: The number of bins in the quantization range
-    :param signed: If False, the output tensor will be mapped to ``[0, num_bins]``;
-        otherwise, the output tensor will be mapped to ``[-ceil(num_bins/2), floor(num_bins/2)]``
-    """
+    ...
 
 @overload
 def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
                         qmin: int, qmax: int, block_size: Optional[List] = None):
-    """
-    Performs differentiable quantize-dequantize given scale, offset, and quantization range.
-
-    :param tensor: Tensor to quantize
-    :param scale: Scale factor for quantization
-    :param offset: Offset value for quantization
-    :param qmin: Minimum value of the quantization range
-    :param qmax: Maximum value of the quantization range
-    """
+    ...
 
 
 def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
                         *args, **kwargs):
+    r"""
+    Applies fake-quantization by quantizing and dequantizing the input.
+
+    Precisely,
+
+    .. math::
+        out = (x_{int} + offset) * scale
+
+    where
+
+    .. math::
+        x_{int} = clamp\left(\left\lceil\frac{input}{scale}\right\rfloor - offset, qmin, qmax\right)
+
+
+    This function is overloaded with the signatures listed below:
+
+
+    .. function:: quantize_dequantize(tensor, scale, offset, bitwidth, signed=False, block_size=None)
+       :noindex:
+
+       Equivalent to:
+
+       .. math::
+           qmin= 
+           \begin{cases}
+               -\left\lceil\frac{2^{bitwidth}-1}{2}\right\rceil,& \text{if } signed\\
+               0,                                          & \text{otherwise   (default)}
+           \end{cases}
+           qmax= 
+           \begin{cases}
+               \left\lfloor\frac{2^{bitwidth}-1}{2}\right\rfloor,& \text{if } signed\\
+               2^{bitwidth}-1,                                   & \text{otherwise   (default)}
+           \end{cases}
+
+       :param Tensor tensor: Tensor to quantize
+       :param Tensor scale: Scale for quantization
+       :param Tensor offset: Offset for quantization
+       :param int bitwidth: Bitwidth of quantized tensor based on which :math:`qmin` and :math:`qmax` will be derived
+       :param bool signed: If false, the intermediate output :math:`x_{int}` will be mapped to positive integers only.
+           Otherwise, :math:`x_{int}` will range over both positive and negative integers.
+
+    .. function:: quantize_dequantize(tensor, scale, offset, *, num_bins, signed=False, block_size=None)
+       :noindex:
+
+       Equivalent to:
+
+       .. math::
+           qmin= 
+           \begin{cases}
+               -\left\lceil\frac{num\_bins}{2}\right\rceil,& \text{if } signed\\
+               0,                                          & \text{otherwise   (default)}
+           \end{cases}
+           qmax= 
+           \begin{cases}
+               \left\lfloor\frac{num\_bins}{2}\right\rfloor,& \text{if } signed\\
+               num\_bins,                                   & \text{otherwise   (default)}
+           \end{cases}
+
+
+       :param Tensor tensor: Tensor to quantize
+       :param Tensor scale: Scale for quantization
+       :param Tensor offset: Offset for quantization
+       :param int num_bins: The number of bins in the quantization range based on which :math:`qmin` and :math:`qmax` will be derived
+       :param bool signed: If false, the intermediate output :math:`x_{int}` will be mapped to positive integers only.
+           Otherwise, :math:`x_{int}` will range over both positive and negative integers.
+
+    .. function:: quantize_dequantize(tensor, scale, offset, *, qmin, qmax, block_size=None)
+       :noindex:
+
+       :param Tensor tensor: Tensor to quantize
+       :param Tensor scale: Scale for quantization
+       :param Tensor offset: Offset for quantization
+       :param int qmin: Minimum value of the quantization range
+       :param int qmax: Maximum value of the quantization range
+    """
     qmin, qmax, block_size = _parse_args(args, kwargs)
     return get_backend().quantize_dequantize(tensor, scale, offset, qmin, qmax, block_size)
 
