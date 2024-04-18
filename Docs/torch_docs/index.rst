@@ -56,13 +56,15 @@ Please visit :ref:`AIMET Installation <ug-installation>` for installation instru
 .. toctree::
    :maxdepth: 2
    :titlesonly:
-   :glob:
    :caption: AIMET PyTorch API
 
    quantized_modules
    quantizer
    encoding_analyzer
-   api/*
+   api/nn.fake_quantization_mixin
+   api/nn.quantization_mixin
+   api/quantization/affine/index
+   api/quantization/float/index
 
 
 
