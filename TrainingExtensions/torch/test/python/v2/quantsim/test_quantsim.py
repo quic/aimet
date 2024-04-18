@@ -47,7 +47,7 @@ from aimet_torch.v2.quantization.encoding_analyzer import PercentileEncodingAnal
 from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.affine import AffineQuantizerBase
 from aimet_torch.v2.nn import BaseQuantizationMixin
-from .models_ import test_models
+from ..models_ import test_models
 
 def encodings_are_close(quantizer_1: AffineQuantizerBase, quantizer_2: AffineQuantizerBase):
     min_1, max_1 = quantizer_1.get_min(), quantizer_1.get_max()
