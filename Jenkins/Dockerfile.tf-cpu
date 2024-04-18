@@ -67,7 +67,6 @@ RUN echo "%users ALL = (ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 RUN apt-get update -y > /dev/null && \
     apt-get install --no-install-recommends -y \
-
         # Python
         python3.10 \
         python3.10-dev \
@@ -75,7 +74,6 @@ RUN apt-get update -y > /dev/null && \
         python3-pip \
         python3-setuptools \
         build-essential \
-
         # lmdb dependency
         libffi-dev && \
         rm -rf /var/lib/apt/lists/*
@@ -88,7 +86,7 @@ RUN update-alternatives --set python3 /usr/bin/python3.10
 # Upgrade Python3 pip and install some more packages
 RUN python3 -m pip --no-cache-dir install --upgrade \
         pip \
-        setuptools \
+        setuptools==49.4.0 \
         wheel==0.33.4
 
 # Ubuntu packages for tensorflow aimet
@@ -128,6 +126,7 @@ RUN python3 -m pip --no-cache-dir install \
         blosc \
         cffi \
         click \
+        cma \
         cython \
         dataclasses \
         Deprecated \

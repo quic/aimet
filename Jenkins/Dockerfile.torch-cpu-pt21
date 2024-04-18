@@ -170,7 +170,7 @@ RUN python3 -m pip --no-cache-dir install \
         pydot \
         pyDOE2 \
         pylint==2.8.3 \
-        pymoo==0.4.1 \
+        pymoo \
         pytest \
         pytest-cov \
         pytorch-ignite \

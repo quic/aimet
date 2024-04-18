@@ -87,7 +87,7 @@ RUN update-alternatives --set python3 /usr/bin/python3.10
 # Upgrade Python3 pip and install some more packages
 RUN python3 -m pip --no-cache-dir install --upgrade \
         pip \
-        setuptools \
+        setuptools==49.4.0 \
         wheel==0.33.4
 
 # Ubuntu packages for pytorch aimet
@@ -130,6 +130,7 @@ RUN python3 -m pip --no-cache-dir install \
         blosc==1.10.1 \
         cffi \
         click \
+        cma \
         cumm==0.2.8 \
         cvxpy \
         cylp \
@@ -167,7 +168,7 @@ RUN python3 -m pip --no-cache-dir install \
         pydot \
         pyDOE2 \
         pylint==2.8.3 \
-        pymoo==0.4.1 \
+        pymoo \
         pytest \
         pytest-cov \
         pytorch-ignite \
