@@ -98,27 +98,27 @@ def eval_callback(model: torch.nn.Module, _: Any = None) -> float:
 
 def quant_analyzer_example():
 
-    # Step 3. Prepare model
+    # Step 3. Prepare model and callback functions
     model = models.resnet18(pretrained=True).cuda().eval()
     input_shape = (1, 3, 224, 224)
     dummy_input = torch.randn(*input_shape).cuda()
     prepared_model = prepare_model(model)
-    # End step 3
 
     # User action required
     # User should pass actual argument(s) of the callback functions.
     forward_pass_callback_fn = CallbackFunc(forward_pass_callback, func_callback_args=None)
     eval_callback_fn = CallbackFunc(eval_callback, func_callback_args=None)
-
-    # User action required
-    # User should use unlabeled dataloader, so if the dataloader yields labels as well user should use discard them.
-    unlabeled_data_loader = _get_unlabled_data_loader()
+    # End step 3
 
     # Step 4. Create QuantAnalyzer object
     quant_analyzer = QuantAnalyzer(model=prepared_model,
                                    dummy_input=dummy_input,
                                    forward_pass_callback=forward_pass_callback_fn,
                                    eval_callback=eval_callback_fn)
+
+    # User action required
+    # User should use unlabeled dataloader, so if the dataloader yields labels as well user should use discard them.
+    unlabeled_data_loader = _get_unlabled_data_loader()
     # Approximately 256 images/samples are recommended for MSE loss analysis. So, if the dataloader
     # has batch_size of 64, then 4 number of batches leads to 256 images/samples.
     quant_analyzer.enable_per_layer_mse_loss(unlabeled_dataset_iterable=unlabeled_data_loader, num_batches=4)

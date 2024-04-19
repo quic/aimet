@@ -101,7 +101,7 @@ class TestQuantAnalyzer:
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
-        fp32_acc, weight_quantized_acc, act_quantized_acc = quant_analyzer._check_model_sensitivity_to_quantization(sim)
+        fp32_acc, weight_quantized_acc, act_quantized_acc = quant_analyzer.check_model_sensitivity_to_quantization(sim)
 
         assert fp32_acc >= weight_quantized_acc
         assert fp32_acc >= act_quantized_acc
@@ -188,7 +188,7 @@ class TestQuantAnalyzer:
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         try:
             layer_wise_eval_score_dict = \
-                quant_analyzer._perform_per_layer_analysis_by_enabling_quant_wrappers(sim, results_dir="./tmp/")
+                quant_analyzer.perform_per_layer_analysis_by_enabling_quant_wrappers(sim, results_dir="./tmp/")
             print(layer_wise_eval_score_dict)
             assert type(layer_wise_eval_score_dict) == dict
             assert len(layer_wise_eval_score_dict) == 10
@@ -219,7 +219,7 @@ class TestQuantAnalyzer:
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         try:
             layer_wise_eval_score_dict = \
-                quant_analyzer._perform_per_layer_analysis_by_disabling_quant_wrappers(sim, results_dir="./tmp/")
+                quant_analyzer.perform_per_layer_analysis_by_disabling_quant_wrappers(sim, results_dir="./tmp/")
             print(layer_wise_eval_score_dict)
             assert type(layer_wise_eval_score_dict) == dict
             assert len(layer_wise_eval_score_dict) == 10
@@ -245,7 +245,7 @@ class TestQuantAnalyzer:
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         try:
-            quant_analyzer._export_per_layer_stats_histogram(sim, results_dir="./tmp/")
+            quant_analyzer.export_per_layer_stats_histogram(sim, results_dir="./tmp/")
 
             # Check if it is exported to correct html file.
             assert os.path.exists("./tmp/activations_pdf")
@@ -289,7 +289,7 @@ class TestQuantAnalyzer:
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         try:
-            quant_analyzer._export_per_layer_stats_histogram(sim, results_dir="./tmp/")
+            quant_analyzer.export_per_layer_stats_histogram(sim, results_dir="./tmp/")
             assert os.path.exists("./tmp/activations_pdf")
             assert os.path.exists("./tmp/weights_pdf")
             assert os.path.isfile("./tmp/activations_pdf/bn1_output_q0_0.html")
@@ -312,7 +312,7 @@ class TestQuantAnalyzer:
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         try:
-            quant_analyzer._export_per_layer_encoding_min_max_range(sim, results_dir="./tmp/")
+            quant_analyzer.export_per_layer_encoding_min_max_range(sim, results_dir="./tmp/")
             assert os.path.isfile("./tmp/min_max_ranges/weights.html")
             assert os.path.isfile("./tmp/min_max_ranges/activations.html")
         finally:
@@ -356,7 +356,7 @@ class TestQuantAnalyzer:
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         try:
-            quant_analyzer._export_per_layer_encoding_min_max_range(sim, results_dir="./tmp/")
+            quant_analyzer.export_per_layer_encoding_min_max_range(sim, results_dir="./tmp/")
             assert os.path.isfile("./tmp/min_max_ranges/activations.html")
             assert os.path.isfile("./tmp/min_max_ranges/conv1_weight.html")
             # Dense (Gemm) is disabled to per-channel quantization, it should be in weights.html
@@ -378,7 +378,7 @@ class TestQuantAnalyzer:
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         quant_analyzer.enable_per_layer_mse_loss(unlabeled_dataset_iterable, num_batches=4)
         try:
-            quant_analyzer._export_per_layer_mse_loss(sim, results_dir="./tmp/")
+            quant_analyzer.export_per_layer_mse_loss(sim, results_dir="./tmp/")
             assert os.path.isfile("./tmp/per_layer_mse_loss.html")
         finally:
             if os.path.isdir("./tmp/"):

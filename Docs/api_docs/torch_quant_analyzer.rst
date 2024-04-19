@@ -10,10 +10,44 @@ AIMET PyTorch Quant Analyzer analyzes the PyTorch model and points out sensitive
 It checks model sensitivity to weight and activation quantization, performs per layer sensitivity and MSE analysis.
 It also exports per layer encodings min and max ranges and statistics histogram for every layer.
 
+User Guide Link
+===============
+To learn more about this technique, please see :ref:`QuantAnalyzer<ug-quant-analyzer>`
+
+Examples Notebook Link
+======================
+For an end-to-end notebook showing how to use PyTorch QuantAnalyzer, please see :doc:`here<../Examples/torch/quantization/quant_analyzer>`.
+
 Top-level API
 =============
+
+.. autoclass:: aimet_common.utils.CallbackFunc
+|
 .. autoclass:: aimet_torch.quant_analyzer.QuantAnalyzer
-    :members:
+|
+.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.enable_per_layer_mse_loss
+|
+.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.analyze
+|
+
+Run specific utility
+====================
+We can avoid running all the utilities that QuantAnalyzer offers and only run those of our interest. For this we
+need to have the QuantizationSimModel object, Then we call the desired QuantAnalyzer utility of our interest and pass
+the same object to it.
+
+.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.check_model_sensitivity_to_quantization
+|
+.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.perform_per_layer_analysis_by_enabling_quant_wrappers
+|
+.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.perform_per_layer_analysis_by_disabling_quant_wrappers
+|
+.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.export_per_layer_encoding_min_max_range
+|
+.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.export_per_layer_stats_histogram
+|
+.. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.export_per_layer_mse_loss
+|
 
 Code Examples
 =============
@@ -39,11 +73,11 @@ Code Examples
     :start-after: # Step 2. Prepare eval callback
     :end-before: # End step 2
 
-**Prepare model**
+**Prepare model and callback functions**
 
 .. literalinclude:: ../torch_code_examples/quant_analyzer_code_example.py
     :language: python
-    :start-after: # Step 3. Prepare model
+    :start-after: # Step 3. Prepare model and callback functions
     :end-before: # End step 3
 
 **Create QuantAnalyzer object**
