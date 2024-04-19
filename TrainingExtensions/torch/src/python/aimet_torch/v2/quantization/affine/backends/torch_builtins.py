@@ -120,9 +120,9 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
         raise RuntimeError(msg)
 
     orig_tensor_shape = tensor.shape
-    tensor = _reshape_tensor_for_blocks(tensor, scale, block_size)
-    scale = _reshape_encoding_param_for_blocks(scale, block_size)
-    offset = _reshape_encoding_param_for_blocks(offset, block_size)
+    tensor = reshape_tensor_for_blocks(tensor, scale.shape, block_size)
+    scale = scale.view(get_encoding_shape_with_blocks(scale.shape, block_size))
+    offset = offset.view(get_encoding_shape_with_blocks(offset.shape, block_size))
     return QuantizeFunc.apply(tensor, scale, offset, qmin, qmax).view(orig_tensor_shape)
 
 def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
@@ -149,9 +149,9 @@ def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
         raise RuntimeError(msg)
 
     orig_tensor_shape = tensor.shape
-    tensor = _reshape_tensor_for_blocks(tensor, scale, block_size)
-    scale = _reshape_encoding_param_for_blocks(scale, block_size)
-    offset = _reshape_encoding_param_for_blocks(offset, block_size)
+    tensor = reshape_tensor_for_blocks(tensor, scale.shape, block_size)
+    scale = scale.view(get_encoding_shape_with_blocks(scale.shape, block_size))
+    offset = offset.view(get_encoding_shape_with_blocks(offset.shape, block_size))
     return QuantDequantFunc.apply(tensor.to(internal_dtype),
                                   scale.to(internal_dtype),
                                   offset.to(internal_dtype),
@@ -170,9 +170,9 @@ def dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, 
     """
     _validate_arguments(tensor, scale, offset, block_size=block_size)
     orig_tensor_shape = tensor.shape
-    tensor = _reshape_tensor_for_blocks(tensor, scale, block_size)
-    scale = _reshape_encoding_param_for_blocks(scale, block_size)
-    offset = _reshape_encoding_param_for_blocks(offset, block_size)
+    tensor = reshape_tensor_for_blocks(tensor, scale.shape, block_size)
+    scale = scale.view(get_encoding_shape_with_blocks(scale.shape, block_size))
+    offset = offset.view(get_encoding_shape_with_blocks(offset.shape, block_size))
     return DequantizeFunc.apply(tensor, scale, offset).view(orig_tensor_shape)
 
 
@@ -273,8 +273,28 @@ class QuantDequantFunc(torch.autograd.Function):
         offset_grad = -grad * (mask * scale - scale) if ctx.offset_requires_grad else None
         return tensor_grad, scale_grad, offset_grad, None, None
 
-def _reshape_tensor_for_blocks(tensor: torch.Tensor, scale: torch.Tensor, block_size: Optional[List]) \
-        -> torch.Tensor:
+def get_encoding_shape_with_blocks(original_encoding_shape: torch.Size, block_size: List[int]):
+    """
+    Get new encoding param shape to account for block sizes. If block_size is not None, the original shape is
+    interleaved with '1' in between each dimension. Otherwise, the original shape is returned.
+
+    :param original_encoding_shape: Original encoding shape
+    :param block_size: Block sizes per dimension
+    :return: Encoding shape accounting for blocks
+    """
+    if block_size is None:
+        return original_encoding_shape
+
+    new_encoding_shape = []
+
+    for size in original_encoding_shape:
+        new_encoding_shape.append(size)
+        new_encoding_shape.append(1)
+
+    return new_encoding_shape
+
+def reshape_tensor_for_blocks(tensor: torch.Tensor, encoding_shape: torch.Tensor, block_size: Optional[List]) -> \
+        torch.Tensor:
     """
     Reshape tensor to account for block sizes. The new shape separates each dimension into num blocks and block size.
     The resulting tensor shape has twice as many dimensions as the starting shape.
@@ -291,7 +311,7 @@ def _reshape_tensor_for_blocks(tensor: torch.Tensor, scale: torch.Tensor, block_
     If block_size is None, the original shape is returned.
 
     :param tensor: Tensor to reshape
-    :param scale: Encoding scale
+    :param encoding_shape: Encoding param shape (without taking blocks into consideration)
     :param block_size: Block sizes per dimension
     :return: Reshaped tensor
     """
@@ -301,32 +321,12 @@ def _reshape_tensor_for_blocks(tensor: torch.Tensor, scale: torch.Tensor, block_
     input_reshape = []
     for i in range(1, len(block_size) + 1):
         if block_size[-i] == -1:
-            input_reshape.insert(0, tensor.shape[-i] // scale.shape[-i])
-            input_reshape.insert(0, scale.shape[-i])
+            input_reshape.insert(0, tensor.shape[-i] // encoding_shape[-i])
+            input_reshape.insert(0, encoding_shape[-i])
         else:
             input_reshape.insert(0, block_size[-i])
-            input_reshape.insert(0, scale.shape[-i])
+            input_reshape.insert(0, encoding_shape[-i])
 
     input_reshape = list(tensor.shape[:-len(block_size)]) + input_reshape
 
     return tensor.view(input_reshape)
-
-def _reshape_encoding_param_for_blocks(enc_param: torch.Tensor, block_size: Optional[List]) -> torch.Tensor:
-    """
-    Reshape encoding param to account for block sizes. If block_size is not None, the original shape is interleaved
-    with '1' in between each dimension. Otherwise, the original shape is used.
-
-    :param enc_param: Encoding param tensor to reshape
-    :param block_size: Block sizes per dimension
-    :return: Reshaped encoding parameter
-    """
-    if block_size is None:
-        return enc_param
-
-    param_reshape = []
-
-    for size in enc_param.shape:
-        param_reshape.append(size)
-        param_reshape.append(1)
-
-    return enc_param.view(param_reshape)
