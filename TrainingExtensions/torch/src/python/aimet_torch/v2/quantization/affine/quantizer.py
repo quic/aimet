@@ -39,7 +39,7 @@
 
 import abc
 import math
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 import contextlib
 import functools
 
@@ -56,7 +56,7 @@ from aimet_torch.v2.utils import ste_round
 
 
 __all__ = ['AffineQuantizerBase', 'MinMaxQuantizer', 'Quantize', 'QuantizeDequantize', 'Dequantize',
-           'LpbqQuantizeDequantize']
+           'GroupedBlockQuantizeDequantize']
 
 
 class AffineQuantizerBase(QuantizerBase):
@@ -245,7 +245,7 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
     max: torch.nn.Parameter
 
     def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None,
-                 block_size: Optional[List[int]] = None):
+                 block_size: Optional[Tuple] = None):
         super().__init__(shape, bitwidth, symmetric, encoding_analyzer, block_size)
 
         self.register_quantization_parameter('min', nn.Parameter(-torch.ones(self.shape)))
@@ -601,13 +601,13 @@ class Dequantize(torch.nn.Module):
         """
         return input.dequantize()
 
-class LpbqQuantizeDequantize(QuantizeDequantize):
-    """ Class for performing Low-Power Blockwise Quantization (LPBQ) """
+class GroupedBlockQuantizeDequantize(QuantizeDequantize):
+    """ Class for performing Grouped Block Quantize Dequantize """
     def __init__(self, shape, bitwidth: int, symmetric: bool, decompressed_bw: int,
-                 encoding_analyzer: EncodingAnalyzer = None, block_size: Optional[List[int]] = None,
-                 block_grouping: Optional[List[int]] = None):
+                 encoding_analyzer: EncodingAnalyzer = None, block_size: Optional[Tuple] = None,
+                 block_grouping: Optional[Tuple] = None):
         """
-        LPBQ Quantize Dequantize constructor.
+        Grouped Block Quantize Dequantize constructor.
 
         :param shape: Shape of the quantization parameters
         :type shape: tuple
@@ -616,13 +616,13 @@ class LpbqQuantizeDequantize(QuantizeDequantize):
         :param symmetric: If True, performs symmetric quantization;
                           otherwise, performs asymmetric quantization
         :type symmetric: bool
-        :param decompressed_bw: Bitwidth used for decompression in LPBQ algorithm.
+        :param decompressed_bw: Bitwidth used for decompression
         :type decompressed_bw: int
         :param encoding_analyzer: Encoding analyzer for calibrating quantization encodings
                                   (default: absolute min-max encoding analyzer)
         :type encoding_analyzer: EncodingAnalyzer, optional
         :param block_size: Block size per dimension.
-        :type block_size: List[int]
+        :type block_size: Tuple
         :param block_grouping: Block grouping per dimension. If provided, every set of block_group scales will be
                                grouped together, and the maximum scale for all blocks in the group will be used to find
                                the scale in the decompressed_grid to be shared by all blocks in the group.
@@ -631,7 +631,7 @@ class LpbqQuantizeDequantize(QuantizeDequantize):
                                A value of -1 for a block group for a dimension is equivalent to grouping all blocks in
                                the dimension in one group. This is also equivalent to a block group value equal to the
                                number of blocks for that dimension.
-        :type block_grouping: List[int]
+        :type block_grouping: Tuple
         """
         super().__init__(shape, bitwidth, symmetric, encoding_analyzer, block_size)
         self.decompressed_bw = decompressed_bw
@@ -645,31 +645,35 @@ class LpbqQuantizeDequantize(QuantizeDequantize):
                 raise RuntimeError(f'Length of block grouping {block_grouping} must equal length of shape {shape}.')
             for idx, block_group in enumerate(block_grouping):
                 if block_group != -1 and shape[idx] % block_group != 0:
-                    raise RuntimeError(f'Block size values must divide evenly with corresponding block grouping values '
-                                       f' for block size {block_size} and block grouping {block_grouping}.')
+                    raise RuntimeError(f'Quantizer shape dimensions must divide evenly with corresponding block '
+                                       f'grouping values for shapes {shape} and block grouping {block_grouping}.')
 
         if self.decompressed_bw < self.bitwidth:
             raise RuntimeError(f'Decompressed bitwidth {decompressed_bw} cannot be smaller than self.bitwidth '
                                f'{bitwidth}')
 
         if not symmetric:
-            raise RuntimeError(f'LPBQ only supports symmetric quantization.')
+            raise RuntimeError(f'GroupedBlockQuantizeDequantize only supports symmetric quantization.')
 
     def get_scale(self, dtype=None) -> torch.Tensor:
         """
         Compute quantization scale to be used for forward pass.
-        Overrides QuantizeDequantize self.get_scale() to apply the LPBQ algorithm for calculating modified scales.
+        Overrides QuantizeDequantize self.get_scale() to apply the grouped block algorithm for calculating modified
+        scales.
 
         :param dtype: dtype of the computed scale. Use of self.min.dtype by default.
-        :return: LPBQ scale
+        :return: Updated scale
         """
         orig_scale = super().get_scale(dtype)
         orig_scale_shape = orig_scale.shape
         reshaped_scale = orig_scale.view(self.get_expanded_scale_shape())
         max_scale = torch.amax(reshaped_scale, list(range(1, len(orig_scale_shape) * 2, 2)), keepdim=True)
         per_channel_scale = max_scale / 2 ** (self.decompressed_bw - self.bitwidth)
-        updated_scale = torch.maximum(ste_round(reshaped_scale / per_channel_scale), torch.tensor(1.0))
-        updated_scale = (updated_scale * per_channel_scale)
+        updated_scale = quantize_dequantize(reshaped_scale,
+                                            scale=per_channel_scale,
+                                            offset=torch.tensor([0.0], device=per_channel_scale.device),
+                                            qmin=1,
+                                            qmax=2 ** (self.decompressed_bw - self.bitwidth))
         return updated_scale.view(orig_scale_shape)
 
     def get_expanded_scale_shape(self) -> List[int]:

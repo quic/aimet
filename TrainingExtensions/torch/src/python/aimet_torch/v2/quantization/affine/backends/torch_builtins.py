@@ -65,6 +65,10 @@ def _is_numerically_stable(dtype: torch.dtype, qmin: int, qmax: int):
     if not _is_range_representable(dtype, qmin, qmax):
         return False
 
+    # Degenerate case
+    if qmin == qmax:
+        return True
+
     # NOTE: This is a heuristic criteria. It doesn't perfectly guarantee numerical stability
     #       This criteria allows 8-bit quantization of float16, but it needs more discussion
     if torch.finfo(dtype).tiny > 1e-1 / (qmax - qmin):
@@ -97,8 +101,8 @@ def _validate_arguments(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
         raise RuntimeError(f"Scale of shape {scale.shape} cannot be expanded like input tensor of shape {tensor.shape}")
 
     if qmin is not None and qmax is not None:
-        if qmin >= qmax:
-            raise RuntimeError(f"qmin ({qmin}) must be smaller than qmax ({qmax})")
+        if qmin > qmax:
+            raise RuntimeError(f"qmin ({qmin}) must be smaller than or equal to qmax ({qmax})")
 
 
 def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
