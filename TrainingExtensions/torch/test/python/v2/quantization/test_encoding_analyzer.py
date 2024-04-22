@@ -717,7 +717,7 @@ class TestSqnrEncodingAnalyzer:
         x = torch.randn(5*3*5*100, dtype=torch.float).view(5, 3, 5, 100)
         shape = (5, 1, 5, 1)
 
-        encoding_analyzer = SqnrEncodingAnalyzer(shape=shape, num_bins = 10)
+        encoding_analyzer = SqnrEncodingAnalyzer(shape=shape)
         histograms = encoding_analyzer.observer.collect_stats(x)
 
         for i in range(25):
