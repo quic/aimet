@@ -42,6 +42,7 @@ import sys
 
 
 cur_dir = os.getcwd()
+source_dir = os.path.join(cur_dir, '..')
 sys.path.append(os.path.join(cur_dir, '..'))
 
 # First import all universal settings from the base Docs/conf.py file
@@ -55,9 +56,14 @@ exclude_patterns = ["keras_code_examples*", "onnx_code_examples*", "tf_code_exam
                     "api_docs*", "Examples*", "user_guide/examples.rst"]
 
 # These paths are relative to the current directory
-html_static_path = ['../_static']
-templates_path = ['../_templates']
+html_static_path = [os.path.join(source_dir, "_static")]
+templates_path = [os.path.join(source_dir, "_templates")]
 html_logo = '../images/brain_logo.png'
 
 # Version here refers to the AIMET torch v1/v2 version, not the AIMET release number
 html_context["current_version"] = "PyTorch"
+
+
+autosummary_filename_map = {
+    "aimet_torch.v2.quantization.affine.quantize": "aimet_torch.v2.quantization.affine.quantize_"
+}
