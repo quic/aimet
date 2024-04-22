@@ -37,13 +37,13 @@
 
 import pytest
 import json
-import unittest.mock
+import tempfile
 import torch
 import torch.nn as nn
-import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme
-from aimet_torch import elementwise_ops
+from aimet_torch import elementwise_ops as aimet_ops
 from aimet_torch.v2.quantsim import QuantizationSimModel
+from aimet_torch import utils as v1_utils
 
 
 class Model2(nn.Module):
@@ -68,62 +68,55 @@ class Model3(nn.Module):
         return x
 
 
-def dummy_forward_pass(model, args):
-    model.eval()
-    with torch.no_grad():
-        output = model(torch.randn((5, 10, 10, 20)))
-    return output
-
-
-def evaluate(model: torch.nn.Module, dummy_input: torch.Tensor):
-    """
-    Helper function to evaluate model given dummy input
-    :param model: torch model
-    :param dummy_input: dummy input to model
-    """
-    model.eval()
-    if isinstance(dummy_input, torch.Tensor):
-        dummy_input = [dummy_input]
-    with torch.no_grad():
-        model(*dummy_input)
+def dummy_forward(model: torch.nn.Module, input: torch.Tensor):
+    if isinstance(input, torch.Tensor):
+        input = [input]
+    with torch.no_grad(), v1_utils.in_eval_mode(model):
+        model(*input)
 
 
 # From https://github.com/quic/aimet/blob/8ed479b24010834bfea09885cf6879b9bd916e8a/TrainingExtensions/torch/test/python/test_elementwise_ops.py#L101
-@pytest.mark.skip('Not adjusted for v2 API yet')
-class TestTrainingExtensionElementwiseOps(unittest.TestCase):
+class TestTrainingExtensionElementwiseOps:
     def test_quantsim_export(self):
-        torch.manual_seed(10)
-        model = Model2(elementwise_ops.Add())
+        model = Model2(aimet_ops.Add())
         dummy_input = torch.randn(5, 10, 10, 20)
-        sim = QuantizationSimModel(model, dummy_input)
-        encodings = libpymo.TfEncoding()
-        encodings.bw = 8
-        encodings.max = 5
-        encodings.min = -5
-        encodings.delta = 1
-        encodings.offset = 0.2
-        sim.model.op1.output_quantizers[0].encoding = encodings
-        sim.model.op1.input_quantizers[1].enabled = False
-        sim.model.conv1.output_quantizers[0].encoding = encodings
-        sim.model.conv1.param_quantizers['weight'].encoding = encodings
-        sim.export(path='./data', filename_prefix='quant_model', dummy_input=dummy_input)
+        sim = QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf)
 
-        with open('./data/quant_model.encodings') as f:
-            data = json.load(f)
+        sim.model.op1.output_quantizers[0].bitwidth = 8
+        sim.model.op1.output_quantizers[0].min.copy_(-5)
+        sim.model.op1.output_quantizers[0].max.copy_(5)
 
-        self.assertTrue(len(data['activation_encodings']) == 2)
-        self.assertTrue(len(data['param_encodings']) == 1)
+        sim.model.op1.input_quantizers[1] = None
+
+        sim.model.conv1.output_quantizers[0].bitwidth = 8
+        sim.model.conv1.output_quantizers[0].min.copy_(-5)
+        sim.model.conv1.output_quantizers[0].max.copy_(5)
+
+        sim.model.conv1.param_quantizers['weight'].bitwidth = 8
+        sim.model.conv1.param_quantizers['weight'].min.copy_(-5)
+        sim.model.conv1.param_quantizers['weight'].max.copy_(5)
+
+        with tempfile.TemporaryDirectory() as path:
+            sim.export(path=path, filename_prefix='quant_model', dummy_input=dummy_input)
+
+            with open(f'{path}/quant_model.encodings') as f:
+                data = json.load(f)
+
+            assert len(data['activation_encodings']) == 2
+            assert len(data['param_encodings']) == 1
 
     def test_concat_compute_encodings(self):
         torch.manual_seed(10)
-        model = Model3(elementwise_ops.Concat())
+        model = Model3(aimet_ops.Concat())
         dummy_input = torch.randn(5, 10, 10, 20)
-        sim = QuantizationSimModel(model, dummy_input)
-        sim.compute_encodings(dummy_forward_pass, None)
-        print(sim)
-        sim.export(path='./data', filename_prefix='concat_model', dummy_input=dummy_input)
+        sim = QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf)
+        sim.compute_encodings(dummy_forward, dummy_input)
+        with tempfile.TemporaryDirectory() as path:
+            sim.export(path=path, filename_prefix='concat_model', dummy_input=dummy_input)
 
-    def test_concat_op_with_qat(self):
+    @pytest.mark.parametrize('quant_scheme', [QuantScheme.post_training_tf,
+                                              QuantScheme.training_range_learning_with_tf_init])
+    def test_concat_op_with_qat(self, quant_scheme):
         """
         Test torch.cat op for both QAT and QAT-range learning
         """
@@ -137,7 +130,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
                 self.conv2 = nn.Conv2d(10, 10, 5)
                 self.conv3 = nn.Conv2d(10, 10, 5)
                 self.conv4 = nn.Conv2d(10, 10, 1)
-                self.cat = elementwise_ops.Concat(1)
+                self.cat = aimet_ops.Concat(1)
                 self.relu1 = nn.ReLU(inplace=True)
                 self.relu2 = nn.ReLU(inplace=True)
 
@@ -156,85 +149,51 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         input_shape = (1, 10, 10, 20)
         dummy_input = [torch.randn(*input_shape), torch.randn(*input_shape), torch.randn(*input_shape)]
         model = ModelWithConCatWrapper().eval()
-        quant_schemes = [QuantScheme.post_training_tf_enhanced,
-                         QuantScheme.training_range_learning_with_tf_init,
-                         QuantScheme.post_training_tf_enhanced,
-                         QuantScheme.training_range_learning_with_tf_enhanced_init]
-        for quant_scheme in quant_schemes:
-            quant_sim = QuantizationSimModel(model, dummy_input, quant_scheme=quant_scheme)
-            quant_sim.compute_encodings(evaluate, dummy_input)
-            quant_sim.model.train()
-            out = quant_sim.model(*dummy_input)
-            loss = out.flatten().sum()
-            loss.backward()
-            assert quant_sim.model.cat.output_quantizers[0] is not None
-
-    def test_dtypes_to_ignore_for_quantization(self):
-        """
-        test dtypes to be ignored for quantization when inputs to elementwise ops are scalar numbers.
-        We just skip quantization for scalars.
-        """
-        class Model(nn.Module):
-            def __init__(self):
-                super(Model, self).__init__()
-                self.conv = nn.Conv2d(10, 20, 5)
-                self.add = elementwise_ops.Add()
-                self.mul = elementwise_ops.Multiply()
-
-            def forward(self, input1):
-                x = self.conv(input1)
-                x = self.add(x, 2)
-                x = self.mul(x, 1)
-                return x
-
-        model = Model().eval()
-        dummy_input = torch.randn(1, 10, 10, 20)
-        model(dummy_input)
-        sim = QuantizationSimModel(model, dummy_input)
-        sim.compute_encodings(dummy_forward_pass, None)
-        sim.model(dummy_input)
-
-        assert not sim.model.add.input_quantizers[0].encoding
-        assert not sim.model.add.input_quantizers[1].encoding
-        assert sim.model.add.output_quantizers[0].encoding
-
-        assert not sim.model.mul.input_quantizers[0].encoding
-        assert not sim.model.mul.input_quantizers[1].encoding
-        assert sim.model.mul.output_quantizers[0].encoding
-
-    def test_dtypes_to_ignore_for_quantization_quant_scheme_range_learning(self):
-        """
-        test dtypes to be ignored for quantization when inputs to elementwise ops are scalar numbers.
-        We just skip quantization for scalars.
-        """
-        class Model(nn.Module):
-            def __init__(self):
-                super(Model, self).__init__()
-                self.conv = nn.Conv2d(10, 20, 5)
-                self.add = elementwise_ops.Add()
-                self.mul = elementwise_ops.Multiply()
-
-            def forward(self, input1):
-                x = self.conv(input1)
-                x = self.add(x, 2)
-                x = self.mul(x, 1)
-                return x
-
-        model = Model().eval()
-        dummy_input = torch.randn(1, 10, 10, 20)
-        model(dummy_input)
-        sim = QuantizationSimModel(model, dummy_input,
-                                   quant_scheme=QuantScheme.training_range_learning_with_tf_enhanced_init)
-        sim.compute_encodings(dummy_forward_pass, None)
-        sim.model.train()
-        out = sim.model(dummy_input)
+        quant_sim = QuantizationSimModel(model, dummy_input, quant_scheme=quant_scheme)
+        quant_sim.compute_encodings(dummy_forward, dummy_input)
+        quant_sim.model.train()
+        out = quant_sim.model(*dummy_input)
         loss = out.flatten().sum()
         loss.backward()
 
-        assert not sim.model.add.input_quantizers[0].encoding
-        assert not sim.model.add.input_quantizers[1].encoding
-        assert sim.model.add.output_quantizers[0].encoding
+        if quant_scheme == QuantScheme.post_training_tf:
+            assert quant_sim.model.cat.output_quantizers[0].min.grad is None
+            assert quant_sim.model.cat.output_quantizers[0].max.grad is None
+        elif quant_scheme == QuantScheme.training_range_learning_with_tf_init:
+            assert quant_sim.model.cat.output_quantizers[0].min.grad is not None
+            assert quant_sim.model.cat.output_quantizers[0].max.grad is not None
+        else:
+            raise
 
-        assert not sim.model.mul.input_quantizers[0].encoding
-        assert not sim.model.mul.input_quantizers[1].encoding
-        assert sim.model.mul.output_quantizers[0].encoding
+    @pytest.mark.parametrize('quant_scheme', [QuantScheme.post_training_tf,
+                                              QuantScheme.training_range_learning_with_tf_init])
+    def test_dtypes_to_ignore_for_quantization(self, quant_scheme):
+        """
+        test dtypes to be ignored for quantization when inputs to elementwise ops are scalar numbers.
+        We just skip quantization for scalars.
+        """
+        class Model(nn.Module):
+            def __init__(self):
+                super(Model, self).__init__()
+                self.conv = nn.Conv2d(10, 20, 5)
+                self.add = aimet_ops.Add()
+                self.mul = aimet_ops.Multiply()
+
+            def forward(self, input1):
+                x = self.conv(input1)
+                x = self.add(x, 2)
+                x = self.mul(x, 1)
+                return x
+
+        model = Model().eval()
+        dummy_input = torch.randn(1, 10, 10, 20)
+        sim = QuantizationSimModel(model, dummy_input, quant_scheme=quant_scheme)
+        sim.compute_encodings(dummy_forward, dummy_input)
+
+        assert sim.model.add.input_quantizers[0] is None
+        assert not sim.model.add.input_quantizers[1].is_initialized()
+        assert sim.model.add.output_quantizers[0].is_initialized()
+
+        assert sim.model.mul.input_quantizers[0] is None
+        assert not sim.model.mul.input_quantizers[1].is_initialized()
+        assert sim.model.mul.output_quantizers[0].is_initialized()
