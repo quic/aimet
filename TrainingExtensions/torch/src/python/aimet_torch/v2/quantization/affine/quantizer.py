@@ -671,7 +671,7 @@ class GroupedBlockQuantizeDequantize(QuantizeDequantize):
         per_channel_scale = max_scale / 2 ** (self.decompressed_bw - self.bitwidth)
         updated_scale = quantize_dequantize(reshaped_scale,
                                             scale=per_channel_scale,
-                                            offset=torch.tensor([0.0], device=per_channel_scale.device),
+                                            offset=torch.zeros_like(per_channel_scale),
                                             qmin=1,
                                             qmax=2 ** (self.decompressed_bw - self.bitwidth))
         return updated_scale.view(orig_scale_shape)

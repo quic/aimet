@@ -1048,7 +1048,17 @@ def test_gbbq_equivalences(gbbq_shape, gbbq_decompressed_bw, gbbq_block_size, gb
         _ = qdq(tensor)
 
     assert torch.equal(gbbq.get_scale(), qdq.get_scale().expand(gbbq.get_scale().shape))
-    assert torch.equal(gbbq(tensor), qdq(tensor))
+    gbbq_out = gbbq(tensor)
+    qdq_out = qdq(tensor)
+    assert torch.equal(gbbq_out, qdq_out)
+
+    if all(group_size == 1 for group_size in gbbq_block_grouping):
+        grad = torch.randn(size=gbbq_out.shape)
+        gbbq_out.backward(grad)
+        qdq_out.backward(grad)
+
+        assert torch.equal(gbbq.min.grad, qdq.min.grad)
+        assert torch.equal(gbbq.max.grad, qdq.max.grad)
 
 def test_invalid_gbbq_settings():
     with pytest.raises(RuntimeError):
