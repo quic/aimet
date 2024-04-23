@@ -37,6 +37,7 @@
 # pylint: disable=redefined-builtin
 """ Base encoding definition """
 import abc
+import copy
 
 import torch
 
@@ -94,3 +95,23 @@ class EncodingBase(abc.ABC):
         :param input: Tensor to be dequantized
         :return: Dequantized tensor
         """
+
+    def _detach(self) -> "EncodingBase":
+        """
+        Returns a new encoding object with all tensors attributes detached from the current graph
+        """
+        self_copy = copy.copy(self)
+        for name, item in self_copy.__dict__.items():
+            if isinstance(item, torch.Tensor):
+                setattr(self_copy, name, item.detach())
+        return self_copy
+
+    def _clone(self) -> "EncodingBase":
+        """
+        Returns a new encoding object all tensor attributes cloned
+        """
+        self_copy = copy.copy(self)
+        for name, item in self_copy.__dict__.items():
+            if isinstance(item, torch.Tensor):
+                setattr(self_copy, name, item.clone())
+        return self_copy

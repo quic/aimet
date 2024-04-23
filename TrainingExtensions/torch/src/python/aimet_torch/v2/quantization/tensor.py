@@ -48,6 +48,18 @@ from aimet_torch.v2.quantization.base import EncodingBase
 __all__ = ['QuantizedTensorBase', 'QuantizedTensor', 'DequantizedTensor', 'EncodingError']
 
 
+HANDLED_FUNCTIONS = {}
+def implements(torch_function):
+    """
+    Register an override for QuantizedTensorBase
+    """
+    def decorator(func):
+        HANDLED_FUNCTIONS[torch_function] = func
+        return func
+
+    return decorator
+
+
 class QuantizedTensorBase(torch.Tensor):
     """
     Abstract base class to define quantized tensor behavior.
@@ -93,11 +105,7 @@ class QuantizedTensorBase(torch.Tensor):
 
     # Operations that an encoding can always pass through
     _passthrough_ops = {
-        torch.Tensor.clone,
         torch.Tensor.contiguous,
-        torch.Tensor.detach,
-        torch.detach,
-        torch.detach_copy,
     }
 
     # Operations that a per-tensor encoding can pass through
@@ -199,8 +207,33 @@ class QuantizedTensorBase(torch.Tensor):
         ret.encoding = encoding
         return ret
 
+    @implements(torch.clone)
+    def clone(self, *, memory_format=torch.preserve_format):
+        """
+        Returns a copy of self
+
+        :param memory_format: Desired memory format of the returned tensor (default=torch.preserve_format)
+        """
+        # Note: use encoding.clone() here instead of deepcopy to propagate gradient through operation
+        encoding_clone = self.encoding._clone() # pylint:disable = protected-access
+        self_clone = super().clone(memory_format=memory_format).as_subclass(self.__class__)
+        self_clone.encoding = encoding_clone
+        return self_clone
+
+    @implements(torch.detach)
+    def detach(self) -> "QuantizedTensorBase":
+        """
+        Returns a new QuantizedTensorBase with data and encoding detached from the current graph
+        """
+        self_detached = super().detach().as_subclass(self.__class__)
+        self_detached.encoding = self.encoding._detach() # pylint:disable = protected-access
+        return self_detached
+
     @classmethod
     def __torch_function__(cls, func, types, args=(), kwargs=None):
+        if func in HANDLED_FUNCTIONS:
+            kwargs = kwargs if kwargs is not None else {}
+            return HANDLED_FUNCTIONS[func](*args, **kwargs)
         ret = super().__torch_function__(func, types, args, kwargs)
 
         flattened_args, _ = tree_flatten((args, kwargs))
@@ -227,7 +260,13 @@ class QuantizedTensorBase(torch.Tensor):
         if func in cls._pertensor_passthrough_ops:
             self, *_ = args
             if self.encoding.granularity == "pertensor":
+                # Return a cls object with the same encoding which can later be quantized or dequantized
                 ret.encoding = copy.copy(self.encoding)
+            else:
+                # Return a cls object with no encoding
+                # If the user later tries to quantize or dequantize this, an error will be thrown
+                ret.encoding = None
+            return ret
 
         def set_encoding(qtensor):
             if not hasattr(qtensor, 'encoding'):
