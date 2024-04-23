@@ -99,438 +99,471 @@ class SeqMseParams:
     forward_fn: Callable = default_forward_fn
 
 
-def apply_seq_mse(model: torch.nn.Module,
-                  sim: QuantizationSimModel,
-                  data_loader: DataLoader,
-                  params: SeqMseParams,
-                  modules_to_exclude: Optional[List[torch.nn.Module]] = None,
-                  checkpoints_config: Optional[str] = None):
+class SequentialMse:
     """
     Sequentially minimizing activation MSE loss in layer-wise way to decide optimal param quantization encodings.
-
-        1 Disable all input/output quantizers, param quantizers of non-supported modules
-	    2 Find and feeze optimal parameter encodings candidate for remaining supported modules
-	    3 Re-enable disabled quantizers from step 1
-
-    Example userflow:
-    model = Model().eval()
-    sim = QuantizationSimModel(...)
-    apply_seq_mse(...)
-    sim.compute_encodings(...) [compute encodings for all activations and parameters of non-supported modules]
-    sim.export(...)
-
-    NOTE:
-    1) module reference passed to modules_to_exclude should be from FP32 model.
-    2) module from modules_to_exclude won't be quantized and skipped when appyling sequential MSE.
-    3) Except finding param encodings for supported modules, config JSON file will be respected and
-     final state of sim will be unchanged.
-
-    :param model: Original fp32 model
-    :param sim: Corresponding QuantizationSimModel object
-    :param data_loader: Data loader
-    :param params: Sequential MSE parameters
-    :param modules_to_exclude: List of supported type module(s) to exclude when applying Sequential MSE
-    :param checkpoints_config: Config files to split fp32/quant model by checkpoints to speedup activations sampling
     """
-    # pylint: disable=protected-access
-    assert sim._quant_scheme == QuantScheme.post_training_tf, "Use TF quant-scheme with sequential MSE."
+    @classmethod
+    def apply_seq_mse(cls,
+                      model: torch.nn.Module,
+                      sim: QuantizationSimModel,
+                      data_loader: DataLoader,
+                      params: SeqMseParams,
+                      modules_to_exclude: Optional[List[torch.nn.Module]] = None,
+                      checkpoints_config: Optional[str] = None):
+        """
+        Sequentially minimizing activation MSE loss in layer-wise way to decide optimal param quantization encodings.
 
-    # disable all input/output activation quantizers and
-    # param quantizers of all the non-supported modules and from modules_to_exclude list.
-    quantizers = get_quantizers_to_be_disabled(model, sim, modules_to_exclude)
-    enable_disable_quantizers(quantizers, enabled=False)
+            1 Disable all input/output quantizers, param quantizers of non-supported modules
+            2 Find and feeze optimal parameter encodings candidate for remaining supported modules
+            3 Re-enable disabled quantizers from step 1
 
-    # Initialize param encodings of modules of supported types.
-    compute_all_param_encodings(sim)
+        Example userflow:
+        model = Model().eval()
+        sim = QuantizationSimModel(...)
+        apply_seq_mse(...)
+        sim.compute_encodings(...) [compute encodings for all activations and parameters of non-supported modules]
+        sim.export(...)
 
-    with tempfile.TemporaryDirectory() as tempdir:
-        cached_dataset = CachedDataset(data_loader, params.num_batches, os.path.join(tempdir, 'cached_dataset'))
-        if checkpoints_config:
-            apply_seq_mse_using_opt_sampling(checkpoints_config, model, sim, modules_to_exclude, cached_dataset, params,
-                                             tempdir)
-        else:
-            dummy_input = change_tensor_device_placement(next(iter(data_loader)), get_device(model))
-            fp32_modules = get_ordered_list_of_modules(model, dummy_input, fwd_func=params.forward_fn)
+        NOTE:
+        1) module reference passed to modules_to_exclude should be from FP32 model.
+        2) module from modules_to_exclude won't be quantized and skipped when appyling sequential MSE.
+        3) Except finding param encodings for supported modules, config JSON file will be respected and
+        final state of sim will be unchanged.
+
+        :param model: Original fp32 model
+        :param sim: Corresponding QuantizationSimModel object
+        :param data_loader: Data loader
+        :param params: Sequential MSE parameters
+        :param modules_to_exclude: List of supported type module(s) to exclude when applying Sequential MSE
+        :param checkpoints_config: Config files to split fp32/quant model by checkpoints to speedup activations sampling
+        """
+        # pylint: disable=protected-access
+        assert sim._quant_scheme == QuantScheme.post_training_tf, "Use TF quant-scheme with sequential MSE."
+
+        # disable all input/output activation quantizers and
+        # param quantizers of all the non-supported modules and from modules_to_exclude list.
+        # then, re-enable disabled quantizers after running sequential mse.
+        # this ensures that config JSON file will be respected and final state of sim will be unchanged.
+        with cls.temporarily_disable_quantizers(model, sim, modules_to_exclude), \
+            tempfile.TemporaryDirectory() as tempdir:
+
+            # Initialize param encodings of modules of supported types.
+            cls.compute_all_param_encodings(sim)
+
+            cached_dataset = CachedDataset(data_loader, params.num_batches, os.path.join(tempdir, 'cached_dataset'))
+            if checkpoints_config:
+                cls.apply_seq_mse_using_opt_sampling(checkpoints_config, model, sim, modules_to_exclude, cached_dataset, params,
+                                                     tempdir)
+            else:
+                dummy_input = change_tensor_device_placement(next(iter(data_loader)), get_device(model))
+                fp32_modules = get_ordered_list_of_modules(model, dummy_input, fwd_func=params.forward_fn)
+                fp32_modules = [(name, module) for name, module in fp32_modules if isinstance(module, SUPPORTED_MODULES)]
+                if modules_to_exclude:
+                    fp32_modules = [(name, module) for name, module in fp32_modules if not module in modules_to_exclude]
+
+                # Find and freeze optimal param encodings candidate
+                cls.run_seq_mse(fp32_modules, model, sim.model, params, params.forward_fn,
+                                cached_dataset, cached_quant_dataset=None)
+
+    @classmethod
+    def apply_seq_mse_using_opt_sampling(cls,
+                                         checkpoints_config: str,
+                                         model: torch.nn.Module,
+                                         sim: QuantizationSimModel,
+                                         modules_to_exclude: Optional[List[torch.nn.Module]],
+                                         cached_dataset: CachedDataset,
+                                         params: SeqMseParams,
+                                         tempdir: str):
+        """
+        Apply sequential MSE using optimized sampling of intermediate data. When checkpoints_config file is provided,
+        intermediate activations from breakpoint are treated as model inputs for next blocks.
+
+        NOTE: Assumption is that the outputs from the current block are fed directly to following block
+        and there are no functional operations in-between.
+
+        :param checkpoints_config: Config files to split fp32/quant model by checkpoints to speedup activations sampling
+        :param model: Original fp32 model
+        :param sim: Corresponding QuantizationSimModel object
+        :param modules_to_exclude: List of supported type module(s) to exclude when applying Sequential MSE
+        :param cached_dataset: Cached dataset
+        :param params: Sequential MSE parameters
+        :param tempdir: temporary working directory
+        """
+        # pylint: disable=too-many-locals
+        ckpts_file = json.load(open(checkpoints_config))
+        assert 'grouped_modules' in ckpts_file.keys(), \
+            "Please provide a dictionary of grouped_modules in the file to define checkpoints"
+        assert 'include_static_inputs' in ckpts_file.keys(), \
+            "Please provide a dictionary of include_static_inputs in the file to define checkpoints"
+        assert 'cache_on_cpu' in ckpts_file.keys(), \
+            "Please define cache_on_cpu to determine whether to cache intermediate tensors on CPU"
+
+        grouped_modules = ckpts_file['grouped_modules']
+        breakpoint_module_name = ckpts_file['grouped_modules'][list(grouped_modules.keys())[0]][0]
+        include_static_inputs = ckpts_file['include_static_inputs']
+        cache_on_cpu = ckpts_file['cache_on_cpu']
+        cached_fp_dataset, cached_quant_dataset = get_block_inputs(model, sim,
+                                                                   breakpoint_module_name,
+                                                                   cached_dataset, cache_on_cpu,
+                                                                   params.forward_fn, params.num_batches,
+                                                                   tempdir)
+        device = get_device(model)
+        model.cpu()
+        sim.model.cpu()
+
+        # Forward function for the ModuleList object
+        def fwd_fn_modulelist(modulelists, x):
+            for mod in modulelists:
+                x = mod(*x) if isinstance(x, (tuple, list)) else mod(x)
+            return x
+
+        sub_fp_models, sub_sim_models = create_modulelist_for_group_modules(model, sim, grouped_modules)
+        for i, (fp_block, quant_sim_block, static_input) in enumerate(zip(sub_fp_models,
+                                                                          sub_sim_models,
+                                                                          include_static_inputs)):
+            fp32_modules = get_ordered_list_of_modules(fp_block, cached_fp_dataset[0], fwd_func=fwd_fn_modulelist)
             fp32_modules = [(name, module) for name, module in fp32_modules if isinstance(module, SUPPORTED_MODULES)]
             if modules_to_exclude:
                 fp32_modules = [(name, module) for name, module in fp32_modules if not module in modules_to_exclude]
 
-            # Find and freeze optimal param encodings candidate
-            run_seq_mse(fp32_modules, model, sim.model, params, params.forward_fn,
-                        cached_dataset, cached_quant_dataset=None)
+            cls.run_seq_mse(fp32_modules, fp_block, quant_sim_block, params, fwd_fn_modulelist,
+                            cached_fp_dataset, cached_quant_dataset=cached_quant_dataset)
 
-    # re-enable disabled quantizers
-    # this ensures that config JSON file will be respected and final state of sim will be unchanged.
-    enable_disable_quantizers(quantizers, enabled=True)
+            # Get the outputs from the current block and assign to be the inputs for next block
+            # except for the last block
+            if i < len(sub_fp_models) - 1:
+                get_block_outputs(fp_block, quant_sim_block, static_input,
+                                  cached_fp_dataset, cached_quant_dataset, cache_on_cpu,
+                                  fwd_fn_modulelist, device, tempdir)
+        model.to(device)
+        sim.model.to(device)
 
+    @classmethod
+    def run_seq_mse(cls,
+                    fp32_modules: List[Tuple[str, torch.nn.Module]],
+                    model: torch.nn.Module,
+                    quant_model: torch.nn.Module,
+                    params: SeqMseParams,
+                    forward_fn: Callable,
+                    cached_fp_dataset: CachedDataset,
+                    cached_quant_dataset: Optional[CachedDataset] = None,
+                    ):
+        """
+        Run Sequential MSE
 
-def apply_seq_mse_using_opt_sampling(
-        checkpoints_config: str,
-        model: torch.nn.Module,
-        sim: QuantizationSimModel,
-        modules_to_exclude: Optional[List[torch.nn.Module]],
-        cached_dataset: CachedDataset,
-        params: SeqMseParams,
-        tempdir: str):
-    """
-    Apply sequential MSE using optimized sampling of intermediate data. When checkpoints_config file is provided,
-     intermediate activations from breakpoint are treated as model inputs for next blocks.
+        :param fp32_modules: List of FP32 candidate modules in order of occurence
+        :param model: FP32 model
+        :param quant_model: QuantizationSimModel object
+        :param params: Sequential MSE parameters
+        :param forward_fn: Optional adapter function that performs forward pass given a model and inputs
+        yielded from the data loader. The function expects model as first argument and inputs to model as second argument.
+        :param cached_fp_dataset: Cached dataset object
+        :param cached_quant_dataset: Cached dataset object
+        """
+        name_to_quant_module = {}
+        for name, quant_module in quant_model.named_modules():
+            name_to_quant_module[name] = quant_module
 
-    NOTE: Assumption is that the outputs from the current block are fed directly to following block
-     and there are no functional operations in-between.
+        if not cached_quant_dataset:
+            cached_quant_dataset = cached_fp_dataset
 
-    :param checkpoints_config: Config files to split fp32/quant model by checkpoints to speedup activations sampling
-    :param model: Original fp32 model
-    :param sim: Corresponding QuantizationSimModel object
-    :param modules_to_exclude: List of supported type module(s) to exclude when applying Sequential MSE
-    :param cached_dataset: Cached dataset
-    :param params: Sequential MSE parameters
-    :param tempdir: temporary working directory
-    """
-    # pylint: disable=too-many-locals
-    ckpts_file = json.load(open(checkpoints_config))
-    assert 'grouped_modules' in ckpts_file.keys(), \
-        "Please provide a dictionary of grouped_modules in the file to define checkpoints"
-    assert 'include_static_inputs' in ckpts_file.keys(), \
-        "Please provide a dictionary of include_static_inputs in the file to define checkpoints"
-    assert 'cache_on_cpu' in ckpts_file.keys(), \
-        "Please define cache_on_cpu to determine whether to cache intermediate tensors on CPU"
+        for module_qualified_name, fp32_module in fp32_modules:
+            try:
+                quant_module = name_to_quant_module[module_qualified_name]
+            except KeyError:
+                continue
 
-    grouped_modules = ckpts_file['grouped_modules']
-    breakpoint_module_name = ckpts_file['grouped_modules'][list(grouped_modules.keys())[0]][0]
-    include_static_inputs = ckpts_file['include_static_inputs']
-    cache_on_cpu = ckpts_file['cache_on_cpu']
-    cached_fp_dataset, cached_quant_dataset = get_block_inputs(model, sim,
-                                                               breakpoint_module_name,
-                                                               cached_dataset, cache_on_cpu,
-                                                               params.forward_fn, params.num_batches,
-                                                               tempdir)
-    device = get_device(model)
-    model.cpu()
-    sim.model.cpu()
+            if quant_module.param_quantizers['weight'].bitwidth > SUPPORTED_PARAM_BW:
+                continue
 
-    # Forward function for the ModuleList object
-    def fwd_fn_modulelist(modulelists, x):
-        for mod in modulelists:
-            x = mod(*x) if isinstance(x, (tuple, list)) else mod(x)
-        return x
+            _logger.info("Finding and freezing optimal param encodings candidate of module: %s", module_qualified_name)
+            if params.inp_symmetry == "asym":
+                fp32_inp_acts = cls.get_module_inp_acts(fp32_module, model, params, forward_fn, cached_fp_dataset)
+                quant_inp_acts = cls.get_module_inp_acts(quant_module, quant_model, params, forward_fn, cached_quant_dataset)
+                cls.optimize_module(quant_module, fp32_inp_acts, quant_inp_acts, params)
+            elif params.inp_symmetry == "symfp":
+                fp32_inp_acts = cls.get_module_inp_acts(fp32_module, model, params, forward_fn, cached_fp_dataset)
+                cls.optimize_module(quant_module, fp32_inp_acts, fp32_inp_acts, params)
+            elif params.inp_symmetry == "symqt":
+                quant_inp_acts = cls.get_module_inp_acts(quant_module, quant_model, params, forward_fn, cached_quant_dataset)
+                cls.optimize_module(quant_module, quant_inp_acts, quant_inp_acts, params)
+            else:
+                raise ValueError(f"Invalid inp_symmetry: {params.inp_symmetry}")
 
-    sub_fp_models, sub_sim_models = create_modulelist_for_group_modules(model, sim, grouped_modules)
-    for i, (fp_block, quant_sim_block, static_input) in enumerate(zip(sub_fp_models,
-                                                                      sub_sim_models,
-                                                                      include_static_inputs)):
-        fp32_modules = get_ordered_list_of_modules(fp_block, cached_fp_dataset[0], fwd_func=fwd_fn_modulelist)
-        fp32_modules = [(name, module) for name, module in fp32_modules if isinstance(module, SUPPORTED_MODULES)]
-        if modules_to_exclude:
-            fp32_modules = [(name, module) for name, module in fp32_modules if not module in modules_to_exclude]
+    @staticmethod
+    def get_module_inp_acts(module: torch.nn.Module,
+                            model: torch.nn.Module,
+                            params: SeqMseParams,
+                            forward_fn: Callable,
+                            cached_dataset: CachedDataset,
+                            ) -> torch.Tensor:
+        """
+        For given module, get inputs to the module.
 
-        run_seq_mse(fp32_modules, fp_block, quant_sim_block, params, fwd_fn_modulelist,
-                    cached_fp_dataset, cached_quant_dataset=cached_quant_dataset)
+        :param module: FP32/quant module
+        :param model: FP32/quant model
+        :param params: Sequential MSE parameters
+        :param forward_fn: Optional adapter function that performs forward pass given a model and inputs
+        yielded from the data loader. The function expects model as first argument and inputs to model as second argument.
+        :param cached_dataset: Cached dataset
+        :return: Concatenated inputs
+        """
+        inp_acts = []
+        def hook_fn(_, inp, __):
+            if isinstance(inp, tuple):
+                inp_acts.append(inp[0])
+            raise StopForwardException
+        handle = module.register_forward_hook(hook_fn)
 
-        # Get the outputs from the current block and assign to be the inputs for next block
-        # except for the last block
-        if i < len(sub_fp_models) - 1:
-            get_block_outputs(fp_block, quant_sim_block, static_input,
-                              cached_fp_dataset, cached_quant_dataset, cache_on_cpu,
-                              fwd_fn_modulelist, device, tempdir)
-    model.to(device)
-    sim.model.to(device)
+        iterator = iter(cached_dataset)
+        for _ in range(params.num_batches):
+            batch = change_tensor_device_placement(next(iterator), get_device(model))
+            try:
+                with in_eval_mode(model), torch.no_grad():
+                    forward_fn(model, batch)
+            except StopForwardException:
+                pass
+        handle.remove()
 
-def run_seq_mse(fp32_modules: List[Tuple[str, torch.nn.Module]],
-                model: torch.nn.Module,
-                quant_model: torch.nn.Module,
-                params: SeqMseParams,
-                forward_fn: Callable,
-                cached_fp_dataset: CachedDataset,
-                cached_quant_dataset: Optional[CachedDataset] = None,
-                ):
-    """
-    Run Sequential MSE
+        inp_acts = torch.stack(inp_acts)
+        return inp_acts
 
-    :param fp32_modules: List of FP32 candidate modules in order of occurence
-    :param model: FP32 model
-    :param quant_model: QuantizationSimModel object
-    :param params: Sequential MSE parameters
-    :param forward_fn: Optional adapter function that performs forward pass given a model and inputs
-     yielded from the data loader. The function expects model as first argument and inputs to model as second argument.
-    :param cached_fp_dataset: Cached dataset object
-    :param cached_quant_dataset: Cached dataset object
-    """
-    name_to_quant_module = {}
-    for name, quant_module in quant_model.named_modules():
-        name_to_quant_module[name] = quant_module
+    @staticmethod
+    def _get_quantizers_to_be_disabled(
+            model: torch.nn.Module,
+            sim: QuantizationSimModel,
+            modules_to_exclude: Optional[List[torch.nn.Module]],
+    ) -> List[TensorQuantizer]:
+        """
+        For given quantsim model, get all quantizers to be disabled before applying sequential MSE.
+        """
+        # pylint: disable=protected-access
+        name_to_fp32_module_dict = {}
+        for name, fp32_module in model.named_modules():
+            name_to_fp32_module_dict[name] = fp32_module
 
-    if not cached_quant_dataset:
-        cached_quant_dataset = cached_fp_dataset
+        quantizers_to_be_disabled = []
+        for name, quant_wrapper in sim.quant_wrappers():
+            for quantizer in quant_wrapper.input_quantizers:
+                if quantizer.enabled:
+                    quantizers_to_be_disabled.append(quantizer)
 
-    for module_qualified_name, fp32_module in fp32_modules:
-        try:
-            quant_module = name_to_quant_module[module_qualified_name]
-        except KeyError:
-            continue
+            for quantizer in quant_wrapper.output_quantizers:
+                if quantizer.enabled:
+                    quantizers_to_be_disabled.append(quantizer)
 
-        if quant_module.param_quantizers['weight'].bitwidth > SUPPORTED_PARAM_BW:
-            continue
+            for quantizer in quant_wrapper.param_quantizers.values():
+                if not isinstance(quant_wrapper._module_to_wrap, SUPPORTED_MODULES) and quantizer.enabled:
+                    quantizers_to_be_disabled.append(quantizer)
 
-        _logger.info("Finding and freezing optimal param encodings candidate of module: %s", module_qualified_name)
-        if params.inp_symmetry == "asym":
-            fp32_inp_acts = get_module_inp_acts(fp32_module, model, params, forward_fn, cached_fp_dataset)
-            quant_inp_acts = get_module_inp_acts(quant_module, quant_model, params, forward_fn, cached_quant_dataset)
-            optimize_module(quant_module, fp32_inp_acts, quant_inp_acts, params)
-        elif params.inp_symmetry == "symfp":
-            fp32_inp_acts = get_module_inp_acts(fp32_module, model, params, forward_fn, cached_fp_dataset)
-            optimize_module(quant_module, fp32_inp_acts, fp32_inp_acts, params)
-        elif params.inp_symmetry == "symqt":
-            quant_inp_acts = get_module_inp_acts(quant_module, quant_model, params, forward_fn, cached_quant_dataset)
-            optimize_module(quant_module, quant_inp_acts, quant_inp_acts, params)
+            # disable param quantizers from exclusion list
+            if modules_to_exclude:
+                with contextlib.suppress(KeyError):
+                    fp32_module = name_to_fp32_module_dict[name]
+                    if fp32_module in modules_to_exclude:
+                        for quantizer in quant_wrapper.param_quantizers.values():
+                            if quantizer.enabled:
+                                quantizers_to_be_disabled.append(quantizer)
+
+        return quantizers_to_be_disabled
+
+    @classmethod
+    @contextlib.contextmanager
+    def temporarily_disable_quantizers(
+            cls,
+            model: torch.nn.Module,
+            sim: QuantizationSimModel,
+            modules_to_exclude: Optional[List[torch.nn.Module]],
+    ):
+        """
+        For given quantsim model, disable quantizers needed to be diabled before applying sequential MSE.
+
+        :param model: Original fp32 model
+        :param sim: QuantizationSimModel object
+        :param modules_to_exclude: List of supported modules to exclude when applying Sequential MSE
+        :return: List of quantizers to be disabled.
+        """
+        quantizers_to_be_disabled = cls._get_quantizers_to_be_disabled(model, sim, modules_to_exclude)
+
+        for quantizer in quantizers_to_be_disabled:
+            quantizer.enabled = False
+        yield
+        for quantizer in quantizers_to_be_disabled:
+            quantizer.enabled = True
+
+    @staticmethod
+    def compute_all_param_encodings(sim: QuantizationSimModel):
+        """
+        Compute encodings for all parameters, needed for initializing Sequential MSE
+
+        :param sim: Quant sim
+        """
+        for _, quant_wrapper in sim.quant_wrappers():
+            for name, quantizer in quant_wrapper.param_quantizers.items():
+                quantizer.reset_encoding_stats()
+                quantizer.update_encoding_stats(getattr(quant_wrapper, name).data)
+                quantizer.compute_encoding()
+
+            # Wrapper mode must be set to ACTIVE because the wrapper's quantize_dequantize_params() will only call
+            # into the param tensor quantizer's quantize_dequantize() if the mode isn't PASSTHROUGH.
+            quant_wrapper.set_mode(QcQuantizeOpMode.ACTIVE)
+
+    @staticmethod
+    def get_candidates(num_candidates: int,
+                       per_channel_max: torch.Tensor,
+                       per_channel_min: Optional[torch.Tensor]) -> List[Tuple[torch.Tensor, torch.Tensor]]:
+        """
+        Perform grid search.
+
+        :param num_candidates: Number of candidates
+        :param per_channel_max: Per channel max values
+        :param per_channel_min: Per channel min values
+        :return: candidates
+        """
+        candidates = []
+        if per_channel_min is not None:
+            for cand in range(num_candidates):
+                cand_max = torch.tensor(per_channel_max / num_candidates * (cand + 1))
+                cand_min = torch.tensor(per_channel_min / num_candidates * (cand + 1))
+                candidates.append((cand_max, cand_min))
         else:
-            raise ValueError(f"Invalid inp_symmetry: {params.inp_symmetry}")
+            for cand in range(num_candidates):
+                cand_max = torch.tensor(per_channel_max / num_candidates * (cand + 1))
+                cand_min = -cand_max
+                candidates.append((cand_max, cand_min))
+        return candidates
 
+    @classmethod
+    def optimize_module(cls,
+                        quant_module: QcQuantizeWrapper,
+                        x: torch.Tensor,
+                        xq: torch.Tensor,
+                        params: SeqMseParams):
+        """
+        Find and freeze optimal parameter encodings candidate for given module.
 
-def get_module_inp_acts(module: torch.nn.Module,
-                        model: torch.nn.Module,
-                        params: SeqMseParams,
-                        forward_fn: Callable,
-                        cached_dataset: CachedDataset,
-                        ) -> torch.Tensor:
-    """
-    For given module, get inputs to the module.
+        :param quant_module: Quant module to be optimized
+        :param x: Inputs to module from FP32 model
+        :param xq: Inputs to module from QuantSim model
+        :param params: Sequenial MSE parameters
+        """
+        # pylint: disable=too-many-locals
+        if cls._is_symmetric_quantizer(quant_module.param_quantizers["weight"]):
+            per_channel_max = torch.max(quant_module.weight.abs(), dim=1)[0].detach()
+            per_channel_min = None
+        else:
+            per_channel_max = torch.max(quant_module.weight, dim=1)[0].detach()
+            per_channel_min = torch.min(quant_module.weight, dim=1)[0].detach()
+        candidates = cls.get_candidates(params.num_candidates, per_channel_max, per_channel_min)
 
-    :param module: FP32/quant module
-    :param model: FP32/quant model
-    :param params: Sequential MSE parameters
-    :param forward_fn: Optional adapter function that performs forward pass given a model and inputs
-     yielded from the data loader. The function expects model as first argument and inputs to model as second argument.
-    :param cached_dataset: Cached dataset
-    :return: Concatenated inputs
-    """
-    inp_acts = []
-    def hook_fn(_, inp, __):
-        if isinstance(inp, tuple):
-            inp_acts.append(inp[0])
-        raise StopForwardException
-    handle = module.register_forward_hook(hook_fn)
+        total_loss = []
+        for cand_max, cand_min in candidates:
+            cls.compute_param_encodings(quant_module.param_quantizers['weight'], cand_min, cand_max)
+            w = quant_module.weight
+            wq = cls._get_quantized_weight(quant_module)
+            loss = torch.zeros(len(cand_max), device=w.device)
+            with torch.no_grad():
+                for batch_idx in range(params.num_batches):
+                    xqwq, xw = cls.compute_outputs(quant_module, x[batch_idx], xq[batch_idx], w, wq)
+                    loss += cls.compute_recon_loss(xqwq, xw, params)
+                total_loss.append(loss)
 
-    iterator = iter(cached_dataset)
-    for _ in range(params.num_batches):
-        batch = change_tensor_device_placement(next(iterator), get_device(model))
-        try:
-            with in_eval_mode(model), torch.no_grad():
-                forward_fn(model, batch)
-        except StopForwardException:
-            pass
-    handle.remove()
+        best_indices = torch.stack(total_loss).min(0, keepdim=True)[1]
+        _logger.debug("Indices of optimal candidate: %s", best_indices.squeeze(0)[:params.num_candidates].tolist())
+        best_max = torch.stack([cand_max for cand_max, _ in candidates]).gather(0, best_indices)[0]
+        best_min = torch.stack([cand_min for _, cand_min in candidates]).gather(0, best_indices)[0]
 
-    inp_acts = torch.stack(inp_acts)
-    return inp_acts
+        # Compute and freeze parameter encodings using best candidate
+        cls.compute_param_encodings(quant_module.param_quantizers['weight'], best_min, best_max)
+        cls._freeze_quantizer_encoding(quant_module.param_quantizers['weight'])
 
+    @staticmethod
+    def compute_param_encodings(quantizer: Union[StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer],
+                                x_min: torch.Tensor,
+                                x_max: torch.Tensor):
+        """
+        Compute encodings for parameter quantizer using given x_min and x_max values.
 
-def get_quantizers_to_be_disabled(
-        model: torch.nn.Module,
-        sim: QuantizationSimModel,
-        modules_to_exclude: Optional[List[torch.nn.Module]],
-) -> List[TensorQuantizer]:
-    """
-    For given quantsim model, get all quantizers to be disabled before applying sequential MSE.
+        :param quantizer: Tensor quantizer
+        :param x_min: min values
+        :param x_max: max values
+        """
+        tensor = torch.stack([x_min, x_max], dim=-1)
+        quantizer.reset_encoding_stats()
+        quantizer.update_encoding_stats(tensor)
+        quantizer.compute_encoding()
 
-    :param model: Original fp32 model
-    :param sim: QuantizationSimModel object
-    :param modules_to_exclude: List of supported modules to exclude when applying Sequential MSE
-    :return: List of quantizers to be disabled.
-    """
-    # pylint: disable=protected-access
-    name_to_fp32_module_dict = {}
-    for name, fp32_module in model.named_modules():
-        name_to_fp32_module_dict[name] = fp32_module
+    @classmethod
+    def compute_outputs(cls,
+                        quant_module: QcQuantizeWrapper,
+                        x: torch.Tensor,
+                        xq: torch.Tensor,
+                        w: torch.Tensor,
+                        wq: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Compute X^W^ and XW output acitvations.
 
-    quantizers_to_be_disabled = []
-    for name, quant_wrapper in sim.quant_wrappers():
-        for quantizer in quant_wrapper.input_quantizers:
-            if quantizer.enabled:
-                quantizers_to_be_disabled.append(quantizer)
+        :param quant_module: Wrapper module to be optimized
+        :param x: Inputs from FP32 model
+        :param xq: Inputs from QuantSim model
+        :param w: FP32 weights
+        :param wq: Quantized-dequantized weights
+        :return: xqwq, xw
+        """
+        # pylint: disable=protected-access
+        module = cls._get_original_module(quant_module)
 
-        for quantizer in quant_wrapper.output_quantizers:
-            if quantizer.enabled:
-                quantizers_to_be_disabled.append(quantizer)
+        if isinstance(module, torch.nn.Linear):
+            xqwq = functional.linear(xq, wq, module.bias)
+            xw = functional.linear(x, w, module.bias)
+        else:
+            raise ValueError('Unsupported module: ', module)
+        return xqwq, xw
 
-        for quantizer in quant_wrapper.param_quantizers.values():
-            if not isinstance(quant_wrapper._module_to_wrap, SUPPORTED_MODULES) and quantizer.enabled:
-                quantizers_to_be_disabled.append(quantizer)
+    @staticmethod
+    def compute_recon_loss(xqwq: torch.Tensor, xw: torch.Tensor, params: SeqMseParams):
+        """
+        Compute reconsturction loss and return the sum by reducing over all the dimensions except last channel dimension.
 
-        # disable param quantizers from exclusion list
-        if modules_to_exclude:
-            with contextlib.suppress(KeyError):
-                fp32_module = name_to_fp32_module_dict[name]
-                if fp32_module in modules_to_exclude:
-                    for quantizer in quant_wrapper.param_quantizers.values():
-                        if quantizer.enabled:
-                            quantizers_to_be_disabled.append(quantizer)
+        :param xqwq: X^Q^ quantized-dequantized values
+        :param xw: XW FP32 values
+        :param params: Sequenial MSE parameters
+        :return: loss
+        """
+        if params.loss_fn == "mse":
+            loss_fn = functional.mse_loss
+        elif params.loss_fn == "l1":
+            loss_fn = functional.l1_loss
+        elif params.loss_fn == "sqnr":
+            loss_fn = neg_sqnr
+        else:
+            raise ValueError(f"Invalid loss function: {params.loss_fn}")
 
-    return quantizers_to_be_disabled
+        channel_dim = xqwq.shape[-1]
+        xqwq = xqwq.reshape(-1, channel_dim)
+        xw = xw.reshape(-1, channel_dim)
+        loss = loss_fn(xqwq, xw, reduction="none").sum(0)
+        assert loss.size() == torch.Size([channel_dim])
+        return loss
 
+    @staticmethod
+    def _is_symmetric_quantizer(quantizer: TensorQuantizer):
+        return quantizer.use_symmetric_encodings
 
-def enable_disable_quantizers(quantizers: List[TensorQuantizer], enabled: bool):
-    """
-    For given list of quantizers, set (enable/disable) quantizer's 'enabled' attribute.
+    @staticmethod
+    def _freeze_quantizer_encoding(quantizer: TensorQuantizer):
+        return quantizer.freeze_encoding()
 
-    :param quantizers: List of quantizers.
-    :param enabled: Enabled flag.
-    """
-    for quantizer in quantizers:
-        quantizer.enabled = enabled
-
-
-def compute_all_param_encodings(sim: QuantizationSimModel):
-    """
-    Compute encodings for all parameters, needed for initializing Sequential MSE
-
-    :param sim: Quant sim
-    """
-    for _, quant_wrapper in sim.quant_wrappers():
-        for name, quantizer in quant_wrapper.param_quantizers.items():
-            quantizer.reset_encoding_stats()
-            quantizer.update_encoding_stats(getattr(quant_wrapper, name).data)
-            quantizer.compute_encoding()
-
-        # Wrapper mode must be set to ACTIVE because the wrapper's quantize_dequantize_params() will only call
-        # into the param tensor quantizer's quantize_dequantize() if the mode isn't PASSTHROUGH.
-        quant_wrapper.set_mode(QcQuantizeOpMode.ACTIVE)
-
-
-def get_candidates(num_candidates: int,
-                   per_channel_max: torch.Tensor,
-                   per_channel_min: Optional[torch.Tensor]) -> List[Tuple[torch.Tensor, torch.Tensor]]:
-    """
-    Perform grid search.
-
-    :param num_candidates: Number of candidates
-    :param per_channel_max: Per channel max values
-    :param per_channel_min: Per channel min values
-    :return: candidates
-    """
-    candidates = []
-    if per_channel_min is not None:
-        for cand in range(num_candidates):
-            cand_max = torch.tensor(per_channel_max / num_candidates * (cand + 1))
-            cand_min = torch.tensor(per_channel_min / num_candidates * (cand + 1))
-            candidates.append((cand_max, cand_min))
-    else:
-        for cand in range(num_candidates):
-            cand_max = torch.tensor(per_channel_max / num_candidates * (cand + 1))
-            cand_min = -cand_max
-            candidates.append((cand_max, cand_min))
-    return candidates
-
-
-def optimize_module(quant_module: QcQuantizeWrapper,
-                    x: torch.Tensor,
-                    xq: torch.Tensor,
-                    params: SeqMseParams):
-    """
-    Find and freeze optimal parameter encodings candidate for given module.
-
-    :param quant_module: Quant module to be optimized
-    :param x: Inputs to module from FP32 model
-    :param xq: Inputs to module from QuantSim model
-    :param params: Sequenial MSE parameters
-    """
-    # pylint: disable=too-many-locals
-    if quant_module.param_quantizers["weight"].use_symmetric_encodings:
-        per_channel_max = torch.max(quant_module.weight.abs(), dim=1)[0].detach()
-        per_channel_min = None
-    else:
-        per_channel_max = torch.max(quant_module.weight, dim=1)[0].detach()
-        per_channel_min = torch.min(quant_module.weight, dim=1)[0].detach()
-    candidates = get_candidates(params.num_candidates, per_channel_max, per_channel_min)
-
-    total_loss = []
-    for cand_max, cand_min in candidates:
-        compute_param_encodings(quant_module.param_quantizers['weight'], cand_min, cand_max)
+    @staticmethod
+    def _get_quantized_weight(quant_module: QcQuantizeWrapper):
         w = quant_module.weight
-        wq = quant_module.param_quantizers['weight'].quantize_dequantize(w, libpymo.RoundingMode.ROUND_NEAREST)
-        loss = torch.zeros(len(cand_max), device=w.device)
-        with torch.no_grad():
-            for batch_idx in range(params.num_batches):
-                xqwq, xw = compute_outputs(quant_module, x[batch_idx], xq[batch_idx], w, wq)
-                loss += compute_recon_loss(xqwq, xw, params)
-            total_loss.append(loss)
+        return quant_module.param_quantizers['weight'].quantize_dequantize(w, libpymo.RoundingMode.ROUND_NEAREST)
 
-    best_indices = torch.stack(total_loss).min(0, keepdim=True)[1]
-    _logger.debug("Indices of optimal candidate: %s", best_indices.squeeze(0)[:params.num_candidates].tolist())
-    best_max = torch.stack([cand_max for cand_max, _ in candidates]).gather(0, best_indices)[0]
-    best_min = torch.stack([cand_min for _, cand_min in candidates]).gather(0, best_indices)[0]
-
-    # Compute and freeze parameter encodings using best candidate
-    compute_param_encodings(quant_module.param_quantizers['weight'], best_min, best_max)
-    quant_module.param_quantizers['weight'].freeze_encoding()
-
-
-def compute_param_encodings(quantizer: Union[StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer],
-                            x_min: torch.Tensor,
-                            x_max: torch.Tensor):
-    """
-    Compute encodings for parameter quantizer using given x_min and x_max values.
-
-    :param quantizer: Tensor quantizer
-    :param x_min: min values
-    :param x_max: max values
-    """
-    tensor = torch.stack([x_min, x_max], dim=-1)
-    quantizer.reset_encoding_stats()
-    quantizer.update_encoding_stats(tensor)
-    quantizer.compute_encoding()
-
-
-def compute_outputs(quant_module: QcQuantizeWrapper,
-                    x: torch.Tensor,
-                    xq: torch.Tensor,
-                    w: torch.Tensor,
-                    wq: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Compute X^W^ and XW output acitvations.
-
-    :param quant_module: Wrapper module to be optimized
-    :param x: Inputs from FP32 model
-    :param xq: Inputs from QuantSim model
-    :param w: FP32 weights
-    :param wq: Quantized-dequantized weights
-    :return: xqwq, xw
-    """
-    # pylint: disable=protected-access
-    module = quant_module._module_to_wrap
-
-    if isinstance(module, torch.nn.Linear):
-        xqwq = functional.linear(xq, wq, module.bias)
-        xw = functional.linear(x, w, module.bias)
-    else:
-        raise ValueError('Unsupported module: ', module)
-    return xqwq, xw
-
-
-def compute_recon_loss(xqwq: torch.Tensor, xw: torch.Tensor, params: SeqMseParams):
-    """
-    Compute reconsturction loss and return the sum by reducing over all the dimensions except last channel dimension.
-
-    :param xqwq: X^Q^ quantized-dequantized values
-    :param xw: XW FP32 values
-    :param params: Sequenial MSE parameters
-    :return: loss
-    """
-    if params.loss_fn == "mse":
-        loss_fn = functional.mse_loss
-    elif params.loss_fn == "l1":
-        loss_fn = functional.l1_loss
-    elif params.loss_fn == "sqnr":
-        loss_fn = neg_sqnr
-    else:
-        raise ValueError(f"Invalid loss function: {params.loss_fn}")
-
-    channel_dim = xqwq.shape[-1]
-    xqwq = xqwq.reshape(-1, channel_dim)
-    xw = xw.reshape(-1, channel_dim)
-    loss = loss_fn(xqwq, xw, reduction="none").sum(0)
-    assert loss.size() == torch.Size([channel_dim])
-    return loss
+    @staticmethod
+    def _get_original_module(quant_module: QcQuantizeWrapper):
+        # pylint: disable=protected-access
+        return quant_module._module_to_wrap
 
 
 def neg_sqnr(pred: torch.Tensor, target: torch.Tensor, eps=1e-10, reduction="none"):
@@ -550,3 +583,8 @@ def neg_sqnr(pred: torch.Tensor, target: torch.Tensor, eps=1e-10, reduction="non
     sqnr = exp_signal / exp_noise
     sqnr_db = 10 * torch.log10(sqnr)
     return -sqnr_db
+
+# Global variables for compatibility
+apply_seq_mse = SequentialMse.apply_seq_mse
+get_candidates = SequentialMse.get_candidates
+optimize_module = SequentialMse.optimize_module
