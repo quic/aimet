@@ -91,6 +91,56 @@ class QuantizedTensorBase(torch.Tensor):
         torch.Tensor.to,
     ]
 
+    # Operations that an encoding can always pass through
+    _passthrough_ops = {
+        torch.Tensor.clone,
+        torch.Tensor.contiguous,
+        torch.Tensor.detach,
+        torch.detach,
+        torch.detach_copy,
+    }
+
+    # Operations that a per-tensor encoding can pass through
+    _pertensor_passthrough_ops = {
+        torch.Tensor.broadcast_to,
+        torch.Tensor.expand,
+        torch.Tensor.expand_as,
+        torch.Tensor.flatten,
+        torch.Tensor.masked_select,
+        torch.Tensor.permute,
+        torch.Tensor.repeat,
+        torch.Tensor.reshape,
+        torch.Tensor.reshape_as,
+        torch.Tensor.resize,
+        torch.Tensor.resize_as,
+        torch.Tensor.select,
+        torch.Tensor.squeeze,
+        torch.Tensor.swapaxes,
+        torch.Tensor.swapdims,
+        torch.Tensor.t,
+        torch.Tensor.transpose,
+        torch.Tensor.unflatten,
+        torch.Tensor.unsqueeze,
+        torch.Tensor.view,
+        torch.Tensor.view_as,
+        torch.as_strided,
+        torch.as_strided_copy,
+        torch.expand_copy,
+        torch.flatten,
+        torch.permute,
+        torch.permute_copy,
+        torch.reshape,
+        torch.squeeze,
+        torch.squeeze_copy,
+        torch.swapdims,
+        torch.t,
+        torch.t_copy,
+        torch.unflatten,
+        torch.unsqueeze,
+        torch.unsqueeze_copy,
+        torch.view_copy
+    }
+
     @abc.abstractmethod
     def quantize(self) -> "QuantizedTensor":
         """
@@ -169,6 +219,15 @@ class QuantizedTensorBase(torch.Tensor):
             # Outputs of cast ops can inherit the same encoding as its parents
             self, *_ = args
             ret.encoding = copy.copy(self.encoding) # shallow copy
+
+        if func in cls._passthrough_ops:
+            self, *_ = args
+            ret.encoding = copy.copy(self.encoding)
+
+        if func in cls._pertensor_passthrough_ops:
+            self, *_ = args
+            if self.encoding.granularity == "pertensor":
+                ret.encoding = copy.copy(self.encoding)
 
         def set_encoding(qtensor):
             if not hasattr(qtensor, 'encoding'):

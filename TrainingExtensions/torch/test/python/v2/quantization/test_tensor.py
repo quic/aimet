@@ -328,3 +328,87 @@ class TestQuantizedTensor:
         qtensor_out = torch.nn.functional.linear(qother, qtensor)
         assert not isinstance(qtensor_out, QuantizedTensor)
         assert torch.allclose(qtensor_out, torch.nn.functional.linear(other_qdq, tensor_qdq))
+
+    @pytest.mark.parametrize('qtensor_cls', [QuantizedTensor, DequantizedTensor])
+    @pytest.mark.parametrize('op, args, kwargs', [
+        (torch.Tensor.clone, (), {}),
+        (torch.Tensor.expand, ((2, 128, 2), ), {}),
+        (torch.Tensor.expand_as, (torch.randn(2, 128, 2), ), {}),
+        (torch.Tensor.permute, (0, 2, 1), {}),
+        (torch.Tensor.repeat, ((2, 128, 2)), {}),
+        (torch.Tensor.reshape, (128, 2, 1), {}),
+        (torch.Tensor.resize, ((2, 64, 2)), {}),
+        (torch.Tensor.unsqueeze, (-1, ), {}),
+        (torch.Tensor.squeeze, (-1, ), {}),
+        (torch.Tensor.view, (-1, ), {}),
+        (torch.flatten, (), {}),
+        (torch.detach, (), {}),
+        (torch.view_copy, ((-1, ), ), {})
+    ])
+    def test_propagate_pertensor_encoding(self, qtensor_cls, op, args, kwargs, scale, offset, bitwidth):
+        shape = (2, 128, 1)
+        data = torch.empty(shape)
+        qtensor = data.clone().as_subclass(qtensor_cls)
+        qtensor.encoding = AffineEncoding(scale, offset, bitwidth)
+        """
+        Given: Per-tensor quantized tensor object
+        When: Call a 'math invariant' tensor operation on the quantized tensor
+        Then: 1) Output is also a quantized tensor
+              2) Output encoding matches input encoding
+              3) Output encoding is not the same object as input encoding
+        """
+        output = op(qtensor, *args, **kwargs)
+
+        assert isinstance(output, qtensor_cls)
+        assert torch.equal(output.encoding.scale, qtensor.encoding.scale)
+        assert torch.equal(output.encoding.offset, qtensor.encoding.offset)
+        assert output.encoding.bitwidth == qtensor.encoding.bitwidth
+        assert output.encoding.signed == qtensor.encoding.signed
+        assert output.encoding is not qtensor.encoding
+
+    @pytest.mark.parametrize('qtensor_cls', [QuantizedTensor, DequantizedTensor])
+    @pytest.mark.parametrize('op, args, kwargs', [
+        (torch.Tensor.add, (torch.randn(2, 128, 1), ), {}),
+        (torch.Tensor.bmm, (torch.randn(2, 1, 128),), {})
+    ])
+    def test_dont_propagate_pertensor_encoding(self, qtensor_cls, op, args, kwargs, scale, offset, bitwidth):
+        shape = (2, 128, 1)
+        data = torch.empty(shape)
+        qtensor = data.clone().as_subclass(qtensor_cls)
+        qtensor.encoding = AffineEncoding(scale, offset, bitwidth)
+        """
+        Given: Per-tensor quantized tensor object
+        When: Call non 'math invariant' tensor operation on the quantized tensor
+        Then: Output is not a quantized tensor
+        """
+        output = op(qtensor, *args, **kwargs)
+        assert not isinstance(output, qtensor_cls)
+
+    @pytest.mark.parametrize('qtensor_cls', [QuantizedTensor, DequantizedTensor])
+    @pytest.mark.parametrize('op, args, kwargs', [
+        (torch.Tensor.expand, ((2, 128, 2), ), {}),
+        (torch.Tensor.expand_as, (torch.randn(2, 128, 2), ), {}),
+        (torch.Tensor.permute, (0, 2, 1), {}),
+        (torch.Tensor.repeat, ((2, 128, 2)), {}),
+        (torch.Tensor.reshape, (128, 2, 1), {}),
+        (torch.Tensor.resize, ((2, 64, 2)), {}),
+        (torch.Tensor.unsqueeze, (-1, ), {}),
+        (torch.Tensor.squeeze, (-1, ), {}),
+        (torch.Tensor.view, (-1, ), {}),
+        (torch.flatten, (), {}),
+        (torch.view_copy, ((-1, ), ), {})
+    ])
+    def test_dont_propagate_perchannel_encoding(self, qtensor_cls, op, args, kwargs, bitwidth):
+        scale = torch.randn(2, 1, 1)
+        offset = torch.zeros_like(scale)
+        shape = (2, 128, 1)
+        data = torch.empty(shape)
+        qtensor = data.clone().as_subclass(qtensor_cls)
+        qtensor.encoding = AffineEncoding(scale, offset, bitwidth)
+        """
+        Given: Per-channel quantized tensor object
+        When: Call an op which changes the dimensions of the tensor
+        Then: Output is not a quantized tensor
+        """
+        output = op(qtensor, *args, **kwargs)
+        assert not isinstance(output, qtensor_cls)
