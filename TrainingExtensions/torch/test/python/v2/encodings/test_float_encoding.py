@@ -133,6 +133,6 @@ class TestFloatEncoding:
         exponent_bits = 10
         maxval = torch.randn(shape)
         encoding = FloatEncoding(mantissa_bits, exponent_bits, maxval)
-        assert encoding.maxval.shape == shape
+        assert encoding.maxval.shape == tuple()
         assert encoding.granularity == "pertensor"
         assert encoding.mapping == "float"

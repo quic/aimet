@@ -53,6 +53,8 @@ class FloatEncoding(EncodingBase):
     def __init__(self, mantissa_bits: int, exponent_bits: int, maxval: torch.Tensor):
         self._mantissa_bits = mantissa_bits
         self._exponent_bits = exponent_bits
+        if maxval.numel() == 1:
+            maxval = maxval.view([])
         self._maxval = maxval
 
     @property
@@ -95,9 +97,11 @@ class FloatEncoding(EncodingBase):
         """
         Returns the granularity of the quantizer encoding
         """
-        if self.maxval.shape in (torch.Size([]), torch.Size([1])):
+        if self.maxval.numel() == 1:
             return "pertensor"
-        return "perchannel"
+        if any(dim > 1 for dim in self.maxval.shape):
+            return "perchannel"
+        return "unknown"
 
     def to(self, *args, **kwargs):
         """
