@@ -149,7 +149,7 @@ Please run below commands to install dependencies to build AIMET:
 
 !pip3 install pytest
 
-!pip3 install setuptools==41.0.1
+!pip3 install setuptools==49.4.0
 
 !pip3 install keras==2.2.4
 
