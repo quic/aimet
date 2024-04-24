@@ -147,7 +147,6 @@ class SequentialMse(V1SequentialMse):
         return quantizer._freeze_encoding()
 
     @staticmethod
-    @torch.no_grad()
     def _get_quantized_weight(quant_module: BaseQuantizationMixin):
         w = quant_module.weight
         return quant_module.param_quantizers['weight'](w)
