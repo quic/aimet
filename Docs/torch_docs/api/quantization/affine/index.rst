@@ -29,3 +29,4 @@ Functions
 
     quantize
     quantize_dequantize
+    dequantize
