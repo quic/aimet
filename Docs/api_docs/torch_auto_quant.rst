@@ -12,7 +12,7 @@ To learn more about this technique, please see :ref:`AutoQuant<ug-auto-quant>`
 
 Examples Notebook Link
 ======================
-For an end-to-end notebook showing how to use PyTorch AutoQuant, please see :doc:`here<../Examples/torch/quantization/autoquant>`.
+For an end-to-end notebook showing how to use PyTorch AutoQuant, please see :doc:`here<../Examples/torch/quantization/autoquant_v2>`.
 
 Top-level API
 =============
