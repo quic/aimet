@@ -1,3 +1,4 @@
 libeigen3-dev
 libncurses5
 libtinfo5
+libunwind-14
