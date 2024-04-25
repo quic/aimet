@@ -9,7 +9,7 @@
 Quantized Modules
 =================
 
-To simulate the effects of running networks at an reduced (or integer) bitwidth, AIMET provides quantized versions of
+To simulate the effects of running networks at a reduced (or integer) bitwidth, AIMET provides quantized versions of
 standard torch.nn.Modules. These quantized modules serve as drop-in replacements for their PyTorch counterparts, but can
 hold input, output, and parameter :ref:`quantizers<api-torch-quantizers>` to perform quantization operations during the
 module's forward pass and compute quantization encodings.
@@ -26,7 +26,8 @@ AIMET defines two types of quantization mixin:
       a quantized forward pass and dequantizes the output. If no kernel is registered, the module will perform fake-quantization.
 
 The functionality and state of a :ref:`QuantizationMixin<api-torch-quantization-mixin>` is a superset of that of a :ref:`FakeQuantizationMixin<api-torch-fake-quantization-mixin>`, meaning that
-if one does not intend to register a custom kernel, it does not matter which mixin a module is inherited from. AIMET provides
+if one does not register a custom kernel, a :ref:`QuantizationMixin<api-torch-quantization-mixin>`-derived module behaves
+exactly the same as a :ref:`FakeQuantizationMixin<api-torch-fake-quantization-mixin>`-derived module. AIMET provides
 extensive coverage of :ref:`FakeQuantizationMixin<api-torch-fake-quantization-mixin>` for `torch.nn.Module` layer types, and more limited coverage for
 :ref:`QuantizationMixin<api-torch-quantization-mixin>` layers.
 
@@ -34,9 +35,7 @@ Top-level API
 =============
 
 .. autoclass:: aimet_torch.v2.nn.base.BaseQuantizationMixin
-   :exclude-members: wrap, export_input_encodings, export_output_encodings, export_param_encodings, import_input_encodings, import_output_encodings, import_param_encodings
-   :members:
-   :special-members: __quant_init__
+   :members: __quant_init__, quantized_forward, compute_encodings
 
 Configuration
 =============
@@ -57,23 +56,24 @@ input index, output index, or parameter name. By default, all the quantizers are
 will be applied to the respective tensor.
 
 Example: Create a linear layer which performs only per-channel weight quantization
-    >>> from aimet_torch.v2.quantization import affine
-    >>> qlinear = aimet_torch.v2.nn.QuantizedLinear(out_features=10, in_features=5)
+    >>> import aimet_torch.v2 as aimet
+    >>> import aimet_torch.quantization as Q
+    >>> qlinear = aimet.nn.QuantizedLinear(out_features=10, in_features=5)
     >>> # Per-channel weight quantization is performed over the `out_features` dimension, so encodings are shape (10, 1)
-    >>> per_channel_quantizer = affine.QuantizeDequantize(shape=(10, 1), bitwidth=8, symmetric=True)
+    >>> per_channel_quantizer = Q.affine.QuantizeDequantize(shape=(10, 1), bitwidth=8, symmetric=True)
     >>> qlinear.param_quantizers["weight"] = per_channel_quantizer
 
 Example: Create an elementwise multiply layer which quantizes only the output and the second input
-    >>> qmul = aimet_torch.v2.nn.QuantizedMultiply()
-    >>> qmul.output_quantizers[0] = affine.QuantizeDequantize(shape=(1, ), bitwidth=8, symmetric=False)
-    >>> qmul.input_quantizers[1] = affine.QuantizeDequantize(shape=(1, ), bitwidth=8, symmetric=False)
+    >>> qmul = aimet.nn.QuantizedMultiply()
+    >>> qmul.output_quantizers[0] = Q.affine.QuantizeDequantize(shape=(1, ), bitwidth=8, symmetric=False)
+    >>> qmul.input_quantizers[1] = Q.affine.QuantizeDequantize(shape=(1, ), bitwidth=8, symmetric=False)
 
 In some cases, it may make sense for multiple tensors to share the same quantizer. In this case, we can assign the same
 quantizer to multiple indices.
 
 Example: Create an elementwise add layer which shares the same quantizer between its inputs
-    >>> qadd = aimet_torch.v2.nn.QuantizedAdd()
-    >>> quantizer = affine.QuantizeDequantize(shape=(1, ), bitwidth=8, symmetric=False)
+    >>> qadd = aimet.nn.QuantizedAdd()
+    >>> quantizer = Q.affine.QuantizeDequantize(shape=(1, ), bitwidth=8, symmetric=False)
     >>> qadd.input_quantizers[0] = quantizer
     >>> qadd.input_quantizers[1] = quantizer
 
@@ -87,9 +87,9 @@ the quantizers calculate appropriate quantization encodings based on these stati
 computed is determined by each quantizer's :ref:`encoding analyzer<api-torch-encoding-analyzer>`).
 
 Example:
-    >>> qlinear = aimet_torch.v2.nn.QuantizedLinear(out_features=10, in_features=5)
-    >>> qlinear.output_quantizers[0] = affine.QuantizeDequantize((1, ), bitwidth=8, symmetric=False)
-    >>> qlinear.param_quantizers[0] = affine.QuantizeDequantize((10, 1), bitwidth=8, symmetric=True)
+    >>> qlinear = aimet.nn.QuantizedLinear(out_features=10, in_features=5)
+    >>> qlinear.output_quantizers[0] = Q.affine.QuantizeDequantize((1, ), bitwidth=8, symmetric=False)
+    >>> qlinear.param_quantizers[0] = Q.affine.QuantizeDequantize((10, 1), bitwidth=8, symmetric=True)
     >>> with qlinear.compute_encodings():
     ...     # Pass several samples through the layer to ensure representative statistics
     ...     for x, _ in calibration_data_loader:
