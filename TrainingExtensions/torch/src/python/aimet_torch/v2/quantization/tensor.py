@@ -132,21 +132,21 @@ class QuantizedTensorBase(torch.Tensor):
         torch.Tensor.view,
         torch.Tensor.view_as,
         torch.as_strided,
-        torch.as_strided_copy,
-        torch.expand_copy,
+        #torch.as_strided_copy, TODO: Uncomment when pytorch 1.9 support is fully deprecated
+        #torch.expand_copy,
         torch.flatten,
         torch.permute,
-        torch.permute_copy,
+        #torch.permute_copy,
         torch.reshape,
         torch.squeeze,
-        torch.squeeze_copy,
+        #torch.squeeze_copy,
         torch.swapdims,
         torch.t,
-        torch.t_copy,
-        torch.unflatten,
+        #torch.t_copy,
+        #torch.unflatten,
         torch.unsqueeze,
-        torch.unsqueeze_copy,
-        torch.view_copy
+        #torch.unsqueeze_copy,
+        #torch.view_copy
     }
 
     @abc.abstractmethod
