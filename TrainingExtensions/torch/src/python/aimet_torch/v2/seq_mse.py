@@ -68,7 +68,7 @@ class SequentialMse(V1SequentialMse):
         :param sim: Quant sim
         """
         for _, quant_wrapper in sim.quant_wrappers():
-            quant_wrapper._compute_param_encodings(overwrite=True)
+            quant_wrapper._compute_param_encodings(overwrite=True) # pylint: disable=protected-access
 
     @staticmethod
     @contextlib.contextmanager
