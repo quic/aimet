@@ -379,14 +379,20 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
         except KeyError:
             input_encoding = {}
 
-        self.import_input_encodings(input_encoding, ignore_when_quantizer_disabled, disable_quantizer_without_encoding)
+        self.import_input_encodings(input_encoding,
+                                    ignore_when_quantizer_disabled,
+                                    disable_quantizer_without_encoding,
+                                    freeze=False)
 
         try:
             output_encoding = activation_encodings[module_name]['output']
         except KeyError:
             output_encoding = {}
 
-        self.import_output_encodings(output_encoding, ignore_when_quantizer_disabled, disable_quantizer_without_encoding)
+        self.import_output_encodings(output_encoding,
+                                     ignore_when_quantizer_disabled,
+                                     disable_quantizer_without_encoding,
+                                     freeze=False)
 
     def set_param_encoding(self, module_name: str, param_encodings: Dict,
                            ignore_when_quantizer_disabled: bool = False, disable_quantizer_without_encoding: bool = True):
@@ -405,7 +411,10 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
             for param_name, _ in self.param_quantizers.items()
             if f'{module_name}.{param_name}' in param_encodings
         }
-        self.import_param_encodings(param_encoding, ignore_when_quantizer_disabled, disable_quantizer_without_encoding)
+        self.import_param_encodings(param_encoding,
+                                    ignore_when_quantizer_disabled,
+                                    disable_quantizer_without_encoding,
+                                    freeze=False)
 
     def freeze_param_encoding(self, module_name: str, param_encodings: Dict):
         """
@@ -482,8 +491,8 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
         """
         return [export_quantizer_encoding(quantizer) for quantizer in self.input_quantizers]
 
-    def import_param_encodings(self, encodings: Dict[str, List[Dict]], ignore_when_quantizer_disabled: bool = False,
-                               disable_quantizer_without_encoding: bool = True, freeze=False):
+    def import_param_encodings(self, encodings: Dict[str, List[Dict]], ignore_when_quantizer_disabled: bool,
+                               disable_quantizer_without_encoding: bool, freeze: bool):
         """
         Import parameter encodings represented in below format:
         {
@@ -532,8 +541,8 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                                        "configuration as the quantsim which was used to export the encodings")
 
 
-    def import_output_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled: bool = False,
-                                disable_quantizer_without_encoding: bool = True, freeze=False):
+    def import_output_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled: bool,
+                                disable_quantizer_without_encoding: bool, freeze: bool):
         """
         Import output encodings represented in below format:
         {
@@ -545,8 +554,8 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
         self._import_encoding(encodings, self.output_quantizers, ignore_when_quantizer_disabled, disable_quantizer_without_encoding,
                               freeze=freeze)
 
-    def import_input_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled: bool = False,
-                               disable_quantizer_without_encoding: bool = True, freeze=False):
+    def import_input_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled: bool,
+                               disable_quantizer_without_encoding: bool, freeze: bool):
         """
         Import input encodings represented in below format:
         {
@@ -558,8 +567,8 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
         self._import_encoding(encodings, self.input_quantizers, ignore_when_quantizer_disabled, disable_quantizer_without_encoding,
                               freeze=freeze)
 
-    def _import_encoding(self, encodings, quantizers, ignore_when_quantizer_disabled,
-                         disable_quantizer_without_encoding: bool = True, freeze=False):
+    def _import_encoding(self, encodings, quantizers, ignore_when_quantizer_disabled: bool,
+                         disable_quantizer_without_encoding: bool, freeze: bool):
         assert quantizers is self.input_quantizers or quantizers is self.output_quantizers
 
         for i, quantizer in enumerate(quantizers):

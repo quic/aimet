@@ -206,8 +206,8 @@ class BaseQuantizationMixin(abc.ABC):
             for quantizer in _flatten_nn_module_list(self.input_quantizers)
         ]
 
-    def import_input_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled=False,
-                               disable_quantizer_without_encoding=True, freeze: bool = False):
+    def import_input_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled: bool,
+                               disable_quantizer_without_encoding: bool, freeze: bool):
         """
         Import input encodings represented in below format:
         {
@@ -244,8 +244,8 @@ class BaseQuantizationMixin(abc.ABC):
             for quantizer in _flatten_nn_module_list(self.output_quantizers)
         ]
 
-    def import_output_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled=False,
-                                disable_quantizer_without_encoding=True, freeze: bool = False):
+    def import_output_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled: bool,
+                                disable_quantizer_without_encoding: bool, freeze: bool):
         """
         Import output encodings represented in below format:
         {
@@ -282,8 +282,8 @@ class BaseQuantizationMixin(abc.ABC):
             for param_name, quantizer in self.param_quantizers.items()
         }
 
-    def import_param_encodings(self, encodings: Dict[str, List[Dict]], ignore_when_quantizer_disabled=False,
-                               disable_quantizer_without_encoding=True, freeze: bool = False):
+    def import_param_encodings(self, encodings: Dict[str, List[Dict]], ignore_when_quantizer_disabled: bool,
+                               disable_quantizer_without_encoding: bool, freeze: bool):
         """
         Import parameter encodings represented in below format:
         {
