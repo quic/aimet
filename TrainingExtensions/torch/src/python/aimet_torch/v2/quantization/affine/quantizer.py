@@ -63,12 +63,14 @@ class AffineQuantizerBase(QuantizerBase):
     """
     Base class for linear quantization modules.
 
-    :param shape: Shape of the quantization parameters.
-    :param bitwidth: Quantization bitwidth.
-    :param symmetric: If True, performs symmetric quantization;
-                      otherwise, performs asymmetric quantization.
-    :param encoding_analyzer: Encoding analyzer for calibrating quantization encodings.
-                              (default: absolute min-max encoding analyzer)
+    Args:
+        shape (tuple): Shape of the quantization parameters
+        bitwidth (int): Quantization bitwidth
+        symmetric (bool): If True, performs symmetric quantization;
+                          otherwise, performs asymmetric quantization
+        encoding_analyzer (EncodingAnalyzer, optional): Encoding analyzer for calibrating quantization encodings
+                                                        (default: absolute min-max encoding analyzer)
+
     """
     def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None,
                  block_size: Optional[list] = None):
@@ -96,8 +98,12 @@ class AffineQuantizerBase(QuantizerBase):
         Compute quantization min to be used for forward pass.
         Return None f the quantizer is not initialized yet.
 
-        :param dtype: dtype of the computed min
-        :return: Quantization min
+        Args:
+            dtype (torch.dtype): dtype of the computed min
+
+        Returns:
+            Quantization min
+
         """
 
     @abc.abstractmethod
@@ -106,8 +112,12 @@ class AffineQuantizerBase(QuantizerBase):
         Compute quantization max to be used for forward pass.
         Return None f the quantizer is not initialized yet.
 
-        :param dtype: dtype of the computed max
-        :return: Quantization max
+        Args:
+            dtype (torch.dtype): dtype of the computed max
+
+        Returns:
+            Quantization max
+
         """
 
     @abc.abstractmethod
@@ -116,8 +126,12 @@ class AffineQuantizerBase(QuantizerBase):
         Compute quantization scale to be used for forward pass.
         Return None f the quantizer is not initialized yet.
 
-        :param dtype: dtype of the computed scale
-        :return: Quantization scale
+        Args:
+            dtype (torch.dtype): dtype of the computed scale
+
+        Returns:
+            Quantization scale
+
         """
 
     @abc.abstractmethod
@@ -126,8 +140,12 @@ class AffineQuantizerBase(QuantizerBase):
         Compute quantization offset to be used for forward pass.
         Return None f the quantizer is not initialized yet.
 
-        :param dtype: dtype of the computed offset
-        :return: Quantization offset
+        Args:
+            dtype (torch.dtype): dtype of the computed offset
+
+        Returns:
+            Quantization offset
+
         """
 
     @abc.abstractmethod
@@ -387,8 +405,7 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
 
 
 class Quantize(MinMaxQuantizer):
-    r"""
-    Applies quantization to the input.
+    r"""Applies quantization to the input.
 
     Precisely,
 
@@ -398,17 +415,13 @@ class Quantize(MinMaxQuantizer):
     where :math:`scale` and :math:`offset` are derived from learnable parameters
     :math:`\theta_{min}` and :math:`\theta_{max}`.
 
-    :param shape: Shape of the quantization parameters
-    :type shape: tuple
-    :param bitwidth: Quantization bitwidth
-    :type bitwidth: int
-    :param symmetric: If True, performs symmetric quantization;
-                      otherwise, performs asymmetric quantization
-    :type symmetric: bool
-    :param encoding_analyzer: Encoding analyzer for calibrating quantization encodings
-                              (default: absolute min-max encoding analyzer)
-    :type encoding_analyzer: EncodingAnalyzer, optional
-
+    Args:
+        shape (tuple): Shape of the quantization parameters
+        bitwidth (int): Quantization bitwidth
+        symmetric (bool): If True, performs symmetric quantization;
+                          otherwise, performs asymmetric quantization
+        encoding_analyzer (EncodingAnalyzer, optional): Encoding analyzer for calibrating quantization encodings
+                                                        (default: absolute min-max encoding analyzer)
 
     :ivar Tensor min: :math:`\theta_{min}` from which scale and offset will be derived.
     :ivar Tensor max: :math:`\theta_{max}` from which scale and offset will be derived.
@@ -458,9 +471,14 @@ class Quantize(MinMaxQuantizer):
                         grad_fn=<AliasBackward0>)
     """
     def forward(self, input: torch.Tensor) -> QuantizedTensor:
-        """
-        :param input: Input to quantize
-        :return: Quantized output and scale/offset associated with it
+        """Quantizes the input tensor
+
+        Args:
+            input (torch.Tensor): Input to quantize
+
+        Returns:
+            Quantized output
+
         """
         if not self.is_initialized():
             raise RuntimeError(
@@ -481,8 +499,7 @@ class Quantize(MinMaxQuantizer):
 
 
 class QuantizeDequantize(MinMaxQuantizer):
-    r"""
-    Applies fake-quantization by quantizing and dequantizing the input.
+    r"""Applies fake-quantization by quantizing and dequantizing the input.
 
     Precisely,
 
@@ -497,17 +514,13 @@ class QuantizeDequantize(MinMaxQuantizer):
     and :math:`scale` and :math:`offset` are derived from learnable parameters
     :math:`\theta_{min}` and :math:`\theta_{max}`.
 
-    :param shape: Shape of the quantization parameters
-    :type shape: tuple
-    :param bitwidth: Quantization bitwidth
-    :type bitwidth: int
-    :param symmetric: If True, performs symmetric quantization;
-                      otherwise, performs asymmetric quantization
-    :type symmetric: bool
-    :param encoding_analyzer: Encoding analyzer for calibrating quantization encodings
-                              (default: absolute min-max encoding analyzer)
-    :type encoding_analyzer: EncodingAnalyzer, optional
-
+    Args:
+        shape (tuple): Shape of the quantization parameters
+        bitwidth (int): Quantization bitwidth
+        symmetric (bool): If True, performs symmetric quantization;
+                          otherwise, performs asymmetric quantization
+        encoding_analyzer (EncodingAnalyzer, optional): Encoding analyzer for calibrating quantization encodings
+                                                        (default: absolute min-max encoding analyzer)
 
     :ivar Tensor min: :math:`\theta_{min}` from which scale and offset will be derived.
     :ivar Tensor max: :math:`\theta_{max}` from which scale and offset will be derived.
@@ -567,9 +580,14 @@ class QuantizeDequantize(MinMaxQuantizer):
                           grad_fn=<AliasBackward0>)
     """
     def forward(self, input: torch.Tensor) -> DequantizedTensor:
-        """
-        :param input: Input to quantize and dequantize
-        :return: Quantize-dequantized output
+        """Quantizes and dequantizes the input tensor
+
+        Args:
+            input (torch.Tensor): Input to quantize and dequantize
+
+        Returns:
+            Quantize-dequantized output
+
         """
         if not self.is_initialized():
             raise RuntimeError(
