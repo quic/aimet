@@ -1605,30 +1605,27 @@ class QuantizationSimModel:
 
     def load_encodings(self, encodings: Union[Mapping, str, os.PathLike],
                        strict: bool = True,
-                       partial: bool = True,
-                       allow_recompute: bool = True):
+                       partial: bool = True):
         """
         :param encodings: Encoding dictionary or path to the encoding dictionary json file.
         :param bool strict: If True, an error will be thrown if the model doesn't
             have a quantizer corresponding to the specified encodings.
         :param bool partial: If True, the encoding will be interpreted as a partial encoding.
             Otherwise, the dangling quantizers that has no corresponding encoding will be removed.
-        :param bool allow_recompute: If True, the loaded encodings will be allowed to
-            be overwriiten when compute_encodings is called subsequently.
         """
+        self._load_encodings_impl(encodings,
+                                  ignore_when_quantizer_disabled=not strict,
+                                  disable_quantizer_without_encoding=not partial,
+                                  freeze=False)
+
+    def _load_encodings_impl(self, encodings: Union[Mapping, str, os.PathLike],
+                             freeze: bool,
+                             ignore_when_quantizer_disabled: bool,
+                             disable_quantizer_without_encoding: bool):
         if isinstance(encodings, (str, os.PathLike)):
             with open(encodings, mode='r') as f:
                 encodings = json.load(f)
 
-        self._load_encodings_impl(encodings,
-                                  ignore_when_quantizer_disabled=not strict,
-                                  disable_quantizer_without_encoding=not partial,
-                                  freeze=not allow_recompute)
-
-    def _load_encodings_impl(self, encodings: Mapping,
-                             freeze: bool,
-                             ignore_when_quantizer_disabled: bool,
-                             disable_quantizer_without_encoding: bool):
         if 'param_encodings' not in encodings:
             param_encodings = encodings
             activation_encodings = None
@@ -1667,10 +1664,10 @@ class QuantizationSimModel:
         :param ignore_when_quantizer_disabled: ignore raising RuntimeError while setting encodings,
             when quantizers are disabled.
         """
-        self.load_encodings(encoding_path,
-                            strict=not ignore_when_quantizer_disabled,
-                            partial=True,
-                            allow_recompute=False)
+        self._load_encodings_impl(encoding_path,
+                                  ignore_when_quantizer_disabled=ignore_when_quantizer_disabled,
+                                  disable_quantizer_without_encoding=False,
+                                  freeze=True)
 
     def _set_param_encodings(self,
                              encoding_dict: Dict,
@@ -1735,10 +1732,10 @@ class QuantizationSimModel:
         if 'activation_encodings' in encodings:
             del encodings['activation_encodings']
 
-        self.load_encodings(encodings,
-                            strict=True,
-                            partial=True,
-                            allow_recompute=False)
+        self._load_encodings_impl(encodings,
+                                  ignore_when_quantizer_disabled=False,
+                                  disable_quantizer_without_encoding=True,
+                                  freeze=True)
 
     def quant_wrappers(self):
         """
@@ -2018,10 +2015,10 @@ def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, pytorch_encodin
         if isinstance(module, QcQuantizeWrapper):
             module.set_mode(QcQuantizeOpMode.ACTIVE)
 
-    quant_sim_model.load_encodings(pytorch_encoding_path,
-                                   strict=True,
-                                   partial=False,
-                                   allow_recompute=True)
+    quant_sim_model._load_encodings_impl(pytorch_encoding_path, # pylint: disable=protected-access
+                                         ignore_when_quantizer_disabled=False,
+                                         disable_quantizer_without_encoding=True,
+                                         freeze=False)
 
     if isinstance(quant_sim_model, QuantizationSimModel):
         # Only for V1 quantsim
