@@ -63,6 +63,7 @@ if not os.path.isfile("inception_preprocessing.py"):
         "https://raw.githubusercontent.com/tensorflow/models/r2/research/slim/preprocessing/inception_preprocessing.py")
 
 # pylint: disable-msg=wrong-import-position
+# pylint: disable=wrong-import-order
 from vgg_preprocessing import preprocess_image as vgg_resnet_preprocess_image
 from inception_preprocessing import preprocess_image as inception_mobilenet_preprocess_image
 
@@ -160,7 +161,7 @@ class ImageNetDataLoader:
         try:
             np_images_labels = self._sess.run(self._data_labels)
             return np_images_labels
-        except tf.errors.OutOfRangeError:
+        except tf.errors.OutOfRangeError: # pylint: disable=raise-missing-from
             raise StopIteration
 
     def parse(self, serialized_example: tf_tensor) -> Tuple[tf_tensor]:

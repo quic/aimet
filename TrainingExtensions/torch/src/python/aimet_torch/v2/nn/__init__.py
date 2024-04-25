@@ -38,9 +38,9 @@
 # pylint: disable=missing-docstring
 import contextlib
 import torch
-from .fake_quant import *
-from .true_quant import *
-from .base import *
+from .fake_quant import *  # pylint: disable=import-error
+from .true_quant import *  # pylint: disable=import-error
+from .base import * # pylint: disable=import-error
 
 
 @contextlib.contextmanager
