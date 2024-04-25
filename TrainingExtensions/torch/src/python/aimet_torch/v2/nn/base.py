@@ -40,7 +40,7 @@ import abc
 import contextlib
 import functools
 import itertools
-from typing import Type, List, Dict, Union, Iterable
+from typing import Type, List, Dict, Union, Iterable, Mapping, Optional
 
 import torch.nn as nn
 
@@ -119,7 +119,7 @@ class BaseQuantizationMixin(abc.ABC):
             if not param_quantizer:
                 continue
 
-            if param_quantizer._is_encoding_frozen(): # pylint: disable=protected-access
+            if param_quantizer._skip_encoding_computation: # pylint: disable=protected-access
                 continue
 
             if not param_quantizer.is_initialized() or overwrite:
@@ -160,7 +160,7 @@ class BaseQuantizationMixin(abc.ABC):
                 if not isinstance(quantizer, QuantizerBase):
                     continue
 
-                if quantizer._is_encoding_frozen(): # pylint: disable=protected-access
+                if quantizer._skip_encoding_computation: # pylint: disable=protected-access
                     continue
 
                 ctx = quantizer.compute_encodings()
@@ -229,8 +229,12 @@ class BaseQuantizationMixin(abc.ABC):
             for quantizer in _flatten_nn_module_list(self.input_quantizers)
         ]
 
-    def import_input_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled: bool,
-                               disable_quantizer_without_encoding: bool, freeze: bool):
+    def import_input_encodings(self,
+                               encodings: Mapping[str, Mapping],
+                               strict: bool,
+                               partial: bool,
+                               requires_grad: Optional[bool],
+                               allow_recompute: Optional[bool]):
         """
         Import input encodings represented in below format:
         {
@@ -247,16 +251,21 @@ class BaseQuantizationMixin(abc.ABC):
         for i, quantizer in enumerate(list(self.input_quantizers)):
             encoding = encodings.get(str(i), None)
             if not encoding:
-                if disable_quantizer_without_encoding:
+                if not partial:
+                    # Dnagling quantizers have to be removed when importing non-partial encodings
                     self.input_quantizers[i] = None
                 continue
-            if quantizer is None and not ignore_when_quantizer_disabled:
+            if quantizer is None and strict:
                 raise RuntimeError
             if isinstance(encoding, dict):
                 encoding = [encoding]
             quantizer.set_legacy_encodings(encoding)
-            if freeze:
-                quantizer._freeze_encoding() # pylint:disable = protected-access
+
+            if requires_grad is not None:
+                quantizer.requires_grad_(requires_grad)
+
+            if allow_recompute is not None:
+                quantizer._skip_encoding_computation = not allow_recompute # pylint:disable = protected-access
 
     def export_output_encodings(self) -> List[List[Dict]]:
         """
@@ -267,8 +276,12 @@ class BaseQuantizationMixin(abc.ABC):
             for quantizer in _flatten_nn_module_list(self.output_quantizers)
         ]
 
-    def import_output_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled: bool,
-                                disable_quantizer_without_encoding: bool, freeze: bool):
+    def import_output_encodings(self,
+                                encodings: Mapping[str, Mapping],
+                                strict: bool,
+                                partial: bool,
+                                requires_grad: Optional[bool],
+                                allow_recompute: Optional[bool]):
         """
         Import output encodings represented in below format:
         {
@@ -285,16 +298,21 @@ class BaseQuantizationMixin(abc.ABC):
         for i, quantizer in enumerate(list(self.output_quantizers)):
             encoding = encodings.get(str(i), None)
             if not encoding:
-                if disable_quantizer_without_encoding:
+                if not partial:
+                    # Dnagling quantizers have to be removed when importing non-partial encodings
                     self.output_quantizers[i] = None
                 continue
-            if quantizer is None and not ignore_when_quantizer_disabled:
+            if quantizer is None and strict:
                 raise RuntimeError
             if isinstance(encoding, dict):
                 encoding = [encoding]
             quantizer.set_legacy_encodings(encoding)
-            if freeze:
-                quantizer._freeze_encoding() # pylint:disable = protected-access
+
+            if requires_grad is not None:
+                quantizer.requires_grad_(requires_grad)
+
+            if allow_recompute is not None:
+                quantizer._skip_encoding_computation = not allow_recompute # pylint:disable = protected-access
 
     def export_param_encodings(self) -> Dict[str, List[Dict]]:
         """
@@ -305,8 +323,12 @@ class BaseQuantizationMixin(abc.ABC):
             for param_name, quantizer in self.param_quantizers.items()
         }
 
-    def import_param_encodings(self, encodings: Dict[str, List[Dict]], ignore_when_quantizer_disabled: bool,
-                               disable_quantizer_without_encoding: bool, freeze: bool):
+    def import_param_encodings(self,
+                               encodings: Mapping[str, Mapping],
+                               strict: bool,
+                               partial: bool,
+                               requires_grad: Optional[bool],
+                               allow_recompute: Optional[bool]):
         """
         Import parameter encodings represented in below format:
         {
@@ -323,16 +345,21 @@ class BaseQuantizationMixin(abc.ABC):
         for param_name, quantizer in dict(self.param_quantizers).items():
             encoding = encodings.get(param_name, None)
             if not encoding:
-                if disable_quantizer_without_encoding:
+                if not partial:
+                    # Dnagling quantizers have to be removed when importing non-partial encodings
                     self.param_quantizers[param_name] = None
                 continue
-            if quantizer is None and not ignore_when_quantizer_disabled:
+            if quantizer is None and strict:
                 raise RuntimeError
             if isinstance(encoding, dict):
                 encoding = [encoding]
             quantizer.set_legacy_encodings(encoding)
-            if freeze:
-                quantizer._freeze_encoding() # pylint:disable = protected-access
+
+            if requires_grad is not None:
+                quantizer.requires_grad_(requires_grad)
+
+            if allow_recompute is not None:
+                quantizer._skip_encoding_computation = not allow_recompute # pylint:disable = protected-access
 
     def get_original_module(self) -> nn.Module:
         """

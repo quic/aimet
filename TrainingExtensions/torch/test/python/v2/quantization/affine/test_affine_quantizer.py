@@ -953,34 +953,23 @@ def test_high_bitwidth(x, symmetric):
 
 @pytest.mark.parametrize("q", (Quantize(_PARAMETER_SHAPE, 8, False),
                                QuantizeDequantize(_PARAMETER_SHAPE, 8, True)))
-def test_freeze_encodings(x, q):
+def test_skip_encoding_computation(x, q):
     with q.compute_encodings():
         q(x)
 
-    q_min, q_max = q.min.detach().clone(), q.max.detach().clone()
-    assert q.min.requires_grad
-    assert q.max.requires_grad
-    assert not q._is_encoding_frozen()
-
-    q._freeze_encoding()
-    assert q._is_encoding_frozen()
     """
-    Given: Called quantizer.freeze_encoding()
-    When: Inspect parameter requires_grad() attributes
-    Then: requires_grad = False for all parameters
-    """
-    assert not q.min.requires_grad
-    assert not q.max.requires_grad
-
-    """
+    Given: _skip_encoding_computation set to True
     When: Try to recompute encodings
-    Then: Encodings do not change
+    Then: Encoding does NOT get overwritten by compute_encodings
     """
+    q_min, q_max = q.min.detach().clone(), q.max.detach().clone()
+    q._skip_encoding_computation = True
     with q.compute_encodings():
         q(x * 10)
 
     assert torch.equal(q_min, q.min)
     assert torch.equal(q_max, q.max)
+
 
 def test_bq_compute_encodings_and_forward():
     torch.manual_seed(0)

@@ -34,8 +34,6 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-import itertools
-
 import torch
 import tempfile
 import os
@@ -104,22 +102,36 @@ class TestPercentileScheme:
             sim_2 = QuantizationSimModel(model, dummy_input, config_file=config_file)
 
             """
-            Given: call set_and_freeze_param_encodigns
+            When: call set_and_freeze_param_encodigns
+            Then: Encodings should match
             """
             sim_2.set_and_freeze_param_encodings(file_path)
+            assert encodings_are_close(sim.model.conv.param_quantizers["weight"], sim_2.model.conv.param_quantizers["weight"])
 
         """
-        When: Compare sim_2 param encodings to sim_1 param encodings
-        Then: Encodings should matchn
+        When: Recompute encodings with new weights
+        Then: Weight encodings should NOT get overwritten by compute_encodings
         """
-        assert encodings_are_close(sim.model.conv.param_quantizers["weight"], sim_2.model.conv.param_quantizers["weight"])
+        weight_min = sim_2.model.conv.param_quantizers['weight'].min.clone().detach()
+        weight_max = sim_2.model.conv.param_quantizers['weight'].max.clone().detach()
+
+        with torch.no_grad():
+            sim_2.model.conv.weight.mul_(10)
+
+        sim_2.compute_encodings(lambda model, _: model(dummy_input), None)
+        assert torch.equal(weight_min, sim_2.model.conv.param_quantizers['weight'].min)
+        assert torch.equal(weight_max, sim_2.model.conv.param_quantizers['weight'].max)
 
         """
-        When: Inspect param quantizers
-        Then: param_quantizer._is_encoding_frozen() == True
+        When: Recompute encodings with new input
+        Then: Activation encodings should be updated for the new input (freezing only takes effect to weight quantizers)
         """
-        assert sim_2.model.conv.param_quantizers["weight"]._is_encoding_frozen()
-        assert not sim_2.model.conv.output_quantizers[0]._is_encoding_frozen()
+        new_dummy_input = 10 * dummy_input
+        input_min = sim_2.model.conv.input_quantizers[0].min.clone().detach()
+        input_max = sim_2.model.conv.input_quantizers[0].max.clone().detach()
+        sim_2.compute_encodings(lambda model, _: model(new_dummy_input), None)
+        assert torch.allclose(input_min * 10, sim_2.model.conv.input_quantizers[0].min)
+        assert torch.allclose(input_max * 10, sim_2.model.conv.input_quantizers[0].max)
 
     @pytest.mark.parametrize("config_file", (None, get_path_for_per_channel_config()))
     def test_load_and_freeze_encodings(self, config_file):
@@ -132,59 +144,242 @@ class TestPercentileScheme:
             fname = "test_model"
             sim.export(temp_dir, fname, dummy_input)
             file_path = os.path.join(temp_dir, fname + '_torch.encodings')
+
+            """
+            When: Load encodings with ``load_and_freeze_encodings``
+            Then: No quantizers should get additionally enabled/disabled
+            """
             sim_2 = QuantizationSimModel(test_models.TinyModel(), dummy_input, config_file=config_file)
+            all_quantizers = [q for q in sim_2.model.modules() if isinstance(q, QuantizerBase)]
             sim_2.load_and_freeze_encodings(file_path)
+            assert all_quantizers == [q for q in sim_2.model.modules() if isinstance(q, QuantizerBase)]
 
-        for module in sim_2.model.modules():
-            if isinstance(module, QuantizerBase):
-                assert module._is_encoding_frozen()
+        """
+        When: Recompute encodings with new weights
+        Then: Weight encodings should NOT get overwritten by compute_encodings
+        """
+        weight_min = sim_2.model.conv1.param_quantizers['weight'].min.clone().detach()
+        weight_max = sim_2.model.conv1.param_quantizers['weight'].max.clone().detach()
 
-        for name, child in sim.model.named_children():
-            child_2 = getattr(sim_2.model, name)
+        with torch.no_grad():
+            sim_2.model.conv1.weight.mul_(10)
 
-            for quantizer_1, quantizer_2 in zip(itertools.chain(child.output_quantizers, child.input_quantizers, child.param_quantizers.values()),
-                                                itertools.chain(child_2.output_quantizers, child_2.input_quantizers, child_2.param_quantizers.values())):
-                if quantizer_1 is None:
-                    assert quantizer_2 is None
-                    continue
-                if quantizer_2 is None:
-                    assert quantizer_1 is None
-                    continue
-                assert encodings_are_close(quantizer_1, quantizer_2)
+        sim_2.compute_encodings(lambda model, _: model(dummy_input), None)
+        assert torch.equal(weight_min, sim_2.model.conv1.param_quantizers['weight'].min)
+        assert torch.equal(weight_max, sim_2.model.conv1.param_quantizers['weight'].max)
+
+        """
+        When: Recompute encodings with new input
+        Then: Activation encodings should NOT get overwritten by compute_encodings
+        """
+        new_dummy_input = 10 * dummy_input
+        input_min = sim_2.model.conv1.input_quantizers[0].min.clone().detach()
+        input_max = sim_2.model.conv1.input_quantizers[0].max.clone().detach()
+        sim_2.compute_encodings(lambda model, _: model(new_dummy_input), None)
+        assert torch.equal(input_min, sim_2.model.conv1.input_quantizers[0].min)
+        assert torch.equal(input_max, sim_2.model.conv1.input_quantizers[0].max)
 
     def test_load_and_freeze_with_partial_encodings(self):
         """ Test load_and_freeze encoding API with partial_encodings """
-        model = test_models.TinyModelWithNoMathInvariantOps()
-        dummy_input = torch.randn([1, 3, 24, 24])
+        model = test_models.TinyModel()
+        dummy_input = torch.randn(1, 3, 32, 32)
 
         sample_encoding = {"min": -4, "max": 4, "scale": 0.03, "offset": 8,
                            "bitwidth": 8, "is_symmetric": "False", "dtype": "int"}
 
-        sample_partial_encodings_list = [{"activation_encodings": {"conv1": {"input": {"0": sample_encoding}},
-                                                                   "mul1": {"output": {"0": sample_encoding}}},
-                                          "param_encodings": {}},
-                                         {"activation_encodings": {"add1": {"output": {"0": sample_encoding}}},
-                                          "param_encodings": {}},
-                                         {"activation_encodings": {"mul1": {"output": {"0": sample_encoding}}},
-                                          "param_encodings": {"conv1.weight": [sample_encoding]}}]
+        partial_encodings = {
+            "activation_encodings": {
+                "conv1": {
+                    "input": {"0": sample_encoding}
+                }
+            },
+            "param_encodings": {"conv1.weight": [sample_encoding]}
+        }
 
-        for partial_encodings in sample_partial_encodings_list:
-            with open('./data/partial_encoding.json', 'w') as f:
-                json.dump(partial_encodings, f)
+        sim = QuantizationSimModel(model, dummy_input)
+        all_quantizers = [q for q in sim.model.modules() if isinstance(q, QuantizerBase)]
+        sim.load_and_freeze_encodings(partial_encodings)
 
+        """
+        When: Load partial encodings with ``load_and_freeze_encodings``
+        Then: No quantizers should get additionally enabled/disabled
+        """
+        assert all_quantizers == [q for q in sim.model.modules() if isinstance(q, QuantizerBase)]
+
+        """
+        When: Recompute encodings with new weights
+        Then: Weight encodings imported from the config file should NOT get overwritten by compute_encodings
+            2) Weight encodings NOT imported from the config file SHOULD get overwritten by compute_encodings
+        """
+        conv1_weight_min = sim.model.conv1.param_quantizers['weight'].min.clone().detach()
+        conv1_weight_max = sim.model.conv1.param_quantizers['weight'].max.clone().detach()
+        with torch.no_grad():
+            sim.model.conv1.weight.mul_(10)
+
+        sim.compute_encodings(lambda model, _: model(dummy_input), None)
+        assert torch.equal(conv1_weight_min, sim.model.conv1.param_quantizers['weight'].min)
+        assert torch.equal(conv1_weight_max, sim.model.conv1.param_quantizers['weight'].max)
+
+        """
+        When: Recompute encodings with new weights
+        Then: Weight encodings NOT imported from the config file SHOULD get overwritten by compute_encodings
+        """
+        fc_weight_min = sim.model.fc.param_quantizers['weight'].min.clone().detach()
+        fc_weight_max = sim.model.fc.param_quantizers['weight'].max.clone().detach()
+        with torch.no_grad():
+            sim.model.fc.weight.mul_(10)
+        sim.compute_encodings(lambda model, _: model(dummy_input), None)
+        assert torch.allclose(fc_weight_min * 10, sim.model.fc.param_quantizers['weight'].min)
+        assert torch.allclose(fc_weight_max * 10, sim.model.fc.param_quantizers['weight'].max)
+
+        """
+        When: Recompute encodings with new input
+        Then: Activation encodings should NOT get overwritten by compute_encodings
+            1) Activation encodings imported from the config file should NOT get overwritten by compute_encodings
+            2) Activation encodings NOT imported from the config file SHOULD get overwritten by compute_encodings
+        """
+        new_dummy_input = 10 * dummy_input
+        conv1_input_min = sim.model.conv1.input_quantizers[0].min.clone().detach()
+        conv1_input_max = sim.model.conv1.input_quantizers[0].max.clone().detach()
+        fc_output_min = sim.model.fc.output_quantizers[0].min.clone().detach()
+        fc_output_max = sim.model.fc.output_quantizers[0].max.clone().detach()
+        sim.compute_encodings(lambda model, _: model(new_dummy_input), None)
+        assert torch.equal(conv1_input_min, sim.model.conv1.input_quantizers[0].min)
+        assert torch.equal(conv1_input_max, sim.model.conv1.input_quantizers[0].max)
+        assert not any(torch.isclose(fc_output_min, sim.model.fc.output_quantizers[0].min))
+        assert not any(torch.isclose(fc_output_max, sim.model.fc.output_quantizers[0].max))
+
+    def test_load_encodings(self):
+        model = test_models.TinyModel()
+        dummy_input = torch.randn(1, 3, 32, 32)
+
+        sample_encoding = {"min": -4, "max": 4, "scale": 0.03, "offset": 8,
+                           "bitwidth": 8, "is_symmetric": "False", "dtype": "int"}
+
+        encodings = {
+            "activation_encodings": {
+                "conv1": {
+                    "input": {"0": sample_encoding}
+                }
+            },
+            "param_encodings": {"conv1.weight": [sample_encoding]}
+        }
+
+        """
+        When: Call load_encodings with partial=False
+        Then: All the dangling quantizers should be removed
+        """
+        sim = QuantizationSimModel(model, dummy_input)
+        sim.load_encodings(encodings, partial=False)
+        all_quantizers = [q for q in sim.model.modules() if isinstance(q, QuantizerBase)]
+        assert all_quantizers == [sim.model.conv1.param_quantizers['weight'],
+                                  sim.model.conv1.input_quantizers[0]]
+
+        """
+        When: Call load_encodings with partial=True
+        Then: No quantizer gets removed
+        """
+        sim = QuantizationSimModel(model, dummy_input)
+        all_quantizers = [q for q in sim.model.modules() if isinstance(q, QuantizerBase)]
+        sim.load_encodings(encodings, partial=True)
+        assert all_quantizers == [q for q in sim.model.modules() if isinstance(q, QuantizerBase)]
+
+        for requires_grad in (True, False):
+            """
+            When: Call load_encodings with requires_grad specified
+            Then: The loaded quantizers should be set to requires_grad=True/False accordingly
+            """
             sim = QuantizationSimModel(model, dummy_input)
+            all_parameters = {
+                q: (q.min.clone(), q.max.clone())
+                for q in sim.model.modules() if isinstance(q, QuantizerBase)
+            }
+            sim.load_encodings(encodings, requires_grad=requires_grad)
+            assert sim.model.conv1.param_quantizers['weight'].min.requires_grad ==\
+                   sim.model.conv1.param_quantizers['weight'].max.requires_grad ==\
+                   requires_grad
+            assert sim.model.conv1.input_quantizers[0].min.requires_grad ==\
+                   sim.model.conv1.input_quantizers[0].max.requires_grad ==\
+                   requires_grad
 
-            sim.load_and_freeze_encodings('./data/partial_encoding.json', ignore_when_quantizer_disabled=True)
+            # requires_grad of all the oither quantization parameters should not be modified
+            for q, (min_copy, max_copy) in all_parameters.items():
+                if q in (sim.model.conv1.param_quantizers['weight'],
+                         sim.model.conv1.input_quantizers[0]):
+                    continue
+                assert q.min.requires_grad == min_copy.requires_grad
+                assert q.max.requires_grad == max_copy.requires_grad
 
-            # all output quantizers and model input quantizer need to enabled (no op specific config)
-            assert sim.model.mul1.output_quantizers[0] is not None
-            assert sim.model.mul2.output_quantizers[0] is not None
-            assert sim.model.add1.output_quantizers[0] is not None
-            assert sim.model.conv1.output_quantizers[0] is not None
-            assert sim.model.conv1.input_quantizers[0] is not None
+            """
+            When: Call load_encodings with requires_grad NOT specified
+            Then: requires_grad flag should be kept unchanged
+            """
+            sim.load_encodings(encodings, requires_grad=None)
+            assert sim.model.conv1.param_quantizers['weight'].min.requires_grad ==\
+                   sim.model.conv1.param_quantizers['weight'].max.requires_grad ==\
+                   requires_grad
+            assert sim.model.conv1.input_quantizers[0].min.requires_grad ==\
+                   sim.model.conv1.input_quantizers[0].max.requires_grad ==\
+                   requires_grad
 
-            # conv param quantizer needs to be enabled
-            assert sim.model.conv1.param_quantizers['weight'] is not None
+            # requires_grad of all the oither quantization parameters should not be modified
+            for q, (min_copy, max_copy) in all_parameters.items():
+                if q in (sim.model.conv1.param_quantizers['weight'],
+                         sim.model.conv1.input_quantizers[0]):
+                    continue
+                assert q.min.requires_grad == min_copy.requires_grad
+                assert q.max.requires_grad == max_copy.requires_grad
+
+        """
+        When: Call load_encodings with allow_recompute=True
+        Then: The loaded quantizers should be overwritten by a subsequent compute_encodings
+        """
+        sim = QuantizationSimModel(model, dummy_input)
+        sim.load_encodings(encodings, allow_recompute=True)
+        weight_min = sim.model.conv1.param_quantizers['weight'].min.clone().detach()
+        weight_max = sim.model.conv1.param_quantizers['weight'].max.clone().detach()
+        input_min = sim.model.conv1.input_quantizers[0].min.clone().detach()
+        input_max = sim.model.conv1.input_quantizers[0].max.clone().detach()
+
+        sim.compute_encodings(lambda model, _: model(dummy_input), None)
+
+        assert not any(torch.isclose(weight_min,
+                                     sim.model.conv1.param_quantizers['weight'].min))
+        assert not any(torch.isclose(weight_max,
+                                     sim.model.conv1.param_quantizers['weight'].max))
+        assert not any(torch.isclose(input_min,
+                                     sim.model.conv1.input_quantizers[0].min))
+        assert not any(torch.isclose(input_max,
+                                     sim.model.conv1.input_quantizers[0].max))
+
+        """
+        When: Call load_encodings with allow_recompute=False
+        Then: The loaded quantizers should NOT be overwritten by a subsequent compute_encodings
+        """
+        sim = QuantizationSimModel(model, dummy_input)
+        sim.load_encodings(encodings, allow_recompute=False)
+        weight_min = sim.model.conv1.param_quantizers['weight'].min.clone().detach()
+        weight_max = sim.model.conv1.param_quantizers['weight'].max.clone().detach()
+        input_min = sim.model.conv1.input_quantizers[0].min.clone().detach()
+        input_max = sim.model.conv1.input_quantizers[0].max.clone().detach()
+
+        sim.compute_encodings(lambda model, _: model(dummy_input), None)
+
+        assert torch.equal(weight_min, sim.model.conv1.param_quantizers['weight'].min)
+        assert torch.equal(weight_max, sim.model.conv1.param_quantizers['weight'].max)
+        assert torch.equal(input_min, sim.model.conv1.input_quantizers[0].min)
+        assert torch.equal(input_max, sim.model.conv1.input_quantizers[0].max)
+
+        """
+        When: Call load_encodings with allow_recompute=None
+        Then: Whether the loaded quantizers can be overwritten is kept unchanged
+        """
+        sim.load_encodings(encodings, allow_recompute=None)
+
+        assert torch.equal(weight_min, sim.model.conv1.param_quantizers['weight'].min)
+        assert torch.equal(weight_max, sim.model.conv1.param_quantizers['weight'].max)
+        assert torch.equal(input_min, sim.model.conv1.input_quantizers[0].min)
+        assert torch.equal(input_max, sim.model.conv1.input_quantizers[0].max)
 
     @pytest.mark.parametrize('load_encodings_fn', [load_encodings_to_sim,
                                                    QuantizationSimModel.load_and_freeze_encodings,
@@ -462,7 +657,6 @@ class TestPercentileScheme:
 
             with pytest.raises(RuntimeError):
                 load_encodings_fn(qsim, fname)
-
 
 class TestQuantsimUtilities:
 
