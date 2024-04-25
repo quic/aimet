@@ -1180,14 +1180,18 @@ def compute_partial_encoding(quantizer: TensorQuantizer, encoding_dict: Dict) ->
     return encoding_dict
 
 
-def deprecated(msg):
+def deprecated(msg: str):
     """
     Wrap a function or class such that a deprecation warning is printed out when invoked
     """
+    def colored(msg: str):
+        # Color the string with red
+        return '\x1b[31;21m' + msg + '\x1b[0m'
+
     def decorator(_callable):
         @functools.wraps(_callable)
         def fn_wrapper(*args, **kwargs):
-            warnings.warn(f'{_callable.__qualname__} will be deprecated soon in the later versions. {msg}',
+            warnings.warn(colored(f'{_callable.__qualname__} will be deprecated soon in the later versions. {msg}'),
                           DeprecationWarning, stacklevel=2)
             return _callable(*args, **kwargs)
         return fn_wrapper
