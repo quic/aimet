@@ -161,8 +161,8 @@ class ImageNetDataLoader:
         try:
             np_images_labels = self._sess.run(self._data_labels)
             return np_images_labels
-        except tf.errors.OutOfRangeError: # pylint: disable=raise-missing-from
-            raise StopIteration
+        except tf.errors.OutOfRangeError as e:
+            raise StopIteration from e
 
     def parse(self, serialized_example: tf_tensor) -> Tuple[tf_tensor]:
         """
