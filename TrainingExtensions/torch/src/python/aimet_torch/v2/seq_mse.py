@@ -133,8 +133,9 @@ class SequentialMse(V1SequentialMse):
         """
         # For per-channel quantization, we need to add single dimension
         # to x_{min, max} to make them reducible like quantizer.shape
-        quantizer.min.copy_(reduce(x_min[..., None], quantizer.shape, torch.min).values)
-        quantizer.max.copy_(reduce(x_max[..., None], quantizer.shape, torch.max).values)
+        with torch.no_grad():
+            quantizer.min.copy_(reduce(x_min[..., None], quantizer.shape, torch.min).values)
+            quantizer.max.copy_(reduce(x_max[..., None], quantizer.shape, torch.max).values)
 
     @staticmethod
     def _is_symmetric_quantizer(quantizer: AffineQuantizerBase):
