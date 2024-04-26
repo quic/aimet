@@ -42,7 +42,7 @@ import os
 import io
 import copy
 import pickle
-from typing import Tuple, List, Union, Dict, Callable, Optional, Any, runtime_checkable, Protocol
+from typing import Tuple, List, Union, Dict, Callable, Optional, Any, runtime_checkable, Protocol, Mapping
 from collections import OrderedDict, defaultdict
 import json
 import torch
@@ -64,6 +64,7 @@ from aimet_torch.qc_quantize_op import QcQuantizeStandAloneBase, QcQuantizeWrapp
 from aimet_torch.tensor_quantizer import initialize_learned_grid_quantizer_attributes
 from aimet_torch.qc_quantize_op import get_encoding_by_quantizer as _get_encoding_by_quantizer
 from aimet_torch import torchscript_utils, utils, transformer_utils, onnx_utils
+from aimet_torch.utils import deprecated
 from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs, CustomMarker, get_pytorch_name_from_onnx_name
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
@@ -97,6 +98,7 @@ MAP_PYMO_TO_ROUND_MODE = {libpymo.RoundingMode.ROUND_NEAREST: 'nearest',
                           libpymo.RoundingMode.ROUND_STOCHASTIC: 'stochastic'}
 
 SUPPORTED_KERNELS_ACTION = SupportedKernelsAction.warn_on_error
+
 
 
 class QuantParams:
@@ -149,8 +151,8 @@ class ExportableQuantModule(Protocol):
         Returns a dict of {param name: param encodings}, with each encoding represented as a List of Dicts
         """
 
-    def import_input_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled=False,
-                               disable_quantizer_without_encoding=True, freeze=False):
+    def import_input_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled: bool,
+                               disable_quantizer_without_encoding: bool, freeze: bool):
         """
         Import input encodings represented in below format:
         {
@@ -160,8 +162,8 @@ class ExportableQuantModule(Protocol):
         }
         """
 
-    def import_output_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled=False,
-                                disable_quantizer_without_encoding=True, freeze=False):
+    def import_output_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled: bool,
+                                disable_quantizer_without_encoding: bool, freeze: bool):
         """
         Import output encodings represented in below format:
         {
@@ -171,8 +173,8 @@ class ExportableQuantModule(Protocol):
         }
         """
 
-    def import_param_encodings(self, encodings: Dict[str, List[Dict]], ignore_when_quantizer_disabled=False,
-                               disable_quantizer_without_encoding=True, freeze=False):
+    def import_param_encodings(self, encodings: Dict[str, List[Dict]], ignore_when_quantizer_disabled: bool,
+                               disable_quantizer_without_encoding: bool, freeze: bool):
         """
         Import parameter encodings represented in below format:
         {
@@ -1601,6 +1603,56 @@ class QuantizationSimModel:
         return QuantSimConfigurator(self.model, self.connected_graph, config_file, default_output_bw,
                                     default_param_bw, default_data_type)
 
+    def load_encodings(self, encodings: Union[Mapping, str, os.PathLike],
+                       strict: bool = True,
+                       partial: bool = True):
+        """
+        :param encodings: Encoding dictionary or path to the encoding dictionary json file.
+        :param bool strict: If True, an error will be thrown if the model doesn't
+            have a quantizer corresponding to the specified encodings.
+        :param bool partial: If True, the encoding will be interpreted as a partial encoding.
+            Otherwise, the dangling quantizers that has no corresponding encoding will be removed.
+        """
+        self._load_encodings_impl(encodings,
+                                  ignore_when_quantizer_disabled=not strict,
+                                  disable_quantizer_without_encoding=not partial,
+                                  freeze=False)
+
+    def _load_encodings_impl(self, encodings: Union[Mapping, str, os.PathLike],
+                             freeze: bool,
+                             ignore_when_quantizer_disabled: bool,
+                             disable_quantizer_without_encoding: bool):
+        if isinstance(encodings, (str, os.PathLike)):
+            with open(encodings, mode='r') as f:
+                encodings = json.load(f)
+
+        if 'param_encodings' not in encodings:
+            param_encodings = encodings
+            activation_encodings = None
+            logger.warning("An older AdaRound exported encoding file type has been detected! "
+                           "Please regenerate it using the AdaRound export function from the latest "
+                           "AIMET (version 1.32 or higher) if necessary. "
+                           "Support for this encoding file will be deprecated in AIMET version 1.33.0.")
+        else:
+            param_encodings = encodings.get('param_encodings', None)
+            activation_encodings = encodings.get('activation_encodings', None)
+
+        if param_encodings is None and activation_encodings is None:
+            raise RuntimeError
+
+        if param_encodings is not None:
+            self._set_param_encodings(param_encodings,
+                                      freeze=freeze,
+                                      ignore_when_quantizer_disabled=ignore_when_quantizer_disabled,
+                                      disable_quantizer_without_encoding=disable_quantizer_without_encoding)
+
+        if activation_encodings is not None:
+            self._set_activation_encodings(activation_encodings,
+                                           freeze=freeze,
+                                           ignore_when_quantizer_disabled=ignore_when_quantizer_disabled,
+                                           disable_quantizer_without_encoding=disable_quantizer_without_encoding)
+
+    @deprecated(f"Use {load_encodings.__qualname__} instead.")
     def load_and_freeze_encodings(self, encoding_path: str, ignore_when_quantizer_disabled: bool = False):
         """
         Functionality to set encodings (both activation and parameter) as per the given encodings JSON file and
@@ -1612,19 +1664,10 @@ class QuantizationSimModel:
         :param ignore_when_quantizer_disabled: ignore raising RuntimeError while setting encodings,
             when quantizers are disabled.
         """
-        with open(encoding_path, mode='r') as json_file:
-            encodings_dict = json.load(json_file)
-
-        self._set_param_encodings(encodings_dict['param_encodings'],
-                                  freeze=True,
+        self._load_encodings_impl(encoding_path,
                                   ignore_when_quantizer_disabled=ignore_when_quantizer_disabled,
-                                  disable_quantizer_without_encoding=False)
-
-        self._set_activation_encodings(encodings_dict['activation_encodings'],
-                                       freeze=True,
-                                       ignore_when_quantizer_disabled=ignore_when_quantizer_disabled,
-                                       disable_quantizer_without_encoding=False)
-
+                                  disable_quantizer_without_encoding=False,
+                                  freeze=True)
 
     def _set_param_encodings(self,
                              encoding_dict: Dict,
@@ -1673,6 +1716,7 @@ class QuantizationSimModel:
                                            disable_quantizer_without_encoding=disable_quantizer_without_encoding)
 
 
+    @deprecated(f"Use {load_encodings.__qualname__} instead.")
     def set_and_freeze_param_encodings(self, encoding_path: str):
         """
         Set and freeze parameter encodings from encodings JSON file.
@@ -1682,21 +1726,16 @@ class QuantizationSimModel:
 
         :param encoding_path: path from where to load parameter encodings file
         """
-        # Load parameter encodings file
-        with open(encoding_path) as json_file:
-            param_encodings = json.load(json_file)
-            if 'param_encodings' in param_encodings:
-                param_encodings = param_encodings['param_encodings']
-            else:
-                logger.warning("An older AdaRound exported encoding file type has been detected! "
-                               "Please regenerate it using the AdaRound export function from the latest "
-                               "AIMET (version 1.32 or higher) if necessary. "
-                               "Support for this encoding file will be deprecated in AIMET version 1.33.0.")
+        with open(encoding_path, mode='r') as f:
+            encodings = json.load(f)
 
-        self._set_param_encodings(param_encodings,
-                                  freeze=True,
+        if 'activation_encodings' in encodings:
+            del encodings['activation_encodings']
+
+        self._load_encodings_impl(encodings,
                                   ignore_when_quantizer_disabled=False,
-                                  disable_quantizer_without_encoding=True)
+                                  disable_quantizer_without_encoding=True,
+                                  freeze=True)
 
     def quant_wrappers(self):
         """
@@ -1962,6 +2001,7 @@ def check_accumulator_overflow(model: torch.nn.Module, quant_bw: int, accum_bw: 
     return most_accum_range_used_layer, most_accum_range_used
 
 
+@deprecated(f"Use {QuantizationSimModel.load_encodings.__qualname__} instead.")
 def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, pytorch_encoding_path: str):
     """
     Loads the saved encodings to quant sim model. The encoding filename to load should end in _torch.encodings,
@@ -1971,72 +2011,14 @@ def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, pytorch_encodin
         when encodings were exported.
     :param pytorch_encoding_path: Path of the encodings file to load.
     """
-    # pylint: disable=too-many-locals, too-many-branches
-    # Load encodings file
-    with open(pytorch_encoding_path) as json_file:
-        encodings = json.load(json_file)
-
-    param_encodings = encodings['param_encodings']
-    activation_encodings = encodings['activation_encodings']
-
-    for module_name, module in quant_sim_model.model.named_modules():
-        if not isinstance(module, ExportableQuantModule):
-            continue
-
+    for module in quant_sim_model.model.modules():
         if isinstance(module, QcQuantizeWrapper):
             module.set_mode(QcQuantizeOpMode.ACTIVE)
 
-        param_encoding = {
-            param_name: param_encodings[f'{module_name}.{param_name}']
-            for param_name, _ in module.param_quantizers.items()
-            if f'{module_name}.{param_name}' in param_encodings
-        }
-        module.import_param_encodings(param_encoding)
-
-        try:
-            input_encoding = activation_encodings[module_name]['input']
-        except KeyError:
-            input_encoding = {}
-
-        module.import_input_encodings(input_encoding)
-
-        try:
-            output_encoding = activation_encodings[module_name]['output']
-        except KeyError:
-            output_encoding = {}
-
-        module.import_output_encodings(output_encoding)
-
-    def is_enabled(quantizer):
-        if quantizer is None:
-            return False
-        if hasattr(quantizer, 'enabled'):
-            return quantizer.enabled
-        return True
-
-    def is_initialized(quantizer):
-        if hasattr(quantizer, 'is_initialized'):
-            return quantizer.is_initialized()
-        return quantizer.encoding is not None
-
-    for name, layer in quant_sim_model.quant_wrappers():
-        if isinstance(layer, ExportableQuantModule):
-            input_quantizers = layer.input_quantizers
-            output_quantizers = layer.output_quantizers
-        else:
-            input_quantizers = list(layer.input_quantizers.values())
-            output_quantizers = list(layer.output_quantizers.values())
-
-        for idx, quantizer in enumerate(input_quantizers):
-            if is_enabled(quantizer) and not is_initialized(quantizer):
-                logger.debug('No encoding loaded for input quantizer %s of layer %s', idx, name)
-
-        for idx, (param_name, quantizer) in enumerate(layer.param_quantizers.items()):
-            if is_enabled(quantizer) and not is_initialized(quantizer):
-                logger.debug('No encoding loaded for param quantizer %s of layer %s', param_name, name)
-        for idx, quantizer in enumerate(output_quantizers):
-            if is_enabled(quantizer) and not is_initialized(quantizer):
-                logger.debug('No encoding loaded for output quantizer %s of layer %s', idx, name)
+    quant_sim_model._load_encodings_impl(pytorch_encoding_path, # pylint: disable=protected-access
+                                         ignore_when_quantizer_disabled=False,
+                                         disable_quantizer_without_encoding=True,
+                                         freeze=False)
 
     if isinstance(quant_sim_model, QuantizationSimModel):
         # Only for V1 quantsim
