@@ -111,6 +111,10 @@ class BaseQuantizationMixin(abc.ABC):
             yield
 
     def _compute_param_encodings(self, overwrite: bool):
+        """
+        :param bool overwrite: If True, the quantizers that are already initialized will also recompute encodings.
+            Otherwise, only the uninitialized quantizers will compute encodings.
+        """
         for param_name, param_quantizer in self.param_quantizers.items():
             if not param_quantizer:
                 continue
@@ -120,6 +124,10 @@ class BaseQuantizationMixin(abc.ABC):
                 if param is not None:
                     with param_quantizer.compute_encodings():
                         _ = param_quantizer(param)
+
+    def compute_param_encodings(self):
+        """ Compute encodings of parameter quantizers """
+        self._compute_param_encodings(overwrite=True)
 
     @contextlib.contextmanager
     def compute_encodings(self):
