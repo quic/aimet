@@ -39,7 +39,7 @@
 
 import abc
 import math
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 import contextlib
 import functools
 
@@ -55,7 +55,8 @@ from aimet_torch.v2.quantization.affine.backends import quantize, quantize_dequa
 from aimet_torch.v2.utils import ste_round
 
 
-__all__ = ['AffineQuantizerBase', 'MinMaxQuantizer', 'Quantize', 'QuantizeDequantize', 'Dequantize']
+__all__ = ['AffineQuantizerBase', 'MinMaxQuantizer', 'Quantize', 'QuantizeDequantize', 'Dequantize',
+           'GroupedBlockQuantizeDequantize']
 
 
 class AffineQuantizerBase(QuantizerBase):
@@ -244,7 +245,7 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
     max: torch.nn.Parameter
 
     def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None,
-                 block_size: Optional[List[int]] = None):
+                 block_size: Optional[Tuple] = None):
         super().__init__(shape, bitwidth, symmetric, encoding_analyzer, block_size)
 
         self.register_quantization_parameter('min', nn.Parameter(-torch.ones(self.shape)))
@@ -599,3 +600,96 @@ class Dequantize(torch.nn.Module):
         :return: Dequantized output
         """
         return input.dequantize()
+
+class GroupedBlockQuantizeDequantize(QuantizeDequantize):
+    """ Class for performing Grouped Block Quantize Dequantize """
+    def __init__(self, shape, bitwidth: int, symmetric: bool, decompressed_bw: int,
+                 encoding_analyzer: EncodingAnalyzer = None, block_size: Optional[Tuple] = None,
+                 block_grouping: Optional[Tuple] = None):
+        """
+        Grouped Block Quantize Dequantize constructor.
+
+        :param shape: Shape of the quantization parameters
+        :type shape: tuple
+        :param bitwidth: Quantization bitwidth
+        :type bitwidth: int
+        :param symmetric: If True, performs symmetric quantization;
+                          otherwise, performs asymmetric quantization
+        :type symmetric: bool
+        :param decompressed_bw: Bitwidth used for decompression
+        :type decompressed_bw: int
+        :param encoding_analyzer: Encoding analyzer for calibrating quantization encodings
+                                  (default: absolute min-max encoding analyzer)
+        :type encoding_analyzer: EncodingAnalyzer, optional
+        :param block_size: Block size per dimension.
+        :type block_size: Tuple
+        :param block_grouping: Block grouping per dimension. If provided, every set of block_group scales will be
+                               grouped together, and the maximum scale for all blocks in the group will be used to find
+                               the scale in the decompressed_grid to be shared by all blocks in the group.
+                               If no block_grouping is provided, default behavior uses a block group of 1 for all dims,
+                               equivalent to Blockwise Quantization.
+                               A value of -1 for a block group for a dimension is equivalent to grouping all blocks in
+                               the dimension in one group. This is also equivalent to a block group value equal to the
+                               number of blocks for that dimension.
+        :type block_grouping: Tuple
+        """
+        super().__init__(shape, bitwidth, symmetric, encoding_analyzer, block_size)
+        self.decompressed_bw = decompressed_bw
+        self.block_grouping = block_grouping
+        if self.block_grouping is None:
+            # Default to BQ behavior with 1 for all block grouping dims if not provided
+            self.block_grouping = [1] * len(self.shape)
+
+        if block_grouping is not None:
+            if len(block_grouping) != len(shape):
+                raise RuntimeError(f'Length of block grouping {block_grouping} must equal length of shape {shape}.')
+            for idx, block_group in enumerate(block_grouping):
+                if block_group != -1 and shape[idx] % block_group != 0:
+                    raise RuntimeError(f'Quantizer shape dimensions must divide evenly with corresponding block '
+                                       f'grouping values for shapes {shape} and block grouping {block_grouping}.')
+
+        if self.decompressed_bw < self.bitwidth:
+            raise RuntimeError(f'Decompressed bitwidth {decompressed_bw} cannot be smaller than self.bitwidth '
+                               f'{bitwidth}')
+
+        if not symmetric:
+            raise RuntimeError(f'GroupedBlockQuantizeDequantize only supports symmetric quantization.')
+
+    def get_scale(self, dtype=None) -> torch.Tensor:
+        """
+        Compute quantization scale to be used for forward pass.
+        Overrides QuantizeDequantize self.get_scale() to apply the grouped block algorithm for calculating modified
+        scales.
+
+        :param dtype: dtype of the computed scale. Use of self.min.dtype by default.
+        :return: Updated scale
+        """
+        orig_scale = super().get_scale(dtype)
+        orig_scale_shape = orig_scale.shape
+        reshaped_scale = orig_scale.view(self.get_expanded_scale_shape())
+        max_scale = torch.amax(reshaped_scale, list(range(1, len(orig_scale_shape) * 2, 2)), keepdim=True)
+        per_channel_scale = max_scale / 2 ** (self.decompressed_bw - self.bitwidth)
+        updated_scale = quantize_dequantize(reshaped_scale,
+                                            scale=per_channel_scale,
+                                            offset=torch.zeros_like(per_channel_scale),
+                                            qmin=1,
+                                            qmax=2 ** (self.decompressed_bw - self.bitwidth))
+        return updated_scale.view(orig_scale_shape)
+
+    def get_expanded_scale_shape(self) -> List[int]:
+        """
+        Get expanded scale shape which breaks each scale dimension into a pair of dimensions with sizes
+        (original_shape / block_grouping, block_grouping).
+
+        :return: Expanded scale shape
+        """
+        expanded_shape = []
+        for idx, block_group in enumerate(self.block_grouping):
+            # Block group of -1 is equivalent to grouping all blocks together
+            if block_group == -1:
+                expanded_shape.append(1)
+                expanded_shape.append(self.shape[idx])
+            else:
+                expanded_shape.append(self.shape[idx] // block_group)
+                expanded_shape.append(block_group)
+        return expanded_shape
