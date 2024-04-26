@@ -540,7 +540,10 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
 
                 if requires_grad is not None:
                     if isinstance(quantizer, LearnedGridTensorQuantizer) and quantizer.wrapper_ref:
-                        quantizer.wrapper_ref.requires_grad_(requires_grad)
+                        q_min = getattr(quantizer.wrapper_ref, quantizer.name + '_encoding_min')
+                        q_min.requires_grad_(requires_grad)
+                        q_max = getattr(quantizer.wrapper_ref, quantizer.name + '_encoding_max')
+                        q_max.requires_grad_(requires_grad)
 
                 if allow_recompute is not None:
                     if not allow_recompute:
@@ -634,7 +637,10 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
 
             if requires_grad is not None:
                 if isinstance(quantizer, LearnedGridTensorQuantizer) and quantizer.wrapper_ref:
-                    quantizer.wrapper_ref.requires_grad_(requires_grad)
+                    q_min = getattr(quantizer.wrapper_ref, quantizer.name + '_encoding_min')
+                    q_min.requires_grad_(requires_grad)
+                    q_max = getattr(quantizer.wrapper_ref, quantizer.name + '_encoding_max')
+                    q_max.requires_grad_(requires_grad)
 
             if allow_recompute is not None:
                 if not allow_recompute:
