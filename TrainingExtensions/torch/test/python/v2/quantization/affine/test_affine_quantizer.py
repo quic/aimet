@@ -39,6 +39,8 @@ import copy
 import math
 import pickle
 import pytest
+import numpy as np
+import random
 import torch
 from torch import nn
 from torch.optim import SGD, RMSprop, Adagrad, Adam, AdamW
@@ -47,6 +49,13 @@ from aimet_torch.v2.quantization.affine import AffineQuantizerBase, Quantize, \
     QuantizeDequantize, Dequantize, GroupedBlockQuantizeDequantize
 from aimet_torch.v2.quantization import affine
 import aimet_torch.v2.quantization as Q
+
+
+@pytest.fixture(autouse=True)
+def set_seed():
+    random.seed(999)
+    torch.manual_seed(0)
+    np.random.seed(0)
 
 
 _PARAMETER_SHAPE = (100,)
@@ -972,7 +981,6 @@ def test_allow_overwrite(x, q):
 
 
 def test_bq_compute_encodings_and_forward():
-    torch.manual_seed(0)
     shape = (2, 2, 4)
     bq = QuantizeDequantize(shape=shape,
                             bitwidth=4,
@@ -997,7 +1005,6 @@ def test_bq_compute_encodings_and_forward():
                                                 [(1, 4, 1), (4, 1, 4)],
                                                 [(1, 1, 4), (4, 4, 1)]])
 def test_bq_vs_per_channel_sanity(shape, block_sizes):
-    torch.manual_seed(0)
     bq = QuantizeDequantize(shape=shape,
                             bitwidth=4,
                             symmetric=True,
@@ -1019,7 +1026,6 @@ def test_bq_vs_per_channel_sanity(shape, block_sizes):
     assert torch.equal(bq(param_tensor), pc(param_tensor))
 
 def test_quantized_tensor_with_block_size():
-    torch.manual_seed(0)
     shape = (2, 2, 4)
     tensor = torch.randn(4, 8, 12)
     bq = Quantize(shape=shape,
@@ -1034,7 +1040,6 @@ def test_quantized_tensor_with_block_size():
     assert torch.equal(q.dequantize(), affine.dequantize(q, bq.get_scale(), bq.get_offset(), bq.block_size))
 
 def test_gbbq_sanity():
-    torch.manual_seed(0)
     tensor = torch.randn(8, 12)
     gbbq = GroupedBlockQuantizeDequantize(shape=(8, 4),
                                           bitwidth=4,
@@ -1061,7 +1066,6 @@ def test_gbbq_sanity():
 
 @pytest.mark.parametrize('bitwidth, decompressed_bw', [[4, 8], [4, 16], [4, 12], [3, 5], [5, 9], [6, 6]])
 def test_gbbq_per_block_sanity(bitwidth, decompressed_bw):
-    torch.manual_seed(0)
     tensor = torch.randn(4, 8, 12)
     gbbq = GroupedBlockQuantizeDequantize(shape=(2, 4, 6),
                                           bitwidth=bitwidth,
@@ -1096,7 +1100,6 @@ def test_gbbq_per_block_sanity(bitwidth, decompressed_bw):
                 assert torch.equal(rounded_scales, gbbq_block_group)
 
 def test_gbbq_quantizer_default_grouping():
-    torch.manual_seed(0)
     tensor = torch.randn(4, 8, 12)
     gbbq_default_grouping = GroupedBlockQuantizeDequantize(shape=(2, 4, 6),
                                                            bitwidth=4,
@@ -1130,7 +1133,6 @@ def test_gbbq_equivalences(gbbq_shape, gbbq_decompressed_bw, gbbq_block_size, gb
     #         is equal to bitwidth.
     # Test 3: GBBQ should be equal to per channel in the case when block_grouping is -1 for all dims except the channel
     #         dimension and decompressed_bw is equal to bitwidth.
-    torch.manual_seed(0)
     tensor = torch.randn(4, 8, 12)
     gbbq = GroupedBlockQuantizeDequantize(shape=gbbq_shape,
                                           bitwidth=4,
