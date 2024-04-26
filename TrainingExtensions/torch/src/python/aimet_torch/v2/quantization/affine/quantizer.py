@@ -653,7 +653,7 @@ class GroupedBlockQuantizeDequantize(QuantizeDequantize):
                                f'{bitwidth}')
 
         if not symmetric:
-            raise RuntimeError(f'GroupedBlockQuantizeDequantize only supports symmetric quantization.')
+            raise RuntimeError('GroupedBlockQuantizeDequantize only supports symmetric quantization.')
 
     def get_scale(self, dtype=None) -> torch.Tensor:
         """
