@@ -81,7 +81,7 @@ op_inputs_dict = {
 # When traced, the leaf level module for these ops may have ordering of inputs flipped. We trace into these modules in
 # order to determine the true input ordering.
 MULTI_INPUT_OPS_TO_PARSE = [elementwise_ops.Add, elementwise_ops.Multiply, elementwise_ops.Subtract,
-                            elementwise_ops.Divide, elementwise_ops.Pow]
+                            elementwise_ops.Divide, elementwise_ops.Pow, elementwise_ops.IndexSelect]
 
 # We want to consider following operations as leaf nodes while creating op for connected graph.
 SKIP_LIST_FOR_SUBGRAPH_TRACE = [elementwise_ops.StridedSlice, elementwise_ops.GatherNd, elementwise_ops.ScatterND,
