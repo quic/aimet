@@ -50,7 +50,7 @@ The following table has links to browsable versions of the notebooks for differe
      - `Link <../Examples/tensorflow/quantization/keras/adaround.ipynb>`_
      -
    * - AutoQuant
-     - `Link <../Examples/torch/quantization/autoquant.ipynb>`_
+     - `Link <../Examples/torch/quantization/autoquant_v2.ipynb>`_
      - `Link <../Examples/tensorflow/quantization/autoquant.ipynb>`_
      -
      -
@@ -83,10 +83,10 @@ Running the notebooks
 Install Jupyter
 ---------------
 - Install the Jupyter metapackage as follows (pre-pend with "sudo -H" if appropriate):
-`python3 -m pip install jupyter`
+``python3 -m pip install jupyter``
 
 - Start the notebook server as follows (please customize the command line options if appropriate):
-`jupyter notebook --ip=* --no-browser &`
+``jupyter notebook --ip=* --no-browser &``
 
 - The above command will generate and display a URL in the terminal. Copy and paste it into your browser.
 
@@ -94,11 +94,15 @@ Install Jupyter
 Download the Example notebooks and related code
 ------------------------------------------------
 - Clone the AIMET repo as follows to any location:
-  * WORKSPACE="<absolute_path_to_workspace>"
-  * mkdir $WORKSPACE && cd $WORKSPACE
-  *  Go to https://github.com/quic/aimet/releases and identify the release tag (`<release_tag>`) of the AIMET package that you're working with.
-  * git clone https://github.com/quic/aimet.git --branch <release_tag>
-  * Update the environment variable as follows: `export PYTHONPATH=$PYTHONPATH:${WORKSPACE}/aimet`
+
+.. code-block:: shell
+
+   WORKSPACE="<absolute_path_to_workspace>"
+   mkdir $WORKSPACE && cd $WORKSPACE
+   # Go to https://github.com/quic/aimet/releases and identify the release tag (<release_tag>) of the AIMET package that you're working with.
+   git clone https://github.com/quic/aimet.git --branch <release_tag>
+   # Update the environment variable as follows:
+   export PYTHONPATH=$PYTHONPATH:${WORKSPACE}/aimet
 
 - The dataloader, evaluator, and trainer utilized in the examples is for the ImageNet dataset.
   To run the example, please download the ImageNet dataset from here: https://www.image-net.org/download.php
@@ -109,6 +113,7 @@ Run the notebooks
 -----------------
 
 - Navigate to one of the following paths under the Examples directory and launch your chosen Jupyter Notebook (`.ipynb` extension):
+
   - `Examples/torch/quantization/`
   - `Examples/torch/compression/`
   - `Examples/tensorflow/quantization/`

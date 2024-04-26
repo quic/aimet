@@ -7,9 +7,16 @@
 Encoding Analyzers
 ==================
 
+.. autoclass:: EncodingAnalyzer
+    :members:
 
-Top-level API
-=============
 
-.. automodule:: aimet_torch.v2.quantization.encoding_analyzer
-   :members:
+Variants
+--------
+
+.. autosummary::
+    :toctree: generated
+
+    MinMaxEncodingAnalyzer
+    SqnrEncodingAnalyzer
+    PercentileEncodingAnalyzer
