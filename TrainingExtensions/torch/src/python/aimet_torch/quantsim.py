@@ -1630,8 +1630,8 @@ class QuantizationSimModel:
         :param bool strict: If True, an error will be thrown if the model doesn't
             have a quantizer corresponding to the specified encodings.
         :param bool partial: If True, the encoding will be interpreted as a partial encoding,
-            and the dangling quantizers that has no corresponding encoding will be kept intact.
-            Otherwise, the dangling quantizers will removed.
+            and the dangling quantizers with no corresponding encoding will be kept untouched.
+            Otherwise, the dangling quantizers will be removed from the model.
         :param bool requires_grad: Whether or not the quantization parameters loaded from the
             encodings require gradient computation during training.
             If None, ``requires_grad`` flag of the quantization parameters will be kept unchanged.
