@@ -43,7 +43,7 @@ from torch import nn
 from torch.optim import SGD, RMSprop, Adagrad, Adam, AdamW
 from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 from aimet_torch.v2.quantization.affine import AffineQuantizerBase, Quantize, \
-    QuantizeDequantize, Dequantize
+    QuantizeDequantize, Dequantize, GroupedBlockQuantizeDequantize
 from aimet_torch.v2.quantization import affine
 import aimet_torch.v2.quantization as Q
 
@@ -876,7 +876,7 @@ def test_bq_compute_encodings_and_forward():
     bq = QuantizeDequantize(shape=shape,
                             bitwidth=4,
                             symmetric=True,
-                            block_size=[2, 4, 3])
+                            block_size=(2, 4, 3))
     assert bq.encoding_analyzer.observer.shape == [2, 1, 2, 1, 4, 1]
 
     bq.eval()
@@ -892,9 +892,9 @@ def test_bq_compute_encodings_and_forward():
                                          signed=bq.signed, block_size=bq.block_size)
     assert torch.equal(out, qdq_out)
 
-@pytest.mark.parametrize('shape, block_sizes', [[(4, 1, 1), [1, 4, 4]],
-                                                [(1, 4, 1), [4, 1, 4]],
-                                                [(1, 1, 4), [4, 4, 1]]])
+@pytest.mark.parametrize('shape, block_sizes', [[(4, 1, 1), (1, 4, 4)],
+                                                [(1, 4, 1), (4, 1, 4)],
+                                                [(1, 1, 4), (4, 4, 1)]])
 def test_bq_vs_per_channel_sanity(shape, block_sizes):
     torch.manual_seed(0)
     bq = QuantizeDequantize(shape=shape,
@@ -924,10 +924,157 @@ def test_quantized_tensor_with_block_size():
     bq = Quantize(shape=shape,
                   bitwidth=4,
                   symmetric=True,
-                  block_size=[2, 4, 3])
+                  block_size=(2, 4, 3))
     with bq.compute_encodings():
         _ = bq(tensor)
     assert bq.get_encoding().block_size == bq.block_size
     q = bq(tensor)
     assert q.encoding.block_size == bq.block_size
     assert torch.equal(q.dequantize(), affine.dequantize(q, bq.get_scale(), bq.get_offset(), bq.block_size))
+
+def test_gbbq_sanity():
+    torch.manual_seed(0)
+    tensor = torch.randn(8, 12)
+    gbbq = GroupedBlockQuantizeDequantize(shape=(8, 4),
+                                          bitwidth=4,
+                                          symmetric=True,
+                                          decompressed_bw=8,
+                                          block_size=(-1, -1),
+                                          block_grouping=(1, -1))
+    pc = QuantizeDequantize(shape=(8, 1),
+                            bitwidth=4,
+                            symmetric=True)
+
+    with gbbq.compute_encodings():
+        _ = gbbq(tensor)
+
+    with pc.compute_encodings():
+        _ = pc(tensor)
+
+    assert gbbq.get_scale().shape == (8, 4)
+
+    # The largest scale for any given channel GBBQ should equal the scale for per channel
+    assert torch.equal(torch.amax(gbbq.get_scale(), dim=1, keepdim=True), pc.get_scale())
+
+    assert not torch.equal(gbbq(tensor), pc(tensor))
+
+@pytest.mark.parametrize('bitwidth, decompressed_bw', [[4, 8], [4, 16], [4, 12], [3, 5], [5, 9], [6, 6]])
+def test_gbbq_per_block_sanity(bitwidth, decompressed_bw):
+    torch.manual_seed(0)
+    tensor = torch.randn(4, 8, 12)
+    gbbq = GroupedBlockQuantizeDequantize(shape=(2, 4, 6),
+                                          bitwidth=bitwidth,
+                                          symmetric=True,
+                                          block_size=(2, 2, 2),
+                                          decompressed_bw=decompressed_bw,
+                                          block_grouping=(2, 2, 3))
+    qdq = QuantizeDequantize(shape=(2, 4, 6),
+                             bitwidth=bitwidth,
+                             symmetric=True,
+                             block_size=(2, 2, 2))
+    with gbbq.compute_encodings():
+        _ = gbbq(tensor)
+
+    with qdq.compute_encodings():
+        _ = qdq(tensor)
+
+    for i in range(gbbq.shape[0] // gbbq.block_grouping[0]):
+        for j in range(gbbq.shape[1] // gbbq.block_grouping[1]):
+            for k in range(gbbq.shape[2] // gbbq.block_grouping[2]):
+                gbbq_block_group = gbbq.get_scale()[i * gbbq.block_grouping[0]:(i + 1) * gbbq.block_grouping[0],
+                                                    j * gbbq.block_grouping[1]:(j + 1) * gbbq.block_grouping[1],
+                                                    k * gbbq.block_grouping[2]:(k + 1) * gbbq.block_grouping[2]]
+                qdq_block_group = qdq.get_scale()[i * gbbq.block_grouping[0]:(i + 1) * gbbq.block_grouping[0],
+                                                  j * gbbq.block_grouping[1]:(j + 1) * gbbq.block_grouping[1],
+                                                  k * gbbq.block_grouping[2]:(k + 1) * gbbq.block_grouping[2]]
+                max_scale = torch.max(qdq_block_group)
+                compression_factor = 2 ** (decompressed_bw - bitwidth)
+                gamma = max_scale / compression_factor
+                int_rounded_scales = torch.maximum(torch.tensor([1.0]), torch.round(qdq_block_group / gamma))
+                rounded_scales = int_rounded_scales * gamma
+                assert torch.equal(rounded_scales, gbbq_block_group)
+
+def test_gbbq_quantizer_default_grouping():
+    torch.manual_seed(0)
+    tensor = torch.randn(4, 8, 12)
+    gbbq_default_grouping = GroupedBlockQuantizeDequantize(shape=(2, 4, 6),
+                                                           bitwidth=4,
+                                                           symmetric=True,
+                                                           block_size=(2, 2, 2),
+                                                           decompressed_bw=8)
+    gbbq_no_grouping = GroupedBlockQuantizeDequantize(shape=(2, 4, 6),
+                                                      bitwidth=4,
+                                                      symmetric=True,
+                                                      block_size=(2, 2, 2),
+                                                      decompressed_bw=8,
+                                                      block_grouping=(1, 1, 1))
+    with gbbq_default_grouping.compute_encodings():
+        _ = gbbq_default_grouping(tensor)
+
+    with gbbq_no_grouping.compute_encodings():
+        _ = gbbq_no_grouping(tensor)
+
+    assert torch.equal(gbbq_default_grouping.get_scale(), gbbq_no_grouping.get_scale())
+    assert torch.equal(gbbq_default_grouping(tensor), gbbq_no_grouping(tensor))
+
+@pytest.mark.parametrize('gbbq_shape, gbbq_decompressed_bw, gbbq_block_size, gbbq_block_grouping, qdq_shape,'
+                         'qdq_block_size',
+                         [[(2, 4, 6), 8, (2, 2, 2), (1, 1, 1), (2, 4, 6), (2, 2, 2)],
+                          [(2, 4, 6), 4, (2, 2, 2), (-1, -1, -1), (1, 1, 1), None],
+                          [(2, 8, 6), 4, (2, 1, 2), (-1, 1, -1), (1, 8, 1), None]])
+def test_gbbq_equivalences(gbbq_shape, gbbq_decompressed_bw, gbbq_block_size, gbbq_block_grouping, qdq_shape,
+                           qdq_block_size):
+    # Test 1: GBBQ should be equal to BQ in the case when block_grouping is 1 for all dims.
+    # Test 2: GBBQ should be equal to per tensor in the case when block_grouping is -1 for all dims and decompressed_bw
+    #         is equal to bitwidth.
+    # Test 3: GBBQ should be equal to per channel in the case when block_grouping is -1 for all dims except the channel
+    #         dimension and decompressed_bw is equal to bitwidth.
+    torch.manual_seed(0)
+    tensor = torch.randn(4, 8, 12)
+    gbbq = GroupedBlockQuantizeDequantize(shape=gbbq_shape,
+                                          bitwidth=4,
+                                          symmetric=True,
+                                          block_size=gbbq_block_size,
+                                          decompressed_bw=gbbq_decompressed_bw,
+                                          block_grouping=gbbq_block_grouping)
+    qdq = QuantizeDequantize(shape=qdq_shape,
+                             bitwidth=4,
+                             symmetric=True,
+                             block_size=qdq_block_size)
+    with gbbq.compute_encodings():
+        _ = gbbq(tensor)
+
+    with qdq.compute_encodings():
+        _ = qdq(tensor)
+
+    assert torch.equal(gbbq.get_scale(), qdq.get_scale().expand(gbbq.get_scale().shape))
+    gbbq_out = gbbq(tensor)
+    qdq_out = qdq(tensor)
+    assert torch.equal(gbbq_out, qdq_out)
+
+    if all(group_size == 1 for group_size in gbbq_block_grouping):
+        grad = torch.randn(size=gbbq_out.shape)
+        gbbq_out.backward(grad)
+        qdq_out.backward(grad)
+
+        assert torch.equal(gbbq.min.grad, qdq.min.grad)
+        assert torch.equal(gbbq.max.grad, qdq.max.grad)
+
+def test_invalid_gbbq_settings():
+    with pytest.raises(RuntimeError):
+        _ = GroupedBlockQuantizeDequantize(shape=(2, 4, 6),
+                                           bitwidth=4,
+                                           symmetric=False,
+                                           decompressed_bw=8)
+    with pytest.raises(RuntimeError):
+        _ = GroupedBlockQuantizeDequantize(shape=(2, 4, 6),
+                                           bitwidth=4,
+                                           symmetric=True,
+                                           decompressed_bw=8,
+                                           block_grouping=(-1, -1, -1, -1))
+
+    with pytest.raises(RuntimeError):
+        _ = GroupedBlockQuantizeDequantize(shape=(2, 4, 6),
+                                           bitwidth=4,
+                                           symmetric=True,
+                                           decompressed_bw=3)
