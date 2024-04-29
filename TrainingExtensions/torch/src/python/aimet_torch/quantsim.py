@@ -1624,7 +1624,7 @@ class QuantizationSimModel:
                        strict: bool = True,
                        partial: bool = True,
                        requires_grad: Optional[bool] = None,
-                       allow_recompute: Optional[bool] = False):
+                       allow_recompute: Optional[bool] = None):
         """
         :param encodings: Encoding dictionary or path to the encoding dictionary json file.
         :param bool strict: If True, an error will be thrown if the model doesn't
