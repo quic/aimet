@@ -84,6 +84,7 @@ class ImageNetEvaluator:
         :param iterations: The number of iterations to run. If None, all the data will be used
         """
         # Get specific model's preprocessing and decode functions
+        # pylint: disable=import-outside-toplevel
         if self._model_type == "resnet50":
             from tensorflow.keras.applications.resnet import preprocess_input, decode_predictions
         elif self._model_type == "mobilenetv1":

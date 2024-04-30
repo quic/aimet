@@ -55,8 +55,8 @@ from aimet_torch.v2.quantization.tensor import QuantizedTensorBase
 from aimet_torch.v2.utils import patch_attr, _ContextManager, allow_recompute
 import aimet_torch.elementwise_ops as aimet_ops
 
-from .base import BaseQuantizationMixin
-from .fake_quant import _FakeQuantizedUnaryOpMixin, _FakeQuantizedBinaryOpMixin
+from .base import BaseQuantizationMixin # pylint: disable=import-error
+from .fake_quant import _FakeQuantizedUnaryOpMixin, _FakeQuantizedBinaryOpMixin # pylint: disable=import-error
 
 
 def _quantize_if_applicable(data: Any, quantizer: Optional[QuantizerBase]):
@@ -146,7 +146,7 @@ class QuantizationMixin(BaseQuantizationMixin, ABC): # pylint: disable=abstract-
         return self.get_default_kernel()
 
     @contextlib.contextmanager
-    def compute_encodings(self):
+    def compute_encodings(self): # pylint: disable=missing-function-docstring
         def no_op(tensor_in: Tensor):
             return tensor_in
 
@@ -234,7 +234,7 @@ class QuantizationMixin(BaseQuantizationMixin, ABC): # pylint: disable=abstract-
 # pylint: disable=arguments-differ, abstract-method
 
 class _QuantizedUnaryOpMixin(QuantizationMixin, ABC):
-    def quantized_forward(self, *args, **kwargs):
+    def quantized_forward(self, *args, **kwargs): # pylint: disable=missing-function-docstring
         kernel = self.get_kernel()
 
         if not kernel or _is_computing_encodings(self):
@@ -273,7 +273,7 @@ class _QuantizedBinaryOpMixin(QuantizationMixin, ABC):
         super().__quant_init__()
         self.input_quantizers = nn.ModuleList([None, None])
 
-    def quantized_forward(self, *args, **kwargs):
+    def quantized_forward(self, *args, **kwargs): # pylint: disable=missing-function-docstring
         kernel = self.get_kernel()
 
         if not kernel or _is_computing_encodings(self):

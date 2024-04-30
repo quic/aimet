@@ -393,7 +393,7 @@ class QuantAnalyzer:
             try:
                 model_inputs = next(iterator)
             except StopIteration:
-                raise ValueError(f'Can not fetch {self._num_batches} batches from dataset')
+                raise ValueError(f'Can not fetch {self._num_batches} batches from dataset')  # pylint: disable=raise-missing-from
 
             # Collect output activation data from original op
             feed_dict = create_input_feed_dict(self._session.graph, self._start_op_names, model_inputs)

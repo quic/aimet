@@ -40,6 +40,7 @@ from collections import defaultdict
 import onnx
 from packaging import version
 
+# pylint: disable=wrong-import-order
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
 
 # pylint: disable=no-name-in-module, ungrouped-imports

@@ -58,9 +58,8 @@ class VisualizeCompression:
         :param saved_eval_scores_dict_path: file path to the evaluation scores for each layer
         :return: None
         """
-        infile = open(saved_eval_scores_dict_path, 'rb')
-        eval_scores_dict = pickle.load(infile)
-        infile.close()
+        with open(saved_eval_scores_dict_path, 'rb') as infile:
+            eval_scores_dict = pickle.load(infile)
 
         eval_scores_data_frame = pd.DataFrame.from_dict(eval_scores_dict).T
         eval_scores_data_frame.columns = eval_scores_data_frame.columns.map(str)

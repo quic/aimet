@@ -46,7 +46,7 @@ from typing import Optional, List, Dict
 import torch
 from torch import nn
 
-from packaging import version
+from packaging import version  # pylint: disable=wrong-import-order
 from aimet_torch.v2.quantization.base import EncodingBase
 from aimet_torch.v2.quantization.encoding_analyzer import EncodingAnalyzer
 

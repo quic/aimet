@@ -44,6 +44,7 @@ import tensorflow as tf
 from tqdm import tqdm
 
 import jinja2
+from bokeh.resources import CDN
 
 from aimet_tensorflow.adaround.adaround_weight import Adaround, AdaroundParameters
 from aimet_tensorflow.cross_layer_equalization import equalize_model
@@ -591,7 +592,6 @@ class _EvalManager:
         template = env.get_template("auto_quant_diagnostics_template.html")
 
         if any(sess.diagnostics.contains_bokeh() for sess in self._all_sessions):
-            from bokeh.resources import CDN
             head = CDN.render()
         else:
             head = ""
@@ -696,7 +696,7 @@ class _PtqSession(_EvalSession):
     inside a with-as block.
     """
     def __init__(self, *args, **kwargs):
-        super(_PtqSession, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self._ptq_result = None
 
     @property
@@ -787,7 +787,7 @@ class _PtqSession(_EvalSession):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Raises error if set_ptq_result is not called."""
-        super(_PtqSession, self).__exit__(exc_type, exc_val, exc_tb)
+        super().__exit__(exc_type, exc_val, exc_tb)
 
         if self._ptq_result is None:
             raise RuntimeError

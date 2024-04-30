@@ -211,7 +211,7 @@ class DataSubSampler:
         :return: input_data, output_data
         """
 
-        def _hook_to_collect_input_data(module, inp_data, _):
+        def _hook_to_collect_input_data(module, inp_data, _):  # pylint: disable=unused-argument
             """
             hook to collect input data
             """
@@ -219,7 +219,7 @@ class DataSubSampler:
             pruned_layer_inp_data.append(inp_data)
             raise StopForwardException
 
-        def _hook_to_collect_output_data(module, _, out_data):
+        def _hook_to_collect_output_data(module, _, out_data):  # pylint: disable=unused-argument
             """
             hook to collect output data
             """

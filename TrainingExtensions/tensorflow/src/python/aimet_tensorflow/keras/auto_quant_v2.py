@@ -53,6 +53,7 @@ import shutil
 from numpy.ma import copy
 from tqdm import tqdm
 import jinja2
+from bokeh.resources import CDN
 import tensorflow as tf
 
 from aimet_common.cache import Cache
@@ -161,7 +162,7 @@ def _validate_inputs(model: tf.keras.Model, # pylint: disable=too-many-arguments
         raise ValueError('dataset must be of type tf.data.Dataset, not ' + str(
             type(dataset).__name__))
 
-    if not isinstance(eval_callback, Callable):
+    if not isinstance(eval_callback, Callable):  # pylint: disable=isinstance-second-argument-not-valid-type
         raise ValueError('eval_callback must be of type Callable, not ' +
                          str(type(eval_callback).__name__))
 
@@ -604,7 +605,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         with self.eval_manager.session("QuantScheme Selection") as sess:
             self._quantsim_params["quant_scheme"] = self._choose_default_quant_scheme()
 
-        with self.eval_manager.session(f"W32 Evaluation") as sess:
+        with self.eval_manager.session("W32 Evaluation") as sess:
             w32_eval_score = sess.eval(model=fp32_model, param_bw=32)
             _logger.info("Evaluation finished: W32A%d (eval score: %f)",
                          self._quantsim_params["output_bw"], w32_eval_score)
@@ -802,7 +803,6 @@ class _EvalManager:
         template = env.get_template(os.path.basename(self.HTML_TEMPLATE_FILE))
 
         if any(sess.diagnostics.contains_bokeh() for sess in self._all_sessions.values()):
-            from bokeh.resources import CDN
             head = CDN.render()
         else:
             head = ""

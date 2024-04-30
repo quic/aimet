@@ -37,15 +37,14 @@
 """ Utility functions for ONNX """
 import itertools
 from typing import Dict, List, Union, Tuple
-
 import os
 import pickle
 import numpy as np
 import onnx
 from onnx import helper, numpy_helper, mapping
-from packaging import version
 
 from aimet_common.utils import AimetLogger
+from packaging import version
 
 # pylint: disable=no-name-in-module, ungrouped-imports
 if version.parse(onnx.__version__) >= version.parse("1.14.0"):
@@ -320,9 +319,9 @@ class ParamUtils:
                 for param in model.graph.initializer:
                     if param.name == param_name:
                         return param.dims
-            assert "Param not present in the node"
+            logger.debug("Param not present in the node")
         else:
-            assert "Node type not in allowed op types with param list"
+            logger.debug("Node type not in allowed op types with param list")
         return None
 
     @staticmethod

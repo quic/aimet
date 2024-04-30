@@ -84,7 +84,6 @@ def setup(app):
 # ones.
 extensions = [
     'sphinx.ext.autodoc',
-    'sphinx.ext.autosummary',
     'sphinx_autodoc_typehints',
     'sphinx.ext.autosectionlabel',
     'sphinx.ext.ifconfig',
@@ -240,5 +239,3 @@ html_context = {
                 ["PyTorch", docs_root_url + "torch_v2/torch_docs/index.html"]],
   'display_version_tab': True
 }
-
-autosummary_generate = True

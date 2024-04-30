@@ -589,7 +589,7 @@ def get_all_ops_in_neighborhood(op: Op, direction: str, neighborhood=None, split
                     get_all_ops_in_neighborhood(input_op, 'input', neighborhood, split_type)
                     get_all_ops_in_neighborhood(input_op, 'output', neighborhood, split_type)
     elif op.output:
-        output_ops = [consumer for consumer in op.output.consumers]
+        output_ops = [consumer for consumer in op.output.consumers]  # pylint: disable=unnecessary-comprehension
         for output_op in output_ops:
             if output_op not in neighborhood:
                 neighborhood[output_op] = 'input'

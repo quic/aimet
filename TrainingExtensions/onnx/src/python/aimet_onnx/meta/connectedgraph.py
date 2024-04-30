@@ -47,7 +47,7 @@ result of an operation. Furthermore the graph representation is bi-directional."
 from typing import List, Union, Dict
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
 import onnx
-from packaging import version
+from packaging import version  # pylint: disable=wrong-import-order
 
 from aimet_common.connected_graph.connectedgraph import ConnectedGraph as AimetCommonConnectedGraph, get_ordered_ops
 from aimet_common.utils import AimetLogger
@@ -171,9 +171,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             for input_name in node.input:
                 if input_name in output_names and output_names[input_name].op_type == 'Constant':
                     continue
-                else:
-                    flag = False
-                    break
+                flag = False
+                break
             if flag and node not in input_ops:
                 input_ops.append(node)
 

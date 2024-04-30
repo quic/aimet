@@ -73,6 +73,7 @@ class MnistParser:
         :return: Input image and labels
         """
         dim = 28
+        # pylint: disable=unexpected-keyword-arg,no-value-for-parameter
         features = tf.compat.v1.parse_single_example(serialized_example,
                                                      features={'label': tf.compat.v1.FixedLenFeature([], tf.int64),
                                                                'image_raw': tf.compat.v1.FixedLenFeature([], tf.string)})
@@ -84,7 +85,7 @@ class MnistParser:
 
         # Convert from bytes to floats 0 -> 1.
         image = tf.cast(image, tf.float32) / 255
-        label = tf.cast(features['label'], tf.int32)
+        label = tf.cast(features['label'], tf.int32)  # pylint: disable=no-value-for-parameter
         labels = tf.one_hot(indices=label, depth=10)
 
         return image, labels
@@ -157,13 +158,13 @@ class ImagenetParser:
         :return: Input image and labels
         """
         dim = 224
-
+        # pylint: disable=unexpected-keyword-arg,no-value-for-parameter
         features = tf.compat.v1.parse_single_example(serialized_example,
                                                      features={
                                                          'image/class/label': tf.FixedLenFeature([], tf.int64),
                                                          'image/encoded': tf.FixedLenFeature([], tf.string)})
         image_data = features['image/encoded']
-        label = tf.cast(features['image/class/label'], tf.int32)
+        label = tf.cast(features['image/class/label'], tf.int32)  # pylint: disable=no-value-for-parameter
         labels = tf.one_hot(indices=label, depth=1000)
 
         # Decode the jpeg

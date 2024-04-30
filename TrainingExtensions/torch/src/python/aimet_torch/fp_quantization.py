@@ -37,6 +37,7 @@
 """ FP8 quantization and supporting range setting functions """
 
 import torch
+import numpy as np
 
 from aimet_common.defs import QuantScheme
 
@@ -179,7 +180,6 @@ def fake_cast_to_ieee_float(x_float, maxval, exponent_bits, mantissa_bits):
     maximum representable value based on the above equation.
     """
     def log2(x):
-        import numpy as np
         if isinstance(x, torch.Tensor):
             return torch.log2(x)
         return np.log2(x)

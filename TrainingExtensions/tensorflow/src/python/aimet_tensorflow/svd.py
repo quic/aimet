@@ -879,12 +879,11 @@ class Svd:
                                 ' Ending rank selection', model_perf, self._error_margin, self._baseline_perf)
                     break
 
-                else:
-                    if objective_score <= optimal_score:
-                        optimal_score = objective_score
-                        logger.info('Found a better value for the objective score %f at rank_index %i',
-                                    optimal_score, rank_index)
-                        best_index = rank_index
+                if objective_score <= optimal_score:
+                    optimal_score = objective_score
+                    logger.info('Found a better value for the objective score %f at rank_index %i',
+                                optimal_score, rank_index)
+                    best_index = rank_index
 
         if best_index != -1:
             self._svd.StoreBestRanks(best_index)

@@ -115,31 +115,31 @@ def line_plot_changes_in_summary_stats(data_before, data_after, x_axis_label=Non
                   title=title,
                   tools="pan, box_zoom, crosshair, reset, save",
                   width_policy="max", sizing_mode='stretch_both', output_backend="webgl")
-    plot.line(x='index', y='min', line_width=2, line_color="#2171b5", legend="Minimum After Optimization",
+    plot.line(x='index', y='min', line_width=2, line_color="#2171b5", legend_label="Minimum After Optimization",
               source=layer_weights_old_model, name="new model")
-    plot.line(x='index', y='max', line_width=2, line_color="green", legend="Maximum After Optimization", source=layer_weights_old_model,
+    plot.line(x='index', y='max', line_width=2, line_color="green", legend_label="Maximum After Optimization", source=layer_weights_old_model,
               name="new model")
-    plot.line(x='index', y='mean', line_width=2, line_color="orange", legend="Mean After Optimization",
+    plot.line(x='index', y='mean', line_width=2, line_color="orange", legend_label="Mean After Optimization",
               source=layer_weights_old_model, name="new model")
 
     plot.line(x='index', y='min', line_width=2, line_color="#2171b5", line_dash='dotted',
-              legend="Minimum Before Optimization", source=layer_weights_new_model, name="old model")
+              legend_label="Minimum Before Optimization", source=layer_weights_new_model, name="old model")
     plot.line(x='index', y='max', line_width=2, line_color="green", line_dash='dotted',
-              legend="Maximum Before Optimizaiton", source=layer_weights_new_model, name="old model")
+              legend_label="Maximum Before Optimizaiton", source=layer_weights_new_model, name="old model")
     plot.line(x='index', y='mean', line_width=2, line_color="orange", line_dash='dotted',
-              legend="Mean Before Optimization", source=layer_weights_new_model, name="old model")
+              legend_label="Mean Before Optimization", source=layer_weights_new_model, name="old model")
 
     plot.varea(x=data_after.index,
                y1=data_after['min'],
-               y2=data_before['min'], fill_alpha=0.3, legend="shaded region", name="new model")
+               y2=data_before['min'], fill_alpha=0.3, legend_label="shaded region", name="new model")
 
     plot.varea(x=data_after.index,
                y1=data_after['max'],
-               y2=data_before['max'], fill_color="green", fill_alpha=0.3, legend="shaded region")
+               y2=data_before['max'], fill_color="green", fill_alpha=0.3, legend_label="shaded region")
 
     plot.varea(x=data_after.index,
                y1=data_after['mean'],
-               y2=data_before['mean'], fill_color="orange", fill_alpha=0.3, legend="shaded region")
+               y2=data_before['mean'], fill_color="orange", fill_alpha=0.3, legend_label="shaded region")
 
     plot.legend.location = "top_left"
     plot.legend.click_policy = "hide"
@@ -280,11 +280,11 @@ def line_plot_summary_statistics_model(layer_name, layer_weights_data_frame, hei
                   tools="pan, box_zoom, crosshair, reset, save",
                   width=width, height=height, output_backend="webgl")
     plot.line(x='index', y='min', line_width=2, line_color="#2171b5",
-              legend="Minimum", source=layer_weights)
+              legend_label="Minimum", source=layer_weights)
     plot.line(x='index', y='max', line_width=2, line_color="green",
-              legend="Maximum", source=layer_weights)
+              legend_label="Maximum", source=layer_weights)
     plot.line(x='index', y='mean', line_width=2, line_color="orange",
-              legend="Average", source=layer_weights)
+              legend_label="Average", source=layer_weights)
 
     plot.legend.location = "top_left"
     plot.legend.click_policy = "hide"

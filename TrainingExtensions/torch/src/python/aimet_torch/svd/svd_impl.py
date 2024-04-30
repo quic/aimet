@@ -146,6 +146,7 @@ class SvdImpl:
         :return:
             True if the model is on GPU, False if on CPU
         """
+        # pylint: disable=consider-using-generator,use-a-generator
         return all([param.is_cuda for param in self._model.parameters()])
 
     def _final_compressed_network(self, best_index, svd_rank_pair_dict_best_index, rank_stats_list):

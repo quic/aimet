@@ -50,7 +50,7 @@ def visualize_changes_after_optimization(
         new_model: torch.nn.Module,
         results_dir: str,
         selected_layers: List = None
-) -> List[plotting.Figure]:
+) -> List[plotting.figure]:
     """
     Visualizes changes before and after some optimization has been applied to a model.
 
@@ -94,7 +94,7 @@ def visualize_weight_ranges(
         model: torch.nn.Module,
         results_dir: str,
         selected_layers: List = None
-) -> List[plotting.Figure]:
+) -> List[plotting.figure]:
     """
     Visualizes weight ranges for each layer through a scatter plot showing mean plotted against the standard deviation,
     the minimum plotted against the max, and a line plot with min, max, and mean for each output channel.
@@ -127,7 +127,7 @@ def visualize_relative_weight_ranges_to_identify_problematic_layers(
         model: torch.nn.Module,
         results_dir: str,
         selected_layers: List = None
-) -> List[plotting.Figure]:
+) -> List[plotting.figure]:
     """
     For each of the selected layers, publishes a line plot showing  weight ranges for each layer, summary statistics
     for relative weight ranges, and a histogram showing weight ranges of output channels

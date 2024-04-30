@@ -77,7 +77,7 @@ class QcQuantizableMultiHeadAttention(MultiHeadAttention):
                  default_data_type: QuantizationDataType = QuantizationDataType.int,
                  copy_source_weights=None,
                  **kwargs):
-        super(QcQuantizableMultiHeadAttention, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.quant_scheme = quant_scheme
         self.rounding_mode = rounding_mode
         self.default_output_bw = default_output_bw
@@ -102,7 +102,7 @@ class QcQuantizableMultiHeadAttention(MultiHeadAttention):
             "copy_source_weights":
                 self.copy_source_weights
         }
-        base_config = super(QcQuantizableMultiHeadAttention, self).get_config()
+        base_config = super().get_config()
         base_config.update(config)
         return base_config
 
@@ -132,7 +132,7 @@ class QcQuantizableMultiHeadAttention(MultiHeadAttention):
         :param value: value tensor or TensorShape
         :param key: key tensor or TensorShape
         """
-        super(QcQuantizableMultiHeadAttention, self)._build_from_signature(query, value, key)
+        super()._build_from_signature(query, value, key)
 
         if key is None:
             key = value
@@ -179,7 +179,7 @@ class QcQuantizableMultiHeadAttention(MultiHeadAttention):
         lambda layers for all operations that need quantized inputs or outputs, and wraps them with QcQuantizeWrappers
         :param rank: the rank of query, key, value tensors.
         """
-        super(QcQuantizableMultiHeadAttention, self)._build_attention(rank)
+        super()._build_attention(rank)
 
         def scale_and_multiply(inputs):
             return special_math_ops.einsum(self._dot_product_equation,
@@ -267,7 +267,7 @@ class QcQuantizableMultiHeadAttention(MultiHeadAttention):
             key_layer = self._key_dense
             value_layer = self._value_dense
             output_layer = self._output_dense
-            attn_func = super(QcQuantizableMultiHeadAttention, self)._compute_attention
+            attn_func = super()._compute_attention
 
         query = query_layer(query)
         key = key_layer(key)

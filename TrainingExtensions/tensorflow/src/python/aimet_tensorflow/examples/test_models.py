@@ -392,13 +392,13 @@ def pad_model():
 
     inputs = tf.keras.Input(shape=(10, 10, 3,))
     x = tf.keras.layers.Conv2D(16, (1, 1))(inputs)
-    x = tf.pad(x, tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]]))
+    x = tf.pad(x, tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]]))  # pylint: disable=no-value-for-parameter
     x = tf.keras.layers.Conv2D(8, (2, 2))(x)
-    x = tf.pad(x, tf.constant([[0, 0], [1, 1], [1, 1], [1, 1]]))
+    x = tf.pad(x, tf.constant([[0, 0], [1, 1], [1, 1], [1, 1]]))  # pylint: disable=no-value-for-parameter
     x = tf.keras.layers.Conv2D(8, (2, 2))(x)
     x = tf.pad(x, tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]]), constant_values=2)
     x = tf.keras.layers.Conv2D(8, (2, 2))(x)
-    x = tf.pad(x, tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]]), mode='SYMMETRIC')
+    x = tf.pad(x, tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]]), mode='SYMMETRIC')  # pylint: disable=unexpected-keyword-arg,no-value-for-parameter
     x = tf.keras.layers.Conv2D(8, (2, 2))(x)
     x = tf.keras.layers.Flatten()(x)
     outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="pad_model")(x)

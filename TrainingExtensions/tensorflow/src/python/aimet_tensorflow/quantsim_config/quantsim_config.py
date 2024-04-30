@@ -41,6 +41,7 @@ import itertools
 import tensorflow as tf
 from packaging import version
 
+# pylint: disable=wrong-import-order
 import aimet_common.libpymo as pymo
 from aimet_common.quantsim_config.json_config_importer import DefaultsType, OpType, ParamType, OpTypeType, \
     SupergroupType, ConfigType, ConfigDictKeys
