@@ -41,6 +41,7 @@ from dataclasses import dataclass
 from typing import List, Callable, Dict, Any, Tuple, Optional
 
 import jinja2
+from bokeh.resources import CDN
 from tqdm import tqdm
 import tensorflow as tf
 
@@ -492,7 +493,6 @@ class _EvalManager:
         template = env.get_template("auto_quant_diagnostics_template.html")
 
         if any(sess.diagnostics.contains_bokeh() for sess in self._all_sessions):
-            from bokeh.resources import CDN
             head = CDN.render()
         else:
             head = ""
@@ -582,7 +582,7 @@ class _PtqSession(_EvalSession):
     inside a with-as block.
     """
     def __init__(self, *args, **kwargs):
-        super(_PtqSession, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self._ptq_result = None
 
     @property

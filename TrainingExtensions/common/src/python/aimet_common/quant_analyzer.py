@@ -49,7 +49,7 @@ DEFAULT_BOKEH_FIGURE_HEIGHT = 300
 
 
 def export_per_layer_sensitivity_analysis_plot(layer_wise_eval_score_dict: Dict, results_dir: str,
-                                               title: str) -> plotting.Figure:
+                                               title: str) -> plotting.figure:
     """
     Export per layer sensitivity analysis in html format.
 
@@ -67,7 +67,7 @@ def export_per_layer_sensitivity_analysis_plot(layer_wise_eval_score_dict: Dict,
     filename = os.path.join(results_dir, f"{title}.html")
     plotting.output_file(filename)
     plot = plotting.figure(x_range=layer_names,
-                           plot_height=DEFAULT_BOKEH_FIGURE_HEIGHT,
+                           height=DEFAULT_BOKEH_FIGURE_HEIGHT,
                            title=title,
                            x_axis_label="Layers",
                            y_axis_label="Eval score")
@@ -122,7 +122,7 @@ def create_and_export_min_max_ranges_plot(min_max_ranges_dict: Dict,
 
 
 def _export_per_layer_min_max_ranges_plot(layer_wise_min_max_ranges_dict: Dict, results_dir: str, title: str) \
-        -> plotting.Figure:
+        -> plotting.figure:
     """
     Export per layer encoding min-max range in html format.
     :param layer_wise_min_max_ranges_dict: layer wise eval score dictionary.
@@ -143,7 +143,7 @@ def _export_per_layer_min_max_ranges_plot(layer_wise_min_max_ranges_dict: Dict, 
     filename = os.path.join(results_dir, f"{title}.html")
     plotting.output_file(filename)
     plot = plotting.figure(x_range=layer_names,
-                           plot_height=DEFAULT_BOKEH_FIGURE_HEIGHT,
+                           height=DEFAULT_BOKEH_FIGURE_HEIGHT,
                            title=title)
     plot.vbar(x=layer_names, width=0.2, bottom=enc_min_values, top=enc_max_values)
     plot.xaxis.major_label_orientation = "vertical"
@@ -153,7 +153,7 @@ def _export_per_layer_min_max_ranges_plot(layer_wise_min_max_ranges_dict: Dict, 
     return plot
 
 
-def export_per_layer_mse_plot(mse_loss_dict: Dict, results_dir: str, title: str) -> plotting.Figure:
+def export_per_layer_mse_plot(mse_loss_dict: Dict, results_dir: str, title: str) -> plotting.figure:
     """
     Export per layer MSE loss between fp32 and quantized output activations in html format.
     :param mse_loss_dict: layer wise MSE loss.
@@ -171,7 +171,7 @@ def export_per_layer_mse_plot(mse_loss_dict: Dict, results_dir: str, title: str)
     filename = os.path.join(results_dir, f"{title}.html")
     plotting.output_file(filename)
     plot = plotting.figure(x_range=layer_names,
-                           plot_height=DEFAULT_BOKEH_FIGURE_HEIGHT,
+                           height=DEFAULT_BOKEH_FIGURE_HEIGHT,
                            title=title,
                            x_axis_label="Layers",
                            y_axis_label="MSE loss")
@@ -186,7 +186,7 @@ def export_per_layer_mse_plot(mse_loss_dict: Dict, results_dir: str, title: str)
 def export_stats_histogram_plot(histogram: List,
                                 encoding: libpymo.TfEncoding,
                                 results_dir: str,
-                                title: str) -> plotting.Figure:
+                                title: str) -> plotting.figure:
     """
     Export histogram (PDF) of statistics with overlaying encoding min and max
     values in html format.
@@ -205,20 +205,20 @@ def export_stats_histogram_plot(histogram: List,
     # Configure the output file to be saved.
     filename = os.path.join(results_dir, f"{title}.html")
     plotting.output_file(filename)
-    plot = plotting.figure(plot_height=DEFAULT_BOKEH_FIGURE_HEIGHT,
+    plot = plotting.figure(height=DEFAULT_BOKEH_FIGURE_HEIGHT,
                            title=title)
     # Add line and underlying color for histogram.
     plot_source = ColumnDataSource(data=dict(entries=entries, pdfs=pdfs))
-    plot.line("entries", "pdfs", source=plot_source, color="blue", legend="PDF")
+    plot.line("entries", "pdfs", source=plot_source, color="blue", legend_label="PDF")
     band = Band(base="entries", upper="pdfs", source=plot_source, level="underlay", fill_color="blue")
     plot.add_layout(band)
 
     # Overlay encoding min and max values.
     line = Span(location=encoding.min, dimension="height", line_color="green", line_dash="dashed")
-    plot.line([], [], line_dash="dashed", line_color="green", legend='MIN_VAL')
+    plot.line([], [], line_dash="dashed", line_color="green", legend_label='MIN_VAL')
     plot.add_layout(line)
     line = Span(location=encoding.max, dimension="height", line_color="red", line_dash="dashed")
-    plot.line([], [], line_dash="dashed", line_color="red", legend="MAX_VAL")
+    plot.line([], [], line_dash="dashed", line_color="red", legend_label="MAX_VAL")
     plot.add_layout(line)
 
     plotting.save(plot)

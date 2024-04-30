@@ -917,8 +917,8 @@ def get_all_quantizers(model: torch.nn.Module):
     :param model: Root module
     :returns: List of parameter, input, and output quantizers
     """
-    from aimet_torch.qc_quantize_op import QcQuantizeWrapper
-    from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
+    from aimet_torch.qc_quantize_op import QcQuantizeWrapper# pylint: disable=import-outside-toplevel
+    from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent# pylint: disable=import-outside-toplevel
 
     param_quantizers = []
     input_quantizers = []

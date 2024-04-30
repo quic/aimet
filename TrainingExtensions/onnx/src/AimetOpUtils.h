@@ -44,7 +44,7 @@
 #include "DlQuantization/TensorQuantizer.h"
 #include "DlQuantization/TensorQuantizerOpFacade.h"
 #include "Eigen/Core"
-#include "Eigen/src/Core/arch/CUDA/Half.h"
+#include "Eigen/src/Core/arch/Default/Half.h"
 #include "OnnxOpUtils.h"
 #include "QuantizeDequantizeUtils.hpp"
 

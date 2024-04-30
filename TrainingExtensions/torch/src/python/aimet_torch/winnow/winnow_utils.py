@@ -97,7 +97,7 @@ class ReShape(nn.Module):
 
     def __init__(self, *args):
         """ Desired shape is passed in as argument. """
-        super(ReShape, self).__init__()
+        super().__init__()
         self.shape = args
 
     # pylint: disable=arguments-differ

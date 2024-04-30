@@ -62,7 +62,7 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         :param channel_axis: Channel axis of parameter tensor. Only used during per channel Adaround.
         """
         #TODO Remove the hardcoding of data_type
-        super(AdaroundTensorQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
+        super().__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
                                                       enabled_by_default, QuantizationDataType.int)
         self.encoding = None
         # V in System HLD

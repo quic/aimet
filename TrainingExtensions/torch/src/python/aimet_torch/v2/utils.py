@@ -63,7 +63,7 @@ def _is_reducible(src_shape: Tuple[int, ...],
     """
     Returns true if source shape can be reduced as target shape
     """
-    return _is_expandable(target_shape, src_shape)
+    return _is_expandable(target_shape, src_shape)  # pylint: disable=arguments-out-of-order
 
 
 def reduce(input: torch.Tensor, shape: Tuple[int, ...], reduce_op: Callable):

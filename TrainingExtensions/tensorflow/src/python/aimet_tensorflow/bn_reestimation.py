@@ -203,10 +203,10 @@ def _get_tf_vars_and_orig_values(sim: QuantizationSimModel) -> Tuple[Dict[tf.Var
     mean_tf_vars, variance_tf_vars, momentum_tf_vars, is_training_tf_vars = _get_all_tf_bn_vars_list(sim)
 
     with sim.session.graph.as_default():
-        mean_checkpoints = dict(zip(mean_tf_vars, sim.session.run([v for v in mean_tf_vars])))
-        variance_checkpoints = dict(zip(variance_tf_vars, sim.session.run([v for v in variance_tf_vars])))
-        momentum_checkpoints = dict(zip(momentum_tf_vars, sim.session.run([v for v in momentum_tf_vars])))
-        is_training_checkpoints = dict(zip(is_training_tf_vars, sim.session.run([v for v in is_training_tf_vars])))
+        mean_checkpoints = dict(zip(mean_tf_vars, sim.session.run(list(mean_tf_vars))))
+        variance_checkpoints = dict(zip(variance_tf_vars, sim.session.run(list(variance_tf_vars))))
+        momentum_checkpoints = dict(zip(momentum_tf_vars, sim.session.run(list(momentum_tf_vars))))
+        is_training_checkpoints = dict(zip(is_training_tf_vars, sim.session.run(list(is_training_tf_vars))))
 
     return mean_checkpoints, variance_checkpoints, momentum_checkpoints, is_training_checkpoints
 

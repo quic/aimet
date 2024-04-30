@@ -105,7 +105,7 @@ class ActivationSampler:
                     break
 
             except tf.errors.OutOfRangeError:
-                raise StopIteration("Can not fetch {} batches from dataset.".format(num_batches))
+                raise StopIteration("Can not fetch {} batches from dataset.".format(num_batches))  # pylint: disable=raise-missing-from
 
         all_inp_data = np.vstack(all_inp_data)
         all_out_data = np.vstack(all_out_data)

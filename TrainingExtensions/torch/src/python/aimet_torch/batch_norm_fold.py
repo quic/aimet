@@ -159,7 +159,7 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
     :param conv_wrapper: QcQuantizeWrapper that wraps conv or linear layer.
     :param bn_wrapper: QcQuantizeWrapper that wraps bn.
     """
-    # pylint: disable=protected-access, too-many-locals, too-many-branches, bad-whitespace, too-many-statements
+    # pylint: disable=protected-access, too-many-locals, too-many-branches, too-many-statements
     conv = conv_wrapper._module_to_wrap
     bn = bn_wrapper._module_to_wrap
 

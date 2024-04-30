@@ -170,9 +170,9 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         if 'in_quant_enabled' in kwargs.keys():
             new_kwargs = dict(kwargs)
             new_kwargs.pop('in_quant_enabled')
-            super(QcQuantizeWrapper, self).__init__(**new_kwargs)
+            super().__init__(**new_kwargs)
         else:
-            super(QcQuantizeWrapper, self).__init__(**kwargs)
+            super().__init__(**kwargs)
         self._layer_to_wrap = layer_to_wrap
         self._activation_quant_settings = activation_quant_settings
         self._param_quant_settings = param_quant_settings

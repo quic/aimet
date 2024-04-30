@@ -50,9 +50,12 @@ import sys
 import io
 from unittest.mock import patch
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, Mapping
+import pickle
+from uuid import uuid4
 import torch
 from torch.utils.data import DataLoader
 import jinja2
+from bokeh.resources import CDN
 from tqdm import tqdm
 
 from aimet_torch import utils
@@ -166,7 +169,7 @@ def _validate_inputs(model: torch.nn.Module, # pylint: disable=too-many-argument
         raise ValueError('data_loader must be of type DataLoader, not ' + str(
             type(data_loader).__name__))
 
-    if not isinstance(eval_callback, Callable):
+    if not isinstance(eval_callback, Callable):  # pylint: disable=isinstance-second-argument-not-valid-type
         raise ValueError('eval_callback must be of type Callable, not ' + str(type(eval_callback).__name__))
 
     if not isinstance(dummy_input, (torch.Tensor, Tuple)):
@@ -695,7 +698,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         with self.eval_manager.session("QuantScheme Selection") as sess:
             self._quantsim_params["quant_scheme"] = sess.wrap(self._choose_default_quant_scheme)()
 
-        with self.eval_manager.session(f"W32 Evaluation") as sess:
+        with self.eval_manager.session("W32 Evaluation") as sess:
             w32_eval_score = sess.wrap(sess.eval)(model=fp32_model, param_bw=32)
             _logger.info("Evaluation finished: W32A%d (eval score: %f)",
                          self._quantsim_params["output_bw"], w32_eval_score)
@@ -885,7 +888,6 @@ class _EvalManager:
         template = env.get_template(os.path.basename(self.HTML_TEMPLATE_FILE))
 
         if any(sess.diagnostics.contains_bokeh() for sess in self._all_sessions.values()):
-            from bokeh.resources import CDN
             head = CDN.render()
         else:
             head = ""
@@ -1008,8 +1010,6 @@ class _EvalSession: # pylint: disable=too-many-instance-attributes
         :param fn: Function to wrap.
         :returns: Function whose return value is cached.
         """
-        import pickle
-        from uuid import uuid4
 
         results_dir = self._results_dir
         class CachedResult:

@@ -46,7 +46,7 @@ import re
 from typing import List, Dict, Set, Union
 from collections import OrderedDict
 import tensorflow as tf
-from packaging import version
+from packaging import version  # pylint: disable=wrong-import-order
 
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.common.sub_graph_matcher_op_templates import op_type_templates

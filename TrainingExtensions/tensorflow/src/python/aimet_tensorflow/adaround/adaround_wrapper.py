@@ -41,7 +41,7 @@ from typing import Union, Dict, List, Tuple
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
-from packaging import version
+from packaging import version  # pylint: disable=wrong-import-order
 
 # Import AIMET specific modules
 import aimet_common.libpymo as libpymo
@@ -73,7 +73,7 @@ class AdaroundWrapper(keras.layers.Layer):
         :param unsigned_symmetric: Unsigned symmetric flag.
         :param enable_per_channel: if set to True, use per channel quantization
         """
-        super(AdaroundWrapper, self).__init__()
+        super().__init__()
 
         self._op = op
         self.enable_per_channel = enable_per_channel
@@ -167,7 +167,7 @@ class AdaroundWrapper(keras.layers.Layer):
 
         # Hard rounding maps alpha to exact zero or one
         def compute_hard_rounding():
-            return tf.cast(alpha > 0, dtype=alpha.dtype)
+            return tf.cast(alpha > 0, dtype=alpha.dtype)  # pylint: disable=unexpected-keyword-arg,no-value-for-parameter
 
         if enable_per_channel:
             assert isinstance(encoding, list), "Per-channel expects encoding to be a list"

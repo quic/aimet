@@ -39,7 +39,7 @@
 
 from typing import Union
 import tensorflow as tf
-from packaging import version
+from packaging import version  # pylint: disable=wrong-import-order
 
 if version.parse(tf.version.VERSION) >= version.parse("2.10"):
     # Ignore pylint errors as keras module is not available in TF 2.4
@@ -142,7 +142,7 @@ class BiasAdd(Layer):
 
         "Initialize method"
 
-        super(BiasAdd, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.units = units
         self.bias_initializer = initializers.get(bias_initializer)
         self.bias_regularizer = regularizers.get(bias_regularizer)
@@ -189,7 +189,7 @@ class BiasAdd(Layer):
                 constraints.serialize(self.bias_constraint)
         }
         # pylint: disable=bad-super-call
-        base_config = super(BiasAdd, self).get_config()
+        base_config = super().get_config()
         base_config.update(config)
         return base_config
 
@@ -212,7 +212,7 @@ class QuantizedLSTMCell(LSTMCell):
 
         """Overriden LSTM Cell __init__"""
 
-        super(QuantizedLSTMCell, self).__init__(units, **kwargs)
+        super().__init__(units, **kwargs)
         self.wrapped_layers = []
 
         self.is_first_step = False
@@ -309,7 +309,7 @@ class QuantizedLSTMCell(LSTMCell):
 
         """Overridden build to call wrap method"""
 
-        # pylint: disable=bad-super-call
+        # pylint: disable=bad-super-call,super-with-arguments
         super(LSTMCell, self).build(input_shape)
 
         self.wrap_LSTM_internals(input_shape)
@@ -351,15 +351,11 @@ class QuantizedLSTMCell(LSTMCell):
 
         if 0 < self.dropout < 1.:
             inputs = inputs * dp_mask[0]
-        else:
-            inputs = inputs
 
         x = self._wrapped_input_matmul(inputs)
 
         if 0 < self.recurrent_dropout < 1.:
             h_tm1 = h_tm1 * rec_dp_mask[0]
-        else:
-            h_tm1 = h_tm1
 
         h = self._wrapped_hidden_st_matmul(h_tm1)
         z = self._wrapped_in_hidden_st_add([x, h])
@@ -367,6 +363,7 @@ class QuantizedLSTMCell(LSTMCell):
         if self.use_bias:
             z = self._wrapped_bias_add(z)
 
+        # pylint: disable=unexpected-keyword-arg,redundant-keyword-arg,no-value-for-parameter
         z = tf.split(z, num_or_size_splits=4, axis=1)
         z0, z1, z2, z3 = z
 
@@ -408,6 +405,6 @@ class QuantizedLSTMCell(LSTMCell):
                 self.copy_source_weights
         }
         # pylint: disable=bad-super-call
-        base_config = super(QuantizedLSTMCell, self).get_config()
+        base_config = super().get_config()
         base_config.update(config)
         return base_config

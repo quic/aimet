@@ -40,7 +40,7 @@ from typing import List, Tuple, Dict, Union
 import tensorflow as tf
 from tensorflow.keras import layers
 
-from packaging import version
+from packaging import version  # pylint: disable=wrong-import-order
 if version.parse(tf.version.VERSION) >= version.parse("2.10.1"):
     from keras.layers.core.tf_op_layer import TFOpLambda  # pylint: disable=import-error
 else:
@@ -288,8 +288,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
     def __init__(self, connected_graph: ConnectedGraph, quant_scheme: Union[QuantScheme, str], rounding_mode: str,
                  default_output_bw: int, default_param_bw: int,
                  default_data_type: QuantizationDataType = QuantizationDataType.int, config_file: str = None):
-        super(QuantSimConfigurator, self).__init__(config_file, default_data_type, default_output_bw,
-                                                   default_param_bw)
+        super().__init__(config_file, default_data_type, default_output_bw, default_param_bw)
         self._connected_graph = connected_graph
         self._layer_to_affected_quantizer_info_dict = self._create_layer_to_affected_quantizer_info_dict()
         self._layer_to_config_dict = TreeLikeDictionary()

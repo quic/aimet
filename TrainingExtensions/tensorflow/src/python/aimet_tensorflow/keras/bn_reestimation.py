@@ -78,7 +78,7 @@ def _reset_bn_stats(bn_layers: List[tf.keras.layers.Layer], bn_mean_checkpoints:
         return Handle(cleanup)
     except:
         cleanup()
-        raise ValueError('exception for reset_bn_stats')
+        raise ValueError('exception for reset_bn_stats')  # pylint: disable=raise-missing-from
 
 # pylint: disable=too-many-locals
 def reestimate_bn_stats(model: tf.keras.Model, bn_re_estimation_dataset: tf.data.Dataset,

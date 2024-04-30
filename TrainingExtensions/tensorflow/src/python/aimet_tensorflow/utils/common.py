@@ -377,9 +377,8 @@ def save_data_to_pickle_file(info_to_be_saved, output_path: str, output_file_nam
         os.mkdir(output_path)
     output_file_with_path = os.path.join(output_path, output_file_name)
     # save the dictionaries of quant op nodes added as pickle files
-    outfile = open(output_file_with_path, 'wb')
-    pickle.dump(info_to_be_saved, outfile)
-    outfile.close()
+    with open(output_file_with_path, 'wb') as outfile:
+        pickle.dump(info_to_be_saved, outfile)
 
 
 def load_data_from_pickle_file(filename: str):
@@ -389,9 +388,8 @@ def load_data_from_pickle_file(filename: str):
     :return: data loaded from pickle file
     """
 
-    infile = open(filename, 'rb')
-    loaded_data = pickle.load(infile)
-    infile.close()
+    with open(filename, 'rb') as infile:
+        loaded_data = pickle.load(infile)
     return loaded_data
 
 

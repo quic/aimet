@@ -113,7 +113,7 @@ class QuantizationSimModel(tf.keras.Model):
                                  Note that the mode default_data_type=QuantizationDataType.float is only supported with
                                  default_output_bw=16 and default_param_bw=16
         """
-        super(QuantizationSimModel, self).__init__()
+        super().__init__()
 
         self._model_without_wrappers = model
         if not in_place:

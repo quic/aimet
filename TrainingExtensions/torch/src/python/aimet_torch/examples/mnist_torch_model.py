@@ -115,7 +115,7 @@ class Net(nn.Module):
     def __init__(self):
         """ Constructor """
 
-        super(Net, self).__init__()
+        super().__init__()
         self.conv1 = nn.Conv2d(1, 32, kernel_size=5, padding=(2, 2))
         self.relu1 = nn.ReLU()
         self.maxpool1 = nn.MaxPool2d(2)
@@ -151,7 +151,7 @@ class ExtendedNet(nn.Module):
     def __init__(self):
         """ Constructor """
 
-        super(ExtendedNet, self).__init__()
+        super().__init__()
         self.conv1 = nn.Conv2d(1, 32, kernel_size=5, padding=(2, 2))
         self.conv2 = nn.Conv2d(32, 64, kernel_size=5, padding=(2, 2), bias=False)
         self.conv2_drop = nn.Dropout2d()

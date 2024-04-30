@@ -73,7 +73,7 @@ class AdaroundWrapper(keras.layers.Layer):
         :param unsigned_symmetric: Unsigned symmetric flag
         :param per_channel_enabled: Flag set for per channel encodings
         """
-        super(AdaroundWrapper, self).__init__()
+        super().__init__()
 
         self._layer = layer
         self.per_channel_enabled = per_channel_enabled
