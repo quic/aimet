@@ -713,7 +713,8 @@ class TestSqnrEncodingAnalyzer:
         When: Compute encodings
         Then: Encodings have shape == encoding_analyzer.shape
         """
-        x = torch.arange(5*3*5*10, dtype=torch.float).view(5, 3, 5, 10)
+        torch.manual_seed(10)
+        x = torch.randn(5*3*5*100, dtype=torch.float).view(5, 3, 5, 100)
         shape = (5, 1, 5, 1)
 
         encoding_analyzer = SqnrEncodingAnalyzer(shape=shape)
@@ -732,8 +733,6 @@ class TestSqnrEncodingAnalyzer:
         for i in range(25):
             assert merged_histograms[i].min == x[i//5, :, i%5, :].min().item() / 2
             assert merged_histograms[i].max == x[i//5, :, i%5, :].max().item() / 2
-
-        pytest.skip() # TODO (pdangi): Delete this line
 
         encoding_analyzer.update_stats(x)
         merged_histograms = encoding_analyzer.observer.get_stats()
