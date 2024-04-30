@@ -123,7 +123,7 @@ class QcQuantizeStandAloneBase(nn.Module):
         :param quant_scheme: Quantization scheme (e.g. TF Enhanced)
         :param is_symmetric: Symmetric or asymmetric quantization
         """
-        super(QcQuantizeStandAloneBase, self).__init__()
+        super().__init__()
         self.output_quantizers = [tensor_quantizer_factory(activation_bw, round_mode,
                                                            quant_scheme,
                                                            is_symmetric,
@@ -216,7 +216,7 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
         :param num_inputs: Number of inputs for this module
         :param num_outputs: Number of outputs for this module
         """
-        super(QcQuantizeWrapper, self).__init__()
+        super().__init__()
 
         if data_type == QuantizationDataType.float and weight_bw not in [8, 16]:
             raise ValueError('weight_bw in [8, 16] is the only supported configuration with floating point data type')
@@ -574,8 +574,8 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                     _logger.info("%s quantizer %s is disabled, and the provided encoding can't be set",
                                  type_of_quantizer, str(i))
                     continue
-                else:
-                    raise RuntimeError("The quantsim passed for loading encodings does not have the same "
+
+                raise RuntimeError("The quantsim passed for loading encodings does not have the same "
                                        "configuration as the quantsim which was used to export the encodings")
 
             if quantizer._is_encoding_frozen: # pylint: disable=protected-access
@@ -621,7 +621,7 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
         # Translate round mode and quant scheme into pymo types prior to initializing super()
         round_mode = MAP_ROUND_MODE_TO_PYMO[round_mode]
 
-        super(StaticGridQuantWrapper, self).__init__(module_to_wrap, weight_bw, activation_bw, round_mode, quant_scheme,
+        super().__init__(module_to_wrap, weight_bw, activation_bw, round_mode, quant_scheme,
                                                      is_output_quantized, is_symmetric, num_inputs,
                                                      num_outputs, data_type)
 
@@ -894,7 +894,7 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
         if data_type != QuantizationDataType.int:
             raise ValueError('Only QuantizationDataType.int is supported for LearnedGridQuantWrapper')
 
-        super(LearnedGridQuantWrapper, self).__init__(module_to_wrap, weight_bw, activation_bw, round_mode,
+        super().__init__(module_to_wrap, weight_bw, activation_bw, round_mode,
                                                       quant_scheme, is_output_quantized, is_symmetric, num_inputs,
                                                       num_outputs, data_type)
 
@@ -1130,7 +1130,7 @@ class NativeTorchQuantWrapper(nn.Module):
         :param module_name: name of module
         :param device: device on which model is
         """
-        super(NativeTorchQuantWrapper, self).__init__()
+        super().__init__()
 
         self._module_to_wrap = getattr(post_training_module, module_name)
         if isinstance(post_training_module, StaticGridQuantWrapper):

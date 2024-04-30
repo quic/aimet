@@ -308,8 +308,8 @@ class AdaroundOptimizer:
             if self._is_tensor_pinned(smaller_act_data, name=smaller_act_data_name):
                 inp_tensor = self._optimizer_session.graph.get_tensor_by_name("all_inp_data:0")
                 out_tensor = self._optimizer_session.graph.get_tensor_by_name("all_orig_out_data:0")
-                inp_tensor = tf.gather(inp_tensor, self._indices_tensor)
-                out_tensor = tf.gather(out_tensor, self._indices_tensor)
+                inp_tensor = tf.gather(inp_tensor, self._indices_tensor)  # pylint: disable=no-value-for-parameter
+                out_tensor = tf.gather(out_tensor, self._indices_tensor)  # pylint: disable=no-value-for-parameter
                 tensors_pinned = True
 
         return tensors_pinned, inp_tensor, out_tensor

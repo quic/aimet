@@ -196,7 +196,7 @@ class QuantizableMultiheadAttention(nn.MultiheadAttention):
                  kdim: int = None, vdim: int = None, batch_first: bool = False,
                  device=None, dtype=None) -> None:
         factory_kwargs = {'device': device, 'dtype': dtype}
-        super(QuantizableMultiheadAttention, self).__init__(embed_dim, num_heads, dropout,
+        super().__init__(embed_dim, num_heads, dropout,
                                                             bias, add_bias_kv,
                                                             add_zero_attn, kdim, vdim, batch_first, **factory_kwargs)
         self.linear_Q = nn.Linear(self.embed_dim, self.embed_dim, bias=bias, **factory_kwargs)
@@ -719,6 +719,7 @@ def create_quantizable_transformer_encoder_layer(
     :param transformerEncoderLayer: Existing torch.nn.TransformerEncoderLayer module
     :return: Newly created QuantizableTransformerEncoderLayer module
     """
+    # pylint: disable=isinstance-second-argument-not-valid-type
     if isinstance(transformerEncoderLayer.activation, (torch.nn.modules.activation.ReLU, torch.nn.functional.relu)):
         activation = 'relu'
     elif isinstance(transformerEncoderLayer.activation, (torch.nn.modules.activation.GELU, torch.nn.functional.gelu)):
@@ -746,6 +747,7 @@ def create_quantizable_transformer_decoder_layer(
     :param transformerDecoderLayer: Existing torch.nn.TransformerDecoderLayer module
     :return: Newly created QuantizableTransformerDecoderLayer module
     """
+    # pylint: disable=isinstance-second-argument-not-valid-type
     if isinstance(transformerDecoderLayer.activation, (torch.nn.modules.activation.ReLU, torch.nn.functional.relu)):
         activation = 'relu'
     elif isinstance(transformerDecoderLayer.activation, (torch.nn.modules.activation.GELU, torch.nn.functional.gelu)):

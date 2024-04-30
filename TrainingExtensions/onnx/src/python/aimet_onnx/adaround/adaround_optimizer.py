@@ -44,7 +44,7 @@ from onnx import numpy_helper
 import torch
 import torch.nn.functional as functional
 from torch.utils.data import Dataset
-from packaging import version
+from packaging import version  # pylint: disable=wrong-import-order
 
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger
@@ -330,5 +330,5 @@ def update_sim_weight(quant_model: onnx.ModelProto, weights: onnx.TensorProto, w
     for tensor in quant_model.model.graph.initializer:
         if tensor.name == weight_name:
             tensor.raw_data = weights
-            break
-    assert "Could not find %s in QuantSim model", weight_name
+            return
+    logger.info("Could not find %s in QuantSim model", weight_name)

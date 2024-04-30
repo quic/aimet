@@ -50,8 +50,11 @@ import io
 from unittest.mock import patch
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, Mapping, Iterable
 import shutil
-import jinja2
+import pickle
+from uuid import uuid4
 from tqdm import tqdm
+import jinja2
+from bokeh.resources import CDN
 
 import onnx
 import onnxruntime as ort
@@ -166,7 +169,7 @@ def _validate_inputs(model: Union[onnx.ModelProto, ONNXModel], # pylint: disable
         raise ValueError('data_loader must be of type Iterable, not ' + str(
             type(data_loader).__name__))
 
-    if not isinstance(eval_callback, Callable):
+    if not isinstance(eval_callback, Callable):  # pylint: disable=isinstance-second-argument-not-valid-type
         raise ValueError('eval_callback must be of type Callable, not ' + str(type(eval_callback).__name__))
 
     if not isinstance(dummy_input, Dict):
@@ -630,7 +633,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
             self._quantsim_params["quant_scheme"] = sess.wrap(self._choose_default_quant_scheme)()
 
         # Early exit
-        with self.eval_manager.session(f"W32 Evaluation") as sess:
+        with self.eval_manager.session("W32 Evaluation") as sess:
             w32_eval_score = sess.wrap(sess.eval)(fp32_model, param_bw=32)
             _logger.info("Evaluation finished: W32A%d (eval score: %f)",
                          self._quantsim_params["output_bw"], w32_eval_score)
@@ -826,7 +829,6 @@ class _EvalManager:
         template = env.get_template(os.path.basename(self.HTML_TEMPLATE_FILE))
 
         if any(sess.diagnostics.contains_bokeh() for sess in self._all_sessions.values()):
-            from bokeh.resources import CDN
             head = CDN.render()
         else:
             head = ""
@@ -946,9 +948,6 @@ class _EvalSession: # pylint: disable=too-many-instance-attributes
         :param fn: Function to wrap.
         :returns: Function whose return value is cached.
         """
-        import pickle
-        from uuid import uuid4
-
         results_dir = self._results_dir
         class CachedResult:
             """Cached result """

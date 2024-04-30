@@ -49,7 +49,7 @@ class BlockwiseLinear(torch.nn.Module):
     of each linear module are summed up.
     """
     def __init__(self, linear_module: torch.nn.Linear, block_size: int):
-        super(BlockwiseLinear, self).__init__()
+        super().__init__()
         self.block_size = block_size
         self.linears = torch.nn.ModuleList()
         self.elementwise_adds = torch.nn.ModuleList()

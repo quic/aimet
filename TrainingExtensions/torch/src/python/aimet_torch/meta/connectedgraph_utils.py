@@ -131,6 +131,7 @@ def get_ops_with_missing_modules(model: torch.nn.Module, model_input: Union[torc
     except:
         logger.error('A connected graph failed to be built. This may prevent from AIMET features from being able to '
                      'run on the model. Please address the errors shown.')
+        # pylint: disable=raise-missing-from
         raise AssertionError('A connected graph failed to be built. This may prevent from AIMET features from being '
                              'able to run on the model. Please address the errors shown.')
 

@@ -49,9 +49,11 @@ import threading
 import time
 from enum import Enum
 from typing import Callable, Dict, List
-
+import multiprocessing
 import yaml
 from tqdm import tqdm
+from bokeh.server.server import Server
+from bokeh.application import Application
 
 try:
     # The build system updates Product, Version and Feature set information in the package_info file.
@@ -145,7 +147,7 @@ class AimetLogger(metaclass=SingletonType):
         with open(abs_file_path, encoding='utf-8') as logging_configuration_file:
             try:
                 config_dict = json.loads(logging_configuration_file.read())
-            except:
+            except:  # pylint: disable=raise-missing-from
                 raise ValueError("Logging configuration file: default_logging_config.json contains invalid format")
 
         logging.config.dictConfig(config_dict)
@@ -240,7 +242,7 @@ def kill_process_with_name_and_port_number(name: str, port_number: int):
     """ Kill a process that is associated with a port number displayed by the command: ps -x """
 
     logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
-    p = subprocess.Popen(['ps', '-x'], stdout=subprocess.PIPE)
+    p = subprocess.Popen(['ps', '-x'], stdout=subprocess.PIPE)  # pylint: disable=consider-using-with
     out, _ = p.communicate()
 
     for line in out.splitlines():
@@ -259,9 +261,6 @@ def start_bokeh_server_session(port: int = None):
     :param port: Port number. If not specified, bokeh server will listen on an arbitrary free port.
     :return: Returns the Bokeh Server URL and the process object used to create the child server process
     """
-    from bokeh.server.server import Server
-    from bokeh.application import Application
-    import multiprocessing
     manager = multiprocessing.Manager()
     d = manager.dict()
     server_started = manager.Event()
@@ -338,7 +337,7 @@ class TqdmStreamHandler(logging.StreamHandler):
     """
     def emit(self, record):
         with tqdm.external_write_mode(file=self.stream):
-            super(TqdmStreamHandler, self).emit(record)
+            super().emit(record)
 
 
 
@@ -400,19 +399,19 @@ class Spinner(tqdm):
             f"{prefix} {title}" for prefix in self.prefixes
         ]
 
-        super(Spinner, self).__init__()
+        super().__init__()
 
     def __str__(self):
         return self._messages[self._index]
 
     def __enter__(self):
         self._refresh_thread.start()
-        return super(Spinner, self).__enter__()
+        return super().__enter__()
 
     def __exit__(self, *args, **kwargs): # pylint: disable=arguments-differ
         self._stop.set()
         self._refresh_thread.join()
-        super(Spinner, self).__exit__(*args, **kwargs)
+        super().__exit__(*args, **kwargs)
 
 
 class Handle:

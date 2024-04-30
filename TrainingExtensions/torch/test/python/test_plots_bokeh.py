@@ -107,7 +107,7 @@ class VisualizeNetwork(unittest.TestCase):
         layout = bokeh_plots.PlotsLayout()
 
         # create a new plot with a range set with a tuple
-        p = figure(plot_width=400, plot_height=400, x_range=(0, 20))
+        p = figure(width=400, height=400, x_range=(0, 20))
 
         # set a range using a Range1d
         p.y_range = Range1d(0, 15)

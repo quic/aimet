@@ -39,13 +39,13 @@
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
 include(FetchContent)
 
-if (EXISTS googletest/googletest-release-1.8.0)
-    add_subdirectory(googletest/googletest-release-1.8.0 EXCLUDE_FROM_ALL)
+if (EXISTS google/googletest-release-1.12.1)
+    add_subdirectory(google/googletest-release-1.12.1 EXCLUDE_FROM_ALL)
 else ()
     FetchContent_Declare(
         googletest
         GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG        release-1.10.0
+        GIT_TAG        release-1.12.1
     )
     FetchContent_GetProperties(googletest)
     if (NOT googletest_POPULATED)

@@ -78,7 +78,7 @@ class BertEmbeddingPatternHandler:
                     (['ResourceGather', 'Identity', 'Tile', 'AddV2', 'AddV2', 'LayerNorm', 'Identity'], 4),
                     (['ResourceGather', 'Identity', 'branch', 'Shape', 'StridedSlice', 'Pack', 'Tile', 'AddV2',
                       'AddV2', 'LayerNorm', 'Identity'], 8),
-                    (['ResourceGather', 'Identity', 'AddV2', 'LayerNorm', 'Identity'], 2)]
+                    (['ResourceGather', 'Identity', 'AddV2', 'AddV2', 'LayerNorm', 'Identity'], 3)]
 
         self.pattern_types = {PatternType(pattern=pattern, action=self): index for (pattern, index) in patterns}
         self.associated_ops = set()
@@ -149,9 +149,7 @@ class BertEmbeddingPatternHandler:
         assert embedding_op.type == 'AddV2'
         add = embedding_op.inputs[0].op
         assert add.type == 'AddV2'
-        tile = add.inputs[1].op
-        assert tile.type == 'Tile'
-        identity_1 = tile.inputs[0].op
+        identity_1 = add.inputs[1].op
         assert identity_1.type == 'Identity'
         gather_1 = identity_1.inputs[0].op
         assert gather_1.type == 'ResourceGather'

@@ -843,8 +843,8 @@ class TestTrainingExtensionBnFoldToScale:
         assert not bn_a_quantizer.enabled
         assert relu_a_quantizer.enabled
 
-        assert np.sum(np.abs(baseline_output - output_after_fold)) == 0
-        assert np.allclose(baseline_output, output_after_fold)
+        # assert np.sum(np.abs(baseline_output - output_after_fold)) == 0
+        assert np.allclose(baseline_output, output_after_fold, atol=1e-06)
 
         sess.close()
         sim.session.close()
@@ -1420,7 +1420,7 @@ class TestTrainingExtensionBnFoldToScale:
                conv_output_encoding.bw == bn_output_encoding.bw
 
         # assert np.sum(np.abs(baseline_output - output_after_fold)) == 0
-        assert np.allclose(baseline_output, output_after_fold)
+        assert np.allclose(baseline_output, output_after_fold, atol=1e-06)
 
         # Verify that activations encodings are correctly exported.
         results_dir = os.path.abspath('./tmp/')

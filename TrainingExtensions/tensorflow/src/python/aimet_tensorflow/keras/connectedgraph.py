@@ -100,7 +100,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         :param model: Keras Model that is built (Sequential, Functional)
         """
-        super(ConnectedGraph, self).__init__()
+        super().__init__()
 
         self._name_to_layer = {}
         self._op_name_to_layer = {}

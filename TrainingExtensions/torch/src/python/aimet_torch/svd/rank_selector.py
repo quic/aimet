@@ -120,13 +120,13 @@ class RankSelector:
                 logger.info('Model performance %f falls below %f percent of baseline performance %f'
                             ' Ending rank selection', model_perf*100, error_margin, baseline_perf*100)
                 break
-            else:
-                if objective_score <= min_objective_score:
-                    min_objective_score = objective_score
-                    logger.info('Found a better value for the objective score %f at rank_index %i',
-                                min_objective_score, rank_index)
-                    best_index = rank_index
-                    svd_rank_pair_dict_best_index = svd_rank_pair_dict
+
+            if objective_score <= min_objective_score:
+                min_objective_score = objective_score
+                logger.info('Found a better value for the objective score %f at rank_index %i',
+                            min_objective_score, rank_index)
+                best_index = rank_index
+                svd_rank_pair_dict_best_index = svd_rank_pair_dict
 
             # Create the Per Rank Index Statistics object.
             rank_data = stats_u.SvdStatistics.PerRankIndex(rank_index=rank_index, model_accuracy=model_accuracy,

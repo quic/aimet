@@ -394,6 +394,7 @@ def reduce_pad(sess: tf.compat.v1.Session,
     except ValueError:
         mode = 'CONSTANT'
 
+    # pylint: disable=unexpected-keyword-arg
     new_tensor = tf.pad(op_tensor_tuple[1][0],
                         new_padding_tensor,
                         constant_values=const_val,

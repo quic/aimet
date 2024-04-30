@@ -44,13 +44,14 @@ from typing import Type, Optional, Tuple
 
 from torch import Tensor
 import torch.nn as nn
+from torch.nn.modules.adaptive import _ASMoutput
 from torch.nn.utils.rnn import PackedSequence
 from torch.utils._pytree import tree_map
 
 from aimet_torch.v2.utils import patch_attr
 import aimet_torch.elementwise_ops as aimet_ops
 
-from .base import BaseQuantizationMixin
+from .base import BaseQuantizationMixin # pylint: disable=import-error
 
 
 class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-method
@@ -62,7 +63,7 @@ class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-m
     qcls_to_cls = OrderedDict() # original class -> quantized class
 
     @contextlib.contextmanager
-    def compute_encodings(self):
+    def compute_encodings(self): # pylint: disable=missing-function-docstring
         def no_op(input: Tensor): # pylint: disable=redefined-builtin
             return input
 
@@ -106,7 +107,7 @@ class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-m
 
 
 class _FakeQuantizedUnaryOpMixin(FakeQuantizationMixin):
-    def quantized_forward(self, *args, **kwargs) -> Tensor:
+    def quantized_forward(self, *args, **kwargs) -> Tensor: # pylint: disable=missing-function-docstring
         x, *others = args
 
         if isinstance(x, Tensor) and x.is_floating_point() and self.input_quantizers[0]:
@@ -126,7 +127,7 @@ class _FakeQuantizedBinaryOpMixin(FakeQuantizationMixin):
         super().__quant_init__()
         self.input_quantizers = nn.ModuleList([None, None])
 
-    def quantized_forward(self, *args, **kwargs) -> Tensor:
+    def quantized_forward(self, *args, **kwargs) -> Tensor: # pylint: disable=missing-function-docstring
         x, y, *others = args
 
         if isinstance(x, Tensor) and x.is_floating_point() and self.input_quantizers[0]:
@@ -149,7 +150,7 @@ class _FakeQuantizedTernaryOpMixin(FakeQuantizationMixin):
         super().__quant_init__()
         self.input_quantizers = nn.ModuleList([None, None, None])
 
-    def quantized_forward(self, *args, **kwargs) -> Tensor:
+    def quantized_forward(self, *args, **kwargs) -> Tensor: # pylint: disable=missing-function-docstring
         x, y, z, *others = args
 
         if isinstance(x, Tensor) and x.is_floating_point() and self.input_quantizers[0]:
@@ -329,6 +330,7 @@ class FakeQuantizedEmbedding(FakeQuantizationMixin, nn.Embedding):
     """
     def __quant_init__(self):
         super().__quant_init__()
+        # pylint: disable=attribute-defined-outside-init
         self.input_quantizers = nn.ModuleList([]) # nn.Embedding takes no float input
         self.output_quantizers = nn.ModuleList([None])
 
@@ -354,6 +356,7 @@ class FakeQuantizedEmbeddingBag(FakeQuantizationMixin, nn.EmbeddingBag):
     """
     def __quant_init__(self):
         super().__quant_init__()
+        # pylint: disable=attribute-defined-outside-init
         self.input_quantizers = nn.ModuleList([None])
         self.output_quantizers = nn.ModuleList([None])
 
@@ -453,6 +456,7 @@ class FakeQuantizedLSTM(FakeQuantizationMixin, nn.LSTM):
     """
     def __quant_init__(self):
         super().__quant_init__()
+        # pylint: disable=attribute-defined-outside-init
         self.input_quantizers = nn.ModuleList([None, nn.ModuleList([None, None])])
         self.output_quantizers = nn.ModuleList([None, nn.ModuleList([None, None])])
 
@@ -507,6 +511,7 @@ class FakeQuantizedLSTMCell(FakeQuantizationMixin, nn.LSTMCell):
     """
     def __quant_init__(self):
         super().__quant_init__()
+        # pylint: disable=attribute-defined-outside-init
         self.input_quantizers = nn.ModuleList([None, nn.ModuleList([None, None])])
         self.output_quantizers = nn.ModuleList([None])
 
@@ -544,6 +549,7 @@ class FakeQuantizedAdaptiveLogSoftmaxWithLoss(FakeQuantizationMixin, nn.Adaptive
     """
     def __quant_init__(self):
         super().__quant_init__()
+        # pylint: disable=attribute-defined-outside-init
         self.input_quantizers = nn.ModuleList([None, None])
         self.output_quantizers = nn.ModuleList([None, None])
 
@@ -551,8 +557,6 @@ class FakeQuantizedAdaptiveLogSoftmaxWithLoss(FakeQuantizationMixin, nn.Adaptive
         """
         Quantized forward impl for nn.AdaptiveLogSoftmaxWithLoss.
         """
-        from torch.nn.modules.adaptive import _ASMoutput
-
         if  self.input_quantizers[0]:
             input_ = self.input_quantizers[0](input_)
 
@@ -697,6 +701,7 @@ class FakeQuantizedBatchNorm(FakeQuantizationMixin, aimet_ops.BatchNorm): # pyli
     """
     def __quant_init__(self):
         super().__quant_init__()
+        # pylint: disable=attribute-defined-outside-init
         self.input_quantizers = nn.ModuleList([None, None, None, None, None])
 
     def quantized_forward(self, # pylint: disable=too-many-arguments, arguments-differ
@@ -744,6 +749,7 @@ class FakeQuantizedAimetGroupNorm(FakeQuantizationMixin, aimet_ops.GroupNorm): #
     """
     def __quant_init__(self):
         super().__quant_init__()
+        # pylint: disable=attribute-defined-outside-init
         self.input_quantizers = nn.ModuleList([None, None, None, None])
 
     def quantized_forward(self, # pylint: disable=arguments-differ
@@ -781,6 +787,7 @@ class FakeQuantizedNonMaxSuppression(FakeQuantizationMixin, aimet_ops.NonMaxSupp
     """
     def __quant_init__(self):
         super().__quant_init__()
+        # pylint: disable=attribute-defined-outside-init
         self.input_quantizers = nn.ModuleList([None])
         self.output_quantizers = nn.ModuleList([None])
 
@@ -855,6 +862,7 @@ class FakeQuantizedWhere(FakeQuantizationMixin, aimet_ops.Where): # pylint: disa
     """
     def __quant_init__(self):
         super().__quant_init__()
+        # pylint: disable=attribute-defined-outside-init
         self.input_quantizers = nn.ModuleList([None, None, None])
         self.output_quantizers = nn.ModuleList([None])
 
@@ -885,6 +893,7 @@ class FakeQuantizedMaskedFill(FakeQuantizationMixin, aimet_ops.MaskedFill): # py
     """
     def __quant_init__(self):
         super().__quant_init__()
+        # pylint: disable=attribute-defined-outside-init
         self.input_quantizers = nn.ModuleList([None, None])
         self.output_quantizers = nn.ModuleList([None])
 

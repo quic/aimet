@@ -47,7 +47,7 @@ from collections import OrderedDict, defaultdict
 import json
 import torch
 import onnx
-from packaging import version
+from packaging import version  # pylint: disable=wrong-import-order
 
 import aimet_common
 import aimet_common.libpymo as libpymo
@@ -1018,7 +1018,7 @@ class QuantizationSimModel:
             param_name = layer_name + '.' + orig_param_name
             if param_encoding is None:
                 continue
-            elif param_name not in valid_param_set:
+            if param_name not in valid_param_set:
                 logger.error('Param tensor {%s} not found in valid param set', param_name)
                 continue
             param_encodings[param_name] = param_encoding
@@ -1470,6 +1470,7 @@ class QuantizationSimModel:
         :return: Model without quantization wrappers.
         """
         original_model = copy.deepcopy(model)
+        # pylint: disable=unnecessary-comprehension
         all_modules_in_original_model = [module for module in original_model.modules()]
         QuantizationSimModel._remove_quantization_wrappers(original_model, all_modules_in_original_model)
         return original_model
@@ -1867,7 +1868,7 @@ class QuantizationSimModel:
         if isinstance(dummy_input, torch.Tensor):
             dummy_input = dummy_input.to(device)
         else:
-            dummy_input = tuple([input.to(device) for input in dummy_input])
+            dummy_input = tuple([input.to(device) for input in dummy_input])  # pylint: disable=consider-using-generator
         QuantizationSimModel._replace_quantization_wrapper_with_native_torch_quantization_nodes(quant_sim_model, device)
 
         if export_to_torchscript:
@@ -2057,7 +2058,7 @@ def has_valid_encodings(qc_quantize_op: ExportableQuantModule) -> bool:
     if isinstance(qc_quantize_op, ExportableQuantModule):
         all_encodings = qc_quantize_op.export_output_encodings() + qc_quantize_op.export_input_encodings() + \
                         list(qc_quantize_op.export_param_encodings().values())
-        return any([encoding is not None for encoding in all_encodings])
+        return any([encoding is not None for encoding in all_encodings])  # pylint: disable=consider-using-generator,use-a-generator
     input_quantizers = list(qc_quantize_op.input_quantizers.values())
     output_quantizers = list(qc_quantize_op.output_quantizers.values())
 

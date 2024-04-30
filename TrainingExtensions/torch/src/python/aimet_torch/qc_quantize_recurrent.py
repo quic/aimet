@@ -141,7 +141,7 @@ class QcQuantizeRecurrent(torch.nn.Module):
         :param num_inputs: Number of inputs for this module (Added to keep a common interface with QcQuantizeWrapper)
         :param num_outputs: Number of outputs for this module (Added to keep a common interface with QcQuantizeWrapper)
         """
-        super(QcQuantizeRecurrent, self).__init__()
+        super().__init__()
 
         self._mode = QcQuantizeOpMode.ANALYSIS
         # clone parameter
