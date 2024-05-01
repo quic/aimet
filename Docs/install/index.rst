@@ -47,25 +47,27 @@ AIMET release packages are hosted at https://github.com/quic/aimet/releases. Eac
 
 .. code-block::
 
-    <PACKAGE_PREFIX>-<VARIANT>_<VERSION>-cp38-cp38-linux_x86_64.whl
+    <PACKAGE_PREFIX>-<VARIANT>_<VERSION>-cp310-cp310-linux_x86_64.whl
 
 Please find more information below about each *VARIANT*.
 
 PyTorch
 
-#. **torch-gpu** for PyTorch 1.13 GPU package with Python 3.8 and CUDA 11.x - *Recommended for use* with PyTorch models
-#. **torch-cpu** for PyTorch 1.13 CPU package with Python 3.8 - If installing on a machine without CUDA
+#. **torch-gpu** for PyTorch 2.1.2 GPU package with Python 3.10 and CUDA 11.x - *Recommended for use* with PyTorch models
+#. **torch-cpu** for PyTorch 2.1.2 CPU package with Python 3.10 - If installing on a machine without CUDA
+#. **torch-gpu** for PyTorch 1.13 GPU package with Python 3.10 and CUDA 11.x - *Recommended for use* with PyTorch models
+#. **torch-cpu** for PyTorch 1.13 CPU package with Python 3.10 - If installing on a machine without CUDA
 
 
 TensorFlow
 
-#. **tf-gpu** for TensorFlow 2.10 GPU package with Python 3.8 - *Recommended for use* with TensorFlow models
-#. **tf-cpu** for TensorFlow 2.10 CPU package with Python 3.8 - If installing on a machine without CUDA
+#. **tf-gpu** for TensorFlow 2.10.1 GPU package with Python 3.10 - *Recommended for use* with TensorFlow models
+#. **tf-cpu** for TensorFlow 2.10.1 CPU package with Python 3.10 - If installing on a machine without CUDA
 
 ONNX
 
-#. **onnx-gpu** for ONNX 1.11.0 GPU package with Python 3.8 - *Recommended for use* with ONNX models
-#. **onnx-cpu** for ONNX 1.11.0 CPU package with Python 3.8 - If installing on a machine without CUDA
+#. **onnx-gpu** for ONNX 1.14.1 GPU package with Python 3.10 - *Recommended for use* with ONNX models
+#. **onnx-cpu** for ONNX 1.14.1 CPU package with Python 3.10 - If installing on a machine without CUDA
 
 System Requirements
 ~~~~~~~~~~~~~~~~~~~
@@ -73,7 +75,7 @@ System Requirements
 The AIMET package requires the following host platform setup:
 
 * 64-bit Intel x86-compatible processor
-* Linux Ubuntu: 20.04 LTS
+* Linux Ubuntu: 22.04 LTS
 * bash command shell
 * For GPU variants:
     * Nvidia GPU card (Compute capability 5.2 or later)

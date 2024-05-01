@@ -45,8 +45,10 @@ This page provides instructions to install AIMET package inside a development do
 Set variant
 ~~~~~~~~~~~
 Set the `<variant_string>` to ONE of the following depending on your desired variant
-    #. For the PyTorch 1.13 GPU variant, use `torch-gpu`
-    #. For the PyTorch 1.13 CPU variant, use `torch-cpu`
+    #. For the PyTorch 2.1.2 GPU variant, use `torch-gpu`
+    #. For the PyTorch 2.1.2 CPU variant, use `torch-cpu`
+    #. For the PyTorch 1.13 GPU variant, use `torch-gpu-pt113`
+    #. For the PyTorch 1.13 CPU variant, use `torch-cpu-pt113`
     #. For the TensorFlow GPU variant, use `tf-gpu`
     #. For the TensorFlow CPU variant, use `tf-cpu`
     #. For the ONNX GPU variant, use `onnx-gpu`
@@ -120,10 +122,10 @@ Go to https://github.com/quic/aimet/releases and identify the release tag of the
 
 Set the <variant_string> to ONE of the following depending on your desired variant
 
-#. For the PyTorch 1.13 GPU variant, use "torch_gpu"
-#. For the PyTorch 1.13 CPU variant, use "torch_cpu"
-#. For the PyTorch 1.9 GPU variant, use "torch_gpu_pt19"
-#. For the PyTorch 1.9 CPU variant, use "torch_cpu_pt19"
+#. For the PyTorch 2.1.2 GPU variant, use "torch_gpu"
+#. For the PyTorch 2.1.2 CPU variant, use "torch_cpu"
+#. For the PyTorch 1.13 GPU variant, use "torch_gpu-pt113"
+#. For the PyTorch 1.13 CPU variant, use "torch_cpu-pt113"
 #. For the TensorFlow GPU variant, use "tf_gpu"
 #. For the TensorFlow CPU variant, use "tf_cpu"
 #. For the ONNX GPU variant, use "onnx_gpu"
@@ -149,13 +151,13 @@ Set the common suffix for the package files as follows:
 
 .. code-block:: bash
 
-    export wheel_file_suffix="cp38-cp38-linux_x86_64.whl"
+    export wheel_file_suffix="cp310-cp310-linux_x86_64.whl"
 
 Install the AIMET packages in the order specified below:
 
 **NOTE:**
     #. Please pre-pend the "apt-get install" and "pip3 install" commands with "sudo -H" as appropriate.
-    #. These instructions assume that pip packages will be installed in the path: /usr/local/lib/python3.8/dist-packages. If that is not the case, please modify it accordingly.
+    #. These instructions assume that pip packages will be installed in the path: /usr/local/lib/python3.10/dist-packages. If that is not the case, please modify it accordingly.
     #. Python dependencies will automatically get installed.
 
 .. code-block:: bash
@@ -178,5 +180,5 @@ Set the common environment variables as follows:
 
 .. code-block:: bash
 
-    source /usr/local/lib/python3.8/dist-packages/aimet_common/bin/envsetup.sh
+    source /usr/local/lib/python3.10/dist-packages/aimet_common/bin/envsetup.sh
 
