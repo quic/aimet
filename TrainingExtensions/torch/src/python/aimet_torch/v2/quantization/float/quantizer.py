@@ -71,16 +71,82 @@ assert _ieee_float_max_representable_value(_BFLOAT16_EXPONENT_BITS, _BFLOAT16_MA
 
 
 class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
-    """
-    Float quantizer
+    r"""
+    Simulates fake quantization by fake-casting the input to the given exponent and mantissa bits based on IEEE float representation. 
 
+   IEEE float representation represents the maximum representible value as 
+   .. math::
+    max = (2 - 2^{-mantissa}) * 2^{(2^{exponent} - bias - 2)}
+
+    Precisely,
+    .. math::
+        out = \left\lceil\frac{x_c}{scale}\right\rfloor * scale
+    where
+    .. math::
+        x_c = clamp(x, -max, max)
+        bias = 2^{exponent} - \log_2(max) + \log_2(2 - 2^{-mantissa}) - 1
+        scale = 2 ^ {\left\lfloor \log_2 |x_c| + bias \right\rfloor - mantissa - bias}
     :param exponent_bits: Number of exponent bits to simulate.
+    :type exponent_bits: int
     :param mantissa_bits: Number of mantissa bits to simulate.
+    :type mantissa_bits: int
     :param dtype: torch.dtype to simulate. This argument is mutually exclusive with
                   exponent_bits and mantissa_bits.
+    :type dtype: torch.dtype
     :param encoding_analyzer: If specified, the maximum value to represent
                               will be determined dynamically based on the input statistics
                               for finer precision.
+    :type encoding_analyzer: EncodingAnalyzer
+
+    .. note::
+        :class:`QuantizeDequantize` cannot run :meth:`forward` until :attr:`min` and :attr:`max` are properly initialized,
+        which can be done based on input statistics using :meth:`compute_encodings` or
+        by manually assigning a new value to :attr:`min` and :attr:`max`.
+        See the examples below.
+    Examples:
+        >>> import aimet_torch.v2.quantization as Q
+        >>> input = torch.randn(5, 10)
+        >>> qdq = Q.float.FloatQuantizeDequantize(mantissa_bits=3, exponent_bits=4)
+        >>> qdq.is_initialized()
+        False
+        >>> with qdq.compute_encodings():
+        ...     _ = qdq(input)
+        ...
+        >>> qdq.is_initialized()
+        True
+        >>> qdq(input)
+        DequantizedTensor([[ 1.9185, -1.7549, -0.2974, -0.8328, -1.3831, -1.1303,
+                             1.3534, -0.6990,  2.0375,  0.1636],
+                           [ 0.6366, -0.1522,  0.6643,  0.0000, -2.2559, -1.0103,
+                             1.2733,  0.8027, -1.0518, -1.3286],
+                           [-0.2097,  1.3444,  0.5180,  1.4677, -0.4440,  0.5674,
+                             0.6414,  0.1727,  0.3207, -1.6774],
+                           [ 0.7324, -0.4534, -1.6393,  1.3254,  0.9650,  1.2556,
+                             0.5697,  0.4069,  0.7673, -0.0465],
+                           [-0.1790,  0.9488, -0.1014,  1.3427,  0.4714, -0.0418,
+                             0.3759,  0.1731,  0.3103,  0.9846]],
+                          grad_fn=<AliasBackward0>)
+        >>> import aimet_torch.v2.quantization as Q
+        >>> input = torch.randn(5, 10)
+        >>> qdq = Q.float.FloatQuantizeDequantize(mantissa_bits=3, exponent_bits=4)
+        >>> qdq.is_initialized()
+        False
+        >>> qdq.min = torch.nn.Parameter(-torch.ones_like(qdq.min))
+        >>> qdq.max = torch.nn.Parameter(torch.ones_like(qdq.max))
+        >>> qdq.is_initialized()
+        True
+        >>> qdq(input)
+        DequantizedTensor([[ 1.0039, -0.9961, -0.2902, -0.8314, -0.9961, -0.9961,
+                             1.0039, -0.6980,  1.0039,  0.1647],
+                           [ 0.6353, -0.1490,  0.6667,  0.0000, -0.9961, -0.9961,
+                             1.0039,  0.8078, -0.9961, -0.9961],
+                           [-0.2118,  1.0039,  0.5176,  1.0039, -0.4471,  0.5647,
+                             0.6353,  0.1804,  0.3216, -0.9961],
+                           [ 0.7294, -0.4471, -0.9961,  1.0039,  0.9569,  1.0039,
+                             0.5725,  0.4157,  0.7686, -0.0471],
+                           [-0.1804,  0.9490, -0.1020,  1.0039,  0.4706, -0.0471,
+                             0.3765,  0.1725,  0.3137,  0.9882]],
+                          grad_fn=<AliasBackward0>)
     """
     maxval: torch.Tensor
 

@@ -8,7 +8,24 @@ quantization.float
 .. automodule:: aimet_torch.v2.quantization.float
 
 
-.. toctree::
+Classes
+-------
 
-   FloatQuantizeDequantize <FloatQuantizeDequantize>
-   QuantizeDequantize <QuantizeDequantize>
+.. autosummary::
+    :toctree: generated
+    :nosignatures:
+
+    QuantizeDequantize
+
+
+Functions
+---------
+
+.. autosummary::
+    :toctree: generated
+    :nosignatures:
+
+    quantize
+    quantize_dequantize
+    dequantize
+

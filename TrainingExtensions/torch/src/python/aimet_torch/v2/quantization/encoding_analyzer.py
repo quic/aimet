@@ -271,6 +271,9 @@ class _HistogramObserver(_Observer[_Histogram]):
         return self.stats
 
 class EncodingAnalyzer(Generic[_Statistics], ABC):
+    '''
+    Base class that gathers statistics of input data and computes encodings
+    '''
     def __init__(self, observer: _Observer):
         self.observer = observer
 
@@ -297,8 +300,25 @@ class EncodingAnalyzer(Generic[_Statistics], ABC):
         pass
 
 class MinMaxEncodingAnalyzer(EncodingAnalyzer[_MinMaxRange]):
-    """
-    Encoding Analyzer for Min-Max calibration technique
+    r"""
+    EncodingAnalyzer subclass which uses MinMax calibration. This involves 
+    tracking the minimum and maximum observed values and computing min-max 
+    range as [min observed value, max observed value]
+
+    Example:
+
+        >>> from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
+        >>> encoding_analyzer = MinMaxEncodingAnalyzer(shape=(1,))
+        >>> stats = encoding_analyzer.update_stats(torch.randn(100))
+        >>> encoding_analyzer.compute_encodings(num_quant_bins = math.pow(2, 8), is_symmetric = False)
+        (tensor([-2.0991]), tensor([2.3696]))
+        >>> encoding_analyzer.compute_encodings_from_stats(stats = stats, num_quant_bins = math.pow(2, 8), is_symmetric = False)
+        (tensor([-2.0991]), tensor([2.3696]))
+        >>> encoding_analyzer.reset_stats()
+        >>> encoding_analyzer.update_stats(torch.randn(100))
+        _MinMaxRange(min=tensor([-2.1721]), max=tensor([2.2592]))
+        >>> encoding_analyzer.compute_encodings(num_quant_bins = math.pow(2, 8), is_symmetric = False)
+        (tensor([-2.1721]), tensor([2.2592]))
     """
     def __init__(self, shape: tuple):
         observer = _MinMaxObserver(shape)
@@ -373,8 +393,28 @@ def adjust_min_max(curr_min, curr_max, num_steps, is_symmetric):
 
 # pylint: disable=arguments-differ
 class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
-    """
-    Encoding Analyzer for Percentile calibration technique
+    r"""
+    EncodingAnalyzer subclass which uses Percentile calibration. This involves
+    recording values in a histogram and computing the min-max range given a 
+    percentile value p. The range would be computed after clipping
+    (100 - percentile)% of the largest and smallest observed values. 
+
+    Example:
+
+        >>> from aimet_torch.v2.quantization.encoding_analyzer import PercentileEncodingAnalyzer
+        >>> encoding_analyzer = PercentileEncodingAnalyzer(shape=(1,), num_bins = 10, percentile = 80)
+        >>> stats = encoding_analyzer.update_stats(torch.randn(100))
+        >>> encoding_analyzer.compute_encodings(num_quant_bins = math.pow(2, 8), is_symmetric = False)
+        (tensor([-1.1188]), tensor([0.3368]))
+        >>> encoding_analyzer.compute_encodings_from_stats(stats = stats, num_quant_bins = math.pow(2, 8), is_symmetric = False)
+        (tensor([-1.1188]), tensor([0.3368]))
+        >>> encoding_analyzer.reset_stats()
+        >>> encoding_analyzer.update_stats(torch.randn(100))
+        [_Histogram(histogram=tensor([ 1.,  1.,  8., 13., 19., 27., 16., 10.,  3.,  2.]), 
+        bin_edges=tensor([-2.5710, -2.0989, -1.6269, -1.1548, -0.6827, -0.2106,  0.2614,  0.7335, 1.2056,  1.6776,  2.1497]), 
+        min=tensor(-2.5710), max=tensor(2.1497))]
+        >>> encoding_analyzer.compute_encodings(num_quant_bins = math.pow(2, 8), is_symmetric = False)
+        (tensor([-1.1548]), tensor([0.2614]))
     """
     def __init__(self, shape: tuple, num_bins: int = 2048, percentile: float = 100):
         if num_bins <= 0:
@@ -442,8 +482,27 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
 
 
 class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
-    """
-    Encoding Analyzer for SQNR Calibration technique
+    r"""
+    Encoding Analyzer subclass using SQNR Calibration technique. This involves
+    recording values in a histogram and computing the min-max range based on 
+    values that produce the lowest expected SQNR.
+    
+    Example:
+
+        >>> from aimet_torch.v2.quantization.encoding_analyzer import SqnrEncodingAnalyzer
+        >>> encoding_analyzer = SqnrEncodingAnalyzer(shape=(1,), num_bins = 10, gamma = 1)
+        >>> stats = encoding_analyzer.update_stats(torch.randn(100))
+        >>> encoding_analyzer.compute_encodings(num_quant_bins = math.pow(2, 8), is_symmetric = False)
+        (tensor([-2.3612]), tensor([2.8497]))
+        >>> encoding_analyzer.compute_encodings_from_stats(stats = stats, num_quant_bins = math.pow(2, 8), is_symmetric = False)
+        (tensor([-2.3612]), tensor([2.8497]))
+        >>> encoding_analyzer.reset_stats()
+        >>> encoding_analyzer.update_stats(torch.randn(100))
+        [_Histogram(histogram=tensor([ 2.,  0.,  8.,  8., 16., 22., 23., 12.,  6.,  3.]), 
+        bin_edges=tensor([-2.8907, -2.3625, -1.8343, -1.3061, -0.7779, -0.2497,  0.2784,  0.8066, 1.3348,  1.8630,  2.3912]), 
+        min=tensor(-2.8907), max=tensor(2.3912))]
+        >>> encoding_analyzer.compute_encodings(num_quant_bins = math.pow(2, 8), is_symmetric = False)
+        (tensor([-2.7080]), tensor([2.2438]))
     """
     def __init__(self,
                  shape: tuple,
