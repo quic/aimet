@@ -33,7 +33,7 @@ Please visit :ref:`AIMET Installation <ug-installation>` for installation instru
    :maxdepth: 1
 
    Installation <../install/index>
-   tutorials/quickstart
+   Quickstart Guide <tutorials/quickstart_guide>
 
 
 .. toctree::
