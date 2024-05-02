@@ -266,7 +266,7 @@ if [ $run_prep -eq 1 ]; then
     if [ ! -e ${google_test_path} ]; then
         mkdir -p $workspaceFolder/ThirdParty/google
         pushd $workspaceFolder/ThirdParty/google
-        if [[ -f "${DEPENDENCY_PATH_PATH}/googletest.zip" ]]; then
+        if [[ -f "${DEPENDENCY_DATA_PATH}/googletest.zip" ]]; then
             unzip ${DEPENDENCY_DATA_PATH}/googletest.zip
         else
             git clone ${github_url}/google/googletest.git -b release-1.12.1 googletest-release-1.12.1
