@@ -39,6 +39,7 @@
 
 from collections import OrderedDict
 from typing import Type, Optional, Tuple
+import abc
 
 from torch import Tensor
 import torch.nn as nn
@@ -52,12 +53,81 @@ from .base import BaseQuantizationMixin # pylint: disable=import-error
 
 
 class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-method
-    """
-    Mixin that implements fake-quantization on top of regular pytorch modules.
+    """Mixin that implements fake-quantization on top of regular pytorch modules.
+
+    Specifically, a fake-quantized module will call into its :meth:`quantized_forward` method in place of the inherited
+    :class:`torch.nn.Module` forward method. If all input, output, and parameter quantizers are ``None``, a
+    fake-quantized module will behave exactly the same as its parent :class:`torch.nn.Module`.
+
+    A fake-quantized module can be initialized from scratch using the same syntax as the parent module, or can be
+    formed from an existing module using the :meth:`from_module` method.
+
+    Attributes:
+        input_quantizers (nn.ModuleList): :class:`ModuleList` containing :class:`QuantizerBase` objects to be applied
+            to the layer's input tensors
+        output_quantizers (nn.ModuleList): :class:`ModuleList` containing :class:`QuantizerBase` objects to be applied
+            to the layer's output tensors
+        param_quantizers (nn.ModuleDict): :class:`ModuleList` containing :class:`QuantizerBase` objects to be applied
+            to the layer's parameters
+
+    Examples:
+
+        >>> qlinear = FakeQuantizedLinear(in_features=10, out_features=20, bias=False)
+        >>> print(qlinear)
+        FakeQuantizedLinear(
+          in_features=10, out_features=20, bias=False
+          (param_quantizers): ModuleDict(
+            (weight): None
+          )
+          (input_quantizers): ModuleList(
+            (0): None
+          )
+          (output_quantizers): ModuleList(
+            (0): None
+          )
+        )
+
+
+        >>> linear = torch.nn.Linear(in_features=10, out_features=20, bias=True)
+        >>> qlinear = FakeQuantizationMixin.from_module(linear)
+        >>> print(qlinear)
+        FakeQuantizedLinear(
+          in_features=10, out_features=20, bias=True
+          (param_quantizers): ModuleDict(
+            (weight): None
+            (bias): None
+          )
+          (input_quantizers): ModuleList(
+            (0): None
+          )
+          (output_quantizers): ModuleList(
+            (0): None
+          )
+        )
+        >>> qlinear.weight is linear.weight
+        True
+
     """
 
     cls_to_qcls = OrderedDict() # ouantized class -> original class
     qcls_to_cls = OrderedDict() # original class -> quantized class
+
+    @abc.abstractmethod
+    def quantized_forward(self, *args, **kwargs):
+        """Computes a fake-quantized version of the parent module's forward method.
+
+        A fake-quantized module will call into its :meth:`quantized_forward` method in place of the inherited
+        :class:`torch.nn.Module` forward method. The :meth:`quantized_forward` method should perform the following
+        logic in order:
+
+            1) Apply existing input quantizers to input tensors
+            2) Apply existing param quantizers to the layer's parameters
+            3) Call the inherited :class:`torch.nn.Module` forward method with quantized inputs and parameters
+            4) Apply existing output quantizers to the outputs of the forward method
+
+        If all input, output, and parameter quantizers are ``None``, this method will behave exactly the same as
+        its parent module's forward pass.
+        """
 
     @classmethod
     def wrap(cls, module_cls: Type[nn.Module]) -> Type[nn.Module]:
@@ -77,8 +147,33 @@ class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-m
 
     @classmethod
     def implements(cls, module_cls):
-        """
-        Decorator for registering fake-quantized implementation of the given base class.
+        """Decorator for registering fake-quantized implementation of the given base class.
+
+        This decorator registers the defined class as fake-quantized version of module_cls such that calling
+        :meth:`from_module` on an instance of module_cls will output an instance of the decorated class.
+
+        Args:
+            module_cls: The base :class:`torch.nn.Module` class
+
+        Example:
+
+            >>> @FakeQuantizationMixin.implements(torch.nn.Softmax)
+            ... class MyFakeQuantizedSoftmax(FakeQuantizationMixin, torch.nn.Softmax):
+            ...
+            ...     def quantized_forward(self, x):
+            ...             # Apply input quantizer if it exists
+            ...             x = self.input_quantizers[0](x) if self.input_quantizers[0] else x
+            ...             # Call parent module forward function
+            ...             output = self._super_forward(x)
+            ...             # Apply output quantizer if it exists
+            ...             output = self.output_quantizers[0](output) if self.output_quantizers[0] else output
+            ...             return output
+            ...
+            >>> softmax = torch.nn.Softmax(dim=-1)
+            >>> qsoftmax = FakeQuantizationMixin.from_module(softmax)
+            >>> isinstance(qsoftmax, MyFakeQuantizedSoftmax)
+            True
+
         """
         def wrapper(quantized_cls):
             cls.cls_to_qcls[module_cls] = quantized_cls
