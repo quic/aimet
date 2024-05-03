@@ -67,8 +67,8 @@ class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-m
             to the layer's input tensors
         output_quantizers (nn.ModuleList): :class:`ModuleList` containing :class:`QuantizerBase` objects to be applied
             to the layer's output tensors
-        param_quantizers (nn.ModuleDict): :class:`ModuleList` containing :class:`QuantizerBase` objects to be applied
-            to the layer's parameters
+        param_quantizers (nn.ModuleDict): :class:`ModuleDict` mapping parameter names to associated :class:`QuantizerBase`
+            objects
 
     Examples:
 
@@ -147,9 +147,9 @@ class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-m
 
     @classmethod
     def implements(cls, module_cls):
-        """Decorator for registering fake-quantized implementation of the given base class.
+        """Decorator for registering a fake-quantized implementation of the given base class.
 
-        This decorator registers the defined class as fake-quantized version of module_cls such that calling
+        This decorator registers the defined class as the fake-quantized version of module_cls such that calling
         :meth:`from_module` on an instance of module_cls will output an instance of the decorated class.
 
         Args:

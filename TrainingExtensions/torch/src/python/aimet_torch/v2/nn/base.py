@@ -69,8 +69,8 @@ class BaseQuantizationMixin(abc.ABC):
             to the layer's input tensors
         output_quantizers (nn.ModuleList): :class:`ModuleList` containing :class:`QuantizerBase` objects to be applied
             to the layer's output tensors
-        param_quantizers (nn.ModuleDict): :class:`ModuleList` containing :class:`QuantizerBase` objects to be applied
-            to the layer's parameters
+        param_quantizers (nn.ModuleDict): :class:`ModuleDict` mapping parameter names to associated :class:`QuantizerBase`
+            objects
 
     """
 
@@ -387,7 +387,7 @@ class BaseQuantizationMixin(abc.ABC):
         """Returns the floating point version of the quantized module
 
         Returns:
-            An floating point module with quantizers removed
+            A floating point module with quantizers removed
 
         Example:
 
