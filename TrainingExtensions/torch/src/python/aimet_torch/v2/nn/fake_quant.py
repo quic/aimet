@@ -155,25 +155,6 @@ class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-m
         Args:
             module_cls: The base :class:`torch.nn.Module` class
 
-        Example:
-
-            >>> @FakeQuantizationMixin.implements(torch.nn.Softmax)
-            ... class MyFakeQuantizedSoftmax(FakeQuantizationMixin, torch.nn.Softmax):
-            ...
-            ...     def quantized_forward(self, x):
-            ...             # Apply input quantizer if it exists
-            ...             x = self.input_quantizers[0](x) if self.input_quantizers[0] else x
-            ...             # Call parent module forward function
-            ...             output = self._super_forward(x)
-            ...             # Apply output quantizer if it exists
-            ...             output = self.output_quantizers[0](output) if self.output_quantizers[0] else output
-            ...             return output
-            ...
-            >>> softmax = torch.nn.Softmax(dim=-1)
-            >>> qsoftmax = FakeQuantizationMixin.from_module(softmax)
-            >>> isinstance(qsoftmax, MyFakeQuantizedSoftmax)
-            True
-
         """
         def wrapper(quantized_cls):
             cls.cls_to_qcls[module_cls] = quantized_cls
