@@ -24,6 +24,7 @@ We also provide recipes for users to quantize floating point models using AIMET.
 
 ## Table of Contents
 - [Why AIMET?](#why-aimet)
+- [Quick Installation](#quick-install)
 - [Supported features](#supported-features)
 - [What's New](#whats-new)  
 - [Results](#results)
@@ -32,6 +33,19 @@ We also provide recipes for users to quantize floating point models using AIMET.
 - [Contributions](#contributions)
 - [Team](#team)
 - [License](#license)
+
+## Quick Installation
+#### The following environment is supported by our pypi package
+* * 64-bit Intel x86-compatible processor
+* * Linux Ubuntu 20.04 LTS
+* * Python 3.8
+* * bash command shell
+
+#### Installation
+```
+apt-get install liblapacke
+python3 -m pip install aimet-torch
+```
 
 ## Why AIMET?
 
