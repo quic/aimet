@@ -1,0 +1,4 @@
+cumm-cu118
+spconv-cu118
+torch==2.1.2+cu118 -f https://download.pytorch.org/whl/torch_stable.html
+torchvision==0.16.2+cu118 -f https://download.pytorch.org/whl/torch_stable.html
