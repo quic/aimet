@@ -44,82 +44,70 @@ set -e
 
 # Set Package Root
 
-export PACKAGE_ROOT="/usr/local/lib/python3.8/dist-packages"
+export PACKAGE_ROOT="/usr/local/lib/python3.10/dist-packages"
 
 # Install packages    
 apt-get update 
-apt-get install python3.8 python3.8-dev python3-pip -y
+apt-get install python3.10 python3.10-dev python3-pip -y
 python3 -m pip install --upgrade pip
 apt-get install --assume-yes wget gnupg2
 
-update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1
-update-alternatives --set python3 /usr/bin/python3.8
+update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
+update-alternatives --set python3 /usr/bin/python3.10
 
 # GPU varients
 if [[ "$AIMET_VARIANT" == *"gpu"* ]]; then
 
     #. PyTorch 1.13 GPU variant: `CUDA Toolkit 11.6.2 <https://developer.nvidia.com/cuda-11-6-2-download-archive>`_
-    if [[ "$AIMET_VARIANT" == *"torch"* || "$AIMET_VARIANT" == *"onnx"* ]]; then
-        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin
-        mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600
-        wget https://developer.download.nvidia.com/compute/cuda/11.6.2/local_installers/cuda-repo-ubuntu2004-11-6-local_11.6.2-510.47.03-1_amd64.deb
-        apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/3bf863cc.pub
-        apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu2004/x86_64/7fa2af80.pub
-        dpkg -i cuda-repo-ubuntu2004-11-6-local_11.6.2-510.47.03-1_amd64.deb
-        echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64 /" > /etc/apt/sources.list.d/cuda.list
-        echo "deb https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu2004/x86_64 /" > /etc/apt/sources.list.d/nvidia-ml.list
+    if [[ ( "$AIMET_VARIANT" == *"torch"* || "$AIMET_VARIANT" == *"onnx"* ) && "$AIMET_VARIANT" != *"pt21"* ]]; then
+        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin
+        mv cuda-ubuntu2204.pin /etc/apt/preferences.d/cuda-repository-pin-600
+        wget https://developer.download.nvidia.com/compute/cuda/11.7.1/local_installers/cuda-repo-ubuntu2204-11-7-local_11.7.1-515.65.01-1_amd64.deb
+        apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub
+        dpkg -i cuda-repo-ubuntu2204-11-7-local_11.7.1-515.65.01-1_amd64.deb
+        cp /var/cuda-repo-ubuntu2204-11-7-local/cuda-*-keyring.gpg /usr/share/keyrings/
+        echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64 /" > /etc/apt/sources.list.d/cuda.list
         apt-get update
 
-        apt-get install cuda-nvrtc-11-6 \
-                cuda-nvrtc-dev-11-6 \
-                cuda-nvprune-11-6 \
-                cuda-compat-11-6 \
-                libcufft-dev-11-6 \
-                libcurand-dev-11-6 \
-                libcusolver-dev-11-6 \
-                libcusparse-dev-11-6 \
-                libcublas-11-6 -y --no-install-recommends \
+        apt-get install cuda-nvrtc-11-7 \
+                cuda-nvrtc-dev-11-7 \
+                cuda-nvprune-11-7 \
+                cuda-compat-11-7 \
+                libcufft-dev-11-7 \
+                libcurand-dev-11-7 \
+                libcusolver-dev-11-7 \
+                libcusparse-dev-11-7 \
+                libcublas-11-7 -y --no-install-recommends \
                 && rm -rf /var/lib/apt/lists/*
-
-        wget http://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu2004/x86_64/nvidia-machine-learning-repo-ubuntu2004_1.0.0-1_amd64.deb
-        dpkg -i nvidia-machine-learning-repo-ubuntu2004_1.0.0-1_amd64.deb
-        apt-get update
     fi
 
     # Tensorflow GPU varaint
-    if [[ "$AIMET_VARIANT" == *"tf"* ]]; then
-        echo "*** Tensorflow GPU ***"
-        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin
-        mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600
-        wget https://developer.download.nvidia.com/compute/cuda/11.2.2/local_installers/cuda-repo-ubuntu2004-11-2-local_11.2.2-460.32.03-1_amd64.deb   
-        apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/3bf863cc.pub
-        apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu2004/x86_64/7fa2af80.pub
-        dpkg -i cuda-repo-ubuntu2004-11-2-local_11.2.2-460.32.03-1_amd64.deb
-        echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64 /" > /etc/apt/sources.list.d/cuda.list
-        echo "deb https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu2004/x86_64 /" > /etc/apt/sources.list.d/nvidia-ml.list
+    if [[ "$AIMET_VARIANT" == *"tf"* || "$AIMET_VARIANT" == *"pt21"* ]]; then
+        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin
+        mv cuda-ubuntu2204.pin /etc/apt/preferences.d/cuda-repository-pin-600
+        wget https://developer.download.nvidia.com/compute/cuda/11.8.0/local_installers/cuda-repo-ubuntu2204-11-8-local_11.8.0-520.61.05-1_amd64.deb
+        apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub
+        dpkg -i cuda-repo-ubuntu2204-11-8-local_11.8.0-520.61.05-1_amd64.deb
+        cp /var/cuda-repo-ubuntu2204-11-8-local/cuda-*-keyring.gpg /usr/share/keyrings/
+        echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64 /" > /etc/apt/sources.list.d/cuda.list
         apt-get update
 
-        apt-get install cuda-nvrtc-11-2 \
-                cuda-nvrtc-dev-11-2 \
-                cuda-nvprune-11-2 \
-                cuda-compat-11-2 \
-                libcufft-dev-11-2 \
-                libcurand-dev-11-2 \
-                libcusolver-dev-11-2 \
-                libcusparse-dev-11-2=11.4.1.1152-1 \
-                libcublas-11-2=11.4.1.1043-1 --no-install-recommends \
+        apt-get install cuda-nvrtc-11-8 \
+                cuda-nvrtc-dev-11-8 \
+                cuda-nvprune-11-8 \
+                cuda-compat-11-8 \
+                libcufft-dev-11-8 \
+                libcurand-dev-11-8 \
+                libcusolver-dev-11-8 \
+                libcusparse-dev-11-8 \
+                libcublas-11-8 --no-install-recommends \
                 && rm -rf /var/lib/apt/lists/*
-
-        wget http://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu2004/x86_64/nvidia-machine-learning-repo-ubuntu2004_1.0.0-1_amd64.deb
-        dpkg -i nvidia-machine-learning-repo-ubuntu2004_1.0.0-1_amd64.deb
-        apt-get update
-
     fi
 fi
 
 # Aimet install
 export download_url="https://github.com/quic/aimet/releases/download/${release_tag}"
-export wheel_file_suffix="cp38-cp38-linux_x86_64.whl"
+export wheel_file_suffix="cp310-cp310-linux_x86_64.whl"
 
 python3 -m pip install ${download_url}/AimetCommon-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
 
@@ -178,11 +166,11 @@ fi
 
 if [[ "$AIMET_VARIANT" == "tf_gpu" ]]; then
   if [[ -f !/usr/local/cuda ]]; then 
-      ln -s /usr/local/cuda-11.2 /usr/local/cuda
+      ln -s /usr/local/cuda-11.8 /usr/local/cuda
   fi
 elif [[ "$AIMET_VARIANT" == "torch_gpu" ]]; then
     if [[ -f !/usr/local/cuda ]]; then
-        ln -s /usr/local/cuda-11.6 /usr/local/cuda
+        ln -s /usr/local/cuda-11.7 /usr/local/cuda
     fi
 fi
 
