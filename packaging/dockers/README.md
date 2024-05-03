@@ -25,8 +25,8 @@ Set the *<variant_string>* to ONE of the following depending on your desired var
 
 * For the PyTorch 1.13 GPU variant, use **torch_gpu**
 * For the PyTorch 1.13 CPU variant, use **torch_cpu**
-* For the PyTorch 1.9 GPU variant, use **torch_gpu_pt19**
-* For the PyTorch 1.9 CPU variant, use **torch_cpu_pt19**
+* For the PyTorch 2.1.2 GPU variant, use **torch_gpu_pt21**
+* For the PyTorch 2.1.2 CPU variant, use **torch_cpu_pt21**
 * For the TensorFlow GPU variant, use **tf_gpu**
 * For the TensorFlow CPU variant, use **tf_cpu**
 * For the ONNX GPU variant, use **onnx_gpu**
@@ -57,7 +57,7 @@ export download_url="https://github.com/quic/aimet/releases/download/${release_t
 Set the common suffix for the package files as follows:
 
 ```console
-export wheel_file_suffix="cp38-cp38-linux_x86_64.whl"
+export wheel_file_suffix="cp310-cp310-linux_x86_64.whl"
 ```
 
 Download the AIMET packages in the order specified below:
@@ -133,5 +133,5 @@ Environment setup
 Set the common environment variables as follows:
 
 ```console
-source /usr/local/lib/python3.8/dist-packages/aimet_common/bin/envsetup.sh
+source /usr/local/lib/python3.10/dist-packages/aimet_common/bin/envsetup.sh
 ```
