@@ -7,17 +7,16 @@
 
 .. currentmodule:: aimet_torch.v2.nn
 
-====================
-nn.QuantizationMixin
-====================
+=================
+QuantizationMixin
+=================
 
-Mixin for adding full quantization functionality to `nn.Module` subclasses. This functionality includes both the ability
-to set input, output, and parameter quantizers as well as the ability to register a quantized version of the layer's
-forward operation.
-
-Top-level API
-=============
 .. autoclass:: QuantizationMixin
-   :members:
+   :members: compute_encodings, from_module, implements, get_original_module, get_kernel, get_default_kernel
+
+   .. automethod:: quantized_forward
+   .. automethod:: __quant_init__
+   .. automethod:: set_kernel
+   .. automethod:: set_default_kernel
 
 
