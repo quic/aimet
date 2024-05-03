@@ -98,7 +98,6 @@ Install GPU packages for PyTorch 1.13 or ONNX
     cp /var/cuda-repo-ubuntu2204-11-7-local/cuda-*-keyring.gpg /usr/share/keyrings/
     echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64 /" > /etc/apt/sources.list.d/cuda.list  
     apt-get update
-    apt-get -y install cuda
 
 Install GPU packages for PyTorch 2.1 or TensorFlow
 ===================================================
@@ -119,7 +118,6 @@ Install GPU packages for PyTorch 2.1 or TensorFlow
     cp /var/cuda-repo-ubuntu2204-11-8-local/cuda-*-keyring.gpg /usr/share/keyrings/
     echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64 /" > /etc/apt/sources.list.d/cuda.list
     apt-get update
-    apt-get -y install cuda
 
 Install AIMET packages
 ~~~~~~~~~~~~~~~~~~~~~~~
