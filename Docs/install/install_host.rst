@@ -96,7 +96,7 @@ Install GPU packages for PyTorch 1.13 or ONNX
     apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub
     dpkg -i cuda-repo-ubuntu2204-11-7-local_11.7.1-515.65.01-1_amd64.deb
     cp /var/cuda-repo-ubuntu2204-11-7-local/cuda-*-keyring.gpg /usr/share/keyrings/
-    echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/" > /etc/apt/sources.list.d/cuda.list  
+    echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64 /" > /etc/apt/sources.list.d/cuda.list  
     apt-get update
     apt-get -y install cuda
 
@@ -113,11 +113,11 @@ Install GPU packages for PyTorch 2.1 or TensorFlow
     apt-get update && apt-get install -y gnupg2
     wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin
     mv cuda-ubuntu2204.pin /etc/apt/preferences.d/cuda-repository-pin-600
-    wget https://developer.download.nvidia.com/compute/cuda/11.7.1/local_installers/cuda-repo-ubuntu2204-11-7-local_11.7.1-515.65.01-1_amd64.deb
+    wget https://developer.download.nvidia.com/compute/cuda/11.8.0/local_installers/cuda-repo-ubuntu2204-11-8-local_11.8.0-520.61.05-1_amd64.deb
     apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub
-    dpkg -i cuda-repo-ubuntu2204-11-7-local_11.7.1-515.65.01-1_amd64.deb
-    cp /var/cuda-repo-ubuntu2204-11-7-local/cuda-*-keyring.gpg /usr/share/keyrings/
-    echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/" > /etc/apt/sources.list.d/cuda.list
+    dpkg -i cuda-repo-ubuntu2204-11-8-local_11.8.0-520.61.05-1_amd64.deb
+    cp /var/cuda-repo-ubuntu2204-11-8-local/cuda-*-keyring.gpg /usr/share/keyrings/
+    echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64 /" > /etc/apt/sources.list.d/cuda.list
     apt-get update
     apt-get -y install cuda
 
@@ -259,8 +259,9 @@ Post installation steps
 
 .. code-block:: bash
 
-    # NOTE: Please modify the below command depending on the version of your CUDA driver toolkit
+    # NOTE: Please chose between the below command depending on the version of your CUDA driver toolkit
     ln -s /usr/local/cuda-11.7 /usr/local/cuda
+    ln -s /usr/local/cuda-11.8 /usr/local/cuda
 
 Environment setup
 ~~~~~~~~~~~~~~~~~
