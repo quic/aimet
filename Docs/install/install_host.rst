@@ -40,7 +40,7 @@
 AIMET Installation and Setup
 ##############################
 
-This page provides instructions to install AIMET package on Ubuntu 20.04 LTS with Nvidia GPU. Please follow the instructions in the order provided, unless specified otherwise.
+This page provides instructions to install AIMET package on Ubuntu 22.04 LTS with Nvidia GPU. Please follow the instructions in the order provided, unless specified otherwise.
 
 **NOTE:**
     #. Please pre-pend the "apt-get install" and "pip3 install" commands with "sudo -H" as appropriate.
