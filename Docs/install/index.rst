@@ -53,10 +53,10 @@ Please find more information below about each *VARIANT*.
 
 PyTorch
 
-#. **torch-gpu** for PyTorch 2.1.2 GPU package with Python 3.10 and CUDA 11.x - *Recommended for use* with PyTorch models
-#. **torch-cpu** for PyTorch 2.1.2 CPU package with Python 3.10 - If installing on a machine without CUDA
 #. **torch-gpu** for PyTorch 1.13 GPU package with Python 3.10 and CUDA 11.x - *Recommended for use* with PyTorch models
 #. **torch-cpu** for PyTorch 1.13 CPU package with Python 3.10 - If installing on a machine without CUDA
+#. **torch-gpu-pt21** for PyTorch 2.1.2 GPU package with Python 3.10 and CUDA 11.x - *Recommended for use* with PyTorch models
+#. **torch-cpu-pt21** for PyTorch 2.1.2 CPU package with Python 3.10 - If installing on a machine without CUDA
 
 
 TensorFlow
