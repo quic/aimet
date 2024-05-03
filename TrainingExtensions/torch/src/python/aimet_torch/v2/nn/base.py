@@ -119,6 +119,9 @@ class BaseQuantizationMixin(abc.ABC):
             if not param_quantizer:
                 continue
 
+            if param_quantizer._is_encoding_frozen(): # pylint: disable=protected-access
+                continue
+
             if not param_quantizer.is_initialized() or overwrite:
                 param = getattr(self, param_name)
                 if param is not None:
@@ -145,6 +148,10 @@ class BaseQuantizationMixin(abc.ABC):
         """
         self._compute_param_encodings(overwrite=True)
 
+        def passthrough(module, inp, out): # pylint: disable=unused-argument
+            inp, = inp
+            return inp
+
         with contextlib.ExitStack() as stack:
             input_quantizers = _flatten_nn_module_list(self.input_quantizers)
             output_quantizers = _flatten_nn_module_list(self.output_quantizers)
@@ -152,8 +159,16 @@ class BaseQuantizationMixin(abc.ABC):
             for quantizer in itertools.chain(input_quantizers, output_quantizers):
                 if not isinstance(quantizer, QuantizerBase):
                     continue
+
+                if quantizer._is_encoding_frozen(): # pylint: disable=protected-access
+                    continue
+
                 ctx = quantizer.compute_encodings()
                 stack.enter_context(ctx)
+
+                # Set input/output quantizers into pass-through mode during compute_encodings
+                # NOTE: This behavior is for backawrd-compatibility with V1 quantsim.
+                stack.enter_context(quantizer.register_forward_hook(passthrough))
             yield
 
     @classmethod
