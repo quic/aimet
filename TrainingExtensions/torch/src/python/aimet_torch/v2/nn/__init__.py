@@ -54,7 +54,7 @@ def compute_encodings(model: torch.nn.Module):
     """
     with contextlib.ExitStack() as stack:
         for module in model.modules():
-            if isinstance(module, BaseQuantizationMixin):
+            if isinstance(module, BaseQuantizationMixin): # pylint: disable=undefined-variable
                 ctx = module.compute_encodings()
                 stack.enter_context(ctx)
 
@@ -70,5 +70,5 @@ def compute_param_encodings(model: torch.nn.Module):
         with ``allow_recompute=False`` will be kept unchanged.
     """
     for module in model.modules():
-        if isinstance(module, BaseQuantizationMixin):
+        if isinstance(module, BaseQuantizationMixin): # pylint: disable=undefined-variable
             module.compute_param_encodings()
