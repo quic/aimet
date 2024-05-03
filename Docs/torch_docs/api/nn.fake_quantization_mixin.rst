@@ -9,7 +9,9 @@ FakeQuantizationMixin
 =====================
 
 .. autoclass:: FakeQuantizationMixin
-   :members: quantized_forward, __quant_init__, compute_encodings, from_module, implements, get_original_module
-   :member-order: bysource
+   :members: compute_encodings, from_module, implements, get_original_module
+
+   .. automethod:: quantized_forward
+   .. automethod:: __quant_init__
 
 
