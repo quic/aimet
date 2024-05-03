@@ -152,14 +152,15 @@ RUN python3 -m pip --no-cache-dir install \
         lmdb==1.2.1 \
         matplotlib>=3 \
         mock \
-        networkx \
         nbsphinx \
+        networkx \
         'numpy<1.24,>=1.20.5' \
         onnx==1.14.1 \
         onnxsim \
         onnxruntime==1.15.1 \
         onnxruntime-extensions \
         opencv-python \
+        peft \
         Pillow==9.3.0 \
         pluggy==0.12.0 \
         progressbar2 \

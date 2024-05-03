@@ -155,13 +155,13 @@ if [ ! -d "../aimet" ] && [ ! -d "../aimet-main" ]; then
 fi
 
 # Set the docker file path
-# This is the default value (for python 3.8 docker files)
+# This is the default value (for python 3.10 docker files)
 dockerfile_path=${scriptPath}/Jenkins
 if [ -n "$PYTHON_VER" ]; then
     # If the python version variable was set, then switch the path
-    if [ "${PYTHON_VER}" != "3.8" ]; then
-        # We only support python 3.8 version.
-        echo "ERROR: Invalid PYTHON_VER (${PYTHON_VER}). Must be either 3.8!"
+    if [ "${PYTHON_VER}" != "3.10" ]; then
+        # We only support python 3.10 version.
+        echo "ERROR: Invalid PYTHON_VER (${PYTHON_VER}). Must be either 3.10!"
         exit 3
     fi
 fi
