@@ -73,8 +73,8 @@ Install GPU packages
 
 #. Do this section ONLY for the GPU variants.
 #. The released AIMET GPU packages *were tested* with the following CUDA toolkit versions:
-    #. PyTorch 2.1.2 GPU variant: `CUDA Toolkit 11.8.0 <https://developer.nvidia.com/cuda-11-8-0-download-archive>`_
     #. PyTorch 1.13 GPU variant: `CUDA Toolkit 11.7.1 <https://developer.nvidia.com/cuda-11-7-1-download-archive>`_
+    #. PyTorch 2.1 GPU variant: `CUDA Toolkit 11.8.0 <https://developer.nvidia.com/cuda-11-8-0-download-archive>`_
     #. TensorFlow GPU variant: `CUDA Toolkit 11.8.0 <https://developer.nvidia.com/cuda-11-8-0-download-archive>`_
     #. ONNX GPU variant: `CUDA Toolkit 11.7.1 <https://developer.nvidia.com/cuda-11-7-1-download-archive>`_
 #. The instructions in the sub-sections below correspond to our tested versions above. Visit this page https://developer.nvidia.com/cuda-toolkit-archive to obtain the correct version of the CUDA toolkit for your environment.
@@ -89,47 +89,32 @@ Install GPU packages for PyTorch 1.13 or ONNX
 
 .. code-block:: bash
 
+    apt-get update && apt-get install -y gnupg2
     wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin
     mv cuda-ubuntu2204.pin /etc/apt/preferences.d/cuda-repository-pin-600
     wget https://developer.download.nvidia.com/compute/cuda/11.7.1/local_installers/cuda-repo-ubuntu2204-11-7-local_11.7.1-515.65.01-1_amd64.deb
+    apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub
     dpkg -i cuda-repo-ubuntu2204-11-7-local_11.7.1-515.65.01-1_amd64.deb
     cp /var/cuda-repo-ubuntu2204-11-7-local/cuda-*-keyring.gpg /usr/share/keyrings/
     echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/" > /etc/apt/sources.list.d/cuda.list  
     apt-get update
     apt-get -y install cuda
 
-Install GPU packages for PyTorch 2.1.2
-======================================
+Install GPU packages for PyTorch 2.1 or TensorFlow
+===================================================
 
 **NOTE:**
 
-#. Do this section ONLY for the PyTorch 2.1.2 variant.
+#. Do this section ONLY for the PyTorch 2.1 or TensorFlow GPU variant.
 #. Visit this page https://developer.nvidia.com/cuda-11-8-0-download-archive to obtain the exact and up-to-date installation instructions for your environment.
 
 .. code-block:: bash
 
+    apt-get update && apt-get install -y gnupg2
     wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin
     mv cuda-ubuntu2204.pin /etc/apt/preferences.d/cuda-repository-pin-600
     wget https://developer.download.nvidia.com/compute/cuda/11.7.1/local_installers/cuda-repo-ubuntu2204-11-7-local_11.7.1-515.65.01-1_amd64.deb
-    dpkg -i cuda-repo-ubuntu2204-11-7-local_11.7.1-515.65.01-1_amd64.deb
-    cp /var/cuda-repo-ubuntu2204-11-7-local/cuda-*-keyring.gpg /usr/share/keyrings/
-    echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/" > /etc/apt/sources.list.d/cuda.list
-    apt-get update
-    apt-get -y install cuda
-
-Install GPU packages for TensorFlow
-====================================
-
-**NOTE:**
-
-#. Do this section ONLY for the TensorFlow GPU variant.
-#. Visit this page https://developer.nvidia.com/cuda-11-8-0-download-archive to obtain the exact and up-to-date installation instructions for your environment.
-
-.. code-block:: bash
-
-    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin
-    mv cuda-ubuntu2204.pin /etc/apt/preferences.d/cuda-repository-pin-600
-    wget https://developer.download.nvidia.com/compute/cuda/11.7.1/local_installers/cuda-repo-ubuntu2204-11-7-local_11.7.1-515.65.01-1_amd64.deb
+    apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub
     dpkg -i cuda-repo-ubuntu2204-11-7-local_11.7.1-515.65.01-1_amd64.deb
     cp /var/cuda-repo-ubuntu2204-11-7-local/cuda-*-keyring.gpg /usr/share/keyrings/
     echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/" > /etc/apt/sources.list.d/cuda.list
@@ -145,8 +130,8 @@ Set the <variant_string> to ONE of the following depending on your desired varia
 
 #. For the PyTorch 1.13 GPU variant, use "torch_gpu"
 #. For the PyTorch 1.13 CPU variant, use "torch_cpu"
-#. For the PyTorch 2.1.2 GPU variant, use "torch_gpu_pt21"
-#. For the PyTorch 2.1.2 CPU variant, use "torch_cpu_pt21"
+#. For the PyTorch 2.1 GPU variant, use "torch_gpu_pt21"
+#. For the PyTorch 2.1 CPU variant, use "torch_cpu_pt21"
 #. For the TensorFlow GPU variant, use "tf_gpu"
 #. For the TensorFlow CPU variant, use "tf_cpu"
 #. For the ONNX GPU variant, use "onnx_gpu"
@@ -275,7 +260,7 @@ Post installation steps
 .. code-block:: bash
 
     # NOTE: Please modify the below command depending on the version of your CUDA driver toolkit
-    ln -s /usr/local/cuda-11.8 /usr/local/cuda
+    ln -s /usr/local/cuda-11.7 /usr/local/cuda
 
 Environment setup
 ~~~~~~~~~~~~~~~~~

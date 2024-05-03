@@ -55,19 +55,19 @@ PyTorch
 
 #. **torch-gpu** for PyTorch 1.13 GPU package with Python 3.10 and CUDA 11.x - *Recommended for use* with PyTorch models
 #. **torch-cpu** for PyTorch 1.13 CPU package with Python 3.10 - If installing on a machine without CUDA
-#. **torch-gpu-pt21** for PyTorch 2.1.2 GPU package with Python 3.10 and CUDA 11.x - *Recommended for use* with PyTorch models
-#. **torch-cpu-pt21** for PyTorch 2.1.2 CPU package with Python 3.10 - If installing on a machine without CUDA
+#. **torch-gpu-pt21** for PyTorch 2.1 GPU package with Python 3.10 and CUDA 11.x
+#. **torch-cpu-pt21** for PyTorch 2.1 CPU package with Python 3.10 - If installing on a machine without CUDA
 
 
 TensorFlow
 
-#. **tf-gpu** for TensorFlow 2.10.1 GPU package with Python 3.10 - *Recommended for use* with TensorFlow models
-#. **tf-cpu** for TensorFlow 2.10.1 CPU package with Python 3.10 - If installing on a machine without CUDA
+#. **tf-gpu** for TensorFlow 2.10 GPU package with Python 3.10 - *Recommended for use* with TensorFlow models
+#. **tf-cpu** for TensorFlow 2.10 CPU package with Python 3.10 - If installing on a machine without CUDA
 
 ONNX
 
-#. **onnx-gpu** for ONNX 1.14.1 GPU package with Python 3.10 - *Recommended for use* with ONNX models
-#. **onnx-cpu** for ONNX 1.14.1 CPU package with Python 3.10 - If installing on a machine without CUDA
+#. **onnx-gpu** for ONNX 1.14 GPU package with Python 3.10 - *Recommended for use* with ONNX models
+#. **onnx-cpu** for ONNX 1.14 CPU package with Python 3.10 - If installing on a machine without CUDA
 
 System Requirements
 ~~~~~~~~~~~~~~~~~~~
