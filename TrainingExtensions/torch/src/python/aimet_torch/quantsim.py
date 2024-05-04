@@ -58,6 +58,7 @@ from aimet_common.defs import QuantScheme, QuantizationDataType, SupportedKernel
 from aimet_common.quantsim import encoding_version, validate_quantsim_inputs, extract_global_quantizer_args
 from aimet_common.quant_utils import get_conv_accum_bounds
 
+from aimet_torch import elementwise_ops
 from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_torch.qc_quantize_op import QcQuantizeStandAloneBase, QcQuantizeWrapper, QcQuantizeOpMode, \
     StaticGridQuantWrapper, LearnedGridQuantWrapper, NativeTorchQuantWrapper, QUANTIZER_TYPE_INPUT, QUANTIZER_TYPE_OUTPUT
@@ -66,7 +67,7 @@ from aimet_torch.qc_quantize_op import get_encoding_by_quantizer as _get_encodin
 from aimet_torch import torchscript_utils, utils, transformer_utils, onnx_utils
 from aimet_torch.utils import deprecated
 from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs, CustomMarker, get_pytorch_name_from_onnx_name
-from aimet_torch.meta.connectedgraph import ConnectedGraph
+from aimet_torch.meta.connectedgraph import ConnectedGraph, Op
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.v2.quantization.builder import LazyQuantizeWrapper
 from aimet_torch.v2.nn import BaseQuantizationMixin
@@ -280,6 +281,8 @@ class QuantizationSimModel:
 
         # Initialize real wrappers using collected information
         self._realize_quant_wrappers_in_model(self.model)
+
+        self._apply_exception_rules()
 
     def _realize_quant_wrappers_in_model(self, model: torch.nn.Module):
         """
@@ -1866,6 +1869,106 @@ class QuantizationSimModel:
             # Recursively call children modules if present
             if not utils.is_leaf_module(module_ref):
                 QuantizationSimModel._replace_quantization_wrapper_with_native_torch_quantization_nodes(module_ref, device)
+
+    # pylint: disable=protected-access, too-many-branches
+    def _apply_exception_rules(self):
+        """
+        Apply exception rules to specific op. For example, a rule can override high bitwidth to Embedding module
+        """
+        if self._hw_version not in {'V73', 'V75'}:
+            return
+
+        module_to_quant_wrapper = {}
+        for _, wrapper in self.quant_wrappers():
+            module_to_quant_wrapper[wrapper._module_to_wrap] = wrapper
+
+        for name, wrapper in self.quant_wrappers():
+            original_module = wrapper._module_to_wrap
+
+            # A module that doesn't require exception rules
+            if not isinstance(original_module, (torch.nn.Embedding, torch.nn.GroupNorm, elementwise_ops.MatMul)):
+                continue
+
+            if isinstance(original_module, torch.nn.Embedding):
+                weight_quantizer = wrapper.param_quantizers['weight']
+                output_quantizer = wrapper.output_quantizers[0]
+
+                weight_quantizer.bitwidth = output_quantizer.bitwidth
+                weight_quantizer.use_symmetric_encodings = output_quantizer.use_symmetric_encodings
+            elif isinstance(original_module, torch.nn.GroupNorm):
+                if 'weight' in wrapper.param_quantizers:
+                    output_quantizer = wrapper.output_quantizers[0]
+                    for _, param_quantizer in wrapper.param_quantizers.items():
+                        param_quantizer.bitwidth = output_quantizer.bitwidth
+                        param_quantizer.use_symmetric_encodings = output_quantizer.use_symmetric_encodings
+            elif isinstance(original_module, elementwise_ops.MatMul):
+                first_input_quantizer, second_input_quantizer = wrapper.input_quantizers
+
+                if first_input_quantizer.bitwidth == 16:
+                    if second_input_quantizer.enabled:
+                        target_quantizer = second_input_quantizer
+                    else:
+                        op = self.connected_graph._module_to_op_dict[original_module]
+                        second_input_op = op.input_ops[1]
+                        closest_producer_wrapper = self._get_closest_producer_wrapper(
+                            second_input_op, module_to_quant_wrapper
+                        )
+
+                        if closest_producer_wrapper:
+                            target_quantizer = closest_producer_wrapper.output_quantizers[0]
+                        else:
+                            logger.warning("The closest wrapper could not be found. MatMul exception rule does not apply. "
+                                           "If you haven't used model preparer, consider using it.")
+                            continue
+
+                    target_quantizer.use_symmetric_encodings = True
+                    # The only difference between V73 and V75 is bitwidth of second input quantizer
+                    if self._hw_version == 'V73':
+                        target_quantizer.bitwidth = 8
+                    elif self._hw_version == 'V75':
+                        target_quantizer.bitwidth = 16
+                    else:
+                        raise ValueError(f'Not expected hardware version to apply exception rules: {self._hw_version}')
+            else:
+                raise ValueError(f'A module not expected to apply exception rules: {name}')
+
+    def _get_closest_producer_wrapper(self,
+                                      op: Op,
+                                      module_to_quant_wrapper: Dict[torch.nn.Module, QcQuantizeWrapper]) -> \
+            Optional[QcQuantizeWrapper]:
+        """
+        Find the closest producer QcQuantizeWrapper and return it
+
+        :param op: Target operation
+        :param module_to_quant_wrapper: Module to Wrapper dictionary
+        :return: QcQuantizerWrapper if exists else None
+        """
+        def get_quant_wrapper() -> Optional[QcQuantizeWrapper]:
+            module = op.get_module()
+            return module_to_quant_wrapper.get(module) if module else None
+
+        wrapper = get_quant_wrapper()
+        if wrapper and wrapper.output_quantizers[0].enabled:
+            return wrapper
+
+        if wrapper and not wrapper.output_quantizers[0].enabled:
+            # pylint: disable=no-else-return
+            if len(op.input_ops) == 1:
+                return self._get_closest_producer_wrapper(op.input_ops[0], module_to_quant_wrapper)
+            else:
+                logger.warning("A wrapper of %s with output quantization disabled has no input or more than one input exists. "
+                               "It's ambiguous to find the nearest producer in this case", str(op.get_module()))
+                return None
+
+        if not wrapper:
+            if not op.input_ops:
+                logger.warning("No input exists for navigation for traversal, it's not possible to find the closest producer")
+                return None
+
+            if len(op.input_ops) > 1:
+                logger.warning("Multiple input ops exist, traversal to find closest producer is performed based on the first input")
+
+            return self._get_closest_producer_wrapper(op.input_ops[0], module_to_quant_wrapper)
 
     @staticmethod
     def save_model_with_embedded_quantization_nodes(sim_model, path: str, filename_prefix: str, dummy_input: Union[torch.Tensor, Tuple],
