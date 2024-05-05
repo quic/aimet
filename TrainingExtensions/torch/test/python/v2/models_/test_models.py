@@ -1217,3 +1217,61 @@ class TinyModelWithNoMathInvariantOps(torch.nn.Module):
         m = self.add1(y, 3)
         z = self.mul2(m, 5)
         return z
+
+
+class ModelWithMatMul(torch.nn.Module):
+    """
+    Model with MatMul module
+    """
+    def __init__(self):
+        super().__init__()
+        self.act1 = nn.PReLU()
+        self.act2 = nn.ReLU()
+        self.matmul = elementwise_ops.MatMul()
+
+    def forward(self, *inputs):
+        x = self.act1(inputs[0])
+        y = self.act2(inputs[1])
+        y = y.reshape(10, 4, 5)
+        return self.matmul(x, y)
+
+class ModelWithMatMul2(torch.nn.Module):
+    """
+    Model with MatMul module
+    """
+    def __init__(self):
+        super().__init__()
+        self.act1 = nn.PReLU()
+        self.act2 = nn.ReLU()
+        self.act3 = nn.Softmax()
+        self.matmul = elementwise_ops.MatMul()
+
+    def forward(self, *inputs):
+        x = self.act1(inputs[0])
+        y = self.act3(inputs[1])
+        y = self.act2(y)
+        y = y.reshape(10, 4, 5)
+        return self.matmul(x, y)
+
+class ModelWithGroupNorm(torch.nn.Module):
+    """
+    Model with GroupNorm module
+    """
+    def __init__(self):
+        super().__init__()
+        self.gn = torch.nn.GroupNorm(2, 6)
+        self.gn_with_no_affine = torch.nn.GroupNorm(2, 6, affine=False)
+
+    def forward(self, *inputs):
+        return self.gn_with_no_affine(self.gn(inputs[0]))
+
+class ModelWithEmbedding(torch.nn.Module):
+    """
+    Model with embedding module
+    """
+    def __init__(self):
+        super().__init__()
+        self.embedding = torch.nn.Embedding(8, 4)
+
+    def forward(self, *inputs):
+        return self.embedding(inputs[0])

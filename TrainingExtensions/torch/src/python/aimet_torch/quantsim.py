@@ -279,10 +279,10 @@ class QuantizationSimModel:
         self._supported_kernels = quantsim_configurator.get_supported_kernels()
         self._validate_supported_kernels_for_quantizers(SUPPORTED_KERNELS_ACTION)
 
+        self._apply_exception_rules()
+
         # Initialize real wrappers using collected information
         self._realize_quant_wrappers_in_model(self.model)
-
-        self._apply_exception_rules()
 
     def _realize_quant_wrappers_in_model(self, model: torch.nn.Module):
         """

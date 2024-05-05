@@ -95,10 +95,6 @@ class QuantizationSimModel(V1QuantizationSimModel):
             # Set quantization parameters to the device of the original module
             module.to(device=device)
 
-    def _apply_exception_rules(self):
-        # TODO: remove when exception logic is supported for quantsim v2
-        pass
-
     @staticmethod
     def _realize_quant_wrapper(module: LazyQuantizeWrapper) -> FakeQuantizationMixin:
         """
