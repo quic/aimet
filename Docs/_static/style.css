@@ -29,6 +29,7 @@ nav .hideitem {
   --aimet-menu-hover: #e3efff;
   --aimet-menu-font-active: #0058ff;
   --aimet-code-grey: #fafafa;
+  --aimet-light-blue: #e7f2fa;
 }
 
 /* In main body this sets the background used in the text boxes*/
@@ -289,3 +290,29 @@ html.writer-html5 .rst-content table.docutils td>p, html.writer-html5 .rst-conte
 .wy-menu-vertical header, .wy-menu-vertical p.caption {
     color: var(--aimet-dark-blue);
 }
+
+
+/*
+ * Configure the appearance of code output box.
+ * Values are based on sphinx-gallery configuration
+*/
+.script-output {
+    color: black;
+    display: flex;
+    gap: 0.5em;
+}
+
+.script-output::before {
+    content: "Out:";
+    line-height: 1.4;
+    padding-top: 10px;
+}
+
+.script-output .highlight {
+    background: transparent;
+    flex-grow: 1;
+    overflow: auto;
+    /* Allow output block to take up maximum 25 lines */
+    max-height: 25em;
+}
+
