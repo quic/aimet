@@ -39,6 +39,7 @@ We also provide recipes for users to quantize floating point models using AIMET.
 * * 64-bit Intel x86-compatible processor
 * * Linux Ubuntu 20.04 LTS
 * * Python 3.8
+* * Cuda >= 11.8
 * * bash command shell
 
 #### Installation
