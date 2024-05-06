@@ -328,3 +328,137 @@ class TestQuantizedTensor:
         qtensor_out = torch.nn.functional.linear(qother, qtensor)
         assert not isinstance(qtensor_out, QuantizedTensor)
         assert torch.allclose(qtensor_out, torch.nn.functional.linear(other_qdq, tensor_qdq))
+
+    @pytest.mark.parametrize('qtensor_cls', [QuantizedTensor, DequantizedTensor])
+    @pytest.mark.parametrize('callback', [
+        lambda t : t.clone(),
+        lambda t : t.flatten(),
+        lambda t : t.expand((2, 128, 2)),
+        lambda t : t.expand_as(torch.randn(2, 128, 2)),
+        lambda t : t.permute(0, 2, 1),
+        lambda t : t.repeat((2, 128, 2)),
+        lambda t : t.reshape(128, 2, 1),
+        lambda t : t.resize(2, 64, 2),
+        lambda t : t.unsqueeze(-1),
+        lambda t : t.squeeze(-1),
+        lambda t : t.view(-1),
+        torch.detach,
+        torch.flatten,
+        torch.clone,
+    ])
+    def test_propagate_pertensor_encoding(self, qtensor_cls, callback, scale, offset, bitwidth):
+        shape = (2, 128, 1)
+        data = torch.empty(shape)
+        qtensor = data.clone().as_subclass(qtensor_cls)
+        qtensor.encoding = AffineEncoding(scale, offset, bitwidth)
+        """
+        Given: Per-tensor quantized tensor object
+        When: Call a 'math invariant' tensor operation on the quantized tensor
+        Then: 1) Output is also a quantized tensor
+              2) Output encoding matches input encoding
+              3) Output encoding is not the same object as input encoding
+        """
+        output = callback(qtensor)
+
+        assert isinstance(output, qtensor_cls)
+        assert torch.equal(output.encoding.scale, qtensor.encoding.scale)
+        assert torch.equal(output.encoding.offset, qtensor.encoding.offset)
+        assert output.encoding.bitwidth == qtensor.encoding.bitwidth
+        assert output.encoding.signed == qtensor.encoding.signed
+        assert output.encoding is not qtensor.encoding
+
+    @pytest.mark.parametrize('qtensor_cls', [QuantizedTensor, DequantizedTensor])
+    @pytest.mark.parametrize('callback', [
+        lambda t : t + torch.randn(2, 128, 1),
+        lambda t : t.bmm(torch.randn(2, 1, 128)),
+    ])
+    def test_dont_propagate_pertensor_encoding(self, qtensor_cls, callback, scale, offset, bitwidth):
+        shape = (2, 128, 1)
+        data = torch.empty(shape)
+        qtensor = data.clone().as_subclass(qtensor_cls)
+        qtensor.encoding = AffineEncoding(scale, offset, bitwidth)
+        """
+        Given: Per-tensor quantized tensor object
+        When: Call non 'math invariant' tensor operation on the quantized tensor
+        Then: Output is not a quantized tensor
+        """
+        output = callback(qtensor)
+        assert not isinstance(output, qtensor_cls)
+
+    @pytest.mark.parametrize('qtensor_cls', [QuantizedTensor, DequantizedTensor])
+    @pytest.mark.parametrize('callback', [
+        lambda t: t.flatten(),
+        lambda t: t.expand((2, 128, 2)),
+        lambda t: t.expand_as(torch.randn(2, 128, 2)),
+        lambda t: t.permute(0, 2, 1),
+        lambda t: t.repeat((2, 128, 2)),
+        lambda t: t.reshape(128, 2, 1),
+        lambda t: t.resize(2, 64, 2),
+        lambda t: t.unsqueeze(-1),
+        lambda t: t.squeeze(-1),
+        lambda t: t.view(-1),
+        torch.flatten,
+    ])
+    def test_dont_propagate_perchannel_encoding(self, qtensor_cls, callback, bitwidth):
+        scale = torch.randn(2, 1, 1)
+        offset = torch.zeros_like(scale)
+        shape = (2, 128, 1)
+        data = torch.empty(shape)
+        qtensor = data.clone().as_subclass(qtensor_cls)
+        qtensor.encoding = AffineEncoding(scale, offset, bitwidth)
+        """
+        Given: Per-channel quantized tensor object
+        When: Call an op which changes the dimensions of the tensor
+        Then: Output is not a quantized tensor
+        """
+        output = callback(qtensor)
+        assert output.encoding is None
+
+    @pytest.mark.parametrize('qtensor_cls', [QuantizedTensor, DequantizedTensor])
+    def test_clone_tensor(self, qtensor_cls, scale, offset, bitwidth):
+        shape = (2, 128, 1)
+        data = torch.randn(shape)
+        qtensor = data.clone().as_subclass(qtensor_cls)
+        qtensor.requires_grad = True
+        scale = scale.clone()
+        scale.requires_grad = True
+        qtensor.encoding = AffineEncoding(scale, offset, bitwidth)
+        """
+        Given: Quantized tensor object qtensor
+        When: Call qtensor.clone()
+        Then: 1) Output is equal to qtensor
+              3) Output encoding tensors are clones of qtensor encoding tensors
+              4) Clone() was recorded as on the gradient tape for output and encoding tensors
+        """
+        cloned_tensor = qtensor.clone()
+
+        assert cloned_tensor.data is not qtensor.data
+        assert torch.equal(cloned_tensor, qtensor)
+        assert cloned_tensor.encoding.scale is not qtensor.encoding.scale
+        assert torch.equal(cloned_tensor.encoding.scale, qtensor.encoding.scale)
+        assert cloned_tensor.grad_fn is not None
+        assert cloned_tensor.encoding.scale.grad_fn is not None
+
+    @pytest.mark.parametrize('qtensor_cls', [QuantizedTensor, DequantizedTensor])
+    def test_detach_tensor(self, qtensor_cls, scale, offset, bitwidth):
+        shape = (2, 128, 1)
+        data = torch.randn(shape)
+        qtensor = data.clone().as_subclass(qtensor_cls)
+        qtensor.requires_grad = True
+        scale = scale.clone()
+        scale.requires_grad = True
+        qtensor.encoding = AffineEncoding(scale, offset, bitwidth)
+        """
+        Given: Quantized tensor object qtensor
+        When: Call qtensor.detach()
+        Then: 1) Output is also a quantized tensor
+              2) Output and output encodings do not require gradients
+              3) qtensor and qtensor encodings still require gradients
+        """
+        detached_tensor = qtensor.detach()
+
+        assert isinstance(detached_tensor, qtensor_cls)
+        assert not detached_tensor.requires_grad
+        assert not detached_tensor.encoding.scale.requires_grad
+        assert qtensor.requires_grad
+        assert qtensor.encoding.scale.requires_grad
