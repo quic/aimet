@@ -1674,7 +1674,7 @@ class QuantizationSimModel:
                                            disable_quantizer_without_encoding=disable_quantizer_without_encoding)
 
 
-    def set_and_freeze_param_encodings(self, encoding_path: str):
+    def set_and_freeze_param_encodings(self, encoding_path: str, disable_quantizer_without_encoding: bool = False):
         """
         Set and freeze parameter encodings from encodings JSON file.
         .. note:
@@ -1697,7 +1697,7 @@ class QuantizationSimModel:
         self._set_param_encodings(param_encodings,
                                   freeze=True,
                                   ignore_when_quantizer_disabled=False,
-                                  disable_quantizer_without_encoding=True)
+                                  disable_quantizer_without_encoding=disable_quantizer_without_encoding)
 
     def quant_wrappers(self):
         """
