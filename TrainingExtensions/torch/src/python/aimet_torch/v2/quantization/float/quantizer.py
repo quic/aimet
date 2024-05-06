@@ -74,24 +74,24 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
     r"""
     Simulates quantization by fake-casting the input to the given exponent and mantissa bits based on IEEE float representation.
 
-    Given mantissa_bits as :math:`mantissa` and exponent_bits as :math:`exponent`, the IEEE standard computes the maximum representable value by 
-    
+    Given mantissa_bits as :math:`mantissa` and exponent_bits as :math:`exponent`, the IEEE standard computes the maximum representable value by
+
     .. math::
         max = (2 - 2^{-mantissa}) * 2^{(exponent\_max - \left\lfloor \frac{exponent\_max}{2} \right\rfloor - 1)} \\
         \text{where } exponent\_max = 2^{exponent} - 1 \\
-    
+
     Given input :math:`x`, fake-casting is equivalent to the following operation
-    
+
     .. math::
-        out = \left\lceil\frac{x_c}{scale}\right\rfloor * scale 
-    
+        out = \left\lceil\frac{x_c}{scale}\right\rfloor * scale
+
     where
-    
+
     .. math::
         x_c = clamp(x, -max, max) \\
         bias = 2^{exponent} - \log_2(max) + \log_2(2 - 2^{-mantissa}) - 1 \\
         scale = 2 ^ {\left\lfloor \log_2 |x_c| + bias \right\rfloor - mantissa - bias} \\
-    
+
     :param exponent_bits: Number of exponent bits to simulate.
     :type exponent_bits: int
     :param mantissa_bits: Number of mantissa bits to simulate.
@@ -102,9 +102,9 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
     :param encoding_analyzer: If specified, the maximum value to represent
                               will be determined dynamically based on the input statistics
                               for finer precision.
-    :type encoding_analyzer: EncodingAnalyzer 
-    
-  
+    :type encoding_analyzer: EncodingAnalyzer
+
+
     Examples:
         >>> import aimet_torch.v2.quantization as Q
         >>> input = torch.randn(5, 10)
