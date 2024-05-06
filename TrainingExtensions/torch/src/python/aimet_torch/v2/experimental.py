@@ -55,7 +55,8 @@ def propagate_output_encodings(sim: QuantizationSimModel, arg):
     _propagate_output_encodings(sim, condition)
 
 
-def _propagate_output_encodings(sim: QuantizationSimModel, condition: Callable[[torch.nn.Module], bool]):
+def _propagate_output_encodings(sim: QuantizationSimModel,
+                                condition: Callable[[torch.nn.Module], bool]):
     """ Propagate output encodings of all the modules that satisfies the given condition. """
     cg = sim.connected_graph
     qmodel = sim.model
@@ -73,20 +74,30 @@ def _propagate_output_encodings(sim: QuantizationSimModel, condition: Callable[[
         producer = x.producer
 
         if not producer:
+            # ``x`` is a root input (i.e. has no producer).
+            # In this case, set the input quantizer of the consumer to ``qtzr``
             i = consumer.inputs.index(x)
             qmodule = get_qmodule(consumer)
             qmodule.input_quantizers[i] = qtzr
+            assert qmodule.input_quantizers[i] is not None
             return
 
         qmodule = get_qmodule(producer)
 
-        if not qmodule or _is_math_invariant_op(qmodule):
-            for input in producer.inputs:
-                _set_src_qtzr(input, consumer=producer, qtzr=qtzr)
-        else:
+        if qmodule:
+            # There exists a qmodule associated with the graph node ``producer``
+            # In this case, set the output quantizer of the producer to ``qtzr``
             outputs = getattr(producer, 'output_products', [producer.output])
             i = outputs.index(x)
-            qmodule.output_quantizers[i] = qtzr
+            if qmodule.output_quantizers[i] is not None:
+                qmodule.output_quantizers[i] = qtzr
+
+        if not qmodule or _is_math_invariant_op(qmodule):
+            # 1. There is no qmodule associated with the graph node ``producer``, or
+            # 2. qmodule is a math invariant op (reshape, permute, etc).
+            # In these cases, propagate encoding further to the ancestors
+            for input in producer.inputs:
+                _set_src_qtzr(input, consumer=producer, qtzr=qtzr)
 
 
     for op in reversed(cg.ordered_ops):
