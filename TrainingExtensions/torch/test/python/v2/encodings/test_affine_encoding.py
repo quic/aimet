@@ -206,7 +206,7 @@ class TestAffineEncoding:
         offset = torch.randn(shape)
         encoding = AffineEncoding(scale, offset, 8)
         for property in [encoding.min, encoding.max, encoding.scale, encoding.offset]:
-            assert property.shape == shape
+            assert property.shape == tuple()
         assert encoding.granularity == "pertensor"
         assert encoding.mapping == "affine"
 
