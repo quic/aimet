@@ -8,8 +8,7 @@ quantization.float
 
 
 .. autosummary::
-    :toctree: generated
     :nosignatures:
     
     FloatQuantizeDequantize <FloatQuantizeDequantize>
-    FloatQuantizeDequantize <QuantizeDequantize>
+    QuantizeDequantize <QuantizeDequantize>
