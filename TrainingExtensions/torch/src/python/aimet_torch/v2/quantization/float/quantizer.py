@@ -72,20 +72,26 @@ assert _ieee_float_max_representable_value(_BFLOAT16_EXPONENT_BITS, _BFLOAT16_MA
 
 class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
     r"""
-    Simulates fake quantization by fake-casting the input to the given exponent and mantissa bits based on IEEE float representation. 
+    Simulates quantization by fake-casting the input to the given exponent and mantissa bits based on IEEE float representation.
 
-   IEEE float representation represents the maximum representible value as 
-   .. math::
-    max = (2 - 2^{-mantissa}) * 2^{(2^{exponent} - bias - 2)}
-
-    Precisely,
+    Given mantissa_bits as :math:`mantissa` and exponent_bits as :math:`exponent`, the IEEE standard computes the maximum representable value by 
+    
     .. math::
-        out = \left\lceil\frac{x_c}{scale}\right\rfloor * scale
+        max = (2 - 2^{-mantissa}) * 2^{(exponent\_max - \left\lfloor \frac{exponent\_max}{2} \right\rfloor - 1)} \\
+        \text{where } exponent\_max = 2^{exponent} - 1 \\
+    
+    Given input :math:`x`, fake-casting is equivalent to the following operation
+    
+    .. math::
+        out = \left\lceil\frac{x_c}{scale}\right\rfloor * scale 
+    
     where
+    
     .. math::
-        x_c = clamp(x, -max, max)
-        bias = 2^{exponent} - \log_2(max) + \log_2(2 - 2^{-mantissa}) - 1
-        scale = 2 ^ {\left\lfloor \log_2 |x_c| + bias \right\rfloor - mantissa - bias}
+        x_c = clamp(x, -max, max) \\
+        bias = 2^{exponent} - \log_2(max) + \log_2(2 - 2^{-mantissa}) - 1 \\
+        scale = 2 ^ {\left\lfloor \log_2 |x_c| + bias \right\rfloor - mantissa - bias} \\
+    
     :param exponent_bits: Number of exponent bits to simulate.
     :type exponent_bits: int
     :param mantissa_bits: Number of mantissa bits to simulate.
@@ -96,58 +102,52 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
     :param encoding_analyzer: If specified, the maximum value to represent
                               will be determined dynamically based on the input statistics
                               for finer precision.
-    :type encoding_analyzer: EncodingAnalyzer
-
-    .. note::
-        :class:`QuantizeDequantize` cannot run :meth:`forward` until :attr:`min` and :attr:`max` are properly initialized,
-        which can be done based on input statistics using :meth:`compute_encodings` or
-        by manually assigning a new value to :attr:`min` and :attr:`max`.
-        See the examples below.
+    :type encoding_analyzer: EncodingAnalyzer 
+    
+  
     Examples:
         >>> import aimet_torch.v2.quantization as Q
         >>> input = torch.randn(5, 10)
-        >>> qdq = Q.float.FloatQuantizeDequantize(mantissa_bits=3, exponent_bits=4)
-        >>> qdq.is_initialized()
-        False
-        >>> with qdq.compute_encodings():
-        ...     _ = qdq(input)
-        ...
+        >>> qdq = Q.float.FloatQuantizeDequantize(mantissa_bits=7, exponent_bits=8)
+        >>> # Unlike AffineQuantizer, FloatQuantizer is initialized without calling compute_encodings()
         >>> qdq.is_initialized()
         True
-        >>> qdq(input)
-        DequantizedTensor([[ 1.9185, -1.7549, -0.2974, -0.8328, -1.3831, -1.1303,
-                             1.3534, -0.6990,  2.0375,  0.1636],
-                           [ 0.6366, -0.1522,  0.6643,  0.0000, -2.2559, -1.0103,
-                             1.2733,  0.8027, -1.0518, -1.3286],
-                           [-0.2097,  1.3444,  0.5180,  1.4677, -0.4440,  0.5674,
-                             0.6414,  0.1727,  0.3207, -1.6774],
-                           [ 0.7324, -0.4534, -1.6393,  1.3254,  0.9650,  1.2556,
-                             0.5697,  0.4069,  0.7673, -0.0465],
-                           [-0.1790,  0.9488, -0.1014,  1.3427,  0.4714, -0.0418,
-                             0.3759,  0.1731,  0.3103,  0.9846]],
-                          grad_fn=<AliasBackward0>)
-        >>> import aimet_torch.v2.quantization as Q
-        >>> input = torch.randn(5, 10)
-        >>> qdq = Q.float.FloatQuantizeDequantize(mantissa_bits=3, exponent_bits=4)
-        >>> qdq.is_initialized()
-        False
-        >>> qdq.min = torch.nn.Parameter(-torch.ones_like(qdq.min))
-        >>> qdq.max = torch.nn.Parameter(torch.ones_like(qdq.max))
-        >>> qdq.is_initialized()
+        >>> qdq.is_bfloat16()
         True
+        >>> qdq.bitwidth
+        16
         >>> qdq(input)
-        DequantizedTensor([[ 1.0039, -0.9961, -0.2902, -0.8314, -0.9961, -0.9961,
-                             1.0039, -0.6980,  1.0039,  0.1647],
-                           [ 0.6353, -0.1490,  0.6667,  0.0000, -0.9961, -0.9961,
-                             1.0039,  0.8078, -0.9961, -0.9961],
-                           [-0.2118,  1.0039,  0.5176,  1.0039, -0.4471,  0.5647,
-                             0.6353,  0.1804,  0.3216, -0.9961],
-                           [ 0.7294, -0.4471, -0.9961,  1.0039,  0.9569,  1.0039,
-                             0.5725,  0.4157,  0.7686, -0.0471],
-                           [-0.1804,  0.9490, -0.1020,  1.0039,  0.4706, -0.0471,
-                             0.3765,  0.1725,  0.3137,  0.9882]],
-                          grad_fn=<AliasBackward0>)
+        tensor([[-0.0347,  1.9062,  2.2188, -1.7500,  0.3750,  1.7344, -0.0820, -0.2031,
+        0.4395, -1.0703],
+        [ 0.3965,  0.0645, -0.4824, -0.2871, -1.2344, -0.1240, -0.5352, -0.3574,
+        0.2676, -0.3301],
+        [ 2.6406,  2.4844,  0.1436, -0.4355, -0.1167, -0.6367,  0.3535, -1.0703,
+        -0.8125, -0.3359],
+        [-0.5078, -0.7500, -0.7227, -0.3438,  0.1543, -0.9922,  0.6523, -0.2295,
+        0.3145, -0.1338],
+        [-1.5078,  0.4961,  1.1641,  0.7617, -0.2412,  0.1177,  0.1660, -0.9141,
+        0.2500, -0.6797]])
+
+        >>> from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
+        >>> encoding_analyzer = MinMaxEncodingAnalyzer(shape=(1,))
+        >>> qdq = Q.float.FloatQuantizeDequantize(dtype=torch.float16, encoding_analyzer = encoding_analyzer)
+        >>> qdq.is_float16()
+        True
+        >>> qdq.bitwidth
+        16
+        >>> qdq(input)
+        tensor([[-0.0348,  1.9062,  2.2227, -1.7500,  0.3748,  1.7344, -0.0820, -0.2031,
+          0.4395, -1.0664],
+        [ 0.3955,  0.0645, -0.4832, -0.2876, -1.2363, -0.1239, -0.5361, -0.3582,
+          0.2671, -0.3303],
+        [ 2.6484,  2.4883,  0.1440, -0.4351, -0.1167, -0.6372,  0.3542, -1.0742,
+         -0.8110, -0.3352],
+        [-0.5088, -0.7490, -0.7236, -0.3440,  0.1541, -0.9912,  0.6528, -0.2299,
+          0.3142, -0.1338],
+        [-1.5039,  0.4958,  1.1641,  0.7622, -0.2416,  0.1179,  0.1660, -0.9131,
+          0.2507, -0.6797]])
     """
+
     maxval: torch.Tensor
 
     def __init__(self,
