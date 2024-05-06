@@ -40,7 +40,7 @@ We also provide recipes for users to quantize floating point models using AIMET.
 * * Linux Ubuntu 20.04 LTS
 * * Python 3.8
 * * Torch 1.13
-* * Cuda >= 11.8
+* * Cuda 11.8
 * * bash command shell
 
 #### Installation
