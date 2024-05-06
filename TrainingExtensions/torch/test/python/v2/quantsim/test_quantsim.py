@@ -45,7 +45,9 @@ from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.quantization.encoding_analyzer import PercentileEncodingAnalyzer
 from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.affine import AffineQuantizerBase, GroupedBlockQuantizeDequantize
+from aimet_torch.v2.experimental import propagate_output_encodings
 from aimet_torch.v2.nn import BaseQuantizationMixin
+import aimet_torch.elementwise_ops as aimet_ops
 from ..models_ import test_models
 
 def encodings_are_close(quantizer_1: AffineQuantizerBase, quantizer_2: AffineQuantizerBase):
@@ -834,3 +836,146 @@ class TestQuantsimUtilities:
             if isinstance(module, BaseQuantizationMixin):
                 assert module in leaf_modules.keys()
                 assert leaf_modules[module] == name
+
+    @pytest.mark.skip
+    def test_supergroup_bfs(self):
+        """
+        Given: model as below
+            [input] -+--> conv1 --> relu1 ---> sum --> (output)
+                     +--> conv2 --> relu2 ------^
+
+        When: Call modules in a BFS-order: 1) conv1 2) conv2 3) relu1 4) relu4
+        Then: Output quantizers of conv1 and conv2 shouldn't be instantiated
+
+        """
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv1 = torch.nn.Conv2d(3,3,3)
+                self.relu1 = torch.nn.ReLU()
+                self.conv2 = torch.nn.Conv2d(3,3,3)
+                self.relu2 = torch.nn.ReLU()
+
+            def forward(self, x):
+                x1 = self.conv1(x)
+                x2 = self.conv2(x)
+                x1 = self.relu1(x1)
+                x2 = self.relu2(x2)
+                return x1 + x2
+
+        model = Model()
+        x = torch.randn(1, 3, 24, 24)
+        sim = QuantizationSimModel(model, x)
+
+        assert sim.model.conv1.output_quantizers[0] is None
+        assert sim.model.conv2.output_quantizers[0] is None
+
+
+
+class _Model(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv1 = torch.nn.Conv2d(3,3,3)
+        self.relu1 = torch.nn.ReLU()
+        self.conv2 = torch.nn.Conv2d(3,3,3)
+        self.relu2 = torch.nn.ReLU()
+        self.cat = aimet_ops.Concat()
+
+    def forward(self, x):
+        x1 = x2 = x
+        x1 = self.conv1(x1); x2 = self.conv2(x2)
+        x1 = self.relu1(x1); x2 = self.relu2(x2)
+        return self.cat(x1, x2)
+
+
+
+class TestEncodingPropagation:
+    def test_encoding_prop_output(self):
+        """
+        Given: model as below
+          [input] --+-> q_in1 -> conv1 -> relu1 ---> q_out1 ---> concat -> q_out3 -> [output]
+                    +-> q_in2 -> conv2 -> relu2 ---> q_out2 -------^
+        """
+        model = _Model()
+        x = torch.randn(1, 3, 24, 24)
+        sim = QuantizationSimModel(model, x)
+
+        """
+        When: Call propagate_output_encodings(concat)
+
+        Then: q_out1 and q_out2 are replaced with q3 as below
+          [input] --+-> q_in1 -> conv1 -> relu1 -> **q_out3** -> concat -> q_out3- > [output]
+                    +-> q_in2 -> conv2 -> relu2 -> **q_out3** -----^
+        """
+
+        orig_q_in1 = sim.model.conv1.input_quantizers[0]
+        orig_q_in2 = sim.model.conv2.input_quantizers[0]
+
+        propagate_output_encodings(sim, aimet_ops.Concat)
+
+        q_in1 = sim.model.conv1.input_quantizers[0]
+        q_in2 = sim.model.conv2.input_quantizers[0]
+        q_out1 = sim.model.relu1.output_quantizers[0]
+        q_out2 = sim.model.relu2.output_quantizers[0]
+        q_out3 = sim.model.cat.output_quantizers[0]
+
+        # q_out1 == q_out2 == q_out3
+        assert q_out1 is q_out3
+        assert q_out2 is q_out3
+
+        # q_in1 and q_in2 stay unchanged
+        assert q_in1 is orig_q_in1
+        assert q_in2 is orig_q_in2
+
+    def test_encoding_prop_math_invariant(self):
+        """
+        Given: model as below
+          [input] --+-> q_in1 -> conv1 ---> relu1 -> q_out1 -> concat -> q_out3 -> [output]
+                    +-> q_in2 -> reshape -> permute --------------^
+        """
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv1 = torch.nn.Conv2d(3,3,3, padding=1)
+                self.relu1 = torch.nn.ReLU()
+
+                self.reshape = aimet_ops.Reshape()
+                self.permute = aimet_ops.Permute()
+
+                self.cat = aimet_ops.Concat()
+
+            def forward(self, x):
+                # assert x.shape[1:] == torch.Size([3, 24, 24])
+                x1 = x2 = x
+                x1 = self.conv1(x1)
+                x1 = self.relu1(x1)
+
+                x2 = self.reshape(x2, (-1, 24, 24, 3)) 
+                x2 = self.permute(x2, (0, 3, 1, 2))
+                return self.cat(x1, x2)
+
+        model = Model()
+        x = torch.randn(1, 3, 24, 24)
+        sim = QuantizationSimModel(model, x)
+        """
+        When: Call propagate_output_encodings(concat)
+
+        Then: q_out1 and q_in2 are replaced with q3 as below
+          [input] --+-> q_in1 -> conv1 ---> relu1 -----> **q_out3**- ---> concat -> q_out3 -> [output]
+                    +-> **q_out3** -> reshape -> transpose -> permute -------^
+        """
+        orig_q_in1 = sim.model.conv1.input_quantizers[0]
+
+        propagate_output_encodings(sim, aimet_ops.Concat)
+
+        q_in1 = sim.model.conv1.input_quantizers[0]
+        q_in2 = sim.model.reshape.input_quantizers[0]
+        q_out1 = sim.model.relu1.output_quantizers[0]
+        q_out3 = sim.model.cat.output_quantizers[0]
+
+        # q_out1 == q_out2 == q_out3
+        assert q_out1 is q_out3
+        assert q_in2 is q_out3
+
+        # q_in1 and q_in2 stay unchanged
+        assert q_in1 is orig_q_in1
