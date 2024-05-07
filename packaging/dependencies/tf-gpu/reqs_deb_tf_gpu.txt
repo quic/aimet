@@ -3,7 +3,7 @@ libcufft-11-8
 libcurand-11-8
 libcusolver-11-8
 libcusparse-11-8
-libcudnn8=8.0.5.39-1+cuda11.8
-libnccl-dev=2.8.4-1+cuda11.8
-libnccl2=2.8.4-1+cuda11.8
+libcudnn8=8.9.6.50-1+cuda11.8
+libnccl-dev=2.15.5-1+cuda11.8
+libnccl2=2.15.5-1+cuda11.8
 cuda-command-line-tools-11-8
