@@ -197,7 +197,7 @@ print(prepared_model)
 # Now, we are ready to use AIMET's :class:`QuantizationSimModel` to simulate quantizing the floating point model. This
 # involves two steps:
 #
-# 1) Add quantizers to perform "fake quantization" during the model's forward pass
+# 1) Add quantizers to simulate quantization noise during the model's forward pass
 # 2) Calibrate the quantizer encodings (e.g., min/max ranges) on some sample inputs
 #
 # Calibration is necessary to determine the range of values each activation quantizer is likely to encounter in the
@@ -237,9 +237,9 @@ print(f"Floating point model accuracy: {fp_accuracy} %\n"
 # quantized version of the layer. The quantization behavior of each module is determined by the configuration of its
 # held quantizers.
 #
-# For example, we can see that ``sim.model.conv2`` has a 4-bit weight quantizer with shape ``[256, 1, 1, 1]`` (this is a
-# per-channel parameter quantizer), and an 8-bit output quantizer with shape ``[1]`` (this is a per-tensor activation
-# quantizer). We will discuss more about the exact meaning and motivation for these shapes in a later tutorial.
+# For example, we can see that ``sim.model.conv2`` has a 4-bit weight quantizer and an 8-bit output quantizer as specified
+# during construction. We will discuss more advanced ways to configure these quantizers to optimize performance and
+# accuracy in a later tutorial.
 #
 # Fine-tune the model with quantization aware training
 # ----------------------------------------------------

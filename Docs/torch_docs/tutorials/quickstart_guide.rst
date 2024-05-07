@@ -120,7 +120,7 @@ Now, let's instantiate a network and train for a few epochs on our dataset to es
   .. code-block:: none
 
 
-      Floating point accuracy: 92.1683349609375
+      Floating point accuracy: 91.70999908447266
       
 
 
@@ -160,10 +160,10 @@ function. Does this mean we need to completely redefine our model to use AIMET? 
   .. code-block:: none
 
 
-      2024-05-06 10:49:10,769 - root - INFO - AIMET
-      2024-05-06 10:49:10,827 - ModelPreparer - INFO - Functional         : Adding new module for node: {module_relu} 
-      2024-05-06 10:49:10,828 - ModelPreparer - INFO - Functional         : Adding new module for node: {module_relu_1} 
-      2024-05-06 10:49:10,828 - ModelPreparer - INFO - Functional         : Adding new module for node: {module_softmax} 
+      2024-05-07 14:39:22,747 - root - INFO - AIMET
+      2024-05-07 14:39:22,806 - ModelPreparer - INFO - Functional         : Adding new module for node: {module_relu} 
+      2024-05-07 14:39:22,806 - ModelPreparer - INFO - Functional         : Adding new module for node: {module_relu_1} 
+      2024-05-07 14:39:22,806 - ModelPreparer - INFO - Functional         : Adding new module for node: {module_softmax} 
       GraphModule(
         (conv1): Conv2d(1, 128, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
         (bn_1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
@@ -263,7 +263,7 @@ Quantize the model
 Now, we are ready to use AIMET's :class:`QuantizationSimModel` to simulate quantizing the floating point model. This
 involves two steps:
 
-1) Add quantizers to perform "fake quantization" during the model's forward pass
+1) Add quantizers to simulate quantization noise during the model's forward pass
 2) Calibrate the quantizer encodings (e.g., min/max ranges) on some sample inputs
 
 Calibration is necessary to determine the range of values each activation quantizer is likely to encounter in the
@@ -398,8 +398,8 @@ to accurately estimate the ranges.
           return module_softmax
           
       # To see more debug info, please use `graph_module.print_readable()`
-      Floating point model accuracy: 92.1683349609375 %
-      Quantized model accuracy: 91.58833312988281 %
+      Floating point model accuracy: 91.70999908447266 %
+      Quantized model accuracy: 91.1500015258789 %
       
 
 
@@ -407,9 +407,9 @@ Here, we can see that ``sim.model`` is nothing more than the ``prepared_model`` 
 quantized version of the layer. The quantization behavior of each module is determined by the configuration of its
 held quantizers.
 
-For example, we can see that ``sim.model.conv2`` has a 4-bit weight quantizer with shape ``[256, 1, 1, 1]`` (this is a
-per-channel parameter quantizer), and an 8-bit output quantizer with shape ``[1]`` (this is a per-tensor activation
-quantizer). We will discuss more about the exact meaning and motivation for these shapes in a later tutorial.
+For example, we can see that ``sim.model.conv2`` has a 4-bit weight quantizer and an 8-bit output quantizer as specified
+during construction. We will discuss more advanced ways to configure these quantizers to optimize performance and
+accuracy in a later tutorial.
 
 Fine-tune the model with quantization aware training
 ----------------------------------------------------
@@ -452,8 +452,8 @@ Let's repeat our floating-point training loop for one more epoch, but this time 
   .. code-block:: none
 
 
-      Original quantized model accuracy: 91.58833312988281 %
-      Post-QAT model accuracy: 92.48999786376953 %
+      Original quantized model accuracy: 91.1500015258789 %
+      Post-QAT model accuracy: 92.05333709716797 %
       
 
 

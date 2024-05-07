@@ -50,9 +50,6 @@ from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.encoding_analyzer import PercentileEncodingAnalyzer
 from aimet_torch.v2.utils import patch_attr
 from aimet_torch import utils
-from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
-
-DEFAULT_PER_CHANNEL_CONFIG = get_path_for_per_channel_config()
 
 
 qc_quantize_modules_dict = {
