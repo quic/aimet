@@ -12,7 +12,7 @@ QuantizationMixin
 =================
 
 .. autoclass:: QuantizationMixin
-   :members: compute_encodings, from_module, implements, get_original_module, get_kernel, get_default_kernel
+   :members: compute_encodings, from_module, implements, get_kernel, get_default_kernel
 
    .. automethod:: quantized_forward
    .. automethod:: __quant_init__
