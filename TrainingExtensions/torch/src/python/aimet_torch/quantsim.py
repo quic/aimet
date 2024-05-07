@@ -52,11 +52,12 @@ from packaging import version  # pylint: disable=wrong-import-order
 
 import aimet_common
 import aimet_common.libpymo as libpymo
+from aimet_common import quantsim
 
 from aimet_common.connected_graph.connectedgraph_utils import CG_SPLIT
 from aimet_common.utils import AimetLogger, save_json_yaml, log_with_error_and_assert_if_false
 from aimet_common.defs import QuantScheme, QuantizationDataType, SupportedKernelsAction, QuantDtypeBwInfo
-from aimet_common.quantsim import encoding_version, validate_quantsim_inputs, extract_global_quantizer_args
+from aimet_common.quantsim import validate_quantsim_inputs, extract_global_quantizer_args
 from aimet_common.quant_utils import get_conv_accum_bounds
 
 from aimet_torch import elementwise_ops
@@ -72,6 +73,7 @@ from aimet_torch.meta.connectedgraph import ConnectedGraph, Op
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.v2.quantization.builder import LazyQuantizeWrapper
 from aimet_torch.v2.nn import BaseQuantizationMixin
+from aimet_torch.experimental.v2.quantsim.export_utils import VALID_ENCODING_VERSIONS, _export_to_1_0_0
 
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -496,6 +498,9 @@ class QuantizationSimModel:
         :param export_to_torchscript: If True, export to torchscript. Export to onnx otherwise. Defaults to False.
         :param use_embedded_encodings: If True, another onnx model embedded with fakequant nodes will be exported
         """
+        if quantsim.encoding_version not in VALID_ENCODING_VERSIONS:
+            raise NotImplementedError(f'Encoding version {quantsim.encoding_version} not in set of valid encoding '
+                                      f'versions {VALID_ENCODING_VERSIONS}.')
         # save the quantized model and encodings
         model_filename = filename_prefix + '.pth'
         model_path = os.path.join(path, model_filename)
@@ -910,6 +915,7 @@ class QuantizationSimModel:
         layers_to_onnx_op_names = QuantizationSimModel._get_layers_in_io_tensor_map(op_to_io_tensor_map)
         tensor_to_consumer_map = QuantizationSimModel._get_tensor_to_consumer_map(op_to_io_tensor_map)
         layer_names_not_found = []
+        tensor_to_quantizer_map = {}
 
         for layer_name, layer in sim_model.named_modules():
             if not isinstance(layer, (ExportableQuantModule, QcQuantizeRecurrent)):
@@ -929,7 +935,8 @@ class QuantizationSimModel:
                                                                       activation_encodings_torch,
                                                                       param_encodings, op_to_io_tensor_map,
                                                                       valid_param_set, propagate_encodings,
-                                                                      tensor_to_consumer_map, layers_to_onnx_op_names)
+                                                                      tensor_to_consumer_map, layers_to_onnx_op_names,
+                                                                      tensor_to_quantizer_map)
 
         if layer_names_not_found:
             logger.warning("The following layers were not found in the exported onnx model. Encodings for these layers"
@@ -941,27 +948,32 @@ class QuantizationSimModel:
                            "\t- The layer has valid encodings but was not seen while exporting to onnx using the dummy "
                            "input provided in sim.export(). Ensure that the dummy input covers all layers.",
                            layer_names_not_found)
-        encodings_dict_onnx = {'version': encoding_version,
-                               'activation_encodings': activation_encodings_onnx,
-                               'param_encodings': param_encodings,
-                               'excluded_layers': excluded_layer_names}
 
-        encodings_dict_pytorch = {'version': encoding_version,
-                                  'activation_encodings': activation_encodings_torch,
-                                  'param_encodings': param_encodings,
-                                  'excluded_layers': excluded_layer_names}
+        if quantsim.encoding_version == '0.6.1':
+            encodings_dict_onnx = {'version': quantsim.encoding_version,
+                                   'activation_encodings': activation_encodings_onnx,
+                                   'param_encodings': param_encodings,
+                                   'excluded_layers': excluded_layer_names}
 
-        if quantizer_args:
-            encodings_dict_pytorch.update({'quantizer_args': quantizer_args})
-            encodings_dict_onnx.update({'quantizer_args': quantizer_args})
+            encodings_dict_pytorch = {'version': quantsim.encoding_version,
+                                      'activation_encodings': activation_encodings_torch,
+                                      'param_encodings': param_encodings,
+                                      'excluded_layers': excluded_layer_names}
 
-        logger.info("Layers excluded from quantization: %s", excluded_layer_names)
+            if quantizer_args:
+                encodings_dict_pytorch.update({'quantizer_args': quantizer_args})
+                encodings_dict_onnx.update({'quantizer_args': quantizer_args})
 
-        # export weight encodings to output json file
-        encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
-        encoding_file_path_pytorch = os.path.join(path, filename_prefix + '_torch' + '.encodings')
-        save_json_yaml(encoding_file_path, encodings_dict_onnx)
-        save_json_yaml(encoding_file_path_pytorch, encodings_dict_pytorch)
+            logger.info("Layers excluded from quantization: %s", excluded_layer_names)
+
+            # export weight encodings to output json file
+            encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
+            encoding_file_path_pytorch = os.path.join(path, filename_prefix + '_torch' + '.encodings')
+            save_json_yaml(encoding_file_path, encodings_dict_onnx)
+            save_json_yaml(encoding_file_path_pytorch, encodings_dict_pytorch)
+        else:
+            _export_to_1_0_0(path, filename_prefix, activation_encodings_onnx, param_encodings, tensor_to_quantizer_map,
+                             excluded_layer_names, quantizer_args)
 
     @staticmethod
     def _get_tensor_to_consumer_map(op_to_io_tensor_map: Dict[str, Dict]) -> Dict[str, str]:
@@ -1012,7 +1024,7 @@ class QuantizationSimModel:
 
     @staticmethod
     def _update_param_encodings_dict_for_layer(layer: ExportableQuantModule, layer_name: str, param_encodings: Dict,
-                                               valid_param_set: set):
+                                               valid_param_set: set, tensor_to_quantizer_map: Dict):
         """
         :param layer: layer as torch.nn.Module
         :param layer_name : Name of the layer
@@ -1028,13 +1040,15 @@ class QuantizationSimModel:
                 logger.error('Param tensor {%s} not found in valid param set', param_name)
                 continue
             param_encodings[param_name] = param_encoding
+            tensor_to_quantizer_map[param_name] = layer.param_quantizers[orig_param_name]
 
     @staticmethod
     def _update_encoding_dicts_for_layer(layer: ExportableQuantModule, layer_name: str, activation_encodings_onnx: Dict,
                                          activation_encodings_torch: Dict, param_encodings: Dict,
                                          op_to_io_tensor_map: Dict, valid_param_set: set, propagate_encodings: bool,
                                          tensor_to_consumer_map: Dict[str, str],
-                                         layers_to_onnx_op_names: Dict[str, str]):
+                                         layers_to_onnx_op_names: Dict[str, str],
+                                         tensor_to_quantizer_map: Dict):
         """
         Add given layer param and activation encodings to respective dictionaries to be used for exporting encodings
         :param layer: layer as torch.nn.Module
@@ -1059,7 +1073,8 @@ class QuantizationSimModel:
             QuantizationSimModel._update_encoding_dict_for_input_activations(layer, layer_name, op_to_io_tensor_map,
                                                                              activation_encodings_onnx,
                                                                              activation_encodings_torch,
-                                                                             layers_to_onnx_op_names)
+                                                                             layers_to_onnx_op_names,
+                                                                             tensor_to_quantizer_map)
             # ---------------------------------------
             # Update encodings for output activations
             # ---------------------------------------
@@ -1069,18 +1084,20 @@ class QuantizationSimModel:
                                                                               activation_encodings_torch,
                                                                               propagate_encodings,
                                                                               tensor_to_consumer_map,
-                                                                              layers_to_onnx_op_names)
+                                                                              layers_to_onnx_op_names,
+                                                                              tensor_to_quantizer_map)
             # ---------------------------
             # Update encodings for Params
             # ---------------------------
             QuantizationSimModel._update_param_encodings_dict_for_layer(layer, layer_name, param_encodings,
-                                                                        valid_param_set)
+                                                                        valid_param_set, tensor_to_quantizer_map)
 
         if isinstance(layer, QcQuantizeRecurrent):
             # Update encodings for Recurrent layers
             QuantizationSimModel._update_encoding_dict_for_recurrent_layers(layer, layer_name, op_to_io_tensor_map,
                                                                             activation_encodings_onnx,
-                                                                            param_encodings, propagate_encodings)
+                                                                            param_encodings, propagate_encodings,
+                                                                            tensor_to_quantizer_map)
 
     @staticmethod
     def find_op_names_for_layer(layer_name: str, op_to_io_tensor_map: Dict,
@@ -1134,7 +1151,8 @@ class QuantizationSimModel:
     def _update_encoding_dict_for_output_activations(layer: ExportableQuantModule, layer_name: str, op_to_io_tensor_map: Dict,
                                                      activation_encodings_onnx: Dict, activation_encodings_torch: Dict,
                                                      propagate_encodings: bool, tensor_to_consumer_map: Dict[str, str],
-                                                     layers_to_onnx_op_names: Dict[str, str]):
+                                                     layers_to_onnx_op_names: Dict[str, str],
+                                                     tensor_to_quantizer_map: Dict):
         # pylint: disable=too-many-locals
         output_tensors, propagate_tensors = QuantizationSimModel._get_layer_activation_tensors(layer_name,
                                                                                                op_to_io_tensor_map,
@@ -1151,6 +1169,7 @@ class QuantizationSimModel:
 
             if encoding is not None:
                 activation_encodings_onnx[output_tensor] = encoding
+                tensor_to_quantizer_map[output_tensor] = layer.output_quantizers[index]
                 if layer_name not in activation_encodings_torch:
                     activation_encodings_torch[layer_name] = {}
                 if QUANTIZER_TYPE_OUTPUT not in activation_encodings_torch[layer_name]:
@@ -1168,7 +1187,8 @@ class QuantizationSimModel:
     @staticmethod
     def _update_encoding_dict_for_input_activations(layer: ExportableQuantModule, layer_name: str, op_to_io_tensor_map: Dict,
                                                     activation_encodings_onnx: Dict, activation_encodings_torch: Dict,
-                                                    layers_to_onnx_op_names: Dict[str, str]):
+                                                    layers_to_onnx_op_names: Dict[str, str],
+                                                    tensor_to_quantizer_map: Dict):
         input_encodings = layer.export_input_encodings()
         # skip layer if it has no input encodings.
         if all(encoding is None for encoding in input_encodings):
@@ -1185,6 +1205,7 @@ class QuantizationSimModel:
         for index, (input_tensor, encoding) in enumerate(zip(input_tensors, input_encodings)):
             if encoding is not None:
                 activation_encodings_onnx[input_tensor] = encoding
+                tensor_to_quantizer_map[input_tensor] = layer.input_quantizers[index]
                 # Check if layer exists in the pytorch encoding dictionary
                 if layer_name not in activation_encodings_torch:
                     activation_encodings_torch[layer_name] = {}
@@ -1283,7 +1304,7 @@ class QuantizationSimModel:
     @staticmethod
     def _update_encoding_dict_for_recurrent_layers(layer: torch.nn.Module, layer_name: str, op_to_io_tensor_map: Dict,
                                                    activation_encodings_onnx: Dict, param_encodings: Dict,
-                                                   propagate_encodings: bool):
+                                                   propagate_encodings: bool, tensor_to_quantizer_map: Dict):
         """
 
         :param layer:
@@ -1310,6 +1331,7 @@ class QuantizationSimModel:
             encoding = QuantizationSimModel._create_encoding_dict(quantizer_encoding, quantizer,
                                                                   propagate_encodings=False)
             activation_encodings_onnx[tensor] = [encoding]
+            tensor_to_quantizer_map[tensor] = quantizer
 
         if propagate_encodings and quantizer:
             _, op_names = QuantizationSimModel.find_op_names_for_layer(layer_name, op_to_io_tensor_map, None, None)
@@ -1329,6 +1351,7 @@ class QuantizationSimModel:
                                                                                   True)
 
                             activation_encodings_onnx[output_tensor] = [encoding]
+                            tensor_to_quantizer_map[output_tensor] = quantizer
 
         # ------------------
         # Params
@@ -1338,6 +1361,7 @@ class QuantizationSimModel:
             encoding = QuantizationSimModel._create_encoding_dict(quantizer_encoding, quantizer,
                                                                   propagate_encodings=False)
             param_encodings[tensor] = [encoding]
+            tensor_to_quantizer_map[tensor] = quantizer
 
     @staticmethod
     def _get_qc_quantized_layers(model) -> List[Tuple[str, QcQuantizeWrapper]]:
