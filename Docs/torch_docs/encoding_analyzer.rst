@@ -10,13 +10,12 @@ Encoding Analyzers
 .. autoclass:: EncodingAnalyzer
     :members:
 
-
 Variants
 --------
-
 .. autosummary::
     :toctree: generated
+    :nosignature
 
     MinMaxEncodingAnalyzer
-    SqnrEncodingAnalyzer
     PercentileEncodingAnalyzer
+    SqnrEncodingAnalyzer
