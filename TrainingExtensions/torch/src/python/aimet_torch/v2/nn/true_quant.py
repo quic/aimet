@@ -191,7 +191,9 @@ class QuantizationMixin(BaseQuantizationMixin, ABC): # pylint: disable=abstract-
         return wrapper
 
     @contextlib.contextmanager
-    def _unsafe_view_as_fakequant(self):
+    def _unsafe_view_as(self, cls):
+        assert issubclass(cls, BaseQuantizationMixin)
+
         def _view_as_qdq(quantizer):
             if not quantizer:
                 return contextlib.nullcontext()
@@ -216,7 +218,11 @@ class QuantizationMixin(BaseQuantizationMixin, ABC): # pylint: disable=abstract-
                                              self.param_quantizers.values()):
                 ctx = _view_as_qdq(quantizer)
                 stack.enter_context(ctx)
-            yield
+
+            qmodule = cls.from_module(self.get_original_module())
+            qmodule.__dict__ = self.__dict__
+
+            yield qmodule
 
 
 # pylint: disable=arguments-differ, abstract-method
@@ -233,8 +239,8 @@ class _QuantizedUnaryOpMixin(QuantizationMixin, ABC):
 
             # NOTE: This is a quick temporary solution that may not be robust
             #       for the quantized modules to be added in the future.
-            with self._unsafe_view_as_fakequant():
-                return _FakeQuantizedUnaryOpMixin.quantized_forward(self, *args, **kwargs)
+            with self._unsafe_view_as(_FakeQuantizedUnaryOpMixin) as _self:
+                return _self.quantized_forward(*args, **kwargs)
 
         x, *args = args
         x = _quantize_if_applicable(x, self.input_quantizers[0])
@@ -272,8 +278,8 @@ class _QuantizedBinaryOpMixin(QuantizationMixin, ABC):
 
             # NOTE: This is a quick temporary solution that may not be robust
             #       for the quantized modules to be added in the future.
-            with self._unsafe_view_as_fakequant():
-                return _FakeQuantizedBinaryOpMixin.quantized_forward(self, *args, **kwargs)
+            with self._unsafe_view_as(_FakeQuantizedBinaryOpMixin) as _self:
+                return _self.quantized_forward(*args, **kwargs)
 
         x, y, *args = args
         x = _quantize_if_applicable(x, self.input_quantizers[0])
