@@ -461,6 +461,9 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
 
     @torch.no_grad()
     def update_stats(self, input_tensor: torch.Tensor) -> _Statistics:
+        """
+        :meta private:
+        """
         new_stats = self.observer.collect_stats(input_tensor)
         self.observer.merge_stats(new_stats, input_tensor)
         return new_stats
