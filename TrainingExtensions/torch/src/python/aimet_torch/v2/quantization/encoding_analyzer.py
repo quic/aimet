@@ -459,6 +459,12 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
 
         self.percentile = percentile
 
+    @torch.no_grad()
+    def update_stats(self, input_tensor: torch.Tensor) -> _Statistics:
+        new_stats = self.observer.collect_stats(input_tensor)
+        self.observer.merge_stats(new_stats, input_tensor)
+        return new_stats
+
     # pylint: disable=too-many-locals
     @torch.no_grad()
     def compute_encodings_from_stats(self, stats: List[_Histogram], num_steps: int, is_symmetric: bool)\
@@ -549,6 +555,15 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         self.num_offset_candidates = offset_candidates
         self.gamma = gamma
         self.max_parallelism = max_parallelism
+
+    @torch.no_grad()
+    def update_stats(self, input_tensor: torch.Tensor) -> _Statistics:
+        """
+        :meta private:
+        """
+        new_stats = self.observer.collect_stats(input_tensor)
+        self.observer.merge_stats(new_stats, input_tensor)
+        return new_stats
 
     # pylint: disable=too-many-locals
     @torch.no_grad()
