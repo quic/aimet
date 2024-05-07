@@ -37,6 +37,7 @@
 
 """ Implementation for simulating models running on Quantized hardware """
 # pylint: disable=too-many-lines
+import itertools
 import contextlib
 import os
 import io
@@ -1643,6 +1644,30 @@ class QuantizationSimModel:
 
         if param_encodings is None and activation_encodings is None:
             raise RuntimeError
+
+        param_keys = set(param_encodings.keys())
+        activation_keys = set(activation_encodings.keys() if activation_encodings else {})
+
+        for module_name, quant_module in self.model.named_modules():
+            if not isinstance(quant_module, ExportableQuantModule):
+                continue
+
+            for param_name in quant_module.param_quantizers:
+                try:
+                    param_keys.remove(f'{module_name}.{param_name}')
+                except KeyError:
+                    pass
+
+            try:
+                activation_keys.remove(module_name)
+            except KeyError:
+                pass
+
+        if param_keys or activation_keys:
+            keys = ', '.join(itertools.chain(param_keys, activation_keys))
+            param_keys = ', '.join(param_keys)
+            msg = f"Encoding dictionary contains modules/parameters that doesn't exist in the model: {keys}"
+            raise RuntimeError(msg)
 
         if param_encodings is not None:
             self._set_param_encodings(param_encodings,
