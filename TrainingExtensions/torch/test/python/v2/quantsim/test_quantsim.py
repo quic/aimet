@@ -42,6 +42,7 @@ import os
 import json
 import pytest
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
+from aimet_torch.quantsim import load_encodings_to_sim
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.quantization.encoding_analyzer import PercentileEncodingAnalyzer
 from aimet_torch.v2.quantization.base import QuantizerBase
@@ -185,6 +186,282 @@ class TestPercentileScheme:
             # conv param quantizer needs to be enabled
             assert sim.model.conv1.param_quantizers['weight'] is not None
 
+    @pytest.mark.parametrize('load_encodings_fn', [load_encodings_to_sim,
+                                                   QuantizationSimModel.load_and_freeze_encodings,
+                                                   QuantizationSimModel.set_and_freeze_param_encodings])
+    def test_legacy_load_encodings_partial_encoding(self, load_encodings_fn):
+        model = test_models.SmallMnist()
+        dummy_input = torch.rand(1, 1, 28, 28)
+
+        partial_torch_encodings = {
+            "activation_encodings": {
+                "conv1": {
+                    "input": {
+                        "0": {
+                            "bitwidth": 8,
+                            "dtype": "int",
+                            "is_symmetric": "False",
+                            "max": 0.9978924989700317,
+                            "min": 0.0,
+                            "offset": 0,
+                            "scale": 0.003913303837180138
+                        }
+                    }
+                },
+                "conv2": {
+                    "output": {
+                        "0": {
+                            "bitwidth": 8,
+                            "dtype": "int",
+                            "is_symmetric": "False",
+                            "max": 0.4923851788043976,
+                            "min": -0.43767568469047546,
+                            "offset": -120,
+                            "scale": 0.0036472973879426718
+                        }
+                    }
+                },
+                "fc2": {
+                    "output": {
+                        "0": {
+                            "bitwidth": 8,
+                            "dtype": "int",
+                            "is_symmetric": "False",
+                            "max": 0.1948324590921402,
+                            "min": -0.15752412378787994,
+                            "offset": -114,
+                            "scale": 0.0013817904982715845
+                        }
+                    }
+                },
+                "relu1": {
+                    "output": {
+                        "0": {
+                            "bitwidth": 8,
+                            "dtype": "int",
+                            "is_symmetric": "False",
+                            "max": 1.0608084201812744,
+                            "min": 0.0,
+                            "offset": 0,
+                            "scale": 0.004160033073276281
+                        }
+                    }
+                },
+                "relu3": {
+                    "output": {
+                        "0": {
+                            "bitwidth": 8,
+                            "dtype": "int",
+                            "is_symmetric": "False",
+                            "max": 0.5247029066085815,
+                            "min": 0.0,
+                            "offset": 0,
+                            "scale": 0.0020576585084199905
+                        }
+                    }
+                }
+            },
+            "excluded_layers": [],
+            "param_encodings": {
+                "conv1.weight": [
+                    {
+                        "bitwidth": 4,
+                        "dtype": "int",
+                        "is_symmetric": "True",
+                        "max": 0.18757757544517517,
+                        "min": -0.2143743634223938,
+                        "offset": -8,
+                        "scale": 0.026796795427799225
+                    }
+                ],
+                "fc2.weight": [
+                    {
+                        "bitwidth": 4,
+                        "dtype": "int",
+                        "is_symmetric": "True",
+                        "max": 0.13095608353614807,
+                        "min": -0.14966410398483276,
+                        "offset": -8,
+                        "scale": 0.018708012998104095
+                    }
+                ]
+            },
+            "quantizer_args": {
+                "activation_bitwidth": 8,
+                "dtype": "int",
+                "is_symmetric": True,
+                "param_bitwidth": 4,
+                "per_channel_quantization": False,
+                "quant_scheme": "post_training_tf_enhanced"
+            },
+            "version": "0.6.1"
+        }
+
+        qsim = QuantizationSimModel(model, dummy_input)
+        quantizers = [q for q in qsim.model.modules() if isinstance(q, QuantizerBase)]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            fname = os.path.join(temp_dir, "temp_partial_torch_encodings.encodings")
+            with open(fname, 'w') as f:
+                json.dump(partial_torch_encodings, f)
+
+            load_encodings_fn(qsim, fname)
+
+        if load_encodings_fn is load_encodings_to_sim:
+            """
+            When: Load partial encodings with load_encodings_to_sim
+            Then: Quantizers that have no corresponding encodings should be removed
+            """
+            loaded_quantizers = [
+                qsim.model.conv1.input_quantizers[0],
+                qsim.model.conv1.param_quantizers['weight'],
+                qsim.model.conv2.output_quantizers[0],
+                qsim.model.fc2.output_quantizers[0],
+                qsim.model.fc2.param_quantizers['weight'],
+                qsim.model.relu1.output_quantizers[0],
+                qsim.model.relu3.output_quantizers[0],
+            ]
+            assert sorted(loaded_quantizers, key=id) ==\
+                   sorted([q for q in qsim.model.modules() if isinstance(q, QuantizerBase)], key=id)
+
+        elif load_encodings_fn in [QuantizationSimModel.load_and_freeze_encodings,
+                                   QuantizationSimModel.set_and_freeze_param_encodings]:
+            """
+            When: Load partial encodings with load_and_freeze_encodings or set_and_freeze_param_encodings
+            Then: Quantizers shouldn't be additionally removed or instantiated
+            """
+            assert quantizers == [q for q in qsim.model.modules() if isinstance(q, QuantizerBase)]
+        else:
+            raise AssertionError
+
+    @pytest.mark.parametrize('load_encodings_fn', [load_encodings_to_sim,
+                                                   QuantizationSimModel.load_and_freeze_encodings,
+                                                   QuantizationSimModel.set_and_freeze_param_encodings])
+    def test_legacy_load_encodings_mismatching_encoding(self, load_encodings_fn):
+        model = test_models.SmallMnist()
+        dummy_input = torch.rand(1, 1, 28, 28)
+
+        invalid_torch_encodings = {
+            "excluded_layers": [],
+            "activation_encodings": {
+                "conv999": {
+                    "input": {
+                        "0": {
+                            "bitwidth": 8,
+                            "dtype": "int",
+                            "is_symmetric": "False",
+                            "max": 0.9978924989700317,
+                            "min": 0.0,
+                            "offset": 0,
+                            "scale": 0.003913303837180138
+                        }
+                    }
+                },
+            },
+            "param_encodings": {
+                "conv999.weight": [ # NOTE: conv999 does not exist in the model
+                    {
+                        "bitwidth": 4,
+                        "dtype": "int",
+                        "is_symmetric": "True",
+                        "max": 0.18757757544517517,
+                        "min": -0.2143743634223938,
+                        "offset": -8,
+                        "scale": 0.026796795427799225
+                    }
+                ],
+            },
+            "quantizer_args": {
+                "activation_bitwidth": 8,
+                "dtype": "int",
+                "is_symmetric": True,
+                "param_bitwidth": 4,
+                "per_channel_quantization": False,
+                "quant_scheme": "post_training_tf_enhanced"
+            },
+            "version": "0.6.1"
+        }
+
+        qsim = QuantizationSimModel(model, dummy_input)
+
+        """
+        When: Try to load encoding file some keys of which are missing in the model
+              (Note that conv999 does not exist in the model)
+        Then: Throw runtime error
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            fname = os.path.join(temp_dir, "temp_partial_torch_encodings.encodings")
+            with open(fname, 'w') as f:
+                json.dump(invalid_torch_encodings, f)
+
+            with pytest.raises(RuntimeError):
+                load_encodings_fn(qsim, fname)
+
+    @pytest.mark.parametrize('load_encodings_fn', [load_encodings_to_sim,
+                                                   QuantizationSimModel.load_and_freeze_encodings,
+                                                   QuantizationSimModel.set_and_freeze_param_encodings])
+    def test_legacy_load_encodings_to_disabled_quantizer(self, load_encodings_fn):
+        model = test_models.SmallMnist()
+        dummy_input = torch.rand(1, 1, 28, 28)
+
+        invalid_torch_encodings = {
+            "excluded_layers": [],
+            "activation_encodings": {
+                "conv1": {
+                    "input": {
+                        "0": {
+                            "bitwidth": 8,
+                            "dtype": "int",
+                            "is_symmetric": "False",
+                            "max": 0.9978924989700317,
+                            "min": 0.0,
+                            "offset": 0,
+                            "scale": 0.003913303837180138
+                        }
+                    }
+                },
+            },
+            "param_encodings": {
+                "conv1.weight": [
+                    {
+                        "bitwidth": 4,
+                        "dtype": "int",
+                        "is_symmetric": "True",
+                        "max": 0.18757757544517517,
+                        "min": -0.2143743634223938,
+                        "offset": -8,
+                        "scale": 0.026796795427799225
+                    }
+                ],
+            },
+            "quantizer_args": {
+                "activation_bitwidth": 8,
+                "dtype": "int",
+                "is_symmetric": True,
+                "param_bitwidth": 4,
+                "per_channel_quantization": False,
+                "quant_scheme": "post_training_tf_enhanced"
+            },
+            "version": "0.6.1"
+        }
+
+        qsim = QuantizationSimModel(model, dummy_input)
+
+        """
+        Given: Input/param quantizers of conv1 is disabled
+        When: Try to load input/param quantizers to conv1
+        Then: Throw runtime error
+        """
+        qsim.model.conv1.input_quantizers[0] = None
+        qsim.model.conv1.param_quantizers['weight'] = None
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            fname = os.path.join(temp_dir, "temp_partial_torch_encodings.encodings")
+            with open(fname, 'w') as f:
+                json.dump(invalid_torch_encodings, f)
+
+            with pytest.raises(RuntimeError):
+                load_encodings_fn(qsim, fname)
 
 
 class TestQuantsimUtilities:
