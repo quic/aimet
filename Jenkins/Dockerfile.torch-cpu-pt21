@@ -87,7 +87,7 @@ RUN update-alternatives --set python3 /usr/bin/python3.10
 # Upgrade Python3 pip and install some more packages
 RUN python3 -m pip --no-cache-dir install --upgrade \
         pip \
-        setuptools \
+        setuptools==49.4.0 \
         wheel==0.33.4
 
 # Ubuntu packages for pytorch aimet
@@ -131,6 +131,7 @@ RUN python3 -m pip --no-cache-dir install \
         blosc==1.10.1 \
         cffi \
         click \
+        cma \
         cumm \
         cvxpy \
         cylp \
@@ -160,6 +161,7 @@ RUN python3 -m pip --no-cache-dir install \
         onnxruntime==1.15.1 \
         onnxruntime-extensions \
         opencv-python \
+        peft \
         Pillow==9.3.0 \
         pluggy==0.12.0 \
         progressbar2 \

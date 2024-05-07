@@ -53,7 +53,20 @@ Dependency Tree
 │   ├── reqs_pip_common.txt -> ../reqs_pip_common.txt
 │   ├── reqs_pip_torch_common.txt -> ../reqs_pip_torch_common.txt
 │   └── reqs_pip_torch_cpu.txt
-└── torch-gpu
+├── torch-gpu
+│   ├── reqs_deb_common.txt -> ../reqs_deb_common.txt
+│   ├── reqs_deb_torch_common.txt -> ../reqs_deb_torch_common.txt
+│   ├── reqs_deb_torch_gpu.txt
+│   ├── reqs_pip_common.txt -> ../reqs_pip_common.txt
+│   ├── reqs_pip_torch_common.txt -> ../reqs_pip_torch_common.txt
+│   └── reqs_pip_torch_gpu.txt
+├── torch-cpu-pt21
+│   ├── reqs_deb_common.txt -> ../reqs_deb_common.txt
+│   ├── reqs_deb_torch_common.txt -> ../reqs_deb_torch_common.txt
+│   ├── reqs_pip_common.txt -> ../reqs_pip_common.txt
+│   ├── reqs_pip_torch_common.txt -> ../reqs_pip_torch_common.txt
+│   └── reqs_pip_torch_cpu.txt
+└── torch-gpu-pt21
     ├── reqs_deb_common.txt -> ../reqs_deb_common.txt
     ├── reqs_deb_torch_common.txt -> ../reqs_deb_torch_common.txt
     ├── reqs_deb_torch_gpu.txt
