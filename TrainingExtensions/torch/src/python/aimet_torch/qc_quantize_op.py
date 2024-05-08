@@ -549,7 +549,7 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                         q_max.requires_grad_(requires_grad)
 
                 assert not quantizer.is_encoding_frozen
-                if not allow_overwrite:
+                if not allow_overwrite and quantizer.encoding is not None:
                     quantizer.freeze_encoding()
 
                 _logger.info("Setting quantization encodings for parameter: %s", param_name)
@@ -644,7 +644,7 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                     q_max.requires_grad_(requires_grad)
 
             assert not quantizer.is_encoding_frozen
-            if not allow_overwrite:
+            if not allow_overwrite and quantizer.encoding is not None:
                 quantizer.freeze_encoding()
 
 
