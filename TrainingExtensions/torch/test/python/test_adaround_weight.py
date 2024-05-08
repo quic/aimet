@@ -135,6 +135,22 @@ class ConvTransposeNet(torch.nn.Module):
         return x
 
 
+class ConvWithStandaloneBN(torch.nn.Module):
+    """" Model with Conv and Standalone BatchNorm layer """
+    def __init__(self):
+        super(ConvWithStandaloneBN, self).__init__()
+        self.conv1 = torch.nn.Conv2d(3, 8, kernel_size=2, stride=2, padding=2, bias=False)
+        self.bn1 = torch.nn.BatchNorm2d(8)
+        self.reul1 = torch.nn.ReLU()
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = x + 2
+        x = self.bn1(x)
+        x = self.reul1(x)
+        return x
+
+
 class MultiDataLoaders:
     """
     A simple implementation for supporting two data loaders, can be extended
@@ -1105,3 +1121,30 @@ class TestAdaround:
 
         with patch.object(AdaroundOptimizer, 'adaround_module', _adaround_module):
             _ = Adaround.apply_adaround(model, torch.randn((1, 3, 32, 32)), params, './', 'dummy')
+
+
+    def test_adaround_with_unsupported_modules_containing_weights(self):
+        data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
+
+        model = ConvWithStandaloneBN()
+        dummy_input = torch.randn(1, 3, 32, 32)
+
+        model.eval()
+
+        adaround_params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=5)
+        ada_model = Adaround.apply_adaround(model, dummy_input, adaround_params,
+                                            path='./data', filename_prefix='conv_with_standalone_bn_ada')
+
+        sim = QuantizationSimModel(ada_model, dummy_input)
+        sim.set_and_freeze_param_encodings('./data/conv_with_standalone_bn_ada.encodings')
+
+        for _, module in sim.model.named_modules():
+            if isinstance(module, QcQuantizeWrapper) and 'weight' in module.param_quantizers:
+                # As adaround doesn't support standalone batchnorm modules (which are not folded with Conv),
+                # after applying set_and_freeze_encodings() using adaround encodings,
+                # param quantizers for batchnorm weights should not be disabled
+                if isinstance(module._module_to_wrap, torch.nn.BatchNorm2d):
+                    assert not module.param_quantizers['weight'].is_encoding_frozen and module.param_quantizers['weight'].enabled
+                else:
+                    assert module.param_quantizers['weight'].is_encoding_frozen
+
