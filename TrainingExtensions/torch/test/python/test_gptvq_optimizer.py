@@ -40,6 +40,7 @@ import pytest
 import torch
 
 from aimet_torch.gptvq.gptvq_optimizer import GPTVQOptimizer
+from aimet_torch.gptvq.utils import manipulate_inverse_hessian_diagonal
 
 
 class TestGPTVQOptimizer:
@@ -77,3 +78,29 @@ class TestGPTVQOptimizer:
             # Since weights is zero tensor, the rounded weight should be first vector in codebook, which is the nearest vector
             nearest_vector = corresponding_codebook[0]
             assert all([row.equal(nearest_vector) for row in current_group_weight])
+
+    @pytest.mark.parametrize("ndim", [None, 2, 3])
+    def test_manipulate_hessian_inverse_diagonal(self, ndim):
+        vector_dim = 2
+        num_elements = 32
+
+        tensor = torch.zeros(24, num_elements, vector_dim)
+        if ndim == 2:
+            hessian_inverse_diagonal = torch.zeros(1, vector_dim)
+        elif ndim == 3:
+            hessian_inverse_diagonal = torch.zeros(1, num_elements, vector_dim)
+        else:
+            hessian_inverse_diagonal = None
+
+        manipulated_tensor = manipulate_inverse_hessian_diagonal(
+            tensor, hessian_inverse_diagonal
+        )
+        if ndim == 2:
+            assert torch.equal(hessian_inverse_diagonal, manipulated_tensor)
+        elif ndim == 3:
+            assert manipulated_tensor.shape == (1, num_elements, 1, vector_dim)
+        else:
+            assert torch.equal(
+                manipulated_tensor, torch.ones(tensor.shape[-1], device=tensor.device)
+            )
+

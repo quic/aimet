@@ -41,6 +41,7 @@ import tempfile
 
 import pytest
 import torch
+from torch.utils.data import DataLoader, Dataset
 
 from aimet_torch.gptvq.defs import GPTVQSupportedModules
 from aimet_torch.gptvq.gptvq_weight import GPTVQ, GPTVQParameters
@@ -77,12 +78,34 @@ QUANTSIM_CONFIG = {
 }
 
 
+class RandomDataset(Dataset):
+    def __init__(self, data_size = 32, input_dim = 10):
+        self.data_size = data_size
+        self.input_dim = input_dim
+
+        # generate random data and store it in lists
+        self.data_x = [torch.rand(input_dim) for _ in range(data_size)]
+        self.data_y = [torch.rand(1) for _ in range(data_size)]
+
+    def __len__(self):
+        return self.data_size
+
+    def __getitem__(self, idx):
+        x = self.data_x[idx]
+        y = self.data_y[idx]
+        return x, y
+
+
 class TestGPTVQWeight:
     @pytest.mark.parametrize("vector_bw", [4, 8, 16])
     @pytest.mark.parametrize("rows_per_block", [32, 64])
     def test_quant_sim_initialization_in_gptvq(self, vector_bw, rows_per_block):
         model = test_models.ModelWithThreeLinears()
+
+        data_loader = DataLoader(RandomDataset(data_size=2, input_dim=768), batch_size=1, shuffle=False)
         gptvq_parameters = GPTVQParameters(
+            data_loader=data_loader,
+            forward_fn=lambda m, d: m(d[0]),
             vector_bw=vector_bw, rows_per_block=rows_per_block
         )
         dummy_input = torch.randn(1, 768)
@@ -110,9 +133,32 @@ class TestGPTVQWeight:
                     assert weight_quantizer.block_size == (gptvq_parameters.rows_per_block, weight_shape[1])
                     assert weight_quantizer.is_initialized()
 
+    def test_gptvq_weight_update(self):
+        model = test_models.ModelWithThreeLinears()
+        data_loader = DataLoader(RandomDataset(data_size=1, input_dim=768), batch_size=1, shuffle=False)
+        gptvq_parameters = GPTVQParameters(data_loader, forward_fn=lambda m, d: m(d[0]), num_of_kmeans_iterations=1)
+        dummy_input = torch.randn(1, 768)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = f"{temp_dir}/quantsim_config.json"
+            with open(config_path, "w") as f:
+                json.dump(QUANTSIM_CONFIG, f)
+
+            rounded_model = GPTVQ.apply_gptvq(
+                model,
+                dummy_input,
+                gptvq_parameters,
+                param_encoding_path=temp_dir,
+                config_file_path=config_path,
+            )
+
+        assert not torch.allclose(model.linear1.weight, rounded_model.linear1.weight)
+        assert not torch.allclose(model.linear2.weight, rounded_model.linear2.weight)
+        assert not torch.allclose(model.linear3.weight, rounded_model.linear3.weight)
+
     def test_exported_param_encodings_after_gptvq(self):
         model = test_models.ModelWithThreeLinears()
-        gptvq_parameters = GPTVQParameters()
+        data_loader = DataLoader(RandomDataset(data_size=1, input_dim=768), batch_size=1, shuffle=False)
+        gptvq_parameters = GPTVQParameters(data_loader, forward_fn=lambda m, d: m(d[0]), num_of_kmeans_iterations=1)
         dummy_input = torch.randn(1, 768)
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = f"{temp_dir}/quantsim_config.json"

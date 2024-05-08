@@ -35,6 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """Utility methods for working with GPTVQ"""
+from typing import Optional
 
 import torch
 from torch.linalg import LinAlgError
@@ -43,18 +44,28 @@ from aimet_torch.gptvq.defs import DAMPENING_PERCENTAGE
 
 
 def generate_codebook(weight_block: torch.Tensor,
-                      num_of_centroids: int):
+                      num_of_centroids: int,
+                      inverse_hessian_diagonal: Optional[torch.Tensor] = None,
+                      assignment_chunk_size: Optional[int] = None,
+                      kmeans_iteration: int = 100):
     """
     Generate and optimize codebook using K-means and return it
 
     :param weight_block: Weight block
     :param num_of_centroids: Number of centroids
+    :param inverse_hessian_diagonal: Diagonal of inverse Hessian tensor
+    :param assignment_chunk_size: Chunk size for better memory management
+    :param kmeans_iteration: Number of K-means iterations
     :return: Optimized codebook
     """
-    initial_codebook = hacky_mahalanobis_init(weight_block, num_of_centroids)
+    codebook = hacky_mahalanobis_init(weight_block, num_of_centroids)
+    for _ in range(kmeans_iteration):
+        # Expectation step
+        assignments = get_assignments(weight_block, codebook, inverse_hessian_diagonal, assignment_chunk_size)
 
-    # TODO: Add K-means optimization with Hessian tensor
-    return initial_codebook
+        # Maximization step
+        codebook = do_kmeans_maximization(weight_block, codebook, assignments, inverse_hessian_diagonal)
+    return codebook
 
 
 def hacky_mahalanobis_init(tensor: torch.Tensor, num_of_centroids: int) -> torch.Tensor:
@@ -89,17 +100,143 @@ def hacky_mahalanobis_init(tensor: torch.Tensor, num_of_centroids: int) -> torch
     return torch.gather(tensor, dim=1, index=idx)
 
 
-def get_assignments(tensor: torch.Tensor, centroids: torch.Tensor) -> torch.Tensor:
+def manipulate_inverse_hessian_diagonal(tensor: torch.Tensor,
+                                        inverse_hessian_diagonal: Optional[torch.Tensor]) -> torch.Tensor:
+    """
+    Manipulate diagonal of inverse Hessian tensor if needed
+
+    :param tensor: Tensor corresponding to diagonal of inverse Hessian tensor
+    :param inverse_hessian_diagonal: Diagonal of inverse Hessian tensor
+    :return: Manipulated Hessian tensor
+    """
+    if inverse_hessian_diagonal is None:
+        return torch.ones(tensor.shape[-1], device=tensor.device)
+
+    if inverse_hessian_diagonal.ndim > 2:  # should then be 1 x N x vector_dim
+        assert (
+                inverse_hessian_diagonal.shape[0] == 1
+                and inverse_hessian_diagonal.shape[1] == tensor.shape[1]
+                and inverse_hessian_diagonal.shape[2] == tensor.shape[2]
+        ), f"{inverse_hessian_diagonal.shape, tensor.shape}"
+        return inverse_hessian_diagonal.unsqueeze(2)  # 1 x N x 1 x vector_dim
+
+    return inverse_hessian_diagonal
+
+
+def generate_tensor_chunks(tensor: torch.Tensor,
+                           chunk_size: Optional[int]) -> list[torch.Tensor]:
+    """
+    Generate chunks of torch.Tensor
+
+    :param tensor: torch.Tensor
+    :param chunk_size: Chunk size
+    :return: Tensor chunks
+    """
+    if chunk_size is None:
+        return [tensor]
+
+    return torch.split(tensor, chunk_size, dim=1)
+
+
+def generate_hessian_chunks(hessian: torch.Tensor,
+                            num_of_tensor_chunks: int,
+                            chunk_size: Optional[int]) -> list[torch.Tensor]:
+    """
+    Generate chunks of diagonal of inverse Hessian tensor
+
+    :param hessian: Diagonal of inverse Hessian tensor
+    :param num_of_tensor_chunks: Number of corresponding tensor chunks
+    :param chunk_size: Chunk size
+    :return: Hessian tensor chunks
+    """
+    if chunk_size is None:
+        return [hessian]
+
+    if hessian.ndim > 1:
+        return torch.split(hessian, chunk_size, dim=1)
+
+    return [hessian] * num_of_tensor_chunks
+
+
+def prepare_tensor_and_hessian_chunks(tensor: torch.Tensor,
+                                      hessian: torch.Tensor,
+                                      chunk_size: Optional[int]) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
+    """
+    Use chunking for better memory management and return tensor and hessian chunks
+
+    :param tensor: Tensor corresponding to diagonal of inverse Hessian tensor
+    :param hessian: Diagonal of inverse Hessian tensor
+    :param chunk_size: Chunk size
+    :return: Tuple of tensor chunks and hessian chunks
+    """
+    tensor_chunks = generate_tensor_chunks(tensor, chunk_size)
+    hessian_chunks = generate_hessian_chunks(hessian, len(tensor_chunks), chunk_size)
+
+    return tensor_chunks, hessian_chunks
+
+
+def get_assignments(tensor: torch.Tensor,
+                    centroids: torch.Tensor,
+                    inverse_hessian_diagonal: Optional[torch.Tensor] = None,
+                    chunk_size: Optional[int] = None) -> torch.Tensor:
     """
     Calculate nearest centroid index tensor
 
     :param tensor: num_blocks_per_column x N x vector_dim
     :param centroids: num_blocks_per_column x num_centroids x vector_dim
+    :param inverse_hessian_diagonal: Diagonal of inverse Hessian tensor
+    :param chunk_size: Chunk size for better memory management
     :return: nearest centroid index tensor
     """
-    centroids = centroids.unsqueeze(1)  # num_blocks_per_column x 1 x num_centroids x vector_dim
-    tensor = tensor.unsqueeze(2)        # num_blocks_per_column x N x       1       x vector_dim
-    distance = (tensor - centroids).pow(2).sum(-1)
-    assignments = distance.argmin(-1)
+    manipulated_hessian = manipulate_inverse_hessian_diagonal(tensor, inverse_hessian_diagonal)
+    tensor_chunks, hessian_chunks = prepare_tensor_and_hessian_chunks(tensor, manipulated_hessian, chunk_size)
 
-    return assignments  # num_blocks_per_column x N
+    centroids = centroids.unsqueeze(1) # num_blocks_per_column x 1 x num_centroids x vector_dim
+    assignments = []
+    for tensor_chunk, hessian_chunk in zip(tensor_chunks, hessian_chunks):
+        tensor_chunk = tensor_chunk.unsqueeze(2) # num_blocks_per_column x N x 1 x vector_dim
+        distance = ((tensor_chunk - centroids).pow(2) * hessian_chunk).sum(-1)
+        assignments.append(distance.argmin(-1))
+
+    return torch.concat(assignments, dim=1)  # num_blocks_per_column x N
+
+
+def do_kmeans_maximization(tensor: torch.Tensor,
+                           centroids: torch.Tensor,
+                           assignments: torch.Tensor,
+                           inverse_hessian_diagonal: Optional[torch.Tensor]) -> torch.Tensor:
+    """
+    Do K-means maximization step
+
+    :param tensor: torch.Tensor (num_blocks_per_column x N x vector_dim)
+    :param centroids: Codebook including centroids (num_blocks_per_column x num_centroids x vector_dim)
+    :param assignments: Assignment result from expectation step (num_blocks_per_column x N)
+    :param inverse_hessian_diagonal: Diagonal of inverse Hessian (1 x N x vector_dim)
+    :return: Updated codebook after maximization step
+    """
+    centroid_range = torch.arange(centroids.shape[1], device=centroids.device)
+    expanded_assignments = (
+        assignments.unsqueeze(-1) == centroid_range.view(1, 1, -1)
+    ).to(tensor.dtype)
+
+    if inverse_hessian_diagonal is None:
+        norm = 1.0 / torch.clip(expanded_assignments.sum(1), min=1)
+        new_centroids = torch.einsum(
+            "gnd,gnk,gk->gkd", tensor, expanded_assignments, norm
+        )
+    else:
+        norm = 1.0 / torch.clip(
+            torch.einsum(
+                "gnk,nd->gkd", expanded_assignments, inverse_hessian_diagonal[0]
+            ),
+            min=1e-10,
+        )
+        new_centroids = torch.einsum(
+            "gnd,nd,gnk,gkd->gkd",
+            tensor,
+            inverse_hessian_diagonal[0],
+            expanded_assignments,
+            norm,
+        )
+
+    return new_centroids
