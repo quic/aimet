@@ -34,6 +34,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+import os
 import copy
 import math
 import pickle
@@ -104,6 +105,33 @@ def x():
     """
     return torch.arange(-200, 200).view(4, 100) / 100
 
+
+@pytest.fixture
+def init_process_group():
+    import torch.distributed as dist
+
+    LOCAL_RANK = os.getenv('LOCAL_RANK', None)
+    try:
+        # Create process group of size 1
+        dist.init_process_group(backend='gloo',
+                                store=dist.HashStore(),
+                                world_size=1,
+                                rank=0)
+        os.environ['LOCAL_RANK'] = '0'
+        yield
+    finally:
+        if dist.is_initialized():
+            dist.destroy_process_group()
+        if LOCAL_RANK is not None:
+            os.environ['LOCAL_RANK'] = LOCAL_RANK
+
+
+@pytest.fixture
+def deepspeed_zero3_config():
+    return {
+        "zero_optimization": {"stage": 3},
+        "train_batch_size": 1,
+    }
 
 
 def minmax_to_scaleoffset(min, max, symmetric, bitwidth):
@@ -778,6 +806,90 @@ def test_is_initialized():
     res = pickle.dumps(qdq)
     qdq = pickle.loads(res)
     assert qdq.is_initialized()
+
+
+@pytest.mark.cuda
+def test_is_initialized_with_deepspeed_zero3(init_process_group, deepspeed_zero3_config):
+    import deepspeed as ds
+
+    """
+    When: Partition a quantizer with deepspeed zero 3
+    Then: quantizer.is_initialized() flag should be preserved after pertitioning
+    """
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
+    engine, *_ = ds.initialize(model=qdq, config=deepspeed_zero3_config)
+    qdq_zero3 = engine.module
+    assert not qdq_zero3.is_initialized()
+
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
+    qdq.set_range(-1, 1)
+    engine, *_ = ds.initialize(model=qdq, config=deepspeed_zero3_config)
+    qdq_zero3 = engine.module
+    assert qdq_zero3.is_initialized()
+
+    """
+    When: Gather the partitioned quantization parameters in read-only mode
+    Then: quantizer.is_initialized() flag should be preserved during/after gathering
+    """
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
+    engine, *_ = ds.initialize(model=qdq, config=deepspeed_zero3_config)
+    qdq_zero3 = engine.module
+
+    with ds.zero.GatheredParameters(qdq_zero3.parameters()):
+        assert not qdq_zero3.is_initialized()
+    assert not qdq_zero3.is_initialized()
+
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
+    qdq.set_range(-1, 1)
+    engine, *_ = ds.initialize(model=qdq, config=deepspeed_zero3_config)
+    qdq_zero3 = engine.module
+
+    with ds.zero.GatheredParameters(qdq_zero3.parameters()):
+        assert qdq_zero3.is_initialized()
+    assert qdq_zero3.is_initialized()
+
+    """
+    When: Modify the partitioned quantization parameters
+    Then: quantizer.is_initialized() returns True
+    """
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
+    engine, *_ = ds.initialize(model=qdq, config=deepspeed_zero3_config)
+    qdq_zero3 = engine.module
+    with ds.zero.GatheredParameters(qdq_zero3.parameters(), modifier_rank=0):
+        qdq_zero3.set_range(-1, 1)
+        assert qdq_zero3.is_initialized()
+    assert qdq_zero3.is_initialized()
+
+    # TODO (kyunggeu): Support the below use case
+    # qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
+    # engine, *_ = ds.initialize(model=qdq, config=deepspeed_zero3_config)
+    # qdq_zero3 = engine.module
+    # with ds.zero.GatheredParameters(qdq_zero3.parameters(), modifier_rank=0):
+    #     with qdq_zero3.compute_encodings():
+    #         _ = qdq_zero3(torch.arange(-5, 5, dtype=torch.float, device='cuda:0'))
+    #     assert qdq_zero3.is_initialized()
+    # assert qdq_zero3.is_initialized()
+
+    """
+    When: Gather the partitioned quantization parameters in writable mode but don't modify them
+    Then: quantizer.is_initialized() flag should be preserved during/after gathering
+    """
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
+    engine, *_ = ds.initialize(model=qdq, config=deepspeed_zero3_config)
+    qdq_zero3 = engine.module
+
+    with ds.zero.GatheredParameters(qdq_zero3.parameters(), modifier_rank=0):
+        assert not qdq_zero3.is_initialized()
+    assert not qdq_zero3.is_initialized()
+
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
+    qdq.set_range(-1, 1)
+    engine, *_ = ds.initialize(model=qdq, config=deepspeed_zero3_config)
+    qdq_zero3 = engine.module
+
+    with ds.zero.GatheredParameters(qdq_zero3.parameters(), modifier_rank=0):
+        assert qdq_zero3.is_initialized()
+    assert qdq_zero3.is_initialized()
 
 
 @torch.no_grad()
