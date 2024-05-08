@@ -67,7 +67,7 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
         # This info will be used for judging whether the current parameter has ever been
         # initialized after it was instantiated.
         self._initial_parameters = OrderedDict()
-        self._skip_encoding_computation = False
+        self._allow_overwrite = True
 
     @abc.abstractmethod
     @contextlib.contextmanager

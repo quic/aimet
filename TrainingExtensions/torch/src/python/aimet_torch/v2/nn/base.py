@@ -234,7 +234,7 @@ class BaseQuantizationMixin(abc.ABC):
                                strict: bool,
                                partial: bool,
                                requires_grad: Optional[bool],
-                               allow_recompute: Optional[bool]):
+                               allow_overwrite: Optional[bool]):
         """
         Import input encodings represented in below format:
         {
@@ -252,7 +252,7 @@ class BaseQuantizationMixin(abc.ABC):
             encoding = encodings.get(str(i), None)
             if not encoding:
                 if not partial:
-                    # Dnagling quantizers have to be removed when importing non-partial encodings
+                    # Dangling quantizers have to be removed when importing non-partial encodings
                     self.input_quantizers[i] = None
                 continue
             if quantizer is None and strict:
@@ -264,8 +264,8 @@ class BaseQuantizationMixin(abc.ABC):
             if requires_grad is not None:
                 quantizer.requires_grad_(requires_grad)
 
-            if allow_recompute is not None:
-                quantizer._skip_encoding_computation = not allow_recompute # pylint:disable = protected-access
+            if allow_overwrite is not None:
+                quantizer._allow_overwrite = allow_overwrite # pylint:disable = protected-access
 
     def export_output_encodings(self) -> List[List[Dict]]:
         """
@@ -281,7 +281,7 @@ class BaseQuantizationMixin(abc.ABC):
                                 strict: bool,
                                 partial: bool,
                                 requires_grad: Optional[bool],
-                                allow_recompute: Optional[bool]):
+                                allow_overwrite: Optional[bool]):
         """
         Import output encodings represented in below format:
         {
@@ -299,7 +299,7 @@ class BaseQuantizationMixin(abc.ABC):
             encoding = encodings.get(str(i), None)
             if not encoding:
                 if not partial:
-                    # Dnagling quantizers have to be removed when importing non-partial encodings
+                    # Dangling quantizers have to be removed when importing non-partial encodings
                     self.output_quantizers[i] = None
                 continue
             if quantizer is None and strict:
@@ -311,8 +311,8 @@ class BaseQuantizationMixin(abc.ABC):
             if requires_grad is not None:
                 quantizer.requires_grad_(requires_grad)
 
-            if allow_recompute is not None:
-                quantizer._skip_encoding_computation = not allow_recompute # pylint:disable = protected-access
+            if allow_overwrite is not None:
+                quantizer._allow_overwrite = allow_overwrite # pylint:disable = protected-access
 
     def export_param_encodings(self) -> Dict[str, List[Dict]]:
         """
@@ -328,7 +328,7 @@ class BaseQuantizationMixin(abc.ABC):
                                strict: bool,
                                partial: bool,
                                requires_grad: Optional[bool],
-                               allow_recompute: Optional[bool]):
+                               allow_overwrite: Optional[bool]):
         """
         Import parameter encodings represented in below format:
         {
@@ -346,7 +346,7 @@ class BaseQuantizationMixin(abc.ABC):
             encoding = encodings.get(param_name, None)
             if not encoding:
                 if not partial:
-                    # Dnagling quantizers have to be removed when importing non-partial encodings
+                    # Dangling quantizers have to be removed when importing non-partial encodings
                     self.param_quantizers[param_name] = None
                 continue
             if quantizer is None and strict:
@@ -358,8 +358,8 @@ class BaseQuantizationMixin(abc.ABC):
             if requires_grad is not None:
                 quantizer.requires_grad_(requires_grad)
 
-            if allow_recompute is not None:
-                quantizer._skip_encoding_computation = not allow_recompute # pylint:disable = protected-access
+            if allow_overwrite is not None:
+                quantizer._allow_overwrite = allow_overwrite # pylint:disable = protected-access
 
     def get_original_module(self) -> nn.Module:
         """

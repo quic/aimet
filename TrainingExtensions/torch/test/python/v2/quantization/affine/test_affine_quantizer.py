@@ -953,17 +953,17 @@ def test_high_bitwidth(x, symmetric):
 
 @pytest.mark.parametrize("q", (Quantize(_PARAMETER_SHAPE, 8, False),
                                QuantizeDequantize(_PARAMETER_SHAPE, 8, True)))
-def test_skip_encoding_computation(x, q):
+def test_allow_overwrite(x, q):
     with q.compute_encodings():
         q(x)
 
     """
-    Given: _skip_encoding_computation set to True
+    Given: _allow_overwrite set to True
     When: Try to recompute encodings
     Then: Encoding does NOT get overwritten by compute_encodings
     """
     q_min, q_max = q.min.detach().clone(), q.max.detach().clone()
-    q._skip_encoding_computation = True
+    q._allow_overwrite = False
     with q.compute_encodings():
         q(x * 10)
 

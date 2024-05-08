@@ -383,7 +383,7 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                                     strict=not ignore_when_quantizer_disabled,
                                     partial=not disable_quantizer_without_encoding,
                                     requires_grad=None,
-                                    allow_recompute=None)
+                                    allow_overwrite=None)
 
         try:
             output_encoding = activation_encodings[module_name]['output']
@@ -394,7 +394,7 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                                      strict=not ignore_when_quantizer_disabled,
                                      partial=not disable_quantizer_without_encoding,
                                      requires_grad=None,
-                                     allow_recompute=None)
+                                     allow_overwrite=None)
 
     def set_param_encoding(self, module_name: str, param_encodings: Dict,
                            ignore_when_quantizer_disabled: bool = False, disable_quantizer_without_encoding: bool = True):
@@ -417,7 +417,7 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                                     strict=not ignore_when_quantizer_disabled,
                                     partial=not disable_quantizer_without_encoding,
                                     requires_grad=None,
-                                    allow_recompute=None)
+                                    allow_overwrite=None)
 
     def freeze_param_encoding(self, module_name: str, param_encodings: Dict):
         """
@@ -499,7 +499,7 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                                strict: bool,
                                partial: bool,
                                requires_grad: Optional[bool],
-                               allow_recompute: Optional[bool]):
+                               allow_overwrite: Optional[bool]):
         """
         Import parameter encodings represented in below format:
         {
@@ -545,8 +545,8 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                         q_max = getattr(quantizer.wrapper_ref, quantizer.name + '_encoding_max')
                         q_max.requires_grad_(requires_grad)
 
-                if allow_recompute is not None:
-                    if not allow_recompute:
+                if allow_overwrite is not None:
+                    if not allow_overwrite:
                         quantizer.freeze_encoding()
                     else:
                         raise NotImplementedError("Unfreezing is not supported")
@@ -566,7 +566,7 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                                 strict: bool,
                                 partial: bool,
                                 requires_grad: Optional[bool],
-                                allow_recompute: Optional[bool]):
+                                allow_overwrite: Optional[bool]):
         """
         Import output encodings represented in below format:
         {
@@ -576,14 +576,14 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
         }
         """
         self._import_encoding(encodings, self.output_quantizers,
-                              strict, partial, requires_grad, allow_recompute)
+                              strict, partial, requires_grad, allow_overwrite)
 
     def import_input_encodings(self,
                                encodings: Mapping[str, Mapping],
                                strict: bool,
                                partial: bool,
                                requires_grad: Optional[bool],
-                               allow_recompute: Optional[bool]):
+                               allow_overwrite: Optional[bool]):
         """
         Import input encodings represented in below format:
         {
@@ -593,10 +593,10 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
         }
         """
         self._import_encoding(encodings, self.input_quantizers,
-                              strict, partial, requires_grad, allow_recompute)
+                              strict, partial, requires_grad, allow_overwrite)
 
     def _import_encoding(self, encodings, quantizers, strict: bool, partial: bool,
-                         requires_grad: Optional[bool], allow_recompute: Optional[bool]):
+                         requires_grad: Optional[bool], allow_overwrite: Optional[bool]):
         # pylint: disable=too-many-branches
         assert quantizers is self.input_quantizers or quantizers is self.output_quantizers
 
@@ -642,8 +642,8 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                     q_max = getattr(quantizer.wrapper_ref, quantizer.name + '_encoding_max')
                     q_max.requires_grad_(requires_grad)
 
-            if allow_recompute is not None:
-                if not allow_recompute:
+            if allow_overwrite is not None:
+                if not allow_overwrite:
                     quantizer.freeze_encoding()
                 else:
                     raise NotImplementedError("Unfreezing is not supported")

@@ -331,11 +331,11 @@ class TestPercentileScheme:
                 assert q.max.requires_grad == max_copy.requires_grad
 
         """
-        When: Call load_encodings with allow_recompute=True
+        When: Call load_encodings with allow_overwrite=True
         Then: The loaded quantizers should be overwritten by a subsequent compute_encodings
         """
         sim = QuantizationSimModel(model, dummy_input)
-        sim.load_encodings(encodings, allow_recompute=True)
+        sim.load_encodings(encodings, allow_overwrite=True)
         weight_min = sim.model.conv1.param_quantizers['weight'].min.clone().detach()
         weight_max = sim.model.conv1.param_quantizers['weight'].max.clone().detach()
         input_min = sim.model.conv1.input_quantizers[0].min.clone().detach()
@@ -353,11 +353,11 @@ class TestPercentileScheme:
                                      sim.model.conv1.input_quantizers[0].max))
 
         """
-        When: Call load_encodings with allow_recompute=False
+        When: Call load_encodings with allow_overwrite=False
         Then: The loaded quantizers should NOT be overwritten by a subsequent compute_encodings
         """
         sim = QuantizationSimModel(model, dummy_input)
-        sim.load_encodings(encodings, allow_recompute=False)
+        sim.load_encodings(encodings, allow_overwrite=False)
         weight_min = sim.model.conv1.param_quantizers['weight'].min.clone().detach()
         weight_max = sim.model.conv1.param_quantizers['weight'].max.clone().detach()
         input_min = sim.model.conv1.input_quantizers[0].min.clone().detach()
@@ -371,10 +371,10 @@ class TestPercentileScheme:
         assert torch.equal(input_max, sim.model.conv1.input_quantizers[0].max)
 
         """
-        When: Call load_encodings with allow_recompute=None
+        When: Call load_encodings with allow_overwrite=None
         Then: Whether the loaded quantizers can be overwritten is kept unchanged
         """
-        sim.load_encodings(encodings, allow_recompute=None)
+        sim.load_encodings(encodings, allow_overwrite=None)
 
         assert torch.equal(weight_min, sim.model.conv1.param_quantizers['weight'].min)
         assert torch.equal(weight_max, sim.model.conv1.param_quantizers['weight'].max)

@@ -158,7 +158,7 @@ class ExportableQuantModule(Protocol):
                                strict: bool,
                                partial: bool,
                                requires_grad: Optional[bool],
-                               allow_recompute: Optional[bool]):
+                               allow_overwrite: Optional[bool]):
         """
         Import input encodings represented in below format:
         {
@@ -173,7 +173,7 @@ class ExportableQuantModule(Protocol):
                                 strict: bool,
                                 partial: bool,
                                 requires_grad: Optional[bool],
-                                allow_recompute: Optional[bool]):
+                                allow_overwrite: Optional[bool]):
         """
         Import output encodings represented in below format:
         {
@@ -188,7 +188,7 @@ class ExportableQuantModule(Protocol):
                                strict: bool,
                                partial: bool,
                                requires_grad: Optional[bool],
-                               allow_recompute: Optional[bool]):
+                               allow_overwrite: Optional[bool]):
         """
         Import parameter encodings represented in below format:
         {
@@ -1624,7 +1624,7 @@ class QuantizationSimModel:
                        strict: bool = True,
                        partial: bool = True,
                        requires_grad: Optional[bool] = None,
-                       allow_recompute: Optional[bool] = None):
+                       allow_overwrite: Optional[bool] = None):
         """
         :param encodings: Encoding dictionary or path to the encoding dictionary json file.
         :param bool strict: If True, an error will be thrown if the model doesn't
@@ -1635,21 +1635,21 @@ class QuantizationSimModel:
         :param bool requires_grad: Whether or not the quantization parameters loaded from the
             encodings require gradient computation during training.
             If None, ``requires_grad`` flag of the quantization parameters will be kept unchanged.
-        :param bool allow_recompute: Whether or not the quantization parameters loaded from the
-            encodings can be overwriiten when :ref:`compute_encodings` is called subsequently.
-            If None, whether the quantizer is allowed to overwrite encodings will be kept unchanged.
+        :param bool allow_overwrite: Whether or not the quantization parameters loaded from the
+            encodings can be overwriiten by :ref:`compute_encodings` or another :ref:`load_encodings`.
+            If None, whether the quantizer is overwrieable will be kept unchanged.
         """
         if isinstance(encodings, (str, os.PathLike)):
             with open(encodings, mode='r') as f:
                 encodings = json.load(f)
 
-        self._load_encodings_impl(encodings, strict, partial, requires_grad, allow_recompute)
+        self._load_encodings_impl(encodings, strict, partial, requires_grad, allow_overwrite)
 
     def _load_encodings_impl(self, encodings: Mapping,
                              strict: bool,
                              partial: bool,
                              requires_grad: Optional[bool],
-                             allow_recompute: Optional[bool]):
+                             allow_overwrite: Optional[bool]):
         if 'param_encodings' not in encodings:
             param_encodings = encodings
             activation_encodings = {}
@@ -1675,11 +1675,11 @@ class QuantizationSimModel:
 
         if param_encodings is not None:
             self._set_param_encodings(param_encodings,
-                                      strict, partial, requires_grad, allow_recompute)
+                                      strict, partial, requires_grad, allow_overwrite)
 
         if activation_encodings is not None:
             self._set_activation_encodings(activation_encodings,
-                                           strict, partial, requires_grad, allow_recompute)
+                                           strict, partial, requires_grad, allow_overwrite)
 
     @deprecated(f"Use {load_encodings.__qualname__} instead.")
     def load_and_freeze_encodings(self, encoding_path: str, ignore_when_quantizer_disabled: bool = False):
@@ -1697,14 +1697,14 @@ class QuantizationSimModel:
                             strict=not ignore_when_quantizer_disabled,
                             partial=True,
                             requires_grad=False,
-                            allow_recompute=False)
+                            allow_overwrite=False)
 
     def _set_param_encodings(self,
                              encoding_dict: Mapping,
                              strict: bool,
                              partial: bool,
                              requires_grad: Optional[bool],
-                             allow_recompute: Optional[bool]):
+                             allow_overwrite: Optional[bool]):
         for name, quant_module in self.model.named_modules():
             if isinstance(quant_module, ExportableQuantModule):
                 param_encoding = {
@@ -1716,14 +1716,14 @@ class QuantizationSimModel:
                                                     strict,
                                                     partial,
                                                     requires_grad,
-                                                    allow_recompute)
+                                                    allow_overwrite)
 
     def _set_activation_encodings(self,
                                   activation_encoding_dict: Mapping,
                                   strict: bool,
                                   partial: bool,
                                   requires_grad: Optional[bool],
-                                  allow_recompute: Optional[bool]):
+                                  allow_overwrite: Optional[bool]):
         for module_name, module in self.model.named_modules():
             if not isinstance(module, ExportableQuantModule):
                 continue
@@ -1737,7 +1737,7 @@ class QuantizationSimModel:
                                           strict,
                                           partial,
                                           requires_grad,
-                                          allow_recompute)
+                                          allow_overwrite)
 
             try:
                 output_encoding = activation_encoding_dict[module_name]['output']
@@ -1748,7 +1748,7 @@ class QuantizationSimModel:
                                            strict,
                                            partial,
                                            requires_grad,
-                                           allow_recompute)
+                                           allow_overwrite)
 
 
     @deprecated(f"Use {load_encodings.__qualname__} instead.")
@@ -1771,7 +1771,7 @@ class QuantizationSimModel:
                             strict=True,
                             partial=True,
                             requires_grad=False,
-                            allow_recompute=False)
+                            allow_overwrite=False)
 
     def quant_wrappers(self):
         """
@@ -2155,7 +2155,7 @@ def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, pytorch_encodin
                                    strict=True,
                                    partial=False,
                                    requires_grad=None,
-                                   allow_recompute=None)
+                                   allow_overwrite=None)
 
     if isinstance(quant_sim_model, QuantizationSimModel):
         # Only for V1 quantsim

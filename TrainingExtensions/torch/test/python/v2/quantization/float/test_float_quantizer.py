@@ -127,19 +127,19 @@ def test_qdq_compute_encodings(x):
     assert torch.equal(float16_qdq(x), expected_output)
 
 
-def test_skip_encoding_computation(x):
+def test_allow_overwrite(x):
     exponent_bits, mantissa_bits = 3, 4
     q = FloatQuantizeDequantize(exponent_bits, mantissa_bits, encoding_analyzer=MinMaxEncodingAnalyzer((1, 100)))
     with q.compute_encodings():
         q(x)
 
     """
-    Given: _skip_encoding_computation set to True
+    Given: _allow_overwrite set to False
     When: Try to recompute encodings
     Then: Encoding does NOT get overwritten by compute_encodings
     """
     q_max = q.maxval.detach().clone()
-    q._skip_encoding_computation = True
+    q._allow_overwrite = False
     with q.compute_encodings():
         q(x * 10)
 
