@@ -47,7 +47,7 @@ Code Examples for Bias Correction
 
 .. literalinclude:: ../tf_code_examples/post_training_techniques_examples.py
     :language: python
-    :lines: 41-55
+    :lines: 41-54
 
 **Only Empirical Bias correction on a given model**
 

@@ -38,7 +38,7 @@ Code Example
 
 .. literalinclude:: ../onnx_code_examples/cross_layer_equalization.py
     :language: python
-    :lines: 40
+    :lines: 39
 
 
 **Cross Layer Equalization in auto mode**

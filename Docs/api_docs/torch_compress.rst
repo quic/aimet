@@ -103,7 +103,7 @@ Code Examples
 
 .. literalinclude:: ../torch_code_examples/code_examples.py
    :language: python
-   :lines: 41-50, 56
+   :lines: 40-49
 
 **Evaluation function**
 

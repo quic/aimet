@@ -43,7 +43,7 @@ Code Examples
 
 .. literalinclude:: ../keras_code_examples/quantization.py
     :language: python
-    :lines: 38-41
+    :lines: 37-40
 
 **Quantize with Fine tuning**
 

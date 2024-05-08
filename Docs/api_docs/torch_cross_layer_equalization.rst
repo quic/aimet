@@ -42,7 +42,7 @@ Code Example
 
 .. literalinclude:: ../torch_code_examples/post_training_techniques_examples.py
     :language: python
-    :lines: 42, 47
+    :lines: 41, 46
 
 
 **Cross Layer Equalization in auto mode**

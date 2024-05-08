@@ -35,7 +35,7 @@ Import the architecture checker:
 
 .. literalinclude:: ../torch_code_examples/architecture_checker_code_example.py
    :language: python
-   :lines: 43
+   :lines: 42
 
 Run the checker on the model by passing in the model as well as the model input:
 
