@@ -286,10 +286,10 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
         def forward_wrapper(input):
             expanded_input = torch_builtins.reshape_tensor_for_blocks(input, self.shape, self.block_size)
             batch_statistics = self.encoding_analyzer.update_stats(expanded_input)
-            num_quant_bins = math.pow(2, self.bitwidth) - 1
+            num_steps = math.pow(2, self.bitwidth) - 1
             dynamic_min, dynamic_max =\
                     self.encoding_analyzer.compute_encodings_from_stats(batch_statistics,
-                                                                        num_quant_bins,
+                                                                        num_steps,
                                                                         self.symmetric)
             if self.block_size is not None:
                 dynamic_min = dynamic_min.view(self.min.shape)
@@ -310,8 +310,8 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
             raise
         else:
             try:
-                num_quant_bins = math.pow(2, self.bitwidth) - 1
-                enc_min, enc_max = self.encoding_analyzer.compute_encodings(num_quant_bins, self.symmetric)
+                num_steps = math.pow(2, self.bitwidth) - 1
+                enc_min, enc_max = self.encoding_analyzer.compute_encodings(num_steps, self.symmetric)
                 if self.block_size is not None:
                     enc_min = enc_min.view(self.min.shape)
                     enc_max = enc_max.view(self.max.shape)
@@ -368,9 +368,9 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
             return None
 
         dtype = dtype or self.min.dtype
-        num_bins = 2 ** self.bitwidth - 1
+        num_steps = 2 ** self.bitwidth - 1
 
-        scale = (self.max.to(dtype) - self.min.to(dtype)) / num_bins
+        scale = (self.max.to(dtype) - self.min.to(dtype)) / num_steps
         return scale.to(dtype)
 
     def get_offset(self, dtype=None) -> Optional[torch.Tensor]:

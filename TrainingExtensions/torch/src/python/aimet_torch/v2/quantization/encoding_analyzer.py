@@ -283,16 +283,16 @@ class EncodingAnalyzer(Generic[_Statistics], ABC):
     def reset_stats(self) -> None:
         self.observer.reset_stats()
 
-    def compute_encodings(self, num_quant_bins: int, is_symmetric: bool) -> torch.Tensor:
-        return self.compute_encodings_from_stats(self.observer.get_stats(), num_quant_bins, is_symmetric)
+    def compute_encodings(self, num_steps: int, is_symmetric: bool) -> torch.Tensor:
+        return self.compute_encodings_from_stats(self.observer.get_stats(), num_steps, is_symmetric)
 
-    def compute_dynamic_encodings(self, input_tensor: torch.Tensor, num_quant_bins: int,
+    def compute_dynamic_encodings(self, input_tensor: torch.Tensor, num_steps: int,
                                   is_symmetric: bool)-> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
         return self.compute_encodings_from_stats(
-            self.observer.collect_stats(input_tensor), num_quant_bins, is_symmetric)
+            self.observer.collect_stats(input_tensor), num_steps, is_symmetric)
 
     @abstractmethod
-    def compute_encodings_from_stats(self, stats: _Statistics, num_quant_bins: int, is_symmetric: bool)\
+    def compute_encodings_from_stats(self, stats: _Statistics, num_steps: int, is_symmetric: bool)\
             -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
         pass
 
@@ -306,9 +306,9 @@ class MinMaxEncodingAnalyzer(EncodingAnalyzer[_MinMaxRange]):
 
     #pylint: disable=too-many-locals
     @torch.no_grad()
-    def compute_encodings_from_stats(self, stats: _MinMaxRange, num_quant_bins: int, is_symmetric: bool)\
+    def compute_encodings_from_stats(self, stats: _MinMaxRange, num_steps: int, is_symmetric: bool)\
             -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
-        if num_quant_bins <= 0:
+        if num_steps <= 0:
             raise ValueError('The number of quantization bins cannot be less than or equal to 0.')
 
         if stats.min is None or stats.max is None:
@@ -323,19 +323,19 @@ class MinMaxEncodingAnalyzer(EncodingAnalyzer[_MinMaxRange]):
         max_with_zero = torch.maximum(stats.max, torch.zeros_like(stats.max))
 
          # adjusts any min/max pairing that are too close
-        tensor_diff = (max_with_zero - min_with_zero) / num_quant_bins
-        update_min = torch.where(tensor_diff < tiny_num, tiny_num * math.ceil(num_quant_bins / 2), 0.0)
-        update_max = torch.where(tensor_diff < tiny_num, tiny_num * math.floor(num_quant_bins / 2), 0.0)
+        tensor_diff = (max_with_zero - min_with_zero) / num_steps
+        update_min = torch.where(tensor_diff < tiny_num, tiny_num * math.ceil(num_steps / 2), 0.0)
+        update_max = torch.where(tensor_diff < tiny_num, tiny_num * math.floor(num_steps / 2), 0.0)
         updated_max = max_with_zero + update_max
         updated_min = min_with_zero - update_min
 
         if is_symmetric:
-            num_pos_bins = math.floor(num_quant_bins / 2)
-            num_neg_bins = math.ceil(num_quant_bins / 2)
-            delta = torch.maximum(updated_max / num_pos_bins, -updated_min / num_neg_bins)
-            offset = -1 * num_neg_bins
+            num_pos_steps = math.floor(num_steps / 2)
+            num_neg_steps = math.ceil(num_steps / 2)
+            delta = torch.maximum(updated_max / num_pos_steps, -updated_min / num_neg_steps)
+            offset = -1 * num_neg_steps
             updated_min = offset * delta
-            updated_max = num_pos_bins * delta
+            updated_max = num_pos_steps * delta
 
         # replace pos and neg inf respectively
         updated_max[torch.isposinf(updated_max)] = torch.finfo(stats.min.dtype).max
@@ -345,7 +345,7 @@ class MinMaxEncodingAnalyzer(EncodingAnalyzer[_MinMaxRange]):
         return updated_min, updated_max
 
 
-def adjust_min_max(curr_min, curr_max, num_bins, is_symmetric):
+def adjust_min_max(curr_min, curr_max, num_steps, is_symmetric):
     # ensure that 0 is in the range
     curr_min = torch.minimum(curr_min, torch.zeros_like(curr_min))
     curr_max = torch.maximum(curr_max, torch.zeros_like(curr_max))
@@ -356,18 +356,18 @@ def adjust_min_max(curr_min, curr_max, num_bins, is_symmetric):
 
     # ensure that min/max aren't too close
     tiny_num = torch.finfo(curr_min.dtype).tiny
-    tensor_threshold = (curr_max - curr_min) / num_bins
-    curr_min[tensor_threshold < tiny_num] -= tiny_num * math.ceil(num_bins / 2)
-    curr_max[tensor_threshold < tiny_num] += tiny_num * math.floor(num_bins / 2)
+    tensor_threshold = (curr_max - curr_min) / num_steps
+    curr_min[tensor_threshold < tiny_num] -= tiny_num * math.ceil(num_steps / 2)
+    curr_max[tensor_threshold < tiny_num] += tiny_num * math.floor(num_steps / 2)
 
     if is_symmetric:
-        num_pos_bins = math.floor(num_bins / 2)
-        num_neg_bins = math.ceil(num_bins / 2)
-        delta = max(curr_max / num_pos_bins, -curr_min / num_neg_bins)
-        offset = -1 * num_neg_bins
+        num_pos_steps = math.floor(num_steps / 2)
+        num_neg_steps = math.ceil(num_steps / 2)
+        delta = max(curr_max / num_pos_steps, -curr_min / num_neg_steps)
+        offset = -1 * num_neg_steps
 
         curr_min = offset * delta
-        curr_max = num_pos_bins * delta
+        curr_max = num_pos_steps * delta
 
     return curr_min, curr_max
 
@@ -404,10 +404,10 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
 
     # pylint: disable=too-many-locals
     @torch.no_grad()
-    def compute_encodings_from_stats(self, stats: List[_Histogram], num_quant_bins: int, is_symmetric: bool)\
+    def compute_encodings_from_stats(self, stats: List[_Histogram], num_steps: int, is_symmetric: bool)\
             -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
 
-        if num_quant_bins <= 0:
+        if num_steps <= 0:
             raise ValueError('The number of quantization bins cannot be less than or equal to 0.')
 
         if stats[0].histogram is None:
@@ -428,7 +428,7 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
             curr_min = list_elem.bin_edges[min_index]
             curr_max = list_elem.bin_edges[max_index]
             # adjust min/max
-            updated_min, updated_max = adjust_min_max(curr_min, curr_max, num_quant_bins, is_symmetric)
+            updated_min, updated_max = adjust_min_max(curr_min, curr_max, num_steps, is_symmetric)
             encoding_min_list.append(updated_min)
             encoding_max_list.append(updated_max)
 
@@ -481,31 +481,31 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
 
     # pylint: disable=too-many-locals
     @torch.no_grad()
-    def compute_encodings_from_stats(self, stats: List[_Histogram], num_quant_bins: int, is_symmetric: bool)\
+    def compute_encodings_from_stats(self, stats: List[_Histogram], num_steps: int, is_symmetric: bool)\
             -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
         Searches for encodings which produce the lowest expected SQNR based on the histograms in stats
 
         :param stats: A list of _Histogram objects with length equal to the number of encodings to compute
-        :param num_quant_bins: The number of bins the quantized range is split into
+        :param num_steps: The number of bins the quantized range is split into
         :param is_symmetric: If True, computes symmetric encodings, else computes asymmetric encodings
         :return: Tuple of computed encodings (min, max) as tensors with shape self.shape
         """
         if stats[0].histogram is None:
             raise StatisticsNotFoundError('No statistics present to compute encodings.')
-        if num_quant_bins <= 0:
+        if num_steps <= 0:
             raise ValueError('The number of quantization bins cannot be less than or equal to 0.')
         chunked_stats = [stats[i:min(i+self.max_parallelism, len(stats))] for i in range(0, len(stats), self.max_parallelism)]
         best_deltas, best_offsets = [], []
         for stats_ in chunked_stats:
-            test_deltas, test_offsets = self._pick_test_candidates(stats_, num_quant_bins, is_symmetric)
-            best_delta, best_offset = self._select_best_candidates(test_deltas, test_offsets, stats_, num_quant_bins)
+            test_deltas, test_offsets = self._pick_test_candidates(stats_, num_steps, is_symmetric)
+            best_delta, best_offset = self._select_best_candidates(test_deltas, test_offsets, stats_, num_steps)
             best_deltas.append(best_delta)
             best_offsets.append(best_offset)
         best_offset = best_offsets[0] if is_symmetric else torch.cat(best_offsets)
         best_delta = torch.cat(best_deltas)
         min_enc = best_offset * best_delta
-        max_enc = min_enc + num_quant_bins * best_delta
+        max_enc = min_enc + num_steps * best_delta
         return min_enc.view(self.observer.shape).to(stats[0].max.dtype), \
                max_enc.view(self.observer.shape).to(stats[0].max.dtype)
 
