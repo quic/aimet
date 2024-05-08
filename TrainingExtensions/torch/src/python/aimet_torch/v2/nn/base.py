@@ -249,6 +249,8 @@ class BaseQuantizationMixin(abc.ABC):
         :param freeze: If True, freezes the quantizer's encodings after loading
         """
         for i, quantizer in enumerate(list(self.input_quantizers)):
+            if quantizer and not quantizer._allow_overwrite: # pylint: disable=protected-access
+                continue
             encoding = encodings.get(str(i), None)
             if not encoding:
                 if not partial:
@@ -296,6 +298,8 @@ class BaseQuantizationMixin(abc.ABC):
         :param freeze: If True, freezes the quantizer's encodings after loading
         """
         for i, quantizer in enumerate(list(self.output_quantizers)):
+            if quantizer and not quantizer._allow_overwrite: # pylint: disable=protected-access
+                continue
             encoding = encodings.get(str(i), None)
             if not encoding:
                 if not partial:
@@ -343,6 +347,8 @@ class BaseQuantizationMixin(abc.ABC):
         :param freeze: If True, freezes the quantizer's encodings after loading
         """
         for param_name, quantizer in dict(self.param_quantizers).items():
+            if quantizer and not quantizer._allow_overwrite: # pylint: disable=protected-access
+                continue
             encoding = encodings.get(param_name, None)
             if not encoding:
                 if not partial:

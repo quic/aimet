@@ -255,6 +255,8 @@ class TestPercentileScheme:
 
         sample_encoding = {"min": -4, "max": 4, "scale": 0.03, "offset": 8,
                            "bitwidth": 8, "is_symmetric": "False", "dtype": "int"}
+        sample_encoding2 = {"min": -8, "max": 8, "scale": 0.06, "offset": 8,
+                            "bitwidth": 8, "is_symmetric": "False", "dtype": "int"}
 
         encodings = {
             "activation_encodings": {
@@ -263,6 +265,14 @@ class TestPercentileScheme:
                 }
             },
             "param_encodings": {"conv1.weight": [sample_encoding]}
+        }
+        encodings2 = {
+            "activation_encodings": {
+                "conv1": {
+                    "input": {"0": sample_encoding2}
+                }
+            },
+            "param_encodings": {"conv1.weight": [sample_encoding2]}
         }
 
         """
@@ -332,7 +342,8 @@ class TestPercentileScheme:
 
         """
         When: Call load_encodings with allow_overwrite=True
-        Then: The loaded quantizers should be overwritten by a subsequent compute_encodings
+        Then: The loaded quantizers should be overwritten by a subsequent
+              compute_encodings or load_encodings
         """
         sim = QuantizationSimModel(model, dummy_input)
         sim.load_encodings(encodings, allow_overwrite=True)
@@ -352,9 +363,26 @@ class TestPercentileScheme:
         assert not any(torch.isclose(input_max,
                                      sim.model.conv1.input_quantizers[0].max))
 
+        weight_min = sim.model.conv1.param_quantizers['weight'].min.clone().detach()
+        weight_max = sim.model.conv1.param_quantizers['weight'].max.clone().detach()
+        input_min = sim.model.conv1.input_quantizers[0].min.clone().detach()
+        input_max = sim.model.conv1.input_quantizers[0].max.clone().detach()
+
+        sim.load_encodings(encodings2)
+
+        assert not any(torch.isclose(weight_min,
+                                     sim.model.conv1.param_quantizers['weight'].min))
+        assert not any(torch.isclose(weight_max,
+                                     sim.model.conv1.param_quantizers['weight'].max))
+        assert not any(torch.isclose(input_min,
+                                     sim.model.conv1.input_quantizers[0].min))
+        assert not any(torch.isclose(input_max,
+                                     sim.model.conv1.input_quantizers[0].max))
+
         """
         When: Call load_encodings with allow_overwrite=False
-        Then: The loaded quantizers should NOT be overwritten by a subsequent compute_encodings
+        Then: The loaded quantizers should NOT be overwritten by a subsequent
+              compute_encodings or load_encodings
         """
         sim = QuantizationSimModel(model, dummy_input)
         sim.load_encodings(encodings, allow_overwrite=False)
@@ -364,6 +392,13 @@ class TestPercentileScheme:
         input_max = sim.model.conv1.input_quantizers[0].max.clone().detach()
 
         sim.compute_encodings(lambda model, _: model(dummy_input), None)
+
+        assert torch.equal(weight_min, sim.model.conv1.param_quantizers['weight'].min)
+        assert torch.equal(weight_max, sim.model.conv1.param_quantizers['weight'].max)
+        assert torch.equal(input_min, sim.model.conv1.input_quantizers[0].min)
+        assert torch.equal(input_max, sim.model.conv1.input_quantizers[0].max)
+
+        sim.load_encodings(encodings2)
 
         assert torch.equal(weight_min, sim.model.conv1.param_quantizers['weight'].min)
         assert torch.equal(weight_max, sim.model.conv1.param_quantizers['weight'].max)
