@@ -602,7 +602,10 @@ FakeQuantizedAimetAdaptiveAvgPool2d = _FakeQuantizedUnaryOpMixin.wrap(aimet_ops.
 FakeQuantizedAimetAvgPool2d = _FakeQuantizedUnaryOpMixin.wrap(aimet_ops.AvgPool2d)
 
 _AIMET_V1_UNARY_MODULES = [
+    aimet_ops.AMax,
+    aimet_ops.AMin,
     aimet_ops.Cast,
+    aimet_ops.DepthToSpaceCRDMode,
     aimet_ops.DepthToSpaceDCRMode,
     aimet_ops.OneHot,
     aimet_ops.Exponential,
@@ -676,6 +679,7 @@ _AIMET_V1_TERNARY_MODULES = [
     aimet_ops.Addmm,
     aimet_ops.ScatterND,
     aimet_ops.DynamicConv2d,
+    aimet_ops.DynamicLinear,
     aimet_ops.ScatterElements,
 ]
 
