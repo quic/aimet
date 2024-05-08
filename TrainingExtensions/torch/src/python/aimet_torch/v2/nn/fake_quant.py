@@ -37,8 +37,6 @@
 #pylint: disable=too-many-lines
 """Fake-quantized modules"""
 
-import contextlib
-import itertools
 from collections import OrderedDict
 from typing import Type, Optional, Tuple
 
@@ -48,7 +46,6 @@ from torch.nn.modules.adaptive import _ASMoutput
 from torch.nn.utils.rnn import PackedSequence
 from torch.utils._pytree import tree_map
 
-from aimet_torch.v2.utils import patch_attr
 import aimet_torch.elementwise_ops as aimet_ops
 
 from .base import BaseQuantizationMixin # pylint: disable=import-error
@@ -61,22 +58,6 @@ class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-m
 
     cls_to_qcls = OrderedDict() # ouantized class -> original class
     qcls_to_cls = OrderedDict() # original class -> quantized class
-
-    @contextlib.contextmanager
-    def compute_encodings(self): # pylint: disable=missing-function-docstring
-        def no_op(input: Tensor): # pylint: disable=redefined-builtin
-            return input
-
-        with contextlib.ExitStack() as stack:
-            for quantizer in itertools.chain(self.input_quantizers, self.output_quantizers):
-                if not quantizer:
-                    continue
-                # Set input/output quantizers into pass-through mode during compute_encodings
-                # NOTE: This behavior is for backawrd-compatibility with V1 quantsim.
-                stack.enter_context(patch_attr(quantizer, 'forward', no_op))
-
-            with super().compute_encodings():
-                yield
 
     @classmethod
     def wrap(cls, module_cls: Type[nn.Module]) -> Type[nn.Module]:

@@ -147,22 +147,10 @@ class QuantizationMixin(BaseQuantizationMixin, ABC): # pylint: disable=abstract-
 
     @contextlib.contextmanager
     def compute_encodings(self): # pylint: disable=missing-function-docstring
-        def no_op(tensor_in: Tensor):
-            return tensor_in
-
-        with contextlib.ExitStack() as stack:
-            for quantizer in itertools.chain(self.input_quantizers, self.output_quantizers):
-                if quantizer is None:
-                    continue
-                # NOTE: This behavior is for backward-compatibility with V1 quantsim.
-                stack.enter_context(patch_attr(quantizer, 'forward', no_op))
-
-            ctx = _ContextManager(action=lambda: _enter_computing_encodings(self),
-                                  cleanup=lambda: _exit_compute_encodings(self))
-            stack.enter_context(ctx)
-
-            with super().compute_encodings():
-                yield
+        ctx = _ContextManager(action=lambda: _enter_computing_encodings(self),
+                              cleanup=lambda: _exit_compute_encodings(self))
+        with super().compute_encodings(), ctx:
+            yield
 
     @contextlib.contextmanager
     def _patch_dequantized_parameters(self):
