@@ -119,7 +119,7 @@ class BaseQuantizationMixin(abc.ABC):
             if not param_quantizer:
                 continue
 
-            if param_quantizer._skip_encoding_computation: # pylint: disable=protected-access
+            if not param_quantizer._allow_overwrite: # pylint: disable=protected-access
                 continue
 
             if not param_quantizer.is_initialized() or overwrite:
@@ -160,7 +160,7 @@ class BaseQuantizationMixin(abc.ABC):
                 if not isinstance(quantizer, QuantizerBase):
                     continue
 
-                if quantizer._skip_encoding_computation: # pylint: disable=protected-access
+                if not quantizer._allow_overwrite: # pylint: disable=protected-access
                     continue
 
                 ctx = quantizer.compute_encodings()
