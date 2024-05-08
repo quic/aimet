@@ -78,14 +78,18 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
 
     .. math::
         max = (2 - 2^{-mantissa}) * 2^{(\left\lfloor \frac{exponent\_max}{2} \right\rfloor)} \\
-        \text{where } exponent\_max = 2^{exponent} - 1 \\
+    
+    where
+    
+    .. math::    
+        exponent\_max = 2^{exponent} - 1 \\ \\
 
     Given input :math:`x`, fake-casting is equivalent to the following operation
 
     .. math::
         out = \left\lceil\frac{x_c}{scale}\right\rfloor * scale
 
-    \\ where
+    where
 
     .. math::
         x_c = clamp(x, -max, max) \\

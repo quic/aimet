@@ -1,8 +1,8 @@
 .. _api-torch-quantization-float:
 
-===================
+==================
 quantization.float
-===================
+==================
 
 .. automodule:: aimet_torch.v2.quantization.float
 
@@ -11,4 +11,4 @@ quantization.float
     :nosignatures:
     
     FloatQuantizeDequantize <FloatQuantizeDequantize>
-    QuantizeDequantize <QuantizeDequantize>
+    QuantizeDequantize <FloatQuantizeDequantize>
