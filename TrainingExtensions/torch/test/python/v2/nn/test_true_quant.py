@@ -495,7 +495,7 @@ class TestQuantizedLayers:
         qlinear.set_kernel(None) # Set kernel to None since removing quantizers does not work with integer kernels
 
         """
-        When: ``with _remove_{input, param, output}_quantizers``
+        When: ``with _remove_{input, param, output, activation, all}_quantizers``
         Then:
             1) The corresponding quantizers are set to None under the context.
                (Output should be computed without input, param, and output quantization respectively)
@@ -527,6 +527,24 @@ class TestQuantizedLayers:
                                     weight_qtzr(qlinear.weight).dequantize())
             assert torch.equal(qlinear(input), expected_out)
         assert qlinear.output_quantizers[0] is output_qtzr
+
+        with qlinear._remove_activation_quantizers():
+            assert qlinear.input_quantizers[0] is None
+            assert qlinear.output_quantizers[0] is None
+            expected_out = F.linear(input, weight_qtzr(qlinear.weight).dequantize())
+            assert torch.equal(qlinear(input), expected_out)
+        assert qlinear.input_quantizers[0] is input_qtzr
+        assert qlinear.output_quantizers[0] is output_qtzr
+
+        with qlinear._remove_all_quantizers():
+            assert qlinear.input_quantizers[0] is None
+            assert qlinear.output_quantizers[0] is None
+            assert qlinear.param_quantizers['weight'] is None
+            expected_out = F.linear(input, qlinear.weight)
+            assert torch.equal(qlinear(input), expected_out)
+        assert qlinear.input_quantizers[0] is input_qtzr
+        assert qlinear.output_quantizers[0] is output_qtzr
+        assert qlinear.param_quantizers['weight'] is weight_qtzr
 
         """
         When: Call ``_remove_{input, param, output}_quantizers`` without ``with`` statement
