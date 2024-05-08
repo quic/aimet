@@ -510,6 +510,9 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
         """
         # pylint: disable=too-many-branches
         for param_name, quantizer in self.param_quantizers.items():
+            if quantizer._is_encoding_frozen: # pylint: disable=protected-access
+                continue
+
             encoding = encodings.get(param_name, None)
             if not encoding:
                 if not partial:
@@ -545,11 +548,9 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                         q_max = getattr(quantizer.wrapper_ref, quantizer.name + '_encoding_max')
                         q_max.requires_grad_(requires_grad)
 
-                if allow_overwrite is not None:
-                    if not allow_overwrite:
-                        quantizer.freeze_encoding()
-                    else:
-                        raise NotImplementedError("Unfreezing is not supported")
+                assert not quantizer.is_encoding_frozen
+                if not allow_overwrite:
+                    quantizer.freeze_encoding()
 
                 _logger.info("Setting quantization encodings for parameter: %s", param_name)
             else:
@@ -601,6 +602,12 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
         assert quantizers is self.input_quantizers or quantizers is self.output_quantizers
 
         for i, quantizer in enumerate(quantizers):
+            if quantizer._is_encoding_frozen: # pylint: disable=protected-access
+                type_of_quantizer = 'input' if quantizers is self.input_quantizers else 'output'
+                _logger.debug("Encodings are frozen for module %s quantizer of %s",
+                              type_of_quantizer, self._module_to_wrap.__class__)
+                continue
+
             encoding = encodings.get(str(i), None)
             if not encoding:
                 if not partial:
@@ -616,12 +623,6 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
 
                 raise RuntimeError("The quantsim passed for loading encodings does not have the same "
                                        "configuration as the quantsim which was used to export the encodings")
-
-            if quantizer._is_encoding_frozen: # pylint: disable=protected-access
-                type_of_quantizer = 'input' if quantizers is self.input_quantizers else 'output'
-                _logger.debug("Encodings are frozen for module %s quantizer of %s",
-                              type_of_quantizer, self._module_to_wrap.__class__)
-                continue
 
             encoding = compute_partial_encoding(quantizer, encoding)
             if encoding['dtype'] == 'int':
@@ -642,11 +643,9 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                     q_max = getattr(quantizer.wrapper_ref, quantizer.name + '_encoding_max')
                     q_max.requires_grad_(requires_grad)
 
-            if allow_overwrite is not None:
-                if not allow_overwrite:
-                    quantizer.freeze_encoding()
-                else:
-                    raise NotImplementedError("Unfreezing is not supported")
+            assert not quantizer.is_encoding_frozen
+            if not allow_overwrite:
+                quantizer.freeze_encoding()
 
 
 class StaticGridQuantWrapper(QcQuantizeWrapper):
