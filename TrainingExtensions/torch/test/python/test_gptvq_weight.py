@@ -35,7 +35,6 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """Test GPTVQ weight"""
-
 import json
 import tempfile
 
@@ -47,7 +46,6 @@ from aimet_torch.gptvq.defs import GPTVQSupportedModules
 from aimet_torch.gptvq.gptvq_weight import GPTVQ, GPTVQParameters
 from aimet_torch.v2.nn import BaseQuantizationMixin
 from models import test_models
-
 
 QUANTSIM_CONFIG = {
     "defaults": {
@@ -118,20 +116,21 @@ class TestGPTVQWeight:
                 model, dummy_input, gptvq_parameters, config_file_path=config_path
             )
 
-        for module in quant_sim.model.modules():
-            if isinstance(module, BaseQuantizationMixin):
-                # Input/Output quantizers should be disabled
-                assert all((x is None for x in module.input_quantizers))
-                assert all((x is None for x in module.output_quantizers))
+        with GPTVQ._disable_quantizers_for_gptvq_optimization(quant_sim):
+            for module in quant_sim.model.modules():
+                if isinstance(module, BaseQuantizationMixin):
+                    # Input/Output quantizers should be disabled
+                    assert all((x is None for x in module.input_quantizers))
+                    assert all((x is None for x in module.output_quantizers))
 
-                if isinstance(module.get_original_module(), GPTVQSupportedModules):
-                    weight_shape = module.weight.shape
-                    weight_quantizer = module.param_quantizers["weight"]
-                    # Bitwidth, shape and block_size should be matched with GPTVQ parameters
-                    assert weight_quantizer.bitwidth == gptvq_parameters.vector_bw
-                    assert weight_quantizer.shape == (weight_shape[0] // gptvq_parameters.rows_per_block, 1)
-                    assert weight_quantizer.block_size == (gptvq_parameters.rows_per_block, weight_shape[1])
-                    assert weight_quantizer.is_initialized()
+                    if isinstance(module.get_original_module(), GPTVQSupportedModules):
+                        weight_shape = module.weight.shape
+                        weight_quantizer = module.param_quantizers["weight"]
+                        # Bitwidth, shape and block_size should be matched with GPTVQ parameters
+                        assert weight_quantizer.bitwidth == gptvq_parameters.vector_bw
+                        assert weight_quantizer.shape == (weight_shape[0] // gptvq_parameters.rows_per_block, 1)
+                        assert weight_quantizer.block_size == (gptvq_parameters.rows_per_block, weight_shape[1])
+                        assert not weight_quantizer.is_initialized(), "Weight quantizer should be initialized during GPTVQ optimization"
 
     def test_gptvq_weight_update(self):
         model = test_models.ModelWithThreeLinears()

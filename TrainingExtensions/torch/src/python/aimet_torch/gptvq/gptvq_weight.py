@@ -35,16 +35,14 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """Top level API for GPTVQ - Post-Training Quantization (PTQ)"""
-
+import contextlib
 import json
 import os
-import tempfile
-from typing import Union, Tuple, Optional, Dict
+from typing import Union, Tuple, Optional, Dict, List, Set
 
 import torch
 from torch import nn
 
-import aimet_torch.v2.quantization as Q
 from aimet_common.defs import QuantScheme
 from aimet_common.utils import Spinner
 from aimet_torch import utils
@@ -54,7 +52,33 @@ from aimet_torch.quantsim import ExportableQuantModule
 from aimet_torch.save_utils import SaveUtils
 from aimet_torch.utils import get_named_module
 from aimet_torch.v2.nn import BaseQuantizationMixin
+from aimet_torch.v2.quantization import DequantizedTensor
+from aimet_torch.v2.quantization.affine import QuantizeDequantize
+from aimet_torch.v2.quantization.encoding_analyzer import EncodingAnalyzer
 from aimet_torch.v2.quantsim import QuantizationSimModel
+
+
+class _VectorQuantizeDequantize(QuantizeDequantize):
+    def __init__(
+        self,
+        shape,
+        bitwidth: int,
+        symmetric: bool,
+        encoding_analyzer: EncodingAnalyzer = None,
+        block_size: Optional[Tuple] = None,
+    ):
+        super().__init__(shape, bitwidth, symmetric, encoding_analyzer, block_size)
+        # Below flag should be enabled only after optimizing weight and setting it to module weight
+        self._do_bypass = False
+
+    # pylint: disable=redefined-builtin
+    def forward(self, input: torch.Tensor) -> DequantizedTensor:
+        if self._do_bypass:
+            output = input.as_subclass(DequantizedTensor)
+            output.encoding = self.get_encoding()
+            return output
+
+        return super().forward(input)
 
 
 # pylint: disable=protected-access
@@ -69,6 +93,7 @@ class GPTVQ:
         dummy_input: Union[torch.Tensor, Tuple],
         gptvq_params: GPTVQParameters,
         param_encoding_path: str,
+        module_names_to_exclude: Optional[List[str]] = None,
         file_name_prefix: str = "gptvq",
         config_file_path: Optional[str] = None,
     ):
@@ -82,12 +107,18 @@ class GPTVQ:
                             pass a tuple. User is expected to place the tensors on the appropriate device
         :param gptvq_params: Dataclass holding GPTVQ parameters
         :param param_encoding_path: Path where to store parameter encodings
+        :param module_names_to_exclude: Module names which are excluded during GPTVQ optimization
         :param file_name_prefix: Prefix to use for filename of the encodings file
         :param config_file_path: Configuration file path for model quantizers
         :return: Model with GPTVQ applied weights and saves corresponding parameter encodings JSON file at provided path
         """
         sim = cls._get_quantsim(model, dummy_input, gptvq_params, config_file_path)
-        cls._apply_gptvq(model, sim, dummy_input, gptvq_params)
+        if module_names_to_exclude is None:
+            module_names_to_exclude = []
+
+        with cls._disable_quantizers_for_gptvq_optimization(sim):
+            cls._apply_gptvq(model, sim, dummy_input, gptvq_params, set(module_names_to_exclude))
+
         cls._export_encodings_to_json(param_encoding_path, file_name_prefix, sim, gptvq_params.rows_per_block)
         SaveUtils.remove_quantization_wrappers(sim.model)
 
@@ -117,7 +148,7 @@ class GPTVQ:
             config_file=config_file_path,
         )
         cls._replace_param_quantizers(sim, gptvq_params.rows_per_block)
-        cls._compute_param_encodings(sim)
+
         return sim
 
     @staticmethod
@@ -134,39 +165,47 @@ class GPTVQ:
                     isinstance(module.get_original_module(), GPTVQSupportedModules)):
                 param_quantizer = module.param_quantizers["weight"]
                 weight_shape = module.weight.shape
-                q = Q.affine.QuantizeDequantize(
+                q = _VectorQuantizeDequantize(
                     shape=(weight_shape[0] // rows_per_block, 1),
-                    block_size=(rows_per_block, weight_shape[1]),
                     bitwidth=param_quantizer.bitwidth,
                     symmetric=param_quantizer.symmetric,
+                    block_size=(rows_per_block, weight_shape[1]),
                 ).to(module.weight.device)
                 module.param_quantizers["weight"] = q
 
     @staticmethod
-    def _compute_param_encodings(sim: QuantizationSimModel):
+    def _disable_quantizers_for_gptvq_optimization(sim: QuantizationSimModel,
+                                                   target_modules = None) -> contextlib.ExitStack:
         """
-        Remove input/output quantizers and compute param encodings for GPTVQ supportable modules
+        Get context managers to disable quantizers temporarily
 
         :param sim: QuantizationSimModel object
+        :return: List of context managers to disable quantizers
         """
+        target_modules = target_modules if target_modules else set()
+        exit_stack = contextlib.ExitStack()
         for module in sim.model.modules():
-            if isinstance(module, BaseQuantizationMixin):
-                # pylint: disable=protected-access
-                module._remove_activation_quantizers()
-                if not isinstance(module, GPTVQSupportedModules):
-                    module._remove_param_quantizers()
-                    continue
+            if not isinstance(module, BaseQuantizationMixin):
+                continue
 
-                weight_quantizer = module.param_quantizers["weight"]
-                with weight_quantizer.compute_encodings():
-                    _ = weight_quantizer(module.weight)
+            if module in target_modules:
+                exit_stack.enter_context(module._remove_activation_quantizers())
+            elif isinstance(module, GPTVQSupportedModules) and not target_modules:
+                exit_stack.enter_context(module._remove_activation_quantizers())
+            else:
+                exit_stack.enter_context(module._remove_all_quantizers())
+
+        return exit_stack
 
     @classmethod
-    def _apply_gptvq(cls,
-                     original_model: nn.Module,
-                     sim: QuantizationSimModel,
-                     dummy_input: Union[torch.Tensor, Tuple],
-                     gptvq_params: GPTVQParameters):
+    def _apply_gptvq(
+            cls,
+            original_model: nn.Module,
+            sim: QuantizationSimModel,
+            dummy_input: Union[torch.Tensor, Tuple],
+            gptvq_params: GPTVQParameters,
+            module_names_to_exclude: Set[str],
+    ):
         """
         Apply GPTVQ algorithm to optimize weights
 
@@ -174,23 +213,23 @@ class GPTVQ:
         :param sim: QuantizationSimModel object to optimize weight
         :param dummy_input: Dummy input to model to be used to parse model graph
         :param gptvq_params: Dataclass holding GPTVQ parameters
+        :param module_names_to_exclude: Module names which are excluded during GPTVQ optimization
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
-            cached_dataset = utils.CachedDataset(gptvq_params.data_loader, gptvq_params.num_batches, temp_dir)
-            modules = utils.get_ordered_list_of_modules(original_model, dummy_input)
-            for name, _ in modules:
-                quant_module = get_named_module(sim.model, name)
-                if not isinstance(quant_module, GPTVQSupportedModules):
-                    continue
+        modules = utils.get_ordered_list_of_modules(original_model, dummy_input)
+        for name, _ in modules:
+            quant_module = get_named_module(sim.model, name)
+            if (
+                not isinstance(quant_module, GPTVQSupportedModules)
+                or name in module_names_to_exclude
+            ):
+                continue
 
-                with Spinner(f"Started GPTVQ optimization of {name}"):
-                    GPTVQOptimizer.gptvq_module(
-                        quant_module=quant_module,
-                        gptvq_params=gptvq_params,
-                        sim=sim,
-                        forward_fn=gptvq_params.forward_fn,
-                        cached_dataset=cached_dataset,
-                    )
+            with Spinner(f"Started GPTVQ optimization of {name}"):
+                GPTVQOptimizer.gptvq_module(
+                    quant_module=quant_module,
+                    gptvq_params=gptvq_params,
+                    sim=sim,
+                )
 
     @classmethod
     def _export_encodings_to_json(cls,
