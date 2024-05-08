@@ -181,10 +181,10 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
         @functools.wraps(original_forward)
         def forward_wrapper(input):
             batch_statistics = self.encoding_analyzer.update_stats(input)
-            num_quant_bins = math.pow(2, self.bitwidth) - 1
+            num_steps = math.pow(2, self.bitwidth) - 1
             dynamic_min, dynamic_max =\
                     self.encoding_analyzer.compute_encodings_from_stats(batch_statistics,
-                                                                        num_quant_bins,
+                                                                        num_steps,
                                                                         is_symmetric=False)
             dynamic_absmax = torch.maximum(dynamic_min.abs(), dynamic_max.abs())
             dynamic_absmax = dynamic_absmax.to(dtype=self.maxval.dtype,
@@ -200,8 +200,8 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
             raise
         else:
             try:
-                num_quant_bins = math.pow(2, self.bitwidth) - 1
-                min, max = self.encoding_analyzer.compute_encodings(num_quant_bins,
+                num_steps = math.pow(2, self.bitwidth) - 1
+                min, max = self.encoding_analyzer.compute_encodings(num_steps,
                                                                     is_symmetric=False)
             except StatisticsNotFoundError:
                 return

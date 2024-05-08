@@ -49,7 +49,7 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
 
 @overload
 def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
-             num_bins: int, signed: bool = False, block_size: Optional[List] = None):
+             num_steps: int, signed: bool = False, block_size: Optional[List] = None):
     ...
 
 @overload
@@ -81,7 +81,7 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
            qmin= 
            \begin{cases}
                -\left\lceil\frac{2^{bitwidth}-1}{2}\right\rceil,& \text{if } signed\\
-               0,                                          & \text{otherwise   (default)}
+               0,                                               & \text{otherwise   (default)}
            \end{cases}
            qmax= 
            \begin{cases}
@@ -96,7 +96,7 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
        :param bool signed: If false, the output will be mapped to positive integers only.
            Otherwise, it will range over both positive and negative integers.
 
-    .. function:: quantize(tensor, scale, offset, *, num_bins, signed=False, block_size=None)
+    .. function:: quantize(tensor, scale, offset, *, num_steps, signed=False, block_size=None)
        :noindex:
 
        Equivalent to:
@@ -104,20 +104,20 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
        .. math::
            qmin= 
            \begin{cases}
-               -\left\lceil\frac{num\_bins}{2}\right\rceil,& \text{if } signed\\
-               0,                                          & \text{otherwise   (default)}
+               -\left\lceil\frac{num\_steps}{2}\right\rceil,& \text{if } signed\\
+               0,                                           & \text{otherwise   (default)}
            \end{cases}
            qmax= 
            \begin{cases}
-               \left\lfloor\frac{num\_bins}{2}\right\rfloor,& \text{if } signed\\
-               num\_bins,                                   & \text{otherwise   (default)}
+               \left\lfloor\frac{num\_steps}{2}\right\rfloor,& \text{if } signed\\
+               num\_steps,                                   & \text{otherwise   (default)}
            \end{cases}
 
 
        :param Tensor tensor: Tensor to quantize
        :param Tensor scale: Scale for quantization
        :param Tensor offset: Offset for quantization
-       :param int num_bins: The number of bins in the quantization range based on which :math:`qmin` and :math:`qmax` will be derived
+       :param int num_steps: The number of steps in the quantization range based on which :math:`qmin` and :math:`qmax` will be derived
        :param bool signed: If false, the output will be mapped to positive integers only.
            Otherwise, it will range over both positive and negative integers.
 
@@ -149,7 +149,7 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
         tensor([ 0.,  0.,  0.,  0.,  0.,  0., -0.,  1.,  2.,  2.,  3.,  4.,  4.,  5.,
                  6.,  7.,  7.,  8.,  9., 10., 10., 11., 12., 13., 13., 14., 15., 15.,
                  15., 15., 15., 15.])
-        >>> Q.affine.quantize(input, scale, offset, num_bins=15)
+        >>> Q.affine.quantize(input, scale, offset, num_steps=15)
         tensor([ 0.,  0.,  0.,  0.,  0.,  0., -0.,  1.,  2.,  2.,  3.,  4.,  4.,  5.,
                  6.,  7.,  7.,  8.,  9., 10., 10., 11., 12., 13., 13., 14., 15., 15.,
                  15., 15., 15., 15.])
@@ -169,7 +169,7 @@ def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
 
 @overload
 def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
-                        num_bins: int, signed: bool = False, block_size: Optional[List] = None):
+                        num_steps: int, signed: bool = False, block_size: Optional[List] = None):
     ...
 
 @overload
@@ -206,7 +206,7 @@ def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
            qmin= 
            \begin{cases}
                -\left\lceil\frac{2^{bitwidth}-1}{2}\right\rceil,& \text{if } signed\\
-               0,                                          & \text{otherwise   (default)}
+               0,                                               & \text{otherwise   (default)}
            \end{cases}
            qmax= 
            \begin{cases}
@@ -221,7 +221,7 @@ def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
        :param bool signed: If false, the intermediate output :math:`x_{int}` will be mapped to positive integers only.
            Otherwise, :math:`x_{int}` will range over both positive and negative integers.
 
-    .. function:: quantize_dequantize(tensor, scale, offset, *, num_bins, signed=False, block_size=None)
+    .. function:: quantize_dequantize(tensor, scale, offset, *, num_steps, signed=False, block_size=None)
        :noindex:
 
        Equivalent to:
@@ -229,20 +229,20 @@ def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
        .. math::
            qmin= 
            \begin{cases}
-               -\left\lceil\frac{num\_bins}{2}\right\rceil,& \text{if } signed\\
-               0,                                          & \text{otherwise   (default)}
+               -\left\lceil\frac{num\_steps}{2}\right\rceil,& \text{if } signed\\
+               0,                                           & \text{otherwise   (default)}
            \end{cases}
            qmax= 
            \begin{cases}
-               \left\lfloor\frac{num\_bins}{2}\right\rfloor,& \text{if } signed\\
-               num\_bins,                                   & \text{otherwise   (default)}
+               \left\lfloor\frac{num\_steps}{2}\right\rfloor,& \text{if } signed\\
+               num\_steps,                                   & \text{otherwise   (default)}
            \end{cases}
 
 
        :param Tensor tensor: Tensor to quantize
        :param Tensor scale: Scale for quantization
        :param Tensor offset: Offset for quantization
-       :param int num_bins: The number of bins in the quantization range based on which :math:`qmin` and :math:`qmax` will be derived
+       :param int num_steps: The number of steps in the quantization range based on which :math:`qmin` and :math:`qmax` will be derived
        :param bool signed: If false, the intermediate output :math:`x_{int}` will be mapped to positive integers only.
            Otherwise, :math:`x_{int}` will range over both positive and negative integers.
 
@@ -275,7 +275,7 @@ def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
                 0.1333, 0.2000, 0.2667, 0.2667, 0.3333, 0.4000, 0.4667, 0.4667, 0.5333,
                 0.6000, 0.6667, 0.6667, 0.7333, 0.8000, 0.8667, 0.8667, 0.9333, 1.0000,
                 1.0000, 1.0000, 1.0000, 1.0000, 1.0000])
-        >>> Q.affine.quantize_dequantize(input, scale, offset, num_bins=15)
+        >>> Q.affine.quantize_dequantize(input, scale, offset, num_steps=15)
         tensor([0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0667, 0.1333,
                 0.1333, 0.2000, 0.2667, 0.2667, 0.3333, 0.4000, 0.4667, 0.4667, 0.5333,
                 0.6000, 0.6667, 0.6667, 0.7333, 0.8000, 0.8667, 0.8667, 0.9333, 1.0000,
@@ -295,7 +295,7 @@ def dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, 
 
 
 def _parse_args(args, kwargs) -> Tuple[int, int, Optional[List]]:
-    bitwidth = num_bins = signed = qmin = qmax = None
+    bitwidth = num_steps = signed = qmin = qmax = None
     block_size = kwargs.get('block_size')
 
     if len(args) == 2:
@@ -306,21 +306,21 @@ def _parse_args(args, kwargs) -> Tuple[int, int, Optional[List]]:
     else:
         if 'bitwidth' in kwargs:
             bitwidth, signed = kwargs['bitwidth'], kwargs.get('signed', False)
-        elif 'num_bins' in kwargs:
-            num_bins, signed = kwargs['num_bins'], kwargs.get('signed', False)
+        elif 'num_steps' in kwargs:
+            num_steps, signed = kwargs['num_steps'], kwargs.get('signed', False)
         else:
             qmin, qmax = kwargs['qmin'], kwargs['qmax']
 
     if bitwidth is not None:
-        num_bins = 2 ** bitwidth - 1
+        num_steps = 2 ** bitwidth - 1
 
-    if num_bins is not None:
+    if num_steps is not None:
         if signed:
-            qmin = -math.ceil(num_bins/2)
-            qmax = math.floor(num_bins/2)
+            qmin = -math.ceil(num_steps/2)
+            qmax = math.floor(num_steps/2)
         else:
             qmin = 0
-            qmax = num_bins
+            qmax = num_steps
 
     assert qmin is not None
     assert qmax is not None
