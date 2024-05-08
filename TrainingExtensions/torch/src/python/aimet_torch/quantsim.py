@@ -1738,7 +1738,7 @@ class QuantizationSimModel:
 
         self._load_encodings_impl(encodings,
                                   ignore_when_quantizer_disabled=False,
-                                  disable_quantizer_without_encoding=True,
+                                  disable_quantizer_without_encoding=False,
                                   freeze=True)
 
     def quant_wrappers(self):
