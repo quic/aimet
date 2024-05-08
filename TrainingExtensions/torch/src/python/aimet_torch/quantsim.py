@@ -158,7 +158,7 @@ class ExportableQuantModule(Protocol):
                                strict: bool,
                                partial: bool,
                                requires_grad: Optional[bool],
-                               allow_overwrite: Optional[bool]):
+                               allow_overwrite: bool):
         """
         Import input encodings represented in below format:
         {
@@ -173,7 +173,7 @@ class ExportableQuantModule(Protocol):
                                 strict: bool,
                                 partial: bool,
                                 requires_grad: Optional[bool],
-                                allow_overwrite: Optional[bool]):
+                                allow_overwrite: bool):
         """
         Import output encodings represented in below format:
         {
@@ -188,7 +188,7 @@ class ExportableQuantModule(Protocol):
                                strict: bool,
                                partial: bool,
                                requires_grad: Optional[bool],
-                               allow_overwrite: Optional[bool]):
+                               allow_overwrite: bool):
         """
         Import parameter encodings represented in below format:
         {
@@ -1624,7 +1624,7 @@ class QuantizationSimModel:
                        strict: bool = True,
                        partial: bool = True,
                        requires_grad: Optional[bool] = None,
-                       allow_overwrite: Optional[bool] = None):
+                       allow_overwrite: bool = True):
         """
         :param encodings: Encoding dictionary or path to the encoding dictionary json file.
         :param bool strict: If True, an error will be thrown if the model doesn't
@@ -1649,7 +1649,7 @@ class QuantizationSimModel:
                              strict: bool,
                              partial: bool,
                              requires_grad: Optional[bool],
-                             allow_overwrite: Optional[bool]):
+                             allow_overwrite: bool):
         if 'param_encodings' not in encodings:
             param_encodings = encodings
             activation_encodings = {}
@@ -1704,7 +1704,7 @@ class QuantizationSimModel:
                              strict: bool,
                              partial: bool,
                              requires_grad: Optional[bool],
-                             allow_overwrite: Optional[bool]):
+                             allow_overwrite: bool):
         for name, quant_module in self.model.named_modules():
             if isinstance(quant_module, ExportableQuantModule):
                 param_encoding = {
@@ -1723,7 +1723,7 @@ class QuantizationSimModel:
                                   strict: bool,
                                   partial: bool,
                                   requires_grad: Optional[bool],
-                                  allow_overwrite: Optional[bool]):
+                                  allow_overwrite: bool):
         for module_name, module in self.model.named_modules():
             if not isinstance(module, ExportableQuantModule):
                 continue

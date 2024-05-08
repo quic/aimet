@@ -234,7 +234,7 @@ class BaseQuantizationMixin(abc.ABC):
                                strict: bool,
                                partial: bool,
                                requires_grad: Optional[bool],
-                               allow_overwrite: Optional[bool]):
+                               allow_overwrite: bool):
         """
         Import input encodings represented in below format:
         {
@@ -266,8 +266,7 @@ class BaseQuantizationMixin(abc.ABC):
             if requires_grad is not None:
                 quantizer.requires_grad_(requires_grad)
 
-            if allow_overwrite is not None:
-                quantizer._allow_overwrite = allow_overwrite # pylint:disable = protected-access
+            quantizer._allow_overwrite = allow_overwrite # pylint:disable = protected-access
 
     def export_output_encodings(self) -> List[List[Dict]]:
         """
@@ -283,7 +282,7 @@ class BaseQuantizationMixin(abc.ABC):
                                 strict: bool,
                                 partial: bool,
                                 requires_grad: Optional[bool],
-                                allow_overwrite: Optional[bool]):
+                                allow_overwrite: bool):
         """
         Import output encodings represented in below format:
         {
@@ -315,8 +314,7 @@ class BaseQuantizationMixin(abc.ABC):
             if requires_grad is not None:
                 quantizer.requires_grad_(requires_grad)
 
-            if allow_overwrite is not None:
-                quantizer._allow_overwrite = allow_overwrite # pylint:disable = protected-access
+            quantizer._allow_overwrite = allow_overwrite # pylint:disable = protected-access
 
     def export_param_encodings(self) -> Dict[str, List[Dict]]:
         """
@@ -332,7 +330,7 @@ class BaseQuantizationMixin(abc.ABC):
                                strict: bool,
                                partial: bool,
                                requires_grad: Optional[bool],
-                               allow_overwrite: Optional[bool]):
+                               allow_overwrite: bool):
         """
         Import parameter encodings represented in below format:
         {
@@ -364,8 +362,7 @@ class BaseQuantizationMixin(abc.ABC):
             if requires_grad is not None:
                 quantizer.requires_grad_(requires_grad)
 
-            if allow_overwrite is not None:
-                quantizer._allow_overwrite = allow_overwrite # pylint:disable = protected-access
+            quantizer._allow_overwrite = allow_overwrite # pylint:disable = protected-access
 
     def get_original_module(self) -> nn.Module:
         """

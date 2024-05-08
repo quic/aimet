@@ -499,7 +499,7 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                                strict: bool,
                                partial: bool,
                                requires_grad: Optional[bool],
-                               allow_overwrite: Optional[bool]):
+                               allow_overwrite: bool):
         """
         Import parameter encodings represented in below format:
         {
@@ -566,7 +566,7 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                                 strict: bool,
                                 partial: bool,
                                 requires_grad: Optional[bool],
-                                allow_overwrite: Optional[bool]):
+                                allow_overwrite: bool):
         """
         Import output encodings represented in below format:
         {
@@ -583,7 +583,7 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                                strict: bool,
                                partial: bool,
                                requires_grad: Optional[bool],
-                               allow_overwrite: Optional[bool]):
+                               allow_overwrite: bool):
         """
         Import input encodings represented in below format:
         {
@@ -596,7 +596,7 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                               strict, partial, requires_grad, allow_overwrite)
 
     def _import_encoding(self, encodings, quantizers, strict: bool, partial: bool,
-                         requires_grad: Optional[bool], allow_overwrite: Optional[bool]):
+                         requires_grad: Optional[bool], allow_overwrite: bool):
         # pylint: disable=too-many-branches
         assert quantizers is self.input_quantizers or quantizers is self.output_quantizers
 
