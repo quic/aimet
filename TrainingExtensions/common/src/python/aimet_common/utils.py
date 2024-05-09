@@ -37,6 +37,7 @@
 """ Utility classes and functions that are used by NightlyTests files as well as
     common to both PyTorch and TensorFlow. """
 
+from contextlib import contextmanager
 import json
 import logging
 import logging.config
@@ -48,7 +49,7 @@ import subprocess
 import threading
 import time
 from enum import Enum
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Optional
 import multiprocessing
 import yaml
 from tqdm import tqdm
@@ -453,3 +454,27 @@ def convert_configs_values_to_bool(dictionary: Dict):
             convert_configs_values_to_bool(value)
         else:
             pass
+
+@contextmanager
+def profile(file_path_and_name: str, label: str, new_file: bool = False, logger: Optional[logging.Logger] = None):
+    """
+    Profile a block of code and save profiling information into a file.
+
+    :param file_path_and_name: File path and name to save profiling information to
+    :param label: String label associated with the block of code to profile (shows up in the profiling print)
+    :param new_file: True if a new file is to be created to hold profiling info, False if an existing file should be
+        appended to
+    :param logger: If logger is provided, profiling string will also be printed with INFO logging level
+    """
+    start = time.time()
+    yield
+    end = time.time()
+    profiling_string = f'{label}: {end - start}'
+    if logger:
+        logger.info(profiling_string)
+    if new_file:
+        with open(file_path_and_name, 'w') as f:
+            print(profiling_string, file=f)
+    else:
+        with open(file_path_and_name, 'a') as f:
+            print(f'{label}: {end - start}', file=f)
