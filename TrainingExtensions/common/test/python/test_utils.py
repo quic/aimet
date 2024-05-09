@@ -68,14 +68,15 @@ def test_profile():
         with open(file_path_and_name, 'r') as f:
             lines = f.readlines()
         assert len(lines) == 2
-        assert 'profile 1: ' in lines[0]
-        assert 'profile 2: ' in lines[1]
+        assert lines[0].startswith('profile 1: ')
+        assert lines[1].startswith('profile 2: ')
+
         with profile('profile 3', file_path_and_name, new_file=True, logger=logger):
             _ = 1 + 1
         with open(file_path_and_name, 'r') as f:
             lines = f.readlines()
         assert len(lines) == 1
-        assert 'profile 3: ' in lines[0]
+        assert lines[0].startswith('profile 3: ')
 
         with profile('profile 4'):
             _ = 1 + 1
