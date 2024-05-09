@@ -332,6 +332,9 @@ class LazyQuantizer:
         if not self.enabled:
             return None
 
+        if self.is_const:
+            return None
+
         self._validate_quantizer_properties()
 
         quantizer_param_shape = self._get_param_shape()
