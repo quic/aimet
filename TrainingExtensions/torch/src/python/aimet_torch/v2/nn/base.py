@@ -38,7 +38,6 @@
 
 import abc
 import contextlib
-import functools
 import itertools
 from typing import Type, List, Dict, Union, Iterable
 
@@ -355,33 +354,6 @@ class BaseQuantizationMixin(abc.ABC):
         del orig_module._modules['param_quantizers']
 
         return orig_module
-
-    @property
-    def _super_forward(self):
-        # This is a manually/explicitly rewritten version of super().forward.
-        # NOTE: This is an ad-hoc solution and will be removed in the later versions
-        is_staticmethod = False
-        is_classmethod = False
-
-        for cls in type(self).__mro__:
-            if not 'forward' in cls.__dict__:
-                continue
-            super_forward = cls.__dict__['forward']
-
-            if isinstance(super_forward, staticmethod):
-                is_staticmethod = True
-            if isinstance(super_forward, classmethod):
-                is_classmethod = True
-            break
-        else:
-            raise RuntimeError
-
-        super_forward = self.qcls_to_cls[type(self)].forward
-
-        if is_staticmethod or is_classmethod:
-            return super_forward
-
-        return functools.partial(super_forward, self)
 
     def _remove_input_quantizers(self, indices: Union[int, Iterable[int]] = None):
         """
