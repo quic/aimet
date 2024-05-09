@@ -37,6 +37,7 @@
 
 """ Implementation for simulating models running on Quantized hardware """
 # pylint: disable=too-many-lines
+from itertools import chain
 import contextlib
 import os
 import io
@@ -1632,17 +1633,26 @@ class QuantizationSimModel:
 
         if 'param_encodings' not in encodings:
             param_encodings = encodings
-            activation_encodings = None
+            activation_encodings = {}
             logger.warning("An older AdaRound exported encoding file type has been detected! "
                            "Please regenerate it using the AdaRound export function from the latest "
                            "AIMET (version 1.32 or higher) if necessary. "
                            "Support for this encoding file will be deprecated in AIMET version 1.33.0.")
         else:
-            param_encodings = encodings.get('param_encodings', None)
-            activation_encodings = encodings.get('activation_encodings', None)
+            param_encodings = encodings.get('param_encodings', {})
+            activation_encodings = encodings.get('activation_encodings', {})
 
-        if param_encodings is None and activation_encodings is None:
+        if not param_encodings and not activation_encodings:
             raise RuntimeError
+
+        encoding_keys = param_encodings.keys() | activation_encodings.keys()
+        model_keys = set(name.replace("._module_to_wrap", "") for name, _
+                         in chain(self.model.named_modules(), self.model.named_parameters()))
+        keys_not_found = encoding_keys - model_keys
+        if keys_not_found:
+            keys_not_found = ', '.join(sorted(keys_not_found))
+            msg = f"Encoding dictionary contains modules/parameters that doesn't exist in the model: {keys_not_found}"
+            raise RuntimeError(msg)
 
         if param_encodings is not None:
             self._set_param_encodings(param_encodings,
