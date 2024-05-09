@@ -1645,8 +1645,10 @@ class TestQuantizationSimStaticGrad:
             if isinstance(module, aimet_nn.FakeQuantizationMixin):
                 if name == 'relu1':
                     assert isinstance(module.output_quantizers[0], QuantizeDequantize)
-                elif name in ['conv2', 'conv2_drop', 'relu2', 'relu3', 'dropout', 'fc2', 'log_softmax']:
+                elif name in ['conv2', 'relu2', 'relu3', 'fc2', 'log_softmax']:
                     assert not module.output_quantizers[0].is_initialized()
+                elif name in ['conv2_drop', 'dropout']:
+                    assert module.output_quantizers[0] is None
 
     def test_rnn_quantization(self):
         """ Test quantizing a model with rnn layer """
@@ -2357,7 +2359,7 @@ class TestQuantizationSimStaticGrad:
             qsim.save_encodings_to_json(tmp_dir, 'saved_encodings')
             with open(f'{tmp_dir}/saved_encodings.json') as encodings_file:
                 encodings = json.load(encodings_file)
-                assert len(encodings['activation_encodings']) == 14
+                assert len(encodings['activation_encodings']) == 13
                 assert len(encodings['param_encodings']) == 5
 
     @pytest.mark.skip('compute_encodings_for_sims not supported yet')

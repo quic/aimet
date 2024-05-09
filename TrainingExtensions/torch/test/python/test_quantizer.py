@@ -1665,7 +1665,6 @@ class TestQuantizationSimStaticGrad:
 
         self.check_quant_params(sim.model.conv1, loaded_model.conv1, True)
         self.check_quant_params(sim.model.conv2, loaded_model.conv2, True)
-        self.check_quant_params(sim.model.conv2_drop, loaded_model.conv2_drop, False)
         self.check_quant_params(sim.model.fc2, loaded_model.fc2, True)
 
         assert np.allclose(output_before_save.detach().numpy(),
@@ -2586,7 +2585,7 @@ class TestQuantizationSimStaticGrad:
         qsim.save_encodings_to_json('./data', 'saved_encodings')
         with open('./data/saved_encodings.json') as encodings_file:
             encodings = json.load(encodings_file)
-            assert len(encodings['activation_encodings']) == 14
+            assert len(encodings['activation_encodings']) == 13
             assert len(encodings['param_encodings']) == 5
 
     def test_compute_encodings_for_multiple_sims(self):
