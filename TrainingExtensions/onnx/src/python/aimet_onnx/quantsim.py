@@ -234,7 +234,7 @@ class QuantizationSimModel:
 
         :return: Connected graph ops
         """
-        valid_ops = []
+        valid_ops = list()
 
         for op in self.connected_graph.get_all_ops().values():
             valid_ops.append(op)
