@@ -39,12 +39,13 @@
 import importlib
 import inspect
 import itertools
-from typing import List, Tuple, Union, Dict, Callable, Any, Iterable
+from typing import List, Tuple, Union, Dict, Callable, Any, Iterable, Optional, TextIO
 import contextlib
 import os
 import pickle
 import sys
 import functools
+import logging
 import warnings
 
 import numpy as np
@@ -55,6 +56,7 @@ from torchvision import datasets, transforms
 
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_common.utils import AimetLogger, Handle, log_with_error_and_assert_if_false
+from aimet_common.utils import profile as _profile
 import aimet_common.libpymo as libpymo
 from aimet_torch import elementwise_ops
 from aimet_torch.tensor_quantizer import TensorQuantizer
@@ -1205,3 +1207,29 @@ def deprecated(msg: str):
             return _callable(*args, **kwargs)
         return fn_wrapper
     return decorator
+
+
+def profile(label: str, file: Union[str, os.PathLike, TextIO] = None, new_file: bool = False, logger: Optional[logging.Logger] = None):
+    """
+    Profile a block of code and save profiling information into a file.
+
+    :param label: String label associated with the block of code to profile (shows up in the profiling print)
+    :param file: File path and name or a file-like object to send output text to (Default: stdout)
+    :param new_file: True if a new file is to be created to hold profiling info, False if an existing file should be
+        appended to. This flag is only valid when ``file`` is a path, not a file-like object.
+    :param logger: If logger is provided, profiling string will also be printed with INFO logging level
+    """
+    return _profile(label, file, new_file, logger, cleanup=lambda: torch.cuda.synchronize)
+
+
+def profile_async(label: str, file: Union[str, os.PathLike, TextIO] = None, new_file: bool = False, logger: Optional[logging.Logger] = None):
+    """
+    Profile a block of code and save profiling information into a file.
+
+    :param label: String label associated with the block of code to profile (shows up in the profiling print)
+    :param file: File path and name or a file-like object to send output text to (Default: stdout)
+    :param new_file: True if a new file is to be created to hold profiling info, False if an existing file should be
+        appended to. This flag is only valid when ``file`` is a path, not a file-like object.
+    :param logger: If logger is provided, profiling string will also be printed with INFO logging level
+    """
+    return _profile(label, file, new_file, logger, cleanup=None)
