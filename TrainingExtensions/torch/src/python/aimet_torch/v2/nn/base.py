@@ -39,7 +39,7 @@
 import abc
 import contextlib
 import itertools
-from typing import Type, List, Dict, Union, Iterable
+from typing import Type, List, Dict, Union, Iterable, Mapping, Optional
 
 import torch.nn as nn
 
@@ -118,7 +118,7 @@ class BaseQuantizationMixin(abc.ABC):
             if not param_quantizer:
                 continue
 
-            if param_quantizer._is_encoding_frozen(): # pylint: disable=protected-access
+            if not param_quantizer._allow_overwrite: # pylint: disable=protected-access
                 continue
 
             if not param_quantizer.is_initialized() or overwrite:
@@ -159,7 +159,7 @@ class BaseQuantizationMixin(abc.ABC):
                 if not isinstance(quantizer, QuantizerBase):
                     continue
 
-                if quantizer._is_encoding_frozen(): # pylint: disable=protected-access
+                if not quantizer._allow_overwrite: # pylint: disable=protected-access
                     continue
 
                 ctx = quantizer.compute_encodings()
@@ -228,8 +228,12 @@ class BaseQuantizationMixin(abc.ABC):
             for quantizer in _flatten_nn_module_list(self.input_quantizers)
         ]
 
-    def import_input_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled: bool,
-                               disable_quantizer_without_encoding: bool, freeze: bool):
+    def import_input_encodings(self,
+                               encodings: Mapping[str, Mapping],
+                               strict: bool,
+                               partial: bool,
+                               requires_grad: Optional[bool],
+                               allow_overwrite: bool):
         """
         Import input encodings represented in below format:
         {
@@ -244,18 +248,24 @@ class BaseQuantizationMixin(abc.ABC):
         :param freeze: If True, freezes the quantizer's encodings after loading
         """
         for i, quantizer in enumerate(list(self.input_quantizers)):
+            if quantizer and not quantizer._allow_overwrite: # pylint: disable=protected-access
+                continue
             encoding = encodings.get(str(i), None)
             if not encoding:
-                if disable_quantizer_without_encoding:
+                if not partial:
+                    # Dangling quantizers have to be removed when importing non-partial encodings
                     self.input_quantizers[i] = None
                 continue
-            if quantizer is None and not ignore_when_quantizer_disabled:
+            if quantizer is None and strict:
                 raise RuntimeError
             if isinstance(encoding, dict):
                 encoding = [encoding]
             quantizer.set_legacy_encodings(encoding)
-            if freeze:
-                quantizer._freeze_encoding() # pylint:disable = protected-access
+
+            if requires_grad is not None:
+                quantizer.requires_grad_(requires_grad)
+
+            quantizer._allow_overwrite = allow_overwrite # pylint:disable = protected-access
 
     def export_output_encodings(self) -> List[List[Dict]]:
         """
@@ -266,8 +276,12 @@ class BaseQuantizationMixin(abc.ABC):
             for quantizer in _flatten_nn_module_list(self.output_quantizers)
         ]
 
-    def import_output_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled: bool,
-                                disable_quantizer_without_encoding: bool, freeze: bool):
+    def import_output_encodings(self,
+                                encodings: Mapping[str, Mapping],
+                                strict: bool,
+                                partial: bool,
+                                requires_grad: Optional[bool],
+                                allow_overwrite: bool):
         """
         Import output encodings represented in below format:
         {
@@ -282,18 +296,24 @@ class BaseQuantizationMixin(abc.ABC):
         :param freeze: If True, freezes the quantizer's encodings after loading
         """
         for i, quantizer in enumerate(list(self.output_quantizers)):
+            if quantizer and not quantizer._allow_overwrite: # pylint: disable=protected-access
+                continue
             encoding = encodings.get(str(i), None)
             if not encoding:
-                if disable_quantizer_without_encoding:
+                if not partial:
+                    # Dangling quantizers have to be removed when importing non-partial encodings
                     self.output_quantizers[i] = None
                 continue
-            if quantizer is None and not ignore_when_quantizer_disabled:
+            if quantizer is None and strict:
                 raise RuntimeError
             if isinstance(encoding, dict):
                 encoding = [encoding]
             quantizer.set_legacy_encodings(encoding)
-            if freeze:
-                quantizer._freeze_encoding() # pylint:disable = protected-access
+
+            if requires_grad is not None:
+                quantizer.requires_grad_(requires_grad)
+
+            quantizer._allow_overwrite = allow_overwrite # pylint:disable = protected-access
 
     def export_param_encodings(self) -> Dict[str, List[Dict]]:
         """
@@ -304,8 +324,12 @@ class BaseQuantizationMixin(abc.ABC):
             for param_name, quantizer in self.param_quantizers.items()
         }
 
-    def import_param_encodings(self, encodings: Dict[str, List[Dict]], ignore_when_quantizer_disabled: bool,
-                               disable_quantizer_without_encoding: bool, freeze: bool):
+    def import_param_encodings(self,
+                               encodings: Mapping[str, Mapping],
+                               strict: bool,
+                               partial: bool,
+                               requires_grad: Optional[bool],
+                               allow_overwrite: bool):
         """
         Import parameter encodings represented in below format:
         {
@@ -320,18 +344,24 @@ class BaseQuantizationMixin(abc.ABC):
         :param freeze: If True, freezes the quantizer's encodings after loading
         """
         for param_name, quantizer in dict(self.param_quantizers).items():
+            if quantizer and not quantizer._allow_overwrite: # pylint: disable=protected-access
+                continue
             encoding = encodings.get(param_name, None)
             if not encoding:
-                if disable_quantizer_without_encoding:
+                if not partial:
+                    # Dangling quantizers have to be removed when importing non-partial encodings
                     self.param_quantizers[param_name] = None
                 continue
-            if quantizer is None and not ignore_when_quantizer_disabled:
+            if quantizer is None and strict:
                 raise RuntimeError
             if isinstance(encoding, dict):
                 encoding = [encoding]
             quantizer.set_legacy_encodings(encoding)
-            if freeze:
-                quantizer._freeze_encoding() # pylint:disable = protected-access
+
+            if requires_grad is not None:
+                quantizer.requires_grad_(requires_grad)
+
+            quantizer._allow_overwrite = allow_overwrite # pylint:disable = protected-access
 
     def get_original_module(self) -> nn.Module:
         """

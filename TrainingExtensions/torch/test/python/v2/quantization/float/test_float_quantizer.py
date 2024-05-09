@@ -127,27 +127,19 @@ def test_qdq_compute_encodings(x):
     assert torch.equal(float16_qdq(x), expected_output)
 
 
-def test_freeze_encodings(x):
+def test_allow_overwrite(x):
     exponent_bits, mantissa_bits = 3, 4
     q = FloatQuantizeDequantize(exponent_bits, mantissa_bits, encoding_analyzer=MinMaxEncodingAnalyzer((1, 100)))
     with q.compute_encodings():
         q(x)
 
-    q_max = q.maxval.detach().clone()
-
-    q._freeze_encoding()
-    assert q._is_encoding_frozen()
     """
-    Given: Called quantizer.freeze_encoding()
-    When: Inspect parameter requires_grad() attributes
-    Then: requires_grad = False for all parameters
-    """
-    assert not q.maxval.requires_grad
-
-    """
+    Given: _allow_overwrite set to False
     When: Try to recompute encodings
-    Then: Encodings do not change
+    Then: Encoding does NOT get overwritten by compute_encodings
     """
+    q_max = q.maxval.detach().clone()
+    q._allow_overwrite = False
     with q.compute_encodings():
         q(x * 10)
 

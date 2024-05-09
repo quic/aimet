@@ -189,10 +189,15 @@ class TestSeqMse:
         model = Net().eval().cuda()
         dummy_input = torch.randn(1, 1, 28, 28).cuda()
         sim = QuantizationSimModel(model, dummy_input, default_param_bw=4, quant_scheme=QuantScheme.post_training_tf)
+        sim.model.requires_grad_(True)
         params = SeqMseParams(num_batches=2, inp_symmetry=inp_symmetry, loss_fn=loss_fn)
         apply_seq_mse(model, sim, unlabeled_data_loader, params)
-        assert sim.model.fc1.param_quantizers['weight']._is_encoding_frozen()
-        assert sim.model.fc2.param_quantizers['weight']._is_encoding_frozen()
+        assert not sim.model.fc1.param_quantizers['weight'].min.requires_grad
+        assert not sim.model.fc1.param_quantizers['weight'].max.requires_grad
+        assert not sim.model.fc1.param_quantizers['weight']._allow_overwrite
+        assert not sim.model.fc2.param_quantizers['weight'].min.requires_grad
+        assert not sim.model.fc2.param_quantizers['weight'].max.requires_grad
+        assert not sim.model.fc2.param_quantizers['weight']._allow_overwrite
 
         # Compute encodings for all the activations and remaining non-supported modules
         enc_before = sim.model.fc1.param_quantizers['weight'].get_encoding()
@@ -212,21 +217,31 @@ class TestSeqMse:
         dummy_input = torch.randn(1, 3, 32, 32)
         sim_without = QuantizationSimModel(model, dummy_input, default_param_bw=4,
                                            quant_scheme=QuantScheme.post_training_tf)
+        sim_without.model.requires_grad_(True)
         sim_with = QuantizationSimModel(model, dummy_input, default_param_bw=4,
                                         quant_scheme=QuantScheme.post_training_tf)
+        sim_with.model.requires_grad_(True)
         params = SeqMseParams(num_batches=2, inp_symmetry=inp_symmetry, loss_fn=loss_fn)
 
         # Apply Sequential MSE without checkpoints config
         apply_seq_mse(model, sim_without, data_loader, params, modules_to_exclude=[model.fc1])
-        assert not sim_without.model.fc1.param_quantizers['weight']._is_encoding_frozen()
-        assert sim_without.model.fc2.param_quantizers['weight']._is_encoding_frozen()
+        assert sim_without.model.fc1.param_quantizers['weight'].min.requires_grad
+        assert sim_without.model.fc1.param_quantizers['weight'].max.requires_grad
+        assert sim_without.model.fc1.param_quantizers['weight']._allow_overwrite
+        assert not sim_without.model.fc2.param_quantizers['weight'].min.requires_grad
+        assert not sim_without.model.fc2.param_quantizers['weight'].max.requires_grad
+        assert not sim_without.model.fc2.param_quantizers['weight']._allow_overwrite
         without_checkpoints_enc = sim_without.model.fc2.param_quantizers['weight'].get_encoding()
 
         # Apply Sequential MSE with checkpoints config
         apply_seq_mse(model, sim_with, data_loader, params, checkpoints_config="./test_checkpoints.json",
                       modules_to_exclude=[model.fc1])
-        assert not sim_with.model.fc1.param_quantizers['weight']._is_encoding_frozen()
-        assert sim_with.model.fc2.param_quantizers['weight']._is_encoding_frozen()
+        assert sim_with.model.fc1.param_quantizers['weight'].min.requires_grad
+        assert sim_with.model.fc1.param_quantizers['weight'].max.requires_grad
+        assert sim_with.model.fc1.param_quantizers['weight']._allow_overwrite
+        assert not sim_with.model.fc2.param_quantizers['weight'].min.requires_grad
+        assert not sim_with.model.fc2.param_quantizers['weight'].max.requires_grad
+        assert not sim_with.model.fc2.param_quantizers['weight']._allow_overwrite
         with_checkpoints_enc = sim_with.model.fc2.param_quantizers['weight'].get_encoding()
 
         # encodings should be bit-exact
@@ -241,7 +256,12 @@ class TestSeqMse:
         model = Net().eval()
         dummy_input = torch.randn(1, 1, 28, 28)
         sim = QuantizationSimModel(model, dummy_input, default_param_bw=4, quant_scheme=QuantScheme.post_training_tf)
+        sim.model.requires_grad_(True)
         params = SeqMseParams(num_batches=2)
         apply_seq_mse(model, sim, unlabeled_data_loader, params, modules_to_exclude=[model.fc1])
-        assert not sim.model.fc1.param_quantizers['weight']._is_encoding_frozen()
-        assert sim.model.fc2.param_quantizers['weight']._is_encoding_frozen()
+        assert sim.model.fc1.param_quantizers['weight'].min.requires_grad
+        assert sim.model.fc1.param_quantizers['weight'].max.requires_grad
+        assert sim.model.fc1.param_quantizers['weight']._allow_overwrite
+        assert not sim.model.fc2.param_quantizers['weight'].min.requires_grad
+        assert not sim.model.fc2.param_quantizers['weight'].max.requires_grad
+        assert not sim.model.fc2.param_quantizers['weight']._allow_overwrite

@@ -67,6 +67,7 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
         # This info will be used for judging whether the current parameter has ever been
         # initialized after it was instantiated.
         self._initial_parameters = OrderedDict()
+        self._allow_overwrite = True
 
     @abc.abstractmethod
     @contextlib.contextmanager
@@ -202,20 +203,3 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
         is_initialized = state.pop('is_initialized')
         self.__dict__.update(state)
         self.set_extra_state(is_initialized)
-
-    def _freeze_encoding(self):
-        """
-        Freeze the encoding params so they won't be updated during training or compute_encodings
-        """
-        for param in self.parameters():
-            param.requires_grad = False
-        self.encoding_analyzer = None
-
-    def _is_encoding_frozen(self):
-        """
-        Returns true if the encodings are frozen
-        """
-        for param in self.parameters():
-            if param.requires_grad:
-                return False
-        return self.encoding_analyzer is None

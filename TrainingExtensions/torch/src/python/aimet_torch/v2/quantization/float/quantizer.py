@@ -172,7 +172,7 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
         During ``compute_encodings`` is enabled, the quantizer forward pass performs
         dynamic quantization using the batch statistics.
         """
-        if not self.encoding_analyzer:
+        if not self.encoding_analyzer or not self._allow_overwrite:
             yield
             return
 
