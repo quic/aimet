@@ -484,7 +484,7 @@ class QuantizationSimModel:
 
     def export(self, path: str, filename_prefix: str, dummy_input: Union[torch.Tensor, Tuple],
                onnx_export_args: Optional[Union[OnnxExportApiArgs, Dict]] = None, propagate_encodings: bool = False,
-               export_to_torchscript: bool = False, use_embedded_encodings: bool = False):
+               export_to_torchscript: bool = False, use_embedded_encodings: bool = False, export_model: bool = True):
         """
         This method exports out the quant-sim model so it is ready to be run on-target.
 
@@ -509,6 +509,7 @@ class QuantizationSimModel:
                 ops. Defaults to False.
         :param export_to_torchscript: If True, export to torchscript. Export to onnx otherwise. Defaults to False.
         :param use_embedded_encodings: If True, another onnx model embedded with fakequant nodes will be exported
+        :param export_model: If True, then model is exported. If false, only encodings are exported
         """
 
         warning_str = 'Exporting encodings to yaml will be deprecated in a future release. Ensure that your ' \
@@ -550,7 +551,8 @@ class QuantizationSimModel:
                 self.export_onnx_model_and_encodings(path, filename_prefix, model_to_export, self.model,
                                                      dummy_input, onnx_export_args, propagate_encodings,
                                                      self._module_marker_map, self._is_conditional,
-                                                     self._excluded_layer_names, quantizer_args=self.quant_args)
+                                                     self._excluded_layer_names, quantizer_args=self.quant_args,
+                                                     export_model=export_model)
 
     @staticmethod
     def export_torch_script_model_and_encodings(path: str, filename_prefix: str,
@@ -589,7 +591,7 @@ class QuantizationSimModel:
                                         onnx_export_args: Union[OnnxExportApiArgs, dict], propagate_encodings: bool,
                                         module_marker_map: Dict[torch.nn.Module, torch.Tensor] = None,
                                         is_conditional: bool = False, excluded_layer_names: List = None,
-                                        quantizer_args: Dict = None):
+                                        quantizer_args: Dict = None, export_model: bool = True):
         """
         This method exports a onnx model and the corresponding encodings
 
@@ -605,24 +607,27 @@ class QuantizationSimModel:
         :param module_marker_map: Maps module names to traced custom markers (only used for conditional models)
         :param is_conditional: True if model is conditional, False otherwise
         :param excluded_layer_names: List of names of layers that have been excluded from quantization.
+        :param export_model: If True, then model is exported. If false, only encodings are exported
         :return: None
 
         """
         # pylint: disable=too-many-locals
         onnx_path = os.path.join(path, filename_prefix + '.onnx')
-        if version.parse(torch.__version__) >= version.parse("1.13.0") and onnx_utils.EXPORT_TO_ONNX_DIRECT:
-            logger.debug('Exporting quantsim using torch.onnx.export directly')
-            original_model.cpu()
-            if isinstance(onnx_export_args, OnnxExportApiArgs):
-                kwargs = onnx_export_args.kwargs
+        if export_model:
+            if version.parse(torch.__version__) >= version.parse("1.13.0") and onnx_utils.EXPORT_TO_ONNX_DIRECT:
+                logger.debug('Exporting quantsim using torch.onnx.export directly')
+                original_model.cpu()
+                if isinstance(onnx_export_args, OnnxExportApiArgs):
+                    kwargs = onnx_export_args.kwargs
+                else:
+                    kwargs = onnx_export_args
+                torch.onnx.export(original_model, dummy_input, onnx_path, **kwargs)
             else:
-                kwargs = onnx_export_args
-            torch.onnx.export(original_model, dummy_input, onnx_path, **kwargs)
-        else:
-            # Create onnx model and obtain node to i/o tensor name map
-            OnnxSaver.create_onnx_model_with_pytorch_layer_names(onnx_path, original_model, dummy_input, is_conditional,
-                                                                 module_marker_map, onnx_export_args)
+                # Create onnx model and obtain node to i/o tensor name map
+                OnnxSaver.create_onnx_model_with_pytorch_layer_names(onnx_path, original_model, dummy_input, is_conditional,
+                                                                     module_marker_map, onnx_export_args)
 
+        assert os.path.exists(onnx_path), 'The onnx model does not exist in the location specified'
         onnx_model = onnx.load(onnx_path)
         onnx_node_to_io_tensor_map, valid_param_set = OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
 
