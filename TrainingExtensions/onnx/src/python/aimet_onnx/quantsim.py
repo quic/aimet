@@ -234,7 +234,10 @@ class QuantizationSimModel:
 
         :return: Connected graph ops
         """
-        valid_ops = [op for op in self.connected_graph.get_all_ops().values()]
+        valid_ops = []
+
+        for op in self.connected_graph.get_all_ops().values():
+            valid_ops.append(op)
         return valid_ops
 
     def _get_activations_to_quantize(self, dummy_input: Dict[str, np.ndarray]):
