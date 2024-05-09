@@ -421,6 +421,22 @@ class BaseQuantizationMixin(abc.ABC):
             indices = list(range(len(self.output_quantizers)))
         return _remove_quantizers(self.output_quantizers, indices)
 
+    def _remove_activation_quantizers(self):
+        """ Remove all activation quantizers """
+        # pylint: disable=protected-access
+        ctx_1 = self._remove_output_quantizers()
+        ctx_2 = self._remove_input_quantizers()
+        return _ContextManager(action=lambda: None,
+                               cleanup=lambda: (ctx_1._cleanup(), ctx_2._cleanup()))
+
+    def _remove_all_quantizers(self):
+        """ Remove all quantizers """
+        # pylint: disable=protected-access
+        ctx_1 = self._remove_activation_quantizers()
+        ctx_2 = self._remove_param_quantizers()
+        return _ContextManager(action=lambda: None,
+                               cleanup=lambda: (ctx_1._cleanup(), ctx_2._cleanup()))
+
 
 def _remove_quantizers(quantizers, keys):
     orig_quantizers = {key: quantizers[key] for key in keys}

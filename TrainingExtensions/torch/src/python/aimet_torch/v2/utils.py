@@ -36,7 +36,7 @@
 # =============================================================================
 # pylint: disable=redefined-builtin
 """ Common utility functions """
-from typing import Callable, Tuple
+from typing import Callable, Tuple, Any
 import functools
 import itertools
 
@@ -91,7 +91,7 @@ def reduce(input: torch.Tensor, shape: Tuple[int, ...], reduce_op: Callable):
 
 
 class _ContextManager:
-    def __init__(self, action: Callable[[], None], cleanup: Callable[[], None]):
+    def __init__(self, action: Callable[[], Any], cleanup: Callable[[], Any]):
         self._action = action
         self._cleanup = cleanup
 
