@@ -179,16 +179,22 @@ class TestTrainingExtensionElementwiseOps:
                 self.add = aimet_ops.Add()
                 self.mul = aimet_ops.Multiply()
 
-            def forward(self, input1):
-                x = self.conv(input1)
-                x = self.add(x, 2)
-                x = self.mul(x, 1)
+            def forward(self, x, y, z):
+                x = self.conv(x)
+                x = self.add(x, y)
+                x = self.mul(x, z)
                 return x
 
         model = Model().eval()
-        dummy_input = torch.randn(1, 10, 10, 20)
+        dummy_input = (torch.randn(1, 10, 10, 20),
+                       torch.tensor([2.0]),
+                       torch.tensor([1.0]))
         sim = QuantizationSimModel(model, dummy_input, quant_scheme=quant_scheme)
-        sim.compute_encodings(dummy_forward, dummy_input)
+        """
+        When: Pass integers as input during compute_encodings
+        Then: The input quantizers that took the integers as input should not be initialized
+        """
+        sim.compute_encodings(dummy_forward, (dummy_input[0], 2, 1))
 
         assert sim.model.add.input_quantizers[0] is None
         assert not sim.model.add.input_quantizers[1].is_initialized()

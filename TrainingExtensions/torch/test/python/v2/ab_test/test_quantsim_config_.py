@@ -908,7 +908,7 @@ class TestQuantsimConfig:
                 x1 = self.conv2(x1)
                 x2 = self.conv3(inputs[1])
                 x = self.add1(x1, x2)
-                x = self.add2(x, torch.tensor(2.0))
+                x = self.add2(x, inputs[2])
                 return x
 
         model = MultiInputWithConstant()
@@ -931,7 +931,7 @@ class TestQuantsimConfig:
             json.dump(quantsim_config, f)
 
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf, config_file='./data/quantsim_config.json',
-                                   dummy_input=(torch.rand(1, 3, 32, 32), torch.rand(1, 3, 20, 20)), in_place=True)
+                                   dummy_input=(torch.rand(1, 3, 32, 32), torch.rand(1, 3, 20, 20), torch.randn(1, 8, 11, 11)), in_place=True)
         for name, module in sim.model.named_children():
             assert isinstance(module, BaseQuantizationMixin)
             if name in ('conv1', 'conv3'):

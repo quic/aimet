@@ -959,6 +959,7 @@ class TestQuantsimConfig:
                 elif name == 'add2':
                     assert not module.input_quantizers[0].enabled
                     assert module.input_quantizers[1].enabled
+                    assert module.input_quantizers[1].is_const
                 else:
                     assert not module.input_quantizers[0].enabled
                 assert not module.output_quantizers[0].enabled
