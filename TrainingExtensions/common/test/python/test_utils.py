@@ -39,7 +39,24 @@
 import os
 import tempfile
 from aimet_common.utils import profile, AimetLogger
+from aimet_common import utils
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
+
+def test_save_json_yaml():
+    test_dict = {'1': 1,
+                 '2': 2,
+                 '3': 3}
+    with tempfile.TemporaryDirectory() as tmpdir:
+        utils.save_json_yaml(os.path.join(tmpdir, 'saved_dict'), test_dict)
+        assert os.path.isfile(os.path.join(tmpdir, 'saved_dict'))
+        assert not os.path.isfile(os.path.join(tmpdir, 'saved_dict.yaml'))
+
+        utils.SAVE_TO_YAML = True
+        utils.save_json_yaml(os.path.join(tmpdir, 'saved_dict_2'), test_dict)
+        assert os.path.isfile(os.path.join(tmpdir, 'saved_dict_2'))
+        assert os.path.isfile(os.path.join(tmpdir, 'saved_dict_2.yaml'))
+
+
 
 def test_profile():
     with tempfile.TemporaryDirectory() as tmpdir:

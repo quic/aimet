@@ -510,6 +510,13 @@ class QuantizationSimModel:
         :param export_to_torchscript: If True, export to torchscript. Export to onnx otherwise. Defaults to False.
         :param use_embedded_encodings: If True, another onnx model embedded with fakequant nodes will be exported
         """
+
+        warning_str = 'Exporting encodings to yaml will be deprecated in a future release. Ensure that your ' \
+                      'code can work with the exported files ending in ".encodings" which are saved using json ' \
+                      'format. For the time being, if yaml export is needed, set aimet_common.utils.SAVE_TO_YAML to ' \
+                      'True.'
+        logger.warning(warning_str)
+
         if quantsim.encoding_version not in VALID_ENCODING_VERSIONS:
             raise NotImplementedError(f'Encoding version {quantsim.encoding_version} not in set of valid encoding '
                                       f'versions {VALID_ENCODING_VERSIONS}.')
