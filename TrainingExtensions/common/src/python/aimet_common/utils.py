@@ -477,7 +477,7 @@ def profile(label: str, file: Union[str, os.PathLike, TextIO] = None, new_file: 
     should_close = False
     if isinstance(file, (str, os.PathLike)):
         mode = 'w' if new_file else 'a'
-        file = open(file, mode)
+        file = open(file, mode) # pylint: disable=consider-using-with
         should_close = True
     elif file is None:
         file = sys.stdout

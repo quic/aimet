@@ -1210,7 +1210,7 @@ def deprecated(msg: str):
     return decorator
 
 
-def profile(label: str, file: Union[str, os.PathLike, TextIO] = None, new_file: bool = False, logger: Optional[logging.Logger] = None):
+def profile(label: str, file: Union[str, os.PathLike, TextIO] = None, new_file: bool = False, logger: Optional[logging.Logger] = None): # pylint: disable=redefined-outer-name
     """
     Profile a block of code and save profiling information into a file.
 
@@ -1221,10 +1221,10 @@ def profile(label: str, file: Union[str, os.PathLike, TextIO] = None, new_file: 
     :param logger: If logger is provided, profiling string will also be printed with INFO logging level
     """
     ctx = _profile(label, file, new_file, logger, cleanup=lambda: torch.cuda.synchronize)
-    return _ContextManager(action=ctx.__enter__, cleanup=lambda: ctx.__exit__(None, None, None))
+    return _ContextManager(action=ctx.__enter__, cleanup=lambda: ctx.__exit__(None, None, None)) # pylint: disable=no-member
 
 
-def profile_async(label: str, file: Union[str, os.PathLike, TextIO] = None, new_file: bool = False, logger: Optional[logging.Logger] = None):
+def profile_async(label: str, file: Union[str, os.PathLike, TextIO] = None, new_file: bool = False, logger: Optional[logging.Logger] = None): # pylint: disable=redefined-outer-name
     """
     Profile a block of code and save profiling information into a file.
 
@@ -1235,4 +1235,4 @@ def profile_async(label: str, file: Union[str, os.PathLike, TextIO] = None, new_
     :param logger: If logger is provided, profiling string will also be printed with INFO logging level
     """
     ctx = _profile(label, file, new_file, logger, cleanup=lambda: torch.cuda.synchronize)
-    return _ContextManager(action=ctx.__enter__, cleanup=lambda: ctx.__exit__(None, None, None))
+    return _ContextManager(action=ctx.__enter__, cleanup=lambda: ctx.__exit__(None, None, None)) # pylint: disable=no-member
