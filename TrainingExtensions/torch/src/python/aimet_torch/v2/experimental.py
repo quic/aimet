@@ -1,9 +1,47 @@
+# -*- mode: python -*-
+# =============================================================================
+#  @@-COPYRIGHT-START-@@
+#
+#  Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+#
+#  Redistribution and use in source and binary forms, with or without
+#  modification, are permitted provided that the following conditions are met:
+#
+#  1. Redistributions of source code must retain the above copyright notice,
+#     this list of conditions and the following disclaimer.
+#
+#  2. Redistributions in binary form must reproduce the above copyright notice,
+#     this list of conditions and the following disclaimer in the documentation
+#     and/or other materials provided with the distribution.
+#
+#  3. Neither the name of the copyright holder nor the names of its contributors
+#     may be used to endorse or promote products derived from this software
+#     without specific prior written permission.
+#
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+#  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+#  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+#  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+#  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+#  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+#  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+#  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+#  POSSIBILITY OF SUCH DAMAGE.
+#
+#  SPDX-License-Identifier: BSD-3-Clause
+#
+#  @@-COPYRIGHT-END-@@
+# =============================================================================
+""" Module for experimental features """
+
 from typing import overload, Callable, Type
 
 import torch
 
-from aimet_torch.meta.connectedgraph import Op
 from aimet_common.connected_graph.product import Product
+from aimet_torch.meta.connectedgraph import Op
 from aimet_torch import utils
 import aimet_torch.elementwise_ops as aimet_ops
 from aimet_torch.v2.quantsim import QuantizationSimModel
@@ -40,6 +78,8 @@ def propagate_output_encodings(sim: QuantizationSimModel, condition: Callable[[t
 
 
 def propagate_output_encodings(sim: QuantizationSimModel, arg):
+    """ Propagate output encodings of all the modules that satisfies the given condition. """
+
     if isinstance(arg, type) and issubclass(arg, torch.nn.Module):
         module_type = arg
         condition = lambda module: isinstance(module, module_type)
@@ -58,17 +98,23 @@ def propagate_output_encodings(sim: QuantizationSimModel, arg):
 def _propagate_output_encodings(sim: QuantizationSimModel,
                                 condition: Callable[[torch.nn.Module], bool]):
     """ Propagate output encodings of all the modules that satisfies the given condition. """
+    # pylint: disable=redefined-builtin
     cg = sim.connected_graph
     qmodel = sim.model
 
-    def get_qmodule(op):
+    def get_qmodule(op: Op):
         orig_module = op.get_module()
-        full_name = cg._module_to_name[orig_module]
+        if not orig_module:
+            return None
+
+        full_name = cg._module_to_name[orig_module] # pylint: disable=protected-access
         _, *module_names = full_name.split('.')
-        if module_names:
-            module_name = '.'.join(module_names)
-            return utils.get_named_module(qmodel, module_name)
-        raise None
+
+        if not module_names:
+            return None
+
+        module_name = '.'.join(module_names)
+        return utils.get_named_module(qmodel, module_name)
 
     def _set_src_qtzr(x: Product, consumer: Op, qtzr):
         producer = x.producer
