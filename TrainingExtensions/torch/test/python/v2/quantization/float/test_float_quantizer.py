@@ -148,7 +148,7 @@ def test_allow_overwrite(x):
     Then: Encoding does NOT get overwritten by compute_encodings
     """
     q_max = q.maxval.detach().clone()
-    q._allow_overwrite = False
+    q.allow_overwrite(False)
     with q.compute_encodings():
         q(x * 10)
 
