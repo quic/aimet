@@ -13,8 +13,6 @@ TensorFlow, Keras, PyTorch, and ONNX frameworks.
 
 Please follow the links below to see AIMET APIs for either PyTorch, TensorFlow, Keras, or ONNX.
 
-.. note:: AIMET Keras API requires Tensorflow 2.4 or later.
-
 .. toctree::
    :titlesonly:
    :maxdepth: 2

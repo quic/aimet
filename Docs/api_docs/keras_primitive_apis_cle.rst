@@ -41,7 +41,7 @@ Code Examples for Higher Level APIs
 
 .. literalinclude:: ../keras_code_examples/post_training_techniques_examples.py
     :language: python
-    :lines: 38, 40, 42, 44
+    :lines: 37, 39, 41, 43
 
 **Perform Cross Layer Equalization in auto mode step by step**
 
@@ -86,7 +86,7 @@ Code Example for Lower level APIs
 
 .. literalinclude:: ../keras_code_examples/post_training_techniques_examples.py
     :language: python
-    :lines: 38, 41, 42, 44
+    :lines: 37, 40, 41, 43
 
 **Perform Cross Layer Equalization in manual mode**
 

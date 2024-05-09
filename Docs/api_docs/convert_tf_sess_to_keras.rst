@@ -54,7 +54,7 @@ Code Example
 
 .. literalinclude:: ../tf_code_examples/converting_tf_session_to_keras.py
     :language: python
-    :lines: 40, 51-52
+    :lines: 39, 50-51
 
 **Steps to convert a TF session found after compression to Keras model**
 
@@ -68,7 +68,7 @@ Utility Functions
 
 .. literalinclude:: ../tf_code_examples/converting_tf_session_to_keras.py
     :language: python
-    :lines: 40-49
+    :lines: 39-48
 
 **Utility function to get session from Keras model**
 

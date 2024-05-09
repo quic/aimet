@@ -62,7 +62,7 @@ Code Examples for Higher Level APIs
 
 .. literalinclude:: ../torch_code_examples/post_training_techniques_examples.py
     :language: python
-    :lines: 41-42, 45-46, 49
+    :lines: 40-41, 44-45, 48
 
 
 **Cross Layer Equalization in auto mode calling each API**
@@ -103,7 +103,7 @@ Code Examples for Lower Level APIs
 
 .. literalinclude:: ../torch_code_examples/post_training_techniques_examples.py
     :language: python
-    :lines: 42, 54, 45-46, 49
+    :lines: 41, 44-45, 48
 
 **Cross Layer Equalization in manual mode**
 

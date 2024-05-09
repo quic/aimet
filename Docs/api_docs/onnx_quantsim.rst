@@ -37,7 +37,7 @@ Code Examples
 
 .. literalinclude:: ../onnx_code_examples/quantization.py
     :language: python
-    :lines: 40-41
+    :lines: 39-41
 
 **User should write this function to pass calibration data**
 
