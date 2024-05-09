@@ -284,6 +284,7 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
 
         @functools.wraps(original_forward)
         def forward_wrapper(input):
+            self._realize_block_size(input)
             expanded_input = torch_builtins.reshape_tensor_for_blocks(input, self.shape, self.block_size)
             batch_statistics = self.encoding_analyzer.update_stats(expanded_input)
             num_steps = math.pow(2, self.bitwidth) - 1
@@ -402,6 +403,19 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
         with torch.no_grad():
             self.min.copy_(min)
             self.max.copy_(max)
+
+    def _realize_block_size(self, inp):
+        """
+        Fill in block sizes for dimensions with block size -1
+        """
+        if self.block_size is not None and any(size == -1 for size in self.block_size):
+            block_size = []
+            for i in range(1, len(self.block_size) + 1):
+                if self.block_size[-i] == -1:
+                    block_size.insert(0, inp.shape[-i] // self.shape[-i])
+                else:
+                    block_size.insert(0, self.block_size[-i])
+            self.block_size = block_size
 
 
 class Quantize(MinMaxQuantizer):
@@ -711,3 +725,27 @@ class GroupedBlockQuantizeDequantize(QuantizeDequantize):
                 expanded_shape.append(self.shape[idx] // block_group)
                 expanded_shape.append(block_group)
         return expanded_shape
+
+    def get_per_channel_scale(self, dtype=None) -> torch.Tensor:
+        """
+        Get per channel scale.
+
+        :return: Per channel scale
+        """
+        orig_scale = super().get_scale(dtype)
+        orig_scale_shape = orig_scale.shape
+        reshaped_scale = orig_scale.view(self.get_expanded_scale_shape())
+        max_scale = torch.amax(reshaped_scale, list(range(1, len(orig_scale_shape) * 2, 2)), keepdim=True)
+        per_channel_scale = max_scale / 2 ** (self.decompressed_bw - self.bitwidth)
+        return per_channel_scale
+
+    def get_per_block_integer_scale(self) -> torch.Tensor:
+        """
+        Get per block integer scale.
+
+        :return: Per block integer scale
+        """
+        per_channel_scale = self.get_per_channel_scale()
+        expanded_scale = self.get_scale().view(self.get_expanded_scale_shape())
+        integer_scale = torch.round(expanded_scale / per_channel_scale).int().view(self.get_scale().shape)
+        return integer_scale
