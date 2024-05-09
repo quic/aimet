@@ -40,7 +40,7 @@
 # pylint: disable=too-many-lines
 import abc
 from enum import Enum
-from typing import Dict, Tuple, Union, List, Callable, Type, Any, Optional
+from typing import Dict, Tuple, Union, List, Callable, Type, Any, Optional, Mapping
 import os
 import torch
 from torch import nn
@@ -380,9 +380,10 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
             input_encoding = {}
 
         self.import_input_encodings(input_encoding,
-                                    ignore_when_quantizer_disabled,
-                                    disable_quantizer_without_encoding,
-                                    freeze=False)
+                                    strict=not ignore_when_quantizer_disabled,
+                                    partial=not disable_quantizer_without_encoding,
+                                    requires_grad=None,
+                                    allow_overwrite=None)
 
         try:
             output_encoding = activation_encodings[module_name]['output']
@@ -390,9 +391,10 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
             output_encoding = {}
 
         self.import_output_encodings(output_encoding,
-                                     ignore_when_quantizer_disabled,
-                                     disable_quantizer_without_encoding,
-                                     freeze=False)
+                                     strict=not ignore_when_quantizer_disabled,
+                                     partial=not disable_quantizer_without_encoding,
+                                     requires_grad=None,
+                                     allow_overwrite=None)
 
     def set_param_encoding(self, module_name: str, param_encodings: Dict,
                            ignore_when_quantizer_disabled: bool = False, disable_quantizer_without_encoding: bool = True):
@@ -412,9 +414,10 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
             if f'{module_name}.{param_name}' in param_encodings
         }
         self.import_param_encodings(param_encoding,
-                                    ignore_when_quantizer_disabled,
-                                    disable_quantizer_without_encoding,
-                                    freeze=False)
+                                    strict=not ignore_when_quantizer_disabled,
+                                    partial=not disable_quantizer_without_encoding,
+                                    requires_grad=None,
+                                    allow_overwrite=None)
 
     def freeze_param_encoding(self, module_name: str, param_encodings: Dict):
         """
@@ -491,8 +494,12 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
         """
         return [export_quantizer_encoding(quantizer) for quantizer in self.input_quantizers]
 
-    def import_param_encodings(self, encodings: Dict[str, List[Dict]], ignore_when_quantizer_disabled: bool,
-                               disable_quantizer_without_encoding: bool, freeze: bool):
+    def import_param_encodings(self,
+                               encodings: Mapping[str, Mapping],
+                               strict: bool,
+                               partial: bool,
+                               requires_grad: Optional[bool],
+                               allow_overwrite: bool):
         """
         Import parameter encodings represented in below format:
         {
@@ -501,10 +508,15 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
             ...
         }
         """
+        # pylint: disable=too-many-branches
         for param_name, quantizer in self.param_quantizers.items():
+            if quantizer._is_encoding_frozen: # pylint: disable=protected-access
+                continue
+
             encoding = encodings.get(param_name, None)
             if not encoding:
-                if disable_quantizer_without_encoding:
+                if not partial:
+                    # Dnagling quantizers have to be removed when importing non-partial encodings
                     quantizer.enabled = False
                 continue
 
@@ -528,12 +540,21 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                     quantizer.data_type = QuantizationDataType.float
                 else:
                     raise RuntimeError("Data type does not match int or float in encodings file")
-                if freeze:
+
+                if requires_grad is not None:
+                    if isinstance(quantizer, LearnedGridTensorQuantizer) and quantizer.wrapper_ref:
+                        q_min = getattr(quantizer.wrapper_ref, quantizer.name + '_encoding_min')
+                        q_min.requires_grad_(requires_grad)
+                        q_max = getattr(quantizer.wrapper_ref, quantizer.name + '_encoding_max')
+                        q_max.requires_grad_(requires_grad)
+
+                assert not quantizer.is_encoding_frozen
+                if not allow_overwrite and quantizer.encoding is not None:
                     quantizer.freeze_encoding()
 
                 _logger.info("Setting quantization encodings for parameter: %s", param_name)
             else:
-                if ignore_when_quantizer_disabled:
+                if not strict:
                     _logger.warning("Param Quantizer disabled, Couldn't set quantization encodings provided "
                                     "for parameter %s", param_name)
                 else:
@@ -541,8 +562,12 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                                        "configuration as the quantsim which was used to export the encodings")
 
 
-    def import_output_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled: bool,
-                                disable_quantizer_without_encoding: bool, freeze: bool):
+    def import_output_encodings(self,
+                                encodings: Mapping[str, Mapping],
+                                strict: bool,
+                                partial: bool,
+                                requires_grad: Optional[bool],
+                                allow_overwrite: bool):
         """
         Import output encodings represented in below format:
         {
@@ -551,11 +576,15 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
             ...
         }
         """
-        self._import_encoding(encodings, self.output_quantizers, ignore_when_quantizer_disabled, disable_quantizer_without_encoding,
-                              freeze=freeze)
+        self._import_encoding(encodings, self.output_quantizers,
+                              strict, partial, requires_grad, allow_overwrite)
 
-    def import_input_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled: bool,
-                               disable_quantizer_without_encoding: bool, freeze: bool):
+    def import_input_encodings(self,
+                               encodings: Mapping[str, Mapping],
+                               strict: bool,
+                               partial: bool,
+                               requires_grad: Optional[bool],
+                               allow_overwrite: bool):
         """
         Import input encodings represented in below format:
         {
@@ -564,21 +593,29 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
             ...
         }
         """
-        self._import_encoding(encodings, self.input_quantizers, ignore_when_quantizer_disabled, disable_quantizer_without_encoding,
-                              freeze=freeze)
+        self._import_encoding(encodings, self.input_quantizers,
+                              strict, partial, requires_grad, allow_overwrite)
 
-    def _import_encoding(self, encodings, quantizers, ignore_when_quantizer_disabled: bool,
-                         disable_quantizer_without_encoding: bool, freeze: bool):
+    def _import_encoding(self, encodings, quantizers, strict: bool, partial: bool,
+                         requires_grad: Optional[bool], allow_overwrite: bool):
+        # pylint: disable=too-many-branches
         assert quantizers is self.input_quantizers or quantizers is self.output_quantizers
 
         for i, quantizer in enumerate(quantizers):
+            if quantizer._is_encoding_frozen: # pylint: disable=protected-access
+                type_of_quantizer = 'input' if quantizers is self.input_quantizers else 'output'
+                _logger.debug("Encodings are frozen for module %s quantizer of %s",
+                              type_of_quantizer, self._module_to_wrap.__class__)
+                continue
+
             encoding = encodings.get(str(i), None)
             if not encoding:
-                if disable_quantizer_without_encoding:
+                if not partial:
+                    # Dnagling quantizers have to be removed when importing non-partial encodings
                     quantizer.enabled = False
                 continue
             if not quantizer.enabled:
-                if ignore_when_quantizer_disabled:
+                if not strict:
                     type_of_quantizer = 'input' if quantizers is self.input_quantizers else 'output'
                     _logger.info("%s quantizer %s is disabled, and the provided encoding can't be set",
                                  type_of_quantizer, str(i))
@@ -586,12 +623,6 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
 
                 raise RuntimeError("The quantsim passed for loading encodings does not have the same "
                                        "configuration as the quantsim which was used to export the encodings")
-
-            if quantizer._is_encoding_frozen: # pylint: disable=protected-access
-                type_of_quantizer = 'input' if quantizers is self.input_quantizers else 'output'
-                _logger.debug("Encodings are frozen for module %s quantizer of %s",
-                              type_of_quantizer, self._module_to_wrap.__class__)
-                continue
 
             encoding = compute_partial_encoding(quantizer, encoding)
             if encoding['dtype'] == 'int':
@@ -604,7 +635,16 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                 quantizer.data_type = QuantizationDataType.float
             else:
                 raise RuntimeError("Unrecognized encodings datatype")
-            if freeze:
+
+            if requires_grad is not None:
+                if isinstance(quantizer, LearnedGridTensorQuantizer) and quantizer.wrapper_ref:
+                    q_min = getattr(quantizer.wrapper_ref, quantizer.name + '_encoding_min')
+                    q_min.requires_grad_(requires_grad)
+                    q_max = getattr(quantizer.wrapper_ref, quantizer.name + '_encoding_max')
+                    q_max.requires_grad_(requires_grad)
+
+            assert not quantizer.is_encoding_frozen
+            if not allow_overwrite and quantizer.encoding is not None:
                 quantizer.freeze_encoding()
 
 

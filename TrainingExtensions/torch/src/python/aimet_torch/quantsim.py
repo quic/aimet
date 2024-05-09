@@ -153,8 +153,12 @@ class ExportableQuantModule(Protocol):
         Returns a dict of {param name: param encodings}, with each encoding represented as a List of Dicts
         """
 
-    def import_input_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled: bool,
-                               disable_quantizer_without_encoding: bool, freeze: bool):
+    def import_input_encodings(self,
+                               encodings: Mapping[str, Mapping],
+                               strict: bool,
+                               partial: bool,
+                               requires_grad: Optional[bool],
+                               allow_overwrite: bool):
         """
         Import input encodings represented in below format:
         {
@@ -164,8 +168,12 @@ class ExportableQuantModule(Protocol):
         }
         """
 
-    def import_output_encodings(self, encodings: Dict[str, Dict], ignore_when_quantizer_disabled: bool,
-                                disable_quantizer_without_encoding: bool, freeze: bool):
+    def import_output_encodings(self,
+                                encodings: Mapping[str, Mapping],
+                                strict: bool,
+                                partial: bool,
+                                requires_grad: Optional[bool],
+                                allow_overwrite: bool):
         """
         Import output encodings represented in below format:
         {
@@ -175,8 +183,12 @@ class ExportableQuantModule(Protocol):
         }
         """
 
-    def import_param_encodings(self, encodings: Dict[str, List[Dict]], ignore_when_quantizer_disabled: bool,
-                               disable_quantizer_without_encoding: bool, freeze: bool):
+    def import_param_encodings(self,
+                               encodings: Mapping[str, Mapping],
+                               strict: bool,
+                               partial: bool,
+                               requires_grad: Optional[bool],
+                               allow_overwrite: bool):
         """
         Import parameter encodings represented in below format:
         {
@@ -1610,27 +1622,34 @@ class QuantizationSimModel:
 
     def load_encodings(self, encodings: Union[Mapping, str, os.PathLike],
                        strict: bool = True,
-                       partial: bool = True):
+                       partial: bool = True,
+                       requires_grad: Optional[bool] = None,
+                       allow_overwrite: bool = True):
         """
         :param encodings: Encoding dictionary or path to the encoding dictionary json file.
         :param bool strict: If True, an error will be thrown if the model doesn't
             have a quantizer corresponding to the specified encodings.
-        :param bool partial: If True, the encoding will be interpreted as a partial encoding.
-            Otherwise, the dangling quantizers that has no corresponding encoding will be removed.
+        :param bool partial: If True, the encoding will be interpreted as a partial encoding,
+            and the dangling quantizers with no corresponding encoding will be kept untouched.
+            Otherwise, the dangling quantizers will be removed from the model.
+        :param bool requires_grad: Whether or not the quantization parameters loaded from the
+            encodings require gradient computation during training.
+            If None, ``requires_grad`` flag of the quantization parameters will be kept unchanged.
+        :param bool allow_overwrite: Whether or not the quantization parameters loaded from the
+            encodings can be overwriiten by :ref:`compute_encodings` or another :ref:`load_encodings`.
+            If None, whether the quantizer is overwrieable will be kept unchanged.
         """
-        self._load_encodings_impl(encodings,
-                                  ignore_when_quantizer_disabled=not strict,
-                                  disable_quantizer_without_encoding=not partial,
-                                  freeze=False)
-
-    def _load_encodings_impl(self, encodings: Union[Mapping, str, os.PathLike],
-                             freeze: bool,
-                             ignore_when_quantizer_disabled: bool,
-                             disable_quantizer_without_encoding: bool):
         if isinstance(encodings, (str, os.PathLike)):
             with open(encodings, mode='r') as f:
                 encodings = json.load(f)
 
+        self._load_encodings_impl(encodings, strict, partial, requires_grad, allow_overwrite)
+
+    def _load_encodings_impl(self, encodings: Mapping,
+                             strict: bool,
+                             partial: bool,
+                             requires_grad: Optional[bool],
+                             allow_overwrite: bool):
         if 'param_encodings' not in encodings:
             param_encodings = encodings
             activation_encodings = {}
@@ -1656,15 +1675,11 @@ class QuantizationSimModel:
 
         if param_encodings is not None:
             self._set_param_encodings(param_encodings,
-                                      freeze=freeze,
-                                      ignore_when_quantizer_disabled=ignore_when_quantizer_disabled,
-                                      disable_quantizer_without_encoding=disable_quantizer_without_encoding)
+                                      strict, partial, requires_grad, allow_overwrite)
 
         if activation_encodings is not None:
             self._set_activation_encodings(activation_encodings,
-                                           freeze=freeze,
-                                           ignore_when_quantizer_disabled=ignore_when_quantizer_disabled,
-                                           disable_quantizer_without_encoding=disable_quantizer_without_encoding)
+                                           strict, partial, requires_grad, allow_overwrite)
 
     @deprecated(f"Use {load_encodings.__qualname__} instead.")
     def load_and_freeze_encodings(self, encoding_path: str, ignore_when_quantizer_disabled: bool = False):
@@ -1678,16 +1693,18 @@ class QuantizationSimModel:
         :param ignore_when_quantizer_disabled: ignore raising RuntimeError while setting encodings,
             when quantizers are disabled.
         """
-        self._load_encodings_impl(encoding_path,
-                                  ignore_when_quantizer_disabled=ignore_when_quantizer_disabled,
-                                  disable_quantizer_without_encoding=False,
-                                  freeze=True)
+        self.load_encodings(encoding_path,
+                            strict=not ignore_when_quantizer_disabled,
+                            partial=True,
+                            requires_grad=False,
+                            allow_overwrite=False)
 
     def _set_param_encodings(self,
-                             encoding_dict: Dict,
-                             freeze: bool,
-                             ignore_when_quantizer_disabled: bool,
-                             disable_quantizer_without_encoding: bool):
+                             encoding_dict: Mapping,
+                             strict: bool,
+                             partial: bool,
+                             requires_grad: Optional[bool],
+                             allow_overwrite: bool):
         for name, quant_module in self.model.named_modules():
             if isinstance(quant_module, ExportableQuantModule):
                 param_encoding = {
@@ -1696,15 +1713,17 @@ class QuantizationSimModel:
                     if f'{name}.{param_name}' in encoding_dict
                 }
                 quant_module.import_param_encodings(param_encoding,
-                                                    freeze=freeze,
-                                                    ignore_when_quantizer_disabled=ignore_when_quantizer_disabled,
-                                                    disable_quantizer_without_encoding=disable_quantizer_without_encoding)
+                                                    strict,
+                                                    partial,
+                                                    requires_grad,
+                                                    allow_overwrite)
 
     def _set_activation_encodings(self,
-                                  activation_encoding_dict: dict,
-                                  freeze: bool,
-                                  ignore_when_quantizer_disabled: bool,
-                                  disable_quantizer_without_encoding: bool):
+                                  activation_encoding_dict: Mapping,
+                                  strict: bool,
+                                  partial: bool,
+                                  requires_grad: Optional[bool],
+                                  allow_overwrite: bool):
         for module_name, module in self.model.named_modules():
             if not isinstance(module, ExportableQuantModule):
                 continue
@@ -1715,9 +1734,10 @@ class QuantizationSimModel:
                 input_encoding = {}
 
             module.import_input_encodings(input_encoding,
-                                          freeze=freeze,
-                                          ignore_when_quantizer_disabled=ignore_when_quantizer_disabled,
-                                          disable_quantizer_without_encoding=disable_quantizer_without_encoding)
+                                          strict,
+                                          partial,
+                                          requires_grad,
+                                          allow_overwrite)
 
             try:
                 output_encoding = activation_encoding_dict[module_name]['output']
@@ -1725,9 +1745,10 @@ class QuantizationSimModel:
                 output_encoding = {}
 
             module.import_output_encodings(output_encoding,
-                                           freeze=freeze,
-                                           ignore_when_quantizer_disabled=ignore_when_quantizer_disabled,
-                                           disable_quantizer_without_encoding=disable_quantizer_without_encoding)
+                                           strict,
+                                           partial,
+                                           requires_grad,
+                                           allow_overwrite)
 
 
     @deprecated(f"Use {load_encodings.__qualname__} instead.")
@@ -1746,10 +1767,11 @@ class QuantizationSimModel:
         if 'activation_encodings' in encodings:
             del encodings['activation_encodings']
 
-        self._load_encodings_impl(encodings,
-                                  ignore_when_quantizer_disabled=False,
-                                  disable_quantizer_without_encoding=False,
-                                  freeze=True)
+        self.load_encodings(encodings,
+                            strict=True,
+                            partial=True,
+                            requires_grad=False,
+                            allow_overwrite=False)
 
     def quant_wrappers(self):
         """
@@ -2129,10 +2151,11 @@ def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, pytorch_encodin
         if isinstance(module, QcQuantizeWrapper):
             module.set_mode(QcQuantizeOpMode.ACTIVE)
 
-    quant_sim_model._load_encodings_impl(pytorch_encoding_path, # pylint: disable=protected-access
-                                         ignore_when_quantizer_disabled=False,
-                                         disable_quantizer_without_encoding=True,
-                                         freeze=False)
+    quant_sim_model.load_encodings(pytorch_encoding_path,
+                                   strict=True,
+                                   partial=False,
+                                   requires_grad=None,
+                                   allow_overwrite=None)
 
     if isinstance(quant_sim_model, QuantizationSimModel):
         # Only for V1 quantsim

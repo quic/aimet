@@ -50,7 +50,7 @@ def compute_encodings(model: torch.nn.Module):
 
     .. warning::
         Encodings of the quantizers loaded with :ref:`QuantizationSimModel.load_encodings`
-        with ``allow_recompute=False`` will be kept unchanged.
+        with ``allow_overwrite=False`` will be kept unchanged.
     """
     with contextlib.ExitStack() as stack:
         for module in model.modules():
@@ -67,7 +67,7 @@ def compute_param_encodings(model: torch.nn.Module):
 
     .. warning::
         Encodings of the quantizers loaded with :ref:`QuantizationSimModel.load_encodings`
-        with ``allow_recompute=False`` will be kept unchanged.
+        with ``allow_overwrite=False`` will be kept unchanged.
     """
     for module in model.modules():
         if isinstance(module, BaseQuantizationMixin): # pylint: disable=undefined-variable
