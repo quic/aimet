@@ -151,6 +151,9 @@ def track_lora_meta_data(model: torch.nn.Module):
 
 
 class PeftQuantUtils:
+    """
+    Utilities for quantizing peft model
+    """
     def __init__(self, model, adapater_name_to_meta_data: Dict, prepared_model: bool = False):
         """
         Init for Peft utilities for quantization
@@ -162,12 +165,13 @@ class PeftQuantUtils:
         self.adapter_name_to_meta_data = adapater_name_to_meta_data
         self.lora_layers = self._get_lora_layers()
         self.pt_name_to_onnx_name, self.onnx_name_to_pt_name = None, None
-        self.pt_to_lora_name = self.lora_layers
+        self.pt_to_lora_name = dict.fromkeys(self.lora_layers, '')
         if prepared_model:
             self.pt_name_to_onnx_name, self.onnx_name_to_pt_name = self._get_pytorch_name_to_onnx_name(model)
             self.lora_to_pt_name, self.pt_to_lora_name = self._get_lora_name_to_pytorch_name()
 
-    def _get_pytorch_name_to_onnx_name(self, model: torch.nn.Module):
+    @staticmethod
+    def _get_pytorch_name_to_onnx_name(model: torch.nn.Module):
         """
         Gets onnx names to pytorch names mapping and vice versa
 
@@ -208,6 +212,17 @@ class PeftQuantUtils:
                 lora_layers.add(lora_module)
         return lora_layers
 
+    @staticmethod
+    def _freeze_quantizer(quantizer):
+        """
+        Disables compute encodings and gradient update for a quantizer
+
+        :param quantizer: Param, output or Input quantizer
+        """
+        # pylint:disable = protected-access
+        quantizer._allow_overwrite = False
+        quantizer.requires_grad_(False)
+
     def freeze_base_model_param_quantizers(self, sim: QuantizationSimModel):
         """
         Freeze parameter quantizers of base model
@@ -220,8 +235,7 @@ class PeftQuantUtils:
             if isinstance(module, BaseQuantizationMixin) and module_name not in self.pt_to_lora_name:
                 for _, param_quantizer in module.param_quantizers.items():
                     if param_quantizer:
-                        # pylint:disable = protected-access
-                        param_quantizer._allow_overwrite = False
+                        self._freeze_quantizer(param_quantizer)
 
     def freeze_base_model_activation_quantizers(self, sim: QuantizationSimModel):
         """
@@ -235,11 +249,9 @@ class PeftQuantUtils:
             if isinstance(module, BaseQuantizationMixin) and module_name not in self.pt_to_lora_name:
                 for input_quantizer, output_quantizer in zip(module.input_quantizers, module.output_quantizers):
                     if input_quantizer:
-                        # pylint:disable = protected-access
-                        input_quantizer._allow_overwrite = False
+                        self._freeze_quantizer(input_quantizer)
                     if output_quantizer:
-                        # pylint:disable = protected-access
-                        output_quantizer._allow_overwrite = False
+                        self._freeze_quantizer(output_quantizer)
 
     def freeze_base_model(self, sim: QuantizationSimModel):
         """
@@ -284,7 +296,8 @@ class PeftQuantUtils:
                     self._set_bitwidth_for_module(lora_a, output_bw, param_bw)
                     self._set_bitwidth_for_module(lora_b, output_bw, param_bw)
 
-    def _set_bitwidth_for_module(self, module: BaseQuantizationMixin, output_bw: int, param_bw: int):
+    @staticmethod
+    def _set_bitwidth_for_module(module: BaseQuantizationMixin, output_bw: int, param_bw: int):
         """
         Sets bitwidth for a QcQuantizeWrapper module
 

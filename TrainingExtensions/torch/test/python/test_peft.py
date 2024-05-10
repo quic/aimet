@@ -127,23 +127,23 @@ class TestLoraAdapterPeft:
 
         qc_lora = sim.model.base_model.model.linear
 
-        assert qc_lora.base_layer.param_quantizers['weight']._allow_overwrite == True
+        assert not _is_frozen(qc_lora.base_layer.param_quantizers['weight'])
 
         peft_utils.freeze_base_model_param_quantizers(sim)
 
-        assert qc_lora.base_layer.param_quantizers['weight']._allow_overwrite == False
-        assert qc_lora.lora_A[0].param_quantizers['weight']._allow_overwrite == True
-        assert qc_lora.lora_A[1].param_quantizers['weight']._allow_overwrite == True
-        assert qc_lora.lora_B[0].param_quantizers['weight']._allow_overwrite == True
-        assert qc_lora.lora_B[1].param_quantizers['weight']._allow_overwrite == True
+        assert _is_frozen(qc_lora.base_layer.param_quantizers['weight'])
+        assert not _is_frozen(qc_lora.lora_A[0].param_quantizers['weight'])
+        assert not _is_frozen(qc_lora.lora_A[1].param_quantizers['weight'])
+        assert not _is_frozen(qc_lora.lora_B[0].param_quantizers['weight'])
+        assert not _is_frozen(qc_lora.lora_B[1].param_quantizers['weight'])
 
-        assert qc_lora.base_layer.output_quantizers[0]._allow_overwrite == True
+        assert not _is_frozen(qc_lora.base_layer.output_quantizers[0])
 
         peft_utils.freeze_base_model_activation_quantizers(sim)
 
-        assert qc_lora.base_layer.output_quantizers[0]._allow_overwrite == False
-        assert qc_lora.lora_A[0].output_quantizers[0]._allow_overwrite == True
-        assert qc_lora.lora_B[1].output_quantizers[0]._allow_overwrite == True
+        assert _is_frozen(qc_lora.base_layer.output_quantizers[0])
+        assert not _is_frozen(qc_lora.lora_A[0].output_quantizers[0])
+        assert not _is_frozen(qc_lora.lora_B[1].output_quantizers[0])
 
     def test_set_bitwidth_for_lora_adapters(self):
         model = two_adapter_model()
@@ -219,3 +219,9 @@ class TestLoraAdapterPeft:
                    'base_model.model.linear.lora_B.0.weight']
         assert sorted(tensor_name) == sorted(tensors)
         shutil.rmtree('./tmp')
+
+def _is_frozen(quantizer):
+    if quantizer._allow_overwrite == False and quantizer.min.requires_grad == False and quantizer.max.requires_grad == False:
+        return True
+    elif quantizer._allow_overwrite == True and quantizer.min.requires_grad == True and quantizer.max.requires_grad == True:
+        return False

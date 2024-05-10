@@ -509,7 +509,9 @@ class QuantizationSimModel:
                 ops. Defaults to False.
         :param export_to_torchscript: If True, export to torchscript. Export to onnx otherwise. Defaults to False.
         :param use_embedded_encodings: If True, another onnx model embedded with fakequant nodes will be exported
-        :param export_model: If True, then model is exported. If false, only encodings are exported
+        :param export_model: If True, then ONNX model is exported. When False, only encodings are exported. User should
+                            disable (False) this flag only if the corresponding ONNX model already exists in the path
+                            specified
         """
 
         warning_str = 'Exporting encodings to yaml will be deprecated in a future release. Ensure that your ' \
@@ -607,7 +609,9 @@ class QuantizationSimModel:
         :param module_marker_map: Maps module names to traced custom markers (only used for conditional models)
         :param is_conditional: True if model is conditional, False otherwise
         :param excluded_layer_names: List of names of layers that have been excluded from quantization.
-        :param export_model: If True, then model is exported. If false, only encodings are exported
+        :param export_model: If True, then ONNX model is exported. When False, only encodings are exported. User should
+                            disable (False) this flag only if the corresponding ONNX model already exists in the path
+                            specified
         :return: None
 
         """
@@ -627,7 +631,8 @@ class QuantizationSimModel:
                 OnnxSaver.create_onnx_model_with_pytorch_layer_names(onnx_path, original_model, dummy_input, is_conditional,
                                                                      module_marker_map, onnx_export_args)
 
-        assert os.path.exists(onnx_path), 'The onnx model does not exist in the location specified'
+        assert os.path.exists(onnx_path), 'The onnx model does not exist in the location specified. Please re-run export' \
+                                          'with export_model flag as True or check path/file_name'
         onnx_model = onnx.load(onnx_path)
         onnx_node_to_io_tensor_map, valid_param_set = OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
 
