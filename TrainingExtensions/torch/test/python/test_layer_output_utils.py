@@ -34,7 +34,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
+import pytest
 import os
 import re
 import shutil
@@ -45,7 +45,8 @@ from torchvision import models
 
 from aimet_torch.model_preparer import prepare_model
 from aimet_torch.model_validator.model_validator import ModelValidator
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.quantsim import QuantizationSimModel as QuantizationSimModelV1
+from aimet_torch.v2.quantsim import QuantizationSimModel as QuantizationSimModelV2
 from aimet_torch.layer_output_utils import NamingScheme, LayerOutputUtil, LayerOutput
 from aimet_torch.utils import is_leaf_module
 from aimet_torch.onnx_utils import OnnxExportApiArgs
@@ -76,7 +77,7 @@ def get_original_model_artifacts():
     return model, layer_names, dummy_input
 
 
-def get_quantsim_artifacts():
+def get_quantsim_artifacts(_QuantizationSimModel):
     # Load resnet18 model
     model = models.resnet18()
     model.eval()
@@ -93,9 +94,9 @@ def get_quantsim_artifacts():
             layer_names.append(name)
 
     # Obtain quantsim model
-    quantsim = QuantizationSimModel(model=model, quant_scheme='tf_enhanced',
-                                    dummy_input=dummy_input, rounding_mode='nearest',
-                                    default_output_bw=8, default_param_bw=8, in_place=False)
+    quantsim = _QuantizationSimModel(model=model, quant_scheme='tf_enhanced',
+                                     dummy_input=dummy_input, rounding_mode='nearest',
+                                     default_output_bw=8, default_param_bw=8, in_place=False)
 
     quantsim.compute_encodings(forward_pass_callback=dummy_forward_pass,
                                forward_pass_callback_args=dummy_input)
@@ -130,11 +131,12 @@ class TestLayerOutput:
         # Delete temp_dir
         shutil.rmtree(temp_dir_path, ignore_errors=False, onerror=None)
 
-    def test_get_quantsim_outputs(self):
+    @pytest.mark.parametrize('_QuantizationSimModel', [QuantizationSimModelV1, QuantizationSimModelV2])
+    def test_get_quantsim_outputs(self, _QuantizationSimModel):
         """ Test whether outputs are generated for all the layers of a quantsim model """
 
         # Get quantsim artifacts
-        quantsim, layer_names, dummy_input = get_quantsim_artifacts()
+        quantsim, layer_names, dummy_input = get_quantsim_artifacts(_QuantizationSimModel)
         layer_names = [re.sub(r'\W+', "_", name) for name in layer_names]
 
         temp_dir_path = os.path.dirname(os.path.abspath(__file__))
@@ -156,11 +158,12 @@ class TestLayerOutput:
         # Delete temp_dir
         shutil.rmtree(temp_dir_path, ignore_errors=False, onerror=None)
 
-    def test_layer_name_to_onnx_layer_output_name_dict(self):
+    @pytest.mark.parametrize('_QuantizationSimModel', [QuantizationSimModelV1, QuantizationSimModelV2])
+    def test_layer_name_to_onnx_layer_output_name_dict(self, _QuantizationSimModel):
         """ Test whether every layer-name has corresponding onnx layer-output-name """
 
         # Get quantsim artifacts
-        quantsim, layer_names, dummy_input = get_quantsim_artifacts()
+        quantsim, layer_names, dummy_input = get_quantsim_artifacts(_QuantizationSimModel)
 
         temp_dir_path = os.path.dirname(os.path.abspath(__file__))
         temp_dir_path = os.path.join(temp_dir_path, 'temp_dir')
@@ -211,11 +214,12 @@ def get_dataset_artifacts():
 
 
 class TestLayerOutputUtil:
-    def test_generate_layer_outputs(self):
+    @pytest.mark.parametrize('_QuantizationSimModel', [QuantizationSimModelV1, QuantizationSimModelV2])
+    def test_generate_layer_outputs(self, _QuantizationSimModel):
         """ Test whether input files and corresponding layer-output files are generated """
 
         # Get quantsim artifacts
-        quantsim, layer_output_names, dummy_input = get_quantsim_artifacts()
+        quantsim, layer_output_names, dummy_input = get_quantsim_artifacts(_QuantizationSimModel)
         layer_output_names = [re.sub(r'\W+', "_", name) for name in layer_output_names]
 
         # Get dataset artifacts
