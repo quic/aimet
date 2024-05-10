@@ -1220,7 +1220,10 @@ def profile(label: str, file: Union[str, os.PathLike, TextIO] = None, new_file: 
         appended to. This flag is only valid when ``file`` is a path, not a file-like object.
     :param logger: If logger is provided, profiling string will also be printed with INFO logging level
     """
-    ctx = _profile(label, file, new_file, logger, cleanup=lambda: torch.cuda.synchronize)
+    if not torch.cuda.is_available():
+        return profile_async(label, file, new_file, logger)
+
+    ctx = _profile(label, file, new_file, logger, cleanup=torch.cuda.synchronize)
     return _ContextManager(action=ctx.__enter__, cleanup=lambda: ctx.__exit__(None, None, None)) # pylint: disable=no-member
 
 
@@ -1234,5 +1237,5 @@ def profile_async(label: str, file: Union[str, os.PathLike, TextIO] = None, new_
         appended to. This flag is only valid when ``file`` is a path, not a file-like object.
     :param logger: If logger is provided, profiling string will also be printed with INFO logging level
     """
-    ctx = _profile(label, file, new_file, logger, cleanup=lambda: torch.cuda.synchronize)
+    ctx = _profile(label, file, new_file, logger, cleanup=None)
     return _ContextManager(action=ctx.__enter__, cleanup=lambda: ctx.__exit__(None, None, None)) # pylint: disable=no-member
