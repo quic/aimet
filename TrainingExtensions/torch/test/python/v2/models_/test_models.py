@@ -1300,3 +1300,24 @@ class SmallMnist(nn.Module):
         x = self.dropout(x)
         x = self.fc2(x)
         return self.log_softmax(x)
+
+class ModelWithUnusedAdd(torch.nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        self.identity = torch.nn.Identity()
+        self.add = elementwise_ops.Add()
+
+    def forward(self, x):
+        return self.identity(x)
+
+class ModelWithUnusedRNN(torch.nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        self.identity = torch.nn.Identity()
+        self.rnn = nn.RNN(10, 20, 2)
+
+    def forward(self, x):
+        return self.identity(x)
+
