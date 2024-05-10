@@ -28,7 +28,7 @@ Import the model validator:
 
 .. literalinclude:: ../torch_code_examples/model_validator_code_example.py
    :language: python
-   :lines: 45
+   :lines: 44
 
 Run the model validator on the model by passing in the model as well as model input:
 

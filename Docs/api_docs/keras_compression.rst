@@ -83,7 +83,7 @@ Code Examples
 
 .. literalinclude:: ../keras_code_examples/compression_code_examples.py
     :language: python
-    :lines: 40-50
+    :lines: 39-49
 
 **Evaluation function**
 

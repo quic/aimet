@@ -40,7 +40,7 @@ Code Example
 
 .. literalinclude:: ../keras_code_examples/post_training_techniques_examples.py
     :language: python
-    :lines: 38, 43
+    :lines: 37, 42
 
 **Cross Layer Equalization in auto mode comprehensive**
 

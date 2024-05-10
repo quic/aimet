@@ -89,7 +89,7 @@ Code Examples
 
 .. literalinclude:: ../tf_code_examples/code_examples.py
     :language: python
-    :lines: 41-51
+    :lines: 40-50
 
 **Evaluation function**
 
@@ -142,7 +142,7 @@ Code Examples for Weight SVD
 
 .. literalinclude:: ../tf_code_examples/weight_svd.py
    :language: python
-   :lines: 38-41
+   :lines: 37-40
 
 **Compressing using Weight SVD in auto mode**
 

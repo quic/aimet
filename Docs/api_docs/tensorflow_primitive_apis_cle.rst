@@ -41,7 +41,7 @@ Code Examples for Higher Level APIs
 
 .. literalinclude:: ../tf_code_examples/post_training_techniques_examples.py
     :language: python
-    :lines: 41-44, 48-49
+    :lines: 41-44, 47-48
 
 **Perform Cross Layer Equalization in auto mode step by step**
 
@@ -86,7 +86,7 @@ Code Example for Lower level APIs
 
 .. literalinclude:: ../tf_code_examples/post_training_techniques_examples.py
     :language: python
-    :lines: 41-44, 48, 50-51
+    :lines: 41-44, 49, 50-51
 
 **Perform Cross Layer Equalization in manual mode**
 
