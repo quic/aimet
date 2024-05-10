@@ -30,7 +30,7 @@ This example shows how to use AIMET to perform Adaptive Rounding (AdaRound).
 
 .. literalinclude:: ../onnx_code_examples/adaround.py
     :language: python
-    :lines: 42-43
+    :lines: 41-42
 
 **User should write this function to pass calibration data**
 
