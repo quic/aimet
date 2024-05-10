@@ -274,6 +274,32 @@ class TestPercentileScheme:
             },
             "param_encodings": {"conv1.weight": [sample_encoding2]}
         }
+        encodings3 = {
+            "activation_encodings": {
+                "conv1": {
+                    "input": {"0": sample_encoding},
+                    "output": {"0": sample_encoding}
+                }
+            },
+            "param_encodings": {"conv1.weight": [sample_encoding]}
+        }
+
+        """
+        When: Call load_encodings with strict=True
+        Then: Runtime error is raised
+        """
+        sim = QuantizationSimModel(model, dummy_input)
+        with pytest.raises(RuntimeError):
+            sim.load_encodings(encodings3, strict=True)
+
+        """
+        When: Call load_encodings with strict=False
+        Then: Skip to load encodings that doesn't exist 
+        """
+        sim = QuantizationSimModel(model, dummy_input)
+        sim.load_encodings(encodings3, strict=False)
+        assert sim.model.conv1.output_quantizers[0] is None
+
 
         """
         When: Call load_encodings with partial=False
