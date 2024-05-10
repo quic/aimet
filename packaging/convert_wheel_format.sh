@@ -35,6 +35,10 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+# Script to do the following:
+# 1. Obtain the minimum supported value of glibc by invoking a separate script
+# 2. Rename the package wheel files to conform to manylinux format for PyPi
+
 # verbose mode
 # set -x
 
@@ -47,4 +51,23 @@ if [[ -z ${1} ]]; then
 fi
 
 BUILD_DIR=$1
-find ${BUILD_DIR} -name libpymo*.so | grep artifacts | xargs -I {} objdump -T {} | grep GLIBC | sed 's/.*GLIBC_\([.0-9]*\).*/\1/g' | sort -Vu | tail -1 | tr "." "_"
+
+# Search for and create an array of .so files in the package
+declare -a so_file_list=($(find ${BUILD_DIR} -name *.so | grep artifacts))
+
+# Loop through each library file
+for so_file in "${so_file_list[@]}"
+do
+    # Find glibc version and append to list
+    glibc_ver=$(echo $so_file | xargs -I {} objdump -T {} | grep GLIBC | sed 's/.*GLIBC_\([.0-9]*\).*/\1/g' | sort -Vu | tail -1)
+    echo "glibc version for $so_file is $glibc_ver"
+    glibc_ver_list+="$(echo "$glibc_ver ")"
+done
+
+# Sort the array and determine the smallest value
+glibc_ver_list_sorted=$(echo ${glibc_ver_list} | xargs -n1 | sort -n -k1.2 | xargs)
+glibc_min_ver=$(echo "${glibc_ver_list_sorted}" | awk '{print $1;}' | tr '.' '_')
+echo "glibc_min_ver = ${glibc_min_ver}"
+
+# Rename the package wheel files to conform to manylinux format for PyPi
+wheel tags --platform-tag="manylinux_${glibc_min_ver}_x86_64" --remove ${BUILD_DIR}/packaging/dist/*.whl

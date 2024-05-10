@@ -208,21 +208,12 @@ foreach(package ${package_name_list})
   )
 endforeach()
 
-
-# Obtain the minimum supported value of glibc by invoking a separate script
-execute_process(COMMAND bash "-c" "${src_packaging_dir}/find_min_glibc.sh ${CMAKE_BINARY_DIR}"
-                OUTPUT_VARIABLE glibc_min_ver
-                RESULT_VARIABLE glibc_return_string
-                OUTPUT_STRIP_TRAILING_WHITESPACE)
-message(STATUS "Minimum glibc supported = ${glibc_min_ver}")
-
-# Rename the package wheel files to conform to multilinux format for PyPi
-set(rename_package_cmd "wheel tags --platform-tag=\"manylinux_${glibc_min_ver}_x86_64\" --remove ${build_packaging_dir}/dist/*.whl")
+# Rename the package wheel files to conform to manylinux format for PyPi
 message(STATUS "Package rename command: ${rename_package_cmd}")
-execute_process(COMMAND bash "-c" ${rename_package_cmd}
-                OUTPUT_VARIABLE rename_package_output
-                RESULT_VARIABLE rename_package_result
+execute_process(COMMAND bash "-c" "${src_packaging_dir}/convert_wheel_format.sh ${CMAKE_BINARY_DIR}"
+                OUTPUT_VARIABLE convert_wheel_output
+                RESULT_VARIABLE convert_wheel_result
                 OUTPUT_STRIP_TRAILING_WHITESPACE)
-if(rename_package_result EQUAL "1")
-  message( FATAL_ERROR "Package rename failed")
+if(convert_wheel_result EQUAL "1")
+  message( FATAL_ERROR "Wheel package conversion failed")
 endif()
