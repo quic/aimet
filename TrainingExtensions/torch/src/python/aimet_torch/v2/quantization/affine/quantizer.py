@@ -284,7 +284,6 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
 
         @functools.wraps(original_forward)
         def forward_wrapper(input):
-            self._realize_block_size(input)
             expanded_input = torch_builtins.reshape_tensor_for_blocks(input, self.shape, self.block_size)
             batch_statistics = self.encoding_analyzer.update_stats(expanded_input)
             num_steps = math.pow(2, self.bitwidth) - 1
@@ -403,19 +402,6 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
         with torch.no_grad():
             self.min.copy_(min)
             self.max.copy_(max)
-
-    def _realize_block_size(self, inp):
-        """
-        Fill in block sizes for dimensions with block size -1
-        """
-        if self.block_size is not None and any(size == -1 for size in self.block_size):
-            block_size = []
-            for i in range(1, len(self.block_size) + 1):
-                if self.block_size[-i] == -1:
-                    block_size.insert(0, inp.shape[-i] // self.shape[-i])
-                else:
-                    block_size.insert(0, self.block_size[-i])
-            self.block_size = block_size
 
 
 class Quantize(MinMaxQuantizer):
