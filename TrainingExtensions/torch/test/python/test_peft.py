@@ -168,6 +168,7 @@ class TestLoraAdapterPeft:
         assert qc_lora.lora_A[1].param_quantizers['weight'].bitwidth == 2
         assert qc_lora.lora_B[1].output_quantizers[0].bitwidth == 2
 
+    @pytest.mark.cuda
     def test_enable_and_load_weights_adapter(self):
         model = one_adapter_model()
         replace_lora_layers_with_quantizable_layers(model)

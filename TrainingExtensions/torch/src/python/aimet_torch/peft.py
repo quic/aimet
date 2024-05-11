@@ -38,6 +38,7 @@
 """ Implementation for handling LoRA adapters added using PEFT """
 from typing import Dict
 import os
+import pickle
 from collections import defaultdict
 import torch.nn as nn
 import torch
@@ -130,11 +131,13 @@ class AdapterMetaData:
         self.alpha = None
 
 
-def track_lora_meta_data(model: torch.nn.Module):
+def track_lora_meta_data(model: torch.nn.Module, path: str, filename_prefix: str):
     """
-    Utility to track adapter names and corresponding metadata
+    Utility to track and save meta data for adapters. The meta data has adapter names and corresponding lora layers & alphas
 
     :param model: PEFT model
+    :param path: path where to store model pth and encodings
+    :param filename_prefix: Prefix to use for filenames of the model pth and encodings files
     """
     for name, module in model.named_modules():
         module.name = name
@@ -147,6 +150,10 @@ def track_lora_meta_data(model: torch.nn.Module):
                 adapter_name_to_meta_data[module.index_to_adapter_name[index]].lora_B.append(lora_layer.name)
             for lora_adapter_name in module.lora_alpha:
                 adapter_name_to_meta_data[lora_adapter_name].alpha = module.lora_alpha[lora_adapter_name]
+
+    file_name = os.path.join(path, f"{filename_prefix}.pkl")
+    with open(file_name, 'wb') as file:
+        pickle.dump(adapter_name_to_meta_data, file)
     return adapter_name_to_meta_data
 
 
