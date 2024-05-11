@@ -36,6 +36,7 @@
 # =============================================================================
 import os
 import shutil
+import pytest
 
 import torch
 from safetensors.torch import save_file
@@ -103,7 +104,7 @@ class TestLoraAdapterPeft:
     def test_track_adapter_meta_data(self):
         model = two_adapter_model()
         replace_lora_layers_with_quantizable_layers(model)
-        meta_data = track_lora_meta_data(model)
+        meta_data = track_lora_meta_data(model, './', 'meta_data')
         assert len(meta_data) == 2
         assert 'default' in meta_data
         assert 'default_new' in meta_data
@@ -113,7 +114,7 @@ class TestLoraAdapterPeft:
     def test_freeze_base_model_params_and_activations(self):
         model = two_adapter_model()
         replace_lora_layers_with_quantizable_layers(model)
-        meta_data = track_lora_meta_data(model)
+        meta_data = track_lora_meta_data(model, './', 'meta_data')
 
         dummy_inputs = torch.randn(10, 10)
 
@@ -148,7 +149,7 @@ class TestLoraAdapterPeft:
     def test_set_bitwidth_for_lora_adapters(self):
         model = two_adapter_model()
         replace_lora_layers_with_quantizable_layers(model)
-        meta_data = track_lora_meta_data(model)
+        meta_data = track_lora_meta_data(model, './', 'meta_data')
         dummy_inputs = torch.randn(10, 10)
 
         peft_utils = PeftQuantUtils(model, meta_data)
@@ -172,7 +173,7 @@ class TestLoraAdapterPeft:
     def test_enable_and_load_weights_adapter(self):
         model = one_adapter_model()
         replace_lora_layers_with_quantizable_layers(model)
-        meta_data = track_lora_meta_data(model)
+        meta_data = track_lora_meta_data(model, './', 'meta_data')
         dummy_inputs = torch.randn(10, 10)
 
         peft_utils = PeftQuantUtils(model, meta_data)
@@ -196,7 +197,7 @@ class TestLoraAdapterPeft:
         model = one_adapter_model()
 
         replace_lora_layers_with_quantizable_layers(model)
-        meta_data = track_lora_meta_data(model)
+        meta_data = track_lora_meta_data(model,'./', 'meta_data')
         dummy_inputs = torch.randn(10, 10)
 
         peft_utils = PeftQuantUtils(model, meta_data)
