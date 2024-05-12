@@ -56,6 +56,8 @@ from tqdm import tqdm
 from bokeh.server.server import Server
 from bokeh.application import Application
 
+SAVE_TO_YAML = False
+
 try:
     # The build system updates Product, Version and Feature set information in the package_info file.
     from aimet_common.package_info import Product, Version_Info, Postfix
@@ -318,18 +320,20 @@ def log_package_info():
         logging.info("%s", Product)
 
 
-def save_json_yaml(encoding_file_path: str, encodings_dict: dict):
+def save_json_yaml(file_path: str, dict_to_save: dict):
     """
     Function which saves encoding in YAML and JSON file format
-    :param encoding_file_path: file name to use to generate the yaml and json file
-    :param encodings_dict: dictionary containing the encoding
+    :param file_path: file name to use to generate the yaml and json file
+    :param dict_to_save: dictionary to save
     """
-    encoding_file_path_json = encoding_file_path
-    encoding_file_path_yaml = encoding_file_path + '.yaml'
+    encoding_file_path_json = file_path
     with open(encoding_file_path_json, 'w') as encoding_fp_json:
-        json.dump(encodings_dict, encoding_fp_json, sort_keys=True, indent=4)
-    with open(encoding_file_path_yaml, 'w') as encoding_fp_yaml:
-        yaml.dump(encodings_dict, encoding_fp_yaml, default_flow_style=False, allow_unicode=True)
+        json.dump(dict_to_save, encoding_fp_json, sort_keys=True, indent=4)
+
+    if SAVE_TO_YAML:
+        encoding_file_path_yaml = file_path + '.yaml'
+        with open(encoding_file_path_yaml, 'w') as encoding_fp_yaml:
+            yaml.dump(dict_to_save, encoding_fp_yaml, default_flow_style=False, allow_unicode=True)
 
 
 class TqdmStreamHandler(logging.StreamHandler):
