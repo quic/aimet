@@ -66,7 +66,7 @@ from aimet_torch.qc_quantize_op import QcQuantizeStandAloneBase, QcQuantizeWrapp
     StaticGridQuantWrapper, LearnedGridQuantWrapper, NativeTorchQuantWrapper, QUANTIZER_TYPE_INPUT, QUANTIZER_TYPE_OUTPUT
 from aimet_torch.tensor_quantizer import initialize_learned_grid_quantizer_attributes
 from aimet_torch.qc_quantize_op import get_encoding_by_quantizer as _get_encoding_by_quantizer
-from aimet_torch import torchscript_utils, utils, transformer_utils, onnx_utils
+from aimet_torch import torchscript_utils, utils, onnx_utils
 from aimet_torch.utils import deprecated
 from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs, CustomMarker, get_pytorch_name_from_onnx_name
 from aimet_torch.meta.connectedgraph import ConnectedGraph, Op
@@ -279,9 +279,6 @@ class QuantizationSimModel:
         # Disable bias quantization
         self.exclude_param_from_quantization("bias")
 
-        # override specific quantizers to tf mode in transformer model
-        self._override_quant_config_for_transformer_layers()
-
         quantsim_configurator = self.configure_quantization_ops(config_file, default_output_bw, default_param_bw,
                                                                 default_data_type)
 
@@ -418,8 +415,6 @@ class QuantizationSimModel:
                 layer.set_mode(QcQuantizeOpMode.ACTIVE)
 
         sim.replace_wrappers_for_quantize_dequantize()
-
-        sim._clamp_transformer_attention_mask_encoding()
 
     def compute_encodings(self, forward_pass_callback, forward_pass_callback_args):
         """
@@ -809,74 +804,6 @@ class QuantizationSimModel:
                 device = torch.device('cpu')
 
             self._replace_quantization_wrapper(self.model, device)
-
-    def _override_quant_config_for_transformer_layers(self):
-        """
-        Looks for specific ops in a transformer and overrides the quantizer to tf mode
-        """
-        # pylint: disable=protected-access
-        attention_with_mask_add_quantizer_dict = transformer_utils.get_attention_with_mask_add_quantizer_dict(self.model)
-
-        for attention_head, (mask_add_quantizer_wrapper, mask_add_name) in attention_with_mask_add_quantizer_dict.items():
-
-            assert isinstance(mask_add_quantizer_wrapper, (StaticGridQuantWrapper, LazyQuantizeWrapper))
-
-            # clamping needs to be done only if data type is int
-            if mask_add_quantizer_wrapper.output_quantizers and \
-                    mask_add_quantizer_wrapper.output_quantizers[0].data_type == QuantizationDataType.int:
-
-                module_to_quantize = mask_add_quantizer_wrapper._module_to_wrap
-
-                quantizer_wrapper_type = qc_quantize_modules_dict.get(type(module_to_quantize), LazyQuantizeWrapper)
-
-                # Add a quantizer set to tf mode and bw to 16 and copy over remaining attributes
-                # we need 16 bit to retain the max representation for this quantizer.
-                quantized_module = quantizer_wrapper_type(module_to_quantize, 16, 16,
-                                                          MAP_PYMO_TO_ROUND_MODE[mask_add_quantizer_wrapper.output_quantizers[0].round_mode],
-                                                          QuantScheme.post_training_tf,
-                                                          num_inputs=len(mask_add_quantizer_wrapper.input_quantizers),
-                                                          num_outputs=len(mask_add_quantizer_wrapper.output_quantizers),
-                                                          data_type=mask_add_quantizer_wrapper.output_quantizers[0].data_type)
-
-                setattr(attention_head, mask_add_name, quantized_module)
-
-    def _clamp_transformer_attention_mask_encoding(self):
-        """
-        clamps the quantizer encoding min associated with mask adder
-        op within a attention head.
-        :return:
-        """
-        # pylint: disable=protected-access
-        attention_with_mask_add_quantizer_dict = transformer_utils.get_attention_with_mask_add_quantizer_dict(self.model)
-
-        for (mask_add_quantizer_wrapper, _) in attention_with_mask_add_quantizer_dict.values():
-            # we check if quantizer is enabled and data type is set to int before clamping
-            # clamping is not necessary for FP16 mode.
-            assert isinstance(mask_add_quantizer_wrapper, StaticGridQuantWrapper)
-            if mask_add_quantizer_wrapper.output_quantizers and mask_add_quantizer_wrapper.output_quantizers[0].enabled \
-                    and mask_add_quantizer_wrapper.output_quantizers[0].data_type == QuantizationDataType.int:
-                for output_quantizer in mask_add_quantizer_wrapper.output_quantizers:
-                    # get the min/max from accumulated stats associated with this quantizer
-                    if output_quantizer.is_encoding_frozen:
-                        continue
-                    encoding = output_quantizer.encoding
-                    output_quantizer.encoding.min = max(encoding.min,
-                                                        transformer_utils.MASK_OVERRIDE_VALUE)
-                    output_quantizer.encoding.max = encoding.max
-
-                    # recompute grid params as we clamped min and updated max above
-                    # with bitwidth as dictated by default config
-                    clamped_encoding = aimet_common.quantsim.recompute_grid_params(
-                        output_quantizer.encoding,
-                        self._default_output_bw,
-                        output_quantizer.use_symmetric_encodings)
-
-                    # update encoding of this quantizer
-                    output_quantizer.encoding = clamped_encoding
-                    output_quantizer.freeze_encoding()
-            else:
-                logger.debug("Skipping clamp on %s. Quantizer is disabled or not int type",
-                             mask_add_quantizer_wrapper)
 
     @staticmethod
     def _validate_quantsim_inputs(quant_scheme: Union[str, QuantScheme], rounding_mode: str, default_output_bw: int,
