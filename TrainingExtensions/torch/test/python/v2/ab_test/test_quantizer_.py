@@ -52,6 +52,7 @@ from torchvision import models
 
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
+import aimet_common
 from aimet_common.utils import AimetLogger
 from aimet_torch import transformer_utils, onnx_utils
 from aimet_torch import utils, elementwise_ops
@@ -943,61 +944,68 @@ class TestQuantizationSimStaticGrad:
     def test_export_to_onnx(self):
         """Exporting encodings and model"""
 
-        dummy_input = (torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28))
+        saved_flag = aimet_common.utils.SAVE_TO_YAML
+        aimet_common.utils.SAVE_TO_YAML = True
 
-        def forward_pass(model, args):
-            model.eval()
+        try:
+            dummy_input = (torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28))
+
+            def forward_pass(model, args):
+                model.eval()
+                with torch.no_grad():
+                    model(*dummy_input)
+
+            model = ModelWithTwoInputs()
+            sim = QuantizationSimModel(model, dummy_input=dummy_input,
+                                       quant_scheme=QuantScheme.post_training_tf)
+
+            # Quantize
+            sim.compute_encodings(forward_pass, None)
+
             with torch.no_grad():
-                model(*dummy_input)
+                sim.model.conv1_a.param_quantizers['weight'].min.copy_(-10)
+                sim.model.conv1_a.param_quantizers['weight'].max.copy_(10)
+                sim.model.conv1_a.output_quantizers[0].max.copy_(30)
 
-        model = ModelWithTwoInputs()
-        sim = QuantizationSimModel(model, dummy_input=dummy_input,
-                                   quant_scheme=QuantScheme.post_training_tf)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                # save encodings
+                sim.export(tmp_dir, 'two_input_model', dummy_input)
 
-        # Quantize
-        sim.compute_encodings(forward_pass, None)
+                # check the encodings
+                with open(os.path.join(tmp_dir, 'two_input_model.encodings'), 'r') as fp:
+                    encodings = json.load(fp)
 
-        with torch.no_grad():
-            sim.model.conv1_a.param_quantizers['weight'].min.copy_(-10)
-            sim.model.conv1_a.param_quantizers['weight'].max.copy_(10)
-            sim.model.conv1_a.output_quantizers[0].max.copy_(30)
+                    activation_encodings = encodings['activation_encodings']
+                    param_encodings = encodings['param_encodings']
+                    assert 16 == len(activation_encodings)
+                    assert 7 == len(param_encodings['conv1_a.weight'][0])
+                    min = param_encodings['conv1_a.weight'][0]['min']
+                    max = param_encodings['conv1_a.weight'][0]['max']
+                    scale = (max - min) / 255
+                    offset = round(min / scale)
+                    assert scale == pytest.approx(20/255)
+                    assert offset == -128
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            # save encodings
-            sim.export(tmp_dir, 'two_input_model', dummy_input)
+                with open(os.path.join(tmp_dir, 'two_input_model.encodings.yaml'), 'r') as fp_yaml:
+                    encodings = yaml.load(fp_yaml, Loader=yaml.FullLoader)
 
-            # check the encodings
-            with open(f'{tmp_dir}/two_input_model.encodings', 'r') as fp:
-                encodings = json.load(fp)
+                    activation_encodings = encodings['activation_encodings']
+                    param_encodings = encodings['param_encodings']
+                    assert 16 == len(activation_encodings)
+                    assert 7 == len(param_encodings['conv1_a.weight'][0])
+                    min = param_encodings['conv1_a.weight'][0]['min']
+                    max = param_encodings['conv1_a.weight'][0]['max']
+                    scale = (max - min) / 255
+                    offset = round(min / scale)
+                    assert scale == pytest.approx(20/255)
+                    assert offset == -128
 
-                activation_encodings = encodings['activation_encodings']
-                param_encodings = encodings['param_encodings']
-                assert 16 == len(activation_encodings)
-                assert 7 == len(param_encodings['conv1_a.weight'][0])
-                min = param_encodings['conv1_a.weight'][0]['min']
-                max = param_encodings['conv1_a.weight'][0]['max']
-                scale = (max - min) / 255
-                offset = round(min / scale)
-                assert scale == pytest.approx(20/255)
-                assert offset == -128
+                # check the exported model
+                loaded_model = torch.load(f'{tmp_dir}/two_input_model.pth')
+                loaded_model(torch.rand(1, 1, 28, 28), torch.rand(1, 1, 28, 28))
 
-            with open(f'{tmp_dir}/two_input_model.encodings.yaml', 'r') as fp_yaml:
-                encodings = yaml.load(fp_yaml, Loader=yaml.FullLoader)
-
-                activation_encodings = encodings['activation_encodings']
-                param_encodings = encodings['param_encodings']
-                assert 16 == len(activation_encodings)
-                assert 7 == len(param_encodings['conv1_a.weight'][0])
-                min = param_encodings['conv1_a.weight'][0]['min']
-                max = param_encodings['conv1_a.weight'][0]['max']
-                scale = (max - min) / 255
-                offset = round(min / scale)
-                assert scale == pytest.approx(20/255)
-                assert offset == -128
-
-            # check the exported model
-            loaded_model = torch.load(f'{tmp_dir}/two_input_model.pth')
-            loaded_model(torch.rand(1, 1, 28, 28), torch.rand(1, 1, 28, 28))
+        finally:
+            utils.SAVE_TO_YAML = saved_flag
 
     def test_no_fine_tuning_tf(self):
         """"""
