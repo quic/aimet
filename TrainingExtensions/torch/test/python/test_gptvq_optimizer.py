@@ -44,9 +44,9 @@ from aimet_torch.gptvq.gptvq_optimizer import GPTVQOptimizer
 
 class TestGPTVQOptimizer:
     @pytest.mark.parametrize("vector_dim", [1, 2, 4])
-    @pytest.mark.parametrize("num_groups_per_column", [24, 12, 6])
+    @pytest.mark.parametrize("num_blocks_per_column", [24, 12, 6])
     @pytest.mark.parametrize("min_value", [0, 16])
-    def test_update_weight_block(self, vector_dim, num_groups_per_column, min_value):
+    def test_update_weight_block(self, vector_dim, num_blocks_per_column, min_value):
         start_index = 0
         num_of_centroids = 64
 
@@ -54,24 +54,23 @@ class TestGPTVQOptimizer:
         original_sliced_weight = weight_block[:, start_index:start_index + vector_dim].clone()
         codebook = torch.arange(
             start=min_value,
-            end=min_value + num_groups_per_column * num_of_centroids * vector_dim,
+            end=min_value + num_blocks_per_column * num_of_centroids * vector_dim,
             dtype=torch.float32,
         )
-        codebook = codebook.reshape(num_groups_per_column, num_of_centroids, vector_dim)
+        codebook = codebook.reshape(num_blocks_per_column, num_of_centroids, vector_dim)
 
         updated_weight_block = GPTVQOptimizer._update_weight_block(
-            weight_block,
+            weight_block[:, start_index:start_index + vector_dim].clone(),
             codebook,
-            start_index=start_index,
             vector_dim=vector_dim,
-            num_groups_per_column=num_groups_per_column,
+            num_blocks_per_column=num_blocks_per_column,
         )
 
         assert updated_weight_block.shape == original_sliced_weight.shape
         assert not torch.allclose(updated_weight_block, original_sliced_weight)
 
-        updated_weight_block = updated_weight_block.reshape(num_groups_per_column, -1, vector_dim)
-        for group_index in range(num_groups_per_column):
+        updated_weight_block = updated_weight_block.reshape(num_blocks_per_column, -1, vector_dim)
+        for group_index in range(num_blocks_per_column):
             current_group_weight = updated_weight_block[group_index]
             corresponding_codebook = codebook[group_index]
 

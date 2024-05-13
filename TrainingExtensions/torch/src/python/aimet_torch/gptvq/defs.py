@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2017-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -34,24 +34,26 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+"""Type definitions that are used across GPTVQ"""
 
-""" Utilities to save a models and related parameters """
+from dataclasses import dataclass
 
-from aimet_torch.quantsim import ExportableQuantModule
+from torch import nn
+
+GPTVQSupportedModules = (nn.Linear,)
+DAMPENING_PERCENTAGE = 0.01
 
 
-class SaveUtils:
-    """ Utility class to save a models and related parameters """
-
-    @staticmethod
-    def remove_quantization_wrappers(module):
-        """
-        Removes quantization wrappers from model (in place)
-        :param module: Model
-        """
-        for module_name, module_ref in module.named_children():
-            if isinstance(module_ref, ExportableQuantModule):
-                setattr(module, module_name, module_ref.get_original_module())
-            # recursively call children modules
-            else:
-                SaveUtils.remove_quantization_wrappers(module_ref)
+@dataclass
+class GPTVQParameters:
+    """
+    Data carrier containing GPTVQ parameters
+    """
+    row_axis: int = 0
+    col_axis: int = 1
+    rows_per_block: int = 32
+    cols_per_block: int = 256
+    vector_dim: int = 2
+    vector_bw: int = 8
+    vector_stride: int = 1
+    index_bw: int = 6
