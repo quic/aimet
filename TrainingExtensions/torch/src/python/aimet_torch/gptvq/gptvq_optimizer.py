@@ -39,8 +39,9 @@
 import torch
 from torch import nn
 
-
-_DEFAULT_GROUP_SHAPE = (32, 256)
+import aimet_torch.v2.quantization as Q
+from aimet_torch.gptvq.defs import GPTVQParameters
+from aimet_torch.gptvq.utils import get_assignments, generate_codebook
 
 
 class GPTVQOptimizer:
@@ -50,68 +51,76 @@ class GPTVQOptimizer:
 
     # pylint: disable=too-many-locals
     @classmethod
-    def _weight_update(cls, module: nn.Module, block_size: int = 128):
+    def _weight_update(cls, module: nn.Module, gptvq_params: GPTVQParameters, block_stride: int = 128):
         """
         Optimizes the weights
 
         :param module: nn.Module
-        :param block_size: used to process columns to perform weight update in the optimization
+        :param block_stride: used to process columns to perform weight update in the optimization
         """
         original_weight = module.weight
         num_rows, num_cols = original_weight.shape
 
-        columns_per_group = _DEFAULT_GROUP_SHAPE[1]
-        num_groups_per_column = num_rows // _DEFAULT_GROUP_SHAPE[0]
+        assert num_rows % gptvq_params.rows_per_block == 0, f"The number of rows in weight (#: {num_rows}) should be divided by rows per block (#: {gptvq_params.rows_per_block})"
+        columns_per_block = gptvq_params.cols_per_block
+        num_blocks_per_column = num_rows // gptvq_params.rows_per_block
 
-        vector_dim = 2
+        vector_dim = gptvq_params.vector_dim
+        num_of_centroids = 2 ** gptvq_params.index_bw
         rounded_weight = torch.zeros_like(original_weight)
-        dummy_codebook = None
-        for i1 in range(0, num_cols, block_size):
-            i2 = min(i1 + block_size, num_cols)
-            count = i2 - i1
+        codebook = None
+        for block_start_idx in range(0, num_cols, block_stride):
+            block_end_idx = min(block_start_idx + block_stride, num_cols)
+            count = block_end_idx - block_start_idx
 
-            weight_block = original_weight[:, i1:i2].clone()
+            weight_block = original_weight[:, block_start_idx:block_end_idx].clone()
             for i in range(count):
-                if (i1 + i) % columns_per_group == 0:
-                    dummy_codebook = _generate_dummy_codebook(
-                        num_groups_per_column, vector_dim
-                    )
+                if (block_start_idx + i) % columns_per_block == 0:
+                    weight_block_for_codebook = original_weight[:, (block_start_idx + i):(block_start_idx + i + columns_per_block)]
+                    weight_block_for_codebook = weight_block_for_codebook.reshape(num_blocks_per_column, -1, vector_dim)
+                    codebook = generate_codebook(weight_block_for_codebook, num_of_centroids)
 
                 if i % vector_dim == 0:
-                    weight_block[:, i:i + vector_dim] = cls._update_weight_block(
-                        weight_block,
-                        dummy_codebook,
-                        start_index=i,
+                    updated_weight_block = cls._update_weight_block(
+                        weight_block[:, i:i + vector_dim],
+                        codebook,
                         vector_dim=vector_dim,
-                        num_groups_per_column=num_groups_per_column,
+                        num_blocks_per_column=num_blocks_per_column,
                     )
+                    qdq_weight_block = cls._quantize_dequantize_weight_block(
+                        updated_weight_block,
+                        quantizer=module.param_quantizers["weight"],
+                        num_blocks_per_column=num_blocks_per_column,
+                    )
+                    # TODO: divide err by hessian
+                    # pylint: disable=unused-variable
+                    err = updated_weight_block - qdq_weight_block
+                    weight_block[:, i:i + vector_dim] = updated_weight_block
 
-            rounded_weight[:, i1:i2] = weight_block
+            rounded_weight[:, block_start_idx:block_end_idx] = weight_block
 
-        module.weight.data = rounded_weight.reshape(original_weight.shape)
+        with torch.no_grad():
+            module.weight.copy_(rounded_weight.reshape(original_weight.shape))
 
     @staticmethod
     def _update_weight_block(
             weight_block: torch.Tensor,
             codebook: torch.Tensor,
-            start_index: int,
             vector_dim: int,
-            num_groups_per_column: int,
+            num_blocks_per_column: int,
     ) -> torch.Tensor:
         """
         Update weight block using codebook
 
         :param weight_block: Weight block to be updated
         :param codebook: Codebook containing centroids
-        :param start_index: Starting index to be used weight block slicing
         :param vector_dim: Vector dimension
-        :param num_groups_per_column: Number of groups per column
+        :param num_blocks_per_column: Number of blocks per column
         :return: Updated weight block
         """
-        sliced_weight = weight_block[:, start_index:start_index + vector_dim]
-        sliced_weight_shape = sliced_weight.shape
-        # Before: num_rows x vector_dim -> After: num_groups_per_column x N x vector_dim
-        sliced_weight = sliced_weight.reshape(num_groups_per_column, -1, vector_dim)
+        weight_block_shape = weight_block.shape
+        # Before: num_rows x vector_dim -> After: num_blocks_per_column x N x vector_dim
+        sliced_weight = weight_block.reshape(num_blocks_per_column, -1, vector_dim)
 
         indices = get_assignments(sliced_weight, codebook)
         centroids = torch.gather(
@@ -119,35 +128,27 @@ class GPTVQOptimizer:
             dim=1,
             index=indices.unsqueeze(-1).expand(-1, -1, vector_dim),
         )
-        # Before: num_groups_per_column x N x vector_dim -> After: num_rows x vector_dim
-        centroids = centroids.view(sliced_weight_shape)
+        # Before: num_blocks_per_column x N x vector_dim -> After: num_rows x vector_dim
+        centroids = centroids.view(weight_block_shape)
         return centroids
 
+    @staticmethod
+    def _quantize_dequantize_weight_block(weight_block: torch.Tensor,
+                                          quantizer: nn.Module,
+                                          num_blocks_per_column: int) -> torch.Tensor:
+        """
+        Quantize-Dequantize rounded weight block
 
-def _generate_dummy_codebook(num_groups_per_column: int, vector_dim: int) -> torch.Tensor:
-    """
-    Generate dummy codebook
-
-    :param num_groups_per_column: number of groups per column
-    :param vector_dim: dimension of vector
-    :return: dummy codebook
-    """
-    bits_per_dim = 3
-    num_centroids = 2 ** (vector_dim * bits_per_dim)
-    return torch.randn(num_groups_per_column, num_centroids, vector_dim)
-
-
-def get_assignments(tensor: torch.Tensor, centroids: torch.Tensor) -> torch.Tensor:
-    """
-    Calculate nearest centroid index tensor
-
-    :param tensor: num_groups_per_column x N x vector_dim
-    :param centroids: num_groups_per_column x num_centroids x vector_dim
-    :return: nearest centroid index tensor
-    """
-    centroids = centroids.unsqueeze(1)  # num_groups_per_column x 1 x num_centroids x vector_dim
-    tensor = tensor.unsqueeze(2)        # num_groups_per_column x N x       1       x vector_dim
-    distance = (tensor - centroids).pow(2).sum(-1)
-    assignments = distance.argmin(-1)
-
-    return assignments  # num_groups_per_column x N
+        :param weight_block: Rounded weight block
+        :param quantizer: Quantizer
+        :param num_blocks_per_column: Number of blocks per column
+        :return: Quantize-Dequantized weight block
+        """
+        qdq_weight_block = Q.affine.quantize_dequantize(
+            weight_block.reshape(num_blocks_per_column, -1),
+            quantizer.get_scale(),
+            quantizer.get_offset(),
+            quantizer.bitwidth,
+            quantizer.symmetric,
+        )
+        return qdq_weight_block.reshape(weight_block.shape)

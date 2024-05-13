@@ -1324,3 +1324,20 @@ class TinyModelWithNoMathInvariantOps(torch.nn.Module):
         m = self.add1(y, 3)
         z = self.mul2(m, 5)
         return z
+
+
+class ModelWithThreeLinears(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear1 = nn.Linear(768, 768)
+        self.linear2 = nn.Linear(768, 3072)
+        self.linear3 = nn.Linear(3072, 768)
+        self.softmax = nn.Softmax(dim=1)
+
+    def forward(self, *inputs):
+        x = inputs[0]
+        x = self.linear1(x)
+        x = self.linear2(x)
+        x = self.linear3(x)
+        x = self.softmax(x)
+        return x
