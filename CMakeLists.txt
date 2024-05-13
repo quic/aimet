@@ -78,9 +78,9 @@ find_package(Threads)
 if (NOT (DEFINED ENABLE_CUDA))
   message("Compiling with CUDA not explicitly disabled. Enabling implicitly")
   set(ENABLE_CUDA ON CACHE BOOL "")
-
 endif(NOT (DEFINED ENABLE_CUDA))
 
+set(CUDA_VER_STRING "cpu")
 if (ENABLE_CUDA)
   message("Compiling with CUDA enabled")
 
@@ -92,6 +92,12 @@ if (ENABLE_CUDA)
 
   enable_language(CUDA)
 
+  # Find CUDA toolkit version
+  find_package(CUDAToolkit QUIET)
+  # Truncate the string for use in version string ex. 11.6.124 --> cu116
+  string(REGEX REPLACE "^([0-9]+)\\.([0-9]+)\\.*[0-9]*" "cu\\1\\2" CUDA_VER_STRING ${CUDAToolkit_VERSION})
+  message(STATUS "Found CUDA toolkit version ${CUDAToolkit_VERSION}, using ${CUDA_VER_STRING}")
+  
 else(ENABLE_CUDA)
   message("Compiling with CUDA disabled")
 
@@ -118,6 +124,12 @@ if (NOT (DEFINED ENABLE_ONNX))
 endif(NOT (DEFINED ENABLE_ONNX))
 
 if (ENABLE_ONNX)
+  execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import onnx; print(onnx.__version__)"
+                  OUTPUT_VARIABLE ONNX_VERSION
+                  OUTPUT_STRIP_TRAILING_WHITESPACE)
+  set(FMWORK_VERSION ${ONNX_VERSION})
+  message(STATUS "Found ONNX version: ${ONNX_VERSION}")
+
   if (NOT ENABLE_TORCH)
     message(STATUS "Enabling Torch as it is required by ONNX")
     set(ENABLE_TORCH ON CACHE BOOL "" FORCE)
@@ -141,8 +153,11 @@ message(STATUS "AIMET - ENABLE_TORCH: ${ENABLE_TORCH}" )
 
 if (ENABLE_TORCH)
   execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import torch; print(torch.__version__)"
-  OUTPUT_VARIABLE TORCH_VERSION
-  OUTPUT_STRIP_TRAILING_WHITESPACE)
+                  OUTPUT_VARIABLE TORCH_VERSION
+                  OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if (NOT ENABLE_ONNX)
+    set(FMWORK_VERSION ${TORCH_VERSION})
+  endif()
   message(STATUS "Found Torch version: ${TORCH_VERSION}")
 
   set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/torch/src/python")
@@ -224,11 +239,16 @@ endif(NOT (DEFINED ENABLE_TENSORFLOW))
 
 if (ENABLE_TENSORFLOW)
   # Get Tensorflow version
-  execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import tensorflow as tf; print(tf.__version__)" OUTPUT_VARIABLE TF_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
+  execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import tensorflow as tf; print(tf.__version__)"
+                  OUTPUT_VARIABLE TF_VERSION
+                  OUTPUT_STRIP_TRAILING_WHITESPACE)
+  set(FMWORK_VERSION ${TF_VERSION})
 
   if(NOT DEFINED TF_LIB_DIR)
     # Get location of TensorFlow library
-    execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import tensorflow as tf; print(tf.sysconfig.get_lib())" OUTPUT_VARIABLE TF_LIB_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
+    execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import tensorflow as tf; print(tf.sysconfig.get_lib())"
+                    OUTPUT_VARIABLE TF_LIB_DIR
+                    OUTPUT_STRIP_TRAILING_WHITESPACE)
     message(STATUS "Found TensorFlow version: ${TF_VERSION} TensorFlow library path: ${TF_LIB_DIR}")
   else(TF_LIB_DIR)
     message(STATUS "TensorFlow version and TensorFlow library already set.")
@@ -303,29 +323,35 @@ if(NOT DEFINED AIMET_PACKAGE_PATH)
   message(STATUS "Set AIMET_PACKAGE_PATH = ${AIMET_PACKAGE_PATH}")
 endif(NOT DEFINED AIMET_PACKAGE_PATH)
 
-execute_process(COMMAND git config --get remote.origin.url WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} OUTPUT_VARIABLE remote_url)
-if(NOT remote_url STREQUAL "")
-  string(REGEX REPLACE "\n$" "" remote_url "${remote_url}")
-  # Remove the ".git" suffix from the remote repo URL
-  string(REGEX REPLACE "\\.[^.]*$" "" remote_url ${remote_url})
-  string(REGEX REPLACE ".*@" "" remote_post ${remote_url})
-  set(remote_url "https://${remote_post}")
-  message(STATUS "Repo Remote URL = ${remote_url}")
-  set(remote_url_cfg "\"${remote_url}\"")
-  set(sw_version_cfg "\"${SW_VERSION}\"")
+set(remote_url_cmake_opt "-DREMOTE_URL=\"\"")
+if (PIP_INDEX EQUAL "reporelease")
+  execute_process(COMMAND git config --get remote.origin.url WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} OUTPUT_VARIABLE remote_url)
+  if(NOT remote_url STREQUAL "")
+    string(REGEX REPLACE "\n$" "" remote_url "${remote_url}")
+    # Remove the ".git" suffix from the remote repo URL
+    string(REGEX REPLACE "\\.[^.]*$" "" remote_url ${remote_url})
+    string(REGEX REPLACE ".*@" "" remote_post ${remote_url})
+    set(remote_url "https://${remote_post}")
+    message(STATUS "Repo Remote URL = ${remote_url}")
+    set(remote_url_cfg "\"${remote_url}\"")
+    set(sw_version_cfg "\"${SW_VERSION}\"")
 
-  file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/packaging/setup_cfg.py" "version=${sw_version_cfg}\n")
-  file(APPEND "${CMAKE_CURRENT_SOURCE_DIR}/packaging/setup_cfg.py" "remote_url=${remote_url_cfg}")
+    file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/packaging/setup_cfg.py" "version=${sw_version_cfg}\n")
+    file(APPEND "${CMAKE_CURRENT_SOURCE_DIR}/packaging/setup_cfg.py" "remote_url=${remote_url_cfg}")
 
-  add_custom_target(packageaimet
-    # Run the install target first
-    COMMAND "${CMAKE_COMMAND}" --build . --target install
-    # Now run the packaging target to generate wheel files
-    COMMAND ${CMAKE_COMMAND} -DSW_VERSION=${SW_VERSION} -DREMOTE_URL=${remote_url} -DPYTHON3_EXECUTABLE=${Python3_EXECUTABLE} -DAIMET_PACKAGE_PATH=${AIMET_PACKAGE_PATH} -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -DENABLE_CUDA=${ENABLE_CUDA} -DENABLE_TENSORFLOW=${ENABLE_TENSORFLOW} -DENABLE_TORCH=${ENABLE_TORCH} -DENABLE_ONNX=${ENABLE_ONNX} -DPATCHELF_EXE=${PATCHELF_EXE} -P ${CMAKE_CURRENT_SOURCE_DIR}/packaging/package_aimet.cmake
-  )
-else()
-  message(STATUS "Repo Remote URL is blank. Skipping packageaimet target")
+    set(remote_url_cmake_opt "-DREMOTE_URL=${remote_url}")
+  else()
+    message(FATAL_ERROR "Repo Remote URL is blank. Unable to create AIMET wheel package")
+  endif()
 endif()
+
+add_custom_target(packageaimet
+  # Run the install target first
+  COMMAND "${CMAKE_COMMAND}" --build "${PROJECT_BINARY_DIR}" --target install
+
+  # Now run the packaging target to generate wheel files
+  COMMAND ${CMAKE_COMMAND} -DSW_VERSION=${SW_VERSION} -DCUDA_VER_STRING=${CUDA_VER_STRING} -DPIP_INDEX=${PIP_INDEX} ${remote_url_cmake_opt} -DPYTHON3_EXECUTABLE=${Python3_EXECUTABLE} -DAIMET_PACKAGE_PATH=${AIMET_PACKAGE_PATH} -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -DENABLE_CUDA=${ENABLE_CUDA} -DENABLE_TENSORFLOW=${ENABLE_TENSORFLOW} -DENABLE_TORCH=${ENABLE_TORCH} -DENABLE_ONNX=${ENABLE_ONNX} -DPATCHELF_EXE=${PATCHELF_EXE} -DFMWORK_VERSION=${FMWORK_VERSION} -P ${CMAKE_CURRENT_SOURCE_DIR}/packaging/package_aimet.cmake
+)
 
 add_subdirectory(ThirdParty)
 
@@ -361,3 +387,29 @@ set(CPACK_SYSTEM_NAME "build-0.0.0.0")
 set(CPACK_GENERATOR "TGZ")
 set(CPACK_INSTALLED_DIRECTORIES ${AIMET_INSTALL_DIR} .)
 include(CPack)
+
+# -------------------------------
+# Upload pip packages
+# -------------------------------
+
+# Check the pip config file path and set it to a default value (if not set)
+if(NOT DEFINED PIP_CONFIG_FILE)
+  set(PIP_CONFIG_FILE "None")
+endif()
+
+# Check the pip index name and set it to a default value (if not set)
+if(NOT DEFINED PIP_INDEX)
+  set(PIP_INDEX "None")
+endif()
+
+# Check the pip certificate path and set it to a default value (if not set)
+if(NOT DEFINED PIP_CERT_FILE)
+  set(PIP_CERT_FILE "None")
+endif()
+
+#TODO For some reason, this package upload target does NOT work as expected and needs to be debugged
+add_custom_target(upload
+    # Now run the packaging target to upload the pip package
+    COMMAND ${CMAKE_COMMAND} -DPIP_CONFIG_FILE=${PIP_CONFIG_FILE} -DPIP_INDEX=${PIP_INDEX} -DPIP_CERT_FILE=${PIP_CERT_FILE} -P ${CMAKE_CURRENT_SOURCE_DIR}/packaging/upload_aimet.cmake
+    DEPENDS packageaimet
+)
