@@ -223,7 +223,6 @@ class TestLoraAdapterPeft:
         shutil.rmtree('./tmp')
 
 def _is_frozen(quantizer):
-    if quantizer._allow_overwrite == False and quantizer.min.requires_grad == False and quantizer.max.requires_grad == False:
-        return True
-    elif quantizer._allow_overwrite == True and quantizer.min.requires_grad == True and quantizer.max.requires_grad == True:
-        return False
+    return quantizer._allow_overwrite == False and\
+           quantizer.min.requires_grad == False and\
+           quantizer.max.requires_grad == False
