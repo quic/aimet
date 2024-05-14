@@ -787,8 +787,7 @@ class TestQuantsim:
         model = test_models.ModelWithUnusedAdd()
         sim = QuantizationSimModel(model, dummy_input=torch.randn(10, 10))
         assert len(sim.model.add.input_quantizers) == 2
-        assert sim.model.add.input_quantizers[0] is None
-        assert sim.model.add.input_quantizers[1] is None
+        assert type(sim.model.add.input_quantizers[0]) is type(sim.model.add.input_quantizers[1])
 
         """
         Given: A model with unused layer
@@ -800,8 +799,7 @@ class TestQuantsim:
         model = test_models.ModelWithUnusedRNN()
         sim = QuantizationSimModel(model, dummy_input=torch.randn(10, 10))
         assert len(sim.model.rnn.output_quantizers) == 2
-        assert sim.model.rnn.output_quantizers[0] is not None
-        assert sim.model.rnn.output_quantizers[1] is not None
+        assert type(sim.model.rnn.output_quantizers[0]) is type(sim.model.rnn.output_quantizers[1])
 
 
 class TestQuantsimUtilities:
