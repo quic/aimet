@@ -151,7 +151,8 @@ class TestSeqMse:
     @pytest.mark.parametrize("enable_pcq", [True, False])
     @pytest.mark.parametrize("param_bw", [2, 31])
     @pytest.mark.parametrize("loss_fn", ['mse', 'l1', 'sqnr'])
-    def test_optimize_module_linear(self, enable_pcq, param_bw, loss_fn):
+    @pytest.mark.parametrize("qparam_requires_grad", [True, False])
+    def test_optimize_module_linear(self, enable_pcq, param_bw, loss_fn, qparam_requires_grad):
         """ test optimize module for linear """
         torch.manual_seed(0)
         linear = torch.nn.Linear(64, 128)
@@ -162,6 +163,8 @@ class TestSeqMse:
             quantizer_shape = []
 
         wrapper.param_quantizers['weight'] = QuantizeDequantize(shape=quantizer_shape, bitwidth=param_bw, symmetric=True)
+        wrapper.param_quantizers['weight'].min.requires_grad = qparam_requires_grad
+        wrapper.param_quantizers['weight'].max.requires_grad = qparam_requires_grad
 
         xq = torch.randn(32, 4, 32, 64)
         with wrapper.param_quantizers['weight'].compute_encodings():
@@ -183,12 +186,13 @@ class TestSeqMse:
     @pytest.mark.cuda()
     @pytest.mark.parametrize("inp_symmetry", ['asym', 'symfp', 'symqt'])
     @pytest.mark.parametrize("loss_fn", ['mse', 'l1', 'sqnr'])
-    def test_apply_seq_mse(self, unlabeled_data_loader, inp_symmetry, loss_fn):
+    @pytest.mark.parametrize("qscheme", [QuantScheme.post_training_tf, QuantScheme.training_range_learning_with_tf_init])
+    def test_apply_seq_mse(self, unlabeled_data_loader, inp_symmetry, loss_fn, qscheme):
         """ test apply_seq_mse end-to-end """
         torch.manual_seed(0)
         model = Net().eval().cuda()
         dummy_input = torch.randn(1, 1, 28, 28).cuda()
-        sim = QuantizationSimModel(model, dummy_input, default_param_bw=4, quant_scheme=QuantScheme.post_training_tf)
+        sim = QuantizationSimModel(model, dummy_input, default_param_bw=4, quant_scheme=qscheme)
         sim.model.requires_grad_(True)
         params = SeqMseParams(num_batches=2, inp_symmetry=inp_symmetry, loss_fn=loss_fn)
         apply_seq_mse(model, sim, unlabeled_data_loader, params)
@@ -207,7 +211,8 @@ class TestSeqMse:
 
     @pytest.mark.parametrize("inp_symmetry", ['asym', 'symfp', 'symqt'])
     @pytest.mark.parametrize("loss_fn", ['mse', 'l1', 'sqnr'])
-    def test_seq_mse_with_and_without_checkpoints_config(self, inp_symmetry, loss_fn):
+    @pytest.mark.parametrize("qscheme", [QuantScheme.post_training_tf, QuantScheme.training_range_learning_with_tf_init])
+    def test_seq_mse_with_and_without_checkpoints_config(self, inp_symmetry, loss_fn, qscheme):
         """ test apply_seq_mse end-to-end with and without checkpoints configs """
         torch.manual_seed(0)
 
@@ -216,10 +221,10 @@ class TestSeqMse:
         save_config_file_for_checkpoints()
         dummy_input = torch.randn(1, 3, 32, 32)
         sim_without = QuantizationSimModel(model, dummy_input, default_param_bw=4,
-                                           quant_scheme=QuantScheme.post_training_tf)
+                                           quant_scheme=qscheme)
         sim_without.model.requires_grad_(True)
         sim_with = QuantizationSimModel(model, dummy_input, default_param_bw=4,
-                                        quant_scheme=QuantScheme.post_training_tf)
+                                        quant_scheme=qscheme)
         sim_with.model.requires_grad_(True)
         params = SeqMseParams(num_batches=2, inp_symmetry=inp_symmetry, loss_fn=loss_fn)
 
@@ -250,12 +255,13 @@ class TestSeqMse:
         assert without_checkpoints_enc.scale == with_checkpoints_enc.scale
         assert without_checkpoints_enc.offset == with_checkpoints_enc.offset
 
-    def test_apply_seq_mse_with_modules_to_exclude(self, unlabeled_data_loader):
+    @pytest.mark.parametrize("qscheme", [QuantScheme.post_training_tf, QuantScheme.training_range_learning_with_tf_init])
+    def test_apply_seq_mse_with_modules_to_exclude(self, unlabeled_data_loader, qscheme):
         """ test apply_seq_mse end-to-end with exclusion list """
         torch.manual_seed(0)
         model = Net().eval()
         dummy_input = torch.randn(1, 1, 28, 28)
-        sim = QuantizationSimModel(model, dummy_input, default_param_bw=4, quant_scheme=QuantScheme.post_training_tf)
+        sim = QuantizationSimModel(model, dummy_input, default_param_bw=4, quant_scheme=qscheme)
         sim.model.requires_grad_(True)
         params = SeqMseParams(num_batches=2)
         apply_seq_mse(model, sim, unlabeled_data_loader, params, modules_to_exclude=[model.fc1])
