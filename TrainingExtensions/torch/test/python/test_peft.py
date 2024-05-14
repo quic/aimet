@@ -35,9 +35,9 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 import os
-import shutil
 import pytest
 
+import tempfile
 import torch
 from safetensors.torch import save_file
 from safetensors import safe_open
@@ -182,16 +182,13 @@ class TestLoraAdapterPeft:
         qc_lora = sim.model.base_model.model.linear
         assert torch.all(qc_lora.lora_B[0].weight == torch.zeros((10, 4)))
 
-        meta_path = './tmp'
-        if not os.path.exists(meta_path):
-            os.mkdir(meta_path)
-        tensors = {'base_model.model.linear.lora_A.0.weight': torch.randn((4, 10)),
-                   'base_model.model.linear.lora_B.0.weight': torch.randn((10, 4))}
-        path = './tmp/weight.safetensor'
-        save_file(tensors, path)
-        peft_utils.enable_adapter_and_load_weights(sim, './tmp/weight.safetensor')
-        assert torch.all(qc_lora.lora_B[0].weight == tensors['base_model.model.linear.lora_B.0.weight'])
-        shutil.rmtree('./tmp')
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tensors = {'base_model.model.linear.lora_A.0.weight': torch.randn((4, 10)),
+                       'base_model.model.linear.lora_B.0.weight': torch.randn((10, 4))}
+            path = os.path.join(tmpdir, 'weight.safetensor')
+            save_file(tensors, path)
+            peft_utils.enable_adapter_and_load_weights(sim, path)
+            assert torch.all(qc_lora.lora_B[0].weight == tensors['base_model.model.linear.lora_B.0.weight'])
 
     def test_export_adapter_weights(self):
         model = one_adapter_model()
@@ -206,21 +203,17 @@ class TestLoraAdapterPeft:
         qc_lora = sim.model.base_model.model.linear
         assert torch.all(qc_lora.lora_B[0].weight == torch.zeros((10, 4)))
 
-        meta_path = './tmp'
-        if not os.path.exists(meta_path):
-            os.mkdir(meta_path)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            peft_utils.export_adapter_weights(sim, tmpdir, 'weight')
+            tensor_name = []
+            with safe_open(os.path.join(tmpdir, 'weight.safetensor'), framework="pt", device=0) as f:
+                for key in f.keys():
+                    tensor_name.append(key)
 
-        peft_utils.export_adapter_weights(sim, meta_path, 'weight')
-        tensor_name = []
-        with safe_open('./tmp/weight.safetensor', framework="pt", device=0) as f:
-            for key in f.keys():
-                tensor_name.append(key)
-
-        assert len(tensor_name) == 2
-        tensors = ['base_model.model.linear.lora_A.0.weight',
-                   'base_model.model.linear.lora_B.0.weight']
-        assert sorted(tensor_name) == sorted(tensors)
-        shutil.rmtree('./tmp')
+            assert len(tensor_name) == 2
+            tensors = ['base_model.model.linear.lora_A.0.weight',
+                       'base_model.model.linear.lora_B.0.weight']
+            assert sorted(tensor_name) == sorted(tensors)
 
 def _is_frozen(quantizer):
     return quantizer._allow_overwrite == False and\
