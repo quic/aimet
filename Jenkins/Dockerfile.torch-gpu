@@ -115,11 +115,14 @@ RUN apt-get update > /dev/null && \
         libeigen3-dev \
         libgtest-dev \
         libgtk2.0-dev \
+        libncurses5 \
         libsox-dev \
         libsox-fmt-all \
         libstdc++6:i386 \
         libswscale-dev \
+        libtinfo5 \
         libxtst6 \
+        libunwind-14 \
         lsb-release \
         meld \
         nano \
@@ -250,7 +253,7 @@ RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/s
 # SSH login fix. Otherwise user is kicked off after login
 RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
 
-RUN python3 -m pip install git-pylint-commit-hook osqp
+RUN python3 -m pip install git-pylint-commit-hook osqp twine
 
 # NOTE: We need to pin the holoviews version to this since the latest version has a circular dependency on bokeh 2.0.0 through the panel package
 RUN python3 -m pip install holoviews==1.18.3 netron jsonschema pandas==1.5.3
