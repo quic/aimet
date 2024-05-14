@@ -259,8 +259,7 @@ class BaseQuantizationMixin(abc.ABC):
             if quantizer is None:
                 if strict:
                     raise RuntimeError
-                else:
-                    continue
+                continue
             if isinstance(encoding, dict):
                 encoding = [encoding]
             quantizer.set_legacy_encodings(encoding)
@@ -310,8 +309,7 @@ class BaseQuantizationMixin(abc.ABC):
             if quantizer is None:
                 if strict:
                     raise RuntimeError
-                else:
-                    continue
+                continue
             if isinstance(encoding, dict):
                 encoding = [encoding]
             quantizer.set_legacy_encodings(encoding)
@@ -361,8 +359,7 @@ class BaseQuantizationMixin(abc.ABC):
             if quantizer is None:
                 if strict:
                     raise RuntimeError
-                else:
-                    continue
+                continue
             if isinstance(encoding, dict):
                 encoding = [encoding]
             quantizer.set_legacy_encodings(encoding)
