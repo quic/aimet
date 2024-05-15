@@ -275,32 +275,33 @@ class EncodingAnalyzer(Generic[_Statistics], ABC):
         self.observer = observer
 
     @torch.no_grad()
-    def update_stats(self, input_tensor: torch.Tensor) -> _Statistics:
+    def update_stats(self, input_tensor: torch.Tensor):
         r"""
         Updates the internal statistics given the input data
 
-        :param input_tensor: Input data
-        :type input_tensor: torch.Tensor
-
+        Args:
+            input_tensor (torch.Tensor): Input data
         """
         new_stats = self.observer.collect_stats(input_tensor)
         self.observer.merge_stats(new_stats)
         return new_stats
 
-    def reset_stats(self) -> None:
+    def reset_stats(self):
         """
         Resets the internal stats
         """
         self.observer.reset_stats()
 
-    def compute_encodings(self, num_steps: int, is_symmetric: bool) -> torch.Tensor:
+    def compute_encodings(self, num_steps: int, is_symmetric: bool):
         r"""
         Computes encodings based on the input data & calibration scheme and returns the encoding minimum and maximum value
 
-        :param num_steps: Number of steps used in quantization. In strict symmetric mode, the number of bins is equivalent to :math:`2^{bitwidth} - 2`.
-        :type num_steps: int
-        :param is_symmetric: True if encodings are symmetric
-        :type is_symmetric: bool
+        Args:
+            num_steps (int): Number of steps used in quantization.
+            is_symmetric (bool): True if encodings are symmetric
+
+        Returns:
+            Encoding min and max as a tuple
 
         """
         return self.compute_encodings_from_stats(self.observer.get_stats(), num_steps, is_symmetric)
@@ -323,8 +324,8 @@ class MinMaxEncodingAnalyzer(EncodingAnalyzer[_MinMaxRange]):
     r"""
     EncodingAnalyzer subclass which uses min-max calibration. This involves tracking the minimum and maximum observed values and computing the min-max range as :math:`[min(input), max(input)]`
 
-    :param shape: Shape of calculated encoding
-    :type shape: tuple
+    Args:
+        shape (tuple): Shape of calculated encoding
 
     Example:
 
@@ -419,12 +420,10 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
     r"""
     EncodingAnalyzer subclass which uses percentile calibration. This involves recording values in a histogram and computing the min-max range given a percentile value :math:`p`. The range would be computed after clipping (100 - :math:`p`)% of the largest and smallest observed values.
 
-    :param shape: Shape of calculated encoding
-    :type shape: tuple
-    :param num_bins: Number of bins used to create the histogram
-    :type num_bins: int
-    :param percentile: Percentile value which is used to clip values
-    :type percentile: float
+    Args:
+        shape (tuple): Shape of calculated encoding
+        num_bins (int): Number of bins used to create the histogram
+        percentile (float): Percentile value which is used to clip values
 
     Example:
 
@@ -450,8 +449,9 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
     def set_percentile(self, percentile):
         r"""
         Set the clipping percentile of the encoding analyzer. The encoding analyzer will clip the (100 - :math:`p`)% largest and smallest observed values from the encoding range when computing encodings.
-        :param percentile: Value from 50.0 to 100.0 indicating the clipping percentile
-        :type percentile: float
+
+        Args:
+            percentile (float): Percentile value which is used to clip values
 
         """
         if percentile < 50 or percentile > 100:
@@ -513,20 +513,15 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
     r"""
     EncodingAnalyzer subclass which uses SQNR calibration. This involves recording values in a histogram and computing the min-max range based on values that produce the lowest expected SQNR.
 
-    :param shape: Shape of calculated encoding
-    :type shape: tuple
-    :param num_bins: number of bins to use per histogram
-    :type num_bins: int
-    :param asymmetric_delta_candidates: number of delta values to search over in asymmetric mode
-    :type asymmetric_delta_candidates: int
-    :param symmetric_delta_candidates: number of delta values to search over in symmetric mode
-    :type symmetric_delta_candidates: int
-    :param offset_candidates: number of offset values to search over in asymmetric mode
-    :type offset_candidates: int
-    :param max_parallelism: maximum number of encodings to process in parallel (higher number results in higher memory usage but faster computation)
-    :type max_parallelism: int
-    :param gamma: weighting factor on clipping noise (higher value results in less clipping noise)
-    :type gamma: float
+    Args:
+        shape (tuple): Shape of calculated encoding
+        num_bins (int): Number of bins used to create the histogram
+        asymmetric_delta_candidates (int): Number of delta values to search over in asymmetric mode
+        symmetric_delta_candidates (int): Number of delta values to search over in symmetric mode
+        offset_candidates (int): Number of offset values to search over in asymmetric mode
+        max_parallelism (int): Maximum number of encodings to process in parallel (higher number results in higher memory usage but faster computation)
+        gamma (float): Weighting factor on clipping noise (higher value results in less clipping noise)
+        percentile (float): Percentile value which is used to clip values
 
     Example:
 
@@ -571,15 +566,7 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
     # pylint: disable=too-many-locals
     @torch.no_grad()
     def compute_encodings_from_stats(self, stats: List[_Histogram], num_steps: int, is_symmetric: bool)\
-            -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Searches for encodings which produce the lowest expected SQNR based on the histograms in stats
-
-        :param stats: A list of _Histogram objects with length equal to the number of encodings to compute
-        :param num_steps: The number of bins the quantized range is split into
-        :param is_symmetric: If True, computes symmetric encodings, else computes asymmetric encodings
-        :return: Tuple of computed encodings (min, max) as tensors with shape self.shape
-        """
+            -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
         if stats[0].histogram is None:
             raise StatisticsNotFoundError('No statistics present to compute encodings.')
         if num_steps <= 0:
@@ -695,12 +682,12 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         We approximately reconstruct x from hists by assuming all elements within a given bin fall exactly on the
         midpoint of that bin.
 
-        :param stats: list of _Histogram objects of observed input values
-        :param test_deltas: Tensor holding the values of all deltas to search with shape (num_hists, num_deltas, num_offsets)
-        :param test_offsets: Tensor holding values of all offsets to search with shape (num_hists, num_deltas, num_offsets)
-        :param num_steps: Number of quantization steps, i.e., (2 ** bitwidth) - 1
-        :param gamma: Fudge factor to trade off between saturation cost and quantization cost. When gamma=1.0, this
-                      approximates the MSE of the quantization function
+        Args:
+            stats (List): A list of _Histogram objects with length equal to the number of encodings to compute
+            test_deltas (torch.Tensor): Tensor holding the values of all deltas to search with shape (num_hists, num_deltas, num_offsets)
+            test_offsets (torch.Tensor):Tensor holding values of all offsets to search with shape (num_hists, num_deltas, num_offsets)
+            num_steps (int): Number of quantization steps, i.e., (2 ** bitwidth) - 1
+            gamma (float): Fudge factor to trade off between saturation cost and quantization cost. When gamma=1.0, this approximates the MSE of the quantization function
         """
         tensor_kwargs = {"device": test_deltas.device, "dtype": test_deltas.dtype}
         hists = torch.stack([stat.histogram for stat in stats])
