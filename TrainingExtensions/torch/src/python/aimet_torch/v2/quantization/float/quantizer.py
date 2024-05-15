@@ -103,18 +103,11 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
     .. math::
         exponent\_max = 2^{exponent} - 1 \\
 
-    :param exponent_bits: Number of exponent bits to simulate.
-    :type exponent_bits: int
-    :param mantissa_bits: Number of mantissa bits to simulate.
-    :type mantissa_bits: int
-    :param dtype: torch.dtype to simulate. This argument is mutually exclusive with
-                  exponent_bits and mantissa_bits.
-    :type dtype: torch.dtype
-    :param encoding_analyzer: If specified, the maximum value to represent
-                              will be determined dynamically based on the input statistics
-                              for finer precision.
-    :type encoding_analyzer: EncodingAnalyzer
-
+    Args:
+        exponent_bits (int): Number of exponent bits to simulate
+        mantissa_bits (int):  Number of mantissa bits to simulate
+        dtype (torch.dtype): torch.dtype to simulate. This argument is mutually exclusive with exponent_bits and mantissa_bits.
+        encoding_analyzer (EncodingAnalyzer): If specified, the maximum value to represent will be determined dynamically based on the input statistics for finer precision.
 
     Examples:
 
