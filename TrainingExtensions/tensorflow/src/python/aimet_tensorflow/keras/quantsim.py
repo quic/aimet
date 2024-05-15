@@ -571,6 +571,8 @@ class QuantizationSimModel(tf.keras.Model):
         param_encodings = encodings['param_encodings']
         activation_encodings = encodings['activation_encodings']
 
+        model_input_tensor_names = [inp.name for inp in self.model.inputs]
+
         for wrapper in self.quant_wrappers():
             for idx, input_quantizer in enumerate(wrapper.input_quantizers):
                 # because dense layers in quantizable MHA and RNN are not explicitly sublayers, they don't have their
@@ -579,6 +581,8 @@ class QuantizationSimModel(tf.keras.Model):
                     tensor_name = wrapper.name + "/" + input_quantizer.name + ":0"
                 else:
                     tensor_name = wrapper._layer_to_wrap.inbound_nodes[0].keras_inputs[idx].name
+                if tensor_name in model_input_tensor_names:
+                    tensor_name += ":0"
 
                 if tensor_name in activation_encodings:
                     if not input_quantizer.is_enabled():
