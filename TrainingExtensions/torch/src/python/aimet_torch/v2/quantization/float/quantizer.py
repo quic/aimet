@@ -72,19 +72,15 @@ assert _ieee_float_max_representable_value(_BFLOAT16_EXPONENT_BITS, _BFLOAT16_MA
 
 class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
     r"""
-    Simulates quantization by fake-casting the input to the given exponent and mantissa bits based on IEEE float representation.
+    Simulates quantization by fake-casting the input:
 
-    Given mantissa_bits as :math:`mantissa` and exponent_bits as :math:`exponent`, the IEEE standard computes the maximum representable value by
+    If dtype is provided, this is equivalent to
 
     .. math::
-        max = (2 - 2^{-mantissa}) * 2^{(\left\lfloor \frac{exponent\_max}{2} \right\rfloor)} \\
-    
-    where
-    
-    .. math::    
-        exponent\_max = 2^{exponent} - 1 \\ \\
+        out = x.to(dtype).to(x.dtype) \\
 
-    Given input :math:`x`, fake-casting is equivalent to the following operation
+
+    If the exponent and mantissa bits are provided, this is equivalent to
 
     .. math::
         out = \left\lceil\frac{x_c}{scale}\right\rfloor * scale
@@ -92,9 +88,20 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
     where
 
     .. math::
-        x_c = clamp(x, -max, max) \\
-        bias = 2^{exponent} - \log_2(max) + \log_2(2 - 2^{-mantissa}) - 1 \\
-        scale = 2 ^ {\left\lfloor \log_2 |x_c| + bias \right\rfloor - mantissa - bias} \\
+        x_c   &= clamp(x, -max, max) \\
+        bias  &= 2^{exponent} - \log_2(max) + \log_2(2 - 2^{-mantissa}) - 1 \\
+        scale &= 2 ^ {\left\lfloor \log_2 |x_c| + bias \right\rfloor - mantissa - bias} \\
+
+
+    The IEEE standard computes the maximum representable value by
+
+    .. math::
+        max = (2 - 2^{-mantissa}) * 2^{(\left\lfloor 0.5 * exponent\_max \right\rfloor)} \\
+
+    where
+
+    .. math::
+        exponent\_max = 2^{exponent} - 1 \\
 
     :param exponent_bits: Number of exponent bits to simulate.
     :type exponent_bits: int
@@ -123,7 +130,7 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
         16
         >>> qdq(input)
         tensor([[ 1.8984, -0.0947], [-1.0859, -0.1729]])
-  
+
         >>> from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
         >>> encoding_analyzer = MinMaxEncodingAnalyzer(shape=(1,))
         >>> qdq = Q.float.FloatQuantizeDequantize(dtype=torch.float16, encoding_analyzer=encoding_analyzer)
