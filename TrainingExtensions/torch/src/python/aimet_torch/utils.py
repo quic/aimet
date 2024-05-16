@@ -60,7 +60,6 @@ from aimet_common.utils import profile as _profile
 import aimet_common.libpymo as libpymo
 from aimet_torch import elementwise_ops
 from aimet_torch.tensor_quantizer import TensorQuantizer
-from aimet_torch.v2.nn.base import BaseQuantizationMixin
 from aimet_torch.v2.utils import _ContextManager
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
@@ -923,12 +922,13 @@ def get_all_quantizers(model: torch.nn.Module):
     :param model: Root module
     :returns: List of parameter, input, and output quantizers
     """
+    from aimet_torch.v2.nn.base import BaseQuantizationMixin# pylint: disable=import-outside-toplevel
+    from aimet_torch.qc_quantize_op import QcQuantizeWrapper# pylint: disable=import-outside-toplevel
+    from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent# pylint: disable=import-outside-toplevel
+
     for m in model.modules():
         if isinstance(m, BaseQuantizationMixin):
             raise NotImplementedError(f'{get_all_quantizers.__qualname__} is not supported in AIMET 2')
-
-    from aimet_torch.qc_quantize_op import QcQuantizeWrapper# pylint: disable=import-outside-toplevel
-    from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent# pylint: disable=import-outside-toplevel
 
     param_quantizers = []
     input_quantizers = []
@@ -958,6 +958,8 @@ def disable_all_quantizers(model: torch.nn.Module) -> Handle:
     :param model: Root module
     :returns: Handle that enable all quantizers in the model upon handle.remove().
     """
+    from aimet_torch.v2.nn.base import BaseQuantizationMixin# pylint: disable=import-outside-toplevel
+
     for m in model.modules():
         if isinstance(m, BaseQuantizationMixin):
             raise NotImplementedError(f'{disable_all_quantizers.__qualname__} is not supported in AIMET 2')
