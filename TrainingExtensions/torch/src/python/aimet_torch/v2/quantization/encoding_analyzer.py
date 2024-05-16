@@ -566,7 +566,7 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
     # pylint: disable=too-many-locals
     @torch.no_grad()
     def compute_encodings_from_stats(self, stats: List[_Histogram], num_steps: int, is_symmetric: bool)\
-            -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
+            -> Tuple[torch.Tensor, torch.Tensor]:
         if stats[0].histogram is None:
             raise StatisticsNotFoundError('No statistics present to compute encodings.')
         if num_steps <= 0:
