@@ -44,7 +44,7 @@ from aimet_torch.quantsim import load_encodings_to_sim
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.quantization.encoding_analyzer import PercentileEncodingAnalyzer
 from aimet_torch.v2.quantization.base import QuantizerBase
-from aimet_torch.v2.quantization.affine import AffineQuantizerBase
+from aimet_torch.v2.quantization.affine import AffineQuantizerBase, GroupedBlockQuantizeDequantize
 from aimet_torch.v2.nn import BaseQuantizationMixin
 from ..models_ import test_models
 
@@ -692,6 +692,62 @@ class TestPercentileScheme:
 
             with pytest.raises(RuntimeError):
                 load_encodings_fn(qsim, fname)
+
+    def test_save_and_load_gbbq(self):
+        torch.manual_seed(0)
+        model = test_models.SingleResidualWithAvgPool()
+        dummy_input = torch.randn(1, 3, 28, 28)
+        dummy_input_2 = torch.randn(1, 3, 28, 28)
+        qsim = QuantizationSimModel(model, dummy_input)
+        qsim.model.fc.param_quantizers['weight'] = GroupedBlockQuantizeDequantize(shape=(10, 6),
+                                                                                  bitwidth=4,
+                                                                                  symmetric=True,
+                                                                                  decompressed_bw=8,
+                                                                                  block_size=(1, 12),
+                                                                                  block_grouping=(1, 6))
+        qsim.compute_encodings(lambda m, _: m(dummy_input), None)
+        out1 = qsim.model(dummy_input)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            qsim.save_encodings_to_json(temp_dir, 'saved_encodings')
+            qsim.export(temp_dir, 'exported_encodings', dummy_input=dummy_input)
+
+            with open(os.path.join(temp_dir, 'saved_encodings.json'), 'r') as enc_file:
+                encodings = json.load(enc_file)
+
+            assert len(encodings['param_encodings']['fc.weight']) == 60
+
+            with open(os.path.join(temp_dir, 'exported_encodings_torch.encodings'), 'r') as enc_file:
+                encodings = json.load(enc_file)
+
+            assert len(encodings['param_encodings']['fc.weight']) == 60
+
+            old_weight = qsim.model.fc.weight
+            old_max = qsim.model.fc.param_quantizers['weight'].get_max()[0][0]
+            qsim.model.fc.weight = torch.nn.Parameter(torch.randn(old_weight.shape))
+            qsim.compute_encodings(lambda m, _: m(dummy_input_2), None)
+            assert qsim.model.fc.param_quantizers['weight'].get_max()[0][0] != old_max
+            out2 = qsim.model(dummy_input)
+
+            assert not torch.equal(out1, out2)
+
+            # Test loading of encodings saved using save_encodings_to_json
+            qsim.model.fc.weight = old_weight
+            qsim.load_encodings(os.path.join(temp_dir, 'saved_encodings.json'))
+
+            assert qsim.model.fc.param_quantizers['weight'].get_max()[0][0] == old_max
+            out3 = qsim.model(dummy_input)
+            assert torch.equal(out1, out3)
+
+            qsim.model.fc.weight = torch.nn.Parameter(torch.randn(old_weight.shape))
+            qsim.compute_encodings(lambda m, _: m(dummy_input_2), None)
+
+            # Test loading of encodings from sim.export
+            qsim.model.fc.weight = old_weight
+            qsim.load_encodings(os.path.join(temp_dir, 'exported_encodings_torch.encodings'))
+
+            out4 = qsim.model(dummy_input)
+            assert torch.equal(out1, out4)
+
 
 class TestQuantsimUtilities:
 
