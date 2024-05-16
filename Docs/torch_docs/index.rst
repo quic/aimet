@@ -1,29 +1,25 @@
 
 .. _ug-torch-apidocs:
 
-========================================================
-Welcome to AI Model Efficiency Toolkit PyTorch API Docs!
-========================================================
+================================================
+AIMET: AI Model Efficiency Toolkit Documentation
+================================================
 
-AI Model Efficiency Toolkit (AIMET) is a software toolkit that enables users to quantize and compress models.
-Quantization is a must for efficient edge inference using fixed-point AI accelerators.
+AI Model Efficiency Toolkit (AIMET) provides tools enabling users to quantize and compress PyTorch models. Quantization
+is an essential step when deploying models to edge devices with fixed-point AI accelerators.
 
-AIMET optimizes pre-trained models (e.g., FP32 trained models) using post-training and fine-tuning techniques that
-minimize accuracy loss incurred during quantization or compression.
-
-AIMET PyTorch is designed to work on any user-provided PyTorch model. Please follow the links on this page to see
-AIMET PyTorch tutorials, examples, features, and APIs. To view AIMET's Tensorflow, ONNX, Keras documentation,
-please visit our `AIMET v1 Documentation <https://quic.github.io/aimet-pages/releases/latest/user_guide/index.html>`_ page.
+AIMET provides both post-training and fine-tuning techniques to minimize accuracy loss incurred when quantizing
+floating-point models.
 
 .. image:: ../images/AIMET_index_no_fine_tune.png
+   :width: 800px
 
-The above picture shows a high-level view of the workflow when using AIMET. The user will start with a trained
-floating-point model. This trained model is passed to AIMET using APIs
-for compression and quantization. AIMET returns a compressed/quantized version of the model
-that the users can fine-tune (or train further for a small number of epochs) to recover lost accuracy. Users can then
-export via ONNX/torchscript to an on-target runtime like Qualcomm\ |reg| Neural Processing SDK.
+The above picture shows a high-level view of the workflow when using AIMET. The user passes a trained floating-point
+model to AIMET's APIs for quantization. AIMET returns a new PyTorch model simulating low-precision inference, which users
+can fine-tune to recover lost accuracy. Users can then export the quantized model via ONNX/torchscript to an on-target
+runtime like Qualcomm\ |reg| Neural Processing SDK.
 
-Please visit :ref:`AIMET Installation <ug-installation>` for installation instructions.
+
 
 
 .. toctree::
@@ -34,6 +30,38 @@ Please visit :ref:`AIMET Installation <ug-installation>` for installation instru
 
    Installation <../install/index>
    Quickstart Guide <tutorials/quickstart_guide>
+
+
+**Pip Installation:**
+
+.. code-block:: console
+
+    apt-get install liblapacke
+    python3 -m pip install aimet-torch
+
+For more installation options, please visit the :ref:`AIMET installation instructions<ug-installation>`.
+
+
+**Basic Usage:**
+
+.. code-block:: Python
+
+    import aimet_torch.v2 as aimet
+
+    # Create quantization simulation model for your model
+    sim = aimet.quantsim.QuantizationSimModel(model, sample_input)
+
+    # Calibrate quantization encodings on sample data
+    with aimet.nn.compute_encodings(sim.model):
+        for data, _ in data_loader:
+            sim.model(data)
+
+    # Simulate quantized inference
+    sample_output = sim.model(sample_input)
+
+    # Export model and quantization encodings
+    sim.export("./out_dir", "quantized_model", sample_input)
+
 
 
 .. toctree::
