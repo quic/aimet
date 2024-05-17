@@ -20,9 +20,9 @@
 ## Requirements
 This package supports the following environment:
 - 64-bit Intel x86-compatible processor
-- Linux Ubuntu: 20.04 LTS
+- Linux Ubuntu: 22.04 LTS
 - bash command shell
-- Python 3.8
+- Python 3.10
 - @package@ @fmwork_ver_bare@
 
 ## Why AIMET?
