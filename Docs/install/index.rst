@@ -40,34 +40,72 @@
 AIMET Installation
 ###################
 
-Release packages
-~~~~~~~~~~~~~~~~
+Quick Install
+~~~~~~~~~~~~~
 
-AIMET release packages are hosted at https://github.com/quic/aimet/releases. Each release includes multiple python packages of the following format:
+The AIMET PyTorch GPU PyPI packages are available for environments that meet the following requirements:
+
+* 64-bit Intel x86-compatible processor
+* Linux Ubuntu 22.04 LTS
+* Python 3.10
+* Torch 1.13+cu117
+
+**Pip install:**
 
 .. code-block::
 
-    <PACKAGE_PREFIX>-<VARIANT>_<VERSION>-cp310-cp310-linux_x86_64.whl
-
-Please find more information below about each *VARIANT*.
-
-PyTorch
-
-#. **torch-gpu** for PyTorch 1.13 GPU package with Python 3.10 and CUDA 11.x - *Recommended for use* with PyTorch models
-#. **torch-cpu** for PyTorch 1.13 CPU package with Python 3.10 - If installing on a machine without CUDA
-#. **torch-gpu-pt21** for PyTorch 2.1 GPU package with Python 3.10 and CUDA 11.x
-#. **torch-cpu-pt21** for PyTorch 2.1 CPU package with Python 3.10 - If installing on a machine without CUDA
+    apt-get install liblapacke
+    python3 -m pip install aimet-torch
 
 
-TensorFlow
+Release Packages
+~~~~~~~~~~~~~~~~
 
-#. **tf-gpu** for TensorFlow 2.10 GPU package with Python 3.10 - *Recommended for use* with TensorFlow models
-#. **tf-cpu** for TensorFlow 2.10 CPU package with Python 3.10 - If installing on a machine without CUDA
+For other aimet variants, install the latest version from the .whl files hosted at https://github.com/quic/aimet/releases
 
-ONNX
+**PyTorch**
 
-#. **onnx-gpu** for ONNX 1.14 GPU package with Python 3.10 - *Recommended for use* with ONNX models
-#. **onnx-cpu** for ONNX 1.14 CPU package with Python 3.10 - If installing on a machine without CUDA
+.. parsed-literal::
+
+    # Pytorch 1.13 with CUDA 11.x
+    python3 -m pip install |download_url|\ |version|/aimet_torch-torch_gpu\_\ |version|\ |whl_suffix|
+    # Pytorch 1.13 CPU only
+    python3 -m pip install |download_url|\ |version|/aimet_torch-torch_cpu\_\ |version|\ |whl_suffix|
+    # Pytorch 2.1 with CUDA 11.x
+    python3 -m pip install |download_url|\ |version|/aimet_torch-torch_gpu-pt21\_\ |version|\ |whl_suffix|
+    # Pytorch 2.1 CPU only
+    python3 -m pip install |download_url|\ |version|/aimet_torch-torch_cpu-pt21\_\ |version|\ |whl_suffix|
+
+**TensorFlow**
+
+.. parsed-literal::
+
+    # Tensorflow 2.10 GPU with CUDA 11.x
+    python3 -m pip install |download_url|\ |version|/aimet_tensorflow-tf_gpu\_\ |version|\ |whl_suffix|
+    # Tensorflow 2.10 CPU only
+    python3 -m pip install |download_url|\ |version|/aimet_tensorflow-tf_cpu\_\ |version|\ |whl_suffix|
+
+
+**Onnx**
+
+.. parsed-literal::
+
+    # ONNX 1.14 GPU
+    python3 -m pip install |download_url|\ |version|/aimet_onnx-onnx_gpu\_\ |version|\ |whl_suffix|
+    # ONNX 1.14 CPU
+    python3 -m pip install |download_url|\ |version|/aimet_onnx-onnx_cpu\_\ |version|\ |whl_suffix|
+
+For previous AIMET releases, browse packages at https://github.com/quic/aimet/releases. Each release includes multiple python packages of the following format:
+
+.. parsed-literal::
+
+    # VARIANT in {torch_gpu, torch_cpu, tf_gpu, tf_cpu, onnx_gpu, onnx_cpu}
+    # PACKAGE_PREFIX in {aimet_torch, aimet_tensorflow, aimet_onnx}
+    <PACKAGE_PREFIX>-<VARIANT>_<VERSION>\ |whl_suffix|
+
+
+.. |whl_suffix| replace:: -cp310-cp310-linux_x86_64.whl
+.. |download_url| replace:: \https://github.com/quic/aimet/releases/download/
 
 System Requirements
 ~~~~~~~~~~~~~~~~~~~
@@ -83,18 +121,9 @@ The AIMET package requires the following host platform setup:
 
 To use the GPU accelerated training modules an Nvidia CUDA enabled GPU with a minimum Nvidia driver version of 455+ is required. Using the latest driver is always recommended, especially if using a newer GPU. Both CUDA and cuDNN (the more advanced CUDA interface) enabled GPUs are supported.
 
-Recommended host system hardware requirements:
 
-* Intel i7 multicore CPU w/hyperthreading
-* 16+ GB RAM
-* 500GB+ SSD hard drive
-* For GPU variants:
-    * GPU: Nvidia GeForce GTX 1080 or Tesla V100
-
-While these are not minimum requirements, they are recommended for good performance when training large networks.
-
-Installation Instructions
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+Advanced Installation Instructions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 There are two ways to setup and install AIMET:
     * On your host machine
