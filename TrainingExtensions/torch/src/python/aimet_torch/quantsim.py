@@ -1705,14 +1705,15 @@ class QuantizationSimModel:
         if not param_encodings and not activation_encodings:
             raise RuntimeError
 
-        encoding_keys = param_encodings.keys() | activation_encodings.keys()
-        model_keys = set(name.replace("._module_to_wrap", "") for name, _
-                         in chain(self.model.named_modules(), self.model.named_parameters()))
-        keys_not_found = encoding_keys - model_keys
-        if keys_not_found:
-            keys_not_found = ', '.join(sorted(keys_not_found))
-            msg = f"Encoding dictionary contains modules/parameters that doesn't exist in the model: {keys_not_found}"
-            raise RuntimeError(msg)
+        if strict is True:
+            encoding_keys = param_encodings.keys() | activation_encodings.keys()
+            model_keys = set(name.replace("._module_to_wrap", "") for name, _
+                             in chain(self.model.named_modules(), self.model.named_parameters()))
+            keys_not_found = encoding_keys - model_keys
+            if keys_not_found:
+                keys_not_found = ', '.join(sorted(keys_not_found))
+                msg = f"Encoding dictionary contains modules/parameters that doesn't exist in the model: {keys_not_found}"
+                raise RuntimeError(msg)
 
         if param_encodings is not None:
             self._set_param_encodings(param_encodings,
