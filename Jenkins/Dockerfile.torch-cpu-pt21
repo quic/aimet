@@ -1,7 +1,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -111,7 +111,6 @@ RUN apt-get update > /dev/null && \
         libtinfo5 \
         libxtst6 \
         libunwind-14 \
-        libxtst6 \
         lsb-release \
         meld \
         nano \
@@ -242,7 +241,7 @@ RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/s
 # SSH login fix. Otherwise user is kicked off after login
 RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
 
-RUN python3 -m pip install git-pylint-commit-hook osqp
+RUN python3 -m pip install git-pylint-commit-hook osqp twine
 
 # NOTE: We need to pin the holoviews version to this since the latest version has a circular dependency on bokeh 2.0.0 through the panel package
 RUN python3 -m pip install holoviews==1.18.3 netron jsonschema pandas==1.5.3
