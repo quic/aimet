@@ -71,7 +71,7 @@ from aimet_torch.utils import deprecated
 from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs, CustomMarker, get_pytorch_name_from_onnx_name
 from aimet_torch.meta.connectedgraph import ConnectedGraph, Op
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
-from aimet_torch.v2.quantization.builder import LazyQuantizeWrapper
+from aimet_torch.quantsim_config.builder import LazyQuantizeWrapper
 from aimet_torch.v2.nn import BaseQuantizationMixin
 from aimet_torch.experimental.v2.quantsim.export_utils import VALID_ENCODING_VERSIONS, _export_to_1_0_0
 
