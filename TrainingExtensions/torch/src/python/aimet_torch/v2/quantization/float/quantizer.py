@@ -72,7 +72,7 @@ assert _ieee_float_max_representable_value(_BFLOAT16_EXPONENT_BITS, _BFLOAT16_MA
 
 class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
     r"""
-    Simulates quantization by fake-casting the input:
+    Simulates quantization by fake-casting the input
 
     If dtype is provided, this is equivalent to
 
@@ -197,10 +197,14 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
                self.mantissa_bits == _BFLOAT16_MANTISSA_BITS
 
     def get_legacy_encodings(self) -> Optional[List[Dict]]:
+        """
+        :meta private:
+        """
         return [{'bitwidth': self.bitwidth, 'dtype': 'float'}]
 
     def set_legacy_encodings(self, encodings: List[Dict]):
         """
+        :meta private:
         Set encodings represented in the same format as the output of get_legacy_encodings as below:
 
         [
@@ -290,7 +294,12 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
         return fake_cast_to_ieee_float(input, maxval, exponent_bits, mantissa_bits)
 
     def extra_repr(self):
+        """
+        :meta private:
+        """
         return f'exponent_bits={self.exponent_bits}, mantissa_bits={self.mantissa_bits}'
 
-
-QuantizeDequantize = FloatQuantizeDequantize
+class QuantizeDequantize(FloatQuantizeDequantize):
+    r"""
+    Alias of FloatQuantizeDequantize
+    """
