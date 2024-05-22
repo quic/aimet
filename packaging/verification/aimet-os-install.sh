@@ -58,8 +58,8 @@ update-alternatives --set python3 /usr/bin/python3.10
 # GPU varients
 if [[ "$AIMET_VARIANT" == *"gpu"* ]]; then
 
-    #. PyTorch 1.13 GPU variant: `CUDA Toolkit 11.6.2 <https://developer.nvidia.com/cuda-11-6-2-download-archive>`_
-    if [[ ( "$AIMET_VARIANT" == *"torch"* || "$AIMET_VARIANT" == *"onnx"* ) && "$AIMET_VARIANT" != *"pt21"* ]]; then
+    #. PyTorch 1.13 GPU variant or ONNX variant: `CUDA Toolkit 11.7.1 <https://developer.nvidia.com/cuda-11-7-1-download-archive>`_
+    if [[ "$AIMET_VARIANT" == *"pt113"* || "$AIMET_VARIANT" == *"onnx"* ]]; then
         wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin
         mv cuda-ubuntu2204.pin /etc/apt/preferences.d/cuda-repository-pin-600
         wget https://developer.download.nvidia.com/compute/cuda/11.7.1/local_installers/cuda-repo-ubuntu2204-11-7-local_11.7.1-515.65.01-1_amd64.deb
@@ -81,8 +81,8 @@ if [[ "$AIMET_VARIANT" == *"gpu"* ]]; then
                 && rm -rf /var/lib/apt/lists/*
     fi
 
-    # Tensorflow GPU varaint
-    if [[ "$AIMET_VARIANT" == *"tf"* || "$AIMET_VARIANT" == *"pt21"* ]]; then
+    # Tensorflow GPU varaint or PyTorch variant: `CUDA Toolkit 11.8.0 <https://developer.nvidia.com/cuda-11-8-0-download-archive>`_
+    if [[ ( "$AIMET_VARIANT" == *"torch"* || "$AIMET_VARIANT" == *"tf"* ) && "$AIMET_VARIANT" != *"pt113"* ]]; then
         wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin
         mv cuda-ubuntu2204.pin /etc/apt/preferences.d/cuda-repository-pin-600
         wget https://developer.download.nvidia.com/compute/cuda/11.8.0/local_installers/cuda-repo-ubuntu2204-11-8-local_11.8.0-520.61.05-1_amd64.deb
@@ -170,7 +170,7 @@ if [[ "$AIMET_VARIANT" == "tf_gpu" ]]; then
   fi
 elif [[ "$AIMET_VARIANT" == "torch_gpu" ]]; then
     if [[ -f !/usr/local/cuda ]]; then
-        ln -s /usr/local/cuda-11.7 /usr/local/cuda
+        ln -s /usr/local/cuda-11.8 /usr/local/cuda
     fi
 fi
 

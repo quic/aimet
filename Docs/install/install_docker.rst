@@ -144,8 +144,8 @@ Set the <variant_string> to ONE of the following depending on your desired varia
 
 #. For the PyTorch 2.1 GPU variant, use "torch_gpu"
 #. For the PyTorch 2.1 CPU variant, use "torch_cpu"
-#. For the PyTorch 1.13 GPU variant, use "torch_gpu-pt21"
-#. For the PyTorch 1.13 CPU variant, use "torch_cpu-pt21"
+#. For the PyTorch 1.13 GPU variant, use "torch_gpu-pt113"
+#. For the PyTorch 1.13 CPU variant, use "torch_cpu-pt113"
 #. For the TensorFlow GPU variant, use "tf_gpu"
 #. For the TensorFlow CPU variant, use "tf_cpu"
 #. For the ONNX GPU variant, use "onnx_gpu"
