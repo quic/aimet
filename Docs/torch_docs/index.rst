@@ -20,10 +20,13 @@ can fine-tune to recover lost accuracy. Users can then export the quantized mode
 runtime like Qualcomm\ |reg| Neural Processing SDK.
 
 
+Getting Started
+===============
 
 
 .. toctree::
    :caption: Getting Started
+   :hidden:
    :titlesonly:
    :includehidden:
    :maxdepth: 1
@@ -62,7 +65,7 @@ For more installation options, please visit the :ref:`AIMET installation instruc
     # Export model and quantization encodings
     sim.export("./out_dir", "quantized_model", sample_input)
 
-
+Please view the :ref:`Quickstart Guide<ug-torch-quickstart>` for a more in-depth guide to using AIMET quantsim.
 
 .. toctree::
    :caption: Examples

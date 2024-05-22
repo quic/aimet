@@ -134,10 +134,6 @@ color: var(--aimet-dark-blue);
   background: var(--aimet-menu-hover); /* color of toctree menu when hovered over */ 
 }
 
-.wy-menu-vertical header,p.caption {
-  color: black;
-}
-
 /*.wy-menu-vertical ul:hover {
   color: #3253dc;
 }*/
