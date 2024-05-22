@@ -386,6 +386,10 @@ class NonMaxSuppression(torch.nn.Module):
         self.score_threshold = score_threshold
         self.max_output_boxes_per_class = max_output_boxes_per_class
 
+    @staticmethod
+    def _modify_y1x1y2x2_to_x1y1x2y2(boxes):
+        return boxes[:, torch.tensor([1, 0, 3, 2])]
+
     def forward(self, *args) -> torch.Tensor:
         """
         Forward-pass routine for NMS op
@@ -420,7 +424,7 @@ class NonMaxSuppression(torch.nn.Module):
         filtered_score_ind = (classes_score > self.score_threshold).nonzero()[:, 0]
         filtered_boxes = boxes[filtered_score_ind]
         filtered_classes_score = classes_score[filtered_score_ind]
-        res_ = torchvision.ops.nms(filtered_boxes, filtered_classes_score, self.iou_threshold)
+        res_ = torchvision.ops.nms(self._modify_y1x1y2x2_to_x1y1x2y2(filtered_boxes), filtered_classes_score, self.iou_threshold)
         return filtered_score_ind[res_]
 
 
