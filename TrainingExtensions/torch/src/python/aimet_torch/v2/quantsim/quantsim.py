@@ -149,6 +149,17 @@ class QuantizationSimModel(V1QuantizationSimModel):
         stream.write(f"{self.model}\n")
         return stream.getvalue()
 
+    def exclude_param_from_quantization(self, param_name_to_exclude: str):
+        """
+        Excludes all parameters matching 'param_name' from quantization
+        :param param_name_to_exclude: Name of the parameter to exclude
+        :return: None
+        """
+        for module in self.model.modules():
+            if isinstance(module, BaseQuantizationMixin):
+                if param_name_to_exclude in module.param_quantizers:
+                    module.param_quantizers[param_name_to_exclude] = None
+
     @staticmethod
     def compute_layer_encodings_for_sim(sim: 'QuantizationSimModel'):
         raise NotImplementedError("QuantizationSimModel.compute_layer_encodings_for_sim has been removed.")

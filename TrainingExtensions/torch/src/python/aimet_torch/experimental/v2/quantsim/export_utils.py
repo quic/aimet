@@ -43,7 +43,6 @@ from typing import Dict, List, Tuple
 
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantizationDataType
-from aimet_torch.v2.quantization.affine import GroupedBlockQuantizeDequantize, AffineQuantizerBase
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -114,6 +113,8 @@ def _get_activation_encodings(tensor_to_activation_encodings: Dict[str, List], t
 
 
 def _get_param_encodings(tensor_to_param_encodings: Dict[str, List], tensor_to_quantizer_map: Dict):
+    from aimet_torch.v2.quantization.affine import AffineQuantizerBase # pylint: disable=import-outside-toplevel
+
     param_encodings = []
     for tensor, encodings in tensor_to_param_encodings.items():
         assert tensor in tensor_to_quantizer_map
@@ -141,6 +142,8 @@ def _get_param_encodings(tensor_to_param_encodings: Dict[str, List], tensor_to_q
 
 
 def _handle_v2_quantizer(encoding_dict: Dict, encodings: List[Dict], quantizer):
+    from aimet_torch.v2.quantization.affine import GroupedBlockQuantizeDequantize # pylint: disable=import-outside-toplevel
+
     # TODO: enhance these checks for robustness in detecting per channel vs. per block vs. grouped block
     if not quantizer.block_size:
         if len(encodings) > 1:
