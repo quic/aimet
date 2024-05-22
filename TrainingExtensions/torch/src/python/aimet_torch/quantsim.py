@@ -984,25 +984,29 @@ class QuantizationSimModel:
                                    'param_encodings': param_encodings,
                                    'excluded_layers': excluded_layer_names}
 
-            encodings_dict_pytorch = {'version': quantsim.encoding_version,
-                                      'activation_encodings': activation_encodings_torch,
-                                      'param_encodings': param_encodings,
-                                      'excluded_layers': excluded_layer_names}
-
             if quantizer_args:
-                encodings_dict_pytorch.update({'quantizer_args': quantizer_args})
                 encodings_dict_onnx.update({'quantizer_args': quantizer_args})
 
             logger.info("Layers excluded from quantization: %s", excluded_layer_names)
 
             # export weight encodings to output json file
             encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
-            encoding_file_path_pytorch = os.path.join(path, filename_prefix + '_torch' + '.encodings')
             save_json_yaml(encoding_file_path, encodings_dict_onnx)
-            save_json_yaml(encoding_file_path_pytorch, encodings_dict_pytorch)
         else:
             _export_to_1_0_0(path, filename_prefix, activation_encodings_onnx, param_encodings, tensor_to_quantizer_map,
                              excluded_layer_names, quantizer_args)
+
+        # Export torch.encodings used for saving/loading common to 0.6.1 and 1.0.0 versions
+        encodings_dict_pytorch = {'version': quantsim.encoding_version,
+                                  'activation_encodings': activation_encodings_torch,
+                                  'param_encodings': param_encodings,
+                                  'excluded_layers': excluded_layer_names}
+
+        if quantizer_args:
+            encodings_dict_pytorch.update({'quantizer_args': quantizer_args})
+
+        encoding_file_path_pytorch = os.path.join(path, filename_prefix + '_torch' + '.encodings')
+        save_json_yaml(encoding_file_path_pytorch, encodings_dict_pytorch)
 
     @staticmethod
     def _get_tensor_to_consumer_map(op_to_io_tensor_map: Dict[str, Dict]) -> Dict[str, str]:
