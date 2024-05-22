@@ -62,8 +62,16 @@ def _flatten_nn_module_list(module):
 
 
 class BaseQuantizationMixin(abc.ABC):
-    """
-    Mixin that implements quantization on top of regular pytorch modules.
+    """Mixin that implements quantization on top of regular pytorch modules.
+
+    Attributes:
+        input_quantizers (nn.ModuleList): :class:`ModuleList` containing :class:`QuantizerBase` objects to be applied
+            to the layer's input tensors
+        output_quantizers (nn.ModuleList): :class:`ModuleList` containing :class:`QuantizerBase` objects to be applied
+            to the layer's output tensors
+        param_quantizers (nn.ModuleDict): :class:`ModuleDict` mapping parameter names to associated :class:`QuantizerBase`
+            objects
+
     """
 
     input_quantizers: nn.ModuleList
@@ -75,8 +83,14 @@ class BaseQuantizationMixin(abc.ABC):
         self.__quant_init__()
 
     def __quant_init__(self):
-        """
-        Initializer for quantized module. This method will be invoked right after __init__.
+        """Initializer for quantized module. This method will be invoked right after __init__.
+
+        This method initializes the :attr:`input_quantizers`, :attr:`output_quantizers`, and :attr:`param_quantizers`
+        structures to the appropriate sizes based on the number of input tensors, output tensors, and parameters of the
+        base :class:`nn.Module` class. All quantizers are initializd to ``None``.
+
+        For custom quantized classes, this method should be overridden to set the appropriate lengths of
+        :attr:`input_quantizers` and :attr:`output_quantizers` for the given base class.
         """
         self.param_quantizers = nn.ModuleDict({
             name: None for name, _ in self.named_parameters(recurse=False)
@@ -93,9 +107,11 @@ class BaseQuantizationMixin(abc.ABC):
 
     @abc.abstractmethod
     def quantized_forward(self, *args, **kwargs):
-        """
-        Forward function for quantized module.
-        This method will replace the original forward function.
+        """Forward function for quantized module.
+
+        This method will replace the original forward function of the base :class:`nn.Module` class and is
+        responsible for computing a quantized version of the base class' forward function using the configuration of
+        the layer's :class:`QuantizerBase` objects.
         """
 
     @contextlib.contextmanager
@@ -133,17 +149,20 @@ class BaseQuantizationMixin(abc.ABC):
 
     @contextlib.contextmanager
     def compute_encodings(self):
-        """
-        Enters the `compute_encodings` context for all `QuantizerBase` objects in the layer. Inside this context,
-        each quantizer will observe all inputs passed to the quantizer and will compute quantization encodings upon
-        exiting the context.
-        Examples::
+        """Enters the :meth:`compute_encodings` context for all :class:`QuantizerBase` objects in the layer.
+
+        Inside this context, each quantizer will observe all inputs passed to the quantizer and will compute
+        quantization encodings upon exiting the context.
+
+        Example:
+
             >>> qlinear = QuantizedLinear(10, 10)
             >>> qlinear.output_quantizers[0] = Quantize((1, ), 8, symmetric=False)
             >>> with qlinear.compute_encodings():
             >>>     qlinear(torch.randn(16, 10))
             >>> print(qlinear.output_quantizers[0].is_initialized())
             True
+
         """
         self._compute_param_encodings(overwrite=True)
 
@@ -179,15 +198,16 @@ class BaseQuantizationMixin(abc.ABC):
 
     @classmethod
     def from_module(cls, module: nn.Module):
-        r"""
-        Create an instance of quantized module from a regular module instance. The resulting quantized module contains
-        the same attributes and parameters as the original module, but may be assigned input, output and parameter
-        quantizers.
+        r"""Create an instance of quantized module from a regular module instance.
+
+        The resulting quantized module contains the same attributes and parameters as the original module, but may
+        be assigned input, output and parameter quantizers.
 
         :param module: Floating point module to quantize
         :return: Quantized version of the original module
 
-        Examples::
+        Example:
+
             >>> linear = torch.nn.linear(10, 10)
             >>> quantized_linear = FakeQuantizationMixin.from_module(linear)
             >>> print(quantized_linear.weight is linear.weight)
@@ -364,8 +384,20 @@ class BaseQuantizationMixin(abc.ABC):
             quantizer._allow_overwrite = allow_overwrite # pylint:disable = protected-access
 
     def get_original_module(self) -> nn.Module:
-        """
-        Returns the floating point version of quantized module
+        """Returns the floating point version of the quantized module
+
+        Returns:
+            A floating point module with quantizers removed
+
+        Example:
+
+            >>> qlinear = QuantizedLinear(10, 20, bias=False)
+            >>> linear = qlinear.get_original_module()
+            >>> linear
+            Linear(in_features=10, out_features=20, bias=False)
+            >>> linear.weight is qlinear.weight
+            True
+
         """
         # pylint: disable=protected-access
 
