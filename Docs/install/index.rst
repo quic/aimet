@@ -70,10 +70,7 @@ For other aimet variants, install the latest version from the .whl files hosted 
     python3 -m pip install |download_url|\ |version|/aimet_torch-torch_gpu\_\ |version|\ |whl_suffix|
     # Pytorch 1.13 CPU only
     python3 -m pip install |download_url|\ |version|/aimet_torch-torch_cpu\_\ |version|\ |whl_suffix|
-    # Pytorch 2.1 with CUDA 11.x
-    python3 -m pip install |download_url|\ |version|/aimet_torch-torch_gpu-pt21\_\ |version|\ |whl_suffix|
-    # Pytorch 2.1 CPU only
-    python3 -m pip install |download_url|\ |version|/aimet_torch-torch_cpu-pt21\_\ |version|\ |whl_suffix|
+
 
 **TensorFlow**
 
