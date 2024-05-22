@@ -35,15 +35,16 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Main class for pattern match based graph searcher"""
-
-from typing import List
+from typing import List, Optional
 import itertools
 from collections import deque
 from aimet_common.graph_pattern_matcher import PatternMatcher
 from aimet_common.utils import AimetLogger
+from aimet_common.connected_graph.operation import Op
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
+USE_LEGACY_GRAPH_SEARCHER = False
 
 class SlidingWindow:
     """
@@ -118,6 +119,12 @@ class GraphSearcher:
         self._patterns_with_callbacks = patterns_with_callback
         self.sliding_window = None
         self.window_already_checked = set()
+        self.type_to_op_dict = {}
+        for op in conn_graph.get_all_ops().values():
+            if op.type in self.type_to_op_dict:
+                self.type_to_op_dict[op.type].append(op)
+            else:
+                self.type_to_op_dict[op.type] = [op]
 
     def _find_patterns_apply_actions(self, op,
                                      pattern_matcher: PatternMatcher,
@@ -182,26 +189,78 @@ class GraphSearcher:
             string_of_sliding_window_op_names += op.name
         return string_of_sliding_window_op_names
 
-    def find_all_patterns_in_graph_apply_actions(self, ignore=None):
+    # pylint: disable=too-many-nested-blocks
+    def find_all_patterns_in_graph_apply_actions(self, ignore: Optional[Op]=None):
         """
-        Finds corresponding op sequences and apply action.
+        Find corresponding op sequences and apply actions.
         :param ignore: List of operations to ignore during searching
-        :return: None
         """
 
-        # Find the input node(s) in the graph
-        input_nodes = []
-        for op in self._connected_graph.get_all_ops().values():
-            if any(t.is_model_input for t in op.inputs):
-                input_nodes.append(op)
+        if USE_LEGACY_GRAPH_SEARCHER:
+            # Find the input node(s) in the graph
+            input_nodes = []
+            for op in self._connected_graph.get_all_ops().values():
+                if any(t.is_model_input for t in op.inputs):
+                    input_nodes.append(op)
 
-        # define pattern matcher for graph search and set the sliding window length
-        pattern_matcher = PatternMatcher(self._patterns_with_callbacks)
-        self.sliding_window = SlidingWindow(pattern_matcher.get_pattern_max_length())
+            # define pattern matcher for graph search and set the sliding window length
+            pattern_matcher = PatternMatcher(self._patterns_with_callbacks)
+            self.sliding_window = SlidingWindow(pattern_matcher.get_pattern_max_length())
 
-        # find layers of interest
-        for op in input_nodes:
-            visited_nodes = set()
-            # perform DFS with sliding window
-            GraphSearcher._find_patterns_apply_actions(self, op, pattern_matcher,
-                                                       visited_nodes, ignore=ignore)
+            # find layers of interest
+            for op in input_nodes:
+                visited_nodes = set()
+                # perform DFS with sliding window
+                GraphSearcher._find_patterns_apply_actions(self, op, pattern_matcher,
+                                                           visited_nodes, ignore=ignore)
+
+        else:
+            if ignore is None:
+                ignore = []
+
+            # Search patterns starting with longer patterns first
+            for pattern_type in sorted(self._patterns_with_callbacks, key=lambda l: len(l.pattern), reverse=True):
+                if pattern_type.pattern[0] in self.type_to_op_dict:
+                    # One or more ops in the graph correspond to the current pattern's starting op type
+                    for op in self.type_to_op_dict[pattern_type.pattern[0]]:
+                        matched_ops = self._match_pattern(op, pattern_type.pattern, ignore)
+                        if matched_ops:
+                            for matched_ops_list in matched_ops:
+                                pattern_type.action(pattern_type, matched_ops_list)
+                                logger.debug('found match: %s', matched_ops_list)
+
+    # pylint: disable=too-many-branches
+    def _match_pattern(self, op, pattern, ignored_ops):
+        if not pattern:
+            return []
+
+        matched_ops = None
+        if op in ignored_ops:
+            if not op.output:
+                return None
+            for child_op in op.output.consumers:
+                matched_child_ops = self._match_pattern(child_op, pattern, ignored_ops)
+                if matched_child_ops is not None:
+                    if matched_ops is None:
+                        matched_ops = []
+                    matched_ops.extend(matched_child_ops)
+            return matched_ops
+
+        if op.type != pattern[0]:
+            return None
+
+        if len(pattern) > 1:
+            # Still more to match
+            if not op.output:
+                return None
+            for child_op in op.output.consumers:
+                matched_child_ops = self._match_pattern(child_op, pattern[1:], ignored_ops)
+                if matched_child_ops:
+                    if matched_ops is None:
+                        matched_ops = []
+                    for matched_child_op_list in matched_child_ops:
+                        matched_ops.append([op] + matched_child_op_list)
+        else:
+            matched_ops = [[op]]
+
+        return matched_ops
