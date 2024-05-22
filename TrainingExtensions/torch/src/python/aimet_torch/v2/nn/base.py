@@ -276,8 +276,10 @@ class BaseQuantizationMixin(abc.ABC):
                     # Dangling quantizers have to be removed when importing non-partial encodings
                     self.input_quantizers[i] = None
                 continue
-            if quantizer is None and strict:
-                raise RuntimeError
+            if quantizer is None:
+                if strict:
+                    raise RuntimeError
+                continue
             if isinstance(encoding, dict):
                 encoding = [encoding]
             quantizer.set_legacy_encodings(encoding)
@@ -324,8 +326,10 @@ class BaseQuantizationMixin(abc.ABC):
                     # Dangling quantizers have to be removed when importing non-partial encodings
                     self.output_quantizers[i] = None
                 continue
-            if quantizer is None and strict:
-                raise RuntimeError
+            if quantizer is None:
+                if strict:
+                    raise RuntimeError
+                continue
             if isinstance(encoding, dict):
                 encoding = [encoding]
             quantizer.set_legacy_encodings(encoding)
@@ -372,8 +376,10 @@ class BaseQuantizationMixin(abc.ABC):
                     # Dangling quantizers have to be removed when importing non-partial encodings
                     self.param_quantizers[param_name] = None
                 continue
-            if quantizer is None and strict:
-                raise RuntimeError
+            if quantizer is None:
+                if strict:
+                    raise RuntimeError
+                continue
             if isinstance(encoding, dict):
                 encoding = [encoding]
             quantizer.set_legacy_encodings(encoding)
