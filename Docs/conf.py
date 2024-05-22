@@ -172,7 +172,6 @@ htmlhelp_basename = 'AIMETdoc'
 rst_epilog = """
 .. |author| replace:: {author}
 .. |project| replace:: {project}
-.. |version| replace:: {version}
 .. |default-quantsim-config-file| replace:: aimet_common/quantsim_config/default_config.json
 """.format(project=project, author=author, version=version)
 
