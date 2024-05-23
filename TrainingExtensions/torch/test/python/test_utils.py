@@ -491,7 +491,7 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         """
         Test in_eval_mode functionality for given model
         """
-        model = TinyModel().eval()
+        model = TinyModel()
         model_input = torch.randn(1, 3, 32, 32)
         #1 model in eval mode in the beginning
         model.eval()
@@ -518,11 +518,24 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
             pass
         _assert_mode_recursive(model, training=True)
 
+        #4 One of the submodules are set to different mode
+        model.train()
+        model.fc.add_module('submodule', torch.nn.Identity())
+        model.fc.submodule.eval()
+        with utils.in_eval_mode(model):
+            model(model_input)
+            _assert_mode_recursive(model, training=False)
+        for module in model.modules():
+            if module is model.fc.submodule:
+                assert not module.training
+            else:
+                assert module.training
+
     def test_model_in_train_mode(self):
         """
         Test in_train_mode functionality for given model
         """
-        model = TinyModel().eval()
+        model = TinyModel()
         model_input = torch.randn(1, 3, 32, 32)
         #1 model in eval mode in the beginning
         model.eval()
@@ -548,6 +561,19 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         except:
             pass
         _assert_mode_recursive(model, training=False)
+
+        #4 One of the submodules are set to different mode
+        model.eval()
+        model.fc.add_module('submodule', torch.nn.Identity())
+        model.fc.submodule.train()
+        with utils.in_train_mode(model):
+            model(model_input)
+            _assert_mode_recursive(model, training=True)
+        for module in model.modules():
+            if module is model.fc.submodule:
+                assert module.training
+            else:
+                assert not module.training
 
     def test_is_torch_module(self):
         """ test _is_torch_nn_module() utility """
