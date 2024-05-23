@@ -849,17 +849,19 @@ def in_train_mode(module: Union[torch.nn.Module, Iterable[torch.nn.Module]]):
 @contextlib.contextmanager
 def _in_mode(modules: Union[torch.nn.Module, Iterable[torch.nn.Module]], train: bool):
     if isinstance(modules, torch.nn.Module):
-        modules = [modules]
+        modules = (modules,)
 
-    original_modes = [module.training for module in modules]
+    modules = set(itertools.chain(*(m.modules() for m in modules)))
+
+    original_modes = {module: module.training for module in modules}
 
     try:
         for module in modules:
-            module.train(mode=train)
+            module.training = train
         yield
     finally:
-        for module, original_mode in zip(modules, original_modes):
-            module.train(mode=original_mode)
+        for module, original_mode in original_modes.items():
+            module.training = original_mode
 
 
 def is_torch_nn_module(module: torch.nn.Module) -> bool:
