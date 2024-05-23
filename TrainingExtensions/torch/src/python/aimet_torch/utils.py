@@ -794,8 +794,7 @@ def create_encoding_from_dict(encoding_dict: dict) -> (libpymo.TfEncoding, bool)
     log_with_error_and_assert_if_false(encoding_dict.get('is_symmetric') in ['True', 'False'],
                                        logger,
                                        f'Unexpected value for is_symmetric: {encoding_dict.get("is_symmetric")}')
-    is_symmetric = encoding_dict.get('is_symmetric') == 'True'
-    return encoding, is_symmetric
+    return encoding
 
 
 def compute_encoding_for_given_bitwidth(data: np.ndarray, bitwidth: int, quant_scheme: QuantScheme,
@@ -1194,6 +1193,42 @@ def get_v1_quant_scheme_for_initialization(quant_scheme: QuantScheme) -> QuantSc
         return QuantScheme.post_training_tf_enhanced
 
     return quant_scheme
+
+
+def _validate_is_symmetric_flag(quantizer: TensorQuantizer, encoding_dict: Dict, strict: bool):
+    """
+    sub utility of 'validate_is_symmetric_flag'
+    """
+    if 'is_symmetric' in encoding_dict:
+        is_symmetric = encoding_dict['is_symmetric'] == 'True'
+        if quantizer.use_symmetric_encodings != is_symmetric:
+            # If not strict, raise a warning and override the quantizer
+            # setting with provided 'is_symmetric' flag from encoding_dict
+            if not strict:
+                logger.warning("Using Provided 'is_symmetric' flag in encodings (set to %s) "
+                               "which doesn't match with quantizer setting (set to %s), to "
+                               "compute partial encodings", is_symmetric, quantizer.use_symmetric_encodings)
+            else:
+                raise AssertionError("Provided 'is_symmetric' flag in encodings (set to %s) doesn't match with "
+                                     "quantizer setting (set to %s)" % (is_symmetric, quantizer.use_symmetric_encodings))
+    else:
+        raise AttributeError("Provided encoding doesn't have 'is_symmetric' flag")
+
+
+def validate_is_symmetric_flag(quantizer: TensorQuantizer, encoding_dict: Dict, strict: bool = True):
+    """
+    Validate 'is_symmetric' flag from encoding_dict with quantizer.use_symmetric_encodings and set the later accordingly
+    :param quantizer: Quantizer for which use_symmetric_encodings needs to be validated and set
+    :param encoding_dict: encoding_dict from external overrides
+    :param strict: flag to decide whether to raise an error or soft warning
+    :return:
+    """
+    if not (encoding_dict.get('max', 0) == 0 and encoding_dict.get('min', 0) == 0) and encoding_dict.get('delta', 0) != 0:
+        # In case of full encoding, error out when quantizer setting doesn't match with provided 'is_symmetric' flag
+        _validate_is_symmetric_flag(quantizer, encoding_dict, strict=True)
+
+    # In case of partial encodings, use is_symmetric from encodings provided to compute full encoding
+    _validate_is_symmetric_flag(quantizer, encoding_dict, strict=strict)
 
 
 def compute_partial_encoding(quantizer: TensorQuantizer, encoding_dict: Dict) -> Dict:
