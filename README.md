@@ -35,19 +35,23 @@ We also provide recipes for users to quantize floating point models using AIMET.
 - [License](#license)
 
 ## Quick Installation
-#### The following environment is supported by our pypi package
-* * 64-bit Intel x86-compatible processor
-* * Linux Ubuntu 20.04 LTS
-* * Python 3.8
-* * Torch 1.13
-* * Cuda 11.8
-* * bash command shell
+
+The AIMET PyTorch GPU PyPI packages are available for environments that meet the following requirements:
+
+* 64-bit Intel x86-compatible processor
+* Linux Ubuntu 22.04 LTS [Python 3.10] or Linux Ubuntu 20.04 LTS [Python 3.8]
+* Torch 1.13+cu117
 
 #### Installation
 ```
 apt-get install liblapacke
 python3 -m pip install aimet-torch
 ```
+
+To install other AIMET variants and versions, please follow one of the links below for instructions:
+- [Install and run AIMET in *Ubuntu* environment](https://quic.github.io/aimet-pages/releases/latest/install)
+- [Build, install and run AIMET from source in *Docker* environment](./packaging/docker_install.md)
+
 
 ## Why AIMET?
 
@@ -218,14 +222,6 @@ accuracy within approx. 1% of the original uncompressed model.</p>
 
 <br>
 
-## Installation Instructions
-To install and use the pre-built version of the AIMET package, please follow one of the below links:
-- [Install and run AIMET in *Ubuntu* environment](https://quic.github.io/aimet-pages/releases/latest/install)
-- [Install and run AIMET in *Google Colab* environment](./packaging/google_colab/google_colab_install.md)
-
-To build, modify (*optionally*) and use the latest AIMET source code, please follow one of the below links:
-- [Instructions to build, install and run AIMET in *Docker* environment](./packaging/docker_install.md)
-- [Instructions to build, install and run AIMET in *Google Colab* environment](./packaging/google_colab/google_colab_development.md)
 
 ## Resources
 * [User Guide](https://quic.github.io/aimet-pages/releases/latest/user_guide/index.html)
