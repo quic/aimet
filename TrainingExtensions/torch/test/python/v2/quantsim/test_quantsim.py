@@ -57,7 +57,7 @@ def encodings_are_close(quantizer_1: AffineQuantizerBase, quantizer_2: AffineQua
            and quantizer_1.symmetric == quantizer_2.symmetric
 
 
-class TestPercentileScheme:
+class TestQuantsim:
     """ Test Percentile quantization scheme """
 
     def test_set_percentile_value(self):
@@ -773,6 +773,33 @@ class TestPercentileScheme:
 
             out4 = qsim.model(dummy_input)
             assert torch.equal(out1, out4)
+
+
+    def test_quantsim_with_unused_modules(self):
+        """
+        Given: A model with unused layer
+        When: Instantiate quantsim
+        Then: 1) No error is not raised
+              2) Length of input quantizers is equal to the length defined in __quant_init__
+              3) Input quantizers are None
+        """
+
+        model = test_models.ModelWithUnusedAdd()
+        sim = QuantizationSimModel(model, dummy_input=torch.randn(10, 10))
+        assert len(sim.model.add.input_quantizers) == 2
+        assert type(sim.model.add.input_quantizers[0]) is type(sim.model.add.input_quantizers[1])
+
+        """
+        Given: A model with unused layer
+        When: Instantiate quantsim
+        Then: 1) No error is not raised
+              2) Length of output quantizers is equal to the length defined in __quant_init__
+              3) Output quantizers are not None
+        """
+        model = test_models.ModelWithUnusedRNN()
+        sim = QuantizationSimModel(model, dummy_input=torch.randn(10, 10))
+        assert len(sim.model.rnn.output_quantizers) == 2
+        assert type(sim.model.rnn.output_quantizers[0]) is type(sim.model.rnn.output_quantizers[1])
 
 
 class TestQuantsimUtilities:
