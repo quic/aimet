@@ -388,6 +388,14 @@ class QuantizedSigmoid(_QuantizedUnaryOpMixin, nn.Sigmoid):
         return (x, ), {}
 
 
+@QuantizationMixin.implements(nn.Tanh)
+class QuantizedTanh(_QuantizedUnaryOpMixin, nn.Tanh):
+    """ Quantized Tanh """
+
+    def get_functional_args(self, x):
+        return (x,), {}
+
+
 @QuantizationMixin.implements(aimet_ops.Add)
 class QuantizedAdd(_QuantizedBinaryOpMixin, aimet_ops.Add):
     """ Quantized Add """
