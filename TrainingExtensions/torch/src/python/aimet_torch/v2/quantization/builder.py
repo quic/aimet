@@ -226,12 +226,17 @@ class LazyQuantizeWrapper(torch.nn.Module):
             else:
                 raise RuntimeError
 
+        # For unused modules, quantsim assumes # inputs = # outputs = 1
+        # If this is incorrect, propagate the configuration of the last input/output quantizers to the remaining
+        # quantizer positions
         for i, _ in list(enumerate(quantized_module.input_quantizers)):
-            quantizer = self.input_quantizers[i].realize()
+            q_idx = min(i, len(self.input_quantizers) - 1)
+            quantizer = self.input_quantizers[q_idx].realize()
             set_recursive(quantized_module.input_quantizers, i, quantizer)
 
         for i, _ in list(enumerate(quantized_module.output_quantizers)):
-            quantizer = self.output_quantizers[i].realize()
+            q_idx = min(i, len(self.input_quantizers) - 1)
+            quantizer = self.output_quantizers[q_idx].realize()
             set_recursive(quantized_module.output_quantizers, i, quantizer)
 
         for param_name, quant_builder in self.param_quantizers.items():
