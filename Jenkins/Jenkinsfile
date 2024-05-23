@@ -766,7 +766,7 @@ pipeline {
                                     script {
                                         def docker_script = 'python3 -m venv --system-site-packages --clear $PWD/venv ' +
                                             '&& source $PWD/venv/bin/activate ' +
-                                            '&& python3 -m pip install --upgrade pip setuptools ' +
+                                            '&& python3 -m pip install --upgrade pip setuptools==69.5.1 ' +
                                             '&& cmake -S . -B ./build-$AIMET_VARIANT ' +
                                                 '-DENABLE_CUDA=$([[ "$AIMET_VARIANT" =~ "gpu" ]] &&  echo 1 || echo 0) ' +
                                                 '-DENABLE_TORCH=$([[ "$AIMET_VARIANT" =~ "torch" ]] && echo 1 || echo 0) ' +
