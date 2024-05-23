@@ -48,6 +48,8 @@ from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
 from aimet_torch.weight_padding_utils import recompute_scale, recompute_encodings, weight_pad, WeightPaddingParams
 
+from models.test_models import TinyModel
+
 
 def evaluate(model: torch.nn.Module, dummy_input: torch.Tensor):
     """
@@ -186,8 +188,8 @@ class TestWeightPadUtils:
                     assert val % 16 == 0
 
     def test_weight_pad_in_place_per_tensor(self):
-        model = models.resnet50(pretrained=True)
-        dummy_input = torch.randn(1, 3, 224, 224)
+        model = TinyModel()
+        dummy_input = torch.randn(1, 3, 32, 32)
         sim = QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced,
                                    default_param_bw=16, default_output_bw=16)
         sim.compute_encodings(evaluate, dummy_input)
@@ -215,8 +217,8 @@ class TestWeightPadUtils:
                     assert val % 16 == 0
 
     def test_weight_pad_export_per_tensor(self):
-        model = models.resnet50(pretrained=True)
-        dummy_input = torch.randn(1, 3, 224, 224)
+        model = TinyModel()
+        dummy_input = torch.randn(1, 3, 32, 32)
         sim = QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced,
                                    default_param_bw=16, default_output_bw=16)
         sim.compute_encodings(evaluate, dummy_input)
