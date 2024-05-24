@@ -155,6 +155,7 @@ class QuantizationSimModel(V1QuantizationSimModel):
         :param param_name_to_exclude: Name of the parameter to exclude
         :return: None
         """
+        super().exclude_param_from_quantization(param_name_to_exclude)
         for module in self.model.modules():
             if isinstance(module, BaseQuantizationMixin):
                 if param_name_to_exclude in module.param_quantizers:
