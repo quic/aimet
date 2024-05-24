@@ -60,7 +60,6 @@ from aimet_common.utils import profile as _profile
 import aimet_common.libpymo as libpymo
 from aimet_torch import elementwise_ops
 from aimet_torch.tensor_quantizer import TensorQuantizer
-from aimet_torch.v2.utils import _ContextManager
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
@@ -1224,6 +1223,7 @@ def profile(label: str, file: Union[str, os.PathLike, TextIO] = None, new_file: 
         appended to. This flag is only valid when ``file`` is a path, not a file-like object.
     :param logger: If logger is provided, profiling string will also be printed with INFO logging level
     """
+    from aimet_torch.v2.utils import _ContextManager # pylint: disable=import-outside-toplevel
     if not torch.cuda.is_available():
         return profile_async(label, file, new_file, logger)
 
@@ -1241,5 +1241,6 @@ def profile_async(label: str, file: Union[str, os.PathLike, TextIO] = None, new_
         appended to. This flag is only valid when ``file`` is a path, not a file-like object.
     :param logger: If logger is provided, profiling string will also be printed with INFO logging level
     """
+    from aimet_torch.v2.utils import _ContextManager # pylint: disable=import-outside-toplevel
     ctx = _profile(label, file, new_file, logger, cleanup=None)
     return _ContextManager(action=ctx.__enter__, cleanup=lambda: ctx.__exit__(None, None, None)) # pylint: disable=no-member
