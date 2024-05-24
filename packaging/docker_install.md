@@ -118,10 +118,10 @@ Code may *optionally* be developed inside a development docker container. This s
 
 ### Set variant
 Set the `<variant_string>` to ONE of the following depending on your desired variant
-- For the PyTorch 1.13 GPU variant, use `"torch-gpu"`
-- For the PyTorch 1.13 CPU variant, use `"torch-cpu"`
-- For the PyTorch 2.1 GPU variant, use `"torch-gpu-pt21"`
-- For the PyTorch 2.1 CPU variant, use `"torch-cpu-pt21"`
+- For the PyTorch 2.1 GPU variant, use `"torch-gpu"`
+- For the PyTorch 2.1 CPU variant, use `"torch-cpu"`
+- For the PyTorch 1.13 GPU variant, use `"torch-gpu-pt113"`
+- For the PyTorch 1.13 CPU variant, use `"torch-cpu-pt113"`
 - For the TensorFlow GPU variant, use `"tf-gpu"`
 - For the TensorFlow CPU variant, use `"tf-cpu"`
 - For the ONNX GPU variant, use `"onnx-gpu"`
