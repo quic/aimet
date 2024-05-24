@@ -41,7 +41,7 @@ import torch
 import torch.nn
 
 # Import AIMET specific modules
-import aimet_common.AimetTensorQuantizer as AimetTensorQuantizer
+import aimet_common.aimet_tensor_quantizer as AimetTensorQuantizer
 from aimet_common.defs import AdaroundConstants, QuantizationDataType, QuantScheme, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_torch.tensor_quantizer import TensorQuantizer
 from aimet_torch.quantsim_straight_through_grad import broadcast_to_tensor
@@ -63,7 +63,7 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         """
         #TODO Remove the hardcoding of data_type
         super().__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
-                                                      enabled_by_default, QuantizationDataType.int)
+                         enabled_by_default, QuantizationDataType.int)
         self.encoding = None
         # V in System HLD
         self.alpha = None
