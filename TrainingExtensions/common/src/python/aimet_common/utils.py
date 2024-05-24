@@ -37,6 +37,7 @@
 """ Utility classes and functions that are used by NightlyTests files as well as
     common to both PyTorch and TensorFlow. """
 
+import sys
 from contextlib import contextmanager
 import json
 import logging
@@ -49,7 +50,7 @@ import subprocess
 import threading
 import time
 from enum import Enum
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, TextIO, Union, Any
 import multiprocessing
 import yaml
 from tqdm import tqdm
@@ -459,26 +460,44 @@ def convert_configs_values_to_bool(dictionary: Dict):
         else:
             pass
 
+
 @contextmanager
-def profile(file_path_and_name: str, label: str, new_file: bool = False, logger: Optional[logging.Logger] = None):
+def profile(label: str, file: Union[str, os.PathLike, TextIO] = None, new_file: bool = False, logger: Optional[logging.Logger] = None,
+            cleanup: Callable[[], Any] = None):
     """
     Profile a block of code and save profiling information into a file.
 
-    :param file_path_and_name: File path and name to save profiling information to
     :param label: String label associated with the block of code to profile (shows up in the profiling print)
+    :param file: File path and name or a file-like object to send output text to (Default: stdout)
     :param new_file: True if a new file is to be created to hold profiling info, False if an existing file should be
-        appended to
+        appended to. This flag is only valid when ``file`` is a path, not a file-like object.
     :param logger: If logger is provided, profiling string will also be printed with INFO logging level
+    :param cleanup: If provided, this will be called before ending profiling. This can be useful for synchronizing cuda streams.
     """
-    start = time.time()
-    yield
-    end = time.time()
-    profiling_string = f'{label}: {end - start}'
-    if logger:
-        logger.info(profiling_string)
-    if new_file:
-        with open(file_path_and_name, 'w') as f:
-            print(profiling_string, file=f)
-    else:
-        with open(file_path_and_name, 'a') as f:
-            print(f'{label}: {end - start}', file=f)
+    should_close = False
+    if isinstance(file, (str, os.PathLike)):
+        mode = 'w' if new_file else 'a'
+        file = open(file, mode) # pylint: disable=consider-using-with
+        should_close = True
+    elif file is None:
+        file = sys.stdout
+
+    assert hasattr(file, 'write')
+
+    try:
+        with Spinner(label):
+            start = time.perf_counter()
+            yield
+            if cleanup:
+                cleanup()
+            end = time.perf_counter()
+
+        profiling_string = f'{label}: {end - start:.2f}s'
+
+        if logger:
+            logger.info(profiling_string)
+
+        print(profiling_string, file=file)
+    finally:
+        if should_close:
+            file.close()

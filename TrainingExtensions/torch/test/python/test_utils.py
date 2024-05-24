@@ -45,6 +45,7 @@ import torch
 import torch.nn
 import torchvision
 import torch.nn.functional as F
+import tempfile
 
 import aimet_torch.model_validator.validation_checks
 import aimet_torch.utils
@@ -733,6 +734,40 @@ class MiniModel(torch.nn.Module):
         for quantizer in all_quantizers:
             assert not quantizer.enabled
 
+
 def _assert_mode_recursive(root: torch.nn.Module, training: bool):
     for module in root.modules():
         assert module.training == training
+
+
+def test_profile():
+    from aimet_common.utils import AimetLogger
+    logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        file_path_and_name = os.path.join(tmpdir, 'temp_profile.txt')
+        with utils.profile('profile 1', file_path_and_name, new_file=True, logger=logger):
+            _ = 1 + 1
+        with utils.profile('profile 2', file_path_and_name, logger=logger):
+            _ = 1 + 1
+        with open(file_path_and_name, 'r') as f:
+            lines = f.readlines()
+        assert len(lines) == 2
+        assert lines[0].startswith('profile 1: ')
+        assert lines[1].startswith('profile 2: ')
+
+        with utils.profile('profile 3', file_path_and_name, new_file=True, logger=logger):
+            _ = 1 + 1
+
+        @utils.profile('profile 4', file_path_and_name)
+        def foobar():
+            _ = 1 + 1
+
+        foobar()
+        with open(file_path_and_name, 'r') as f:
+            lines = f.readlines()
+        assert len(lines) == 2
+        assert lines[0].startswith('profile 3: ')
+        assert lines[1].startswith('profile 4: ')
+
+        with utils.profile('profile 4'):
+            _ = 1 + 1
