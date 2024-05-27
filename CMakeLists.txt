@@ -304,9 +304,15 @@ else()
     # FIXME
     # Better to include patchefl into docker image, although seems it is not trivial
     include(FetchContent)
-    FetchContent_Declare(patchelf
-        URL "https://github.com/NixOS/patchelf/releases/download/0.15.0/patchelf-0.15.0-x86_64.tar.gz"
-    )
+    if (DEFINED PATCHELF_INTERNAL_URL)
+        FetchContent_Declare(patchelf
+        URL "${PATCHELF_INTERNAL_URL}/patchelf-0.15.0-x86_64.tar.gz"
+        )
+    else()
+        FetchContent_Declare(patchelf
+            URL "https://github.com/NixOS/patchelf/releases/download/0.15.0/patchelf-0.15.0-x86_64.tar.gz"
+        )
+    endif()
     if(NOT patchelf_POPULATED)
         FetchContent_Populate(patchelf)
         set(PATCHELF_EXE ${patchelf_SOURCE_DIR}/bin/patchelf)
