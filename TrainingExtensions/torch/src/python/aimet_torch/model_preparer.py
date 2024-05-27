@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -346,9 +346,9 @@ def conv2d_create_module(node: torch.fx.node) -> torch.nn.Module:
 
         module = torch.nn.Conv2d(**kwargs)
         # Replace nn.Conv2D params using F.Conv2D arguments
-        module.weight = params['weight']
+        module.weight = torch.nn.Parameter(params['weight'])
         if bias:
-            module.bias = params['bias']
+            module.bias = torch.nn.Parameter(params['bias'])
     return module
 
 

@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -56,11 +56,16 @@ from torch.utils.data import DataLoader
 
 from aimet_common.defs import QuantScheme
 from aimet_torch import elementwise_ops
-from models.test_models import ModelWithFunctionalReLU, SingleResidual, ModelWithDuplicateReLU, \
-    ConcatModel
+from models.test_models import (
+    ModelWithFunctionalReLU,
+    SingleResidual,
+    ModelWithDuplicateReLU,
+    ConcatModel,
+    CustomFunctionalConv,
+)
 from aimet_torch.model_validator.model_validator import ModelValidator
 from aimet_torch.quantsim import QuantizationSimModel, QuantParams
-from aimet_torch.utils import create_fake_data_loader, get_device
+from aimet_torch.utils import create_fake_data_loader, get_device, in_eval_mode
 from aimet_torch.model_preparer import prepare_model, _find_functional_name_for_node
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.cross_layer_equalization import  equalize_model
@@ -1925,3 +1930,13 @@ class TestFX:
                     assert inp_quant.enabled == False
                 for out_quant in wrapper.output_quantizers:
                     assert out_quant.enabled == True
+
+    def test_prepare_custom_functional_conv(self):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        dummy_input = torch.rand(1, 3, 16, 16, device=device)
+        original_model = CustomFunctionalConv().to(device)
+
+        with in_eval_mode(original_model):
+            prepared_model = prepare_model(original_model)
+            assert isinstance(prepared_model.module_conv2d, torch.nn.Conv2d)
+            assert torch.allclose(original_model(dummy_input), prepared_model(dummy_input))
