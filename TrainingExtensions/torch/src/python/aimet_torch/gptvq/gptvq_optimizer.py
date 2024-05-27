@@ -38,7 +38,7 @@
 
 import math
 from functools import reduce
-from typing import Optional
+from typing import Optional, Callable, Any
 
 import psutil
 import torch
@@ -70,7 +70,7 @@ class GPTVQOptimizer:
                      quant_module: BaseQuantizationMixin,
                      gptvq_params: GPTVQParameters,
                      sim: QuantizationSimModel,
-                     forward_fn: torch.nn.functional,
+                     forward_fn: Callable[[nn.Module, Any], Any],
                      cached_dataset: Dataset):
         """
         Run layer-wise GPTVQ optimization
