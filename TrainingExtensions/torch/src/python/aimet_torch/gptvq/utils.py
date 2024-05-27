@@ -35,7 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """Utility methods for working with GPTVQ"""
-from typing import Optional
+from typing import Optional, List, Tuple
 
 import torch
 from torch.linalg import LinAlgError
@@ -124,7 +124,7 @@ def manipulate_inverse_hessian_diagonal(tensor: torch.Tensor,
 
 
 def generate_tensor_chunks(tensor: torch.Tensor,
-                           chunk_size: Optional[int]) -> list[torch.Tensor]:
+                           chunk_size: Optional[int]) -> List[torch.Tensor]:
     """
     Generate chunks of torch.Tensor
 
@@ -140,7 +140,7 @@ def generate_tensor_chunks(tensor: torch.Tensor,
 
 def generate_hessian_chunks(hessian: torch.Tensor,
                             num_of_tensor_chunks: int,
-                            chunk_size: Optional[int]) -> list[torch.Tensor]:
+                            chunk_size: Optional[int]) -> List[torch.Tensor]:
     """
     Generate chunks of diagonal of inverse Hessian tensor
 
@@ -160,7 +160,7 @@ def generate_hessian_chunks(hessian: torch.Tensor,
 
 def prepare_tensor_and_hessian_chunks(tensor: torch.Tensor,
                                       hessian: torch.Tensor,
-                                      chunk_size: Optional[int]) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
+                                      chunk_size: Optional[int]) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
     """
     Use chunking for better memory management and return tensor and hessian chunks
 

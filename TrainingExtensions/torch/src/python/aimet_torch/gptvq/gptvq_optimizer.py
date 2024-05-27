@@ -38,7 +38,7 @@
 
 import math
 from functools import reduce
-from typing import Optional, Callable, Any
+from typing import Optional, Callable, Any, Tuple
 
 import psutil
 import torch
@@ -327,7 +327,7 @@ class GPTVQOptimizer:
         return can_cache_data
 
     @staticmethod
-    def _place_cached_acts_data(inp_data: torch.Tensor, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+    def _place_cached_acts_data(inp_data: torch.Tensor, device: torch.device) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Function decides whether cached activation data can be placed on device or not. If yes, it puts
         cached activation data to given device. If there is not enough device memory, it keeps the
