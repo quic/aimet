@@ -172,7 +172,7 @@ class GPTVQOptimizer:
                                                  assignment_chunk_size=gptvq_params.assignment_chunk_size,
                                                  kmeans_iteration=gptvq_params.num_of_kmeans_iterations)
 
-                    codebook = cls._quantize_dequantize_weight_block(
+                    codebook = cls._quantize_dequantize_codebook(
                         codebook,
                         quantizer=module.param_quantizers["weight"],
                         num_blocks_per_column=num_blocks_per_column,
@@ -240,25 +240,25 @@ class GPTVQOptimizer:
         return centroids
 
     @staticmethod
-    def _quantize_dequantize_weight_block(weight_block: torch.Tensor,
-                                          quantizer: nn.Module,
-                                          num_blocks_per_column: int) -> torch.Tensor:
+    def _quantize_dequantize_codebook(codebook: torch.Tensor,
+                                      quantizer: nn.Module,
+                                      num_blocks_per_column: int) -> torch.Tensor:
         """
-        Quantize-Dequantize rounded weight block
+        Quantize-Dequantize codebook
 
-        :param weight_block: Rounded weight block
+        :param codebook: Codebook
         :param quantizer: Quantizer
         :param num_blocks_per_column: Number of blocks per column
-        :return: Quantize-Dequantized weight block
+        :return: Quantize-Dequantized codebook
         """
-        qdq_weight_block = Q.affine.quantize_dequantize(
-            weight_block.reshape(num_blocks_per_column, -1),
+        qdq_codebook = Q.affine.quantize_dequantize(
+            codebook.reshape(num_blocks_per_column, -1),
             quantizer.get_scale(),
             quantizer.get_offset(),
             quantizer.bitwidth,
             quantizer.symmetric,
         )
-        return qdq_weight_block.reshape(weight_block.shape)
+        return qdq_codebook.reshape(codebook.shape)
 
     @classmethod
     def compute_inverse(cls, hessian: torch.tensor) -> torch.Tensor:
