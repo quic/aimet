@@ -127,9 +127,11 @@ class GPTVQOptimizer:
     @classmethod
     def _weight_update(cls, module: BaseQuantizationMixin, gptvq_params: GPTVQParameters, hessian: torch.Tensor):
         """
-        Optimizes the weights
+        Update the weights of module via GPTVQ optimization
 
-        :param module: nn.Module
+        :param module: Concrete class object of BaseQuantizationMixin
+        :param gptvq_params: Data carrier including GPTVQ parameters
+        :param hessian: Hessian tensor to be used for computing GPTVQ optimization
         """
         original_weight = module.weight.clone()
         original_weight = original_weight.float()
