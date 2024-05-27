@@ -149,7 +149,7 @@ class GPTVQ:
 
         :param sim: QuantizationSimModel object
         """
-        for _, module in sim.model.named_modules():
+        for module in sim.model.modules():
             if isinstance(module, BaseQuantizationMixin):
                 # pylint: disable=protected-access
                 module._remove_activation_quantizers()
