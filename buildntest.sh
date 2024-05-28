@@ -252,6 +252,11 @@ else
    docker_add_vol_mount+=${scriptPath}
 fi
 
+# Add patchelf mirror url to the environment
+if [ -n "${PATCHELF_INTERNAL_URL}" ]; then
+   USER_ENV_VARS+=("PATCHELF_INTERNAL_URL")
+fi
+
 # Check if and which version of nvidia docker is present
 set +e
 DOCKER_RUN_PREFIX="docker run"

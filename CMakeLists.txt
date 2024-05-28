@@ -304,12 +304,13 @@ else()
     # FIXME
     # Better to include patchefl into docker image, although seems it is not trivial
     include(FetchContent)
-    if (DEFINED PATCHELF_INTERNAL_URL)
-        message(STATUS "Using Internal URL: ${PATCHELF_INTERNAL_URL}")
+    if (DEFINED ENV{PATCHELF_INTERNAL_URL})
+        message(STATUS "Using Internal URL: $ENV{PATCHELF_INTERNAL_URL}")
         FetchContent_Declare(patchelf
-        URL "${PATCHELF_INTERNAL_URL}/patchelf-0.15.0-x86_64.tar.gz"
+        URL "$ENV{PATCHELF_INTERNAL_URL}/patchelf-0.15.0-x86_64.tar.gz"
         )
     else()
+        message(STATUS "WARNING:! Using External URL")
         FetchContent_Declare(patchelf
             URL "https://github.com/NixOS/patchelf/releases/download/0.15.0/patchelf-0.15.0-x86_64.tar.gz"
         )
