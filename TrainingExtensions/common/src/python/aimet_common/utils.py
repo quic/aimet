@@ -287,7 +287,7 @@ def start_bokeh_server_session(port: int = None):
     proc = multiprocessing.Process(target=start_bokeh_server, args=(port,))
 
     proc.start()
-    server_started.wait(timeout=3)
+    server_started.wait(timeout=10)
 
     if 'port' not in d:
         if 'exception' in d:
