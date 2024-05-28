@@ -81,13 +81,17 @@ This file contains the implementation to automatically prepare keras models for 
 
 class _KerasModelPreparer:
 
-    def __init__(self, original_model: tf.keras.Model = None, input_layer: tf.keras.layers.InputLayer = None):
+    def __init__(
+        self,
+        original_model: Optional[tf.keras.Model] = None,
+        input_layer: Optional[tf.keras.layers.InputLayer] = None
+    ):
         self.model_outputs = []  # Both normal init and "passthrough" init utilize this
         if original_model:
             self.input_layer = self._format_input_layer(original_model, input_layer)
 
             if self._inherits_from_keras_model(original_model):
-                _logger.info("This model inherits from tf.keras.Model, connecting model...")
+                _logger.debug("This model inherits from tf.keras.Model. Need to connect model.")
                 self.original_model = self._connect_inherited_model(original_model, input_layer, is_original_model=True)
 
             else:
@@ -162,8 +166,10 @@ class _KerasModelPreparer:
         Set the functional model's weights to the original model's weights in the correct order
         """
 
-        assert self.prepared_model, "The prepared model must created before setting weights. Please call " \
-                                    "prepare_model() before calling set_weights()."
+        assert self.prepared_model, (
+            "The prepared model must be created before setting weights. Please call "
+                "prepare_model() before calling set_weights()."
+        )
 
         try:
             self.prepared_model.set_weights(self._get_original_models_weights_in_functional_model_order())
@@ -180,7 +186,7 @@ class _KerasModelPreparer:
     @staticmethod
     def _format_input_layer(
             original_model: tf.keras.Model,
-            input_layer: Union[tf.keras.layers.InputLayer, List[tf.keras.layers.InputLayer]] = None
+            input_layer: Union[tf.keras.layers.InputLayer, List[tf.keras.layers.InputLayer], dict]
     ) -> tf.keras.layers.Layer:
         """
         This function formats the input layer by either using the original models input layer or the user provided
@@ -193,6 +199,9 @@ class _KerasModelPreparer:
         """
         if hasattr(original_model, "input"):
             input_layer = original_model.input
+        elif isinstance(input_layer, tf.keras.layers.InputLayer):
+            _logger.info("Input layer explicitly passed in")
+            return input_layer
         else:
             _logger.info("Input layer not found. Using input layer passed in.")
             if input_layer is None:
@@ -483,7 +492,7 @@ class _KerasModelPreparer:
                                             name=_TEMP_MODEL_NAME)
             _logger.debug("Model created for layer '%s'", layer.name)
         except TypeError as e:
-            if "call() got an unexpected keyword argument 'training'" in e.args:
+            if "call() got an unexpected keyword argument 'training'" in e.__str__():
                 _logger.error(
                     "Model preparer calls subclassed layers call functions with the parameter 'training=False', "
                     "in the case that the layer behaves differently during evaluation. Please add **kwargs to your "
