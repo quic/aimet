@@ -305,6 +305,7 @@ else()
     # Better to include patchefl into docker image, although seems it is not trivial
     include(FetchContent)
     if (DEFINED PATCHELF_INTERNAL_URL)
+        message(STATUS "Using Internal URL: ${PATCHELF_INTERNAL_URL}")
         FetchContent_Declare(patchelf
         URL "${PATCHELF_INTERNAL_URL}/patchelf-0.15.0-x86_64.tar.gz"
         )
