@@ -50,7 +50,7 @@ from torch.utils.data import Dataset, DataLoader
 
 from aimet_torch import utils
 from aimet_torch.model_preparer import prepare_model
-from aimet_torch.auto_quant_v2 import AutoQuant
+from aimet_torch.auto_quant import AutoQuant
 from aimet_torch.adaround.adaround_weight import AdaroundParameters
 from aimet_torch.quantsim import QuantizationSimModel, OnnxExportApiArgs
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
