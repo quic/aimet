@@ -38,8 +38,9 @@
 """ Quant Analyzer """
 
 import os
+import contextlib
 from collections import OrderedDict, defaultdict
-from typing import Union, Tuple, Dict, List, Collection
+from typing import Union, Tuple, Dict, List, Collection, Type
 import torch
 from torch.utils.data import DataLoader
 
@@ -193,10 +194,11 @@ class QuantAnalyzer:
             default_param_bw=default_param_bw,
             config_file=config_file,
         )
-        sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
+        sim = self._get_quantsim_cls()(self._model, self._dummy_input, **kwargs)
         if self._modules_to_ignore:
             self._exclude_modules_from_quantization(self._model, sim, self._modules_to_ignore)
 
+        self.patch_quantsim_to_store_histogram(sim)
         sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
         return sim
 
@@ -209,11 +211,9 @@ class QuantAnalyzer:
         :param sim: Quantsim model.
         :return: Quantized model performance.
         """
-        enabled_activation_quantizers = self._get_enabled_activation_quantizers(sim)
-        self._enable_disable_quantizers(enabled_activation_quantizers, enabled=False)
-        eval_score = self._eval_model(sim.model)
-        self._enable_disable_quantizers(enabled_activation_quantizers, enabled=True)
-        return eval_score
+        with self._disable_activation_quantizers(sim):
+            eval_score = self._eval_model(sim.model)
+            return eval_score
 
     def _eval_activation_quantized_model(self, sim: QuantizationSimModel)-> float:
         """
@@ -224,11 +224,9 @@ class QuantAnalyzer:
         :param sim: Quantsim model.
         :return: Quantized model performance.
         """
-        enabled_param_quantizers = self._get_enabled_param_quantizers(sim)
-        self._enable_disable_quantizers(enabled_param_quantizers, enabled=False)
-        eval_score = self._eval_model(sim.model)
-        self._enable_disable_quantizers(enabled_param_quantizers, enabled=True)
-        return eval_score
+        with self._disable_param_quantizers(sim):
+            eval_score = self._eval_model(sim.model)
+            return eval_score
 
     def _eval_model(self, model: torch.nn.Module) -> float:
         """
@@ -263,12 +261,12 @@ class QuantAnalyzer:
 
         sorted_quant_wrappers_dict = OrderedDict()
         utils.run_hook_for_layers_with_given_input(sim.model, self._dummy_input, sorting_hook,
-                                                   module_type_for_attaching_hook=(QcQuantizeWrapper, QcQuantizeRecurrent),
+                                                   module_type_for_attaching_hook=self._get_quant_wrapper_type(),
                                                    leaf_node_only=False)
         return sorted_quant_wrappers_dict
 
-    @staticmethod
-    def _get_enabled_quantizers(sorted_quant_wrappers: Dict)\
+    @classmethod
+    def _get_enabled_quantizers(cls, sorted_quant_wrappers: Dict)\
             -> Dict[Union[QcQuantizeWrapper, QcQuantizeRecurrent], List[TensorQuantizer]]:
         """
         For given sorted quant wrappers dict, get enabled quantizers.
@@ -280,19 +278,19 @@ class QuantAnalyzer:
 
         for quant_wrapper in sorted_quant_wrappers.values():
             for quantizer in quant_wrapper.param_quantizers.values():
-                if quantizer.enabled:
+                if cls._is_quantizer_enabled(quantizer):
                     enabled_quant_wrappers[quant_wrapper].append(quantizer)
             for quantizer in quant_wrapper.output_quantizers:
-                if quantizer.enabled:
+                if cls._is_quantizer_enabled(quantizer):
                     enabled_quant_wrappers[quant_wrapper].append(quantizer)
             for quantizer in quant_wrapper.input_quantizers:
-                if quantizer.enabled:
+                if cls._is_quantizer_enabled(quantizer):
                     enabled_quant_wrappers[quant_wrapper].append(quantizer)
 
         return enabled_quant_wrappers
 
-    @staticmethod
-    def _get_enabled_param_quantizers(sim: QuantizationSimModel) -> List[TensorQuantizer]:
+    @classmethod
+    def _get_enabled_param_quantizers(cls, sim: QuantizationSimModel) -> List[TensorQuantizer]:
         """
         For given quantsim model, get all enabled param quantizers.
         :param sim: Quantsim model.
@@ -301,13 +299,13 @@ class QuantAnalyzer:
         enabled_param_quantizers = []
         for _, quant_wrapper in sim.quant_wrappers():
             for quantizer in quant_wrapper.param_quantizers.values():
-                if quantizer.enabled:
+                if cls._is_quantizer_enabled(quantizer):
                     enabled_param_quantizers.append(quantizer)
 
         return enabled_param_quantizers
 
-    @staticmethod
-    def _get_enabled_activation_quantizers(sim: QuantizationSimModel) -> List[TensorQuantizer]:
+    @classmethod
+    def _get_enabled_activation_quantizers(cls, sim: QuantizationSimModel) -> List[TensorQuantizer]:
         """
         For given quantsim model, get all enabled activation quantizers.
         :param sim: Quantsim model.
@@ -316,10 +314,10 @@ class QuantAnalyzer:
         enabled_activation_quantizers = []
         for _, quant_wrapper in sim.quant_wrappers():
             for quantizer in quant_wrapper.input_quantizers:
-                if quantizer.enabled:
+                if cls._is_quantizer_enabled(quantizer):
                     enabled_activation_quantizers.append(quantizer)
             for quantizer in quant_wrapper.output_quantizers:
-                if quantizer.enabled:
+                if cls._is_quantizer_enabled(quantizer):
                     enabled_activation_quantizers.append(quantizer)
 
         return enabled_activation_quantizers
@@ -359,25 +357,25 @@ class QuantAnalyzer:
         # maps quant wrapper to a list of enabled quantizers in it.
         enabled_quant_wrappers = self._get_enabled_quantizers(sorted_quant_wrappers)
 
+        ctx = contextlib.nullcontext()
         if disable_all_quantizers:
-            for enabled_quantizers in enabled_quant_wrappers.values():
-                self._enable_disable_quantizers(enabled_quantizers, enabled=False)
+            ctx = self._disable_quantizers(sim)
 
         eval_score_dict = {}
-        for name, quant_wrapper in sorted_quant_wrappers.items():
-            if quant_wrapper in enabled_quant_wrappers:
-                enabled_quantizers = enabled_quant_wrappers[quant_wrapper]
-                self._enable_disable_quantizers(enabled_quantizers, enabled=enabled_before)
+        with ctx:
+            for name, quant_wrapper in sorted_quant_wrappers.items():
+                if quant_wrapper in enabled_quant_wrappers:
+                    self._enable_disable_quant_wrapper(quant_wrapper,
+                                                       enabled_quant_wrappers,
+                                                       enabled=enabled_before)
 
-                # Record eval score.
-                eval_score_dict[name] = self._eval_model(sim.model)
-                _logger.debug("For layer: %s, the eval score is: %f", name, eval_score_dict[name])
+                    # Record eval score.
+                    eval_score_dict[name] = self._eval_model(sim.model)
+                    # _logger.debug("For layer: %s, the eval score is: %f", name, eval_score_dict[name])
 
-                self._enable_disable_quantizers(enabled_quantizers, enabled=enabled_after)
-
-        if disable_all_quantizers:
-            for enabled_quantizers in enabled_quant_wrappers.values():
-                self._enable_disable_quantizers(enabled_quantizers, enabled=True)
+                    self._enable_disable_quant_wrapper(quant_wrapper,
+                                                       enabled_quant_wrappers,
+                                                       enabled=enabled_after)
 
         return eval_score_dict
 
@@ -535,23 +533,26 @@ class QuantAnalyzer:
         for _, quant_wrapper in sim.quant_wrappers():
             wrapped_module_name = module_to_name_dict[quant_wrapper]
             for index, quantizer in enumerate(quant_wrapper.input_quantizers):
-                if quantizer.enabled:
+                if self._is_quantizer_enabled(quantizer):
                     name = f"{wrapped_module_name}_input_{index}"
-                    min_max_range_for_activations_dict[name] = (quantizer.encoding.min, quantizer.encoding.max)
+                    encoding = self._get_quantizer_encodings(quantizer)[0]
+                    min_max_range_for_activations_dict[name] = (encoding.min, encoding.max)
             for index, quantizer in enumerate(quant_wrapper.output_quantizers):
-                if quantizer.enabled:
+                if self._is_quantizer_enabled(quantizer):
                     name = f"{wrapped_module_name}_output_{index}"
-                    min_max_range_for_activations_dict[name] = (quantizer.encoding.min, quantizer.encoding.max)
+                    encoding = self._get_quantizer_encodings(quantizer)[0]
+                    min_max_range_for_activations_dict[name] = (encoding.min, encoding.max)
             for param_name, quantizer in quant_wrapper.param_quantizers.items():
-                if quantizer.enabled:
+                if self._is_quantizer_enabled(quantizer):
                     name = f"{wrapped_module_name}_{param_name}"
-                    if isinstance(quantizer.encoding, List): # per-channel
+                    encodings = self._get_quantizer_encodings(quantizer)
+                    if len(encodings) > 1: # per-channel
                         per_channel_encodings = {}
-                        for index, encoding in enumerate(quantizer.encoding):
+                        for index, encoding in enumerate(encodings):
                             per_channel_encodings[f"{name}_{index}"] = (encoding.min, encoding.max)
                         min_max_range_for_weights_dict[name] = per_channel_encodings
                     else: # per-tensor
-                        min_max_range_for_weights_dict[name] = (quantizer.encoding.min, quantizer.encoding.max)
+                        min_max_range_for_weights_dict[name] = (encodings[0].min, encodings[0].max)
 
         create_and_export_min_max_ranges_plot(min_max_range_for_weights_dict,
                                               min_max_ranges_dir,
@@ -595,17 +596,17 @@ class QuantAnalyzer:
         for _, quant_wrapper in sim.quant_wrappers():
             wrapped_module_name = module_to_name_dict[quant_wrapper]
             for index, quantizer in enumerate(quant_wrapper.input_quantizers):
-                if quantizer.encoding:
+                if quantizer is not None and self._get_quantizer_encodings(quantizer):
                     self._create_and_export_stats_histogram_plot(quantizer,
                                                                  activations_pdf_dir,
                                                                  title=f"{wrapped_module_name}_input_q{index}")
             for index, quantizer in enumerate(quant_wrapper.output_quantizers):
-                if quantizer.encoding:
+                if quantizer is not None and self._get_quantizer_encodings(quantizer):
                     self._create_and_export_stats_histogram_plot(quantizer,
                                                                  activations_pdf_dir,
                                                                  title=f"{wrapped_module_name}_output_q{index}")
             for param_name, quantizer in quant_wrapper.param_quantizers.items():
-                if quantizer.encoding:
+                if quantizer is not None and self._get_quantizer_encodings(quantizer):
                     self._create_and_export_stats_histogram_plot(quantizer,
                                                                  os.path.join(weights_pdf_dir, wrapped_module_name),
                                                                  title=f"{wrapped_module_name}_{param_name}")
@@ -706,3 +707,55 @@ class QuantAnalyzer:
             quant_wrappers_to_ignore.append(quant_wrapper)
 
         sim.exclude_layers_from_quantization(quant_wrappers_to_ignore)
+
+    @staticmethod
+    def patch_quantsim_to_store_histogram(_):
+        """
+        Placeholder function to prevent patching v1 quantsim
+        """
+
+    @staticmethod
+    def _get_quantsim_cls() -> Type[QuantizationSimModel]:
+        return QuantizationSimModel
+
+    @staticmethod
+    def _get_quant_wrapper_type() -> Tuple[Type]:
+        return (QcQuantizeWrapper, QcQuantizeRecurrent)
+
+    @staticmethod
+    def _is_quantizer_enabled(quantizer: TensorQuantizer):
+        return quantizer.enabled
+
+    @staticmethod
+    def _get_quantizer_encodings(quantizer: TensorQuantizer):
+        if quantizer.encoding and not isinstance(quantizer.encoding, List):
+            return [quantizer.encoding]
+        return quantizer.encoding
+
+    @classmethod
+    @contextlib.contextmanager
+    def _disable_param_quantizers(cls, sim: QuantizationSimModel):
+        enabled_param_quantizers = cls._get_enabled_param_quantizers(sim)
+        cls._enable_disable_quantizers(enabled_param_quantizers, enabled=False)
+        yield
+        cls._enable_disable_quantizers(enabled_param_quantizers, enabled=True)
+
+    @classmethod
+    @contextlib.contextmanager
+    def _disable_activation_quantizers(cls, sim: QuantizationSimModel):
+        enabled_activation_quantizers = cls._get_enabled_activation_quantizers(sim)
+        cls._enable_disable_quantizers(enabled_activation_quantizers, enabled=False)
+        yield
+        cls._enable_disable_quantizers(enabled_activation_quantizers, enabled=True)
+
+    @staticmethod
+    def _disable_quantizers(sim: QuantizationSimModel):
+        return utils.disable_all_quantizers(sim.model)
+
+    @staticmethod
+    def _enable_disable_quant_wrapper(quant_wrapper: QcQuantizeWrapper,
+                                      enabled_quant_wrappers: Dict[torch.nn.Module, List[TensorQuantizer]],
+                                      enabled: bool):
+        enabled_quantizers = enabled_quant_wrappers[quant_wrapper]
+        for quantizer in enabled_quantizers:
+            quantizer.enabled = enabled
