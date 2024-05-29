@@ -275,6 +275,20 @@ if [ $run_prep -eq 1 ]; then
         check_stage $? "Preparation" "true"
     fi
 
+    # Clone patchelf repo if not already present
+    patch_elf_path="${workspaceFolder}/build/_deps/patchelf-src/bin/patchelf"
+    if [ ! -e ${patch_elf_path} ]; then
+        echo "[INFO]: Setting up patchelf from Internal sources"
+        mkdir -p $workspaceFolder/build/_deps/patchelf-src/
+        pushd $workspaceFolder/build/_deps/patchelf-src/
+        echo "dependency path is : ${DEPENDENCY_DATA_PATH}"
+        if [[ -f "${DEPENDENCY_DATA_PATH}/patchelf.tar.gz" ]]; then
+            tar -xvzf ${DEPENDENCY_DATA_PATH}/patchelf.tar.gz
+        fi
+        popd
+        check_stage $? "Preparation" "true"
+    fi
+
     # Array of python src file path endings
     declare -a python_src_path_endings=("TrainingExtensions/common/src/python/aimet_common")
     # TODO: the line below causes code violation failures in TrainingExtensions/tensorflow and TrainingExtensions/torch

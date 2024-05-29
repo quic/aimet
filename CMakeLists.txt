@@ -297,7 +297,8 @@ else()
   message(STATUS "Set ${AIMET_PYTHONPATH} in ${CMAKE_CURRENT_SOURCE_DIR}")
 endif()
 
-find_program(PATCHELF_EXE patchelf)
+find_program(PATCHELF_EXE patchelf
+             PATHS "${CMAKE_CURRENT_SOURCE_DIR}/../build/_deps/patchelf-src/bin/")
 if (PATCHELF_EXE)
     message(STATUS "Found patchelf in '${PATCHELF_EXE}'")
 else()
