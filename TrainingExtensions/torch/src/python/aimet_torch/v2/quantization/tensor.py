@@ -134,25 +134,42 @@ class QuantizedTensorBase(torch.Tensor):
         torch.Tensor.view_as,
         torch.as_strided,
         #torch.as_strided_copy, TODO: Uncomment when pytorch 1.9 support is fully deprecated
+        torch.chunk,
+        torch.dsplit,
         #torch.expand_copy,
         torch.flatten,
+        torch.gather,
+        torch.hsplit,
+        torch.index_select,
+        torch.masked_select,
+        torch.moveaxis,
+        torch.movedim,
+        torch.narrow,
+        #torch.narrow_copy,
         torch.permute,
         #torch.permute_copy,
         torch.reshape,
+        torch.select,
+        torch.split,
         torch.squeeze,
         #torch.squeeze_copy,
+        torch.swapaxes,
         torch.swapdims,
         torch.t,
+        torch.take,
+        torch.take_along_dim,
+        torch.tensor_split,
+        torch.tile,
         #torch.t_copy,
+        torch.unbind,
         #torch.unflatten,
         torch.unsqueeze,
         #torch.unsqueeze_copy,
+        torch.vsplit,
         #torch.view_copy
+        torch.where,
     }
 
-    _in_out_equal_ops = {
-        torch.Tensor.chunk
-    }
 
     @abc.abstractmethod
     def quantize(self) -> "QuantizedTensor":
@@ -258,26 +275,25 @@ class QuantizedTensorBase(torch.Tensor):
             self, *_ = args
             ret.encoding = copy.copy(self.encoding) # shallow copy
 
+        def propagate_encoding(qtensor, encoding):
+            if isinstance(qtensor, QuantizedTensorBase):
+                qtensor.encoding = copy.copy(encoding)
+
         if func in cls._passthrough_ops:
             self, *_ = args
-            ret.encoding = copy.copy(self.encoding)
+            tree_map(lambda t: propagate_encoding(t, self.encoding), ret)
 
         if func in cls._pertensor_passthrough_ops:
             self, *_ = args
             if self.encoding and self.encoding.granularity == "pertensor":
                 # Return a cls object with the same encoding which can later be quantized or dequantized
-                ret.encoding = copy.copy(self.encoding)
+                tree_map(lambda t: propagate_encoding(t, self.encoding), ret)
             else:
                 # Return a cls object with no encoding
                 # If the user later tries to quantize or dequantize this, an error will be thrown
-                ret.encoding = None
+                tree_map(lambda t: propagate_encoding(t, None), ret)
             return ret
 
-        if func in cls._in_out_equal_ops:
-            self, *_ = args
-            for r in ret:
-                r.encoding = copy.copy(self.encoding)
-            return ret
 
         def set_encoding(qtensor):
             if not hasattr(qtensor, 'encoding'):
