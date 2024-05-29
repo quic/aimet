@@ -140,7 +140,7 @@ class TestQuantAnalyzer:
 
         for quant_wrapper, enabled_quantizers in enabled_quant_wrappers.items():
             assert isinstance(quant_wrapper, BaseQuantizationMixin)
-            assert all(isinstance(restorable_quantizer.quantizer, QuantizerBase) for restorable_quantizer in enabled_quantizers)
+            assert all(isinstance(quantizer, QuantizerBase) for quantizer in enabled_quantizers)
 
         # Disable all the quantizers and verify enabled_quant_wrappers dictionary should be empty.
         for _, quant_wrapper in sim.quant_wrappers():

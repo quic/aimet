@@ -39,12 +39,11 @@
 
 import os
 import contextlib
-from collections import defaultdict, namedtuple
-from typing import Tuple, Dict, List, Type, Optional, Generator
+from collections import namedtuple
+from typing import Tuple, List, Type, Optional, Generator
 import torch
 
 from aimet_common.quant_analyzer import export_stats_histogram_plot
-from aimet_common.utils import AimetLogger
 from aimet_torch.quant_analyzer import QuantAnalyzer as V1QuantAnalyzer
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.nn.base import BaseQuantizationMixin
@@ -52,11 +51,7 @@ from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.encoding_analyzer import _HistogramObserver, _Histogram
 
 
-_logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.QuantAnalyzer)
-
-
 V1Encoding = namedtuple('V1Encoding', ['min', 'max'])
-RestorableQuantizer = namedtuple('RestorableQuantizer', ['container', 'key', 'quantizer'])
 
 
 class QuantAnalyzer(V1QuantAnalyzer):
@@ -153,33 +148,6 @@ class QuantAnalyzer(V1QuantAnalyzer):
             v1_encodings.append(V1Encoding(min=encoding_min.item(), max=encoding_max.item()))
 
         return v1_encodings
-
-    @classmethod
-    def _get_enabled_quantizers(cls, sorted_quant_wrappers: Dict[str, BaseQuantizationMixin])\
-            -> Dict[BaseQuantizationMixin, List[QuantizerBase]]:
-        """
-        For given sorted quant wrappers dict, get enabled quantizers.
-
-        :param sorted_quant_wrappers: Dictionary containing quant wrappers sorted based on occurrence.
-        :return: Dictionary which maps a quant wrapper to a list of enabled quantizers in it.
-        """
-        enabled_quant_wrappers = defaultdict(list)
-
-        for quant_wrapper in sorted_quant_wrappers.values():
-            for key, quantizer in quant_wrapper.param_quantizers.items():
-                if cls._is_quantizer_enabled(quantizer):
-                    restorable_quantizer = RestorableQuantizer(quant_wrapper.param_quantizers, key, quantizer)
-                    enabled_quant_wrappers[quant_wrapper].append(restorable_quantizer)
-            for idx, quantizer in enumerate(quant_wrapper.output_quantizers):
-                if cls._is_quantizer_enabled(quantizer):
-                    restorable_quantizer = RestorableQuantizer(quant_wrapper.output_quantizers, idx, quantizer)
-                    enabled_quant_wrappers[quant_wrapper].append(restorable_quantizer)
-            for idx, quantizer in enumerate(quant_wrapper.input_quantizers):
-                if cls._is_quantizer_enabled(quantizer):
-                    restorable_quantizer = RestorableQuantizer(quant_wrapper.input_quantizers, idx, quantizer)
-                    enabled_quant_wrappers[quant_wrapper].append(restorable_quantizer)
-
-        return enabled_quant_wrappers
 
     @staticmethod
     def _get_quantized_modules(sim: QuantizationSimModel) -> Generator[BaseQuantizationMixin, None, None]:
