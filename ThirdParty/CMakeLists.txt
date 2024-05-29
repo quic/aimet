@@ -39,9 +39,11 @@
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
 include(FetchContent)
 
-if (EXISTS google/googletest-release-1.12.1)
-    add_subdirectory(google/googletest-release-1.12.1 EXCLUDE_FROM_ALL)
+if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/google/googletest-release-1.12.1)
+    message(STATUS "Adding googletest to dependency list")
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/google/googletest-release-1.12.1 EXCLUDE_FROM_ALL)
 else ()
+    message(STATUS "WARNING.! fetching googletest from external source")
     FetchContent_Declare(
         googletest
         GIT_REPOSITORY https://github.com/google/googletest.git
