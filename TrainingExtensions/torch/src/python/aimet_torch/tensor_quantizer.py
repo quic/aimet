@@ -44,7 +44,7 @@ import abc
 
 import torch
 
-import aimet_common.aimet_tensor_quantizer as AimetTensorQuantizer
+from aimet_common.aimet_tensor_quantizer import AimetTensorQuantizer
 import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_common.quantsim import is_non_strict_symmetric
@@ -199,7 +199,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         self._cppOp = []
         quant_scheme = MAP_QUANT_SCHEME_TO_PYMO[self._quant_scheme]
         for _ in range(state.num_channels):
-            self._cppOp.append(AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme))
+            self._cppOp.append(AimetTensorQuantizer(quant_scheme))
 
         # Create the encoding object
         if hasattr(state, 'encodings'):
@@ -240,7 +240,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         self._quant_scheme = quant_scheme
         quant_scheme = MAP_QUANT_SCHEME_TO_PYMO[quant_scheme]
         assert self._cppOp              # whether per-tensor or per-channel, there needs to be at least 1 op
-        self._cppOp = [AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme) for _ in self._cppOp]
+        self._cppOp = [AimetTensorQuantizer(quant_scheme) for _ in self._cppOp]
 
     @property
     def encoding(self) -> Union[None, libpymo.TfEncoding, List[libpymo.TfEncoding]]:
@@ -421,7 +421,7 @@ class StaticGridPerTensorQuantizer(StaticGridTensorQuantizer):
                          enabled_by_default, data_type)
 
         quant_scheme = MAP_QUANT_SCHEME_TO_PYMO[quant_scheme]
-        self._cppOp = [AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme)]
+        self._cppOp = [AimetTensorQuantizer(quant_scheme)]
 
     @property
     def encoding(self) -> Union[None, libpymo.TfEncoding]:
@@ -503,7 +503,7 @@ class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
         super().__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
                          enabled_by_default, data_type=data_type)
         quant_scheme = MAP_QUANT_SCHEME_TO_PYMO[quant_scheme]
-        self._cppOp = [AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme) for _ in range(num_channels)]
+        self._cppOp = [AimetTensorQuantizer(quant_scheme) for _ in range(num_channels)]
         self._ch_axis = ch_axis
 
     @property

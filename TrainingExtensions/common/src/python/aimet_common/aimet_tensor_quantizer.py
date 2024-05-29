@@ -39,8 +39,23 @@
 """ Conditionally imports to use AIMET features using MO and python-only implementations """
 
 # pylint: disable=unused-wildcard-import, wildcard-import, protected-access
-import typing
 try:
     from aimet_common.AimetTensorQuantizer import *
 except ImportError:
-    AimetTensorQuantizer = typing.Any
+    ERROR_MESSAGE = "Cannot import AimetTensorQuantizer." \
+                    " Please build AimetTensorQuantizer and add artifact path to PYTHONPATH" \
+                    " to resolve this issue"
+
+
+    class _MetaUnavailableClass(type):
+        @classmethod
+        def __getattr__(mcs, name):
+            raise RuntimeError(f"Unable to access attribute {name} of class AimetTensorQuantizer: {ERROR_MESSAGE}")
+
+
+    class AimetTensorQuantizer(metaclass=_MetaUnavailableClass):
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError(f"Unable to initialize class AimetTensorQuantizer: {ERROR_MESSAGE}")
+
+        def __getattr__(self, name):
+            raise RuntimeError(f"Unable to access attribute {name} of class AimetTensorQuantizer: {ERROR_MESSAGE}")
