@@ -290,6 +290,9 @@ def start_bokeh_server_session(port: int = None):
     server_started.wait(timeout=10)
 
     if 'port' not in d:
+        if proc:
+            proc.terminate()
+
         if 'exception' in d:
             e = d['exception']
             raise RuntimeError(f'Bokeh server failed with the following error: {e}')
