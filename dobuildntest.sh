@@ -276,12 +276,11 @@ if [ $run_prep -eq 1 ]; then
     fi
 
     # Clone patchelf repo if not already present
-    patch_elf_path="${workspaceFolder}/build/_deps/patchelf-src/bin/patchelf"
+    patch_elf_path="${buildFolder}/_deps/patchelf-src/bin/patchelf"
     if [ ! -e ${patch_elf_path} ]; then
         echo "[INFO]: Setting up patchelf from Internal sources"
-        mkdir -p $workspaceFolder/build/_deps/patchelf-src/
-        pushd $workspaceFolder/build/_deps/patchelf-src/
-        echo "dependency path is : ${DEPENDENCY_DATA_PATH}"
+        mkdir -p ${buildFolder}/_deps/patchelf-src/
+        pushd ${buildFolder}/_deps/patchelf-src/
         if [[ -f "${DEPENDENCY_DATA_PATH}/patchelf.tar.gz" ]]; then
             tar -xvzf ${DEPENDENCY_DATA_PATH}/patchelf.tar.gz
         fi

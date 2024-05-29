@@ -298,7 +298,7 @@ else()
 endif()
 
 find_program(PATCHELF_EXE patchelf
-             PATHS "${CMAKE_CURRENT_SOURCE_DIR}/../build/_deps/patchelf-src/bin/")
+             PATHS ${CMAKE_BINARY_DIR}/_deps/patchelf-src/bin)
 if (PATCHELF_EXE)
     message(STATUS "Found patchelf in '${PATCHELF_EXE}'")
 else()
