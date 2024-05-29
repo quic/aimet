@@ -462,3 +462,31 @@ class TestQuantizedTensor:
         assert not detached_tensor.encoding.scale.requires_grad
         assert qtensor.requires_grad
         assert qtensor.encoding.scale.requires_grad
+
+    @pytest.mark.cuda() 
+    @pytest.mark.parametrize("devices", [(torch.device("cpu"), torch.device("cuda:0")),
+                                         (torch.device("cuda:0"), torch.device("cpu"))])
+    @pytest.mark.parametrize('qtensor_cls', [QuantizedTensor, DequantizedTensor])
+    @pytest.mark.parametrize('callback', [
+            lambda t : t.chunk(2, -1),
+        ])
+    def test_propagate_pertensor_encoding(self, devices, qtensor_cls, callback, scale, offset, bitwidth):
+        device_1, device_2 = devices
+        shape = (1, 6, 8)
+        data = torch.randn(shape).to(device_1)
+        qtensor = data.clone().as_subclass(qtensor_cls)
+        qtensor.encoding = AffineEncoding(scale, offset, bitwidth)
+        output = callback(qtensor)
+
+        assert all(isinstance(o, qtensor_cls) for o in output)
+        assert all(torch.equal(o.encoding.scale, qtensor.encoding.scale) for o in output)
+        assert all(torch.equal(o.encoding.offset, qtensor.encoding.offset) for o in output)
+        assert all(o.encoding.bitwidth == qtensor.encoding.bitwidth for o in output)
+        assert all(o.encoding.signed == qtensor.encoding.signed for o in output)
+        assert all(o.encoding is not qtensor.encoding for o in output)
+        assert all(o.device == device_1 for o in output)
+        
+        qtensor = data.to(device_2)
+        output = callback(qtensor)
+        assert all(o.device == device_2 for o in output)
+        

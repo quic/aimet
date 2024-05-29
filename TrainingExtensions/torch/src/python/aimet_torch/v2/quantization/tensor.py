@@ -149,6 +149,10 @@ class QuantizedTensorBase(torch.Tensor):
         #torch.view_copy
     }
 
+    _in_out_equal_ops = {
+        torch.Tensor.chunk
+    }
+
     @abc.abstractmethod
     def quantize(self) -> "QuantizedTensor":
         """
@@ -266,6 +270,12 @@ class QuantizedTensorBase(torch.Tensor):
                 # Return a cls object with no encoding
                 # If the user later tries to quantize or dequantize this, an error will be thrown
                 ret.encoding = None
+            return ret
+
+        if func in cls._in_out_equal_ops:
+            self, *_ = args
+            for r in ret:
+                r.encoding = copy.copy(self.encoding)
             return ret
 
         def set_encoding(qtensor):
