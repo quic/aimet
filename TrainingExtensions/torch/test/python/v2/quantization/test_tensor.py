@@ -342,6 +342,9 @@ class TestQuantizedTensor:
         lambda t : t.unsqueeze(-1),
         lambda t : t.squeeze(-1),
         lambda t : t.view(-1),
+        lambda t : t[1, :, :],
+        lambda t : t[0],
+        lambda t : t[0][0][0],
         torch.detach,
         torch.flatten,
         torch.clone,
@@ -397,6 +400,9 @@ class TestQuantizedTensor:
         lambda t: t.unsqueeze(-1),
         lambda t: t.squeeze(-1),
         lambda t: t.view(-1),
+        lambda t: t[1, :, :],
+        lambda t: t[0],
+        lambda t: t[0][0][0],
         torch.flatten,
     ])
     def test_dont_propagate_perchannel_encoding(self, qtensor_cls, callback, bitwidth):

@@ -110,6 +110,7 @@ class QuantizedTensorBase(torch.Tensor):
 
     # Operations that a per-tensor encoding can pass through
     _pertensor_passthrough_ops = {
+        torch.Tensor.__getitem__,
         torch.Tensor.broadcast_to,
         torch.Tensor.expand,
         torch.Tensor.expand_as,
@@ -263,7 +264,7 @@ class QuantizedTensorBase(torch.Tensor):
 
         if func in cls._pertensor_passthrough_ops:
             self, *_ = args
-            if self.encoding.granularity == "pertensor":
+            if self.encoding and self.encoding.granularity == "pertensor":
                 # Return a cls object with the same encoding which can later be quantized or dequantized
                 ret.encoding = copy.copy(self.encoding)
             else:
