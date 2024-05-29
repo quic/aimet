@@ -38,6 +38,7 @@
 
 import json
 import os
+import tempfile
 from typing import Union, Tuple, Optional, Dict
 
 import torch
@@ -45,6 +46,7 @@ from torch import nn
 
 import aimet_torch.v2.quantization as Q
 from aimet_common.defs import QuantScheme
+from aimet_common.utils import Spinner
 from aimet_torch import utils
 from aimet_torch.gptvq.defs import GPTVQSupportedModules, GPTVQParameters
 from aimet_torch.gptvq.gptvq_optimizer import GPTVQOptimizer
@@ -137,7 +139,7 @@ class GPTVQ:
                     block_size=(rows_per_block, weight_shape[1]),
                     bitwidth=param_quantizer.bitwidth,
                     symmetric=param_quantizer.symmetric,
-                )
+                ).to(module.weight.device)
                 module.param_quantizers["weight"] = q
 
     @staticmethod
@@ -149,13 +151,15 @@ class GPTVQ:
         """
         for module in sim.model.modules():
             if isinstance(module, BaseQuantizationMixin):
-                module._remove_input_quantizers()
-                module._remove_output_quantizers()
+                # pylint: disable=protected-access
+                module._remove_activation_quantizers()
+                if not isinstance(module, GPTVQSupportedModules):
+                    module._remove_param_quantizers()
+                    continue
 
-                if isinstance(module, GPTVQSupportedModules):
-                    weight_quantizer = module.param_quantizers["weight"]
-                    with weight_quantizer.compute_encodings():
-                        _ = weight_quantizer(module.weight)
+                weight_quantizer = module.param_quantizers["weight"]
+                with weight_quantizer.compute_encodings():
+                    _ = weight_quantizer(module.weight)
 
     @classmethod
     def _apply_gptvq(cls,
@@ -171,12 +175,22 @@ class GPTVQ:
         :param dummy_input: Dummy input to model to be used to parse model graph
         :param gptvq_params: Dataclass holding GPTVQ parameters
         """
-        # NOTE: Passed original model temporarily as result with sim.model is not working as expected
-        modules = utils.get_ordered_list_of_modules(original_model, dummy_input)
-        for name, _ in modules:
-            quant_module = get_named_module(sim.model, name)
-            if isinstance(quant_module, GPTVQSupportedModules):
-                GPTVQOptimizer._weight_update(quant_module, gptvq_params)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cached_dataset = utils.CachedDataset(gptvq_params.data_loader, gptvq_params.num_batches, temp_dir)
+            modules = utils.get_ordered_list_of_modules(original_model, dummy_input)
+            for name, _ in modules:
+                quant_module = get_named_module(sim.model, name)
+                if not isinstance(quant_module, GPTVQSupportedModules):
+                    continue
+
+                with Spinner(f"Started GPTVQ optimization of {name}"):
+                    GPTVQOptimizer.gptvq_module(
+                        quant_module=quant_module,
+                        gptvq_params=gptvq_params,
+                        sim=sim,
+                        forward_fn=gptvq_params.forward_fn,
+                        cached_dataset=cached_dataset,
+                    )
 
     @classmethod
     def _export_encodings_to_json(cls,
