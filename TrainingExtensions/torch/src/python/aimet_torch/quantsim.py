@@ -71,21 +71,11 @@ from aimet_torch.utils import deprecated
 from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs, CustomMarker, get_pytorch_name_from_onnx_name
 from aimet_torch.meta.connectedgraph import ConnectedGraph, Op
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
-from aimet_torch.v2.quantization.builder import LazyQuantizeWrapper
-from aimet_torch.v2.nn import BaseQuantizationMixin
+from aimet_torch.quantsim_config.builder import LazyQuantizeWrapper
 from aimet_torch.experimental.v2.quantsim.export_utils import VALID_ENCODING_VERSIONS, _export_to_1_0_0
 
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
-
-# Types of modules which cannot be quantized
-unquantizable_modules = (
-    QcQuantizeWrapper,
-    QcQuantizeStandAloneBase,
-    QcQuantizeRecurrent,
-    BaseQuantizationMixin,
-    torch.nn.Identity,
-)
 
 # If a torch module type is in this dictionary, call the corresponding quantized module constructor instead of wrapping
 # it with QcQuantizeWrapper.
@@ -204,6 +194,16 @@ class ExportableQuantModule(Protocol):
         """
         Returns the floating point version of quantized module
         """
+
+
+# Types of modules which cannot be quantized
+unquantizable_modules = (
+    QcQuantizeWrapper,
+    QcQuantizeStandAloneBase,
+    QcQuantizeRecurrent,
+    ExportableQuantModule,
+    torch.nn.Identity,
+)
 
 
 class QuantizationSimModel:
@@ -703,10 +703,9 @@ class QuantizationSimModel:
         # reference count to automatically remove the layers.
         module_to_name_dict = utils.get_module_to_name_dict(self.model)
         quant_layers_to_exclude = []
-        quant_cls = (QcQuantizeWrapper,
-                     QcQuantizeRecurrent,
+        quant_cls = (QcQuantizeRecurrent,
                      LazyQuantizeWrapper,
-                     BaseQuantizationMixin)
+                     ExportableQuantModule)
         for layer in layers_to_exclude:
             for module in layer.modules():
                 if isinstance(module, quant_cls):
@@ -726,9 +725,6 @@ class QuantizationSimModel:
             if isinstance(module, (QcQuantizeWrapper, QcQuantizeRecurrent, LazyQuantizeWrapper)):
                 if param_name_to_exclude in module.param_quantizers:
                     module.param_quantizers[param_name_to_exclude].enabled = False
-            if isinstance(module, BaseQuantizationMixin):
-                if param_name_to_exclude in module.param_quantizers:
-                    module.param_quantizers[param_name_to_exclude] = None
 
     def _replace_quantization_wrapper(self, model, device):
         """
@@ -1400,7 +1396,7 @@ class QuantizationSimModel:
     def _get_qc_quantized_layers(model) -> List[Tuple[str, QcQuantizeWrapper]]:
         quantized_layers = []
         for name, module in model.named_modules():
-            if isinstance(module, (QcQuantizeWrapper, QcQuantizeRecurrent, LazyQuantizeWrapper, BaseQuantizationMixin)):
+            if isinstance(module, (QcQuantizeRecurrent, LazyQuantizeWrapper, ExportableQuantModule)):
                 quantized_layers.append((name, module))
         return quantized_layers
 
@@ -1824,7 +1820,7 @@ class QuantizationSimModel:
         Generator for yielding all quantization wrappers and their names
         """
         for name, module in self.model.named_modules():
-            if isinstance(module, (QcQuantizeWrapper, QcQuantizeRecurrent, LazyQuantizeWrapper, BaseQuantizationMixin)):
+            if isinstance(module, (QcQuantizeRecurrent, LazyQuantizeWrapper, ExportableQuantModule)):
                 yield name, module
 
     def run_modules_for_traced_custom_marker(self, module_list: List[torch.nn.Module], dummy_input):
