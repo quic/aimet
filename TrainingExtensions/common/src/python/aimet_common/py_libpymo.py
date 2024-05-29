@@ -110,6 +110,9 @@ for libpymo_class in libpymo_classes:
 
 
 def create_unavailable_function(method_name: str):
+    """
+    Create unavailable function to lazily throw error when user tries to use the function.
+    """
     def unavailable_function(*args, **kwargs):
         raise RuntimeError(f"Unable to run function {method_name}: {ERROR_MESSAGE}")
 

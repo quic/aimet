@@ -54,6 +54,9 @@ except ImportError:
 
 
     class AimetTensorQuantizer(metaclass=_MetaUnavailableClass):
+        """
+        Placeholder class for raising errors when using this class
+        """
         def __init__(self, *args, **kwargs):
             raise RuntimeError(f"Unable to initialize class AimetTensorQuantizer: {ERROR_MESSAGE}")
 
