@@ -758,5 +758,6 @@ class QuantAnalyzer:
 
     @staticmethod
     def _get_quantized_modules(sim: QuantizationSimModel) -> Generator[QcQuantizeWrapper, None, None]:
-        for _, module in sim.quant_wrappers():
-            yield module
+        for module in sim.model.modules():
+            if isinstance(module, (QcQuantizeWrapper, QcQuantizeRecurrent)):
+                yield module
