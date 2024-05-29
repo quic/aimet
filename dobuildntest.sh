@@ -275,12 +275,14 @@ if [ $run_prep -eq 1 ]; then
         fi
         popd
         check_stage $? "Preparation" "true"
+    else
+        echo "googletest package exists.. proceeding further"
     fi
 
     # Clone patchelf repo if not already present
     patch_elf_path="${buildFolder}/_deps/patchelf-src/bin/patchelf"
     if [ ! -e ${patch_elf_path} ]; then
-        echo "[INFO]: Setting up patchelf from Internal sources"
+        echo "Setting up patchelf from Internal sources"
         mkdir -p ${buildFolder}/_deps/patchelf-src/
         pushd ${buildFolder}/_deps/patchelf-src/
         if [[ -f "${DEPENDENCY_DATA_PATH}/patchelf.tar.gz" ]]; then
