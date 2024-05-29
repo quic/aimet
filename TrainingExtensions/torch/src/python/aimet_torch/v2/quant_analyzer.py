@@ -38,12 +38,10 @@
 """ Quant Analyzer for AIMET v2"""
 
 import os
-import itertools
 import contextlib
 from collections import defaultdict, namedtuple
-from typing import Tuple, Dict, List, Type, Optional
+from typing import Tuple, Dict, List, Type, Optional, Generator
 import torch
-import torch.nn as nn
 
 from aimet_common.quant_analyzer import export_stats_histogram_plot
 from aimet_common.utils import AimetLogger
@@ -102,62 +100,32 @@ class QuantAnalyzer(V1QuantAnalyzer):
         for index, (histogram, encoding) in enumerate(zip(histograms, encodings)):
             export_stats_histogram_plot(histogram, encoding, results_dir, title=f"{title}_{index}")
 
-    @staticmethod
-    def _enable_disable_quant_wrapper(quant_wrapper: BaseQuantizationMixin,
-                                      enabled_quant_wrappers: Dict[nn.Module, List[RestorableQuantizer]],
-                                      enabled: bool):
-        enabled_quantizers = enabled_quant_wrappers[quant_wrapper]
-
-        for quantizer in enabled_quantizers:
-            # Enable or disable quantizer
-            quantizer.container[quantizer.key] = \
-                (quantizer.quantizer if enabled else None)
-
-    @staticmethod
-    def _disable_param_quantizers(sim: QuantizationSimModel):
+    @classmethod
+    def _disable_param_quantizers(cls, sim: QuantizationSimModel):
         # pylint: disable=protected-access
         ctx = contextlib.ExitStack()
-        for _, quant_wrapper in sim.quant_wrappers():
+        for quant_wrapper in cls._get_quantized_modules(sim):
             ctx.enter_context(quant_wrapper._remove_param_quantizers())
         return ctx
 
-    @staticmethod
-    def _disable_activation_quantizers(sim: QuantizationSimModel):
+    @classmethod
+    def _disable_activation_quantizers(cls, sim: QuantizationSimModel):
         # pylint: disable=protected-access
         ctx = contextlib.ExitStack()
-        for _, quant_wrapper in sim.quant_wrappers():
+        for quant_wrapper in cls._get_quantized_modules(sim):
             ctx.enter_context(quant_wrapper._remove_activation_quantizers())
         return ctx
 
     @staticmethod
-    def _disable_quantizers(sim: QuantizationSimModel):
+    def _disable_quant_wrapper(module: BaseQuantizationMixin):
         # pylint: disable=protected-access
-        ctx = contextlib.ExitStack()
-        for _, quant_wrapper in sim.quant_wrappers():
-            ctx.enter_context(quant_wrapper._remove_all_quantizers())
-        return ctx
-
-    @staticmethod
-    def patch_quantsim_to_store_histogram(sim: QuantizationSimModel):
-        """
-        Utility function for patching quantizers in quantsim to keep histogram information
-        """
-        for _, quant_wrapper in sim.quant_wrappers():
-            for quantizer in itertools.chain(quant_wrapper.input_quantizers,
-                                             quant_wrapper.output_quantizers,
-                                             quant_wrapper.param_quantizers.values()):
-                if quantizer is None:
-                    continue
-
-                quantizer.encoding_analyzer.reset_stats = lambda: None
+        return module._remove_all_quantizers()
 
     @staticmethod
     def _convert_to_v1_histograms(histograms: List[_Histogram]) -> List:
         v1_histograms = []
         for hist in histograms:
-            assert hist is not None, "Cannot find histogram data in quantsim\n" \
-                "Please patch quantsim object before calling compute_encodings " \
-                "using patch_quantsim_to_store_histogram method to store histogram data"
+            assert hist is not None, "Cannot find histogram data in quantizer"
             hist_sum = torch.sum(hist.histogram).item()
             v1_hist = []
             for bin_edge, hist_value in zip(hist.bin_edges, hist.histogram):
@@ -212,3 +180,9 @@ class QuantAnalyzer(V1QuantAnalyzer):
                     enabled_quant_wrappers[quant_wrapper].append(restorable_quantizer)
 
         return enabled_quant_wrappers
+
+    @staticmethod
+    def _get_quantized_modules(sim: QuantizationSimModel) -> Generator[BaseQuantizationMixin, None, None]:
+        for module in sim.model.modules():
+            if isinstance(module, BaseQuantizationMixin):
+                yield module
