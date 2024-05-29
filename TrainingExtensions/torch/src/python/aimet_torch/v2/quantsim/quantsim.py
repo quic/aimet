@@ -45,7 +45,7 @@ import aimet_torch.quantsim as quantsim_v1
 from aimet_torch.v2 import nn as aimet_nn
 from aimet_torch.v2.nn import FakeQuantizationMixin
 from aimet_torch.v2.nn import BaseQuantizationMixin
-from aimet_torch.v2.quantization.builder import LazyQuantizeWrapper
+from aimet_torch.quantsim_config.builder import LazyQuantizeWrapper
 from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.encoding_analyzer import PercentileEncodingAnalyzer
 from aimet_torch.v2.utils import patch_attr
@@ -148,6 +148,18 @@ class QuantizationSimModel(V1QuantizationSimModel):
         stream.write("-------------------------\n")
         stream.write(f"{self.model}\n")
         return stream.getvalue()
+
+    def exclude_param_from_quantization(self, param_name_to_exclude: str):
+        """
+        Excludes all parameters matching 'param_name' from quantization
+        :param param_name_to_exclude: Name of the parameter to exclude
+        :return: None
+        """
+        super().exclude_param_from_quantization(param_name_to_exclude)
+        for module in self.model.modules():
+            if isinstance(module, BaseQuantizationMixin):
+                if param_name_to_exclude in module.param_quantizers:
+                    module.param_quantizers[param_name_to_exclude] = None
 
     @staticmethod
     def compute_layer_encodings_for_sim(sim: 'QuantizationSimModel'):

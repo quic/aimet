@@ -58,7 +58,7 @@ from aimet_torch.tensor_quantizer import TensorQuantizer
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.onnx_utils import map_torch_types_to_onnx, pytorch_functional_name_to_onnx_dict
 from aimet_torch.translation_mapping import aimet_op_to_backend_op_name_map
-from aimet_torch.v2.quantization.builder import LazyQuantizeWrapper
+from aimet_torch.quantsim_config.builder import LazyQuantizeWrapper
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 MAP_PYTORCH_PARAM_NAME_TO_QUANTSIM_NAME = {

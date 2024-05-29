@@ -43,20 +43,15 @@ from torch import nn
 
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
 from aimet_common.utils import AimetLogger, log_with_error_and_assert_if_false
-from aimet_torch.v2.quantization.float import FloatQuantizeDequantize
 from aimet_torch.utils import get_v1_quant_scheme_for_initialization
 from aimet_torch.qc_quantize_op import QcQuantizeOpMode, QcQuantizeWrapper, StaticGridQuantWrapper, tensor_quantizer_factory
 from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridPerChannelQuantizer
-from aimet_torch.v2.nn import FakeQuantizationMixin
-from aimet_torch.v2.nn import QuantizationMixin
-from aimet_torch.v2.quantization.affine import QuantizeDequantize
-from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer, PercentileEncodingAnalyzer, \
-    SqnrEncodingAnalyzer
 import aimet_torch.fp_quantization as v1_fp_quantization
 
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
+# pylint: disable=import-outside-toplevel
 
 class LazyQuantizeWrapper(torch.nn.Module):
     """
@@ -135,7 +130,7 @@ class LazyQuantizeWrapper(torch.nn.Module):
             # pylint: disable = protected-access
             param_quantizer.enable_per_channel_quantization(channel_axis)
 
-    def _update_quant_param_requires_grad(self, quantized_module: FakeQuantizationMixin):
+    def _update_quant_param_requires_grad(self, quantized_module):
         """
         Update requres_grad value of quantizers in quantized_module.
 
@@ -150,7 +145,7 @@ class LazyQuantizeWrapper(torch.nn.Module):
                     for _, param in quantizer.named_parameters():
                         param.requires_grad = False
 
-    def _apply_quant_param_value_constraints(self, quantized_module: FakeQuantizationMixin):
+    def _apply_quant_param_value_constraints(self, quantized_module):
         """
         Update min and max of quantizers if their values are specified in config
 
@@ -192,12 +187,13 @@ class LazyQuantizeWrapper(torch.nn.Module):
 
         return quantized_module
 
-    def realize_v2_wrapper(self) -> FakeQuantizationMixin:
+    def realize_v2_wrapper(self):
         """
         Realizes v2 quant wrapper using collected information
 
         :return: v2 quant wrapper with specified properties
         """
+        from aimet_torch.v2.nn import FakeQuantizationMixin, QuantizationMixin
         if type(self._module_to_wrap) in QuantizationMixin.cls_to_qcls: # pylint: disable=unidiomatic-typecheck
             quantized_module = QuantizationMixin.from_module(self._module_to_wrap)
         else:
@@ -309,6 +305,8 @@ class LazyQuantizer:
 
         :return: corresponding v2 quant scheme
         """
+        from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer, PercentileEncodingAnalyzer, \
+            SqnrEncodingAnalyzer
         if self.quant_scheme in (QuantScheme.post_training_tf, QuantScheme.training_range_learning_with_tf_init):
             return MinMaxEncodingAnalyzer(shape)
         if self.quant_scheme == QuantScheme.post_training_percentile:
@@ -328,12 +326,14 @@ class LazyQuantizer:
         """
         return [1]
 
-    def realize(self) -> Optional[QuantizeDequantize]:
+    def realize(self):
         """
         Returns spec for v2 quantizer initialization using collected information.
 
         :return: spec for v2 quantizer initialization
         """
+        from aimet_torch.v2.quantization.float import FloatQuantizeDequantize
+        from aimet_torch.v2.quantization.affine import QuantizeDequantize
         if not self.enabled:
             return None
 
