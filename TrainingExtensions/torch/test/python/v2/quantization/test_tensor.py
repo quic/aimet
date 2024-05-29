@@ -364,6 +364,7 @@ class TestQuantizedTensor:
         lambda t : torch.take_along_dim(t, torch.tensor([[[0], [1], [4], [5]]]), dim=1),
         lambda t : torch.tensor_split(t, 2),
         lambda t : torch.tile(t, (2, )),
+        lambda t : t.as_strided((2, 64, 1), (1, 2, 1)),
         torch.detach,
         torch.flatten,
         torch.clone,
