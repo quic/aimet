@@ -65,7 +65,7 @@ do
 done
 
 # Sort the array and determine the smallest value
-glibc_ver_list_sorted=$(echo ${glibc_ver_list} | xargs -n1 | sort -n -k1.2 | xargs)
+glibc_ver_list_sorted=$(echo ${glibc_ver_list} | xargs -n1 | sort -r --version-sort | xargs)
 glibc_min_ver=$(echo "${glibc_ver_list_sorted}" | awk '{print $1;}' | tr '.' '_')
 echo "glibc_min_ver = ${glibc_min_ver}"
 
