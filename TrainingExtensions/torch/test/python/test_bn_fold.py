@@ -938,7 +938,7 @@ def quantsim(model, dummy_input, quantsim_config=None):
 
 class TestTrainingExtensionBnFoldToScale:
     @pytest.mark.parametrize("config", quantsim_config_map.keys())
-    @pytest.mark.parametrize("seed", range(1))
+    @pytest.mark.parametrize("seed", range(10))
     def test_fold_resnet18(self, seed, config):
         quantsim_config = quantsim_config_map[config]
 
