@@ -100,7 +100,7 @@ RUN update-alternatives --set python3 /usr/bin/python3.10
 RUN python3 -m pip --no-cache-dir install --upgrade \
         pip \
         setuptools==49.4.0 \
-        wheel==0.33.4
+        wheel
 
 # Ubuntu packages for pytorch aimet
 RUN dpkg --add-architecture i386
@@ -253,7 +253,7 @@ RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/s
 # SSH login fix. Otherwise user is kicked off after login
 RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
 
-RUN python3 -m pip install git-pylint-commit-hook osqp
+RUN python3 -m pip install git-pylint-commit-hook osqp twine
 
 # NOTE: We need to pin the holoviews version to this since the latest version has a circular dependency on bokeh 2.0.0 through the panel package
 RUN python3 -m pip install holoviews==1.18.3 netron jsonschema pandas==1.5.3
