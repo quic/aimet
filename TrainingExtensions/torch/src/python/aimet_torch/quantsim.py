@@ -50,7 +50,6 @@ import torch
 import onnx
 from packaging import version  # pylint: disable=wrong-import-order
 
-import aimet_common
 import aimet_common.libpymo as libpymo
 from aimet_common import quantsim
 
