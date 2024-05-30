@@ -37,7 +37,7 @@
 # Docker image file to build and test AIMET for Tensorflow in a GPU environment
 
 ARG REGISTRY
-FROM ${REGISTRY}nvidia/cuda:12.0.1-cudnn8-devel-ubuntu22.04
+FROM ${REGISTRY}nvidia/cuda:12.0.0-cudnn8-devel-ubuntu22.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=DontWarn
@@ -280,6 +280,8 @@ RUN ln -s /usr/bin/run-clang-tidy-11.py /usr/bin/run-clang-tidy.py
 
 # Provide write permission to the python package folder in order to install AIMET in editable mode
 RUN chmod o+w /usr/local/lib/python3.10/dist-packages
+
+ENV LD_LIBRARY_PATH=/usr/local/lib/python3.10/dist-packages/nvidia/nvjitlink/lib
 
 # Install cutlass 3.3.0
 RUN cd /usr/local && \
