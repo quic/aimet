@@ -157,7 +157,7 @@ Set the common suffix for the package files as follows:
 
 .. code-block:: bash
 
-    export wheel_file_suffix="cp310-cp310-linux_x86_64.whl"
+    export wheel_file_suffix="cp310-cp310-manylinux_2_34_x86_64.whl"
 
 Install the AIMET packages in the order specified below:
 
@@ -165,37 +165,35 @@ Install the AIMET packages in the order specified below:
 
 .. code-block:: bash
 
-    python3 -m pip install ${download_url}/AimetCommon-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
-
     # Install ONE of the following depending on the variant
-    python3 -m pip install ${download_url}/AimetTorch-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix} -f https://download.pytorch.org/whl/torch_stable.html
+    python3 -m pip install ${download_url}/aimet_torch-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix} -f https://download.pytorch.org/whl/torch_stable.html
     # OR
-    python3 -m pip install ${download_url}/AimetTensorflow-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
+    python3 -m pip install ${download_url}/aimet_tensorflow-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
     # OR
-    python3 -m pip install ${download_url}/AimetOnnx-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
-
-    python3 -m pip install ${download_url}/Aimet-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
+    python3 -m pip install ${download_url}/aimet_onnx-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
 
 
 Install common debian packages
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Install the common debian packages as follows:
+**NOTE:** Do the following ONLY for the TensorFlow variant packages.
 
 .. code-block:: bash
 
-    cat /usr/local/lib/python3.10/dist-packages/aimet_common/bin/reqs_deb_common.txt | xargs apt-get --assume-yes install
+    cat /usr/local/lib/python3.10/dist-packages/aimet_tensorflow/bin/reqs_deb_common.txt | xargs apt-get --assume-yes install
 
 **NOTE:** Do the following ONLY for the PyTorch variant packages.
 
 .. code-block:: bash
 
-    cat /usr/local/lib/python3.10/dist-packages/aimet_onnx/bin/reqs_deb_torch_common.txt | xargs apt-get --assume-yes install
+    cat /usr/local/lib/python3.10/dist-packages/aimet_torch/bin/reqs_deb_common.txt | xargs apt-get --assume-yes install
+    cat /usr/local/lib/python3.10/dist-packages/aimet_torch/bin/reqs_deb_torch_common.txt | xargs apt-get --assume-yes install
 
 **NOTE:** Do the following ONLY for the ONNX variant packages.
 
 .. code-block:: bash
 
+    cat /usr/local/lib/python3.10/dist-packages/aimet_onnx/bin/reqs_deb_common.txt | xargs apt-get --assume-yes install
     cat /usr/local/lib/python3.10/dist-packages/aimet_onnx/bin/reqs_deb_onnx_common.txt | xargs apt-get --assume-yes install
 
 Install tensorflow GPU debian packages

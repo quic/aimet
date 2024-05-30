@@ -39,15 +39,15 @@
 
 import os
 import sys
+import shlex
+import subprocess
 
 from pathlib import Path
 from setuptools import find_packages, find_namespace_packages, setup
 from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
 
 package_name = "aimet_@package@"
-common_package_name ="aimet_common"
-package_url_base = "@REMOTE_URL@/releases/download/@SW_VERSION@"
-
+common_package_name = "aimet_common"
 
 class bdist_wheel_aimet(_bdist_wheel):
     '''
@@ -235,6 +235,37 @@ def get_all_dependency_urls(aimet_package_name):
 
     return dependency_url_list
 
+
+def get_package_url():
+    '''
+    Return the package URL
+    '''
+    remote_url_string="@REMOTE_URL@"
+    if remote_url_string:
+        # For now, we continue to support the REMOTE_URL if set
+        package_url_base = "@REMOTE_URL@/releases/download/@SW_VERSION@"
+    else:
+        # This is the package homepage
+        package_url_base = "https://quic.github.io/aimet-pages/index.html"
+
+    return package_url_base
+
+
+def get_package_version():
+    '''
+    Return the package version (append variant to original value of SW_VERSION)
+    '''
+    sw_version = "@SW_VERSION@"
+
+    if "pypi" in "@PIP_INDEX@":
+        # For PyPi indices, just return the version without appending the variant notation
+        return sw_version
+
+    # Append the variant string to the original software version that was passed in
+    package_version_with_variant = sw_version + "+" + "@CUDA_VER_STRING@"
+    return package_version_with_variant
+
+
 # Obtain list of package and sub-packages (including common dependency ones)
 packages_found = get_package_list(package_name)
 
@@ -250,20 +281,26 @@ required_common_package_data = get_required_package_data(common_package_name)
 # Obtain non-PyPi dependency URLs (if any) for common package
 dependency_url_list.extend(get_all_dependency_urls(common_package_name))
 
+# Obtain the package home page URL
+package_url_base = get_package_url()
+
+
 if "--gpu" in sys.argv:
     sys.argv.remove("--gpu")
+package_version = get_package_version()
 
 
 setup(
     name='aimet-@package@',
-    version='@SW_VERSION@',
+    version=package_version,
     author='Qualcomm Innovation Center, Inc.',
     author_email='aimet.os@quicinc.com',
     packages=packages_found,
     url=package_url_base,
     license='NOTICE.txt',
     description='AIMET @package@ Package',
-    long_description=open('README.txt').read(),
+    long_description=open('pypi_readme_@package@.md').read(),
+    long_description_content_type='text/markdown',
     package_data={package_name:required_package_data, common_package_name:required_common_package_data},
     install_requires=install_requires_list,
     dependency_links=dependency_url_list,

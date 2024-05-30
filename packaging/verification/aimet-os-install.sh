@@ -2,7 +2,7 @@
 #==============================================================================
 #  @@-COPYRIGHT-START-@@
 #  
-#  Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #  
 #  Redistribution and use in source and binary forms, with or without 
 #  modification, are permitted provided that the following conditions are met:
@@ -58,7 +58,7 @@ update-alternatives --set python3 /usr/bin/python3.10
 # GPU varients
 if [[ "$AIMET_VARIANT" == *"gpu"* ]]; then
 
-    #. PyTorch 1.13 GPU variant: `CUDA Toolkit 11.6.2 <https://developer.nvidia.com/cuda-11-6-2-download-archive>`_
+    #. PyTorch 1.13 GPU variant: `CUDA Toolkit 11.7.1 <https://developer.nvidia.com/cuda-11-7-1-download-archive>`_
     if [[ ( "$AIMET_VARIANT" == *"torch"* || "$AIMET_VARIANT" == *"onnx"* ) && "$AIMET_VARIANT" != *"pt21"* ]]; then
         wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin
         mv cuda-ubuntu2204.pin /etc/apt/preferences.d/cuda-repository-pin-600
@@ -164,11 +164,12 @@ if [[ -f !/usr/lib/libjpeg.so ]]; then
 	ln -s /usr/lib/x86_64-linux-gnu/libjpeg.so /usr/lib
 fi
 
-if [[ "$AIMET_VARIANT" == "tf_gpu" ]]; then
+
+if [[ "$AIMET_VARIANT" == "tf_gpu" || "$AIMET_VARIANT" == "torch-gpu-pt21" ]]; then
   if [[ -f !/usr/local/cuda ]]; then 
       ln -s /usr/local/cuda-11.8 /usr/local/cuda
   fi
-elif [[ "$AIMET_VARIANT" == "torch_gpu" ]]; then
+elif [[ "$AIMET_VARIANT" == "torch_gpu" || "$AIMET_VARIANT" == "onnx-gpu"  ]]; then
     if [[ -f !/usr/local/cuda ]]; then
         ln -s /usr/local/cuda-11.7 /usr/local/cuda
     fi

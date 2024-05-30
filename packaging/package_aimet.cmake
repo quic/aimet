@@ -140,6 +140,12 @@ if(ENABLE_ONNX)
 endif()
 
 
+# Pull just the version from the string (ex. 1.13+c116 --> 1.13)
+execute_process(COMMAND bash -c "echo ${FMWORK_VERSION} | tr -s ' ' | cut -d\"+\" -f1"
+                OUTPUT_VARIABLE fmwork_ver_bare
+                OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+
 # Loop over the package array list to generate wheel files
 foreach(package ${package_name_list})
   set(pkg_staging_path "${build_packaging_dir}/${package}")
@@ -158,12 +164,14 @@ foreach(package ${package_name_list})
     )
   execute_process(
     # Delete binaries from aimet_common which should not be part of the package
-    COMMAND ${CMAKE_COMMAND} -E rm -rf "${pkg_common_staging_path}/bin"
+    COMMAND ${CMAKE_COMMAND} -E rm -rf "${pkg_deps_staging_path}"
   )
-  # convert file names to the absolute paths by preprnding corresponded directory
+  # convert file names to the absolute paths by prepending corresponded directory
   list(TRANSFORM deps_name_list_${package} PREPEND "${src_deps_dir}/${variant_name}/")
+
+  # Copy the dependency and other files into the staging subfolder
+  execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory "${pkg_deps_staging_path}")
   execute_process(
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${pkg_deps_staging_path}"
     COMMAND ${CMAKE_COMMAND} -E copy 
       ${deps_name_list_${package}}
       "${src_packaging_dir}/INSTALL.txt"
@@ -172,11 +180,12 @@ foreach(package ${package_name_list})
   )
 
   if(EXISTS "${src_packaging_dir}/LICENSE.pdf")
-    file(COPY "${src_packaging_dir}/LICENSE.pdf" DESTINATION ${build_packaging_dir}/)
     # optional, might not be present on host
-    execute_process(COMMAND ${CMAKE_COMMAND} -E copy "${src_packaging_dir}/LICENSE.pdf" "${pkg_deps_staging_path}/")
+    file(COPY "${src_packaging_dir}/LICENSE.pdf" DESTINATION ${build_packaging_dir}/)
+    file(COPY "${src_packaging_dir}/LICENSE.pdf" DESTINATION ${pkg_deps_staging_path}/)
   endif()
 
+  configure_file("${CMAKE_CURRENT_LIST_DIR}/pypi_readme.md.in" "${pkg_staging_path}/pypi_readme_${package}.md" @ONLY)
   configure_file("${CMAKE_CURRENT_LIST_DIR}/setup.py.in" "${pkg_staging_path}/setup-${package}.py" @ONLY)
   configure_file(${CMAKE_CURRENT_LIST_DIR}/MANIFEST.in.in ${pkg_staging_path}/MANIFEST.in @ONLY)
 
@@ -198,3 +207,13 @@ foreach(package ${package_name_list})
     RESULT_VARIABLE setup_return_string
   )
 endforeach()
+
+# Rename the package wheel files to conform to manylinux format for PyPi
+message(STATUS "Package rename command: ${rename_package_cmd}")
+execute_process(COMMAND bash "-c" "${src_packaging_dir}/convert_wheel_format.sh ${CMAKE_BINARY_DIR}"
+                OUTPUT_VARIABLE convert_wheel_output
+                RESULT_VARIABLE convert_wheel_result
+                OUTPUT_STRIP_TRAILING_WHITESPACE)
+if(convert_wheel_result EQUAL "1")
+  message( FATAL_ERROR "Wheel package conversion failed")
+endif()

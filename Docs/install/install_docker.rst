@@ -118,7 +118,27 @@ Ensure that a docker named `$docker_container_name` is not already running; othe
 Install AIMET packages
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-Go to https://github.com/quic/aimet/releases and identify the release tag of the package you want to install.
+From PyPI
+=========
+
+Aimet Torch GPU can install from pypi through the following method:
+
+Go to https://pypi.org/project/aimet-torch to identify a version you wish to install
+
+    - For PyTorch 1.13 GPU you should use aimet-torch==1.31.1
+    - For Pytorch 2.1.2 GPU you should use aimet-torch >= 1.32.0
+
+.. code-block:: bash
+
+    sudo apt-get install liblapacke -y
+    pip install aimet-torch
+
+
+From Release Package
+====================
+
+Alternatively, we host .whl packages for each release at https://github.com/quic/aimet/releases. Identify the release tag
+of the package you wish to install, then follow the instructions below to install AIMET from the .whl file.
 
 Set the <variant_string> to ONE of the following depending on your desired variant
 
@@ -162,16 +182,12 @@ Install the AIMET packages in the order specified below:
 
 .. code-block:: bash
 
-    python3 -m pip install ${download_url}/AimetCommon-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
-
     # Install ONE of the following depending on the variant
-    python3 -m pip install ${download_url}/AimetTorch-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix} -f https://download.pytorch.org/whl/torch_stable.html
+    python3 -m pip install ${download_url}/aimet_torch-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix} -f https://download.pytorch.org/whl/torch_stable.html
     # OR
-    python3 -m pip install ${download_url}/AimetTensorflow-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
+    python3 -m pip install ${download_url}/aimet_tensorflow-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
     # OR
-    python3 -m pip install ${download_url}/AimetOnnx-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
-
-    python3 -m pip install ${download_url}/Aimet-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
+    python3 -m pip install ${download_url}/aimet_onnx-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
 
 Environment setup
 ~~~~~~~~~~~~~~~~~
