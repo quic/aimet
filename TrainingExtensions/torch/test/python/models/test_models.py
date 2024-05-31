@@ -42,6 +42,7 @@ from typing import Dict, List
 
 import torch
 import torch.nn.functional as F
+from scipy import ndimage
 from torch import nn as nn
 from torchvision.ops import roi_align
 
@@ -1341,3 +1342,33 @@ class ModelWithThreeLinears(nn.Module):
         x = self.linear3(x)
         x = self.softmax(x)
         return x
+
+
+class CustomFunctionalConv(nn.Module):
+    """
+    Custom module with functional conv
+    Expected input shape: (1, 3, 16, 16)
+    """
+    def __init__(self):
+        super().__init__()
+
+        kernel_size = 5
+        channels = 3
+        sigma = 0.7
+        stride = 2
+
+        kernel = torch.zeros(kernel_size, kernel_size)
+        mean_loc = int((kernel_size - 1) / 2)  # Because 0 indexed
+        kernel[mean_loc, mean_loc] = 1
+        kernel = torch.from_numpy(ndimage.gaussian_filter(kernel.numpy(), sigma=sigma))
+
+        # Make a dwise conv out of the kernel
+        # Weights of shape out_channels, in_channels/groups, k, k
+        kernel = kernel.view(1, 1, kernel_size, kernel_size)
+        kernel = kernel.repeat(channels, 1, 1, 1)
+        self.register_buffer("weight", kernel)
+        self.channels = channels
+        self.stride = stride
+
+    def forward(self, x):
+        return F.conv2d(x, weight=self.weight, groups=self.channels, stride=self.stride)
