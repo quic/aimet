@@ -49,6 +49,7 @@ from safetensors import safe_open
 # pylint: disable=no-name-in-module
 from peft.tuners.lora.layer import LoraLayer as PeftLoraLayer
 
+from aimet_torch.defs import ConvInplaceLinear
 from aimet_torch.utils import replace_modules_of_type1_using_constructor
 from aimet_torch.elementwise_ops import Add
 from aimet_torch.v2.quantsim import QuantizationSimModel
@@ -121,6 +122,34 @@ def replace_lora_layers_with_quantizable_layers(model: torch.nn.Module):
     replace_modules_of_type1_using_constructor(model, PeftLoraLayer, LoraLayer)
 
 
+def save_lora_weights_after_adaptation(model: torch.nn.Module, path: str, filename_prefix: str):
+    """
+    Utility to save model weights after model adaptations
+
+    :param model: PEFT model
+    :param path: path where to store model pth and encodings
+    :param filename_prefix: Prefix to use for filenames
+    """
+    param_to_name = {}
+
+    for name, param in model.named_parameters():
+        param_to_name[param] = name
+
+    lora_weights = {}
+    for name, module in model.named_modules():
+        if isinstance(module, LoraLayer):
+            for _, param in module.lora_A.named_parameters():
+                name = param_to_name[param]
+                lora_weights[name] = param
+            for _, param in module.lora_B.named_parameters():
+                name = param_to_name[param]
+                lora_weights[name] = param
+
+    filename_prefix = filename_prefix + '.safetensor'
+    model_params_path = os.path.join(path, filename_prefix)
+    save_file(lora_weights, model_params_path)
+
+
 class AdapterMetaData:
     """
     Tracks meta data for lora layers. Tracks names of lora_a & b as well as alpha values
@@ -137,19 +166,29 @@ def track_lora_meta_data(model: torch.nn.Module, path: str, filename_prefix: str
 
     :param model: PEFT model
     :param path: path where to store model pth and encodings
-    :param filename_prefix: Prefix to use for filenames of the model pth and encodings files
+    :param filename_prefix: Prefix to use for filenames
     """
+    module_to_name_d = {}
+
     for name, module in model.named_modules():
-        module.name = name
+        module_to_name_d[module] = name
+
     adapter_name_to_meta_data = defaultdict(AdapterMetaData)
     for name, module in model.named_modules():
         if isinstance(module, LoraLayer):
             for index, lora_layer in enumerate(module.lora_A):
-                adapter_name_to_meta_data[module.index_to_adapter_name[index]].lora_A.append(lora_layer.name)
+                if isinstance(lora_layer, ConvInplaceLinear):
+                    lora_layer = lora_layer.conv2d
+                adapter_name_to_meta_data[module.index_to_adapter_name[index]].lora_A.append(
+                    module_to_name_d[lora_layer])
             for index, lora_layer in enumerate(module.lora_B):
-                adapter_name_to_meta_data[module.index_to_adapter_name[index]].lora_B.append(lora_layer.name)
+                if isinstance(lora_layer, ConvInplaceLinear):
+                    lora_layer = lora_layer.conv2d
+                adapter_name_to_meta_data[module.index_to_adapter_name[index]].lora_B.append(
+                    module_to_name_d[lora_layer])
             for lora_adapter_name in module.lora_alpha:
                 adapter_name_to_meta_data[lora_adapter_name].alpha = module.lora_alpha[lora_adapter_name]
+
 
     file_name = os.path.join(path, f"{filename_prefix}.pkl")
     with open(file_name, 'wb') as file:
@@ -161,24 +200,23 @@ class PeftQuantUtils:
     """
     Utilities for quantizing peft model
     """
-    def __init__(self, model, adapater_name_to_meta_data: Dict, prepared_model: bool = False):
+    def __init__(self, adapater_name_to_meta_data: Dict, name_to_module_dict = None):
         """
         Init for Peft utilities for quantization
 
-        :param model: Torch model
         :param adapater_name_to_meta_data: Dict showing adapter name to meta data
-        :param prepared_model: Bool. If true, then user has passed a prepared model as the model
+        :param name_to_module_dict: PT Name to module ONNX name mapping
         """
         self.adapter_name_to_meta_data = adapater_name_to_meta_data
         self.lora_layers = self._get_lora_layers()
         self.pt_name_to_onnx_name, self.onnx_name_to_pt_name = None, None
         self.pt_to_lora_name = dict.fromkeys(self.lora_layers, '')
-        if prepared_model:
-            self.pt_name_to_onnx_name, self.onnx_name_to_pt_name = self._get_pytorch_name_to_onnx_name(model)
+        if name_to_module_dict:
+            self.pt_name_to_onnx_name, self.onnx_name_to_pt_name = self._get_pytorch_name_to_onnx_name(name_to_module_dict)
             self.lora_to_pt_name, self.pt_to_lora_name = self._get_lora_name_to_pytorch_name()
 
     @staticmethod
-    def _get_pytorch_name_to_onnx_name(model: torch.nn.Module):
+    def _get_pytorch_name_to_onnx_name(name_to_module_dict):
         """
         Gets onnx names to pytorch names mapping and vice versa
 
@@ -186,12 +224,10 @@ class PeftQuantUtils:
         """
         pt_name_to_onnx_name = {}
         onnx_name_to_pt_name = {}
-        for name, module in model.named_modules():
-            for pytorch_name in model.name_to_module_dict:
-                pytorch_module = model.name_to_module_dict[pytorch_name][0]
-                if pytorch_module == module:
-                    pt_name_to_onnx_name[pytorch_name] = name
-                    onnx_name_to_pt_name[name] = pytorch_name
+        for pytorch_name in name_to_module_dict:
+            onnx_name = name_to_module_dict[pytorch_name][0]
+            pt_name_to_onnx_name[pytorch_name] = onnx_name
+            onnx_name_to_pt_name[onnx_name] = pytorch_name
         return pt_name_to_onnx_name, onnx_name_to_pt_name
 
     def _get_lora_name_to_pytorch_name(self):
@@ -284,24 +320,21 @@ class PeftQuantUtils:
             if isinstance(module, BaseQuantizationMixin) and module_name in self.pt_to_lora_name:
                 self._set_bitwidth_for_module(module, output_bw, param_bw)
 
-    def set_bitwidth_for_given_lora_adapters(self, sim: QuantizationSimModel,
-                                             adapter_name: str, output_bw: int, param_bw: int):
+    def get_quantized_lora_layer(self, sim: QuantizationSimModel):
         """
-        Sets output and param bitwidth for specific adapters. The specific adapter is specified using adapter name
+        This function can be used to generate lora quantized layers
+        Use cases: 1) New quantizers can be created and assigned to lora quantized layer.
+                   New quantizers may be required if changing - Changing dtype, per channel to per tensor
+                   and vice versa
+                   2) Assign new values to symmetric, bitwidth
 
         :param sim: QuantSim model
-        :param adapter_name: Name of the adapter for which the Bitwidth need to be set
-        :param output_bw: Output BW
-        :param param_bw: Parameter BW
         """
-        for _, module in sim.model.named_modules():
-            if isinstance(module, LoraLayer):
-                if adapter_name in module.adapter_name_to_index:
-                    index = module.adapter_name_to_index[adapter_name]
-                    lora_a = module.lora_A[index]
-                    lora_b = module.lora_B[index]
-                    self._set_bitwidth_for_module(lora_a, output_bw, param_bw)
-                    self._set_bitwidth_for_module(lora_b, output_bw, param_bw)
+        for module_name, module in sim.model.named_modules():
+            if self.onnx_name_to_pt_name and module_name in self.onnx_name_to_pt_name:
+                module_name = self.onnx_name_to_pt_name[module_name]
+            if isinstance(module, BaseQuantizationMixin) and module_name in self.pt_to_lora_name:
+                yield module_name, module
 
     @staticmethod
     def _set_bitwidth_for_module(module: BaseQuantizationMixin, output_bw: int, param_bw: int):
@@ -330,7 +363,9 @@ class PeftQuantUtils:
         for module_name, module in sim.model.named_modules():
             org_name = module_name
             if self.onnx_name_to_pt_name and module_name in self.onnx_name_to_pt_name:
-                module_name = 'base_model.' + self.onnx_name_to_pt_name[module_name]
+                pt_name = self.onnx_name_to_pt_name[module_name]
+                if pt_name in self.pt_to_lora_name:
+                    module_name = self.pt_to_lora_name[pt_name]
             if module_name in self.lora_layers:
                 for param_name, param in module.named_parameters():
                     if param_name in ['weight', 'bias']:
@@ -340,20 +375,50 @@ class PeftQuantUtils:
         model_params_path = os.path.join(path, filename_prefix)
         save_file(tensors, model_params_path)
 
-    def enable_adapter_and_load_weights(self, sim: QuantizationSimModel, adapter_weights_path):
+    def enable_adapter_and_load_weights(self, sim: QuantizationSimModel, adapter_weights_path,
+                                        use_safetensor: bool = True):
         """
         Enables adapter effect on base model by loading weights to model
 
         :param sim: QuantSim model
-        :param adapter_weights_path: Path to adapter weights
+        :param adapter_weights_path: Path to adapter weights (adapter weights should be either bin file or safetensor)
+        :param use_safetensor: True if adapter weights path point to a safetensor file. False if points to bin file
         """
         tensors = {}
-        with safe_open(adapter_weights_path, framework="pt", device=0) as f:
-            for key in f.keys():
-                tensor_name = key
-                if self.onnx_name_to_pt_name:
-                    temp_key = key[0:key.find('.weight')]
-                    tensor_name = self.pt_name_to_onnx_name[self.lora_to_pt_name[temp_key]] + '.weight'
-                tensors[tensor_name] = f.get_tensor(key)
+        if use_safetensor:
+            with safe_open(adapter_weights_path, framework="pt", device=0) as f:
+                for key in f.keys():
+                    tensors[key] = f.get_tensor(key)
+        else:
+            tensors = torch.load(adapter_weights_path)
+
+        onnx_names_tensors = {}
+        for key in tensors.keys():
+            tensor_name = key
+            if self.onnx_name_to_pt_name:
+                temp_key = key[0:key.find('.weight')]
+                tensor_name = self.pt_name_to_onnx_name[self.lora_to_pt_name[temp_key]] + '.weight'
+            onnx_names_tensors[tensor_name] = tensors[key]
+
+        sim.model.load_state_dict(onnx_names_tensors, strict=False)
+
+    def disable_lora_adapters(self, sim: QuantizationSimModel):
+        """
+        Disables adapter (zero out weights for lora A & B) effect on base model by loading weights to model
+
+        :param sim: QuantSim model
+        """
+        tensors = {}
+        for module_name, module in sim.model.named_modules():
+            org_name = module_name
+            if self.onnx_name_to_pt_name and module_name in self.onnx_name_to_pt_name:
+                pt_name = self.onnx_name_to_pt_name[module_name]
+                if pt_name in self.pt_to_lora_name:
+                    module_name = self.pt_to_lora_name[pt_name]
+            if module_name in self.lora_layers:
+                for param_name, param in module.named_parameters():
+                    if param_name in ['weight', 'bias']:
+                        tensor_name = org_name + '.' + param_name
+                        tensors[tensor_name] = torch.zeros_like(param)
 
         sim.model.load_state_dict(tensors, strict=False)

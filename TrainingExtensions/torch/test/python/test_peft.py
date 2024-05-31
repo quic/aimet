@@ -41,11 +41,34 @@ import tempfile
 import torch
 from safetensors.torch import save_file
 from safetensors import safe_open
+import functools
+import copy
 
 from peft.tuners.lora.layer import LoraLayer as PeftLoraLayer
 from peft import LoraConfig, get_peft_model
-from aimet_torch.peft import replace_lora_layers_with_quantizable_layers, track_lora_meta_data, LoraLayer, PeftQuantUtils
+from aimet_torch.defs import ConvInplaceLinear
+from aimet_torch.peft import replace_lora_layers_with_quantizable_layers, track_lora_meta_data, LoraLayer, PeftQuantUtils, save_lora_weights_after_adaptation
 from aimet_torch.v2.quantsim import QuantizationSimModel
+
+def rsetattr(obj, attr, val):
+    pre, _, post = attr.rpartition('.')
+    return setattr(rgetattr(obj, pre) if pre else obj, post, val)
+
+def rgetattr(obj, attr, *args):
+    def _getattr(obj, attr):
+        return getattr(obj, attr, *args)
+    return functools.reduce(_getattr, [obj] + attr.split('.'))
+
+def replace_linears_with_convs(model: torch.nn.Module,
+                               linear_types= torch.nn.Linear) -> torch.nn.Module:
+    model_conv = copy.deepcopy(model)
+
+    for name, module in model_conv.named_modules():
+        if isinstance(module, linear_types):
+            conv_layer = ConvInplaceLinear(module)
+            rsetattr(model_conv, name, conv_layer)
+
+    return model_conv
 
 class DummyModel(torch.nn.Module):
     def __init__(self):
@@ -101,10 +124,28 @@ class TestLoraAdapterPeft:
         assert new_count_lora_layer == 0
         assert count_qc_lora_layer == count_lora_layer
 
+    def test_save_weights_after_adaptation(self):
+        model = one_adapter_model()
+        replace_lora_layers_with_quantizable_layers(model)
+        model = replace_linears_with_convs(model)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            save_lora_weights_after_adaptation(model, tmpdir, 'lora_weights')
+            tensor_name = []
+            with safe_open(os.path.join(tmpdir, 'lora_weights.safetensor'), framework="pt", device=0) as f:
+                for key in f.keys():
+                    tensor_name.append(key)
+
+            assert len(tensor_name) == 2
+            tensors = ['base_model.model.linear.lora_A.0.conv2d.weight',
+                       'base_model.model.linear.lora_B.0.conv2d.weight']
+            assert sorted(tensor_name) == sorted(tensors)
+
     def test_track_adapter_meta_data(self):
         model = two_adapter_model()
         replace_lora_layers_with_quantizable_layers(model)
-        meta_data = track_lora_meta_data(model, './', 'meta_data')
+        with tempfile.TemporaryDirectory() as tmpdir:
+            meta_data = track_lora_meta_data(model, tmpdir, 'meta_data')
         assert len(meta_data) == 2
         assert 'default' in meta_data
         assert 'default_new' in meta_data
@@ -114,14 +155,16 @@ class TestLoraAdapterPeft:
     def test_freeze_base_model_params_and_activations(self):
         model = two_adapter_model()
         replace_lora_layers_with_quantizable_layers(model)
-        meta_data = track_lora_meta_data(model, './', 'meta_data')
 
         dummy_inputs = torch.randn(10, 10)
 
         def forward_pass(model, forward_pass_callback=None):
             return model(dummy_inputs)
 
-        peft_utils = PeftQuantUtils(model, meta_data)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            meta_data = track_lora_meta_data(model, tmpdir, 'meta_data')
+
+        peft_utils = PeftQuantUtils(meta_data)
 
         sim = QuantizationSimModel(model, dummy_input= dummy_inputs)
         sim.compute_encodings(forward_pass, forward_pass_callback_args=None)
@@ -149,10 +192,11 @@ class TestLoraAdapterPeft:
     def test_set_bitwidth_for_lora_adapters(self):
         model = two_adapter_model()
         replace_lora_layers_with_quantizable_layers(model)
-        meta_data = track_lora_meta_data(model, './', 'meta_data')
+        with tempfile.TemporaryDirectory() as tmpdir:
+            meta_data = track_lora_meta_data(model, tmpdir, 'meta_data')
         dummy_inputs = torch.randn(10, 10)
 
-        peft_utils = PeftQuantUtils(model, meta_data)
+        peft_utils = PeftQuantUtils(meta_data)
 
         sim = QuantizationSimModel(model, dummy_input=dummy_inputs)
 
@@ -164,11 +208,6 @@ class TestLoraAdapterPeft:
         assert qc_lora.lora_A[1].param_quantizers['weight'].bitwidth == 4
         assert qc_lora.lora_B[1].output_quantizers[0].bitwidth == 4
 
-        peft_utils.set_bitwidth_for_given_lora_adapters(sim, 'default_new', output_bw=2, param_bw=2)
-        assert qc_lora.lora_A[0].param_quantizers['weight'].bitwidth == 4
-        assert qc_lora.lora_A[1].param_quantizers['weight'].bitwidth == 2
-        assert qc_lora.lora_B[1].output_quantizers[0].bitwidth == 2
-
     @pytest.mark.cuda
     def test_enable_and_load_weights_adapter(self):
         model = one_adapter_model()
@@ -176,7 +215,7 @@ class TestLoraAdapterPeft:
         meta_data = track_lora_meta_data(model, './', 'meta_data')
         dummy_inputs = torch.randn(10, 10)
 
-        peft_utils = PeftQuantUtils(model, meta_data)
+        peft_utils = PeftQuantUtils(meta_data)
 
         sim = QuantizationSimModel(model, dummy_input=dummy_inputs)
         qc_lora = sim.model.base_model.model.linear
@@ -190,6 +229,24 @@ class TestLoraAdapterPeft:
             peft_utils.enable_adapter_and_load_weights(sim, path)
             assert torch.all(qc_lora.lora_B[0].weight == tensors['base_model.model.linear.lora_B.0.weight'])
 
+    def test_lora_layer_generator(self):
+        model = two_adapter_model()
+        replace_lora_layers_with_quantizable_layers(model)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            meta_data = track_lora_meta_data(model, tmpdir, 'meta_data')
+        dummy_inputs = torch.randn(10, 10)
+
+        peft_utils = PeftQuantUtils(meta_data)
+
+        sim = QuantizationSimModel(model, dummy_input=dummy_inputs)
+
+        count = 0
+        for name, layer in peft_utils.get_quantized_lora_layer(sim):
+            count += 1
+            assert 'lora' in name
+
+        assert count == 4
+
     def test_export_adapter_weights(self):
         model = one_adapter_model()
 
@@ -197,7 +254,7 @@ class TestLoraAdapterPeft:
         meta_data = track_lora_meta_data(model,'./', 'meta_data')
         dummy_inputs = torch.randn(10, 10)
 
-        peft_utils = PeftQuantUtils(model, meta_data)
+        peft_utils = PeftQuantUtils(meta_data)
 
         sim = QuantizationSimModel(model, dummy_input=dummy_inputs)
         qc_lora = sim.model.base_model.model.linear
