@@ -60,7 +60,7 @@ class TestGPTVQOptimizer:
         )
         codebook = codebook.reshape(num_blocks_per_column, num_of_centroids, vector_dim)
 
-        updated_weight_block = GPTVQOptimizer._update_weight_block(
+        updated_weight_block, _ = GPTVQOptimizer._update_weight_block(
             weight_block[:, start_index:start_index + vector_dim].clone(),
             codebook,
             vector_dim=vector_dim,

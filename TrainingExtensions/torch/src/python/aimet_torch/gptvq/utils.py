@@ -34,13 +34,20 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+# pylint: disable=redefined-outer-name
 """Utility methods for working with GPTVQ"""
 from typing import Optional, List, Tuple
 
 import torch
+from torch import nn
 from torch.linalg import LinAlgError
 
-from aimet_torch.gptvq.defs import DAMPENING_PERCENTAGE
+import aimet_torch.v2.quantization as Q
+from aimet_torch.gptvq.defs import DAMPENING_PERCENTAGE, GPTVQParameters
+
+
+HESSIAN_WEIGHTED_LOOKUP = False
+DO_CODEBOOK_FINE_TUNING = False
 
 
 def generate_codebook(weight_block: torch.Tensor,
@@ -240,3 +247,135 @@ def do_kmeans_maximization(tensor: torch.Tensor,
         )
 
     return new_centroids
+
+
+def quad_loss_2(
+        weight_tensor: torch.Tensor,
+        quantized_weight_tensor: torch.Tensor,
+        hessian_tensor: torch.Tensor,
+) -> torch.Tensor:
+    """
+    Compute quad loss
+
+    :param weight_tensor: Weight tensor
+    :param quantized_weight_tensor: Quantized weight tensor
+    :param hessian_tensor: Hessian tensor
+    :return: Quad loss
+    """
+    weight_error = weight_tensor - quantized_weight_tensor
+    return (weight_error.mm(hessian_tensor) * weight_error).sum()
+
+
+# pylint: disable=too-many-locals
+def fine_tune_codebook(
+        original_weight: torch.Tensor,
+        original_hessian: torch.Tensor,
+        codebooks: List,
+        original_assignments: List,
+        gptvq_params: GPTVQParameters,
+        quantizer: nn.Module,
+):
+    """
+    Update codebook by fine-tuning
+
+    :param original_weight: Original weight tensor of target module
+    :param original_hessian: Original Hessian tensor of target module
+    :param codebooks: List of codebooks
+    :param original_assignments: List of corresponding assignments
+    :param gptvq_params: GPTVQ parameters
+    :param quantizer: Weight quantizer
+    :return: Fine-tuned weight tensor
+    """
+    with torch.enable_grad():
+        weight_tensor = original_weight.float()
+
+        if len(weight_tensor.shape) > 2:
+            weight_tensor = weight_tensor.flatten(1)
+
+        rows, cols = weight_tensor.shape
+        weight_tensor = (
+            weight_tensor.reshape(rows, -1, gptvq_params.vector_stride)
+            .transpose(1, 2)
+            .reshape(rows, cols)
+        )
+        all_centroids = codebooks
+        all_assignments = original_assignments
+
+        def make_quantized_weight(centroids, assignments):
+            all_values = []
+            for c, a in zip(centroids, assignments):
+                for a_ in a:
+                    values = torch.gather(
+                        c, dim=1, index=a_.unsqueeze(-1).expand(-1, -1, gptvq_params.vector_dim)
+                    )
+                    all_values.append(values.view(weight_tensor.shape[0], -1))
+            Q = torch.concat(all_values, dim=1)
+            return Q
+
+        with torch.no_grad():
+            Q = make_quantized_weight(all_centroids, all_assignments)
+            orig_loss = quad_loss_2(weight_tensor, Q, original_hessian)
+            if orig_loss.item() == 0:
+                return Q
+
+        must_restart = True
+        lr = 1e-3
+        while must_restart:
+            orig_centroids = [c.data.clone() for c in all_centroids]
+            for c in all_centroids:
+                c.requires_grad_()
+
+            param_list = list(all_centroids)
+            o = torch.optim.Adam(param_list, lr=lr)
+            for _ in range(25):
+                must_restart = False
+                o.zero_grad()
+                Q = make_quantized_weight(all_centroids, all_assignments)
+                loss = quad_loss_2(weight_tensor, Q, original_hessian)
+                if loss > orig_loss or torch.isnan(loss):
+                    lr *= 1e-1
+                    must_restart = True
+                    all_centroids = orig_centroids
+                    break
+                loss.backward()
+                o.step()
+
+            if not must_restart:
+                new_all_centroids = [
+                    quantize_dequantize_codebook(
+                        c.requires_grad_(False),
+                        quantizer,
+                        rows // gptvq_params.rows_per_block,
+                    )
+                    for c in all_centroids
+                ]
+                Q = make_quantized_weight(new_all_centroids, all_assignments)
+                loss = quad_loss_2(weight_tensor, Q, original_hessian)
+                if torch.isnan(loss):
+                    lr *= 1e-1
+                    must_restart = True
+                    all_centroids = orig_centroids
+                    continue
+
+    return Q
+
+
+def quantize_dequantize_codebook(codebook: torch.Tensor,
+                                 quantizer: nn.Module,
+                                 num_blocks_per_column: int) -> torch.Tensor:
+    """
+    Quantize-Dequantize codebook
+
+    :param codebook: Codebook
+    :param quantizer: Quantizer
+    :param num_blocks_per_column: Number of blocks per column
+    :return: Quantize-Dequantized codebook
+    """
+    qdq_codebook = Q.affine.quantize_dequantize(
+        codebook.reshape(num_blocks_per_column, -1),
+        quantizer.get_scale(),
+        quantizer.get_offset(),
+        quantizer.bitwidth,
+        quantizer.symmetric,
+    )
+    return qdq_codebook.reshape(codebook.shape)
