@@ -55,7 +55,6 @@ class GPTVQParameters:
     # pylint: disable=too-many-instance-attributes
     data_loader: DataLoader
     forward_fn: Callable[[nn.Module, Any], Any]
-    num_batches: int = 1
     row_axis: int = 0
     col_axis: int = 1
     rows_per_block: int = 32
@@ -64,6 +63,5 @@ class GPTVQParameters:
     vector_bw: int = 8
     vector_stride: int = 1
     index_bw: int = 6
-    hessian_weighted_lookup: bool = False
     num_of_kmeans_iterations: int = 100
     assignment_chunk_size: Optional[int] = None
