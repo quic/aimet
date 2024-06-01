@@ -184,4 +184,4 @@ cv::Mat TensorOperations::sumAlongSecondThirdAxis(cv::Mat inputTensor)
     }
     return reducedMat;
 }
-}
+}   // namespace AimetEqualization

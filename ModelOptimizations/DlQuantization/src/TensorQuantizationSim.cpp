@@ -36,20 +36,23 @@
 //
 //==============================================================================
 
-#include <math.h>
 #include <algorithm>
-#include <numeric>
 #include <functional>
 #include <iostream>
+#include <math.h>
+#include <numeric>
 
-#include "trim_functions.hpp"
-#include "quantization_utils.hpp"
 #include "TensorQuantizationSim.h"
+#include "quantization_utils.hpp"
+#include "trim_functions.hpp"
 
 namespace DlQuantization
 {
 
-uint8_t getBw(int bw) { return std::max(bw,8); }
+uint8_t getBw(int bw)
+{
+    return std::max(bw, 8);
+}
 
 template <typename DTYPE>
 TensorQuantizationSim<DTYPE>::TensorQuantizationSim()
@@ -57,8 +60,8 @@ TensorQuantizationSim<DTYPE>::TensorQuantizationSim()
 }
 
 template <typename DTYPE>
-void TensorQuantizationSim<DTYPE>::generateScaleOffset(double &encodingMin, double &encodingMax, uint8_t bw,
-                                                       double &encodingScale, double &encodingOffset)
+void TensorQuantizationSim<DTYPE>::generateScaleOffset(double& encodingMin, double& encodingMax, uint8_t bw,
+                                                       double& encodingScale, double& encodingOffset)
 {
     gateMinMax(encodingMin, encodingMax);
 
@@ -66,11 +69,11 @@ void TensorQuantizationSim<DTYPE>::generateScaleOffset(double &encodingMin, doub
     double numSteps = pow(2, bw) - 1;
     if (encodingMin == -encodingMax)
     {
-        numSteps -= 1;  // in case of 8-bits, strict symmetric means we use 254 int values, instead of 255
+        numSteps -= 1;   // in case of 8-bits, strict symmetric means we use 254 int values, instead of 255
     }
 
     // compute offset and delta on the fly
-    encodingScale = computeDelta(encodingMin, encodingMax, numSteps);
+    encodingScale  = computeDelta(encodingMin, encodingMax, numSteps);
     encodingOffset = computeOffset(encodingMin, encodingScale);
 
     // recalculate the encoding.min and encoding.max based on the new delta and offset
@@ -82,12 +85,10 @@ template <typename DTYPE>
 void TensorQuantizationSim<DTYPE>::fillEncodingInfo(TfEncoding& encoding, uint8_t bw, double encodingMin,
                                                     double encodingMax)
 {
-
-    encoding.bw = bw;
+    encoding.bw  = bw;
     encoding.min = encodingMin;
     encoding.max = encodingMax;
     generateScaleOffset(encoding.min, encoding.max, bw, encoding.delta, encoding.offset);
-
 }
 
 template <typename DTYPE>
@@ -96,8 +97,8 @@ void TensorQuantizationSim<DTYPE>::quantizeDequantizeTensor(const DTYPE* inputTe
                                                             double encodingMax, uint8_t bw, RoundingMode roundingMode,
                                                             bool use_cuda)
 {
-    quantizeDequantizeTensor(inputTensorData, inputTensorCount, outputTensorData, encodingMin, encodingMax,
-                             bw, roundingMode, use_cuda, nullptr);
+    quantizeDequantizeTensor(inputTensorData, inputTensorCount, outputTensorData, encodingMin, encodingMax, bw,
+                             roundingMode, use_cuda, nullptr);
 }
 
 template <typename DTYPE>
@@ -109,7 +110,7 @@ void TensorQuantizationSim<DTYPE>::quantizeDequantizeTensor(const DTYPE* inputTe
     TfEncoding encoding;
     fillEncodingInfo(encoding, bw, encodingMin, encodingMax);
     quantizeDequantize(inputTensorData, inputTensorCount, encoding, outputTensorData, getComputationMode(use_cuda),
-                        roundingMode, stream);
+                       roundingMode, stream);
 }
 
 template <typename DTYPE>
@@ -126,11 +127,11 @@ void TensorQuantizationSim<DTYPE>::quantizeTensor(const DTYPE* inputTensorData, 
 
 template <typename DTYPE>
 void TensorQuantizationSim<DTYPE>::quantizeTensorPacked(const DTYPE* inputTensorData, size_t inputTensorCount,
-                                                        std::vector<uint8_t>& outputTensorData, double encodingMin, double encodingMax,
-                                                        uint8_t bw, RoundingMode roundMode, bool useCuda,
-                                                        bool shiftToSigned)
+                                                        std::vector<uint8_t>& outputTensorData, double encodingMin,
+                                                        double encodingMax, uint8_t bw, RoundingMode roundMode,
+                                                        bool useCuda, bool shiftToSigned)
 {
-    TfEncoding encoding{};
+    TfEncoding encoding {};
     fillEncodingInfo(encoding, bw, encodingMin, encodingMax);
     outputTensorData.resize(ceil(getBw(bw) * inputTensorCount / 8.0));
     quantizeToFxpPacked(inputTensorData, inputTensorCount, encoding, outputTensorData.data(), outputTensorData.size(),
@@ -138,9 +139,11 @@ void TensorQuantizationSim<DTYPE>::quantizeTensorPacked(const DTYPE* inputTensor
 }
 
 template <typename DTYPE>
-void TensorQuantizationSim<DTYPE>::quantizeDequantizePerChannelTensor(
-    std::vector<std::vector<DTYPE>>& splits, std::vector<uint32_t> splitShape, uint32_t axis, DTYPE* outputTensorData,
-    const std::vector<TfEncoding>& encodings, uint8_t bw, RoundingMode roundMode, bool useCuda)
+void TensorQuantizationSim<DTYPE>::quantizeDequantizePerChannelTensor(std::vector<std::vector<DTYPE>>& splits,
+                                                                      std::vector<uint32_t> splitShape, uint32_t axis,
+                                                                      DTYPE* outputTensorData,
+                                                                      const std::vector<TfEncoding>& encodings,
+                                                                      uint8_t bw, RoundingMode roundMode, bool useCuda)
 {
     std::vector<TfEncoding> completeEncodings;
 
@@ -152,14 +155,15 @@ void TensorQuantizationSim<DTYPE>::quantizeDequantizePerChannelTensor(
     }
 
     // Loop through splits and quantize each independently
-    for (uint32_t i = 0; i < splits.size(); ++i) {
+    for (uint32_t i = 0; i < splits.size(); ++i)
+    {
         auto& split = splits[i];
         quantizeDequantize(split.data(), split.size(), completeEncodings[i], split.data(), getComputationMode(useCuda),
-                            roundMode, nullptr);
+                           roundMode, nullptr);
     }
 
     // Concatenate the quantized data back into its original shape.
-    std::vector <uint32_t> outputShape;
+    std::vector<uint32_t> outputShape;
     concat(splits, splitShape, axis, outputTensorData, outputShape);
 }
 
@@ -177,7 +181,7 @@ void TensorQuantizationSim<DTYPE>::quantizePerChannelTensorPacked(std::vector<st
     completeEncodings.resize(encodings.size());
 
     std::vector<std::vector<uint8_t>> qSplits(splits.size());
-    uint32_t qSplitSize = ceil((getBw(bw) * splits[0].size())/8.0);
+    uint32_t qSplitSize = ceil((getBw(bw) * splits[0].size()) / 8.0);
 
     for (auto idx = 0; idx < encodings.size(); idx++)
     {
@@ -185,20 +189,21 @@ void TensorQuantizationSim<DTYPE>::quantizePerChannelTensorPacked(std::vector<st
     }
 
     // Loop through splits and quantize each independently
-    for (uint32_t i = 0; i < splits.size(); ++i) {
-        auto& split = splits[i];
+    for (uint32_t i = 0; i < splits.size(); ++i)
+    {
+        auto& split  = splits[i];
         auto& qSplit = qSplits[i];
         qSplit.resize(qSplitSize);
-        quantizeToFxpPacked(split.data(), split.size(), completeEncodings[i], qSplit.data(),
-                            qSplitSize, getComputationMode(useCuda), roundMode, shiftToSigned);
+        quantizeToFxpPacked(split.data(), split.size(), completeEncodings[i], qSplit.data(), qSplitSize,
+                            getComputationMode(useCuda), roundMode, shiftToSigned);
     }
 
-    uint32_t outputCount = std::accumulate(std::begin(splitShape), std::end(splitShape), splits.size(),
-                                           std::multiplies<uint32_t>());
+    uint32_t outputCount =
+        std::accumulate(std::begin(splitShape), std::end(splitShape), splits.size(), std::multiplies<uint32_t>());
 
     // Concatenate the quantized data back into its original shape.
     outputTensorData.resize(ceil((getBw(bw) * outputCount) / 8.0));
-    std::vector <uint32_t> outputShape;
+    std::vector<uint32_t> outputShape;
     concat(qSplits, splitShape, axis, outputTensorData.data(), outputShape);
 }
 
@@ -207,7 +212,7 @@ void TensorQuantizationSim<DTYPE>::dequantizeTensor(const uint8_t* inputTensorDa
                                                     DTYPE* output, double encodingMin, double encodingMax, uint8_t bw,
                                                     bool shiftToSigned)
 {
-    TfEncoding encoding{};
+    TfEncoding encoding {};
     fillEncodingInfo(encoding, bw, encodingMin, encodingMax);
     dequantizeFromPackedFxp(inputTensorData, inputTensorCount, encoding, output, getComputationMode(false),
                             shiftToSigned);
@@ -231,45 +236,52 @@ void TensorQuantizationSim<DTYPE>::dequantizePerChannelTensor(const uint8_t* inp
     std::vector<uint32_t> splitShape;
     std::vector<std::vector<uint8_t>> splits;
 
-    if(inputShape.size() != 4) {
+    if (inputShape.size() != 4)
+    {
         throw std::invalid_argument("Per-channel quantization only operates on 4 dimensional data!");
     }
 
-    if(axis > 3) {
+    if (axis > 3)
+    {
         throw std::invalid_argument("Per-channel axis must be < 4");
     }
 
-    if(encodings.size() != inputShape[axis]) {
+    if (encodings.size() != inputShape[axis])
+    {
         throw std::invalid_argument("Must provide all encodings for per-channel dequantization");
     }
 
     // Split the data by axis
     slice(inputTensorData, inputShape, axis, splits, splitShape);
-    if(splits.size() != inputShape[axis]) {
+    if (splits.size() != inputShape[axis])
+    {
         throw std::runtime_error("Invalid slice count generated. Count must be equal to axis split on!");
     }
 
     uint32_t splitCount = std::accumulate(std::begin(splitShape), std::end(splitShape), 1, std::multiplies<uint32_t>());
-    uint32_t outputCount = std::accumulate(std::begin(inputShape), std::end(inputShape), 1, std::multiplies<uint32_t>());
-    if(outputCount != splitCount*splits.size()) {
+    uint32_t outputCount =
+        std::accumulate(std::begin(inputShape), std::end(inputShape), 1, std::multiplies<uint32_t>());
+    if (outputCount != splitCount * splits.size())
+    {
         throw std::runtime_error("Accumulated split count doesn't match original input count");
     }
 
     std::vector<std::vector<DTYPE>> splits_dequant(splits.size(), std::vector<DTYPE>(splitCount));
 
-    for(uint32_t i = 0; i < splits.size(); ++i) {
-        auto& e = encodings[i];
+    for (uint32_t i = 0; i < splits.size(); ++i)
+    {
+        auto& e     = encodings[i];
         auto& split = splits[i];
-        if(split.size() != splitCount) {
+        if (split.size() != splitCount)
+        {
             throw std::runtime_error("Tensor split size mismatch!");
         }
-        dequantizeTensor(split.data(), split.size(), splits_dequant[i].data(),
-                         e.min,e.max, bw, shiftToSigned);
+        dequantizeTensor(split.data(), split.size(), splits_dequant[i].data(), e.min, e.max, bw, shiftToSigned);
     }
 
     std::vector<uint32_t> dummy;
     concat(splits_dequant, splitShape, axis, outputTensorData, dummy);
-    (void)dummy;
+    (void) dummy;
 }
 
 template <typename DTYPE>
@@ -307,4 +319,4 @@ void TensorQuantizationSim<DTYPE>::quantizeDequantizeTensorPerChannel(const DTYP
 template class TensorQuantizationSim<float>;
 template class TensorQuantizationSim<double>;
 
-}
+}   // namespace DlQuantization

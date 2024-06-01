@@ -48,7 +48,6 @@ namespace DlQuantization
 template <typename DTYPE>
 class IQuantizationEncodingAnalyzer
 {
-
 public:
     virtual ~IQuantizationEncodingAnalyzer() = default;
 
@@ -67,7 +66,8 @@ public:
      * @param tensorCpuGpuMode Enum indicating whether the tensor is placed in CPU or GPU memory
      * @param allocator Device memory allocator. If nullptr, there is no device memory allocator available.
      */
-    virtual void updateStats(const DTYPE* tensor, const size_t tensorSize, ComputationMode tensorCpuGpuMode, IAllocator* allocator) = 0;
+    virtual void updateStats(const DTYPE* tensor, const size_t tensorSize, ComputationMode tensorCpuGpuMode,
+                             IAllocator* allocator) = 0;
 
     /**
      * @brief Given a number distribution in CPU memory, compute the TensorFlow
@@ -88,8 +88,8 @@ public:
      *                          special case, where we have double the resolution for the computed encodings while
      *                          still preserving the zero-point to be absolute 0.
      */
-    virtual TfEncoding computeEncoding(uint8_t bw, bool useSymmetricEncodings,
-                                       bool useStrictSymmetric, bool useUnsignedSymmetric) const = 0;
+    virtual TfEncoding computeEncoding(uint8_t bw, bool useSymmetricEncodings, bool useStrictSymmetric,
+                                       bool useUnsignedSymmetric) const = 0;
 
     /**
      * @brief Returns a histogram that represents a PDF of tensor values seen by this encoding analyzer so far

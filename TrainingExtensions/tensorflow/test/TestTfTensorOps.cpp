@@ -70,19 +70,20 @@ TEST(TestTfTensorOps, TensorPerChannelMinMax)
     std::copy_n(inputData.data(), inputData.size(), input.flat<float>().data());
 
     auto flat2dTensor = input.flat_inner_dims<float, 2>();
-    Tensor tempScalar(DT_FLOAT, TensorShape({1}));;
+    Tensor tempScalar(DT_FLOAT, TensorShape({1}));
+    ;
     auto tempScalarTensorMap = tempScalar.scalar<float>();
     std::vector<float> minVector(5);
     std::vector<float> maxVector(5);
 
     for (int channel_idx = 0; channel_idx < flat2dTensor.dimension(1); channel_idx++)
     {
-        tempScalarTensorMap = flat2dTensor.chip<1>(channel_idx).minimum();
-        float min = tempScalarTensorMap();
+        tempScalarTensorMap    = flat2dTensor.chip<1>(channel_idx).minimum();
+        float min              = tempScalarTensorMap();
         minVector[channel_idx] = min;
 
-        tempScalarTensorMap = flat2dTensor.chip<1>(channel_idx).maximum();
-        float max = tempScalarTensorMap();
+        tempScalarTensorMap    = flat2dTensor.chip<1>(channel_idx).maximum();
+        float max              = tempScalarTensorMap();
         maxVector[channel_idx] = max;
 
         std::cout << "Channel: " << channel_idx << ", ";
@@ -117,12 +118,13 @@ TEST(TestTfTensorOps, TensorPerTensorMinMax)
     }
     std::copy_n(inputData.data(), inputData.size(), input.flat<float>().data());
 
-    Tensor someScalar(DT_FLOAT, TensorShape({}));;
+    Tensor someScalar(DT_FLOAT, TensorShape({}));
+    ;
     auto scalar = someScalar.scalar<float>();
-    scalar = input.flat<float>().minimum();
-    float min = scalar();
-    scalar = input.flat<float>().maximum();
-    float max = scalar();
+    scalar      = input.flat<float>().minimum();
+    float min   = scalar();
+    scalar      = input.flat<float>().maximum();
+    float max   = scalar();
 
     std::cout << "Min: " << min << ", ";
     std::cout << "Max: " << max << "\n";

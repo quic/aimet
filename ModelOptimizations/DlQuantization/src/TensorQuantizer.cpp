@@ -239,14 +239,16 @@ std::vector<std::tuple<double, double>> TensorQuantizer::getStatsHistogram()
 void TensorQuantizer::setPercentileValue(float percentile)
 {
     // Set percentile value only when quant scheme is percentile.
-    if (_quantScheme == DlQuantization::QuantizationMode::QUANTIZATION_PERCENTILE) {
+    if (_quantScheme == DlQuantization::QuantizationMode::QUANTIZATION_PERCENTILE)
+    {
         _encodingAnalyzer->setPercentileValue(percentile);
     }
 }
 
 float TensorQuantizer::getPercentileValue()
 {
-    if (_quantScheme == DlQuantization::QuantizationMode::QUANTIZATION_PERCENTILE) {
+    if (_quantScheme == DlQuantization::QuantizationMode::QUANTIZATION_PERCENTILE)
+    {
         return _encodingAnalyzer->getPercentileValue();
     }
     else
@@ -327,7 +329,8 @@ void TensorQuantizer::computePartialEncoding(uint8_t bw, TfEncoding& encoding, b
 {
     if (encoding.min == 0 && encoding.max == 0)
     {
-        computeMinMaxRangeFromDeltaOffset(bw, encoding, useSymmetricEncodings, useUnsignedSymmetric, useStrictSymmetric);
+        computeMinMaxRangeFromDeltaOffset(bw, encoding, useSymmetricEncodings, useUnsignedSymmetric,
+                                          useStrictSymmetric);
     }
     else if (encoding.delta == 0)
     {

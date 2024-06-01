@@ -111,11 +111,7 @@ double logBase2(double d);
  * memory allocator available.
  */
 template <typename DTYPE>
-void UpdatePdf(const DTYPE* data,
-               int cnt,
-               ComputationMode mode_cpu_gpu,
-               bool signed_vals,
-               PDF& pdf,
+void UpdatePdf(const DTYPE* data, int cnt, ComputationMode mode_cpu_gpu, bool signed_vals, PDF& pdf,
                IAllocator* allocator);
 
 /**
@@ -131,13 +127,8 @@ void UpdatePdf(const DTYPE* data,
  * memory allocator available.
  */
 template <typename DTYPE>
-void GetHistogram(const DTYPE* data,
-                  const int cnt,
-                  uint32_t histogram[PDF_SIZE],
-                  const DTYPE bucket_size,
-                  const DTYPE pdf_offset,
-                  const ComputationMode mode_cpu_gpu,
-                  const bool is_signed,
+void GetHistogram(const DTYPE* data, const int cnt, uint32_t histogram[PDF_SIZE], const DTYPE bucket_size,
+                  const DTYPE pdf_offset, const ComputationMode mode_cpu_gpu, const bool is_signed,
                   IAllocator* allocator);
 
 /**
@@ -184,12 +175,8 @@ void* MemoryAllocation_cpu(size_t bytes);
 void MemoryFree_cpu(void* data);
 
 template <typename DTYPE>
-void GetHistogram_cpu(const DTYPE* data,
-                      int cnt,
-                      uint32_t histogram[PDF_SIZE],
-                      const DTYPE bucket_size,
-                      const DTYPE pdf_offset,
-                      const bool is_signed);
+void GetHistogram_cpu(const DTYPE* data, int cnt, uint32_t histogram[PDF_SIZE], const DTYPE bucket_size,
+                      const DTYPE pdf_offset, const bool is_signed);
 
 /**
  * @brief Returns a histogram that represents a PDF of tensor values seen so far.
@@ -244,13 +231,8 @@ void* MemoryAllocation_gpu(size_t bytes);
 bool MemoryFree_gpu(void* data);
 
 template <typename DTYPE>
-void GetHistogram_gpu(const DTYPE* data,
-                      int cnt,
-                      uint32_t histogram[PDF_SIZE],
-                      const DTYPE bucket_size,
-                      const DTYPE pdf_offset,
-                      const bool is_signed,
-                      IAllocator* allocator);
+void GetHistogram_gpu(const DTYPE* data, int cnt, uint32_t histogram[PDF_SIZE], const DTYPE bucket_size,
+                      const DTYPE pdf_offset, const bool is_signed, IAllocator* allocator);
 
 #endif   // GPU_QUANTIZATION_ENABLED
 

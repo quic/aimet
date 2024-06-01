@@ -62,13 +62,13 @@ void QcQuantizeKernel::Compute(OrtKernelContext* context)
 {
     // Setup inputs
     const OrtValue* input = api_.KernelContext_GetInput(context, 0);
-    auto inputData       = api_.GetTensorData<float>(input);
+    auto inputData        = api_.GetTensorData<float>(input);
     OrtTensorDimensions dimensions(api_, input);
     // Setup outputs
     OrtValue* output = api_.KernelContext_GetOutput(context, 0, dimensions.data(), dimensions.size());
     auto result      = api_.GetTensorMutableData<float>(output);
     OrtTensorTypeAndShapeInfo* outputInfo = api_.GetTensorTypeAndShape(output);
-    size_t size                            = api_.GetTensorShapeElementCount(outputInfo);
+    size_t size                           = api_.GetTensorShapeElementCount(outputInfo);
 
     std::vector<DlQuantization::TfEncoding*> encodings = quantInfo->encoding;
 
@@ -82,12 +82,12 @@ void QcQuantizeKernel::Compute(OrtKernelContext* context)
     api_.ReleaseTensorTypeAndShapeInfo(outputInfo);
 
     DlQuantization::IAllocator* allocator = &cpuAllocator;
-    void* stream = nullptr;
+    void* stream                          = nullptr;
 #ifdef ONNX_CUDA
     if (useCuda)
     {
         allocator = &cudaAllocator;
-        stream = api_.KernelContext_GetGPUComputeStream(context);
+        stream    = api_.KernelContext_GetGPUComputeStream(context);
         if ((opMode == DlQuantization::TensorQuantizerOpMode::updateStats) ||
             (opMode == DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize))
         {

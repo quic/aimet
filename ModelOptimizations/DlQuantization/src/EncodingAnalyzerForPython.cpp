@@ -84,12 +84,12 @@ std::tuple<DlQuantization::TfEncoding, bool> EncodingAnalyzerForPython::computeE
 
     if (_isEncodingValid)
     {
-        out_encoding = _encodingAnalyzer->computeEncoding(bitwidth, isSymmetric, useStrictSymmetric,
-                                                          useUnsignedSymmetric);
+        out_encoding =
+            _encodingAnalyzer->computeEncoding(bitwidth, isSymmetric, useStrictSymmetric, useUnsignedSymmetric);
     }
 
     return std::make_tuple(out_encoding, _isEncodingValid);
 }
 
 
-}
+}   // namespace DlQuantization

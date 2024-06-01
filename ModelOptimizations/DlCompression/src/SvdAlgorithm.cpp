@@ -58,7 +58,7 @@ void SVD_CORE<DTYPE>::ComputeOriginalAndCompressedMemory_(SVD_COMPRESS_TYPE mode
                                                           size_t& reduced_size)
 {
     unsigned int r = 0, s = 0;
-    original_size = (size_t)(rows * cols * k_h * k_w);
+    original_size = (size_t) (rows * cols * k_h * k_w);
     if (!svd_ranks.size())
     {
         std::cerr << "Empty ranks set passed to method." << std::endl;
@@ -86,7 +86,7 @@ void SVD_CORE<DTYPE>::ComputeOriginalAndCompressedMAC_(SVD_COMPRESS_TYPE mode, i
 {
     unsigned int r = 0, s = 0;
     size_t input_act_dim = act_h * act_w;
-    original_size        = (size_t)(rows * cols * k_h * k_w * input_act_dim);
+    original_size        = (size_t) (rows * cols * k_h * k_w * input_act_dim);
 
     if (!svd_ranks.size())
     {

@@ -61,11 +61,12 @@ REGISTER_OP("QcQuantizeStatic")
     .Attr("is_symmetric: bool")
 
     .Doc(R"doc(Static version of the QcQuantize custom op.)doc")
-    .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {
-        c->set_output(0, c->input(0));
-        return Status::OK();
-    });
-
+    .SetShapeFn(
+        [](::tensorflow::shape_inference::InferenceContext* c)
+        {
+            c->set_output(0, c->input(0));
+            return Status::OK();
+        });
 
 
 // OpKernel definition.
@@ -95,7 +96,8 @@ public:
         OP_REQUIRES_OK(context, context->GetAttr("round_mode", &roundModeString));
         OP_REQUIRES(context, (roundModeString == "NEAREST" || roundModeString == "STOCHASTIC"),
                     errors::InvalidArgument("Round mode string must be NEAREST/STOCHASTIC"
-                                            "; is '" + roundModeString + "'"));
+                                            "; is '" +
+                                            roundModeString + "'"));
 
         if (roundModeString == "NEAREST")
             _roundingMode = DlQuantization::ROUND_NEAREST;
@@ -128,7 +130,8 @@ public:
         modeSpecificAction(d, inTensor, count, outTensor, nullptr);
     }
 
-    void modeSpecificAction(const Device& d, const T* inTensor, size_t count, T* outTensor, DlQuantization::IAllocator* allocator)
+    void modeSpecificAction(const Device& d, const T* inTensor, size_t count, T* outTensor,
+                            DlQuantization::IAllocator* allocator)
     {
         bool useCuda = false;
         if (std::is_same<Device, GPUDevice>::value)
@@ -143,8 +146,8 @@ public:
             auto tensorQuantizer = DlQuantization::TensorQuantizer(_quantScheme, _roundingMode);
             tensorQuantizer.updateStats(inTensor, count, useCuda, allocator);
             DlQuantization::TfEncoding initial_encoding = tensorQuantizer.computeEncoding(_bitwidth, _isSymmetric);
-            tensorQuantizer.quantizeDequantize(inTensor, count, outTensor, initial_encoding.min,
-                                               initial_encoding.max, _bitwidth, useCuda);
+            tensorQuantizer.quantizeDequantize(inTensor, count, outTensor, initial_encoding.min, initial_encoding.max,
+                                               _bitwidth, useCuda);
             break;
         }
         case DlQuantization::TensorQuantizerOpMode::quantizeDequantize:
@@ -177,8 +180,10 @@ private:
 };
 
 
-REGISTER_KERNEL_BUILDER(Name("QcQuantizeStatic").Device(DEVICE_CPU).TypeConstraint<float>("T"), QcQuantizeStaticOp<CPUDevice, float>);
+REGISTER_KERNEL_BUILDER(Name("QcQuantizeStatic").Device(DEVICE_CPU).TypeConstraint<float>("T"),
+                        QcQuantizeStaticOp<CPUDevice, float>);
 
 #ifdef GOOGLE_CUDA
-REGISTER_KERNEL_BUILDER(Name("QcQuantizeStatic").Device(DEVICE_GPU).TypeConstraint<float>("T"), QcQuantizeStaticOp<GPUDevice, float>);
+REGISTER_KERNEL_BUILDER(Name("QcQuantizeStatic").Device(DEVICE_GPU).TypeConstraint<float>("T"),
+                        QcQuantizeStaticOp<GPUDevice, float>);
 #endif   // GOOGLE_CUDA

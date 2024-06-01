@@ -54,7 +54,8 @@ public:
     TensorQuantizationSimForPython();
 
     py::array_t<float> quantizeDequantize(py::array_t<float> input, DlQuantization::TfEncoding& encoding,
-                                          DlQuantization::RoundingMode roundingMode, unsigned int bitwidth, bool use_cuda);
+                                          DlQuantization::RoundingMode roundingMode, unsigned int bitwidth,
+                                          bool use_cuda);
 
 private:
     std::unique_ptr<DlQuantization::ITensorQuantizationSim<float>> _tensorQuantizationSim;

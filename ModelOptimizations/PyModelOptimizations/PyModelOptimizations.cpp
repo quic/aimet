@@ -36,10 +36,10 @@
 //
 //==============================================================================
 
+#include "pybind11/complex.h"
 #include <DlEqualization/CrossLayerScalingForPython.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-#include "pybind11/complex.h"
 
 #include "DlCompression/ISVD.hpp"
 #include "DlEqualization/BatchNormFoldForPython.h"
@@ -50,12 +50,12 @@
 #include "DlQuantization/EncodingAnalyzerForPython.h"
 #include "DlQuantization/IQuantizationEncodingAnalyzer.hpp"
 #include "DlQuantization/IQuantizer.hpp"
-#include "PyTensorQuantizer.hpp"
+#include "DlQuantization/ParserModule.h"
 #include "DlQuantization/Quantization.hpp"
 #include "DlQuantization/QuantizerFactory.hpp"
 #include "DlQuantization/TensorQuantizationSimForPython.h"
 #include "DlQuantization/TensorQuantizerOpFacade.h"
-#include "DlQuantization/ParserModule.h"
+#include "PyTensorQuantizer.hpp"
 
 namespace py = pybind11;
 
@@ -74,54 +74,26 @@ PYBIND11_MODULE(libpymo, m)
         .def_readwrite("op_list", &ModelOpDefParser::m_opList)
         .def_readonly("master_path", &ModelOpDefParser::m_masterPath)
         .def_readonly("backend_path", &ModelOpDefParser::m_backendPath)
-        .def("get_size",
-            &ModelOpDefParser::getSize,
-            py::arg("op_name"),
-            R"(Extracting input, output and parameter sizes)")
-        .def("get_filters_index",
-            &ModelOpDefParser::getFiltersIndex,
-            py::arg("op_name"),
-            R"(Getting the index mapping to filter in inputs)")
-        .def("get_input_datatype",
-            &ModelOpDefParser::getInputDataType,
-            py::arg("op_name"),
-            py::arg("attrib_num"),
-            R"(Extracting input datatypes)")
-        .def("get_output_datatype",
-            &ModelOpDefParser::getOutputDataType,
-            py::arg("op_name"),
-            py::arg("attrib_num"),
-            R"(Extracting output datatypes)")
-        .def("get_param_datatype",
-            &ModelOpDefParser::getParamDataType,
-            py::arg("op_name"),
-            py::arg("attrib_name"),
-            R"(Extracting parameter datatypes)")
-        .def("get_input_rank",
-            &ModelOpDefParser::getInputRank,
-            py::arg("op_name"),
-            py::arg("attrib_num"),
-            R"(Extracting input rank)")
-        .def("get_output_rank",
-            &ModelOpDefParser::getOutputRank,
-            py::arg("op_name"),
-            py::arg("attrib_num"),
-            R"(Extracting output rank)")
-        .def("get_param_rank",
-            &ModelOpDefParser::getParamRank,
-            py::arg("op_name"),
-            py::arg("attrib_name"),
-            R"(Extracting parameter rank)")
-        .def("get_input_multiflag",
-            &ModelOpDefParser::getInputMultiFlag,
-            py::arg("op_name"),
-            py::arg("attrib_num"),
-            R"(Extracting input multi-flag)")
-        .def("get_output_multiflag",
-            &ModelOpDefParser::getOutputMultiFlag,
-            py::arg("op_name"),
-            py::arg("attrib_num"),
-            R"(Extracting output multi-flag)");
+        .def("get_size", &ModelOpDefParser::getSize, py::arg("op_name"),
+             R"(Extracting input, output and parameter sizes)")
+        .def("get_filters_index", &ModelOpDefParser::getFiltersIndex, py::arg("op_name"),
+             R"(Getting the index mapping to filter in inputs)")
+        .def("get_input_datatype", &ModelOpDefParser::getInputDataType, py::arg("op_name"), py::arg("attrib_num"),
+             R"(Extracting input datatypes)")
+        .def("get_output_datatype", &ModelOpDefParser::getOutputDataType, py::arg("op_name"), py::arg("attrib_num"),
+             R"(Extracting output datatypes)")
+        .def("get_param_datatype", &ModelOpDefParser::getParamDataType, py::arg("op_name"), py::arg("attrib_name"),
+             R"(Extracting parameter datatypes)")
+        .def("get_input_rank", &ModelOpDefParser::getInputRank, py::arg("op_name"), py::arg("attrib_num"),
+             R"(Extracting input rank)")
+        .def("get_output_rank", &ModelOpDefParser::getOutputRank, py::arg("op_name"), py::arg("attrib_num"),
+             R"(Extracting output rank)")
+        .def("get_param_rank", &ModelOpDefParser::getParamRank, py::arg("op_name"), py::arg("attrib_name"),
+             R"(Extracting parameter rank)")
+        .def("get_input_multiflag", &ModelOpDefParser::getInputMultiFlag, py::arg("op_name"), py::arg("attrib_num"),
+             R"(Extracting input multi-flag)")
+        .def("get_output_multiflag", &ModelOpDefParser::getOutputMultiFlag, py::arg("op_name"), py::arg("attrib_num"),
+             R"(Extracting output multi-flag)");
 
     py::enum_<QnnDatatype_t>(m, "QnnDatatype")
         .value("QNN_DATATYPE_INT_8", QnnDatatype_t::QNN_DATATYPE_INT_8)
@@ -159,10 +131,7 @@ PYBIND11_MODULE(libpymo, m)
         .value("QNN_RANK_N", QnnRank_t::QNN_RANK_N)
         .value("QNN_RANK_INVALID", QnnRank_t::QNN_RANK_INVALID);
 
-    m.def("str_to_dtype",
-    &strToDtype,
-    py::arg("dtype"),
-    R"(A function to convert string to QNN_DATATYPE)");
+    m.def("str_to_dtype", &strToDtype, py::arg("dtype"), R"(A function to convert string to QNN_DATATYPE)");
 
     m.def("str_to_rank", &strToRank, py::arg("rank"), R"(A function to convert string to QNN_RANK)");
 
@@ -243,12 +212,14 @@ PYBIND11_MODULE(libpymo, m)
 
     py::class_<DlQuantization::TensorQuantizationSimForPython>(m, "TensorQuantizationSimForPython")
         .def(py::init<>())
-        .def("quantizeDequantize", (py::array_t<float>(TensorQuantizationSimForPython::*)(py::array_t<float>,
-                DlQuantization::TfEncoding&, DlQuantization::RoundingMode, unsigned int, bool))
-                &DlQuantization::TensorQuantizationSimForPython::quantizeDequantize)
-        .def("quantizeDequantize", (py::array_t<float>(TensorQuantizationSimForPython::*)(py::array_t<float>,
-                DlQuantization::TfEncoding&, DlQuantization::RoundingMode, bool))
-                &DlQuantization::TensorQuantizationSimForPython::quantizeDequantize);
+        .def("quantizeDequantize",
+             (py::array_t<float>(TensorQuantizationSimForPython::*)(py::array_t<float>, DlQuantization::TfEncoding&,
+                                                                    DlQuantization::RoundingMode, unsigned int, bool)) &
+                 DlQuantization::TensorQuantizationSimForPython::quantizeDequantize)
+        .def("quantizeDequantize",
+             (py::array_t<float>(TensorQuantizationSimForPython::*)(py::array_t<float>, DlQuantization::TfEncoding&,
+                                                                    DlQuantization::RoundingMode, bool)) &
+                 DlQuantization::TensorQuantizationSimForPython::quantizeDequantize);
 
     py::enum_<DlQuantization::TensorQuantizerOpMode>(m, "TensorQuantizerOpMode")
         .value("updateStats", DlQuantization::TensorQuantizerOpMode::updateStats)
@@ -259,10 +230,11 @@ PYBIND11_MODULE(libpymo, m)
     py::class_<DlQuantization::PyTensorQuantizer>(m, "TensorQuantizer")
         .def(py::init<DlQuantization::QuantizationMode, DlQuantization::RoundingMode>())
         .def("updateStats",
-             (void (PyTensorQuantizer::*)(py::array_t<float>, bool)) & DlQuantization::PyTensorQuantizer::updateStats)
-        .def("computeEncoding",  &DlQuantization::PyTensorQuantizer::computeEncoding)
-        .def("quantizeDequantize", (void (PyTensorQuantizer::*)(py::array_t<float>, py::array_t<float>, double, double,
-                                                              unsigned int, bool)) &DlQuantization::PyTensorQuantizer::quantizeDequantize)
+             (void(PyTensorQuantizer::*)(py::array_t<float>, bool)) & DlQuantization::PyTensorQuantizer::updateStats)
+        .def("computeEncoding", &DlQuantization::PyTensorQuantizer::computeEncoding)
+        .def("quantizeDequantize",
+             (void(PyTensorQuantizer::*)(py::array_t<float>, py::array_t<float>, double, double, unsigned int, bool)) &
+                 DlQuantization::PyTensorQuantizer::quantizeDequantize)
         .def("resetEncodingStats", &DlQuantization::PyTensorQuantizer::resetEncodingStats)
         .def("setQuantScheme", &DlQuantization::PyTensorQuantizer::setQuantScheme)
         .def("getQuantScheme", &DlQuantization::PyTensorQuantizer::getQuantScheme)
@@ -305,8 +277,8 @@ PYBIND11_MODULE(libpymo, m)
               (ISVD<float>::*) (const std::string&, std::vector<std::vector<float>>& splitBiases,
                                 const std::vector<unsigned int>&, const std::vector<unsigned int>&) ) &
                  ISVD<float>::SplitLayerBiases)
-        .def("StoreBestRanks", (void (ISVD<float>::*)(const int)) & ISVD<float>::StoreBestRanks)
-        .def("StoreBestRanks", (void (ISVD<float>::*)(const std::string&, const std::vector<unsigned int>&)) &
+        .def("StoreBestRanks", (void(ISVD<float>::*)(const int)) & ISVD<float>::StoreBestRanks)
+        .def("StoreBestRanks", (void(ISVD<float>::*)(const std::string&, const std::vector<unsigned int>&)) &
                                    ISVD<float>::StoreBestRanks);
 
     // Factory func

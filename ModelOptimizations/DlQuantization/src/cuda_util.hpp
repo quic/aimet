@@ -78,7 +78,8 @@ inline size_t CUDA_NUM_BLOCKS(const size_t N)
 }
 
 // Loop over data in kernel (stride: grid)
-#define CUDA_KERNEL_LOOP(i, n) for (size_t i = blockIdx.x * blockDim.x + threadIdx.x; i < (n); i += blockDim.x * gridDim.x)
+#define CUDA_KERNEL_LOOP(i, n) \
+    for (size_t i = blockIdx.x * blockDim.x + threadIdx.x; i < (n); i += blockDim.x * gridDim.x)
 
 }   // End of namespace DlQuantization
 

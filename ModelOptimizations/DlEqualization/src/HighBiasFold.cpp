@@ -88,4 +88,4 @@ void HighBiasFold::updateBias(AimetEqualization::LayerParams& prevLayerParams,
     cv::Mat biasCurrLayer = cv::Mat(currLayerParams.weightShape[0], 1, CV_32F, (float*) &currLayerParams.bias[0]);
     biasCurrLayer += biasCorrectionMat;
 }
-}
+}   // namespace AimetEqualization

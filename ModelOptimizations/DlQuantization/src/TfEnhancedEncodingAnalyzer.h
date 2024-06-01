@@ -59,8 +59,8 @@ public:
      */
     void updateStats(const DTYPE* tensor, const size_t tensorSize, ComputationMode tensorCpuGpuMode) override;
 
-    void updateStats(const DTYPE* tensor, const size_t tensorSize,
-                     ComputationMode tensorCpuGpuMode, IAllocator* allocator) override;
+    void updateStats(const DTYPE* tensor, const size_t tensorSize, ComputationMode tensorCpuGpuMode,
+                     IAllocator* allocator) override;
 
     /***
      * Given a number distribution in CPU memory, compute the TensorFlow encoding with the highest possible SQNR
@@ -80,8 +80,8 @@ public:
      *  Adjusts min and max according quant scheme and determines an acceptable range
      *  for a meaningful scale and offset
      */
-    void getComputedEncodings(int bw, TfEncoding& encoding, bool useSymmetricEncodings,
-                              bool useStrictSymmetric, bool useUnsignedSymmetric) const;
+    void getComputedEncodings(int bw, TfEncoding& encoding, bool useSymmetricEncodings, bool useStrictSymmetric,
+                              bool useUnsignedSymmetric) const;
 
 
     /**
@@ -137,7 +137,8 @@ private:
      * @param test_offsets Vector of offsets (test candidate returned)
      */
     void _pickTestCandidatesSymmetric(DTYPE minVal, DTYPE maxVal, DTYPE numSteps,
-                                      std::vector<std::tuple<DTYPE, int>>& testCandidates, bool useUnsignedSymmetric) const;
+                                      std::vector<std::tuple<DTYPE, int>>& testCandidates,
+                                      bool useUnsignedSymmetric) const;
 
     /**
      * Clamp given test delta and test offset based on observed min and max
@@ -148,8 +149,8 @@ private:
      * @param testOffset test offset
      * @return False if the test candidate is outside both the observed min and max
      */
-    bool _clampToObservedMinMax(DTYPE observedMin, DTYPE observedMax, DTYPE numSteps,
-                                DTYPE& testDelta, int& testOffset) const;
+    bool _clampToObservedMinMax(DTYPE observedMin, DTYPE observedMax, DTYPE numSteps, DTYPE& testDelta,
+                                int& testOffset) const;
     /**
      * Given a set of test candidates (delta x offsets), find the best candidate with the lowest cost
      * @param bw Bitwidth
@@ -160,9 +161,9 @@ private:
                                               const std::vector<std::tuple<DTYPE, int>>& testCandidates) const;
 
     /**
-   * Find range (min, max) of the aggregated stats
-   * @return Tuple of min and max values
-   */
+     * Find range (min, max) of the aggregated stats
+     * @return Tuple of min and max values
+     */
     std::tuple<DTYPE, DTYPE> _findRangeOfAggregateStats() const;
 };
 

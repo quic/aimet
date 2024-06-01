@@ -46,7 +46,7 @@
 #include "tensorflow/core/framework/shape_inference.h"
 #include "tensorflow/core/platform/logging.h"
 
-#include <DlQuantization/TensorQuantizerOpFacade.h>
-#include <DlQuantization/TensorQuantizer.h>
 #include <DlQuantization/Quantization.hpp>
+#include <DlQuantization/TensorQuantizer.h>
+#include <DlQuantization/TensorQuantizerOpFacade.h>
 #endif   // QC_QUANTIZE_OP_HPP

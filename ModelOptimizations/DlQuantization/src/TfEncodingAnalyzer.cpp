@@ -36,8 +36,8 @@
 //
 //==============================================================================
 
-#include <cstddef>
 #include <cassert>
+#include <cstddef>
 #include <vector>
 
 #include "DlQuantization/Quantization.hpp"
@@ -62,8 +62,8 @@ void TfEncodingAnalyzer<DTYPE>::updateStats(const DTYPE* tensor, const size_t te
 {
     this->_statsUpdated = true;
     // Compute stats for the tensor being passed in
-    auto currentMin  = (double) GetMin(tensor, tensorSize, tensorCpuGpuMode);
-    auto currentMax  = (double) GetMax(tensor, tensorSize, tensorCpuGpuMode);
+    auto currentMin = (double) GetMin(tensor, tensorSize, tensorCpuGpuMode);
+    auto currentMax = (double) GetMax(tensor, tensorSize, tensorCpuGpuMode);
 
     // Update accumulated stats
     _accumulatedStats.min = std::min(_accumulatedStats.min, currentMin);
@@ -78,8 +78,8 @@ void TfEncodingAnalyzer<DTYPE>::updateStats(const DTYPE* tensor, const size_t te
 }
 
 template <typename DTYPE>
-TfEncoding TfEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool useSymmetricEncodings,
-                                                      bool useStrictSymmetric, bool useUnsignedSymmetric) const
+TfEncoding TfEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool useSymmetricEncodings, bool useStrictSymmetric,
+                                                      bool useUnsignedSymmetric) const
 {
     // If symmetric encodings are requested then strictSymmetric and unsignedSymmetric are exclusive modes
     if (useSymmetricEncodings)
@@ -88,14 +88,14 @@ TfEncoding TfEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool useSymmet
     TfEncoding encoding;
 
     // Make sure zero value is within the range
-    double newMin  = std::min(0.0, _accumulatedStats.min);
-    double newMax  = std::max(0.0, _accumulatedStats.max);
+    double newMin = std::min(0.0, _accumulatedStats.min);
+    double newMax = std::max(0.0, _accumulatedStats.max);
 
     // When the min and max are too close together, nudge the maximum to meet the
     // minimum range requirement
     // This also handles the case where min==max==0 to avoid division by zero
-    newMax       = std::max(newMax, newMin + MIN_RANGE);
-    encoding.bw  = bw;
+    newMax      = std::max(newMax, newMin + MIN_RANGE);
+    encoding.bw = bw;
 
     return getComputedEncodings(bw, newMin, newMax, useSymmetricEncodings, useStrictSymmetric, useUnsignedSymmetric);
 }
@@ -106,4 +106,4 @@ template class TfEncodingAnalyzer<double>;
 
 template class TfEncodingAnalyzer<float>;
 
-}
+}   // namespace DlQuantization

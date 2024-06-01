@@ -224,7 +224,7 @@ void InitializePdf(PDF& pdf, DTYPE min_val, DTYPE max_val, bool signed_vals)
     else
     {
         DTYPE max_abs_val = std::max(std::abs(max_val), std::abs(min_val));
-        bucket_size = max_abs_val / PDF_SIZE;
+        bucket_size       = max_abs_val / PDF_SIZE;
     }
     pdf.xLeft.resize(PDF_SIZE);
     for (int i = 0; i < PDF_SIZE; ++i)
@@ -240,7 +240,8 @@ void InitializePdf(PDF& pdf, DTYPE min_val, DTYPE max_val, bool signed_vals)
 }
 
 template <typename DTYPE>
-void UpdatePdf(const DTYPE* data, int cnt, ComputationMode mode_cpu_gpu, bool signed_vals, PDF& pdf, IAllocator* allocator)
+void UpdatePdf(const DTYPE* data, int cnt, ComputationMode mode_cpu_gpu, bool signed_vals, PDF& pdf,
+               IAllocator* allocator)
 {
     // Check if we need to initialize the PDF.
     if (0 == pdf.xLeft.size())
@@ -261,24 +262,18 @@ void UpdatePdf(const DTYPE* data, int cnt, ComputationMode mode_cpu_gpu, bool si
 
     // The histogram's range is min_val to max_val.
     DTYPE bucket_size = pdf.xLeft[1] - pdf.xLeft[0];
-    DTYPE min_val = signed_vals ? pdf.xLeft[0] : 0;
+    DTYPE min_val     = signed_vals ? pdf.xLeft[0] : 0;
     // This offset is used to help map numbers to histogram buckets.
     DTYPE pdf_offset = min_val / bucket_size;
 
     // Create the histogram of this number distribution.
     uint32_t histogram[PDF_SIZE];
-    for (int i = 0; i < PDF_SIZE; i++) {
+    for (int i = 0; i < PDF_SIZE; i++)
+    {
         histogram[i] = 0;
     }
 
-    GetHistogram(data,
-                 cnt,
-                 histogram,
-                 bucket_size,
-                 pdf_offset,
-                 mode_cpu_gpu,
-                 signed_vals,
-                 allocator);
+    GetHistogram(data, cnt, histogram, bucket_size, pdf_offset, mode_cpu_gpu, signed_vals, allocator);
 
     // Average this histogram into the average of all batches.
     for (int i = 0; i < PDF_SIZE; ++i)
@@ -292,13 +287,8 @@ void UpdatePdf(const DTYPE* data, int cnt, ComputationMode mode_cpu_gpu, bool si
 }
 
 template <typename DTYPE>
-void GetHistogram(const DTYPE* data,
-                  int cnt,
-                  uint32_t histogram[PDF_SIZE],
-                  const DTYPE bucket_size,
-                  const DTYPE pdf_offset,
-                  const ComputationMode mode_cpu_gpu,
-                  const bool is_signed,
+void GetHistogram(const DTYPE* data, int cnt, uint32_t histogram[PDF_SIZE], const DTYPE bucket_size,
+                  const DTYPE pdf_offset, const ComputationMode mode_cpu_gpu, const bool is_signed,
                   IAllocator* allocator)
 {
     switch (mode_cpu_gpu)
@@ -374,20 +364,15 @@ void MemoryFree_cpu(void* data)
 }
 
 template <typename DTYPE>
-void GetHistogram_cpu(const DTYPE* data,
-                      int cnt,
-                      uint32_t histogram[PDF_SIZE],
-                      const DTYPE bucket_size,
-                      const DTYPE pdf_offset,
-                      const bool is_signed)
+void GetHistogram_cpu(const DTYPE* data, int cnt, uint32_t histogram[PDF_SIZE], const DTYPE bucket_size,
+                      const DTYPE pdf_offset, const bool is_signed)
 {
     // Go through all data points and add them to the histogram.
     for (int i = 0; i < cnt; ++i)
     {
         // Map a floating point number to the appropriate bucket.
-        int index = is_signed ?
-                    round(data[i] / bucket_size - pdf_offset) :
-                    round(std::abs(data[i]) / bucket_size - pdf_offset);
+        int index =
+            is_signed ? round(data[i] / bucket_size - pdf_offset) : round(std::abs(data[i]) / bucket_size - pdf_offset);
 
         // Add to histogram, if inside the histogram range.
         if (index >= 0 && index < PDF_SIZE)
@@ -539,7 +524,7 @@ void updateTensorHistogram_cpu(const DTYPE* data, int tensorSize, TensorProfilin
             // Calculate how much we need to redistribute.
             double dstBinCnt =
                 std::min(static_cast<double>(round((destBinEnd - srcBinBegin) / srcBinWidth * tpp.histogram[i])),
-                            tpp.histogram[i]);
+                         tpp.histogram[i]);
 
             size_t newBin = getBin(PDF_SIZE, destBinWidth, newMin, srcBinBegin);
             scaledHistogram[newBin] += dstBinCnt;
@@ -665,9 +650,11 @@ template double GetMin(const double* data, int cnt, ComputationMode mode_cpu_gpu
 
 template float GetMin(const float* data, int cnt, ComputationMode mode_cpu_gpu);
 
-template void UpdatePdf(const double* data, int cnt, ComputationMode mode_cpu_gpu, bool signed_vals, PDF& pdf, IAllocator* allocator);
+template void UpdatePdf(const double* data, int cnt, ComputationMode mode_cpu_gpu, bool signed_vals, PDF& pdf,
+                        IAllocator* allocator);
 
-template void UpdatePdf(const float* data, int cnt, ComputationMode mode_cpu_gpu, bool signed_vals, PDF& pdf, IAllocator* allocator);
+template void UpdatePdf(const float* data, int cnt, ComputationMode mode_cpu_gpu, bool signed_vals, PDF& pdf,
+                        IAllocator* allocator);
 
 template std::tuple<double, double> findOriginalRange(const PDF& pdf);
 
