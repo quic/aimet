@@ -36,6 +36,7 @@
 # =============================================================================
 # pylint: disable=redefined-outer-name
 """Utility methods for working with GPTVQ"""
+import math
 from typing import Optional, List, Tuple
 
 import torch
@@ -43,8 +44,10 @@ from torch import nn
 from torch.linalg import LinAlgError
 
 import aimet_torch.v2.quantization as Q
+from aimet_torch.gptvq.activation_sampler import ActivationSampler
 from aimet_torch.gptvq.defs import DAMPENING_PERCENTAGE, GPTVQParameters
-
+from aimet_torch.v2.nn import BaseQuantizationMixin
+from aimet_torch.v2.quantsim import QuantizationSimModel
 
 HESSIAN_WEIGHTED_LOOKUP = False
 DO_CODEBOOK_FINE_TUNING = False
@@ -379,3 +382,56 @@ def quantize_dequantize_codebook(codebook: torch.Tensor,
         quantizer.symmetric,
     )
     return qdq_codebook.reshape(codebook.shape)
+
+
+def compute_hessian_tensor(quant_module: BaseQuantizationMixin,
+                           gptvq_params: GPTVQParameters,
+                           sim: QuantizationSimModel) -> torch.Tensor:
+    """
+    Compute Hessian tensor corresponding to quant_module
+
+    :param quant_module: Quantization module
+    :param gptvq_params: GPTVQ parameters
+    :param sim: QuantizationSimModel object
+    :return: Hessian tensor
+    """
+    original_weight = quant_module.weight
+    _, num_cols = original_weight.shape
+    device = original_weight.device
+    hessian = torch.zeros((num_cols, num_cols)).to(device)
+
+    act_sampler = ActivationSampler(quant_module, sim.model, gptvq_params.forward_fn)
+    # update the Hessian and the number of samples in place
+    n_samples = 0
+    for current_data in gptvq_params.data_loader:
+        inp_data = act_sampler.sample_acts(current_data)
+        if len(inp_data.shape) == 2:
+            inp_data = inp_data.unsqueeze(0)
+        curr_batch_size = inp_data.shape[0]
+        update_hessian(inp_data, n_samples, curr_batch_size, hessian)
+        n_samples += curr_batch_size
+
+    return hessian
+
+
+def update_hessian(inp: torch.tensor, n_samples: int, curr_batch_size: int, hessian: torch.tensor):
+    """
+    Updates the hessian matrix using the passed input data to the module and applies scaling
+
+    :param inp: activation input passed to the given module
+    :param hessian: hessian for the module used to do weight update
+    :param n_samples: samples seen so far for hessian computation
+    :param curr_batch_size: batch size of current input
+    """
+    #the hessian is of the shape [weight.shape[1], weight.shape[1]], i.e C*C columns
+    # THIS SHOULD WORK FOR ALL THE DIMENSIONS, it makes the last dimension match the weight's column dimension, and first one as the reshaped/ adjusted sample size
+    inp = inp.reshape((-1, inp.shape[-1]))
+
+    ## we calculate the transpose of input to compute the Hessian in accordance with the weight shape
+    inp = inp.T
+
+    # scale the hessian matrix in place
+    hessian *= n_samples / (n_samples + curr_batch_size)
+    inp = math.sqrt(2 / (n_samples + curr_batch_size)) * inp.float()
+    # update the hessian in place
+    hessian += inp.matmul(inp.T)

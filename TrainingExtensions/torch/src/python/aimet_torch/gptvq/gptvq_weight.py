@@ -35,6 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """Top level API for GPTVQ - Post-Training Quantization (PTQ)"""
+import collections
 import contextlib
 import json
 import os
@@ -44,10 +45,11 @@ import torch
 from torch import nn
 
 from aimet_common.defs import QuantScheme
-from aimet_common.utils import Spinner
+from aimet_common.utils import Spinner, AimetLogger
 from aimet_torch import utils
 from aimet_torch.gptvq.defs import GPTVQSupportedModules, GPTVQParameters
 from aimet_torch.gptvq.gptvq_optimizer import GPTVQOptimizer
+from aimet_torch.gptvq.utils import compute_hessian_tensor
 from aimet_torch.quantsim import ExportableQuantModule
 from aimet_torch.save_utils import SaveUtils
 from aimet_torch.utils import get_named_module
@@ -56,6 +58,9 @@ from aimet_torch.v2.quantization import DequantizedTensor
 from aimet_torch.v2.quantization.affine import QuantizeDequantize
 from aimet_torch.v2.quantization.encoding_analyzer import EncodingAnalyzer
 from aimet_torch.v2.quantsim import QuantizationSimModel
+
+
+_logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 
 class _VectorQuantizeDequantize(QuantizeDequantize):
@@ -81,7 +86,7 @@ class _VectorQuantizeDequantize(QuantizeDequantize):
         return super().forward(input)
 
 
-# pylint: disable=protected-access
+# pylint: disable=protected-access, too-many-arguments
 class GPTVQ:
     """
     Weight rounding mechanism for GPTVQ
@@ -94,6 +99,7 @@ class GPTVQ:
         gptvq_params: GPTVQParameters,
         param_encoding_path: str,
         module_names_to_exclude: Optional[List[str]] = None,
+        block_level_module_names: Optional[List[List[str]]] = None,
         file_name_prefix: str = "gptvq",
         config_file_path: Optional[str] = None,
     ):
@@ -108,6 +114,7 @@ class GPTVQ:
         :param gptvq_params: Dataclass holding GPTVQ parameters
         :param param_encoding_path: Path where to store parameter encodings
         :param module_names_to_exclude: Module names which are excluded during GPTVQ optimization
+        :param block_level_module_names: List of module name lists to optimize block level GPTVQ optimization instead of leaf module level
         :param file_name_prefix: Prefix to use for filename of the encodings file
         :param config_file_path: Configuration file path for model quantizers
         :return: Model with GPTVQ applied weights and saves corresponding parameter encodings JSON file at provided path
@@ -117,7 +124,7 @@ class GPTVQ:
             module_names_to_exclude = []
 
         with cls._disable_quantizers_for_gptvq_optimization(sim):
-            cls._apply_gptvq(model, sim, dummy_input, gptvq_params, set(module_names_to_exclude))
+            cls._apply_gptvq(model, sim, dummy_input, gptvq_params, set(module_names_to_exclude), block_level_module_names)
 
         cls._export_encodings_to_json(param_encoding_path, file_name_prefix, sim, gptvq_params.rows_per_block)
         SaveUtils.remove_quantization_wrappers(sim.model)
@@ -198,6 +205,29 @@ class GPTVQ:
         return exit_stack
 
     @classmethod
+    def _get_block_level_module_names(
+        cls,
+        original_model: nn.Module,
+        dummy_input: Union[torch.Tensor, Tuple],
+        block_level_modules_names: Optional[List[List[str]]],
+    ) -> List[List[str]]:
+        """
+        Return block level module name list
+
+        :param original_model: Original torch model
+        :param dummy_input: Dummy input
+        :param block_level_modules_names: User provided block level module names
+        :return: Block level module name list
+        """
+        if block_level_modules_names:
+            _logger.info("GPTVQ optimization will be applied to user provided block level modules")
+            return block_level_modules_names
+
+        modules = utils.get_ordered_list_of_modules(original_model, dummy_input)
+        _logger.info("GPTVQ optimization will be applied to GPTVQ supportable leaf level modules")
+        return [[name] for name, _ in modules]
+
+    @classmethod
     def _apply_gptvq(
             cls,
             original_model: nn.Module,
@@ -205,6 +235,7 @@ class GPTVQ:
             dummy_input: Union[torch.Tensor, Tuple],
             gptvq_params: GPTVQParameters,
             module_names_to_exclude: Set[str],
+            block_level_module_names: Optional[List[List[str]]],
     ):
         """
         Apply GPTVQ algorithm to optimize weights
@@ -214,22 +245,57 @@ class GPTVQ:
         :param dummy_input: Dummy input to model to be used to parse model graph
         :param gptvq_params: Dataclass holding GPTVQ parameters
         :param module_names_to_exclude: Module names which are excluded during GPTVQ optimization
+        :param block_level_module_names: List of module name lists to optimize block level GPTVQ optimization instead of leaf module level
         """
-        modules = utils.get_ordered_list_of_modules(original_model, dummy_input)
-        for name, _ in modules:
+        block_level_module_names = cls._get_block_level_module_names(
+            original_model, dummy_input, block_level_module_names
+        )
+        for module_names in block_level_module_names:
+            name_to_quant_module = cls._get_applicable_name_to_module_dict(
+                module_names, sim, module_names_to_exclude
+            )
+
+            name_to_hessian = {}
+            for name, quant_module in name_to_quant_module.items():
+                with Spinner(f"Sampling Hessian tensor of {name}"):
+                    name_to_hessian[name] = compute_hessian_tensor(
+                        quant_module, gptvq_params, sim
+                    )
+
+            for name, quant_module in name_to_quant_module.items():
+                assert isinstance(quant_module, BaseQuantizationMixin), "%s is not BaseQuantizationMixin" % quant_module
+                assert quant_module.param_quantizers["weight"], "%s does not have weight quantizer" % quant_module
+
+                with Spinner(f"Started GPTVQ optimization of {name}"), torch.no_grad():
+                    GPTVQOptimizer.weight_update(
+                        module=quant_module,
+                        gptvq_params=gptvq_params,
+                        hessian=name_to_hessian[name],
+                    )
+
+    @staticmethod
+    def _get_applicable_name_to_module_dict(
+        module_names: List[str],
+        sim: QuantizationSimModel,
+        module_names_to_exclude: Set[str],
+    ) -> Dict[str, BaseQuantizationMixin]:
+        """
+        Generate GPTVQ applicable name to module dictionary
+
+        :param module_names: Module name list
+        :param sim: QuantizationSimModel object
+        :param module_names_to_exclude: Module names to exclude GPTVQ optimization
+        :return: Module name to Quantization module dictionary
+        """
+        name_to_quant_module = collections.OrderedDict()
+        for name in module_names:
             quant_module = get_named_module(sim.model, name)
             if (
-                not isinstance(quant_module, GPTVQSupportedModules)
-                or name in module_names_to_exclude
+                isinstance(quant_module, GPTVQSupportedModules)
+                and name not in module_names_to_exclude
             ):
-                continue
-
-            with Spinner(f"Started GPTVQ optimization of {name}"):
-                GPTVQOptimizer.gptvq_module(
-                    quant_module=quant_module,
-                    gptvq_params=gptvq_params,
-                    sim=sim,
-                )
+                name_to_quant_module[name] = quant_module
+        return name_to_quant_module
 
     @classmethod
     def _export_encodings_to_json(cls,
