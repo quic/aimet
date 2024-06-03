@@ -36,7 +36,7 @@
 # =============================================================================
 
 """ Implementation for handling LoRA adapters added using PEFT """
-from typing import Dict
+from typing import Dict, Type
 import os
 import pickle
 from collections import defaultdict
@@ -49,7 +49,6 @@ from safetensors import safe_open
 # pylint: disable=no-name-in-module
 from peft.tuners.lora.layer import LoraLayer as PeftLoraLayer
 
-from aimet_torch.defs import ConvInplaceLinear
 from aimet_torch.utils import replace_modules_of_type1_using_constructor
 from aimet_torch.elementwise_ops import Add
 from aimet_torch.v2.quantsim import QuantizationSimModel
@@ -160,13 +159,16 @@ class AdapterMetaData:
         self.alpha = None
 
 
-def track_lora_meta_data(model: torch.nn.Module, path: str, filename_prefix: str):
+def track_lora_meta_data(model: torch.nn.Module, path: str, filename_prefix: str,
+                         replaced_module_type: Type[torch.nn.Module] = None):
     """
     Utility to track and save meta data for adapters. The meta data has adapter names and corresponding lora layers & alphas
 
     :param model: PEFT model
     :param path: path where to store model pth and encodings
     :param filename_prefix: Prefix to use for filenames
+    :param replaced_module_type: If lora linear layer is replaced by another torch module, then replaced_module_type
+                                represents the type with which linear layer was replaced
     """
     module_to_name_d = {}
 
@@ -177,12 +179,12 @@ def track_lora_meta_data(model: torch.nn.Module, path: str, filename_prefix: str
     for name, module in model.named_modules():
         if isinstance(module, LoraLayer):
             for index, lora_layer in enumerate(module.lora_A):
-                if isinstance(lora_layer, ConvInplaceLinear):
+                if replaced_module_type and isinstance(lora_layer, replaced_module_type):
                     lora_layer = lora_layer.conv2d
                 adapter_name_to_meta_data[module.index_to_adapter_name[index]].lora_A.append(
                     module_to_name_d[lora_layer])
             for index, lora_layer in enumerate(module.lora_B):
-                if isinstance(lora_layer, ConvInplaceLinear):
+                if replaced_module_type and isinstance(lora_layer, replaced_module_type):
                     lora_layer = lora_layer.conv2d
                 adapter_name_to_meta_data[module.index_to_adapter_name[index]].lora_B.append(
                     module_to_name_d[lora_layer])

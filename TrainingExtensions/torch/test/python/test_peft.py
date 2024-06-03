@@ -46,7 +46,6 @@ import copy
 
 from peft.tuners.lora.layer import LoraLayer as PeftLoraLayer
 from peft import LoraConfig, get_peft_model
-from aimet_torch.defs import ConvInplaceLinear
 from aimet_torch.peft import replace_lora_layers_with_quantizable_layers, track_lora_meta_data, LoraLayer, PeftQuantUtils, save_lora_weights_after_adaptation
 from aimet_torch.v2.quantsim import QuantizationSimModel
 
@@ -106,6 +105,47 @@ def two_adapter_model():
     model.add_adapter("default_new", lora_config)
     return model
 
+
+class ConvInplaceLinear(torch.nn.Module):
+    """ Convolution module that replaces a Linear layer inplace"""
+    def __init__(self, linear):
+        super(ConvInplaceLinear, self).__init__()
+        self.in_features = linear.in_features
+        self.out_features = linear.out_features
+        self.conv2d = torch.nn.Conv2d(linear.in_features, linear.out_features, 1, bias=True if linear.bias is not None else False)
+        self.conv2d.weight.data.copy_(linear.weight.data[:, :, None, None])
+        if linear.bias is not None:
+            self.conv2d.bias.data.copy_(linear.bias.data)
+        self.conv2d.to(linear.weight.data.device)
+
+    def __getattr__(self, attr):
+        conv2d = self._modules['conv2d']
+        if attr == 'conv2d':
+            return conv2d
+        return getattr(conv2d, attr)
+
+    def forward(self, x: torch.Tensor, scale: float = 1.0):
+        ndim = x.ndim
+        if ndim == 2:
+            x = x.unsqueeze(0).unsqueeze(-1).permute(0, 2, 3, 1) # (emb_dim, C) -> (1, C, 1, emb_dim)
+        elif ndim == 3:
+            x = x.unsqueeze(-1).permute(0, 2, 3, 1) # (B, emb_dim, C) -> (B, C, 1, emb_dim)
+        elif ndim == 4:
+            x = x.permute(0, 3, 1, 2) # (B, H, W, C) -> (B, C, H, W)
+        else:
+            raise NotImplementedError(f"ConvInplaceLinear could not handle input with shape {x.shape}")
+
+        x = self.conv2d(x)
+
+        if ndim == 2:
+            return x.permute(0, 3, 1, 2).squeeze(-1).squeeze(0) # (1, C, 1, emb_dim) -> # (emb_dim, C)
+        elif ndim == 3:
+             return x.permute(0, 3, 1, 2).squeeze(-1) # (1, C, 1, emb_dim) -> # (B, emb_dim, C)
+        elif ndim == 4:
+            x = x.permute(0, 2, 3, 1) # (B, C, H, W) -> (B, H, W, C)
+        return x
+
+
 class TestLoraAdapterPeft:
     def test_replace_adapter(self):
         model = one_adapter_model()
@@ -140,6 +180,9 @@ class TestLoraAdapterPeft:
             tensors = ['base_model.model.linear.lora_A.0.conv2d.weight',
                        'base_model.model.linear.lora_B.0.conv2d.weight']
             assert sorted(tensor_name) == sorted(tensors)
+
+            meta_data = track_lora_meta_data(model, tmpdir, 'meta_data', ConvInplaceLinear)
+            assert meta_data['default'].lora_A == ['base_model.model.linear.lora_A.0.conv2d']
 
     def test_track_adapter_meta_data(self):
         model = two_adapter_model()
@@ -271,6 +314,26 @@ class TestLoraAdapterPeft:
             tensors = ['base_model.model.linear.lora_A.0.weight',
                        'base_model.model.linear.lora_B.0.weight']
             assert sorted(tensor_name) == sorted(tensors)
+
+    def test_export_encodings_multiple_times(self):
+        model = one_adapter_model()
+
+        replace_lora_layers_with_quantizable_layers(model)
+        dummy_inputs = torch.randn(10, 10)
+
+        sim = QuantizationSimModel(model, dummy_input=dummy_inputs)
+
+        dummy_inputs = torch.randn(10, 10)
+
+        def forward_pass(model, forward_pass_callback=None):
+            return model(dummy_inputs)
+
+        sim.compute_encodings(forward_pass, forward_pass_callback_args=None)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sim.export(tmpdir, 'model', dummy_input=dummy_inputs, export_model=True, filename_prefix_encodings='encodings')
+            sim.export(tmpdir, 'model', dummy_input=dummy_inputs, export_model=False, filename_prefix_encodings='encodings_2')
+            assert os.path.exists(os.path.join(tmpdir, 'encodings.encodings'))
+            assert os.path.exists(os.path.join(tmpdir, 'encodings_2.encodings'))
 
 def _is_frozen(quantizer):
     return quantizer._allow_overwrite == False and\
