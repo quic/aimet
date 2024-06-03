@@ -45,7 +45,7 @@ from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import models, transforms, datasets
 
 from tqdm import tqdm
-from aimet_torch.auto_quant_v2 import AutoQuant
+from aimet_torch.auto_quant import AutoQuant
 from aimet_torch import utils
 from aimet_torch.quantsim import QuantizationSimModel
 
