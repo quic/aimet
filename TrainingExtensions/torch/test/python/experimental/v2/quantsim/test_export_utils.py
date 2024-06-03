@@ -49,6 +49,7 @@ from aimet_torch.examples.test_models import SingleResidualWithAvgPool
 from aimet_torch.experimental.v2.quantsim.export_utils import EncodingType
 from aimet_torch.quantsim import QuantizationSimModel as QuantizationSimModelV1, QuantizationDataType
 from aimet_torch.v2.quantsim import QuantizationSimModel as QuantizationSimModelV2
+from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.affine.quantizer import QuantizeDequantize, GroupedBlockQuantizeDequantize
 
 @contextmanager
@@ -65,13 +66,24 @@ def test_export_1_0_0_per_tensor():
     dummy_inp = torch.randn(1, 3, 32, 32)
     for qsim in (QuantizationSimModelV1(model, dummy_input=dummy_inp, default_param_bw=4, default_output_bw=16),
                  QuantizationSimModelV2(model, dummy_input=dummy_inp, default_param_bw=4, default_output_bw=16)):
+        qtzrs_before = [q.__dict__.copy() for q in qsim.model.modules() if isinstance(q, QuantizerBase)]
         qsim.compute_encodings(lambda m, _: m(dummy_inp), None)
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             with swap_encoding_version():
-                    qsim.export(tmp_dir, 'qsim_export', dummy_inp)
+                qsim.export(tmp_dir, 'qsim_export', dummy_inp)
 
             with open(os.path.join(tmp_dir, 'qsim_export.encodings'), 'r') as f:
                 encodings = json.load(f)
+        qtzrs_after = [q.__dict__.copy() for q in qsim.model.modules() if isinstance(q, QuantizerBase)]
+
+        """
+        Quantizer attributes should not change after export
+        """
+        assert len(qtzrs_before) == len(qtzrs_after)
+        for before, after in zip(qtzrs_before, qtzrs_after):
+            assert before.keys() == after.keys()
+            assert all(before[key] is after[key] for key in before)
 
         assert encodings['version'] == '1.0.0'
         assert isinstance(encodings['activation_encodings'], List)
@@ -99,13 +111,24 @@ def test_export_1_0_0_fp16():
                                         default_data_type=QuantizationDataType.float),
                  QuantizationSimModelV2(model, dummy_input=dummy_inp, default_param_bw=16, default_output_bw=16,
                                         default_data_type=QuantizationDataType.float)):
+        qtzrs_before = [q.__dict__.copy() for q in qsim.model.modules() if isinstance(q, QuantizerBase)]
         qsim.compute_encodings(lambda m, _: m(dummy_inp), None)
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             with swap_encoding_version():
-                    qsim.export(tmp_dir, 'qsim_export', dummy_inp)
+                qsim.export(tmp_dir, 'qsim_export', dummy_inp)
 
             with open(os.path.join(tmp_dir, 'qsim_export.encodings'), 'r') as f:
                 encodings = json.load(f)
+        qtzrs_after = [q.__dict__.copy() for q in qsim.model.modules() if isinstance(q, QuantizerBase)]
+
+        """
+        Quantizer attributes should not change after export
+        """
+        assert len(qtzrs_before) == len(qtzrs_after)
+        for before, after in zip(qtzrs_before, qtzrs_after):
+            assert before.keys() == after.keys()
+            assert all(before[key] is after[key] for key in before)
 
         assert encodings['version'] == '1.0.0'
         assert isinstance(encodings['activation_encodings'], List)
@@ -152,12 +175,23 @@ def test_export_1_0_0_per_channel():
                                             config_file=os.path.join(tmp_dir, 'config_file.json')),
                      QuantizationSimModelV2(model, dummy_input=dummy_inp, default_param_bw=4,
                                             config_file=os.path.join(tmp_dir, 'config_file.json'))):
+            qtzrs_before = [q.__dict__.copy() for q in qsim.model.modules() if isinstance(q, QuantizerBase)]
             qsim.compute_encodings(lambda m, _: m(dummy_inp), None)
+
             with swap_encoding_version():
-                    qsim.export(tmp_dir, 'qsim_export', dummy_inp)
+                qsim.export(tmp_dir, 'qsim_export', dummy_inp)
 
             with open(os.path.join(tmp_dir, 'qsim_export.encodings'), 'r') as f:
                 encodings = json.load(f)
+            qtzrs_after = [q.__dict__.copy() for q in qsim.model.modules() if isinstance(q, QuantizerBase)]
+
+            """
+            Quantizer attributes should not change after export
+            """
+            assert len(qtzrs_before) == len(qtzrs_after)
+            for before, after in zip(qtzrs_before, qtzrs_after):
+                assert before.keys() == after.keys()
+                assert all(before[key] is after[key] for key in before)
 
         assert encodings['version'] == '1.0.0'
         assert isinstance(encodings['activation_encodings'], List)
@@ -189,13 +223,24 @@ def test_export_1_0_0_bq_lpbq():
                                                                                  block_size=(-1, -1, -1, -1),
                                                                                  decompressed_bw=8,
                                                                                  block_grouping=None)
+    qtzrs_before = [q.__dict__.copy() for q in qsim.model.modules() if isinstance(q, QuantizerBase)]
     qsim.compute_encodings(lambda m, _: m(dummy_inp), None)
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         with swap_encoding_version():
-                qsim.export(tmp_dir, 'qsim_export', dummy_inp)
+            qsim.export(tmp_dir, 'qsim_export', dummy_inp)
 
         with open(os.path.join(tmp_dir, 'qsim_export.encodings'), 'r') as f:
             encodings = json.load(f)
+    qtzrs_after = [q.__dict__.copy() for q in qsim.model.modules() if isinstance(q, QuantizerBase)]
+
+    """
+    Quantizer attributes should not change after export
+    """
+    assert len(qtzrs_before) == len(qtzrs_after)
+    for before, after in zip(qtzrs_before, qtzrs_after):
+        assert before.keys() == after.keys()
+        assert all(before[key] is after[key] for key in before)
 
     assert encodings['version'] == '1.0.0'
     assert isinstance(encodings['activation_encodings'], List)
@@ -217,13 +262,24 @@ def test_export_1_0_0_bq_lpbq():
                                                                                  block_size=(-1, -1, -1, -1),
                                                                                  decompressed_bw=8,
                                                                                  block_grouping=(1, 4, 1, 1))
+    qtzrs_before = [q.__dict__.copy() for q in qsim.model.modules() if isinstance(q, QuantizerBase)]
     qsim.compute_encodings(lambda m, _: m(dummy_inp), None)
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         with swap_encoding_version():
-                qsim.export(tmp_dir, 'qsim_export', dummy_inp)
+            qsim.export(tmp_dir, 'qsim_export', dummy_inp)
 
         with open(os.path.join(tmp_dir, 'qsim_export.encodings'), 'r') as f:
             encodings = json.load(f)
+    qtzrs_after = [q.__dict__.copy() for q in qsim.model.modules() if isinstance(q, QuantizerBase)]
+
+    """
+    Quantizer attributes should not change after export
+    """
+    assert len(qtzrs_before) == len(qtzrs_after)
+    for before, after in zip(qtzrs_before, qtzrs_after):
+        assert before.keys() == after.keys()
+        assert all(before[key] is after[key] for key in before)
 
     assert encodings['version'] == '1.0.0'
     assert isinstance(encodings['activation_encodings'], List)

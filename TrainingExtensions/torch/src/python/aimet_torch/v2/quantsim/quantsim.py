@@ -36,8 +36,10 @@
 # =============================================================================
 """ Top level API for performing quantization simulation of a pytorch model """
 
+from typing import Union, Tuple
 import itertools
 import io
+import contextlib
 import torch
 
 from aimet_torch.quantsim import QuantizationSimModel as V1QuantizationSimModel, logger
@@ -47,6 +49,7 @@ from aimet_torch.v2.nn import FakeQuantizationMixin
 from aimet_torch.v2.nn import BaseQuantizationMixin
 from aimet_torch.quantsim_config.builder import LazyQuantizeWrapper
 from aimet_torch.v2.quantization.base import QuantizerBase
+from aimet_torch.v2.quantization.affine import AffineQuantizerBase
 from aimet_torch.v2.quantization.encoding_analyzer import PercentileEncodingAnalyzer
 from aimet_torch.v2.utils import patch_attr
 from aimet_torch import utils
@@ -125,6 +128,50 @@ class QuantizationSimModel(V1QuantizationSimModel):
         with utils.in_eval_mode(self.model), torch.no_grad():
             with aimet_nn.compute_encodings(self.model):
                 _ = forward_pass_callback(self.model, forward_pass_callback_args)
+
+    def export(self, path: str, filename_prefix: str, dummy_input: Union[torch.Tensor, Tuple],
+               *args, **kwargs):
+        if isinstance(dummy_input, torch.Tensor):
+            dummy_input = (dummy_input,)
+
+        @torch.no_grad()
+        def concretize_block_size(qtzr, inp):
+            """
+            Fill in block sizes for dimensions with block size -1
+            """
+            inp, = inp
+            dims = len(qtzr.block_size)
+            input_shape = inp.shape[-dims:]
+            scale_shape = qtzr.get_scale().shape[-dims:]
+            block_size = qtzr.block_size
+
+            concrete_block_size = tuple(inp_size//scale_size if blk_size == -1 else blk_size
+                                        for inp_size, scale_size, blk_size
+                                        in zip(input_shape, scale_shape, block_size))
+            ctx = patch_attr(qtzr, 'block_size', concrete_block_size)
+            stack.enter_context(ctx)
+
+        handles = []
+
+        try:
+            with contextlib.ExitStack() as stack:
+                for qtzr in self.model.modules():
+                    if not isinstance(qtzr, AffineQuantizerBase):
+                        continue
+
+                    if qtzr.block_size and any(size == -1 for size in qtzr.block_size):
+                        h = qtzr.register_forward_pre_hook(concretize_block_size)
+                        handles.append(h)
+
+                if handles:
+                    with utils.in_eval_mode(self.model), torch.no_grad():
+                        _ = self.model(*dummy_input)
+
+                return super().export(path, filename_prefix, dummy_input, *args, **kwargs)
+
+        finally:
+            for h in handles:
+                h.remove()
 
     def _create_quantizer_module(self, *args, **kwargs): # pylint: disable=arguments-differ
         # RNN, LSTM, and GRU don't require special handling in aimet V2
