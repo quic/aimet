@@ -37,11 +37,20 @@
 
 import pytest
 
+import random
 import torch
+import numpy as np
 from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 from aimet_torch.v2.quantization.float import FloatQuantizeDequantize
 from aimet_torch.v2.quantization.float.quantizer import _ieee_float_max_representable_value
 from aimet_torch.fp_quantization import fake_cast_to_ieee_float
+
+
+@pytest.fixture(autouse=True)
+def set_seed():
+    random.seed(999)
+    torch.manual_seed(0)
+    np.random.seed(0)
 
 
 @pytest.fixture()

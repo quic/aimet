@@ -45,6 +45,7 @@ from aimet_torch.v2.quantization.encoding_analyzer import SqnrEncodingAnalyzer, 
 def set_seed():
     random.seed(999)
     torch.random.manual_seed(999)
+    np.random.seed(999)
 
 class TestEncodingAnalyzer():
     @pytest.fixture
@@ -604,19 +605,18 @@ class TestPercentileEncodingAnalyzer():
     def test_compute_encodings_100_percentile(self):
         encoding_analyzer = PercentileEncodingAnalyzer((1,), percentile = 100, num_bins = 3)
         mean = std_dev = 2
-        input_tensor = np.random.normal(mean, std_dev, size=(10000))
-        encoding_analyzer.update_stats(torch.from_numpy(input_tensor))
+        input_tensor = torch.randn(10000) * std_dev + mean
+        encoding_analyzer.update_stats(input_tensor)
 
         num_steps = math.pow(2, 8) - 1
-        symmetric_min, symmetric_max = encoding_analyzer.compute_encodings(num_steps=num_steps - 1, is_symmetric = True)
-        largest_absolute_value = max(abs(element) for element in input_tensor)
-        assert abs(symmetric_min) <= largest_absolute_value
-        assert symmetric_max <= largest_absolute_value
-
+        strict_symmetric_min, strict_symmetric_max = encoding_analyzer.compute_encodings(num_steps=num_steps - 1, is_symmetric = True)
+        absmax = input_tensor.abs().max()
+        assert torch.allclose(strict_symmetric_min, -absmax)
+        assert torch.allclose(strict_symmetric_max, absmax)
 
         asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(num_steps=num_steps, is_symmetric = False)
-        assert np.allclose(asymmetric_min.item(), min(input_tensor))
-        assert np.allclose(asymmetric_max.item(), max(input_tensor))
+        assert torch.allclose(asymmetric_min, input_tensor.min())
+        assert torch.allclose(asymmetric_max, input_tensor.max())
 
     
     def test_compute_encodings_50_percentile(self):
@@ -624,7 +624,6 @@ class TestPercentileEncodingAnalyzer():
         input_tensor =  torch.arange(start=0, end=1001, step=1, dtype=torch.float)
         encoding_analyzer.update_stats(input_tensor)
         
-
         num_steps = math.pow(2, 8) - 1
         symmetric_min, symmetric_max = encoding_analyzer.compute_encodings(num_steps=num_steps - 1, is_symmetric = True)
         
