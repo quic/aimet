@@ -358,6 +358,22 @@ void concat(const std::vector<std::vector<DTYPE>>& inputs, const std::vector<uin
     }
 }
 
+
+template <typename DTYPE>
+std::tuple<DTYPE, std::vector<int>> quantizeSingleChannelPerBlockScale(std::vector<DTYPE>& scale, int compressed_bw,
+                                                                       int decompressed_bw)
+{
+    typename std::vector<DTYPE>::iterator maxScale;
+    maxScale = std::max_element(scale.begin(), scale.end());
+    DTYPE perChannelScale = *maxScale / pow(2, decompressed_bw - compressed_bw);
+    std::vector<int> perBlockIntScale;
+    for (int i=0; i<scale.size(); i++)
+    {
+        perBlockIntScale.push_back(std::max(1, static_cast<int>(std::round(scale[i] / perChannelScale))));
+    }
+    return std::tuple<DTYPE, std::vector<int>>(perChannelScale, perBlockIntScale);
+}
+
 template void slice(const float* input, const std::vector<uint32_t>& inputDim, int32_t axis,
                     std::vector<std::vector<float>>& outputs, std::vector<uint32_t>& outputDim);
 template void slice(const double* input, const std::vector<uint32_t>& inputDim, int32_t axis,
@@ -371,5 +387,12 @@ template void concat(const std::vector<std::vector<double>>& inputs, const std::
                      int32_t axis, double* output, std::vector<uint32_t>& outputDim);
 template void concat(const std::vector<std::vector<unsigned char>>& inputs, const std::vector<uint32_t>& inputDim,
                      int32_t axis, unsigned char* output, std::vector<uint32_t>& outputDim);
+
+template std::tuple<float, std::vector<int>> quantizeSingleChannelPerBlockScale(std::vector<float>& scale,
+                                                                                int compressed_bw,
+                                                                                int decompressed_bw);
+template std::tuple<double, std::vector<int>> quantizeSingleChannelPerBlockScale(std::vector<double>& scale,
+                                                                                 int compressed_bw,
+                                                                                 int decompressed_bw);
 
 }   // End of namespace DlQuantization
