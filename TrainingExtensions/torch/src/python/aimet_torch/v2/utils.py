@@ -39,10 +39,7 @@
 from typing import Callable, Tuple, Any, Union, Iterable
 import functools
 import itertools
-import copy
-
 import torch
-from aimet_torch.v2.nn.base import BaseQuantizationMixin
 
 
 def _is_expandable(src_shape: Tuple[int, ...],
@@ -258,6 +255,7 @@ def allow_recompute(fn):
         return fn(*args, **kwargs)
     return wrapper
 
+
 def flatten_nn_module_list(module):
     """
     Flatten nested list of nn.Modules into a flat list
@@ -271,101 +269,46 @@ def flatten_nn_module_list(module):
 
     return list(flat_iter(module))
 
-def remove_input_quantizers(modules: Union[BaseQuantizationMixin, Iterable[BaseQuantizationMixin]]):
+
+def _remove_quantizers(modules, func_name: str):
+    from aimet_torch.v2.nn import BaseQuantizationMixin
+    contexts = []
+    ctx = _ContextManager(action=lambda: None, cleanup=[ctx._cleanup() for ctx in contexts])
+
+    try:
+        if isinstance(modules, BaseQuantizationMixin):
+            modules = [modules]
+        for module in modules:
+            if isinstance(module, BaseQuantizationMixin):
+                    # pylint: disable=protected-access
+                    context = getattr(module, func_name)
+                    contexts.append(context)
+    except Exception:
+        ctx._cleanup() # pylint: disable=protected-access
+        raise
+    else:
+        return ctx
+
+def remove_input_quantizers(modules):
     '''
     Removes input quantizers for the modules provided
     '''
-    orig_quantizers = {}
-    for module in modules:
-        if isinstance(module, BaseQuantizationMixin):
-            orig_quantizers[module] = copy.deepcopy(module.input_quantizers)
+    _remove_quantizers(modules, '_remove_input_quantizers')
 
-    def restore_quantizers():
-        for module in modules:
-            output_quant = orig_quantizers.get(module)
-            module.input_quantizers = output_quant
-
-    ctx = _ContextManager(action=lambda: None,
-                          cleanup=restore_quantizers)
-
-    try:
-        if isinstance(modules, BaseQuantizationMixin):
-            modules = [modules]
-        for module in modules:
-            if isinstance(module, BaseQuantizationMixin):
-                if module in modules:
-                    # pylint: disable=protected-access
-                    module._remove_input_quantizers()
-    except Exception:
-        ctx._cleanup() # pylint: disable=protected-access
-        raise
-    else:
-        return ctx
-
-def remove_output_quantizers(modules: Union[BaseQuantizationMixin, Iterable[BaseQuantizationMixin]]):
+def remove_output_quantizers(modules):
     '''
     Removes output quantizers for the modules provided
     '''
-    orig_quantizers = {}
-    for module in modules:
-        if isinstance(module, BaseQuantizationMixin):
-            orig_quantizers[module] = copy.deepcopy(module.output_quantizers)
-
-    def restore_quantizers():
-        for module in modules:
-            output_quant = orig_quantizers.get(module)
-            module.output_quantizers = output_quant
-
-    ctx = _ContextManager(action=lambda: None,
-                          cleanup=restore_quantizers)
-
-    try:
-        if isinstance(modules, BaseQuantizationMixin):
-            modules = [modules]
-        for module in modules:
-            if isinstance(module, BaseQuantizationMixin):
-                if module in modules:
-                    # pylint: disable=protected-access
-                    module._remove_output_quantizers()
-    except Exception:
-        ctx._cleanup() # pylint: disable=protected-access
-        raise
-    else:
-        return ctx
+    _remove_quantizers(modules, '_remove_output_quantizers')
 
 
-def remove_param_quantizers(modules: Union[BaseQuantizationMixin, Iterable[BaseQuantizationMixin]]):
+def remove_param_quantizers(modules):
     '''
     Removes parameter quantizers for the modules provided
     '''
-    orig_quantizers = {}
-    for module in modules:
-        if isinstance(module, BaseQuantizationMixin):
-            orig_quantizers[module] = copy.deepcopy(module.param_quantizers)
+    _remove_quantizers(modules, '_remove_param_quantizers')
 
-    def restore_quantizers():
-        for module in modules:
-            output_quant = orig_quantizers.get(module)
-            module.param_quantizers = output_quant
-
-    ctx = _ContextManager(action=lambda: None,
-                          cleanup=restore_quantizers)
-
-    try:
-        if isinstance(modules, BaseQuantizationMixin):
-            modules = [modules]
-        for module in modules:
-            if isinstance(module, BaseQuantizationMixin):
-                if module in modules:
-                    # pylint: disable=protected-access
-                    module._remove_param_quantizers()
-    except Exception:
-        ctx._cleanup() # pylint: disable=protected-access
-        raise
-    else:
-        return ctx
-
-def remove_activation_quantizers(modules: Union[BaseQuantizationMixin, Iterable[BaseQuantizationMixin]]):
+def remove_activation_quantizers(modules):
     '''
     Removes activation quantizers for the modules provided
     '''
@@ -375,7 +318,7 @@ def remove_activation_quantizers(modules: Union[BaseQuantizationMixin, Iterable[
     return _ContextManager(action=lambda: None,
                                cleanup=lambda: (context_1._cleanup(), context_2._cleanup()))
 
-def remove_all_quantizers(modules: Union[BaseQuantizationMixin, Iterable[BaseQuantizationMixin]]):
+def remove_all_quantizers(modules):
     '''
     Removes all quantizers for the modules provided
     '''
