@@ -112,8 +112,9 @@ class TestGPTVQWeight:
             with open(config_path, "w") as f:
                 json.dump(QUANTSIM_CONFIG, f)
 
+            module_name_set = GPTVQ._get_candidate_module_name_set(model, module_names_to_exclude=None, block_level_module_names=None)
             quant_sim = GPTVQ._get_quantsim(
-                model, dummy_input, gptvq_parameters, config_file_path=config_path
+                model, dummy_input, gptvq_parameters, config_file_path=config_path, module_name_set=module_name_set
             )
 
         with GPTVQ._disable_quantizers_for_gptvq_optimization(quant_sim):
