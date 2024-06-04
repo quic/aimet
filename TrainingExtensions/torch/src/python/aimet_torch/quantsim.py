@@ -1741,13 +1741,15 @@ class QuantizationSimModel:
                             requires_grad=False,
                             allow_overwrite=False)
 
-    def quant_wrappers(self):
+    def qmodules(self):
         """
         Generator for yielding all quantization wrappers and their names
         """
         for name, module in self.model.named_modules():
             if isinstance(module, (QcQuantizeRecurrent, LazyQuantizeWrapper, ExportableQuantModule)):
                 yield name, module
+
+    quant_wrappers = qmodules
 
     def run_modules_for_traced_custom_marker(self, module_list: List[torch.nn.Module], dummy_input):
         """
