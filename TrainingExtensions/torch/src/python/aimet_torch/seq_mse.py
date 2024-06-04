@@ -127,7 +127,7 @@ class SequentialMse:
 
         NOTE:
         1) module reference passed to modules_to_exclude should be from FP32 model.
-        2) module from modules_to_exclude won't be quantized and skipped when appyling sequential MSE.
+        2) module from modules_to_exclude won't be quantized and skipped when applying sequential MSE.
         3) Except finding param encodings for supported modules, config JSON file will be respected and
         final state of sim will be unchanged.
 
@@ -377,7 +377,7 @@ class SequentialMse:
             modules_to_exclude: Optional[List[torch.nn.Module]],
     ):
         """
-        For given quantsim model, disable quantizers needed to be diabled before applying sequential MSE.
+        For given quantsim model, disable quantizers needed to be disabled before applying sequential MSE.
 
         :param model: Original fp32 model
         :param sim: QuantizationSimModel object
@@ -436,7 +436,7 @@ class SequentialMse:
             per_channel_min = torch.min(weight, dim=1)[0].detach()
 
         return per_channel_min, per_channel_max
-    
+
     @staticmethod
     def get_candidates(num_candidates: int,
                        per_channel_max: torch.Tensor,
@@ -525,7 +525,7 @@ class SequentialMse:
                         w: torch.Tensor,
                         wq: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Compute X^W^ and XW output acitvations.
+        Compute X^W^ and XW output activations.
 
         :param quant_module: Wrapper module to be optimized
         :param x: Inputs from FP32 model
@@ -556,11 +556,11 @@ class SequentialMse:
     @staticmethod
     def compute_recon_loss(xqwq: torch.Tensor, xw: torch.Tensor, params: SeqMseParams):
         """
-        Compute reconsturction loss and return the sum by reducing over all the dimensions except last channel dimension.
+        Compute reconstruction loss and return the sum by reducing over all the dimensions except last channel dimension.
 
         :param xqwq: X^Q^ quantized-dequantized values
         :param xw: XW FP32 values
-        :param params: Sequenial MSE parameters
+        :param params: Sequential MSE parameters
         :return: loss
         """
         if params.loss_fn == "mse":
