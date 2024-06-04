@@ -174,22 +174,7 @@ class AffineQuantizerBase(QuantizerBase):
         if not self.is_initialized():
             return None
 
-        min = self.get_min(dtype=torch.float32).flatten()
-        max = self.get_max(dtype=torch.float32).flatten()
-        scale = self.get_scale(dtype=torch.float32).flatten()
-        offset = self.get_offset(dtype=torch.float32).flatten()
-        if self._signed: # Legacy behavior is to use offset = 2 ** (bitwidth - 1) for signed symmetric
-            offset -= 2 ** (self.bitwidth - 1)
-        bitwidth = self.bitwidth
-        dtype = "int"
-        is_symmetric = self.symmetric
-
-        return [
-            {'min': float(min_), 'max': float(max_),
-             'scale': float(scale_), 'offset': int(offset_),
-             'bitwidth': bitwidth, 'dtype': dtype, 'is_symmetric': str(is_symmetric)}
-            for min_, max_, scale_, offset_ in zip(min, max, scale, offset)
-        ]
+        return self.get_encoding()._to_legacy_format()
 
     @torch.no_grad()
     def set_legacy_encodings(self, encodings: List[Dict]):

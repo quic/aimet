@@ -55,36 +55,12 @@ from aimet_torch.quantsim import ExportableQuantModule
 from aimet_torch.save_utils import SaveUtils
 from aimet_torch.utils import get_named_module
 from aimet_torch.v2.nn import BaseQuantizationMixin
-from aimet_torch.v2.quantization import DequantizedTensor
-from aimet_torch.v2.quantization.affine import QuantizeDequantize
-from aimet_torch.v2.quantization.encoding_analyzer import EncodingAnalyzer
+from aimet_torch.v2.quantization.affine.quantizer import QuantizeDequantize
+from aimet_torch.v2.quantization.tensor import QuantizedTensorBase
 from aimet_torch.v2.quantsim import QuantizationSimModel
 
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
-
-
-class _VectorQuantizeDequantize(QuantizeDequantize):
-    def __init__(
-        self,
-        shape,
-        bitwidth: int,
-        symmetric: bool,
-        encoding_analyzer: EncodingAnalyzer = None,
-        block_size: Optional[Tuple] = None,
-    ):
-        super().__init__(shape, bitwidth, symmetric, encoding_analyzer, block_size)
-        # Below flag should be enabled only after optimizing weight and setting it to module weight
-        self._do_bypass = False
-
-    # pylint: disable=redefined-builtin
-    def forward(self, input: torch.Tensor) -> DequantizedTensor:
-        if self._do_bypass:
-            output = input.as_subclass(DequantizedTensor)
-            output.encoding = self.get_encoding()
-            return output
-
-        return super().forward(input)
 
 
 # pylint: disable=protected-access, too-many-arguments
@@ -131,13 +107,34 @@ class GPTVQ:
         if module_names_to_exclude is None:
             module_names_to_exclude = []
 
-        with cls._disable_quantizers_for_gptvq_optimization(sim):
+        with cls._disable_quantizers_for_gptvq_optimization(sim, module_name_set):
             cls._apply_gptvq(model, sim, dummy_input, gptvq_params, set(module_names_to_exclude), block_level_module_names)
 
         cls._export_encodings_to_json(param_encoding_path, file_name_prefix, sim, gptvq_params.rows_per_block)
-        SaveUtils.remove_quantization_wrappers(sim.model)
+        return sim
 
-        return sim.model
+    @staticmethod
+    def _validate_module_names(model: nn.Module, module_names: Iterable[str], parameter_name: str):
+        """
+        Validate user provided parameter containing module names
+        Each module should exist in the model and be a GPTVQ supportable module
+
+        :param model: torch Model
+        :param module_names: Iterable of module names
+        :param parameter_name: Name of parameter to validate
+        :raise ValueError: If module names are not valid
+        """
+        name_to_module = dict(model.named_modules())
+        invalid_module_names = []
+        for name in module_names:
+            if name in name_to_module and isinstance(name_to_module[name], GPTVQSupportedModules):
+                continue
+            invalid_module_names.append(name)
+
+        if invalid_module_names:
+            msg = (f"Parameter `{parameter_name}` contains invalid module names ({', '.join(invalid_module_names)}) "
+                   f"that don't exist in model or aren't GPTVQ supportable")
+            raise ValueError(msg)
 
     @staticmethod
     def _validate_module_names(model: nn.Module, module_names: Iterable[str], parameter_name: str):
@@ -221,7 +218,7 @@ class GPTVQ:
 
             param_quantizer = module.param_quantizers["weight"]
             weight_shape = module.weight.shape
-            q = _VectorQuantizeDequantize(
+            q = QuantizeDequantize(
                 shape=(weight_shape[0] // rows_per_block, 1),
                 bitwidth=param_quantizer.bitwidth,
                 symmetric=param_quantizer.symmetric,
@@ -230,7 +227,7 @@ class GPTVQ:
             module.param_quantizers["weight"] = q
 
     @staticmethod
-    def _disable_quantizers_for_gptvq_optimization(sim: QuantizationSimModel) -> contextlib.ExitStack:
+    def _disable_quantizers_for_gptvq_optimization(sim: QuantizationSimModel, module_name_set) -> contextlib.ExitStack:
         """
         Get context managers to disable quantizers temporarily
 
@@ -238,11 +235,11 @@ class GPTVQ:
         :return: List of context managers to disable quantizers
         """
         exit_stack = contextlib.ExitStack()
-        for module in sim.model.modules():
+        for name, module in sim.model.named_modules():
             if not isinstance(module, BaseQuantizationMixin):
                 continue
 
-            if "weight" in module.param_quantizers and isinstance(module.param_quantizers["weight"], _VectorQuantizeDequantize):
+            if "weight" in module.param_quantizers and name in module_name_set:
                 exit_stack.enter_context(module._remove_activation_quantizers())
             else:
                 exit_stack.enter_context(module._remove_all_quantizers())
@@ -379,7 +376,7 @@ class GPTVQ:
 
         for name, quant_module in sim.model.named_modules():
             if isinstance(quant_module, GPTVQSupportedModules):
-                if "weight" in quant_module.param_quantizers:
+                if isinstance(quant_module.weight, QuantizedTensorBase):
                     cls._update_param_encodings_dict(
                         quant_module, name, param_encodings, rows_per_block
                     )

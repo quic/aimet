@@ -45,7 +45,7 @@ from aimet_torch.v2.quantization.base import EncodingBase
 from aimet_torch.v2.quantization.affine.backends import quantize, dequantize
 
 
-__all__ = ["AffineEncoding"]
+__all__ = ["AffineEncoding", "VectorEncoding"]
 
 
 class AffineEncoding(EncodingBase):
@@ -214,3 +214,34 @@ class AffineEncoding(EncodingBase):
         offset = self.offset
         block_size = self.block_size
         return dequantize(input, scale.to(input.dtype), offset.to(input.dtype), block_size=block_size)
+
+    def _to_legacy_format(self):
+        min = self.min.flatten()
+        max = self.max.flatten()
+        scale = self.scale.flatten()
+        offset = self.offset.flatten()
+        return [
+            {'min': float(min_), 'max': float(max_),
+             'scale': float(scale_), 'offset': int(offset_),
+             'bitwidth': self.bitwidth, 'dtype': 'int', 'is_symmetric': str(self.symmetry)}
+            for min_, max_, scale_, offset_ in zip(min, max, scale, offset)
+        ]
+
+
+class VectorEncoding(AffineEncoding):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # TODO (geunlee): ...
+        # super().__init__(*args, **kwargs)
+        # self.vector_dim = kwargs['vector_dim']
+        # self.vector_stride = kwargs['vector_stride']
+
+    def _to_legacy_format(self):
+        return super()._to_legacy_format()
+        # TODO (geunlee)
+        # encoding = super()._to_legacy_format()
+        # for i, _ in enumerate(encoding):
+        #     encoding[i].update(vector_dim=self.vector_dim,
+        #                        vector_stride=self.vector_stride,
+        #                        ...)
+        # return encoding

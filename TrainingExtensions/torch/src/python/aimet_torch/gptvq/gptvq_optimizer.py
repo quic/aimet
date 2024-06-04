@@ -50,6 +50,8 @@ from aimet_torch.gptvq.utils import (
     quantize_dequantize_codebook,
 )
 from aimet_torch.v2.nn import BaseQuantizationMixin
+from aimet_torch.v2.quantization.affine.encoding import AffineEncoding, VectorEncoding
+from aimet_torch.v2.quantization.tensor import DequantizedTensor
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -169,9 +171,25 @@ class GPTVQOptimizer:
                 module.param_quantizers["weight"],
             )
 
-        with torch.no_grad():
-            module.weight.copy_(rounded_weight.reshape(module.weight.shape).to(module.weight.dtype))
-            module.param_quantizers["weight"]._do_bypass = True  # pylint: disable=protected-access
+        qtzr = module.param_quantizers['weight']
+        rounded_weight = qtzr(rounded_weight.reshape(module.weight.shape)
+                                            .to(module.weight.dtype))
+        # At this point, rounded_weight is a quantized tensor with affine encoding
+        # since quantizer is an affine quantizer
+        assert isinstance(rounded_weight, DequantizedTensor)
+        assert isinstance(rounded_weight.encoding, AffineEncoding)
+        e = rounded_weight.encoding
+        # Convert affine encoding to vector encoding
+        rounded_weight.encoding = VectorEncoding(e.scale, # TODO (geunlee)
+                                                 e.offset,
+                                                 e.bitwidth,
+                                                 e.signed,
+                                                 e.symmetry,
+                                                 block_size=None)
+        delattr(module, 'weight')
+        module.register_buffer('weight', rounded_weight)
+        # Remove associated quantizer since the weight is holding already-quantized values
+        module.param_quantizers['weight'] = None
 
     @staticmethod
     def _update_weight_block(
