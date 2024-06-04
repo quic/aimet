@@ -47,6 +47,7 @@ file(REMOVE_RECURSE ${build_packaging_dir})
 # set variant name
 if(DEFINED ENV{AIMET_VARIANT})
   set(variant_name $ENV{AIMET_VARIANT})
+  message(WARNING "*** variant_name was set to AIMET_VARIANT ${variant_name} ***")
 else()
   if(ENABLE_TORCH AND ENABLE_TENSORFLOW)
     set(variant_name "tf-torch")
@@ -65,6 +66,8 @@ else()
   else()
     set(variant_name ${variant_name}-cpu)
   endif()
+
+  message(WARNING "*** AIMET_VARIANT not defined. Variant_name was set to ${variant_name} ***")
 endif()
 
 # Common dependencies
@@ -143,7 +146,8 @@ endif()
 # Pull just the version from the string (ex. 1.13+c116 --> 1.13)
 execute_process(COMMAND bash -c "echo ${FMWORK_VERSION} | tr -s ' ' | cut -d\"+\" -f1"
                 OUTPUT_VARIABLE fmwork_ver_bare
-                OUTPUT_STRIP_TRAILING_WHITESPACE)
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                COMMAND_ERROR_IS_FATAL ANY)
 
 
 # Loop over the package array list to generate wheel files
@@ -161,6 +165,7 @@ foreach(package ${package_name_list})
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${AIMET_PACKAGE_PATH}/lib/x86_64-linux-gnu" "${pkg_common_staging_path}/x86_64-linux-gnu"
     COMMAND ${CMAKE_COMMAND} -E copy "${src_packaging_dir}/NOTICE.txt" "${pkg_staging_path}/"
     COMMAND ${CMAKE_COMMAND} -E copy "${src_packaging_dir}/README.txt" "${pkg_staging_path}/"
+    COMMAND_ERROR_IS_FATAL ANY
     )
   execute_process(
     # Delete binaries from aimet_common which should not be part of the package
@@ -170,13 +175,15 @@ foreach(package ${package_name_list})
   list(TRANSFORM deps_name_list_${package} PREPEND "${src_deps_dir}/${variant_name}/")
 
   # Copy the dependency and other files into the staging subfolder
-  execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory "${pkg_deps_staging_path}")
+  execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory "${pkg_deps_staging_path}"
+                  COMMAND_ERROR_IS_FATAL ANY)
   execute_process(
     COMMAND ${CMAKE_COMMAND} -E copy 
       ${deps_name_list_${package}}
       "${src_packaging_dir}/INSTALL.txt"
       "${src_packaging_dir}/envsetup.sh"
       "${pkg_deps_staging_path}/"
+      COMMAND_ERROR_IS_FATAL ANY
   )
 
   if(EXISTS "${src_packaging_dir}/LICENSE.pdf")
@@ -205,6 +212,7 @@ foreach(package ${package_name_list})
     WORKING_DIRECTORY ${pkg_staging_path}
     OUTPUT_VARIABLE output_var
     RESULT_VARIABLE setup_return_string
+    COMMAND_ERROR_IS_FATAL ANY
   )
 endforeach()
 
@@ -213,7 +221,5 @@ message(STATUS "Package rename command: ${rename_package_cmd}")
 execute_process(COMMAND bash "-c" "${src_packaging_dir}/convert_wheel_format.sh ${CMAKE_BINARY_DIR}"
                 OUTPUT_VARIABLE convert_wheel_output
                 RESULT_VARIABLE convert_wheel_result
-                OUTPUT_STRIP_TRAILING_WHITESPACE)
-if(convert_wheel_result EQUAL "1")
-  message( FATAL_ERROR "Wheel package conversion failed")
-endif()
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                COMMAND_ERROR_IS_FATAL ANY)

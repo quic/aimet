@@ -266,6 +266,15 @@ def get_package_version():
     return package_version_with_variant
 
 
+def get_wheel_package_name():
+    whl_package_name = "aimet_@package@"
+    if "pypi" not in "@PIP_INDEX@":
+        aimet_variant = os.environ.get("AIMET_VARIANT", None)
+        if aimet_variant is not None:
+            whl_package_name = "aimet_" + aimet_variant
+    return whl_package_name
+
+
 # Obtain list of package and sub-packages (including common dependency ones)
 packages_found = get_package_list(package_name)
 
@@ -284,6 +293,8 @@ dependency_url_list.extend(get_all_dependency_urls(common_package_name))
 # Obtain the package home page URL
 package_url_base = get_package_url()
 
+# Obtain the name of the wheel package
+wheel_package_name = get_wheel_package_name()
 
 if "--gpu" in sys.argv:
     sys.argv.remove("--gpu")
@@ -291,7 +302,7 @@ package_version = get_package_version()
 
 
 setup(
-    name='aimet-@package@',
+    name=wheel_package_name,
     version=package_version,
     author='Qualcomm Innovation Center, Inc.',
     author_email='aimet.os@quicinc.com',

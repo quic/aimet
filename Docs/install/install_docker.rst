@@ -1,7 +1,7 @@
 .. # =============================================================================
    #  @@-COPYRIGHT-START-@@
    #
-   #  Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+   #  Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
    #
    #  Redistribution and use in source and binary forms, with or without
    #  modification, are permitted provided that the following conditions are met:
@@ -144,8 +144,8 @@ Set the <variant_string> to ONE of the following depending on your desired varia
 
 #. For the PyTorch 1.13 GPU variant, use "torch_gpu"
 #. For the PyTorch 1.13 CPU variant, use "torch_cpu"
-#. For the PyTorch 2.1 GPU variant, use "torch_gpu-pt21"
-#. For the PyTorch 2.1 CPU variant, use "torch_cpu-pt21"
+#. For the PyTorch 2.1 GPU variant, use "torch_gpu_pt21"
+#. For the PyTorch 2.1 CPU variant, use "torch_cpu_pt21"
 #. For the TensorFlow GPU variant, use "tf_gpu"
 #. For the TensorFlow CPU variant, use "tf_cpu"
 #. For the ONNX GPU variant, use "onnx_gpu"
@@ -171,7 +171,7 @@ Set the common suffix for the package files as follows:
 
 .. code-block:: bash
 
-    export wheel_file_suffix="cp310-cp310-linux_x86_64.whl"
+    export wheel_file_suffix="cp310-cp310-manylinux_2_34_x86_64.whl"
 
 Install the AIMET packages in the order specified below:
 
@@ -183,11 +183,11 @@ Install the AIMET packages in the order specified below:
 .. code-block:: bash
 
     # Install ONE of the following depending on the variant
-    python3 -m pip install ${download_url}/aimet_torch-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix} -f https://download.pytorch.org/whl/torch_stable.html
+    python3 -m pip install ${download_url}/aimet_${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix} -f https://download.pytorch.org/whl/torch_stable.html
     # OR
-    python3 -m pip install ${download_url}/aimet_tensorflow-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
+    python3 -m pip install ${download_url}/aimet_${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
     # OR
-    python3 -m pip install ${download_url}/aimet_onnx-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
+    python3 -m pip install ${download_url}/aimet_${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
 
 Environment setup
 ~~~~~~~~~~~~~~~~~
