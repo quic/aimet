@@ -2189,7 +2189,7 @@ class TestQuantizationSimStaticGrad:
 
         sim = QuantizationSimModel(model, dummy_input=dummy_input,
                                    quant_scheme=QuantScheme.post_training_tf)
-        for _, qmodule in sim.qmodules():
+        for _, qmodule in sim.named_qmodules():
             qmodule.enable_per_channel_quantization()
 
         # Quantize
@@ -2276,7 +2276,7 @@ class TestQuantizationSimStaticGrad:
 
         model = SmallMnist()
         sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=quant_scheme)
-        for _, qmodule in sim.qmodules():
+        for _, qmodule in sim.named_qmodules():
             qmodule.enable_per_channel_quantization()
 
         # Quantize
@@ -2556,7 +2556,7 @@ class TestQuantizationSimStaticGrad:
             input_quant_checked = []
             output_quant_checked = []
             param_quant_checked = []
-            for name, qmodule in qsim.qmodules():
+            for name, qmodule in qsim.named_qmodules():
                 if name in partial_torch_encodings['activation_encodings']:
                     if 'input' in partial_torch_encodings['activation_encodings'][name]:
                         assert_input_output_quantizers(qmodule.input_quantizers, 'input')

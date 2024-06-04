@@ -67,7 +67,7 @@ class SequentialMse(V1SequentialMse):
 
         :param sim: Quant sim
         """
-        for _, qmodule in sim.qmodules():
+        for _, qmodule in sim.named_qmodules():
             qmodule._compute_param_encodings(overwrite=True) # pylint: disable=protected-access
 
     @staticmethod
@@ -93,7 +93,7 @@ class SequentialMse(V1SequentialMse):
         original_input_quantizers = {}
         original_output_quantizers = {}
         original_param_quantizers = {}
-        for name, qmodule in sim.qmodules():
+        for name, qmodule in sim.named_qmodules():
             original_input_quantizers[name] = qmodule.input_quantizers
             original_output_quantizers[name] = qmodule.output_quantizers
             qmodule.input_quantizers = nn.ModuleList([None for _ in qmodule.input_quantizers])
@@ -113,7 +113,7 @@ class SequentialMse(V1SequentialMse):
 
         yield
 
-        for name, qmodule in sim.qmodules():
+        for name, qmodule in sim.named_qmodules():
             qmodule.input_quantizers = original_input_quantizers[name]
             qmodule.output_quantizers = original_output_quantizers[name]
 
