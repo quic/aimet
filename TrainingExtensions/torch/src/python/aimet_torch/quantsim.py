@@ -478,7 +478,8 @@ class QuantizationSimModel:
 
     def export(self, path: str, filename_prefix: str, dummy_input: Union[torch.Tensor, Tuple],
                onnx_export_args: Optional[Union[OnnxExportApiArgs, Dict]] = None, propagate_encodings: bool = False,
-               export_to_torchscript: bool = False, use_embedded_encodings: bool = False, export_model: bool = True):
+               export_to_torchscript: bool = False, use_embedded_encodings: bool = False, export_model: bool = True,
+               filename_prefix_encodings: str = None):
         """
         This method exports out the quant-sim model so it is ready to be run on-target.
 
@@ -506,6 +507,8 @@ class QuantizationSimModel:
         :param export_model: If True, then ONNX model is exported. When False, only encodings are exported. User should
                             disable (False) this flag only if the corresponding ONNX model already exists in the path
                             specified
+        :param filename_prefix_encodings: File name prefix to be used when saving encodings.
+                                          If None, then user defaults to filename_prefix value
         """
 
         warning_str = 'Exporting encodings to yaml will be deprecated in a future release. Ensure that your ' \
@@ -513,6 +516,9 @@ class QuantizationSimModel:
                       'format. For the time being, if yaml export is needed, set aimet_common.utils.SAVE_TO_YAML to ' \
                       'True.'
         logger.warning(warning_str)
+
+        if not filename_prefix_encodings:
+            filename_prefix_encodings = filename_prefix
 
         if quantsim.encoding_version not in VALID_ENCODING_VERSIONS:
             raise NotImplementedError(f'Encoding version {quantsim.encoding_version} not in set of valid encoding '
@@ -541,17 +547,21 @@ class QuantizationSimModel:
                                                                              onnx_export_args, export_to_torchscript, self._is_conditional)
         else:
             if export_to_torchscript:
-                self.export_torch_script_model_and_encodings(path, filename_prefix, model_to_export, self.model,
-                                                             dummy_input, self._excluded_layer_names)
+                self.export_torch_script_model_and_encodings(path, filename_prefix, filename_prefix_encodings,
+                                                             model_to_export, self.model,
+                                                             dummy_input,
+                                                             self._excluded_layer_names)
             else:
                 self.export_onnx_model_and_encodings(path, filename_prefix, model_to_export, self.model,
                                                      dummy_input, onnx_export_args, propagate_encodings,
                                                      self._module_marker_map, self._is_conditional,
                                                      self._excluded_layer_names, quantizer_args=self.quant_args,
-                                                     export_model=export_model)
+                                                     export_model=export_model,
+                                                     filename_prefix_encodings=filename_prefix_encodings)
 
     @staticmethod
     def export_torch_script_model_and_encodings(path: str, filename_prefix: str,
+                                                filename_prefix_encodings: str,
                                                 original_model: torch.nn.Module,
                                                 sim_model: torch.nn.Module,
                                                 dummy_input: Union[torch.Tensor, Tuple],
@@ -561,6 +571,7 @@ class QuantizationSimModel:
 
         :param path: path where to store model pth and encodings
         :param filename_prefix: Prefix to use for filenames of the model pth and encodings files
+        :param filename_prefix_encodings: File name prefix for encodings. Can be same as filename_prefix
         :param original_model: model without the quantsim wrappers
         :param sim_model: model with the quantsim wrappers
         :param dummy_input: Dummy input to the model. Used to parse model graph.
@@ -577,7 +588,7 @@ class QuantizationSimModel:
                 torchscript_utils.get_node_to_io_tensor_names_map(original_model, trace, dummy_input)
 
         # Export encodings
-        QuantizationSimModel._export_encodings_to_files(sim_model, path, filename_prefix,
+        QuantizationSimModel._export_encodings_to_files(sim_model, path, filename_prefix_encodings,
                                                         torch_script_node_io_tensor_map, valid_param_set,
                                                         excluded_layer_names, propagate_encodings=False)
 
@@ -587,7 +598,8 @@ class QuantizationSimModel:
                                         onnx_export_args: Union[OnnxExportApiArgs, dict], propagate_encodings: bool,
                                         module_marker_map: Dict[torch.nn.Module, torch.Tensor] = None,
                                         is_conditional: bool = False, excluded_layer_names: List = None,
-                                        quantizer_args: Dict = None, export_model: bool = True):
+                                        quantizer_args: Dict = None, export_model: bool = True,
+                                        filename_prefix_encodings: str = None):
         """
         This method exports a onnx model and the corresponding encodings
 
@@ -606,10 +618,14 @@ class QuantizationSimModel:
         :param export_model: If True, then ONNX model is exported. When False, only encodings are exported. User should
                             disable (False) this flag only if the corresponding ONNX model already exists in the path
                             specified
+        :param filename_prefix_encodings: File name prefix to be used when saving encodings.
+                                          If None, then user defaults to filename_prefix value
         :return: None
 
         """
         # pylint: disable=too-many-locals
+        if not filename_prefix_encodings:
+            filename_prefix_encodings = filename_prefix
         onnx_path = os.path.join(path, filename_prefix + '.onnx')
         if export_model:
             if version.parse(torch.__version__) >= version.parse("1.13.0") and onnx_utils.EXPORT_TO_ONNX_DIRECT:
@@ -631,7 +647,7 @@ class QuantizationSimModel:
         onnx_node_to_io_tensor_map, valid_param_set = OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
 
         # Export encodings
-        QuantizationSimModel._export_encodings_to_files(sim_model, path, filename_prefix,
+        QuantizationSimModel._export_encodings_to_files(sim_model, path, filename_prefix_encodings,
                                                         onnx_node_to_io_tensor_map, valid_param_set,
                                                         excluded_layer_names, propagate_encodings,
                                                         quantizer_args=quantizer_args)
