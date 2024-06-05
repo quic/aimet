@@ -232,6 +232,6 @@ class QuantizationSimModel(V1QuantizationSimModel):
     def _replace_quantization_wrapper_with_native_torch_quantization_nodes(quant_sim_model, device: torch.device):
         raise NotImplementedError()
 
-    @deprecated('Use {qmodules.__qualname__} instead.')
+    @deprecated(f'Use {V1QuantizationSimModel.named_qmodules.__qualname__} instead.')
     def quant_wrappers(self): # pylint: disable=missing-docstring
         return super().quant_wrappers()
