@@ -40,7 +40,7 @@ import contextlib
 import itertools
 import json
 import os
-from typing import Union, Tuple, Optional, Dict, List, Set
+from typing import Union, Tuple, Optional, Dict, List, Set, Iterable
 
 import torch
 from torch import nn
@@ -120,6 +120,12 @@ class GPTVQ:
         :param config_file_path: Configuration file path for model quantizers
         :return: QuantizationSimModel with GPTVQ applied weights and saves corresponding parameter encodings JSON file at provided path
         """
+        if module_names_to_exclude is not None:
+            cls._validate_module_names(model, module_names_to_exclude, "module_names_to_exclude")
+
+        if block_level_module_names is not None:
+            cls._validate_module_names(model, itertools.chain.from_iterable(block_level_module_names), "block_level_module_names")
+
         module_name_set = cls._get_candidate_module_name_set(model, module_names_to_exclude, block_level_module_names)
         sim = cls._get_quantsim(model, dummy_input, gptvq_params, config_file_path, module_name_set)
         if module_names_to_exclude is None:
@@ -132,6 +138,29 @@ class GPTVQ:
         SaveUtils.remove_quantization_wrappers(sim.model)
 
         return sim.model
+
+    @staticmethod
+    def _validate_module_names(model: nn.Module, module_names: Iterable[str], parameter_name: str):
+        """
+        Validate user provided parameter containing module names
+        Each module should exist in the model and be a GPTVQ supportable module
+
+        :param model: torch Model
+        :param module_names: Iterable of module names
+        :param parameter_name: Name of parameter to validate
+        :raise ValueError: If module names are not valid
+        """
+        name_to_module = {name: module for name, module in model.named_modules()}
+        invalid_module_names = []
+        for name in module_names:
+            if name in name_to_module and isinstance(name_to_module[name], GPTVQSupportedModules):
+                continue
+            invalid_module_names.append(name)
+
+        if invalid_module_names:
+            msg = (f"Parameter `{parameter_name}` contains invalid module names ({', '.join(invalid_module_names)}) "
+                   f"that don't exist in model or aren't GPTVQ supportable")
+            raise ValueError(msg)
 
     @staticmethod
     def _get_candidate_module_name_set(model: nn.Module,
@@ -148,7 +177,7 @@ class GPTVQ:
         if block_level_module_names:
             possible_module_names = set(itertools.chain.from_iterable(block_level_module_names))
         else:
-            possible_module_names = {name for name, _ in model.named_modules()}
+            possible_module_names = {name for name, module in model.named_modules() if isinstance(module, GPTVQSupportedModules)}
 
         module_names_to_exclude = set(module_names_to_exclude) if module_names_to_exclude else set()
         return possible_module_names.difference(module_names_to_exclude)
@@ -192,21 +221,19 @@ class GPTVQ:
         :param rows_per_block: The number of rows per block
         :param module_name_set: Module name set containing candidates of GPTVQ optimization
         """
-        for name, module in sim.model.named_modules():
-            if (
-                isinstance(module, BaseQuantizationMixin)
-                and isinstance(module.get_original_module(), GPTVQSupportedModules)
-                and name in module_name_set
-            ):
-                param_quantizer = module.param_quantizers["weight"]
-                weight_shape = module.weight.shape
-                q = _VectorQuantizeDequantize(
-                    shape=(weight_shape[0] // rows_per_block, 1),
-                    bitwidth=param_quantizer.bitwidth,
-                    symmetric=param_quantizer.symmetric,
-                    block_size=(rows_per_block, weight_shape[1]),
-                ).to(module.weight.device)
-                module.param_quantizers["weight"] = q
+        for module_name in module_name_set:
+            module = get_named_module(sim.model, module_name)
+            assert isinstance(module, BaseQuantizationMixin)
+
+            param_quantizer = module.param_quantizers["weight"]
+            weight_shape = module.weight.shape
+            q = _VectorQuantizeDequantize(
+                shape=(weight_shape[0] // rows_per_block, 1),
+                bitwidth=param_quantizer.bitwidth,
+                symmetric=param_quantizer.symmetric,
+                block_size=(rows_per_block, weight_shape[1]),
+            ).to(module.weight.device)
+            module.param_quantizers["weight"] = q
 
     @staticmethod
     def _disable_quantizers_for_gptvq_optimization(sim: QuantizationSimModel) -> contextlib.ExitStack:

@@ -35,6 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """Test GPTVQ weight"""
+import itertools
 import json
 import tempfile
 
@@ -220,3 +221,16 @@ class TestGPTVQWeight:
         assert torch.allclose(leaf_level_rounded_model.linear1.weight, block_level_rounded_model.linear1.weight)
         # After first module optimization, Hessian of next module is affected by previous module if leaf level optimization
         assert not torch.allclose(leaf_level_rounded_model.linear2.weight, block_level_rounded_model.linear2.weight)
+
+    def test_gptvq_module_name_validation(self):
+        model = test_models.ModelWithThreeLinears()
+        with pytest.raises(ValueError):
+            module_names_to_exclude = ["foo", "bar"]
+            GPTVQ._validate_module_names(model, module_names_to_exclude, "module_names_to_exclude")
+
+        with pytest.raises(ValueError):
+            block_level_module_names = itertools.chain.from_iterable([["linear1"], ["linear2", "foo"]])
+            GPTVQ._validate_module_names(model, block_level_module_names, "block_level_module_names")
+
+        GPTVQ._validate_module_names(model, ["linear1", "linear2"], "module_names_to_exclude")
+        GPTVQ._validate_module_names(model, itertools.chain.from_iterable([["linear1", "linear2"], ["linear3"]]), "block_level_module_names")
