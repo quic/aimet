@@ -1,0 +1,341 @@
+pipeline {
+    parameters {
+        string(name: 'PROJECT_NAME', defaultValue: 'aimet', description: 'project name')
+        string(name: 'BUILD_LABEL_GPU', defaultValue: 'docker-build-aimet-pr-gpu', description: 'Jenkins node host name or label for GPU variants')
+        string(name: 'BUILD_LABEL_CPU', defaultValue: 'docker-build-aimet-pr-cpu', description: 'Jenkins node host name or label for CPU variants')
+        string(name: 'BUILD_TIMEOUT', defaultValue: '3', description: 'Build timeout in hours')
+        string(name: 'USE_LINARO', defaultValue: '-l', description: 'Use pre-built Linaro images, if available.')
+        string(name: 'PREBUILT_DOCKER_IMAGE_URL', defaultValue: '', description: 'Use pre-built docker image from URL, if available.')
+    }
+    agent { label "${params.BUILD_LABEL_CPU}" }
+    options {
+        timestamps()
+        timeout( time: 3, unit: 'HOURS' )
+    }
+    environment{
+        def workspace   = pwd()
+        def REPO_URL    = sh (script: "git config --get remote.origin.url",     returnStdout: true).trim()
+        def REPO_NAME   = sh (script: "basename -s .git ${REPO_URL}",           returnStdout: true).trim()
+
+        PROJECT_ROOT    = "${workspace}/${REPO_NAME}"
+        PROJECT_NAME    = "${params.PROJECT_NAME}"
+        PROJECT_BRANCH  = "${params.PROJECT_BRANCH}"
+        WORKSPACE_ROOT  = "${workspace}"
+        XUNIT_XSL_FILE  = "${PROJECT_ROOT}/Jenkins/to-junit.xsl"
+    }
+    stages {
+        stage('Setup') {
+            steps {
+                echo "*** Running SETUP stage on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
+                sh 'bash -l -c "rm -rf ${PROJECT_ROOT} | true"'
+                sh 'bash -l -c "mkdir ${PROJECT_ROOT}"'
+                // moving all files and folders except current and parent into ${REPO_NAME} folder
+                sh 'mv `ls -1a | grep -v "^${REPO_NAME}$" | grep -v "^\\.$" | grep -v "^\\.\\.$" ` ${REPO_NAME}'
+                script {
+                    // load threshold file to be used for unit test and code quality reporting
+                    def THRESHOLD_FILE = "${PROJECT_ROOT}/Jenkins/jenkins_threshold_configs.json"
+                    if (!fileExists("${THRESHOLD_FILE}")) {
+                        error("Error: Threshold file must be specified for project. ${THRESHOLD_FILE} does not exist.")
+                    }
+
+                    echo "Loading Thresholds Config  file"
+                    THRESHOLD_OBJ = readJSON file: "${PROJECT_ROOT}/Jenkins/jenkins_threshold_configs.json";
+                }
+                stash name: 'AIMETBuildTree', useDefaultExcludes: false
+            }
+        }
+        stage('Pipelines start') {
+            parallel {
+                // Start the pipeline for Torch GPU variant
+                stage("TorchGPU-New") {
+                    agent { label "${params.BUILD_LABEL_GPU}" }
+                    stages {
+                        stage('Setup') {
+                            steps {
+                                cleanWs()
+                                unstash 'AIMETBuildTree'
+                                script{
+                                    env.AIMET_VARIANT_TORCH_GPU = "torch-gpu-new"
+                                }
+                                echo "*** Running SETUP stage for ${env.AIMET_VARIANT_TORCH_GPU} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
+                            }
+                        }
+
+                        stage('Build') {
+                            steps {
+                                echo 'Building code (and generating Docs and pip packages)...'
+                                script {
+                                    //TODO Change option back to "-bp" as soon as issue is fixed
+                                    runStage(env.AIMET_VARIANT_TORCH_GPU, "-bp")
+                                }
+                            }
+                        }
+
+                        stage('Code violations') {
+                            steps {
+                                echo 'Running code violations...'
+                                script {
+                                    runStage(env.AIMET_VARIANT_TORCH_GPU, "-v")
+                                }
+                            }
+                            post {
+                                always {
+                                    step([
+                                            $class                      : 'WarningsPublisher',
+                                            parserConfigurations        : [[
+                                                                            parserName: 'PYLint',
+                                                                            pattern   : "**/**/**/*pylint_results.out"
+                                                                          ]],
+                                            failedTotalHigh             : THRESHOLD_OBJ.pylint_fail_thresholds.high_priority,
+                                            failedTotalNormal           : THRESHOLD_OBJ.pylint_fail_thresholds.normal_priority,
+                                            failedTotalLow              : THRESHOLD_OBJ.pylint_fail_thresholds.low_priority,
+                                            usePreviousBuildAsReference : true
+                                    ])
+                                    script {
+                                        if (currentBuild.currentResult.equals("FAILURE")) {
+                                            // the plugin won't fail the stage.  it only sets the build status, so we have to fail it
+                                            // manually
+                                            sh "exit 1"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        stage('Unit tests') {
+                            steps {
+                                script {
+                                    if ("${env.QCInternalValidation}" == "false") {
+                                        echo 'Building code and running tests...'
+                                        runStage(env.AIMET_VARIANT_TORCH_GPU, "-u")
+                                    }
+                                }
+                            }
+                            post {
+                                always {
+                                    script {
+                                        if ("${env.QCInternalValidation}" == "false") {
+                                            // Parse CTest, Junit, or GoogleTest results
+                                            xunit thresholdMode: 2,
+                                            thresholds: [
+                                                failed(failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.new_tests,
+                                                    failureThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.total_tests,
+                                                    unstableNewThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.new_tests,
+                                                    unstableThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.total_tests)],
+                                            tools: [Custom(customXSL: "${XUNIT_XSL_FILE}",
+                                                        deleteOutputFiles: false,
+                                                        excludesPattern: '',
+                                                        pattern: "**/unit_test_results/**/*.xml",
+                                                        skipNoTestFiles: true,
+                                                        stopProcessingIfError: true)]
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        stage('Static analysis') {
+                            steps {
+                                echo 'Running static analysis...'
+                                script {
+                                    echo 'WARNING: Currently NOT failing on static analysis errors!'
+                                    //TODO Remove the '| true' from the below invocation when errors are fixed
+                                    runStage(env.AIMET_VARIANT_TORCH_GPU, "-s | true")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                //Start an optional pipeline to perform additional testing
+                stage("extra") {
+                    stages {
+                        stage('AIMET extra ALL STAGES') {
+                            steps {
+                                script {
+                                    if ("${env.QCInternalValidation}" == "true") {
+                                        echo 'Running AIMET additional stages'
+                                        callAimetExtra(env.CHANGE_TARGET)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } // stage("extra")
+            }
+        }
+        stage('Matrix') {
+            matrix {
+                axes {
+                    axis {
+                        name 'ML_FMWORK'
+                        values 'torch'
+                    }
+                    axis {
+                        name 'PROC_TYPE'
+                        values 'gpu'
+                    }
+                }
+                excludes {
+                    exclude {
+                        axis {
+                            name 'ML_FMWORK'
+                            values 'tf-torch'
+                        }
+                        axis {
+                            name 'PROC_TYPE'
+                            values 'gpu'
+                        }
+                    }
+                }
+                stages {
+                    stage('Editable mode') {
+                        agent { label "docker-build-aimet-pr-${PROC_TYPE}" }
+                        environment {
+                            AIMET_VARIANT="${ML_FMWORK}-${PROC_TYPE}"
+                            DOCKER_CMD='docker run --rm $([[ "$PROC_TYPE" == "gpu" ]] && echo "--gpus all") -u "$(id -u):$(id -g)" -v $PWD:$PWD -w $PWD -e AIMET_VARIANT $DOCKER_IMAGE '
+                            DOCKER_IMAGE="aimet-dev:latest.${AIMET_VARIANT}"
+                        }
+                        stages {
+                            stage('Get Docker Image') {
+                                steps {
+                                    echo "*** Running Docker stage for ${AIMET_VARIANT} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
+                                    script {
+                                        if (env.AIMET_PREBUILT_DOCKER_IMAGE_URL && ! pullRequest.files.any { f -> f.getFilename().contains('Dockerfile') }) {
+                                            DOCKER_IMAGE_FULL_URL = "${env.AIMET_PREBUILT_DOCKER_IMAGE_URL}/${env.DOCKER_IMAGE}"
+                                            sh "docker pull ${DOCKER_IMAGE_FULL_URL} && docker tag ${DOCKER_IMAGE_FULL_URL} ${env.DOCKER_IMAGE}"
+                                        } else {
+                                            env.DOCKER_IMAGE = "${env.DOCKER_IMAGE}.${CHANGE_ID}"
+                                            def build_args = "-f Jenkins/Dockerfile.${AIMET_VARIANT} -t ${env.DOCKER_IMAGE}"
+                                            if (ALTERNATIVE_DOCKER_REGISTRY) {
+                                                build_args = build_args + " --build-arg REGISTRY=${ALTERNATIVE_DOCKER_REGISTRY}"
+                                            }
+                                            sh "docker build ${build_args} ./Jenkins"
+                                        }
+                                        echo "Will use a ${env.DOCKER_IMAGE} docker image"
+                                    }
+                                }
+                            }
+                            stage('Test onnxruntime') {
+                                when { expression { AIMET_VARIANT =~ 'torch' } }
+                                steps {
+                                    echo "*** Running onnxruntime test stage for ${AIMET_VARIANT} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
+                                    script {
+                                        def onnxruntime_version = sh(returnStdout: true, script: "${env.DOCKER_CMD} find /opt /usr -path '*onnxruntime*' -name VERSION_NUMBER -exec cat {} \\;").trim()
+                                        def onnxruntime_headers_version = sh(returnStdout: true, script: "${env.DOCKER_CMD} python3 -c 'import onnxruntime; print(onnxruntime.__version__)'").trim()
+                                        assert "${onnxruntime_version}" == "${onnxruntime_headers_version}" : "Onnxruntime setup is inconsistent (onnxruntime_version: ${onnxruntime_version}, onnxruntime_headers_version: ${onnxruntime_headers_version})"
+                                    }
+                                }
+                            }
+                            stage('Install AIMET') {
+                                steps {
+                                    echo "*** Running AIMET Editable Mode Install stage for ${AIMET_VARIANT} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
+                                    script {
+                                        def docker_script = 'python3 -m venv --system-site-packages --clear $PWD/venv ' +
+                                            '&& source $PWD/venv/bin/activate ' +
+                                            '&& python3 -m pip install --upgrade pip setuptools==69.5.1 ' +
+                                            '&& cmake -S . -B ./build-$AIMET_VARIANT ' +
+                                                '-DENABLE_CUDA=$([[ "$AIMET_VARIANT" =~ "gpu" ]] &&  echo 1 || echo 0) ' +
+                                                '-DENABLE_TORCH=$([[ "$AIMET_VARIANT" =~ "torch" ]] && echo 1 || echo 0) ' +
+                                                '-DENABLE_TENSORFLOW=$([[ "$AIMET_VARIANT" =~ "tf" ]] && echo 1 || echo 0) ' +
+                                            '&& cmake --build ./build-$AIMET_VARIANT --target whl_develop'
+                                        sh "${env.DOCKER_CMD} bash -c '${docker_script}'"
+                                    }
+                                }
+                            }
+                            stage('Check Installation') {
+                                steps {
+                                    echo "*** Running AIMET Editable Mode Installation Check stage for ${AIMET_VARIANT} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
+                                    script {
+                                        def docker_script = 'source $PWD/venv/bin/activate ' +
+                                            '&& (python3 -m pip show AimetCommon) ' +
+                                            '&& ([[ "$AIMET_VARIANT" =~ "torch" ]] && python3 -m pip show AimetTorch || true) ' +
+                                            '&& ([[ "$AIMET_VARIANT" =~ "tf" ]]    && python3 -m pip show AimetTensorflow || true) '
+                                        sh "${env.DOCKER_CMD} bash -c '${docker_script}'"
+                                    }
+                                }
+                            }
+                            stage('Unit Tests') {
+                                steps {
+                                    echo "*** Running AIMET Editable Mode Unit Test stage for ${AIMET_VARIANT} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
+                                    script {
+                                        def docker_script = 'TORCH_HOME=build-$AIMET_VARIANT/torch_cache cmake --build ./build-$AIMET_VARIANT --target test'
+                                        echo 'WARNING: Skipping unit test stage in Editable mode temporarily'
+                                        //TODO sh "${env.DOCKER_CMD} bash -c '${docker_script}'"
+                                    }
+                                }
+                            }
+                        }
+                        post {
+                            always {
+                                echo 'WARNING: Skipping test results archiving step in Editable mode temporarily'
+                                //TODO archiveArtifacts artifacts: 'build-*/Testing/**/LastTest.log', fingerprint: true, allowEmptyArchive: true
+                                //TODO junit allowEmptyResults: true, testResults: 'build-*/**/*_test_output.xml'
+                            }
+                        }
+                    }
+                }
+            }
+        } // stage('Matrix')
+    }
+    post {
+        always {
+            script {
+                if (currentBuild.currentResult.equals("SUCCESS")) {
+                    echo 'Finished pull request Jenkins file'
+                }
+            }
+        }
+    }
+}
+
+def didDockerFileChange(aimet_variant) {
+    def changedFiles = pullRequest.files.collect {
+        it.getFilename()
+    }
+    echo "Changed files - ${changedFiles}"
+    if (changedFiles.contains("Jenkins/Dockerfile.${aimet_variant}".toString())) {
+        echo "*** Jenkins/Dockerfile.${aimet_variant} changed in PR, so building docker image locally. ***"
+        return true
+    }
+    echo "*** Jenkins/Dockerfile.${aimet_variant} NOT changed in PR, so using pre-built docker image. ***"
+    return false
+}
+
+def runStage(aimet_variant, options) {
+
+    echo "*** Running stage ${options} for ${aimet_variant} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
+    using_linaro=env.USE_LINARO
+    if (aimet_variant == "default") {
+        sh """
+            bash -l -c "cd ${REPO_NAME} && ./buildntest.sh ${options}"
+        """
+
+    }
+    else {
+        if (didDockerFileChange(aimet_variant)) {
+            // setting USE LINARO value to EMPTY to rebuild docker image
+            using_linaro=""
+        }
+        sh """
+            AIMET_VARIANT=${aimet_variant} bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -e AIMET_VARIANT ${options} ${using_linaro} ${env.PREBUILT_DOCKER_IMAGE_URL}"
+        """
+    }
+}
+
+def callAimetExtra(target_branch) {
+    echo target_branch
+    using_linaro=env.USE_LINARO
+    if (didDockerFileChange("torch-gpu-new") ) {
+            // setting USE LINARO value to EMPTY to rebuild docker image
+            using_linaro=""
+        }
+    if (target_branch != "develop") {
+        echo "Running AIMET additional stages on ${CHANGE_TARGET} branch ..."
+        build job: "AIMET-Extra", parameters: [string(name: 'AIMET_GIT_COMMIT', value: "${CHANGE_BRANCH}"), string(name: 'PROJECT_BRANCH', value: target_branch), string(name: 'USE_LINARO', value: "${using_linaro}")]
+    }    else {
+        echo "Running AIMET additional stages on develop branch ..."
+        build job: "AIMET-Extra", parameters: [string(name: 'AIMET_GIT_COMMIT', value: "${CHANGE_BRANCH}"), string(name: 'USE_LINARO', value: "${using_linaro}")]
+    }
+}
+
