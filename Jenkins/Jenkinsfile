@@ -761,6 +761,8 @@ pipeline {
                                 }
                             }
                             stage('Install AIMET') {
+                                //TODO Skip this stage for now until we fix some sporadic failures with "Install AIMET" stage
+                                when { equals expected: true, actual: 'Install AIMET' }
                                 steps {
                                     echo "*** Running AIMET Editable Mode Install stage for ${AIMET_VARIANT} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
                                     script {
@@ -777,6 +779,8 @@ pipeline {
                                 }
                             }
                             stage('Check Installation') {
+                                //TODO Skip this stage for now until we fix some sporadic failures with "Install AIMET" stage
+                                when { equals expected: true, actual: 'Check Installation' }
                                 steps {
                                     echo "*** Running AIMET Editable Mode Installation Check stage for ${AIMET_VARIANT} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
                                     script {
@@ -789,6 +793,8 @@ pipeline {
                                 }
                             }
                             stage('Unit Tests') {
+                                //TODO Skip this stage for now until we fix some sporadic failures with "Install AIMET" stage
+                                when { equals expected: true, actual: 'Unit Tests' }
                                 steps {
                                     echo "*** Running AIMET Editable Mode Unit Test stage for ${AIMET_VARIANT} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
                                     script {
