@@ -86,6 +86,30 @@ class ModelWithMatMul2(torch.nn.Module):
         y = y.reshape(10, 4, 5)
         return self.matmul(x, y)
 
+class ModelWithMatMul4(torch.nn.Module):
+    """
+    Model with MatMul module
+    """
+    def __init__(self):
+        super().__init__()
+        self.act1 = nn.ReLU()
+        self.matmul = elementwise_ops.MatMul()
+
+    def forward(self, *inputs):
+        x = self.act1(inputs[0])
+        return self.matmul(x, inputs[1])
+
+class ModelWithMatMul5(torch.nn.Module):
+    """
+    Model with MatMul module
+    """
+    def __init__(self):
+        super().__init__()
+        self.matmul = elementwise_ops.MatMul()
+
+    def forward(self, *inputs):
+        return self.matmul(inputs[0], inputs[1])
+
 class ModelWithGroupNorm(torch.nn.Module):
     """
     Model with GroupNorm module

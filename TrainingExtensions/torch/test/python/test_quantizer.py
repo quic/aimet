@@ -5005,7 +5005,7 @@ class TestQuantizationSimLearnedGrid:
             assert bias_quantizer.bitwidth != output_quantizer.bitwidth
             assert bias_quantizer.use_symmetric_encodings != output_quantizer.use_symmetric_encodings
 
-    @pytest.mark.parametrize('hw_version', ['V69', 'V73', 'V75'])
+    @pytest.mark.parametrize('hw_version', ['default', 'V66', 'V68', 'V73', 'V69', 'V75'])
     @pytest.mark.parametrize('quant_scheme', [QuantScheme.post_training_tf,
                                               QuantScheme.training_range_learning_with_tf_init,
                                               QuantScheme.post_training_tf_enhanced,
@@ -5041,22 +5041,22 @@ class TestQuantizationSimLearnedGrid:
 
         sim.compute_encodings(lambda sim_model, _: sim_model(*dummy_input),
                               forward_pass_callback_args=None)
-
         closest_output_quantizer_of_second_input = sim.model.act2.output_quantizers[0]
-        if sim._hw_version in {'V73', 'V75'}:
-            if default_output_bw == 16:
-                assert closest_output_quantizer_of_second_input.use_symmetric_encodings
+        closest_output_quantizer_of_first_input = sim.model.act1.output_quantizers[0]
 
-                if sim._hw_version == 'V73':
-                    assert closest_output_quantizer_of_second_input.bitwidth == 8
-                else:   # sim._hw_version == 'V75'
-                    assert closest_output_quantizer_of_second_input.bitwidth == 16
-            else:   # default_output_bw == 8
+        if sim._hw_version in {'V73', 'V75'}:
+            if closest_output_quantizer_of_second_input.bitwidth == 16:
+                assert closest_output_quantizer_of_second_input.use_symmetric_encodings
+                assert closest_output_quantizer_of_first_input.bitwidth == 16
+            else:
                 assert not closest_output_quantizer_of_second_input.use_symmetric_encodings
+        elif sim._hw_version in {'V66', 'V68', 'V69'}:
+            assert closest_output_quantizer_of_second_input.bitwidth == 8
+            assert closest_output_quantizer_of_second_input.use_symmetric_encodings
         else:
             assert not closest_output_quantizer_of_second_input.use_symmetric_encodings
 
-    @pytest.mark.parametrize('hw_version', ['default', 'V73', 'V69', 'V75'])
+    @pytest.mark.parametrize('hw_version', ['default', 'V66', 'V68', 'V73', 'V69', 'V75'])
     @pytest.mark.parametrize('quant_scheme', [QuantScheme.post_training_tf,
                                               QuantScheme.training_range_learning_with_tf_init,
                                               QuantScheme.post_training_tf_enhanced,
@@ -5103,22 +5103,21 @@ class TestQuantizationSimLearnedGrid:
                               forward_pass_callback_args=None)
         first_input_quantizer, second_input_quantizer = sim.model.matmul.input_quantizers
         if sim._hw_version in {'V73', 'V75'}:
-            if default_output_bw == 16:
+            if second_input_quantizer.bitwidth == 16:
                 assert second_input_quantizer.use_symmetric_encodings
-
-                if sim._hw_version == 'V73':
-                    assert second_input_quantizer.bitwidth == 8
-                else:  # sim._hw_version == 'V75'
-                    assert second_input_quantizer.bitwidth == 16
+                assert first_input_quantizer.bitwidth == 16
             else:
                 assert not second_input_quantizer.use_symmetric_encodings
+        elif sim._hw_version in {'V66', 'V68', 'V69'}:
+            assert second_input_quantizer.use_symmetric_encodings
+            assert second_input_quantizer.bitwidth == 8
         else:
             assert not second_input_quantizer.use_symmetric_encodings
 
         # Restore original mapping dictionary
         onnx_utils.map_torch_types_to_onnx = original_map_torch_types_to_onnx
 
-    @pytest.mark.parametrize('hw_version', ['V73', 'V75'])
+    @pytest.mark.parametrize('hw_version', ['default', 'V66', 'V68', 'V69', 'V73', 'V75'])
     @pytest.mark.parametrize('quant_scheme', [QuantScheme.post_training_tf,
                                               QuantScheme.training_range_learning_with_tf_init,
                                               QuantScheme.post_training_tf_enhanced,
@@ -5158,7 +5157,7 @@ class TestQuantizationSimLearnedGrid:
         assert not second_input_quantizer.use_symmetric_encodings
         assert not closest_output_quantizer_of_second_input.use_symmetric_encodings
 
-    @pytest.mark.parametrize("hw_version", ["V73", "V75"])
+    @pytest.mark.parametrize("hw_version", ['default', 'V66', 'V68', 'V69', 'V73', 'V75'])
     @pytest.mark.parametrize(
         "quant_scheme",
         [
@@ -5215,20 +5214,121 @@ class TestQuantizationSimLearnedGrid:
         )
 
         closest_output_quantizer_of_second_input = sim.model.act3.output_quantizers[0]
-        if sim._hw_version in {"V73", "V75"}:
-            if default_output_bw == 16:
+        closest_output_quantizer_of_first_input = sim.model.act1.output_quantizers[0]
+        if sim._hw_version in {'V73', 'V75'}:
+            if closest_output_quantizer_of_second_input.bitwidth == 16:
                 assert closest_output_quantizer_of_second_input.use_symmetric_encodings
-
-                if sim._hw_version == "V73":
-                    assert closest_output_quantizer_of_second_input.bitwidth == 8
-                else:  # sim._hw_version == 'V75'
-                    assert closest_output_quantizer_of_second_input.bitwidth == 16
-
-            else:  # default_output_bw == 8
+                assert closest_output_quantizer_of_first_input.bitwidth == 16
+            else:
                 assert not closest_output_quantizer_of_second_input.use_symmetric_encodings
+        elif sim._hw_version in {'V66', 'V68', 'V69'}:
+            assert closest_output_quantizer_of_second_input.bitwidth == 8
+            assert closest_output_quantizer_of_second_input.use_symmetric_encodings
         else:
             assert not closest_output_quantizer_of_second_input.use_symmetric_encodings
 
+    @pytest.mark.parametrize('hw_version', ['default', 'V66', 'V68', 'V73', 'V69', 'V75'])
+    @pytest.mark.parametrize('quant_scheme', [QuantScheme.post_training_tf,
+                                              QuantScheme.training_range_learning_with_tf_init,
+                                              QuantScheme.post_training_tf_enhanced,
+                                              QuantScheme.training_range_learning_with_tf_enhanced_init])
+    @pytest.mark.parametrize('default_output_bw', [8, 16])
+    def test_exception_if_matmul_has_model_input(self, hw_version, quant_scheme, default_output_bw):
+        device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+
+        model = test_models.ModelWithMatMul4().to(device)
+        dummy_input = (torch.randn(10, device=device), torch.randn(10, device=device))
+
+        quantsim_config = {
+            "defaults": {
+                "hw_version": hw_version,
+                "ops": {"is_output_quantized": "True"}, "params": {"is_symmetric": "True"}
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {"is_input_quantized": "True"},
+            "model_output": {},
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = os.path.join(temp_dir, "quantsim_config.json")
+            with open(config_path, "w") as f:
+                json.dump(quantsim_config, f)
+
+            sim = QuantizationSimModel(model, dummy_input, quant_scheme,
+                                       config_file=config_path,
+                                       default_output_bw=default_output_bw,
+                                       default_param_bw=4)
+
+        sim.compute_encodings(lambda sim_model, _: sim_model(*dummy_input),
+                              forward_pass_callback_args=None)
+
+        closest_output_quantizer_of_first_input = sim.model.act1.output_quantizers[0]
+        _, second_input_quantizer = sim.model.matmul.input_quantizers
+
+        if sim._hw_version in {'V73', 'V75'}:
+            if second_input_quantizer.bitwidth == 16:
+                assert second_input_quantizer.use_symmetric_encodings
+                assert closest_output_quantizer_of_first_input.bitwidth == 16
+            else:
+                assert not second_input_quantizer.use_symmetric_encodings
+        elif sim._hw_version in {'V66', 'V68', 'V69'}:
+            assert second_input_quantizer.bitwidth == 8
+            assert second_input_quantizer.use_symmetric_encodings
+        else:
+            assert not second_input_quantizer.use_symmetric_encodings
+
+    @pytest.mark.parametrize('hw_version', ['default', 'V66', 'V68', 'V73', 'V69', 'V75'])
+    @pytest.mark.parametrize('quant_scheme', [QuantScheme.post_training_tf,
+                                              QuantScheme.training_range_learning_with_tf_init,
+                                              QuantScheme.post_training_tf_enhanced,
+                                              QuantScheme.training_range_learning_with_tf_enhanced_init])
+    @pytest.mark.parametrize('default_output_bw', [8, 16])
+    def test_exception_if_both_matmul_inputs_are_model_input(self, hw_version, quant_scheme, default_output_bw):
+        device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+
+        model = test_models.ModelWithMatMul5().to(device)
+        dummy_input = (torch.randn(10, device=device), torch.randn(10, device=device))
+
+        quantsim_config = {
+            "defaults": {
+                "hw_version": hw_version,
+                "ops": {"is_output_quantized": "True"}, "params": {"is_symmetric": "True"}
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {"is_input_quantized": "True"},
+            "model_output": {},
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = os.path.join(temp_dir, "quantsim_config.json")
+            with open(config_path, "w") as f:
+                json.dump(quantsim_config, f)
+
+            sim = QuantizationSimModel(model, dummy_input, quant_scheme,
+                                       config_file=config_path,
+                                       default_output_bw=default_output_bw,
+                                       default_param_bw=4)
+
+        sim.compute_encodings(lambda sim_model, _: sim_model(*dummy_input),
+                              forward_pass_callback_args=None)
+
+        first_input_quantizer, second_input_quantizer = sim.model.matmul.input_quantizers
+
+        if sim._hw_version in {'V73', 'V75'}:
+            if second_input_quantizer.bitwidth == 16:
+                assert second_input_quantizer.use_symmetric_encodings
+                assert first_input_quantizer.bitwidth == 16
+            else:
+                assert not second_input_quantizer.use_symmetric_encodings
+        elif sim._hw_version in {'V66', 'V68', 'V69'}:
+            assert second_input_quantizer.bitwidth == 8
+            assert second_input_quantizer.use_symmetric_encodings
+        else:
+            assert not second_input_quantizer.use_symmetric_encodings
 
 @pytest.mark.cuda
 @pytest.mark.parametrize('input_dims', (2, 3, 4))
