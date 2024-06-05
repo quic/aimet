@@ -234,3 +234,32 @@ class TestGPTVQWeight:
 
         GPTVQ._validate_module_names(model, ["linear1", "linear2"], "module_names_to_exclude")
         GPTVQ._validate_module_names(model, itertools.chain.from_iterable([["linear1", "linear2"], ["linear3"]]), "block_level_module_names")
+
+    def test_gptvq_block_level_module_names(self):
+        model = test_models.ModelWithThreeLinears()
+        dummy_input = torch.randn(1, 768)
+
+        block_level_module_names = [["linear3"], ["linear1"], ["linear2"]]
+        assert GPTVQ._get_block_level_module_names(
+            model, dummy_input, block_level_module_names
+        ) == [["linear1"], ["linear2"], ["linear3"]]
+
+        block_level_module_names = [["linear3", "linear2"], ["linear1"]]
+        assert GPTVQ._get_block_level_module_names(
+            model, dummy_input, block_level_module_names
+        ) == [["linear1"], ["linear2", "linear3"]]
+
+        block_level_module_names = [["linear2"], ["linear3", "linear1"]]
+        assert GPTVQ._get_block_level_module_names(
+            model, dummy_input, block_level_module_names
+        ) == [["linear1", "linear3"], ["linear2"]]
+
+        block_level_module_names = [["linear3", "linear1", "linear2"]]
+        assert GPTVQ._get_block_level_module_names(
+            model, dummy_input, block_level_module_names
+        ) == [["linear1", "linear2", "linear3"]]
+
+        block_level_module_names = None
+        assert GPTVQ._get_block_level_module_names(
+            model, dummy_input, block_level_module_names
+        ) == [["linear1"], ["linear2"], ["linear3"]]

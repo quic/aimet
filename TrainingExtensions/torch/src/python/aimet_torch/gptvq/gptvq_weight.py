@@ -270,13 +270,24 @@ class GPTVQ:
         :param block_level_modules_names: User provided block level module names
         :return: Block level module name list
         """
+        ordered_module_names = [
+            name
+            for name, module in utils.get_ordered_list_of_modules(original_model, dummy_input)
+            if isinstance(module, GPTVQSupportedModules)
+        ]
         if block_level_modules_names:
             _logger.info("GPTVQ optimization will be applied to user provided block level modules")
-            return block_level_modules_names
+            name_to_index = {name: idx for idx, name in enumerate(ordered_module_names)}
+            for module_block in block_level_modules_names:
+                module_block.sort(key=lambda x: name_to_index.get(x, float("inf")))
 
-        modules = utils.get_ordered_list_of_modules(original_model, dummy_input)
+            return sorted(
+                block_level_modules_names,
+                key=lambda x: name_to_index.get(x[0], float("inf")),
+            )
+
         _logger.info("GPTVQ optimization will be applied to GPTVQ supportable leaf level modules")
-        return [[name] for name, _ in modules]
+        return [[name] for name in ordered_module_names]
 
     @classmethod
     def _apply_gptvq(
@@ -341,10 +352,7 @@ class GPTVQ:
         name_to_quant_module = collections.OrderedDict()
         for name in module_names:
             quant_module = get_named_module(sim.model, name)
-            if (
-                isinstance(quant_module, GPTVQSupportedModules)
-                and name not in module_names_to_exclude
-            ):
+            if name not in module_names_to_exclude:
                 name_to_quant_module[name] = quant_module
         return name_to_quant_module
 
