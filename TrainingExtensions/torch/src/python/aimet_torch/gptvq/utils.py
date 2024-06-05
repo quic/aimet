@@ -414,7 +414,7 @@ def compute_hessian_tensor(quant_module: BaseQuantizationMixin,
     return hessian
 
 
-def update_hessian(inp: torch.tensor, n_samples: int, curr_batch_size: int, hessian: torch.tensor):
+def update_hessian(inp: torch.Tensor, n_samples: int, curr_batch_size: int, hessian: torch.Tensor):
     """
     Updates the hessian matrix using the passed input data to the module and applies scaling
 
