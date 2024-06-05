@@ -36,7 +36,7 @@
 # =============================================================================
 # pylint: disable=redefined-builtin
 """ Common utility functions """
-from typing import Callable, Tuple, Any, Union, Iterable
+from typing import Callable, Tuple, Any
 import functools
 import itertools
 import torch
@@ -271,6 +271,7 @@ def flatten_nn_module_list(module):
 
 
 def _remove_quantizers(modules, func_name: str):
+    # pylint: disable=protected-access
     from aimet_torch.v2.nn import BaseQuantizationMixin
     contexts = []
     ctx = _ContextManager(action=lambda: None, cleanup=[ctx._cleanup() for ctx in contexts])
@@ -280,11 +281,10 @@ def _remove_quantizers(modules, func_name: str):
             modules = [modules]
         for module in modules:
             if isinstance(module, BaseQuantizationMixin):
-                    # pylint: disable=protected-access
-                    context = getattr(module, func_name)
-                    contexts.append(context)
+                context = getattr(module, func_name)
+                contexts.append(context)
     except Exception:
-        ctx._cleanup() # pylint: disable=protected-access
+        ctx._cleanup()
         raise
     else:
         return ctx
@@ -293,20 +293,20 @@ def remove_input_quantizers(modules):
     '''
     Removes input quantizers for the modules provided
     '''
-    _remove_quantizers(modules, '_remove_input_quantizers')
+    return _remove_quantizers(modules, '_remove_input_quantizers')
 
 def remove_output_quantizers(modules):
     '''
     Removes output quantizers for the modules provided
     '''
-    _remove_quantizers(modules, '_remove_output_quantizers')
+    return _remove_quantizers(modules, '_remove_output_quantizers')
 
 
 def remove_param_quantizers(modules):
     '''
     Removes parameter quantizers for the modules provided
     '''
-    _remove_quantizers(modules, '_remove_param_quantizers')
+    return _remove_quantizers(modules, '_remove_param_quantizers')
 
 def remove_activation_quantizers(modules):
     '''
