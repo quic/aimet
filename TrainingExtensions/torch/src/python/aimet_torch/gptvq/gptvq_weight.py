@@ -103,7 +103,7 @@ class GPTVQ:
         block_level_module_names: Optional[List[List[str]]] = None,
         file_name_prefix: str = "gptvq",
         config_file_path: Optional[str] = None,
-    ) -> QuantizationSimModel:
+    ) -> nn.Module:
         """
         Returns model with optimized weight rounding of GPTVQ supportable modules
         and saves the corresponding parameter quantization encodings to a separate JSON file
@@ -129,7 +129,9 @@ class GPTVQ:
             cls._apply_gptvq(model, sim, dummy_input, gptvq_params, set(module_names_to_exclude), block_level_module_names)
 
         cls._export_encodings_to_json(param_encoding_path, file_name_prefix, sim, gptvq_params.rows_per_block)
-        return sim
+        SaveUtils.remove_quantization_wrappers(sim.model)
+
+        return sim.model
 
     @staticmethod
     def _get_candidate_module_name_set(model: nn.Module,
