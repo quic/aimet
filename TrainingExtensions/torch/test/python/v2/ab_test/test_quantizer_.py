@@ -1108,8 +1108,8 @@ class TestQuantizationSimStaticGrad:
         assert sim.model.mul.input_quantizers[1] is None
 
         assert isinstance(sim.model.add1.input_quantizers[0], QuantizeDequantize)
-        assert sim.model.add1.input_quantizers[1] is None
-        assert sim.model.add2.input_quantizers[0] is None
+        assert isinstance(sim.model.add1.input_quantizers[1], QuantizeDequantize)
+        assert isinstance(sim.model.add2.input_quantizers[0], QuantizeDequantize)
         assert isinstance(sim.model.add2.input_quantizers[1], QuantizeDequantize)
 
         # save encodings
