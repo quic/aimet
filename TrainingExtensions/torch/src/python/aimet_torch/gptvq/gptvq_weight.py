@@ -150,7 +150,7 @@ class GPTVQ:
         :param parameter_name: Name of parameter to validate
         :raise ValueError: If module names are not valid
         """
-        name_to_module = {name: module for name, module in model.named_modules()}
+        name_to_module = dict(model.named_modules())
         invalid_module_names = []
         for name in module_names:
             if name in name_to_module and isinstance(name_to_module[name], GPTVQSupportedModules):
