@@ -410,7 +410,7 @@ class SequentialMse:
             quant_wrapper.set_mode(QcQuantizeOpMode.ACTIVE)
 
     @classmethod
-    def _get_per_channel_min_and_max(cls, quant_module: QcQuantizeWrapper) -> Tuple[torch.Tensor, torch.Tensor]:
+    def get_per_channel_min_and_max(cls, quant_module: QcQuantizeWrapper) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Get per channel min/max values across output channel.
 
@@ -418,13 +418,13 @@ class SequentialMse:
         :return:
         """
         # pylint: disable=protected-access
-        module = quant_module._module_to_wrap
+        module = cls._get_original_module(quant_module)
 
         if isinstance(module, torch.nn.Conv2d):
-            channel_dim = quant_module.out_channels
-            weight = quant_module.weight.reshape(channel_dim, -1)
+            channel_dim = module.out_channels
+            weight = module.weight.reshape(channel_dim, -1)
         elif isinstance(module, torch.nn.Linear):
-            weight = quant_module.weight
+            weight = module.weight
         else:
             raise ValueError('Unsupported module: ', module)
 
@@ -477,7 +477,7 @@ class SequentialMse:
         :param params: Sequenial MSE parameters
         """
         # pylint: disable=too-many-locals
-        per_channel_min, per_channel_max = cls._get_per_channel_min_and_max(quant_module)
+        per_channel_min, per_channel_max = cls.get_per_channel_min_and_max(quant_module)
         candidates = cls.get_candidates(params.num_candidates, per_channel_max, per_channel_min)
 
         total_loss = []
