@@ -39,9 +39,12 @@
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
 include(FetchContent)
 
-if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/google/googletest-release-1.12.1)
-    message(STATUS "Adding googletest to dependency list")
-    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/google/googletest-release-1.12.1 EXCLUDE_FROM_ALL)
+if (DEFINED ENV{DEPENDENCY_DATA_PATH})
+    message(STATUS "Unzip local copy...")
+    file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/ThirdParty/google)
+    execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf $ENV{DEPENDENCY_DATA_PATH}/googletest.zip
+                    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/ThirdParty/google)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/google EXCLUDE_FROM_ALL)
 else ()
     message(STATUS "WARNING.! fetching googletest from external source")
     FetchContent_Declare(
