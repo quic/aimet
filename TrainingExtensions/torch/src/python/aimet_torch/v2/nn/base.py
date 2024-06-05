@@ -287,7 +287,7 @@ class BaseQuantizationMixin(abc.ABC):
             if requires_grad is not None:
                 quantizer.requires_grad_(requires_grad)
 
-            quantizer._allow_overwrite = allow_overwrite # pylint:disable = protected-access
+            quantizer.allow_overwrite(allow_overwrite)
 
     def export_output_encodings(self) -> List[List[Dict]]:
         """
@@ -337,7 +337,7 @@ class BaseQuantizationMixin(abc.ABC):
             if requires_grad is not None:
                 quantizer.requires_grad_(requires_grad)
 
-            quantizer._allow_overwrite = allow_overwrite # pylint:disable = protected-access
+            quantizer.allow_overwrite(allow_overwrite)
 
     def export_param_encodings(self) -> Dict[str, List[Dict]]:
         """
@@ -387,7 +387,7 @@ class BaseQuantizationMixin(abc.ABC):
             if requires_grad is not None:
                 quantizer.requires_grad_(requires_grad)
 
-            quantizer._allow_overwrite = allow_overwrite # pylint:disable = protected-access
+            quantizer.allow_overwrite(allow_overwrite)
 
     def get_original_module(self) -> nn.Module:
         """Returns the floating point version of the quantized module

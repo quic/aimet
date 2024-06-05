@@ -146,7 +146,7 @@ class SequentialMse(V1SequentialMse):
     def _freeze_quantizer_encoding(quantizer: QuantizerBase):
         # pylint: disable=protected-access
         quantizer.requires_grad_(False)
-        quantizer._allow_overwrite = False
+        quantizer.allow_overwrite(False)
 
     @staticmethod
     def _get_quantized_weight(quant_module: BaseQuantizationMixin):

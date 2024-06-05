@@ -203,3 +203,7 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
         is_initialized = state.pop('is_initialized')
         self.__dict__.update(state)
         self.set_extra_state(is_initialized)
+
+    def allow_overwrite(self, mode: bool):
+        """ Set allow_overwite flag """
+        self._allow_overwrite = mode
