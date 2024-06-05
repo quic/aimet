@@ -250,6 +250,8 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
             with patch_attr(self, 'maxval', dynamic_absmax):
                 return original_forward(input)
 
+        self.encoding_analyzer.reset_stats()
+
         try:
             with patch_attr(self, 'forward', forward_wrapper):
                 yield
@@ -269,9 +271,6 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
             absmax = torch.maximum(min.abs(), max.abs()).expand_as(self.maxval)
             with torch.no_grad():
                 self.maxval.copy_(absmax)
-
-        finally:
-            self.encoding_analyzer.reset_stats()
 
     def forward(self, input: torch.Tensor):
         """

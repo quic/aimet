@@ -303,6 +303,8 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
                     patch_attr(self, 'max', dynamic_max):
                 return original_forward(input)
 
+        self.encoding_analyzer.reset_stats()
+
         try:
             with patch_attr(self, 'forward', forward_wrapper):
                 yield
@@ -323,9 +325,6 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
                 return
 
             self.set_range(enc_min, enc_max)
-
-        finally:
-            self.encoding_analyzer.reset_stats()
 
     def get_min(self, dtype=None) -> Optional[torch.Tensor]:
         """
