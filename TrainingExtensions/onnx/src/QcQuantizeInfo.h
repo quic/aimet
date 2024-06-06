@@ -49,7 +49,8 @@ struct QcQuantizeInfo
     void set_tensor_quantizer(std::vector<uint64_t>& addr)
     {
         tensorQuantizerRef = std::vector<DlQuantization::TensorQuantizer*>();
-        for(uint64_t i : addr){
+        for (uint64_t i: addr)
+        {
             tensorQuantizerRef.push_back(reinterpret_cast<DlQuantization::TensorQuantizer*>(i));
         }
     }

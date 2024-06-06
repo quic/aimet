@@ -44,10 +44,10 @@
 #include "tensorflow/core/framework/shape_inference.h"
 #include "tensorflow/core/platform/logging.h"
 
-#include <DlQuantization/TensorQuantizerOpFacade.h>
-#include <DlQuantization/Quantization.hpp>
 #include <DlQuantization/ITensorQuantizationSim.h>
-#include <DlQuantization/TensorQuantizer.h>
+#include <DlQuantization/Quantization.hpp>
 #include <DlQuantization/QuantizerFactory.hpp>
+#include <DlQuantization/TensorQuantizer.h>
+#include <DlQuantization/TensorQuantizerOpFacade.h>
 
 #endif   // QC_QUANTIZE_PER_CHANNEL_OP_HPP

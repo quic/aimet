@@ -246,4 +246,4 @@ void BiasCorrection::correctBias(TensorParam& bias)
     }
 }
 
-}
+}   // namespace AimetEqualization

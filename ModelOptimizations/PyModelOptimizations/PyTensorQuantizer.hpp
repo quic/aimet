@@ -55,9 +55,9 @@ class PyTensorQuantizer : public TensorQuantizer
 {
 public:
     /**
-    * Constructor
-    * @param quantScheme Quantization scheme (e.g. TF-Enhanced)
-    * @param roundingMode Rounding mode to use during quantization
+     * Constructor
+     * @param quantScheme Quantization scheme (e.g. TF-Enhanced)
+     * @param roundingMode Rounding mode to use during quantization
      */
     PyTensorQuantizer(QuantizationMode quantScheme, RoundingMode roundingMode);
 
@@ -69,18 +69,18 @@ public:
     void updateStats(py::array_t<float> tensor, bool useCuda);
 
     /**
-    * Convert a tensor from float to quantized int and back to float. Overloaded version that accepts numpy tensors.
-    * @param input Input tensor
-    * @param output Output tensor
-    * @param encodingMin minimum value of encoding range
-    * @param encodingMax maximum value of encoding range
-    * @param bitwidth bitwidth to be used
-    * @param useCuda If true, both the input and output tensors are assumed to be in CUDA memory
+     * Convert a tensor from float to quantized int and back to float. Overloaded version that accepts numpy tensors.
+     * @param input Input tensor
+     * @param output Output tensor
+     * @param encodingMin minimum value of encoding range
+     * @param encodingMax maximum value of encoding range
+     * @param bitwidth bitwidth to be used
+     * @param useCuda If true, both the input and output tensors are assumed to be in CUDA memory
      */
-    void quantizeDequantize(py::array_t<float> inputTensor, py::array_t<float> outputTensor,
-                            double encodingMin, double encodingMax, unsigned int bitwidth, bool useCuda);
+    void quantizeDequantize(py::array_t<float> inputTensor, py::array_t<float> outputTensor, double encodingMin,
+                            double encodingMax, unsigned int bitwidth, bool useCuda);
 
-    ~PyTensorQuantizer() =  default;
+    ~PyTensorQuantizer() = default;
 };
 
 

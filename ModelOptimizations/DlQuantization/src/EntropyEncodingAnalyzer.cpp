@@ -63,7 +63,7 @@ std::vector<std::tuple<double, double>> EntropyEncodingAnalyzer<DTYPE>::getStats
     double histMax      = this->_tensorProfilingParams.max;
     double histBinWidth = (histMax - histMin) / PDF_SIZE;
     double histSum      = std::accumulate(this->_tensorProfilingParams.histogram.begin(),
-                                     this->_tensorProfilingParams.histogram.end(), 0.f);
+                                          this->_tensorProfilingParams.histogram.end(), 0.f);
     // Initialize the probability for each bucket and left sides of the buckets.
     for (int i = 0; i < PDF_SIZE; ++i)
     {

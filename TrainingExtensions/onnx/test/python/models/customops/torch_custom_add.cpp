@@ -38,11 +38,13 @@
 
 #include <torch/script.h>
 
-torch::Tensor custom_add(torch::Tensor X, torch::Tensor Y) {
+torch::Tensor custom_add(torch::Tensor X, torch::Tensor Y)
+{
     auto output = X + Y;
     return output;
 }
 
-TORCH_LIBRARY(my_ops, m) {
-  m.def("custom_add", custom_add);
+TORCH_LIBRARY(my_ops, m)
+{
+    m.def("custom_add", custom_add);
 }

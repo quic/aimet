@@ -312,4 +312,4 @@ TYPED_TEST(TestEntropyEncodingAnalyzer, AllZeroesAsymmetric)
     EXPECT_NEAR(encoding1.max, 0.996078, 0.0001);
     EXPECT_EQ(encoding1.offset, -128);
     EXPECT_EQ(encoding1.bw, 8);
-} 
+}

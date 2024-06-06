@@ -56,19 +56,22 @@ TfEncoding getComputedEncodings(uint8_t bw, double min, double max, bool useSymm
 // ensures min - max is not too close, by checking that max - min > epsilon
 void gateMinMax(double& encodingMin, double& encodingMax);
 
-void computeMinMaxRangeFromDeltaOffset(uint8_t bw, TfEncoding& encoding, bool useSymmetricEncodings, bool useUnsignedSymmetric,
-                                       bool useStrictSymmetric);
+void computeMinMaxRangeFromDeltaOffset(uint8_t bw, TfEncoding& encoding, bool useSymmetricEncodings,
+                                       bool useUnsignedSymmetric, bool useStrictSymmetric);
 
-void computeDeltaAndOffsetFromMinMax(uint8_t bw, TfEncoding& encoding, bool useSymmetricEncodings, bool useUnsignedSymmetric,
-                                     bool useStrictSymmetric);
+void computeDeltaAndOffsetFromMinMax(uint8_t bw, TfEncoding& encoding, bool useSymmetricEncodings,
+                                     bool useUnsignedSymmetric, bool useStrictSymmetric);
 
-// Function to slice a tensor along an axis, allocate and populate output buffers. Output shape will be the same for each slice.
+// Function to slice a tensor along an axis, allocate and populate output buffers. Output shape will be the same for
+// each slice.
 template <typename DTYPE>
-void slice(const DTYPE* data, const std::vector<uint32_t>& inputShape, int32_t axis, std::vector<std::vector<DTYPE>>& output, std::vector<uint32_t>& splitShape);
+void slice(const DTYPE* data, const std::vector<uint32_t>& inputShape, int32_t axis,
+           std::vector<std::vector<DTYPE>>& output, std::vector<uint32_t>& splitShape);
 
 // Function to concatenate from slice along an axis. Should be the same shape as the original input shape to slice.
-template<typename DTYPE>
-void concat(const std::vector<std::vector<DTYPE>>& data, const std::vector<uint32_t>& inputShape, int32_t axis, DTYPE* output, std::vector<uint32_t>& outputShape);
+template <typename DTYPE>
+void concat(const std::vector<std::vector<DTYPE>>& data, const std::vector<uint32_t>& inputShape, int32_t axis,
+            DTYPE* output, std::vector<uint32_t>& outputShape);
 
 }   // End of namespace DlQuantization
 

@@ -43,51 +43,50 @@
 #include "stdexcept"
 #include "string"
 
-#define ATTRIB_NAME             "Name"
-#define OUTPUT                  "Output"
-#define INPUT                   "Input"
-#define PARAMETER               "Parameter"
-#define MANDATORY               "Mandatory"
-#define DESCRIPTION             "Description"
-#define CONTENT                 "Content"
-#define FILTERS                 "filters"
-#define WEIGHTS                 "weights"
-#define WEIGHTS_CAP             "Weights"
-#define CLOSED_BRACKET          "["
-#define XML_TRUE                "true"
-#define XML_FALSE               "false"
-#define SHAPE                   "Shape"
-#define RANK                    "Rank"
-#define DATATYPE                "Datatype"
-#define MASTER_OPDEF_LIST       "OpDefList"
-#define MASTER_OPDEF            "OpDef"
+#define ATTRIB_NAME "Name"
+#define OUTPUT "Output"
+#define INPUT "Input"
+#define PARAMETER "Parameter"
+#define MANDATORY "Mandatory"
+#define DESCRIPTION "Description"
+#define CONTENT "Content"
+#define FILTERS "filters"
+#define WEIGHTS "weights"
+#define WEIGHTS_CAP "Weights"
+#define CLOSED_BRACKET "["
+#define XML_TRUE "true"
+#define XML_FALSE "false"
+#define SHAPE "Shape"
+#define RANK "Rank"
+#define DATATYPE "Datatype"
+#define MASTER_OPDEF_LIST "OpDefList"
+#define MASTER_OPDEF "OpDef"
 #define SUPPLEMENTAL_OPDEF_LIST "SupplementalOpDefList"
-#define SUPPLEMENTAL_OPDEF      "SupplementalOpDef"
-#define INPUT_SIZE              "input_size"
-#define OUTPUT_SIZE             "output_size"
-#define PARAM_SIZE              "param_size"
-#define INPUT_NAME(num)         "in[" + std::to_string(num) + "]"
-#define OUTPUT_NAME(num)        "out[" + std::to_string(num) + "]"
-#define INF_ARG_INDICATOR       ".."
+#define SUPPLEMENTAL_OPDEF "SupplementalOpDef"
+#define INPUT_SIZE "input_size"
+#define OUTPUT_SIZE "output_size"
+#define PARAM_SIZE "param_size"
+#define INPUT_NAME(num) "in[" + std::to_string(num) + "]"
+#define OUTPUT_NAME(num) "out[" + std::to_string(num) + "]"
+#define INF_ARG_INDICATOR ".."
 
-#define DEBUG_LOG_INVALID_OP(op_name) \
-  "Operation " + op_name + " not found in operation list of the model."
+#define DEBUG_LOG_INVALID_OP(op_name) "Operation " + op_name + " not found in operation list of the model."
 #define DEBUG_LOG_INVALID_PARAM(op_name, param_name) \
-  "Operation " + op_name + ": Unexpected parameter name " + attribName + " received."
-#define DEBUG_LOG_INVALID_INPUT(op_name, in_size)                                    \
-  "Operation " + op_name + ": attrib_num argument expected to be in the range [0," + \
-      std::to_string(in_size - 1) + "]"
-#define DEBUG_LOG_INVALID_OUTPUT(op_name, out_size)                                  \
-  "Operation " + op_name + ": attrib_num argument expected to be in the range [0," + \
-      std::to_string(out_size - 1) + "]"
+    "Operation " + op_name + ": Unexpected parameter name " + attribName + " received."
+#define DEBUG_LOG_INVALID_INPUT(op_name, in_size) \
+    "Operation " + op_name + ": attrib_num argument expected to be in the range [0," + std::to_string(in_size - 1) + "]"
+#define DEBUG_LOG_INVALID_OUTPUT(op_name, out_size)                                                                   \
+    "Operation " + op_name + ": attrib_num argument expected to be in the range [0," + std::to_string(out_size - 1) + \
+        "]"
 
-#define DEBUG_LOG_XML_FILE_ERROR(path, description)                        \
-  {                                                                        \
-    std::string error = "Error loading XML: " + path + ": " + description; \
-    throw std::runtime_error(error);                                       \
-  }
+#define DEBUG_LOG_XML_FILE_ERROR(path, description)                            \
+    {                                                                          \
+        std::string error = "Error loading XML: " + path + ": " + description; \
+        throw std::runtime_error(error);                                       \
+    }
 
-enum class QnnDatatype_t {
+enum class QnnDatatype_t
+{
     QNN_DATATYPE_INT_8,
     QNN_DATATYPE_INT_16,
     QNN_DATATYPE_INT_32,
@@ -115,7 +114,8 @@ enum class QnnDatatype_t {
     QNN_DATATYPE_UNDEFINED
 };
 
-enum class QnnRank_t {
+enum class QnnRank_t
+{
     QNN_SCALAR,
     QNN_RANK_1,
     QNN_RANK_2,
@@ -125,4 +125,4 @@ enum class QnnRank_t {
     QNN_RANK_N,
     QNN_RANK_INVALID
 };
-#endif  // PYBINDEX_XMLTYPES_H
+#endif   // PYBINDEX_XMLTYPES_H

@@ -70,7 +70,8 @@
 #undef ORT_API_MANUAL_INIT
 
 // Code reuse from onnxruntime start:
-// Source: https://github.com/microsoft/onnxruntime/blob/861125ccbc0853b2761bbc268841342550a4ff58/onnxruntime/test/testdata/custom_op_library/custom_op_library.cc#L19-L46
+// Source:
+// https://github.com/microsoft/onnxruntime/blob/861125ccbc0853b2761bbc268841342550a4ff58/onnxruntime/test/testdata/custom_op_library/custom_op_library.cc#L19-L46
 
 struct OrtTensorDimensions : std::vector<int64_t>
 {

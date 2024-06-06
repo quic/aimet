@@ -37,9 +37,9 @@
 //==============================================================================
 
 #include <cassert>
+#include <cmath>
 #include <cstddef>
 #include <vector>
-#include <cmath>
 
 #include "DlQuantization/Quantization.hpp"
 #include "math_functions.hpp"
@@ -66,8 +66,7 @@ void TfEnhancedEncodingAnalyzer<DTYPE>::updateStats(const DTYPE* tensor, const s
 
 template <typename DTYPE>
 void TfEnhancedEncodingAnalyzer<DTYPE>::updateStats(const DTYPE* tensor, const size_t tensorSize,
-                                                    ComputationMode tensorCpuGpuMode,
-                                                    IAllocator* allocator)
+                                                    ComputationMode tensorCpuGpuMode, IAllocator* allocator)
 {
     this->_statsUpdated = true;
 
@@ -80,7 +79,7 @@ TfEncoding TfEnhancedEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool u
                                                               bool useStrictSymmetric, bool useUnsignedSymmetric) const
 {
     TfEncoding encoding = {0, 0, 0, 0, 0};
-    DTYPE numSteps = pow(2, bw) - 1;
+    DTYPE numSteps      = pow(2, bw) - 1;
 
     if (this->_stats.xLeft.size() == 0)
     {
@@ -88,13 +87,13 @@ TfEncoding TfEnhancedEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool u
         {
             // Histogram has not been initialized yet, we have seen all zero data
             // We generate a valid encoding that covers float 0
-            encoding.min = -1;
-            encoding.max = 1;
-            encoding.delta = (encoding.max - encoding.min) / int (numSteps);
+            encoding.min    = -1;
+            encoding.max    = 1;
+            encoding.delta  = (encoding.max - encoding.min) / int(numSteps);
             encoding.offset = floor(encoding.min / encoding.delta);
-            encoding.min = encoding.offset * encoding.delta;
-            encoding.max = encoding.min + int(numSteps) * encoding.delta;
-            encoding.bw = bw;
+            encoding.min    = encoding.offset * encoding.delta;
+            encoding.max    = encoding.min + int(numSteps) * encoding.delta;
+            encoding.bw     = bw;
 
             return encoding;
         }
@@ -107,7 +106,7 @@ TfEncoding TfEnhancedEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool u
     }
 
     // Use Min and Max values to compute a valid encoding
-    getComputedEncodings( bw, encoding, useSymmetricEncodings, useStrictSymmetric, useUnsignedSymmetric);
+    getComputedEncodings(bw, encoding, useSymmetricEncodings, useStrictSymmetric, useUnsignedSymmetric);
 
     return encoding;
 }
@@ -117,8 +116,8 @@ std::tuple<DTYPE, int>
 TfEnhancedEncodingAnalyzer<DTYPE>::_findBestCandidate(uint8_t bw,
                                                       const std::vector<std::tuple<DTYPE, int>>& testCandidates) const
 {
-    DTYPE bestDelta  = -1;
-    int bestOffset   = -1;
+    DTYPE bestDelta = -1;
+    int bestOffset  = -1;
     // Go through all <delta, offset> pairs and calculate the quantization and
     // saturation cost.
     // This is a 2d grid search.
@@ -137,9 +136,9 @@ TfEnhancedEncodingAnalyzer<DTYPE>::_findBestCandidate(uint8_t bw,
         // Remember the best encoding.
         if (cost < bestCost)
         {
-            bestCost    = cost;
-            bestDelta   = testDelta;
-            bestOffset  = testOffset;
+            bestCost   = cost;
+            bestDelta  = testDelta;
+            bestOffset = testOffset;
         }
     }
 
@@ -163,7 +162,7 @@ bool TfEnhancedEncodingAnalyzer<DTYPE>::_clampToObservedMinMax(DTYPE observedMin
     testMax = std::min(observedMax, testMax);
 
     // Recalculate the test delta and offset
-    testDelta = (testMax - testMin) / numSteps;
+    testDelta  = (testMax - testMin) / numSteps;
     testOffset = round(testMin / testDelta);
 
     return true;
@@ -175,9 +174,9 @@ void TfEnhancedEncodingAnalyzer<DTYPE>::_pickTestCandidatesAsymmetric(
 {
     // Map observedMin and observedMax to grid points
     DTYPE observedDelta = (observedMax - observedMin) / numSteps;
-    int observedOffset = round(observedMin / observedDelta);
-    observedMin = observedDelta * observedOffset;
-    observedMax = observedMin + observedDelta * numSteps;
+    int observedOffset  = round(observedMin / observedDelta);
+    observedMin         = observedDelta * observedOffset;
+    observedMax         = observedMin + observedDelta * numSteps;
 
     // Compute the largest TF delta which would make sense, based on the range
     // [observedMin ... observedMax] we just calculated.
@@ -195,7 +194,7 @@ void TfEnhancedEncodingAnalyzer<DTYPE>::_pickTestCandidatesAsymmetric(
         for (int i = 0; i <= 20; ++i)
         {
             DTYPE testDelta = f * deltaMax;
-            int testOffset = -numSteps + numSteps / 20.0 * i;
+            int testOffset  = -numSteps + numSteps / 20.0 * i;
 
             // Clamp test candidates to the observedMin and observedMax range.
             if (!_clampToObservedMinMax(observedMin, observedMax, numSteps, testDelta, testOffset))
@@ -209,27 +208,27 @@ void TfEnhancedEncodingAnalyzer<DTYPE>::_pickTestCandidatesAsymmetric(
 }
 
 template <typename DTYPE>
-void TfEnhancedEncodingAnalyzer<DTYPE>::_pickTestCandidatesSymmetric(DTYPE minVal, DTYPE maxVal, DTYPE numSteps,
-                                                                     std::vector<std::tuple<DTYPE, int>>& testCandidates,
-                                                                     bool useUnsignedSymmetric) const
+void TfEnhancedEncodingAnalyzer<DTYPE>::_pickTestCandidatesSymmetric(
+    DTYPE minVal, DTYPE maxVal, DTYPE numSteps, std::vector<std::tuple<DTYPE, int>>& testCandidates,
+    bool useUnsignedSymmetric) const
 {
     // Compute the largest TF delta which would make sense, based on the range
     // [minVal ... maxVal] we just calculated.
 
-    DTYPE deltaMax  = 0.0;
-    int testOffset  = 0;
+    DTYPE deltaMax = 0.0;
+    int testOffset = 0;
 
     if ((minVal == 0.0) && (useUnsignedSymmetric))
     {
         // Special case for symmetric encodings. If all values are positive or 0, we can treat the
         // symmetric encodings as unsigned
-        deltaMax    = maxVal / numSteps;
-        testOffset  = 0;        // Indicates all positive values
+        deltaMax   = maxVal / numSteps;
+        testOffset = 0;   // Indicates all positive values
     }
     else
     {
-        DTYPE absoluteMax  = std::max(std::abs(maxVal), std::abs(minVal));
-        deltaMax           = (2 * absoluteMax) / numSteps;
+        DTYPE absoluteMax = std::max(std::abs(maxVal), std::abs(minVal));
+        deltaMax          = (2 * absoluteMax) / numSteps;
 
         // Compute the offset - since we are finding symmetric candidates, offset can be computed given the delta
         testOffset = floor(-numSteps / 2);
@@ -276,8 +275,8 @@ std::tuple<DTYPE, DTYPE> TfEnhancedEncodingAnalyzer<DTYPE>::_findRangeOfAggregat
     }
 
     // Make sure we include zero in range.
-    minVal  = std::min(minVal, (DTYPE) 0);
-    maxVal  = std::max(maxVal, (DTYPE) 0);
+    minVal = std::min(minVal, (DTYPE) 0);
+    maxVal = std::max(maxVal, (DTYPE) 0);
 
     // Make sure we have a real range.
     maxVal = std::max(maxVal, minVal + (DTYPE) MIN_RANGE);
@@ -290,16 +289,16 @@ DTYPE TfEnhancedEncodingAnalyzer<DTYPE>::_quantAndSatCost(const PDF& pdf, int bw
 {
     // Given the TensorFlow fixed point format (delta and offset), we calculate
     // the smallest and biggest floating point values we can represent.
-    DTYPE minVal    = delta * offset;
-    DTYPE stepSize  = pow(2, bw) - 1;
-    DTYPE maxVal    = delta * stepSize + minVal;
+    DTYPE minVal   = delta * offset;
+    DTYPE stepSize = pow(2, bw) - 1;
+    DTYPE maxVal   = delta * stepSize + minVal;
     // Calculate the indices of the smallest and largest representable value.
-    DTYPE pdfStart  = pdf.xLeft[0];
-    DTYPE pdfStep   = pdf.xLeft[1] - pdf.xLeft[0];
-    int minInd      = (int) std::floor((minVal - pdfStart) / pdfStep);
-    minInd          = std::min(std::max(0, minInd), PDF_SIZE - 1);
-    int maxInd      = (int) std::floor((maxVal - pdfStart) / pdfStep);
-    maxInd          = std::min(std::max(0, maxInd), PDF_SIZE - 1);
+    DTYPE pdfStart = pdf.xLeft[0];
+    DTYPE pdfStep  = pdf.xLeft[1] - pdf.xLeft[0];
+    int minInd     = (int) std::floor((minVal - pdfStart) / pdfStep);
+    minInd         = std::min(std::max(0, minInd), PDF_SIZE - 1);
+    int maxInd     = (int) std::floor((maxVal - pdfStart) / pdfStep);
+    maxInd         = std::min(std::max(0, maxInd), PDF_SIZE - 1);
 
     // Calculate the saturation cost of the bottom part of the PDF.
     DTYPE satCostBottom = 0;
@@ -375,10 +374,10 @@ void TfEnhancedEncodingAnalyzer<DTYPE>::getComputedEncodings(int bw, TfEncoding&
         _pickTestCandidatesAsymmetric(minVal, maxVal, numSteps, testCandidates);
     }
 
-   // Find the best candidate
-   DTYPE bestDelta;
-   int bestOffset;
-   std::tie(bestDelta, bestOffset) = _findBestCandidate( bw, testCandidates);
+    // Find the best candidate
+    DTYPE bestDelta;
+    int bestOffset;
+    std::tie(bestDelta, bestOffset) = _findBestCandidate(bw, testCandidates);
 
     // Using the best delta and offset, calculate the encoding.
     encoding.delta  = bestDelta;
@@ -394,4 +393,4 @@ template class TfEnhancedEncodingAnalyzer<double>;
 
 template class TfEnhancedEncodingAnalyzer<float>;
 
-}
+}   // namespace DlQuantization

@@ -36,12 +36,12 @@
 //
 //==============================================================================
 
-#include <cstdint>
+#include "DlQuantization/Quantization.hpp"
 #include "QuantizeDequantizeUtils.hpp"
 #include "cuda_runtime_api.h"
-#include <gtest/gtest.h>
-#include "DlQuantization/Quantization.hpp"
 #include <cmath>
+#include <cstdint>
+#include <gtest/gtest.h>
 
 
 class TestOnnxTensorOps : public ::testing::Test
@@ -51,16 +51,20 @@ class TestOnnxTensorOps : public ::testing::Test
 
 TEST(TestOnnxTensorOps, TensorChannelSlice)
 {
-    int ch_out = 16;
-    int ch_in = 8;
-    int k = 3;
+    int ch_out         = 16;
+    int ch_in          = 8;
+    int k              = 3;
     int total_elements = ch_out * ch_in * k * k;
-    std::vector<int64_t> dimensions{ch_out, ch_in, k, k};
+    std::vector<int64_t> dimensions {ch_out, ch_in, k, k};
     float data[ch_out][ch_in][k][k];
-    for (int c_o = 0; c_o < ch_out; c_o++){
-        for (int c_i = 0; c_i < ch_in; c_i++){
-            for (int i = 0; i < k; i++){
-                for (int j = 0; j < k; j++){
+    for (int c_o = 0; c_o < ch_out; c_o++)
+    {
+        for (int c_i = 0; c_i < ch_in; c_i++)
+        {
+            for (int i = 0; i < k; i++)
+            {
+                for (int j = 0; j < k; j++)
+                {
                     data[c_o][c_i][i][j] = (float) c_i;
                 }
             }
@@ -72,23 +76,24 @@ TEST(TestOnnxTensorOps, TensorChannelSlice)
     void* result_data;
     int copy_len = ch_out * k * k;
     cudaMalloc(&result_data, sizeof(float) * copy_len);
-    int channel = 3;
-    long copy_width = k * k;
+    int channel        = 3;
+    long copy_width    = k * k;
     long output_stride = copy_width;
-    long iters = ch_out;
-    long input_stride = ch_in * copy_width;
-    long input_offset = channel * copy_width;
+    long iters         = ch_out;
+    long input_stride  = ch_in * copy_width;
+    long input_offset  = channel * copy_width;
     long output_offset = 0;
     cudaDeviceSynchronize();
 
 
-    sliceTensorChannelGPU((float*) device_data, (float*) result_data, iters, copy_width, input_stride,
-                               output_stride, input_offset, output_offset);
+    sliceTensorChannelGPU((float*) device_data, (float*) result_data, iters, copy_width, input_stride, output_stride,
+                          input_offset, output_offset);
     float* result = static_cast<float*>(malloc(sizeof(float) * copy_len));
 
     cudaMemcpy(result, result_data, copy_len * sizeof(float), cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize();
-    for (int i = 0; i < copy_len; i++){
+    for (int i = 0; i < copy_len; i++)
+    {
         EXPECT_EQ((float) channel, result[i]);
     }
 
@@ -101,18 +106,22 @@ TEST(TestOnnxTensorOps, TensorChannelSlice)
 
 TEST(TestOnnxTensorOps, TensorChannelSliceCPU)
 {
-    int axis = 0;
-    int ch_out = 16;
-    int ch_in = 8;
-    int k = 3;
+    int axis           = 0;
+    int ch_out         = 16;
+    int ch_in          = 8;
+    int k              = 3;
     int total_elements = ch_out * ch_in * k * k;
-    std::vector<int64_t> dimensions{ch_out, ch_in, k, k};
+    std::vector<int64_t> dimensions {ch_out, ch_in, k, k};
     float data[ch_out][ch_in][k][k];
-    float output[total_elements/dimensions[axis]];
-    for (int c_o = 0; c_o < ch_out; c_o++){
-        for (int c_i = 0; c_i < ch_in; c_i++){
-            for (int i = 0; i < k; i++){
-                for (int j = 0; j < k; j++){
+    float output[total_elements / dimensions[axis]];
+    for (int c_o = 0; c_o < ch_out; c_o++)
+    {
+        for (int c_i = 0; c_i < ch_in; c_i++)
+        {
+            for (int i = 0; i < k; i++)
+            {
+                for (int j = 0; j < k; j++)
+                {
                     data[c_o][c_i][i][j] = (float) c_o;
                 }
             }
@@ -120,19 +129,17 @@ TEST(TestOnnxTensorOps, TensorChannelSliceCPU)
     }
 
 
-    int copy_len = total_elements/dimensions[axis];
-    int channel = 3;
+    int copy_len = total_elements / dimensions[axis];
+    int channel  = 3;
     cudaDeviceSynchronize();
 
 
-    sliceTensorAlongAxis<float>((float *)data, dimensions, axis, channel, (float*)output, false);
-
+    sliceTensorAlongAxis<float>((float*) data, dimensions, axis, channel, (float*) output, false);
 
 
     cudaDeviceSynchronize();
-    for (int i = 0; i < copy_len; i++){
+    for (int i = 0; i < copy_len; i++)
+    {
         EXPECT_EQ((float) channel, output[i]);
     }
-
 }
-
