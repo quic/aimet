@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -41,7 +41,6 @@ import itertools
 from unittest.mock import patch, MagicMock
 import os
 from bs4 import BeautifulSoup
-from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
 import pytest
 import shutil
 from typing import Callable
@@ -50,12 +49,14 @@ from torch.utils.data import Dataset, DataLoader
 
 from aimet_torch import utils
 from aimet_torch.model_preparer import prepare_model
-from aimet_torch.auto_quant import AutoQuant
-from aimet_torch.adaround.adaround_weight import AdaroundParameters
-from aimet_torch.quantsim import QuantizationSimModel, OnnxExportApiArgs
-from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
+from aimet_torch.v2.auto_quant import AutoQuant
+from aimet_torch.v2.adaround import AdaroundParameters
+from aimet_torch.v2.quantsim import QuantizationSimModel
+from aimet_torch.onnx_utils import OnnxExportApiArgs
+from aimet_torch.v2.nn import BaseQuantizationMixin
 from aimet_torch.save_utils import SaveUtils
 from aimet_common.defs import QuantScheme
+from aimet_torch.v2.quantization import encoding_analyzer
 
 
 class Model(torch.nn.Module):
@@ -281,10 +282,10 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc, fp32_acc=None, w3
             pass
 
     def mock_eval_callback(model, _):
-        if not isinstance(model._conv_0, StaticGridQuantWrapper):
+        if not isinstance(model._conv_0, BaseQuantizationMixin):
             # Not quantized: return fp32 accuracy
             return fp32_acc
-        if model._conv_0.param_quantizers["weight"].bitwidth == 32:
+        if not model._conv_0.param_quantizers["weight"] or model._conv_0.param_quantizers["weight"].bitwidth == 32:
             # W32 evaluation for early exit. Return W32 accuracy
             return w32_acc
 
@@ -305,10 +306,10 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc, fp32_acc=None, w3
         equalize_model: MagicMock
         apply_adaround: MagicMock
 
-    with patch("aimet_torch.auto_quant.QuantizationSimModel", side_effect=_QuantizationSimModel) as mock_qsim,\
+    with patch("aimet_torch.v2.auto_quant.QuantizationSimModel", side_effect=_QuantizationSimModel) as mock_qsim,\
             patch("aimet_torch.auto_quant.fold_all_batch_norms", side_effect=bn_folding) as mock_bn_folding,\
             patch("aimet_torch.auto_quant.equalize_model", side_effect=cle) as mock_cle,\
-            patch("aimet_torch.auto_quant.Adaround._apply_adaround", side_effect=adaround) as mock_adaround,\
+            patch("aimet_torch.v2.auto_quant.Adaround._apply_adaround", side_effect=adaround) as mock_adaround,\
             patch("aimet_torch.auto_quant.Spinner"):
         try:
             yield Mocks(
@@ -478,6 +479,9 @@ class TestAutoQuant:
         with pytest.raises(ValueError):
             AutoQuant(cpu_model, dummy_input, unlabeled_data_loader, lambda: None, output_bw=64)
 
+        with pytest.raises(ValueError):
+            AutoQuant(cpu_model, dummy_input, unlabeled_data_loader, lambda: None, rounding_mode="stochastic")
+
         auto_quant = AutoQuant(cpu_model, dummy_input, unlabeled_data_loader, lambda: None)
         # Allowed accuracy drop < 0
         with pytest.raises(ValueError):
@@ -646,7 +650,7 @@ class TestAutoQuant:
                                        mocks.eval_callback,
                                        results_dir=results_dir,
                                        strict_validation=False)
-                with patch("aimet_torch.auto_quant.Adaround._apply_adaround", side_effect=error_fn):
+                with patch("aimet_torch.v2.auto_quant.Adaround._apply_adaround", side_effect=error_fn):
                     # If adaround fails, should return CLE results
                     _, acc, _ = auto_quant.optimize()
                     assert acc == cle_acc
@@ -667,7 +671,7 @@ class TestAutoQuant:
                                        strict_validation=False)
                 with patch("aimet_torch.auto_quant.fold_all_batch_norms", side_effect=error_fn),\
                         patch("aimet_torch.auto_quant.equalize_model", side_effect=error_fn),\
-                        patch("aimet_torch.auto_quant.Adaround._apply_adaround", side_effect=error_fn):
+                        patch("aimet_torch.v2.auto_quant.Adaround._apply_adaround", side_effect=error_fn):
                     # If everything fails, should raise an error
                     with pytest.raises(RuntimeError):
                         auto_quant.optimize()
@@ -786,10 +790,12 @@ class TestAutoQuant:
             def eval_callback(model, _):
                 # Assumes the model's eval score drops to zero
                 # unless param_quant_scheme == tfe and output_quant_scheme == tf
-                if isinstance(model._conv_0, StaticGridQuantWrapper):
-                    if model._conv_0.param_quantizers["weight"].quant_scheme != QuantScheme.post_training_tf_enhanced:
+                if isinstance(model._conv_0, BaseQuantizationMixin):
+                    if model._conv_0.param_quantizers["weight"] and not \
+                            isinstance(model._conv_0.param_quantizers["weight"].encoding_analyzer, encoding_analyzer.SqnrEncodingAnalyzer):
                         return 0.0
-                    if model._conv_0.output_quantizers[0].quant_scheme != QuantScheme.post_training_tf:
+                    if model._relu.output_quantizers[0] and not \
+                            isinstance(model._relu.output_quantizers[0].encoding_analyzer, encoding_analyzer.MinMaxEncodingAnalyzer):
                         return 0.0
                 return mocks.eval_callback(model, _)
 
@@ -802,7 +808,7 @@ class TestAutoQuant:
                 assert self._quantsim_params["quant_scheme"].output_quant_scheme == QuantScheme.post_training_tf
                 return ret
 
-            with patch("aimet_torch.auto_quant.AutoQuant.optimize", optimize):
+            with patch("aimet_torch.v2.auto_quant.AutoQuant.optimize", optimize):
                 auto_quant = AutoQuant(cpu_model,
                                        dummy_input,
                                        unlabeled_data_loader,

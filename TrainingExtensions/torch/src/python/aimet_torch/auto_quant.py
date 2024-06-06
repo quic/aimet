@@ -36,7 +36,8 @@
 # =============================================================================
 # pylint: disable=too-many-lines
 
-"""Temporary buffer file for adding new features to AutoQuant"""
+""" Implementation of AIMET AutoQuantBase and v1 AutoQuant """
+import abc
 import copy
 import contextlib
 from collections import OrderedDict, defaultdict
@@ -188,7 +189,7 @@ def _validate_inputs(model: torch.nn.Module, # pylint: disable=too-many-argument
     validate_quantsim_inputs(quant_scheme, rounding_mode, output_bw, param_bw)
 
 
-class AutoQuant: # pylint: disable=too-many-instance-attributes
+class AutoQuantBase(abc.ABC): # pylint: disable=too-many-instance-attributes
     """
     Integrate and apply post-training quantization techniques.
 
@@ -276,7 +277,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
         batch_size = self.data_loader.batch_size or 1
         num_batches = math.ceil(num_samples / batch_size)
         num_batches = min(num_batches, len(self.data_loader))
-        self.adaround_params = AdaroundParameters(self.data_loader, num_batches)
+        self.adaround_params = self._get_adaround_parameters(self.data_loader, num_batches)
 
         self._export_kwargs = dict(
             onnx_export_args=OnnxExportApiArgs(),
@@ -297,6 +298,17 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
 
         self._quant_scheme_candidates = _QUANT_SCHEME_CANDIDATES
         self._fp32_acc = None
+
+    @staticmethod
+    @abc.abstractmethod
+    def _get_adaround():
+        """ returns AdaRound """
+
+    @staticmethod
+    @abc.abstractmethod
+    def _get_adaround_parameters(data_loader, num_batches):
+        """ Returns AdaroundParameters(data_loader, num_batches) """
+
 
     def _evaluate_model_performance(self, model) -> float:
         """
@@ -346,7 +358,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
                result["accuracy"],\
                result["encoding_path"]
 
-    def set_adaround_params(self, adaround_params: AdaroundParameters) -> None:
+    def set_adaround_params(self, adaround_params) -> None:
         """
         Set Adaround parameters.
         If this method is not called explicitly by the user, AutoQuant will use
@@ -446,9 +458,7 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
             default_param_bw=(param_bw or self._quantsim_params["param_bw"]),
             config_file=(config_file or self._quantsim_params["config_file"]),
         )
-        sim = QuantizationSimModel(model, self.dummy_input, **kwargs)
-
-        param_quantizers, input_quantizers, output_quantizers = utils.get_all_quantizers(sim.model)
+        sim = self._get_quantsim(model, self.dummy_input, **kwargs)
 
         default_quant_scheme = self._quantsim_params.get("quant_scheme")
         if default_quant_scheme is not None:
@@ -459,43 +469,44 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
                                  default_quant_scheme.param_quant_scheme
             param_percentile = param_percentile or default_quant_scheme.param_percentile
 
-        # Set input/output quantizers' quant schemes
-        for quantizer in itertools.chain(input_quantizers, output_quantizers):
-            quantizer.quant_scheme = output_quant_scheme
-            if quantizer.quant_scheme == QuantScheme.post_training_percentile and\
-                    output_percentile is not None:
-                quantizer.set_percentile_value(output_percentile)
+        self._configure_quantsim(sim,
+                                 output_bw,
+                                 output_quant_scheme,
+                                 output_percentile,
+                                 param_bw,
+                                 param_quant_scheme,
+                                 param_percentile,
+                                 encoding_path)
 
-        # Set param quantizers' quant schemes
-        for quantizer in param_quantizers:
-            quantizer.quant_scheme = param_quant_scheme or\
-                                     default_quant_scheme.param_quant_scheme
-            if quantizer.quant_scheme == QuantScheme.post_training_percentile and\
-                    param_percentile is not None:
-                quantizer.set_percentile_value(param_percentile)
-
-        if encoding_path:
-            sim.set_and_freeze_param_encodings(encoding_path)
-
-        param_quantizers, input_quantizers, output_quantizers = utils.get_all_quantizers(sim.model)
-
-        # Disable input/output quantizers, using fp32 to simulate int32.
-        if output_bw == 32:
-            for quantizer in input_quantizers + output_quantizers:
-                quantizer.enabled = False
-
-        # Disable param quantizers, using fp32 to simulate int32.
-        if param_bw == 32:
-            for quantizer in param_quantizers:
-                quantizer.enabled = False
-
-        # Skip encoding computation if none of the quantizers are enabled
-        if any(quantizer.enabled for quantizer in param_quantizers +\
-                                                  input_quantizers +\
-                                                  output_quantizers):
+        if self._has_enabled_quantizers(sim):
             sim.compute_encodings(self.forward_pass_callback, None)
 
         return sim
+
+    @staticmethod
+    @abc.abstractmethod
+    def _get_quantsim(model, dummy_input, **kwargs):
+        """ Returns QuantizationSimModel(model, dummy_input, **kwargs) """
+
+    @abc.abstractmethod
+    def _configure_quantsim(self, # pylint: disable=too-many-arguments
+                            sim,
+                            output_bw,
+                            output_quant_scheme,
+                            output_percentile,
+                            param_bw,
+                            param_quant_scheme,
+                            param_percentile,
+                            encoding_path):
+        """Configures quantizers in sim with given bitwidths, quantschemes, and percentiles then loads encodings
+
+        Any 32 bit quantizers are disabled after loading and freezing encodings
+        """
+
+    @staticmethod
+    @abc.abstractmethod
+    def _has_enabled_quantizers(sim):
+        """ Returns True if any quantizer in sim is enabled """
 
     def _prepare_model(self, model):
         prepared_model = prepare_model(model, **self._model_preparer_kwargs)
@@ -563,14 +574,17 @@ class AutoQuant: # pylint: disable=too-many-instance-attributes
 
         sim = self._create_quantsim_and_encodings(model)
 
-        _, input_quantizers, output_quantizers = get_all_quantizers(sim.model)
-        for quantizer in itertools.chain(input_quantizers, output_quantizers):
-            quantizer.enabled = False
+        self._disable_activation_quantizers(sim)
 
-        model = Adaround._apply_adaround(sim, model, self.dummy_input, self.adaround_params, # pylint: disable=protected-access
-                                         path=self.results_dir, filename_prefix=filename_prefix)
+        model = self._get_adaround()._apply_adaround(sim, model, self.dummy_input, self.adaround_params, # pylint: disable=protected-access
+                                                     path=self.results_dir, filename_prefix=filename_prefix)
 
         return model, adaround_encoding_path
+
+    @staticmethod
+    @abc.abstractmethod
+    def _disable_activation_quantizers(sim):
+        """ Disables all input and output quantizers in sim """
 
     def _optimize_helper(
             self,
@@ -1186,7 +1200,7 @@ class _EvalSession: # pylint: disable=too-many-instance-attributes
 
 
 @contextlib.contextmanager
-def spy_auto_quant(auto_quant: AutoQuant):
+def spy_auto_quant(auto_quant: AutoQuantBase):
     """
     Install a spy that collects the handles to the ptq result of
     each stage of AutoQuant.
@@ -1339,3 +1353,81 @@ def _build_flowchart_metadata(result: Mapping) -> Dict: # pylint: disable=too-ma
     )
 
     return metadata
+
+
+class AutoQuant(AutoQuantBase): # pylint: disable=too-many-instance-attributes
+    """
+    Integrate and apply post-training quantization techniques.
+
+    AutoQuant includes 1) batchnorm folding, 2) cross-layer equalization,
+    and 3) Adaround.
+    These techniques will be applied in a best-effort manner until the model
+    meets the evaluation goal given as allowed_accuracy_drop.
+    """
+
+    @staticmethod
+    def _get_adaround():
+        """ returns AdaRound """
+        return Adaround
+
+    @staticmethod
+    def _get_adaround_parameters(data_loader, num_batches):
+        return AdaroundParameters(data_loader, num_batches)
+
+    @staticmethod
+    def _get_quantsim(model, dummy_input, **kwargs):
+        return QuantizationSimModel(model, dummy_input, **kwargs)
+
+    def _configure_quantsim(self, # pylint: disable=too-many-arguments
+                            sim,
+                            output_bw,
+                            output_quant_scheme,
+                            output_percentile,
+                            param_bw,
+                            param_quant_scheme,
+                            param_percentile,
+                            encoding_path):
+
+        param_quantizers, input_quantizers, output_quantizers = utils.get_all_quantizers(sim.model)
+
+        # Set input/output quantizers' quant schemes
+        for quantizer in itertools.chain(input_quantizers, output_quantizers):
+            quantizer.quant_scheme = output_quant_scheme
+            if quantizer.quant_scheme == QuantScheme.post_training_percentile and\
+                    output_percentile is not None:
+                quantizer.set_percentile_value(output_percentile)
+
+        # Set param quantizers' quant schemes
+        for quantizer in param_quantizers:
+            quantizer.quant_scheme = param_quant_scheme
+            if quantizer.quant_scheme == QuantScheme.post_training_percentile and\
+                    param_percentile is not None:
+                quantizer.set_percentile_value(param_percentile)
+
+        if encoding_path:
+            sim.set_and_freeze_param_encodings(encoding_path)
+
+        param_quantizers, input_quantizers, output_quantizers = utils.get_all_quantizers(sim.model)
+
+        # Disable input/output quantizers, using fp32 to simulate int32.
+        if output_bw == 32:
+            for quantizer in input_quantizers + output_quantizers:
+                quantizer.enabled = False
+
+        # Disable param quantizers, using fp32 to simulate int32.
+        if param_bw == 32:
+            for quantizer in param_quantizers:
+                quantizer.enabled = False
+
+    @staticmethod
+    def _has_enabled_quantizers(sim):
+        param_quantizers, input_quantizers, output_quantizers = utils.get_all_quantizers(sim.model)
+        return any(quantizer.enabled for quantizer in param_quantizers +\
+                                                      input_quantizers +\
+                                                      output_quantizers)
+
+    @staticmethod
+    def _disable_activation_quantizers(sim):
+        _, input_quantizers, output_quantizers = get_all_quantizers(sim.model)
+        for quantizer in itertools.chain(input_quantizers, output_quantizers):
+            quantizer.enabled = False
