@@ -421,7 +421,8 @@ class Quantize(MinMaxQuantizer):
         out_{j_0 \cdots j_{D-1}} & = clamp\left(
             \left\lceil\frac{input_{j_0 \cdots j_{D-1}}}{scale_{i_0 \cdots i_{D-1}}}\right\rfloor
             - offset_{i_0 \cdots i_{D-1}}, qmin, qmax\right)\\
-        & \forall \quad i_d B_d \leq j_d < (i_d+1) B_d, \quad 0 \leq d < D
+
+        \text{where} \quad \forall_{0 \leq d < D} \quad i_d = \left\lfloor \frac{j_d}{B_d} \right\rfloor
 
     Args:
         shape (tuple): Shape of the quantization parameters
@@ -531,7 +532,8 @@ class QuantizeDequantize(MinMaxQuantizer):
         \overline{input}_{j_0 \cdots j_{D-1}} &= clamp\left(
             \left\lceil\frac{input_{j_0 \cdots j_{D-1}}}{scale_{i_0 \cdots i_{D-1}}}\right\rfloor
             - offset_{i_0 \cdots i_{D-1}}, qmin, qmax\right)\\
-        & \forall \quad i_d B_d \leq j_d < (i_d+1) B_d, \quad 0 \leq d < D
+
+        \text{where} \quad \forall_{0 \leq d < D} \quad i_d = \left\lfloor \frac{j_d}{B_d} \right\rfloor
 
     Args:
         shape (tuple): Shape of the quantization parameters

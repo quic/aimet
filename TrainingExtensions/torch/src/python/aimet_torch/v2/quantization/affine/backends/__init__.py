@@ -76,7 +76,8 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
         out_{j_0 \cdots j_{D-1}} & = clamp\left(
             \left\lceil\frac{input_{j_0 \cdots j_{D-1}}}{scale_{i_0 \cdots i_{D-1}}}\right\rfloor
             - offset_{i_0 \cdots i_{D-1}}, qmin, qmax\right)\\
-        & \forall \quad i_d B_d \leq j_d < (i_d+1) B_d, \quad 0 \leq d < D
+
+        \text{where} \quad \forall_{0 \leq d < D} \quad i_d = \left\lfloor \frac{j_d}{B_d} \right\rfloor
 
     This function is overloaded with the signatures listed below:
 
@@ -218,7 +219,8 @@ def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
         \overline{input}_{j_0 \cdots j_{D-1}} &= clamp\left(
             \left\lceil\frac{input_{j_0 \cdots j_{D-1}}}{scale_{i_0 \cdots i_{D-1}}}\right\rfloor
             - offset_{i_0 \cdots i_{D-1}}, qmin, qmax\right)\\
-        & \forall \quad i_d B_d \leq j_d < (i_d+1) B_d, \quad 0 \leq d < D
+
+        \text{where } \quad \forall_{0 \leq d < D} \quad i_d = \left\lfloor \frac{j_d}{B_d} \right\rfloor
 
 
     This function is overloaded with the signatures listed below:
