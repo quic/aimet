@@ -73,7 +73,7 @@ class AffineQuantizerBase(QuantizerBase):
 
     """
     def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None,
-                 block_size: Optional[list] = None):
+                 block_size: Optional[Tuple[int, ...]] = None):
         super().__init__()
         if isinstance(shape, int):
             shape = (shape,)
@@ -263,7 +263,7 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
     max: torch.nn.Parameter
 
     def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None,
-                 block_size: Optional[Tuple] = None):
+                 block_size: Optional[Tuple[int, ...]] = None):
         super().__init__(shape, bitwidth, symmetric, encoding_analyzer, block_size)
 
         self.register_quantization_parameter('min', nn.Parameter(-torch.ones(self.shape)))
@@ -430,6 +430,7 @@ class Quantize(MinMaxQuantizer):
                           otherwise, performs asymmetric quantization
         encoding_analyzer (EncodingAnalyzer, optional): Encoding analyzer for calibrating quantization encodings
                                                         (default: absolute min-max encoding analyzer)
+        block_size (Tuple[int, ...], optional): Block size
 
     :ivar Tensor min: :math:`\theta_{min}` from which scale and offset will be derived.
     :ivar Tensor max: :math:`\theta_{max}` from which scale and offset will be derived.
@@ -539,6 +540,7 @@ class QuantizeDequantize(MinMaxQuantizer):
                           otherwise, performs asymmetric quantization
         encoding_analyzer (EncodingAnalyzer, optional): Encoding analyzer for calibrating quantization encodings
                                                         (default: absolute min-max encoding analyzer)
+        block_size (Tuple[int, ...], optional): Block size
 
     :ivar Tensor min: :math:`\theta_{min}` from which scale and offset will be derived.
     :ivar Tensor max: :math:`\theta_{max}` from which scale and offset will be derived.
@@ -640,8 +642,8 @@ class Dequantize(torch.nn.Module):
 class GroupedBlockQuantizeDequantize(QuantizeDequantize):
     """ Class for performing Grouped Block Quantize Dequantize """
     def __init__(self, shape, bitwidth: int, symmetric: bool, decompressed_bw: int,
-                 encoding_analyzer: EncodingAnalyzer = None, block_size: Optional[Tuple] = None,
-                 block_grouping: Optional[Tuple] = None):
+                 encoding_analyzer: EncodingAnalyzer = None, block_size: Optional[Tuple[int, ...]] = None,
+                 block_grouping: Optional[Tuple[int, ...]] = None):
         """
         Grouped Block Quantize Dequantize constructor.
 
@@ -674,7 +676,7 @@ class GroupedBlockQuantizeDequantize(QuantizeDequantize):
         self.block_grouping = block_grouping
         if self.block_grouping is None:
             # Default to BQ behavior with 1 for all block grouping dims if not provided
-            self.block_grouping = [1] * len(self.shape)
+            self.block_grouping = tuple(1 for _ in enumerate(self.shape))
 
         if block_grouping is not None:
             if len(block_grouping) != len(shape):

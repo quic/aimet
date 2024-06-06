@@ -37,24 +37,25 @@
 # pylint: disable=all
 
 import math
-from typing import overload, Union, Tuple, Optional, List
+from typing import overload, Union, Tuple, Optional
 import torch
 from .utils import *
 
 
 @overload
 def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
-             bitwidth: Union[int, float], signed: bool = False, block_size: Optional[List] = None):
+             bitwidth: Union[int, float], signed: bool = False,
+             block_size: Optional[Tuple[int, ...]] = None):
     ...
 
 @overload
 def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
-             num_steps: int, signed: bool = False, block_size: Optional[List] = None):
+             num_steps: int, signed: bool = False, block_size: Optional[Tuple[int, ...]] = None):
     ...
 
 @overload
 def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
-             qmin: int, qmax: int, block_size: Optional[List] = None):
+             qmin: int, qmax: int, block_size: Optional[Tuple[int, ...]] = None):
     ...
 
 
@@ -103,6 +104,8 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
        :param int bitwidth: Bitwidth of quantized tensor based on which :math:`qmin` and :math:`qmax` will be derived
        :param bool signed: If false, the output will be mapped to positive integers only.
            Otherwise, it will range over both positive and negative integers.
+       :param block_size: Block size
+       :type block_size: Tuple[int, ...], optional
 
     .. function:: quantize(tensor, scale, offset, *, num_steps, signed=False, block_size=None)
        :noindex:
@@ -128,6 +131,8 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
        :param int num_steps: The number of steps in the quantization range based on which :math:`qmin` and :math:`qmax` will be derived
        :param bool signed: If false, the output will be mapped to positive integers only.
            Otherwise, it will range over both positive and negative integers.
+       :param block_size: Block size
+       :type block_size: Tuple[int, ...], optional
 
     .. function:: quantize(tensor, scale, offset, *, qmin, qmax, block_size=None)
        :noindex:
@@ -137,6 +142,8 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
        :param Tensor offset: Offset for quantization
        :param int qmin: Minimum value of the quantization range
        :param int qmax: Maximum value of the quantization range
+       :param block_size: Block size
+       :type block_size: Tuple[int, ...], optional
 
 
     Examples:
@@ -172,17 +179,18 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
 
 @overload
 def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
-                        bitwidth: Union[int, float], signed: bool = False, block_size: Optional[List] = None):
+                        bitwidth: Union[int, float], signed: bool = False,
+                        block_size: Optional[Tuple[int, ...]] = None):
     ...
 
 @overload
 def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
-                        num_steps: int, signed: bool = False, block_size: Optional[List] = None):
+                        num_steps: int, signed: bool = False, block_size: Optional[Tuple[int, ...]] = None):
     ...
 
 @overload
 def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
-                        qmin: int, qmax: int, block_size: Optional[List] = None):
+                        qmin: int, qmax: int, block_size: Optional[Tuple[int, ...]] = None):
     ...
 
 
@@ -237,8 +245,10 @@ def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
        :param Tensor scale: Scale for quantization
        :param Tensor offset: Offset for quantization
        :param int bitwidth: Bitwidth of quantized tensor based on which :math:`qmin` and :math:`qmax` will be derived
-       :param bool signed: If false, the intermediate output :math:`x_{int}` will be mapped to positive integers only.
-           Otherwise, :math:`x_{int}` will range over both positive and negative integers.
+       :param bool signed: If false, :math:`\overline{input}` will be mapped to positive integers only.
+           Otherwise, :math:`\overline{input}` will range over both positive and negative integers.
+       :param block_size: Block size
+       :type block_size: Tuple[int, ...], optional
 
     .. function:: quantize_dequantize(tensor, scale, offset, *, num_steps, signed=False, block_size=None)
        :noindex:
@@ -262,8 +272,10 @@ def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
        :param Tensor scale: Scale for quantization
        :param Tensor offset: Offset for quantization
        :param int num_steps: The number of steps in the quantization range based on which :math:`qmin` and :math:`qmax` will be derived
-       :param bool signed: If false, the intermediate output :math:`x_{int}` will be mapped to positive integers only.
-           Otherwise, :math:`x_{int}` will range over both positive and negative integers.
+       :param bool signed: If false, :math:`\overline{input}` will be mapped to positive integers only.
+           Otherwise, :math:`\overline{input}` will range over both positive and negative integers.
+       :param block_size: Block size
+       :type block_size: Tuple[int, ...], optional
 
     .. function:: quantize_dequantize(tensor, scale, offset, *, qmin, qmax, block_size=None)
        :noindex:
@@ -273,6 +285,8 @@ def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
        :param Tensor offset: Offset for quantization
        :param int qmin: Minimum value of the quantization range
        :param int qmax: Maximum value of the quantization range
+       :param block_size: Block size
+       :type block_size: Tuple[int, ...], optional
 
 
     Examples:
@@ -309,11 +323,12 @@ def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
     return get_backend().quantize_dequantize(tensor, scale, offset, qmin, qmax, block_size)
 
 
-def dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, block_size: Optional[List] = None):
+def dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
+               block_size: Optional[Tuple[int, ...]] = None):
     return get_backend().dequantize(tensor, scale, offset, block_size)
 
 
-def _parse_args(args, kwargs) -> Tuple[int, int, Optional[List]]:
+def _parse_args(args, kwargs) -> Tuple[int, int, Optional[Tuple[int, ...]]]:
     bitwidth = num_steps = signed = qmin = qmax = None
     block_size = kwargs.get('block_size')
 
