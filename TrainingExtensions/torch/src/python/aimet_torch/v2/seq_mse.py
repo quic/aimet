@@ -50,7 +50,7 @@ from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.affine import AffineQuantizerBase
 from aimet_torch.v2.nn.base import BaseQuantizationMixin
 from aimet_torch.v2.quantsim import QuantizationSimModel
-from aimet_torch.v2.utils import reduce
+from aimet_torch.v2.utils import reduce, _is_reducible
 
 
 SeqMseParams = V1SeqMseParams
@@ -131,11 +131,17 @@ class SequentialMse(V1SequentialMse):
         :param x_min: min values
         :param x_max: max values
         """
-        # For per-channel quantization, we need to add single dimension
-        # to x_{min, max} to make them reducible like quantizer.shape
+        # Unsqueeze x_min/x_max until they become reducible to quantizer.min/max
+        while x_min.dim() < quantizer.min.dim():
+            x_min = x_min[..., None]
+        while x_max.dim() < quantizer.max.dim():
+            x_max = x_max[..., None]
+        assert _is_reducible(x_min.shape, quantizer.min.shape)
+        assert _is_reducible(x_max.shape, quantizer.max.shape)
+
         with torch.no_grad():
-            quantizer.min.copy_(reduce(x_min[..., None], quantizer.shape, torch.min).values)
-            quantizer.max.copy_(reduce(x_max[..., None], quantizer.shape, torch.max).values)
+            quantizer.min.copy_(reduce(x_min, quantizer.shape, torch.min).values)
+            quantizer.max.copy_(reduce(x_max, quantizer.shape, torch.max).values)
 
     @staticmethod
     def _is_symmetric_quantizer(quantizer: AffineQuantizerBase):
