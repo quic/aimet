@@ -61,7 +61,7 @@ from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridPerTensorQua
 from aimet_torch.quantsim import QuantizationSimModel
 
 # The following modules with weights are supported
-SUPPORTED_MODULES = (torch.nn.Linear, )
+SUPPORTED_MODULES = (torch.nn.Linear, torch.nn.Conv2d, )
 
 # Skip running Sequential MSE if param BW is higher than supported PARAM_BW.
 SUPPORTED_PARAM_BW = 4
@@ -127,7 +127,7 @@ class SequentialMse:
 
         NOTE:
         1) module reference passed to modules_to_exclude should be from FP32 model.
-        2) module from modules_to_exclude won't be quantized and skipped when appyling sequential MSE.
+        2) module from modules_to_exclude won't be quantized and skipped when applying sequential MSE.
         3) Except finding param encodings for supported modules, config JSON file will be respected and
         final state of sim will be unchanged.
 
@@ -377,7 +377,7 @@ class SequentialMse:
             modules_to_exclude: Optional[List[torch.nn.Module]],
     ):
         """
-        For given quantsim model, disable quantizers needed to be diabled before applying sequential MSE.
+        For given quantsim model, disable quantizers needed to be disabled before applying sequential MSE.
 
         :param model: Original fp32 model
         :param sim: QuantizationSimModel object
@@ -408,6 +408,34 @@ class SequentialMse:
             # Wrapper mode must be set to ACTIVE because the wrapper's quantize_dequantize_params() will only call
             # into the param tensor quantizer's quantize_dequantize() if the mode isn't PASSTHROUGH.
             quant_wrapper.set_mode(QcQuantizeOpMode.ACTIVE)
+
+    @classmethod
+    def get_per_channel_min_and_max(cls, quant_module: QcQuantizeWrapper) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Get per channel min/max values across output channel.
+
+        :param quant_module: Quant module to be optimized
+        :return:
+        """
+        # pylint: disable=protected-access
+        module = cls._get_original_module(quant_module)
+
+        if isinstance(module, torch.nn.Conv2d):
+            channel_dim = module.out_channels
+            weight = module.weight.reshape(channel_dim, -1)
+        elif isinstance(module, torch.nn.Linear):
+            weight = module.weight
+        else:
+            raise ValueError('Unsupported module: ', module)
+
+        if cls._is_symmetric_quantizer(quant_module.param_quantizers["weight"]):
+            per_channel_max = torch.max(weight.abs(), dim=1)[0].detach()
+            per_channel_min = None
+        else:
+            per_channel_max = torch.max(weight, dim=1)[0].detach()
+            per_channel_min = torch.min(weight, dim=1)[0].detach()
+
+        return per_channel_min, per_channel_max
 
     @staticmethod
     def get_candidates(num_candidates: int,
@@ -449,12 +477,7 @@ class SequentialMse:
         :param params: Sequenial MSE parameters
         """
         # pylint: disable=too-many-locals
-        if cls._is_symmetric_quantizer(quant_module.param_quantizers["weight"]):
-            per_channel_max = torch.max(quant_module.weight.abs(), dim=1)[0].detach()
-            per_channel_min = None
-        else:
-            per_channel_max = torch.max(quant_module.weight, dim=1)[0].detach()
-            per_channel_min = torch.min(quant_module.weight, dim=1)[0].detach()
+        per_channel_min, per_channel_max = cls.get_per_channel_min_and_max(quant_module)
         candidates = cls.get_candidates(params.num_candidates, per_channel_max, per_channel_min)
 
         total_loss = []
@@ -502,7 +525,7 @@ class SequentialMse:
                         w: torch.Tensor,
                         wq: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Compute X^W^ and XW output acitvations.
+        Compute X^W^ and XW output activations.
 
         :param quant_module: Wrapper module to be optimized
         :param x: Inputs from FP32 model
@@ -517,6 +540,15 @@ class SequentialMse:
         if isinstance(module, torch.nn.Linear):
             xqwq = functional.linear(xq, wq, module.bias)
             xw = functional.linear(x, w, module.bias)
+        elif isinstance(module, torch.nn.Conv2d):
+            xqwq = functional.conv2d(xq, wq, bias=module.bias, stride=module.stride, dilation=module.dilation,
+                                     padding=module.padding, groups=module.groups)
+            xw = functional.conv2d(x, w, bias=module.bias, stride=module.stride, dilation=module.dilation,
+                                   padding=module.padding, groups=module.groups)
+
+            # [N, C, H, W] --> [N, H, W, C], so that loss can be computed across channel dimension.
+            xqwq = xqwq.permute(0, 2, 3, 1)
+            xw = xw.permute(0, 2, 3, 1)
         else:
             raise ValueError('Unsupported module: ', module)
         return xqwq, xw
@@ -524,11 +556,11 @@ class SequentialMse:
     @staticmethod
     def compute_recon_loss(xqwq: torch.Tensor, xw: torch.Tensor, params: SeqMseParams):
         """
-        Compute reconsturction loss and return the sum by reducing over all the dimensions except last channel dimension.
+        Compute reconstruction loss and return the sum by reducing over all the dimensions except last channel dimension.
 
         :param xqwq: X^Q^ quantized-dequantized values
         :param xw: XW FP32 values
-        :param params: Sequenial MSE parameters
+        :param params: Sequential MSE parameters
         :return: loss
         """
         if params.loss_fn == "mse":

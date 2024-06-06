@@ -189,6 +189,45 @@ class TestSeqMse:
                 assert not numpy.isclose(before.min, after.min)
                 assert not numpy.isclose(before.max, after.max)
 
+    @pytest.mark.parametrize("enable_pcq", [True, False])
+    @pytest.mark.parametrize("param_bw", [2, 31])
+    @pytest.mark.parametrize("loss_fn", ['mse', 'l1', 'sqnr'])
+    def test_optimize_module_conv(self, enable_pcq, param_bw, loss_fn):
+        """ test optimize module for linear """
+        torch.manual_seed(0)
+        conv = torch.nn.Conv2d(3, 32, 3)
+        wrapper = StaticGridQuantWrapper(conv, param_bw, 16, 'nearest', QuantScheme.post_training_tf)
+        wrapper.input_quantizers[0].enabled = False
+        wrapper.output_quantizers[0].enabled = False
+        if enable_pcq:
+            wrapper.enable_per_channel_quantization()
+
+        xq = torch.randn(32, 1, 3, 10, 10)
+        wrapper.param_quantizers['weight'].reset_encoding_stats()
+        wrapper.param_quantizers['weight'].update_encoding_stats(wrapper.weight.data)
+        wrapper.param_quantizers['weight'].compute_encoding()
+        before = wrapper.param_quantizers['weight'].encoding
+        params = SeqMseParams(num_batches=32, loss_fn=loss_fn)
+        optimize_module(wrapper, xq, xq, params)
+        after = wrapper.param_quantizers['weight'].encoding
+
+        # If we use higher param_bw (for example 16, 31), then it should always choose larger candidates so
+        # before and after param encodings should be almost same.
+        if param_bw == 31:
+            if enable_pcq:
+                assert numpy.isclose(before[0].min, after[0].min)
+                assert numpy.isclose(before[0].max, after[0].max)
+            else:
+                assert numpy.isclose(before.min, after.min)
+                assert numpy.isclose(before.max, after.max)
+        else:
+            if enable_pcq:
+                assert not numpy.isclose(before[0].min, after[0].min)
+                assert not numpy.isclose(before[0].max, after[0].max)
+            else:
+                assert not numpy.isclose(before.min, after.min)
+                assert not numpy.isclose(before.max, after.max)
+
     @pytest.mark.cuda()
     @pytest.mark.parametrize("inp_symmetry", ['asym', 'symfp', 'symqt'])
     @pytest.mark.parametrize("loss_fn", ['mse', 'l1', 'sqnr'])
@@ -202,6 +241,8 @@ class TestSeqMse:
         apply_seq_mse(model, sim, unlabeled_data_loader, params)
         assert sim.model.fc1.param_quantizers['weight'].is_encoding_frozen
         assert sim.model.fc2.param_quantizers['weight'].is_encoding_frozen
+        assert sim.model.conv1.param_quantizers['weight'].is_encoding_frozen
+        assert sim.model.conv2.param_quantizers['weight'].is_encoding_frozen
 
         # Compute encodings for all the activations and remaining non-supported modules
         enc_before = sim.model.fc1.param_quantizers['weight'].encoding
