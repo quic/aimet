@@ -225,6 +225,7 @@ def test_matmul_bit_override():
     assert closest_output_quantizer_of_second_input.symmetric
     assert closest_output_quantizer_of_second_input.signed
 
+
 def test_remove_all_quantizers():
     model = BasicConv2d(kernel_size=3)
     dummy_input = torch.rand(1, 64, 16, 16)
@@ -235,23 +236,18 @@ def test_remove_all_quantizers():
         module_list.append(module)
     
     # Ensures that temporary removal of quantizers works
-    with remove_all_quantizers(module_list):
+    with remove_all_quantizers(qsim.model):
         for module in qsim.model.modules():
             if isinstance(module, BaseQuantizationMixin):
                 assert all(quant is None for quant in module.input_quantizers)
                 assert all(quant is None for quant in module.output_quantizers)
-                print(module.param_quantizers)
                 assert all(value is None for value in module.param_quantizers.values())
     
     # Ensures that quantizers are restored properly
-    i = 0
-    for module in qsim.model.modules():
-        if isinstance(module, BaseQuantizationMixin):
-            assert module == module_list[i]
-        i+=1
+    assert module_list == list(qsim.model.modules())
     
     # Ensures that permanent removal of quantizers works
-    remove_all_quantizers(module_list)
+    remove_all_quantizers(qsim.model)
     for module in qsim.model.modules():
         if isinstance(module, BaseQuantizationMixin):
             assert all(quant is None for quant in module.input_quantizers)
@@ -268,21 +264,17 @@ def test_remove_activation_quantizers():
         module_list.append(module)
     
     # Ensures that temporary removal of quantizers works
-    with remove_activation_quantizers(module_list):
+    with remove_activation_quantizers(qsim.model):
         for module in qsim.model.modules():
             if isinstance(module, BaseQuantizationMixin):
                 assert all(quant is None for quant in module.input_quantizers)
                 assert all(quant is None for quant in module.output_quantizers)
     
     # Ensures that quantizers are restored properly
-    i = 0
-    for module in qsim.model.modules():
-        if isinstance(module, BaseQuantizationMixin):
-            assert module == module_list[i]
-        i+=1
+    assert module_list == list(qsim.model.modules())
     
     # Ensures that permanent removal of quantizers works
-    remove_activation_quantizers(module_list)
+    remove_activation_quantizers(qsim.model)
     for module in qsim.model.modules():
         if isinstance(module, BaseQuantizationMixin):
             assert all(quant is None for quant in module.input_quantizers)
@@ -298,20 +290,16 @@ def test_remove_param_quantizers():
         module_list.append(module)
     
     # Ensures that temporary removal of quantizers works
-    with remove_param_quantizers(module_list):
+    with remove_param_quantizers(qsim.model):
         for module in qsim.model.modules():
             if isinstance(module, BaseQuantizationMixin):
                 assert all(value is None for value in module.param_quantizers.values())
     
     # Ensures that quantizers are restored properly
-    i = 0
-    for module in qsim.model.modules():
-        if isinstance(module, BaseQuantizationMixin):
-            assert module == module_list[i]
-        i+=1
+    assert module_list == list(qsim.model.modules())
     
     # Ensures that permanent removal of quantizers works
-    remove_param_quantizers(module_list)
+    remove_param_quantizers(qsim.model)
     for module in qsim.model.modules():
         if isinstance(module, BaseQuantizationMixin):
             assert all(value is None for value in module.param_quantizers.values())
@@ -326,21 +314,16 @@ def test_remove_input_quantizers():
         module_list.append(module)
     
     # Ensures that temporary removal of quantizers works
-    with remove_input_quantizers(module_list):
+    with remove_input_quantizers(qsim.model):
         for module in qsim.model.modules():
             if isinstance(module, BaseQuantizationMixin):
                 assert all(quant is None for quant in module.input_quantizers)
     
-    
     # Ensures that quantizers are restored properly
-    i = 0
-    for module in qsim.model.modules():
-        if isinstance(module, BaseQuantizationMixin):
-            assert module == module_list[i]
-        i+=1
+    assert module_list == list(qsim.model.modules())
     
     # Ensures that permanent removal of quantizers works
-    remove_input_quantizers(module_list)
+    remove_input_quantizers(qsim.model)
     for module in qsim.model.modules():
         if isinstance(module, BaseQuantizationMixin):
             assert all(quant is None for quant in module.input_quantizers)
@@ -355,21 +338,17 @@ def test_remove_output_quantizers():
         module_list.append(module)
     
     # Ensures that temporary removal of quantizers works
-    with remove_output_quantizers(module_list):
+    with remove_output_quantizers(qsim.model):
         for module in qsim.model.modules():
             if isinstance(module, BaseQuantizationMixin):
                 assert all(quant is None for quant in module.output_quantizers)
     
     
     # Ensures that quantizers are restored properly
-    i = 0
-    for module in qsim.model.modules():
-        if isinstance(module, BaseQuantizationMixin):
-            assert module == module_list[i]
-        i+=1
+    assert module_list == list(qsim.model.modules())
     
     # Ensures that permanent removal of quantizers works
-    remove_output_quantizers(module_list)
+    remove_output_quantizers(qsim.model)
     for module in qsim.model.modules():
         if isinstance(module, BaseQuantizationMixin):
             assert all(quant is None for quant in module.output_quantizers)

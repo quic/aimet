@@ -270,20 +270,22 @@ def flatten_nn_module_list(module):
     return list(flat_iter(module))
 
 
-def _remove_quantizers(modules, func_name: str):
+def _map_qmodule(modules, func):
     # pylint: disable=import-outside-toplevel
     # pylint: disable=protected-access
     from aimet_torch.v2.nn import BaseQuantizationMixin
     contexts = []
     ctx = _ContextManager(action=lambda: None, cleanup=lambda:[context._cleanup() for context in contexts])
 
+    if isinstance(modules, torch.nn.Module):
+        modules = [modules]
+
     try:
-        if isinstance(modules, BaseQuantizationMixin):
-            modules = [modules]
-        for module in modules:
-            if isinstance(module, BaseQuantizationMixin):
-                context = getattr(module, func_name)
-                contexts.append(context())
+        for module_elem in modules:
+            for module in module_elem.modules():
+                if isinstance(module, BaseQuantizationMixin):
+                    context = func(module)
+                    contexts.append(context)
     except Exception:
         ctx._cleanup()
         raise
@@ -294,20 +296,23 @@ def remove_input_quantizers(modules):
     '''
     Removes input quantizers for the modules provided
     '''
-    return _remove_quantizers(modules, '_remove_input_quantizers')
+    # pylint: disable=protected-access
+    return _map_qmodule(modules, lambda qmodule: qmodule._remove_input_quantizers())
 
 def remove_output_quantizers(modules):
     '''
     Removes output quantizers for the modules provided
     '''
-    return _remove_quantizers(modules, '_remove_output_quantizers')
+    # pylint: disable=protected-access
+    return _map_qmodule(modules, lambda qmodule: qmodule._remove_output_quantizers())
 
 
 def remove_param_quantizers(modules):
     '''
     Removes parameter quantizers for the modules provided
     '''
-    return _remove_quantizers(modules, '_remove_param_quantizers')
+    # pylint: disable=protected-access
+    return _map_qmodule(modules, lambda qmodule: qmodule._remove_param_quantizers())
 
 def remove_activation_quantizers(modules):
     '''
