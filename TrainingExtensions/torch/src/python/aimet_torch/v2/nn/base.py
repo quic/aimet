@@ -44,21 +44,8 @@ from typing import Type, List, Dict, Union, Iterable, Mapping, Optional
 import torch.nn as nn
 
 from aimet_torch.v2.quantization.base import QuantizerBase
-from aimet_torch.v2.utils import patch_attr, _ContextManager
+from aimet_torch.v2.utils import patch_attr, _ContextManager, flatten_nn_module_list
 
-
-def _flatten_nn_module_list(module):
-    """
-    Flatten nested list of nn.Modules into a flat list
-    """
-    def flat_iter(mod):
-        if isinstance(mod, (list, tuple, nn.ModuleList)):
-            for x in mod:
-                yield from flat_iter(x)
-        else:
-            yield mod
-
-    return list(flat_iter(module))
 
 
 class BaseQuantizationMixin(abc.ABC):
@@ -171,8 +158,8 @@ class BaseQuantizationMixin(abc.ABC):
             return inp
 
         with contextlib.ExitStack() as stack:
-            input_quantizers = _flatten_nn_module_list(self.input_quantizers)
-            output_quantizers = _flatten_nn_module_list(self.output_quantizers)
+            input_quantizers = flatten_nn_module_list(self.input_quantizers)
+            output_quantizers = flatten_nn_module_list(self.output_quantizers)
 
             for quantizer in itertools.chain(input_quantizers, output_quantizers):
                 if not isinstance(quantizer, QuantizerBase):
@@ -245,7 +232,7 @@ class BaseQuantizationMixin(abc.ABC):
         """
         return [
             quantizer.get_legacy_encodings() if isinstance(quantizer, QuantizerBase) else None
-            for quantizer in _flatten_nn_module_list(self.input_quantizers)
+            for quantizer in flatten_nn_module_list(self.input_quantizers)
         ]
 
     def import_input_encodings(self,
@@ -295,7 +282,7 @@ class BaseQuantizationMixin(abc.ABC):
         """
         return [
             quantizer.get_legacy_encodings() if isinstance(quantizer, QuantizerBase) else None
-            for quantizer in _flatten_nn_module_list(self.output_quantizers)
+            for quantizer in flatten_nn_module_list(self.output_quantizers)
         ]
 
     def import_output_encodings(self,

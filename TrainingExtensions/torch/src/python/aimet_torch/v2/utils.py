@@ -255,3 +255,16 @@ def allow_recompute(fn):
             return torch.utils.checkpoint.checkpoint(fn, *args, use_reentrant=False, **kwargs)
         return fn(*args, **kwargs)
     return wrapper
+
+def flatten_nn_module_list(module):
+    """
+    Flatten nested list of nn.Modules into a flat list
+    """
+    def flat_iter(mod):
+        if isinstance(mod, (list, tuple, torch.nn.ModuleList)):
+            for x in mod:
+                yield from flat_iter(x)
+        else:
+            yield mod
+
+    return list(flat_iter(module))

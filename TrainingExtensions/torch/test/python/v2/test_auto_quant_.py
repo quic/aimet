@@ -45,6 +45,7 @@ import pytest
 import shutil
 from typing import Callable
 import torch
+from .models_ import test_models
 from torch.utils.data import Dataset, DataLoader
 
 from aimet_torch import utils
@@ -107,8 +108,7 @@ def dummy_input():
     return torch.randn((1, 3, 8, 8))
 
 
-@pytest.fixture(scope="session")
-def unlabeled_data_loader(dummy_input):
+def _unlabeled_data_loader(dummy_input):
     class MyDataset(Dataset):
         def __init__(self, data):
             self.data = data
@@ -121,6 +121,10 @@ def unlabeled_data_loader(dummy_input):
 
     dataset = MyDataset([dummy_input[0, :] for _ in range(10)])
     return DataLoader(dataset)
+
+@pytest.fixture(scope="session")
+def unlabeled_data_loader(dummy_input):
+    return _unlabeled_data_loader(dummy_input)
 
 
 def assert_html(html_parsed, properties):
@@ -848,6 +852,22 @@ class TestAutoQuant:
                 assert adaround_params == actual_adaround_params
             finally:
                 setattr(QuantizationSimModel, "export", export)
+
+    def test_auto_quant_nested_input_quantizers(self):
+        dummy_input = torch.randn(2, 10)
+        data_loader = _unlabeled_data_loader(dummy_input)
+
+        model = test_models.LinearAndLSTMModel()
+
+        auto_quant = AutoQuant(model,
+                               dummy_input,
+                               data_loader,
+                               lambda *args: 1.0)
+
+        sim = QuantizationSimModel(model, dummy_input)
+        qs = QuantScheme.post_training_tf
+        auto_quant._configure_quantsim(sim, 32, qs, None, 32, qs, None, None)
+        sim.model(dummy_input)
 
 
 @contextlib.contextmanager

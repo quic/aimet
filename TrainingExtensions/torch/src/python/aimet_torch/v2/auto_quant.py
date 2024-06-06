@@ -38,6 +38,7 @@
 
 import functools
 import itertools
+import torch
 
 import aimet_torch.v2.quantization as Q
 from aimet_torch.auto_quant import AutoQuantBase, _logger, cache # pylint: disable=unused-import
@@ -45,6 +46,7 @@ from aimet_torch.v2.adaround import Adaround, AdaroundParameters
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.nn import BaseQuantizationMixin
 from aimet_torch.v2.quantization import encoding_analyzer
+from aimet_torch.v2.utils import flatten_nn_module_list
 from aimet_common.defs import QuantScheme
 
 # The number of samples to be used for performance evaluation.
@@ -108,7 +110,8 @@ class AutoQuant(AutoQuantBase): # pylint: disable=too-many-instance-attributes
         for module in sim.model.modules():
             if isinstance(module, BaseQuantizationMixin):
                 # Set input/output quantizers' quant schemes
-                for quantizer in itertools.chain(module.input_quantizers, module.output_quantizers):
+                for quantizer in itertools.chain(flatten_nn_module_list(module.input_quantizers),
+                                                 flatten_nn_module_list(module.output_quantizers)):
                     self._set_quantizer_qscheme(quantizer, output_quant_scheme, output_percentile)
 
                 # Set param quantizers' quant schemes
@@ -154,12 +157,17 @@ class AutoQuant(AutoQuantBase): # pylint: disable=too-many-instance-attributes
 
     @staticmethod
     def _disable_activation_quantizers(sim):
+        def recursive_disable_quantizers(quantizer_list):
+            for idx, quantizer in enumerate(quantizer_list):
+                if isinstance(quantizer, (list, tuple, torch.nn.ModuleList)):
+                    recursive_disable_quantizers(quantizer)
+                else:
+                    quantizer_list[idx] = None
+
         for module in sim.model.modules():
             if isinstance(module, BaseQuantizationMixin):
-                for idx in range(len(module.input_quantizers)):
-                    module.input_quantizers[idx] = None
-                for idx in range(len(module.output_quantizers)):
-                    module.output_quantizers[idx] = None
+                recursive_disable_quantizers(module.input_quantizers)
+                recursive_disable_quantizers(module.output_quantizers)
 
     @staticmethod
     def _disable_param_quantizers(sim):
