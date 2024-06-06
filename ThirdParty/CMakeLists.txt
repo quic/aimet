@@ -39,12 +39,16 @@
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
 include(FetchContent)
 
-if (DEFINED ENV{DEPENDENCY_DATA_PATH})
-    message(STATUS "Unzip local copy...")
-    file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/ThirdParty/google)
-    execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf $ENV{DEPENDENCY_DATA_PATH}/googletest.zip
-                    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/ThirdParty/google)
+find_program(GOOGLETEST_EXE googletest
+             PATHS ${CMAKE_CURRENT_SOURCE_DIR}/google)
+if (GOOGLETEST_EXE)
+    message(STATUS "Found googletest in '${GOOGLETEST_EXE}'")
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/google EXCLUDE_FROM_ALL)
+elseif (EXISTS $ENV{DEPENDENCY_DATA_PATH}/googletest.zip)
+    message(STATUS "Setting up googletest from internal cache")
+    file(ARCHIVE_EXTRACT INPUT $ENV{DEPENDENCY_DATA_PATH}/googletest.zip
+    DESTINATION ${CMAKE_BINARY_DIR}/_deps/googletest-src/)
+    add_subdirectory(${CMAKE_BINARY_DIR}/_deps/googletest-src/googletest-release-1.12.1 ${CMAKE_BINARY_DIR}/_deps/googletest-src/googletest-release-1.12.1 EXCLUDE_FROM_ALL)
 else ()
     message(STATUS "WARNING.! fetching googletest from external source")
     FetchContent_Declare(

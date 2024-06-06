@@ -301,6 +301,11 @@ find_program(PATCHELF_EXE patchelf
              PATHS ${CMAKE_BINARY_DIR}/_deps/patchelf-src/bin)
 if (PATCHELF_EXE)
     message(STATUS "Found patchelf in '${PATCHELF_EXE}'")
+elseif (EXISTS $ENV{DEPENDENCY_DATA_PATH}/patchelf.tar.gz)
+    message(STATUS "Setting up patchelf from internal cache")
+    file(ARCHIVE_EXTRACT INPUT $ENV{DEPENDENCY_DATA_PATH}/patchelf.tar.gz
+    DESTINATION ${CMAKE_BINARY_DIR}/_deps/patchelf-src/)
+    set(PATCHELF_EXE ${CMAKE_BINARY_DIR}/_deps/patchelf-src/bin/patchelf)
 else()
     # FIXME
     # Better to include patchefl into docker image, although seems it is not trivial
