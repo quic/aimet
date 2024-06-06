@@ -67,8 +67,8 @@ class SequentialMse(V1SequentialMse):
 
         :param sim: Quant sim
         """
-        for _, quant_wrapper in sim.quant_wrappers():
-            quant_wrapper._compute_param_encodings(overwrite=True) # pylint: disable=protected-access
+        for _, qmodule in sim.named_qmodules():
+            qmodule._compute_param_encodings(overwrite=True) # pylint: disable=protected-access
 
     @staticmethod
     @contextlib.contextmanager
@@ -93,32 +93,32 @@ class SequentialMse(V1SequentialMse):
         original_input_quantizers = {}
         original_output_quantizers = {}
         original_param_quantizers = {}
-        for name, quant_wrapper in sim.quant_wrappers():
-            original_input_quantizers[name] = quant_wrapper.input_quantizers
-            original_output_quantizers[name] = quant_wrapper.output_quantizers
-            quant_wrapper.input_quantizers = nn.ModuleList([None for _ in quant_wrapper.input_quantizers])
-            quant_wrapper.output_quantizers = nn.ModuleList([None for _ in quant_wrapper.output_quantizers])
+        for name, qmodule in sim.named_qmodules():
+            original_input_quantizers[name] = qmodule.input_quantizers
+            original_output_quantizers[name] = qmodule.output_quantizers
+            qmodule.input_quantizers = nn.ModuleList([None for _ in qmodule.input_quantizers])
+            qmodule.output_quantizers = nn.ModuleList([None for _ in qmodule.output_quantizers])
 
-            if not isinstance(quant_wrapper, SUPPORTED_MODULES):
-                original_param_quantizers[name] = quant_wrapper.param_quantizers
-                quant_wrapper.param_quantizers = nn.ModuleDict({key: None for key in quant_wrapper.param_quantizers.keys()})
+            if not isinstance(qmodule, SUPPORTED_MODULES):
+                original_param_quantizers[name] = qmodule.param_quantizers
+                qmodule.param_quantizers = nn.ModuleDict({key: None for key in qmodule.param_quantizers.keys()})
 
             # disable param quantizers from exclusion list
             if modules_to_exclude:
                 with contextlib.suppress(KeyError):
                     fp32_module = name_to_fp32_module_dict[name]
                     if fp32_module in modules_to_exclude:
-                        original_param_quantizers[name] = quant_wrapper.param_quantizers
-                        quant_wrapper.param_quantizers = nn.ModuleDict({key: None for key in quant_wrapper.param_quantizers.keys()})
+                        original_param_quantizers[name] = qmodule.param_quantizers
+                        qmodule.param_quantizers = nn.ModuleDict({key: None for key in qmodule.param_quantizers.keys()})
 
         yield
 
-        for name, quant_wrapper in sim.quant_wrappers():
-            quant_wrapper.input_quantizers = original_input_quantizers[name]
-            quant_wrapper.output_quantizers = original_output_quantizers[name]
+        for name, qmodule in sim.named_qmodules():
+            qmodule.input_quantizers = original_input_quantizers[name]
+            qmodule.output_quantizers = original_output_quantizers[name]
 
             if name in original_param_quantizers:
-                quant_wrapper.param_quantizers = original_param_quantizers[name]
+                qmodule.param_quantizers = original_param_quantizers[name]
 
     @staticmethod
     def compute_param_encodings(quantizer: QuantizerBase,

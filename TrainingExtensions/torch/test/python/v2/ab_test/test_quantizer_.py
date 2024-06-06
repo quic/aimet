@@ -2189,8 +2189,8 @@ class TestQuantizationSimStaticGrad:
 
         sim = QuantizationSimModel(model, dummy_input=dummy_input,
                                    quant_scheme=QuantScheme.post_training_tf)
-        for _, wrapper in sim.quant_wrappers():
-            wrapper.enable_per_channel_quantization()
+        for _, qmodule in sim.named_qmodules():
+            qmodule.enable_per_channel_quantization()
 
         # Quantize
         sim.compute_encodings(forward_pass, None)
@@ -2276,8 +2276,8 @@ class TestQuantizationSimStaticGrad:
 
         model = SmallMnist()
         sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=quant_scheme)
-        for _, wrapper in sim.quant_wrappers():
-            wrapper.enable_per_channel_quantization()
+        for _, qmodule in sim.named_qmodules():
+            qmodule.enable_per_channel_quantization()
 
         # Quantize
         sim.compute_encodings(forward_pass, None)
@@ -2556,20 +2556,20 @@ class TestQuantizationSimStaticGrad:
             input_quant_checked = []
             output_quant_checked = []
             param_quant_checked = []
-            for name, quant in qsim.quant_wrappers():
+            for name, qmodule in qsim.named_qmodules():
                 if name in partial_torch_encodings['activation_encodings']:
                     if 'input' in partial_torch_encodings['activation_encodings'][name]:
-                        assert_input_output_quantizers(quant.input_quantizers, 'input')
+                        assert_input_output_quantizers(qmodule.input_quantizers, 'input')
                         input_quant_checked.append(name)
                     if 'output' in partial_torch_encodings['activation_encodings'][name]:
-                        assert_input_output_quantizers(quant.output_quantizers, 'output')
+                        assert_input_output_quantizers(qmodule.output_quantizers, 'output')
                         output_quant_checked.append(name)
 
-                param_types = quant.param_quantizers.keys()
+                param_types = qmodule.param_quantizers.keys()
                 for param_type in param_types:
                     module_param_name = name + "." + param_type
                     if module_param_name in partial_torch_encodings['param_encodings']:
-                        assert_param_quantizers(quant.param_quantizers, name, param_type)
+                        assert_param_quantizers(qmodule.param_quantizers, name, param_type)
                         param_quant_checked.append(module_param_name)
 
             actual_input_quant = {k for k, v in partial_torch_encodings['activation_encodings'].items() if 'input' in v}

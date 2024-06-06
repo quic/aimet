@@ -53,6 +53,7 @@ from aimet_torch.v2.quantization.affine import AffineQuantizerBase
 from aimet_torch.v2.quantization.encoding_analyzer import PercentileEncodingAnalyzer
 from aimet_torch.v2.utils import patch_attr
 from aimet_torch import utils
+from aimet_torch.utils import deprecated
 
 
 qc_quantize_modules_dict = {
@@ -230,3 +231,7 @@ class QuantizationSimModel(V1QuantizationSimModel):
     @staticmethod
     def _replace_quantization_wrapper_with_native_torch_quantization_nodes(quant_sim_model, device: torch.device):
         raise NotImplementedError()
+
+    @deprecated(f'Use {V1QuantizationSimModel.named_qmodules.__qualname__} instead.')
+    def quant_wrappers(self): # pylint: disable=missing-docstring
+        return super().quant_wrappers()
