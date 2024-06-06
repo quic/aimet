@@ -283,10 +283,11 @@ def docstring(doc: str):
 
 
 def _remove_quantizers(modules, func_name: str):
+    # pylint: disable=import-outside-toplevel
     # pylint: disable=protected-access
     from aimet_torch.v2.nn import BaseQuantizationMixin
     contexts = []
-    ctx = _ContextManager(action=lambda: None, cleanup=[ctx._cleanup() for ctx in contexts])
+    ctx = _ContextManager(action=lambda: None, cleanup=lambda:[context._cleanup() for context in contexts])
 
     try:
         if isinstance(modules, BaseQuantizationMixin):
@@ -294,7 +295,7 @@ def _remove_quantizers(modules, func_name: str):
         for module in modules:
             if isinstance(module, BaseQuantizationMixin):
                 context = getattr(module, func_name)
-                contexts.append(context)
+                contexts.append(context())
     except Exception:
         ctx._cleanup()
         raise
