@@ -60,8 +60,7 @@ TensorQuantizationSimForPython::TensorQuantizationSimForPython()
 py::array_t<float> TensorQuantizationSimForPython::quantizeDequantize(py::array_t<float> input,
                                                                       DlQuantization::TfEncoding& encoding,
                                                                       DlQuantization::RoundingMode roundingMode,
-                                                                      unsigned int bitwidth,
-                                                                      bool use_cuda)
+                                                                      unsigned int bitwidth, bool use_cuda)
 {
     auto npArr        = input.mutable_unchecked<>();
     auto inputDataPtr = (float*) npArr.mutable_data();
@@ -73,11 +72,10 @@ py::array_t<float> TensorQuantizationSimForPython::quantizeDequantize(py::array_
 
     size_t inputTensorSize = npArr.size();
 
-    _tensorQuantizationSim->quantizeDequantizeTensor(inputDataPtr, inputTensorSize, outputDataPtr,
-                                                     encoding.min, encoding.max, bitwidth, roundingMode,
-                                                     use_cuda, nullptr);
+    _tensorQuantizationSim->quantizeDequantizeTensor(inputDataPtr, inputTensorSize, outputDataPtr, encoding.min,
+                                                     encoding.max, bitwidth, roundingMode, use_cuda, nullptr);
 
     return output;
 }
 
-}
+}   // namespace DlQuantization

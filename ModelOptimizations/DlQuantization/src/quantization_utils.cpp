@@ -67,9 +67,9 @@ TfEncoding getComputedEncodings(uint8_t bw, double min, double max, bool useSymm
     }
     encoding.bw = bw;
 
-    //To handle the cases where the min/max can be infinite values
+    // To handle the cases where the min/max can be infinite values
     if (isinf(min) != 0)
-       min = std::numeric_limits<float>::lowest();
+        min = std::numeric_limits<float>::lowest();
 
     if (isinf(max) != 0)
         max = std::numeric_limits<float>::max();
@@ -116,7 +116,8 @@ TfEncoding getComputedEncodings(uint8_t bw, double min, double max, bool useSymm
         }
 
         // Check that the recalculated min/max should be in range of float
-        if (encoding.delta * encoding.offset >= std::numeric_limits<float>::lowest() && encoding.delta * encoding.offset <= std::numeric_limits<float>::max())
+        if (encoding.delta * encoding.offset >= std::numeric_limits<float>::lowest() &&
+            encoding.delta * encoding.offset <= std::numeric_limits<float>::max())
         {
             // Calculate 'min' and 'max' based on 'delta' and 'offset'.
             // Note this min and max can vary from the one in 'stats'. This min and max

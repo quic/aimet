@@ -106,4 +106,4 @@ void BnBasedBiasCorrectionForPython::correctBias(AimetEqualization::TensorParamF
     bnParams.gamma  = (float*) npArrGamma.mutable_data(0);
     BnBasedBiasCorrection::correctBias(bias, quantizedWeights, weights, bnParams, activationPython);
 }
-}
+}   // namespace AimetEqualization

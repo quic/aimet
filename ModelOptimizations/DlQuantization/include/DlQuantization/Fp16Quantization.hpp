@@ -43,14 +43,14 @@
 
 namespace DlQuantization
 {
-    /*
-     * This function can be used for quantization and dequantization of float tensors
-     * @param in pointer to the input tensor
-     * @param cnt total size of input tensor
-     * @param out pointer to the output tensor
-     */
-    void quantizeDequantizeFp16Gpu(const float* in, int cnt, float* out, void* stream = nullptr);
+/*
+ * This function can be used for quantization and dequantization of float tensors
+ * @param in pointer to the input tensor
+ * @param cnt total size of input tensor
+ * @param out pointer to the output tensor
+ */
+void quantizeDequantizeFp16Gpu(const float* in, int cnt, float* out, void* stream = nullptr);
 
-}
+}   // namespace DlQuantization
 
 #endif

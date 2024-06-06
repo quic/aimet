@@ -61,7 +61,6 @@ enum ComputationMode
 class IAllocator
 {
 public:
-
     /**
      * @brief Allocate memory to the associated device and return the pointer.
      * @param bytes Bytes to allocate
@@ -72,7 +71,7 @@ public:
      * @brief Deallocate the memory occupied by the pointer.
      * @param ptr Pointer to deallocate.
      */
-    virtual void deleteRaw(void *ptr) = 0;
+    virtual void deleteRaw(void* ptr) = 0;
 };
 
 
@@ -117,7 +116,6 @@ struct TfEncoding
     double delta;
     double offset;
     int bw;
-
 };
 
 /**

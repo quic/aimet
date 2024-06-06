@@ -136,4 +136,4 @@ AimetEqualization::RescalingParams* ScaleFactorCalculator::ForDepthWiseSeparable
     return reScalingMats;
 }
 
-}
+}   // namespace AimetEqualization

@@ -45,15 +45,15 @@
 #define EIGEN_USE_THREADS
 
 // below forward declaration is done to remove the dependency of "cast_op_impl.h" for TF1.15
-namespace tensorflow {
-typedef std::function<void(OpKernelContext*, const Tensor&, Tensor*,
-                           bool trunc)> CastFunctorType;
+namespace tensorflow
+{
+typedef std::function<void(OpKernelContext*, const Tensor&, Tensor*, bool trunc)> CastFunctorType;
 
 CastFunctorType GetCpuCastFromFloat(DataType dst_dtype);
 CastFunctorType GetCpuCastFromHalf(DataType dst_dtype);
 CastFunctorType GetGpuCastFromHalf(DataType dst_dtype);
 CastFunctorType GetGpuCastFromFloat(DataType dst_dtype);
-}
+}   // namespace tensorflow
 
 template <typename Device>
 class QuantizeDequantizeFp16Functor
@@ -66,13 +66,13 @@ class QuantizeDequantizeFp16Functor
 };
 
 template <>
-class QuantizeDequantizeFp16Functor <CPUDevice>
+class QuantizeDequantizeFp16Functor<CPUDevice>
 {
     // truncate, if set to true would truncate the inputs before casting to fp16. If set to true, tensorflow backend
     // calls LSBZeroSetter which does the truncate operation
     bool _truncate = false;
 
-    public:
+public:
     void operator()(OpKernelContext* context, const Tensor& inTensor, Tensor* outTensor)
     {
         Tensor tempTensorFp16;
@@ -85,17 +85,16 @@ class QuantizeDequantizeFp16Functor <CPUDevice>
 
 #ifdef GOOGLE_CUDA
 template <>
-class QuantizeDequantizeFp16Functor <GPUDevice>
+class QuantizeDequantizeFp16Functor<GPUDevice>
 {
-    public:
+public:
     void operator()(OpKernelContext* context, const Tensor& inTensor, Tensor* outTensor)
     {
-        DlQuantization::quantizeDequantizeFp16Gpu(inTensor.flat<float>().data(),
-                                                  inTensor.NumElements(),
+        DlQuantization::quantizeDequantizeFp16Gpu(inTensor.flat<float>().data(), inTensor.NumElements(),
                                                   outTensor->flat<float>().data());
     }
 };
-#endif // GOOGLE_CUDA
+#endif   // GOOGLE_CUDA
 
 template <typename D, typename T>
 void modeSpecificActionFp16(OpKernelContext* context, const Tensor& inTensor, const uint64* tensorQuantizerRef,
@@ -120,14 +119,14 @@ void modeSpecificActionFp16(OpKernelContext* context, const Tensor& inTensor, co
     }
     case DlQuantization::TensorQuantizerOpMode::updateStats:
     {
-        copyInputTensorsToOutputTensors(context->eigen_device<D>(), inTensor.flat<T>().data(),
-                                            inTensor.NumElements(), outTensor->flat<T>().data());
+        copyInputTensorsToOutputTensors(context->eigen_device<D>(), inTensor.flat<T>().data(), inTensor.NumElements(),
+                                        outTensor->flat<T>().data());
         break;
     }
     case DlQuantization::TensorQuantizerOpMode::passThrough:
     {
-        copyInputTensorsToOutputTensors(context->eigen_device<D>(), inTensor.flat<T>().data(),
-                                            inTensor.NumElements(), outTensor->flat<T>().data());
+        copyInputTensorsToOutputTensors(context->eigen_device<D>(), inTensor.flat<T>().data(), inTensor.NumElements(),
+                                        outTensor->flat<T>().data());
         break;
     }
     default:

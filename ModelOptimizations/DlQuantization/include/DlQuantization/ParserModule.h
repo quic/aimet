@@ -41,12 +41,12 @@
 
 #include <bits/stdc++.h>
 
+#include "pugixml.hpp"
 #include <algorithm>
 #include <cstring>
 #include <iostream>
 #include <list>
 #include <map>
-#include "pugixml.hpp"
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -56,110 +56,117 @@
 
 size_t isSubstring(std::string shortString, std::string longString);
 
-std::string transformLower(const std::string &opName);
+std::string transformLower(const std::string& opName);
 
-QnnDatatype_t strToDtype(const std::string &dtype);
+QnnDatatype_t strToDtype(const std::string& dtype);
 
-QnnRank_t strToRank(const std::string &rank);
+QnnRank_t strToRank(const std::string& rank);
 
-class ConstraintType {
+class ConstraintType
+{
 public:
-    std::list <QnnDatatype_t> m_dtypeListConstraint;
+    std::list<QnnDatatype_t> m_dtypeListConstraint;
     QnnRank_t m_rankConstraint;
 };
 
-class Constraint {
+class Constraint
+{
 public:
-    virtual ConstraintType getConstraint() { return {}; }
-
+    virtual ConstraintType getConstraint()
+    {
+        return {};
+    }
 };
 
-class DatatypeConstraint : public Constraint {
+class DatatypeConstraint : public Constraint
+{
 public:
-    std::list <QnnDatatype_t> m_datatypes;
+    std::list<QnnDatatype_t> m_datatypes;
 
     ConstraintType getConstraint() override;
-
 };
 
-class RankConstraint : public Constraint {
+class RankConstraint : public Constraint
+{
 public:
-    QnnRank_t m_rank{};
+    QnnRank_t m_rank {};
 
     ConstraintType getConstraint() override;
-
 };
 
-class Attribute {
+class Attribute
+{
 public:
-    bool m_mandatory{};
+    bool m_mandatory {};
     RankConstraint m_rankConstraint;
     DatatypeConstraint m_datatypeConstraint;
-    bool m_multiFlag{};
+    bool m_multiFlag {};
 
     [[nodiscard]] bool isMandatory() const;
 };
 
-class OpConstraints {
+class OpConstraints
+{
 public:
     std::string m_opName;
-    std::vector <Attribute> m_inputs;
-    std::vector <Attribute> m_outputs;
-    std::map <std::string, Attribute> m_parameters;
+    std::vector<Attribute> m_inputs;
+    std::vector<Attribute> m_outputs;
+    std::map<std::string, Attribute> m_parameters;
     int m_filterIndex;
 
-    void setIO(std::vector <Attribute> opInputs, std::vector <Attribute> opOutputs);
+    void setIO(std::vector<Attribute> opInputs, std::vector<Attribute> opOutputs);
 
-    void setParam(std::map <std::string, Attribute> opParams);
+    void setParam(std::map<std::string, Attribute> opParams);
 };
 
-class OpDefParser {
+class OpDefParser
+{
 public:
     pugi::xml_node m_masterNode;
     pugi::xml_node m_backendNode;
 
-    [[nodiscard]] std::list <QnnDatatype_t> extractDtypeIp(const std::string &ipName) const;
+    [[nodiscard]] std::list<QnnDatatype_t> extractDtypeIp(const std::string& ipName) const;
 
-    [[nodiscard]] std::list <QnnDatatype_t> extractDtypeOut(const std::string &outName) const;
+    [[nodiscard]] std::list<QnnDatatype_t> extractDtypeOut(const std::string& outName) const;
 
-    [[nodiscard]] std::list <QnnDatatype_t> extractDtypeParam(const std::string &paramName) const;
+    [[nodiscard]] std::list<QnnDatatype_t> extractDtypeParam(const std::string& paramName) const;
 
-    void parseIO(OpConstraints *constraints) const;
+    void parseIO(OpConstraints* constraints) const;
 
-    void parseParams(OpConstraints *constraints) const;
+    void parseParams(OpConstraints* constraints) const;
 };
 
-class ModelOpDefParser {
+class ModelOpDefParser
+{
 public:
-    std::list <std::string> m_opList;
-    std::string m_masterPath{};
-    std::string m_backendPath{};
-    std::map <std::string, OpConstraints> m_modelOpConstraints;
+    std::list<std::string> m_opList;
+    std::string m_masterPath {};
+    std::string m_backendPath {};
+    std::map<std::string, OpConstraints> m_modelOpConstraints;
 
     void populate();
 
-    ModelOpDefParser(std::string mPath, std::string bPath, std::list <std::string> opList);
+    ModelOpDefParser(std::string mPath, std::string bPath, std::list<std::string> opList);
 
-    int getFiltersIndex(const std::string &opName);
+    int getFiltersIndex(const std::string& opName);
 
-    std::map<std::string, int> getSize(const std::string &opName);
+    std::map<std::string, int> getSize(const std::string& opName);
 
-    std::list <QnnDatatype_t> getInputDataType(const std::string &opName, int attribNum);
+    std::list<QnnDatatype_t> getInputDataType(const std::string& opName, int attribNum);
 
-    std::list <QnnDatatype_t> getOutputDataType(const std::string &opName, int attribNum);
+    std::list<QnnDatatype_t> getOutputDataType(const std::string& opName, int attribNum);
 
-    std::list <QnnDatatype_t> getParamDataType(const std::string &opName,
-                                               const std::string &attribName);
+    std::list<QnnDatatype_t> getParamDataType(const std::string& opName, const std::string& attribName);
 
-    QnnRank_t getInputRank(const std::string &opName, int attribNum);
+    QnnRank_t getInputRank(const std::string& opName, int attribNum);
 
-    QnnRank_t getOutputRank(const std::string &opName, int attribNum);
+    QnnRank_t getOutputRank(const std::string& opName, int attribNum);
 
-    QnnRank_t getParamRank(const std::string &opName, const std::string &attribName);
+    QnnRank_t getParamRank(const std::string& opName, const std::string& attribName);
 
-    bool getInputMultiFlag(const std::string &opName, int attribNum);
+    bool getInputMultiFlag(const std::string& opName, int attribNum);
 
-    bool getOutputMultiFlag(const std::string &opName, int attribNum);
+    bool getOutputMultiFlag(const std::string& opName, int attribNum);
 };
 
-#endif  // PYBINDEX_PARSERMODULE_H
+#endif   // PYBINDEX_PARSERMODULE_H

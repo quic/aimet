@@ -60,7 +60,7 @@ void sliceTensorAlongAxis(const T* inTensor, std::vector<int64_t>& dims, size_t 
                           bool useCuda)
 {
     uint64_t copyWidth = 1;
-    uint64_t iter       = 1;
+    uint64_t iter      = 1;
     for (int i = 0; i < dims.size(); i++)
     {
         if (i < axis)

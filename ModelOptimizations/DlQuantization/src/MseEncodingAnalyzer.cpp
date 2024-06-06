@@ -60,7 +60,7 @@ std::vector<std::tuple<double, double>> MseEncodingAnalyzer<DTYPE>::getStatsHist
 
 template <typename DTYPE>
 void MseEncodingAnalyzer<DTYPE>::updateStats(const DTYPE* tensor, const size_t tensorSize,
-                                                    ComputationMode tensorCpuGpuMode)
+                                             ComputationMode tensorCpuGpuMode)
 {
     updateStats(tensor, tensorSize, tensorCpuGpuMode, nullptr);
 }
@@ -68,8 +68,7 @@ void MseEncodingAnalyzer<DTYPE>::updateStats(const DTYPE* tensor, const size_t t
 
 template <typename DTYPE>
 void MseEncodingAnalyzer<DTYPE>::updateStats(const DTYPE* tensor, const size_t tensorSize,
-                                                    ComputationMode tensorCpuGpuMode,
-                                                    IAllocator* allocator)
+                                             ComputationMode tensorCpuGpuMode, IAllocator* allocator)
 {
     this->_statsUpdated = true;
 
@@ -269,4 +268,4 @@ template class MseEncodingAnalyzer<double>;
 
 template class MseEncodingAnalyzer<float>;
 
-}   // namespace DlQuantization 
+}   // namespace DlQuantization

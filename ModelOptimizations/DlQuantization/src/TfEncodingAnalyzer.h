@@ -53,8 +53,8 @@ class TfEncodingAnalyzer : public IQuantizationEncodingAnalyzer<DTYPE>
 public:
     void updateStats(const DTYPE* tensor, const size_t tensorSize, ComputationMode tensorCpuGpuMode) override;
 
-    void updateStats(const DTYPE* tensor, const size_t tensorSize,
-                     ComputationMode tensorCpuGpuMode, IAllocator* allocator) override;
+    void updateStats(const DTYPE* tensor, const size_t tensorSize, ComputationMode tensorCpuGpuMode,
+                     IAllocator* allocator) override;
 
     /**
      * @brief Given a number distribution in CPU memory, compute the TensorFlow
@@ -65,8 +65,8 @@ public:
      * In this cost function, saturation errors are weighted higher than
      * quantization errors.
      */
-    TfEncoding computeEncoding(uint8_t bw, bool useSymmetricEncodings,
-                               bool useStrictSymmetric, bool useUnsignedSymmetric) const override;
+    TfEncoding computeEncoding(uint8_t bw, bool useSymmetricEncodings, bool useStrictSymmetric,
+                               bool useUnsignedSymmetric) const override;
 
     /**
      * @brief Returns a histogram that represents a PDF of tensor values seen by this encoding analyzer so far

@@ -41,12 +41,13 @@ namespace DlQuantization
 {
 
 PyTensorQuantizer::PyTensorQuantizer(QuantizationMode quantScheme, RoundingMode roundingMode) :
-    TensorQuantizer(quantScheme, roundingMode){}
+    TensorQuantizer(quantScheme, roundingMode)
+{
+}
 
 void PyTensorQuantizer::updateStats(py::array_t<float> tensor, bool useCuda)
 {
-
-    auto npArr        = tensor.mutable_unchecked();
+    auto npArr = tensor.mutable_unchecked();
 
     size_t tensorSize = 1;
     for (int i = 0; i < npArr.ndim(); i++)
@@ -60,10 +61,10 @@ void PyTensorQuantizer::updateStats(py::array_t<float> tensor, bool useCuda)
 }
 
 void PyTensorQuantizer::quantizeDequantize(py::array_t<float> inputTensor, py::array_t<float> outputTensor,
-                                           double encodingMin, double encodingMax, unsigned int  bitwidth, bool useCuda)
+                                           double encodingMin, double encodingMax, unsigned int bitwidth, bool useCuda)
 {
-    auto inputArr     = inputTensor.mutable_unchecked();
-    auto outputArr    = outputTensor.mutable_unchecked();
+    auto inputArr  = inputTensor.mutable_unchecked();
+    auto outputArr = outputTensor.mutable_unchecked();
 
     size_t tensorSize = inputArr.size();
 
@@ -71,9 +72,9 @@ void PyTensorQuantizer::quantizeDequantize(py::array_t<float> inputTensor, py::a
     auto outputTensorPtr = static_cast<float*>(outputArr.mutable_data());
 
     // Delegate
-   TensorQuantizer::quantizeDequantize(inputTensorPtr, tensorSize, outputTensorPtr,
-                                       encodingMin, encodingMax, bitwidth, useCuda);
+    TensorQuantizer::quantizeDequantize(inputTensorPtr, tensorSize, outputTensorPtr, encodingMin, encodingMax, bitwidth,
+                                        useCuda);
 }
 
 
-}
+}   // namespace DlQuantization

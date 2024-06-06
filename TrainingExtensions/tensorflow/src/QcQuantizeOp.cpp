@@ -37,8 +37,8 @@
 //==============================================================================
 
 #include "QcQuantizeOp.hpp"
-#include "AimetOpUtils.h"
 #include "AimetFp16OpUtils.h"
+#include "AimetOpUtils.h"
 
 #include <type_traits>
 
@@ -58,10 +58,12 @@ REGISTER_OP("QcQuantize")
 
     .Attr("T: {float} = DT_FLOAT")   // attr 'T' specifies which template instantiation of op to use, default float
     .Doc(R"doc(QcQuantize custom op.)doc")
-    .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {
-        c->set_output(0, c->input(0));
-        return Status::OK();
-    });
+    .SetShapeFn(
+        [](::tensorflow::shape_inference::InferenceContext* c)
+        {
+            c->set_output(0, c->input(0));
+            return Status::OK();
+        });
 
 
 // OpKernel definition.
@@ -115,23 +117,24 @@ public:
         const Tensor* isIntDataTypeTensor;
         OP_REQUIRES_OK(context, context->input("is_int_data_type", &isIntDataTypeTensor));
         auto isIntDataTypeFlat = isIntDataTypeTensor->flat<bool>().data();
-        auto isIntDataType = copyLiteralToHost<bool>(context->eigen_device<Device>(), isIntDataTypeFlat);
+        auto isIntDataType     = copyLiteralToHost<bool>(context->eigen_device<Device>(), isIntDataTypeFlat);
 
         // allocate output tensors
         Tensor* outTensor = nullptr;
         OP_REQUIRES_OK(context, context->allocate_output(0, inTensor.shape(), &outTensor));
         auto outTensorFlat = outTensor->flat<T>().data();
 
-        if(isIntDataType)
+        if (isIntDataType)
         {
             DlQuantization::IAllocator* allocator = nullptr;
 #if GOOGLE_CUDA
             auto tf_allocator = context->get_allocator(context->output_alloc_attr(0));
-            auto _allocator = TensorFlowCudaAllocator(tf_allocator);
-            allocator = &_allocator;
+            auto _allocator   = TensorFlowCudaAllocator(tf_allocator);
+            allocator         = &_allocator;
 #endif
             modeSpecificActionInt(context->eigen_device<Device>(), inTensorFlat, inTensor.NumElements(), outTensorFlat,
-                           quantizerAddr, opMode, encodingMin, encodingMax, bitwidth, useSymmetricEncoding, allocator);
+                                  quantizerAddr, opMode, encodingMin, encodingMax, bitwidth, useSymmetricEncoding,
+                                  allocator);
         }
         else
         {
