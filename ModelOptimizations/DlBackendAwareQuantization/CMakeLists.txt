@@ -46,8 +46,8 @@ if (PUGIXML_EXE)
     add_subdirectory(${CMAKE_BINARY_DIR}/_deps/pugixml-src/pugixml-1.13 ${CMAKE_BINARY_DIR}/_deps/pugixml-src/pugixml-1.13 EXCLUDE_FROM_ALL)
 elseif (EXISTS $ENV{DEPENDENCY_DATA_PATH}/pugixml.zip)
     message(STATUS "Setting up pugixml from internal cache")
-    file(ARCHIVE_EXTRACT INPUT $ENV{DEPENDENCY_DATA_PATH}/pugixml.zip
-    DESTINATION ${CMAKE_BINARY_DIR}/_deps/pugixml-src/)
+    file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/_deps/pugixml-src/)
+    execute_process(COMMAND unzip -O utf-8 $ENV{DEPENDENCY_DATA_PATH}/pugixml.zip -d ${CMAKE_BINARY_DIR}/_deps/pugixml-src/)
     add_subdirectory(${CMAKE_BINARY_DIR}/_deps/pugixml-src/pugixml-1.13 ${CMAKE_BINARY_DIR}/_deps/pugixml-src/pugixml-1.13 EXCLUDE_FROM_ALL)
 elseif (NOT PUGIXML_FOUND)
     FetchContent_Declare(
