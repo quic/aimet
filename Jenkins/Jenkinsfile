@@ -713,11 +713,11 @@ pipeline {
                     exclude {
                         axis {
                             name 'ML_FMWORK'
-                            values 'tf-torch'
+                            values 'tf-torch', 'torch', 'tf'
                         }
                         axis {
                             name 'PROC_TYPE'
-                            values 'gpu'
+                            values 'cpu', 'gpu'
                         }
                     }
                 }

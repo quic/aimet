@@ -190,7 +190,7 @@ RUN python3 -m pip --no-cache-dir install \
         PyYAML \
         scikit-learn==1.1.3 \
         scipy==1.8.1 \
-        spconv-cu118 \
+        spconv \
         sphinx \
         sphinx-autodoc-typehints \
         sphinx-jinja \

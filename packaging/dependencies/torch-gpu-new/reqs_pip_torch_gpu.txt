@@ -12,8 +12,6 @@ matplotlib>=3
 networkx
 numpy<1.24,>=1.20.5
 onnx==1.14.1
-onnxruntime==1.15.1
-onnxruntime-extensions
 onnxsim
 osqp
 pandas==1.5.3
