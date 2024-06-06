@@ -131,11 +131,13 @@ class SequentialMse(V1SequentialMse):
         :param x_min: min values
         :param x_max: max values
         """
-        # For per-channel quantization, we need to add single dimension
+        # For per-channel quantization, we need to add additional dimension(s)
         # to x_{min, max} to make them reducible like quantizer.shape
+        x_min = x_min.reshape(quantizer.shape) if len(quantizer.shape) > 1 else x_min
+        x_max = x_max.reshape(quantizer.shape) if len(quantizer.shape) > 1 else x_max
         with torch.no_grad():
-            quantizer.min.copy_(reduce(x_min[..., None], quantizer.shape, torch.min).values)
-            quantizer.max.copy_(reduce(x_max[..., None], quantizer.shape, torch.max).values)
+            quantizer.min.copy_(reduce(x_min, quantizer.shape, torch.min).values)
+            quantizer.max.copy_(reduce(x_max, quantizer.shape, torch.max).values)
 
     @staticmethod
     def _is_symmetric_quantizer(quantizer: AffineQuantizerBase):
