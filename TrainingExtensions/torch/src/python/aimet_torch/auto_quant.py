@@ -195,11 +195,9 @@ class AutoQuantBase(abc.ABC): # pylint: disable=too-many-instance-attributes
 
     AutoQuant includes 1) batchnorm folding, 2) cross-layer equalization,
     and 3) Adaround.
-
     These techniques will be applied in a best-effort manner until the model
     meets the evaluation goal given as allowed_accuracy_drop.
     """
-    Adaround: Any
 
     def __init__( # pylint: disable=too-many-arguments, too-many-locals
             self,
@@ -300,6 +298,11 @@ class AutoQuantBase(abc.ABC): # pylint: disable=too-many-instance-attributes
 
         self._quant_scheme_candidates = _QUANT_SCHEME_CANDIDATES
         self._fp32_acc = None
+
+    @staticmethod
+    @abc.abstractmethod
+    def _get_adaround():
+        """ returns AdaRound """
 
     @staticmethod
     @abc.abstractmethod
@@ -449,7 +452,6 @@ class AutoQuantBase(abc.ABC): # pylint: disable=too-many-instance-attributes
         if output_quant_scheme is None or param_quant_scheme is None:
             assert self._quantsim_params["quant_scheme"] is not None
 
-
         kwargs = dict(
             rounding_mode=(rounding_mode or self._quantsim_params["rounding_mode"]),
             default_output_bw=(output_bw or self._quantsim_params["output_bw"]),
@@ -574,8 +576,8 @@ class AutoQuantBase(abc.ABC): # pylint: disable=too-many-instance-attributes
 
         self._disable_activation_quantizers(sim)
 
-        model = self.Adaround._apply_adaround(sim, model, self.dummy_input, self.adaround_params, # pylint: disable=protected-access
-                                              path=self.results_dir, filename_prefix=filename_prefix)
+        model = self._get_adaround()._apply_adaround(sim, model, self.dummy_input, self.adaround_params, # pylint: disable=protected-access
+                                                     path=self.results_dir, filename_prefix=filename_prefix)
 
         return model, adaround_encoding_path
 
@@ -1363,17 +1365,14 @@ class AutoQuant(AutoQuantBase): # pylint: disable=too-many-instance-attributes
     meets the evaluation goal given as allowed_accuracy_drop.
     """
 
-    Adaround = Adaround
+    @staticmethod
+    def _get_adaround():
+        """ returns AdaRound """
+        return Adaround
 
     @staticmethod
     def _get_adaround_parameters(data_loader, num_batches):
         return AdaroundParameters(data_loader, num_batches)
-
-    def _evaluate_model_performance(self, model) -> float:
-        """
-        Evaluate the model performance.
-        """
-        return self.eval_callback(model, NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION)
 
     @staticmethod
     def _get_quantsim(model, dummy_input, **kwargs):
