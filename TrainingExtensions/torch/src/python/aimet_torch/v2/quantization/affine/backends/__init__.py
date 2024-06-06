@@ -68,6 +68,14 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
     .. math::
         out = clamp\left(\left\lceil\frac{input}{scale}\right\rfloor - offset, qmin, qmax\right)
 
+    If block size :math:`B = \begin{pmatrix} B_0  & B_1  & \cdots & B_{D-1} \end{pmatrix}` is specified,
+    this equation will be further generalized as
+
+    .. math::
+        out_{j_0 \cdots j_{D-1}} & = clamp\left(
+            \left\lceil\frac{input_{j_0 \cdots j_{D-1}}}{scale_{i_0 \cdots i_{D-1}}}\right\rfloor
+            - offset_{i_0 \cdots i_{D-1}}, qmin, qmax\right)\\
+        & \forall \quad i_d B_d \leq j_d < (i_d+1) B_d, \quad 0 \leq d < D
 
     This function is overloaded with the signatures listed below:
 
@@ -186,12 +194,23 @@ def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
     Precisely,
 
     .. math::
-        out = (x_{int} + offset) * scale
+        out = (\overline{input} + offset) * scale
 
     where
 
     .. math::
-        x_{int} = clamp\left(\left\lceil\frac{input}{scale}\right\rfloor - offset, qmin, qmax\right)
+        \overline{input} = clamp\left(\left\lceil\frac{input}{scale}\right\rfloor - offset, qmin, qmax\right)
+
+
+    If block size :math:`B = \begin{pmatrix} B_0  & B_1  & \cdots & B_{D-1} \end{pmatrix}` is specified,
+    this equation will be further generalized as
+
+    .. math::
+        out_{j_0 \cdots j_{D-1}} &= (\overline{input}_{j_0 \cdots j_{D-1}} + offset_{i_0 \cdots i_{D-1}}) * scale_{i_0 \cdots i_{D-1}}\\
+        \overline{input}_{j_0 \cdots j_{D-1}} &= clamp\left(
+            \left\lceil\frac{input_{j_0 \cdots j_{D-1}}}{scale_{i_0 \cdots i_{D-1}}}\right\rfloor
+            - offset_{i_0 \cdots i_{D-1}}, qmin, qmax\right)\\
+        & \forall \quad i_d B_d \leq j_d < (i_d+1) B_d, \quad 0 \leq d < D
 
 
     This function is overloaded with the signatures listed below:
