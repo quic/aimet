@@ -39,6 +39,7 @@
 from typing import Callable, Tuple, Any
 import functools
 import itertools
+
 import torch
 
 
@@ -254,7 +255,6 @@ def allow_recompute(fn):
             return torch.utils.checkpoint.checkpoint(fn, *args, use_reentrant=False, **kwargs)
         return fn(*args, **kwargs)
     return wrapper
-
 
 def flatten_nn_module_list(module):
     """
