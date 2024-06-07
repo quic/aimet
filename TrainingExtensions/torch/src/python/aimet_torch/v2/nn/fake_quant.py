@@ -40,6 +40,7 @@
 from collections import OrderedDict
 from typing import Type, Optional, Tuple
 import abc
+import warnings
 
 from torch import Tensor
 import torch.nn as nn
@@ -49,14 +50,28 @@ from torch.utils._pytree import tree_map
 
 import aimet_torch.elementwise_ops as aimet_ops
 
-from .base import BaseQuantizationMixin # pylint: disable=import-error
+from .base import BaseQuantizationMixin, _BaseQuantizedUnaryOpMixin, _BaseQuantizedBinaryOpMixin, _BaseQuantizedTernaryOpMixin # pylint: disable=import-error
 
 
-class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-method
+class FakeQuantMeta(abc.ABCMeta):
+    """Sets :meth:`forward` to :meth:`quantized_forward` if only :meth:`quantized_forward` is defined
+    """
+
+    def __new__(mcs, name, bases, namespace, **kwargs):
+        if "quantized_forward" in namespace and "forward" not in namespace:
+            warnings.warn("Support for defining `quantized_forward` in place of `forward` method will be deprecated, "
+                          "please use `forward` instead.",
+                          DeprecationWarning, stacklevel=2)
+            namespace["forward"] = namespace["quantized_forward"]
+        return super().__new__(mcs, name, bases, namespace, **kwargs)
+
+
+class FakeQuantizationMixin(BaseQuantizationMixin, metaclass=FakeQuantMeta): # pylint: disable=abstract-method
     """Mixin that implements fake-quantization on top of regular pytorch modules.
 
-    Specifically, a fake-quantized module will call into its :meth:`quantized_forward` method in place of the inherited
-    :class:`torch.nn.Module` forward method. If all input, output, and parameter quantizers are ``None``, a
+    Specifically, a fake-quantized module will quantize input, output, and parameter tensors with
+    its held :class:`QuantizerBase` objects during the :meth:`forward` method and use the inherited :class:torch.nn.Module`
+    forward method to compute the layer operation. If all input, output, and parameter quantizers are ``None``, a
     fake-quantized module will behave exactly the same as its parent :class:`torch.nn.Module`.
 
     A fake-quantized module can be initialized from scratch using the same syntax as the parent module, or can be
@@ -113,12 +128,10 @@ class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-m
     qcls_to_cls = OrderedDict() # original class -> quantized class
 
     @abc.abstractmethod
-    def quantized_forward(self, *args, **kwargs):
+    def forward(self, *args, **kwargs):
         """Computes a fake-quantized version of the parent module's forward method.
 
-        A fake-quantized module will call into its :meth:`quantized_forward` method in place of the inherited
-        :class:`torch.nn.Module` forward method. The :meth:`quantized_forward` method should perform the following
-        logic in order:
+        The :meth:`forward` method should perform the following logic in order:
 
             1) Apply existing input quantizers to input tensors
             2) Apply existing param quantizers to the layer's parameters
@@ -128,6 +141,7 @@ class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-m
         If all input, output, and parameter quantizers are ``None``, this method will behave exactly the same as
         its parent module's forward pass.
         """
+        return super().forward(*args, **kwargs)
 
     @classmethod
     def wrap(cls, module_cls: Type[nn.Module]) -> Type[nn.Module]:
@@ -163,69 +177,14 @@ class FakeQuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-m
         return wrapper
 
 
-class _FakeQuantizedUnaryOpMixin(FakeQuantizationMixin):
-    def quantized_forward(self, *args, **kwargs) -> Tensor: # pylint: disable=missing-function-docstring
-        x, *others = args
+class _FakeQuantizedUnaryOpMixin(_BaseQuantizedUnaryOpMixin, FakeQuantizationMixin): # pylint: disable=abstract-method
+    pass
 
-        if isinstance(x, Tensor) and x.is_floating_point() and self.input_quantizers[0]:
-            x = self.input_quantizers[0](x)
+class _FakeQuantizedBinaryOpMixin(_BaseQuantizedBinaryOpMixin, FakeQuantizationMixin): # pylint: disable=abstract-method
+    pass
 
-        with self._patch_quantized_parameters():
-            output = super().forward(x, *others, **kwargs)
-
-        if isinstance(output, Tensor) and output.is_floating_point() and self.output_quantizers[0]:
-            output = self.output_quantizers[0](output)
-
-        return output
-
-
-class _FakeQuantizedBinaryOpMixin(FakeQuantizationMixin):
-    def __quant_init__(self):
-        super().__quant_init__()
-        self.input_quantizers = nn.ModuleList([None, None])
-
-    def quantized_forward(self, *args, **kwargs) -> Tensor: # pylint: disable=missing-function-docstring
-        x, y, *others = args
-
-        if isinstance(x, Tensor) and x.is_floating_point() and self.input_quantizers[0]:
-            x = self.input_quantizers[0](x)
-
-        if isinstance(y, Tensor) and y.is_floating_point() and self.input_quantizers[1]:
-            y = self.input_quantizers[1](y)
-
-        with self._patch_quantized_parameters():
-            output = super().forward(x, y, *others, **kwargs)
-
-        if isinstance(output, Tensor) and output.is_floating_point() and self.output_quantizers[0]:
-            output = self.output_quantizers[0](output)
-
-        return output
-
-
-class _FakeQuantizedTernaryOpMixin(FakeQuantizationMixin):
-    def __quant_init__(self):
-        super().__quant_init__()
-        self.input_quantizers = nn.ModuleList([None, None, None])
-
-    def quantized_forward(self, *args, **kwargs) -> Tensor: # pylint: disable=missing-function-docstring
-        x, y, z, *others = args
-
-        if isinstance(x, Tensor) and x.is_floating_point() and self.input_quantizers[0]:
-            x = self.input_quantizers[0](x)
-
-        if isinstance(y, Tensor) and y.is_floating_point() and self.input_quantizers[1]:
-            y = self.input_quantizers[1](y)
-
-        if isinstance(z, Tensor) and z.is_floating_point() and self.input_quantizers[2]:
-            z = self.input_quantizers[2](z)
-
-        with self._patch_quantized_parameters():
-            output = super().forward(x, y, z, *others, **kwargs)
-
-        if isinstance(output, Tensor) and output.is_floating_point() and self.output_quantizers[0]:
-            output = self.output_quantizers[0](output)
-
-        return output
+class _FakeQuantizedTernaryOpMixin(_BaseQuantizedTernaryOpMixin, FakeQuantizationMixin): # pylint: disable=abstract-method
+    pass
 
 
 
@@ -391,7 +350,7 @@ class FakeQuantizedEmbedding(FakeQuantizationMixin, nn.Embedding):
         self.input_quantizers = nn.ModuleList([]) # nn.Embedding takes no float input
         self.output_quantizers = nn.ModuleList([None])
 
-    def quantized_forward(self, input: Tensor) -> Tensor: # pylint: disable=arguments-differ
+    def forward(self, input: Tensor) -> Tensor: # pylint: disable=arguments-differ
         """
         Quantized forward impl for nn.Embedding.
         """
@@ -417,7 +376,7 @@ class FakeQuantizedEmbeddingBag(FakeQuantizationMixin, nn.EmbeddingBag):
         self.input_quantizers = nn.ModuleList([None])
         self.output_quantizers = nn.ModuleList([None])
 
-    def quantized_forward(self, # pylint: disable=arguments-differ
+    def forward(self, # pylint: disable=arguments-differ
                           input: Tensor,
                           offsets: Optional[Tensor] = None,
                           per_sample_weights: Optional[Tensor] = None) -> Tensor:
@@ -444,7 +403,7 @@ class _FakeQuantizedRNNBaseMixin(FakeQuantizationMixin):
         self.input_quantizers = nn.ModuleList([None, None])
         self.output_quantizers = nn.ModuleList([None, None])
 
-    def quantized_forward(self, input, hx: Optional[Tensor] = None): # pylint: disable=arguments-differ
+    def forward(self, input, hx: Optional[Tensor] = None): # pylint: disable=arguments-differ
         """
         Quantized forward impl for nn.GRU and nn.RNN.
         """
@@ -482,7 +441,7 @@ FakeQuantizedRNN = _FakeQuantizedRNNBaseMixin.wrap(nn.RNN)
 
 
 class _FakeQuantizedRNNCellBaseMixin(_FakeQuantizedBinaryOpMixin):
-    def quantized_forward(self, input: Tensor, hx: Optional[Tensor] = None) -> Tensor: # pylint: disable=arguments-differ
+    def forward(self, input: Tensor, hx: Optional[Tensor] = None) -> Tensor: # pylint: disable=arguments-differ
         """
         Quantized forward impl for nn.GRUCell and nn.RNNCell.
         """
@@ -517,7 +476,7 @@ class FakeQuantizedLSTM(FakeQuantizationMixin, nn.LSTM):
         self.input_quantizers = nn.ModuleList([None, nn.ModuleList([None, None])])
         self.output_quantizers = nn.ModuleList([None, nn.ModuleList([None, None])])
 
-    def quantized_forward(self, input, hx: Optional[Tuple[Tensor, Tensor]] = None): # pylint: disable=arguments-differ
+    def forward(self, input, hx: Optional[Tuple[Tensor, Tensor]] = None): # pylint: disable=arguments-differ
         """
         Quantized forward impl for nn.LSTM.
         """
@@ -572,7 +531,7 @@ class FakeQuantizedLSTMCell(FakeQuantizationMixin, nn.LSTMCell):
         self.input_quantizers = nn.ModuleList([None, nn.ModuleList([None, None])])
         self.output_quantizers = nn.ModuleList([None])
 
-    def quantized_forward(self, input: Tensor, hx: Optional[Tuple[Tensor, Tensor]] = None): # pylint: disable=arguments-differ
+    def forward(self, input: Tensor, hx: Optional[Tuple[Tensor, Tensor]] = None): # pylint: disable=arguments-differ
         """
         Quantized forward impl for nn.LSTMCell.
         """
@@ -610,7 +569,7 @@ class FakeQuantizedAdaptiveLogSoftmaxWithLoss(FakeQuantizationMixin, nn.Adaptive
         self.input_quantizers = nn.ModuleList([None, None])
         self.output_quantizers = nn.ModuleList([None, None])
 
-    def quantized_forward(self, input_: Tensor, target_: Tensor) -> Tensor: # pylint: disable=arguments-differ
+    def forward(self, input_: Tensor, target_: Tensor) -> Tensor: # pylint: disable=arguments-differ
         """
         Quantized forward impl for nn.AdaptiveLogSoftmaxWithLoss.
         """
@@ -765,7 +724,7 @@ class FakeQuantizedBatchNorm(FakeQuantizationMixin, aimet_ops.BatchNorm): # pyli
         # pylint: disable=attribute-defined-outside-init
         self.input_quantizers = nn.ModuleList([None, None, None, None, None])
 
-    def quantized_forward(self, # pylint: disable=too-many-arguments, arguments-differ
+    def forward(self, # pylint: disable=too-many-arguments, arguments-differ
                           input: Tensor,
                           running_mean: Optional[Tensor],
                           running_var: Optional[Tensor],
@@ -813,7 +772,7 @@ class FakeQuantizedAimetGroupNorm(FakeQuantizationMixin, aimet_ops.GroupNorm): #
         # pylint: disable=attribute-defined-outside-init
         self.input_quantizers = nn.ModuleList([None, None, None, None])
 
-    def quantized_forward(self, # pylint: disable=arguments-differ
+    def forward(self, # pylint: disable=arguments-differ
                           input: Tensor,
                           num_groups: int,
                           weight: Optional[Tensor] = None,
@@ -852,7 +811,7 @@ class FakeQuantizedNonMaxSuppression(FakeQuantizationMixin, aimet_ops.NonMaxSupp
         self.input_quantizers = nn.ModuleList([None])
         self.output_quantizers = nn.ModuleList([None])
 
-    def quantized_forward(self, *args) -> Tensor: # pylint: disable=arguments-differ
+    def forward(self, *args) -> Tensor: # pylint: disable=arguments-differ
         """
         Quantized forward impl for aimet_ops.NonMaxSuppression.
         """
@@ -862,7 +821,7 @@ class FakeQuantizedNonMaxSuppression(FakeQuantizationMixin, aimet_ops.NonMaxSupp
             # Use same input quantizer for all the score tensors
             scores = tree_map(self.input_quantizers[0], scores)
 
-        super().forward(boxes, scores)
+        output = super().forward(boxes, scores)
 
         if self.output_quantizers[0]:
             output = self.output_quantizers[0](output)
@@ -871,11 +830,11 @@ class FakeQuantizedNonMaxSuppression(FakeQuantizationMixin, aimet_ops.NonMaxSupp
 
 
 @FakeQuantizationMixin.implements(aimet_ops.Split)
-class FakeQuantizedSplit(_FakeQuantizedUnaryOpMixin, aimet_ops.Split): # pylint: disable=abstract-method
+class FakeQuantizedSplit(_FakeQuantizedUnaryOpMixin, aimet_ops.Split): # pylint: disable=abstract-method, too-many-ancestors
     """
     Quantized class definition for aimet_ops.Split.
     """
-    def quantized_forward(self, *args, **kwargs): # pylint: disable=arguments-differ
+    def forward(self, *args, **kwargs): # pylint: disable=arguments-differ
         """
         Quantized forward impl for aimet_ops.Split.
         """
@@ -895,11 +854,11 @@ class FakeQuantizedSplit(_FakeQuantizedUnaryOpMixin, aimet_ops.Split): # pylint:
 
 
 @FakeQuantizationMixin.implements(aimet_ops.Concat)
-class FakeQuantizedConcat(_FakeQuantizedUnaryOpMixin, aimet_ops.Concat):
+class FakeQuantizedConcat(_FakeQuantizedUnaryOpMixin, aimet_ops.Concat): # pylint: disable=too-many-ancestors
     """
     Quantized class definition for aimet_ops.Concat.
     """
-    def quantized_forward(self, *x): # pylint: disable=arguments-differ
+    def forward(self, *x): # pylint: disable=arguments-differ
         """
         Quantized forward impl for aimet_ops.Concat.
         """
@@ -927,7 +886,7 @@ class FakeQuantizedWhere(FakeQuantizationMixin, aimet_ops.Where): # pylint: disa
         self.input_quantizers = nn.ModuleList([None, None, None])
         self.output_quantizers = nn.ModuleList([None])
 
-    def quantized_forward(self, condition: Tensor, input, other, **kwargs) -> Tensor: # pylint: disable=arguments-differ
+    def forward(self, condition: Tensor, input, other, **kwargs) -> Tensor: # pylint: disable=arguments-differ
         """
         Quantized forward impl for aimet_ops.MaskedFill.
         """
@@ -958,7 +917,7 @@ class FakeQuantizedMaskedFill(FakeQuantizationMixin, aimet_ops.MaskedFill): # py
         self.input_quantizers = nn.ModuleList([None, None])
         self.output_quantizers = nn.ModuleList([None])
 
-    def quantized_forward(self, mask: Tensor, value) -> Tensor: # pylint: disable=arguments-differ
+    def forward(self, mask: Tensor, value) -> Tensor: # pylint: disable=arguments-differ
         """
         Quantized forward impl for aimet_ops.MaskedFill.
         """

@@ -42,6 +42,7 @@ import itertools
 from typing import Type, List, Dict, Union, Iterable, Mapping, Optional
 
 import torch.nn as nn
+from torch import Tensor
 
 from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.utils import patch_attr, _ContextManager
@@ -101,18 +102,17 @@ class BaseQuantizationMixin(abc.ABC):
 
     def __call__(self, *args, **kwargs):
         self._compute_param_encodings(overwrite=False)
-
-        with patch_attr(self, 'forward', self.quantized_forward):
-            return super().__call__(*args, **kwargs)
+        return super().__call__(*args, **kwargs)
 
     @abc.abstractmethod
-    def quantized_forward(self, *args, **kwargs):
+    def forward(self, *args, **kwargs):
         """Forward function for quantized module.
 
         This method will replace the original forward function of the base :class:`nn.Module` class and is
         responsible for computing a quantized version of the base class' forward function using the configuration of
         the layer's :class:`QuantizerBase` objects.
         """
+        return super().forward(*args, **kwargs)
 
     @contextlib.contextmanager
     def _patch_quantized_parameters(self):
@@ -474,6 +474,69 @@ class BaseQuantizationMixin(abc.ABC):
         ctx_2 = self._remove_param_quantizers()
         return _ContextManager(action=lambda: None,
                                cleanup=lambda: (ctx_1._cleanup(), ctx_2._cleanup()))
+
+class _BaseQuantizedUnaryOpMixin(BaseQuantizationMixin):
+    def forward(self, *args, **kwargs) -> Tensor: # pylint: disable=missing-function-docstring
+        x, *others = args
+
+        if isinstance(x, Tensor) and x.is_floating_point() and self.input_quantizers[0]:
+            x = self.input_quantizers[0](x)
+
+        with self._patch_quantized_parameters():
+            output = super().forward(x, *others, **kwargs)
+
+        if isinstance(output, Tensor) and output.is_floating_point() and self.output_quantizers[0]:
+            output = self.output_quantizers[0](output)
+
+        return output
+
+class _BaseQuantizedBinaryOpMixin(BaseQuantizationMixin):
+    def __quant_init__(self):
+        super().__quant_init__()
+        self.input_quantizers = nn.ModuleList([None, None])
+
+    def forward(self, *args, **kwargs) -> Tensor: # pylint: disable=missing-function-docstring
+        x, y, *others = args
+
+        if isinstance(x, Tensor) and x.is_floating_point() and self.input_quantizers[0]:
+            x = self.input_quantizers[0](x)
+
+        if isinstance(y, Tensor) and y.is_floating_point() and self.input_quantizers[1]:
+            y = self.input_quantizers[1](y)
+
+        with self._patch_quantized_parameters():
+            output = super().forward(x, y, *others, **kwargs)
+
+        if isinstance(output, Tensor) and output.is_floating_point() and self.output_quantizers[0]:
+            output = self.output_quantizers[0](output)
+
+        return output
+
+
+class _BaseQuantizedTernaryOpMixin(BaseQuantizationMixin):
+    def __quant_init__(self):
+        super().__quant_init__()
+        self.input_quantizers = nn.ModuleList([None, None, None])
+
+    def forward(self, *args, **kwargs) -> Tensor: # pylint: disable=missing-function-docstring
+        x, y, z, *others = args
+
+        if isinstance(x, Tensor) and x.is_floating_point() and self.input_quantizers[0]:
+            x = self.input_quantizers[0](x)
+
+        if isinstance(y, Tensor) and y.is_floating_point() and self.input_quantizers[1]:
+            y = self.input_quantizers[1](y)
+
+        if isinstance(z, Tensor) and z.is_floating_point() and self.input_quantizers[2]:
+            z = self.input_quantizers[2](z)
+
+        with self._patch_quantized_parameters():
+            output = super().forward(x, y, z, *others, **kwargs)
+
+        if isinstance(output, Tensor) and output.is_floating_point() and self.output_quantizers[0]:
+            output = self.output_quantizers[0](output)
+
+        return output
 
 
 def _remove_quantizers(quantizers, keys):
