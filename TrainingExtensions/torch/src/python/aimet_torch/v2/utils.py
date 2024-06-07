@@ -39,6 +39,7 @@
 from typing import Callable, Tuple, Any
 import functools
 import itertools
+
 import torch
 
 
@@ -255,7 +256,6 @@ def allow_recompute(fn):
         return fn(*args, **kwargs)
     return wrapper
 
-
 def flatten_nn_module_list(module):
     """
     Flatten nested list of nn.Modules into a flat list
@@ -268,7 +268,6 @@ def flatten_nn_module_list(module):
             yield mod
 
     return list(flat_iter(module))
-
 
 def _map_qmodule(modules, func):
     # pylint: disable=import-outside-toplevel

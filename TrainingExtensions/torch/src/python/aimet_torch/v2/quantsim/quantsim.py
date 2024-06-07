@@ -36,7 +36,6 @@
 # =============================================================================
 """ Top level API for performing quantization simulation of a pytorch model """
 
-
 from typing import Union, Tuple
 import itertools
 import io
@@ -244,10 +243,6 @@ class QuantizationSimModel(V1QuantizationSimModel):
     def _replace_quantization_wrapper_with_native_torch_quantization_nodes(quant_sim_model, device: torch.device):
         raise NotImplementedError()
 
-
     @deprecated(f'Use {V1QuantizationSimModel.named_qmodules.__qualname__} instead.')
     def quant_wrappers(self): # pylint: disable=missing-docstring
         return super().quant_wrappers()
-
-    def _clamp_transformer_attention_mask_encoding(self):
-        raise NotImplementedError()
