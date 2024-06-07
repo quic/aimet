@@ -126,7 +126,7 @@ class GPTVQ:
         if block_level_module_names is not None:
             cls._validate_module_names(model, itertools.chain.from_iterable(block_level_module_names), "block_level_module_names")
 
-        module_name_set = cls._get_candidate_module_name_set(model, module_names_to_exclude, block_level_module_names)
+        module_name_set = cls._get_candidate_module_name_set(model, module_names_to_exclude)
         sim = cls._get_quantsim(model, dummy_input, gptvq_params, config_file_path, module_name_set)
         if module_names_to_exclude is None:
             module_names_to_exclude = []
@@ -164,21 +164,15 @@ class GPTVQ:
 
     @staticmethod
     def _get_candidate_module_name_set(model: nn.Module,
-                                       module_names_to_exclude: Optional[List[str]],
-                                       block_level_module_names: Optional[List[List[str]]]) -> Set[str]:
+                                       module_names_to_exclude: Optional[List[str]]) -> Set[str]:
         """
         Return module name set considering module_names_to_exclude and block_level_module_names
 
         :param model: Original model
         :param module_names_to_exclude: Module names which are excluded during GPTVQ optimization
-        :param block_level_module_names: List of module name lists to optimize block level GPTVQ optimization instead of leaf module level
         :return: Module name set considering module_names_to_exclude and block_level_module_names
         """
-        if block_level_module_names:
-            possible_module_names = set(itertools.chain.from_iterable(block_level_module_names))
-        else:
-            possible_module_names = {name for name, module in model.named_modules() if isinstance(module, GPTVQSupportedModules)}
-
+        possible_module_names = {name for name, module in model.named_modules() if isinstance(module, GPTVQSupportedModules)}
         module_names_to_exclude = set(module_names_to_exclude) if module_names_to_exclude else set()
         return possible_module_names.difference(module_names_to_exclude)
 
@@ -261,6 +255,7 @@ class GPTVQ:
         original_model: nn.Module,
         dummy_input: Union[torch.Tensor, Tuple],
         block_level_modules_names: Optional[List[List[str]]],
+        module_names_to_exclude: Set[str],
     ) -> List[List[str]]:
         """
         Return block level module name list
@@ -268,26 +263,35 @@ class GPTVQ:
         :param original_model: Original torch model
         :param dummy_input: Dummy input
         :param block_level_modules_names: User provided block level module names
+        :param module_names_to_exclude: Module names which are excluded during GPTVQ optimization
         :return: Block level module name list
         """
         ordered_module_names = [
             name
             for name, module in utils.get_ordered_list_of_modules(original_model, dummy_input)
-            if isinstance(module, GPTVQSupportedModules)
+            if isinstance(module, GPTVQSupportedModules) and name not in module_names_to_exclude
         ]
         if block_level_modules_names:
-            _logger.info("GPTVQ optimization will be applied to user provided block level modules")
+            leaf_level_module_names = set(ordered_module_names).difference(
+                set(itertools.chain.from_iterable(block_level_modules_names))
+            )
+            leaf_level_module_names = [[name] for name in leaf_level_module_names]
+
             name_to_index = {name: idx for idx, name in enumerate(ordered_module_names)}
             for module_block in block_level_modules_names:
                 module_block.sort(key=lambda x: name_to_index.get(x, float("inf")))
 
-            return sorted(
+            block_level_modules_names.extend(leaf_level_module_names)
+            ordered_block_level_modules = sorted(
                 block_level_modules_names,
                 key=lambda x: name_to_index.get(x[0], float("inf")),
             )
+        else:
+            ordered_block_level_modules = [[name] for name in ordered_module_names]
 
-        _logger.info("GPTVQ optimization will be applied to GPTVQ supportable leaf level modules")
-        return [[name] for name in ordered_module_names]
+        msg = "\n".join([str(x) for x in ordered_block_level_modules])
+        _logger.info("GPTVQ Hessian sampling and optimization will be applied in the following order and granularity\n%s", msg)
+        return ordered_block_level_modules
 
     @classmethod
     def _apply_gptvq(
@@ -310,7 +314,7 @@ class GPTVQ:
         :param block_level_module_names: List of module name lists to optimize block level GPTVQ optimization instead of leaf module level
         """
         block_level_module_names = cls._get_block_level_module_names(
-            original_model, dummy_input, block_level_module_names
+            original_model, dummy_input, block_level_module_names, module_names_to_exclude
         )
         for module_names in block_level_module_names:
             name_to_quant_module = cls._get_applicable_name_to_module_dict(
