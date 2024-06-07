@@ -39,7 +39,7 @@
 import contextlib
 from functools import partial
 import itertools
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections import OrderedDict
 from typing import Type, Any, Tuple, Dict, Optional, Callable
 from weakref import WeakKeyDictionary
@@ -55,8 +55,7 @@ from aimet_torch.v2.quantization.tensor import QuantizedTensorBase
 from aimet_torch.v2.utils import patch_attr, _ContextManager, allow_recompute
 import aimet_torch.elementwise_ops as aimet_ops
 
-from .base import BaseQuantizationMixin # pylint: disable=import-error
-from .fake_quant import _FakeQuantizedUnaryOpMixin, _FakeQuantizedBinaryOpMixin # pylint: disable=import-error
+from .base import BaseQuantizationMixin, _BaseQuantizedUnaryOpMixin, _BaseQuantizedBinaryOpMixin # pylint: disable=import-error
 
 
 def _quantize_if_applicable(data: Any, quantizer: Optional[QuantizerBase]):
@@ -95,7 +94,7 @@ def _exit_compute_encodings(qmodule):
     _QUANTIZED_MODULES_UNDER_COMPUTE_ENCODINGS[qmodule] -= 1
 
 
-class QuantizationMixin(BaseQuantizationMixin, ABC): # pylint: disable=abstract-method
+class QuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-method
     """
     Mixin that allows dispatch to quantized operator libraries in place of native pytorch operations
     """
@@ -191,8 +190,7 @@ class QuantizationMixin(BaseQuantizationMixin, ABC): # pylint: disable=abstract-
         return wrapper
 
     @contextlib.contextmanager
-    def _unsafe_view_as(self, cls):
-        assert issubclass(cls, BaseQuantizationMixin)
+    def _unsafe_view_quantizers_as_qdq(self):
 
         def _view_as_qdq(quantizer):
             if not quantizer:
@@ -219,16 +217,13 @@ class QuantizationMixin(BaseQuantizationMixin, ABC): # pylint: disable=abstract-
                 ctx = _view_as_qdq(quantizer)
                 stack.enter_context(ctx)
 
-            qmodule = cls.from_module(self.get_original_module())
-            qmodule.__dict__ = self.__dict__
-
-            yield qmodule
+            yield
 
 
-# pylint: disable=arguments-differ, abstract-method
+# pylint: disable=arguments-differ, abstract-method, too-many-ancestors
 
-class _QuantizedUnaryOpMixin(QuantizationMixin, ABC):
-    def quantized_forward(self, *args, **kwargs): # pylint: disable=missing-function-docstring
+class _QuantizedUnaryOpMixin(QuantizationMixin, _BaseQuantizedUnaryOpMixin):
+    def forward(self, *args, **kwargs): # pylint: disable=missing-function-docstring
         kernel = self.get_kernel()
 
         if not kernel or _is_computing_encodings(self):
@@ -239,8 +234,8 @@ class _QuantizedUnaryOpMixin(QuantizationMixin, ABC):
 
             # NOTE: This is a quick temporary solution that may not be robust
             #       for the quantized modules to be added in the future.
-            with self._unsafe_view_as(_FakeQuantizedUnaryOpMixin) as _self:
-                return _self.quantized_forward(*args, **kwargs)
+            with self._unsafe_view_quantizers_as_qdq():
+                return super().forward(*args, **kwargs)
 
         x, *args = args
         x = _quantize_if_applicable(x, self.input_quantizers[0])
@@ -262,12 +257,12 @@ class _QuantizedUnaryOpMixin(QuantizationMixin, ABC):
         """
 
 
-class _QuantizedBinaryOpMixin(QuantizationMixin, ABC):
+class _QuantizedBinaryOpMixin(QuantizationMixin, _BaseQuantizedBinaryOpMixin):
     def __quant_init__(self):
         super().__quant_init__()
         self.input_quantizers = nn.ModuleList([None, None])
 
-    def quantized_forward(self, *args, **kwargs): # pylint: disable=missing-function-docstring
+    def forward(self, *args, **kwargs): # pylint: disable=missing-function-docstring
         kernel = self.get_kernel()
 
         if not kernel or _is_computing_encodings(self):
@@ -278,8 +273,8 @@ class _QuantizedBinaryOpMixin(QuantizationMixin, ABC):
 
             # NOTE: This is a quick temporary solution that may not be robust
             #       for the quantized modules to be added in the future.
-            with self._unsafe_view_as(_FakeQuantizedBinaryOpMixin) as _self:
-                return _self.quantized_forward(*args, **kwargs)
+            with self._unsafe_view_quantizers_as_qdq():
+                return super().forward(*args, **kwargs)
 
         x, y, *args = args
         x = _quantize_if_applicable(x, self.input_quantizers[0])
@@ -313,11 +308,11 @@ class _QuantizedConvNdMixin(_QuantizedUnaryOpMixin): # pylint: disable=too-many-
             raise NotImplementedError(msg)
         super().__quant_init__()
 
-    def quantized_forward(self, *args, **kwargs):
+    def forward(self, *args, **kwargs):
         if self.padding_mode != 'zeros':
             msg = f'padding_mode other than "zeros" is currently not supported. (got {self.padding_mode})'
             raise NotImplementedError(msg)
-        return super().quantized_forward(*args, **kwargs)
+        return super().forward(*args, **kwargs)
 
     def get_functional_args(self, x):
         args = (x, self.weight)
@@ -351,8 +346,8 @@ class QuantizedLinear(_QuantizedUnaryOpMixin, nn.Linear):
     # Only allow activation recompute (a.k.a activation checkpointing) for QuantizedLinear.
     # This is mainly to reduce memory footprint of QAT of large language models.
     @allow_recompute
-    def quantized_forward(self, *args, **kwargs):
-        return super().quantized_forward(*args, **kwargs)
+    def forward(self, *args, **kwargs):
+        return super().forward(*args, **kwargs)
 
     def get_functional_args(self, x):
         return (x, self.weight), {"bias": self.bias}
