@@ -34,18 +34,20 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-""" Module for experimental features """
+""" Experimental quantsim utilities """
 
 from typing import overload, Callable, Type
-
 import torch
 
+from aimet_common.utils import AimetLogger
 from aimet_common.connected_graph.product import Product
-from aimet_torch.meta.connectedgraph import Op
-from aimet_torch import utils
 import aimet_torch.elementwise_ops as aimet_ops
+from aimet_torch.meta.connectedgraph import Op
+from aimet_torch.v2.quantization.affine.quantizer import AffineQuantizerBase
 from aimet_torch.v2.quantsim import QuantizationSimModel
+from aimet_torch import utils
 
+logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 _MATH_INVARIANT_OPS = (
     aimet_ops.Reshape,
@@ -162,3 +164,27 @@ def _propagate_output_encodings(sim: QuantizationSimModel,
 
         for input in op.inputs:
             _set_src_qtzr(input, consumer=op, qtzr=qtzr)
+
+def clip_weights_to_7f7f(sim: 'QuantizationSimModel'):
+    """
+    Clip sim model weights which are 16 bit symmetric to have a max of 0x7f7f when quantized.
+
+    :param sim: Quantsim model to clip weights for
+    """
+    affected_layers = []
+    for name, quant_layer in sim.named_qmodules():
+        # pylint: disable=too-many-boolean-expressions
+        if 'weight' in quant_layer.param_quantizers and \
+                quant_layer.param_quantizers['weight'] is not None and \
+                quant_layer.param_quantizers['weight'].bitwidth == 16 and \
+                isinstance(quant_layer.param_quantizers['weight'], AffineQuantizerBase) and \
+                quant_layer.param_quantizers['weight'].symmetric and \
+                quant_layer.param_quantizers['weight'].is_initialized():
+            clipped_weight = torch.minimum(quant_layer.weight,
+                                           quant_layer.param_quantizers['weight'].get_scale() * 0x7f7f)
+            with torch.no_grad():
+                quant_layer.weight.copy_(clipped_weight)
+
+            affected_layers.append(name)
+    logger_str = f'Clipping weights of the following layers to 0x7f7f max quantized value: {affected_layers}'
+    logger.debug(logger_str)

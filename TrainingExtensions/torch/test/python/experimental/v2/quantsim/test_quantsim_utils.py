@@ -43,7 +43,7 @@ import tempfile
 from aimet_torch.examples.test_models import SingleResidualWithAvgPool
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.quantization.affine.backends.torch_builtins import quantize
-from aimet_torch.experimental.v2.quantsim.quantsim_utils import clip_weights_to_7f7f
+from aimet_torch.v2.experimental import clip_weights_to_7f7f
 
 def test_clip_weights_to_7f7f():
     torch.manual_seed(0)
@@ -83,7 +83,7 @@ def test_clip_weights_to_7f7f():
     qsim.compute_encodings(lambda m, _: m(dummy_input), None)
 
     affected_quant_layers = []
-    for _, quant_layer in qsim.quant_wrappers():
+    for _, quant_layer in qsim.named_qmodules():
         if 'weight' in quant_layer.param_quantizers and quant_layer.param_quantizers['weight'] is not None:
             encoding = quant_layer.param_quantizers['weight'].get_encoding()
             quantized_weight = quantize(quant_layer.weight, encoding.scale, encoding.offset, -32768, 32767)
