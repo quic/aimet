@@ -35,7 +35,7 @@ Top-level API
 =============
 
 .. autoclass:: aimet_torch.v2.nn.base.BaseQuantizationMixin
-   :members: __quant_init__, quantized_forward, compute_encodings
+   :members: __quant_init__, forward, compute_encodings
 
 Configuration
 =============
