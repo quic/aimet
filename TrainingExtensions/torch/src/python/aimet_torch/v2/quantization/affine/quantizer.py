@@ -73,7 +73,7 @@ class AffineQuantizerBase(QuantizerBase):
 
     """
     def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None,
-                 block_size: Optional[list] = None):
+                 block_size: Optional[Tuple[int, ...]] = None):
         super().__init__()
         if isinstance(shape, int):
             shape = (shape,)
@@ -263,7 +263,7 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
     max: torch.nn.Parameter
 
     def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None,
-                 block_size: Optional[Tuple] = None):
+                 block_size: Optional[Tuple[int, ...]] = None):
         super().__init__(shape, bitwidth, symmetric, encoding_analyzer, block_size)
 
         self.register_quantization_parameter('min', nn.Parameter(-torch.ones(self.shape)))
@@ -414,6 +414,16 @@ class Quantize(MinMaxQuantizer):
     where :math:`scale` and :math:`offset` are derived from learnable parameters
     :math:`\theta_{min}` and :math:`\theta_{max}`.
 
+    If block size :math:`B = \begin{pmatrix} B_0  & B_1  & \cdots & B_{D-1} \end{pmatrix}` is specified,
+    this equation will be further generalized as
+
+    .. math::
+        out_{j_0 \cdots j_{D-1}} & = clamp\left(
+            \left\lceil\frac{input_{j_0 \cdots j_{D-1}}}{scale_{i_0 \cdots i_{D-1}}}\right\rfloor
+            - offset_{i_0 \cdots i_{D-1}}, qmin, qmax\right)\\
+
+        \text{where} \quad \forall_{0 \leq d < D} \quad i_d = \left\lfloor \frac{j_d}{B_d} \right\rfloor
+
     Args:
         shape (tuple): Shape of the quantization parameters
         bitwidth (int): Quantization bitwidth
@@ -421,6 +431,7 @@ class Quantize(MinMaxQuantizer):
                           otherwise, performs asymmetric quantization
         encoding_analyzer (EncodingAnalyzer, optional): Encoding analyzer for calibrating quantization encodings
                                                         (default: absolute min-max encoding analyzer)
+        block_size (Tuple[int, ...], optional): Block size
 
     :ivar Tensor min: :math:`\theta_{min}` from which scale and offset will be derived.
     :ivar Tensor max: :math:`\theta_{max}` from which scale and offset will be derived.
@@ -435,7 +446,7 @@ class Quantize(MinMaxQuantizer):
 
         >>> import aimet_torch.v2.quantization as Q
         >>> input = torch.randn(5, 10)
-        >>> q = Q.affine.Quantize(shape=(5, 1), bitwidth=8, symmetric=False)
+        >>> q = Q.affine.Quantize(shape=(5, 1), bitwidth=8, symmetric=False, block_size=(1, 5))
         >>> q.is_initialized()
         False
         >>> with q.compute_encodings():
@@ -444,17 +455,17 @@ class Quantize(MinMaxQuantizer):
         >>> q.is_initialized()
         True
         >>> q(input)
-        QuantizedTensor([[247.,   0.,  98.,  62.,  25.,  42., 209.,  71., 255., 129.],
-                         [209., 152., 211., 163.,   0.,  90., 255., 221.,  87.,  67.],
-                         [119., 245., 178., 255., 100., 182., 188., 150., 162.,   0.],
-                         [204., 102.,   0., 255., 224., 249., 190., 176., 207., 137.],
-                         [  0., 189.,  13., 255., 109.,  23.,  93.,  59.,  82., 195.]],
+        QuantizedTensor([[129.,  64., 255., 122.,   0., 192., 106.,  94., 255.,   0.],
+                         [  0., 145., 181., 255., 144., 255., 194.,   0.,  74.,  86.],
+                         [122.,   0., 255., 150.,  33., 103., 103.,   0.,  37., 255.],
+                         [255., 111., 237., 218.,   0.,  49., 155., 255.,   0., 179.],
+                         [  0.,  66., 255.,  89., 110.,  17.,  36.,  83., 255.,   0.]],
                         grad_fn=<AliasBackward0>)
 
 
         >>> import aimet_torch.v2.quantization as Q
         >>> input = torch.randn(5, 10)
-        >>> q = Q.affine.Quantize(shape=(5, 1), bitwidth=8, symmetric=False)
+        >>> q = Q.affine.Quantize(shape=(5, 1), bitwidth=8, symmetric=False, block_size=(1, 5))
         >>> q.is_initialized()
         False
         >>> q.min = torch.nn.Parameter(-torch.ones_like(q.min))
@@ -462,11 +473,11 @@ class Quantize(MinMaxQuantizer):
         >>> q.is_initialized()
         True
         >>> q(input)
-        QuantizedTensor([[255.,   0.,  90.,  21.,   0.,   0., 255.,  38., 255., 148.],
-                         [208., 108., 212., 127.,   0.,   0., 255., 230.,   0.,   0.],
-                         [100., 255., 193., 255.,  70., 199., 208., 150., 168.,   0.],
-                         [220.,  70.,   0., 255., 249., 255., 200., 180., 225., 121.],
-                         [104., 248., 114., 255., 187., 121., 175., 149., 167., 253.]],
+        QuantizedTensor([[187., 186., 131.,   0., 203.,  64.,  80.,   0., 143., 152.],
+                         [ 16.,   0., 255.,   0.,   0., 150.,   0., 255.,  32., 255.],
+                         [255., 226.,   0., 255.,  55., 172.,   0., 255., 145., 255.],
+                         [207., 146., 216., 238.,   0.,   0., 141., 178., 255., 188.],
+                         [ 63.,  59.,  19., 162.,  30., 255., 109., 255.,   0., 255.]],
                         grad_fn=<AliasBackward0>)
     """
     def forward(self, input: torch.Tensor) -> QuantizedTensor:
@@ -503,15 +514,26 @@ class QuantizeDequantize(MinMaxQuantizer):
     Precisely,
 
     .. math::
-        out = (x_{int} + offset) * scale
+        out = (\overline{input} + offset) * scale
 
     where
 
     .. math::
-        x_{int} = clamp\left(\left\lceil\frac{input}{scale}\right\rfloor - offset, qmin, qmax\right)
+        \overline{input} = clamp\left(\left\lceil\frac{input}{scale}\right\rfloor - offset, qmin, qmax\right)
 
     and :math:`scale` and :math:`offset` are derived from learnable parameters
     :math:`\theta_{min}` and :math:`\theta_{max}`.
+
+    If block size :math:`B = \begin{pmatrix} B_0  & B_1  & \cdots & B_{D-1} \end{pmatrix}` is specified,
+    this equation will be further generalized as
+
+    .. math::
+        out_{j_0 \cdots j_{D-1}} &= (\overline{input}_{j_0 \cdots j_{D-1}} + offset_{i_0 \cdots i_{D-1}}) * scale_{i_0 \cdots i_{D-1}}\\
+        \overline{input}_{j_0 \cdots j_{D-1}} &= clamp\left(
+            \left\lceil\frac{input_{j_0 \cdots j_{D-1}}}{scale_{i_0 \cdots i_{D-1}}}\right\rfloor
+            - offset_{i_0 \cdots i_{D-1}}, qmin, qmax\right)\\
+
+        \text{where} \quad \forall_{0 \leq d < D} \quad i_d = \left\lfloor \frac{j_d}{B_d} \right\rfloor
 
     Args:
         shape (tuple): Shape of the quantization parameters
@@ -520,6 +542,7 @@ class QuantizeDequantize(MinMaxQuantizer):
                           otherwise, performs asymmetric quantization
         encoding_analyzer (EncodingAnalyzer, optional): Encoding analyzer for calibrating quantization encodings
                                                         (default: absolute min-max encoding analyzer)
+        block_size (Tuple[int, ...], optional): Block size
 
     :ivar Tensor min: :math:`\theta_{min}` from which scale and offset will be derived.
     :ivar Tensor max: :math:`\theta_{max}` from which scale and offset will be derived.
@@ -534,7 +557,7 @@ class QuantizeDequantize(MinMaxQuantizer):
 
         >>> import aimet_torch.v2.quantization as Q
         >>> input = torch.randn(5, 10)
-        >>> qdq = Q.affine.QuantizeDequantize(shape=(5, 1), bitwidth=8, symmetric=False)
+        >>> qdq = Q.affine.QuantizeDequantize(shape=(5, 2), bitwidth=8, symmetric=False, block_size=(1, 5))
         >>> qdq.is_initialized()
         False
         >>> with qdq.compute_encodings():
@@ -543,22 +566,22 @@ class QuantizeDequantize(MinMaxQuantizer):
         >>> qdq.is_initialized()
         True
         >>> qdq(input)
-        DequantizedTensor([[ 1.9185, -1.7549, -0.2974, -0.8328, -1.3831, -1.1303,
-                             1.3534, -0.6990,  2.0375,  0.1636],
-                           [ 0.6366, -0.1522,  0.6643,  0.0000, -2.2559, -1.0103,
-                             1.2733,  0.8027, -1.0518, -1.3286],
-                           [-0.2097,  1.3444,  0.5180,  1.4677, -0.4440,  0.5674,
-                             0.6414,  0.1727,  0.3207, -1.6774],
-                           [ 0.7324, -0.4534, -1.6393,  1.3254,  0.9650,  1.2556,
-                             0.5697,  0.4069,  0.7673, -0.0465],
-                           [-0.1790,  0.9488, -0.1014,  1.3427,  0.4714, -0.0418,
-                             0.3759,  0.1731,  0.3103,  0.9846]],
+        DequantizedTensor([[-0.2771,  0.3038,  1.0819,  0.9700,  0.9487, -0.1307,
+                            -1.7894, -0.1709, -0.2212,  0.7741],
+                           [-1.0295, -1.2265, -1.0295,  1.0564,  0.6177, -1.0386,
+                            -0.0176, -2.6054,  1.8836, -0.1232],
+                           [-0.8229,  0.5540,  0.3992, -0.2363,  1.2546, -1.0036,
+                             0.2355,  0.1741,  1.6079,  0.6247],
+                           [-1.0115,  1.2458,  0.9157, -1.4694, -0.0639, -0.2568,
+                             0.0680,  1.6695,  0.7932, -0.1889],
+                           [ 0.0158,  0.5695,  0.5220,  0.1977, -1.4475, -0.0424,
+                            -1.1128, -0.8796, -0.1060,  1.5897]],
                           grad_fn=<AliasBackward0>)
 
 
         >>> import aimet_torch.v2.quantization as Q
         >>> input = torch.randn(5, 10)
-        >>> qdq = Q.affine.QuantizeDequantize(shape=(5, 1), bitwidth=8, symmetric=False)
+        >>> qdq = Q.affine.QuantizeDequantize(shape=(5, 2), bitwidth=8, symmetric=False, block_size=(1, 5))
         >>> qdq.is_initialized()
         False
         >>> qdq.min = torch.nn.Parameter(-torch.ones_like(qdq.min))
@@ -566,16 +589,16 @@ class QuantizeDequantize(MinMaxQuantizer):
         >>> qdq.is_initialized()
         True
         >>> qdq(input)
-        DequantizedTensor([[ 1.0039, -0.9961, -0.2902, -0.8314, -0.9961, -0.9961,
-                             1.0039, -0.6980,  1.0039,  0.1647],
-                           [ 0.6353, -0.1490,  0.6667,  0.0000, -0.9961, -0.9961,
-                             1.0039,  0.8078, -0.9961, -0.9961],
-                           [-0.2118,  1.0039,  0.5176,  1.0039, -0.4471,  0.5647,
-                             0.6353,  0.1804,  0.3216, -0.9961],
-                           [ 0.7294, -0.4471, -0.9961,  1.0039,  0.9569,  1.0039,
-                             0.5725,  0.4157,  0.7686, -0.0471],
-                           [-0.1804,  0.9490, -0.1020,  1.0039,  0.4706, -0.0471,
-                             0.3765,  0.1725,  0.3137,  0.9882]],
+        DequantizedTensor([[-0.6196, -0.9961,  0.0549, -0.6431,  1.0039, -0.8706,
+                             1.0039,  0.4706, -0.2353,  0.8078],
+                           [ 0.3451, -0.1176, -0.9961, -0.4549, -0.0549, -0.0471,
+                            -0.5255, -0.2353,  1.0039, -0.9961],
+                           [-0.4157,  0.0784,  0.5333,  0.1647, -0.9961, -0.9961,
+                            -0.2118, -0.2196,  0.9176,  0.9490],
+                           [ 1.0039, -0.7765,  0.4784, -0.8706,  1.0039,  0.6039,
+                            -0.4157, -0.2118, -0.9961,  0.3137],
+                           [ 1.0039,  0.3216, -0.2353, -0.7765, -0.9961,  0.8000,
+                             1.0039,  0.4157,  0.4392,  0.4863]],
                           grad_fn=<AliasBackward0>)
     """
     def forward(self, input: torch.Tensor) -> DequantizedTensor:
@@ -621,8 +644,8 @@ class Dequantize(torch.nn.Module):
 class GroupedBlockQuantizeDequantize(QuantizeDequantize):
     """ Class for performing Grouped Block Quantize Dequantize """
     def __init__(self, shape, bitwidth: int, symmetric: bool, decompressed_bw: int,
-                 encoding_analyzer: EncodingAnalyzer = None, block_size: Optional[Tuple] = None,
-                 block_grouping: Optional[Tuple] = None):
+                 encoding_analyzer: EncodingAnalyzer = None, block_size: Optional[Tuple[int, ...]] = None,
+                 block_grouping: Optional[Tuple[int, ...]] = None):
         """
         Grouped Block Quantize Dequantize constructor.
 
@@ -655,7 +678,7 @@ class GroupedBlockQuantizeDequantize(QuantizeDequantize):
         self.block_grouping = block_grouping
         if self.block_grouping is None:
             # Default to BQ behavior with 1 for all block grouping dims if not provided
-            self.block_grouping = [1] * len(self.shape)
+            self.block_grouping = tuple(1 for _ in enumerate(self.shape))
 
         if block_grouping is not None:
             if len(block_grouping) != len(shape):
