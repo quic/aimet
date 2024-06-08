@@ -392,8 +392,7 @@ class BaseQuantizationMixin(abc.ABC):
                                                          e.signed,
                                                          e.symmetry,
                                                          block_size=None)
-                delattr(self, param_name)
-                self.register_buffer(param_name, rounded_weight)
+                setattr(self, param_name, torch.nn.Parameter(rounded_weight))
                 # Remove associated quantizer since the weight is holding already-quantized values
                 self.param_quantizers[param_name] = None
 

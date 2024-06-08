@@ -186,8 +186,7 @@ class GPTVQOptimizer:
                                                  e.signed,
                                                  e.symmetry,
                                                  block_size=None)
-        delattr(module, 'weight')
-        module.register_buffer('weight', rounded_weight)
+        module.weight = torch.nn.Parameter(rounded_weight)
         # Remove associated quantizer since the weight is holding already-quantized values
         module.param_quantizers['weight'] = None
 
