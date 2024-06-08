@@ -173,6 +173,7 @@ class QuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-metho
             4) Dequantize the output of the kernel call
 
         """
+        return super().forward(*args, **kwargs)
 
     @classmethod
     def set_default_kernel(cls, kernel: Callable):
