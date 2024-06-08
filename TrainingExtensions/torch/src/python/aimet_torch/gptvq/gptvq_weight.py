@@ -111,30 +111,14 @@ class GPTVQ:
             cls._apply_gptvq(model, sim, dummy_input, gptvq_params, set(module_names_to_exclude), block_level_module_names)
 
         cls._export_encodings_to_json(param_encoding_path, file_name_prefix, sim, gptvq_params.rows_per_block)
-        return sim
+        # Restore all nn.Parameters holding DequantizedTensors to hold plain torch.Tensor
+        # so as to keep the output as a pure pytorch model
+        for qmodule in sim.qmodules():
+            for name, param in dict(qmodule.named_parameters()):
+                if isinstance(param, QuantizedTensorBase):
+                    setattr(qmodule, name, nn.Parameter(param.as_subclass(torch.Tensor)))
 
-    @staticmethod
-    def _validate_module_names(model: nn.Module, module_names: Iterable[str], parameter_name: str):
-        """
-        Validate user provided parameter containing module names
-        Each module should exist in the model and be a GPTVQ supportable module
-
-        :param model: torch Model
-        :param module_names: Iterable of module names
-        :param parameter_name: Name of parameter to validate
-        :raise ValueError: If module names are not valid
-        """
-        name_to_module = dict(model.named_modules())
-        invalid_module_names = []
-        for name in module_names:
-            if name in name_to_module and isinstance(name_to_module[name], GPTVQSupportedModules):
-                continue
-            invalid_module_names.append(name)
-
-        if invalid_module_names:
-            msg = (f"Parameter `{parameter_name}` contains invalid module names ({', '.join(invalid_module_names)}) "
-                   f"that don't exist in model or aren't GPTVQ supportable")
-            raise ValueError(msg)
+        return sim.model
 
     @staticmethod
     def _validate_module_names(model: nn.Module, module_names: Iterable[str], parameter_name: str):
