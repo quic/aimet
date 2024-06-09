@@ -73,6 +73,10 @@ template <typename DTYPE>
 void concat(const std::vector<std::vector<DTYPE>>& data, const std::vector<uint32_t>& inputShape, int32_t axis,
             DTYPE* output, std::vector<uint32_t>& outputShape);
 
+template <typename DTYPE>
+std::tuple<DTYPE, std::vector<int>> quantizeSingleChannelPerBlockScale(std::vector<DTYPE>& scale, int compressed_bw,
+                                                                       int decompressed_bw);
+
 }   // End of namespace DlQuantization
 
 #endif   // QUANTIZATION_UTILS_H_

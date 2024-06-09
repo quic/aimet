@@ -39,6 +39,7 @@
 #include "quantization_utils.hpp"
 #include <gtest/gtest.h>
 #include <random>
+#include <cmath>
 
 using namespace DlQuantization;
 
@@ -263,4 +264,39 @@ TEST_F(TestUtilitiesCpu, SANITY_Concat4)
     ASSERT_EQ(outputData.size(), this->data2.size());
     ASSERT_EQ(outputData, this->data2);
     ASSERT_EQ(outputShape, this->shape2);
+}
+
+TEST_F(TestUtilitiesCpu, SANITY_QuantizeSingleChannelPerBlockScale) {
+    std::vector<float> scale;
+    scale.resize(24);
+    std::mt19937 eng;
+    std::uniform_real_distribution<> distrib(0.001, 1);
+    for(auto& d : scale) {
+        d = distrib(eng);
+    }
+    float maxScale = 0.0;
+    for (int i=0; i< 24; i++) {
+        if (maxScale < scale[i])
+        {
+            maxScale = scale[i];
+        }
+    }
+    float perChannelScale;
+    std::vector<int> perBlockIntScale;
+    tie(perChannelScale, perBlockIntScale) = quantizeSingleChannelPerBlockScale(scale, 4, 8);
+
+    ASSERT_EQ(perChannelScale, maxScale / 16);
+    for (int i=0; i<24; i++)
+    {
+        ASSERT_GE(perBlockIntScale[i], 1);
+        ASSERT_LE(perBlockIntScale[i], 16);
+        if (perBlockIntScale[i] == 1)
+        {
+            ASSERT_LE(abs(scale[i] - perBlockIntScale[i]*perChannelScale), perChannelScale);
+        }
+        else
+        {
+            ASSERT_LE(abs(scale[i] - perBlockIntScale[i]*perChannelScale), perChannelScale / 2.0);
+        }
+    }
 }
