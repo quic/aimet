@@ -140,6 +140,7 @@ map_torch_types_to_onnx = {
     elementwise_ops.Reshape: ['Reshape'],
     elementwise_ops.RoiAlign: ['RoiAlign'],
     elementwise_ops.ScatterElements: ['ScatterElements'],
+    elementwise_ops.Select: ['Gather'],
     elementwise_ops.Split: ['Split'],
     elementwise_ops.StridedSlice: ['Slice'],
     elementwise_ops.Subtract: ['Sub'],
