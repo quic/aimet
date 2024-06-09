@@ -132,6 +132,7 @@ Baddbmm = create_wrapper_module('Baddbmm', torch.baddbmm)
 Addmm = create_wrapper_module('Addmm', torch.addmm)
 RSqRt = create_wrapper_module('RSqrt', torch.rsqrt)
 Square = create_wrapper_module('Square', torch.square)
+Select = create_wrapper_module('Select', torch.select)
 
 # modules for functional operations defined under torch.nn.functional package
 Interpolate = create_wrapper_module('Interpolate', torch.nn.functional.interpolate)
