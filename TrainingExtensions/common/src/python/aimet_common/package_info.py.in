@@ -39,3 +39,4 @@
 Product = '@PRODUCT@'
 Version_Info = '@SW_VERSION@'
 Postfix = '@POSTFIX@'
+Qnn_Version_Info = '@QNN_VERSION@'
