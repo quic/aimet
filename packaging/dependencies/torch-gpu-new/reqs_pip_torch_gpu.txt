@@ -1,5 +1,5 @@
 bokeh==3.2.2
-cumm
+cumm-cu120
 cvxpy
 cylp
 dataclasses
@@ -23,7 +23,7 @@ PyYAML
 scikit-learn==1.1.3
 scipy==1.8.1
 setuptools
-spconv
+spconv-cu120
 tensorboardX==2.4
 torch==2.1.2
 torchvision==0.16.2
