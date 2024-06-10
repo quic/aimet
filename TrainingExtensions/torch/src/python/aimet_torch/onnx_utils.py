@@ -1601,3 +1601,50 @@ def _restore_pruned_initializer(onnx_graph: onnx.GraphProto,
         new_initializer = result.initializer
         new_initializer.name = new_initializer_name or input_tensor
         onnx_graph.initializer.append(new_initializer)
+
+
+def get_tensor_to_consumer_map(op_to_io_tensor_map: Dict[str, Dict]) -> Dict[str, str]:
+    """
+    Get a dictionary mapping tensor names to names of ops consuming that tensor.
+
+    :param op_to_io_tensor_map: Dictionary mapping op names to IO Tensors
+    :return: Dictionary mapping tensor names to names of ops consuming that tensor
+    """
+    tensor_to_consumer_map = {}
+    if version.parse(torch.__version__) >= version.parse("1.13.0") and EXPORT_TO_ONNX_DIRECT:
+        for op_name, io_tensors in op_to_io_tensor_map.items():
+            for inp in io_tensors.inputs:
+                if inp not in tensor_to_consumer_map:
+                    tensor_to_consumer_map[inp] = [op_name]
+                else:
+                    tensor_to_consumer_map[inp].append(op_name)
+            for output in io_tensors.outputs:
+                if output not in tensor_to_consumer_map:
+                    tensor_to_consumer_map[output] = []
+    return tensor_to_consumer_map
+
+
+def get_layers_in_io_tensor_map(op_to_io_tensor_map: Dict) -> Dict[str, str]:
+    """
+    extract root(layer) names of onnx op names in tensor map
+    :param op_to_io_tensor_map: ONNX or Torch Script map of layer name to it's input/output tensors
+    :return: a set containing layer names present in io tensor map.
+    """
+    layers_to_onnx_op_names = {}
+    if version.parse(torch.__version__) < version.parse("1.13.0") or not EXPORT_TO_ONNX_DIRECT:
+        for name in op_to_io_tensor_map.keys():
+            modified_name = name
+            if modified_name.endswith('.end'):
+                modified_name = modified_name[:-4]
+            if name in layers_to_onnx_op_names.keys():
+                layers_to_onnx_op_names[modified_name.split('#')[0]].append(name)
+            else:
+                layers_to_onnx_op_names[modified_name.split('#')[0]] = [name]
+    else:
+        for name in op_to_io_tensor_map.keys():
+            pytorch_name = get_pytorch_name_from_onnx_name(name)
+            if pytorch_name in layers_to_onnx_op_names.keys():
+                layers_to_onnx_op_names[pytorch_name].append(name)
+            else:
+                layers_to_onnx_op_names[pytorch_name] = [name]
+    return layers_to_onnx_op_names
