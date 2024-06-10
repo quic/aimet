@@ -551,8 +551,6 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                 assert not quantizer.is_encoding_frozen
                 if not allow_overwrite and quantizer.encoding is not None:
                     quantizer.freeze_encoding()
-
-                _logger.info("Setting quantization encodings for parameter: %s", param_name)
             else:
                 if not strict:
                     _logger.warning("Param Quantizer disabled, Couldn't set quantization encodings provided "
