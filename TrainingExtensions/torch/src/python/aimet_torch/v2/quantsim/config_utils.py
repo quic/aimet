@@ -54,7 +54,6 @@ def _parse_arg_for_condition(arg):
         if not isinstance(arg[0], torch.nn.Module):
             raise RuntimeError('List given as arg must contain either torch.nn.Module types or specific '
                                'torch.nn.Module objects.')
-        assert isinstance(arg[0], torch.nn.Module)
         qmodules = arg
         condition = lambda module: module in qmodules
     else:
@@ -109,9 +108,9 @@ def set_activation_quantizers_to_float(sim: QuantizationSimModel, arg, exponent_
         2. A list of torch.nn.Modules, in which case all modules in the list will be set
         3. A callable function which takes a torch.nn.Module as input and returns True if the module is to be set, False
            otherwise
-    :param exponent_bits: Exponent bits for float quantization
-    :param mantissa_bits: Mantissa bits for float quantization
-    :param dtype: Dtype for float quantization
+    :param exponent_bits: Number of exponent bits to simulate
+    :param mantissa_bits: Number of mantissa bits to simulate
+    :param dtype: torch.dtype to simulate. This argument is mutually exclusive with exponent_bits and mantissa_bits.
     """
 
     condition = _parse_arg_for_condition(arg)
@@ -122,13 +121,15 @@ def _set_activation_quantizers_to_float(sim: QuantizationSimModel, condition: Ca
                                         exponent_bits: int = None, mantissa_bits: int = None,
                                         dtype: torch.dtype = None):
     """ Set activation quantizers of all the modules that satisfy the given condition to float. """
-    for _, quant_layer in sim.quant_wrappers():
+    for _, quant_layer in sim.named_qmodules():
         if condition(quant_layer):
-            for idx, _ in enumerate(quant_layer.input_quantizers):
-                quant_layer.input_quantizers[idx] = FloatQuantizeDequantize(exponent_bits, mantissa_bits, dtype)
+            for idx, quantizer in enumerate(quant_layer.input_quantizers):
+                if quantizer is not None:
+                    quant_layer.input_quantizers[idx] = FloatQuantizeDequantize(exponent_bits, mantissa_bits, dtype)
 
-            for idx, _ in enumerate(quant_layer.output_quantizers):
-                quant_layer.output_quantizers[idx] = FloatQuantizeDequantize(exponent_bits, mantissa_bits, dtype)
+            for idx, quantizer in enumerate(quant_layer.output_quantizers):
+                if quantizer is not None:
+                    quant_layer.output_quantizers[idx] = FloatQuantizeDequantize(exponent_bits, mantissa_bits, dtype)
 
 
 @overload
@@ -151,7 +152,8 @@ def set_blockwise_quantization_for_weights(sim: QuantizationSimModel, condition:
 
 def set_blockwise_quantization_for_weights(sim: QuantizationSimModel, arg, bitwidth: int, symmetric: bool,
                                            block_size: Tuple[int, ...]):
-    """ Set weight parameter quantizers of modules to blockwise.
+    """
+    Set weight parameter quantizers of modules to blockwise.
 
     :param sim: Quantsim to set activation quantizers for
     :param arg: Argument determining which modules to set. This can consist of either:
@@ -171,7 +173,8 @@ def _get_layers_to_quantizer_shapes_for_block_size(sim, condition, block_size):
     layer_to_quantizer_shape_dict = {}
     invalid_layers_for_block_size = []
     for name, quant_layer in sim.named_qmodules():
-        if condition(quant_layer) and 'weight' in quant_layer.param_quantizers:
+        if condition(quant_layer) and 'weight' in quant_layer.param_quantizers and \
+                quant_layer.param_quantizers['weight'] is not None:
             assert hasattr(quant_layer, 'weight')
             layer_to_quantizer_shape_dict[quant_layer] = \
                 _get_weight_quantizer_shape_from_block_size(quant_layer, block_size)
@@ -221,7 +224,8 @@ def set_grouped_blockwise_quantization_for_weights(sim: QuantizationSimModel,
 def set_grouped_blockwise_quantization_for_weights(sim: QuantizationSimModel, arg,
                                                    bitwidth: int, symmetric: bool, decompressed_bw: int,
                                                    block_size: Tuple[int, ...], block_grouping: Tuple[int, ...]):
-    """ Set weight parameter quantizers of modules to grouped blockwise.
+    """
+    Set weight parameter quantizers of modules to grouped blockwise.
 
     :param sim: Quantsim to set activation quantizers for
     :param arg: Argument determining which modules to set. This can consist of either:

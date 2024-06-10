@@ -42,6 +42,7 @@ from aimet_torch.examples.test_models import SingleResidualWithAvgPool
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.quantsim.config_utils import set_activation_quantizers_to_float, \
     set_blockwise_quantization_for_weights, set_grouped_blockwise_quantization_for_weights
+from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.affine import QuantizeDequantize, GroupedBlockQuantizeDequantize
 from aimet_torch.v2.quantization.float import FloatQuantizeDequantize
 import aimet_torch.v2.nn as aimet_nn
@@ -52,6 +53,11 @@ def test_set_activation_quantizers_to_float():
 
     qsim = QuantizationSimModel(model, dummy_input)
     qsim.compute_encodings(lambda m, _: m(dummy_input), None)
+
+    starting_quantizer_count = 0
+    for module in qsim.model.modules():
+        if isinstance(module, QuantizerBase):
+            starting_quantizer_count += 1
 
     other_layers = []
     relu_layers = []
@@ -93,6 +99,13 @@ def test_set_activation_quantizers_to_float():
 
     for other_layer in other_layers:
         assert isinstance(other_layer.output_quantizers[0], QuantizeDequantize)
+
+    ending_quantizer_count = 0
+    for module in qsim.model.modules():
+        if isinstance(module, QuantizerBase):
+            ending_quantizer_count += 1
+
+    assert starting_quantizer_count == ending_quantizer_count
 
 def test_set_blockwise_quantization_for_weights():
     model = SingleResidualWithAvgPool().eval()
