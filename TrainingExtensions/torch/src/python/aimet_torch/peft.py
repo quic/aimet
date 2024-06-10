@@ -207,7 +207,7 @@ class PeftQuantUtils:
     """
     Utilities for quantizing peft model
     """
-    def __init__(self, adapater_name_to_meta_data: Dict[str, AdapterMetaData], name_to_module_dict = None):
+    def __init__(self, adapater_name_to_meta_data: Dict[str, AdapterMetaData], name_to_module_dict=None):
         """
         Init for Peft utilities for quantization
 
@@ -367,11 +367,11 @@ class PeftQuantUtils:
         :param onnx_model_path: Path from where we can load the exported onnx model. This can be the same path to where
                                 QuantSim exported the ONNX model
         """
-
+        # pylint: disable=too-many-locals
         assert os.path.exists(onnx_model_path), 'The onnx model does not exist in the location specified'
 
         onnx_model = onnx.load(onnx_model_path)
-        onnx_node_to_io_tensor_map, valid_param_set = OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
+        onnx_node_to_io_tensor_map, _ = OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
         layers_to_onnx_op_names = get_layers_in_io_tensor_map(onnx_node_to_io_tensor_map)
 
         tensors = {}
