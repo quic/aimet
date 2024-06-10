@@ -145,6 +145,10 @@ def test_set_blockwise_quantization_for_weights():
     assert qsim.model.fc.param_quantizers['weight'].bitwidth == 8
     assert len(qsim.model.fc.param_quantizers['weight'].shape) == 1
 
+    with pytest.raises(RuntimeError):
+        # This should error out since the first conv's in_channels of 3 is invalid with block size 4
+        set_blockwise_quantization_for_weights(qsim, [aimet_nn.QuantizedConv2d], 4, True, [1, 4, -1, -1])
+
     set_blockwise_quantization_for_weights(qsim, [aimet_nn.QuantizedLinear], 4, True, [1, 4])
 
     assert not qsim.model.fc.param_quantizers['weight'].is_initialized()
@@ -211,6 +215,11 @@ def test_set_grouped_blockwise_quantization_for_weights():
     assert qsim.model.fc.param_quantizers['weight'].is_initialized()
     assert qsim.model.fc.param_quantizers['weight'].bitwidth == 8
     assert len(qsim.model.fc.param_quantizers['weight'].shape) == 1
+
+    with pytest.raises(RuntimeError):
+        # This should error out since the first conv's in_channels of 3 is invalid with block size 4
+        set_grouped_blockwise_quantization_for_weights(qsim, [aimet_nn.QuantizedConv2d], 4, True, 8, [1, 4, -1, -1],
+                                                       [1, -1, -1, -1])
 
     set_grouped_blockwise_quantization_for_weights(qsim, [aimet_nn.QuantizedLinear], 4, True, 8, [1, 4], [1, -1])
 
