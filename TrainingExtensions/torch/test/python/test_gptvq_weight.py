@@ -46,6 +46,8 @@ from torch.utils.data import DataLoader, Dataset
 from aimet_torch.gptvq.defs import GPTVQSupportedModules
 from aimet_torch.gptvq.gptvq_weight import GPTVQ, GPTVQParameters
 from aimet_torch.v2.nn import BaseQuantizationMixin
+from aimet_torch.v2.quantization.affine import VectorEncoding
+from aimet_torch.v2.quantsim import QuantizationSimModel
 from models import test_models
 
 QUANTSIM_CONFIG = {
@@ -274,3 +276,41 @@ class TestGPTVQWeight:
         assert GPTVQ._get_block_level_module_names(
             model, dummy_input, block_level_module_names, set()
         ) == [["linear1"], ["linear2"], ["linear3"]]
+
+    def test_gptvq_and_load_encodings(self):
+        model = test_models.ModelWithThreeLinears()
+        data_loader = DataLoader(RandomDataset(data_size=1, input_dim=768), batch_size=1, shuffle=False)
+        gptvq_parameters = GPTVQParameters(data_loader, forward_fn=lambda m, d: m(d[0]), num_of_kmeans_iterations=1)
+        dummy_input = torch.randn(1, 768)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = f"{temp_dir}/quantsim_config.json"
+            with open(config_path, "w") as f:
+                json.dump(QUANTSIM_CONFIG, f)
+
+            rounded_model = GPTVQ.apply_gptvq(
+                model,
+                dummy_input,
+                gptvq_parameters,
+                param_encoding_path=temp_dir,
+                config_file_path=config_path,
+                module_names_to_exclude=["linear2"]
+            )
+
+            sim = QuantizationSimModel(
+                rounded_model,
+                dummy_input=dummy_input,
+                default_param_bw=gptvq_parameters.vector_bw,
+                config_file=config_path
+            )
+            sim.load_encodings(f"{temp_dir}/gptvq.encodings", allow_overwrite=False)
+            assert hasattr(sim.model.linear1.weight, "encoding")
+            assert isinstance(sim.model.linear1.weight.encoding, VectorEncoding)
+            assert sim.model.linear1.param_quantizers["weight"] is None
+
+            # linear2 was excluded in GPTVQ
+            assert not hasattr(sim.model.linear2.weight, "encoding")
+            assert sim.model.linear2.param_quantizers["weight"] is not None
+
+            assert hasattr(sim.model.linear3.weight, "encoding")
+            assert isinstance(sim.model.linear3.weight.encoding, VectorEncoding)
+            assert sim.model.linear3.param_quantizers["weight"] is None

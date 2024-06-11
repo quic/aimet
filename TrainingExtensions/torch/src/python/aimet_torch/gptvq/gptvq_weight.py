@@ -111,14 +111,13 @@ class GPTVQ:
             cls._apply_gptvq(model, sim, dummy_input, gptvq_params, set(module_names_to_exclude), block_level_module_names)
 
         cls._export_encodings_to_json(param_encoding_path, file_name_prefix, sim, gptvq_params.rows_per_block)
-        SaveUtils.remove_quantization_wrappers(sim.model)
         # Restore all nn.Parameters holding DequantizedTensors to hold plain torch.Tensor
         # so as to keep the output as a pure pytorch model
         for qmodule in sim.qmodules():
             for name, param in qmodule.named_parameters():
                 if isinstance(param, QuantizedTensorBase):
                     setattr(qmodule, name, nn.Parameter(param.as_subclass(torch.Tensor)))
-
+        SaveUtils.remove_quantization_wrappers(sim.model)
         return sim.model
 
     @staticmethod

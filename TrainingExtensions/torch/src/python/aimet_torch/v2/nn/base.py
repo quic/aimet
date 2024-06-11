@@ -43,7 +43,7 @@ from typing import Type, List, Dict, Union, Iterable, Mapping, Optional
 
 import torch.nn as nn
 from torch import Tensor
-from aimet_torch.v2.quantization.affine.encoding import VectorEncoding
+from aimet_torch.v2.quantization.affine.encoding import VectorEncoding, AffineEncoding
 
 from aimet_torch.v2.quantization.tensor import QuantizedTensorBase
 from aimet_torch.v2.quantization.base import QuantizerBase
@@ -374,9 +374,7 @@ class BaseQuantizationMixin(abc.ABC):
                 continue
             encoding = encodings.get(param_name, None)
 
-            # TODO (geunlee)
-            # if is_vector_encoding(encoding):
-            if False:
+            if is_vector_encoding(encoding):
                 # Vector encodings will be held directly by weights, not by quantizers.
                 quantizer.set_legacy_encodings(encoding)
                 rounded_weight = quantizer(self.weight)
@@ -386,13 +384,21 @@ class BaseQuantizationMixin(abc.ABC):
                 assert isinstance(rounded_weight.encoding, AffineEncoding)
                 e = rounded_weight.encoding
                 # Convert affine encoding to vector encoding
-                rounded_weight.encoding = VectorEncoding(e.scale, # TODO (geunlee)
+                vector_encoding_properties = {
+                    "rows_per_block": encoding[0]["rows_per_block"],
+                    "cols_per_block": encoding[0]["cols_per_block"],
+                    "vector_dim": encoding[0]["vector_dim"],
+                    "vector_stride": encoding[0]["vector_stride"],
+                    "index_bw": encoding[0]["index_bw"],
+                }
+                rounded_weight.encoding = VectorEncoding(e.scale,
                                                          e.offset,
                                                          e.bitwidth,
                                                          e.signed,
                                                          e.symmetry,
-                                                         block_size=None)
-                setattr(self, param_name, torch.nn.Parameter(rounded_weight))
+                                                         block_size=None,
+                                                         **vector_encoding_properties)
+                setattr(self, param_name, nn.Parameter(rounded_weight))
                 # Remove associated quantizer since the weight is holding already-quantized values
                 self.param_quantizers[param_name] = None
 
@@ -582,3 +588,23 @@ def _remove_quantizers(quantizers, keys):
         raise
     else:
         return ctx
+
+
+def is_vector_encoding(encoding: Optional[List[Dict]]) -> bool:
+    """
+    Check if encoding is from vector quantization
+
+    :param encoding: List of encoding dictionaries
+    :return: True if all required vector quantization properties are included in encoding
+    """
+    if encoding is None:
+        return False
+
+    required_properties = (
+        "rows_per_block",
+        "cols_per_block",
+        "vector_dim",
+        "vector_stride",
+        "index_bw",
+    )
+    return all((property_ in encoding[0] for property_ in required_properties))
