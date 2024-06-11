@@ -1,8 +1,9 @@
+# /usr/bin/env python3
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -35,32 +36,29 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-import glob
-import os
-from setuptools import setup
-from torch.utils.cpp_extension import BuildExtension, CppExtension, CUDAExtension
+""" Conditionally imports to use AIMET features using MO and python-only implementations """
 
-enable_cuda = os.environ["ENABLE_CUDA_PYTORCH"]
-if enable_cuda == "1":
-    extension_cls = CUDAExtension
-elif enable_cuda == "0":
-    extension_cls = CppExtension
-else:
-    raise ValueError(f"Unexpected value for 'ENABLE_CUDA_PYTORCH'. Expected 0 or 1; got {enable_cuda}")
+# pylint: disable=unused-wildcard-import, wildcard-import, protected-access
+try:
+    from aimet_common.AimetTensorQuantizer import *
+except ImportError:
+    ERROR_MESSAGE = "Cannot import AimetTensorQuantizer." \
+                    " Please build AimetTensorQuantizer and add artifact path to PYTHONPATH" \
+                    " to resolve this issue"
 
-setup(
-    name='aimet_tensor_quantizer',
-    ext_modules=[
-        extension_cls(
-            name='AimetTensorQuantizer',
-            sources=['${CMAKE_CURRENT_SOURCE_DIR}/src/AimetTensorQuantizer.cpp'],
-            include_dirs=['${DlQuantizationIncludePaths}'],
-            extra_objects=glob.glob('${CMAKE_BINARY_DIR}/artifacts/aimet_common/*libpymo*.so'),
-            extra_link_args=os.environ.get('EXTRA_LINK_ARGS', '').split(),
-            extra_compile_args=['-D_GLIBCXX_USE_CXX11_ABI=0', f'-DENABLE_CUDA_PYTORCH={enable_cuda}']),
-    ],
-    zip_safe=False,
-    cmdclass={
-        'build_ext': BuildExtension
-    }
-)
+
+    class _MetaUnavailableClass(type):
+        @classmethod
+        def __getattr__(mcs, name):
+            raise RuntimeError(f"Unable to access attribute {name} of class AimetTensorQuantizer: {ERROR_MESSAGE}")
+
+
+    class AimetTensorQuantizer(metaclass=_MetaUnavailableClass):
+        """
+        Placeholder class for raising errors when using this class
+        """
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError(f"Unable to initialize class AimetTensorQuantizer: {ERROR_MESSAGE}")
+
+        def __getattr__(self, name):
+            raise RuntimeError(f"Unable to access attribute {name} of class AimetTensorQuantizer: {ERROR_MESSAGE}")
