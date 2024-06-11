@@ -35,6 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """Test GPTVQ weight"""
+import itertools
 import json
 import tempfile
 
@@ -112,8 +113,9 @@ class TestGPTVQWeight:
             with open(config_path, "w") as f:
                 json.dump(QUANTSIM_CONFIG, f)
 
+            module_name_set = GPTVQ._get_candidate_module_name_set(model, module_names_to_exclude=None)
             quant_sim = GPTVQ._get_quantsim(
-                model, dummy_input, gptvq_parameters, config_file_path=config_path
+                model, dummy_input, gptvq_parameters, config_file_path=config_path, module_name_set=module_name_set
             )
 
         with GPTVQ._disable_quantizers_for_gptvq_optimization(quant_sim):
@@ -187,3 +189,87 @@ class TestGPTVQWeight:
                 for i in range(0, num_of_channels, gptvq_parameters.rows_per_block):
                     assert len({x["min"] for x in weight_encodings[i : i + gptvq_parameters.rows_per_block]}) == 1
                     assert len({x["max"] for x in weight_encodings[i : i + gptvq_parameters.rows_per_block]}) == 1
+
+    def test_gptvq_weight_update_with_block_level_modules(self):
+        model = test_models.ModelWithThreeLinears()
+        data_loader = DataLoader(RandomDataset(data_size=1, input_dim=768), batch_size=1, shuffle=False)
+        gptvq_parameters = GPTVQParameters(data_loader, forward_fn=lambda m, d: m(d[0]), num_of_kmeans_iterations=1)
+        dummy_input = torch.randn(1, 768)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = f"{temp_dir}/quantsim_config.json"
+            with open(config_path, "w") as f:
+                json.dump(QUANTSIM_CONFIG, f)
+
+            leaf_level_rounded_model = GPTVQ.apply_gptvq(
+                model,
+                dummy_input,
+                gptvq_parameters,
+                param_encoding_path=temp_dir,
+                config_file_path=config_path,
+                block_level_module_names=[["linear1"], ["linear2"]]
+            )
+            block_level_rounded_model = GPTVQ.apply_gptvq(
+                model,
+                dummy_input,
+                gptvq_parameters,
+                param_encoding_path=temp_dir,
+                config_file_path=config_path,
+                block_level_module_names=[["linear1", "linear2"]]
+            )
+
+        # Updated weight of first module should be same both leaf level and block level
+        assert torch.allclose(leaf_level_rounded_model.linear1.weight, block_level_rounded_model.linear1.weight)
+        # After first module optimization, Hessian of next module is affected by previous module if leaf level optimization
+        assert not torch.allclose(leaf_level_rounded_model.linear2.weight, block_level_rounded_model.linear2.weight)
+
+    def test_gptvq_module_name_validation(self):
+        model = test_models.ModelWithThreeLinears()
+        with pytest.raises(ValueError):
+            module_names_to_exclude = ["foo", "bar"]
+            GPTVQ._validate_module_names(model, module_names_to_exclude, "module_names_to_exclude")
+
+        with pytest.raises(ValueError):
+            block_level_module_names = itertools.chain.from_iterable([["linear1"], ["linear2", "foo"]])
+            GPTVQ._validate_module_names(model, block_level_module_names, "block_level_module_names")
+
+        GPTVQ._validate_module_names(model, ["linear1", "linear2"], "module_names_to_exclude")
+        GPTVQ._validate_module_names(model, itertools.chain.from_iterable([["linear1", "linear2"], ["linear3"]]), "block_level_module_names")
+
+    def test_gptvq_block_level_module_names(self):
+        model = test_models.ModelWithThreeLinears()
+        dummy_input = torch.randn(1, 768)
+
+        block_level_module_names = [["linear2"]]
+        assert GPTVQ._get_block_level_module_names(
+            model, dummy_input, block_level_module_names, {"linear1"}
+        ) == [["linear2"], ["linear3"]]
+
+        block_level_module_names = [["linear3", "linear2"]]
+        assert GPTVQ._get_block_level_module_names(
+            model, dummy_input, block_level_module_names, set()
+        ) == [["linear1"], ["linear2", "linear3"]]
+
+        block_level_module_names = [["linear3"], ["linear1"], ["linear2"]]
+        assert GPTVQ._get_block_level_module_names(
+            model, dummy_input, block_level_module_names, set()
+        ) == [["linear1"], ["linear2"], ["linear3"]]
+
+        block_level_module_names = [["linear3", "linear2"], ["linear1"]]
+        assert GPTVQ._get_block_level_module_names(
+            model, dummy_input, block_level_module_names, set()
+        ) == [["linear1"], ["linear2", "linear3"]]
+
+        block_level_module_names = [["linear2"], ["linear3", "linear1"]]
+        assert GPTVQ._get_block_level_module_names(
+            model, dummy_input, block_level_module_names, set()
+        ) == [["linear1", "linear3"], ["linear2"]]
+
+        block_level_module_names = [["linear3", "linear1", "linear2"]]
+        assert GPTVQ._get_block_level_module_names(
+            model, dummy_input, block_level_module_names, set()
+        ) == [["linear1", "linear2", "linear3"]]
+
+        block_level_module_names = None
+        assert GPTVQ._get_block_level_module_names(
+            model, dummy_input, block_level_module_names, set()
+        ) == [["linear1"], ["linear2"], ["linear3"]]
