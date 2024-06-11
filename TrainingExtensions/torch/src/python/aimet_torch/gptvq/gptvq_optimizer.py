@@ -35,7 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """GPTVQ optimizer"""
-
+import dataclasses
 from typing import Optional, Tuple
 
 import torch
@@ -171,24 +171,28 @@ class GPTVQOptimizer:
                 module.param_quantizers["weight"],
             )
 
-        qtzr = module.param_quantizers['weight']
-        rounded_weight = qtzr(rounded_weight.reshape(module.weight.shape)
-                                            .to(module.weight.dtype))
+        qtzr = module.param_quantizers["weight"]
+        rounded_weight = qtzr(
+            rounded_weight.reshape(module.weight.shape).to(module.weight.dtype)
+        )
         # At this point, rounded_weight is a quantized tensor with affine encoding
         # since quantizer is an affine quantizer
         assert isinstance(rounded_weight, DequantizedTensor)
         assert isinstance(rounded_weight.encoding, AffineEncoding)
         e = rounded_weight.encoding
         # Convert affine encoding to vector encoding
-        rounded_weight.encoding = VectorEncoding(e.scale, # TODO (geunlee)
-                                                 e.offset,
-                                                 e.bitwidth,
-                                                 e.signed,
-                                                 e.symmetry,
-                                                 block_size=None)
+        rounded_weight.encoding = VectorEncoding(
+            e.scale,
+            e.offset,
+            e.bitwidth,
+            e.signed,
+            e.symmetry,
+            block_size=e.block_size,
+            **dataclasses.asdict(gptvq_params),
+        )
         module.weight = torch.nn.Parameter(rounded_weight)
         # Remove associated quantizer since the weight is holding already-quantized values
-        module.param_quantizers['weight'] = None
+        module.param_quantizers["weight"] = None
 
     @staticmethod
     def _update_weight_block(

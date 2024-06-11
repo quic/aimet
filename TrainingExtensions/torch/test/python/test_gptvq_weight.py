@@ -145,7 +145,7 @@ class TestGPTVQWeight:
             with open(config_path, "w") as f:
                 json.dump(QUANTSIM_CONFIG, f)
 
-            gptvq_applied_sim = GPTVQ.apply_gptvq(
+            rounded_model = GPTVQ.apply_gptvq(
                 model,
                 dummy_input,
                 gptvq_parameters,
@@ -153,9 +153,9 @@ class TestGPTVQWeight:
                 config_file_path=config_path,
             )
 
-        assert not torch.allclose(model.linear1.weight, gptvq_applied_sim.model.linear1.weight)
-        assert not torch.allclose(model.linear2.weight, gptvq_applied_sim.model.linear2.weight)
-        assert not torch.allclose(model.linear3.weight, gptvq_applied_sim.model.linear3.weight)
+        assert not torch.allclose(model.linear1.weight, rounded_model.linear1.weight)
+        assert not torch.allclose(model.linear2.weight, rounded_model.linear2.weight)
+        assert not torch.allclose(model.linear3.weight, rounded_model.linear3.weight)
 
     def test_exported_param_encodings_after_gptvq(self):
         model = test_models.ModelWithThreeLinears()
@@ -201,7 +201,7 @@ class TestGPTVQWeight:
             with open(config_path, "w") as f:
                 json.dump(QUANTSIM_CONFIG, f)
 
-            leaf_level_optimized_sim = GPTVQ.apply_gptvq(
+            leaf_level_rounded_model = GPTVQ.apply_gptvq(
                 model,
                 dummy_input,
                 gptvq_parameters,
@@ -209,7 +209,7 @@ class TestGPTVQWeight:
                 config_file_path=config_path,
                 block_level_module_names=[["linear1"], ["linear2"]]
             )
-            block_level_optimized_sim = GPTVQ.apply_gptvq(
+            block_level_rounded_model = GPTVQ.apply_gptvq(
                 model,
                 dummy_input,
                 gptvq_parameters,
@@ -219,7 +219,7 @@ class TestGPTVQWeight:
             )
 
         # Updated weight of first module should be same both leaf level and block level
-        assert torch.allclose(leaf_level_optimized_sim.model.linear1.weight, block_level_optimized_sim.model.linear1.weight)
+        assert torch.allclose(leaf_level_rounded_model.linear1.weight, block_level_rounded_model.linear1.weight)
         # After first module optimization, Hessian of next module is affected by previous module if leaf level optimization
         assert not torch.allclose(leaf_level_rounded_model.linear2.weight, block_level_rounded_model.linear2.weight)
 

@@ -229,19 +229,31 @@ class AffineEncoding(EncodingBase):
 
 
 class VectorEncoding(AffineEncoding):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # TODO (geunlee): ...
-        # super().__init__(*args, **kwargs)
-        # self.vector_dim = kwargs['vector_dim']
-        # self.vector_stride = kwargs['vector_stride']
+    def __init__(
+        self,
+        scale: torch.Tensor,
+        offset: torch.Tensor,
+        bitwidth: int,
+        signed=False,
+        symmetry=False,
+        block_size: Optional[List] = None,
+        **kwargs,
+    ):
+        super().__init__(scale, offset, bitwidth, signed, symmetry, block_size)
+        self.rows_per_block = kwargs["rows_per_block"]
+        self.cols_per_block = kwargs["cols_per_block"]
+        self.vector_dim = kwargs["vector_dim"]
+        self.vector_stride = kwargs["vector_stride"]
+        self.index_bw = kwargs["index_bw"]
 
     def _to_legacy_format(self):
-        return super()._to_legacy_format()
-        # TODO (geunlee)
-        # encoding = super()._to_legacy_format()
-        # for i, _ in enumerate(encoding):
-        #     encoding[i].update(vector_dim=self.vector_dim,
-        #                        vector_stride=self.vector_stride,
-        #                        ...)
-        # return encoding
+        encoding = super()._to_legacy_format()
+        for i, _ in enumerate(encoding):
+            encoding[i].update(
+                rows_per_block=self.rows_per_block,
+                cols_per_block=self.cols_per_block,
+                vector_dim=self.vector_dim,
+                vector_stride=self.vector_stride,
+                index_bw=self.index_bw,
+            )
+        return encoding
