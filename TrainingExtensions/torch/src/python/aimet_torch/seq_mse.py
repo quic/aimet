@@ -139,7 +139,8 @@ class SequentialMse:
         :param checkpoints_config: Config files to split fp32/quant model by checkpoints to speedup activations sampling
         """
         # pylint: disable=protected-access
-        assert sim._quant_scheme == QuantScheme.post_training_tf, "Use TF quant-scheme with sequential MSE."
+        assert sim._quant_scheme in (QuantScheme.post_training_tf, QuantScheme.training_range_learning_with_tf_init), \
+            "Use TF quant-scheme with sequential MSE."
 
         # disable all input/output activation quantizers and
         # param quantizers of all the non-supported modules and from modules_to_exclude list.
