@@ -36,13 +36,12 @@
 # =============================================================================
 """GPTVQ optimizer"""
 
-import math
 from typing import Optional, Tuple
 
 import torch
 
 from aimet_common.utils import AimetLogger
-from aimet_torch.gptvq.activation_sampler import ActivationSampler
+from aimet_torch.gptvq import utils as gptvq_utils
 from aimet_torch.gptvq.defs import GPTVQParameters, DAMPENING_PERCENTAGE, BLOCK_STRIDE
 from aimet_torch.gptvq.utils import (
     get_assignments,
@@ -50,10 +49,7 @@ from aimet_torch.gptvq.utils import (
     fine_tune_codebook,
     quantize_dequantize_codebook,
 )
-from aimet_torch.gptvq import utils as gptvq_utils
 from aimet_torch.v2.nn import BaseQuantizationMixin
-from aimet_torch.v2.quantsim import QuantizationSimModel
-
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -63,44 +59,9 @@ class GPTVQOptimizer:
     Optimizes the weight rounding of quantized wrapper module
     """
 
-    # pylint: disable=too-many-locals
-    @classmethod
-    def gptvq_module(cls,
-                     quant_module: BaseQuantizationMixin,
-                     gptvq_params: GPTVQParameters,
-                     sim: QuantizationSimModel):
-        """
-        Run layer-wise GPTVQ optimization
-
-        :param quant_module: Quantization module
-        :param gptvq_params: Data holder containing GPTVQ parameters
-        :param sim: QuantizationSimModel object
-        """
-        assert isinstance(quant_module, BaseQuantizationMixin), "%s is not BaseQuantizationMixin" % quant_module
-        assert quant_module.param_quantizers["weight"], "%s does not have weight quantizer" % quant_module
-
-        original_weight = quant_module.weight
-        _, num_cols = original_weight.shape
-        device = original_weight.device
-        hessian = torch.zeros((num_cols, num_cols)).to(device)
-
-        act_sampler = ActivationSampler(quant_module, sim.model, gptvq_params.forward_fn)
-        # update the Hessian and the number of samples in place
-        n_samples = 0
-        for current_data in gptvq_params.data_loader:
-            inp_data = act_sampler.sample_acts(current_data)
-            if len(inp_data.shape) == 2:
-                inp_data = inp_data.unsqueeze(0)
-            curr_batch_size = inp_data.shape[0]
-            cls.update_hessian(inp_data, n_samples, curr_batch_size, hessian)
-            n_samples += curr_batch_size
-
-        with torch.no_grad():
-            cls._weight_update(quant_module, gptvq_params, hessian)
-
     # pylint: disable=too-many-locals, too-many-statements
     @classmethod
-    def _weight_update(cls, module: BaseQuantizationMixin, gptvq_params: GPTVQParameters, hessian: torch.Tensor):
+    def weight_update(cls, module: BaseQuantizationMixin, gptvq_params: GPTVQParameters, hessian: torch.Tensor):
         """
         Update the weights of module via GPTVQ optimization
 
@@ -257,29 +218,6 @@ class GPTVQOptimizer:
         hessian = torch.cholesky_inverse(hessian)
         hessian = torch.linalg.cholesky(hessian, upper=True)
         return hessian
-
-    @classmethod
-    def update_hessian(cls, inp: torch.tensor, n_samples: int, curr_batch_size: int, hessian: torch.tensor):
-        """
-        Updates the hessian matrix using the passed input data to the module and applies scaling
-
-        :param inp: activation input passed to the given module
-        :param hessian: hessian for the module used to do weight update
-        :param n_samples: samples seen so far for hessian computation
-        :param curr_batch_size: batch size of current input
-        """
-        #the hessian is of the shape [weight.shape[1], weight.shape[1]], i.e C*C columns
-        # THIS SHOULD WORK FOR ALL THE DIMENSIONS, it makes the last dimension match the weight's column dimension, and first one as the reshaped/ adjusted sample size
-        inp = inp.reshape((-1, inp.shape[-1]))
-
-        ## we calculate the transpose of input to compute the Hessian in accordance with the weight shape
-        inp = inp.T
-
-        # scale the hessian matrix in place
-        hessian *= n_samples / (n_samples + curr_batch_size)
-        inp = math.sqrt(2 / (n_samples + curr_batch_size)) * inp.float()
-        # update the hessian in place
-        hessian += inp.matmul(inp.T)
 
     @staticmethod
     def _get_inverse_hessian_diagonal(hessian_diagonal: torch.Tensor, gptvq_params: GPTVQParameters) -> Optional[torch.Tensor]:
