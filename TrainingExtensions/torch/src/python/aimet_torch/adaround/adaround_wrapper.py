@@ -44,7 +44,7 @@ import torch
 import torch.nn
 
 # Import AIMET specific modules
-import aimet_common.AimetTensorQuantizer as AimetTensorQuantizer
+import aimet_common.aimet_tensor_quantizer as AimetTensorQuantizer
 from aimet_common.defs import AdaroundConstants, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_torch.tensor_quantizer import StaticGridPerChannelQuantizer
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper

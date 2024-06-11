@@ -1,8 +1,9 @@
+# /usr/bin/env python3.8
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -35,32 +36,16 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-import glob
-import os
-from setuptools import setup
-from torch.utils.cpp_extension import BuildExtension, CppExtension, CUDAExtension
+import aimet_common._libpymo as mo_libpymo
+import aimet_common.py_libpymo as py_libpymo
 
-enable_cuda = os.environ["ENABLE_CUDA_PYTORCH"]
-if enable_cuda == "1":
-    extension_cls = CUDAExtension
-elif enable_cuda == "0":
-    extension_cls = CppExtension
-else:
-    raise ValueError(f"Unexpected value for 'ENABLE_CUDA_PYTORCH'. Expected 0 or 1; got {enable_cuda}")
 
-setup(
-    name='aimet_tensor_quantizer',
-    ext_modules=[
-        extension_cls(
-            name='AimetTensorQuantizer',
-            sources=['${CMAKE_CURRENT_SOURCE_DIR}/src/AimetTensorQuantizer.cpp'],
-            include_dirs=['${DlQuantizationIncludePaths}'],
-            extra_objects=glob.glob('${CMAKE_BINARY_DIR}/artifacts/aimet_common/*libpymo*.so'),
-            extra_link_args=os.environ.get('EXTRA_LINK_ARGS', '').split(),
-            extra_compile_args=['-D_GLIBCXX_USE_CXX11_ABI=0', f'-DENABLE_CUDA_PYTORCH={enable_cuda}']),
-    ],
-    zip_safe=False,
-    cmdclass={
-        'build_ext': BuildExtension
-    }
-)
+class Testlibpymo:
+
+    def test_libpymo_api(self):
+        """
+        test public APIs from mo_libpymo are part of py_libpymo
+        """
+        for attribute in dir(mo_libpymo):
+            if not attribute.startswith('_'):
+                assert hasattr(py_libpymo, attribute)

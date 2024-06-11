@@ -44,7 +44,7 @@ import abc
 
 import torch
 
-import aimet_common.AimetTensorQuantizer as AimetTensorQuantizer
+from aimet_common.aimet_tensor_quantizer import AimetTensorQuantizer
 import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_common.quantsim import is_non_strict_symmetric
@@ -158,7 +158,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
         """
         super().__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
-                                                        enabled_by_default, data_type)
+                         enabled_by_default, data_type)
         self._cppOp = None
         self._encoding = None
         self.fp8_maxval = None
@@ -199,7 +199,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         self._cppOp = []
         quant_scheme = MAP_QUANT_SCHEME_TO_PYMO[self._quant_scheme]
         for _ in range(state.num_channels):
-            self._cppOp.append(AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme))
+            self._cppOp.append(AimetTensorQuantizer(quant_scheme))
 
         # Create the encoding object
         if hasattr(state, 'encodings'):
@@ -240,7 +240,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         self._quant_scheme = quant_scheme
         quant_scheme = MAP_QUANT_SCHEME_TO_PYMO[quant_scheme]
         assert self._cppOp              # whether per-tensor or per-channel, there needs to be at least 1 op
-        self._cppOp = [AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme) for _ in self._cppOp]
+        self._cppOp = [AimetTensorQuantizer(quant_scheme) for _ in self._cppOp]
 
     @property
     def encoding(self) -> Union[None, libpymo.TfEncoding, List[libpymo.TfEncoding]]:
@@ -418,10 +418,10 @@ class StaticGridPerTensorQuantizer(StaticGridTensorQuantizer):
         :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
         """
         super().__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
-                                                           enabled_by_default, data_type)
+                         enabled_by_default, data_type)
 
         quant_scheme = MAP_QUANT_SCHEME_TO_PYMO[quant_scheme]
-        self._cppOp = [AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme)]
+        self._cppOp = [AimetTensorQuantizer(quant_scheme)]
 
     @property
     def encoding(self) -> Union[None, libpymo.TfEncoding]:
@@ -501,9 +501,9 @@ class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
         :param data_type: data type of type QuantizationDataType to be used
         """
         super().__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
-                                                            enabled_by_default, data_type=data_type)
+                         enabled_by_default, data_type=data_type)
         quant_scheme = MAP_QUANT_SCHEME_TO_PYMO[quant_scheme]
-        self._cppOp = [AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme) for _ in range(num_channels)]
+        self._cppOp = [AimetTensorQuantizer(quant_scheme) for _ in range(num_channels)]
         self._ch_axis = ch_axis
 
     @property
@@ -593,7 +593,7 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
             raise ValueError('Only QuantizationDataType.int is supported for LearnedGridTensorQuantizer')
 
         super().__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
-                                                         enabled_by_default, data_type)
+                         enabled_by_default, data_type)
         self.wrapper_ref = None
         self.name = None
         self.round_ste_func = grad_fn.RoundStraightThrough.apply

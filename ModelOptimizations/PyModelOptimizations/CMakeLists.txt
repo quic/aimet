@@ -2,7 +2,7 @@
 #
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2018 - 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2018 - 2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -71,6 +71,7 @@ endif (ENABLE_CUDA)
 set_target_properties(PyModelOptimizations
       PROPERTIES
          OUTPUT_NAME "pymo"
+         PREFIX "_lib"
          SUFFIX ".${Python3_SOABI}.so"
          LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts/aimet_common/"
       )
