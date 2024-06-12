@@ -36,7 +36,9 @@
 # =============================================================================
 """ Implementation for simulating models running on Quantized hardware """
 
+import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 import os
 from typing import Dict, List, Union, Tuple, Optional
 import json
@@ -71,8 +73,6 @@ if version.parse(onnx.__version__) >= version.parse("1.14.0"):
     from onnx import ModelProto
 else:
     from onnx.onnx_pb import ModelProto
-
-WORKING_DIR = '/tmp/quantsim/'
 
 op_types_to_ignore = ["branch", "Flatten", "Gather", "Reshape", "Shape", "Unsqueeze", "Squeeze", "Split",
                       "Compress", "Tile", "Transpose", "Identity"]
@@ -122,7 +122,7 @@ class QuantizationSimModel:
                  use_symmetric_encodings: bool = False, use_cuda: bool = True,
                  device: int = 0, config_file: str = None,
                  default_data_type: QuantizationDataType = QuantizationDataType.int,
-                 simplify_model: bool = True, user_onnx_libs: List[str] = None):
+                 simplify_model: bool = True, user_onnx_libs: List[str] = None, path: str = None):
         """
         Constructor
 
@@ -141,6 +141,7 @@ class QuantizationSimModel:
                                  default_output_bw=16 and default_param_bw=16
         :param simplify_model: Default True, uses onnx simplifier to simplify model
         :param user_onnx_libs: List of paths to all compiled ONNX custom ops libraries
+        :param path: Path where to store model external data
         """
         self.model = model
         if not isinstance(model, ONNXModel):
@@ -177,11 +178,15 @@ class QuantizationSimModel:
         self.input_quantizers_name = []
         self.activation_names = []
         self.activation_dtypes = {}
+        self._path = path if path else tempfile.TemporaryDirectory().name
+        if not os.path.exists(self._path):
+            os.makedirs(self._path)
+
         self._get_param_names()
         self._get_activations_to_quantize(dummy_input)
         self._add_quantization_nodes()
-        self.session = QuantizationSimModel.build_session(self.model.model, self.providers, self._user_onnx_libs)
-
+        self.session = QuantizationSimModel.build_session(self.model.model, self.providers, self._path,
+                                                          self._user_onnx_libs)
         quantsim_configurator = self._add_configuration_(config_file)
 
         self._supported_kernels = quantsim_configurator.get_supported_kernels()
@@ -283,7 +288,7 @@ class QuantizationSimModel:
         hooks = []
         for name in activations:
             hooks.append(add_hook_to_get_activation(self.model.model, name))
-        sess = QuantizationSimModel.build_session(self.model.model, self.providers, self._user_onnx_libs)
+        sess = QuantizationSimModel.build_session(self.model.model, self.providers, self._path, self._user_onnx_libs)
         outputs = sess.run(None, dummy_input)
         for idx in range(len(self.model.graph().output)):
             act_name = self.model.graph().output[idx].name
@@ -391,12 +396,13 @@ class QuantizationSimModel:
                                                           )
 
     @staticmethod
-    def build_session(model, providers: List, user_onnx_libs: List[str] = None):
+    def build_session(model: onnx.ModelProto, providers: List, path: str, user_onnx_libs: List[str] = None):
         """
         Build and return onnxruntime inference session
 
         :param model: onnx model
         :param providers: providers to execute onnxruntime
+        :param path: path where to store model external data
         :param user_onnx_libs: list of paths to user custom ONNX op libraries
         """
         sess_options = SessionOptions()
@@ -407,8 +413,17 @@ class QuantizationSimModel:
             for lib in user_onnx_libs:
                 sess_options.register_custom_ops_library(lib)
         sess_options.graph_optimization_level = GraphOptimizationLevel.ORT_DISABLE_ALL
+
+        # Convert and save ONNX model to external data if larger than 2GB.
+        # External data will be saved under same directory.
+        save_as_external_data = model.ByteSize() >= onnx.checker.MAXIMUM_PROTOBUF
+        output_path = os.path.join(path, 'model.onnx')
+        if save_as_external_data:
+            onnx.save_model(model, output_path, save_as_external_data=True, location=Path(output_path).name + ".data")
+
+        path_or_bytes = output_path if save_as_external_data else model.SerializeToString()
         session = InferenceSession(
-            path_or_bytes=model.SerializeToString(),
+            path_or_bytes=path_or_bytes,
             sess_options=sess_options,
             providers=providers,
         )
@@ -426,9 +441,7 @@ class QuantizationSimModel:
 
         :param filename_prefix: filename to save the onnx model
         """
-        if not os.path.exists(WORKING_DIR):
-            os.makedirs(WORKING_DIR)
-        self.model.save_model_to_file(os.path.join(WORKING_DIR, filename_prefix) + '.onnx')
+        self.model.save_model_to_file(os.path.join(self._path, filename_prefix) + '.onnx')
 
     def compute_encodings(self, forward_pass_callback, forward_pass_callback_args):
         """
