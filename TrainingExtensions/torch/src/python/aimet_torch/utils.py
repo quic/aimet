@@ -1244,3 +1244,23 @@ def profile_async(label: str, file: Union[str, os.PathLike, TextIO] = None, new_
     from aimet_torch.v2.utils import _ContextManager # pylint: disable=import-outside-toplevel
     ctx = _profile(label, file, new_file, logger, cleanup=None)
     return _ContextManager(action=ctx.__enter__, cleanup=lambda: ctx.__exit__(None, None, None)) # pylint: disable=no-member
+
+
+def is_vector_encoding(encoding: Optional[List[Dict]]) -> bool:
+    """
+    Check if encoding is from vector quantization
+
+    :param encoding: List of encoding dictionaries
+    :return: True if all required vector quantization properties are included in encoding
+    """
+    if encoding is None:
+        return False
+
+    required_properties = (
+        "rows_per_block",
+        "cols_per_block",
+        "vector_dim",
+        "vector_stride",
+        "index_bw",
+    )
+    return all((property_ in encoding[0] for property_ in required_properties))

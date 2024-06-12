@@ -43,6 +43,8 @@ from typing import Type, List, Dict, Union, Iterable, Mapping, Optional
 
 import torch.nn as nn
 from torch import Tensor
+
+from aimet_torch.utils import is_vector_encoding
 from aimet_torch.v2.quantization.affine.encoding import VectorEncoding, AffineEncoding
 
 from aimet_torch.v2.quantization.tensor import QuantizedTensorBase
@@ -51,7 +53,6 @@ from aimet_torch.v2.utils import (
     patch_attr,
     _ContextManager,
     flatten_nn_module_list,
-    is_vector_encoding,
 )
 
 

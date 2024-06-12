@@ -43,7 +43,8 @@ from typing import Dict, List, Tuple
 
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantizationDataType
-from aimet_torch.v2.utils import is_vector_encoding
+from aimet_torch.utils import is_vector_encoding
+
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
