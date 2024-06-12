@@ -37,25 +37,26 @@
 """ Quantized modules"""
 
 import contextlib
-from functools import partial
 import itertools
 from abc import abstractmethod
 from collections import OrderedDict
+from functools import partial
 from typing import Type, Any, Tuple, Dict, Optional, Callable
 from weakref import WeakKeyDictionary
 
 import torch
 import torch.nn as nn
 from torch import Tensor
+from torch.utils._pytree import tree_map
 
-from aimet_torch.v2.quantization.base import QuantizerBase
+import aimet_torch.elementwise_ops as aimet_ops
 from aimet_torch.v2.quantization import affine
+from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.float import FloatQuantizeDequantize
 from aimet_torch.v2.quantization.tensor import QuantizedTensorBase
 from aimet_torch.v2.utils import patch_attr, _ContextManager, allow_recompute
-import aimet_torch.elementwise_ops as aimet_ops
-
-from .base import BaseQuantizationMixin, _BaseQuantizedUnaryOpMixin, _BaseQuantizedBinaryOpMixin # pylint: disable=import-error
+from .base import BaseQuantizationMixin, _BaseQuantizedUnaryOpMixin, \
+    _BaseQuantizedBinaryOpMixin  # pylint: disable=import-error
 
 
 def _quantize_if_applicable(data: Any, quantizer: Optional[QuantizerBase]):
@@ -71,6 +72,7 @@ def _quantize_if_applicable(data: Any, quantizer: Optional[QuantizerBase]):
         return data.quantize()
 
     return data
+
 
 def _dequantize_if_applicable(data: torch.Tensor):
     return data.dequantize() if isinstance(data, QuantizedTensorBase) else data
@@ -153,7 +155,7 @@ class QuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-metho
     qcls_to_cls = OrderedDict()  # original class -> quantized class
 
     _default_kernel: Optional[Callable] = None
-    _kernels = WeakKeyDictionary() # instance -> instance_kernel
+    _kernels = WeakKeyDictionary()  # instance -> instance_kernel
 
     @abstractmethod
     def forward(self, *args, **kwargs):
@@ -265,7 +267,7 @@ class QuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-metho
         return self.get_default_kernel()
 
     @contextlib.contextmanager
-    def compute_encodings(self): # pylint: disable=missing-function-docstring
+    def compute_encodings(self):  # pylint: disable=missing-function-docstring
         ctx = _ContextManager(action=lambda: _enter_computing_encodings(self),
                               cleanup=lambda: _exit_compute_encodings(self))
         with super().compute_encodings(), ctx:
@@ -343,7 +345,7 @@ class QuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-metho
 # pylint: disable=arguments-differ, abstract-method, too-many-ancestors
 
 class _QuantizedUnaryOpMixin(QuantizationMixin, _BaseQuantizedUnaryOpMixin):
-    def forward(self, *args, **kwargs): # pylint: disable=missing-function-docstring
+    def forward(self, *args, **kwargs):  # pylint: disable=missing-function-docstring
         kernel = self.get_kernel()
 
         if not kernel or _is_computing_encodings(self):
@@ -382,7 +384,7 @@ class _QuantizedBinaryOpMixin(QuantizationMixin, _BaseQuantizedBinaryOpMixin):
         super().__quant_init__()
         self.input_quantizers = nn.ModuleList([None, None])
 
-    def forward(self, *args, **kwargs): # pylint: disable=missing-function-docstring
+    def forward(self, *args, **kwargs):  # pylint: disable=missing-function-docstring
         kernel = self.get_kernel()
 
         if not kernel or _is_computing_encodings(self):
@@ -420,8 +422,9 @@ class _QuantizedBinaryOpMixin(QuantizationMixin, _BaseQuantizedBinaryOpMixin):
         """
 
 
-class _QuantizedConvNdMixin(_QuantizedUnaryOpMixin): # pylint: disable=too-many-ancestors
+class _QuantizedConvNdMixin(_QuantizedUnaryOpMixin):  # pylint: disable=too-many-ancestors
     """ Quantized ConvNd """
+
     def __quant_init__(self):
         if self.padding_mode != 'zeros':
             msg = f'padding_mode other than "zeros" is currently not supported. (got {self.padding_mode})'
@@ -445,17 +448,17 @@ class _QuantizedConvNdMixin(_QuantizedUnaryOpMixin): # pylint: disable=too-many-
 
 
 @QuantizationMixin.implements(nn.Conv1d)
-class QuantizedConv1d(_QuantizedConvNdMixin, nn.Conv1d): # pylint: disable=too-many-ancestors
+class QuantizedConv1d(_QuantizedConvNdMixin, nn.Conv1d):  # pylint: disable=too-many-ancestors
     """ Quantized Conv1d """
 
 
 @QuantizationMixin.implements(nn.Conv2d)
-class QuantizedConv2d(_QuantizedConvNdMixin, nn.Conv2d): # pylint: disable=too-many-ancestors
+class QuantizedConv2d(_QuantizedConvNdMixin, nn.Conv2d):  # pylint: disable=too-many-ancestors
     """ Quantized Conv2d """
 
 
 @QuantizationMixin.implements(nn.Conv3d)
-class QuantizedConv3d(_QuantizedConvNdMixin, nn.Conv3d): # pylint: disable=too-many-ancestors
+class QuantizedConv3d(_QuantizedConvNdMixin, nn.Conv3d):  # pylint: disable=too-many-ancestors
     """ Quantized Conv3d """
 
 
@@ -478,7 +481,7 @@ class QuantizedGELU(_QuantizedUnaryOpMixin, nn.GELU):
     """ Quantized GELU """
 
     def get_functional_args(self, x):
-        return (x, ), {"approximate": self.approximate}
+        return (x,), {"approximate": self.approximate}
 
 
 @QuantizationMixin.implements(nn.LayerNorm)
@@ -486,7 +489,8 @@ class QuantizedLayerNorm(_QuantizedUnaryOpMixin, nn.LayerNorm):
     """ Quantized LayerNorm """
 
     def get_functional_args(self, x):
-        return (x, self.normalized_shape), {"weight": self.weight, "bias": self.bias, "eps": self.eps}
+        return (x, self.normalized_shape,), {"weight": self.weight, "bias": self.bias, "eps": self.eps}
+
 
 @QuantizationMixin.implements(nn.Softmax)
 class QuantizedSoftmax(_QuantizedUnaryOpMixin, nn.Softmax):
@@ -495,12 +499,13 @@ class QuantizedSoftmax(_QuantizedUnaryOpMixin, nn.Softmax):
     def get_functional_args(self, x):
         return (x, self.dim), {}
 
+
 @QuantizationMixin.implements(nn.Sigmoid)
 class QuantizedSigmoid(_QuantizedUnaryOpMixin, nn.Sigmoid):
     """ Quantized Sigmoid """
 
     def get_functional_args(self, x):
-        return (x, ), {}
+        return (x,), {}
 
 
 @QuantizationMixin.implements(nn.Tanh)
@@ -509,6 +514,147 @@ class QuantizedTanh(_QuantizedUnaryOpMixin, nn.Tanh):
 
     def get_functional_args(self, x):
         return (x,), {}
+
+
+@QuantizationMixin.implements(nn.ReLU)
+class QuantizedReLU(_QuantizedUnaryOpMixin, nn.ReLU):
+    """ Quantized ReLU """
+
+    def get_functional_args(self, x):
+        return (x,), {}
+
+
+@QuantizationMixin.implements(nn.PReLU)
+class QuantizedPReLU(_QuantizedUnaryOpMixin, nn.PReLU):
+    """ Quantized PReLU """
+
+    def get_functional_args(self, x):
+        return (x, self.weight), {}
+
+
+@QuantizationMixin.implements(nn.ConstantPad2d)
+class QuantizedConstantPad2d(_QuantizedUnaryOpMixin, nn.ConstantPad2d):
+    """ Quantized ConstantPad2d """
+
+    def get_functional_args(self, x):
+        return (x, self.padding, "constant", self.value,), {}
+
+
+@QuantizationMixin.implements(nn.BatchNorm2d)
+class QuantizedBatchNorm2d(_QuantizedUnaryOpMixin, nn.BatchNorm2d):
+    """ Quantized BatchNorm2d """
+
+    def get_functional_args(self, x):
+        return (x, self.running_mean, self.running_var, self.weight, self.bias, self.training, self.momentum,
+                self.eps), {}
+
+
+@QuantizationMixin.implements(nn.InstanceNorm2d)
+class QuantizedInstanceNorm2d(_QuantizedUnaryOpMixin, nn.InstanceNorm2d):
+    """ Quantized InstanceNorm2d """
+
+    def get_functional_args(self, x):
+        return (x, self.running_mean, self.running_var, self.weight, self.bias, self.training, self.momentum,
+                self.eps), {}
+
+
+@QuantizationMixin.implements(nn.Hardtanh)
+class QuantizedHardtanh(_QuantizedUnaryOpMixin, nn.Hardtanh):
+    """ Quantized Hardtanh """
+
+    def get_functional_args(self, x):
+        return (x, self.min_val, self.max_val,), {}
+
+
+@QuantizationMixin.implements(nn.MaxPool2d)
+class QuantizedMaxPool2d(_QuantizedUnaryOpMixin, nn.MaxPool2d):
+    """ Quantized MaxPool2d """
+
+    def get_functional_args(self, x):
+        return (x, self.kernel_size, self.stride, self.padding, self.dilation,), \
+            {"ceil_mode": self.ceil_mode, "return_indices": self.return_indices}
+
+
+@QuantizationMixin.implements(nn.UpsamplingBilinear2d)
+class QuantizedUpsamplingBilinear2d(_QuantizedUnaryOpMixin, nn.UpsamplingBilinear2d):
+    """ Quantized UpsamplingBilinear2d """
+
+    def get_functional_args(self, x):
+        return (x, self.size, self.scale_factor, self.mode, self.align_corners,), \
+            {"recompute_scale_factor": self.recompute_scale_factor}
+
+
+@QuantizationMixin.implements(nn.PixelShuffle)
+class QuantizedPixelShuffle(_QuantizedUnaryOpMixin, nn.PixelShuffle):
+    """ Quantized PixelShuffle """
+
+    def get_functional_args(self, x):
+        return (x, self.upscale_factor,), {}
+
+
+@QuantizationMixin.implements(aimet_ops.Sin)
+class QuantizedSin(_QuantizedUnaryOpMixin, aimet_ops.Sin):
+    """ Quantized Sin """
+
+    def get_functional_args(self, x):
+        return (x,), {}
+
+
+@QuantizationMixin.implements(aimet_ops.Cos)
+class QuantizedCos(_QuantizedUnaryOpMixin, aimet_ops.Cos):
+    """ Quantized Cos """
+
+    def get_functional_args(self, x):
+        return (x,), {}
+
+
+@QuantizationMixin.implements(aimet_ops.AvgPool2d)
+class QuantizedAvgPool2d(_QuantizedUnaryOpMixin, aimet_ops.AvgPool2d):
+    """ Quantized AvgPool2d """
+
+    def get_functional_args(self, x):
+        return (x, self.kernel_size, self.stride, self.padding, self.ceil_mode, self.count_include_pad,
+                self.divisor_override), {}
+
+
+@QuantizationMixin.implements(aimet_ops.Reshape)
+class QuantizedReshape(_QuantizedUnaryOpMixin, aimet_ops.Reshape):
+    """ Quantized Reshape """
+
+    def get_functional_args(self, x):
+        return (x,), {}
+
+
+@QuantizationMixin.implements(aimet_ops.RSqRt)
+class QuantizedRSqRt(_QuantizedUnaryOpMixin, aimet_ops.RSqRt):
+    """ Quantized RSqRt """
+
+    def get_functional_args(self, x):
+        return (x,), {}
+
+
+@QuantizationMixin.implements(aimet_ops.Concat)
+class QuantizedConcat(_QuantizedUnaryOpMixin, aimet_ops.Concat):
+    """ Quantized Concat """
+
+    def forward(self, *x):  # pylint: disable=arguments-differ
+        """
+        Quantized forward impl for aimet_ops.Concat.
+        """
+        if self.input_quantizers[0]:
+            # Use same input quantizer for all the input tensors
+            quantize_fn = lambda inp: self.input_quantizers[0](inp) if inp.is_floating_point() else inp
+            x = tree_map(quantize_fn, x)
+
+        output = super().forward(*x)
+
+        if output.is_floating_point() and self.output_quantizers[0]:
+            output = self.output_quantizers[0](output)
+
+        return output
+
+    def get_functional_args(self, *x):
+        return (*x,), {}
 
 
 @QuantizationMixin.implements(aimet_ops.Add)
@@ -530,6 +676,14 @@ class QuantizedMultiply(_QuantizedBinaryOpMixin, aimet_ops.Multiply):
 @QuantizationMixin.implements(aimet_ops.Subtract)
 class QuantizedSubtract(_QuantizedBinaryOpMixin, aimet_ops.Subtract):
     """ Quantized Subtract """
+
+    def get_functional_args(self, x, y):
+        return (x, y), {}
+
+
+@QuantizationMixin.implements(aimet_ops.Divide)
+class QuantizedDivide(_QuantizedBinaryOpMixin, aimet_ops.Divide):
+    """ Quantized Divide """
 
     def get_functional_args(self, x, y):
         return (x, y), {}
