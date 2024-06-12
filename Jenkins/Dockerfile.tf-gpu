@@ -145,6 +145,7 @@ RUN python3 -m pip --no-cache-dir install \
         dataclasses \
         Deprecated \
         docutils==0.16 \
+        graphviz \
         h5py \
         ipykernel \
         ipython \
@@ -164,6 +165,7 @@ RUN python3 -m pip --no-cache-dir install \
         psutil \
         ptflops \
         pybind11 \
+        pydot \
         pyDOE2 \
         pylint==2.8.3 \
         pymoo \
