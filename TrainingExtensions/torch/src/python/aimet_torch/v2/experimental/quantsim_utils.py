@@ -66,7 +66,7 @@ def _is_math_invariant_op(module: torch.nn.Module):
 
 @overload
 def propagate_output_encodings(sim: QuantizationSimModel, module_type: Type[torch.nn.Module]):
-    """ Propagate output encodings of the givein module type """
+    """ Propagate output encodings of the given module type """
 
 
 @overload
