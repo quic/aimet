@@ -219,7 +219,12 @@ class AffineEncoding(EncodingBase):
         min = self.min.flatten()
         max = self.max.flatten()
         scale = self.scale.flatten()
-        offset = self.offset.flatten()
+
+        if self._signed: # Legacy behavior is to use offset = 2 ** (bitwidth - 1) for signed symmetric
+            offset = self.offset.flatten() - 2 ** (self.bitwidth - 1)
+        else:
+            offset = self.offset.flatten()
+
         return [
             {'min': float(min_), 'max': float(max_),
              'scale': float(scale_), 'offset': int(offset_),
@@ -229,6 +234,9 @@ class AffineEncoding(EncodingBase):
 
 
 class VectorEncoding(AffineEncoding):
+    """
+    Encoding object for vector quantization
+    """
     def __init__(
         self,
         scale: torch.Tensor,

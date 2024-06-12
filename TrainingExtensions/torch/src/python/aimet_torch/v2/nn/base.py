@@ -47,8 +47,12 @@ from aimet_torch.v2.quantization.affine.encoding import VectorEncoding, AffineEn
 
 from aimet_torch.v2.quantization.tensor import QuantizedTensorBase
 from aimet_torch.v2.quantization.base import QuantizerBase
-from aimet_torch.v2.utils import patch_attr, _ContextManager, flatten_nn_module_list
-
+from aimet_torch.v2.utils import (
+    patch_attr,
+    _ContextManager,
+    flatten_nn_module_list,
+    is_vector_encoding,
+)
 
 
 class BaseQuantizationMixin(abc.ABC):
@@ -343,7 +347,7 @@ class BaseQuantizationMixin(abc.ABC):
             elif isinstance(param, QuantizedTensorBase) and param.encoding is not None:
                 # If parameter itself is an already-quantized tensor,
                 # export the encoding held by the parameter
-                e = param.encoding._to_legacy_format()
+                e = param.encoding._to_legacy_format() # pylint: disable=protected-access
             else:
                 e = None
             encodings[param_name] = e
@@ -588,23 +592,3 @@ def _remove_quantizers(quantizers, keys):
         raise
     else:
         return ctx
-
-
-def is_vector_encoding(encoding: Optional[List[Dict]]) -> bool:
-    """
-    Check if encoding is from vector quantization
-
-    :param encoding: List of encoding dictionaries
-    :return: True if all required vector quantization properties are included in encoding
-    """
-    if encoding is None:
-        return False
-
-    required_properties = (
-        "rows_per_block",
-        "cols_per_block",
-        "vector_dim",
-        "vector_stride",
-        "index_bw",
-    )
-    return all((property_ in encoding[0] for property_ in required_properties))

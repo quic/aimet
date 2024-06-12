@@ -36,7 +36,7 @@
 # =============================================================================
 # pylint: disable=redefined-builtin
 """ Common utility functions """
-from typing import Callable, Tuple, Any
+from typing import Callable, Tuple, Any, Optional, List, Dict
 import functools
 import itertools
 
@@ -268,3 +268,23 @@ def flatten_nn_module_list(module):
             yield mod
 
     return list(flat_iter(module))
+
+
+def is_vector_encoding(encoding: Optional[List[Dict]]) -> bool:
+    """
+    Check if encoding is from vector quantization
+
+    :param encoding: List of encoding dictionaries
+    :return: True if all required vector quantization properties are included in encoding
+    """
+    if encoding is None:
+        return False
+
+    required_properties = (
+        "rows_per_block",
+        "cols_per_block",
+        "vector_dim",
+        "vector_stride",
+        "index_bw",
+    )
+    return all((property_ in encoding[0] for property_ in required_properties))

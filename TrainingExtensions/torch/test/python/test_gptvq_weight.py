@@ -37,12 +37,15 @@
 """Test GPTVQ weight"""
 import itertools
 import json
+import os
 import tempfile
+from contextlib import contextmanager
 
 import pytest
 import torch
 from torch.utils.data import DataLoader, Dataset
 
+from aimet_common import quantsim
 from aimet_torch.gptvq.defs import GPTVQSupportedModules
 from aimet_torch.gptvq.gptvq_weight import GPTVQ, GPTVQParameters
 from aimet_torch.v2.nn import BaseQuantizationMixin
@@ -79,6 +82,16 @@ QUANTSIM_CONFIG = {
 }
 
 
+@contextmanager
+def swap_encoding_version(version='1.0.0'):
+    old_version = quantsim.encoding_version
+    quantsim.encoding_version = version
+
+    yield
+
+    quantsim.encoding_version = old_version
+
+
 class RandomDataset(Dataset):
     def __init__(self, data_size = 32, input_dim = 10):
         self.data_size = data_size
@@ -98,7 +111,6 @@ class RandomDataset(Dataset):
 
 
 class TestGPTVQWeight:
-    @pytest.mark.skip(reason="function signature changed")
     @pytest.mark.parametrize("vector_bw", [4, 8, 16])
     @pytest.mark.parametrize("rows_per_block", [32, 64])
     def test_quant_sim_initialization_in_gptvq(self, vector_bw, rows_per_block):
@@ -121,7 +133,7 @@ class TestGPTVQWeight:
                 model, dummy_input, gptvq_parameters, config_file_path=config_path, module_name_set=module_name_set
             )
 
-        with GPTVQ._disable_quantizers_for_gptvq_optimization(quant_sim):
+        with GPTVQ._disable_quantizers_for_gptvq_optimization(quant_sim, module_name_set):
             for module in quant_sim.model.modules():
                 if isinstance(module, BaseQuantizationMixin):
                     # Input/Output quantizers should be disabled
@@ -314,3 +326,59 @@ class TestGPTVQWeight:
             assert hasattr(sim.model.linear3.weight, "encoding")
             assert isinstance(sim.model.linear3.weight.encoding, VectorEncoding)
             assert sim.model.linear3.param_quantizers["weight"] is None
+
+    def test_gptvq_export(self):
+        model = test_models.ModelWithThreeLinears()
+        data_loader = DataLoader(RandomDataset(data_size=1, input_dim=768), batch_size=1, shuffle=False)
+        gptvq_parameters = GPTVQParameters(data_loader, forward_fn=lambda m, d: m(d[0]), num_of_kmeans_iterations=1)
+        dummy_input = torch.randn(1, 768)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = f"{temp_dir}/quantsim_config.json"
+            with open(config_path, "w") as f:
+                json.dump(QUANTSIM_CONFIG, f)
+
+            rounded_model = GPTVQ.apply_gptvq(
+                model,
+                dummy_input,
+                gptvq_parameters,
+                param_encoding_path=temp_dir,
+                config_file_path=config_path,
+                module_names_to_exclude=["linear2"]
+            )
+
+            sim = QuantizationSimModel(
+                rounded_model,
+                dummy_input=dummy_input,
+                default_param_bw=gptvq_parameters.vector_bw,
+                config_file=config_path
+            )
+            sim.load_encodings(f"{temp_dir}/gptvq.encodings", allow_overwrite=False)
+            sim.compute_encodings(lambda m, _: m(dummy_input), None)
+            with swap_encoding_version():
+                sim.export(temp_dir, "vq_with_activation", dummy_input)
+
+            with open(os.path.join(temp_dir, "vq_with_activation.encodings")) as f:
+                encodings = json.load(f)
+
+        assert len(encodings["activation_encodings"]) == 1 + 4  # One input, four output encodings
+
+        param_encodings = encodings["param_encodings"]
+        linear1_encoding, linear2_encoding, linear3_encoding = param_encodings
+        assert linear1_encoding["enc_type"] == "VECTOR"
+        num_scales = len(linear1_encoding["scale"])
+        rows_per_block = linear1_encoding["rows_per_block"]
+        assert num_scales == sim.model.linear1.weight.shape[0]
+        for i in range(0, num_scales, rows_per_block):
+            # per-channel scales should be same within a block
+            assert len(set(linear1_encoding["scale"][i:i + rows_per_block])) == 1
+
+        assert linear2_encoding["enc_type"] == "PER_CHANNEL"
+        assert len(linear2_encoding["scale"]) == sim.model.linear2.weight.shape[0]
+
+        assert linear3_encoding["enc_type"] == "VECTOR"
+        num_scales = len(linear3_encoding["scale"])
+        rows_per_block = linear3_encoding["rows_per_block"]
+        assert num_scales == sim.model.linear3.weight.shape[0]
+        for i in range(0, num_scales, rows_per_block):
+            # per-channel scales should be same within a block
+            assert len(set(linear3_encoding["scale"][i:i + rows_per_block])) == 1

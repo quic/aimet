@@ -169,7 +169,7 @@ class AffineQuantizerBase(QuantizerBase):
         """
         Returns a list of encodings, each represented as a List of Dicts
         """
-        # pylint: disable=redefined-builtin
+        # pylint: disable=redefined-builtin, protected-access
 
         if not self.is_initialized():
             return None
