@@ -42,6 +42,8 @@ operations represent a module or a function that generates a tensor, while produ
 the tensors that are either input to the model (input, constant or parameter) or the
 result of an operation. Furthermore the graph representation is bi-directional."""
 
+import copy
+from collections import defaultdict
 from typing import Tuple, Union, List, Dict, Type, Optional
 import torch
 
@@ -312,8 +314,14 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         # For each split in the model, insert a corresponding split Op in the connected graph.
         # pylint: disable=unnecessary-comprehension
         ops_list = [op for op in self._ops.values()]
+        producer_to_product_name_map = defaultdict(list)
+        for product in self._products.values():
+            if product.producer:
+                producer_to_product_name_map[product.producer.dotted_name].append(product.name)
+
         for op in ops_list:
-            self._determine_split_behavior_for_op_and_insert_split_op_in_connected_graph(op)
+            self._determine_split_behavior_for_op_and_insert_split_op_in_connected_graph(op,
+                                                                                         producer_to_product_name_map)
 
     def _parse_top_level_trace(self, trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule],
                                model: torch.nn.Module):
@@ -1049,19 +1057,21 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                                  'output of op %s', op.output.shape, op.output.name, op.output_shape,
                                  op.name)
 
-    def _determine_split_behavior_for_op_and_insert_split_op_in_connected_graph(self, op: Op):
+    def _determine_split_behavior_for_op_and_insert_split_op_in_connected_graph(self, op: Op,
+                                                                                producer_to_product_name_map: Dict[str, List]):
         """
         Determine if an Op's output is used as an input to more than one Op. If it is, create a Split Op and
         insert it in the connected graph, below this Op.
         Note that the split is done in the forward() function of a model and is NOT a PyTorch OP.
         :param op: Op to check if output is used as an input to more than one op.
+        :param producer_to_product_name_map: Dictionary mapping op names to product names which the op produces.
         """
 
         name = op.name
         dotted_name = op.dotted_name
 
         # Get the output product names.
-        output_product_names = self.get_product_names_from_dotted_name(dotted_name)
+        output_product_names = producer_to_product_name_map[dotted_name]
 
         name_list = []
         for prod_name in output_product_names:
@@ -1073,31 +1083,11 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         if len(output_product_names) > 1:
             name_list = [+1 for prod in name_list if name in prod]
             if len(name_list) > 1:
-                logger.debug("%s is a split Op", op.dotted_name)
-
                 # Create a Split Op
                 split_op = self._create_split_op(op)
 
                 # Insert the Split Op in the connected graph.
-                self._insert_split_op_in_connected_graph(op, split_op)
-
-    def get_product_names_from_dotted_name(self, dotted_name: str) -> List[str]:
-        """
-        Returns all names of products whose producer op dotted name matches the argument dotted name.
-        For Residual models, same producer will have multiple products.
-        During connected graph construction, only one output product can be associated with an op, so previous output
-        products are overwritten when a new op is created.  Thus we must search through products dictionary for all
-        output products corresponding to an op.
-        :param dotted_name: Dotted name for connected graph op to check for output products.
-        :return: List of products
-        """
-
-        matched_products = list()
-        for product in self._products.values():
-            if product.producer:
-                if product.producer.dotted_name == dotted_name:
-                    matched_products.append(product.name)
-        return matched_products
+                self._insert_split_op_in_connected_graph(op, split_op, producer_to_product_name_map)
 
     def _create_split_op(self, op: Op) -> Op:
         """
@@ -1116,11 +1106,13 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         self._ops[split_name] = split_op
         return split_op
 
-    def _insert_split_op_in_connected_graph(self, preceding_op: Op, split_op: Op):
+    def _insert_split_op_in_connected_graph(self, preceding_op: Op, split_op: Op,
+                                            producer_to_product_name_map: Dict[str, List]):
         """
         Insert a Split Op below the preceding Op in the connected graph.
         :param preceding_op: Op prior to split op
         :param split_op: Split op to insert
+        :param producer_to_product_name_map: Dictionary mapping op names to product names which the op produces.
         """
 
         # Important Notes
@@ -1153,12 +1145,13 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         # 1. Create a new Product for Split Op's output.
         split_op_product = self._create_split_op_output_product(preceding_op, split_op)
+        producer_to_product_name_map[split_op_product.name].append(split_op_product)
         split_op.output = split_op_product
 
         # 2.This product has multiple consumers. Add the consumers to the Product.
         # Get the consumers from the op's multiple products.
 
-        self._add_consumers_to_split_op_product(preceding_op, split_op_product)
+        self._add_consumers_to_split_op_product(preceding_op, split_op_product, producer_to_product_name_map)
 
         # 3. Create a new product to connect the preceding Op to the Split Op.
         # Set the the preceding Op's output Product's consumer to Split Op.
@@ -1171,17 +1164,19 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         # Since the preceding Op was behaving like a Split Op, it  would have 2 products with the preceding Op as the
         # producer. Delete these products from the product dictionary.
-        preceding_op_product_names = self.get_product_names_from_dotted_name(preceding_op.dotted_name)
+        preceding_op_product_names = copy.deepcopy(producer_to_product_name_map[preceding_op.dotted_name])
         for name in preceding_op_product_names:
             # Important Notes
             # The following check is needed since ResNet uses the same Relu twice in BasicBlock's forward()
             # Please read the details comments in _add_consumers_to_split_op_product()
             if preceding_op.name in name:
                 deleted_product = self._products.pop(name)
-                logger.debug("Insert Split Op: Step 3. Deleted product: %s", deleted_product)
+                try:
+                    producer_to_product_name_map[preceding_op.dotted_name].remove(deleted_product.name)
+                except ValueError as e:
+                    raise AssertionError(f'Product {deleted_product.name} not found in producer_to_product_name_map') from e
 
         new_product_name = preceding_op.name + '__to__' + split_op.name
-        new_product_shape = preceding_op.output.shape
         new_product = self._add_product(new_product_name, new_product_shape)
         new_product.producer = preceding_op
         preceding_op.output = new_product
@@ -1216,15 +1211,17 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         self._products[name] = product
         return product
 
-    def _add_consumers_to_split_op_product(self, preceding_op: Op, split_op_product: Product):
+    def _add_consumers_to_split_op_product(self, preceding_op: Op, split_op_product: Product,
+                                           producer_to_product_name_map: Dict[str, List]):
         """
         A Split Op's output product has multiple consumers. Add them to the product.
         :param preceding_op: Op prior to split op
         :param split_op_product: Output product of split op
+        :param producer_to_product_name_map: Dictionary mapping op names to product names which the op produces.
         """
 
         dotted_name = preceding_op.dotted_name
-        output_product_names = self.get_product_names_from_dotted_name(dotted_name)
+        output_product_names = producer_to_product_name_map[dotted_name]
 
         # Important Notes
         # ResNet model uses the same Relu twice in the forward function of ResNet's BasicBlock.
@@ -1240,15 +1237,10 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             a_product = self.get_product(out_product_names[a_product_index])
             a_consumer = a_product.consumers[0]
             split_op_product.consumers.append(a_consumer)
-            logger.debug("Insert Split Op: Step 2a. Consumer Op: %s, a_product_index: %s",
-                         a_consumer.dotted_name, a_product_index)
             # Need to insert the newly created split_op product in the correct input index of the op
-            logger.debug("Insert Split Op: Step 2b. Op has multiple input products: %s", a_consumer.inputs)
             input_product_index = determine_preceding_op_input_product_index_in_multi_input_op(preceding_op,
                                                                                                a_consumer)
             a_consumer.inputs[input_product_index] = split_op_product
-            logger.debug("Insert Split Op: Step 2c. For product: %s, split_op input_product_index: %s",
-                         split_op_product.name, input_product_index)
             consumer_index += 1
 
     def _is_recursive_parsing_needed(self, module: torch.nn.Module,
