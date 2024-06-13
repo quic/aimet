@@ -45,7 +45,7 @@ from aimet_torch.v2.quantization.base import EncodingBase
 from aimet_torch.v2.quantization.affine.backends import quantize, dequantize
 
 
-__all__ = ["AffineEncoding"]
+__all__ = ["AffineEncoding", "VectorEncoding"]
 
 
 class AffineEncoding(EncodingBase):
@@ -214,3 +214,82 @@ class AffineEncoding(EncodingBase):
         offset = self.offset
         block_size = self.block_size
         return dequantize(input, scale.to(input.dtype), offset.to(input.dtype), block_size=block_size)
+
+    def _to_legacy_format(self):
+        min = self.min.flatten()
+        max = self.max.flatten()
+        scale = self.scale.flatten()
+
+        if self._signed: # Legacy behavior is to use offset = 2 ** (bitwidth - 1) for signed symmetric
+            offset = self.offset.flatten() - 2 ** (self.bitwidth - 1)
+        else:
+            offset = self.offset.flatten()
+
+        return [
+            {'min': float(min_), 'max': float(max_),
+             'scale': float(scale_), 'offset': int(offset_),
+             'bitwidth': self.bitwidth, 'dtype': 'int', 'is_symmetric': str(self.symmetry)}
+            for min_, max_, scale_, offset_ in zip(min, max, scale, offset)
+        ]
+
+
+class VectorEncoding(AffineEncoding):
+    """
+    Encoding object for vector quantization
+    """
+    def __init__(
+        self,
+        scale: torch.Tensor,
+        offset: torch.Tensor,
+        bitwidth: int,
+        signed=False,
+        symmetry=False,
+        block_size: Optional[List] = None,
+        **kwargs,
+    ):
+        super().__init__(scale, offset, bitwidth, signed, symmetry, block_size)
+        self.rows_per_block = kwargs["rows_per_block"]
+        self.cols_per_block = kwargs["cols_per_block"]
+        self.vector_dim = kwargs["vector_dim"]
+        self.vector_stride = kwargs["vector_stride"]
+        self.index_bw = kwargs["index_bw"]
+
+    def _to_legacy_format(self):
+        encoding = super()._to_legacy_format()
+        for i, _ in enumerate(encoding):
+            encoding[i].update(
+                rows_per_block=self.rows_per_block,
+                cols_per_block=self.cols_per_block,
+                vector_dim=self.vector_dim,
+                vector_stride=self.vector_stride,
+                index_bw=self.index_bw,
+            )
+        return encoding
+
+    def to(self, *args, **kwargs):
+        """
+        Changes dtype of data in quantizer encoding or device where the data is.
+        Behaves similar to torch.Tensor.to
+        """
+        to_args = parse_to_args(*args, **kwargs)
+        device, dtype, _, _ = to_args
+        dtype = dtype if dtype else self._scale.dtype
+        device = device if device else self._scale.device
+
+        if dtype is self._scale.dtype and device is self._scale.device:
+            return self
+
+        if not dtype.is_floating_point:
+            raise RuntimeError(f"Cannot change encoding data dtype to {dtype}, "
+                               "only floating point data types are supported")
+
+        scale = self._scale.to(dtype=dtype, device=device)
+        offset = self._offset.to(dtype=dtype, device=device)
+        properties = {
+            "rows_per_block": self.rows_per_block,
+            "cols_per_block": self.cols_per_block,
+            "vector_dim": self.vector_dim,
+            "vector_stride": self.vector_stride,
+            "index_bw": self.index_bw,
+        }
+        return type(self)(scale, offset, self._bitwidth, self._signed, self._symmetry, **properties)

@@ -43,6 +43,8 @@ from typing import Dict, List, Tuple
 
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantizationDataType
+from aimet_torch.utils import is_vector_encoding
+
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -132,6 +134,9 @@ def _get_param_encodings(tensor_to_param_encodings: Dict[str, List], tensor_to_q
             encoding_dict['offset'] = [encoding['offset'] for encoding in encodings]
             if isinstance(quantizer, AffineQuantizerBase):
                 _handle_v2_quantizer(encoding_dict, encodings, quantizer)
+            elif is_vector_encoding(encodings):
+                assert quantizer is None, "Quantizer should be None if encoding is from vector quantization"
+                _handle_vector_encoding(encoding_dict, encodings)
             else:
                 if len(encodings) > 1:
                     encoding_dict['enc_type'] = EncodingType.PER_CHANNEL.name
@@ -172,3 +177,20 @@ def _get_block_size(block_size: Tuple):
         if dim_block_size != 1:
             return dim_block_size
     return block_size[1]
+
+
+def _handle_vector_encoding(encoding_dict: Dict, encodings: List[Dict]):
+    """
+    Update encoding dictionary if encodings are from Vector Quantization
+
+    :param encoding_dict: Dictionary to store parameter encoding
+    :param encodings: List of encoding dictionary
+    """
+    encoding = encodings[0]
+
+    encoding_dict["enc_type"] = EncodingType.VECTOR.name
+    encoding_dict["rows_per_block"] = encoding["rows_per_block"]
+    encoding_dict["cols_per_block"] = encoding["cols_per_block"]
+    encoding_dict["vector_dim"] = encoding["cols_per_block"]
+    encoding_dict["vector_stride"] = encoding["vector_stride"]
+    encoding_dict["index_bw"] = encoding["index_bw"]
