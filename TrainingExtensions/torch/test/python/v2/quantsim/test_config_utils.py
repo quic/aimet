@@ -276,3 +276,21 @@ def test_set_grouped_blockwise_with_single_value():
     for m in layers_to_set:
         assert m.param_quantizers['weight'].block_size == [2, 1, -1, -1]
         assert m.param_quantizers['weight'].block_grouping == [-1, 1, 1, 1]
+
+def test_invalid_single_value_block_size():
+    class PreluModel(torch.nn.Module):
+        def __init__(self):
+            super(PreluModel, self).__init__()
+            self.prelu = torch.nn.PReLU()
+            self.relu = torch.nn.ReLU()
+
+        def forward(self, inp):
+            x = self.prelu(inp)
+            return self.relu(x)
+
+    model = PreluModel()
+    dummy_input = torch.randn(1, 10)
+    model.prelu.weight = torch.nn.Parameter(torch.randn(10))
+    qsim = QuantizationSimModel(model, dummy_input)
+    with pytest.raises(RuntimeError):
+        set_blockwise_quantization_for_weights(qsim, lambda m: isinstance(m, torch.nn.PReLU), 4, True, 2)

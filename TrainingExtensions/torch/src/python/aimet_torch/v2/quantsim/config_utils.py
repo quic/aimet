@@ -45,8 +45,18 @@ from aimet_torch.v2.quantization.float import FloatQuantizeDequantize
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
+modules_with_in_out_channels = (torch.nn.Linear,
+                                torch.nn.Conv1d,
+                                torch.nn.Conv2d,
+                                torch.nn.Conv3d,
+                                torch.nn.ConvTranspose1d,
+                                torch.nn.ConvTranspose2d,
+                                torch.nn.ConvTranspose3d)
+
 def _get_in_channels_dim(module: torch.nn.Module):
     """ Get input channels dimension for the given module """
+    if not isinstance(module, modules_with_in_out_channels):
+        raise AssertionError(f'In channels not defined for module of type {type(module)}')
     if isinstance(module, (torch.nn.ConvTranspose1d,
                            torch.nn.ConvTranspose2d,
                            torch.nn.ConvTranspose3d)):
@@ -55,6 +65,8 @@ def _get_in_channels_dim(module: torch.nn.Module):
 
 def _get_out_channels_dim(module: torch.nn.Module):
     """ Get input channels dimension for the given module """
+    if not isinstance(module, modules_with_in_out_channels):
+        raise AssertionError(f'Out channels not defined for module of type {type(module)}')
     if isinstance(module, (torch.nn.ConvTranspose1d,
                            torch.nn.ConvTranspose2d,
                            torch.nn.ConvTranspose3d)):
@@ -70,6 +82,11 @@ def _get_block_size_array_for_module(module: torch.nn.Module, block_size: Union[
         return block_size
 
     assert isinstance(block_size, int)
+    if not isinstance(module, modules_with_in_out_channels):
+        error_msg = f'Single value block size is only supported for modules of types in ' \
+                    f'config_utils.modules_with_in_out_channels, but got module of type {type(module)}. Update ' \
+                    f'the argument for identifying modules to set to exclude unsupported types.'
+        raise RuntimeError(error_msg)
     assert hasattr(module, 'weight')
 
     # Initialize block sizes with -1, meaning blocks will span the entire dimension for each axis
@@ -95,6 +112,11 @@ def _get_block_grouping_array_for_module(module: torch.nn.Module, block_grouping
         return block_grouping
 
     assert isinstance(block_grouping, int)
+    if not isinstance(module, modules_with_in_out_channels):
+        error_msg = f'Single value block grouping is only supported for modules of types in ' \
+                    f'config_utils.modules_with_in_out_channels, but got module of type {type(module)}. Update ' \
+                    f'the argument for identifying modules to set to exclude unsupported types.'
+        raise RuntimeError(error_msg)
     assert hasattr(module, 'weight')
 
     # Initialize block grouping with 1, meaning no blocks will be grouped together in each dimension
