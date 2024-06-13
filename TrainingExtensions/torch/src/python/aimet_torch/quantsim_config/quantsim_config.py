@@ -86,7 +86,6 @@ class SupergroupConfigCallback(AimetCommonSupergroupConfigCallback):
                 # and subsequent ops with wrappers will be set correctly anyway.
                 continue
             if op.get_module() is None:
-                logger.debug("Op %s has no associated module. Skipping processing for this op.", op)
                 continue
             if index == 0:
                 # turn off only output quantization of first op in the list
@@ -137,14 +136,19 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         :return: Dictionary mapping op to tuple of lists of tensor quantizers to change
         """
         module_to_tensor_quantizers_dict = {}
+        module_to_cg_op_dict = {}
+        for op in self._conn_graph.get_all_ops().values():
+            module = op.get_module()
+            if module:
+                module_to_cg_op_dict[module] = op
         for module, quantsim_wrapper in self._module_to_quantsim_wrapper_dict.items():
             # Attempt to find op in connected graph corresponding to this module
-            op = [op for op in self._conn_graph.get_all_ops().values() if op.get_module() == module]
+            op = module_to_cg_op_dict.get(module)
             if op:
-                input_true_list = self._get_tensor_quantizers_for_input_true_setting(op[0])
-                output_true_list = self._get_tensor_quantizers_for_output_true_setting(op[0])
-                input_false_list = self._get_tensor_quantizers_for_input_false_setting(op[0])
-                output_false_list = self._get_tensor_quantizers_for_output_false_setting(op[0])
+                input_true_list = self._get_tensor_quantizers_for_input_true_setting(op)
+                output_true_list = self._get_tensor_quantizers_for_output_true_setting(op)
+                input_false_list = self._get_tensor_quantizers_for_input_false_setting(op)
+                output_false_list = self._get_tensor_quantizers_for_output_false_setting(op)
             else:
                 input_true_list = quantsim_wrapper.input_quantizers
                 output_true_list = quantsim_wrapper.output_quantizers
@@ -417,7 +421,6 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 for onnx_type in onnx_types:
                     if onnx_type in op_configs:
                         op_config = op_configs[onnx_type]
-                        logger.info(' Set op level config for op = {%s}', onnx_type)
                         self._set_config_for_module(input_output_tensor_quantizers, op_config, modified_tensor_quantizers,
                                                     module)
 
@@ -425,7 +428,6 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         for op, input_output_tensor_quantizers in self._elementwise_op_to_tensor_quantizers_dict.items():
             if op.type in op_configs:
                 op_config = op_configs[op.type]
-                logger.info(' Set op level config for elementwise op = {%s}', op.type)
                 self._set_config_for_module(input_output_tensor_quantizers, op_config, modified_tensor_quantizers)
 
     def _set_config_for_module(self, input_output_tensor_quantizers: TensorQuantizersTupleType, op_config: OpType,
