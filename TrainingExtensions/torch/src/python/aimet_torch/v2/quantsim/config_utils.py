@@ -92,11 +92,6 @@ def _get_block_size_array_for_module(module: torch.nn.Module, block_size: Union[
     # Initialize block sizes with -1, meaning blocks will span the entire dimension for each axis
     block_size_array = [-1] * len(module.weight.shape)
 
-    # Special case for weight of dim 1
-    if len(block_size_array) == 1:
-        block_size_array[0] = block_size
-        return block_size_array
-
     # Set in channels dimension block size to block_size, and set out channels dimension block size to 1 (per channel)
     block_size_array[_get_in_channels_dim(module)] = block_size
     block_size_array[_get_out_channels_dim(module)] = 1
@@ -121,11 +116,6 @@ def _get_block_grouping_array_for_module(module: torch.nn.Module, block_grouping
 
     # Initialize block grouping with 1, meaning no blocks will be grouped together in each dimension
     block_grouping_array = [1] * len(module.weight.shape)
-
-    # Special case for weight of dim 1
-    if len(block_grouping_array) == 1:
-        block_grouping_array[0] = block_grouping
-        return block_grouping_array
 
     # Set in channels dimension block size to block_grouping
     block_grouping_array[_get_in_channels_dim(module)] = block_grouping
