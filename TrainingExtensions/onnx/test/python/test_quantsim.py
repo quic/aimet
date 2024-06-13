@@ -482,7 +482,7 @@ class TestQuantSim:
 
             del sim
 
-            sim = QuantizationSimModel(model, config_file=get_path_for_per_channel_config())
+            sim = QuantizationSimModel(model, config_file=get_path_for_per_channel_config(), path=tempdir)
             load_encodings_to_sim(sim, os.path.join(tempdir, 'onnx_sim.encodings'))
             out3 = sim.session.run(None, dummy_tensor)
             assert np.allclose(out2, out3)
@@ -498,7 +498,7 @@ class TestQuantSim:
             sim.compute_encodings(callback, None)
             sim.export(tempdir, 'onnx_sim')
             model = multi_output_model().model
-            sim = QuantizationSimModel(model)
+            sim = QuantizationSimModel(model, path=tempdir)
             with pytest.raises(AssertionError):
                 load_encodings_to_sim(sim, os.path.join(tempdir, 'onnx_sim.encodings'), strict=False)
 

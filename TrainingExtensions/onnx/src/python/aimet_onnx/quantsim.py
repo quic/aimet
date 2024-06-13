@@ -178,15 +178,14 @@ class QuantizationSimModel:
         self.input_quantizers_name = []
         self.activation_names = []
         self.activation_dtypes = {}
-        self._path = path if path else tempfile.TemporaryDirectory().name
+        self._path = path if path else tempfile.mkdtemp()
         if not os.path.exists(self._path):
-            os.makedirs(self._path)
-
+            os.makedirs(self._path, exist_ok=True)
         self._get_param_names()
         self._get_activations_to_quantize(dummy_input)
         self._add_quantization_nodes()
-        self.session = QuantizationSimModel.build_session(self.model.model, self.providers, path=self._path,
-                                                          user_onnx_libs=self._user_onnx_libs)
+        self.session = QuantizationSimModel.build_session(self.model.model, self.providers,
+                                                          user_onnx_libs=self._user_onnx_libs, path=self._path)
         quantsim_configurator = self._add_configuration_(config_file)
 
         self._supported_kernels = quantsim_configurator.get_supported_kernels()
@@ -288,8 +287,8 @@ class QuantizationSimModel:
         hooks = []
         for name in activations:
             hooks.append(add_hook_to_get_activation(self.model.model, name))
-        sess = QuantizationSimModel.build_session(self.model.model, self.providers, path=self._path,
-                                                  user_onnx_libs=self._user_onnx_libs)
+        sess = QuantizationSimModel.build_session(self.model.model, self.providers,
+                                                  user_onnx_libs=self._user_onnx_libs, path=self._path)
         outputs = sess.run(None, dummy_input)
         for idx in range(len(self.model.graph().output)):
             act_name = self.model.graph().output[idx].name
@@ -397,14 +396,14 @@ class QuantizationSimModel:
                                                           )
 
     @staticmethod
-    def build_session(model: onnx.ModelProto, providers: List, path: str = None, user_onnx_libs: List[str] = None):
+    def build_session(model: onnx.ModelProto, providers: List, user_onnx_libs: List[str] = None, path: str = None):
         """
         Build and return onnxruntime inference session
 
         :param model: onnx model
         :param providers: providers to execute onnxruntime
-        :param path: path where to store model external data
         :param user_onnx_libs: list of paths to user custom ONNX op libraries
+        :param path: path where to store model external data
         """
         sess_options = SessionOptions()
         shared_library = os.path.dirname(libquant_info.__file__)
@@ -417,9 +416,9 @@ class QuantizationSimModel:
 
         # Convert and save ONNX model to external data if larger than 2GB.
         # External data will be saved under same directory.
-        path = path if path else tempfile.TemporaryDirectory().name
+        path = path if path else tempfile.mkdtemp()
         if not os.path.exists(path):
-            os.makedirs(path)
+            os.makedirs(path, exist_ok=True)
         save_as_external_data = model.ByteSize() >= onnx.checker.MAXIMUM_PROTOBUF
         output_path = os.path.join(path, 'model.onnx')
         if save_as_external_data:
