@@ -188,7 +188,6 @@ def _handle_vector_encoding(encoding_dict: Dict, encodings: List[Dict]):
     """
     encoding = encodings[0]
 
-    encoding_dict.pop("dtype")
     encoding_dict["enc_type"] = EncodingType.VECTOR.name
     encoding_dict["rows_per_block"] = encoding["rows_per_block"]
     encoding_dict["cols_per_block"] = encoding["cols_per_block"]
