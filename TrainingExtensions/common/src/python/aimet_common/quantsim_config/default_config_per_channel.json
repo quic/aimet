@@ -24,7 +24,12 @@
 
   "op_type":
   {
-    "Cast": {
+    "Cast":
+    {
+      "is_output_quantized": "False"
+    },
+    "Dropout":
+    {
       "is_output_quantized": "False"
     },
     "Squeeze":
