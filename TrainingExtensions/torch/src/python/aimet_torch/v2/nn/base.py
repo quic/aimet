@@ -44,9 +44,16 @@ from typing import Type, List, Dict, Union, Iterable, Mapping, Optional
 import torch.nn as nn
 from torch import Tensor
 
-from aimet_torch.v2.quantization.base import QuantizerBase
-from aimet_torch.v2.utils import patch_attr, _ContextManager, flatten_nn_module_list
+from aimet_torch.utils import is_vector_encoding
+from aimet_torch.v2.quantization.affine.encoding import VectorEncoding, AffineEncoding
 
+from aimet_torch.v2.quantization.tensor import QuantizedTensorBase
+from aimet_torch.v2.quantization.base import QuantizerBase
+from aimet_torch.v2.utils import (
+    patch_attr,
+    _ContextManager,
+    flatten_nn_module_list,
+)
 
 
 class BaseQuantizationMixin(abc.ABC):
@@ -330,10 +337,23 @@ class BaseQuantizationMixin(abc.ABC):
         """
         Returns a dict of {param name: param encodings}, with each encoding represented as a List of Dicts
         """
-        return {
+        encodings = {
             param_name: quantizer.get_legacy_encodings() if isinstance(quantizer, QuantizerBase) else None
             for param_name, quantizer in self.param_quantizers.items()
         }
+        for param_name, quantizer in self.param_quantizers.items():
+            param = getattr(self, param_name)
+            if isinstance(quantizer, QuantizerBase):
+                e = quantizer.get_legacy_encodings()
+            elif isinstance(param, QuantizedTensorBase) and param.encoding is not None:
+                # If parameter itself is an already-quantized tensor,
+                # export the encoding held by the parameter
+                e = param.encoding._to_legacy_format() # pylint: disable=protected-access
+            else:
+                e = None
+            encodings[param_name] = e
+
+        return encodings
 
     def import_param_encodings(self,
                                encodings: Mapping[str, Mapping],
@@ -358,6 +378,35 @@ class BaseQuantizationMixin(abc.ABC):
             if quantizer and not quantizer._allow_overwrite: # pylint: disable=protected-access
                 continue
             encoding = encodings.get(param_name, None)
+
+            if is_vector_encoding(encoding):
+                # Vector encodings will be held directly by weights, not by quantizers.
+                quantizer.set_legacy_encodings(encoding)
+                rounded_weight = quantizer(self.weight)
+                # At this point, rounded_weight is a quantized tensor with affine encoding
+                # since quantizer is an affine quantizer
+                assert isinstance(rounded_weight, QuantizedTensorBase)
+                assert isinstance(rounded_weight.encoding, AffineEncoding)
+                e = rounded_weight.encoding
+                # Convert affine encoding to vector encoding
+                vector_encoding_properties = {
+                    "rows_per_block": encoding[0]["rows_per_block"],
+                    "cols_per_block": encoding[0]["cols_per_block"],
+                    "vector_dim": encoding[0]["vector_dim"],
+                    "vector_stride": encoding[0]["vector_stride"],
+                    "index_bw": encoding[0]["index_bw"],
+                }
+                rounded_weight.encoding = VectorEncoding(e.scale,
+                                                         e.offset,
+                                                         e.bitwidth,
+                                                         e.signed,
+                                                         e.symmetry,
+                                                         block_size=None,
+                                                         **vector_encoding_properties)
+                setattr(self, param_name, nn.Parameter(rounded_weight))
+                # Remove associated quantizer since the weight is holding already-quantized values
+                self.param_quantizers[param_name] = None
+
             if not encoding:
                 if not partial:
                     # Dangling quantizers have to be removed when importing non-partial encodings

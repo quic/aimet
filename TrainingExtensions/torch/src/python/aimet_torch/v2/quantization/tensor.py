@@ -346,6 +346,24 @@ class DequantizedTensor(QuantizedTensorBase):
     without further loss in information.
     """
 
+    def __getstate__(self):
+        state = self.__dict__
+        state["data"] = self.data
+        state["encoding"] = self.encoding
+        return state
+
+    def __setstate__(self, state):
+        self.data = state["data"]
+        self.encoding = state["encoding"]
+
+    def __deepcopy__(self, memo):
+        new_instance = type(self).__new__(type(self))
+        state = self.__getstate__()
+        new_instance.__setstate__(state)
+        new_instance.encoding = copy.deepcopy(state["encoding"])
+        new_instance.data = copy.deepcopy(state["data"])
+        return new_instance
+
     def quantize(self) -> QuantizedTensor:
         """
         Quantizes ``self`` using :attr:`self.encoding` to produce a :class:`QuantizedTensor` with the same encoding
