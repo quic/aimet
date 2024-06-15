@@ -36,7 +36,7 @@
 # =============================================================================
 """ Commonly used utilities for configuring quantsim """
 
-from typing import overload, Callable, List, Optional, Tuple, Type
+from typing import overload, Callable, List, Optional, Tuple, Type, Union
 import torch
 from aimet_common.utils import AimetLogger
 from aimet_torch.v2.quantsim.quantsim import QuantizationSimModel
@@ -44,6 +44,83 @@ from aimet_torch.v2.quantization.affine import QuantizeDequantize, GroupedBlockQ
 from aimet_torch.v2.quantization.float import FloatQuantizeDequantize
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
+
+modules_with_in_out_channels = (torch.nn.Linear,
+                                torch.nn.Conv1d,
+                                torch.nn.Conv2d,
+                                torch.nn.Conv3d,
+                                torch.nn.ConvTranspose1d,
+                                torch.nn.ConvTranspose2d,
+                                torch.nn.ConvTranspose3d)
+
+def _get_in_channels_dim(module: torch.nn.Module):
+    """ Get input channels dimension for the given module """
+    if not isinstance(module, modules_with_in_out_channels):
+        raise AssertionError(f'In channels not defined for module of type {type(module)}')
+    if isinstance(module, (torch.nn.ConvTranspose1d,
+                           torch.nn.ConvTranspose2d,
+                           torch.nn.ConvTranspose3d)):
+        return 0
+    return 1
+
+def _get_out_channels_dim(module: torch.nn.Module):
+    """ Get input channels dimension for the given module """
+    if not isinstance(module, modules_with_in_out_channels):
+        raise AssertionError(f'Out channels not defined for module of type {type(module)}')
+    if isinstance(module, (torch.nn.ConvTranspose1d,
+                           torch.nn.ConvTranspose2d,
+                           torch.nn.ConvTranspose3d)):
+        return 1
+    return 0
+
+def _get_block_size_array_for_module(module: torch.nn.Module, block_size: Union[int, Tuple[int, ...]]):
+    """
+    Return block size array for a module given a single block size value, assuming that the block size value is to be
+    applied to the in_channels dimension, and the out_channels dimension is per channel.
+    """
+    if isinstance(block_size, (tuple, list)):
+        return block_size
+
+    assert isinstance(block_size, int)
+    if not isinstance(module, modules_with_in_out_channels):
+        error_msg = f'Single value block size is only supported for modules of types in ' \
+                    f'config_utils.modules_with_in_out_channels, but got module of type {type(module)}. Update ' \
+                    f'the argument for identifying modules to set to exclude unsupported types.'
+        raise RuntimeError(error_msg)
+    assert hasattr(module, 'weight')
+
+    # Initialize block sizes with -1, meaning blocks will span the entire dimension for each axis
+    block_size_array = [-1] * len(module.weight.shape)
+
+    # Set in channels dimension block size to block_size, and set out channels dimension block size to 1 (per channel)
+    block_size_array[_get_in_channels_dim(module)] = block_size
+    block_size_array[_get_out_channels_dim(module)] = 1
+    return block_size_array
+
+
+def _get_block_grouping_array_for_module(module: torch.nn.Module, block_grouping: Union[int, Tuple[int, ...]]):
+    """
+    Return block grouping array for a module given a single block grouping value, assuming that the block grouping value
+    is to be applied to the in_channels dimension.
+    """
+    if isinstance(block_grouping, (tuple, list)):
+        return block_grouping
+
+    assert isinstance(block_grouping, int)
+    if not isinstance(module, modules_with_in_out_channels):
+        error_msg = f'Single value block grouping is only supported for modules of types in ' \
+                    f'config_utils.modules_with_in_out_channels, but got module of type {type(module)}. Update ' \
+                    f'the argument for identifying modules to set to exclude unsupported types.'
+        raise RuntimeError(error_msg)
+    assert hasattr(module, 'weight')
+
+    # Initialize block grouping with 1, meaning no blocks will be grouped together in each dimension
+    block_grouping_array = [1] * len(module.weight.shape)
+
+    # Set in channels dimension block size to block_grouping
+    block_grouping_array[_get_in_channels_dim(module)] = block_grouping
+    return block_grouping_array
+
 
 def _parse_arg_for_condition(arg):
     """ Transform the given arg into a corresponding condition expression """
@@ -65,6 +142,7 @@ def _get_weight_quantizer_shape_from_block_size(quant_layer: torch.nn.Module, bl
         -> Optional[List[int]]:
     """ Given a block size, get the corresponding weight quantizer shape """
     weight_shape = quant_layer.weight.shape
+    block_size = _get_block_size_array_for_module(quant_layer, block_size)
     assert len(block_size) == len(weight_shape)
     quantizer_shape = []
     for idx, shape in enumerate(weight_shape):
@@ -134,24 +212,24 @@ def _set_activation_quantizers_to_float(sim: QuantizationSimModel, condition: Ca
 
 @overload
 def set_blockwise_quantization_for_weights(sim: QuantizationSimModel, module_type: List[Type[torch.nn.Module]],
-                                           bitwidth: int, symmetric: bool, block_size: Tuple[int, ...]):
+                                           bitwidth: int, symmetric: bool, block_size: Union[int, Tuple[int, ...]]):
     """ Set weight parameter quantizers of the given module type to blockwise """
 
 
 @overload
 def set_blockwise_quantization_for_weights(sim: QuantizationSimModel, qmodules: List[torch.nn.Module], bitwidth: int,
-                                           symmetric: bool, block_size: Tuple[int, ...]):
+                                           symmetric: bool, block_size: Union[int, Tuple[int, ...]]):
     """ Set weight parameter quantizers of the given modules to blockwise """
 
 
 @overload
 def set_blockwise_quantization_for_weights(sim: QuantizationSimModel, condition: Callable[[torch.nn.Module], bool],
-                                           bitwidth: int, symmetric: bool, block_size: Tuple[int, ...]):
+                                           bitwidth: int, symmetric: bool, block_size: Union[int, Tuple[int, ...]]):
     """ Set weight parameter quantizers of modules that satisfy the given condition to blockwise """
 
 
 def set_blockwise_quantization_for_weights(sim: QuantizationSimModel, arg, bitwidth: int, symmetric: bool,
-                                           block_size: Tuple[int, ...]):
+                                           block_size: Union[int, Tuple[int, ...]]):
     """
     Set weight parameter quantizers of modules to blockwise.
 
@@ -163,7 +241,11 @@ def set_blockwise_quantization_for_weights(sim: QuantizationSimModel, arg, bitwi
            otherwise
     :param bitwidth: Bitwidth for affine quantization
     :param symmetric: True if affine quantization is symmetric, False otherwise
-    :param block_size: Block size for affine quantization
+    :param block_size: Block size for affine quantization. This can be an array in which case all layers identified
+        by arg must have weight shapes compatible with the array length, or can be an integer value, in which case the
+        block size will be applied to the weight's in_channels dimension, and per channel will be used for the weight's
+        out_channels dimension. A block size value of -1 for a particular dimension is equivalent to a block size equal
+        to the size of that particular dimension.
     """
     condition = _parse_arg_for_condition(arg)
     _set_blockwise_quantization_for_weights(sim, condition, bitwidth, symmetric, block_size)
@@ -192,24 +274,28 @@ def _get_layers_to_quantizer_shapes_for_block_size(sim, condition, block_size):
 
 
 def _set_blockwise_quantization_for_weights(sim: QuantizationSimModel, condition: Callable[[torch.nn.Module], bool],
-                                            bitwidth: int, symmetric: bool, block_size: Tuple[int, ...]):
+                                            bitwidth: int, symmetric: bool, block_size: Union[int, Tuple[int, ...]]):
     """ Set weight parameter quantizers of modules that satisfy the given condition to blockwise """
     layer_to_quantizer_shape_dict = _get_layers_to_quantizer_shapes_for_block_size(sim, condition, block_size)
     for layer, quantizer_shape in layer_to_quantizer_shape_dict.items():
-        layer.param_quantizers['weight'] = QuantizeDequantize(quantizer_shape, bitwidth, symmetric, None, block_size)
+        layer_block_size = _get_block_size_array_for_module(layer, block_size)
+        layer.param_quantizers['weight'] = QuantizeDequantize(quantizer_shape, bitwidth, symmetric, None,
+                                                              layer_block_size)
 
 
 @overload
 def set_grouped_blockwise_quantization_for_weights(sim: QuantizationSimModel, module_type: List[Type[torch.nn.Module]],
                                                    bitwidth: int, symmetric: bool, decompressed_bw: int,
-                                                   block_size: Tuple[int, ...], block_grouping):
+                                                   block_size: Union[int, Tuple[int, ...]],
+                                                   block_grouping: Union[int, Tuple[int, ...]]):
     """ Set weight parameter quantizers of the given module type to grouped blockwise """
 
 
 @overload
 def set_grouped_blockwise_quantization_for_weights(sim: QuantizationSimModel, qmodules: List[torch.nn.Module],
                                                    bitwidth: int, symmetric: bool, decompressed_bw: int,
-                                                   block_size: Tuple[int, ...], block_grouping: Tuple[int, ...]):
+                                                   block_size: Union[int, Tuple[int, ...]],
+                                                   block_grouping: Union[int, Tuple[int, ...]]):
     """ Set weight parameter quantizers of the given modules to grouped blockwise """
 
 
@@ -217,13 +303,15 @@ def set_grouped_blockwise_quantization_for_weights(sim: QuantizationSimModel, qm
 def set_grouped_blockwise_quantization_for_weights(sim: QuantizationSimModel,
                                                    condition: Callable[[torch.nn.Module], bool],
                                                    bitwidth: int, symmetric: bool, decompressed_bw: int,
-                                                   block_size: Tuple[int, ...], block_grouping: Tuple[int, ...]):
+                                                   block_size: Union[int, Tuple[int, ...]],
+                                                   block_grouping: Union[int, Tuple[int, ...]]):
     """ Set weight parameter quantizers of modules that satisfy the given condition to grouped blockwise """
 
 
 def set_grouped_blockwise_quantization_for_weights(sim: QuantizationSimModel, arg,
                                                    bitwidth: int, symmetric: bool, decompressed_bw: int,
-                                                   block_size: Tuple[int, ...], block_grouping: Tuple[int, ...]):
+                                                   block_size: Union[int, Tuple[int, ...]],
+                                                   block_grouping: Union[int, Tuple[int, ...]]):
     """
     Set weight parameter quantizers of modules to grouped blockwise.
 
@@ -236,8 +324,16 @@ def set_grouped_blockwise_quantization_for_weights(sim: QuantizationSimModel, ar
     :param bitwidth: Bitwidth for affine quantization
     :param symmetric: True if affine quantization is symmetric, False otherwise
     :param decompressed_bw: Decompressed bw for grouped block quantization
-    :param block_size: Block size for affine quantization
-    :param block_grouping: Block grouping for grouped block quantization
+    :param block_size: Block size for affine quantization. This can be an array in which case all layers identified
+        by arg must have weight shapes compatible with the array length, or can be an integer value, in which case the
+        block size will be applied to the weight's in_channels dimension and per channel will be used for the weight's
+        out_channels dimension. A block size value of -1 for a particular dimension is equivalent to a block size equal
+        to the size of that particular dimension.
+    :param block_grouping: Block grouping for grouped block quantization. This can be an array in which case all layers
+        identified by arg must have weight shapes compatible with the array length, or can be an integer value, in which
+        case the block grouping will be applied to the weight's in_channels dimension, and no other dimensions will
+        experience block grouping. A block grouping value of -1 for a particular dimension is equivalent to a block
+        grouping equal to the number of blocks for that particular dimension.
     """
     condition = _parse_arg_for_condition(arg)
     _set_grouped_blockwise_quantization_for_weights(sim, condition, bitwidth, symmetric, decompressed_bw, block_size,
@@ -247,10 +343,13 @@ def set_grouped_blockwise_quantization_for_weights(sim: QuantizationSimModel, ar
 def _set_grouped_blockwise_quantization_for_weights(sim: QuantizationSimModel,
                                                     condition: Callable[[torch.nn.Module], bool],
                                                     bitwidth: int, symmetric: bool, decompressed_bw: int,
-                                                    block_size: Tuple[int, ...], block_grouping: Tuple[int, ...]):
+                                                    block_size: Union[int, Tuple[int, ...]],
+                                                    block_grouping: Union[int, Tuple[int, ...]]):
     """ Set weight parameter quantizers of modules that satisfy the given condition to grouped blockwise """
     layer_to_quantizer_shape_dict = _get_layers_to_quantizer_shapes_for_block_size(sim, condition, block_size)
     for layer, quantizer_shape in layer_to_quantizer_shape_dict.items():
+        layer_block_size = _get_block_size_array_for_module(layer, block_size)
+        layer_block_grouping = _get_block_grouping_array_for_module(layer, block_grouping)
         layer.param_quantizers['weight'] = GroupedBlockQuantizeDequantize(quantizer_shape, bitwidth, symmetric,
-                                                                          decompressed_bw, None, block_size,
-                                                                          block_grouping)
+                                                                          decompressed_bw, None, layer_block_size,
+                                                                          layer_block_grouping)
