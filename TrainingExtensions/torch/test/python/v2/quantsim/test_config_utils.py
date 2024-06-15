@@ -38,7 +38,7 @@
 
 import pytest
 import torch
-from aimet_torch.examples.test_models import SingleResidualWithAvgPool
+from aimet_torch.examples.test_models import SingleResidualWithAvgPool, TransposedConvModel
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.quantsim.config_utils import set_activation_quantizers_to_float, \
     set_blockwise_quantization_for_weights, set_grouped_blockwise_quantization_for_weights
@@ -243,3 +243,54 @@ def test_set_grouped_blockwise_quantization_for_weights():
                                                                      qsim.model.fc.weight.shape[1] // 4)
     assert qsim.model.fc.param_quantizers['weight'].decompressed_bw == 8
     assert tuple(qsim.model.fc.param_quantizers['weight'].block_grouping) == (1, -1)
+
+def test_set_grouped_blockwise_with_single_value():
+    model = SingleResidualWithAvgPool()
+    dummy_input = torch.randn(1, 3, 32, 32)
+
+    qsim = QuantizationSimModel(model, dummy_input)
+    layers_to_set = [m for m in qsim.model.modules() if isinstance(m, (torch.nn.Conv2d, torch.nn.Linear)) and \
+                     m.weight.shape[1] != 3]
+    assert layers_to_set
+    set_grouped_blockwise_quantization_for_weights(qsim, lambda m: m in layers_to_set, 4, True, 8, 4, -1)
+    qsim.compute_encodings(lambda m, _: m(dummy_input), None)
+    _ = qsim.model(dummy_input)
+
+    for m in layers_to_set:
+        if isinstance(m, aimet_nn.QuantizedConv2d):
+            assert m.param_quantizers['weight'].block_size == [1, 4, -1, -1]
+            assert m.param_quantizers['weight'].block_grouping == [1, -1, 1, 1]
+        else:
+            assert m.param_quantizers['weight'].block_size == [1, 4]
+            assert m.param_quantizers['weight'].block_grouping == [1, -1]
+
+    model = TransposedConvModel()
+    dummy_input = torch.randn(10, 10, 3, 4)
+    qsim = QuantizationSimModel(model, dummy_input)
+    layers_to_set = [m for m in qsim.model.modules() if isinstance(m, torch.nn.ConvTranspose2d)]
+    assert layers_to_set
+    set_grouped_blockwise_quantization_for_weights(qsim, lambda m: m in layers_to_set, 4, True, 8, 2, -1)
+    qsim.compute_encodings(lambda m, _: m(dummy_input), None)
+    _ = qsim.model(dummy_input)
+
+    for m in layers_to_set:
+        assert m.param_quantizers['weight'].block_size == [2, 1, -1, -1]
+        assert m.param_quantizers['weight'].block_grouping == [-1, 1, 1, 1]
+
+def test_invalid_single_value_block_size():
+    class PreluModel(torch.nn.Module):
+        def __init__(self):
+            super(PreluModel, self).__init__()
+            self.prelu = torch.nn.PReLU()
+            self.relu = torch.nn.ReLU()
+
+        def forward(self, inp):
+            x = self.prelu(inp)
+            return self.relu(x)
+
+    model = PreluModel()
+    dummy_input = torch.randn(1, 10)
+    model.prelu.weight = torch.nn.Parameter(torch.randn(10))
+    qsim = QuantizationSimModel(model, dummy_input)
+    with pytest.raises(RuntimeError):
+        set_blockwise_quantization_for_weights(qsim, lambda m: isinstance(m, torch.nn.PReLU), 4, True, 2)
