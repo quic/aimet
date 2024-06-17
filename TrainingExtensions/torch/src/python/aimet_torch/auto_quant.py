@@ -212,6 +212,7 @@ class AutoQuantBase(abc.ABC): # pylint: disable=too-many-instance-attributes
             config_file: str = None,
             results_dir: str = "/tmp",
             cache_id: str = None,
+            model_prepare_required: bool = True,
             strict_validation: bool = True) -> None:
         '''
         :param model: Model to be quantized. Assumes model is on the correct device
@@ -225,6 +226,7 @@ class AutoQuantBase(abc.ABC): # pylint: disable=too-many-instance-attributes
         :param config_file: Path to configuration file for model quantizers
         :param results_dir: Directory to save the results of PTQ techniques
         :param cache_id: ID associated with cache results
+        :param model_prepare_required: Flag set to True by default.If False, AutoQuant will skip model prepare block in the pipeline.
         :param strict_validation: Flag set to True by default.hen False, AutoQuant will proceed with execution and handle errors internally if possible. This may produce unideal or unintuitive results.
         '''
         _validate_inputs(model, data_loader, eval_callback, dummy_input, results_dir,
@@ -248,6 +250,8 @@ class AutoQuantBase(abc.ABC): # pylint: disable=too-many-instance-attributes
             self.cache_dir = os.path.join(results_dir, ".auto_quant_cache", cache_id)
         else:
             self.cache_dir = None
+
+        self.model_prepare_required = model_prepare_required
 
         def forward_pass_callback(model, _: Any = None):
             device = utils.get_device(model)
@@ -324,8 +328,9 @@ class AutoQuantBase(abc.ABC): # pylint: disable=too-many-instance-attributes
         '''
         model = self.fp32_model
 
-        with self.eval_manager.session("Prepare Model") as sess:
-            model = sess.wrap(self._prepare_model)(self.fp32_model)
+        if self.model_prepare_required:
+            with self.eval_manager.session("Prepare Model") as sess:
+                model = sess.wrap(self._prepare_model)(self.fp32_model)
 
         # Batchnorm Folding
         with self.eval_manager.session("Batchnorm Folding", ptq=True) as sess:
@@ -628,7 +633,7 @@ class AutoQuantBase(abc.ABC): # pylint: disable=too-many-instance-attributes
 
                 return ret
         finally:
-            self.eval_manager.export_diagnostics()
+            self.eval_manager.export_diagnostics(self.model_prepare_required)
 
     def get_quant_scheme_candidates(self) -> Tuple[_QuantSchemePair, ...]:
         """
@@ -694,7 +699,7 @@ class AutoQuantBase(abc.ABC): # pylint: disable=too-many-instance-attributes
         # Find the quant scheme that yields the best eval score
         return max(candidates, key=eval_fn)
 
-    def _optimize_main(self, fp32_model: torch.nn.Module, target_acc: float):
+    def _optimize_main(self, fp32_model: torch.nn.Module, target_acc: float): # pylint: disable=too-many-branches
         """
         Helper function of apply().
 
@@ -705,8 +710,11 @@ class AutoQuantBase(abc.ABC): # pylint: disable=too-many-instance-attributes
 
         :return: The best ptq result as a dictionary.
         """
-        with self.eval_manager.session("Prepare Model") as sess:
-            fp32_model = sess.wrap(self._prepare_model)(self.fp32_model)
+        fp32_model = self.fp32_model
+
+        if self.model_prepare_required:
+            with self.eval_manager.session("Prepare Model") as sess:
+                fp32_model = sess.wrap(self._prepare_model)(self.fp32_model)
 
         # Choose quant scheme automatically.
         with self.eval_manager.session("QuantScheme Selection") as sess:
@@ -892,9 +900,10 @@ class _EvalManager:
         "auto_quant_diagnostics_template.html",
     )
 
-    def export_diagnostics(self) -> str:
+    def export_diagnostics(self, model_prepare) -> str:
         """
         Export diagnostics in html format.
+        :param model_prepare: Flag indicating if model prepare is included in pipeline or not.
         :return: Diagnostics string in html format.
         """
         loader = jinja2.FileSystemLoader(os.path.dirname(self.HTML_TEMPLATE_FILE))
@@ -927,7 +936,7 @@ class _EvalManager:
             else:
                 result[sess.title_lowercase] = sess.result
 
-        flowchart_metadata = _build_flowchart_metadata(result)
+        flowchart_metadata = _build_flowchart_metadata(result, model_prepare)
 
         html = template.render(head=head, log=log.getvalue(), **flowchart_metadata)
 
@@ -1247,11 +1256,12 @@ def spy_auto_quant(auto_quant: AutoQuantBase):
         setattr(auto_quant, "_optimize_main", _optimize_main)
 
 
-def _build_flowchart_metadata(result: Mapping) -> Dict: # pylint: disable=too-many-return-statements
+def _build_flowchart_metadata(result: Mapping, model_prepare) -> Dict: # pylint: disable=too-many-return-statements
     """
     Build flowchart metadata for the html template of summary report
 
     :param result: Result of AutoQuant with the following format:
+    :param model_prepare: Flag indicating if model prepare is present in pipeline or not.
 
         result := {
             "prepare_model": _stage_result,
@@ -1282,7 +1292,11 @@ def _build_flowchart_metadata(result: Mapping) -> Dict: # pylint: disable=too-ma
         node_prepare_model='data-visited="true"',
     )
 
-    status = result['prepare_model']['status']
+    if model_prepare:
+        status = result['prepare_model']['status']
+    else:
+        status = 'error-ignored'
+
     metadata.update(
         node_prepare_model=f'data-visited="true" data-stage-result="{status}"',
     )
