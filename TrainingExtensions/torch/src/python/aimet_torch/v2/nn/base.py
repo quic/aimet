@@ -382,7 +382,8 @@ class BaseQuantizationMixin(abc.ABC):
             if is_vector_encoding(encoding):
                 # Vector encodings will be held directly by weights, not by quantizers.
                 quantizer.set_legacy_encodings(encoding)
-                rounded_weight = quantizer(self.weight)
+                param = getattr(self, param_name)
+                rounded_weight = quantizer(param)
                 # At this point, rounded_weight is a quantized tensor with affine encoding
                 # since quantizer is an affine quantizer
                 assert isinstance(rounded_weight, QuantizedTensorBase)
