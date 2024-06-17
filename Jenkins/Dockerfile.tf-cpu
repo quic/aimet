@@ -127,10 +127,13 @@ RUN python3 -m pip --no-cache-dir install \
         cffi \
         click \
         cma \
+        cvxpy \
+        cylp \
         cython \
         dataclasses \
         Deprecated \
         docutils==0.16 \
+        graphviz \
         h5py \
         ipykernel \
         ipython \
@@ -139,6 +142,7 @@ RUN python3 -m pip --no-cache-dir install \
         keras==2.10.0 \
         lmdb==0.95 \
         nbsphinx \
+        networkx \
         'numpy<1.24,>=1.20.0' \
         onnx==1.12.0 \
         opencv-python \
@@ -149,6 +153,7 @@ RUN python3 -m pip --no-cache-dir install \
         psutil \
         ptflops \
         pybind11 \
+        pydot \
         pyDOE2 \
         pylint==2.8.3 \
         pymoo \
