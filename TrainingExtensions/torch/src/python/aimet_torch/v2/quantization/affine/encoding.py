@@ -37,7 +37,7 @@
 # pylint: disable=redefined-builtin
 """ Affine encoding definition """
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import torch
 from torch._C._nn import _parse_to as parse_to_args
 
@@ -185,11 +185,7 @@ class AffineEncoding(EncodingBase):
         Changes dtype of data in quantizer encoding or device where the data is.
         Behaves similar to torch.Tensor.to
         """
-        to_args = parse_to_args(*args, **kwargs)
-        device, dtype, _, _ = to_args
-        dtype = dtype if dtype else self._scale.dtype
-        device = device if device else self._scale.device
-
+        dtype, device = self._get_dtype_and_device(*args, **kwargs)
         if dtype is self._scale.dtype and device is self._scale.device:
             return self
 
@@ -232,6 +228,13 @@ class AffineEncoding(EncodingBase):
             for min_, max_, scale_, offset_ in zip(min, max, scale, offset)
         ]
 
+    def _get_dtype_and_device(self, *args, **kwargs) -> Tuple[torch.dtype, torch.device]:
+        to_args = parse_to_args(*args, **kwargs)
+        device, dtype, _, _ = to_args
+        dtype = dtype if dtype else self._scale.dtype
+        device = device if device else self._scale.device
+        return dtype, device
+
 
 class VectorEncoding(AffineEncoding):
     """
@@ -271,11 +274,7 @@ class VectorEncoding(AffineEncoding):
         Changes dtype of data in quantizer encoding or device where the data is.
         Behaves similar to torch.Tensor.to
         """
-        to_args = parse_to_args(*args, **kwargs)
-        device, dtype, _, _ = to_args
-        dtype = dtype if dtype else self._scale.dtype
-        device = device if device else self._scale.device
-
+        dtype, device = self._get_dtype_and_device(*args, **kwargs)
         if dtype is self._scale.dtype and device is self._scale.device:
             return self
 
