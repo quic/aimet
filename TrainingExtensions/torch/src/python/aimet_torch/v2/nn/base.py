@@ -344,7 +344,7 @@ class BaseQuantizationMixin(abc.ABC):
         for param_name, quantizer in self.param_quantizers.items():
             param = getattr(self, param_name)
             if isinstance(quantizer, QuantizerBase):
-                e = quantizer.get_legacy_encodings()
+                e = encodings[param_name]
             elif isinstance(param, QuantizedTensorBase) and param.encoding is not None:
                 # If parameter itself is an already-quantized tensor,
                 # export the encoding held by the parameter
