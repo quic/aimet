@@ -995,28 +995,23 @@ def test_model_stays_valid_after_export_per_channel():
         os.remove(tmp_config_file)
 
 
-def test_load_encodings():
+@pytest.mark.parametrize('param_encodings', [{'conv2d_1/kernel:0':
+                                                  [{'bitwidth': 4, "dtype": 'int', 'is_symmetric': "False",
+                                                    'max': 0.14584073424339294, 'min': -0.12761062383651733,
+                                                    'offset': -7.0, 'scale': 0.01823008991777897}]},
+                                             {'conv2d_1/kernel:0': [{'bitwidth': 16, 'dtype': 'float'}]}])
+@pytest.mark.parametrize('activation_encodings', [{"conv2d_1/Tanh:0":
+                                                       [{"bitwidth": 8, "dtype": "int", "is_symmetric": "False",
+                                                         "max": 5.99380955882352939, "min": -7.77575294117647056,
+                                                         "offset": -144, "scale": 0.05399828431372549}]},
+                                                  {"conv2d_1/Tanh:0": [{'bitwidth': 16, 'dtype': 'float'}]}])
+def test_load_encodings(param_encodings, activation_encodings):
     """ Test load encodings functionality """
     tf.compat.v1.reset_default_graph()
 
     model = keras_model()
 
     sim = QuantizationSimModel(model)
-    param_encodings = {'conv2d_1/kernel:0': [{'bitwidth': 4, 'is_symmetric': "False",
-                                              'max': 0.14584073424339294,
-                                              'min': -0.12761062383651733,
-                                              'offset': -7.0, 'scale': 0.01823008991777897}]}
-    activation_encodings = {"conv2d_1/Tanh:0": [
-        {
-            "bitwidth": 8,
-            "dtype": "int",
-            "is_symmetric": "False",
-            "max": 5.99380955882352939,
-            "min": -7.77575294117647056,
-            "offset": -144,
-            "scale": 0.05399828431372549
-        }
-    ]}
 
     dummy_encodings = {"activation_encodings": activation_encodings,
                        "param_encodings": param_encodings}
@@ -1033,20 +1028,24 @@ def test_load_encodings():
     # For param
     expected_encoding = param_encodings['conv2d_1/kernel:0'][0]
     actual_encoding = extracted_encoding["param_encodings"]['conv2d_1/kernel:0'][0]
+    assert actual_encoding.get('dtype') == expected_encoding.get('dtype')
     assert actual_encoding.get('bitwidth') == expected_encoding.get('bitwidth')
-    assert actual_encoding.get('offset') == expected_encoding.get('offset')
-    assert actual_encoding.get('is_symmetric') == expected_encoding.get('is_symmetric')
-    assert np.allclose(actual_encoding.get('min'), expected_encoding.get('min'), atol=1e-5)
-    assert np.allclose(actual_encoding.get('max'), expected_encoding.get('max'), atol=1e-5)
+    if actual_encoding.get('dtype') == 'int':
+        assert actual_encoding.get('offset') == expected_encoding.get('offset')
+        assert actual_encoding.get('is_symmetric') == expected_encoding.get('is_symmetric')
+        assert np.allclose(actual_encoding.get('min'), expected_encoding.get('min'), atol=1e-5)
+        assert np.allclose(actual_encoding.get('max'), expected_encoding.get('max'), atol=1e-5)
 
     # For activation
     expected_encoding = activation_encodings["conv2d_1/Tanh:0"][0]
     actual_encoding = extracted_encoding["activation_encodings"]["conv2d_1/Tanh:0"][0]
+    assert actual_encoding.get('dtype') == expected_encoding.get('dtype')
     assert actual_encoding.get('bitwidth') == expected_encoding.get('bitwidth')
-    assert actual_encoding.get('offset') == expected_encoding.get('offset')
-    assert actual_encoding.get('is_symmetric') == expected_encoding.get('is_symmetric')
-    assert np.allclose(actual_encoding.get('min'), expected_encoding.get('min'), atol=1e-5)
-    assert np.allclose(actual_encoding.get('max'), expected_encoding.get('max'), atol=1e-5)
+    if actual_encoding.get('dtype') == 'int':
+        assert actual_encoding.get('offset') == expected_encoding.get('offset')
+        assert actual_encoding.get('is_symmetric') == expected_encoding.get('is_symmetric')
+        assert np.allclose(actual_encoding.get('min'), expected_encoding.get('min'), atol=1e-5)
+        assert np.allclose(actual_encoding.get('max'), expected_encoding.get('max'), atol=1e-5)
 
     # Delete encodings JSON file
     if os.path.exists("./dummy.encodings"):
@@ -1080,7 +1079,7 @@ def test_load_encodings_with_disabled_param():
     model = keras_model()
 
     sim = QuantizationSimModel(model, config_file='./quantsim_config.json')
-    param_encodings = {'conv2d_1/kernel:0': [{'bitwidth': 4, 'is_symmetric': "False",
+    param_encodings = {'conv2d_1/kernel:0': [{'bitwidth': 4, 'dtype': 'int', 'is_symmetric': "False",
                                               'max': 0.14584073424339294,
                                               'min': -0.12761062383651733,
                                               'offset': -7.0, 'scale': 0.01823008991777897}]}
@@ -1159,19 +1158,19 @@ def test_load_encodings_pcq():
     model = keras_model()
 
     sim = QuantizationSimModel(model, config_file='./quantsim_config.json')
-    param_encodings = {'conv2d_1/kernel:0': [{'bitwidth': 4, 'is_symmetric': "False",
+    param_encodings = {'conv2d_1/kernel:0': [{'bitwidth': 4, 'dtype': 'int', 'is_symmetric': "False",
                                               'max': 0.14584073424339294,
                                               'min': -0.12761062383651733,
                                               'offset': -7.0, 'scale': 0.01823008991777897},
-                                             {'bitwidth': 4, 'is_symmetric': "False",
+                                             {'bitwidth': 4, 'dtype': 'int', 'is_symmetric': "False",
                                               'max': 0.14584073424339294,
                                               'min': -0.12761062383651733,
                                               'offset': -7.0, 'scale': 0.01823008991777897},
-                                             {'bitwidth': 4, 'is_symmetric': "False",
+                                             {'bitwidth': 4, 'dtype': 'int', 'is_symmetric': "False",
                                               'max': 0.14584073424339294,
                                               'min': -0.12761062383651733,
                                               'offset': -7.0, 'scale': 0.01823008991777897},
-                                             {'bitwidth': 4, 'is_symmetric': "False",
+                                             {'bitwidth': 4, 'dtype': 'int', 'is_symmetric': "False",
                                               'max': 0.14584073424339294,
                                               'min': -0.12761062383651733,
                                               'offset': -7.0, 'scale': 0.01823008991777897}]}
