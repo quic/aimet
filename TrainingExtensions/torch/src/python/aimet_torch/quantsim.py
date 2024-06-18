@@ -1610,7 +1610,7 @@ class QuantizationSimModel:
         if strict is True:
             encoding_keys = param_encodings.keys() | activation_encodings.keys()
             model_keys = set(name.replace("._module_to_wrap", "") for name, _
-                             in chain(self.model.named_modules(), self._all_named_parameters()))
+                             in chain(self.model.named_modules(), utils.get_all_named_parameters(self.model)))
             keys_not_found = encoding_keys - model_keys
             if keys_not_found:
                 keys_not_found = ', '.join(sorted(keys_not_found))
@@ -1624,11 +1624,6 @@ class QuantizationSimModel:
         if activation_encodings is not None:
             self._set_activation_encodings(activation_encodings,
                                            strict, partial, requires_grad, allow_overwrite)
-
-    def _all_named_parameters(self):
-        for name, module in self.model.named_modules(remove_duplicate=False):
-            for param_name, parameter in module.named_parameters(recurse=False):
-                yield name + "." + param_name, parameter
 
     @deprecated(f"Use {load_encodings.__qualname__} instead.")
     def load_and_freeze_encodings(self, encoding_path: str, ignore_when_quantizer_disabled: bool = False):

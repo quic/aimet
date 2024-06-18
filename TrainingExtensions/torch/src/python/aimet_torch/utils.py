@@ -1264,3 +1264,14 @@ def is_vector_encoding(encoding: Optional[List[Dict]]) -> bool:
         "index_bw",
     )
     return all((property_ in encoding[0] for property_ in required_properties))
+
+
+def get_all_named_parameters(model: torch.nn.Module):
+    """
+    Yields all (name, parameter) pairs in model including redundant parameters.
+
+    :param model: torch.nn.Module from which to retrieve parameters
+    """
+    for name, module in model.named_modules(remove_duplicate=False):
+        for param_name, parameter in module.named_parameters(recurse=False):
+            yield name + "." + param_name, parameter
