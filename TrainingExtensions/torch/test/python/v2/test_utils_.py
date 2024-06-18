@@ -34,9 +34,16 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+import json
+import os
 import pytest
+import tempfile
 import torch
 
+from .models_.test_models import ModelWithMatMul2
+from aimet_common.defs import QuantScheme
+from aimet_torch.v2.experimental import set_matmul_second_input_producer_to_8bit_symmetric
+from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.utils import allow_recompute, enable_recompute, reduce, patch_attr
 
 @pytest.mark.parametrize('reduce_dim, target_shape', [
@@ -165,3 +172,52 @@ def test_allow_recompute(use_deterministic_algorithms):
 
     assert torch.equal(conv1_grad_with_recompute, conv1_grad_without_recompute)
     assert torch.equal(conv2_grad_with_recompute, conv2_grad_without_recompute)
+
+def test_matmul_bit_override():
+
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
+    model = ModelWithMatMul2().to(device)
+    dummy_input = (
+        torch.randn(10, 3, 4, device=device),
+        torch.randn(10, 5, 4, device=device),
+    )
+
+    quantsim_config = {
+        "defaults": {
+            "hw_version": 'V79',
+            "ops": {"is_output_quantized": "True"},
+            "params": {},
+        },
+        "params": {},
+        "op_type": {
+            "Relu": {"is_output_quantized": "False"},
+        },
+        "supergroups": [],
+        "model_input": {},
+        "model_output": {},
+    }
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        config_path = os.path.join(temp_dir, "quantsim_config.json")
+
+        with open(config_path, "w") as f:
+            json.dump(quantsim_config, f)
+
+        sim = QuantizationSimModel(
+            model,
+            dummy_input,
+            quant_scheme=QuantScheme.post_training_tf,
+            config_file=config_path,
+            default_output_bw = 16,
+            default_param_bw=4,
+        )
+
+    sim.compute_encodings(
+        lambda sim_model, _: sim_model(*dummy_input), forward_pass_callback_args=None
+    )
+    set_matmul_second_input_producer_to_8bit_symmetric(sim)
+
+    closest_output_quantizer_of_second_input = sim.model.act3.output_quantizers[0]
+    assert closest_output_quantizer_of_second_input.bitwidth == 8
+    assert closest_output_quantizer_of_second_input.symmetric
