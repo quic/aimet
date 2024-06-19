@@ -4631,6 +4631,17 @@ class TestQuantizationSimLearnedGrid:
             optimizer.step()
             optimizer.zero_grad()
 
+    def test_save_and_load_with_reused_weights(self):
+        model = torch.nn.Sequential(torch.nn.Linear(10, 10), torch.nn.Linear(10, 10))
+        model[0].weight = model[1].weight
+        sim = QuantizationSimModel(model, dummy_input=torch.randn(1, 10))
+
+        sim.compute_encodings(lambda model, _: model(torch.randn(1, 10)), None)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sim.save_encodings_to_json(tmpdir, "model_enc")
+            sim.load_encodings(os.path.join(tmpdir, "model_enc.json"))
+
     @pytest.mark.parametrize(
         'quant_scheme',
         [QuantScheme.training_range_learning_with_tf_init,

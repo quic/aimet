@@ -1610,7 +1610,7 @@ class QuantizationSimModel:
         if strict is True:
             encoding_keys = param_encodings.keys() | activation_encodings.keys()
             model_keys = set(name.replace("._module_to_wrap", "") for name, _
-                             in chain(self.model.named_modules(), self.model.named_parameters()))
+                             in chain(self.model.named_modules(), utils.get_all_named_parameters(self.model)))
             keys_not_found = encoding_keys - model_keys
             if keys_not_found:
                 keys_not_found = ', '.join(sorted(keys_not_found))
