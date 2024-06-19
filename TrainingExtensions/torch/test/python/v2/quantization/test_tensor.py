@@ -35,7 +35,11 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 import pytest
+import copy
+import pickle
 import torch
+from torch import nn
+
 from aimet_torch.v2.quantization.affine import quantize, quantize_dequantize
 from aimet_torch.v2.quantization.tensor import QuantizedTensor, DequantizedTensor
 from aimet_torch.v2.quantization.affine import AffineEncoding
@@ -499,4 +503,58 @@ class TestQuantizedTensor:
         assert not detached_tensor.encoding.scale.requires_grad
         assert qtensor.requires_grad
         assert qtensor.encoding.scale.requires_grad
-        
+
+    @pytest.mark.parametrize('data', [torch.randn(5, 5), nn.Parameter(torch.randn(5, 5))])
+    @pytest.mark.parametrize('qtensor_cls', [QuantizedTensor, DequantizedTensor])
+    def test_copy(self, data, qtensor_cls, scale, offset, bitwidth):
+        qtensor = torch.tensor(data).as_subclass(qtensor_cls)
+        qtensor.encoding = AffineEncoding(scale, offset, bitwidth)
+
+        """
+        When: Deep-copy a quantized tensor object using copy.deepcopy or pickle.load/dump
+        Then: 1) The copied tensor is also a quantized tensor with the same values
+              2) The copied tensor must hold the same metadata (device, requires_grad, etc.)
+              3) The copied tensor must hold the same encoding
+        """
+        for deepcopy_fn in [copy.deepcopy, lambda t: pickle.loads(pickle.dumps(t))]:
+            qtensor_copy = deepcopy_fn(qtensor)
+
+            assert type(qtensor_copy) == qtensor_cls
+            assert torch.equal(qtensor_copy, qtensor)
+            assert qtensor_copy.data_ptr() != qtensor.data_ptr()
+            assert qtensor_copy is not qtensor
+
+            assert qtensor_copy.device == qtensor.device
+            assert qtensor_copy.requires_grad == qtensor.requires_grad
+            assert qtensor_copy.dtype == qtensor.dtype
+            assert qtensor_copy.layout == qtensor.layout
+            assert qtensor_copy.stride() == qtensor.stride()
+            assert qtensor_copy.is_pinned() == qtensor.is_pinned()
+
+            assert torch.equal(qtensor_copy.encoding.scale, qtensor.encoding.scale)
+            assert torch.equal(qtensor_copy.encoding.offset, qtensor.encoding.offset)
+            assert qtensor_copy.encoding.bitwidth == qtensor.encoding.bitwidth
+            assert qtensor_copy.encoding.signed == qtensor.encoding.signed
+            assert qtensor_copy.encoding is not qtensor.encoding
+
+        """
+        When: Shallow-copy a quantized tensor object
+        Then: 1) The copied tensor is also a quantized tensor with the same values
+              2) The copied tensor must hold the same metadata (device, requires_grad, etc.)
+              3) The copied tensor must hold the identical encoding object
+        """
+        qtensor_copy = copy.copy(qtensor)
+
+        assert type(qtensor_copy) == qtensor_cls
+        assert torch.equal(qtensor_copy, qtensor)
+        assert qtensor_copy.data_ptr() == qtensor.data_ptr()
+        assert qtensor_copy is not qtensor
+
+        assert qtensor_copy.device == qtensor.device
+        assert qtensor_copy.requires_grad == qtensor.requires_grad
+        assert qtensor_copy.dtype == qtensor.dtype
+        assert qtensor_copy.layout == qtensor.layout
+        assert qtensor_copy.stride() == qtensor.stride()
+        assert qtensor_copy.is_pinned() == qtensor.is_pinned()
+
+        assert qtensor_copy.encoding is qtensor.encoding
