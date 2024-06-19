@@ -191,6 +191,6 @@ def _handle_vector_encoding(encoding_dict: Dict, encodings: List[Dict]):
     encoding_dict["enc_type"] = EncodingType.VECTOR.name
     encoding_dict["rows_per_block"] = encoding["rows_per_block"]
     encoding_dict["cols_per_block"] = encoding["cols_per_block"]
-    encoding_dict["vector_dim"] = encoding["cols_per_block"]
+    encoding_dict["vector_dim"] = encoding["vector_dim"]
     encoding_dict["vector_stride"] = encoding["vector_stride"]
     encoding_dict["index_bw"] = encoding["index_bw"]
