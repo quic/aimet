@@ -144,6 +144,16 @@ Quantization options that can be controlled via the configuration file include t
 Please see the :ref:`Quantization Simulation Configuration <ug-quantsim-config>` page which describes the configuration
 options in detail.
 
+Quantization Simulation APIs
+============================
+
+Please refer to the links below to view the Quantization Simulation API for each AIMET variant:
+
+- :ref:`Quantization Simulation for PyTorch<api-torch-quantsim>`
+- :ref:`Quantization Simulation for Tensorflow<api-tf-quantsim>`
+- :ref:`Quantization Simulation for Keras<api-keras-quantsim>`
+- :ref:`Quantization Simulation for ONNX<api-onnx-quantsim>`
+
 Frequently Asked Questions
 ==========================
 - Q: How many samples are needed in the calibration step (compute encodings)?
