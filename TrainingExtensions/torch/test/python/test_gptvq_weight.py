@@ -40,6 +40,7 @@ import json
 import os
 import tempfile
 from contextlib import contextmanager
+from typing import Union, Tuple
 
 import pytest
 import torch
@@ -93,12 +94,13 @@ def swap_encoding_version(version='1.0.0'):
 
 
 class RandomDataset(Dataset):
-    def __init__(self, data_size = 32, input_dim = 10):
+    def __init__(self, data_size = 32, input_dim: Union[int, Tuple] = 10):
         self.data_size = data_size
         self.input_dim = input_dim
 
         # generate random data and store it in lists
-        self.data_x = [torch.rand(input_dim) for _ in range(data_size)]
+        input_dim = input_dim if isinstance(input_dim, tuple) else (input_dim,)
+        self.data_x = [torch.rand(*input_dim) for _ in range(data_size)]
         self.data_y = [torch.rand(1) for _ in range(data_size)]
 
     def __len__(self):
@@ -382,3 +384,24 @@ class TestGPTVQWeight:
         for i in range(0, num_scales, rows_per_block):
             # per-channel scales should be same within a block
             assert len(set(linear3_encoding["scale"][i:i + rows_per_block])) == 1
+
+    def test_gptvq_conv_model(self):
+        model = test_models.BasicConv2d(kernel_size=3)
+        dataset = RandomDataset(data_size=4, input_dim=(64, 8, 8))
+        data_loader = DataLoader(dataset, batch_size=1, shuffle=False)
+        gptvq_parameters = GPTVQParameters(data_loader, forward_fn=lambda m, d: m(d[0]), num_of_kmeans_iterations=1)
+        dummy_input = torch.randn(1, 64, 8, 8)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = f"{temp_dir}/quantsim_config.json"
+            with open(config_path, "w") as f:
+                json.dump(QUANTSIM_CONFIG, f)
+
+            rounded_model = GPTVQ.apply_gptvq(
+                model,
+                dummy_input,
+                gptvq_parameters,
+                param_encoding_path=temp_dir,
+                config_file_path=config_path,
+            )
+
+        assert not torch.allclose(model.conv.weight, rounded_model.conv.weight)

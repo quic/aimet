@@ -395,9 +395,8 @@ def compute_hessian_tensor(quant_module: BaseQuantizationMixin,
     :param sim: QuantizationSimModel object
     :return: Hessian tensor
     """
-    original_weight = quant_module.weight
-    _, num_cols = original_weight.shape
-    device = original_weight.device
+    _, num_cols = get_2d_tensor_shape(quant_module)
+    device = quant_module.weight.device
     hessian = torch.zeros((num_cols, num_cols)).to(device)
 
     act_sampler = ActivationSampler(quant_module, sim.model, gptvq_params.forward_fn)
@@ -408,27 +407,62 @@ def compute_hessian_tensor(quant_module: BaseQuantizationMixin,
         if len(inp_data.shape) == 2:
             inp_data = inp_data.unsqueeze(0)
         curr_batch_size = inp_data.shape[0]
-        update_hessian(inp_data, n_samples, curr_batch_size, hessian)
+        update_hessian(quant_module, inp_data, n_samples, curr_batch_size, hessian)
         n_samples += curr_batch_size
 
     return hessian
 
+def get_2d_tensor_shape(quant_module: BaseQuantizationMixin) -> torch.Size:
+    """
+    Compute num of columns from quantization module
 
-def update_hessian(inp: torch.Tensor, n_samples: int, curr_batch_size: int, hessian: torch.Tensor):
+    :param quant_module: Quantization module
+    :return: Num of columns
+    """
+    if isinstance(quant_module, nn.Linear):
+        tensor_shape = quant_module.weight.shape
+    elif isinstance(quant_module, nn.Conv2d):
+        tensor_shape = quant_module.weight.flatten(1).shape
+    else:
+        raise ValueError(f"Unsupported module type {type(quant_module)}")
+
+    return tensor_shape
+
+def update_hessian(
+    quant_module: BaseQuantizationMixin,
+    inp: torch.Tensor,
+    n_samples: int,
+    curr_batch_size: int,
+    hessian: torch.Tensor,
+):
     """
     Updates the hessian matrix using the passed input data to the module and applies scaling
 
+    :param quant_module: Quantization module
     :param inp: activation input passed to the given module
     :param hessian: hessian for the module used to do weight update
     :param n_samples: samples seen so far for hessian computation
     :param curr_batch_size: batch size of current input
     """
-    #the hessian is of the shape [weight.shape[1], weight.shape[1]], i.e C*C columns
+    # The hessian is of the shape [weight.shape[1], weight.shape[1]], i.e C*C columns
     # THIS SHOULD WORK FOR ALL THE DIMENSIONS, it makes the last dimension match the weight's column dimension, and first one as the reshaped/ adjusted sample size
-    inp = inp.reshape((-1, inp.shape[-1]))
-
-    ## we calculate the transpose of input to compute the Hessian in accordance with the weight shape
-    inp = inp.T
+    if isinstance(quant_module, nn.Linear):
+        if len(inp.shape) >= 3:
+            inp = inp.reshape((-1, inp.shape[-1]))
+        ## we calculate the transpose of input to compute the Hessian in accordance with the weight shape
+        inp = inp.T
+    elif isinstance(quant_module, nn.Conv2d):
+        unfold = nn.Unfold(
+            quant_module.kernel_size,
+            dilation=quant_module.dilation,
+            padding=quant_module.padding,
+            stride=quant_module.stride,
+        )
+        inp = unfold(inp)
+        inp = inp.permute([1, 0, 2])
+        inp = inp.flatten(1)
+    else:
+        raise ValueError(f"Unsupported module type {type(quant_module)}")
 
     # scale the hessian matrix in place
     hessian *= n_samples / (n_samples + curr_batch_size)
