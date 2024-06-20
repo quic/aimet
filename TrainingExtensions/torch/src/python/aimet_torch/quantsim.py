@@ -1872,7 +1872,7 @@ class QuantizationSimModel:
                 continue
 
             if isinstance(original_module, torch.nn.Embedding):
-                if self._hw_version not in {'V73', 'V75'}:
+                if self._hw_version not in {'V73', 'V75', 'V79'}:
                     continue
                 weight_quantizer = wrapper.param_quantizers['weight']
                 output_quantizer = wrapper.output_quantizers[0]
@@ -1880,7 +1880,7 @@ class QuantizationSimModel:
                 weight_quantizer.bitwidth = output_quantizer.bitwidth
                 weight_quantizer.use_symmetric_encodings = output_quantizer.use_symmetric_encodings
             elif isinstance(original_module, torch.nn.GroupNorm):
-                if self._hw_version not in {'V73', 'V75'}:
+                if self._hw_version not in {'V73', 'V75', 'V79'}:
                     continue
                 if 'weight' in wrapper.param_quantizers:
                     output_quantizer = wrapper.output_quantizers[0]
@@ -1912,7 +1912,7 @@ class QuantizationSimModel:
                 if self._hw_version in {'V66', 'V68', 'V69'}:
                     target_quantizer_for_second_input.use_symmetric_encodings = True
                     target_quantizer_for_second_input.bitwidth = 8
-                elif self._hw_version in {'V73', 'V75'}:
+                elif self._hw_version in {'V73', 'V75', 'V79'}:
                     if target_quantizer_for_second_input.bitwidth == 16:
                         target_quantizer_for_second_input.use_symmetric_encodings = True
                         if target_quantizer_for_first_input:
