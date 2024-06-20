@@ -108,7 +108,7 @@ class TestTrainingExtensionElementwiseOps:
     def test_concat_compute_encodings(self):
         torch.manual_seed(10)
         model = Model3(aimet_ops.Concat())
-        dummy_input = torch.randn(5, 10, 10, 20)
+        dummy_input = torch.randn(5, 10, 10, 20), torch.randn(5, 10, 10, 20)
         sim = QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf)
         sim.compute_encodings(dummy_forward, dummy_input)
         with tempfile.TemporaryDirectory() as path:

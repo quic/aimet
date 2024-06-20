@@ -858,10 +858,22 @@ class FakeQuantizedConcat(_FakeQuantizedUnaryOpMixin, aimet_ops.Concat): # pylin
     """
     Quantized class definition for aimet_ops.Concat.
     """
+    _num_inputs: int
+
+    def __quant_init__(self):
+        super().__quant_init__()
+        self._num_inputs = None
+
+    def export_input_encodings(self):
+        input_encodings = super().export_input_encodings()
+        return input_encodings * self._num_inputs
+
     def forward(self, *x): # pylint: disable=arguments-differ
         """
         Quantized forward impl for aimet_ops.Concat.
         """
+        self._num_inputs = len(x)
+
         if self.input_quantizers[0]:
             # Use same input quantizer for all the input tensors
             quantize_fn = lambda inp: self.input_quantizers[0](inp) if inp.is_floating_point() else inp

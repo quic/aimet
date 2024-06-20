@@ -1136,7 +1136,8 @@ class QuantizationSimModel:
         for index, (input_tensor, encoding) in enumerate(zip(input_tensors, input_encodings)):
             if encoding is not None:
                 activation_encodings_onnx[input_tensor] = encoding
-                tensor_to_quantizer_map[input_tensor] = layer.input_quantizers[index]
+                # TODO: Modify this so quantsim does not make assumptions about the length of input_quantizers
+                tensor_to_quantizer_map[input_tensor] = layer.input_quantizers[min(index, len(layer.input_quantizers) - 1)]
                 # Check if layer exists in the pytorch encoding dictionary
                 if layer_name not in activation_encodings_torch:
                     activation_encodings_torch[layer_name] = {}
