@@ -635,24 +635,33 @@ class QuantizationSimModel(tf.keras.Model):
                 # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
                 # inbound_nodes parameter populated, so the name of the quantizer is used instead
                 if not wrapper._layer_to_wrap.inbound_nodes:
-                    tensor_name = wrapper.name + ":0"
+                    tensor_names = [wrapper.name + ":0"]
                 else:
-                    tensor_name = wrapper._layer_to_wrap.output.name
+                    # There can be multiple outputs if there is a
+                    # `tf.split` in the model.
+                    if isinstance(wrapper._layer_to_wrap.output, list):
+                        tensor_names = [
+                            output.name
+                            for output in wrapper._layer_to_wrap.output
+                        ]
+                    else:
+                        tensor_names = [wrapper._layer_to_wrap.output.name]
 
-                if tensor_name in activation_encodings:
-                    if not output_quantizer.is_enabled():
-                        _logger.info("Not loading encodings for quantizer: %s as it is disabled", tensor_name)
-                        continue
-                    encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(
-                        activation_encodings[tensor_name][0])
-                    output_quantizer.tensor_quantizer.isEncodingValid = True
-                    output_quantizer.set_quantizer_encodings(encoding.bw, is_symmetric, encoding,
-                                                             libpymo.TensorQuantizerOpMode.quantizeDequantize)
-                    _logger.info("Setting encodings for : %s", tensor_name)
-                else:
-                    if output_quantizer.is_enabled():
-                        output_quantizer.disable()
-                        _logger.info("Encoding for quantizer: %s is not present thus disabling it.", tensor_name)
+                for tensor_name in tensor_names:
+                    if tensor_name in activation_encodings:
+                        if not output_quantizer.is_enabled():
+                            _logger.info("Not loading encodings for quantizer: %s as it is disabled", tensor_name)
+                            continue
+                        encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(
+                            activation_encodings[tensor_name][0])
+                        output_quantizer.tensor_quantizer.isEncodingValid = True
+                        output_quantizer.set_quantizer_encodings(encoding.bw, is_symmetric, encoding,
+                                                                 libpymo.TensorQuantizerOpMode.quantizeDequantize)
+                        _logger.info("Setting encodings for : %s", tensor_name)
+                    else:
+                        if output_quantizer.is_enabled():
+                            output_quantizer.disable()
+                            _logger.info("Encoding for quantizer: %s is not present thus disabling it.", tensor_name)
 
     def _param_op_mode_after_analysis(self, quant_scheme) -> libpymo.TensorQuantizerOpMode:
         """
