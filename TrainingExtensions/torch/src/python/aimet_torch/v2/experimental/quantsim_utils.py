@@ -43,6 +43,7 @@ from aimet_common.utils import AimetLogger
 from aimet_common.connected_graph.product import Product
 import aimet_torch.elementwise_ops as aimet_ops
 from aimet_torch.meta.connectedgraph import Op
+from aimet_torch.v2.nn import BaseQuantizationMixin
 from aimet_torch.v2.quantization.affine.quantizer import AffineQuantizerBase
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch import utils
@@ -188,3 +189,60 @@ def clip_weights_to_7f7f(sim: 'QuantizationSimModel'):
             affected_layers.append(name)
     logger_str = f'Clipping weights of the following layers to 0x7f7f max quantized value: {affected_layers}'
     logger.debug(logger_str)
+
+def set_matmul_second_input_producer_to_8bit_symmetric(sim: 'QuantizationSimModel'):
+    """
+    set matmul second input producer for 8 bit symmetric encodings.
+    :param sim: Quantsim model to apply matmul exception
+    """
+    model_name = sim.connected_graph._model_name # pylint: disable=protected-access
+    quant_modules = {name: module for name, module in sim.model.named_modules()
+                     if isinstance(module, BaseQuantizationMixin)}
+
+    def get_connected_graph_op(connected_graph, model_name, name):
+        # pylint: disable=protected-access
+        original_module = connected_graph._name_to_module[f'{model_name}.{name}']
+        return connected_graph._module_to_op_dict[original_module]
+
+    def get_closest_producer(op: Op):
+        quant_module = quant_modules.get(op.dotted_name.removeprefix(f'{model_name}.'), None)
+        if quant_module:
+            if quant_module.output_quantizers[0]:
+                return quant_module
+
+            if len(op.input_ops) == 1:
+                return get_closest_producer(op.input_ops[0])
+
+            logger.warning(
+                "A wrapper of %s with output quantization disabled has no input or more than one input exists. "
+                "It's ambiguous to find the nearest producer in this case", str(op.dotted_name))
+            return None
+
+        if not op.input_ops:
+            logger.warning("No input exists for navigation for traversal, aborting..")
+            return None
+
+        if len(op.input_ops) > 1:
+            logger.warning(
+            "Multiple input ops exist, traversal to find closest producer is performed based on the first input")
+
+        return get_closest_producer(op.input_ops[0])
+
+    for name, module in quant_modules.items():
+        if isinstance(module, aimet_ops.MatMul):
+            _, target_quantizer = module.input_quantizers
+            matmul_op = get_connected_graph_op(sim.connected_graph, model_name, name)
+            if not target_quantizer:
+                input_op = matmul_op.input_ops[1]
+                if input_op:
+                    closest_producer_wrapper = get_closest_producer(input_op)
+                    if closest_producer_wrapper:
+                        target_quantizer = closest_producer_wrapper.output_quantizers[0]
+                    else:
+                        logger.warning(
+                            "The closest wrapper could not be found. MatMul exception rule does not apply. "
+                            "If you haven't used model preparer, consider using it.")
+
+            if target_quantizer:
+                target_quantizer.bitwidth = 8
+                target_quantizer.symmetric = True
