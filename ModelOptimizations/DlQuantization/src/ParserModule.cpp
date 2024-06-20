@@ -138,17 +138,10 @@ void OpConstraints::setParam(std::map<std::string, Attribute> opParams)
 std::list<QnnDatatype_t> OpDefParser::extractDtypeIp(const std::string& ipName) const
 {
     std::list<QnnDatatype_t> dtypeList = {};
-    std::string ipNameCopy             = ipName;
-    if (isSubstring(INF_ARG_INDICATOR, ipName) != std::string::npos)
-    {
-        std::string numStr = ipName.substr(3, isSubstring(INF_ARG_INDICATOR, ipName) - 3);
-        ipNameCopy         = INPUT_NAME(stoi(numStr));
-    }
-
     for (pugi::xml_node node = m_backendNode.child(INPUT); node; node = node.next_sibling(INPUT))
     {
-        std::string name = node.child(ATTRIB_NAME).text().get();
-        if (name == ipNameCopy)
+        std::string input_name = node.child(ATTRIB_NAME).text().get();
+        if (input_name == ipName)
         {
             for (pugi::xml_node dtypeNode = node.child(DATATYPE); dtypeNode;
                  dtypeNode                = dtypeNode.next_sibling(DATATYPE))
@@ -163,17 +156,11 @@ std::list<QnnDatatype_t> OpDefParser::extractDtypeIp(const std::string& ipName) 
 std::list<QnnDatatype_t> OpDefParser::extractDtypeOut(const std::string& outName) const
 {
     std::list<QnnDatatype_t> dtypeList = {};
-    std::string outNameCopy            = outName;
-    if (isSubstring(INF_ARG_INDICATOR, outName) != std::string::npos)
-    {
-        std::string numStr = outName.substr(4, isSubstring(INF_ARG_INDICATOR, outName) - 4);
-        outNameCopy        = OUTPUT_NAME(stoi(numStr));
-    }
 
     for (pugi::xml_node node = m_backendNode.child(OUTPUT); node; node = node.next_sibling(OUTPUT))
     {
-        std::string name = node.child(ATTRIB_NAME).text().get();
-        if (name == outNameCopy)
+        std::string output_name = node.child(ATTRIB_NAME).text().get();
+        if (output_name == outName)
         {
             for (pugi::xml_node dtypeNode = node.child(DATATYPE); dtypeNode;
                  dtypeNode                = dtypeNode.next_sibling(DATATYPE))
@@ -324,10 +311,23 @@ void OpDefParser::parseParams(OpConstraints* constraints) const
     constraints->setParam(parameters);
 }
 
+std::list<std::string> ModelOpDefParser::getSupportedOpsInBackend()
+{
+  std::list<std::string> supportedOpsInBackend;
+  pugi::xml_document backendDoc;
+  pugi::xml_parse_result backendResult = backendDoc.load_file(m_backendPath.c_str());
+  if (!backendResult)
+      DEBUG_LOG_XML_FILE_ERROR(m_backendPath, backendResult.description())
+
+  pugi::xml_node supportedOpsNode = backendDoc.child(SUPPLEMENTAL_OPDEF_LIST).child(SUPPORTED_OPS);
+  for (pugi::xml_node_iterator it = supportedOpsNode.begin(); it != supportedOpsNode.end(); ++it)
+      supportedOpsInBackend.push_back(it->child_value());
+
+  return supportedOpsInBackend;
+}
+
 void ModelOpDefParser::populate()
 {
-    OpDefParser parser;
-    OpConstraints newConstraints;
     pugi::xml_document masterDoc;
     pugi::xml_document backendDoc;
     std::vector<std::string> missingNodesInMasterOpDef;
@@ -347,12 +347,19 @@ void ModelOpDefParser::populate()
         std::string lowercaseOpName = transformLower(opName);
         pugi::xml_node masterRoot;
         pugi::xml_node backendRoot;
+
+        OpDefParser parser;
+        OpConstraints newConstraints;
+
         for (pugi::xml_node node = masterDoc.child(MASTER_OPDEF_LIST).child(MASTER_OPDEF); node;
              node                = node.next_sibling(MASTER_OPDEF))
         {
             if (strcmp(transformLower(node.child(ATTRIB_NAME).text().get()).c_str(), lowercaseOpName.c_str()) == 0)
             {
                 masterRoot = node;
+
+                if (!masterRoot) missingNodesInMasterOpDef.push_back(opName);
+                parser.m_masterNode = masterRoot;
                 break;
             }
         }
@@ -362,21 +369,16 @@ void ModelOpDefParser::populate()
             if (strcmp(transformLower(node.child(ATTRIB_NAME).text().get()).c_str(), lowercaseOpName.c_str()) == 0)
             {
                 backendRoot = node;
-                break;
+
+                if (!backendRoot) missingNodesInBackendOpDef.push_back(opName);
+
+                parser.m_backendNode = backendRoot;
+
+                parser.parseIO(&newConstraints);
+                parser.parseParams(&newConstraints);
+                m_modelOpConstraints_v2[opName].emplace_back(newConstraints);
             }
         }
-
-        if (!masterRoot)
-            missingNodesInMasterOpDef.push_back(opName);
-        if (!backendRoot)
-            missingNodesInBackendOpDef.push_back(opName);
-
-        parser.m_masterNode  = masterRoot;
-        parser.m_backendNode = backendRoot;
-
-        parser.parseIO(&newConstraints);
-        parser.parseParams(&newConstraints);
-        m_modelOpConstraints[opName] = newConstraints;
     }
 
     if (!missingNodesInBackendOpDef.empty())
@@ -388,11 +390,11 @@ void ModelOpDefParser::populate()
     }
 }
 
-ModelOpDefParser::ModelOpDefParser(std::string mPath, std::string bPath, std::list<std::string> opList)
+ModelOpDefParser::ModelOpDefParser(std::string mPath, std::string bPath)
 {
     m_masterPath  = std::move(mPath);
     m_backendPath = std::move(bPath);
-    m_opList      = std::move(opList);
+    m_opList = std::move(getSupportedOpsInBackend());
     populate();
 }
 
@@ -614,6 +616,74 @@ bool ModelOpDefParser::getOutputMultiFlag(const std::string& opName, int attribN
     bool flag = opConstraints.m_outputs[attribNum].m_multiFlag;
 
     return flag;
+}
+
+std::list <std::map<std::string, int>> ModelOpDefParser::getSizeList(const std::string &opName) {
+    std::string opNameRetrieved = compareAndGetOpName(opName, m_opList);
+
+    if (opNameRetrieved.empty()) {
+        std::string error = DEBUG_LOG_INVALID_OP(opName);
+        throw std::invalid_argument(error);
+    }
+    std::list <std::map<std::string, int>> sizesList;
+    std::list <OpConstraints> opConstraintsList = m_modelOpConstraints_v2[opNameRetrieved];
+
+    for (OpConstraints opConstraints: opConstraintsList)
+    {
+        std::map<std::string, int> sizes;
+        sizes[INPUT_SIZE] = int(opConstraints.m_inputs.size());
+        sizes[OUTPUT_SIZE] = int(opConstraints.m_outputs.size());
+        sizes[PARAM_SIZE] = int(opConstraints.m_parameters.size());
+
+        sizesList.emplace_back(sizes);
+    }
+
+    return sizesList;
+}
+
+std::list <std::list <QnnDatatype_t>> ModelOpDefParser::getInputDataTypeList(const std::string &opName,
+                                                                             int attribNum) {
+    std::string opNameRetrieved = compareAndGetOpName(opName, m_opList);
+
+    if (opNameRetrieved.empty()) {
+        std::string error = DEBUG_LOG_INVALID_OP(opName);
+        throw std::invalid_argument(error);
+    }
+    std::list<OpConstraints> opConstraintsList = m_modelOpConstraints_v2[opNameRetrieved];
+    std::list <std::list <QnnDatatype_t>> validDtypes;
+
+    for(OpConstraints opConstraints: opConstraintsList){
+        if (opConstraints.m_inputs.size() - 1 < attribNum) {
+            std::string error = DEBUG_LOG_INVALID_INPUT(opName, opConstraints.m_inputs.size()) +
+                                " in getInputDataTypeList() function.";
+            throw std::invalid_argument(error);
+        }
+        validDtypes.emplace_back(opConstraints.m_inputs[attribNum].m_datatypeConstraint.getConstraint().m_dtypeListConstraint);
+    }
+    return validDtypes;
+}
+
+std::list <std::list <QnnDatatype_t>> ModelOpDefParser::getOutputDataTypeList(const std::string &opName,
+                                                                              int attribNum) {
+    std::string opNameRetrieved = compareAndGetOpName(opName, m_opList);
+
+    if (opNameRetrieved.empty()) {
+        std::string error = DEBUG_LOG_INVALID_OP(opName);
+        throw std::invalid_argument(error);
+    }
+    std::list <OpConstraints> opConstraintsList = m_modelOpConstraints_v2[opNameRetrieved];
+
+    std::list <std::list <QnnDatatype_t>> validDtypes;
+
+    for (auto& opConstraints: opConstraintsList){
+        if (opConstraints.m_outputs.size() - 1 < attribNum) {
+            std::string error = DEBUG_LOG_INVALID_OUTPUT(opName, opConstraints.m_outputs.size()) +
+                                " in getOutputDataTypeList() function.";
+            throw std::invalid_argument(error);
+        }
+        validDtypes.emplace_back(opConstraints.m_outputs[attribNum].m_datatypeConstraint.getConstraint().m_dtypeListConstraint);
+    }
+    return validDtypes;
 }
 
 size_t isSubstring(std::string shortString, std::string longString)

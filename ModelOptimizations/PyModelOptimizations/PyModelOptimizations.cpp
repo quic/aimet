@@ -70,10 +70,12 @@ PYBIND11_MODULE(libpymo, m)
     options.show_user_defined_docstrings();
 
     py::class_<ModelOpDefParser>(m, "ModelOpDefParser")
-        .def(py::init<std::string, std::string, std::list<std::string>>())
+        .def(py::init<std::string, std::string>())
         .def_readwrite("op_list", &ModelOpDefParser::m_opList)
         .def_readonly("master_path", &ModelOpDefParser::m_masterPath)
         .def_readonly("backend_path", &ModelOpDefParser::m_backendPath)
+        .def("get_supported_ops_in_backend", &ModelOpDefParser::getSupportedOpsInBackend,
+             R"(Getting supported ops in backend XML)")
         .def("get_size", &ModelOpDefParser::getSize, py::arg("op_name"),
              R"(Extracting input, output and parameter sizes)")
         .def("get_filters_index", &ModelOpDefParser::getFiltersIndex, py::arg("op_name"),
@@ -93,7 +95,13 @@ PYBIND11_MODULE(libpymo, m)
         .def("get_input_multiflag", &ModelOpDefParser::getInputMultiFlag, py::arg("op_name"), py::arg("attrib_num"),
              R"(Extracting input multi-flag)")
         .def("get_output_multiflag", &ModelOpDefParser::getOutputMultiFlag, py::arg("op_name"), py::arg("attrib_num"),
-             R"(Extracting output multi-flag)");
+             R"(Extracting output multi-flag)")
+        .def("get_size_list", &ModelOpDefParser::getSizeList, py::arg("op_name"),
+             R"(Extracting input, output and parameter sizes)")
+        .def("get_input_datatype_list", &ModelOpDefParser::getInputDataTypeList, py::arg("op_name"), py::arg("attrib_num"),
+             R"(Extracting input datatype params)")
+        .def("get_output_datatype_list", &ModelOpDefParser::getOutputDataTypeList, py::arg("op_name"), py::arg("attrib_num"),
+             R"(Extracting output datatypes list)");
 
     py::enum_<QnnDatatype_t>(m, "QnnDatatype")
         .value("QNN_DATATYPE_INT_8", QnnDatatype_t::QNN_DATATYPE_INT_8)
