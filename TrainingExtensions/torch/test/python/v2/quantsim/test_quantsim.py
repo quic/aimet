@@ -40,6 +40,7 @@ import os
 import json
 import pytest
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
+from aimet_common.defs import QuantizationDataType
 from aimet_torch.quantsim import load_encodings_to_sim
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.quantization.encoding_analyzer import PercentileEncodingAnalyzer
@@ -802,6 +803,65 @@ class TestQuantsim:
         sim = QuantizationSimModel(model, dummy_input=torch.randn(10, 10))
         assert len(sim.model.rnn.output_quantizers) == 2
         assert type(sim.model.rnn.output_quantizers[0]) is type(sim.model.rnn.output_quantizers[1])
+
+    def test_encoding_min_max_fixed_vals(self):
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "False",
+                    "is_symmetric": "True"
+                }
+            },
+            "params": {
+                "weight": {
+                    "is_quantized": "True"
+                }
+            },
+            "op_type": {
+                "Softmax":
+                {
+                    "encoding_constraints":
+                        {
+                            "min": 0.0,
+                            "max": 1.0
+                        }
+                },
+            },
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with open(os.path.join(temp_dir, 'config.json'), 'w') as f:
+                json.dump(quantsim_config, f)
+
+            class SoftmaxModel(torch.nn.Module):
+                def __init__(self):
+                    super(SoftmaxModel, self).__init__()
+                    self.linear = torch.nn.Linear(3, 8)
+                    self.softmax = torch.nn.Softmax()
+
+                def forward(self, inp):
+                    x = self.linear(inp)
+                    x = self.softmax(x)
+                    return x
+
+            model = SoftmaxModel()
+            dummy_input = torch.randn(1, 3)
+
+            qsim = QuantizationSimModel(model, dummy_input, config_file=os.path.join(temp_dir, 'config.json'))
+            assert torch.equal(qsim.model.softmax.output_quantizers[0].min, torch.tensor([0.]))
+            assert torch.equal(qsim.model.softmax.output_quantizers[0].max, torch.tensor([1.]))
+
+            qsim = QuantizationSimModel(model, dummy_input, config_file=os.path.join(temp_dir, 'config.json'),
+                                        default_param_bw=16, default_output_bw=16,
+                                        default_data_type=QuantizationDataType.float)
+            assert not hasattr(qsim.model.softmax.output_quantizers[0], 'min')
+            assert not hasattr(qsim.model.softmax.output_quantizers[0], 'max')
 
 
 class TestQuantsimUtilities:
