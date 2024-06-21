@@ -314,20 +314,17 @@ class MinMaxEncodingAnalyzer(EncodingAnalyzer[_MinMaxRange]):
         if stats.min is None or stats.max is None:
             raise StatisticsNotFoundError('No statistics present to compute encodings.')
 
-        updated_min = stats.min
-        updated_max = stats.max
-
         tiny_num = torch.finfo(stats.min.dtype).tiny
         # enforces that 0 is within the min/max
-        min_with_zero = torch.minimum(stats.min, torch.zeros_like(stats.min))
-        max_with_zero = torch.maximum(stats.max, torch.zeros_like(stats.max))
+        min_with_zero = torch.clamp(stats.min, max=0)
+        max_with_zero = torch.clamp(stats.max, min=0)
 
          # adjusts any min/max pairing that are too close
         tensor_diff = (max_with_zero - min_with_zero) / num_steps
-        update_min = torch.where(tensor_diff < tiny_num, tiny_num * math.ceil(num_steps / 2), 0.0)
-        update_max = torch.where(tensor_diff < tiny_num, tiny_num * math.floor(num_steps / 2), 0.0)
-        updated_max = max_with_zero + update_max
-        updated_min = min_with_zero - update_min
+        adjustment_step = tiny_num * (tensor_diff < tiny_num)
+
+        updated_max = max_with_zero + math.floor(num_steps / 2) * adjustment_step
+        updated_min = min_with_zero - math.ceil(num_steps / 2) * adjustment_step
 
         if is_symmetric:
             num_pos_steps = math.floor(num_steps / 2)
@@ -338,10 +335,8 @@ class MinMaxEncodingAnalyzer(EncodingAnalyzer[_MinMaxRange]):
             updated_max = num_pos_steps * delta
 
         # replace pos and neg inf respectively
-        updated_max[torch.isposinf(updated_max)] = torch.finfo(stats.min.dtype).max
-        updated_min[torch.isposinf(updated_min)] = torch.finfo(stats.min.dtype).max
-        updated_max[torch.isneginf(updated_max)] = -torch.finfo(stats.min.dtype).max
-        updated_min[torch.isneginf(updated_min)] = -torch.finfo(stats.min.dtype).max
+        updated_max = torch.clamp(updated_max, max=torch.finfo(stats.min.dtype).max)
+        updated_min = torch.clamp(updated_min, min=torch.finfo(stats.min.dtype).min)
         return updated_min, updated_max
 
 
