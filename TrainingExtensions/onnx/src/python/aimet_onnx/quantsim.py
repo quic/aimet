@@ -79,6 +79,9 @@ op_types_to_ignore = ["branch", "Flatten", "Gather", "Reshape", "Shape", "Unsque
 
 allowed_op_type_for_per_channel = ['Conv', 'Gemm', 'MatMul', 'ConvTranspose']
 
+# List of ops whose parameters are not to be quantized
+op_params_to_ignore = ['Resize', 'Pow']
+
 data_types_to_quantize = [np.float32]
 
 @dataclass
@@ -248,7 +251,8 @@ class QuantizationSimModel:
                             self._is_op_quantizable(name):
                         self.activation_names.append(name)
             for input_name in node.input:
-                if input_name not in self.activation_names and input_name not in self.param_names:
+                if input_name not in self.activation_names and input_name not in self.param_names and \
+                        node.op_type not in op_params_to_ignore:
                     for tensors in self.model.model.graph.initializer:
                         if tensors.name == input_name and tensors.data_type == 1: # 1 corresponds to float, dictionary can be found by using onnx.TensorProto.DataType.items()
                             self.activation_names.append(tensors.name)
