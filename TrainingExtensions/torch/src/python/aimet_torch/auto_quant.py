@@ -85,6 +85,10 @@ cache = Cache()
 # NOTE: None means "all".
 NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION = None
 
+class _StageSkipped(Exception):
+    def __init__(self, message='Stage Skipped'):
+        super(_StageSkipped, self).__init__(message)
+
 
 @dataclass(frozen=True)
 class _QuantSchemePair:
@@ -633,7 +637,7 @@ class AutoQuantBase(abc.ABC): # pylint: disable=too-many-instance-attributes
 
                 return ret
         finally:
-            self.eval_manager.export_diagnostics(self.model_prepare_required)
+            self.eval_manager.export_diagnostics()
 
     def get_quant_scheme_candidates(self) -> Tuple[_QuantSchemePair, ...]:
         """
@@ -712,9 +716,11 @@ class AutoQuantBase(abc.ABC): # pylint: disable=too-many-instance-attributes
         """
         fp32_model = self.fp32_model
 
-        if self.model_prepare_required:
-            with self.eval_manager.session("Prepare Model") as sess:
+        with self.eval_manager.session("Prepare Model") as sess:
+            if self.model_prepare_required:
                 fp32_model = sess.wrap(self._prepare_model)(self.fp32_model)
+            else:
+                raise _StageSkipped("Skipping Model Preparer")
 
         # Choose quant scheme automatically.
         with self.eval_manager.session("QuantScheme Selection") as sess:
@@ -900,10 +906,9 @@ class _EvalManager:
         "auto_quant_diagnostics_template.html",
     )
 
-    def export_diagnostics(self, model_prepare) -> str:
+    def export_diagnostics(self) -> str:
         """
         Export diagnostics in html format.
-        :param model_prepare: Flag indicating if model prepare is included in pipeline or not.
         :return: Diagnostics string in html format.
         """
         loader = jinja2.FileSystemLoader(os.path.dirname(self.HTML_TEMPLATE_FILE))
@@ -936,7 +941,7 @@ class _EvalManager:
             else:
                 result[sess.title_lowercase] = sess.result
 
-        flowchart_metadata = _build_flowchart_metadata(result, model_prepare)
+        flowchart_metadata = _build_flowchart_metadata(result)
 
         html = template.render(head=head, log=log.getvalue(), **flowchart_metadata)
 
@@ -1086,19 +1091,22 @@ class _EvalSession: # pylint: disable=too-many-instance-attributes
             buffer = io.StringIO()
             traceback.print_exception(exc_type, exc_val, exc_tb, file=buffer)
 
-            if self._strict_validation:
-                print(buffer.getvalue())
+            if isinstance(exc_val, _StageSkipped):
+                print(exc_val.args[0])
             else:
-                print(
-                    "################################################################\n"
-                    "################################################################\n"
-                    "################################################################\n"
-                    "WARNING: The following exception was raised but ignored:\n\n"
-                    f"{buffer.getvalue()}"
-                    "################################################################\n"
-                    "################################################################\n"
-                    "################################################################\n"
-                )
+                if self._strict_validation:
+                    print(buffer.getvalue())
+                else:
+                    print(
+                        "################################################################\n"
+                        "################################################################\n"
+                        "################################################################\n"
+                        "WARNING: The following exception was raised but ignored:\n\n"
+                        f"{buffer.getvalue()}"
+                        "################################################################\n"
+                        "################################################################\n"
+                        "################################################################\n"
+                    )
 
         self._stdout_redirect.stop()
         self.diagnostics.add(self._log.getvalue())
@@ -1106,6 +1114,9 @@ class _EvalSession: # pylint: disable=too-many-instance-attributes
         self.result["error"] = exc_val
         if not exc_val:
             self.result["status"] = "success"
+        elif isinstance(exc_val, _StageSkipped):
+            self.result["status"] = "discarded"
+            return True
         elif self._strict_validation:
             self.result["status"] = "error-failed"
         else:
@@ -1256,12 +1267,11 @@ def spy_auto_quant(auto_quant: AutoQuantBase):
         setattr(auto_quant, "_optimize_main", _optimize_main)
 
 
-def _build_flowchart_metadata(result: Mapping, model_prepare) -> Dict: # pylint: disable=too-many-return-statements
+def _build_flowchart_metadata(result: Mapping) -> Dict: # pylint: disable=too-many-return-statements
     """
     Build flowchart metadata for the html template of summary report
 
     :param result: Result of AutoQuant with the following format:
-    :param model_prepare: Flag indicating if model prepare is present in pipeline or not.
 
         result := {
             "prepare_model": _stage_result,
@@ -1292,11 +1302,7 @@ def _build_flowchart_metadata(result: Mapping, model_prepare) -> Dict: # pylint:
         node_prepare_model='data-visited="true"',
     )
 
-    if model_prepare:
-        status = result['prepare_model']['status']
-    else:
-        status = 'error-ignored'
-
+    status = result['prepare_model']['status']
     metadata.update(
         node_prepare_model=f'data-visited="true" data-stage-result="{status}"',
     )
