@@ -60,6 +60,15 @@ def encodings_are_close(quantizer_1: AffineQuantizerBase, quantizer_2: AffineQua
            and quantizer_1.symmetric == quantizer_2.symmetric
 
 
+class ConcatModel(torch.nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        self.cat = aimet_ops.Concat()
+
+    def forward(self, *x):
+        return self.cat(*x)
+
 class TestQuantsim:
     """ Test Percentile quantization scheme """
 
@@ -804,12 +813,26 @@ class TestQuantsim:
         assert len(sim.model.rnn.output_quantizers) == 2
         assert type(sim.model.rnn.output_quantizers[0]) is type(sim.model.rnn.output_quantizers[1])
 
+    def test_export_concat_encodings(self):
+        num_inputs = 3
+        model = ConcatModel()
+        dummy_input = tuple([torch.randn(1, 3, 32, 32)] * num_inputs)
+        sim = QuantizationSimModel(model, dummy_input=dummy_input)
+        sim.compute_encodings(lambda model, _: model(*dummy_input), None)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            fname = "test_model"
+            sim.export(temp_dir, fname, dummy_input)
+            with open(os.path.join(temp_dir, f"{fname}_torch.encodings")) as f:
+                encodings = json.load(f)
+            assert len(encodings["activation_encodings"]["cat"]["input"].keys()) == num_inputs
+            sim.load_encodings(encodings)
+
     @pytest.mark.parametrize("config_file", (None, get_path_for_per_channel_config()))
     def test_expand_op_is_not_quantized(self, config_file):
         model = test_models.ExpandModel()
         sim = QuantizationSimModel(model, dummy_input=torch.randn(10), config_file=config_file)
         assert sim.model.expand.output_quantizers[0] is None
-        
+
     def test_encoding_min_max_fixed_vals(self):
         quantsim_config = {
             "defaults": {
