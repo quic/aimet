@@ -48,8 +48,10 @@ from aimet_torch.gptvq.utils import (
     generate_codebook,
     fine_tune_codebook,
     quantize_dequantize_codebook,
+    get_2d_tensor_shape,
 )
 from aimet_torch.v2.nn import BaseQuantizationMixin
+from aimet_torch.v2.quantization.affine import QuantizeDequantize
 from aimet_torch.v2.quantization.affine.encoding import AffineEncoding, VectorEncoding
 from aimet_torch.v2.quantization.tensor import DequantizedTensor
 
@@ -74,7 +76,7 @@ class GPTVQOptimizer:
         original_weight = module.weight.clone()
         original_hessian = hessian.clone()
 
-        num_rows, num_cols = module.weight.shape
+        num_rows, num_cols = get_2d_tensor_shape(module)
         assert num_rows % gptvq_params.rows_per_block == 0, f"The number of rows in weight (#: {num_rows}) should be divided by rows per block (#: {gptvq_params.rows_per_block})"
         columns_per_block = gptvq_params.cols_per_block
         num_blocks_per_column = num_rows // gptvq_params.rows_per_block
@@ -82,6 +84,10 @@ class GPTVQOptimizer:
         # 1-1. if any diagonal elements are zero, mark them as 1, and corresponding weight as 0
         dead = torch.diag(hessian) == 0
         hessian[dead, dead] = 1
+        if isinstance(module, torch.nn.Conv2d):
+            cls._convert_weight_to_2d_tensor(
+                module, num_blocks_per_column, gptvq_params.rows_per_block, num_cols
+            )
         module.weight[:, dead] = 0
 
         # 1-2. After setting dead columns to module weight, compute and overwrite parameter encoding
@@ -180,6 +186,8 @@ class GPTVQOptimizer:
         assert isinstance(rounded_weight, DequantizedTensor)
         assert isinstance(rounded_weight.encoding, AffineEncoding)
         e = rounded_weight.encoding
+        # NOTE: Need to revert 2D tensor shape to original weight shape such as (O, I, H, W)
+        rounded_weight = rounded_weight.reshape(original_weight.shape)
         # Convert affine encoding to vector encoding
         rounded_weight.encoding = VectorEncoding(
             e.scale,
@@ -193,6 +201,32 @@ class GPTVQOptimizer:
         module.weight = torch.nn.Parameter(rounded_weight)
         # Remove associated quantizer since the weight is holding already-quantized values
         module.param_quantizers["weight"] = None
+
+    @staticmethod
+    def _convert_weight_to_2d_tensor(
+        module: BaseQuantizationMixin,
+        num_blocks_per_column: int,
+        rows_per_block: int,
+        num_cols: int,
+    ):
+        """
+        Convert module weight and corresponding quantizer to 2D tensor compatible form
+
+        :param module: Module to convert
+        :param num_blocks_per_column: Num blocks per column
+        :param rows_per_block: Rows per block
+        :param num_cols: Num of columns in 2D tensor
+        """
+        if isinstance(module, torch.nn.Conv2d):
+            module.weight = torch.nn.Parameter(module.weight.flatten(1))
+            original_quantizer = module.param_quantizers["weight"]
+            q = QuantizeDequantize(
+                shape=(num_blocks_per_column, 1),
+                bitwidth=original_quantizer.bitwidth,
+                symmetric=original_quantizer.symmetric,
+                block_size=(rows_per_block, num_cols),
+            ).to(module.weight.device)
+            module.param_quantizers["weight"] = q
 
     @staticmethod
     def _update_weight_block(
