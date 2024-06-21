@@ -127,6 +127,7 @@ map_torch_types_to_onnx = {
     elementwise_ops.CustomGather: ['Gather'],
     elementwise_ops.DepthToSpaceDCRMode: ['DepthToSpace'],
     elementwise_ops.Divide: ['Div'],
+    elementwise_ops.Expand: ['Expand'],
     elementwise_ops.Gather: ['Gather'],
     elementwise_ops.GatherNd: ['GatherND'],
     elementwise_ops.IndexSelect: ['Gather'],
