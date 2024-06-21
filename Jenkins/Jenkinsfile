@@ -717,7 +717,7 @@ pipeline {
                         }
                         axis {
                             name 'PROC_TYPE'
-                            values 'cpu', 'gpu'
+                            values 'gpu'
                         }
                     }
                 }
