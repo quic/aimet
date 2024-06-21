@@ -55,6 +55,18 @@ In analytical bias correction, data from BatchNorms - when present are used for 
 
 .. image:: ../images/bias_correction_analytical.png
 
+
+Cross-Layer Equalization API
+============================
+
+Please refer to the links below to view the Cross-Layer Equalization API for each AIMET variant:
+
+- :ref:`Cross-Layer Equalization for PyTorch<api-torch-cle>`
+- :ref:`Cross-Layer Equalization for Tensorflow<api-tf-cle>`
+- :ref:`Cross-Layer Equalization for Keras<api-keras-cle>`
+- :ref:`Cross-Layer Equalization for ONNX<api-onnx-cle>`
+
+
 FAQs
 ====
 
