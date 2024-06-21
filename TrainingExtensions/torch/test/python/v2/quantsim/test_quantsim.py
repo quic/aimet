@@ -803,6 +803,11 @@ class TestQuantsim:
         assert len(sim.model.rnn.output_quantizers) == 2
         assert type(sim.model.rnn.output_quantizers[0]) is type(sim.model.rnn.output_quantizers[1])
 
+    @pytest.mark.parametrize("config_file", (None, get_path_for_per_channel_config()))
+    def test_expand_op_is_not_quantized(self, config_file):
+        model = test_models.ExpandModel()
+        sim = QuantizationSimModel(model, dummy_input=torch.randn(10), config_file=config_file)
+        assert sim.model.expand.output_quantizers[0] is None
 
 class TestQuantsimUtilities:
 

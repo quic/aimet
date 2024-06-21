@@ -32,6 +32,10 @@
     {
       "is_output_quantized": "False"
     },
+    "Expand":
+    {
+      "is_output_quantized": "False"
+    },
     "Squeeze":
     {
       "is_output_quantized": "False"

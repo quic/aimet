@@ -1321,3 +1321,12 @@ class ModelWithUnusedRNN(torch.nn.Module):
     def forward(self, x):
         return self.identity(x)
 
+class ExpandModel(torch.nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        self.expand = elementwise_ops.Expand()
+        self.linear = torch.nn.Linear(10, 10)
+
+    def forward(self, x):
+        return self.linear(self.expand(x, (1, 10)))
