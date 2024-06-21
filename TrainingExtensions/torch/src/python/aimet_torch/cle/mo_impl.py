@@ -1,9 +1,8 @@
-# /usr/bin/env python3.8
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -43,15 +42,14 @@ import torch
 import numpy as np
 import aimet_common.libpymo as libpymo
 
-from aimet_common.cross_layer_equalization import ClsSetInfo
-from aimet_torch.cle.impl import ClsSet, ClsImpl, HbfImpl
+from aimet_common.cross_layer_equalization import ClsSetInfo, ClsImpl, HbfImpl
 
 
 class MoClsImpl(ClsImpl):
     """
     This class implements the CLS algorithm using MO version while following the base Implementation interface.
     """
-    def scale_cls_set_with_depthwise_layers(self, cls_set: ClsSet) -> [np.ndarray, np.ndarray]:
+    def scale_cls_set_with_depthwise_layers(self, cls_set) -> [np.ndarray, np.ndarray]:
         """
         API to invoke equalize layer params for depth wise separable layers(update for weights and bias is in place)
 
@@ -75,7 +73,7 @@ class MoClsImpl(ClsImpl):
 
         return scaling_params.scalingMatrix12, scaling_params.scalingMatrix23
 
-    def scale_cls_set_with_conv_layers(self, cls_set: ClsSet) -> np.ndarray:
+    def scale_cls_set_with_conv_layers(self, cls_set) -> np.ndarray:
         """
         API to invoke equalize layer params for regular conv layers (update for weights and bias is in place)
 
@@ -98,7 +96,7 @@ class MoClsImpl(ClsImpl):
         return scaling_factor
 
     @staticmethod
-    def _pack_params_for_conv(cls_set: ClsSet,
+    def _pack_params_for_conv(cls_set,
                               prev_layer_params: libpymo.EqualizationParams,
                               curr_layer_params: libpymo.EqualizationParams):
         """
@@ -140,7 +138,7 @@ class MoClsImpl(ClsImpl):
             prev_layer_params.isBiasNone = True
 
     @staticmethod
-    def _update_params_for_conv(cls_set: ClsSet,
+    def _update_params_for_conv(cls_set,
                                 prev_layer_params: libpymo.EqualizationParams,
                                 curr_layer_params: libpymo.EqualizationParams):
         """
@@ -180,7 +178,7 @@ class MoClsImpl(ClsImpl):
             cls_set[0].bias.data = cls_set[0].bias.data.type(torch.FloatTensor)
 
     @staticmethod
-    def _pack_params_for_depthwise_conv(cls_set: ClsSet,
+    def _pack_params_for_depthwise_conv(cls_set,
                                         prev_layer_params: libpymo.EqualizationParams,
                                         curr_layer_params: libpymo.EqualizationParams,
                                         next_layer_params: libpymo.EqualizationParams):
@@ -230,7 +228,7 @@ class MoClsImpl(ClsImpl):
             curr_layer_params.isBiasNone = True
 
     @staticmethod
-    def _update_params_for_depthwise_conv(cls_set: ClsSet,
+    def _update_params_for_depthwise_conv(cls_set,
                                           prev_layer_params: libpymo.EqualizationParams,
                                           curr_layer_params: libpymo.EqualizationParams,
                                           next_layer_params: libpymo.EqualizationParams):

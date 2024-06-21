@@ -572,3 +572,41 @@ class HighBiasFold(ABC):
         :param prev_layer_params: Data structure holding weight and bias for previous layer in cls set.
         :param curr_layer_params: Data structure holding weight and bias for current layer in cls set.
         """
+
+
+class ClsImpl(ABC):
+    """
+    The Implementation interface declares methods common to both MO (c++) and python versions of CLS algorithm.
+    """
+    @abstractmethod
+    def scale_cls_set_with_depthwise_layers(self, cls_set) -> [np.ndarray, np.ndarray]:
+        """
+        API to invoke equalize layer params for depth wise separable layers(update for weights and bias is in place)
+
+        :param cls_set: Consecutive Conv layers whose weights and biases need to be equalized.
+                        Second Conv layer is a depth-wise conv and third conv layer is point-wise conv
+        :return: Scaling factors S_12 and S_23 : numpy arrays
+        """
+
+    @abstractmethod
+    def scale_cls_set_with_conv_layers(self, cls_set) -> np.ndarray:
+        """
+        API to invoke equalize layer params for regular conv layers (update for weights and bias is in place)
+
+        :param cls_set: Consecutive Conv layers Tuple whose weights and biases need to be equalized
+        :return: Scaling factor S_12 for each conv layer pair: numpy array
+        """
+
+
+class HbfImpl(ABC):
+    """
+    The Implementation interface declares methods common to both MO (c++) and python versions of HBF algorithm.
+    """
+    @abstractmethod
+    def bias_fold(self, cls_pair_info: ClsSetInfo.ClsSetLayerPairInfo, bn_layers: Dict):
+        """
+        Bias fold implementation.
+
+        :param cls_pair_info: Layer pairs that were scaled using CLS and related information.
+        :param bn_layers: Dictionary with Key being Conv/Linear layer and value being corresponding folded BN layer.
+        """

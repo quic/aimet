@@ -46,8 +46,8 @@ from aimet_common.utils import AimetLogger
 from aimet_torch import batch_norm_fold
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 import aimet_torch.cross_layer_equalization as cle
-from aimet_torch.cross_layer_equalization import CrossLayerScaling, GraphSearchUtils, HighBiasFold, equalize_model,\
-    ClsSetInfo
+from aimet_torch.cross_layer_equalization import CrossLayerScaling, HighBiasFold, equalize_model,\
+    ClsSetInfo, GraphSearchUtils
 from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 from aimet_torch.utils import get_layer_name
 from models.mobilenet import MockMobileNetV2, MockMobileNetV1
@@ -184,7 +184,7 @@ class TestTrainingExtensionsCrossLayerScaling:
     @pytest.mark.parametrize("use_python_only_impl", [True, False])
     def test_verify_cross_layer_scaling(self, use_python_only_impl):
         # Get trained MNIST model
-        cle.use_python_only_impl = use_python_only_impl
+        cle.USE_PYTHON_IMPL = use_python_only_impl
         torch.manual_seed(10)
         model = MyModel()
         # Call API
@@ -205,7 +205,7 @@ class TestTrainingExtensionsCrossLayerScaling:
 
     @pytest.mark.parametrize("use_python_only_impl", [True, False])
     def test_top_level_api(self, use_python_only_impl):
-        cle.use_python_only_impl = use_python_only_impl
+        cle.USE_PYTHON_IMPL = use_python_only_impl
         torch.manual_seed(10)
         # model = MockMobileNetV1()
         # input_shape = (1, 3, 224, 224)
@@ -224,7 +224,7 @@ class TestTrainingExtensionsCrossLayerScaling:
     @pytest.mark.parametrize("use_python_only_impl", [True, False])
     def test_verify_cross_layer_for_multiple_pairs(self, use_python_only_impl):
         # Get trained MNIST model
-        cle.use_python_only_impl = use_python_only_impl
+        cle.USE_PYTHON_IMPL = use_python_only_impl
         model = MyModel()
         # Call API
         consecutive_layer_list = [(model.conv1, model.conv2),
@@ -242,7 +242,7 @@ class TestTrainingExtensionsCrossLayerScaling:
 
     @pytest.mark.parametrize("use_python_only_impl", [True, False])
     def test_verify_cross_layer_scaling_depthwise_separable_layer_mobilnet(self, use_python_only_impl):
-        cle.use_python_only_impl = use_python_only_impl
+        cle.USE_PYTHON_IMPL = use_python_only_impl
         torch.manual_seed(10)
 
         model = MockMobileNetV1()
@@ -275,7 +275,7 @@ class TestTrainingExtensionsCrossLayerScaling:
 
     @pytest.mark.parametrize("use_python_only_impl", [True, False])
     def test_verify_cross_layer_scaling_depthwise_separable_layer_multiple_triplets(self, use_python_only_impl):
-        cle.use_python_only_impl = use_python_only_impl
+        cle.USE_PYTHON_IMPL = use_python_only_impl
         torch.manual_seed(10)
 
         model = MockMobileNetV1()
@@ -296,7 +296,7 @@ class TestTrainingExtensionsCrossLayerScaling:
 
     @pytest.mark.parametrize("use_python_only_impl", [True, False])
     def test_find_layer_groups_to_scale_for_network_with_residuals(self, use_python_only_impl):
-        cle.use_python_only_impl = use_python_only_impl
+        cle.USE_PYTHON_IMPL = use_python_only_impl
         torch.manual_seed(10)
         model = MockMobileNetV2()
         model.eval()
@@ -549,7 +549,7 @@ class TestTrainingExtensionsCrossLayerScaling:
 
     @pytest.mark.parametrize("use_python_only_impl", [True, False])
     def test_auto_mobilenetv1(self, use_python_only_impl):
-        cle.use_python_only_impl = use_python_only_impl
+        cle.USE_PYTHON_IMPL = use_python_only_impl
         torch.manual_seed(10)
         model = MockMobileNetV1()
         model.eval()
@@ -562,7 +562,7 @@ class TestTrainingExtensionsCrossLayerScaling:
 
     @pytest.mark.parametrize("use_python_only_impl", [True, False])
     def test_auto_cls_custom_model(self, use_python_only_impl):
-        cle.use_python_only_impl = use_python_only_impl
+        cle.USE_PYTHON_IMPL = use_python_only_impl
         torch.manual_seed(10)
         model = MyModel()
         model.eval()
@@ -584,7 +584,7 @@ class TestTrainingExtensionsCrossLayerScaling:
     @pytest.mark.cuda
     @pytest.mark.parametrize("use_python_only_impl", [True, False])
     def test_auto_cls_custom_model_multi_gpu(self, use_python_only_impl):
-        cle.use_python_only_impl = use_python_only_impl
+        cle.USE_PYTHON_IMPL = use_python_only_impl
         torch.manual_seed(10)
         model = MyModel()
         model.eval()
@@ -603,7 +603,7 @@ class TestTrainingExtensionsCrossLayerScaling:
 
     @pytest.mark.parametrize("use_python_only_impl", [True, False])
     def test_auto_cle_custom_model(self, use_python_only_impl):
-        cle.use_python_only_impl = use_python_only_impl
+        cle.USE_PYTHON_IMPL = use_python_only_impl
         torch.manual_seed(10)
         model = MyModel()
         model.eval()
@@ -618,7 +618,7 @@ class TestTrainingExtensionsCrossLayerScaling:
     @pytest.mark.cuda
     @pytest.mark.parametrize("use_python_only_impl", [True, False])
     def test_auto_cle_custom_model_multi_gpu(self, use_python_only_impl):
-        cle.use_python_only_impl = use_python_only_impl
+        cle.USE_PYTHON_IMPL = use_python_only_impl
         torch.manual_seed(10)
         model = MyModel()
         model.eval()
@@ -635,7 +635,7 @@ class TestTrainingExtensionsCrossLayerScaling:
 
     @pytest.mark.parametrize("use_python_only_impl", [True, False])
     def test_auto_cle_two_inputs_model(self, use_python_only_impl):
-        cle.use_python_only_impl = use_python_only_impl
+        cle.USE_PYTHON_IMPL = use_python_only_impl
         model = TwoInputsModel().eval()
         model_copy = copy.deepcopy(model)
         inp_shapes = [(1, 3, 32, 32), (1, 3, 20, 20)]
@@ -653,7 +653,7 @@ class TestTrainingExtensionsCrossLayerScaling:
 
     @pytest.mark.parametrize("use_python_only_impl", [True, False])
     def test_auto_transposed_conv2d_model(self, use_python_only_impl):
-        cle.use_python_only_impl = use_python_only_impl
+        cle.USE_PYTHON_IMPL = use_python_only_impl
         torch.manual_seed(10)
         model = TransposedConvModel()
         model.eval()
@@ -668,7 +668,7 @@ class TestTrainingExtensionsCrossLayerScaling:
 
     @pytest.mark.parametrize("use_python_only_impl", [True, False])
     def test_auto_depthwise_transposed_conv_model(self, use_python_only_impl):
-        cle.use_python_only_impl = use_python_only_impl
+        cle.USE_PYTHON_IMPL = use_python_only_impl
         torch.manual_seed(0)
         model = torch.nn.Sequential(
             torch.nn.Conv2d(5, 10, 3),
@@ -694,7 +694,7 @@ class TestTrainingExtensionsCrossLayerScaling:
 
     @pytest.mark.parametrize("use_python_only_impl", [True, False])
     def test_cle_for_float32_and_int64_input_model(self, use_python_only_impl):
-        cle.use_python_only_impl = use_python_only_impl
+        cle.USE_PYTHON_IMPL = use_python_only_impl
         model = Float32AndInt64InputModel().to(torch.device('cpu'))
         model.eval()
 
@@ -727,12 +727,12 @@ class TestTrainingExtensionsCrossLayerScalingPythonOnly:
         output = model(random_input)
 
         # equalize using MO
-        cle.use_python_only_impl = False
+        cle.USE_PYTHON_IMPL = False
         equalize_model(model, (2, 10, 24, 24), dummy_input=random_input)
         output_using_mo = model(random_input)
 
         # equalize using python
-        cle.use_python_only_impl = True
+        cle.USE_PYTHON_IMPL = True
         equalize_model(model_copy, (2, 10, 24, 24), dummy_input=random_input)
         output_using_python = model_copy(random_input)
 
@@ -752,12 +752,12 @@ class TestTrainingExtensionsCrossLayerScalingPythonOnly:
         output = model(random_input)
 
         # Invoke MO implementation
-        cle.use_python_only_impl = False
+        cle.USE_PYTHON_IMPL = False
         CrossLayerScaling.scale_cls_set_with_conv_layers((model.conv1, model.conv2))
         output_using_mo = model(random_input)
 
         # Invoke python implementation
-        cle.use_python_only_impl = True
+        cle.USE_PYTHON_IMPL = True
         CrossLayerScaling.scale_cls_set_with_conv_layers((model_copy.conv1, model_copy.conv2))
         output_using_python = model_copy(random_input)
 
@@ -783,9 +783,9 @@ class TestTrainingExtensionsCrossLayerScalingPythonOnly:
         fold_all_batch_norms(model_copy, (1, 3, 224, 224), dummy_input=dummy_input)
 
         # CLS using MO and python.
-        cle.use_python_only_impl = False
+        cle.USE_PYTHON_IMPL = False
         scale_factors_mo = CrossLayerScaling.scale_model(model, (1, 3, 224, 224), dummy_input)
-        cle.use_python_only_impl = True
+        cle.USE_PYTHON_IMPL = True
         scale_factors_python = CrossLayerScaling.scale_model(model_copy, (1, 3, 224, 224), dummy_input)
 
         assert len(scale_factors_mo) == 8
@@ -849,10 +849,10 @@ class TestTrainingExtensionsCrossLayerScalingPythonOnly:
         dummy_input = torch.randn(1, 3, 10, 10)
 
         # invoke with MO (c++) implementation
-        cle.use_python_only_impl = False
+        cle.USE_PYTHON_IMPL = False
         conv1_bias_mo, conv2_bias_mo, conv3_bias_mo = _verify_bias_fold(model, dummy_input)
         # invoke with python implementation
-        cle.use_python_only_impl = True
+        cle.USE_PYTHON_IMPL = True
         conv1_bias_p, conv2_bias_p, conv3_bias_p = _verify_bias_fold(model_copy, dummy_input)
 
         assert torch.allclose(conv1_bias_mo, conv1_bias_p)

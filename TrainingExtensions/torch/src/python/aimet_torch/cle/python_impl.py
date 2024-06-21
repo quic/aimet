@@ -1,9 +1,8 @@
-# /usr/bin/env python3.8
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -41,14 +40,14 @@
 import torch
 import numpy as np
 
-from aimet_torch.cle.impl import ClsSet, ClsImpl, HbfImpl
+from aimet_common.cross_layer_equalization import ClsImpl, HbfImpl
 
 
 class PythonClsImpl(ClsImpl):
     """
     This class implements the CLS algorithm using Python version while following the base Implementation interface.
     """
-    def scale_cls_set_with_depthwise_layers(self, cls_set: ClsSet) -> [np.ndarray, np.ndarray]:
+    def scale_cls_set_with_depthwise_layers(self, cls_set) -> [np.ndarray, np.ndarray]:
         """
         API to invoke equalize layer params for depth wise separable layers(update for weights and bias is in place)
 
@@ -75,12 +74,13 @@ class PythonClsImpl(ClsImpl):
         if cls_set[1].bias is not None:
             bias_1 = cls_set[1].bias.detach()
 
-        max_0 = self._get_tensor_max(weight_0, (1, 2, 3))
-        max_1 = self._get_tensor_max(weight_1, (1, 2, 3))
-        max_2 = self._get_tensor_max(weight_2, (0, 2, 3))
+        max_0 = torch.amax(torch.abs(weight_0), dim=(1, 2, 3))
+        max_1 = torch.amax(torch.abs(weight_1), dim=(1, 2, 3))
+        max_2 = torch.amax(torch.abs(weight_2), dim=(0, 2, 3))
         s_12 = max_0 / torch.pow(max_0 * max_1 * max_2, 1.0 / 3)
         s_23 = torch.pow(max_0 * max_1 * max_2, 1.0 / 3) / max_2
 
+        # inplace modifications on detached tensor(s) will update the original tensor(s).
         weight_0 *= (1.0 / s_12[:, None, None, None])
         weight_1 *= s_12[:, None, None, None] * (1.0 / s_23[:, None, None, None])
         weight_2 *= s_23[None, :, None, None]
@@ -91,7 +91,7 @@ class PythonClsImpl(ClsImpl):
 
         return s_12.numpy(), s_23.numpy()
 
-    def scale_cls_set_with_conv_layers(self, cls_set: ClsSet) -> np.ndarray:
+    def scale_cls_set_with_conv_layers(self, cls_set) -> np.ndarray:
         """
         API to invoke equalize layer params for regular conv layers (update for weights and bias is in place)
 
@@ -110,10 +110,11 @@ class PythonClsImpl(ClsImpl):
         if cls_set[0].bias is not None:
             bias_0 = cls_set[0].bias.detach()
 
-        max_0 = self._get_tensor_max(weight_0, (1, 2, 3))
-        max_1 = self._get_tensor_max(weight_1, (0, 2, 3))
+        max_0 = torch.amax(torch.abs(weight_0), dim=(1, 2, 3))
+        max_1 = torch.amax(torch.abs(weight_1), dim=(0, 2, 3))
         scale_factor = max_0 / torch.pow(max_0 * max_1, 1. / 2)
 
+        # inplace modifications on detached tensor(s) will update the original tensor(s).
         weight_0 *= (1.0 / scale_factor[:, None, None, None])
         weight_1 *= scale_factor[None, :, None, None]
         if bias_0 is not None:
@@ -121,11 +122,44 @@ class PythonClsImpl(ClsImpl):
 
         return scale_factor.numpy()
 
+    @staticmethod
+    def _transpose_tensor_in_common_format(module: torch.nn.Module, tensor: torch.Tensor) -> torch.Tensor:
+        """
+        Transpose tensor in the common format [Noc, Nin, Kh, Kw].
+        For transposed conv, weight are stored in [Nin, Noc, Kh, Kw] format.
+
+        :param module: Module.
+        :param tensor: Input tensor.
+        :return: Output tensor.
+        """
+        # Transpose weights to Noc, Nin, Kh, Kw from Nin, Noc, Kh, kw since axis are flipped for transposed conv2d
+        if isinstance(module, torch.nn.ConvTranspose2d):
+            tensor = tensor.permute(1, 0, 2, 3)
+        # Transpose weights to Noc, Nin, K from Nin, Noc, K since axis are flipped for transposed conv1d
+        if isinstance(module, torch.nn.ConvTranspose1d):
+            tensor = tensor.permute(1, 0, 2)
+        return tensor
+
+    @staticmethod
+    def _make_4d_tensor(module: torch.nn.Module, tensor: torch.Tensor) -> torch.Tensor:
+        """
+        Return 4 dimensional tensor by adding a dimension on the end if the tensor is not 4d.
+
+        :param module: Module.
+        :param tensor: Input tensor.
+        :return: Output tensor.
+        """
+        if isinstance(module, (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
+            assert len(tensor.shape) == 3, "Module should have 3d weight tensor."
+            tensor = torch.unsqueeze(tensor, dim=-1)
+        return tensor
+
 
 class PythonHbfImpl(HbfImpl):
     """
     This class implements the HBF algorithm using python version while following the base Implementation interface.
     """
+    # pylint: disable=no-self-use
     def bias_fold(self, cls_pair_info, bn_layers):
         """
         Bias fold implementation using python version.
