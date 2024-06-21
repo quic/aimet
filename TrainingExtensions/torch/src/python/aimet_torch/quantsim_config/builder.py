@@ -162,9 +162,13 @@ class LazyQuantizeWrapper(torch.nn.Module):
         quantizer_info_list = self.input_quantizers + self.output_quantizers + param_quantizer_info_list
 
         for quantizer, quantizer_info in zip(quantizer_list, quantizer_info_list):
-            if quantizer is not None and quantizer_info.encoding_min_max_fixed_vals:
+            # pylint: disable=protected-access
+            if quantizer is not None and quantizer_info.encoding_min_max_fixed_vals and \
+                    'min' in quantizer._initial_parameters and 'max' in quantizer._initial_parameters:
                 quantizer.min = torch.nn.Parameter(quantizer_info.encoding_min_max_fixed_vals[0] * torch.ones((1,)))
                 quantizer.max = torch.nn.Parameter(quantizer_info.encoding_min_max_fixed_vals[1] * torch.ones((1,)))
+                quantizer.allow_overwrite(False)
+                quantizer.requires_grad_(False)
 
     def realize_v1_wrapper(self) -> QcQuantizeWrapper:
         """
