@@ -73,3 +73,15 @@ Following is guideline for Hyper parameters:
 #. Hyper Parameters to be changed least: beta range(default (20, 2)), warm start period (default 20%)
 
 |
+
+
+AdaRound API
+============
+
+Please refer to the links below to view the AdaRound API for each AIMET variant:
+
+- :ref:`AdaRound for PyTorch<api-torch-adaround>`
+- :ref:`AdaRound for Tensorflow<api-tf-adaround>`
+- :ref:`AdaRound for Keras<api-keras-adaround>`
+- :ref:`AdaRound for ONNX<api-onnx-adaround>`
+
