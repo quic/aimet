@@ -274,6 +274,7 @@ class LazyQuantizer:
         self.enabled = enabled_by_default
         self.data_type = data_type
         self.is_const = False
+        self.is_singleton = False
         self._encoding_min_max_fixed_vals = None
 
     @property
@@ -339,6 +340,9 @@ class LazyQuantizer:
         from aimet_torch.v2.quantization.float import FloatQuantizeDequantize
         from aimet_torch.v2.quantization.affine import QuantizeDequantize
         if not self.enabled:
+            return None
+
+        if self.is_const and self.is_singleton:
             return None
 
         self._validate_quantizer_properties()
