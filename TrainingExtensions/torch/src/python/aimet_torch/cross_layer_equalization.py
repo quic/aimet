@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -43,20 +43,23 @@ Layer groups: Groups of layers that are immediately connected and can be decompo
 """
 
 from typing import Tuple, List, Union, Dict
-from enum import Enum
 import numpy as np
 import torch
 
 from aimet_common.utils import AimetLogger
-from aimet_torch.cle.impl import ClsSet
+from aimet_common.cross_layer_equalization import ClsLayerType, ClsSetInfo
 from aimet_torch.cle.python_impl import PythonClsImpl, PythonHbfImpl
 from aimet_torch.cle.mo_impl import MoClsImpl, MoHbfImpl
 from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
-from aimet_torch.utils import get_device, get_ordered_list_of_modules, create_rand_tensors_given_shapes
+from aimet_torch.utils import (get_device, get_ordered_list_of_modules, create_rand_tensors_given_shapes,
+                               place_model)
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.CrosslayerEqualization)
+
+ClsSet = Union[Tuple[torch.nn.Conv2d, torch.nn.Conv2d],
+               Tuple[torch.nn.Conv2d, torch.nn.Conv2d, torch.nn.Conv2d]]
 
 ClsSupportedLayer = Union[torch.nn.Conv1d, torch.nn.Conv2d, torch.nn.ConvTranspose1d, torch.nn.ConvTranspose2d]
 
@@ -64,51 +67,9 @@ ScaleFactor = Union[np.ndarray, Tuple[np.ndarray]]
 
 cls_supported_layers = (torch.nn.Conv2d, torch.nn.ConvTranspose2d, torch.nn.Conv1d, torch.nn.ConvTranspose1d)
 cls_supported_activations = (torch.nn.ReLU, torch.nn.PReLU)
-use_python_only_impl = False
 
-
-class ClsLayerType(Enum):
-    """Enum class to represent CLS layer types"""
-    Unsupported = 0
-    Conv = 1  # Overloaded for conv and ConvTranspose
-    DepthwiseConv = 2
-
-
-class ClsSetInfo:
-    """
-    This class hold information about the layers in a CLS set, along with corresponding scaling factors
-    and other information like if there is a ReLU activation function between the CLS set layers
-    """
-
-    class ClsSetLayerPairInfo:
-        """
-        Models a pair of layers that were scaled using CLS. And related information.
-        """
-
-        def __init__(self, layer1: torch.nn.Conv2d, layer2: torch.nn.Conv2d, scale_factor: np.ndarray,
-                     relu_activation_between_layers: bool):
-            """
-            :param layer1: Layer whose bias is folded
-            :param layer2: Layer to which bias of previous layer's bias is folded
-            :param scale_factor: Scale Factor found from Cross Layer Scaling to scale BN parameters
-            :param relu_activation_between_layers: If the activation between layer1 and layer2 is Relu
-            """
-            self.layer1 = layer1
-            self.layer2 = layer2
-            self.scale_factor = scale_factor
-            self.relu_activation_between_layers = relu_activation_between_layers
-
-    def __init__(self, cls_pair_1: ClsSetLayerPairInfo, cls_pair_2: ClsSetLayerPairInfo = None):
-        """
-        Constructor takes 2 pairs if Depth-wise separable layer is being folded
-
-        :param cls_pair_1: Pair between two conv or conv and depth-wise conv
-        :param cls_pair_2: Pair between depth-wise conv and point-wise conv
-        """
-        if cls_pair_2:
-            self.cls_pair_info_list = [cls_pair_1, cls_pair_2]
-        else:
-            self.cls_pair_info_list = [cls_pair_1]
+# Temporary flag to flip underlying implementation. This flag will be removed in the future releases.
+USE_PYTHON_IMPL = True
 
 
 def get_ordered_list_of_conv_modules(model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple]) -> List:
@@ -131,19 +92,18 @@ class GraphSearchUtils:
     def __init__(self, model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]],
                  dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None):
         """
+
         :param model: PyTorch model.
         :param input_shapes: Input shape for the model (can be one or multiple inputs)
-        :param dummy_input: Dummy input to the model. Used to parse model graph.
+        :param dummy_input: Dummy input to the model. Used to parse model graph. dummy_input is expected to be placed
+         on the same device as model.
         """
-        device = get_device(model)
         if dummy_input is None:
-            dummy_input = tuple(utils.create_rand_tensors_given_shapes(input_shapes, device))
-
-        # Place dummy input on the same device as model.
-        dummy_input = utils.change_tensor_device_placement(dummy_input, device=device)
-
-        self._connected_graph = ConnectedGraph(model, dummy_input)
-        self._ordered_module_list = get_ordered_list_of_conv_modules(model, dummy_input)
+            inp_tensor_list = tuple(utils.create_rand_tensors_given_shapes(input_shapes, get_device(model)))
+        else:
+            inp_tensor_list = dummy_input
+        self._connected_graph = ConnectedGraph(model, inp_tensor_list)
+        self._ordered_module_list = get_ordered_list_of_conv_modules(model, inp_tensor_list)
 
 
     @staticmethod
@@ -384,7 +344,7 @@ class CrossLayerScaling:
                 module.cpu()
 
         # Pick implementation version (either MO (c++) or python) depending on the user provided flag.
-        cls_impl = PythonClsImpl() if use_python_only_impl else MoClsImpl()
+        cls_impl = PythonClsImpl() if USE_PYTHON_IMPL else MoClsImpl()
         if len(cls_set) == 3:
             scale_factor = cls_impl.scale_cls_set_with_depthwise_layers(cls_set)
         else:
@@ -412,7 +372,7 @@ class CrossLayerScaling:
                 on_gpu = True
                 module.cpu()
 
-        cls_impl = PythonClsImpl() if use_python_only_impl else MoClsImpl()
+        cls_impl = PythonClsImpl() if USE_PYTHON_IMPL else MoClsImpl()
         scaling_factor = cls_impl.scale_cls_set_with_conv_layers(cls_set)
 
         if on_gpu:
@@ -438,7 +398,7 @@ class CrossLayerScaling:
                 on_gpu = True
                 module.cpu()
 
-        cls_impl = PythonClsImpl() if use_python_only_impl else MoClsImpl()
+        cls_impl = PythonClsImpl() if USE_PYTHON_IMPL else MoClsImpl()
         scaling_factors = cls_impl.scale_cls_set_with_depthwise_layers(cls_set)
 
         if on_gpu:
@@ -486,41 +446,49 @@ class CrossLayerScaling:
         return cls_set_info_list
 
     @staticmethod
-    def scale_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]], dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None) -> List[ClsSetInfo]:
+    def scale_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]] = None,
+                    dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None) -> List[ClsSetInfo]:
         """
         Uses cross-layer scaling to scale all applicable layers in the given model
 
         :param model: Model to scale
         :param input_shapes: Input shape for the model (can be one or multiple inputs)
-        :param dummy_input: Dummy input to the model. Used to parse model graph. User is expected to place the tensors on the appropriate device.
+        :param dummy_input: A dummy input to the model. Can be a Tensor or a Tuple of Tensors. dummy_input will be
+         placed on CPU if not already.
         :return: CLS information for each CLS set
         """
         if isinstance(model, torch.nn.DataParallel):
             return CrossLayerScaling.scale_model(model.module, input_shapes, dummy_input=dummy_input)
-        device = get_device(model)
-        model.cpu()
 
-        # Find layer groups
-        graph_search = GraphSearchUtils(model, input_shapes, dummy_input=dummy_input)
-        layer_groups = graph_search.find_layer_groups_to_scale()
+        # The use of input_shapes will be removed in the future release. It is maintained now for backward compatibility.
+        if input_shapes and dummy_input is None:
+            dummy_input = create_rand_tensors_given_shapes(input_shapes, torch.device('cpu'))
+        if input_shapes is None and dummy_input is None:
+            raise ValueError("Both input_shapes and dummy_input can't be None")
 
-        # Find cls sets from the layer groups
-        cls_sets = []
-        for layer_group in layer_groups:
-            cls_set = GraphSearchUtils.convert_layer_group_to_cls_sets(layer_group)
-            cls_sets += cls_set
+        # Place model and dummy input on the cpu.
+        with place_model(model, torch.device("cpu")):
+            dummy_input = utils.change_tensor_device_placement(dummy_input, device=torch.device('cpu'))
 
-        # Scale the CLS sets
-        scale_factors = CrossLayerScaling.scale_cls_sets(cls_sets)
+            # Find layer groups
+            graph_search = GraphSearchUtils(model, input_shapes, dummy_input=dummy_input)
+            layer_groups = graph_search.find_layer_groups_to_scale()
 
-        # Find if there were relu activations between layers of each cls set
-        is_relu_activation_in_cls_sets = graph_search.is_relu_activation_present_in_cls_sets(cls_sets)
+            # Find cls sets from the layer groups
+            cls_sets = []
+            for layer_group in layer_groups:
+                cls_set = GraphSearchUtils.convert_layer_group_to_cls_sets(layer_group)
+                cls_sets += cls_set
 
-        # Convert to a list of cls-set-info elements
-        cls_set_info_list = CrossLayerScaling.create_cls_set_info_list(cls_sets, scale_factors,
-                                                                       is_relu_activation_in_cls_sets)
+            # Scale the CLS sets
+            scale_factors = CrossLayerScaling.scale_cls_sets(cls_sets)
 
-        model.to(device=device)
+            # Find if there were relu activations between layers of each cls set
+            is_relu_activation_in_cls_sets = graph_search.is_relu_activation_present_in_cls_sets(cls_sets)
+
+            # Convert to a list of cls-set-info elements
+            cls_set_info_list = CrossLayerScaling.create_cls_set_info_list(cls_sets, scale_factors,
+                                                                           is_relu_activation_in_cls_sets)
         return cls_set_info_list
 
 
@@ -554,44 +522,38 @@ class HighBiasFold:
                     continue
 
                 # Pick an implementation version based on user provided flag.
-                hbf_impl = PythonHbfImpl() if use_python_only_impl else MoHbfImpl()
+                hbf_impl = PythonHbfImpl() if USE_PYTHON_IMPL else MoHbfImpl()
                 hbf_impl.bias_fold(cls_pair_info, bn_layers)
 
 
-def equalize_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]],
+def equalize_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]] = None,
                    dummy_input: Union[torch.Tensor, Tuple] = None):
     """
     High-level API to perform Cross-Layer Equalization (CLE) on the given model. The model is equalized in place.
 
     :param model: Model to equalize
     :param input_shapes: Shape of the input (can be a tuple or a list of tuples if multiple inputs)
-    :param dummy_input: A dummy input to the model. Can be a Tensor or a Tuple of Tensors
-    :return: None
+    :param dummy_input: A dummy input to the model. Can be a Tensor or a Tuple of Tensors. dummy_input will be
+     placed on CPU if not already.
     """
-    if dummy_input is None:
-        # The use of input_shapes will be removed in a future release. It is maintained now for backward compatibility.
-        # Note, create_rand_tensors_given_shapes() creates all FP32 tensors where as some multi-input models might
-        # additionally use Integer Tensors.
-        dummy_input = create_rand_tensors_given_shapes(input_shapes, torch.device('cpu'))
-    if isinstance(dummy_input, (list, tuple)):
-        input_shapes = [i.shape for i in dummy_input]
-    else:
-        input_shapes = dummy_input.shape
-
     if isinstance(model, torch.nn.DataParallel):
         equalize_model(model.module, input_shapes, dummy_input)
     else:
+        # The use of input_shapes will be removed in the future release. It is maintained now for backward compatibility.
+        if input_shapes and dummy_input is None:
+            dummy_input = create_rand_tensors_given_shapes(input_shapes, torch.device('cpu'))
+        if input_shapes is None and dummy_input is None:
+            raise ValueError("Both input_shapes and dummy_input can't be None")
+
         # Place model and dummy input on the cpu.
-        device = get_device(model)
-        model.cpu()
-        dummy_input = utils.change_tensor_device_placement(dummy_input, device=torch.device('cpu'))
+        with place_model(model, torch.device('cpu')):
+            dummy_input = utils.change_tensor_device_placement(dummy_input, device=torch.device('cpu'))
 
-        # fold batchnorm layers and perform CLE on the folded model.
-        folded_pairs = fold_all_batch_norms(model, input_shapes, dummy_input=dummy_input)
-        equalize_bn_folded_model(model, input_shapes, folded_pairs,
-                                 dummy_input=dummy_input)
+            # fold batchnorm layers and perform CLE on the folded model.
+            folded_pairs = fold_all_batch_norms(model, input_shapes, dummy_input=dummy_input)
+            equalize_bn_folded_model(model, input_shapes, folded_pairs,
+                                     dummy_input=dummy_input)
 
-        model.to(device=device)
 
 def equalize_bn_folded_model(model: torch.nn.Module,
                              input_shapes: Union[Tuple, List[Tuple]],
@@ -604,26 +566,23 @@ def equalize_bn_folded_model(model: torch.nn.Module,
 
     :param model: Batchnorm-folded model to equalize
     :param input_shapes: Shape of the input (can be a tuple or a list of tuples if multiple inputs)
-    :param dummy_input: Dummy input to the model. Used to parse model graph. User is expected to place the tensors on the appropriate device.
+    :param dummy_input: A dummy input to the model. Can be a Tensor or a Tuple of Tensors. dummy_input will be
+     placed on CPU if not already.
     :param folded_pairs: List of pairs of folded layers
-    :return: None
     """
     if isinstance(model, torch.nn.DataParallel):
         equalize_bn_folded_model(model.module, input_shapes, folded_pairs, dummy_input=dummy_input)
     else:
-        device = get_device(model)
-        model.cpu()
         bn_dict = {}
         for conv_bn in folded_pairs:
             bn_dict[conv_bn[0]] = conv_bn[1]
 
-        # replace any ReLU6 layers with ReLU
-        utils.replace_modules_of_type1_with_type2(model, torch.nn.ReLU6, torch.nn.ReLU)
+        with place_model(model, torch.device('cpu')):
+            # replace any ReLU6 layers with ReLU
+            utils.replace_modules_of_type1_with_type2(model, torch.nn.ReLU6, torch.nn.ReLU)
 
-        # perform cross-layer scaling on applicable layer sets
-        cls_set_info_list = CrossLayerScaling.scale_model(model, input_shapes, dummy_input=dummy_input)
+            # perform cross-layer scaling on applicable layer sets
+            cls_set_info_list = CrossLayerScaling.scale_model(model, input_shapes, dummy_input=dummy_input)
 
-        # high-bias fold
-        HighBiasFold.bias_fold(cls_set_info_list, bn_dict)
-
-        model.to(device=device)
+            # high-bias fold
+            HighBiasFold.bias_fold(cls_set_info_list, bn_dict)

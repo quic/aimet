@@ -1385,3 +1385,16 @@ def get_all_named_parameters(model: torch.nn.Module):
             else:
                 # Don't prepend . if module name is "" (Parameter owned by base model)
                 yield param_name, parameter
+
+
+@contextlib.contextmanager
+def place_model(model: torch.nn.Module, device: torch.device):
+    """
+    Temporarily place model on given device
+    """
+    original_device = get_device(model)
+    try:
+        model.to(device=device)
+        yield
+    finally:
+        model.to(device=original_device)
