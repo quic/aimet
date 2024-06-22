@@ -143,10 +143,12 @@ public:
     std::string m_masterPath {};
     std::string m_backendPath {};
     std::map<std::string, OpConstraints> m_modelOpConstraints;
-
+    std::map <std::string, std::list<OpConstraints>> m_modelOpConstraints_v2;
     void populate();
 
-    ModelOpDefParser(std::string mPath, std::string bPath, std::list<std::string> opList);
+    std::list<std::string> getSupportedOpsInBackend();
+
+    ModelOpDefParser(std::string mPath, std::string bPath);
 
     int getFiltersIndex(const std::string& opName);
 
@@ -167,6 +169,12 @@ public:
     bool getInputMultiFlag(const std::string& opName, int attribNum);
 
     bool getOutputMultiFlag(const std::string& opName, int attribNum);
+
+    std::list <std::map<std::string, int>> getSizeList(const std::string &opName);
+
+    std::list <std::list <QnnDatatype_t>> getInputDataTypeList(const std::string &opName, int attribNum);
+
+    std::list <std::list <QnnDatatype_t>> getOutputDataTypeList(const std::string &opName, int attribNum);
 };
 
 #endif   // PYBINDEX_PARSERMODULE_H

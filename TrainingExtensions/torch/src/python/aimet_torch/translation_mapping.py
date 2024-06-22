@@ -178,7 +178,19 @@ aimet_op_to_backend_op_name_map = {"Conv1d":"Conv1d",
                                    "CustomLayerNorm":"LayerNorm",
                                    "IndexSelect":"Gather",
                                    "Embedding":"Gather",
-                                   "Expand":"ElementWiseMultiply"}
+                                   "Expand":"ElementWiseMultiply",
+                                   "Stack":"Pack",
+                                   "UnBind":"UnPack",
+                                   "SpaceToBatch":"SpaceToBatch",
+                                   "BatchToSpace":"BatchToSpace",
+                                   "Moments":"Moments",
+                                   "CropAndResize":"CropAndResize",
+                                   "FloorDivide":"ElementWiseFloorDiv",
+                                   "GELU":"Gelu",
+                                   "Cast":"Cast",
+                                   "StridedSlice":"StridedSlice",
+                                   "GroupNorm":"GroupNorm"
+                                   }
 
 
 op_to_weight_index_map = {'Conv1d' : 1,

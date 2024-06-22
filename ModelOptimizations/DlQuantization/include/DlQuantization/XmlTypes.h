@@ -63,6 +63,7 @@
 #define MASTER_OPDEF "OpDef"
 #define SUPPLEMENTAL_OPDEF_LIST "SupplementalOpDefList"
 #define SUPPLEMENTAL_OPDEF "SupplementalOpDef"
+#define SUPPORTED_OPS "SupportedOps"
 #define INPUT_SIZE "input_size"
 #define OUTPUT_SIZE "output_size"
 #define PARAM_SIZE "param_size"
