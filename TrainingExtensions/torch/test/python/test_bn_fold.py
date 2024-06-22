@@ -56,10 +56,8 @@ from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.model_preparer import prepare_model
 from aimet_common.defs import QuantScheme
-
+import aimet_torch.batch_norm_fold as batch_norm_fold
 from torch.nn.modules.batchnorm import _BatchNorm
-
-
 torch.manual_seed(1228)
 
 
@@ -152,7 +150,9 @@ class TwoInputs(torch.nn.Module):
 
 class TestTrainingExtensionBnFold:
 
-    def test_fold_resnet18(self):
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_fold_resnet18(self, use_python_impl):
+        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = models.resnet18()
         _initialize_bn_params(model)
@@ -171,8 +171,8 @@ class TestTrainingExtensionBnFold:
         assert not isinstance(model.layer2[0].bn1, torch.nn.BatchNorm2d)
         assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
 
-    def test_fold_bn_before_conv_no_bias(self):
-
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_fold_bn_before_conv_no_bias(self, use_python_impl):
         class MyModel(torch.nn.Module):
             def __init__(self):
 
@@ -190,6 +190,7 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
+        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -210,7 +211,8 @@ class TestTrainingExtensionBnFold:
         assert model.conv2.weight.device == model.conv2.bias.device
         assert model.conv2.weight.dtype == model.conv2.bias.dtype
 
-    def test_fold_bn_before_conv_with_bias(self):
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_fold_bn_before_conv_with_bias(self, use_python_impl):
 
         class MyModel(torch.nn.Module):
             def __init__(self):
@@ -229,6 +231,7 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
+        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -246,7 +249,8 @@ class TestTrainingExtensionBnFold:
         assert not isinstance(model.bn1, torch.nn.BatchNorm2d)
         assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-1)
 
-    def test_fold_bn_before_conv_with_padding(self):
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_fold_bn_before_conv_with_padding(self, use_python_impl):
 
         class MyModel(torch.nn.Module):
             def __init__(self):
@@ -265,6 +269,7 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
+        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -281,7 +286,8 @@ class TestTrainingExtensionBnFold:
         assert isinstance(model.bn1, torch.nn.BatchNorm2d)
         assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
 
-    def test_fold_bn_before_conv_transpose(self):
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_fold_bn_before_conv_transpose(self, use_python_impl):
 
         class MyModel(torch.nn.Module):
             def __init__(self):
@@ -300,6 +306,7 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
+        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -316,7 +323,8 @@ class TestTrainingExtensionBnFold:
         assert isinstance(model.bn1, torch.nn.BatchNorm2d)
         assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
 
-    def test_filter_conv_bn_pair(self):
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_filter_conv_bn_pair(self, use_python_impl):
         invalid_fold_forward = [torch.nn.Conv2d(10, 20, 3, padding=1),
                                 torch.nn.Conv2d(10, 10, 2, groups=10),
                                 torch.nn.Conv2d(10, 20, 2, groups=2),
@@ -353,7 +361,8 @@ class TestTrainingExtensionBnFold:
         is_valid = [_is_valid_bn_fold(layer, True) for layer in valid_fold_backward]
         assert all(is_valid)
 
-    def test_fold_bn_after_conv_no_bias(self):
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_fold_bn_after_conv_no_bias(self, use_python_impl):
 
         class MyModel(torch.nn.Module):
             def __init__(self):
@@ -370,6 +379,7 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
+        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -390,7 +400,8 @@ class TestTrainingExtensionBnFold:
         assert model.conv1.weight.device == model.conv1.bias.device
         assert model.conv1.weight.dtype == model.conv1.bias.dtype
 
-    def test_fold_bn_after_conv_depthwise(self):
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_fold_bn_after_conv_depthwise(self, use_python_impl):
 
         class MyModel(torch.nn.Module):
             def __init__(self):
@@ -407,6 +418,7 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
+        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -422,7 +434,8 @@ class TestTrainingExtensionBnFold:
         assert not isinstance(model.bn1, torch.nn.BatchNorm2d)
         assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
 
-    def test_fold_bn_after_transposed_conv_depthwise(self):
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_fold_bn_after_transposed_conv_depthwise(self, use_python_impl):
 
         class MyModel(torch.nn.Module):
             def __init__(self):
@@ -439,6 +452,7 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
+        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -454,7 +468,8 @@ class TestTrainingExtensionBnFold:
         assert not isinstance(model.bn1, torch.nn.BatchNorm2d)
         assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
 
-    def test_fold_bn_after_conv_with_bias(self):
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_fold_bn_after_conv_with_bias(self, use_python_impl):
 
         class MyModel(torch.nn.Module):
             def __init__(self):
@@ -471,6 +486,7 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
+        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -488,7 +504,8 @@ class TestTrainingExtensionBnFold:
         assert not isinstance(model.bn1, torch.nn.BatchNorm2d)
         assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
 
-    def test_fold_bn_before_linear_layer_no_bias(self):
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_fold_bn_before_linear_layer_no_bias(self, use_python_impl):
 
         class MyModel(torch.nn.Module):
             def __init__(self):
@@ -503,6 +520,7 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
+        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -523,7 +541,8 @@ class TestTrainingExtensionBnFold:
         assert model.fc1.weight.device == model.fc1.bias.device
         assert model.fc1.weight.dtype == model.fc1.bias.dtype
 
-    def test_fold_bn_before_linear_layer_with_bias(self):
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_fold_bn_before_linear_layer_with_bias(self, use_python_impl):
 
         class MyModel(torch.nn.Module):
             def __init__(self):
@@ -538,6 +557,7 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
+        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -555,7 +575,8 @@ class TestTrainingExtensionBnFold:
         assert not isinstance(model.bn1, torch.nn.BatchNorm1d)
         assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
 
-    def test_fold_bn_after_linear_layer_no_bias(self):
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_fold_bn_after_linear_layer_no_bias(self, use_python_impl):
 
         class MyModel(torch.nn.Module):
             def __init__(self):
@@ -570,6 +591,7 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
+        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -590,7 +612,8 @@ class TestTrainingExtensionBnFold:
         assert model.fc1.weight.device == model.fc1.bias.device
         assert model.fc1.weight.dtype == model.fc1.bias.dtype
 
-    def test_fold_bn_after_linear_layer_with_bias(self):
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_fold_bn_after_linear_layer_with_bias(self, use_python_impl):
 
         class MyModel(torch.nn.Module):
             def __init__(self):
@@ -605,6 +628,7 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
+        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -622,7 +646,9 @@ class TestTrainingExtensionBnFold:
         assert not isinstance(model.bn1, torch.nn.BatchNorm1d)
         assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
 
-    def test_find_batch_norms_to_fold(self):
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_find_batch_norms_to_fold(self, use_python_impl):
+        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         model = MyModel().eval()
         _initialize_bn_params(model)
 
@@ -637,7 +663,9 @@ class TestTrainingExtensionBnFold:
         assert (model.bn2, model.conv3) in bn_conv_pairs
         assert len(bn_picked) == 2
 
-    def test_bn_fold_auto_mode_transposed_conv2d(self):
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_bn_fold_auto_mode_transposed_conv2d(self, use_python_impl):
+        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = TransposedConvModel().eval()
         _initialize_bn_params(model)
@@ -655,8 +683,9 @@ class TestTrainingExtensionBnFold:
         assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
         assert len(folded_pairs) == 2
 
-    def test_find_batch_norms_to_fold_multi_input(self):
-
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_find_batch_norms_to_fold_multi_input(self, use_python_impl):
+        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         model = TwoInputs().eval()
         _initialize_bn_params(model)
         inp_shapes = [(1, 3, 32, 32), (1, 3, 20, 20)]
@@ -672,7 +701,9 @@ class TestTrainingExtensionBnFold:
         assert (model.conv1, model.bn1) in conv_bn_pairs
         assert (model.conv2, model.bn2) in conv_bn_pairs
 
-    def test_bn_fold_auto_mode(self):
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_bn_fold_auto_mode(self, use_python_impl):
+        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
 
         model = MyModel().eval()
@@ -690,7 +721,8 @@ class TestTrainingExtensionBnFold:
         assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
         assert len(folded_pairs) == 2
 
-    def test_fold_auto_mode_with_bn_after_Conv1d_layer(self):
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_fold_auto_mode_with_bn_after_Conv1d_layer(self, use_python_impl):
         class MyModel(torch.nn.Module):
             def __init__(self):
 
@@ -704,6 +736,7 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
+        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         model = MyModel().eval()
         _initialize_bn_params(model)
 
@@ -721,7 +754,8 @@ class TestTrainingExtensionBnFold:
         assert 1 == len(bn_pairs)
         assert (model.conv1d, orig_bn) in bn_pairs
 
-    def test_bn_conversion(self):
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_bn_conversion(self, use_python_impl):
         class MyModel(torch.nn.Module):
             def __init__(self):
 
@@ -737,6 +771,7 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
+        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         model = MyModel().eval()
         _initialize_bn_params(model)
 
@@ -754,9 +789,8 @@ class TestTrainingExtensionBnFold:
         assert 0 == len(bn_pairs)
         assert (model.conv1d, orig_bn) not in bn_pairs
 
-
-
-    def test_fold_manual_with_bn_after_Conv1d_layer_no_bias(self):
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_fold_manual_with_bn_after_Conv1d_layer_no_bias(self, use_python_impl):
         class MyModel(torch.nn.Module):
             def __init__(self):
 
@@ -770,6 +804,7 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
+        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         model = MyModel().eval()
         _initialize_bn_params(model)
 
@@ -788,8 +823,9 @@ class TestTrainingExtensionBnFold:
         assert model.conv1d.weight.dtype == model.conv1d.bias.dtype
 
     @pytest.mark.cuda
-    def test_multi_gpu(self):
-
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_multi_gpu(self, use_python_impl):
+        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel()
         model.eval()
@@ -804,7 +840,8 @@ class TestTrainingExtensionBnFold:
         output_after = model(random_input)
         assert torch.allclose(output_before, output_after, rtol=1.e-2)
 
-    def test_fold_bn_before_Conv1d_with_bias(self):
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_fold_bn_before_Conv1d_with_bias(self, use_python_impl):
 
         class MyModel(torch.nn.Module):
             def __init__(self):
@@ -819,6 +856,7 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
+        batch_norm_fold.USE_PYTHON_IMPL =use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -835,7 +873,8 @@ class TestTrainingExtensionBnFold:
         assert (model.conv1d, orig_bn) in bn_pairs
         assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
 
-    def test_fold_bn_before_Conv1d_no_bias(self):
+    @pytest.mark.parametrize("use_python_impl", [True, False])
+    def test_fold_bn_before_Conv1d_no_bias(self, use_python_impl):
 
         class MyModel(torch.nn.Module):
             def __init__(self):
@@ -850,6 +889,7 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
+        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel()
         _initialize_bn_params(model)

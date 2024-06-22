@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -63,7 +63,6 @@ from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.BatchNormFolding)
 
-
 LayerType = Union[
     torch.nn.Linear,
     torch.nn.Conv1d,
@@ -75,6 +74,8 @@ _supported_layers = LayerType.__args__
 BatchNormType = Union[BatchNorm1d, BatchNorm2d]
 _supported_batchnorms = BatchNormType.__args__
 
+# Temporary flag to flip underlying implementation. This flag will be removed in the future releases.
+USE_PYTHON_IMPL = True
 
 def _delete_bn_from_model(model: torch.nn.Module, bn_layer_list: Iterable[BatchNormType]):
     utils.replace_modules_with_instances_of_new_type(model, bn_layer_list, torch.nn.Identity)
@@ -105,6 +106,27 @@ def _expand_shape_to_4d(weight_tensor: libpymo.TensorParams):
             yield weight_tensor
         finally:
             weight_tensor.shape = orig_shape
+
+
+def _make_4d_tensor(tensor: torch.Tensor) -> torch.Tensor:
+    """
+    Return 4 dimensional tensor by adding a dimension if the tensor is not 4d.
+    :param tensor: Input tensor.
+    :return: Output tensor.
+    """
+    dims = len(tensor.shape)
+
+    if dims > 4:
+        raise RuntimeError
+
+    if dims == 4:
+        return tensor
+
+    while len(tensor.shape) < 4:
+        tensor = tensor[..., None]
+
+    return tensor
+
 
 
 def _call_mo_batch_norm_fold(weight: torch.Tensor,
@@ -146,6 +168,41 @@ def _call_mo_batch_norm_fold(weight: torch.Tensor,
 
         weight.copy_(torch.tensor(weight_tensor.data, device=weight.device, dtype=weight.dtype)
                      .reshape_as(weight))
+
+
+def _call_py_batch_norm_fold(weight: torch.Tensor,
+                             bias: torch.Tensor,
+                             bn: Union[BatchNorm1d, BatchNorm2d],
+                             fold_backward: bool):
+    """
+     BN fold without calling C++ APIs.
+
+    :param weight: conv/linear weight
+    :param bias: conv/linear bias
+    :param bn: Batch Norm layer
+    :param fold_backward: True if BatchNorm comes after Conv/Linear layer
+    """
+    with torch.no_grad():
+        gamma = bn.weight.detach()
+        beta = bn.bias.detach()
+        mu = bn.running_mean.detach()
+        sigma = torch.sqrt(bn.running_var + bn.eps).detach()
+
+        _weight = weight.detach()
+        _bias = bias.detach()
+        scale = gamma / sigma
+
+        _weight = _make_4d_tensor(_weight)
+
+        if fold_backward:
+            _weight *= scale[:, None, None, None]
+            _bias += beta + (_bias - mu) * gamma / sigma - _bias
+        else:
+            _w_2d = _weight.sum(3).sum(2)
+            mu_hat = torch.matmul(_w_2d, mu * scale)
+            beta_hat = torch.matmul(_w_2d, beta)
+            _weight *= scale[None, :, None, None]
+            _bias += beta_hat - mu_hat
 
 
 class _BatchNormFoldingNotSupported(RuntimeError):
@@ -273,7 +330,10 @@ def _fold_to_weight(conv_linear: LayerType, bn: BatchNormType, fold_backward: bo
                            dtype=conv_linear.weight.dtype)
         conv_linear.bias = torch.nn.Parameter(bias)
 
-    _call_mo_batch_norm_fold(conv_linear.weight, conv_linear.bias, bn, fold_backward=fold_backward)
+    if USE_PYTHON_IMPL:
+        _call_py_batch_norm_fold(conv_linear.weight, conv_linear.bias, bn, fold_backward=fold_backward)
+    else:
+        _call_mo_batch_norm_fold(conv_linear.weight, conv_linear.bias, bn, fold_backward=fold_backward)
 
     # Transpose weight back to N, C, H, W for transposed Conv2D, for non-depthwise layers
     if isinstance(conv_linear, torch.nn.ConvTranspose2d) and conv_linear.groups == 1:
@@ -498,7 +558,7 @@ def fold_all_batch_norms_to_weight(
 
      # Convert the standalone BNs which are not folded
     bn_converted = convert_standalone_batchnorms(model, inp_tensor_list, bn_to_fold)
-    _logger.info("%d BatchNorms' weights got converted", len(bn_converted))
+    _logger.debug("Total %d standalone BatchNorms' weights got converted", len(bn_converted))
     return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs]
 
 
@@ -535,7 +595,7 @@ def convert_batchnorm_parameters(model: torch.nn.Module, bn: Union[torch.nn.Batc
         running_mean = bn.running_mean
         inv_sigma = torch.rsqrt(bn.running_var + bn.eps)
 
-        weight = gamma*inv_sigma
+        weight = gamma * inv_sigma
         bias = beta - running_mean * weight
 
         # Update the values
