@@ -371,7 +371,7 @@ class TestQuantsimOnnxExport:
 
         torch.manual_seed(0)
 
-        model = resnet18(pretrained=True).eval()
+        model = resnet18().eval()
         dummy_input = torch.randn(1, 3, 224, 224)
 
         sim_v1 = QuantizationSimModelV1(model, dummy_input)
