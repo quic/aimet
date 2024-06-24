@@ -80,6 +80,10 @@ class PythonClsImpl(ClsImpl):
         s_12 = max_0 / torch.pow(max_0 * max_1 * max_2, 1.0 / 3)
         s_23 = torch.pow(max_0 * max_1 * max_2, 1.0 / 3) / max_2
 
+        # Avoid 'divide by zero' by using a value that does no scaling. i.e., 1.
+        s_12 = torch.nan_to_num(s_12, nan=1.0)
+        s_23 = torch.nan_to_num(s_23, nan=1.0)
+
         # inplace modifications on detached tensor(s) will update the original tensor(s).
         weight_0 *= (1.0 / s_12[:, None, None, None])
         weight_1 *= s_12[:, None, None, None] * (1.0 / s_23[:, None, None, None])
@@ -114,6 +118,9 @@ class PythonClsImpl(ClsImpl):
         max_1 = torch.amax(torch.abs(weight_1), dim=(0, 2, 3))
         scale_factor = max_0 / torch.pow(max_0 * max_1, 1. / 2)
 
+        # Avoid 'divide by zero' by using a value that does no scaling. i.e., 1.
+        scale_factor = torch.nan_to_num(scale_factor, nan=1.0)
+
         # inplace modifications on detached tensor(s) will update the original tensor(s).
         weight_0 *= (1.0 / scale_factor[:, None, None, None])
         weight_1 *= scale_factor[None, :, None, None]
@@ -133,10 +140,10 @@ class PythonClsImpl(ClsImpl):
         :return: Output tensor.
         """
         # Transpose weights to Noc, Nin, Kh, Kw from Nin, Noc, Kh, kw since axis are flipped for transposed conv2d
-        if isinstance(module, torch.nn.ConvTranspose2d):
+        if isinstance(module, torch.nn.ConvTranspose2d) and module.groups == 1:
             tensor = tensor.permute(1, 0, 2, 3)
         # Transpose weights to Noc, Nin, K from Nin, Noc, K since axis are flipped for transposed conv1d
-        if isinstance(module, torch.nn.ConvTranspose1d):
+        if isinstance(module, torch.nn.ConvTranspose1d) and module.groups == 1:
             tensor = tensor.permute(1, 0, 2)
         return tensor
 

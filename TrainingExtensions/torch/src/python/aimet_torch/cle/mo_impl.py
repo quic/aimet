@@ -95,10 +95,11 @@ class MoClsImpl(ClsImpl):
 
         return scaling_factor
 
-    @staticmethod
-    def _pack_params_for_conv(cls_set,
+    def _pack_params_for_conv(self,
+                              cls_set,
                               prev_layer_params: libpymo.EqualizationParams,
-                              curr_layer_params: libpymo.EqualizationParams):
+                              curr_layer_params: libpymo.EqualizationParams
+                              ):
         """
         Prepare and pack data structure for previous and current layer in given cls set.
 
@@ -106,39 +107,16 @@ class MoClsImpl(ClsImpl):
         :param prev_layer_params: Data structure holding weight and bias for previous layer in cls set.
         :param curr_layer_params: Data structure holding weight and bias for current layer in cls set.
         """
-        weight_set_0 = cls_set[0].weight
-
-        # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
-        if isinstance(cls_set[0], torch.nn.ConvTranspose2d):
-            weight_set_0 = weight_set_0.permute(1, 0, 2, 3)
-        if isinstance(cls_set[0], torch.nn.ConvTranspose1d):
-            weight_set_0 = weight_set_0.permute(1, 0, 2)
-
-        prev_layer_params.weight = weight_set_0.detach().numpy().reshape(-1)
-        prev_layer_params.weightShape = np.array(weight_set_0.shape)
-        if len(prev_layer_params.weightShape) == 3:
-            prev_layer_params.weightShape = prev_layer_params.weightShape + [1]
-
-        weight_set_1 = cls_set[1].weight
-
-        # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
-        if isinstance(cls_set[1], torch.nn.ConvTranspose2d):
-            weight_set_1 = weight_set_1.permute(1, 0, 2, 3)
-        if isinstance(cls_set[1], torch.nn.ConvTranspose1d):
-            weight_set_1 = weight_set_1.permute(1, 0, 2)
-
-        curr_layer_params.weight = weight_set_1.detach().numpy().reshape(-1)
-        curr_layer_params.weightShape = np.array(weight_set_1.shape)
-        if len(curr_layer_params.weightShape) == 3:
-            curr_layer_params.weightShape = curr_layer_params.weightShape + [1]
+        self._populate_libpymo_params(cls_set[0], prev_layer_params)
+        self._populate_libpymo_params(cls_set[1], curr_layer_params)
 
         if cls_set[0].bias is not None:
             prev_layer_params.bias = cls_set[0].bias.detach().numpy()
         else:
             prev_layer_params.isBiasNone = True
 
-    @staticmethod
-    def _update_params_for_conv(cls_set,
+    def _update_params_for_conv(self,
+                                cls_set,
                                 prev_layer_params: libpymo.EqualizationParams,
                                 curr_layer_params: libpymo.EqualizationParams):
         """
@@ -148,37 +126,16 @@ class MoClsImpl(ClsImpl):
         :param prev_layer_params: Data structure holding weight and bias for previous layer in cls set.
         :param curr_layer_params: Data structure holding weight and bias for current layer in cls set.
         """
-        if isinstance(cls_set[0], (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
-            prev_layer_params.weightShape = prev_layer_params.weightShape[:-1]
-        cls_set[0].weight.data = torch.from_numpy(np.reshape(prev_layer_params.weight,
-                                                             prev_layer_params.weightShape))
-        cls_set[0].weight.data = cls_set[0].weight.data.type(torch.FloatTensor)
-
-        # Transpose weight back to N, C, H, W for transposed Conv2D
-        if isinstance(cls_set[0], torch.nn.ConvTranspose2d):
-            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2, 3).contiguous()
-        if isinstance(cls_set[0], torch.nn.ConvTranspose1d):
-            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2).contiguous()
-
-        if isinstance(cls_set[1], (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
-            curr_layer_params.weightShape = curr_layer_params.weightShape[:-1]
-        cls_set[1].weight.data = torch.from_numpy(np.reshape(curr_layer_params.weight,
-                                                             curr_layer_params.weightShape))
-        cls_set[1].weight.data = cls_set[1].weight.data.type(torch.FloatTensor)
-
-        # Transpose weight back to N, C, H, W for transposed Conv2D
-        if isinstance(cls_set[1], torch.nn.ConvTranspose2d):
-            cls_set[1].weight.data = cls_set[1].weight.data.permute(1, 0, 2, 3).contiguous()
-        if isinstance(cls_set[1], torch.nn.ConvTranspose1d):
-            cls_set[1].weight.data = cls_set[1].weight.data.permute(1, 0, 2).contiguous()
+        self._update_module_from_libpymo(cls_set[0], prev_layer_params)
+        self._update_module_from_libpymo(cls_set[1], curr_layer_params)
 
         if cls_set[0].bias is not None:
             cls_set[0].bias.data = torch.from_numpy(np.reshape(prev_layer_params.bias,
                                                                prev_layer_params.weightShape[0]))
             cls_set[0].bias.data = cls_set[0].bias.data.type(torch.FloatTensor)
 
-    @staticmethod
-    def _pack_params_for_depthwise_conv(cls_set,
+    def _pack_params_for_depthwise_conv(self,
+                                        cls_set,
                                         prev_layer_params: libpymo.EqualizationParams,
                                         curr_layer_params: libpymo.EqualizationParams,
                                         next_layer_params: libpymo.EqualizationParams):
@@ -190,32 +147,18 @@ class MoClsImpl(ClsImpl):
         :param curr_layer_params: Data structure holding weight and bias for current layer in cls set.
         :param next_layer_params: Data structure holding weight and bias for next layer in cls set.
         """
-        if isinstance(cls_set[0], torch.nn.ConvTranspose2d):
-            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2, 3).contiguous()
-        if isinstance(cls_set[0], torch.nn.ConvTranspose1d):
-            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2).contiguous()
+        # cls_set 0
+        self._populate_libpymo_params(cls_set[0], prev_layer_params)
 
-        if isinstance(cls_set[2], torch.nn.ConvTranspose2d):
-            cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2, 3).contiguous()
-        if isinstance(cls_set[2], torch.nn.ConvTranspose1d):
-            cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2).contiguous()
-
+        # cls_set 1
         assert cls_set[1].groups > 1
-
-        prev_layer_params.weight = cls_set[0].weight.detach().numpy().flatten()
-        prev_layer_params.weightShape = np.array(cls_set[0].weight.shape)
-        if len(prev_layer_params.weightShape) == 3:
-            prev_layer_params.weightShape = prev_layer_params.weightShape + [1]
-
         curr_layer_params.weight = cls_set[1].weight.detach().numpy().flatten()
         curr_layer_params.weightShape = np.array(cls_set[1].weight.shape)
         if len(curr_layer_params.weightShape) == 3:
             curr_layer_params.weightShape = curr_layer_params.weightShape + [1]
 
-        next_layer_params.weight = cls_set[2].weight.detach().numpy().flatten()
-        next_layer_params.weightShape = np.array(cls_set[2].weight.shape)
-        if len(next_layer_params.weightShape) == 3:
-            next_layer_params.weightShape = next_layer_params.weightShape + [1]
+        # cls_set 2
+        self._populate_libpymo_params(cls_set[2], next_layer_params)
 
         if cls_set[0].bias is not None:
             prev_layer_params.bias = cls_set[0].bias.detach().numpy()
@@ -227,8 +170,8 @@ class MoClsImpl(ClsImpl):
         else:
             curr_layer_params.isBiasNone = True
 
-    @staticmethod
-    def _update_params_for_depthwise_conv(cls_set,
+    def _update_params_for_depthwise_conv(self,
+                                          cls_set,
                                           prev_layer_params: libpymo.EqualizationParams,
                                           curr_layer_params: libpymo.EqualizationParams,
                                           next_layer_params: libpymo.EqualizationParams):
@@ -240,32 +183,9 @@ class MoClsImpl(ClsImpl):
         :param curr_layer_params: Data structure holding weight and bias for current layer in cls set.
         :param next_layer_params: Data structure holding weight and bias for next layer in cls set.
         """
-        if isinstance(cls_set[0], (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
-            prev_layer_params.weightShape = prev_layer_params.weightShape[:-1]
-        cls_set[0].weight.data = torch.from_numpy(np.reshape(prev_layer_params.weight,
-                                                             prev_layer_params.weightShape))
-        cls_set[0].weight.data = cls_set[0].weight.data.type(torch.FloatTensor)
-        if isinstance(cls_set[0], torch.nn.ConvTranspose2d):
-            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2, 3).contiguous()
-        if isinstance(cls_set[0], torch.nn.ConvTranspose1d):
-            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2).contiguous()
-
-        if isinstance(cls_set[1], (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
-            curr_layer_params.weightShape = curr_layer_params.weightShape[:-1]
-        cls_set[1].weight.data = torch.from_numpy(np.reshape(curr_layer_params.weight,
-                                                             curr_layer_params.weightShape))
-        cls_set[1].weight.data = cls_set[1].weight.data.type(torch.FloatTensor)
-
-        if isinstance(cls_set[2], (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
-            next_layer_params.weightShape = next_layer_params.weightShape[:-1]
-
-        cls_set[2].weight.data = torch.from_numpy(np.reshape(next_layer_params.weight,
-                                                             next_layer_params.weightShape))
-        cls_set[2].weight.data = cls_set[2].weight.data.type(torch.FloatTensor)
-        if isinstance(cls_set[2], torch.nn.ConvTranspose2d):
-            cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2, 3).contiguous()
-        if isinstance(cls_set[2], torch.nn.ConvTranspose1d):
-            cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2).contiguous()
+        self._update_module_from_libpymo(cls_set[0], prev_layer_params)
+        self._update_module_from_libpymo(cls_set[1], curr_layer_params)
+        self._update_module_from_libpymo(cls_set[2], next_layer_params)
 
         if cls_set[0].bias is not None:
             cls_set[0].bias.data = torch.from_numpy(np.reshape(prev_layer_params.bias,
@@ -276,6 +196,47 @@ class MoClsImpl(ClsImpl):
             cls_set[1].bias.data = torch.from_numpy(np.reshape(curr_layer_params.bias,
                                                                curr_layer_params.weightShape[0]))
             cls_set[1].bias.data = cls_set[1].bias.data.type(torch.FloatTensor)
+
+    @staticmethod
+    def _populate_libpymo_params(module: torch.nn.Module, layer_params: libpymo.EqualizationParams):
+        """
+        Populate libpymo object.
+
+        :param module: pytorch module.
+        :param layer_params: libpymo object.
+        """
+        weight_set = module.weight
+
+        # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
+        if isinstance(module, torch.nn.ConvTranspose2d) and module.groups == 1:
+            weight_set = weight_set.permute(1, 0, 2, 3).contiguous()
+        if isinstance(module, torch.nn.ConvTranspose1d) and module.groups == 1:
+            weight_set = weight_set.permute(1, 0, 2).contiguous()
+
+        layer_params.weight = weight_set.detach().numpy().reshape(-1)
+        layer_params.weightShape = np.array(weight_set.shape)
+        if len(layer_params.weightShape) == 3:
+            layer_params.weightShape = layer_params.weightShape + [1]
+
+    @staticmethod
+    def _update_module_from_libpymo(module: torch.nn.Module, layer_param: libpymo.EqualizationParams):
+        """
+        Update module parameter from the libpymo object.
+
+        :param module: pytorch module.
+        :param layer_param: libpymo object.
+        """
+        if isinstance(module, (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
+            layer_param.weightShape = layer_param.weightShape[:-1]
+        module.weight.data = torch.from_numpy(np.reshape(layer_param.weight,
+                                                             layer_param.weightShape))
+        module.weight.data = module.weight.data.type(torch.FloatTensor)
+
+        # Transpose weight back to N, C, H, W for transposed Conv2D/1D
+        if isinstance(module, torch.nn.ConvTranspose2d) and module.groups == 1:
+            module.weight.data = module.weight.data.permute(1, 0, 2, 3).contiguous()
+        if isinstance(module, torch.nn.ConvTranspose1d) and module.groups == 1:
+            module.weight.data = module.weight.data.permute(1, 0, 2).contiguous()
 
 
 class MoHbfImpl(HbfImpl):
