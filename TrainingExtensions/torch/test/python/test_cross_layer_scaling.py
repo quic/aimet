@@ -859,3 +859,34 @@ class TestTrainingExtensionsCrossLayerScalingPythonOnly:
         assert torch.allclose(conv2_bias_mo, conv2_bias_p)
         assert torch.allclose(conv3_bias_mo, conv3_bias_p)
         assert torch.allclose(model(dummy_input), model_copy(dummy_input), rtol=1.e-2)
+
+    @pytest.mark.parametrize("groups", [10])
+    def test_compare_scale_factors(self, groups):
+        """ compare scale factors using with MO and python implementation """
+        model = torch.nn.Sequential(
+            torch.nn.ConvTranspose2d(10, 10, 3, groups=groups),
+            torch.nn.Conv2d(10, 10, 3),
+        ).eval()
+        model_copy = copy.deepcopy(model).eval()
+        dummy_input = torch.rand((1, 10, 32, 32))
+        cle.USE_PYTHON_IMPL = True
+        py_scale_factors = CrossLayerScaling.scale_model(model_copy, dummy_input=dummy_input)
+        cle.USE_PYTHON_IMPL = False
+        mo_scale_factors = CrossLayerScaling.scale_model(model, dummy_input=dummy_input)
+        for py, mo in zip(py_scale_factors[0].cls_pair_info_list[0].scale_factor,
+                          mo_scale_factors[0].cls_pair_info_list[0].scale_factor):
+            assert np.isclose(py, mo)
+
+    @pytest.mark.parametrize("use_python_only_impl", [True, False])
+    def test_divide_by_zero(self, use_python_only_impl):
+        """ Ensure scale factors are computed using with MO and python implementation """
+        cle.USE_PYTHON_IMPL = use_python_only_impl
+        model = torch.nn.Sequential(
+            torch.nn.ConvTranspose2d(10, 10, 3, groups=10),
+            torch.nn.Conv2d(10, 10, 3),
+        ).eval()
+        dummy_input = torch.rand((1, 10, 32, 32))
+        with torch.no_grad():
+            model[0].weight[0, :, :, :] = 0
+        CrossLayerScaling.scale_model(model, dummy_input=dummy_input)
+        assert not torch.isnan(model[0].weight).any()
