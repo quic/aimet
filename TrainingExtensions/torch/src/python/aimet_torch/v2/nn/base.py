@@ -55,6 +55,8 @@ from aimet_torch.v2.utils import (
     flatten_nn_module_list,
 )
 
+def _no_op(in_tensor):
+    return in_tensor
 
 class BaseQuantizationMixin(abc.ABC):
     """Mixin that implements quantization on top of regular pytorch modules.
@@ -134,7 +136,7 @@ class BaseQuantizationMixin(abc.ABC):
             if not param_quantizer.is_initialized() or overwrite:
                 param = getattr(self, param_name)
                 if param is not None:
-                    with param_quantizer.compute_encodings():
+                    with patch_attr(param_quantizer, "forward", _no_op), param_quantizer.compute_encodings():
                         _ = param_quantizer(param)
 
     def compute_param_encodings(self):
@@ -160,10 +162,6 @@ class BaseQuantizationMixin(abc.ABC):
         """
         self._compute_param_encodings(overwrite=True)
 
-        def passthrough(module, inp, out): # pylint: disable=unused-argument
-            inp, = inp
-            return inp
-
         with contextlib.ExitStack() as stack:
             input_quantizers = flatten_nn_module_list(self.input_quantizers)
             output_quantizers = flatten_nn_module_list(self.output_quantizers)
@@ -175,12 +173,13 @@ class BaseQuantizationMixin(abc.ABC):
                 if not quantizer._allow_overwrite: # pylint: disable=protected-access
                     continue
 
+                # Set input/output quantizers into pass-through mode during compute_encodings
+                # NOTE: This behavior is for backawrd-compatibility with V1 quantsim.
+                stack.enter_context(patch_attr(quantizer, 'forward', _no_op))
+
                 ctx = quantizer.compute_encodings()
                 stack.enter_context(ctx)
 
-                # Set input/output quantizers into pass-through mode during compute_encodings
-                # NOTE: This behavior is for backawrd-compatibility with V1 quantsim.
-                stack.enter_context(quantizer.register_forward_hook(passthrough))
             yield
 
     @classmethod
@@ -344,7 +343,7 @@ class BaseQuantizationMixin(abc.ABC):
         for param_name, quantizer in self.param_quantizers.items():
             param = getattr(self, param_name)
             if isinstance(quantizer, QuantizerBase):
-                e = quantizer.get_legacy_encodings()
+                e = encodings[param_name]
             elif isinstance(param, QuantizedTensorBase) and param.encoding is not None:
                 # If parameter itself is an already-quantized tensor,
                 # export the encoding held by the parameter
@@ -382,7 +381,8 @@ class BaseQuantizationMixin(abc.ABC):
             if is_vector_encoding(encoding):
                 # Vector encodings will be held directly by weights, not by quantizers.
                 quantizer.set_legacy_encodings(encoding)
-                rounded_weight = quantizer(self.weight)
+                param = getattr(self, param_name)
+                rounded_weight = quantizer(param)
                 # At this point, rounded_weight is a quantized tensor with affine encoding
                 # since quantizer is an affine quantizer
                 assert isinstance(rounded_weight, QuantizedTensorBase)

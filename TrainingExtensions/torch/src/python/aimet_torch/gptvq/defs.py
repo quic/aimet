@@ -42,7 +42,7 @@ from typing import Callable, Any, Optional
 from torch import nn
 from torch.utils.data import DataLoader
 
-GPTVQSupportedModules = (nn.Linear,)
+GPTVQSupportedModules = (nn.Linear, nn.Conv2d)
 DAMPENING_PERCENTAGE = 0.01
 BLOCK_STRIDE = 128
 

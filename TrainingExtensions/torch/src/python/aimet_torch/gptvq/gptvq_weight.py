@@ -201,12 +201,13 @@ class GPTVQ:
             assert isinstance(module, BaseQuantizationMixin)
 
             param_quantizer = module.param_quantizers["weight"]
-            weight_shape = module.weight.shape
+            num_rows, *remaining_shapes = module.weight.shape
+            assert num_rows % rows_per_block == 0, f"The number of rows in weight (#: {num_rows}) should be divided by rows per block (#: {rows_per_block})"
             q = QuantizeDequantize(
-                shape=(weight_shape[0] // rows_per_block, 1),
+                shape=(num_rows // rows_per_block, *[1 for _ in remaining_shapes]),
                 bitwidth=param_quantizer.bitwidth,
                 symmetric=param_quantizer.symmetric,
-                block_size=(rows_per_block, weight_shape[1]),
+                block_size=(rows_per_block, *remaining_shapes),
             ).to(module.weight.device)
             module.param_quantizers["weight"] = q
 

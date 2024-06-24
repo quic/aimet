@@ -274,11 +274,12 @@ class QuantizationSimModel:
         self._excluded_layer_names = []
 
         # Add quantization layers
-        num_inout_tensors = utils.find_num_inout_tensors_per_module(self.model, dummy_input)
+        inout_tensor_shape = utils.get_inout_tensor_shape_per_module(self.model, dummy_input)
+        num_inout_tensors = self._get_num_inout_tensors_from_tensor_shape_dict(inout_tensor_shape)
         inout_tensors_dtypes_for_cast_ops = utils.get_inout_tensors_dtypes_for_cast_modules(self.model, dummy_input)
 
         self._add_quantization_wrappers(self.model, num_inout_tensors, default_data_type)
-        self._set_tensor_quantizers_for_consts()
+        self._set_tensor_quantizers_for_consts(inout_tensor_shape)
 
         # Disable bias quantization
         self.exclude_param_from_quantization("bias")
@@ -1136,7 +1137,8 @@ class QuantizationSimModel:
         for index, (input_tensor, encoding) in enumerate(zip(input_tensors, input_encodings)):
             if encoding is not None:
                 activation_encodings_onnx[input_tensor] = encoding
-                tensor_to_quantizer_map[input_tensor] = layer.input_quantizers[index]
+                # TODO: Modify this so quantsim does not make assumptions about the length of input_quantizers
+                tensor_to_quantizer_map[input_tensor] = layer.input_quantizers[min(index, len(layer.input_quantizers) - 1)]
                 # Check if layer exists in the pytorch encoding dictionary
                 if layer_name not in activation_encodings_torch:
                     activation_encodings_torch[layer_name] = {}
@@ -1367,7 +1369,7 @@ class QuantizationSimModel:
             else:
                 self._add_quantization_wrappers(module_ref, num_inout_tensors, default_data_type)
 
-    def _set_tensor_quantizers_for_consts(self):
+    def _set_tensor_quantizers_for_consts(self, inout_tensor_shape_dict: Dict):
         """
         Identify and set is_const for tensor quantizers which correspond to constant inputs in the model.
         """
@@ -1378,9 +1380,14 @@ class QuantizationSimModel:
                     # Only handling QcQuantWrappers and not QcQuantizeRecurrents
                     # pylint: disable=protected-access
                     conn_graph_op = self.connected_graph._module_to_op_dict.get(qc_quantize_wrapper._module_to_wrap)
+                    input_tensor_shape_list = inout_tensor_shape_dict.get(qc_quantize_wrapper._module_to_wrap)
                     if conn_graph_op is not None:
-                        for (input_quantizer, inp) in zip(qc_quantize_wrapper.input_quantizers, conn_graph_op.inputs):
+                        for idx, (input_quantizer, inp) in \
+                            enumerate(zip(qc_quantize_wrapper.input_quantizers, conn_graph_op.inputs)):
                             input_quantizer.is_const = inp.is_const
+                            input_quantizer.is_singleton = (input_tensor_shape_list is not None \
+                                                            and input_tensor_shape_list[0][idx] is not None \
+                                                            and input_tensor_shape_list[0][idx].numel() == 1)
 
     @staticmethod
     def _create_encoding_dict(encoding: libpymo.TfEncoding, quantizer, propagate_encodings: bool) -> Union[Dict, None]:
@@ -1872,7 +1879,7 @@ class QuantizationSimModel:
                 continue
 
             if isinstance(original_module, torch.nn.Embedding):
-                if self._hw_version not in {'V73', 'V75'}:
+                if self._hw_version not in {'V73', 'V75', 'V79'}:
                     continue
                 weight_quantizer = wrapper.param_quantizers['weight']
                 output_quantizer = wrapper.output_quantizers[0]
@@ -1880,7 +1887,7 @@ class QuantizationSimModel:
                 weight_quantizer.bitwidth = output_quantizer.bitwidth
                 weight_quantizer.use_symmetric_encodings = output_quantizer.use_symmetric_encodings
             elif isinstance(original_module, torch.nn.GroupNorm):
-                if self._hw_version not in {'V73', 'V75'}:
+                if self._hw_version not in {'V73', 'V75', 'V79'}:
                     continue
                 if 'weight' in wrapper.param_quantizers:
                     output_quantizer = wrapper.output_quantizers[0]
@@ -1912,7 +1919,7 @@ class QuantizationSimModel:
                 if self._hw_version in {'V66', 'V68', 'V69'}:
                     target_quantizer_for_second_input.use_symmetric_encodings = True
                     target_quantizer_for_second_input.bitwidth = 8
-                elif self._hw_version in {'V73', 'V75'}:
+                elif self._hw_version in {'V73', 'V75', 'V79'}:
                     if target_quantizer_for_second_input.bitwidth == 16:
                         target_quantizer_for_second_input.use_symmetric_encodings = True
                         if target_quantizer_for_first_input:
@@ -2058,6 +2065,20 @@ class QuantizationSimModel:
                 wrapped_module = getattr(self.model, module_name)
                 for output_quantizer in wrapped_module.output_quantizers:
                     setattr(output_quantizer, 'enabled', True)
+
+    @staticmethod
+    def _get_num_inout_tensors_from_tensor_shape_dict(inout_tensor_shape_dict):
+        """
+        Convert tensor shape dictionary to num inout tensors dictionary
+        """
+        num_inout_tensors = {}
+
+        for module, inout_tensor_shape in inout_tensor_shape_dict.items():
+            input_tensor_shape_list, output_tensor_shape_list = inout_tensor_shape
+            num_inout_tensors[module] = (len(input_tensor_shape_list),
+                                         len(output_tensor_shape_list))
+
+        return num_inout_tensors
 
 
 def save_checkpoint(quant_sim_model: QuantizationSimModel, file_path: str):

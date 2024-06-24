@@ -40,6 +40,7 @@ import json
 import os
 import tempfile
 from contextlib import contextmanager
+from typing import Union, Tuple
 
 import pytest
 import torch
@@ -48,6 +49,7 @@ from torch.utils.data import DataLoader, Dataset
 from aimet_common import quantsim
 from aimet_torch.gptvq.defs import GPTVQSupportedModules
 from aimet_torch.gptvq.gptvq_weight import GPTVQ, GPTVQParameters
+from aimet_torch.utils import is_vector_encoding
 from aimet_torch.v2.nn import BaseQuantizationMixin
 from aimet_torch.v2.quantization.affine import VectorEncoding
 from aimet_torch.v2.quantsim import QuantizationSimModel
@@ -93,12 +95,13 @@ def swap_encoding_version(version='1.0.0'):
 
 
 class RandomDataset(Dataset):
-    def __init__(self, data_size = 32, input_dim = 10):
+    def __init__(self, data_size = 32, input_dim: Union[int, Tuple] = 10):
         self.data_size = data_size
         self.input_dim = input_dim
 
         # generate random data and store it in lists
-        self.data_x = [torch.rand(input_dim) for _ in range(data_size)]
+        input_dim = input_dim if isinstance(input_dim, tuple) else (input_dim,)
+        self.data_x = [torch.rand(*input_dim) for _ in range(data_size)]
         self.data_y = [torch.rand(1) for _ in range(data_size)]
 
     def __len__(self):
@@ -382,3 +385,56 @@ class TestGPTVQWeight:
         for i in range(0, num_scales, rows_per_block):
             # per-channel scales should be same within a block
             assert len(set(linear3_encoding["scale"][i:i + rows_per_block])) == 1
+
+    def test_gptvq_conv_model(self):
+        model = test_models.BasicConv2d(kernel_size=3)
+        dataset = RandomDataset(data_size=4, input_dim=(64, 8, 8))
+        data_loader = DataLoader(dataset, batch_size=1, shuffle=False)
+        gptvq_parameters = GPTVQParameters(data_loader, forward_fn=lambda m, d: m(d[0]), num_of_kmeans_iterations=1)
+        dummy_input = torch.randn(1, 64, 8, 8)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = f"{temp_dir}/quantsim_config.json"
+            with open(config_path, "w") as f:
+                json.dump(QUANTSIM_CONFIG, f)
+
+            rounded_model = GPTVQ.apply_gptvq(
+                model,
+                dummy_input,
+                gptvq_parameters,
+                param_encoding_path=temp_dir,
+                config_file_path=config_path,
+            )
+
+            assert not torch.allclose(model.conv.weight, rounded_model.conv.weight)
+            sim = QuantizationSimModel(
+                rounded_model,
+                dummy_input=dummy_input,
+                default_param_bw=gptvq_parameters.vector_bw,
+                config_file=config_path
+            )
+            sim.load_encodings(f"{temp_dir}/gptvq.encodings", allow_overwrite=False)
+            sim.compute_encodings(lambda m, _: m(dummy_input), None)
+            with swap_encoding_version():
+                sim.export(temp_dir, "vq_conv", dummy_input)
+
+            with open(os.path.join(temp_dir, "vq_conv.encodings")) as f:
+                encodings = json.load(f)
+
+        assert len(encodings["activation_encodings"]) == 1 + 3  # One input, three (Conv, BN, Relu) output encodings
+        param_encodings = encodings["param_encodings"]
+        conv_encoding, *_ = param_encodings
+        assert is_vector_encoding([conv_encoding])
+        assert conv_encoding["enc_type"] == "VECTOR"
+        assert conv_encoding["bw"] == gptvq_parameters.vector_bw
+        assert conv_encoding["rows_per_block"] == gptvq_parameters.rows_per_block
+        assert conv_encoding["cols_per_block"] == gptvq_parameters.cols_per_block
+        assert conv_encoding["index_bw"] == gptvq_parameters.index_bw
+        assert conv_encoding["vector_dim"] == gptvq_parameters.vector_dim
+        assert conv_encoding["vector_stride"] == gptvq_parameters.vector_stride
+
+        num_scales = len(conv_encoding["scale"])
+        rows_per_block = conv_encoding["rows_per_block"]
+        assert num_scales == sim.model.conv.weight.shape[0]
+        for i in range(0, num_scales, rows_per_block):
+            # per-channel scales should be same within a block
+            assert len(set(conv_encoding["scale"][i:i + rows_per_block])) == 1

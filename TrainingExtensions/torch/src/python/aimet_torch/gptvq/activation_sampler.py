@@ -94,7 +94,7 @@ class ActivationSampler:
 
         return all_inp_data
 
-    def sample_acts(self, model_inputs: Union[torch.tensor, List, Tuple]) -> Tuple[torch.Tensor, torch.Tensor]:
+    def sample_acts(self, model_inputs: Union[torch.tensor, List, Tuple]) -> torch.Tensor:
         """
         For given model_inputs, collect input activations data to quant module
 
@@ -104,10 +104,6 @@ class ActivationSampler:
         """
         # Collect input activation data to quantized wrapper module
         # (with all preceding weight modules quantized)
-        # if we have a 1 d input reshape it so that it is (batch_size = 1, inp_dim) to make the torch.cat for all_inp_data work correctly.
-        if len(model_inputs[0].shape) == 1:
-            model_inputs[0] = model_inputs[0].unsqueeze(0)
-        inp_data = None
         inp_data, _ = self._module_collector.collect_inp_out_data(model_inputs,
                                                                   collect_input=True,
                                                                   collect_output=False)
