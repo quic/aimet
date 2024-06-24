@@ -87,7 +87,7 @@ NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION = None
 
 class _StageSkipped(Exception):
     def __init__(self, message='Stage Skipped'):
-        super(_StageSkipped, self).__init__(message)
+        super().__init__(message)
 
 
 @dataclass(frozen=True)
