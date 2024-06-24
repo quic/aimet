@@ -877,6 +877,9 @@ class FakeQuantizedConcat(_FakeQuantizedUnaryOpMixin, aimet_ops.Concat): # pylin
                                partial: bool,
                                requires_grad: Optional[bool],
                                allow_overwrite: bool):
+        """
+        Extends super().import_input_encodings to set `self._num_inputs` based on length of encodings.
+        """
         self._num_inputs = len(encodings)
         super().import_input_encodings(encodings,
                                        strict=strict,
