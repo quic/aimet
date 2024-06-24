@@ -825,7 +825,10 @@ class TestQuantsim:
             with open(os.path.join(temp_dir, f"{fname}_torch.encodings")) as f:
                 encodings = json.load(f)
             assert len(encodings["activation_encodings"]["cat"]["input"].keys()) == num_inputs
+
+            sim = QuantizationSimModel(model, dummy_input=dummy_input)
             sim.load_encodings(encodings)
+            sim.save_encodings_to_json(temp_dir, "model_encodings")
 
     @pytest.mark.parametrize("config_file", (None, get_path_for_per_channel_config()))
     def test_expand_op_is_not_quantized(self, config_file):
