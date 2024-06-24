@@ -101,14 +101,11 @@ def line_plot_changes_in_summary_stats(data_before, data_after, x_axis_label=Non
     layer_weights_old_model = convert_pandas_data_frame_to_bokeh_column_data_source(data_before)
     layer_weights_new_model = convert_pandas_data_frame_to_bokeh_column_data_source(data_after)
 
-    # Conditional for python version due to bokeh versioning issue
-    legend_parameter = "legend" if sys.version.split(".")[:2] == ['3', '8'] else "legend_label"
-
     plot = figure(x_axis_label=x_axis_label, y_axis_label=y_axis_label,
                   title=title,
                   tools="pan, box_zoom, crosshair, reset, save",
                   width=950, height=600, sizing_mode='stretch_both', output_backend="webgl")
-    plot.line(x='index', y='min', line_width=2, line_color="#2171b5", line_dash='dotted', **{legend_parameter: "Before Optimization"},
+    plot.line(x='index', y='min', line_width=2, line_color="#2171b5", line_dash='dotted', legend_label="Before Optimization",
               source=layer_weights_old_model, name="old model")
     plot.line(x='index', y='max', line_width=2, line_color="green", line_dash='dotted', source=layer_weights_old_model,
               name="old model")
@@ -116,7 +113,7 @@ def line_plot_changes_in_summary_stats(data_before, data_after, x_axis_label=Non
               source=layer_weights_old_model, name="old model")
 
     plot.line(x='index', y='min', line_width=2, line_color="#2171b5",
-              **{legend_parameter: "After Optimization"}, source=layer_weights_new_model, name="new model")
+              legend_label="After Optimization", source=layer_weights_new_model, name="new model")
     plot.line(x='index', y='max', line_width=2, line_color="green",
               source=layer_weights_new_model, name="new model")
     plot.line(x='index', y='mean', line_width=2, line_color="orange",
@@ -124,15 +121,15 @@ def line_plot_changes_in_summary_stats(data_before, data_after, x_axis_label=Non
 
     plot.varea(x=data_after.index,
                y1=data_after['min'],
-               y2=data_before['min'], fill_alpha=0.3, **{legend_parameter: "shaded region"}, name="new model")
+               y2=data_before['min'], fill_alpha=0.3, legend_label="shaded region", name="new model")
 
     plot.varea(x=data_after.index,
                y1=data_after['max'],
-               y2=data_before['max'], fill_color="green", fill_alpha=0.3, **{legend_parameter: "shaded region"})
+               y2=data_before['max'], fill_color="green", fill_alpha=0.3, legend_label="shaded region")
 
     plot.varea(x=data_after.index,
                y1=data_after['mean'],
-	       y2=data_before['mean'], fill_color="orange", fill_alpha=0.3, **{legend_parameter: "shaded region"})
+	       y2=data_before['mean'], fill_color="orange", fill_alpha=0.3, legend_label="shaded region")
 
     plot.legend.location = "top_left"
     plot.legend.click_policy = "hide"
@@ -323,20 +320,17 @@ def line_plot_summary_statistics_model(layer_name, layer_weights_data_frame, hei
     :return:
     """
 
-    # Conditional for python version due to bokeh versioning issue
-    legend_parameter = "legend" if sys.version.split(".")[:2] == ['3', '8'] else "legend_label"
- 
     layer_weights = convert_pandas_data_frame_to_bokeh_column_data_source(layer_weights_data_frame)
     plot = figure(x_axis_label="Output Channels", y_axis_label="Summary Statistics",
                   title="Weight Ranges per Output Channel: " + layer_name,
                   tools="pan, box_zoom, crosshair, reset, save",
                   width=width, height=height, output_backend="webgl")
     plot.line(x='index', y='min', line_width=2, line_color="#2171b5",
-              **{legend_parameter: "Minimum"}, source=layer_weights)
+              legend_label="Minimum", source=layer_weights)
     plot.line(x='index', y='max', line_width=2, line_color="green",
-              **{legend_parameter: "Maximum"}, source=layer_weights)
+              legend_label="Maximum", source=layer_weights)
     plot.line(x='index', y='mean', line_width=2, line_color="orange",
-              **{legend_parameter: "Average"}, source=layer_weights)
+              legend_label="Average", source=layer_weights)
 
     plot.legend.location = "top_left"
     plot.legend.click_policy = "hide"

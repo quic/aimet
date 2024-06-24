@@ -203,9 +203,6 @@ def export_stats_histogram_plot(histogram: List,
         entries.append(entry)
         pdfs.append(pdf)
 
-    # Conditional for python version due to bokeh versioning issue
-    legend_parameter = "legend" if sys.version.split(".")[:2] == ['3', '8'] else "legend_label"
-
     # Configure the output file to be saved.
     filename = os.path.join(results_dir, f"{title}.html")
     plotting.output_file(filename)
@@ -213,16 +210,16 @@ def export_stats_histogram_plot(histogram: List,
                            title=title)
     # Add line and underlying color for histogram.
     plot_source = ColumnDataSource(data=dict(entries=entries, pdfs=pdfs))
-    plot.line("entries", "pdfs", source=plot_source, color="blue", **{legend_parameter: "PDF"})
+    plot.line("entries", "pdfs", source=plot_source, color="blue", legend_label="PDF")
     band = Band(base="entries", upper="pdfs", source=plot_source, level="underlay", fill_color="blue")
     plot.add_layout(band)
 
     # Overlay encoding min and max values.
     line = Span(location=encoding.min, dimension="height", line_color="green", line_dash="dashed")
-    plot.line([], [], line_dash="dashed", line_color="green", **{legend_parameter: "MIN_VAL"})
+    plot.line([], [], line_dash="dashed", line_color="green", legend_label="MIN_VAL")
     plot.add_layout(line)
     line = Span(location=encoding.max, dimension="height", line_color="red", line_dash="dashed")
-    plot.line([], [], line_dash="dashed", line_color="red", **{legend_parameter: "MAX_VAL"})
+    plot.line([], [], line_dash="dashed", line_color="red", legend_label="MAX_VAL")
     plot.add_layout(line)
 
     plotting.save(plot)

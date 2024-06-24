@@ -1,11 +1,11 @@
-bokeh==1.2.0
+bokeh==3.1.1
 cumm-cu118
 cvxpy
 cylp
 dataclasses
 h5py==2.10.0
-holoviews==1.12.7
-hvplot==0.4.0
+holoviews==1.17.1
+hvplot==0.10.0
 Jinja2==3.0.3
 jsonschema
 matplotlib>=3
