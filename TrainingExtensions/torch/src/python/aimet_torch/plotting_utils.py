@@ -102,7 +102,7 @@ def line_plot_changes_in_summary_stats(data_before, data_after, x_axis_label=Non
     layer_weights_new_model = convert_pandas_data_frame_to_bokeh_column_data_source(data_after)
 
     # Conditional for python version due to bokeh versioning issue
-    legend_parameter = "legend" if sys.version[:2] == (3, 8) else "legend_label"
+    legend_parameter = "legend" if sys.version.split(".")[:2] == ['3', '8'] else "legend_label"
 
     plot = figure(x_axis_label=x_axis_label, y_axis_label=y_axis_label,
                   title=title,
@@ -324,7 +324,7 @@ def line_plot_summary_statistics_model(layer_name, layer_weights_data_frame, hei
     """
 
     # Conditional for python version due to bokeh versioning issue
-    legend_parameter = "legend" if sys.version[:2] == (3, 8) else "legend_label"
+    legend_parameter = "legend" if sys.version.split(".")[:2] == ['3', '8'] else "legend_label"
  
     layer_weights = convert_pandas_data_frame_to_bokeh_column_data_source(layer_weights_data_frame)
     plot = figure(x_axis_label="Output Channels", y_axis_label="Summary Statistics",

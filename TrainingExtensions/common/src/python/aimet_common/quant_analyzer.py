@@ -204,7 +204,7 @@ def export_stats_histogram_plot(histogram: List,
         pdfs.append(pdf)
 
     # Conditional for python version due to bokeh versioning issue
-    legend_parameter = "legend" if sys.version_info[:2] == (3, 8) else "legend_label"
+    legend_parameter = "legend" if sys.version.split(".")[:2] == ['3', '8'] else "legend_label"
 
     # Configure the output file to be saved.
     filename = os.path.join(results_dir, f"{title}.html")
