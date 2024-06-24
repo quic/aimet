@@ -862,16 +862,27 @@ class FakeQuantizedConcat(_FakeQuantizedUnaryOpMixin, aimet_ops.Concat): # pylin
 
     def __quant_init__(self):
         super().__quant_init__()
-        self._num_inputs = None
+        self._num_inputs = 1
 
     def export_input_encodings(self):
         """
         Extends super().export to repeat input quantizer's encodings :attr:`self._num_inputs` times
         """
         input_encodings = super().export_input_encodings()
-        if self._num_inputs is None:
-            raise RuntimeError("Cannot infer number of input tensors without first executing `self.forward`.")
         return input_encodings * self._num_inputs
+
+    def import_input_encodings(self,
+                               encodings,
+                               strict: bool,
+                               partial: bool,
+                               requires_grad: Optional[bool],
+                               allow_overwrite: bool):
+        self._num_inputs = len(encodings)
+        super().import_input_encodings(encodings,
+                                       strict=strict,
+                                       partial=partial,
+                                       requires_grad=requires_grad,
+                                       allow_overwrite=allow_overwrite)
 
     def forward(self, *x): # pylint: disable=arguments-differ
         """
