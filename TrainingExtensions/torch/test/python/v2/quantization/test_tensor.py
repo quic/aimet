@@ -342,6 +342,30 @@ class TestQuantizedTensor:
         lambda t : t.unsqueeze(-1),
         lambda t : t.squeeze(-1),
         lambda t : t.view(-1),
+        lambda t : t[1, :, :],
+        lambda t : t[..., 0],
+        lambda t : t[0, 4:4:32, :],
+        lambda t : t[..., None],
+        lambda t : t[0],
+        lambda t : t[0][0][0],
+        lambda t : t.chunk(2, -1),
+        lambda t : torch.gather(t, 1, torch.tensor([[[0], [0]], [[1], [0]]])),
+        lambda t : torch.dsplit(t.reshape(2, 64, 2), 2),
+        lambda t : torch.unbind(t, dim=0),
+        lambda t : torch.hsplit(t, 2),
+        lambda t : torch.chunk(t, 2),
+        lambda t : torch.index_select(t, 1, torch.tensor([0, 4, 8, 10])),
+        lambda t : torch.masked_select(t, t.as_subclass(torch.Tensor).ge(0.5)),
+        lambda t : torch.movedim(t, 1, 0),
+        lambda t : torch.moveaxis(t, 1, 0),
+        lambda t : torch.narrow(t, 1, 0, 16),
+        lambda t : torch.split(t, 2),
+        lambda t : torch.swapaxes(t, 0, 1),
+        lambda t : torch.take(t, torch.tensor([0, 10, 0])),
+        lambda t : torch.take_along_dim(t, torch.tensor([[[0], [1], [4], [5]]]), dim=1),
+        lambda t : torch.tensor_split(t, 2),
+        lambda t : torch.tile(t, (2, )),
+        lambda t : t.as_strided((2, 64, 1), (1, 2, 1)),
         torch.detach,
         torch.flatten,
         torch.clone,
@@ -358,14 +382,16 @@ class TestQuantizedTensor:
               2) Output encoding matches input encoding
               3) Output encoding is not the same object as input encoding
         """
-        output = callback(qtensor)
-
-        assert isinstance(output, qtensor_cls)
-        assert torch.equal(output.encoding.scale, qtensor.encoding.scale)
-        assert torch.equal(output.encoding.offset, qtensor.encoding.offset)
-        assert output.encoding.bitwidth == qtensor.encoding.bitwidth
-        assert output.encoding.signed == qtensor.encoding.signed
-        assert output.encoding is not qtensor.encoding
+        outputs = callback(qtensor)
+        if not isinstance(outputs, tuple):
+            outputs = outputs,
+        for output in outputs:
+            assert isinstance(output, qtensor_cls)
+            assert torch.equal(output.encoding.scale, qtensor.encoding.scale)
+            assert torch.equal(output.encoding.offset, qtensor.encoding.offset)
+            assert output.encoding.bitwidth == qtensor.encoding.bitwidth
+            assert output.encoding.signed == qtensor.encoding.signed
+            assert output.encoding is not qtensor.encoding
 
     @pytest.mark.parametrize('qtensor_cls', [QuantizedTensor, DequantizedTensor])
     @pytest.mark.parametrize('callback', [
@@ -397,6 +423,14 @@ class TestQuantizedTensor:
         lambda t: t.unsqueeze(-1),
         lambda t: t.squeeze(-1),
         lambda t: t.view(-1),
+        lambda t: t[1, :, :],
+        lambda t: t[..., 0],
+        lambda t: t[0, 4:4:32, :],
+        lambda t: t[..., None],
+        lambda t: t[0],
+        lambda t: t[0][0][0],
+        lambda t: torch.gather(t, 1, torch.tensor([[[0], [0]], [[1], [0]]])),
+        lambda t: torch.dsplit(t.reshape(2, 64, 2), 2),
         torch.flatten,
     ])
     def test_dont_propagate_perchannel_encoding(self, qtensor_cls, callback, bitwidth):
@@ -411,8 +445,11 @@ class TestQuantizedTensor:
         When: Call an op which changes the dimensions of the tensor
         Then: Output is not a quantized tensor
         """
-        output = callback(qtensor)
-        assert output.encoding is None
+        outputs = callback(qtensor)
+        if not isinstance(outputs, tuple):
+            outputs = outputs,
+        for output in outputs:
+            assert output.encoding is None
 
     @pytest.mark.parametrize('qtensor_cls', [QuantizedTensor, DequantizedTensor])
     def test_clone_tensor(self, qtensor_cls, scale, offset, bitwidth):
@@ -462,3 +499,4 @@ class TestQuantizedTensor:
         assert not detached_tensor.encoding.scale.requires_grad
         assert qtensor.requires_grad
         assert qtensor.encoding.scale.requires_grad
+        

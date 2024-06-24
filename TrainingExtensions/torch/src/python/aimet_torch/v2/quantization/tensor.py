@@ -110,11 +110,26 @@ class QuantizedTensorBase(torch.Tensor):
 
     # Operations that a per-tensor encoding can pass through
     _pertensor_passthrough_ops = {
+        torch.Tensor.__getitem__,
+        torch.Tensor.as_strided,
         torch.Tensor.broadcast_to,
+        torch.Tensor.chunk,
+        torch.Tensor.dsplit,
         torch.Tensor.expand,
         torch.Tensor.expand_as,
         torch.Tensor.flatten,
+        torch.Tensor.flip,
+        torch.Tensor.fliplr,
+        torch.Tensor.flipud,
+        torch.Tensor.gather,
+        torch.Tensor.hsplit,
+        torch.Tensor.index_select,
+        torch.Tensor.kthvalue,
         torch.Tensor.masked_select,
+        torch.Tensor.movedim,
+        torch.Tensor.moveaxis,
+        torch.Tensor.msort,
+        torch.Tensor.narrow,
         torch.Tensor.permute,
         torch.Tensor.repeat,
         torch.Tensor.reshape,
@@ -122,32 +137,60 @@ class QuantizedTensorBase(torch.Tensor):
         torch.Tensor.resize,
         torch.Tensor.resize_as,
         torch.Tensor.select,
+        torch.Tensor.split,
         torch.Tensor.squeeze,
         torch.Tensor.swapaxes,
         torch.Tensor.swapdims,
         torch.Tensor.t,
+        torch.Tensor.take,
+        torch.Tensor.take_along_dim,
+        torch.Tensor.tensor_split,
+        torch.Tensor.tile,
         torch.Tensor.transpose,
         torch.Tensor.unflatten,
         torch.Tensor.unsqueeze,
         torch.Tensor.view,
         torch.Tensor.view_as,
         torch.as_strided,
-        #torch.as_strided_copy, TODO: Uncomment when pytorch 1.9 support is fully deprecated
-        #torch.expand_copy,
+        torch.as_strided_copy,
+        torch.chunk,
+        torch.dsplit,
+        torch.expand_copy,
         torch.flatten,
+        torch.flip,
+        torch.fliplr,
+        torch.flipud,
+        torch.gather,
+        torch.hsplit,
+        torch.index_select,
+        torch.masked_select,
+        torch.moveaxis,
+        torch.movedim,
+        torch.narrow,
+        torch.narrow_copy,
         torch.permute,
-        #torch.permute_copy,
+        torch.permute_copy,
         torch.reshape,
+        torch.select,
+        torch.split,
         torch.squeeze,
-        #torch.squeeze_copy,
+        torch.squeeze_copy,
+        torch.swapaxes,
         torch.swapdims,
         torch.t,
-        #torch.t_copy,
-        #torch.unflatten,
+        torch.take,
+        torch.take_along_dim,
+        torch.tensor_split,
+        torch.tile,
+        torch.t_copy,
+        torch.unbind,
+        torch.unflatten,
         torch.unsqueeze,
-        #torch.unsqueeze_copy,
-        #torch.view_copy
+        torch.unsqueeze_copy,
+        torch.vsplit,
+        torch.view_copy,
     }
+
 
     @abc.abstractmethod
     def quantize(self) -> "QuantizedTensor":
@@ -253,20 +296,25 @@ class QuantizedTensorBase(torch.Tensor):
             self, *_ = args
             ret.encoding = copy.copy(self.encoding) # shallow copy
 
+        def propagate_encoding(qtensor, encoding):
+            if isinstance(qtensor, QuantizedTensorBase):
+                qtensor.encoding = copy.copy(encoding)
+
         if func in cls._passthrough_ops:
             self, *_ = args
-            ret.encoding = copy.copy(self.encoding)
+            tree_map(lambda t: propagate_encoding(t, self.encoding), ret)
 
         if func in cls._pertensor_passthrough_ops:
             self, *_ = args
-            if self.encoding.granularity == "pertensor":
+            if self.encoding and self.encoding.granularity == "pertensor":
                 # Return a cls object with the same encoding which can later be quantized or dequantized
-                ret.encoding = copy.copy(self.encoding)
+                tree_map(lambda t: propagate_encoding(t, self.encoding), ret)
             else:
                 # Return a cls object with no encoding
                 # If the user later tries to quantize or dequantize this, an error will be thrown
-                ret.encoding = None
+                tree_map(lambda t: propagate_encoding(t, None), ret)
             return ret
+
 
         def set_encoding(qtensor):
             if not hasattr(qtensor, 'encoding'):
