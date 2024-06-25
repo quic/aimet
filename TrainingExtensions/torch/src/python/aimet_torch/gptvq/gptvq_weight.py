@@ -184,6 +184,9 @@ class GPTVQ:
         )
         cls._replace_param_quantizers(sim, gptvq_params.rows_per_block, module_name_set)
 
+        # TODO: Remove this line after fixing root cause of GC block and memory leak in connected graph
+        del sim.connected_graph
+
         return sim
 
     @staticmethod
