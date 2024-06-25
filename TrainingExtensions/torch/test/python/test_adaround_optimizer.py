@@ -135,7 +135,7 @@ class TestAdaroundOptimizer(unittest.TestCase):
         weight_data = np.random.rand(4, 4, 1, 1).astype(dtype='float32')
         encoding_dict = compute_encoding_for_given_bitwidth(weight_data, weight_bw, quant_scheme, False,
                                                             QuantizationDataType.int)
-        encoding, _ = create_encoding_from_dict(encoding_dict)
+        encoding = create_encoding_from_dict(encoding_dict)
 
         print(encoding_dict['scale'], encoding_dict['max'])
         self.assertAlmostEqual(encoding_dict['scale'], 0.003772232448682189, places=3)

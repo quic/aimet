@@ -55,7 +55,7 @@ from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGri
     LearnedGridTensorQuantizer, set_encoding_min_max_gating_threshold, StaticGridTensorQuantizer
 from aimet_torch.torch_quantizer import TorchQuantizer
 import aimet_torch.quantsim_straight_through_grad as ste
-from aimet_torch.utils import compute_partial_encoding
+from aimet_torch.utils import compute_partial_encoding, validate_is_symmetric_flag
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -528,12 +528,17 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                 if isinstance(quantizer, StaticGridPerTensorQuantizer) and len(encoding) != 1:
                     raise ValueError(f"Invalid PerTensor encodings for {param_name}, the quantizer is a "
                                      f"PerTensorQuantizer. To avoid this, enable per_channel_quantization")
-                encoding = [compute_partial_encoding(quantizer, enc) for enc in encoding]
                 if encoding[0]['dtype'] == 'int':
-                    _, is_symmetric = utils.create_encoding_from_dict(encoding[0])
+                    # Validate and set symmetric flags before computing partial encodings
+                    validate_is_symmetric_flag(quantizer, encoding[0], strict)
+                    is_symmetric = encoding[0]['is_symmetric'] == 'True'
                     quantizer.use_symmetric_encodings = is_symmetric
+                    quantizer.use_unsigned_symmetric = quantizer.use_unsigned_symmetric if is_symmetric else False
+                    quantizer.use_strict_symmetric = quantizer.use_strict_symmetric if is_symmetric else False
+                    # Compute partial encodings if needed
+                    encoding = [compute_partial_encoding(quantizer, enc) for enc in encoding]
                     quantizer.bitwidth = encoding[0]['bitwidth']
-                    quantizer.encoding = [utils.create_encoding_from_dict(enc_dict)[0] for enc_dict in encoding]
+                    quantizer.encoding = [utils.create_encoding_from_dict(enc_dict) for enc_dict in encoding]
                     quantizer.data_type = QuantizationDataType.int
                 elif encoding[0]['dtype'] == 'float':
                     quantizer.bitwidth = encoding[0]['bitwidth']
@@ -620,13 +625,19 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                     continue
 
                 raise RuntimeError("The quantsim passed for loading encodings does not have the same "
-                                       "configuration as the quantsim which was used to export the encodings")
+                                   "configuration as the quantsim which was used to export the encodings")
 
-            encoding = compute_partial_encoding(quantizer, encoding)
             if encoding['dtype'] == 'int':
-                encoding, is_symmetric = utils.create_encoding_from_dict(encoding)
-                quantizer.bitwidth = encoding.bw
+                # Validate and set symmetric flags before computing partial encodings
+                validate_is_symmetric_flag(quantizer, encoding, strict)
+                is_symmetric = encoding['is_symmetric'] == 'True'
                 quantizer.use_symmetric_encodings = is_symmetric
+                quantizer.use_unsigned_symmetric = quantizer.use_unsigned_symmetric if is_symmetric else False
+                quantizer.use_strict_symmetric = quantizer.use_strict_symmetric if is_symmetric else False
+                # Compute partial encodings if needed
+                encoding = compute_partial_encoding(quantizer, encoding)
+                encoding = utils.create_encoding_from_dict(encoding)
+                quantizer.bitwidth = encoding.bw
                 quantizer.encoding = encoding
             elif encoding['dtype'] == 'float':
                 quantizer.bitwidth = encoding['bitwidth']

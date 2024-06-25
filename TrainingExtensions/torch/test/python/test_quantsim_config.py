@@ -2207,21 +2207,24 @@ class TestQuantsimConfig:
                 assert np.allclose(qsim.model.softmax.output_quantizers[0].encoding.min, -5.0, atol=1e-1)
                 assert np.allclose(qsim.model.softmax.output_quantizers[0].encoding.max, 5.0, atol=1e-1)
 
-    def test_load_and_freeze_with_partial_encodings(self):
+    @pytest.mark.parametrize('sample_enc', [{"min": -4, "max": 4, "bitwidth": 8, "dtype": "int", "is_symmetric": "True"},
+                                            {"min": -4, "max": 4, "bitwidth": 8, "dtype": "int", "is_symmetric": "False"},
+                                            {"scale": 0.03, "offset": 8, "bitwidth": 8,
+                                             "is_symmetric": "False", "dtype": "int"},
+                                            {"scale": 0.03, "offset": 8, "bitwidth": 8,
+                                             "is_symmetric": "True", "dtype": "int"}])
+    def test_load_and_freeze_with_partial_encodings(self, sample_enc):
         """ Test load_and_freeze encoding API with partial_encodings """
         model = test_models.TinyModelWithNoMathInvariantOps()
         dummy_input = torch.randn([1, 3, 24, 24])
 
-        sample_encoding = {"min": -4, "max": 4, "scale": 0.03, "offset": 8,
-                           "bitwidth": 8, "is_symmetric": "False", "dtype": "int"}
-
-        sample_partial_encodings_list = [{"activation_encodings": {"conv1": {"input": {"0": sample_encoding}},
-                                                                   "mul1": {"output": {"0": sample_encoding}}},
+        sample_partial_encodings_list = [{"activation_encodings": {"conv1": {"input": {"0": sample_enc}},
+                                                                   "mul1": {"output": {"0": sample_enc}}},
                                           "param_encodings": {}},
-                                         {"activation_encodings": {"add1": {"output": {"0": sample_encoding}}},
+                                         {"activation_encodings": {"add1": {"output": {"0": sample_enc}}},
                                           "param_encodings": {}},
-                                         {"activation_encodings": {"mul1": {"output": {"0": sample_encoding}}},
-                                          "param_encodings": {"conv1.weight": [sample_encoding]}}]
+                                         {"activation_encodings": {"mul1": {"output": {"0": sample_enc}}},
+                                          "param_encodings": {"conv1.weight": [sample_enc]}}]
 
         for partial_encodings in sample_partial_encodings_list:
             with open('./data/partial_encoding.json', 'w') as f:
@@ -2240,3 +2243,8 @@ class TestQuantsimConfig:
 
             # conv param quantizer needs to be enabled
             assert sim.model.conv1.param_quantizers['weight'].enabled
+            if partial_encodings['param_encodings']:
+                if sample_enc['is_symmetric'] == 'True':
+                    assert sim.model.conv1.param_quantizers['weight'].use_symmetric_encodings
+                else:
+                    assert not sim.model.conv1.param_quantizers['weight'].use_symmetric_encodings
