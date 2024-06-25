@@ -8,6 +8,7 @@ on:
 
 jobs:
   repolinter:
+    if: github.server_url == 'https://github.com'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repo
