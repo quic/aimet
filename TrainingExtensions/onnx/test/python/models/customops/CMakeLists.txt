@@ -37,7 +37,6 @@
 cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
 
 find_package(Torch REQUIRED)
-set(CMAKE_CXX_STANDARD 14)
 
 add_library(torch_custom_add SHARED torch_custom_add.cpp)
 target_compile_features(torch_custom_add PRIVATE cxx_std_14)

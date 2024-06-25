@@ -39,10 +39,14 @@ cmake_minimum_required(VERSION 3.19)
 
 project(aimet)
 
+# Project-global settings
+set(CMAKE_CXX_STANDARD 17 CACHE STRING "The C++ standard whose features are requested to build this target.")
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 # TODO Needed below variable CMAKE_CXX_FLAGS_ORG for tensorflow 2.10 verasion.
 # We have use -std=c++17 -O0 -ggdb -fPIC -D_GLIBCXX_USE_CXX11_ABI=1 for TF2.10
 set(CMAKE_CXX_FLAGS_ORG "${CMAKE_CXX_FLAGS}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O0 -ggdb -fPIC -D_GLIBCXX_USE_CXX11_ABI=0 -DPYBIND11_BUILD_ABI=\\\"_cxxabi1011\\\"")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=0 -DPYBIND11_BUILD_ABI=\\\"_cxxabi1011\\\"")
 
 set(AIMET_INSTALL_DIR ${CMAKE_BINARY_DIR}/staging/universal)
 
@@ -257,7 +261,7 @@ if (ENABLE_TENSORFLOW)
   # Use different cmake version for TF2.10
   if (${TF_VERSION} MATCHES "2.10.*")
     message(STATUS "TensorFlow version is 2.10. Setting cmake cxx flags with c++17")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS_ORG} -std=c++17 -O0 -ggdb -fPIC -D_GLIBCXX_USE_CXX11_ABI=1 -DPYBIND11_BUILD_API=\\\"_cxxabi1011\\\"")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS_ORG} -D_GLIBCXX_USE_CXX11_ABI=1 -DPYBIND11_BUILD_API=\\\"_cxxabi1011\\\"")
   endif (${TF_VERSION} MATCHES "2.10.*")
 
   # Find the TensorFlow library file
