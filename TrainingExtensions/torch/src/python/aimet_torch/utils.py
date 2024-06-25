@@ -1342,4 +1342,8 @@ def get_all_named_parameters(model: torch.nn.Module):
     """
     for name, module in model.named_modules(remove_duplicate=False):
         for param_name, parameter in module.named_parameters(recurse=False):
-            yield name + "." + param_name, parameter
+            if name:
+                yield name + "." + param_name, parameter
+            else:
+                # Don't prepend . if module name is "" (Parameter owned by base model)
+                yield param_name, parameter
