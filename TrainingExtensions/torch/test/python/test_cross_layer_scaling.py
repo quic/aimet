@@ -860,7 +860,7 @@ class TestTrainingExtensionsCrossLayerScalingPythonOnly:
         assert torch.allclose(conv3_bias_mo, conv3_bias_p)
         assert torch.allclose(model(dummy_input), model_copy(dummy_input), rtol=1.e-2)
 
-    @pytest.mark.parametrize("groups", [10])
+    @pytest.mark.parametrize("groups", [1, 10])
     def test_compare_scale_factors(self, groups):
         """ compare scale factors using with MO and python implementation """
         model = torch.nn.Sequential(
@@ -890,3 +890,22 @@ class TestTrainingExtensionsCrossLayerScalingPythonOnly:
             model[0].weight[0, :, :, :] = 0
         CrossLayerScaling.scale_model(model, dummy_input=dummy_input)
         assert not torch.isnan(model[0].weight).any()
+
+    def test_bias_fold_for_convtranspose1d(self):
+        """ Verify bias fold for ConvTranspose1d """
+        model = torch.nn.Sequential(
+            torch.nn.Conv1d(10, 10, 3),
+            torch.nn.BatchNorm1d(10),
+            torch.nn.ConvTranspose1d(10, 10, 3)
+        ).eval()
+        # Initialize BN parameters
+        torch.nn.init.normal_(model[1].weight)
+        torch.nn.init.normal_(model[1].bias)
+        dummy_input = torch.randn(1, 10, 32)
+        model_copy = copy.deepcopy(model).eval()
+        cle.USE_PYTHON_IMPL = True
+        equalize_model(model, dummy_input=dummy_input)
+        cle.USE_PYTHON_IMPL = False
+        equalize_model(model_copy, dummy_input=dummy_input)
+        assert torch.allclose(model[0].bias, model_copy[0].bias)
+        assert torch.allclose(model[2].bias, model_copy[2].bias)

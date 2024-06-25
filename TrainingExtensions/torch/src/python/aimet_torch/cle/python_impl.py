@@ -179,13 +179,13 @@ class PythonHbfImpl(HbfImpl):
         gamma = bn_layers[cls_pair_info.layer1].weight.detach() / torch.Tensor(cls_pair_info.scale_factor)
         weight = cls_pair_info.layer2.weight.detach().cpu()
 
+        if isinstance(cls_pair_info.layer2, (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
+            weight = torch.unsqueeze(weight, dim=-1)
+
         # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
         if isinstance(cls_pair_info.layer2, (torch.nn.ConvTranspose1d, torch.nn.ConvTranspose2d)) and \
                 cls_pair_info.layer2.groups == 1:
             weight = weight.permute(1, 0, 2, 3)
-
-        if isinstance(cls_pair_info.layer2, (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
-            weight = torch.unsqueeze(weight, dim=-1)
 
         bias_prev_layer = cls_pair_info.layer1.bias.detach()
         bias_curr_layer = cls_pair_info.layer2.bias.detach()
@@ -207,5 +207,6 @@ class PythonHbfImpl(HbfImpl):
             bias_correction = torch.matmul(weight_matrix, absorb_bias)
 
         # Update bias for previous and current layers.
+        # inplace modifications on detached tensor(s) will update the original tensor(s).
         bias_prev_layer -= absorb_bias
         bias_curr_layer += bias_correction
