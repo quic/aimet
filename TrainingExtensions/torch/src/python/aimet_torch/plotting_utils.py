@@ -40,7 +40,6 @@ import math
 import holoviews as hv
 import numpy as np
 import pandas as pd
-import sys
 import torch
 from bokeh.layouts import row
 from bokeh.models import HoverTool, ColumnDataSource, Span, TableColumn, DataTable
@@ -129,7 +128,7 @@ def line_plot_changes_in_summary_stats(data_before, data_after, x_axis_label=Non
 
     plot.varea(x=data_after.index,
                y1=data_after['mean'],
-	       y2=data_before['mean'], fill_color="orange", fill_alpha=0.3, legend_label="shaded region")
+               y2=data_before['mean'], fill_color="orange", fill_alpha=0.3, legend_label="shaded region")
 
     plot.legend.location = "top_left"
     plot.legend.click_policy = "hide"
@@ -319,7 +318,6 @@ def line_plot_summary_statistics_model(layer_name, layer_weights_data_frame, hei
     :param layer_weights_data_frame:
     :return:
     """
-
     layer_weights = convert_pandas_data_frame_to_bokeh_column_data_source(layer_weights_data_frame)
     plot = figure(x_axis_label="Output Channels", y_axis_label="Summary Statistics",
                   title="Weight Ranges per Output Channel: " + layer_name,

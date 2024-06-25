@@ -37,7 +37,6 @@
 """Common methods used in QuantAnalyzer across frameworks"""
 import json
 import os
-import sys
 from typing import Dict, List
 
 from bokeh import plotting
@@ -216,7 +215,7 @@ def export_stats_histogram_plot(histogram: List,
 
     # Overlay encoding min and max values.
     line = Span(location=encoding.min, dimension="height", line_color="green", line_dash="dashed")
-    plot.line([], [], line_dash="dashed", line_color="green", legend_label="MIN_VAL")
+    plot.line([], [], line_dash="dashed", line_color="green", legend_label='MIN_VAL')
     plot.add_layout(line)
     line = Span(location=encoding.max, dimension="height", line_color="red", line_dash="dashed")
     plot.line([], [], line_dash="dashed", line_color="red", legend_label="MAX_VAL")
