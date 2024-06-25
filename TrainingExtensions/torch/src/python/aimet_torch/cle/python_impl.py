@@ -83,6 +83,8 @@ class PythonClsImpl(ClsImpl):
         # Avoid 'divide by zero' by using a value that does no scaling. i.e., 1.
         s_12 = torch.nan_to_num(s_12, nan=1.0)
         s_23 = torch.nan_to_num(s_23, nan=1.0)
+        s_12[s_12 == 0.0] = 1.0
+        s_23[s_23 == 0.0] = 1.0
 
         # inplace modifications on detached tensor(s) will update the original tensor(s).
         weight_0 *= (1.0 / s_12[:, None, None, None])
@@ -120,6 +122,7 @@ class PythonClsImpl(ClsImpl):
 
         # Avoid 'divide by zero' by using a value that does no scaling. i.e., 1.
         scale_factor = torch.nan_to_num(scale_factor, nan=1.0)
+        scale_factor[scale_factor == 0.0] = 1.0
 
         # inplace modifications on detached tensor(s) will update the original tensor(s).
         weight_0 *= (1.0 / scale_factor[:, None, None, None])

@@ -909,3 +909,33 @@ class TestTrainingExtensionsCrossLayerScalingPythonOnly:
         equalize_model(model_copy, dummy_input=dummy_input)
         assert torch.allclose(model[0].bias, model_copy[0].bias)
         assert torch.allclose(model[2].bias, model_copy[2].bias)
+
+    def test_divide_by_zero_with_depthwise(self):
+        """ Ensure scale factors are computed using with MO and python implementation """
+        model = torch.nn.Sequential(
+            torch.nn.Conv2d(10, 10, 3),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(10, 10, 3, groups=10),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(10, 10, 1),
+            torch.nn.ReLU(),
+        ).eval()
+        dummy_input = torch.randn(1, 10, 32, 32)
+        with torch.no_grad():
+            model[0].weight[0, :, :, :] = 0
+            model[2].weight[0, :, :, :] = 0
+        model_copy = copy.deepcopy(model).eval()
+        cle.USE_PYTHON_IMPL = True
+        CrossLayerScaling.scale_model(model, dummy_input=dummy_input)
+        cle.USE_PYTHON_IMPL = False
+        CrossLayerScaling.scale_model(model_copy, dummy_input=dummy_input)
+
+        assert not torch.isnan(model[0].weight).any()
+        assert not torch.isnan(model[2].weight).any()
+        assert not torch.isnan(model[4].weight).any()
+        assert torch.allclose(model[0].weight, model_copy[0].weight)
+        assert torch.allclose(model[2].weight, model_copy[2].weight)
+        assert torch.allclose(model[4].weight, model_copy[4].weight)
+
+        with torch.no_grad():
+            assert torch.allclose(model(dummy_input), model_copy(dummy_input), rtol=1.e-3)
