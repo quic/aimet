@@ -215,8 +215,8 @@ class AutoQuantBase(abc.ABC): # pylint: disable=too-many-instance-attributes
             config_file: str = None,
             results_dir: str = "/tmp",
             cache_id: str = None,
-            model_prepare_required: bool = True,
-            strict_validation: bool = True) -> None:
+            strict_validation: bool = True,
+            model_prepare_required: bool = True) -> None:
         '''
         :param model: Model to be quantized. Assumes model is on the correct device
         :param dummy_input: Dummy input for the model. Assumes that dummy_input is on the correct device
@@ -229,8 +229,8 @@ class AutoQuantBase(abc.ABC): # pylint: disable=too-many-instance-attributes
         :param config_file: Path to configuration file for model quantizers
         :param results_dir: Directory to save the results of PTQ techniques
         :param cache_id: ID associated with cache results
-        :param model_prepare_required: Flag set to True by default.If False, AutoQuant will skip model prepare block in the pipeline.
         :param strict_validation: Flag set to True by default.hen False, AutoQuant will proceed with execution and handle errors internally if possible. This may produce unideal or unintuitive results.
+        :param model_prepare_required: Flag set to True by default.If False, AutoQuant will skip model prepare block in the pipeline.
         '''
         _validate_inputs(model, data_loader, eval_callback, dummy_input, results_dir,
                          strict_validation, quant_scheme, param_bw, output_bw, rounding_mode)
