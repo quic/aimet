@@ -734,6 +734,15 @@ class MiniModel(torch.nn.Module):
         for quantizer in all_quantizers:
             assert not quantizer.enabled
 
+    def test_get_base_model_parameter(self):
+        """
+        When: parameter is owned by the base model
+        Then: get_all_named_parameters doesn't add "." to the start of name
+        """
+        model = torch.nn.Linear(10, 10, bias=False)
+        named_params = list(utils.get_all_named_parameters(model))
+        assert named_params[0][0] == "weight"
+
 
 def _assert_mode_recursive(root: torch.nn.Module, training: bool):
     for module in root.modules():
