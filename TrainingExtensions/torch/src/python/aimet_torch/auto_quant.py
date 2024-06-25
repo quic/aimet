@@ -86,8 +86,7 @@ cache = Cache()
 NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION = None
 
 class _StageSkipped(Exception):
-    def __init__(self, message='Stage Skipped'):
-        super().__init__(message)
+    pass
 
 
 @dataclass(frozen=True)
@@ -1091,7 +1090,7 @@ class _EvalSession: # pylint: disable=too-many-instance-attributes
             buffer = io.StringIO()
             traceback.print_exception(exc_type, exc_val, exc_tb, file=buffer)
 
-            if isinstance(exc_val, _StageSkipped):
+            if exc_type == _StageSkipped:
                 print(exc_val.args[0])
             else:
                 if self._strict_validation:
@@ -1114,7 +1113,7 @@ class _EvalSession: # pylint: disable=too-many-instance-attributes
         self.result["error"] = exc_val
         if not exc_val:
             self.result["status"] = "success"
-        elif isinstance(exc_val, _StageSkipped):
+        elif exc_type == _StageSkipped:
             self.result["status"] = "discarded"
             return True
         elif self._strict_validation:
