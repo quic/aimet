@@ -130,7 +130,7 @@ Tile = create_wrapper_module('Tile', torch.tile)
 ElementwiseUnarySign = create_wrapper_module('ElementwiseUnarySign', torch.sign)
 Baddbmm = create_wrapper_module('Baddbmm', torch.baddbmm)
 Addmm = create_wrapper_module('Addmm', torch.addmm)
-RSqRt = create_wrapper_module('RSqrt', torch.rsqrt)
+RSqrt = create_wrapper_module('RSqrt', torch.rsqrt)
 Square = create_wrapper_module('Square', torch.square)
 Select = create_wrapper_module('Select', torch.select)
 
