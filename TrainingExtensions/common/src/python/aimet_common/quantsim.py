@@ -232,22 +232,22 @@ def _validate_bitwidth(default_output_bw: int,
         raise ValueError('Activation bitwidth must be between 4 and 32, not ' + str(default_output_bw))
 
     if ALLOW_EXPERIMENTAL:
-        if data_type == QuantizationDataType.float and default_output_bw not in [8, 16]:
+        if data_type == QuantizationDataType.float and default_output_bw not in [8, 16, 32]:
             raise ValueError(
-                'float data_type can only be used when default_output_bw set to 8 or 16, not ' + str(default_output_bw))
+                'float data_type can only be used when default_output_bw set to 8, 16 or 32, not ' + str(default_output_bw))
 
-        if data_type == QuantizationDataType.float and default_param_bw not in [8, 16]:
+        if data_type == QuantizationDataType.float and default_param_bw not in [8, 16, 32]:
             raise ValueError(
-                'float data_type can only be used when default_param_bw set to 8 or 16, not ' + str(default_param_bw))
+                'float data_type can only be used when default_param_bw set to 8, 16 or 32, not ' + str(default_param_bw))
 
     else:
-        if data_type == QuantizationDataType.float and default_output_bw != 16:
+        if data_type == QuantizationDataType.float and default_output_bw not in [16, 32]:
             raise ValueError(
-                'float data_type can only be used when default_output_bw set to 16, not ' + str(default_output_bw))
+                'float data_type can only be used when default_output_bw set to 16 or 32, not ' + str(default_output_bw))
 
-        if data_type == QuantizationDataType.float and default_param_bw != 16:
+        if data_type == QuantizationDataType.float and default_param_bw not in [16, 32]:
             raise ValueError(
-                'float data_type can only be used when default_param_bw set to 16, not ' + str(default_param_bw))
+                'float data_type can only be used when default_param_bw set to 16 or 32, not ' + str(default_param_bw))
 
 
 def extract_global_quantizer_args(quant_scheme: Union[str, QuantScheme],

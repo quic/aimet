@@ -63,11 +63,11 @@ class LazyQuantizeWrapper(torch.nn.Module):
                  quant_scheme: QuantScheme, is_output_quantized=True, is_symmetric=False, num_inputs=1, num_outputs=1,
                  data_type: QuantizationDataType = QuantizationDataType.int):
         super().__init__()
-        if data_type == QuantizationDataType.float and weight_bw not in [8, 16]:
-            raise ValueError('weight_bw in [8, 16] is the only supported configuration with floating point data type')
+        if data_type == QuantizationDataType.float and weight_bw not in [8, 16, 32]:
+            raise ValueError('weight_bw in [8, 16, 32] is the only supported configuration with floating point data type')
 
-        if data_type == QuantizationDataType.float and activation_bw not in [8, 16]:
-            raise ValueError('activation_bw in [8, 16] is the only supported configuration with floating point data type')
+        if data_type == QuantizationDataType.float and activation_bw not in [8, 16, 32]:
+            raise ValueError('activation_bw in [8, 16, 32] is the only supported configuration with floating point data type')
 
         # Save those parameters for v1 quant wrapper initialization
         self._weight_bw = weight_bw
