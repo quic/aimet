@@ -1181,3 +1181,27 @@ def test_invalid_gbbq_settings():
                                            bitwidth=4,
                                            symmetric=True,
                                            decompressed_bw=3)
+
+def test_import_signed_flag():
+    symmetric_quantizer = QuantizeDequantize((1, ), 8, symmetric=True)
+    asymmetric_quantizer = QuantizeDequantize((1, ), 8, symmetric=False)
+    assert symmetric_quantizer.signed
+    with symmetric_quantizer.compute_encodings():
+        symmetric_quantizer(torch.randn(10))
+    """
+    When: Load signed-symmetric encodings into unsigned-asymmetric quantizer
+    Then: unsigned-asymmetric quantizer becomes signed-symmetric
+    """
+    asymmetric_quantizer.set_legacy_encodings(symmetric_quantizer.get_legacy_encodings())
+    assert asymmetric_quantizer.signed
+    assert asymmetric_quantizer.symmetric
+    """
+    When: Load unsigned-asymmetric encodings into signed-symmetric quantizer
+    Then: signed-symmetric quantizer becomes unsigned-asymmetric
+    """
+    asymmetric_quantizer = QuantizeDequantize((1,), 8, symmetric=False)
+    with asymmetric_quantizer.compute_encodings():
+        asymmetric_quantizer(torch.randn(10))
+    symmetric_quantizer.set_legacy_encodings(asymmetric_quantizer.get_legacy_encodings())
+    assert not symmetric_quantizer.signed
+    assert not symmetric_quantizer.symmetric
