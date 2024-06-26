@@ -289,6 +289,9 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                  default_output_bw: int, default_param_bw: int,
                  default_data_type: QuantizationDataType = QuantizationDataType.int, config_file: str = None):
         super().__init__(config_file, default_data_type, default_output_bw, default_param_bw)
+        RANGE_LEARNING = (QuantScheme.training_range_learning_with_tf_init,
+                          QuantScheme.training_range_learning_with_tf_enhanced_init)
+        self._quantsim_configs['defaults']['strict_symmetric'] = self._quantsim_configs['defaults']['strict_symmetric'] or quant_scheme in RANGE_LEARNING
         self._connected_graph = connected_graph
         self._layer_to_affected_quantizer_info_dict = self._create_layer_to_affected_quantizer_info_dict()
         self._layer_to_config_dict = TreeLikeDictionary()
