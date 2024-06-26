@@ -218,11 +218,11 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
         """
         super().__init__()
 
-        if data_type == QuantizationDataType.float and weight_bw not in [8, 16]:
-            raise ValueError('weight_bw in [8, 16] is the only supported configuration with floating point data type')
+        if data_type == QuantizationDataType.float and weight_bw not in [8, 16, 32]:
+            raise ValueError('weight_bw in [8, 16, 32] is the only supported configuration with floating point data type')
 
-        if data_type == QuantizationDataType.float and activation_bw not in [8, 16]:
-            raise ValueError('activation_bw in [8, 16] is the only supported configuration with floating point data type')
+        if data_type == QuantizationDataType.float and activation_bw not in [8, 16, 32]:
+            raise ValueError('activation_bw in [8, 16, 32] is the only supported configuration with floating point data type')
 
         self.output_quantizers = [tensor_quantizer_factory(activation_bw, round_mode,
                                                            quant_scheme,
@@ -639,6 +639,7 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
                 encoding = utils.create_encoding_from_dict(encoding)
                 quantizer.bitwidth = encoding.bw
                 quantizer.encoding = encoding
+                quantizer.data_type = QuantizationDataType.int
             elif encoding['dtype'] == 'float':
                 quantizer.bitwidth = encoding['bitwidth']
                 quantizer.data_type = QuantizationDataType.float
