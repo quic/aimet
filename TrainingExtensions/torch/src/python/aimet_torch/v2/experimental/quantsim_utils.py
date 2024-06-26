@@ -246,3 +246,4 @@ def set_matmul_second_input_producer_to_8bit_symmetric(sim: 'QuantizationSimMode
             if target_quantizer:
                 target_quantizer.bitwidth = 8
                 target_quantizer.symmetric = True
+                target_quantizer.signed = True
