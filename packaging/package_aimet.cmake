@@ -44,6 +44,10 @@ set(package_common "aimet_common")
 # First delete the existing packaging directory if it exists
 file(REMOVE_RECURSE ${build_packaging_dir})
 
+if(DEFINED ENV{FAST_RELEASE})
+  set(src_deps_dir "${src_packaging_dir}/dependencies/fast-release")
+endif()
+
 # set variant name
 if(DEFINED ENV{AIMET_VARIANT})
   set(variant_name $ENV{AIMET_VARIANT})
