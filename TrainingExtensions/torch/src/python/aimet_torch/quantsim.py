@@ -1864,7 +1864,7 @@ class QuantizationSimModel:
         """
         Apply exception rules to specific op. For example, a rule can override high bitwidth to Embedding module
         """
-        if self._hw_version not in {'V66', 'V68', 'V69', 'V73', 'V75'}:
+        if self._hw_version not in {'V66', 'V68', 'V69', 'V73', 'V75', 'V79'}:
             return
 
         module_to_quant_wrapper = {}
