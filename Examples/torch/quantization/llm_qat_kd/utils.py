@@ -35,6 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 #
 # =============================================================================
+# pylint: disable=all
 import itertools
 from typing import List, Dict, Mapping, Any
 import numpy as np

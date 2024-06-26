@@ -35,6 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 #
 # =============================================================================
+# pylint: disable=all
 import os
 import json
 from packaging import version
