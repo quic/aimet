@@ -221,3 +221,4 @@ def test_matmul_bit_override():
     closest_output_quantizer_of_second_input = sim.model.act3.output_quantizers[0]
     assert closest_output_quantizer_of_second_input.bitwidth == 8
     assert closest_output_quantizer_of_second_input.symmetric
+    assert closest_output_quantizer_of_second_input.signed
