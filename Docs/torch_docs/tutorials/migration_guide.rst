@@ -1,21 +1,26 @@
 .. _tutorials-migration-guide:
 
-Migrate to AIMET v2
-===================
+Migrate to QuantSim 2.0
+===============================
 
-Learn how to migrate your code from AIMET 1.0 to AIMET 2.0! 
+Learn how to migrate your code from QuantSim 1.0 to QuantSim 2.0! 
 
-Migration to AIMET 2.0 enables access to new features, easier debugging, and simpler code that is easier to extend. This guide provides an overview of the migration process and describes the fundamental differences between the two versions. 
+Migration to QuantSim 2.0 enables access to new features, easier debugging, and simpler code that is easier to extend. This guide provides an overview of the migration process and describes the fundamental differences between the two versions. 
 
-Changes in AIMET 2.0
---------------------
+.. note::
+    
+    Please be advised that QuantSim 2.0 is an experimental feature whose APIs and behaviors are subject to change. 
 
-Before migrating, it is important to understand the behavior and API differences between AIMET 1.0 and AIMET 2.0. Under the hood, AIMETv2 has a different set of building blocks and properties than v1.  
+Changes in QuantSim 2.0
+----------------------------
 
-At a high level, AIMET v2
+Before migrating, it is important to understand the behavior and API differences between QuantSim 1.0 and QuantSim 2.0. Users can interact with QuantSim through the high level APIs in the same way. Methods like compute_encodings() and export() will remain the same. 
 
-* QuantizationSimModel is composed of quantized nn.Modules and Quantizers
-* Moves all implementation code to Python for easier debugging and portability
+Under the hood, QuantSim 2.0 has a different set of building blocks and properties than QuantSim 1.0, as shown below:
+
+.. image:: ../../images/quantsim2.0.png
+  :width: 800
+
 
 Migration Process
 -----------------
@@ -26,232 +31,301 @@ The migration process includes the following:
 2. Change how internal components of QuantizationSimModel are accessed
 3. Remove any dependency on deprecated features
 
-**Imports**
+Imports
+~~~~~~~~~~
 
-To migrate to V2, replace your imports as shown below. If your code does not directly access lower-level components, no further code change is needed. 
+To migrate to QuantSim 2.0, your imports should originate from the aimet_torch.v2 namespace and be replaced as shown below. If your code does not directly access lower-level components, no further code change is needed. 
 
-AIMETv1
+===================== ====================================================== ==================================================================
+AIMET Feature         :mod:`aimet_torch`                                     :mod:`aimet_torch.v2`
+QuantSim              :class:`aimet_torch.quantsim.QuantizationSimModel`     :class:`aimet_torch.v2.quantsim.quantsim.QuantizationSimModel`
+AdaRound              :class:`aimet_torch.adaround.adaround_weight.AdaRound` :class:`aimet_torch.v2.adaround.AdaRound`
+Sequential MSE        :class:`aimet_torch.seq_mse.apply_seq_mse`             :class:`aimet_torch.v2.seq_mse.apply_seq_mse`
+QuantAnalyzer         :class:`aimet_torch.quant_analyzer.QuantAnalyzer`      :class:`aimet_torch.v2.quant_analyzer.QuantAnalyzer`
+AutoQuant             :class:`aimet_torch.auto_quant.AutoQuant`              :class:`aimet_torch.v2.auto_quant.AutoQuant`
+===================== ====================================================== ==================================================================
 
-.. code-block:: Python
-
-    # Any APIs imported outside aimet_torch.v2 subpackage use AIMET 1.0
-    from aimet_torch.quantsim import QuantizationSimModel as QuantizationSimModelV1
-    from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
-    from aimet_torch.seq_mse import apply_seq_mse
-    from aimet_torch.quant_analyzer import QuantAnalyzer
-    from aimet_torch.batch_norm_fold import fold_all_batch_norms
-    from aimet_torch.auto_quant import AutoQuant
-
-AIMETv2
-
-.. code-block:: Python
-
-    from aimet_torch.v2.quantsim.quantsim import QuantizationSimModel as QuantizationSimModelV2
-    from aimet_torch.v2.adaroundimportAdaround, AdaroundParameters
-    from aimet_torch.v2.seq_mse import apply_seq_mse
-    from aimet_torch.v2.quant_analyzer import QuantAnalyzer
-    from aimet_torch.v2.batch_norm_fold import fold_all_batch_norms
-    from aimet_torch.v2.auto_quant import AutoQuant
-
-In AIMETv2, all implementation code is ported to Python. Users will no longer need to import from aimet_common.libpymo. Please refer to the table in Step 3 to migrate these imports. 
+In QuantSim 2.0, all implementation code is ported to Python. Users will no longer need to import from ``aimet_common.libpymo``. Please refer to the table in :ref:`Depracated Features <depracated-features>` to migrate these imports. 
 
 All the other import statements will stay the same, including but not limited to:
 
-* from aimet_common.defs import QuantScheme
-* from aimet_torch.cross_layer_equalization import equalize_model
-* from aimet_torch.model_preparer import prepare_model
+* ``from aimet_common.defs import QuantScheme``
+* ``from aimet_torch.cross_layer_equalization import equalize_model``
+* ``from aimet_torch.model_preparer import prepare_model``
 
 
-**QuantizationSimModel**
+QuantizationSimModel
+~~~~~~~~~~~~~~~~~~~~~
 
-Users can interact with QuantSim through the higher level APIs in the same way. Methods like compute_encodings() and export() will remain the same. 
+---------------------------------------------------
+Moving from QuantWrapper to Quantized Modules
+---------------------------------------------------
 
-Let's delve into the differences when handling the internals of QuantSim.
+To enable quantization in QuantSim 1.0, modules are wrapped with a QuantizeWrapper. These wrapped modules can be accessed as follows:
 
-*Access*
+>>> from aimet_torch.quantsim import QuantizationSimModel as QuantizationSimModelV1
+>>> sim = QuantizationSimModelV1(…)
+>>> all_quant_wrappers = sim.quant_wrappers()
+>>> for quant_wrapper in sim.quant_wrappers():
+    print(quant_wrapper)
+StaticGridQuantWrapper(
+    (_module_to_wrap): Linear(in_features=100, out_features=200, bias=True)
+)
+StaticGridQuantWrapper(
+    (_module_to_wrap): ReLU()
+)
 
-AIMETv1
+In contrast, QuantSim 2.0 enables quantization through quantized nn.Modules - modules are no longer wrapped but replaced with a quantized version. For example, a nn.Linear would be replaced with QuantizedLinear, nn.Conv2d would be replace by QuantizedConv2d, and so on. The quantized module definitions can be found under `aimet_torch.v2.nn`. These quantized modules can be accessed as follows:
 
-To enable quantization in AIMET v1, modules are wrapped with a QuantizeWrapper and fake quantization ops are added. 
-These wrapped modules and the associated TensorQuantizers can be accessed as follows:
+>>> from aimet_torch.v2.quantsim.quantsim import QuantizationSimModel as QuantizationSimModelV2
+>>> sim2 = QuantizationSimModelV2(…)
+>>> all_q_modules = sim2.qmodules()
+>>> for q_module in sim2.qmodules():
+    print(q_module)
+QuantizedLinear(
+    in_features=100, out_features=200, bias=True
+    (param_quantizers): ModuleDict(
+        (weight): QuantizeDequantize(shape=[1], bitwidth=8, symmetric=True)
+        (bias): None
+    )
+    (input_quantizers): ModuleList(
+        (0): QuantizeDequantize(shape=[1], bitwidth=8, symmetric=False)
+    )
+    (output_quantizers): ModuleList(
+        (0): None
+    )
+)
+FakeQuantizedReLU(
+    (param_quantizers): ModuleDict()
+    (input_quantizers): ModuleList(
+        (0): None
+    )
+    (output_quantizers): ModuleList(
+        (0): QuantizeDequantize(shape=[1], bitwidth=8, symmetric=False)
+    )
+)
+
+For more information on Quantized modules, please refer to the API reference guide :ref:`here<api-torch-quantized-modules>`.
+
+-------------------------------------------------------------------------------
+Moving from StaticGrid and LearnedGrid Quantizer to Affine and Float Quantizer
+-------------------------------------------------------------------------------
+
+In QuantSim 1.0, we relied on StaticGridQuantizer and LearnedGridQuantizer. For both, floating point quantization could be enabled based on ``QuantizationDataType`` passed in. 
 
 .. code-block:: Python
 
-    sim=QuantizationSimModelV1(…)
+    from aimet_torch.tensor_quantizer import StaticGridPerChannelQuantizers
+    from aimet_common.defs import QuantizationDataType
 
-    all_quant_wrappers = sim.quant_wrappers()
+    fp_quantizer = StaticGridPerChannelQuantizer(data_type = QuantizationDataType.float, ...)
+    affine_quantizer = StaticGridPerChannelQuantizer(data_type = QuantizationDataType.int, ...)
 
-    all_input_quantizers = [quant_wrapper.input_quantizers for _, quant_wrapper in sim.quant_wrappers()]
 
-    all_output_quantizers = [quant_wrapper.output_quantizers for _, quant_wrapper in sim.quant_wrappers()]
-
-    all_param_quantizers = [quant_wrapper.param_quantizers.values() for _, quant_wrapper in sim.quant_wrappers()]
-
-AIMETv2
-
-In contrast, AIMET v2 enables quantization through quantized nn.Modules and Quantizers. The modules are no longer wrapped but replaced with a quantized version. For example, a nn.Linear would be replaced with QuantizedLinear. 
-
-Regarding quantizers, AIMETv2 has affine and floating point.  Affine quantizers perform integer quantization with an equidistant quantization grid. Floating point quantizers simulate the precision errors of low-bit floating point data types (float16, float8). 
-
-You can learn more enabling quantization for custom modules, quantization on integer kernels, and other details in the AIMETv2 User Guide. 
-
-These quantized modules and the associated Quantizers can be accessed as follows:
+However, in QuantSim 2.0, this functionality is separated into an AffineQuantizer and a FloatQuantizer. Users can access these quantizers and related operations under `aimet_torch.v2.quantization`.
 
 .. code-block:: Python
 
-    import aimet_torch.v2 as aimet_v2
-    sim2=QuantizationSimModelV2(…)
+    import aimet_torch.v2.quantization as Q
 
-    all_qmodules=[
-        module for module in sim.model.modules()
-        if isinstance(module, aimet_v2.nn.BaseQuantizationMixin)]
-
-    all_input_quantizers = [module.input_quantizers for module in all_qmodules]
-    all_output_quantizers = [module.output_quantizers for module in all_qmodules]
-    all_param_quantizers = [module.param_quantizers for module in all_qmodules]
+    affine_q = Q.affine.Quantize(...)
+    affine_qdq = Q.affine.QuantizeDequantize(...)
+    fp_qdq = Q.float.FloatQuantizeDequantize(...)
 
 
-*Properties*
+From the wrapped module (QuantSim 1.0) or quantized module (QuantSim 2.0), the attributes to access the quantizers remain consistent: ``.input_quantizers`` for input quantizers, ``.output_quantizers`` for output quantizers, and ``.param_quantizers`` for parameter quantizers.
 
-After accessing the components, we will now explore their inner properties and how to get/set them. 
+For more information on Quantizers, please refer to the API reference guide :ref:`here<api-torch-quantizers>`.
 
-AIMETv1
+-----------------------------
+Code Examples
+-----------------------------
+**Setup**
 
 .. code-block:: Python
 
-    for _, wrapper in sim.quant_wrappers():
+    # QuantSim 1.0
+    from aimet_torch.quantsim import QuantizationSimModel as QuantizationSimModelV1
 
-    if wrapper.param_quantizers:
-        quantizer = wrapper.param_quantizers['weight']
-        
-        # 1. Bitwidth
-        quantizer.bitwidth = 16
-        
-        # 2. Encoding Data
-        if quantizer.encoding:
-            assert type (quantizer.encoding) == libpymo.TfEncoding
-            quantizer.encoding.bw = 8
-            quantizer.encoding.min = -1
-            quantizer.encoding.max = 1
-            quantizer.encoding.scale = 1
-            quantizer.encoding.offset = -1
+    sim1 = QuantizationSimModelV1(...)
+    wrap_linear = sim1.model.linear
 
-        # 3. Symmetry
-        quantizer.use_symmetric_encodings = True
-        quantizer.use_strict_symmetric = True
-        quantizer.is_unsigned_symmetric = False
-        
-        # 4. V1 attributes
-        if_enabled = quantizer.enabled
-        round_mode = quantizer.round_mode
-        quant_scheme = quantizer.quant_scheme
+    # QuantSim 2.0
+    from aimet_torch.v2.quantsim.quantsim import QuantizationSimModel as QuantizationSimModelV2
+
+    sim2 = QuantizationSimModelV2(...)
+    qlinear = sim2.model.linear 
+
+
+**Case 1: Manually setting common attributes**
+
+*Bitwidth*
+
+.. code-block:: Python
+
+    # QuantSim 1.0
+    wrap_linear.param_quantizers['weight'].bitwidth = 4
+    wrap_linear.input_quantizers[0].bitwidth = 4
+    wrap_linear.output_quantizers[0].bitwidth = 4
+
+    # QuantSim 2.0
+    if qlinear.param_quantizers['weight']:
+        module.param_quantizers['weight'].bitwidth = 4
+
+    if qlinear.input_quantizers[0]:
+        qlinear.input_quantizers[0].bitwidth = 4
+
+    if qlinear.output_quantizers[0]:
+        qlinear.output_quantizers[0].bitwidth = 4
+
+
+*Symmetry*
+
+.. code-block:: Python
+
+    # QuantSim 1.0
+    wrap_linear.param_quantizers['weight'].use_symmetric_encodings = True
+    wrap_linear.param_quantizers['weight'].is_unsigned_symmetric = False
+    wrap_linear.param_quantizers['weight'].use_strict_symmetric = False
+
+    wrap_linear.input_quantizers[0].use_symmetric_encodings = True
+    wrap_linear.input_quantizers[0].is_unsigned_symmetric = False
+    wrap_linear.input_quantizers[0].use_strict_symmetric = False
+
+    wrap_linear.output_quantizers[0].use_symmetric_encodings = True
+    wrap_linear.output_quantizers[0].is_unsigned_symmetric = False
+    wrap_linear.output_quantizers[0].use_strict_symmetric = False
+
+    # QuantSim 2.0
+    # Notes: simplified into two flags
+    if qlinear.param_quantizers['weight']:
+        qlinear.param_quantizers['weight'].symmetric = True
+        qlinear.param_quantizers['weight'].signed = True
+
+    if qlinear.input_quantizers[0]:
+        qlinear.input_quantizers[0].symmetric = True
+        qlinear.input_quantizers[0].signed = True
+
+    if qlinear.output_quantizers[0]:
+        qlinear.output_quantizers[0].symmetric = True
+        qlinear.output_quantizers[0].signed = True
+
+*Encoding Data*
+
+.. code-block:: Python
+
+    # QuantSim 1.0
+    import libpymo
+
+    if wrap_linear.param_quantizers['weight'].encoding:
+        encoding = libpymo.TfEncoding()
+        encoding.max = 1
+        encoding.min = -1
+        wrap_linear.param_quantizers['weight'].encoding = encoding
     
-    for quantizer in wrapper.input_quantizers:
-        # 1. Bitwidth
-        quantizer.bitwidth = 16
-        
-        # 2. Encoding Data
-        if quantizer.encoding:
-            #assert type (quantizer.encoding) == libpymo.TfEncoding
-            quantizer.encoding.bw = 8
-            quantizer.encoding.min = -1
-            quantizer.encoding.max = 1
-            quantizer.encoding.scale = 1
-            quantizer.encoding.offset = -1
-
-        # 3. Symmetry
-        quantizer.use_symmetric_encodings = True
-        quantizer.use_strict_symmetric = True
-        quantizer.is_unsigned_symmetric = False
-        
-        # 4. V1 attributes
-        if_enabled = quantizer.enabled
-        round_mode = quantizer.round_mode
-        quant_scheme = quantizer.quant_scheme
+    if wrap_linear.input_quantizers[0].encoding:
+        encoding = libpymo.TfEncoding()
+        encoding.max = 1
+        encoding.min = -1
+        wrap_linear.input_quantizers[0].encoding = encoding
     
-        
-    for quantizer in wrapper.output_quantizers:
-        # Same flow as wrapper.input_quantizers
+    if wrap_linear.output_quantizers[0].encoding:
+        encoding = libpymo.TfEncoding()
+        encoding.max = 1
+        encoding.min = -1
+        wrap_linear.output_quantizers[0].encoding = encoding
+
+    # QuantSim 2.0
+    # Notes: TfEncoding() is no longer used, encoding min/max are of type torch.nn.Parameter
+    if qlinear.param_quantizers['weight']:
+        qlinear.param_quantizers['weight'].min.copy_(-1.0) 
+        module.param_quantizers['weight'].max.copy_(1.0)
+
+    if qlinear.input_quantizers[0]:
+        qlinear.input_quantizers[0].min.copy_(-1.0)
+        qlinear.input_quantizers[0].max.copy_(1.0)
+
+    if qlinear.output_quantizers[0]:
+        qlinear.output_quantizers[0].min.copy_(-1.0)
+        qlinear.output_quantizers[0].max.copy_(1.0)
+
+
+**Case 2: Enabling and Disabling Quantization**
+
+*Is quantization enabled?*
+
+.. code-block:: Python
+
+    # QuantSim 1.0 
+    if wrap_linear.param_quantizers['weight'].enabled:
+        pass
+    
+    # QuantSim 2.0
+    # Notes: Quantizers no longer have an 'enabled' attribute. If a quantizer is present, it is enabled
+    if qlinear.param_quantizers['weight']:
         pass
 
-
-AIMETv2 
+*Disabling Quantization*
 
 .. code-block:: Python
 
-    for module in sim2.model.modules():
-        if isinstance(module, aimet_v2.nn.BaseQuantizationMixin):
-            if module.param_quantizers:
-                if module.param_quantizers['weight']:
-                    # 1. Bitwidth
-                    module.param_quantizers['weight'].bitwidth = 4
-                    
-                    # 2. Encoding Data
-                    module.param_quantizers['weight'].min = nn.Parameter(torch.tensor([-1.0]))
-                    module.param_quantizers['weight'].max = nn.Parameter(torch.tensor([1.0]))
+    # QuantSim 1.0
+    wrap_linear.param_quantizers['weight'].enabled = False
 
-                    encoding = module.param_quantizers['weight'].get_encoding()
-                    assert type(encoding) == AffineEncoding
+    # QuantSim 2.0
+    # Notes: Quantizers can be disabled by setting them to None or using the utility API (_remove_input_quantizers, _remove_output_quantizers, _remove_param_quantizers)
+    qlinear._remove_param_quantizers('weight')
 
-                    # 3. Symmetry
-                    module.param_quantizers['weight'].symmetric = True
-                    module.param_quantizers['weight'].signed = True
+*Enabling Quantization*
 
-                    # 4. V1 attributes
-                    module._remove_param_quantizers('weight') # Equivalent to module.param_quantizers['weight'] = None
-            
-            if module.input_quantizers[0]:
-                # 1. Bitwidth
-                module.input_quantizers[0].bitwidth = 4
-                    
-                # 2. Encoding Data
-                module.input_quantizers[0].min = nn.Parameter(torch.tensor([-1.0]))
-                module.input_quantizers[0].max = nn.Parameter(torch.tensor([1.0]))
+.. code-block:: Python
 
-                encoding = module.input_quantizers[0].get_encoding()
-                assert type(encoding) == AffineEncoding
+    # QuantSim 1.0
+    wrap_linear.param_quantizers['weight'].enabled = True
 
-                # 3. Symmetry
-                module.input_quantizers[0].symmetric = True
-                module.input_quantizers[0].signed = True
+    # QuantSim 2.0
+    import aimet_torch.v2.quantization as Q
+    qlinear.param_quantizers['weight'] = Q.affine.QuantizeDequantize(...)
 
-                # 4. V1 attributes
-                module._remove_input_quantizers(0) # Equivalent to module.input_quantizers[0] = None
+*Temporarily disabling Quantization*
+
+.. code-block:: Python
+
+    # QuantSim 1.0
+    assert wrap_linear.param_quantizers['weight'].enabled
+    wrap_linear.param_quantizers['weight'].enabled = False
+    # Run other code here
+    wrap_linear.param_quantizers['weight'].enabled = True
+
+    # QuantSim 2.0
+    assert qlinear.param_quantizers['weight']
+    with qlinear._remove_param_quantizers('weight'):
+        assert qlinear.param_quantizers['weight'] is None
+        # Run other code here
+
+    assert qlinear.param_quantizers['weight']
 
 
-            if module.output_quantizers[0]:   
-                # Same flow as module.input_quantizers for #1-3
-                
-                # 4. V1 attributes
-                module._remove_output_quantizers(0) # Equivalent to module.output_quantizers[0] = None
-                pass
+**Case 3: Freezing encodings**
 
-For more detail on their differences: 
-
-1. Encoding Data: In AIMET v2, the encoding min/max are now stored as torch.nn.Parameters, which allows users to access these values through the 'parameters' iterator. Encodings are no longer represented by libpymo.TfEncoding but AffineEncoding. 
-2. Symmetry: In AIMETv2, we have simplified our design into two flags - symmetric and signed. We support two quantization modes - unsigned asymmetric and signed symmetric. 
-3. Miscellaneous Attributes:
-   In AIMETv2, quantizers no longer have an 'enabled' attribute. If a quantizer is present, it is enabled and can be disabled by setting it to None. When handling Quantizers, users should check if they are None. 
-   
-   You can use _remove_input_quantizers, _remove_output_quantizers, and _remove_param_quantizers to remove the respective quantizers as shown below: 
+.. code-block:: Python
     
-   .. code-block:: Python
-    
-      qlinear = sim2.model.linear 
-      with qlinear._remove_input_quantizers(0): # Temporarily removes the 0th input quantizer
-         ...
-      with qlinear._remove_input_quantizers(): # Temporarily removes all input quantizers
-         ...
-      qlinear._remove_input_quantizers(0) # Permanently removes the 0th input quantizer
-      qlinear._remove_input_quantizers() # Permanently removes all input quantizers
-    
-   Rounding_mode  and Quant Scheme are no longer an attributes in v2. Rounding_mode will always be set to nearest in v2. 
+    # QuantSim 1.0
+    if not wrap_linear.param_quantizers['weight']._is_encoding_frozen:
+        wrap_linear.param_quantizers['weight'].freeze_encodings()
 
-**Depracated Features**
+    # QuantSim 2.0
+    if not qlinear.param_quantizers['weight']._is_encoding_frozen():
+        qlinear.param_quantizers['weight']._freeze_encodings()
 
-Components that are tied to the AIMETv1 design and are no longer needed in v2 will soon be sunset. Users will currently experience depracation warnings when accessing these APIs and features. 
+.. _depracated-features:
 
-In AIMETv2, all source code will be implemented in Python to provide easier debugging and improved portability. Thus, invoking any modules defined in C through libpymo will not be supported. 
+Depracated Features
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Components that are tied to the QuantSim 1.0 design and are no longer needed in QuantSim 2.0 will soon be sunset. Users will currently experience depracation warnings when accessing these APIs and features. 
+
+In QuantSim 2.0, all source code will be implemented in Python to provide easier debugging and improved portability. Thus, invoking any modules defined in C through libpymo will not be supported. 
 
 Below, you can see a list of depracated features and the recommended migration guideline: 
 
@@ -263,11 +337,10 @@ Below, you can see a list of depracated features and the recommended migration g
    * - Depracated Feature
      - Replacement in V2
    * - libpymo.TensorQuantizer
-     - AffineQuantizer, FloatQuantizer
+     - :ref:`AffineQuantizer<api-torch-quantizers>`, :ref:`FloatQuantizer<api-torch-quantizers>`
    * - libpymo.RoundingMode  
      - Set to 'nearest' as default
    * - libpymo.TfEncoding  
-     - AffineEncoding, VectorEncoding
-   * - libpymo.EncodingAnalyzer  
-     - MinMaxEncodingAnalyzer, SqnrEncodingAnalyzer, PercentileEncodingAnalyzer
-  
+     - AffineEncoding, FloatEncoding, VectorEncoding
+   * - libpymo.EncodingAnalyzerForPython  
+     - :ref:`MinMaxEncodingAnalyzer<api-torch-encoding-analyzer>`, :ref:`SqnrEncodingAnalyzer<api-torch-encoding-analyzer>`, :ref:`PercentileEncodingAnalyzer<api-torch-encoding-analyzer>`

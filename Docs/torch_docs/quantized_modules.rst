@@ -3,7 +3,7 @@
 .. currentmodule:: aimet_torch.v2.nn
 
 .. warning::
-    This feature is under heavy development and API changes may occur without notice in future verions.
+    This feature is under heavy development and API changes may occur without notice in future versions.
 
 =================
 Quantized Modules
