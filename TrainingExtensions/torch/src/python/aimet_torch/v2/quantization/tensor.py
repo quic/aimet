@@ -250,6 +250,17 @@ class QuantizedTensorBase(torch.Tensor):
         ret.encoding = encoding
         return ret
 
+    def new_empty(self, size, *, dtype=None, device=None, requires_grad=False,
+                  layout=torch.strided, pin_memory=False, **kwargs) -> "QuantizedTensorBase":
+        # PyTorch requires subclasses of torch.Tensor to override this method such that
+        # it returns an instance of the subclass, not a plain torch.Tensor,
+        # for the subclass to be deep-copyable
+        encoding = kwargs.pop('encoding', None)
+        t = super().new_empty(size, dtype=dtype, device=device, requires_grad=requires_grad,
+                              layout=layout, pin_memory=pin_memory, **kwargs).as_subclass(type(self))
+        t.encoding = encoding
+        return t
+
     @implements(torch.clone)
     def clone(self, *, memory_format=torch.preserve_format):
         """
@@ -393,24 +404,6 @@ class DequantizedTensor(QuantizedTensorBase):
     the data was quantized. With this, a :class:`DequantizedTensor` can be converted back to its quantized representation
     without further loss in information.
     """
-
-    def __getstate__(self):
-        state = self.__dict__
-        state["data"] = self.data
-        state["encoding"] = self.encoding
-        return state
-
-    def __setstate__(self, state):
-        self.data = state["data"]
-        self.encoding = state["encoding"]
-
-    def __deepcopy__(self, memo):
-        new_instance = type(self).__new__(type(self))
-        state = self.__getstate__()
-        new_instance.__setstate__(state)
-        new_instance.encoding = copy.deepcopy(state["encoding"])
-        new_instance.data = copy.deepcopy(state["data"])
-        return new_instance
 
     def quantize(self) -> QuantizedTensor:
         """
