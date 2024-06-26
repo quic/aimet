@@ -1,7 +1,8 @@
-#==============================================================================
+#=============================================================================
+#
 #  @@-COPYRIGHT-START-@@
 #  
-#  Copyright (c) 2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2018-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #  
 #  Redistribution and use in source and binary forms, with or without 
 #  modification, are permitted provided that the following conditions are met:
@@ -32,38 +33,46 @@
 #  SPDX-License-Identifier: BSD-3-Clause
 #  
 #  @@-COPYRIGHT-END-@@
-#==============================================================================
+#
+#=============================================================================
 
-add_library(MoDlCompression STATIC
-      src/SvdAlgorithm.cpp
-      src/SvdAlgorithm.hpp
+# INPUTS:
+#
+# OUTPUTS:
+# - TF_VERSION
+# - TF_LIB_DIR
+# - TF_LIB_FILE
+# - PYWRAP_TF_INTERNAL
 
-      include/DlCompression/ISVD.hpp
-      )
+# Get Tensorflow version
+execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import tensorflow as tf; print(tf.__version__)"
+        OUTPUT_VARIABLE TF_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+# Get location of TensorFlow library
+execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import tensorflow as tf; print(tf.sysconfig.get_lib())"
+        OUTPUT_VARIABLE TF_LIB_DIR
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+message(STATUS "Found TensorFlow version: ${TF_VERSION} TensorFlow library path: ${TF_LIB_DIR}")
 
-target_include_directories(MoDlCompression
-      PRIVATE ${LAPACKE_INCLUDE_DIRS} ${OPENCV_INCLUDE_DIRS}
-      PUBLIC
-         ${CMAKE_CURRENT_SOURCE_DIR}/include)
+# Find the TensorFlow library file
+find_library(TF_LIB_FILE NAMES libtensorflow_framework.so.1 libtensorflow_framework.so.2 HINTS ${TF_LIB_DIR})
 
-target_link_libraries(MoDlCompression PUBLIC
-    pybind11
-    ${LAPACKE_LINK_LIBRARIES}
-    ${OPENCV_LINK_LIBRARIES}
-    )
-
-target_compile_options(MoDlCompression
-        PRIVATE
-            -DUSE_OPENCV)
-
-
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
-
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/DlCompression
-        DESTINATION ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu/include)
-
-if (ENABLE_TESTS)
-    add_subdirectory(test)
+if(NOT TF_LIB_FILE)
+    message(FATAL_ERROR "TensorFlow library NOT found at ${TF_LIB_DIR}")
 endif()
 
-whl_add_whl_prep_common_target(DlCompression)
+add_library(TensorFlow SHARED IMPORTED)
+set_target_properties(TensorFlow PROPERTIES
+    IMPORTED_LOCATION "${TF_LIB_FILE}"
+    INTERFACE_INCLUDE_DIRECTORIES "${TF_LIB_DIR}/include"
+    )
+
+# ----
+
+# Find the _pywrap_tensorflow_internal.so library. Used for custom ops.
+find_library(PYWRAP_TF_INTERNAL NAMES _pywrap_tensorflow_internal.so HINTS ${TF_LIB_DIR}/python/)
+
+add_library(PyWrapTensorFlowInternal SHARED IMPORTED)
+set_target_properties(PyWrapTensorFlowInternal PROPERTIES
+    IMPORTED_LOCATION "${PYWRAP_TF_INTERNAL}"
+    )

@@ -34,9 +34,6 @@
 #  @@-COPYRIGHT-END-@@
 #==============================================================================
 
-find_package(Python3 COMPONENTS Interpreter)
-
-
 set(SETUP_PY "${CMAKE_CURRENT_BINARY_DIR}/src/setup.py")
 set(OUTPUT  "${CMAKE_CURRENT_BINARY_DIR}/build/timestamp"
       "${CMAKE_CURRENT_BINARY_DIR}/build"
@@ -91,13 +88,9 @@ add_dependencies(BuildTorchExtensions TorchCppOps)
 
 add_subdirectory(src/python)
 
-if (ENABLE_ONNX)
-    message(STATUS "ONNX is enabled, skipping Torch Unit test")
-else(ENABLE_ONNX)
-    if (ENABLE_TESTS)
-        add_subdirectory(test)
-    endif()
-endif(ENABLE_ONNX)
+if (ENABLE_TESTS)
+    add_subdirectory(test)
+endif()
 
 install(DIRECTORY ${CMAKE_BINARY_DIR}/artifacts/aimet_common/
       DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_common

@@ -1,7 +1,8 @@
-#==============================================================================
+#=============================================================================
+#
 #  @@-COPYRIGHT-START-@@
 #  
-#  Copyright (c) 2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2018-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #  
 #  Redistribution and use in source and binary forms, with or without 
 #  modification, are permitted provided that the following conditions are met:
@@ -32,41 +33,27 @@
 #  SPDX-License-Identifier: BSD-3-Clause
 #  
 #  @@-COPYRIGHT-END-@@
-#==============================================================================
+#
+#=============================================================================
 
+# INPUTS:
+#
+# OUTPUTS:
+# - ONNX_VERSION
+# - ONNXRUNTIME_INCLUDE_DIR
+# - ONNXRUNTIME_LIBRARIES
 
-include_directories(BEFORE
-        ${CMAKE_CURRENT_SOURCE_DIR}/../src
-        )
+execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import onnx; print(onnx.__version__)"
+        OUTPUT_VARIABLE ONNX_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+message(STATUS "Found ONNX version: ${ONNX_VERSION}")
 
-add_executable(MoDlEqualizationTest
-        TestDLEqualization.cpp
-        )
+# michof: There is no known reference to ONNX_CMAKE_DIR in this repo... so this shouldn't return anything sensible.
+#get_filename_component(ONNX_DIR ${ONNX_CMAKE_DIR}/../../ ABSOLUTE)
+#message(STATUS "** ONNX_DIR = ${ONNX_DIR}")
 
-target_compile_options(MoDlEqualizationTest
-        PRIVATE
-            -DUSE_OPENCV
-        )
+find_path(ONNXRUNTIME_INCLUDE_DIR "onnxruntime_cxx_api.h" PATH_SUFFIXES onnxruntime_headers/include REQUIRED)
+find_library(ONNXRUNTIME_LIBRARIES NAMES libonnxruntime.so PATH_SUFFIXES /onnxruntime_headers/lib REQUIRED)
 
-target_include_directories(MoDlEqualizationTest
-        PRIVATE ${OPENCV_INCLUDE_DIRS}
-        )
-
-target_link_libraries(MoDlEqualizationTest
-        MoDlEqualization
-        stdc++
-        ${OPENCV_LINK_LIBRARIES}
-        z
-        dl
-        gtest_main
-        )
-
-add_test(NAME MoDlEqualizationTest
-         COMMAND $<TARGET_FILE:MoDlEqualizationTest> --gtest_output=xml:cpp_test_output.xml)
-
-add_test(NAME MoDlEqualizationPythonTest
-      COMMAND ${Python3_EXECUTABLE} -m pytest ${CMAKE_CURRENT_SOURCE_DIR} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
-      )
-
-set_property(TEST MoDlEqualizationPythonTest
-      APPEND PROPERTY ENVIRONMENT "${AIMET_PYTHONPATH}")
+message(STATUS "** ONNXRUNTIME_INCLUDE_DIR = ${ONNXRUNTIME_INCLUDE_DIR}")
+message(STATUS "** ONNXRUNTIME_LIBRARIES = ${ONNXRUNTIME_LIBRARIES}")

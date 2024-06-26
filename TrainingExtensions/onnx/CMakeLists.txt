@@ -34,11 +34,6 @@
 #  @@-COPYRIGHT-END-@@
 #==============================================================================
 
-find_package(Python3 COMPONENTS Interpreter)
-
-find_path(ONNXRUNTIME_INC "onnxruntime_cxx_api.h" PATH_SUFFIXES onnxruntime_headers/include)
-find_package(Eigen3 REQUIRED)
-
 add_subdirectory(src/python)
 
 if (ENABLE_TESTS)
@@ -57,32 +52,28 @@ add_library(OnnxCppOps SHARED
         src/OnnxOpUtils.h
         src/QuantizeDequantizeUtils.hpp
         src/QuantizeDequantizeUtils.cu
-        )
-
-
-include_directories(${EIGEN3_INCLUDE_DIR})
+    )
 
 target_include_directories(OnnxCppOps PRIVATE
-        ${ONNXRUNTIME_INC}
+        ${EIGEN3_INCLUDE_DIR}
+        ${ONNXRUNTIME_INCLUDE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/../common/include
         )
 
+target_link_libraries(OnnxCppOps PUBLIC
+        MoDlQuantization
+        )
+
 if (ENABLE_CUDA)
-    target_compile_options(OnnxCppOps
-            PRIVATE
+    target_compile_options(OnnxCppOps PRIVATE
             -DONNX_CUDA=1
             )
+
     target_link_libraries(OnnxCppOps PUBLIC
-            MoDlQuantization
             MoDlQuantizationCuda
             CUDA::cublas
             )
-else (ENABLE_CUDA)
-    target_link_libraries(OnnxCppOps PUBLIC
-            MoDlQuantization
-            )
 endif (ENABLE_CUDA)
-
 
 set_target_properties(OnnxCppOps PROPERTIES
         OUTPUT_NAME "aimet_onnxrt_ops"
@@ -93,28 +84,22 @@ install(TARGETS OnnxCppOps
         LIBRARY DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_common
         )
 
+# ----
 
 Python3_add_library(quant_info SHARED
         src/QcQuantizeInfo.h
         src/QcQuantizeInfo.cpp)
 
+    target_link_libraries(quant_info PUBLIC
+            MoDlQuantization
+            )
 
 if (ENABLE_CUDA)
-    target_link_libraries(quant_info
-            PUBLIC
-            MoDlQuantization
+    target_link_libraries(quant_info PUBLIC
             MoDlQuantizationCuda
             CUDA::cublas
             )
-
-else (ENABLE_CUDA)
-    target_link_libraries(quant_info
-            PUBLIC
-            MoDlQuantization
-            )
-
 endif (ENABLE_CUDA)
-
 
 set_target_properties(quant_info
         PROPERTIES
@@ -126,6 +111,8 @@ set_target_properties(quant_info
 install(TARGETS quant_info
         LIBRARY DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_common
         )
+
+# ----
 
 add_custom_target(whl_prep_cp_onnx
     COMMAND ${CMAKE_COMMAND} -E make_directory ${WHL_PREP_AIMET_ONNX_DIR}

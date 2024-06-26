@@ -2,7 +2,7 @@
 #
 #  @@-COPYRIGHT-START-@@
 #  
-#  Copyright (c) 2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2018-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #  
 #  Redistribution and use in source and binary forms, with or without 
 #  modification, are permitted provided that the following conditions are met:
@@ -39,31 +39,79 @@
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
 include(FetchContent)
 
+##########
+# Patchelf
+##########
+
+# michof: TODO: Do we need Patchelf at all? Can't we do the RPATH fiddling with CMake built-in tools,
+# such as setting CMAKE_INSTALL_RPATH per-target?
+
+find_program(PATCHELF_EXE patchelf
+             PATHS ${CMAKE_BINARY_DIR}/_deps/patchelf-src/bin)
+
+if (PATCHELF_EXE)
+    # michof: TODO: Consider removing this path.
+    message(STATUS "Patchelf: Found in '${PATCHELF_EXE}'")
+elseif (EXISTS $ENV{DEPENDENCY_DATA_PATH}/patchelf.tar.gz)
+    # michof: TODO: Needs testing. Move to using FetchContent_Declare as below.
+    message(STATUS "Patchelf: Setting up from internal cache")
+    file(ARCHIVE_EXTRACT INPUT $ENV{DEPENDENCY_DATA_PATH}/patchelf.tar.gz
+    DESTINATION ${CMAKE_BINARY_DIR}/_deps/patchelf-src/)
+    set(PATCHELF_EXE ${CMAKE_BINARY_DIR}/_deps/patchelf-src/bin/patchelf)
+else()
+    # FIXME Better to include patchefl into docker image, although seems it is not trivial
+
+    if (DEFINED ENV{PATCHELF_INTERNAL_URL})
+        message(STATUS "Patchelf: Using Internal URL: $ENV{PATCHELF_INTERNAL_URL}")
+        FetchContent_Declare(patchelf
+        URL "$ENV{PATCHELF_INTERNAL_URL}/patchelf-0.15.0-x86_64.tar.gz"
+        )
+    else()
+        message(NOTICE "Patchelf: Fetching from external URL")
+        FetchContent_Declare(patchelf
+            URL "https://github.com/NixOS/patchelf/releases/download/0.15.0/patchelf-0.15.0-x86_64.tar.gz"
+        )
+    endif()
+
+    FetchContent_MakeAvailable(patchelf)
+    set(PATCHELF_EXE ${patchelf_SOURCE_DIR}/bin/patchelf)
+endif()
+
+message(STATUS "** PATCHELF_EXE = ${PATCHELF_EXE}")
+
+############
+# GoogleTest
+############
+
 find_program(GOOGLETEST_EXE googletest
              PATHS ${CMAKE_CURRENT_SOURCE_DIR}/google)
+
 if (GOOGLETEST_EXE)
-    message(STATUS "Found googletest in '${GOOGLETEST_EXE}'")
+    # michof: TODO: Consider removing this path.
+    message(STATUS "GoogleTest: Found in '${GOOGLETEST_EXE}'")
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/google EXCLUDE_FROM_ALL)
 elseif (EXISTS $ENV{DEPENDENCY_DATA_PATH}/googletest.zip)
-    message(STATUS "Setting up googletest from internal cache")
+    # michof: TODO: this flow needs testing - specifying the version number here as subdirectory is very brittle.
+    # Move to using FetchContent_Declare as below.
+    message(STATUS "GoogleTest: Setting up from internal cache")
     file(ARCHIVE_EXTRACT INPUT $ENV{DEPENDENCY_DATA_PATH}/googletest.zip
     DESTINATION ${CMAKE_BINARY_DIR}/_deps/googletest-src/)
     add_subdirectory(${CMAKE_BINARY_DIR}/_deps/googletest-src/googletest-release-1.12.1 ${CMAKE_BINARY_DIR}/_deps/googletest-src/googletest-release-1.12.1 EXCLUDE_FROM_ALL)
 else ()
-    message(STATUS "WARNING.! fetching googletest from external source")
+    message(NOTICE "GoogleTest: Fetching from external URL")
     FetchContent_Declare(
         googletest
         GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG        release-1.12.1
+        GIT_TAG        v1.14.0
     )
-    FetchContent_GetProperties(googletest)
-    if (NOT googletest_POPULATED)
-        FetchContent_Populate(googletest)
-        add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR} EXCLUDE_FROM_ALL)
-    endif ()
+    FetchContent_MakeAvailable(googletest)
 endif ()
 
-if (NOT OPENCV_FOUND)
+########
+# OpenCV
+########
+
+if (NOT OPENCV_FOUND AND NOT OpenCV_FOUND)
   # Aimet requires opencv which might not be installed since it is not part of neither
   # reqs_dep_*.txt nor reqs_pip_*.txt. Download and compile opencv for user only if
   # opencv is not found.
@@ -97,10 +145,14 @@ if (NOT OPENCV_FOUND)
     GIT_SHALLOW    TRUE
   )
   FetchContent_MakeAvailable(opencv)
-  set(OPENCV_LINK_LIBRARIES opencv_core PARENT_SCOPE)
+  set(OPENCV_LINK_LIBRARIES opencv_core)
   get_target_property(OPENCV_INCLUDE_DIRS opencv_core INCLUDE_DIRECTORIES)
-  set(OPENCV_INCLUDE_DIRS ${OPENCV_INCLUDE_DIRS} PARENT_SCOPE)
+  set(OPENCV_INCLUDE_DIRS ${OPENCV_INCLUDE_DIRS})
 endif()
+
+######################
+# ONNX Runtime Headers
+######################
 
 if (ENABLE_TORCH)
   # Aimet ONNX extension requires headers for onnxruntime which might not be installed
@@ -114,7 +166,9 @@ if (ENABLE_TORCH)
       OUTPUT_STRIP_TRAILING_WHITESPACE
   )
   file(GLOB_RECURSE ONNXRUNTIME_HEADER_PATH  "/opt/onnxruntime/*onnxruntime_cxx_api.h")
+
   if (ONNXRUNTIME_NOT_FOUND EQUAL 0 AND NOT ONNXRUNTIME_HEADER_PATH)
+    message(NOTICE "ONNX Runtime: Fetching from external URL")
     FetchContent_Declare(
       onnxruntime_headers
       URL https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}.tgz
@@ -123,3 +177,4 @@ if (ENABLE_TORCH)
     set(CMAKE_INCLUDE_PATH "${CMAKE_INCLUDE_PATH};${onnxruntime_headers_SOURCE_DIR}/include" PARENT_SCOPE)
   endif()
 endif()
+
