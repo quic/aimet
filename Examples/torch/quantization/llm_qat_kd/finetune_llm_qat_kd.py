@@ -37,6 +37,7 @@
 # =============================================================================
 import os
 import json
+from packaging import version
 from typing import Optional
 
 import torch
@@ -46,10 +47,7 @@ from torch.utils.data.distributed import DistributedSampler
 import torch.distributed as dist
 from torch.cuda.amp import autocast
 
-from transformers import (
-    AutoConfig,
-    AutoTokenizer, LlamaTokenizer,
-)
+from transformers import AutoConfig, AutoTokenizer, LlamaTokenizer
 from datasets import load_dataset
 
 import deepspeed as ds
@@ -58,7 +56,7 @@ from deepspeed.inference.engine import InferenceEngine
 from tqdm import tqdm
 
 from aimet_torch.quantsim import QuantizationSimModel
-from aimet_torch.qc_quantize_op import enable_recompute, QcQuantizeWrapper
+from aimet_torch.qc_quantize_op import enable_recompute, QcQuantizeWrapper, LearnedGridQuantWrapper
 from aimet_common.defs import QuantScheme
 from aimet_torch.utils import get_all_quantizers, in_eval_mode, in_train_mode
 
@@ -325,6 +323,21 @@ def create_quant_sim(model, config_file, train_dataloader):
 
     for handle in handles:
         handle.wait()
+
+    if version.parse(ds.__version__) >= version.parse("0.13.0"):
+        # Deepspeed >= 0.13.0 requires users to make explicit the modules to be considered as leaf.
+        # In our case, we want deepspeed to consider all quant wrappers as leaf.
+
+        for _, wrapper in sim.quant_wrappers():
+            if not isinstance(wrapper._module_to_wrap, torch.nn.Embedding):
+                # For practical issues, deepspeed currently doesn't support setting modules as leaf
+                # if it takes inputs that don't requires_grad.
+                # Here, we exclude the quant wrappers of torch.nn.Embedding which takes int64 indices as
+                # input which always doesn't require gradient.
+
+                # NOTE: Additionally exclude modules that take inputs that don't requires_grad as necessary
+                #       (e.g. nn.EmbeddingBag, modules that take leaf input, etc)
+                ds.utils.set_z3_leaf_modules(wrapper, [LearnedGridQuantWrapper])
 
     return sim
 
