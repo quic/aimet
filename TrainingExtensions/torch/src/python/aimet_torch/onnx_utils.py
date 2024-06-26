@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2017-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2017-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -38,7 +38,6 @@
 # pylint: disable=too-many-lines
 
 """ Utilities to load and save onnx models """
-
 from dataclasses import dataclass
 from typing import Union, List, Tuple, Dict, Set, Optional, Any
 import os
@@ -52,6 +51,7 @@ import torchvision
 import onnx
 import onnxsim
 import yaml
+from onnx import GraphProto
 from packaging import version  # pylint: disable=wrong-import-order
 
 from aimet_common.utils import AimetLogger
@@ -78,6 +78,10 @@ update_all_onnx_nodes_name = True
 
 # executes onnx simplify on the onnx model with marker attached.
 simplify_onnx_model = False
+
+# Flag to adjust ONNX node output to have unique name
+MAKE_NODE_OUTPUT_NAME_UNIQUE = True
+
 
 recurrent_onnx_optypes = ['LSTM', 'GRU', 'RNN']
 
@@ -948,7 +952,12 @@ class OnnxSaver:
                 ini.name = name
 
     @classmethod
-    def _remove_marked_module_string_from_node_inp_out_names(cls, onnx_graph):
+    def _remove_marked_module_string_from_node_inp_out_names(
+        cls,
+        onnx_graph: GraphProto,
+        node_output_name_counter: Optional[Dict[str, int]] = None,
+        param_name_to_updated_name: Optional[Dict[str, str]] = None,
+    ):
         """
         Remove 'marked_module' from all node's input and output names. Also, recursively updates subgraph node's
         input and output names.
@@ -962,18 +971,72 @@ class OnnxSaver:
         2) '/layer1/0/relu/marked_module_1/Relu_output_0' --> '/layer1/0/relu_1/Relu_output_0'
 
         :param onnx_graph: Onnx graph containing nodes and subgraph to modify
+        :param node_output_name_counter: Dictionary holding base node name to its frequency
+        :param param_name_to_updated_name: Dictionary holding param_name to updated_name
         """
-        for node in onnx_graph.node:
-            for index, param_name in enumerate(node.input):
-                node.input[index] = cls._get_updated_name(param_name)
+        if node_output_name_counter is None:
+            node_output_name_counter = {}
 
+        if param_name_to_updated_name is None:
+            param_name_to_updated_name = {}
+
+        for node in onnx_graph.node:
             for index, param_name in enumerate(node.output):
-                node.output[index] = cls._get_updated_name(param_name)
+                updated_name = cls._get_updated_name(param_name)
+
+                if MAKE_NODE_OUTPUT_NAME_UNIQUE:
+                    updated_name = cls._get_unique_node_output_name(
+                        updated_name,
+                        param_name,
+                        node_output_name_counter,
+                        param_name_to_updated_name,
+                    )
+                node.output[index] = updated_name
+
+            for index, param_name in enumerate(node.input):
+                updated_name = cls._get_updated_name(param_name)
+                if MAKE_NODE_OUTPUT_NAME_UNIQUE:
+                    updated_name = param_name_to_updated_name.get(param_name, updated_name)
+                node.input[index] = updated_name
 
         for node in onnx_graph.node:
             for attribute in node.attribute:
                 if getattr(attribute, 'g', None) is not None:
-                    cls._remove_marked_module_string_from_node_inp_out_names(attribute.g)
+                    cls._remove_marked_module_string_from_node_inp_out_names(
+                        attribute.g, node_output_name_counter, param_name_to_updated_name
+                    )
+
+    @staticmethod
+    def _get_unique_node_output_name(
+        updated_name: str,
+        param_name: str,
+        node_output_name_counter: Dict[str, int],
+        param_name_to_updated_name: Dict[str, str],
+    ) -> str:
+        """
+        Modify updated_name to make sure it will be unique node output name in ONNX graph
+
+        :param updated_name: Updated name from cls._get_updated_name
+        :param param_name: Original param_name to be key of param_name_to_updated_name
+        :param node_output_name_counter: Dictionary holding node output name to its frequency
+        :param param_name_to_updated_name: Dictionary holding param_name to updated_name
+        :return: Unique node output name
+        """
+        if updated_name in node_output_name_counter:
+            node_output_name_counter[updated_name] += 1
+            name_count = node_output_name_counter[updated_name]
+            deduplicated_name = f'{updated_name}_dup{name_count}'
+            _logger.info(
+                '%s has been updated to %s for name deduplication',
+                updated_name,
+                deduplicated_name,
+            )
+            updated_name = deduplicated_name
+        else:
+            node_output_name_counter[updated_name] = 0
+
+        param_name_to_updated_name[param_name] = updated_name
+        return updated_name
 
     @classmethod
     def _fix_param_names(cls, onnx_model):

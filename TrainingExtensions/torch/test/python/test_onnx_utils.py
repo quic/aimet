@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -34,28 +34,38 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
+import collections
 import contextlib
 import copy
 import logging
 import os
 import tempfile
 from collections import defaultdict
+
+import aimet_torch.elementwise_ops
 import onnx
 import pytest
 import torch
-from torchvision import models
-
-import aimet_torch.elementwise_ops
 from aimet_common.utils import AimetLogger
 from aimet_torch import onnx_utils
 from aimet_torch.model_preparer import prepare_model
 from aimet_torch.onnx_utils import (
+    OnnxSaver,
+    get_pytorch_name_from_onnx_name,
+    restore_onnx_graph_initializers,
     save_initializer_restored_onnx_graph,
-    restore_onnx_graph_initializers, get_pytorch_name_from_onnx_name
 )
-from models.test_models import RoiModel, InputOutputDictModel, MultiplePReluModel, NestedSeqModel,\
-    NestedModelWithOverlappingNames, ModelWithModuleList, ModelWithReusedInitializers
+from torchvision import models
+
+from models.test_models import (
+    InputOutputDictModel,
+    ModelWithModuleList,
+    ModelWithReusedInitializers,
+    MultiplePReluModel,
+    NestedModelWithOverlappingNames,
+    NestedSeqModel,
+    RoiModel,
+)
 
 
 class OutOfOrderModel(torch.nn.Module):
@@ -1034,3 +1044,51 @@ class TestOnnxUtils:
             # Ensure that the graph is correct
             self.check_onnx_node_name_uniqueness(restored_model)
             onnx.checker.check_model(restored_model)
+
+    def test_get_unique_node_output_name(self):
+        # Case 1. If updated_name is occurred first time
+        # Return its name without modification
+        # node_output_name_counter will have an entry and set to value as 0
+        # param_name_to_updated_name will be updated with param_name to unique_node_output_name
+        updated_name = '/down_blocks.0/conv1_1/Conv_output_0'
+        param_name = '/down_blocks.0/marked_module/conv1/marked_module_1/Conv_output_0'
+        base_node_name_counter = {}
+        param_name_to_updated_name = {}
+        assert (
+            OnnxSaver._get_unique_node_output_name(
+                updated_name=updated_name,
+                param_name=param_name,
+                node_output_name_counter=base_node_name_counter,
+                param_name_to_updated_name=param_name_to_updated_name,
+            )
+            == updated_name
+        )
+        assert base_node_name_counter[updated_name] == 0
+        assert (
+            param_name_to_updated_name[param_name]
+            == updated_name
+        )
+
+        # Case 2. If updated_name is not first time
+        # Postfix with count will be appended to node output name (e.g., Conv_output_0 -> Conv_output_0_dup1)
+        # base_node_name_counter will be incremented (x to x + 1)
+        # param_name_to_updated_name will be updated with param_name to unique_node_output_name
+        updated_name = '/down_blocks.0/Add_1/Add_output_0'
+        param_name = '/down_blocks.0/marked_module/Add/marked_module_1/Add_output_0'
+        base_node_name_counter = {updated_name: 0}
+        param_name_to_updated_name = {
+            '/down_blocks.0/marked_module/Add_1/marked_module/Add_0_output_0': updated_name
+        }
+        assert (
+            OnnxSaver._get_unique_node_output_name(
+                updated_name=updated_name,
+                param_name=param_name,
+                node_output_name_counter=base_node_name_counter,
+                param_name_to_updated_name=param_name_to_updated_name,
+            )
+            == '/down_blocks.0/Add_1/Add_output_0_dup1'
+        )
+        assert base_node_name_counter[updated_name] == 1
+        assert (
+            param_name_to_updated_name[param_name] == '/down_blocks.0/Add_1/Add_output_0_dup1'
+        )
