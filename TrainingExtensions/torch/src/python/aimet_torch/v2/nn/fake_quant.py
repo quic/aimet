@@ -640,7 +640,7 @@ _AIMET_V1_UNARY_MODULES = [
     aimet_ops.LogicalNot,
     aimet_ops.NonZero,
     aimet_ops.ElementwiseUnarySign,
-    aimet_ops.RSqRt,
+    aimet_ops.RSqrt,
     aimet_ops.Square,
     aimet_ops.Mean,
     aimet_ops.Sum,

@@ -215,7 +215,7 @@ functional_with_stateless_api = {
     'cumsum'                    : elementwise_ops.CumSum,
     'masked_fill'               : elementwise_ops.MaskedFill,
     'square'                    : elementwise_ops.Square,
-    'rsqrt'                     : elementwise_ops.RSqRt,
+    'rsqrt'                     : elementwise_ops.RSqrt,
 }
 
 
