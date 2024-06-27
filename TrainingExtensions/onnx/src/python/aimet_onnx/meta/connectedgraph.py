@@ -546,7 +546,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             op = my_op.get_module()
 
             weight_tensor = ParamUtils.get_param(self.model, op, WEIGHT_INDEX)
-            create_and_connect_product(weight_tensor.name, weight_tensor.dims, my_op, weight_tensor, 'weight')
+            if weight_tensor:
+                create_and_connect_product(weight_tensor.name, weight_tensor.dims, my_op, weight_tensor, 'weight')
 
             bias_tensor = ParamUtils.get_param(self.model, op, BIAS_INDEX)
             if bias_tensor:
@@ -571,10 +572,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             """
             op = my_op.get_module()
             weight_tensor = ParamUtils.get_param(self.model, op, WEIGHT_INDEX)
-            create_and_connect_product(weight_tensor.name, weight_tensor.dims, my_op, weight_tensor, 'weight_x')
+            if weight_tensor:
+                create_and_connect_product(weight_tensor.name, weight_tensor.dims, my_op, weight_tensor, 'weight_x')
 
             recurrent_weight_tensor = ParamUtils.get_param(self.model, op, RECURRENT_WEIGHT_INDEX)
-            create_and_connect_product(recurrent_weight_tensor.name, recurrent_weight_tensor.dims, my_op, recurrent_weight_tensor, 'weight_r')
+            if recurrent_weight_tensor:
+                create_and_connect_product(recurrent_weight_tensor.name, recurrent_weight_tensor.dims, my_op, recurrent_weight_tensor, 'weight_r')
 
         def create_batchnorm_params(my_op: Op):
             """ Create products for fusedbatchnorm """
@@ -590,13 +593,11 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
             moving_mean_tensor = ParamUtils.get_param(self.model, op, RUNNING_MEAN_INDEX)
             if moving_mean_tensor:
-                create_and_connect_product(moving_mean_tensor.name, moving_mean_tensor.dims, my_op,
-                                           moving_mean_tensor, None)
+                create_and_connect_product(moving_mean_tensor.name, moving_mean_tensor.dims, my_op, moving_mean_tensor, None)
 
             moving_variance_tensor = ParamUtils.get_param(self.model, op, RUNNING_VAR_INDEX)
             if moving_variance_tensor:
-                create_and_connect_product(moving_variance_tensor.name, moving_variance_tensor.dims, my_op,
-                                           moving_variance_tensor, None)
+                create_and_connect_product(moving_variance_tensor.name, moving_variance_tensor.dims, my_op, moving_variance_tensor, None)
 
         def handle_default(my_op: Op):
             """ Handler for other modules """
