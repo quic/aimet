@@ -588,12 +588,19 @@ class QuantizationSimModel(tf.keras.Model):
                     if not input_quantizer.is_enabled():
                         _logger.info("Not loading encodings for quantizer: %s as it is disabled", tensor_name)
                         continue
-                    encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(
-                        activation_encodings[tensor_name][0])
-                    input_quantizer.tensor_quantizer.isEncodingValid = True
-                    input_quantizer.set_quantizer_encodings(encoding.bw, is_symmetric, encoding,
-                                                            libpymo.TensorQuantizerOpMode.quantizeDequantize)
-                    _logger.info("Setting encodings for : %s", tensor_name)
+                    encoding_dict = activation_encodings[tensor_name][0]
+                    if encoding_dict['dtype'] == 'int':
+                        encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(encoding_dict)
+                        input_quantizer.tensor_quantizer.isEncodingValid = True
+                        input_quantizer.set_quantizer_encodings(encoding.bw, is_symmetric, encoding,
+                                                                libpymo.TensorQuantizerOpMode.quantizeDequantize)
+                        _logger.info("Setting encodings for : %s", tensor_name)
+                    elif encoding_dict['dtype'] == 'float':
+                        input_quantizer.data_type = QuantizationDataType.float
+                        input_quantizer.bitwidth = encoding_dict['bitwidth']
+                        _logger.info("Setting quantizer dtype to float for : %s", tensor_name)
+                    else:
+                        raise RuntimeError("Unrecognized dtype %s for: %s" % (encoding_dict['dtype'], tensor_name))
                 else:
                     if input_quantizer.is_enabled():
                         input_quantizer.disable()
@@ -607,19 +614,30 @@ class QuantizationSimModel(tf.keras.Model):
                         _logger.info("Not loading encodings for parameter: %s as quantizer is disabled", param_name)
                         continue
                     if isinstance(param_quantizer, StaticGridPerChannelQuantizer):
+                        assert param_encodings[param_name][0]['dtype'] != 'float', "PerChannel Quantizers can't be set to float"
                         encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(
                             param_encodings[param_name])
                         for tensor_quantizer in param_quantizer.tensor_quantizer:
                             tensor_quantizer.isEncodingValid = True
                         bw = encoding[0].bw
+                        param_quantizer.set_quantizer_encodings(bw, is_symmetric, encoding,
+                                                                libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
+                        _logger.info("Setting encodings for : %s", param_name)
                     else:
-                        encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(
-                            param_encodings[param_name][0])
-                        param_quantizer.tensor_quantizer.isEncodingValid = True
-                        bw = encoding.bw
-                    param_quantizer.set_quantizer_encodings(bw, is_symmetric, encoding,
-                                                            libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
-                    _logger.info("Setting encodings for : %s", param_name)
+                        encoding_dict = param_encodings[param_name][0]
+                        if encoding_dict['dtype'] == 'int':
+                            encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(encoding_dict)
+                            param_quantizer.tensor_quantizer.isEncodingValid = True
+                            bw = encoding.bw
+                            param_quantizer.set_quantizer_encodings(bw, is_symmetric, encoding,
+                                                                    libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
+                            _logger.info("Setting encodings for : %s", param_name)
+                        elif encoding_dict['dtype'] == 'float':
+                            param_quantizer.data_type = QuantizationDataType.float
+                            param_quantizer.bitwidth = encoding_dict['bitwidth']
+                            _logger.info("Setting quantizer to float for : %s", param_name)
+                        else:
+                            raise RuntimeError("Unrecognized dtype %s for: %s" % (encoding_dict['dtype'], tensor_name))
                 else:
                     if param_quantizer.is_enabled():
                         param_quantizer.disable()
@@ -652,12 +670,19 @@ class QuantizationSimModel(tf.keras.Model):
                         if not output_quantizer.is_enabled():
                             _logger.info("Not loading encodings for quantizer: %s as it is disabled", tensor_name)
                             continue
-                        encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(
-                            activation_encodings[tensor_name][0])
-                        output_quantizer.tensor_quantizer.isEncodingValid = True
-                        output_quantizer.set_quantizer_encodings(encoding.bw, is_symmetric, encoding,
-                                                                 libpymo.TensorQuantizerOpMode.quantizeDequantize)
-                        _logger.info("Setting encodings for : %s", tensor_name)
+                        encoding_dict = activation_encodings[tensor_name][0]
+                        if encoding_dict['dtype'] == 'int':
+                            encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(encoding_dict)
+                            output_quantizer.tensor_quantizer.isEncodingValid = True
+                            output_quantizer.set_quantizer_encodings(encoding.bw, is_symmetric, encoding,
+                                                                     libpymo.TensorQuantizerOpMode.quantizeDequantize)
+                            _logger.info("Setting encodings for : %s", tensor_name)
+                        elif encoding_dict['dtype'] == 'float':
+                            output_quantizer.data_type = QuantizationDataType.float
+                            output_quantizer.bitwidth = encoding_dict['bitwidth']
+                            _logger.info("Setting quantizer dtype to float for : %s", tensor_name)
+                        else:
+                            raise RuntimeError("Unrecognized dtype %s for: %s" % (encoding_dict['dtype'], tensor_name))
                     else:
                         if output_quantizer.is_enabled():
                             output_quantizer.disable()
