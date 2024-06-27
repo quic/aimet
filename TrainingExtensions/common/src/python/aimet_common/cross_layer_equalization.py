@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -597,6 +597,85 @@ class ClsImpl(ABC):
         :return: Scaling factor S_12 for each conv layer pair: numpy array
         """
 
+    @staticmethod
+    def compute_scaling_params_for_depthwise_conv(weight_0: np.ndarray, weight_1: np.ndarray, weight_2: np.ndarray) \
+            -> [np.ndarray, np.ndarray]:
+        """
+        Compute scaling parameters for depth-wise separable layer.
+
+        :param weight_0:
+        :param weight_1:
+        :param weight_2:
+        :return: Scaling factors S_12 and S_23 : numpy arrays
+        """
+        max_0 = np.max(np.abs(weight_0), axis=(1, 2, 3))
+        max_1 = np.max(np.abs(weight_1), axis=(1, 2, 3))
+        max_2 = np.max(np.abs(weight_2), axis=(0, 2, 3))
+        s_12 = max_0 / np.power(max_0 * max_1 * max_2, 1.0 / 3)
+        s_23 = np.power(max_0 * max_1 * max_2, 1.0 / 3) / max_2
+
+        # Avoid divide by zero, NaN or Inf by using a value that does no scaling. i.e., 1.
+        s_12 = np.nan_to_num(s_12, nan=1.0, posinf=1.0)
+        s_23 = np.nan_to_num(s_23, nan=1.0, posinf=1.0)
+        s_12[s_12 == 0.0] = 1.0
+        s_23[s_23 == 0.0] = 1.0
+
+        return s_12, s_23
+
+    @staticmethod
+    def compute_scaling_params_for_conv(weight_0, weight_1):
+        """
+        Compute scaling parameters for conv layer.
+        :param weight_0:
+        :param weight_1:
+        :return:
+        """
+        max_0 = np.max(np.abs(weight_0), axis=(1, 2, 3))
+        max_1 = np.max(np.abs(weight_1), axis=(0, 2, 3))
+        scale_factor = max_0 / np.power(max_0 * max_1, 1. / 2)
+
+        # Avoid divide by zero, NaN or Inf by using a value that does no scaling. i.e., 1.
+        scale_factor = np.nan_to_num(scale_factor, nan=1.0, posinf=1.0)
+        scale_factor[scale_factor == 0.0] = 1.0
+
+        return scale_factor
+
+    @staticmethod
+    def fold_scaling_params_for_depthwise_conv(weight_0, weight_1, weight_2, bias_0, bias_1, s_12, s_23):
+        """
+        Fold scaling parameters into weight matrices and biases.
+
+        :param weight_0:
+        :param weight_1:
+        :param weight_2:
+        :param bias_0:
+        :param bias_1:
+        :param s_12:
+        :param s_23:
+        """
+        weight_0 *= (1.0 / s_12[:, None, None, None])
+        weight_1 *= s_12[:, None, None, None] * (1.0 / s_23[:, None, None, None])
+        weight_2 *= s_23[None, :, None, None]
+        if bias_0 is not None:
+            bias_0 *= (1.0 / s_12)
+        if bias_1 is not None:
+            bias_1 *= (1.0 / s_23)
+
+    @staticmethod
+    def fold_scaling_params_for_conv(weight_0, weight_1, bias_0, scale_factor):
+        """
+        Fold scaling parameters into weight matrices and biases.
+        :param weight_0:
+        :param weight_1:
+        :param bias_0:
+        :param scale_factor:
+        :return:
+        """
+        weight_0 *= (1.0 / scale_factor[:, None, None, None])
+        weight_1 *= scale_factor[None, :, None, None]
+        if bias_0 is not None:
+            bias_0 *= (1.0 / scale_factor)
+
 
 class HbfImpl(ABC):
     """
@@ -610,3 +689,34 @@ class HbfImpl(ABC):
         :param cls_pair_info: Layer pairs that were scaled using CLS and related information.
         :param bn_layers: Dictionary with Key being Conv/Linear layer and value being corresponding folded BN layer.
         """
+
+    @staticmethod
+    def _absorb_bias(activation_is_relu, beta, gamma, weight, bias_curr_layer, bias_prev_layer):
+        """
+
+        :param activation_is_relu:
+        :param beta:
+        :param gamma:
+        :param weight:
+        :param bias_curr_layer:
+        :param bias_prev_layer:
+        """
+        if not activation_is_relu:
+            # No activation function, absorb whole bias
+            absorb_bias = beta
+        else:
+            # Only absorb bias part that is more than 'min_std' standard deviations
+            absorb_bias = np.maximum(0, beta - 3 * np.abs(gamma))
+
+        # Calculate correction term for next layer
+        weight_matrix = weight.sum(3).sum(2)
+        if weight_matrix.shape[1] == 1:
+            weight_matrix = weight_matrix.reshape(weight_matrix.shape[0])
+            bias_correction = np.multiply(weight_matrix, absorb_bias)
+        else:
+            bias_correction = np.matmul(weight_matrix, absorb_bias)
+
+        # Update bias for previous and current layers.
+        # inplace modifications on detached tensor(s) will update the original tensor(s).
+        bias_prev_layer -= absorb_bias
+        bias_curr_layer += bias_correction
