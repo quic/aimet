@@ -199,6 +199,8 @@ class AffineQuantizerBase(QuantizerBase):
 
         self.bitwidth = encodings[0]['bitwidth']
         self.symmetric = str_to_bool(encodings[0]['is_symmetric'])
+        # Note: We can only accurately infer signed-ness in the symmetric case, but AIMET uses unsigned for asymmetric
+        self.signed = str_to_bool(encodings[0]['is_symmetric']) and encodings[0]["min"] != 0
         min_ = torch.tensor([e['min'] for e in encodings]).view(self.shape)
         max_ = torch.tensor([e['max'] for e in encodings]).view(self.shape)
         self.set_range(min_, max_)
