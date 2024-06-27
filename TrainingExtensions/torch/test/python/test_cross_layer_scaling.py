@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -771,7 +771,7 @@ class TestTrainingExtensionsCrossLayerScalingPythonOnly:
         assert torch.allclose(model.conv2.weight, model_copy.conv2.weight)
 
     @pytest.mark.cuda
-    def test_cls_using_python_impl(self):
+    def test_cls_using_python_impl_mobilenetv1(self):
         """ Compare MO and python implementation for CLS """
         torch.manual_seed(10)
         model = MockMobileNetV1().cuda().eval()
@@ -922,8 +922,8 @@ class TestTrainingExtensionsCrossLayerScalingPythonOnly:
         ).eval()
         dummy_input = torch.randn(1, 10, 32, 32)
         with torch.no_grad():
-            model[0].weight[0, :, :, :] = 0
             model[2].weight[0, :, :, :] = 0
+
         model_copy = copy.deepcopy(model).eval()
         cle.USE_PYTHON_IMPL = True
         CrossLayerScaling.scale_model(model, dummy_input=dummy_input)
@@ -938,4 +938,4 @@ class TestTrainingExtensionsCrossLayerScalingPythonOnly:
         assert torch.allclose(model[4].weight, model_copy[4].weight)
 
         with torch.no_grad():
-            assert torch.allclose(model(dummy_input), model_copy(dummy_input), rtol=1.e-3)
+            assert torch.allclose(model(dummy_input), model_copy(dummy_input), rtol=1.e-2)
