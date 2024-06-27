@@ -34,6 +34,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+import tempfile
 
 import pytest
 import json
@@ -1480,19 +1481,14 @@ class TestFX:
         sim.model(dummy_input)
 
         # Verify that activations encodings are correctly exported.
-        results_dir = os.path.abspath('./data/interpolate/')
-        os.makedirs(results_dir, exist_ok=True)
-        try:
-            sim.export(results_dir, filename_prefix='modified_model', dummy_input=dummy_input,
+        with tempfile.TemporaryDirectory() as tempdir:
+            sim.export(tempdir, filename_prefix='modified_model', dummy_input=dummy_input,
                        onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)))
-            with open(results_dir + '/modified_model.encodings') as json_file:
+            with open(os.path.join(tempdir, '/modified_model.encodings')) as json_file:
                 encoding_data = json.load(json_file)
 
             # Total 7 encodings for activations.
             assert len(encoding_data["activation_encodings"]) == 7
-        finally:
-            if os.path.isdir(results_dir):
-                shutil.rmtree(results_dir)
 
     def test_fx_with_quantsim_export_and_encodings(self):
         """ test quantsim export and verify encodings are exported correctly for newly added modules """
@@ -1523,19 +1519,12 @@ class TestFX:
         sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
         sim.compute_encodings(evaluate, forward_pass_callback_args=input_tensor)
 
-        # Verify that activations encodings are correctly exported.
-        results_dir = os.path.abspath('./data/verify_sim_export/')
-        os.makedirs(results_dir, exist_ok=True)
-
-        try:
-            sim.export(results_dir, filename_prefix='modified_model', dummy_input=input_tensor)
-            with open(results_dir + '/modified_model.encodings') as json_file:
+        with tempfile.TemporaryDirectory() as tempdir:
+            sim.export(tempdir, filename_prefix='modified_model', dummy_input=input_tensor)
+            with open(os.path.join(tempdir,  '/modified_model.encodings')) as json_file:
                 encoding_data = json.load(json_file)
             # Total 6 encodings for activations. two inputs, two outputs of Convs and two outputs of Add modules.
             assert len(encoding_data["activation_encodings"]) == 6
-        finally:
-            if os.path.isdir(results_dir):
-                shutil.rmtree(results_dir)
 
     def test_model_with_exclusion(self):
         """ test model with exclusion list """
@@ -1704,17 +1693,12 @@ class TestFX:
         assert sim.model.module_silu_2.mul.output_quantizers[0].encoding
 
         # Verify Quantsim Export workflow.
-        results_dir = os.path.abspath('./data/verify_sim_export/')
-        os.makedirs(results_dir, exist_ok=True)
-        try:
-            sim.export(results_dir, filename_prefix='modified_model', dummy_input=dummy_input)
-            with open(results_dir + '/modified_model.encodings') as json_file:
+        with tempfile.TemporaryDirectory() as tempdir:
+            sim.export(tempdir, filename_prefix='modified_model', dummy_input=dummy_input)
+            with open(os.path.join(tempdir,  '/modified_model.encodings')) as json_file:
                 encoding_data = json.load(json_file)
             # Total 8 encodings for activations. 1 input, 1 output of Conv and 6 (2 * 3) for CustomSiLU modules.
             assert len(encoding_data["activation_encodings"]) == 8
-        finally:
-            if os.path.isdir(results_dir):
-                shutil.rmtree(results_dir)
 
     def test_fx_with_baddbmm(self):
         """ test torch fx with baddbmm """
@@ -1941,3 +1925,54 @@ class TestFX:
             prepared_model = prepare_model(original_model)
             assert isinstance(prepared_model.module_conv2d, torch.nn.Conv2d)
             assert torch.allclose(original_model(dummy_input), prepared_model(dummy_input))
+
+    def test_a(self):
+        import os
+        os.environ['HF_HOME'] = '/local/mnt/workspace/hitameht/'
+        from transformers import DetrImageProcessor, DetrForObjectDetection
+        import torch
+        from PIL import Image
+        import requests
+
+        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        image = Image.open(requests.get(url, stream=True).raw)
+
+        # you can specify the revision tag if you don't want the timm dependency
+        processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50", revision="no_timm")
+        model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50", revision="no_timm")
+
+        inputs = processor(images=image, return_tensors="pt")
+        outputs = model(**inputs, return_dict=False)
+        inputs = tuple(inputs.values())
+        exported_fx_graph_module, _ = torch._dynamo.export(model, aten_graph=False, assume_static_by_default=True)(*inputs)
+        with torch.no_grad():
+            exported_fx_graph_module(*inputs)
+        from aimet_torch.meta import connectedgraph
+        connectedgraph.jit_trace_args.update({"strict": False})
+        sim = QuantizationSimModel(exported_fx_graph_module, inputs)
+        sim.compute_encodings(evaluate, inputs)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sim.export(tmpdir, "detr", inputs)
+
+        from torchvision import models
+
+    def test_b(self):
+        from torchvision import models
+        model = models.GoogLeNet().eval()
+        dummy_input = torch.randn(1, 3, 224, 224)
+
+        with torch.no_grad():
+            model(dummy_input)
+        exported_graph_model, _ = torch._dynamo.export(model, assume_static_by_default=False)(dummy_input)
+        torch.jit.trace(exported_graph_model, dummy_input)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            torch.onnx.export(exported_graph_model, dummy_input, os.path.join(tmpdir, 'googlenet.onnx'))
+        from aimet_torch.quantsim import QuantizationSimModel
+        sim = QuantizationSimModel(model, dummy_input)
+        sim.compute_encodings(evaluate, dummy_input)
+        print(sim)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sim.export(tmpdir, "googlenet", dummy_input)
+            onnx_model = onnx.load(os.path.join(tmpdir, 'googlenet.onnx'))
+            for node in onnx_model.graph.node:
+                print(node.name)

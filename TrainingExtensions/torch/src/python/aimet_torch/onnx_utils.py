@@ -66,7 +66,7 @@ _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 # required.
 # TODO: Corner cases exist when ONNX names model nodes with reused modules, or models with recurrent nodes. Do not use
 # this flag in such circumstances.
-EXPORT_TO_ONNX_DIRECT = False
+EXPORT_TO_ONNX_DIRECT = True
 
 # Flag to enable restoring pruned initializers in ONNX graph
 # By default, the flag is disabled because it is rare case we should restore initializers in most cases
