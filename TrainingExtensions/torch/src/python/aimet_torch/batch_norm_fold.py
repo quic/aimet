@@ -48,6 +48,7 @@ from torch.nn.modules.conv import _ConvTransposeNd
 
 import aimet_common.libpymo as libpymo
 
+from aimet_common.batch_norm_fold import batch_norm_fold, make_4d_tensor
 from aimet_common.bias_correction import ConvBnPatternHandler, CONV_OP_TYPES, LINEAR_OP_TYPES, BN_OP_TYPES
 from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.graph_searcher import GraphSearcher
@@ -108,27 +109,6 @@ def _expand_shape_to_4d(weight_tensor: libpymo.TensorParams):
             weight_tensor.shape = orig_shape
 
 
-def _make_4d_tensor(tensor: torch.Tensor) -> torch.Tensor:
-    """
-    Return 4 dimensional tensor by adding a dimension if the tensor is not 4d.
-    :param tensor: Input tensor.
-    :return: Output tensor.
-    """
-    dims = len(tensor.shape)
-
-    if dims > 4:
-        raise RuntimeError
-
-    if dims == 4:
-        return tensor
-
-    while len(tensor.shape) < 4:
-        tensor = tensor[..., None]
-
-    return tensor
-
-
-
 def _call_mo_batch_norm_fold(weight: torch.Tensor,
                              bias: torch.Tensor,
                              bn: BatchNormType,
@@ -183,26 +163,16 @@ def _call_py_batch_norm_fold(weight: torch.Tensor,
     :param fold_backward: True if BatchNorm comes after Conv/Linear layer
     """
     with torch.no_grad():
-        gamma = bn.weight.detach()
-        beta = bn.bias.detach()
-        mu = bn.running_mean.detach()
-        sigma = torch.sqrt(bn.running_var + bn.eps).detach()
+        gamma = bn.weight.detach().cpu().numpy()
+        beta = bn.bias.detach().cpu().numpy()
+        mu = bn.running_mean.detach().cpu().numpy()
+        sigma = torch.sqrt(bn.running_var + bn.eps).detach().cpu().numpy()
 
-        _weight = weight.detach()
-        _bias = bias.detach()
-        scale = gamma / sigma
+        _weight = weight.detach().cpu().numpy()
+        _bias = bias.detach().cpu().numpy()
+        _weight = make_4d_tensor(_weight)
 
-        _weight = _make_4d_tensor(_weight)
-
-        if fold_backward:
-            _weight *= scale[:, None, None, None]
-            _bias += beta + (_bias - mu) * gamma / sigma - _bias
-        else:
-            _w_2d = _weight.sum(3).sum(2)
-            mu_hat = torch.matmul(_w_2d, mu * scale)
-            beta_hat = torch.matmul(_w_2d, beta)
-            _weight *= scale[None, :, None, None]
-            _bias += beta_hat - mu_hat
+        batch_norm_fold(_weight, _bias, gamma, beta, mu, sigma, fold_backward)
 
 
 class _BatchNormFoldingNotSupported(RuntimeError):
