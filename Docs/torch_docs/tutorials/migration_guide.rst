@@ -1,5 +1,8 @@
 .. _tutorials-migration-guide:
 
+.. role:: python(code)
+   :language: python
+
 Migrate to QuantSim 2.0
 ===============================
 
@@ -49,9 +52,9 @@ In QuantSim 2.0, all implementation code is ported to Python. Users will no long
 
 All the other import statements will stay the same, including but not limited to:
 
-* ``from aimet_common.defs import QuantScheme``
-* ``from aimet_torch.cross_layer_equalization import equalize_model``
-* ``from aimet_torch.model_preparer import prepare_model``
+* :python:`from aimet_common.defs import QuantScheme`
+* :python:`from aimet_torch.cross_layer_equalization import equalize_model`
+* :python:`from aimet_torch.model_preparer import prepare_model`
 
 
 QuantizationSimModel
