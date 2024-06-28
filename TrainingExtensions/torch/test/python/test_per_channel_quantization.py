@@ -224,14 +224,15 @@ class TestPerChannelQcQuantizeOpStaticGrid:
         assert sim.model.fc2.param_quantizers['weight'].encoding[0] != \
                sim.model.fc2.param_quantizers['weight'].encoding[1]
 
-        sim.export('./data/', 'two_input_model_per_channel', dummy_input)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, 'two_input_model_per_channel', dummy_input)
 
-        with open("./data/two_input_model_per_channel.encodings", "r") as encodings_file:
-            encodings = json.load(encodings_file)
-        assert len(encodings['param_encodings']) == 5
-        assert len(encodings['param_encodings']['conv1_a.weight']) == 10
-        assert encodings['param_encodings']['conv1_a.weight'][1]['bitwidth'] == 8
-        assert encodings['param_encodings']['conv1_a.weight'][1]['is_symmetric'] == 'True'
+            with open(os.path.join(tmp_dir, "two_input_model_per_channel.encodings"), "r") as encodings_file:
+                encodings = json.load(encodings_file)
+            assert len(encodings['param_encodings']) == 5
+            assert len(encodings['param_encodings']['conv1_a.weight']) == 10
+            assert encodings['param_encodings']['conv1_a.weight'][1]['bitwidth'] == 8
+            assert encodings['param_encodings']['conv1_a.weight'][1]['is_symmetric'] == 'True'
 
     def test_model_per_channel_single_channel(self):
         """Model with single channel conv """

@@ -400,7 +400,7 @@ class TestAdaround:
         with tempfile.TemporaryDirectory() as tempdir:
             config_file = os.path.join(tempdir, 'disjoint_checkpoints.json')
             save_config_file_for_checkpoints(checkpoints_config, config_file)
-            ada_rounded_model = Adaround.apply_adaround(model, inp_tensor_list, params, './', 'dummy')
+            ada_rounded_model = Adaround.apply_adaround(model, inp_tensor_list, params, tempdir, 'dummy')
             ada_rounded_model_ckpts = Adaround.apply_adaround_with_cache(model, inp_tensor_list, params, tempdir,
                                                                          'dummy_checkpoints',
                                                                          checkpoints_config=config_file)
@@ -488,7 +488,8 @@ class TestAdaround:
             assert len(encoding_data["conv1.weight"]) == 32
 
             # Test that encodings can be correctly loaded into sim
-            sim = QuantizationSimModel(ada_rounded_model, torch.randn(input_shape), config_file='./data/quantsim_config.json')
+            sim = QuantizationSimModel(ada_rounded_model, torch.randn(input_shape),
+                                       config_file=os.path.join(tempdir, 'quantsim_config.json'))
             sim.set_and_freeze_param_encodings(os.path.join(tempdir, 'dummy.encodings'))
 
             # Test that we after computing encodings, the param encodings are the same

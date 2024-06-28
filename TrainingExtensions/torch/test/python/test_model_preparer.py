@@ -41,7 +41,6 @@ import json
 import random
 import os
 import re
-import shutil
 import copy
 import numpy as np
 import onnx
@@ -54,7 +53,6 @@ torch.fx.wrap('sqrt')
 from torchvision import models
 from math import sqrt
 from torch.utils.data import DataLoader
-from models.test_models import SingleResidual
 
 from aimet_common.defs import QuantScheme
 from aimet_torch import elementwise_ops
@@ -297,34 +295,32 @@ class TestFX:
             "model_input": {},
             "model_output": {}
         }
-        with open('./data/quantsim_config.json', 'w') as f:
-            json.dump(quantsim_config, f)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with open(os.path.join(tmp_dir, 'quantsim_config.json'), 'w') as f:
+                json.dump(quantsim_config, f)
 
-        quant_sim_for_original_model = QuantizationSimModel(model, dummy_input=input_tensor,
-                                                            config_file='./data/quantsim_config.json')
+            quant_sim_for_original_model = QuantizationSimModel(model, dummy_input=input_tensor,
+                                                                config_file=os.path.join(tmp_dir, 'quantsim_config.json'))
 
-        quant_sim_for_modified_model = QuantizationSimModel(model_transformed, dummy_input=input_tensor,
-                                                            config_file='./data/quantsim_config.json')
+            quant_sim_for_modified_model = QuantizationSimModel(model_transformed, dummy_input=input_tensor,
+                                                                config_file=os.path.join(tmp_dir, 'quantsim_config.json'))
 
-        # Disable output activation quantizer for ReLUs to compare with original quantsim.model eval
-        quant_sim_for_modified_model.model.module_relu.output_quantizers[0].enabled = False
-        quant_sim_for_modified_model.model.module_relu_1.output_quantizers[0].enabled = False
-        quant_sim_for_modified_model.model.module_relu_2.output_quantizers[0].enabled = False
-        quant_sim_for_modified_model.model.module_relu_3.output_quantizers[0].enabled = False
+            # Disable output activation quantizer for ReLUs to compare with original quantsim.model eval
+            quant_sim_for_modified_model.model.module_relu.output_quantizers[0].enabled = False
+            quant_sim_for_modified_model.model.module_relu_1.output_quantizers[0].enabled = False
+            quant_sim_for_modified_model.model.module_relu_2.output_quantizers[0].enabled = False
+            quant_sim_for_modified_model.model.module_relu_3.output_quantizers[0].enabled = False
 
-        quant_sim_for_original_model.compute_encodings(evaluate, input_tensor)
-        quant_sim_for_modified_model.compute_encodings(evaluate, input_tensor)
+            quant_sim_for_original_model.compute_encodings(evaluate, input_tensor)
+            quant_sim_for_modified_model.compute_encodings(evaluate, input_tensor)
 
-        # Eval for both models
-        assert torch.allclose(quant_sim_for_original_model.model(input_tensor),
-                              quant_sim_for_modified_model.model(input_tensor))
+            # Eval for both models
+            assert torch.allclose(quant_sim_for_original_model.model(input_tensor),
+                                  quant_sim_for_modified_model.model(input_tensor))
 
-        # Compare encodings for last layer for both models
-        assert quant_sim_for_original_model.model.fc2.output_quantizers[0].encoding.min ==\
-               quant_sim_for_modified_model.model.fc2.output_quantizers[0].encoding.min
-
-        if os.path.exists('./data/quantsim_config.json'):
-            os.remove('./data/quantsim_config.json')
+            # Compare encodings for last layer for both models
+            assert quant_sim_for_original_model.model.fc2.output_quantizers[0].encoding.min ==\
+                   quant_sim_for_modified_model.model.fc2.output_quantizers[0].encoding.min
 
     def test_fx_with_elementwise_add_quantsim(self):
         """
@@ -620,55 +616,41 @@ class TestFX:
 
         quant_sim.compute_encodings(forward_pass, None)
 
-        quant_sim.export('./data/', filename_prefix='modified_resnet18', dummy_input=input_tensor)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            quant_sim.export(tmp_dir, filename_prefix='modified_resnet18', dummy_input=input_tensor)
 
-        with open('./data/modified_resnet18.encodings') as json_file:
-            encoding_data = json.load(json_file)
-            print(encoding_data)
+            with open(os.path.join(tmp_dir, 'modified_resnet18.encodings')) as json_file:
+                encoding_data = json.load(json_file)
+                print(encoding_data)
 
-        # Check the exported model
-        loaded_model = torch.load('./data/modified_resnet18.pth')
+            # Check the exported model
+            loaded_model = torch.load(os.path.join(tmp_dir, 'modified_resnet18.pth'))
 
-        # Eval for both models
-        assert torch.allclose(model_transformed(input_tensor),
-                              loaded_model(input_tensor))
+            # Eval for both models
+            assert torch.allclose(model_transformed(input_tensor),
+                                  loaded_model(input_tensor))
 
-        # Check the onnx model
-        onnx_model = onnx.load('./data/modified_resnet18.onnx')
-        node_for_relu = 0
-        node_for_add = 0
-        onnx.checker.check_model(onnx_model)
-        module_names = { module_name for module_name, _ in model_transformed.named_modules()}
-        for node in onnx_model.graph.node:
-            if node.op_type == 'Relu':
-                node_for_relu += 1
-            elif node.op_type == 'Add':
-                node_for_add += 1
+            # Check the onnx model
+            onnx_model = onnx.load(os.path.join(tmp_dir, 'modified_resnet18.onnx'))
+            node_for_relu = 0
+            node_for_add = 0
+            onnx.checker.check_model(onnx_model)
+            module_names = { module_name for module_name, _ in model_transformed.named_modules()}
+            for node in onnx_model.graph.node:
+                if node.op_type == 'Relu':
+                    node_for_relu += 1
+                elif node.op_type == 'Add':
+                    node_for_add += 1
 
-            if not node.name.startswith('Flatten'):
-                name = node.name.split('#')[0]
-                assert '.'.join(name.split('.')[:-1]) in module_names
+                if not node.name.startswith('Flatten'):
+                    name = node.name.split('#')[0]
+                    assert '.'.join(name.split('.')[:-1]) in module_names
 
-        # 8 new ReLUs are added.
-        assert node_for_relu == 8 + 9
+            # 8 new ReLUs are added.
+            assert node_for_relu == 8 + 9
 
-        # 8 new elementwise_ops.Add are added.
-        assert node_for_add == 8
-
-        if os.path.exists('./data/modified_resnet18.pth'):
-            os.remove('./data/modified_resnet18.pth')
-
-        if os.path.exists('./data/modified_resnet18.onnx'):
-            os.remove('./data/modified_resnet18.onnx')
-
-        if os.path.exists('./data/modified_resnet18.encodings.yaml'):
-            os.remove('./data/modified_resnet18.encodings.yaml')
-
-        if os.path.exists('./data/modified_resnet18.encodings'):
-            os.remove('./data/modified_resnet18.encodings')
-
-        if os.path.exists('./data/temp_onnx_model_with_markers.onnx'):
-            os.remove('./data/temp_onnx_model_with_markers.onnx')
+            # 8 new elementwise_ops.Add are added.
+            assert node_for_add == 8
 
     def test_fx_with_relu_relu6(self):
         """
@@ -1484,7 +1466,7 @@ class TestFX:
         with tempfile.TemporaryDirectory() as tempdir:
             sim.export(tempdir, filename_prefix='modified_model', dummy_input=dummy_input,
                        onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)))
-            with open(os.path.join(tempdir, '/modified_model.encodings')) as json_file:
+            with open(os.path.join(tempdir, 'modified_model.encodings')) as json_file:
                 encoding_data = json.load(json_file)
 
             # Total 7 encodings for activations.
@@ -1521,7 +1503,7 @@ class TestFX:
 
         with tempfile.TemporaryDirectory() as tempdir:
             sim.export(tempdir, filename_prefix='modified_model', dummy_input=input_tensor)
-            with open(os.path.join(tempdir,  '/modified_model.encodings')) as json_file:
+            with open(os.path.join(tempdir, 'modified_model.encodings')) as json_file:
                 encoding_data = json.load(json_file)
             # Total 6 encodings for activations. two inputs, two outputs of Convs and two outputs of Add modules.
             assert len(encoding_data["activation_encodings"]) == 6
@@ -1695,7 +1677,7 @@ class TestFX:
         # Verify Quantsim Export workflow.
         with tempfile.TemporaryDirectory() as tempdir:
             sim.export(tempdir, filename_prefix='modified_model', dummy_input=dummy_input)
-            with open(os.path.join(tempdir,  '/modified_model.encodings')) as json_file:
+            with open(os.path.join(tempdir,  'modified_model.encodings')) as json_file:
                 encoding_data = json.load(json_file)
             # Total 8 encodings for activations. 1 input, 1 output of Conv and 6 (2 * 3) for CustomSiLU modules.
             assert len(encoding_data["activation_encodings"]) == 8

@@ -202,7 +202,7 @@ def save_config_file_for_per_channel_quantization(path):
         "model_output": {}
     }
 
-    with open(os.path.join(path, 'quantsim_config.json', 'w')) as f:
+    with open(os.path.join(path, 'quantsim_config.json'), 'w') as f:
         json.dump(quantsim_config, f)
 
 
