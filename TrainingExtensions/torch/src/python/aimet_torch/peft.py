@@ -127,66 +127,6 @@ def replace_lora_layers_with_quantizable_layers(model: torch.nn.Module):
     replace_modules_of_type1_using_constructor(model, PeftConv2d, LoraLayer)
 
 
-def save_lora_weights_after_adaptation(model: torch.nn.Module, path: str, filename_prefix: str):
-    """
-    Utility to save model weights after model adaptations
-
-    :param model: PEFT model
-    :param path: path where to store weights after adaptation
-    :param filename_prefix: Prefix to use for filenames
-    """
-    param_to_name = {}
-
-    for name, param in model.named_parameters():
-        param_to_name[param] = name
-
-    lora_weights = {}
-    for name, module in model.named_modules():
-        if isinstance(module, LoraLayer):
-            for _, param in module.lora_A.named_parameters():
-                name = param_to_name[param]
-                lora_weights[name] = param
-            for _, param in module.lora_B.named_parameters():
-                name = param_to_name[param]
-                lora_weights[name] = param
-
-    filename_prefix = filename_prefix + '.safetensor'
-    model_params_path = os.path.join(path, filename_prefix)
-    save_file(lora_weights, model_params_path)
-
-
-def map_and_save_lora_weights_for_similar_adapters(lora_weights_after_model_adapatation: str,
-                                                   lora_weights_for_similar_adapter_before_adaptation: str, use_safetensor,
-                                                   path: str, filename_prefix: str):
-    """
-    Maps and saves weights for similar adapters where model adaptation like linear to conv was performed.
-    Note: Adapter config should be the exact same between the two adapters or else result will be wrong
-
-    :param lora_weights_after_model_adapatation: Safetensors path saved for one adapter after model adaptation
-    :param lora_weights_for_similar_adapter_before_adaptation: Safetensor/bin file path for adapter weights before adaptation
-    :param use_safetensor: True if adapter weights path for adapter before adaptation points to a safetensor file. False if points to bin file
-    :param path: path where to store weights for lora_weights_for_similar_adapter_before_adaptation
-    :param filename_prefix: Prefix to use for filenames
-    """
-    tensor_after_adaptation = _load_weights(lora_weights_after_model_adapatation)
-    tensor_before_adaptation = _load_weights(lora_weights_for_similar_adapter_before_adaptation, use_safetensor)
-    new_tensor_before_adaptation = {}
-    for before_name in tensor_before_adaptation:
-        temp_key = before_name[0:before_name.find('.weight')] + '.conv2d.weight'
-        if temp_key in tensor_after_adaptation:
-            weight_before = tensor_before_adaptation[before_name]
-
-            # cast weight from linear to conv
-            weight = weight_before.data[:, :, None, None]
-            new_tensor_before_adaptation[temp_key] = weight
-        else:
-            new_tensor_before_adaptation[before_name] = tensor_before_adaptation[before_name]
-
-    filename_prefix = filename_prefix + '.safetensor'
-    model_params_path = os.path.join(path, filename_prefix)
-    save_file(new_tensor_before_adaptation, model_params_path)
-
-
 class AdapterMetaData:
     """
     Tracks meta data for lora layers. Tracks names of lora_a & b as well as alpha values
