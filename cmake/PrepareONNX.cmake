@@ -36,24 +36,31 @@
 #
 #=============================================================================
 
-# INPUTS:
-#
-# OUTPUTS:
-# - ONNX_VERSION
-# - ONNXRUNTIME_INCLUDE_DIR
-# - ONNXRUNTIME_LIBRARIES
+function(set_onnx_version)
+    if (NOT ${Python3_FOUND})
+        message(FATAL_ERROR "Need Python3 executable to determine ONNX version.")
+    endif()
 
-execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import onnx; print(onnx.__version__)"
-        OUTPUT_VARIABLE ONNX_VERSION
-        OUTPUT_STRIP_TRAILING_WHITESPACE)
-message(STATUS "Found ONNX version: ${ONNX_VERSION}")
+    execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import onnx; print(onnx.__version__)"
+            OUTPUT_VARIABLE ONNX_VERSION_
+            OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-# michof: There is no known reference to ONNX_CMAKE_DIR in this repo... so this shouldn't return anything sensible.
-#get_filename_component(ONNX_DIR ${ONNX_CMAKE_DIR}/../../ ABSOLUTE)
-#message(STATUS "** ONNX_DIR = ${ONNX_DIR}")
+    message(STATUS "Found ONNX version: ${ONNX_VERSION_}")
+    set(ONNX_VERSION ${ONNX_VERSION_} PARENT_SCOPE)
+endfunction()
 
-find_path(ONNXRUNTIME_INCLUDE_DIR "onnxruntime_cxx_api.h" PATH_SUFFIXES onnxruntime_headers/include REQUIRED)
-find_library(ONNXRUNTIME_LIBRARIES NAMES libonnxruntime.so PATH_SUFFIXES /onnxruntime_headers/lib REQUIRED)
+function(set_onnxruntime_variables)
+    find_path(ONNXRUNTIME_INCLUDE_DIR_ "onnxruntime_cxx_api.h"
+            PATH_SUFFIXES onnxruntime_headers/include
+            REQUIRED)
+    find_library(ONNXRUNTIME_LIBRARIES_
+            NAMES libonnxruntime.so
+            PATH_SUFFIXES /onnxruntime_headers/lib
+            REQUIRED)
 
-message(STATUS "** ONNXRUNTIME_INCLUDE_DIR = ${ONNXRUNTIME_INCLUDE_DIR}")
-message(STATUS "** ONNXRUNTIME_LIBRARIES = ${ONNXRUNTIME_LIBRARIES}")
+    message(STATUS "** ONNXRUNTIME_INCLUDE_DIR = ${ONNXRUNTIME_INCLUDE_DIR_}")
+    set(ONNXRUNTIME_INCLUDE_DIR ${ONNXRUNTIME_INCLUDE_DIR_} PARENT_SCOPE)
+
+    message(STATUS "** ONNXRUNTIME_LIBRARIES = ${ONNXRUNTIME_LIBRARIES_}")
+    set(ONNXRUNTIME_LIBRARIES ${ONNXRUNTIME_LIBRARIES_} PARENT_SCOPE)
+endfunction()

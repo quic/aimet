@@ -71,7 +71,7 @@ target_link_libraries(MoDlEqualization PUBLIC
 
 target_compile_options(MoDlEqualization
         PRIVATE
-            -DUSE_OPENCV
+        -DUSE_OPENCV
         )
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)

@@ -39,6 +39,11 @@ cmake_minimum_required(VERSION 3.19)
 
 project(aimet)
 
+include(cmake/PreparePyTorch.cmake)
+include(cmake/PrepareONNX.cmake)
+include(cmake/PrepareTensorFlow.cmake)
+include(cmake/PreparePyBind11.cmake)
+
 # Project-global settings
 set(CMAKE_CXX_STANDARD 17 CACHE STRING "The C++ standard whose features are requested to build this target.")
 set(CMAKE_CXX_STANDARD_REQUIRED ON CACHE BOOL "Boolean describing whether the value of CXX_STANDARD is a requirement.")
@@ -76,65 +81,58 @@ option(ENABLE_ONNX "Enable AIMET-ONNX build" OFF)
 option(ENABLE_TENSORFLOW "Enable AIMET-TensorFlow build" OFF)
 option(ENABLE_TESTS "Enable building tests" ON)
 
+option(ENABLE_PRE_CXX11_ABI "Compile using pre-C++11 ABI" OFF)
+option(AUTO_ENABLE_PRE_CXX11_ABI "Auto-enable pre-C++11 ABI when deemed necessary" ON)
+
 message(STATUS "AIMET build configuration:")
-if (ENABLE_CUDA)
-    message(STATUS "** CUDA support enabled.")
-else()
-    message(STATUS "** CUDA support disabled.")
-endif()
-
-if (ENABLE_TORCH)
-    message(STATUS "** Building AIMET-Torch enabled.")
-else()
-    message(STATUS "** Building AIMET-Torch disabled.")
-endif()
-
-if (ENABLE_ONNX)
-    message (STATUS "** Building AIMET-ONNX enabled.")
-else()
-    message(STATUS "** Building AIMET-ONNX disabled.")
-endif()
-
-if (ENABLE_TENSORFLOW)
-    message(STATUS "** Building AIMET-TensorFlow enabled.")
-else()
-    message(STATUS "** Building AIMET-TensorFlow disabled.")
-endif()
-
-if (ENABLE_TESTS)
-    message(STATUS "** Building AIMET tests enabled.")
-else()
-    message(STATUS "** Building AIMET tests disabled.")
-endif()
+message(STATUS "** ENABLE_CUDA = ${ENABLE_CUDA}")
+message(STATUS "** ENABLE_TORCH = ${ENABLE_TORCH}")
+message(STATUS "** ENABLE_ONNX = ${ENABLE_ONNX}")
+message(STATUS "** ENABLE_TENSORFLOW = ${ENABLE_TENSORFLOW}")
+message(STATUS "** ENABLE_TESTS = ${ENABLE_TESTS}")
 
 if (ENABLE_TORCH AND ENABLE_TENSORFLOW)
     # Remove this once it's proven feasible.
     message(FATAL_ERROR "AIMET Torch and TensorFlow support currently cannot be built at the same time.")
 endif()
 
-if (ENABLE_TORCH)
-    message(NOTICE "PyTorch is still pre-built with the pre-C++11 ABI.")
-    message(NOTICE "Adding to CXXFLAGS: -D_GLIBCXX_USE_CXX11_ABI=0 -DPYBIND11_BUILD_ABI=\\\"_cxxabi1011\\\"")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=0 -DPYBIND11_BUILD_ABI=\\\"_cxxabi1011\\\"")
-    #message(NOTICE "Adding to CXXFLAGS: -DPYBIND11_BUILD_ABI=\\\"_cxxabi1011\\\"")
-    #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPYBIND11_BUILD_ABI=\\\"_cxxabi1011\\\"")
+if (ENABLE_ONNX AND NOT ENABLE_TORCH)
+    message(NOTICE "** Enabling Torch as it is required by ONNX")
+    set(ENABLE_TORCH ON CACHE BOOL "" FORCE)
 endif()
 
-if (ENABLE_ONNX AND NOT ENABLE_TORCH)
-    message(NOTICE "**** Enabling Torch as it is required by ONNX")
-    set(ENABLE_TORCH ON CACHE BOOL "" FORCE)
+# Find Python libraries
+find_package(Python3 COMPONENTS Interpreter Development)
+message("Found Python3: ${Python3_FOUND}, at ${Python3_LIBRARIES}")
+
+# -------------------------------
+# Compilation flags - not (yet) per target
+# -------------------------------
+
+if (ENABLE_TORCH AND AUTO_ENABLE_PRE_CXX11_ABI)
+    set(ENABLE_PRE_CXX11_ABI ON CACHE BOOL "" FORCE)
+    message(NOTICE "** -- Force set ENABLE_PRE_CXX11_ABI = ON (Reason: PyTorch)")
+endif()
+
+if (ENABLE_TENSORFLOW)
+    set_tensorflow_version() # we already need the version right below
+    if (AUTO_ENABLE_PRE_CXX11_ABI AND TF_VERSION VERSION_LESS "2.9")
+        set(ENABLE_PRE_CXX11_ABI ON CACHE BOOL "" FORCE)
+        message(NOTICE "** -- Force set ENABLE_PRE_CXX11_ABI = ON (Reason: TensorFlow <2.9)")
+    endif()
+endif()
+
+if (ENABLE_PRE_CXX11_ABI)
+    message(NOTICE "Adding to CXXFLAGS: -D_GLIBCXX_USE_CXX11_ABI=0 -DPYBIND11_BUILD_ABI=\\\"_cxxabi1011\\\"")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=0 -DPYBIND11_BUILD_ABI=\\\"_cxxabi1011\\\"")
 endif()
 
 # -------------------------------
 # Centralized dependency handling
 # -------------------------------
 
-# System thread library. Seems to be only needed by DlCompression tests. May be optional - not sure.
+# Find system thread library. Seems to be only needed by DlCompression tests. May be optional - not sure.
 find_package(Threads)
-
-# Python libraries
-find_package(Python3 COMPONENTS Interpreter Development)
-message("Found Python3: ${Python3_FOUND}, at ${Python3_LIBRARIES}")
 
 find_package(PkgConfig)
 pkg_search_module(LAPACKE REQUIRED lapacke)
@@ -143,21 +141,29 @@ pkg_search_module(LAPACKE REQUIRED lapacke)
 pkg_search_module(OPENCV opencv) # in case opencv will not be found, it would be built form source
 
 if (ENABLE_TORCH)
-    include(cmake/PreparePyTorch.cmake)
+    set_torch_version()
+    set_torch_cmake_prefix_path()
+    update_torch_cuda_arch_list()
     find_package(Torch REQUIRED)
 endif()
 
 if (ENABLE_ONNX)
-    include(cmake/PrepareONNX.cmake)
+    set_onnx_version()
+    set_onnxruntime_variables()
     find_package(Eigen3 REQUIRED)
     find_package(Torch REQUIRED)
 endif()
 
 if (ENABLE_TENSORFLOW)
-    include(cmake/PrepareTensorFlow.cmake)
+    set_tensorflow_version()
+    set_tensorflow_library_path()
+    add_library_tensorflow(${TF_LIB_DIR})
+    add_library_pywrap_tensorflow_internal(${TF_LIB_DIR})
 endif()
 
-include(cmake/PreparePyBind11.cmake)
+add_library_pybind11()
+# michof: We should consider replacing the above macro simply by:
+#find_package(pybind11 CONFIG)
 
 include(cmake/ThirdPartyDependencies.cmake)
 

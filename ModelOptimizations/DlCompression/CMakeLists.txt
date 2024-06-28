@@ -54,7 +54,7 @@ target_link_libraries(MoDlCompression PUBLIC
 
 target_compile_options(MoDlCompression
         PRIVATE
-            -DUSE_OPENCV)
+        -DUSE_OPENCV)
 
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)

@@ -44,35 +44,65 @@
 # - TF_LIB_FILE
 # - PYWRAP_TF_INTERNAL
 
-# Get Tensorflow version
-execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import tensorflow as tf; print(tf.__version__)"
-        OUTPUT_VARIABLE TF_VERSION
-        OUTPUT_STRIP_TRAILING_WHITESPACE)
-# Get location of TensorFlow library
-execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import tensorflow as tf; print(tf.sysconfig.get_lib())"
-        OUTPUT_VARIABLE TF_LIB_DIR
-        OUTPUT_STRIP_TRAILING_WHITESPACE)
-message(STATUS "Found TensorFlow version: ${TF_VERSION} TensorFlow library path: ${TF_LIB_DIR}")
+function(set_tensorflow_version)
+    if (NOT ${Python3_FOUND})
+        message(FATAL_ERROR "Need Python3 executable to determine TensorFlow version.")
+    endif()
 
-# Find the TensorFlow library file
-find_library(TF_LIB_FILE NAMES libtensorflow_framework.so.1 libtensorflow_framework.so.2 HINTS ${TF_LIB_DIR})
+    # Get Tensorflow version
+    execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import tensorflow as tf; print(tf.__version__)"
+            OUTPUT_VARIABLE TF_VERSION_
+            OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-if(NOT TF_LIB_FILE)
-    message(FATAL_ERROR "TensorFlow library NOT found at ${TF_LIB_DIR}")
-endif()
+    message(STATUS "Found TensorFlow version: ${TF_VERSION_}")
+    set(TF_VERSION ${TF_VERSION_} PARENT_SCOPE)
+endfunction()
 
-add_library(TensorFlow SHARED IMPORTED)
-set_target_properties(TensorFlow PROPERTIES
-    IMPORTED_LOCATION "${TF_LIB_FILE}"
-    INTERFACE_INCLUDE_DIRECTORIES "${TF_LIB_DIR}/include"
-    )
+function(set_tensorflow_library_path)
+    if (NOT ${Python3_FOUND})
+        message(FATAL_ERROR "Need Python3 executable to determine TensorFlow library path.")
+    endif()
 
-# ----
+    # Get location of TensorFlow library
+    execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import tensorflow as tf; print(tf.sysconfig.get_lib())"
+            OUTPUT_VARIABLE TF_LIB_DIR_
+            OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-# Find the _pywrap_tensorflow_internal.so library. Used for custom ops.
-find_library(PYWRAP_TF_INTERNAL NAMES _pywrap_tensorflow_internal.so HINTS ${TF_LIB_DIR}/python/)
+    message(STATUS "Found TensorFlow library path: ${TF_LIB_DIR_}")
+    set(TF_LIB_DIR ${TF_LIB_DIR_} PARENT_SCOPE)
+endfunction()
 
-add_library(PyWrapTensorFlowInternal SHARED IMPORTED)
-set_target_properties(PyWrapTensorFlowInternal PROPERTIES
-    IMPORTED_LOCATION "${PYWRAP_TF_INTERNAL}"
-    )
+macro(add_library_tensorflow TF_LIB_DIR)
+    # Find the TensorFlow library file
+    find_library(TF_LIB_FILE
+            NAMES libtensorflow_framework.so.1 libtensorflow_framework.so.2
+            HINTS ${TF_LIB_DIR})
+
+    if(NOT TF_LIB_FILE)
+        message(FATAL_ERROR "TensorFlow library NOT found.")
+    endif()
+
+    add_library(TensorFlow SHARED IMPORTED)
+
+    set_target_properties(TensorFlow PROPERTIES
+        IMPORTED_LOCATION "${TF_LIB_FILE}"
+        INTERFACE_INCLUDE_DIRECTORIES "${TF_LIB_DIR}/include"
+        )
+endmacro()
+
+macro(add_library_pywrap_tensorflow_internal TF_LIB_DIR)
+    # Find the _pywrap_tensorflow_internal.so library. Used for custom ops.
+    find_library(PYWRAP_TF_INTERNAL
+            NAMES _pywrap_tensorflow_internal.so
+            HINTS ${TF_LIB_DIR}/python/)
+
+    if(NOT PYWRAP_TF_INTERNAL)
+        message(FATAL_ERROR "_pywrap_tensorflow_internal library NOT found.")
+    endif()
+
+    add_library(PyWrapTensorFlowInternal SHARED IMPORTED)
+
+    set_target_properties(PyWrapTensorFlowInternal PROPERTIES
+        IMPORTED_LOCATION "${PYWRAP_TF_INTERNAL}"
+        )
+endmacro()
