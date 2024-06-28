@@ -68,10 +68,6 @@ _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 # this flag in such circumstances.
 EXPORT_TO_ONNX_DIRECT = False
 
-# Flag to enable restoring pruned initializers in ONNX graph
-# By default, the flag is disabled because it is rare case we should restore initializers in most cases
-RESTORE_ONNX_MODEL_INITIALIZERS = False
-
 # runs the second pass of markers for non-leaf torch module and updates names of onnx ops belonging to
 # non-leaf pytorch module
 update_all_onnx_nodes_name = True
@@ -1125,8 +1121,7 @@ class OnnxSaver:
         :return: Onnx model with optional simply pass
         """
         onnx_model = onnx.load(filepath)
-        if RESTORE_ONNX_MODEL_INITIALIZERS:
-            onnx_model = restore_onnx_graph_initializers(onnx_model, inplace=True)
+        onnx_model = restore_onnx_graph_initializers(onnx_model, inplace=True)
 
         if simplify_onnx_model:
             onnx_model_simplified, check = onnxsim.simplify(onnx_model)
