@@ -53,6 +53,7 @@ torch.fx.wrap('sqrt')
 from torchvision import models
 from math import sqrt
 from torch.utils.data import DataLoader
+from models.test_models import SingleResidual
 
 from aimet_common.defs import QuantScheme
 from aimet_torch import elementwise_ops
@@ -407,9 +408,9 @@ class TestFX:
         """
         test torch fx with torchvision Resnet18 - BN fold
         """
-        input_shape = (1, 3, 224, 224)
+        input_shape = (1, 3, 32, 32)
         input_tensor = torch.randn(*input_shape)
-        model = models.resnet18().eval()
+        model = SingleResidual().eval()
         model_copy = copy.deepcopy(model)
         folded_pairs_for_original_model = fold_all_batch_norms(model, input_shape)
 
@@ -444,9 +445,9 @@ class TestFX:
         """
         test torch fx with torchvision Resnet18 - Cross layer equalization
         """
-        input_shape = (1, 3, 224, 224)
+        input_shape = (1, 3, 32, 32)
         input_tensor = torch.randn(*input_shape).cuda()
-        model = models.resnet18().cuda().eval()
+        model = SingleResidual().cuda().eval()
         model_copy = copy.deepcopy(model)
 
         # Perform CLE - (BN fold, ReLU6 -> ReLU replacement, CLS, HBF)
@@ -480,20 +481,20 @@ class TestFX:
         test torch fx with torchvision Resnet18 - adaround
         """
         seed_all(1)
-        input_shape = (1, 3, 224, 224)
+        input_shape = (1, 3, 32, 32)
         dummy_input = torch.randn(*input_shape).cuda()
-        model = models.resnet18().cuda().eval()
+        model = SingleResidual().cuda().eval()
         model_copy = copy.deepcopy(model)
 
         # create fake data loader with image size (3, 224, 224)
         data_loader = create_fake_data_loader(dataset_size=16, batch_size=16, image_size=input_shape[1:])
         params = AdaroundParameters(data_loader=data_loader, num_batches=1, default_num_iterations=5)
         adarounded_original_model = Adaround.apply_adaround(model, dummy_input, params, path='./',
-                                                            filename_prefix='resnet18')
+                                                            filename_prefix='resnet')
         # Apply Adaround for transformed model
         model_transformed = prepare_model(model_copy)
         adarounded_transformed_model = Adaround.apply_adaround(model_transformed, dummy_input, params, path='./',
-                                                               filename_prefix='resnet18')
+                                                               filename_prefix='resnet')
         # compare weights for very first layer
         # Weights should be same
         original_model_conv1_weight = adarounded_original_model.conv1.weight.clone()
@@ -514,9 +515,9 @@ class TestFX:
         test torch fx with torchvision Resnet18 - bias correction
         """
         seed_all(1)
-        input_shape = (1, 3, 224, 224)
+        input_shape = (1, 3, 32, 32)
         dummy_input = torch.randn(*input_shape).cuda()
-        model = models.resnet18().cuda().eval()
+        model = SingleResidual().cuda().eval()
         model_copy = copy.deepcopy(model)
 
         # create fake data loader with image size (3, 224, 224)

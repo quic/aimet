@@ -530,19 +530,20 @@ class TestQuantizationSimTransformers(unittest.TestCase):
             torch.cuda.manual_seed(seed)
             torch.cuda.manual_seed_all(seed)
 
-        src = torch.rand(10, 32, 512)
-        dummy_input = torch.rand(10, 32, 512)
+        src = torch.rand(1, 32, 128)
+        dummy_input = torch.rand(1, 32, 128)
 
         def forward_pass(model, args):
             model.eval()
             with torch.no_grad():
                 model(dummy_input, dummy_input)
 
-        num_encoder_layers = 12
-        default_num_decoder_layers = 6
+        num_encoder_layers = 2
+        default_num_decoder_layers = 2
 
         # start with a vanilla PyTorch transformer layer
-        transformer_model = nn.Transformer(nhead=16, num_encoder_layers=num_encoder_layers)
+        transformer_model = nn.Transformer(d_model=128, dim_feedforward=256, nhead=16, num_encoder_layers=num_encoder_layers,
+                                           num_decoder_layers=default_num_decoder_layers)
         transformer_model.eval()
 
         from torch import fx

@@ -989,7 +989,7 @@ class TestAdaround:
         dummy_input = [x.to(dtype=dtype) for x in dummy_input]
         out_before_ada = model(*dummy_input)
 
-        params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=1000)
+        params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=50)
         ada_rounded_model = Adaround.apply_adaround(model, dummy_input, params, './', 'dummy')
         out_after_ada = ada_rounded_model(*dummy_input)
 

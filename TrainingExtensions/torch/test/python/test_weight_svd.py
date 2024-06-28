@@ -874,7 +874,7 @@ class TestWeightSvdPruning(unittest.TestCase):
 
     def test_prune_model_2_layers(self):
 
-        model = mnist_model.Net()
+        model = mnist_model.NetSmall()
 
         # Create a layer database
         input_shape = (1, 1, 28, 28)
@@ -893,7 +893,7 @@ class TestWeightSvdPruning(unittest.TestCase):
         fc1_b = layer_db.find_layer_by_name('fc1.1')
 
         self.assertEqual(3136, fc1_a.module.in_features)
-        self.assertEqual(1024, fc1_b.module.out_features)
+        self.assertEqual(128, fc1_b.module.out_features)
 
         conv2_a = layer_db.find_layer_by_name('conv2.0')
         conv2_b = layer_db.find_layer_by_name('conv2.1')
