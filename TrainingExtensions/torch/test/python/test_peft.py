@@ -47,7 +47,7 @@ import copy
 from peft.tuners.lora.layer import LoraLayer as PeftLoraLayer
 from peft import LoraConfig, get_peft_model
 from aimet_torch.peft import replace_lora_layers_with_quantizable_layers, track_lora_meta_data, LoraLayer, \
-    PeftQuantUtils, save_lora_weights_after_adaptation, map_and_save_lora_weights_for_similar_adapters
+    PeftQuantUtils
 from aimet_torch.v2.quantsim import QuantizationSimModel
 
 def rsetattr(obj, attr, val):
