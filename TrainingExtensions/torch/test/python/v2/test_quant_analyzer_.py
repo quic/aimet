@@ -253,8 +253,6 @@ class TestQuantAnalyzer:
 
     def test_export_per_layer_stats_histogram_per_channel(self):
         """ test export_per_layer_stats_histogram() for per channel quantization """
-        results_dir = os.path.abspath("./tmp/")
-        os.makedirs(results_dir, exist_ok=True)
 
         quantsim_config = {
             "defaults": {
