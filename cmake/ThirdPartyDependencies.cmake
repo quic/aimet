@@ -154,7 +154,7 @@ endif()
 # ONNX Runtime Headers
 ######################
 
-if (ENABLE_TORCH)
+if (ENABLE_ONNX)
   # Aimet ONNX extension requires headers for onnxruntime which might not be installed
   # since they are not part of neither reqs_dep_*.txt nor reqs_pip_*.txt.
   # Download and install onnxruntime headers for user only if onnxruntime package is installed
