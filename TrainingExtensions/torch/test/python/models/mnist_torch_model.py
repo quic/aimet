@@ -144,6 +144,15 @@ class Net(nn.Module):
         x = self.fc2(x)
         return self.log_softmax(x)
 
+class NetSmall(Net):
+
+    def __init__(self):
+        """ Constructor """
+
+        super(NetSmall, self).__init__()
+        self.fc1 = nn.Linear(7 * 7 * 64, 128)
+        self.fc2 = nn.Linear(128, 10)
+
 
 class ExtendedNet(nn.Module):
     """ Mnist Model """
