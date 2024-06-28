@@ -35,15 +35,17 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+import os
 import json
+import tempfile
 import unittest.mock
-from unittest import mock
-
-import aimet_common.libpymo as libpymo
 import numpy as np
 import torch
 import torch.nn as nn
 
+from unittest import mock
+
+import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme
 from aimet_torch import elementwise_ops
 from aimet_torch.quantsim import QuantizationSimModel
@@ -126,13 +128,14 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         sim.model.op1.input_quantizers[1].enabled = False
         sim.model.conv1.output_quantizers[0].encoding = encodings
         sim.model.conv1.param_quantizers['weight'].encoding = encodings
-        sim.export(path='./data', filename_prefix='quant_model', dummy_input=dummy_input)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(path=tmp_dir, filename_prefix='quant_model', dummy_input=dummy_input)
 
-        with open('./data/quant_model.encodings') as f:
-            data = json.load(f)
+            with open(os.path.join(tmp_dir, 'quant_model.encodings')) as f:
+                data = json.load(f)
 
-        self.assertTrue(len(data['activation_encodings']) == 2)
-        self.assertTrue(len(data['param_encodings']) == 1)
+            self.assertTrue(len(data['activation_encodings']) == 2)
+            self.assertTrue(len(data['param_encodings']) == 1)
 
     def test_subtract_op(self):
         torch.manual_seed(10)
@@ -188,7 +191,8 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         sim = QuantizationSimModel(model, dummy_input)
         sim.compute_encodings(dummy_forward_pass, None)
         print(sim)
-        sim.export(path='./data', filename_prefix='concat_model', dummy_input=dummy_input)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(path=tmp_dir, filename_prefix='concat_model', dummy_input=dummy_input)
 
     def test_matmul_op(self):
         torch.manual_seed(10)

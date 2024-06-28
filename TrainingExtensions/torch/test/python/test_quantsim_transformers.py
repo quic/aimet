@@ -36,6 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ contains unit tests to validate transformer quantization support """
+
 import copy
 import os
 import json
@@ -286,7 +287,8 @@ class TestQuantizationSimTransformers(unittest.TestCase):
         # validate config after compute encodings
         sim.compute_encodings(forward_pass, None)
 
-        sim.export('./data/', 'two_input_model2', random_input)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, 'two_input_model2', random_input)
 
         # LayerNorm output quantization is enabled by default
         self.assertTrue(sim.model.ln1.output_quantizers[0].encoding)
@@ -322,72 +324,70 @@ class TestQuantizationSimTransformers(unittest.TestCase):
         model = ModelWithBertCustomLayerNorm()
         model.eval()
 
-        file_path = "./data/quantsim_config.json"
-        generate_custom_quantsim_config(file_path)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            file_path = os.path.join(tmp_dir, "quantsim_config.json")
+            generate_custom_quantsim_config(file_path)
 
-        random_input = torch.rand(1, 4, 4)
+            random_input = torch.rand(1, 4, 4)
 
-        def forward_pass(model, args):
-            model.eval()
-            with torch.no_grad():
-                model(*random_input)
+            def forward_pass(model, args):
+                model.eval()
+                with torch.no_grad():
+                    model(*random_input)
 
-        qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = True
+            qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = True
 
-        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
-                                   dummy_input=random_input,
-                                   config_file='./data/quantsim_config.json')
+            sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
+                                       dummy_input=random_input,
+                                       config_file=os.path.join(tmp_dir, "quantsim_config.json"))
 
-        # validate config after compute encodings
-        sim.compute_encodings(forward_pass, None)
+            # validate config after compute encodings
+            sim.compute_encodings(forward_pass, None)
 
-        # validation rules:
-        # AIMET supports overrides ONLY when a lower precision kernel is unavailable.
-        # for example :
-        # 1) (default) int 8, but only FP16 kernel is available for a given op type --> override supported
-        # 2) (default) int 8, but only int 4 kernel is available is available for a given op type --> override not supported
+            # validation rules:
+            # AIMET supports overrides ONLY when a lower precision kernel is unavailable.
+            # for example :
+            # 1) (default) int 8, but only FP16 kernel is available for a given op type --> override supported
+            # 2) (default) int 8, but only int 4 kernel is available is available for a given op type --> override not supported
 
-        #  check quantizer added to parameters of LayerNorm
-        self.assertTrue(isinstance(sim.model.customln1.param_quantizers['weight'], StaticGridPerTensorQuantizer))
-        self.assertTrue(isinstance(sim.model.customln1.param_quantizers['bias'], StaticGridPerTensorQuantizer))
-        self.assertTrue(isinstance(sim.model.customln1.input_quantizers[0], StaticGridPerTensorQuantizer))
+            #  check quantizer added to parameters of LayerNorm
+            self.assertTrue(isinstance(sim.model.customln1.param_quantizers['weight'], StaticGridPerTensorQuantizer))
+            self.assertTrue(isinstance(sim.model.customln1.param_quantizers['bias'], StaticGridPerTensorQuantizer))
+            self.assertTrue(isinstance(sim.model.customln1.input_quantizers[0], StaticGridPerTensorQuantizer))
 
-        # input / output quantizers for layernorm
-        self.assertTrue(isinstance(sim.model.customln1.output_quantizers[0], StaticGridPerTensorQuantizer))
-        self.assertTrue(isinstance(sim.model.customln1, StaticGridQuantWrapper))
+            # input / output quantizers for layernorm
+            self.assertTrue(isinstance(sim.model.customln1.output_quantizers[0], StaticGridPerTensorQuantizer))
+            self.assertTrue(isinstance(sim.model.customln1, StaticGridQuantWrapper))
 
-        # validate config after compute encodings
-        sim.compute_encodings(forward_pass, None)
+            # validate config after compute encodings
+            sim.compute_encodings(forward_pass, None)
 
-        # check output quantizer for linear
-        self.assertTrue(sim.model.linear1.output_quantizers[0].encoding)
-        self.assertTrue(sim.model.linear1.output_quantizers[0].bitwidth == 8)
-        self.assertTrue(sim.model.linear1.output_quantizers[0].data_type == QuantizationDataType.int)
+            # check output quantizer for linear
+            self.assertTrue(sim.model.linear1.output_quantizers[0].encoding)
+            self.assertTrue(sim.model.linear1.output_quantizers[0].bitwidth == 8)
+            self.assertTrue(sim.model.linear1.output_quantizers[0].data_type == QuantizationDataType.int)
 
-        # LayerNorm output quantization is enabled by default
-        # override this with custom config (matches aic100_config.json)
-        self.assertIsNone(sim.model.customln1.output_quantizers[0].encoding)
-        self.assertTrue(sim.model.customln1.output_quantizers[0].bitwidth == 16)
-        self.assertTrue(sim.model.customln1.output_quantizers[0].data_type == QuantizationDataType.float)
+            # LayerNorm output quantization is enabled by default
+            # override this with custom config (matches aic100_config.json)
+            self.assertIsNone(sim.model.customln1.output_quantizers[0].encoding)
+            self.assertTrue(sim.model.customln1.output_quantizers[0].bitwidth == 16)
+            self.assertTrue(sim.model.customln1.output_quantizers[0].data_type == QuantizationDataType.float)
 
-        #  gamma (weight) quantizer of LayerNorm is enabled by default
-        # override this with custom config (matches aic100_config.json)
-        self.assertTrue(sim.model.customln1.param_quantizers['weight'].bitwidth == 16)
-        self.assertTrue(sim.model.customln1.param_quantizers['weight'].data_type == QuantizationDataType.float)
-        self.assertTrue(sim.model.customln1.param_quantizers['bias'].bitwidth == 16)
-        self.assertTrue(sim.model.customln1.param_quantizers['bias'].data_type == QuantizationDataType.float)
+            #  gamma (weight) quantizer of LayerNorm is enabled by default
+            # override this with custom config (matches aic100_config.json)
+            self.assertTrue(sim.model.customln1.param_quantizers['weight'].bitwidth == 16)
+            self.assertTrue(sim.model.customln1.param_quantizers['weight'].data_type == QuantizationDataType.float)
+            self.assertTrue(sim.model.customln1.param_quantizers['bias'].bitwidth == 16)
+            self.assertTrue(sim.model.customln1.param_quantizers['bias'].data_type == QuantizationDataType.float)
 
-        self.assertIsNone(sim.model.customln1.param_quantizers['weight'].encoding)
-        self.assertIsNone(sim.model.customln1.param_quantizers['bias'].encoding)
+            self.assertIsNone(sim.model.customln1.param_quantizers['weight'].encoding)
+            self.assertIsNone(sim.model.customln1.param_quantizers['bias'].encoding)
 
-        self.assertTrue(sim.model.gelu.output_quantizers[0].bitwidth == 16)
-        self.assertTrue(sim.model.gelu.output_quantizers[0].data_type == QuantizationDataType.float)
-        self.assertIsNone(sim.model.gelu.output_quantizers[0].encoding)
+            self.assertTrue(sim.model.gelu.output_quantizers[0].bitwidth == 16)
+            self.assertTrue(sim.model.gelu.output_quantizers[0].data_type == QuantizationDataType.float)
+            self.assertIsNone(sim.model.gelu.output_quantizers[0].encoding)
 
-        # clear data dir that was used in this test
-        qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
-        if os.path.exists(file_path):
-           os.remove(file_path)
+            qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
 
     def test_custom_quantizable_multi_head_attn_unit(self):
         """

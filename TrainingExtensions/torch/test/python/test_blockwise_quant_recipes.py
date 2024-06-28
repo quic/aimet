@@ -35,9 +35,13 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Tests for blockwise quant recipes """
+
+import os
 import copy
 import json
 import itertools
+import tempfile
+
 import pytest
 import torch
 from aimet_torch.quantsim import QuantizationSimModel
@@ -89,8 +93,7 @@ class NestedModel(torch.nn.Module):
         x = self.sigmoid(x)
         return x
 
-@pytest.fixture(scope='module')
-def create_per_channel_config():
+def create_per_channel_config(path):
     quantsim_config = {
         "defaults": {
             "ops": {
@@ -113,7 +116,7 @@ def create_per_channel_config():
         "model_input": {},
         "model_output": {}
     }
-    with open('./data/quantsim_config.json', 'w') as f:
+    with open(path, 'w') as f:
         json.dump(quantsim_config, f)
 
 class TestBlockwiseQuantTensorSplitting:
@@ -145,40 +148,42 @@ class TestBlockwiseQuantTensorSplitting:
         new_out = model(dummy_input)
         assert torch.allclose(orig_out, new_out, atol=1e-6)
 
-    def test_quantize_blockwise_linear(self, create_per_channel_config):
+    def test_quantize_blockwise_linear(self):
         dummy_input = torch.randn(1, 8)
         model = bqts.BlockwiseLinear(torch.nn.Linear(8, 3), 3)
-        qsim = QuantizationSimModel(model, dummy_input=dummy_input, config_file='./data/quantsim_config.json')
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            create_per_channel_config(os.path.join(tmp_dir, 'quantsim_config.json'))
+            qsim = QuantizationSimModel(model, dummy_input=dummy_input, config_file=os.path.join(tmp_dir, 'quantsim_config.json'))
 
-        assert isinstance(qsim.model.split, QcQuantizeWrapper)
-        assert isinstance(qsim.model.linears[0], QcQuantizeWrapper)
-        assert isinstance(qsim.model.linears[1], QcQuantizeWrapper)
-        assert isinstance(qsim.model.linears[2], QcQuantizeWrapper)
-        assert isinstance(qsim.model.elementwise_adds[0], QcQuantizeWrapper)
-        assert isinstance(qsim.model.elementwise_adds[1], QcQuantizeWrapper)
+            assert isinstance(qsim.model.split, QcQuantizeWrapper)
+            assert isinstance(qsim.model.linears[0], QcQuantizeWrapper)
+            assert isinstance(qsim.model.linears[1], QcQuantizeWrapper)
+            assert isinstance(qsim.model.linears[2], QcQuantizeWrapper)
+            assert isinstance(qsim.model.elementwise_adds[0], QcQuantizeWrapper)
+            assert isinstance(qsim.model.elementwise_adds[1], QcQuantizeWrapper)
 
-        # Temporary hack to disable split op output quantizers while handling for CG split op is reworked
-        for output_quantizer in qsim.model.split.output_quantizers:
-            output_quantizer.enabled = False
+            # Temporary hack to disable split op output quantizers while handling for CG split op is reworked
+            for output_quantizer in qsim.model.split.output_quantizers:
+                output_quantizer.enabled = False
 
-        # Temporary hack to enable model input split op input quantizer while handling for CG split op is reworked
-        qsim.model.split.input_quantizers[0].enabled = True
+            # Temporary hack to enable model input split op input quantizer while handling for CG split op is reworked
+            qsim.model.split.input_quantizers[0].enabled = True
 
-        qsim.compute_encodings(lambda m, _: m(dummy_input), None)
-        bqts.tie_blockwise_linear_quantizers(qsim)
-        _ = qsim.model(dummy_input)
+            qsim.compute_encodings(lambda m, _: m(dummy_input), None)
+            bqts.tie_blockwise_linear_quantizers(qsim)
+            _ = qsim.model(dummy_input)
 
-        assert len(qsim.model.linears[0].param_quantizers['weight'].encoding) == 3
-        assert (qsim.model.linears[0].output_quantizers[0].encoding.max ==
-                qsim.model.linears[1].output_quantizers[0].encoding.max)
-        assert (qsim.model.linears[0].output_quantizers[0].encoding.max ==
-                qsim.model.linears[2].output_quantizers[0].encoding.max)
-        assert (qsim.model.linears[0].output_quantizers[0].encoding.max ==
-                qsim.model.elementwise_adds[0].output_quantizers[0].encoding.max)
-        assert (qsim.model.linears[0].output_quantizers[0].encoding.max ==
-                qsim.model.elementwise_adds[1].output_quantizers[0].encoding.max)
+            assert len(qsim.model.linears[0].param_quantizers['weight'].encoding) == 3
+            assert (qsim.model.linears[0].output_quantizers[0].encoding.max ==
+                    qsim.model.linears[1].output_quantizers[0].encoding.max)
+            assert (qsim.model.linears[0].output_quantizers[0].encoding.max ==
+                    qsim.model.linears[2].output_quantizers[0].encoding.max)
+            assert (qsim.model.linears[0].output_quantizers[0].encoding.max ==
+                    qsim.model.elementwise_adds[0].output_quantizers[0].encoding.max)
+            assert (qsim.model.linears[0].output_quantizers[0].encoding.max ==
+                    qsim.model.elementwise_adds[1].output_quantizers[0].encoding.max)
 
-    def test_blockwise_quant_with_small_linear(self, create_per_channel_config):
+    def test_blockwise_quant_with_small_linear(self):
         dummy_input = torch.randn(1, 3)
         model = bqts.BlockwiseLinear(torch.nn.Linear(3, 2), 3)
         qsim = QuantizationSimModel(model, dummy_input=dummy_input)
@@ -208,7 +213,7 @@ class TestBlockwiseQuantTensorSplitting:
 
 class TestBlockwiseQuantBatchedMatmul:
     @pytest.mark.parametrize('device', DEVICES)
-    def test_blockwise_quant_with_batched_matmul(self, create_per_channel_config, device):
+    def test_blockwise_quant_with_batched_matmul(self, device):
         torch.manual_seed(0)
         dummy_input = torch.randn(1, 1, 9, device=device)
         model = LinearModel().to(device)
@@ -220,33 +225,35 @@ class TestBlockwiseQuantBatchedMatmul:
 
         assert torch.allclose(orig_out, new_out, atol=1e-5)
 
-        qsim1 = QuantizationSimModel(model, dummy_input, config_file='./data/quantsim_config.json')
-        bqbm.enable_bmm_per_channel_quantizers(qsim1)
-        qsim1.compute_encodings(lambda m, _: m(dummy_input), None)
-        weight_first_quantized_out = qsim1.model(dummy_input)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            create_per_channel_config(os.path.join(tmp_dir, 'quantsim_config.json'))
+            qsim1 = QuantizationSimModel(model, dummy_input, config_file=os.path.join(tmp_dir, 'quantsim_config.json'))
+            bqbm.enable_bmm_per_channel_quantizers(qsim1)
+            qsim1.compute_encodings(lambda m, _: m(dummy_input), None)
+            weight_first_quantized_out = qsim1.model(dummy_input)
 
-        model.linear1 = bqbm.LinearWithMatMul(orig_linear, 3, weight_first=False)
-        qsim2 = QuantizationSimModel(model, dummy_input, config_file='./data/quantsim_config.json')
-        bqbm.enable_bmm_per_channel_quantizers(qsim2)
-        qsim2.compute_encodings(lambda m, _: m(dummy_input), None)
-        weight_last_quantized_out = qsim2.model(dummy_input)
+            model.linear1 = bqbm.LinearWithMatMul(orig_linear, 3, weight_first=False)
+            qsim2 = QuantizationSimModel(model, dummy_input, config_file=os.path.join(tmp_dir, 'quantsim_config.json'))
+            bqbm.enable_bmm_per_channel_quantizers(qsim2)
+            qsim2.compute_encodings(lambda m, _: m(dummy_input), None)
+            weight_last_quantized_out = qsim2.model(dummy_input)
 
-        for enc1, enc2 in zip(qsim1.model.linear1.batch_matmul.param_quantizers['weight'].encoding,
-                              qsim2.model.linear1.batch_matmul.param_quantizers['weight'].encoding):
-            assert enc1.min == enc2.min
-            assert enc1.max == enc2.max
-            assert enc1.delta == enc2.delta
-            assert enc1.offset == enc2.offset
-            assert enc1.bw == enc2.bw
+            for enc1, enc2 in zip(qsim1.model.linear1.batch_matmul.param_quantizers['weight'].encoding,
+                                  qsim2.model.linear1.batch_matmul.param_quantizers['weight'].encoding):
+                assert enc1.min == enc2.min
+                assert enc1.max == enc2.max
+                assert enc1.delta == enc2.delta
+                assert enc1.offset == enc2.offset
+                assert enc1.bw == enc2.bw
 
-        assert torch.equal(weight_first_quantized_out, weight_last_quantized_out)
-        assert len(qsim2.model.linear1.batch_matmul.param_quantizers['weight'].encoding) == 9
+            assert torch.equal(weight_first_quantized_out, weight_last_quantized_out)
+            assert len(qsim2.model.linear1.batch_matmul.param_quantizers['weight'].encoding) == 9
 
-        qsim2.export('./data', 'bmm_blockwise', dummy_input.to('cpu'))
+            qsim2.export(tmp_dir, 'bmm_blockwise', dummy_input.to('cpu'))
 
 class TestBlockwiseQuantGroupedConv:
     @pytest.mark.parametrize('device', DEVICES)
-    def test_blockwise_quant_with_grouped_conv(self, create_per_channel_config, device):
+    def test_blockwise_quant_with_grouped_conv(self, device):
         torch.manual_seed(0)
         dummy_input = torch.randn(1, 1, 9, device=device)
         model = LinearModel().to(device)
@@ -258,15 +265,17 @@ class TestBlockwiseQuantGroupedConv:
 
         assert torch.allclose(orig_out, new_out, atol=1e-5)
 
-        qsim = QuantizationSimModel(model, dummy_input, config_file='./data/quantsim_config.json')
-        qsim.compute_encodings(lambda m, _: m(dummy_input), None)
-        _ = qsim.model(dummy_input)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            create_per_channel_config(os.path.join(tmp_dir, 'quantsim_config.json'))
+            qsim = QuantizationSimModel(model, dummy_input, config_file=os.path.join(tmp_dir, 'quantsim_config.json'))
+            qsim.compute_encodings(lambda m, _: m(dummy_input), None)
+            _ = qsim.model(dummy_input)
 
-        assert len(qsim.model.linear1.grouped_conv.param_quantizers['weight'].encoding) == 9
+            assert len(qsim.model.linear1.grouped_conv.param_quantizers['weight'].encoding) == 9
 
-        qsim.export('./data', 'gc_blockwise', dummy_input.to('cpu'))
+            qsim.export(tmp_dir, 'gc_blockwise', dummy_input.to('cpu'))
 
-def test_parity_of_blockwise_quant_formulations(create_per_channel_config):
+def test_parity_of_blockwise_quant_formulations():
 
     def assert_encodings_match(enc1, enc2):
         assert enc1.min == enc2.min
@@ -285,31 +294,33 @@ def test_parity_of_blockwise_quant_formulations(create_per_channel_config):
     bqbm.replace_linears_for_blockwise_quant(model_bm, 3)
     bqgc.replace_linears_for_blockwise_quant(model_gc, 3)
 
-    qsim_ts = QuantizationSimModel(model_ts, dummy_input, config_file='./data/quantsim_config.json')
-    qsim_ts.compute_encodings(lambda m, _: m(dummy_input), None)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        create_per_channel_config(os.path.join(tmp_dir, 'quantsim_config.json'))
+        qsim_ts = QuantizationSimModel(model_ts, dummy_input, config_file=os.path.join(tmp_dir, 'quantsim_config.json'))
+        qsim_ts.compute_encodings(lambda m, _: m(dummy_input), None)
 
-    qsim_bm = QuantizationSimModel(model_bm, dummy_input, config_file='./data/quantsim_config.json')
-    bqbm.enable_bmm_per_channel_quantizers(qsim_bm)
-    qsim_bm.compute_encodings(lambda m, _: m(dummy_input), None)
+        qsim_bm = QuantizationSimModel(model_bm, dummy_input, config_file=os.path.join(tmp_dir, 'quantsim_config.json'))
+        bqbm.enable_bmm_per_channel_quantizers(qsim_bm)
+        qsim_bm.compute_encodings(lambda m, _: m(dummy_input), None)
 
-    qsim_gc = QuantizationSimModel(model_gc, dummy_input, config_file='./data/quantsim_config.json')
-    qsim_gc.compute_encodings(lambda m, _: m(dummy_input), None)
+        qsim_gc = QuantizationSimModel(model_gc, dummy_input, config_file=os.path.join(tmp_dir, 'quantsim_config.json'))
+        qsim_gc.compute_encodings(lambda m, _: m(dummy_input), None)
 
-    qsim_ts_linear1_encodings = list(itertools.chain(qsim_ts.model.linear1.linears[0].param_quantizers['weight'].encoding,
-                                                     qsim_ts.model.linear1.linears[1].param_quantizers['weight'].encoding,
-                                                     qsim_ts.model.linear1.linears[2].param_quantizers['weight'].encoding))
+        qsim_ts_linear1_encodings = list(itertools.chain(qsim_ts.model.linear1.linears[0].param_quantizers['weight'].encoding,
+                                                         qsim_ts.model.linear1.linears[1].param_quantizers['weight'].encoding,
+                                                         qsim_ts.model.linear1.linears[2].param_quantizers['weight'].encoding))
 
-    assert len(qsim_ts_linear1_encodings) == len(qsim_bm.model.linear1.batch_matmul.param_quantizers['weight'].encoding)
-    assert len(qsim_ts_linear1_encodings) == len(qsim_gc.model.linear1.grouped_conv.param_quantizers['weight'].encoding)
-    assert (len(qsim_ts.model.linear2.linears[0].param_quantizers['weight'].encoding) ==
-            len(qsim_bm.model.linear2.batch_matmul.param_quantizers['weight'].encoding))
-    assert (len(qsim_ts.model.linear2.linears[0].param_quantizers['weight'].encoding) ==
-            len(qsim_gc.model.linear2.grouped_conv.param_quantizers['weight'].encoding))
+        assert len(qsim_ts_linear1_encodings) == len(qsim_bm.model.linear1.batch_matmul.param_quantizers['weight'].encoding)
+        assert len(qsim_ts_linear1_encodings) == len(qsim_gc.model.linear1.grouped_conv.param_quantizers['weight'].encoding)
+        assert (len(qsim_ts.model.linear2.linears[0].param_quantizers['weight'].encoding) ==
+                len(qsim_bm.model.linear2.batch_matmul.param_quantizers['weight'].encoding))
+        assert (len(qsim_ts.model.linear2.linears[0].param_quantizers['weight'].encoding) ==
+                len(qsim_gc.model.linear2.grouped_conv.param_quantizers['weight'].encoding))
 
-    for idx, encoding in enumerate(qsim_ts_linear1_encodings):
-        assert_encodings_match(encoding, qsim_bm.model.linear1.batch_matmul.param_quantizers['weight'].encoding[idx])
-        assert_encodings_match(encoding, qsim_gc.model.linear1.grouped_conv.param_quantizers['weight'].encoding[idx])
+        for idx, encoding in enumerate(qsim_ts_linear1_encodings):
+            assert_encodings_match(encoding, qsim_bm.model.linear1.batch_matmul.param_quantizers['weight'].encoding[idx])
+            assert_encodings_match(encoding, qsim_gc.model.linear1.grouped_conv.param_quantizers['weight'].encoding[idx])
 
-    for idx, encoding in enumerate(qsim_ts.model.linear2.linears[0].param_quantizers['weight'].encoding):
-        assert_encodings_match(encoding, qsim_bm.model.linear2.batch_matmul.param_quantizers['weight'].encoding[idx])
-        assert_encodings_match(encoding, qsim_gc.model.linear2.grouped_conv.param_quantizers['weight'].encoding[idx])
+        for idx, encoding in enumerate(qsim_ts.model.linear2.linears[0].param_quantizers['weight'].encoding):
+            assert_encodings_match(encoding, qsim_bm.model.linear2.batch_matmul.param_quantizers['weight'].encoding[idx])
+            assert_encodings_match(encoding, qsim_gc.model.linear2.grouped_conv.param_quantizers['weight'].encoding[idx])

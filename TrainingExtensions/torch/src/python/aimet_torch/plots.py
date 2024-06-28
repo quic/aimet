@@ -36,6 +36,7 @@
 # =============================================================================
 
 """ Create visualizations on the weights in each conv and linear layer in a model"""
+
 import os
 import numpy as np
 import pandas as pd

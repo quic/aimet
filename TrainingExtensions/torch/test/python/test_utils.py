@@ -659,8 +659,9 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
                 x = self.fc(x)
                 return x
 
-        with open('./data/mini_model.py', 'w') as f:
-            print("""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with open(os.path.join(tmp_dir, 'mini_model.py'), 'w') as f:
+                print("""
 import torch
 import torch.nn
 class MiniModel(torch.nn.Module):
@@ -672,7 +673,7 @@ class MiniModel(torch.nn.Module):
         self.relu1 = torch.nn.ReLU(inplace=True)
         self.maxpool = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
         self.fc = torch.nn.Linear(128, 12)
-
+    
     def forward(self, *inputs):
         x = self.conv1(inputs[0])
         x = self.bn1(x)
@@ -681,36 +682,36 @@ class MiniModel(torch.nn.Module):
         x = x.view(x.size(0), -1)
         x = self.fc(x)
         return x
-            """, file=f)
-        model = MiniModel()
-        model.eval()
-        dummy_input = torch.randn(1, 3, 8, 8)
-        out1 = model(dummy_input)
-        torch.save(model.state_dict(), './data/mini_model.pth')
-        new_model = utils.load_pytorch_model('MiniModel', './data', 'mini_model', load_state_dict=True)
-        utils.match_model_settings(model, new_model)
-        torch.save(new_model, './data/saved_mini_model.pth')
-        new_model = torch.load('./data/saved_mini_model.pth')
-        out2 = new_model(dummy_input)
-        assert torch.allclose(out1, out2)
+                """, file=f)
+            model = MiniModel()
+            model.eval()
+            dummy_input = torch.randn(1, 3, 8, 8)
+            out1 = model(dummy_input)
+            torch.save(model.state_dict(), os.path.join(tmp_dir, 'mini_model.pth'))
+            new_model = utils.load_pytorch_model('MiniModel', tmp_dir, 'mini_model', load_state_dict=True)
+            utils.match_model_settings(model, new_model)
+            torch.save(new_model, os.path.join(tmp_dir, 'saved_mini_model.pth'))
+            new_model = torch.load(os.path.join(tmp_dir, 'saved_mini_model.pth'))
+            out2 = new_model(dummy_input)
+            assert torch.allclose(out1, out2)
 
-        # Delete pth state dict file
-        if os.path.exists("./data/mini_model.pth"):
-            os.remove("./data/mini_model.pth")
+            # Delete pth state dict file
+            if os.path.exists(os.path.join(tmp_dir, "mini_model.pth")):
+                os.remove(os.path.join(tmp_dir, "mini_model.pth"))
 
-        if os.path.exists("./data/saved_mini_model.pth"):
-            os.remove("./data/saved_mini_model.pth")
+            if os.path.exists(os.path.join(tmp_dir, "saved_mini_model.pth")):
+                os.remove(os.path.join(tmp_dir, "saved_mini_model.pth"))
 
-        with self.assertRaises(AssertionError):
-            _ = utils.load_pytorch_model('MiniModel', './data', 'mini_model', load_state_dict=True)
-        _ = utils.load_pytorch_model('MiniModel', './data', 'mini_model', load_state_dict=False)
+            with self.assertRaises(AssertionError):
+                _ = utils.load_pytorch_model('MiniModel', tmp_dir, 'mini_model', load_state_dict=True)
+            _ = utils.load_pytorch_model('MiniModel', tmp_dir, 'mini_model', load_state_dict=False)
 
-        # Delete pth state dict file
-        if os.path.exists("./data/mini_model.py"):
-            os.remove("./data/mini_model.py")
+            # Delete pth state dict file
+            if os.path.exists(os.path.join(tmp_dir, "mini_model.py")):
+                os.remove(os.path.join(tmp_dir, "mini_model.py"))
 
-        with self.assertRaises(AssertionError):
-            _ = utils.load_pytorch_model('MiniModel', './data', 'mini_model', load_state_dict=False)
+            with self.assertRaises(AssertionError):
+                _ = utils.load_pytorch_model('MiniModel', tmp_dir, 'mini_model', load_state_dict=False)
 
     def test_disable_all_quantizers(self):
         model = TinyModel().to(device="cpu")

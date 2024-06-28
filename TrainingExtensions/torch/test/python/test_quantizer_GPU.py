@@ -36,6 +36,7 @@
 # =============================================================================
 import json
 import os
+import tempfile
 
 import pytest
 import unittest
@@ -157,8 +158,9 @@ class QuantizerCpuGpu(unittest.TestCase):
         self.assertAlmostEqual(model_gpu.fc2.output_quantizers[0].encoding.max,
                                model_cpu.fc2.output_quantizers[0].encoding.max, delta=0.001)
 
-        gpu_sim_model.export("./data/", "quantizer_no_fine_tuning__GPU", dummy_input)
-        cpu_sim_model.export("./data/", "quantizer_no_fine_tuning__CPU", dummy_input)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            gpu_sim_model.export(tmp_dir, "quantizer_no_fine_tuning__GPU", dummy_input)
+            cpu_sim_model.export(tmp_dir, "quantizer_no_fine_tuning__CPU", dummy_input)
 
         self.assertEqual(torch.device('cuda:0'), next(model_gpu.parameters()).device)
         self.assertEqual(torch.device('cpu'), next(model_cpu.parameters()).device)
