@@ -36,6 +36,7 @@
 # =============================================================================
 
 import contextlib
+import tempfile
 from dataclasses import dataclass
 from unittest.mock import patch, MagicMock
 import os
@@ -286,7 +287,7 @@ class TestAutoQuant:
             dataset = tf.compat.v1.data.Dataset.from_tensor_slices(dummy_inputs)
             dataset = dataset.batch(1)
 
-        with create_tmp_directory() as results_dir:
+        with tempfile.TemporaryDirectory() as results_dir:
             with patch_ptq_techniques(
                 bn_folded_acc=50.0, cle_acc=60.0, adaround_acc=70.0
             ) as mocks:
@@ -356,7 +357,7 @@ class TestAutoQuant:
             self, auto_quant, input_session, starting_op_names, output_op_names,
             allowed_accuracy_drop, bn_folded_acc, cle_acc, adaround_acc,
     ):
-        with create_tmp_directory() as results_dir:
+        with tempfile.TemporaryDirectory() as results_dir:
             target_acc = FP32_ACC - allowed_accuracy_drop
 
             output_session, acc, encoding_path =\
@@ -403,7 +404,7 @@ class TestAutoQuant:
                 eval_callback=mocks.eval_callback,
             )
 
-            with create_tmp_directory() as results_dir:
+            with tempfile.TemporaryDirectory() as results_dir:
                 cache_id = "unittest"
                 cache_files  = [
                     os.path.join(results_dir, ".auto_quant_cache", cache_id, f"{key}.meta")
@@ -426,19 +427,3 @@ class TestAutoQuant:
                 # PTQ functions should not be called twice.
                 assert mocks.equalize_model.call_count == 1
                 assert mocks.apply_adaround.call_count == 1
-
-
-@contextlib.contextmanager
-def create_tmp_directory(dirname: str = "/tmp/.aimet_unittest"):
-    success = False
-    try:
-        os.makedirs(dirname, exist_ok=True)
-        success = True
-    except FileExistsError:
-        raise
-
-    try:
-        yield dirname
-    finally:
-        if success:
-            shutil.rmtree(dirname)

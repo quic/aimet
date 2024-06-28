@@ -36,6 +36,7 @@
 # =============================================================================
 
 import pytest
+import tempfile
 import json
 import os.path
 import shutil
@@ -186,9 +187,9 @@ class TestQuantAnalyzer:
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
-        try:
+        with tempfile.TemporaryDirectory() as tempdir:
             layer_wise_eval_score_dict = \
-                quant_analyzer.perform_per_layer_analysis_by_enabling_quant_wrappers(sim, results_dir="./tmp/")
+                quant_analyzer.perform_per_layer_analysis_by_enabling_quant_wrappers(sim, results_dir=tempdir)
             print(layer_wise_eval_score_dict)
             assert type(layer_wise_eval_score_dict) == dict
             assert len(layer_wise_eval_score_dict) == 10
@@ -198,10 +199,7 @@ class TestQuantAnalyzer:
                 assert quant_wrapper_name in module_names
 
                 # Check if it is exported to correct html file.
-                assert os.path.isfile("./tmp/per_layer_quant_enabled.html")
-        finally:
-            if os.path.isdir("./tmp/"):
-                shutil.rmtree("./tmp/")
+                assert os.path.isfile(os.path.join(tempdir, 'per_layer_quant_enabled.html'))
 
     def test_perform_per_layer_analysis_by_disabling_quant_wrappers(self):
         """ test perform per layer analysis by disabling quant wrappers """
@@ -217,9 +215,9 @@ class TestQuantAnalyzer:
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
-        try:
+        with tempfile.TemporaryDirectory() as tempdir:
             layer_wise_eval_score_dict = \
-                quant_analyzer.perform_per_layer_analysis_by_disabling_quant_wrappers(sim, results_dir="./tmp/")
+                quant_analyzer.perform_per_layer_analysis_by_disabling_quant_wrappers(sim, results_dir=tempdir)
             print(layer_wise_eval_score_dict)
             assert type(layer_wise_eval_score_dict) == dict
             assert len(layer_wise_eval_score_dict) == 10
@@ -229,10 +227,7 @@ class TestQuantAnalyzer:
                 assert quant_wrapper_name in module_names
 
             # Check if it is exported to correct html file.
-            assert os.path.isfile("./tmp/per_layer_quant_disabled.html")
-        finally:
-            if os.path.isdir("./tmp/"):
-                shutil.rmtree("./tmp/")
+            assert os.path.isfile(os.path.join(tempdir, 'per_layer_quant_disabled.html'))
 
     def test_export_per_layer_stats_histogram(self):
         """ test export_per_layer_stats_histogram() """
@@ -244,23 +239,17 @@ class TestQuantAnalyzer:
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
-        try:
-            quant_analyzer.export_per_layer_stats_histogram(sim, results_dir="./tmp/")
+        with tempfile.TemporaryDirectory() as tempdir:
+            quant_analyzer.export_per_layer_stats_histogram(sim, results_dir=tempdir)
 
             # Check if it is exported to correct html file.
-            assert os.path.exists("./tmp/activations_pdf")
-            assert os.path.exists("./tmp/weights_pdf")
-            assert os.path.isfile("./tmp/activations_pdf/conv1_input_q0_0.html")
-            assert os.path.isfile("./tmp/weights_pdf/conv1/conv1_weight_0.html")
-        finally:
-            if os.path.isdir("./tmp/"):
-                shutil.rmtree("./tmp/")
+            assert os.path.exists(os.path.join(tempdir, 'activations_pdf'))
+            assert os.path.exists(os.path.join(tempdir, 'weights_pdf'))
+            assert os.path.exists(os.path.join(tempdir, 'activations_pdf/conv1_input_q0_0.html'))
+            assert os.path.exists(os.path.join(tempdir, 'weights_pdf/conv1/conv1_weight_0.html'))
 
     def test_export_per_layer_stats_histogram_per_channel(self):
         """ test export_per_layer_stats_histogram() for per channel quantization """
-        results_dir = os.path.abspath("./tmp/")
-        os.makedirs(results_dir, exist_ok=True)
-
         quantsim_config = {
             "defaults": {
                 "ops": {
@@ -277,29 +266,26 @@ class TestQuantAnalyzer:
             "model_input": {},
             "model_output": {}
         }
-        with open("./tmp/quantsim_config.json", 'w') as f:
-            json.dump(quantsim_config, f)
+        with tempfile.TemporaryDirectory() as tempdir:
+            with open(os.path.join(tempdir, "quantsim_config.json"), 'w') as f:
+                json.dump(quantsim_config, f)
 
-        input_shape = (1, 3, 32, 32)
-        dummy_input = torch.randn(*input_shape)
-        model = TinyModel().eval()
-        sim = QuantizationSimModel(model, dummy_input, config_file="./tmp/quantsim_config.json")
-        sim.compute_encodings(evaluate, dummy_input)
-        forward_pass_callback = CallbackFunc(calibrate, dummy_input)
-        eval_callback = CallbackFunc(evaluate, dummy_input)
-        quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
-        try:
-            quant_analyzer.export_per_layer_stats_histogram(sim, results_dir="./tmp/")
-            assert os.path.exists("./tmp/activations_pdf")
-            assert os.path.exists("./tmp/weights_pdf")
-            assert os.path.isfile("./tmp/activations_pdf/bn1_output_q0_0.html")
-            assert os.path.isfile("./tmp/weights_pdf/conv1/conv1_weight_0.html")
-            assert os.path.isfile("./tmp/weights_pdf/conv1/conv1_weight_31.html")
-            assert os.path.isfile("./tmp/weights_pdf/conv2/conv2_weight_0.html")
-            assert os.path.isfile("./tmp/weights_pdf/conv2/conv2_weight_15.html")
-        finally:
-            if os.path.isdir("./tmp/"):
-                shutil.rmtree("./tmp/")
+            input_shape = (1, 3, 32, 32)
+            dummy_input = torch.randn(*input_shape)
+            model = TinyModel().eval()
+            sim = QuantizationSimModel(model, dummy_input, config_file=os.path.join(tempdir, "quantsim_config.json"))
+            sim.compute_encodings(evaluate, dummy_input)
+            forward_pass_callback = CallbackFunc(calibrate, dummy_input)
+            eval_callback = CallbackFunc(evaluate, dummy_input)
+            quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
+            quant_analyzer.export_per_layer_stats_histogram(sim, results_dir=tempdir)
+            assert os.path.exists(os.path.join(tempdir, 'activations_pdf'))
+            assert os.path.exists(os.path.join(tempdir, 'weights_pdf'))
+            assert os.path.exists(os.path.join(tempdir, 'activations_pdf/bn1_output_q0_0.html'))
+            assert os.path.exists(os.path.join(tempdir, 'weights_pdf/conv1/conv1_weight_0.html'))
+            assert os.path.exists(os.path.join(tempdir, 'weights_pdf/conv1/conv1_weight_31.html'))
+            assert os.path.exists(os.path.join(tempdir, 'weights_pdf/conv2/conv2_weight_0.html'))
+            assert os.path.exists(os.path.join(tempdir, 'weights_pdf/conv2/conv2_weight_15.html'))
 
     def test_export_per_layer_encoding_min_max_range(self):
         """ test export_per_layer_encoding_min_max_range() """
@@ -311,18 +297,13 @@ class TestQuantAnalyzer:
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
-        try:
-            quant_analyzer.export_per_layer_encoding_min_max_range(sim, results_dir="./tmp/")
-            assert os.path.isfile("./tmp/min_max_ranges/weights.html")
-            assert os.path.isfile("./tmp/min_max_ranges/activations.html")
-        finally:
-            if os.path.isdir("./tmp/"):
-                shutil.rmtree("./tmp/")
+        with tempfile.TemporaryDirectory() as tempdir:
+            quant_analyzer.export_per_layer_encoding_min_max_range(sim, results_dir=tempdir)
+            assert os.path.isfile(os.path.join(tempdir, "min_max_ranges/weights.html"))
+            assert os.path.isfile(os.path.join(tempdir, "min_max_ranges/activations.html"))
 
     def test_export_per_layer_encoding_min_max_range_per_channel(self):
         """ test export_per_layer_encoding_min_max_range() for per channel quantization """
-        results_dir = os.path.abspath("./tmp/")
-        os.makedirs(results_dir, exist_ok=True)
 
         quantsim_config = {
             "defaults": {
@@ -344,26 +325,24 @@ class TestQuantAnalyzer:
             "model_input": {},
             "model_output": {}
         }
-        with open("./tmp/quantsim_config.json", 'w') as f:
-            json.dump(quantsim_config, f)
+        with tempfile.TemporaryDirectory() as tempdir:
+            with open(os.path.join(tempdir, "quantsim_config.json"), 'w') as f:
+                json.dump(quantsim_config, f)
 
-        input_shape = (1, 3, 32, 32)
-        dummy_input = torch.randn(*input_shape)
-        model = TinyModel().eval()
-        sim = QuantizationSimModel(model, dummy_input, config_file="./tmp/quantsim_config.json")
-        sim.compute_encodings(evaluate, dummy_input)
-        forward_pass_callback = CallbackFunc(calibrate, dummy_input)
-        eval_callback = CallbackFunc(evaluate, dummy_input)
-        quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
-        try:
-            quant_analyzer.export_per_layer_encoding_min_max_range(sim, results_dir="./tmp/")
-            assert os.path.isfile("./tmp/min_max_ranges/activations.html")
-            assert os.path.isfile("./tmp/min_max_ranges/conv1_weight.html")
+            input_shape = (1, 3, 32, 32)
+            dummy_input = torch.randn(*input_shape)
+            model = TinyModel().eval()
+            sim = QuantizationSimModel(model, dummy_input, config_file=os.path.join(tempdir, "quantsim_config.json"))
+            sim.compute_encodings(evaluate, dummy_input)
+            forward_pass_callback = CallbackFunc(calibrate, dummy_input)
+            eval_callback = CallbackFunc(evaluate, dummy_input)
+            quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
+
+            quant_analyzer.export_per_layer_encoding_min_max_range(sim, results_dir=tempdir)
+            assert os.path.isfile(os.path.join(tempdir, "min_max_ranges/activations.html"))
+            assert os.path.isfile(os.path.join(tempdir, "min_max_ranges/conv1_weight.html"))
             # Dense (Gemm) is disabled to per-channel quantization, it should be in weights.html
-            assert os.path.isfile("./tmp/min_max_ranges/weights.html")
-        finally:
-            if os.path.isdir("./tmp/"):
-                shutil.rmtree("./tmp/")
+            assert os.path.isfile(os.path.join(tempdir, "min_max_ranges/weights.html"))
 
     def test_export_per_layer_mse_loss(self):
         """ test _export_per_layer_mse_loss() """
@@ -377,12 +356,9 @@ class TestQuantAnalyzer:
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         quant_analyzer.enable_per_layer_mse_loss(unlabeled_dataset_iterable, num_batches=4)
-        try:
-            quant_analyzer.export_per_layer_mse_loss(sim, results_dir="./tmp/")
-            assert os.path.isfile("./tmp/per_layer_mse_loss.html")
-        finally:
-            if os.path.isdir("./tmp/"):
-                shutil.rmtree("./tmp/")
+        with tempfile.TemporaryDirectory() as tempdir:
+            quant_analyzer.export_per_layer_mse_loss(sim, results_dir=tempdir)
+            assert os.path.isfile(os.path.join(tempdir, "per_layer_mse_loss.html"))
 
     @pytest.mark.cuda
     def test_analyze(self):
@@ -395,23 +371,20 @@ class TestQuantAnalyzer:
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         quant_analyzer.enable_per_layer_mse_loss(unlabeled_dataset_iterable, num_batches=4)
-        try:
+        with tempfile.TemporaryDirectory() as tempdir:
             quant_analyzer.analyze(quant_scheme=QuantScheme.post_training_tf_enhanced,
                                    default_param_bw=8,
                                    default_output_bw=8,
                                    config_file=None,
-                                   results_dir="./tmp/")
+                                   results_dir=tempdir)
 
-            assert os.path.isfile("./tmp/per_layer_quant_disabled.html")
-            assert os.path.isfile("./tmp/per_layer_quant_enabled.html")
-            assert os.path.exists("./tmp/activations_pdf")
-            assert os.path.exists("./tmp/weights_pdf")
-            assert os.path.isfile("./tmp/min_max_ranges/weights.html")
-            assert os.path.isfile("./tmp/min_max_ranges/activations.html")
-            assert os.path.isfile("./tmp/per_layer_mse_loss.html")
-        finally:
-            if os.path.isdir("./tmp/"):
-                shutil.rmtree("./tmp/")
+            assert os.path.isfile(os.path.join(tempdir, "per_layer_quant_disabled.html"))
+            assert os.path.isfile(os.path.join(tempdir, "per_layer_quant_enabled.html"))
+            assert os.path.isdir(os.path.join(tempdir, "activations_pdf"))
+            assert os.path.isdir(os.path.join(tempdir, "weights_pdf"))
+            assert os.path.isfile(os.path.join(tempdir, "min_max_ranges/weights.html"))
+            assert os.path.isfile(os.path.join(tempdir, "min_max_ranges/activations.html"))
+            assert os.path.isfile(os.path.join(tempdir, "per_layer_mse_loss.html"))
 
     def test_exclude_modules_from_quantization(self):
         """ test ability to exclude modules from quantization """

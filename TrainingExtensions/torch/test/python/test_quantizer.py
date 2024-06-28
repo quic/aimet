@@ -777,15 +777,16 @@ class TestQuantizationSimStaticGrad:
         assert 'layers_deep.5.0' in sim._excluded_layer_names
         assert 'layers_deep.5.1' in sim._excluded_layer_names
 
-        sim.export('./data/', 'modulelist_with_layers_to_ignore', dummy_input=torch.rand(1, 3, 12, 12))
-        with open("./data/modulelist_with_layers_to_ignore.encodings", "r") as encodings_file:
-            encodings = json.load(encodings_file)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sim.export(tmpdir, 'modulelist_with_layers_to_ignore', dummy_input=torch.rand(1, 3, 12, 12))
+            with open(os.path.join(tmpdir, "modulelist_with_layers_to_ignore.encodings"), "r") as encodings_file:
+                encodings = json.load(encodings_file)
 
-        assert 'layers_deep.1' in encodings['excluded_layers']
-        assert 'layers_deep.3' in encodings['excluded_layers']
-        assert 'layers_deep.5.0' in encodings['excluded_layers']
-        assert 'layers_deep.5.1' in encodings['excluded_layers']
-        assert len(encodings['excluded_layers']) == 4
+            assert 'layers_deep.1' in encodings['excluded_layers']
+            assert 'layers_deep.3' in encodings['excluded_layers']
+            assert 'layers_deep.5.0' in encodings['excluded_layers']
+            assert 'layers_deep.5.1' in encodings['excluded_layers']
+            assert len(encodings['excluded_layers']) == 4
 
     # -------------------------------------------
     def test_model_with_two_inputs(self):
@@ -810,7 +811,8 @@ class TestQuantizationSimStaticGrad:
         model(*dummy_input)
 
         # save encodings
-        sim.export('./data/', 'two_input_model', dummy_input)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sim.export(tmpdir, 'two_input_model', dummy_input)
 
     # -------------------------------------------
     def test_model_with_two_inputs_fp16(self):
@@ -831,25 +833,26 @@ class TestQuantizationSimStaticGrad:
         # Quantize
         sim.compute_encodings(forward_pass, None)
 
+        with tempfile.TemporaryDirectory() as tmpdir:
         # save encodings
-        sim.export('./data', 'two_input_model_fp16', dummy_input)
-        encoding_file_path_pytorch = os.path.join('./data', 'two_input_model_fp16' + '_torch' + '.encodings')
-        load_encodings_to_sim(sim, encoding_file_path_pytorch)
+            sim.export(tmpdir, 'two_input_model_fp16', dummy_input)
+            encoding_file_path_pytorch = os.path.join(tmpdir, 'two_input_model_fp16' + '_torch' + '.encodings')
+            load_encodings_to_sim(sim, encoding_file_path_pytorch)
 
-        layer = sim.model.conv1_a
-        if isinstance(layer, QcQuantizeWrapper):
-            for input_quantizer in layer.input_quantizers:
-                if input_quantizer.enabled:
-                    assert input_quantizer.encoding is None
-                    assert input_quantizer.data_type is QuantizationDataType.float
-            for output_quantizer in layer.output_quantizers:
-                if output_quantizer.enabled:
-                    assert output_quantizer.encoding is None
-                    assert output_quantizer.data_type is QuantizationDataType.float
-            for name in layer.param_quantizers:
-                if layer.param_quantizers[name].enabled:
-                    assert layer.param_quantizers[name].encoding is None
-                    assert layer.param_quantizers[name].data_type is QuantizationDataType.float
+            layer = sim.model.conv1_a
+            if isinstance(layer, QcQuantizeWrapper):
+                for input_quantizer in layer.input_quantizers:
+                    if input_quantizer.enabled:
+                        assert input_quantizer.encoding is None
+                        assert input_quantizer.data_type is QuantizationDataType.float
+                for output_quantizer in layer.output_quantizers:
+                    if output_quantizer.enabled:
+                        assert output_quantizer.encoding is None
+                        assert output_quantizer.data_type is QuantizationDataType.float
+                for name in layer.param_quantizers:
+                    if layer.param_quantizers[name].enabled:
+                        assert layer.param_quantizers[name].encoding is None
+                        assert layer.param_quantizers[name].data_type is QuantizationDataType.float
 
     # -------------------------------------------
     def test_model_with_two_inputs_one_to_add(self):
@@ -873,23 +876,24 @@ class TestQuantizationSimStaticGrad:
         sim.compute_encodings(forward_pass, None)
         print(sim)
 
-        # save encodings
-        sim.export('./data/', 'two_input_model_one_with_add', dummy_input)
-        onnx_model = onnx_model = onnx.load('./data/two_input_model_one_with_add.onnx')
-        for node in onnx_model.graph.node:
-            if node.name == 'add':
-                break
-        assert 2 == len(node.input)
-        model_input_tensor = node.input[1]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # save encodings
+            sim.export(tmpdir, 'two_input_model_one_with_add', dummy_input)
+            onnx_model = onnx.load(os.path.join(tmpdir, 'two_input_model_one_with_add.onnx'))
+            for node in onnx_model.graph.node:
+                if node.name == 'add':
+                    break
+            assert 2 == len(node.input)
+            model_input_tensor = node.input[1]
 
-        with open("./data/two_input_model_one_with_add.encodings", "r") as encodings_file:
-            encodings = json.load(encodings_file)
+            with open(os.path.join(tmpdir, "two_input_model_one_with_add.encodings"), "r") as encodings_file:
+                encodings = json.load(encodings_file)
 
-        assert model_input_tensor in encodings['activation_encodings']
-        activation_enc = encodings['activation_encodings'][model_input_tensor]
-        assert isinstance(activation_enc[0]['offset'], int)
-        param_enc = encodings["param_encodings"]["conv1_a.weight"]
-        assert isinstance(param_enc[0]['offset'], int)
+            assert model_input_tensor in encodings['activation_encodings']
+            activation_enc = encodings['activation_encodings'][model_input_tensor]
+            assert isinstance(activation_enc[0]['offset'], int)
+            param_enc = encodings["param_encodings"]["conv1_a.weight"]
+            assert isinstance(param_enc[0]['offset'], int)
 
     def test_export_unified_encoding_format(self):
         """ test export functionality on ResNet18 """
@@ -908,20 +912,20 @@ class TestQuantizationSimStaticGrad:
 
         # Quantize
         sim.compute_encodings(forward_pass, None)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, 'resnet18', dummy_input)
+            with open(os.path.join(tmp_dir, 'resnet18.encodings')) as json_file:
+                encoding_data = json.load(json_file)
+                print(encoding_data)
 
-        sim.export('./data/', 'resnet18', dummy_input)
-        with open('./data/resnet18.encodings') as json_file:
-            encoding_data = json.load(json_file)
-            print(encoding_data)
+            activation_keys = list(encoding_data["activation_encodings"].keys())
 
-        activation_keys = list(encoding_data["activation_encodings"].keys())
+            assert len(activation_keys) == 24
+            assert isinstance(encoding_data["activation_encodings"][activation_keys[0]], list)
 
-        assert len(activation_keys) == 24
-        assert isinstance(encoding_data["activation_encodings"][activation_keys[0]], list)
-
-        param_keys = list(encoding_data["param_encodings"].keys())
-        assert "conv1.weight" in param_keys
-        assert isinstance(encoding_data["param_encodings"]["conv1.weight"], list)
+            param_keys = list(encoding_data["param_encodings"].keys())
+            assert "conv1.weight" in param_keys
+            assert isinstance(encoding_data["param_encodings"]["conv1.weight"], list)
 
     def test_export_with_quantizer_args(self):
         """ test export functionality on ResNet18 """
@@ -934,18 +938,19 @@ class TestQuantizationSimStaticGrad:
         sim = QuantizationSimModel(resnet18, dummy_input=dummy_input, default_output_bw=16, default_param_bw=16,
                                    quant_scheme=QuantScheme.post_training_tf)
 
-        sim.export('./data/', 'resnet18_with_quant_args', dummy_input)
-        with open('./data/resnet18_with_quant_args.encodings') as json_file:
-            encoding_data = json.load(json_file)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, 'resnet18_with_quant_args', dummy_input)
+            with open(os.path.join(tmp_dir, 'resnet18_with_quant_args.encodings')) as json_file:
+                encoding_data = json.load(json_file)
 
-        assert "quantizer_args" in encoding_data
-        quantizer_args = encoding_data["quantizer_args"]
-        assert quantizer_args["activation_bitwidth"] == 16
-        assert quantizer_args["param_bitwidth"] == 16
-        assert not quantizer_args["per_channel_quantization"]
-        assert quantizer_args["quant_scheme"] == QuantScheme.post_training_tf.name
-        assert quantizer_args["dtype"] == "int"
-        assert "is_symmetric" in quantizer_args
+            assert "quantizer_args" in encoding_data
+            quantizer_args = encoding_data["quantizer_args"]
+            assert quantizer_args["activation_bitwidth"] == 16
+            assert quantizer_args["param_bitwidth"] == 16
+            assert not quantizer_args["per_channel_quantization"]
+            assert quantizer_args["quant_scheme"] == QuantScheme.post_training_tf.name
+            assert quantizer_args["dtype"] == "int"
+            assert "is_symmetric" in quantizer_args
 
     def test_export_to_torch_script(self):
         """ test export functionality on ResNet18 """
@@ -1171,12 +1176,13 @@ class TestQuantizationSimStaticGrad:
         # save encodings
         input_names = ['a', 'b', 'c']
 
-        sim.export('./data/', 'model_inputs_shared_constant_intermediate',
-                   dummy_input,
-                   onnx_export_args=OnnxExportApiArgs(input_names=input_names))
-        with open("./data/model_inputs_shared_constant_intermediate.encodings", "r") as encodings_file:
-            activation_encoding_tensors = set(json.load(encodings_file)['activation_encodings'].keys())
-            assert set(input_names).issubset(activation_encoding_tensors)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, 'model_inputs_shared_constant_intermediate',
+                       dummy_input,
+                       onnx_export_args=OnnxExportApiArgs(input_names=input_names))
+            with open(os.path.join(tmp_dir, "model_inputs_shared_constant_intermediate.encodings"), "r") as encodings_file:
+                activation_encoding_tensors = set(json.load(encodings_file)['activation_encodings'].keys())
+                assert set(input_names).issubset(activation_encoding_tensors)
 
     def test_constant_quantization(self):
         model = ModelWithConstantQuantization()
@@ -1196,11 +1202,11 @@ class TestQuantizationSimStaticGrad:
         assert not sim.model.add2.input_quantizers[1].enabled
         assert sim.model.add3.input_quantizers[1].enabled
 
-        sim.export('./data', 'model_with_constant_quantization', dummy_input)
-        with open("./data/model_with_constant_quantization.encodings", "r") as encodings_file:
-            activation_encoding_tensors = set(json.load(encodings_file)['activation_encodings'].keys())
-            assert len(activation_encoding_tensors) == 6
-
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, 'model_with_constant_quantization', dummy_input)
+            with open(os.path.join(tmp_dir, "model_with_constant_quantization.encodings"), "r") as encodings_file:
+                activation_encoding_tensors = set(json.load(encodings_file)['activation_encodings'].keys())
+                assert len(activation_encoding_tensors) == 6
 
     # -------------------------------------------
     def test_input_and_output_quantization(self):
@@ -1589,11 +1595,12 @@ class TestQuantizationSimStaticGrad:
         dummy_forward_pass(sim.model, None)
 
         # Save encodings
-        sim.export("./data/", "encodings_with_standalone_ops", dummy_input)
-        with open('./data/encodings_with_standalone_ops.encodings') as json_file:
-            encoding_data = json.load(json_file)
-        # in onnx definition tensor 16 is output of Reshape, to be ignored
-        assert "32" not in encoding_data["activation_encodings"].keys()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, "encodings_with_standalone_ops", dummy_input)
+            with open(os.path.join(tmp_dir, 'encodings_with_standalone_ops.encodings')) as json_file:
+                encoding_data = json.load(json_file)
+            # in onnx definition tensor 16 is output of Reshape, to be ignored
+            assert "32" not in encoding_data["activation_encodings"].keys()
 
     # -------------------------------------------------------------------------------
     def test_layers_to_ignore(self):
@@ -1615,11 +1622,12 @@ class TestQuantizationSimStaticGrad:
         assert isinstance(sim.model.fc2, nn.Linear)
 
         # export and check encodings file has excluded layers listed as string
-        sim.export('./data', 'excluded_layers', dummy_input, propagate_encodings=True)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, 'excluded_layers', dummy_input, propagate_encodings=True)
 
-        with open('./data/excluded_layers.encodings') as f:
-            encodings = json.load(f)
-            assert 2 == len(encodings['excluded_layers'])
+            with open(os.path.join(tmp_dir, 'excluded_layers.encodings')) as f:
+                encodings = json.load(f)
+                assert 2 == len(encodings['excluded_layers'])
 
     def check_quant_params(self, model_layer, loaded_model_layer, check_weights):
         output_encoding1 = model_layer.output_quantizers[0].encoding
@@ -1657,18 +1665,19 @@ class TestQuantizationSimStaticGrad:
         output_before_save = sim.model(dummy_input)
 
         # Save quantized model
-        torch.save(sim.model, './data/xx')
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            torch.save(sim.model, os.path.join(tmp_dir, 'xx'))
 
-        loaded_model = torch.load('./data/xx')
-        loaded_model.eval()
-        output_after_load = loaded_model(dummy_input)
+            loaded_model = torch.load(os.path.join(tmp_dir, 'xx'))
+            loaded_model.eval()
+            output_after_load = loaded_model(dummy_input)
 
-        self.check_quant_params(sim.model.conv1, loaded_model.conv1, True)
-        self.check_quant_params(sim.model.conv2, loaded_model.conv2, True)
-        self.check_quant_params(sim.model.fc2, loaded_model.fc2, True)
+            self.check_quant_params(sim.model.conv1, loaded_model.conv1, True)
+            self.check_quant_params(sim.model.conv2, loaded_model.conv2, True)
+            self.check_quant_params(sim.model.fc2, loaded_model.fc2, True)
 
-        assert np.allclose(output_before_save.detach().numpy(),
-                           output_after_load.detach().numpy())
+            assert np.allclose(output_before_save.detach().numpy(),
+                               output_after_load.detach().numpy())
 
     def test_ste_gradient_math_tensors(self):
         """
@@ -1866,24 +1875,21 @@ class TestQuantizationSimStaticGrad:
             # Check that edited weight is different than original weight in module_to_quantize
             assert not torch.equal(edited_weight, sim.model.recurrent.module_to_quantize.weight_ih_l0)
 
-            sim.export('./data', 'recurrent_save', dummy_input)
-            exported_model = torch.load('./data/recurrent_save.pth')
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                sim.export(tmp_dir, 'recurrent_save', dummy_input)
+                exported_model = torch.load(os.path.join(tmp_dir, 'recurrent_save.pth'))
 
-            # Check that weight from quantized module was copied to original module successfully
-            assert isinstance(exported_model.recurrent, (torch.nn.RNN, torch.nn.LSTM, torch.nn.GRU))
-            assert torch.equal(edited_weight, exported_model.recurrent.weight_ih_l0)
+                # Check that weight from quantized module was copied to original module successfully
+                assert isinstance(exported_model.recurrent, (torch.nn.RNN, torch.nn.LSTM, torch.nn.GRU))
+                assert torch.equal(edited_weight, exported_model.recurrent.weight_ih_l0)
 
-            with open('./data/recurrent_save.encodings') as f:
-                encodings = json.load(f)
-                # verifying the encoding against default eAI HW cfg
-                # activation encoding (input only w/o cell state) -- x_l0, h_l0, x_l1 & h_l1
-                assert 8 == len(encodings['activation_encodings'])
-                # param encoding (weight only w/o bias)  -- W_l0, R_l0, W_l1 & R_l1
-                assert 4 == len(encodings['param_encodings'])
-
-            os.remove('./data/recurrent_save.pth')
-            os.remove('./data/recurrent_save.onnx')
-            os.remove('./data/recurrent_save.encodings')
+                with open(os.path.join(tmp_dir, 'recurrent_save.encodings')) as f:
+                    encodings = json.load(f)
+                    # verifying the encoding against default eAI HW cfg
+                    # activation encoding (input only w/o cell state) -- x_l0, h_l0, x_l1 & h_l1
+                    assert 8 == len(encodings['activation_encodings'])
+                    # param encoding (weight only w/o bias)  -- W_l0, R_l0, W_l1 & R_l1
+                    assert 4 == len(encodings['param_encodings'])
 
     def test_export_dict_input_output(self):
         """ test export functionality on dictionary input and output """
@@ -1913,22 +1919,23 @@ class TestQuantizationSimStaticGrad:
         sim.compute_encodings(forward_pass, dummy_input[0])
 
         o_names = ['ab', 'bc', 'ca']
-        sim.export('./data/', 'dict_input_output_model', dummy_input,
-                   onnx_export_args=OnnxExportApiArgs(input_names=list(dummy_input[0].keys()),
-                                                      output_names=o_names,
-                                                      opset_version=12
-                                                      ))
-        with open('./data/dict_input_output_model.encodings') as json_file:
-            encoding_data = json.load(json_file)
-            print(encoding_data)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, 'dict_input_output_model', dummy_input,
+                       onnx_export_args=OnnxExportApiArgs(input_names=list(dummy_input[0].keys()),
+                                                          output_names=o_names,
+                                                          opset_version=12
+                                                          ))
+            with open(os.path.join(tmp_dir, 'dict_input_output_model.encodings')) as json_file:
+                encoding_data = json.load(json_file)
+                print(encoding_data)
 
-        onnx_model = onnx.load('./data/dict_input_output_model.onnx')
-        for inp in onnx_model.graph.input:
-            assert inp.name in ['a', 'b', 'c']
-        for exp, act in zip(o_names, onnx_model.graph.output):
-            assert exp == act.name
-        for tensor_name in encoding_data["activation_encodings"].keys():
-            assert tensor_name in o_names
+            onnx_model = onnx.load(os.path.join(tmp_dir, 'dict_input_output_model.onnx'))
+            for inp in onnx_model.graph.input:
+                assert inp.name in ['a', 'b', 'c']
+            for exp, act in zip(o_names, onnx_model.graph.output):
+                assert exp == act.name
+            for tensor_name in encoding_data["activation_encodings"].keys():
+                assert tensor_name in o_names
 
     def test_compute_encoding_fp16(self):
         """
@@ -1973,12 +1980,13 @@ class TestQuantizationSimStaticGrad:
         sim.model.avgpool.output_quantizers[0].enabled = True
         sim.model.avgpool.input_quantizers[0].enabled = True
         sim.compute_encodings(forward_pass, None)
-        sim.export('./data', 'sfmaxavgpool_model', dummy_input)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, 'sfmaxavgpool_model', dummy_input)
 
-        with open('./data/sfmaxavgpool_model.encodings') as json_file:
-            encoding_data = json.load(json_file)
+            with open(os.path.join(tmp_dir, 'sfmaxavgpool_model.encodings')) as json_file:
+                encoding_data = json.load(json_file)
 
-        assert len(encoding_data["activation_encodings"]) == 3
+            assert len(encoding_data["activation_encodings"]) == 3
 
     def test_encodings_propagation_simple_model(self):
         """
@@ -1999,34 +2007,35 @@ class TestQuantizationSimStaticGrad:
         sim.compute_encodings(forward_pass, None)
 
         # Save encodings
-        sim.export('./data', 'encodings_propagation_false', dummy_input)
-        with open('./data/encodings_propagation_false.encodings') as f:
-            encodings = json.load(f)['activation_encodings']
-            encodings = [{key: val} for key, val in encodings.items() if 'scale' in val[0]]
-            assert len(encodings) == 2
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, 'encodings_propagation_false', dummy_input)
+            with open(os.path.join(tmp_dir, 'encodings_propagation_false.encodings')) as f:
+                encodings = json.load(f)['activation_encodings']
+                encodings = [{key: val} for key, val in encodings.items() if 'scale' in val[0]]
+                assert len(encodings) == 2
 
-        # Save encodings again - now with propagate encodings flag enabled
-        sim.export('./data', 'encodings_propagation_true', dummy_input, propagate_encodings=True)
-        with open('./data/encodings_propagation_true.encodings') as f:
-            encodings = json.load(f)['activation_encodings']
-            encodings = [{key: val} for key, val in encodings.items() if 'scale' in val[0]]
-            assert len(encodings) == 2
+            # Save encodings again - now with propagate encodings flag enabled
+            sim.export(tmp_dir, 'encodings_propagation_true', dummy_input, propagate_encodings=True)
+            with open(os.path.join(tmp_dir, 'encodings_propagation_true.encodings')) as f:
+                encodings = json.load(f)['activation_encodings']
+                encodings = [{key: val} for key, val in encodings.items() if 'scale' in val[0]]
+                assert len(encodings) == 2
 
-        pretty_data = json.dumps(encodings, indent=2)
-        print(pretty_data)
+            pretty_data = json.dumps(encodings, indent=2)
+            print(pretty_data)
 
-        # verifying the encodings propagation is disabled if output quantizers are disabled.
-        sim = QuantizationSimModel(model, dummy_input)
-        sim.model.ps.output_quantizers[0].enabled = False
-        # Quantize
-        sim.compute_encodings(forward_pass, None)
+            # verifying the encodings propagation is disabled if output quantizers are disabled.
+            sim = QuantizationSimModel(model, dummy_input)
+            sim.model.ps.output_quantizers[0].enabled = False
+            # Quantize
+            sim.compute_encodings(forward_pass, None)
 
-        # Save encodings again - now with propagate encodings flag enabled
-        sim.export('./data', 'encodings_propagation_quant_disabled', dummy_input, propagate_encodings=True)
-        with open('./data/encodings_propagation_quant_disabled.encodings') as f:
-            encodings = json.load(f)['activation_encodings']
-            encodings = [{key: val} for key, val in encodings.items() if 'scale' in val[0]]
-            assert len(encodings) == 1
+            # Save encodings again - now with propagate encodings flag enabled
+            sim.export(tmp_dir, 'encodings_propagation_quant_disabled', dummy_input, propagate_encodings=True)
+            with open(os.path.join(tmp_dir, 'encodings_propagation_quant_disabled.encodings')) as f:
+                encodings = json.load(f)['activation_encodings']
+                encodings = [{key: val} for key, val in encodings.items() if 'scale' in val[0]]
+                assert len(encodings) == 1
 
     def test_encodings_propagation_lstm_model(self):
         """
@@ -2047,22 +2056,23 @@ class TestQuantizationSimStaticGrad:
         sim.compute_encodings(forward_pass, None)
 
         # Save encodings
-        sim.export('./data', 'encodings_propagation_false', dummy_input)
-        with open('./data/encodings_propagation_false.encodings') as f:
-            encodings = json.load(f)
-        assert len(encodings['activation_encodings']) == 8
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, 'encodings_propagation_false', dummy_input)
+            with open(os.path.join(tmp_dir, 'encodings_propagation_false.encodings')) as f:
+                encodings = json.load(f)
+            assert len(encodings['activation_encodings']) == 8
 
-        # Save encodings again - now with propagate encodings flag enabled
-        sim.export('./data', 'encodings_propagation_true', dummy_input, propagate_encodings=True)
-        with open('./data/encodings_propagation_true.encodings') as f:
-            encodings = json.load(f)['activation_encodings']
-            # Only eight entry should have min, max, delta and offset, remaining entries should be propagated
-            # with bitwidth and dtype.
-            encodings = [{key: val} for key, val in encodings.items() if 'scale' in val[0]]
-            assert len(encodings) == 8
+            # Save encodings again - now with propagate encodings flag enabled
+            sim.export(tmp_dir, 'encodings_propagation_true', dummy_input, propagate_encodings=True)
+            with open(os.path.join(tmp_dir, 'encodings_propagation_true.encodings')) as f:
+                encodings = json.load(f)['activation_encodings']
+                # Only eight entry should have min, max, delta and offset, remaining entries should be propagated
+                # with bitwidth and dtype.
+                encodings = [{key: val} for key, val in encodings.items() if 'scale' in val[0]]
+                assert len(encodings) == 8
 
-        pretty_data = json.dumps(encodings, indent=2)
-        print(pretty_data)
+            pretty_data = json.dumps(encodings, indent=2)
+            print(pretty_data)
 
     def test_change_quant_scheme_tf_enhanced_to_tf(self):
 
@@ -2171,25 +2181,17 @@ class TestQuantizationSimStaticGrad:
 
         qsim = QuantizationSimModel(model, dummy_input=(inp, true_tensor))
         qsim.compute_encodings(forward_callback, forward_pass_callback_args=None)
-        qsim._export_conditional('./data', 'simple_cond', dummy_input=(inp, false_tensor),
-                                 forward_pass_callback=forward_callback, forward_pass_callback_args=None)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            qsim._export_conditional(tmp_dir, 'simple_cond', dummy_input=(inp, false_tensor),
+                                     forward_pass_callback=forward_callback, forward_pass_callback_args=None)
 
-        with open('./data/simple_cond.encodings') as f:
-            encodings = json.load(f)
-            # verifying the encoding against default eAI HW cfg
-            # activation encodings -- input, linear1 out, prelu1 out, linear2 out, prelu2 out, softmax out
-            assert 6 == len(encodings['activation_encodings'])
-            # param encoding -- linear 1 & 2 weight & bias, prelu 1 & 2 weight
-            assert 4 == len(encodings['param_encodings'])
-
-        if os.path.exists('./data/simple_cond.pth'):
-            os.remove('./data/simple_cond.pth')
-        if os.path.exists('./data/simple_cond.onnx'):
-            os.remove('./data/simple_cond.onnx')
-        if os.path.exists('./data/simple_cond.encodings'):
-            os.remove('./data/simple_cond.encodings')
-        if os.path.exists('./data/simple_cond.encodings.yaml'):
-            os.remove('./data/simple_cond.encodings.yaml')
+            with open(os.path.join(tmp_dir, 'simple_cond.encodings')) as f:
+                encodings = json.load(f)
+                # verifying the encoding against default eAI HW cfg
+                # activation encodings -- input, linear1 out, prelu1 out, linear2 out, prelu2 out, softmax out
+                assert 6 == len(encodings['activation_encodings'])
+                # param encoding -- linear 1 & 2 weight & bias, prelu 1 & 2 weight
+                assert 4 == len(encodings['param_encodings'])
 
     def test_export_prelu_encoding_and_check_load_encodings(self):
         """ Test that prelu weight is exported correctly """
@@ -2197,32 +2199,33 @@ class TestQuantizationSimStaticGrad:
         dummy_input = torch.rand(1, 3, 8, 8)
         sim = QuantizationSimModel(model, dummy_input=dummy_input)
         sim.compute_encodings(lambda model, _: model(dummy_input), None)
-        sim.export('./data', 'prelu_model', dummy_input=dummy_input)
-        with open('./data/prelu_model.encodings') as json_file:
-            encoding_data = json.load(json_file)
-        assert 'prelu.weight' in encoding_data['param_encodings'].keys()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, 'prelu_model', dummy_input=dummy_input)
+            with open(os.path.join(tmp_dir, 'prelu_model.encodings')) as json_file:
+                encoding_data = json.load(json_file)
+            assert 'prelu.weight' in encoding_data['param_encodings'].keys()
 
-        output = sim.model(copy.deepcopy(dummy_input))
-        del sim
+            output = sim.model(copy.deepcopy(dummy_input))
+            del sim
 
-        sim = QuantizationSimModel(model, dummy_input=dummy_input)
-        encoding_file_path_pytorch = os.path.join('./data', 'prelu_model' + '_torch' + '.encodings')
-        load_encodings_to_sim(sim, encoding_file_path_pytorch)
+            sim = QuantizationSimModel(model, dummy_input=dummy_input)
+            encoding_file_path_pytorch = os.path.join(tmp_dir, 'prelu_model' + '_torch' + '.encodings')
+            load_encodings_to_sim(sim, encoding_file_path_pytorch)
 
-        layer = sim.model.prelu
-        if isinstance(layer, QcQuantizeWrapper):
-            for input_quantizer in layer.input_quantizers:
-                if input_quantizer.enabled:
-                    assert input_quantizer.encoding is not None
-            for output_quantizer in layer.output_quantizers:
-                if output_quantizer.enabled:
-                    assert output_quantizer.encoding is not None
-            for name in layer.param_quantizers:
-                if layer.param_quantizers[name].enabled:
-                    assert layer.param_quantizers[name].encoding is not None
+            layer = sim.model.prelu
+            if isinstance(layer, QcQuantizeWrapper):
+                for input_quantizer in layer.input_quantizers:
+                    if input_quantizer.enabled:
+                        assert input_quantizer.encoding is not None
+                for output_quantizer in layer.output_quantizers:
+                    if output_quantizer.enabled:
+                        assert output_quantizer.encoding is not None
+                for name in layer.param_quantizers:
+                    if layer.param_quantizers[name].enabled:
+                        assert layer.param_quantizers[name].encoding is not None
 
-        output1 = sim.model(copy.deepcopy(dummy_input))
-        assert sum(output1.flatten() - output.flatten()) == 0.0
+            output1 = sim.model(copy.deepcopy(dummy_input))
+            assert sum(output1.flatten() - output.flatten()) == 0.0
 
     def test_fetching_varaible_from_module(self):
         class Model(nn.Module):
@@ -2329,21 +2332,17 @@ class TestQuantizationSimStaticGrad:
             # Quantize
             sim.compute_encodings(forward_pass, None)
 
-            results_dir = './data/embedded_encodings'
-            if not os.path.exists(results_dir):
-                os.makedirs(results_dir)
             # Save model
-            sim.export(results_dir, 'two_input_model', dummy_input,
-                       onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),
-                       use_embedded_encodings=True)
-            onnx_model = onnx.load(os.path.join(results_dir, 'two_input_model' + '_embedded' + '.onnx'))
-            onnx_type = set()
-            for node in onnx_model.graph.node:
-                onnx_type.add(node.op_type)
-            assert('QuantizeLinear' in onnx_type)
-            assert('DequantizeLinear' in onnx_type)
-        if os.path.exists(results_dir):
-            shutil.rmtree(results_dir)
+            with tempfile.TemporaryDirectory() as tempdir:
+                sim.export(tempdir, 'two_input_model', dummy_input,
+                           onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),
+                           use_embedded_encodings=True)
+                onnx_model = onnx.load(os.path.join(tempdir, 'two_input_model' + '_embedded' + '.onnx'))
+                onnx_type = set()
+                for node in onnx_model.graph.node:
+                    onnx_type.add(node.op_type)
+                assert('QuantizeLinear' in onnx_type)
+                assert('DequantizeLinear' in onnx_type)
 
     def test_save_model_with_embedded_quantization_nodes_fp16(self):
         """Model with more than 1 input"""
@@ -2366,21 +2365,16 @@ class TestQuantizationSimStaticGrad:
             sim.compute_encodings(forward_pass, None)
 
             # save model
-            results_dir = './data/embedded_encodings'
-            if not os.path.exists(results_dir):
-                os.makedirs(results_dir)
-            sim.export(results_dir, 'two_input_model_fp16', dummy_input,
-                       onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),
-                       use_embedded_encodings=True)
+            with tempfile.TemporaryDirectory() as tempdir:
+                sim.export(tempdir, 'two_input_model_fp16', dummy_input,
+                           onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),
+                           use_embedded_encodings=True)
 
-            onnx_model = onnx.load(os.path.join(results_dir, 'two_input_model_fp16' + '_embedded' + '.onnx'))
-            onnx_type = set()
-            for node in onnx_model.graph.node:
-                onnx_type.add(node.op_type)
-            assert('Cast' in onnx_type)
-
-        if os.path.exists(results_dir):
-            shutil.rmtree(results_dir)
+                onnx_model = onnx.load(os.path.join(tempdir, 'two_input_model_fp16' + '_embedded' + '.onnx'))
+                onnx_type = set()
+                for node in onnx_model.graph.node:
+                    onnx_type.add(node.op_type)
+                assert('Cast' in onnx_type)
 
     def test_save_model_with_embedded_quantization_nodes_per_channel(self):
         """Model with more than 1 input"""
@@ -2404,21 +2398,16 @@ class TestQuantizationSimStaticGrad:
             sim.compute_encodings(forward_pass, None)
 
             # Export model with opset_vesrion 13
-            results_dir = './data/embedded_encodings'
-            if not os.path.exists(results_dir):
-                os.makedirs(results_dir)
-            sim.export(results_dir, 'two_input_model_perchannel', dummy_input,
-                       onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=13)),
-                       use_embedded_encodings=True)
-            onnx_model = onnx.load(os.path.join(results_dir, 'two_input_model_perchannel' + '_embedded' + '.onnx'))
-            onnx_type = set()
-            for node in onnx_model.graph.node:
-                onnx_type.add(node.op_type)
-            assert('QuantizeLinear' in onnx_type)
-            assert('DequantizeLinear' in onnx_type)
-
-        if os.path.exists(results_dir):
-            shutil.rmtree(results_dir)
+            with tempfile.TemporaryDirectory() as tempdir:
+                sim.export(tempdir, 'two_input_model_perchannel', dummy_input,
+                           onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=13)),
+                           use_embedded_encodings=True)
+                onnx_model = onnx.load(os.path.join(tempdir, 'two_input_model_perchannel' + '_embedded' + '.onnx'))
+                onnx_type = set()
+                for node in onnx_model.graph.node:
+                    onnx_type.add(node.op_type)
+                assert('QuantizeLinear' in onnx_type)
+                assert('DequantizeLinear' in onnx_type)
 
     def test_save_model_with_embedded_quantization_nodes_using_torch_script(self):
         """Test export onnx model with embedded torch native quantization nodes using torch script"""
@@ -2438,15 +2427,10 @@ class TestQuantizationSimStaticGrad:
             # Quantize
             sim.compute_encodings(forward_pass, None)
 
-            results_dir = './data/embedded_encodings'
-            if not os.path.exists(results_dir):
-                os.makedirs(results_dir)
             # Save model
-            QuantizationSimModel.save_model_with_embedded_quantization_nodes(sim.model, results_dir, 'two_input_model', dummy_input, export_to_torchscript = True)
-            assert(os.path.exists(os.path.join(results_dir, 'two_input_model' + '_embedded' + '.torchscript.pth')))
-
-        if os.path.exists(results_dir):
-            shutil.rmtree(results_dir)
+            with tempfile.TemporaryDirectory() as tempdir:
+                QuantizationSimModel.save_model_with_embedded_quantization_nodes(sim.model, tempdir, 'two_input_model', dummy_input, export_to_torchscript = True)
+                assert(os.path.exists(os.path.join(tempdir, 'two_input_model' + '_embedded' + '.torchscript.pth')))
 
     def test_native_pytorch_quantization_nodes_pertensor(self):
         """Test export onnx model with embedded torch native quantization nodes"""
@@ -2467,9 +2451,6 @@ class TestQuantizationSimStaticGrad:
             # Quantize
             sim.compute_encodings(forward_pass, None)
 
-            results_dir = './data/embedded_encodings'
-            if not os.path.exists(results_dir):
-                os.makedirs(results_dir)
             # Generate model with native pytorch quantization nodes
             quant_sim_model = copy.deepcopy(sim.model)
 
@@ -2481,9 +2462,6 @@ class TestQuantizationSimStaticGrad:
             # Inference Native torch quantization nodes
             torch_res = forward_pass(quant_sim_model, None)
             assert torch.allclose(aimet_res, torch_res, rtol=1e-2)
-
-        if os.path.exists(results_dir):
-            shutil.rmtree(results_dir)
 
     def test_native_pytorch_quantization_nodes_perchannel(self):
         """Test export onnx model with embedded torch native quantization nodes"""
@@ -2506,9 +2484,6 @@ class TestQuantizationSimStaticGrad:
             # Quantize
             sim.compute_encodings(forward_pass, None)
 
-            results_dir = './data/embedded_encodings'
-            if not os.path.exists(results_dir):
-                os.makedirs(results_dir)
             # Generate model with native pytorch quantization nodes
             quant_sim_model = copy.deepcopy(sim.model)
 
@@ -2520,9 +2495,6 @@ class TestQuantizationSimStaticGrad:
             # Inference Native torch quantization nodes
             torch_res = forward_pass(quant_sim_model, None)
             assert torch.allclose(aimet_res, torch_res, rtol=1e-2)
-
-        if os.path.exists(results_dir):
-            shutil.rmtree(results_dir)
 
     def test_export_to_onnx_direct(self):
         if version.parse(torch.__version__) >= version.parse("1.13.0"):
@@ -2582,11 +2554,12 @@ class TestQuantizationSimStaticGrad:
         dummy_input = (torch.rand(32, 1, 100, 100), torch.rand(32, 10, 22, 22))
         qsim = QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf)
         qsim.compute_encodings(lambda m, _: m(*dummy_input), None)
-        qsim.save_encodings_to_json('./data', 'saved_encodings')
-        with open('./data/saved_encodings.json') as encodings_file:
-            encodings = json.load(encodings_file)
-            assert len(encodings['activation_encodings']) == 13
-            assert len(encodings['param_encodings']) == 5
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            qsim.save_encodings_to_json(tmp_dir, 'saved_encodings')
+            with open(os.path.join(tmp_dir, 'saved_encodings.json')) as encodings_file:
+                encodings = json.load(encodings_file)
+                assert len(encodings['activation_encodings']) == 13
+                assert len(encodings['param_encodings']) == 5
 
     def test_compute_encodings_for_multiple_sims(self):
         class SecondModel(torch.nn.Module):
@@ -2993,21 +2966,13 @@ class TestQuantizationSimLearnedGrid:
         assert orig_conv1_encoding_max != new_conv1_encoding_max
         assert not torch.equal(orig_conv2_weight, new_conv2_weight)
 
-        sim.export('./data', 'rl_with_fp16_and_bw_32', dummy_input=dummy_input.to('cpu'))
-        with open('./data/rl_with_fp16_and_bw_32_torch.encodings') as json_file:
-            encoding_data = json.load(json_file)
-            assert encoding_data['param_encodings']['conv2.weight'][0] == {'bitwidth': 16, 'dtype': 'float'}
-            assert 'relu2' not in encoding_data['activation_encodings']
-            assert len(encoding_data['activation_encodings']) == 5
-
-        for filepath in ['./data/rl_with_fp16_and_bw_32_torch.encodings.yaml',
-                         './data/rl_with_fp16_and_bw_32.encodings.yaml',
-                         './data/rl_with_fp16_and_bw_32_torch.encodings',
-                         './data/rl_with_fp16_and_bw_32.encodings',
-                         './data/rl_with_fp16_and_bw_32.pth',
-                         './data/rl_with_fp16_and_bw_32.onnx']:
-            if os.path.exists(filepath):
-                os.remove(filepath)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, 'rl_with_fp16_and_bw_32', dummy_input=dummy_input.to('cpu'))
+            with open(os.path.join(tmp_dir, 'rl_with_fp16_and_bw_32_torch.encodings')) as json_file:
+                encoding_data = json.load(json_file)
+                assert encoding_data['param_encodings']['conv2.weight'][0] == {'bitwidth': 16, 'dtype': 'float'}
+                assert 'relu2' not in encoding_data['activation_encodings']
+                assert len(encoding_data['activation_encodings']) == 5
 
     @pytest.mark.cuda
     @pytest.mark.parametrize('device', ['cpu', 'cuda:0'])
@@ -3356,31 +3321,25 @@ class TestQuantizationSimLearnedGrid:
         assert not torch.allclose(before_conv1_weight_encoding_min, after_conv1_weight_encoding_min)
         assert not torch.allclose(before_fc_weight_encoding_min, after_fc_weight_encoding_min)
 
-        results_dir = '/tmp/symmetry_and_calibration'
-        if not os.path.exists(results_dir):
-            os.makedirs(results_dir)
+        with tempfile.TemporaryDirectory() as tempdir:
+            sim.export(tempdir, "results", dummy_input)
+            with open(f"{tempdir}/results.encodings", "r") as encodings_file:
+                encodings = json.load(encodings_file)
 
-        sim.export(results_dir, "results", dummy_input)
-        with open(f"{results_dir}/results.encodings", "r") as encodings_file:
-            encodings = json.load(encodings_file)
+                param_encodings = encodings["param_encodings"]
+                for layer in ["conv1_a", "conv2", "fc1"]:
+                    encoding_info = param_encodings[f"{layer}.weight"][0]
+                    encoding_min = encoding_info["min"]
+                    encoding_max = encoding_info["max"]
+                    scale = encoding_info["scale"]
+                    offset = encoding_info["offset"]
 
-            param_encodings = encodings["param_encodings"]
-            for layer in ["conv1_a", "conv2", "fc1"]:
-                encoding_info = param_encodings[f"{layer}.weight"][0]
-                encoding_min = encoding_info["min"]
-                encoding_max = encoding_info["max"]
-                scale = encoding_info["scale"]
-                offset = encoding_info["offset"]
-
-                # Default HTP config is non-strict symmetric when parameter quantization
-                # Non-strict symmetric should have
-                # encoding_min == -encoding_max - scale (one more bin)
-                # offset as -128
-                assert np.allclose(encoding_min, -encoding_max - scale)
-                assert offset == -128
-
-        if os.path.exists(results_dir):
-            shutil.rmtree(results_dir)
+                    # Default HTP config is non-strict symmetric when parameter quantization
+                    # Non-strict symmetric should have
+                    # encoding_min == -encoding_max - scale (one more bin)
+                    # offset as -128
+                    assert np.allclose(encoding_min, -encoding_max - scale)
+                    assert offset == -128
 
     def test_set_and_get_encoding_properties(self):
         torch.manual_seed(0)
@@ -3504,33 +3463,34 @@ class TestQuantizationSimLearnedGrid:
         sim = QuantizationSimModel(model, dummy_input=dummy_input,
                                    quant_scheme=QuantScheme.training_range_learning_with_tf_init)
         sim.compute_encodings(lambda model, _: model(dummy_input), None)
-        sim.export('./data', 'prelu_model', dummy_input=dummy_input)
-        with open('./data/prelu_model.encodings') as json_file:
-            encoding_data = json.load(json_file)
-        assert 'prelu.weight' in encoding_data['param_encodings'].keys()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, 'prelu_model', dummy_input=dummy_input)
+            with open(os.path.join(tmp_dir, 'prelu_model.encodings')) as json_file:
+                encoding_data = json.load(json_file)
+            assert 'prelu.weight' in encoding_data['param_encodings'].keys()
 
-        output = sim.model(copy.deepcopy(dummy_input))
-        del sim
+            output = sim.model(copy.deepcopy(dummy_input))
+            del sim
 
-        sim = QuantizationSimModel(model, dummy_input=dummy_input,
-                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init)
-        encoding_file_path_pytorch = os.path.join('./data', 'prelu_model' + '_torch' + '.encodings')
-        load_encodings_to_sim(sim, encoding_file_path_pytorch)
+            sim = QuantizationSimModel(model, dummy_input=dummy_input,
+                                       quant_scheme=QuantScheme.training_range_learning_with_tf_init)
+            encoding_file_path_pytorch = os.path.join(tmp_dir, 'prelu_model' + '_torch' + '.encodings')
+            load_encodings_to_sim(sim, encoding_file_path_pytorch)
 
-        layer = sim.model.prelu
-        if isinstance(layer, QcQuantizeWrapper):
-            for input_quantizer in layer.input_quantizers:
-                if input_quantizer.enabled:
-                    assert input_quantizer.encoding is not None
-            for output_quantizer in layer.output_quantizers:
-                if output_quantizer.enabled:
-                    assert output_quantizer.encoding is not None
-            for name in layer.param_quantizers:
-                if layer.param_quantizers[name].enabled:
-                    assert layer.param_quantizers[name].encoding is not None
+            layer = sim.model.prelu
+            if isinstance(layer, QcQuantizeWrapper):
+                for input_quantizer in layer.input_quantizers:
+                    if input_quantizer.enabled:
+                        assert input_quantizer.encoding is not None
+                for output_quantizer in layer.output_quantizers:
+                    if output_quantizer.enabled:
+                        assert output_quantizer.encoding is not None
+                for name in layer.param_quantizers:
+                    if layer.param_quantizers[name].enabled:
+                        assert layer.param_quantizers[name].encoding is not None
 
-        output1 = sim.model(copy.deepcopy(dummy_input))
-        assert sum(output1.flatten() - output.flatten()) == 0.0
+            output1 = sim.model(copy.deepcopy(dummy_input))
+            assert sum(output1.flatten() - output.flatten()) == 0.0
 
     def test_load_encodings_multi_input_multi_output_model(self):
         net = ModelWith5Output()
@@ -3542,29 +3502,30 @@ class TestQuantizationSimLearnedGrid:
         sim.model.cust.output_quantizers[0].enabled = False
         sim.compute_encodings(evaluate, dummy_input)
 
-        sim.export('./data/', 'module_with_5_output', dummy_input,
-                   onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),
-                   propagate_encodings=False)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, 'module_with_5_output', dummy_input,
+                       onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),
+                       propagate_encodings=False)
 
-        del sim
+            del sim
 
-        sim = QuantizationSimModel(net, dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced,
-                                   default_param_bw=4, default_output_bw=4)
-        sim.model.cust.output_quantizers[0].enabled = False
-        encoding_file_path_pytorch = os.path.join('./data', 'module_with_5_output' + '_torch' + '.encodings')
-        load_encodings_to_sim(sim, encoding_file_path_pytorch)
+            sim = QuantizationSimModel(net, dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                       default_param_bw=4, default_output_bw=4)
+            sim.model.cust.output_quantizers[0].enabled = False
+            encoding_file_path_pytorch = os.path.join(tmp_dir, 'module_with_5_output' + '_torch' + '.encodings')
+            load_encodings_to_sim(sim, encoding_file_path_pytorch)
 
-        layer = sim.model.cust
-        if isinstance(layer, QcQuantizeWrapper):
-            for input_quantizer in layer.input_quantizers:
-                if input_quantizer.enabled:
-                    assert input_quantizer.encoding is not None
-            for output_quantizer in layer.output_quantizers:
-                if output_quantizer.enabled:
-                    assert output_quantizer.encoding is not None
-            for name in layer.param_quantizers:
-                if layer.param_quantizers[name].enabled:
-                    assert layer.param_quantizers[name].encoding is not None
+            layer = sim.model.cust
+            if isinstance(layer, QcQuantizeWrapper):
+                for input_quantizer in layer.input_quantizers:
+                    if input_quantizer.enabled:
+                        assert input_quantizer.encoding is not None
+                for output_quantizer in layer.output_quantizers:
+                    if output_quantizer.enabled:
+                        assert output_quantizer.encoding is not None
+                for name in layer.param_quantizers:
+                    if layer.param_quantizers[name].enabled:
+                        assert layer.param_quantizers[name].encoding is not None
 
     def test_load_encodings_to_sim_partial(self):
         model = SmallMnist()
@@ -3999,13 +3960,14 @@ class TestQuantizationSimLearnedGrid:
         sim.model.cust.output_quantizers[0].enabled = False
         sim.compute_encodings(evaluate, dummy_input)
 
-        sim.export('./data/', 'module_with_5_output', dummy_input,
-                   onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),
-                   propagate_encodings=False)
-        with open('./data/module_with_5_output.encodings') as json_file:
-            activation_encodings = json.load(json_file)['activation_encodings']
-            assert '7' not in activation_encodings
-            assert set(['8', '9', '10', '11', 't.1']).issubset(activation_encodings.keys())
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, 'module_with_5_output', dummy_input,
+                       onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),
+                       propagate_encodings=False)
+            with open(os.path.join(tmp_dir, 'module_with_5_output.encodings')) as json_file:
+                activation_encodings = json.load(json_file)['activation_encodings']
+                assert '7' not in activation_encodings
+                assert set(['8', '9', '10', '11', 't.1']).issubset(activation_encodings.keys())
 
     def test_custom_op_simple(self):
         """
@@ -4023,18 +3985,14 @@ class TestQuantizationSimLearnedGrid:
 
         quant_sim = QuantizationSimModel(cust_model, dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced,
                                          default_param_bw=8, default_output_bw=8)
-
         quant_sim.compute_encodings(evaluate, dummy_input)
-
-        print(quant_sim)
-        print(quant_sim.model)
-
-        quant_sim.export('./data/', 'cust_v1_simple', dummy_input,
-                         onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),
-                         propagate_encodings=True)
-        with open('./data/cust_v1_simple.encodings') as json_file:
-            activation_encodings = json.load(json_file)['activation_encodings']
-            assert set(['10', '11', 't.1']).issubset(activation_encodings.keys())
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            quant_sim.export(tmp_dir, 'cust_v1_simple', dummy_input,
+                             onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),
+                             propagate_encodings=True)
+            with open(os.path.join(tmp_dir, 'cust_v1_simple.encodings')) as json_file:
+                activation_encodings = json.load(json_file)['activation_encodings']
+                assert set(['10', '11', 't.1']).issubset(activation_encodings.keys())
 
     def test_custom_op_simple_v2(self):
         """
@@ -4059,23 +4017,23 @@ class TestQuantizationSimLearnedGrid:
         print(quant_sim.model)
 
         a, b, c, d, e = quant_sim.model(dummy_input)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            quant_sim.export(tmp_dir, 'cust_v2_simple', dummy_input,
+                             onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),
+                             propagate_encodings=False)
 
-        quant_sim.export('./data/', 'cust_v2_simple', dummy_input,
-                         onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),
-                         propagate_encodings=False)
+            with open(os.path.join(tmp_dir, 'cust_v2_simple.encodings')) as json_file:
+                activation_encodings = json.load(json_file)['activation_encodings']
+                assert len(activation_encodings) == 6
 
-        with open('./data/cust_v2_simple.encodings') as json_file:
-            activation_encodings = json.load(json_file)['activation_encodings']
-            assert len(activation_encodings) == 6
+            module_names = { module_name for module_name, _ in cust_model.named_modules()}
+            onnx_model = onnx.load(os.path.join(tmp_dir, 'cust_v2_simple.onnx'))
 
-        module_names = { module_name for module_name, _ in cust_model.named_modules()}
-        onnx_model = onnx.load('./data/cust_v2_simple.onnx')
-
-        for node in onnx_model.graph.node:
-            if not node.name.startswith('.'):
-                name = node.name.split('#')[0]
-                assert '.'.join(name.split('.')[:-1]) in module_names
-        onnx.checker.check_model(onnx_model)
+            for node in onnx_model.graph.node:
+                if not node.name.startswith('.'):
+                    name = node.name.split('#')[0]
+                    assert '.'.join(name.split('.')[:-1]) in module_names
+            onnx.checker.check_model(onnx_model)
 
     def test_quant_roi_model(self):
         roi_model = RoiModel(height=7, width=7, scale=0.25)
@@ -4093,16 +4051,17 @@ class TestQuantizationSimLearnedGrid:
                 model(*dummy_input)
 
         sim.compute_encodings(forward_pass, None)
-        sim.export("./data/", "roi_model", dummy_input,
-                   onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),  propagate_encodings=True)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, "roi_model", dummy_input,
+                       onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),  propagate_encodings=True)
 
-        with open('./data/roi_model.encodings') as json_file:
-            encodings = json.load(json_file)['activation_encodings']
+            with open(os.path.join(tmp_dir, 'roi_model.encodings')) as json_file:
+                encodings = json.load(json_file)['activation_encodings']
 
-            # Only one entry should have min, max, delta and offset, remaining entries should be propagated
-            # with bitwidth and dtype.
-            encodings = [{key: val} for key, val in encodings.items() if 'scale' in val[0]]
-            assert len(encodings) == 1
+                # Only one entry should have min, max, delta and offset, remaining entries should be propagated
+                # with bitwidth and dtype.
+                encodings = [{key: val} for key, val in encodings.items() if 'scale' in val[0]]
+                assert len(encodings) == 1
 
     def test_attributes_mismatch_after_manual_change(self):
         """ Test to enusre that the attributes for quantizers are correctly set when modified manually """
@@ -4167,9 +4126,6 @@ class TestQuantizationSimLearnedGrid:
     def test_quantizer_flag_when_unsigned_symmetric_is_enabled(self, model):
         torch.manual_seed(116)
 
-        results_dir = os.path.abspath("./tmp/")
-        os.makedirs(results_dir, exist_ok=True)
-
         # Use symmetric quantization both activation and parameter and
         #   enable unsigned symmetric and per channel quantization flag
         quantsim_config = {
@@ -4192,74 +4148,72 @@ class TestQuantizationSimLearnedGrid:
             "model_input": {},
             "model_output": {}
         }
-        with open("./tmp/quantsim_config.json", "w") as f:
-            json.dump(quantsim_config, f)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with open(os.path.join(temp_dir, "quantsim_config.json"), "w") as f:
+                json.dump(quantsim_config, f)
 
-        # Force all weight values to have positive numbers
-        with torch.no_grad():
-            model.conv.weight.add_(1).clamp_min_(0)
+            # Force all weight values to have positive numbers
+            with torch.no_grad():
+                model.conv.weight.add_(1).clamp_min_(0)
 
-        dummy_input = torch.rand(16, 3, 28, 28)
-        sim = QuantizationSimModel(model, dummy_input=dummy_input,
-                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init,
-                                   config_file="./tmp/quantsim_config.json")
+            dummy_input = torch.rand(16, 3, 28, 28)
+            sim = QuantizationSimModel(model, dummy_input=dummy_input,
+                                       quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                       config_file=os.path.join(temp_dir, "quantsim_config.json"))
 
-        sim.compute_encodings(evaluate, dummy_input)
-        # Check whether encoding of weight parameter is symmetric characteristic
-        for encoding in sim.model.conv.param_quantizers["weight"].encoding:
-            assert np.allclose(encoding.min, -encoding.max)
-            assert encoding.offset == -128
-            assert np.allclose(encoding.delta, encoding.max / 127.0)
+            sim.compute_encodings(evaluate, dummy_input)
+            # Check whether encoding of weight parameter is symmetric characteristic
+            for encoding in sim.model.conv.param_quantizers["weight"].encoding:
+                assert np.allclose(encoding.min, -encoding.max)
+                assert encoding.offset == -128
+                assert np.allclose(encoding.delta, encoding.max / 127.0)
 
-        # Param quantizer should have is_unsigned_symmetric to False,
-        #   even though unsigned_symmetric is True and encoding range is all positive
-        assert not sim.model.conv.param_quantizers["weight"].is_unsigned_symmetric
+            # Param quantizer should have is_unsigned_symmetric to False,
+            #   even though unsigned_symmetric is True and encoding range is all positive
+            assert not sim.model.conv.param_quantizers["weight"].is_unsigned_symmetric
 
-        # Activation quantizer can have is_unsigned_symmetric to False,
-        #   even though unsigned_symmetric is True and encoding range is all positive
-        assert not sim.model.relu.output_quantizers[0].is_unsigned_symmetric
+            # Activation quantizer can have is_unsigned_symmetric to False,
+            #   even though unsigned_symmetric is True and encoding range is all positive
+            assert not sim.model.relu.output_quantizers[0].is_unsigned_symmetric
 
-        def _validate_export_result(file_name: str) -> None:
-            def _validate_encoding(_encoding_info):
-                encoding_min = encoding_info["min"]
-                encoding_max = encoding_info["max"]
-                scale = encoding_info["scale"]
-                offset = encoding_info["offset"]
+            def _validate_export_result(file_name: str) -> None:
+                def _validate_encoding(_encoding_info):
+                    encoding_min = encoding_info["min"]
+                    encoding_max = encoding_info["max"]
+                    scale = encoding_info["scale"]
+                    offset = encoding_info["offset"]
 
-                assert np.allclose(encoding_min, -encoding_max - scale)
-                assert offset == -128
-                assert np.isclose(encoding_min, scale * offset, atol=1e-6)
-                assert np.isclose(encoding_max, encoding_min + scale * 255, atol=1e-6)
+                    assert np.allclose(encoding_min, -encoding_max - scale)
+                    assert offset == -128
+                    assert np.isclose(encoding_min, scale * offset, atol=1e-6)
+                    assert np.isclose(encoding_max, encoding_min + scale * 255, atol=1e-6)
 
-            with open(f"{results_dir}/{file_name}.encodings", "r") as encodings_file:
-                encodings = json.load(encodings_file)
+                with open(f"{temp_dir}/{file_name}.encodings", "r") as encodings_file:
+                    encodings = json.load(encodings_file)
 
-                activation_encodings = encodings["activation_encodings"]
-                for _, encoding_info_list in activation_encodings.items():
-                    for encoding_info in encoding_info_list:
+                    activation_encodings = encodings["activation_encodings"]
+                    for _, encoding_info_list in activation_encodings.items():
+                        for encoding_info in encoding_info_list:
+                            _validate_encoding(encoding_info)
+
+                    param_encodings = encodings["param_encodings"]
+                    for encoding_info in param_encodings["conv.weight"]:
                         _validate_encoding(encoding_info)
 
-                param_encodings = encodings["param_encodings"]
-                for encoding_info in param_encodings["conv.weight"]:
-                    _validate_encoding(encoding_info)
+            sim.export(temp_dir, "before_range_learning", dummy_input)
+            _validate_export_result("before_range_learning")
 
-        sim.export(results_dir, "before_range_learning", dummy_input)
-        _validate_export_result("before_range_learning")
+            optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.001, momentum=0.5)
+            for _ in range(20):
+                inputs = torch.rand(32, 3, 28, 28)
+                out = sim.model(inputs)
+                loss = out.flatten().sum()
+                loss.backward()
+                optimizer.step()
+                optimizer.zero_grad()
 
-        optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.001, momentum=0.5)
-        for _ in range(20):
-            inputs = torch.rand(32, 3, 28, 28)
-            out = sim.model(inputs)
-            loss = out.flatten().sum()
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-
-        sim.export(results_dir, "after_range_learning", dummy_input)
-        _validate_export_result("after_range_learning")
-
-        if os.path.exists(results_dir):
-            shutil.rmtree(results_dir)
+            sim.export(temp_dir, "after_range_learning", dummy_input)
+            _validate_export_result("after_range_learning")
 
     def test_quantsim_conv3d_tf_int8_eval_train(self):
 
@@ -4407,27 +4361,28 @@ class TestQuantizationSimLearnedGrid:
                                 "model_input": {},
                                 "model_output": {}
                           }
-        with open("./data/quantsim_config.json", "w") as f:
-            json.dump(quantsim_config, f)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with open(os.path.join(tmp_dir, 'quantsim_config.json'), "w") as f:
+                json.dump(quantsim_config, f)
 
-        model = HalfFloatTestModel().cuda().half()
-        dummy_input = torch.rand(1, 20, 4, 4).half().cuda()
-        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.training_range_learning_with_tf_init,
-                                   dummy_input=dummy_input, config_file="./data/quantsim_config.json")
+            model = HalfFloatTestModel().cuda().half()
+            dummy_input = torch.rand(1, 20, 4, 4).half().cuda()
+            sim = QuantizationSimModel(model, quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                       dummy_input=dummy_input, config_file=os.path.join(tmp_dir, 'quantsim_config.json'))
 
-        def dummy_forward(model, _):
-            output = None
-            for _ in range(100):
-                output = model(dummy_input)
-            return output
+            def dummy_forward(model, _):
+                output = None
+                for _ in range(100):
+                    output = model(dummy_input)
+                return output
 
-        optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.05, momentum=0.5)
-        sim.compute_encodings(dummy_forward, None)
-        output = dummy_forward(model, None)
-        loss = output.sum()
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
+            optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.05, momentum=0.5)
+            sim.compute_encodings(dummy_forward, None)
+            output = dummy_forward(model, None)
+            loss = output.sum()
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
 
     @pytest.mark.cuda
     def test_fp16_model_sim_eval_train_static_grid_per_channel_gpu(self):
@@ -4455,27 +4410,28 @@ class TestQuantizationSimLearnedGrid:
             "model_input": {},
             "model_output": {}
         }
-        with open("./data/quantsim_config.json", "w") as f:
-            json.dump(quantsim_config, f)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with open(os.path.join(tmp_dir, "quantsim_config.json"), "w") as f:
+                json.dump(quantsim_config, f)
 
-        model = HalfFloatTestModel().cuda().half()
-        dummy_input = torch.rand(1, 20, 4, 4).half().cuda()
-        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
-                                   dummy_input=dummy_input, config_file="./data/quantsim_config.json")
+            model = HalfFloatTestModel().cuda().half()
+            dummy_input = torch.rand(1, 20, 4, 4).half().cuda()
+            sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
+                                       dummy_input=dummy_input, config_file=os.path.join(tmp_dir, "quantsim_config.json"))
 
-        def dummy_forward(model, _):
-            output = None
-            for _ in range(100):
-                output = model(dummy_input)
-            return output
+            def dummy_forward(model, _):
+                output = None
+                for _ in range(100):
+                    output = model(dummy_input)
+                return output
 
-        optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.05, momentum=0.5)
-        sim.compute_encodings(dummy_forward, None)
-        output = dummy_forward(model, None)
-        loss = output.sum()
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
+            optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.05, momentum=0.5)
+            sim.compute_encodings(dummy_forward, None)
+            output = dummy_forward(model, None)
+            loss = output.sum()
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
 
     def test_tie_quantizers_for_concat(self):
 

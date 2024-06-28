@@ -46,6 +46,7 @@ Scenario 4 : conv2d/Linear with zero planes right below an Add layer
  """
 
 import os
+import tempfile
 import pytest
 import unittest
 import numpy as np
@@ -1004,15 +1005,13 @@ class TestTrainingExtensionsWinnow(unittest.TestCase):      # pylint: disable=to
         input_tensor = torch.rand(input_shape)
 
         # Save the model as ONNX.
-        path = './data/'
-        if not os.path.exists(path):
-            os.makedirs(path)
-        filename = 'winnowed_index_select' + '.onnx'
-        final_path = os.path.join(path, filename)
-        torch.onnx.export(new_model, input_tensor, final_path, verbose=True, export_params=True,
-                          operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK)
-        print("Saved the winnowed model as ONNX")
-        self.assertEqual(0, 0)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            filename = 'winnowed_index_select' + '.onnx'
+            final_path = os.path.join(tmpdir, filename)
+            torch.onnx.export(new_model, input_tensor, final_path, verbose=True, export_params=True,
+                              operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK)
+            print("Saved the winnowed model as ONNX")
+            self.assertEqual(0, 0)
 
     def test_winnowing_single_layer_below_add_single_residual_scenario4(self):
         """ Tests the simple single residual model for Scenario 4. """

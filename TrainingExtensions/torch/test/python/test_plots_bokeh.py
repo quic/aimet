@@ -36,11 +36,10 @@
 # =============================================================================
 
 import os
-import signal
 import unittest
 import numpy as np
 import torch
-import torch.nn as nn
+import tempfile
 from bokeh.models import Range1d
 from bokeh.plotting import figure
 from aimet_common.utils import AimetLogger, kill_process_with_name_and_port_number, start_bokeh_server_session
@@ -146,7 +145,5 @@ class VisualizeNetwork(unittest.TestCase):
         self.assertEqual(num_conv_and_linear_layers, len(layer_weights_map))
 
     def test_line_plot_visualizations_per_layer(self):
-        results_dir = 'artifacts'
-        if not os.path.exists('artifacts'):
-            os.makedirs('artifacts')
-        plot = visualize_model.visualize_relative_weight_ranges_to_identify_problematic_layers(model, results_dir)
+        with tempfile.TemporaryDirectory() as tempdir:
+            plot = visualize_model.visualize_relative_weight_ranges_to_identify_problematic_layers(model, tempdir)
