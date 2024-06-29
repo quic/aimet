@@ -642,8 +642,7 @@ class QuantizationSimModel:
                 else:
                     kwargs = onnx_export_args
                 torch.onnx.export(original_model, dummy_input, onnx_path, **kwargs)
-                if onnx_utils.RESTORE_ONNX_MODEL_INITIALIZERS:
-                    save_initializer_restored_onnx_graph(onnx_path, onnx_path)
+                save_initializer_restored_onnx_graph(onnx_path, onnx_path)
             else:
                 # Create onnx model and obtain node to i/o tensor name map
                 OnnxSaver.create_onnx_model_with_pytorch_layer_names(onnx_path, original_model, dummy_input, is_conditional,

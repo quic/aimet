@@ -899,7 +899,6 @@ class TestOnnxUtils:
         with tempfile.TemporaryDirectory() as tmp_dir:
             onnx_path = f"{tmp_dir}/multiple_p_relu_model.onnx"
 
-            onnx_utils.RESTORE_ONNX_MODEL_INITIALIZERS = True
             onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input)
             onnx_model = onnx.load(onnx_path)
 
@@ -913,7 +912,6 @@ class TestOnnxUtils:
             assert name in valid_param_set
 
         self.check_onnx_node_name_uniqueness(onnx_model)
-        onnx_utils.RESTORE_ONNX_MODEL_INITIALIZERS = False
 
     def test_save_initializer_restored_onnx_graph(self):
         model = MultiplePReluModel()
