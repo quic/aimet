@@ -21,7 +21,7 @@ At a high level, QuantSim v2:
 * Allows components to be extended easily to support advanced quantization techniques 
 * Moves all implementation code to Python for easier debugging and portability
 
-Like QuantSim v1, QuantSim v2 upholds the same high level API such as ``compute_encodings()`` and ``export()``. Both QuantSim versions can perform fake quantization (quantization on floating point kernels) and support the same AIMET features like AutoQuant, Sequential MSE, and QuantAnalyzer.
+Like QuantSim v1, QuantSim v2 upholds the same high level API such as ``compute_encodings()`` and ``export()``. Both QuantSim versions can perform fake quantization (quantization on floating point kernels) and support the same AIMET features like AdaRound, Sequential MSE, and QuantAnalyzer.
 
 To learn more about the differences between QuantSim v1 and QuantSim v2 and how to migrate your code, please refer to this :ref:`guide<tutorials-migration-guide>`.
 
@@ -38,6 +38,8 @@ All code that involves QuantSim v2 can be found in the :mod:`aimet_torch.v2` nam
    ../torch_docs/quantized_modules
    ../torch_docs/quantizer
    ../torch_docs/encoding_analyzer
+   ../torch_docs/api/quantization/affine/index
+   ../torch_docs/api/quantization/float/index
 
 New Features
 ~~~~~~~~~~~~~~~~
