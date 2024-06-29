@@ -117,7 +117,7 @@ language = None
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path .
-exclude_patterns = ["torch_docs/*"]
+exclude_patterns = []
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = 'sphinx'
@@ -239,7 +239,7 @@ html_context = {
   'current_version' : "Universal",
   'versions' : [["Universal", docs_root_url + "user_guide/index.html"],
                 ["PyTorch", docs_root_url + "torch_v2/torch_docs/index.html"]],
-  'display_version_tab': True
+  'display_version_tab': False
 }
 
-autosummary_generate = True
+autosummary_generate = False
