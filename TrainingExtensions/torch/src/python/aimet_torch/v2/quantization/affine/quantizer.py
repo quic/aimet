@@ -271,6 +271,7 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
 
         @functools.wraps(original_forward)
         def forward_wrapper(input):
+            input = input.as_subclass(torch.Tensor)
             expanded_input = torch_builtins.reshape_tensor_for_blocks(input, self.shape, self.block_size)
             batch_statistics = self.encoding_analyzer.update_stats(expanded_input)
             num_steps = math.pow(2, self.bitwidth) - 1
@@ -484,6 +485,12 @@ class Quantize(MinMaxQuantizer):
             )
 
         encoding = self.get_encoding()
+
+        # Subclasses of torch.Tensor with custom __torch_function__ (in our case, QuantizedTensorBase)
+        # is known to introduce substantial CPU overhead.
+        # Cast types of the inputs to plain torch.Tensor for faster execution.
+        input = input.as_subclass(torch.Tensor)
+
         output = quantize(input,
                           encoding.scale.to(input.dtype),
                           encoding.offset.to(input.dtype),
@@ -605,6 +612,12 @@ class QuantizeDequantize(MinMaxQuantizer):
             )
 
         encoding = self.get_encoding()
+
+        # Subclasses of torch.Tensor with custom __torch_function__ (in our case, QuantizedTensorBase)
+        # is known to introduce substantial CPU overhead.
+        # Cast types of the inputs to plain torch.Tensor for faster execution.
+        input = input.as_subclass(torch.Tensor)
+
         output = quantize_dequantize(input,
                                      encoding.scale.to(input.dtype),
                                      encoding.offset.to(input.dtype),

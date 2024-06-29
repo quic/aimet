@@ -41,6 +41,7 @@ from collections import OrderedDict
 from typing import Type, Optional, Tuple
 import abc
 import warnings
+import contextlib
 
 from torch import Tensor
 import torch.nn as nn
@@ -49,8 +50,10 @@ from torch.nn.utils.rnn import PackedSequence
 from torch.utils._pytree import tree_map
 
 import aimet_torch.elementwise_ops as aimet_ops
+from aimet_torch.v2.quantization.tensor import QuantizedTensorBase
+from aimet_torch.v2.utils import patch_attr
 
-from .base import BaseQuantizationMixin, _BaseQuantizedUnaryOpMixin, _BaseQuantizedBinaryOpMixin, _BaseQuantizedTernaryOpMixin # pylint: disable=import-error
+from .base import BaseQuantizationMixin, _BaseQuantizedUnaryOpMixin, _BaseQuantizedBinaryOpMixin, _BaseQuantizedTernaryOpMixin, _as_plain_Tensor # pylint: disable=import-error
 
 
 class FakeQuantMeta(abc.ABCMeta):
@@ -142,6 +145,23 @@ class FakeQuantizationMixin(BaseQuantizationMixin, metaclass=FakeQuantMeta): # p
         its parent module's forward pass.
         """
         return super().forward(*args, **kwargs)
+
+    def __call__(self, *args, **kwargs):
+        # Subclasses of torch.Tensor with custom __torch_function__ (in our case, QuantizedTensorBase)
+        # is known to introduce substantial CPU overhead.
+        # Cast types of the inputs to plain torch.Tensor for faster execution.
+        return super().__call__(*_as_plain_Tensor(args), **_as_plain_Tensor(kwargs))
+
+    @contextlib.contextmanager
+    def _patch_quantized_parameters(self):
+        with super()._patch_quantized_parameters():
+            with contextlib.ExitStack() as stack:
+                for param_name in self.param_quantizers:
+                    quantized_param = getattr(self, param_name)
+                    if isinstance(quantized_param, QuantizedTensorBase):
+                        ctx = patch_attr(self, param_name, quantized_param.as_subclass(Tensor))
+                        stack.enter_context(ctx)
+                yield
 
     @classmethod
     def wrap(cls, module_cls: Type[nn.Module]) -> Type[nn.Module]:
