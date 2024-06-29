@@ -2533,7 +2533,6 @@ class TestQuantizationSimStaticGrad:
             sim.compute_encodings(lambda m, _: m(dummy_input), None)
             filename_prefix = "multiple_p_relu_model"
 
-            onnx_utils.RESTORE_ONNX_MODEL_INITIALIZERS = True
             sim.export(tmp_dir, filename_prefix, dummy_input)
             with open(f"{tmp_dir}/{filename_prefix}.encodings") as encodings_file:
                 encodings = json.load(encodings_file)
@@ -2547,7 +2546,6 @@ class TestQuantizationSimStaticGrad:
                 assert len(param_encodings[param_name]) == num_parameters
             else:           # Per-tensor
                 assert len(param_encodings[param_name]) == 1
-        onnx_utils.RESTORE_ONNX_MODEL_INITIALIZERS = False
 
     def test_save_encodings_to_json(self):
         model = ModelWithTwoInputsOneToAdd()
