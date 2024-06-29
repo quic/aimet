@@ -40,8 +40,8 @@ Imports
 To migrate to QuantSim v2, your imports should originate from the :mod:`aimet_torch.v2` namespace and be replaced as shown below. If your code does not directly access lower-level components, no further code change is needed. 
 
 ===================== ====================================================== ==================================================================
-===================== ====================================================== ==================================================================
 AIMET Classes         :mod:`aimet_torch`                                     :mod:`aimet_torch.v2`
+===================== ====================================================== ==================================================================
 QuantSim              :class:`aimet_torch.quantsim.QuantizationSimModel`     :class:`aimet_torch.v2.quantsim.quantsim.QuantizationSimModel`
 AdaRound              :class:`aimet_torch.adaround.adaround_weight.AdaRound` :class:`aimet_torch.v2.adaround.AdaRound`
 Sequential MSE        :class:`aimet_torch.seq_mse.apply_seq_mse`             :class:`aimet_torch.v2.seq_mse.apply_seq_mse`
@@ -72,7 +72,7 @@ To enable quantization in QuantSim v1, modules are wrapped with a QuantizeWrappe
 .. code-block:: Python
     
     from aimet_torch.quantsim import QuantizationSimModel as QuantizationSimModelV1
-    sim = QuantizationSimModelV1(…)
+    sim = QuantizationSimModelV1(...)
     all_quant_wrappers = sim.quant_wrappers()
     for quant_wrapper in sim.quant_wrappers():
         print(quant_wrapper)
@@ -93,7 +93,7 @@ In contrast, QuantSim v2 enables quantization through quantized nn.Modules - mod
 .. code-block:: Python
 
     from aimet_torch.v2.quantsim.quantsim import QuantizationSimModel as QuantizationSimModelV2
-    sim2 = QuantizationSimModelV2(…)
+    sim2 = QuantizationSimModelV2(...)
     all_q_modules = sim2.qmodules()
     for q_module in sim2.qmodules():
         print(q_module)
@@ -339,9 +339,7 @@ Code Examples
 
     # QuantSim v2
     # Notes: There is no longer a concept of "freezing". Mimicking v1 freezing behavior involves the allow_overwrite and requires_grad_ flag
-    # However, these flags take limited responsibility. It may be possible to modify the encodings even when requires_grad_ and allow_overwrite are False
-    
-    qlinear.param_quantizers['weight'].allow_overwrite(False)  # Prevents encodings from being overwritten
+    qlinear.param_quantizers['weight'].allow_overwrite(False)  # Prevents encodings from being overwritten by AIMET APIs
     qlinear.param_quantizers['weight'].requires_grad_(False)   # Prevents encodings from being learned
 
 .. _deprecated-features:
