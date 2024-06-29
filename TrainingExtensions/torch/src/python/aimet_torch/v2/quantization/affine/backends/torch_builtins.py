@@ -38,9 +38,15 @@
 import functools
 from typing import Optional, List
 import torch
-
 from aimet_torch.v2.utils import _is_expandable
 import aimet_torch.v2.experimental.onnx._export as _onnx
+from packaging import version
+
+
+if version.parse(torch.__version__) >= version.parse("2.0.0"):
+    _compile = torch.compile
+else:
+    _compile = lambda fn: fn
 
 
 def _is_value_representable(dtype: torch.dtype, value: int):
@@ -205,6 +211,7 @@ class QuantizeFunc(torch.autograd.Function):
     """
     # pylint: disable=arguments-differ
     @staticmethod
+    @_compile
     def forward(ctx, tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, qmin: int, qmax: int):
         x_round = (tensor.to(scale.dtype) / scale).round_().sub_(offset)
         if tensor.requires_grad or scale.requires_grad or offset.requires_grad:
@@ -238,6 +245,7 @@ class DequantizeFunc(torch.autograd.Function):
     """
     # pylint: disable=arguments-differ
     @staticmethod
+    @_compile
     def forward(ctx, tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor):
         x_dequant = (tensor + offset).mul_(scale)
         ctx.tensor_requires_grad = tensor.requires_grad
@@ -267,6 +275,7 @@ class QuantDequantFunc(torch.autograd.Function):
     """
     # pylint: disable=arguments-differ, misplaced-comparison-constant
     @staticmethod
+    @_compile
     def forward(ctx, tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, qmin: int, qmax: int):
         x_round = (tensor.to(scale.dtype) / scale).round_().sub_(offset)
 
@@ -288,7 +297,6 @@ class QuantDequantFunc(torch.autograd.Function):
                               offset if scale.requires_grad else None,
                               mask)
         return x_dequant
-
 
     # pylint: disable=arguments-differ
     @staticmethod
