@@ -43,7 +43,6 @@ from typing import Type, List, Dict, Union, Iterable, Mapping, Optional
 
 import torch.nn as nn
 from torch import Tensor
-from torch.utils._pytree import tree_map
 
 from aimet_torch.utils import is_vector_encoding
 from aimet_torch.v2.quantization.affine.encoding import VectorEncoding, AffineEncoding
@@ -58,13 +57,6 @@ from aimet_torch.v2.utils import (
 
 def _no_op(in_tensor):
     return in_tensor
-
-
-def _as_plain_Tensor(tensor: Tensor):
-    if isinstance(tensor, QuantizedTensorBase):
-        tensor = tensor.as_subclass(Tensor)
-    return tensor
-
 
 class BaseQuantizationMixin(abc.ABC):
     """Mixin that implements quantization on top of regular pytorch modules.
@@ -116,12 +108,6 @@ class BaseQuantizationMixin(abc.ABC):
         responsible for computing a quantized version of the base class' forward function using the configuration of
         the layer's :class:`QuantizerBase` objects.
         """
-        # Subclasses of torch.Tensor with custom __torch_function__ (in our case, QuantizedTensorBase)
-        # is known to introduce substantial CPU overhead.
-        # Cast types of the inputs to plain torch.Tensor for faster execution.
-        args = tree_map(_as_plain_Tensor, args)
-        kwargs = tree_map(_as_plain_Tensor, kwargs)
-
         return super().forward(*args, **kwargs)
 
     @contextlib.contextmanager
@@ -527,12 +513,6 @@ class BaseQuantizationMixin(abc.ABC):
 
 class _BaseQuantizedUnaryOpMixin(BaseQuantizationMixin):
     def forward(self, *args, **kwargs) -> Tensor: # pylint: disable=missing-function-docstring
-        # Subclasses of torch.Tensor with custom __torch_function__ (in our case, QuantizedTensorBase)
-        # is known to introduce substantial CPU overhead.
-        # Cast types of the inputs to plain torch.Tensor for faster execution.
-        args = tree_map(_as_plain_Tensor, args)
-        kwargs = tree_map(_as_plain_Tensor, kwargs)
-
         x, *others = args
 
         if isinstance(x, Tensor) and x.is_floating_point() and self.input_quantizers[0]:
@@ -552,12 +532,6 @@ class _BaseQuantizedBinaryOpMixin(BaseQuantizationMixin):
         self.input_quantizers = nn.ModuleList([None, None])
 
     def forward(self, *args, **kwargs) -> Tensor: # pylint: disable=missing-function-docstring
-        # Subclasses of torch.Tensor with custom __torch_function__ (in our case, QuantizedTensorBase)
-        # is known to introduce substantial CPU overhead.
-        # Cast types of the inputs to plain torch.Tensor for faster execution.
-        args = tree_map(_as_plain_Tensor, args)
-        kwargs = tree_map(_as_plain_Tensor, kwargs)
-
         x, y, *others = args
 
         if isinstance(x, Tensor) and x.is_floating_point() and self.input_quantizers[0]:
@@ -581,12 +555,6 @@ class _BaseQuantizedTernaryOpMixin(BaseQuantizationMixin):
         self.input_quantizers = nn.ModuleList([None, None, None])
 
     def forward(self, *args, **kwargs) -> Tensor: # pylint: disable=missing-function-docstring
-        # Subclasses of torch.Tensor with custom __torch_function__ (in our case, QuantizedTensorBase)
-        # is known to introduce substantial CPU overhead.
-        # Cast types of the inputs to plain torch.Tensor for faster execution.
-        args = tree_map(_as_plain_Tensor, args)
-        kwargs = tree_map(_as_plain_Tensor, kwargs)
-
         x, y, z, *others = args
 
         if isinstance(x, Tensor) and x.is_floating_point() and self.input_quantizers[0]:
