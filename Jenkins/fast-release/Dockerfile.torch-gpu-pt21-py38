@@ -132,7 +132,8 @@ RUN apt-get update > /dev/null && \
         tree \
         vim && \
         rm -rf /var/lib/apt/lists/*
-
+#cumm-cu111==0.2.8
+#spconv-cu111==2.1.20
 # Python3 Packages
 RUN python3 -m pip --no-cache-dir install \
         astroid==2.5.3 \
@@ -141,7 +142,7 @@ RUN python3 -m pip --no-cache-dir install \
         blosc==1.10.1 \
         cffi==1.12.3 \
         click \
-        cumm-cu111==0.2.8 \
+        cumm-cu116 \
         cvxpy \
         cylp \
         cython==0.29.12 \
@@ -185,7 +186,7 @@ RUN python3 -m pip --no-cache-dir install \
         PyYAML \
         scikit-learn==1.1.3 \
         scipy==1.8.1 \
-        spconv-cu111==2.1.20 \
+        spconv-cu116 \
         sphinx==3.5.3 \
         sphinx-autodoc-typehints==1.6.0 \
         sphinx-jinja==1.1.1 \
@@ -193,10 +194,10 @@ RUN python3 -m pip --no-cache-dir install \
         tensorboard==2.4.0 \
         tensorboardX==2.4 \
         timm==0.4.12 \
-        torch==2.1.2 \
-        torchaudio==2.1.2 \
+        torch==2.2.2 \
+        torchaudio==2.2.2 \
         torchtext \
-        torchvision==0.16.2 \
+        torchvision==0.17.2 \
         tqdm \
         wget && \
     python3 -m ipykernel.kernelspec

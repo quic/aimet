@@ -198,10 +198,10 @@ RUN python3 -m pip --no-cache-dir install \
         tensorboard==2.4.0 \
         tensorboardX==2.4 \
         timm==0.4.12 \
-        torch==2.1.2 \
-        torchaudio==2.1.2 \
+        torch==2.2.2 \
+        torchaudio==2.2.2 \
         torchtext \
-        torchvision==0.16.2 \
+        torchvision==0.17.2 \
         tqdm \
         transformers==4.27.4 \
         wget && \
