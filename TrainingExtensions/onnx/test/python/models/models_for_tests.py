@@ -46,7 +46,7 @@ from torch import nn as nn
 from torchvision.ops import roi_align
 import numpy as np
 import torch
-from onnx import helper, numpy_helper, OperatorSetIdProto, TensorProto, load_model
+from onnx import helper, numpy_helper, OperatorSetIdProto, TensorProto, load_model, save
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
 from torch.nn.modules.batchnorm import _BatchNorm
 from aimet_common import libquant_info
@@ -1754,7 +1754,7 @@ def instance_norm_model():
     # Export the model
     torch.onnx.export(model,  # model being run
                       x,  # model input (or a tuple for multiple inputs)
-                      "./model_single_residual.onnx",
+                      "./model_instance_norm.onnx",
                       # where to save the model (can be a file or file-like object),
                       training=torch.onnx.TrainingMode.TRAINING,
                       export_params=True,  # store the trained parameter weights inside the model file
@@ -1762,7 +1762,7 @@ def instance_norm_model():
                       do_constant_folding=False,  # whether to execute constant folding for optimization
                       input_names=['input'],  # the model's input names
                       output_names=['output'])
-    model = ONNXModel(load_model('./model_single_residual.onnx'))
+    model = ONNXModel(load_model('./model_instance_norm.onnx'))
     return model
 
 def custom_add_model():
@@ -1831,4 +1831,83 @@ def conv_relu_model():
                       })
 
     model = load_model('./conv_relu.onnx')
+    return model
+
+
+def const_param_model():
+    """ ONNX model having constant tensors as op parameters """
+
+    model = helper.make_model(
+        graph=helper.make_graph(
+            name='ConstantParamModel',
+            inputs=[helper.make_tensor_value_info('latent', TensorProto.FLOAT, shape=[1, 4, 64, 64])],
+            outputs=[helper.make_tensor_value_info('/down_blocks.0/resnets.0/norm1/InstanceNormalization_output_0', TensorProto.FLOAT, shape=[1, 32, 40960])],
+            initializer=[
+                numpy_helper.from_array(np.random.randn(320, 4, 3, 3).astype('float32'), name='conv_in.weight'),
+                numpy_helper.from_array(np.random.randn(320).astype('float32'), name='conv_in.bias'),
+            ],
+            value_info=[
+                helper.make_tensor_value_info('/conv_in/Conv_output_0', TensorProto.FLOAT, shape=[1, 320, 64, 64]),
+                helper.make_tensor_value_info('/down_blocks.0/resnets.0/norm1/Constant_output_0', TensorProto.INT64, shape=[3]),
+                helper.make_tensor_value_info('/down_blocks.0/resnets.0/norm1/Reshape_output_0', TensorProto.FLOAT, shape=[1, 32, 40960]),
+                helper.make_tensor_value_info('/down_blocks.0/resnets.0/norm1/Constant_1_output_0', TensorProto.FLOAT, shape=[32]),
+                helper.make_tensor_value_info('/down_blocks.0/resnets.0/norm1/Constant_2_output_0', TensorProto.FLOAT, shape=[32])
+            ],
+            nodes=[
+                helper.make_node(
+                    'Conv',
+                    inputs=['latent', 'conv_in.weight', 'conv_in.bias'],
+                    outputs=['/conv_in/Conv_output_0'],
+                    name='/conv_in/Conv',
+                    doc_string='',
+                    dilations=[1, 1],
+                    group=1,
+                    kernel_shape=[3, 3],
+                    pads=[1, 1, 1, 1],
+                    strides=[1, 1],
+                ),
+                helper.make_node(
+                    'Constant',
+                    inputs=[],
+                    outputs=['/down_blocks.0/resnets.0/norm1/Constant_output_0'],
+                    name='/down_blocks.0/resnets.0/norm1/Constant',
+                    doc_string='',
+                    value=numpy_helper.from_array(np.array([0, 32, -1], dtype='int64'), name=''),
+                ),
+                helper.make_node(
+                    'Reshape',
+                    inputs=['/conv_in/Conv_output_0', '/down_blocks.0/resnets.0/norm1/Constant_output_0'],
+                    outputs=['/down_blocks.0/resnets.0/norm1/Reshape_output_0'],
+                    name='/down_blocks.0/resnets.0/norm1/Reshape',
+                    doc_string='',
+                    allowzero=0,
+                ),
+                helper.make_node(
+                    'Constant',
+                    inputs=[],
+                    outputs=['/down_blocks.0/resnets.0/norm1/Constant_1_output_0'],
+                    name='/down_blocks.0/resnets.0/norm1/Constant_1',
+                    doc_string='',
+                    value=numpy_helper.from_array(np.random.randn(32).astype('float32'), name=''),
+                ),
+                helper.make_node(
+                    'Constant',
+                    inputs=[],
+                    outputs=['/down_blocks.0/resnets.0/norm1/Constant_2_output_0'],
+                    name='/down_blocks.0/resnets.0/norm1/Constant_2',
+                    doc_string='',
+                    value=numpy_helper.from_array(np.random.randn(32).astype('float32'), name=''),
+                ),
+                helper.make_node(
+                    'InstanceNormalization',
+                    inputs=['/down_blocks.0/resnets.0/norm1/Reshape_output_0', '/down_blocks.0/resnets.0/norm1/Constant_1_output_0', '/down_blocks.0/resnets.0/norm1/Constant_2_output_0'],
+                    outputs=['/down_blocks.0/resnets.0/norm1/InstanceNormalization_output_0'],
+                    name='/down_blocks.0/resnets.0/norm1/InstanceNormalization',
+                    doc_string='',
+                    epsilon=9.999999747378752e-06,
+                ),
+            ],
+        ),
+    )
+
     return model

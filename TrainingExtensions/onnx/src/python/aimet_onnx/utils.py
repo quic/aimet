@@ -313,15 +313,9 @@ class ParamUtils:
         :param node: ONNX node to which the param feeds to
         :param param_index: Index at which param feeds to the ONNX node
         """
-        if node.op_type in OP_TYPES_WITH_PARAMS:
-            if len(node.input) >= param_index + 1:
-                param_name = node.input[param_index]
-                for param in model.graph.initializer:
-                    if param.name == param_name:
-                        return param.dims
-            logger.debug("Param not present in the node")
-        else:
-            logger.debug("Node type not in allowed op types with param list")
+        param = ParamUtils.get_param(model, node, param_index)
+        if param:
+            return param.dims
         return None
 
     @staticmethod
@@ -332,12 +326,29 @@ class ParamUtils:
         :param node: ONNX node to which the param feeds to
         :param param_index: Index at which param feeds to the ONNX node
         """
-        assert node.op_type in OP_TYPES_WITH_PARAMS, "Node type not in allowed op types with param list"
-        if len(node.input) >= param_index + 1:
-            param_name = node.input[param_index]
+        def find_param_in_model_initializers(param_name: str, model: ModelProto):
             for param in model.graph.initializer:
                 if param.name == param_name:
                     return param
+            return None
+
+        def find_param_in_model_constants(param_name: str, model: ModelProto):
+            for node in model.graph.node:
+                if node.op_type == 'Constant' and param_name in node.output:
+                    for attribute in node.attribute:
+                        if attribute.name == 'value':
+                            param = attribute.t
+                            param.name = param_name
+                            return param
+            return None
+
+        assert node.op_type in OP_TYPES_WITH_PARAMS, "Node type not in allowed op types with param list"
+        if len(node.input) >= param_index + 1:
+            param_name = node.input[param_index]
+            param = find_param_in_model_initializers(param_name, model)
+            if param is None:
+                param = find_param_in_model_constants(param_name, model)
+            return param
         return None
 
 
