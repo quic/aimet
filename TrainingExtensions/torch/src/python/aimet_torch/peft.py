@@ -380,7 +380,7 @@ class PeftQuantUtils:
         :param use_safetensor: True if adapter weights path point to a safetensor file. False if points to bin file
         """
         tensors = _load_weights(adapter_weights_path, use_safetensor)
-        lora_layer_names_set = {key for key in self.lora_layers}
+        lora_layer_names_set = set(self.lora_layers)
         onnx_names_tensors = {}
         for key in tensors.keys():
             tensor_name = key
