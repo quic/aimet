@@ -302,7 +302,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         for node in self._model.model.graph.node:
             if node.op_type in CONSTANT_TYPE:
                 for activation_name in node.output:
-                    if activation_name in self._quant_ops_dict and \
+                    if activation_name not in self._param_names and activation_name in self._quant_ops_dict and \
                             self._quant_ops_dict[activation_name] not in modified_quantize_ops:
                         self._modify_activation_quantize_op([self._quant_ops_dict[activation_name]],
                                                             ConfigDictKeys.IS_INPUT_QUANTIZED,
