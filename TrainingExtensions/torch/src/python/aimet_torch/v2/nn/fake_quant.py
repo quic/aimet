@@ -440,7 +440,12 @@ FakeQuantizedGRU = _FakeQuantizedRNNBaseMixin.wrap(nn.GRU)
 FakeQuantizedRNN = _FakeQuantizedRNNBaseMixin.wrap(nn.RNN)
 
 
-class _FakeQuantizedRNNCellBaseMixin(_FakeQuantizedBinaryOpMixin):
+class _FakeQuantizedRNNCellBaseMixin(FakeQuantizationMixin):
+    def __quant_init__(self):
+        super().__quant_init__()
+        self.input_quantizers = nn.ModuleList([None, None])
+        self.output_quantizers = nn.ModuleList([None])
+
     def forward(self, input: Tensor, hx: Optional[Tensor] = None) -> Tensor: # pylint: disable=arguments-differ
         """
         Quantized forward impl for nn.GRUCell and nn.RNNCell.
@@ -830,7 +835,7 @@ class FakeQuantizedNonMaxSuppression(FakeQuantizationMixin, aimet_ops.NonMaxSupp
 
 
 @FakeQuantizationMixin.implements(aimet_ops.Split)
-class FakeQuantizedSplit(_FakeQuantizedUnaryOpMixin, aimet_ops.Split): # pylint: disable=abstract-method, too-many-ancestors
+class FakeQuantizedSplit(FakeQuantizationMixin, aimet_ops.Split):
     """
     Quantized class definition for aimet_ops.Split.
     """
@@ -854,7 +859,7 @@ class FakeQuantizedSplit(_FakeQuantizedUnaryOpMixin, aimet_ops.Split): # pylint:
 
 
 @FakeQuantizationMixin.implements(aimet_ops.Concat)
-class FakeQuantizedConcat(_FakeQuantizedUnaryOpMixin, aimet_ops.Concat): # pylint: disable=too-many-ancestors
+class FakeQuantizedConcat(FakeQuantizationMixin, aimet_ops.Concat):
     """
     Quantized class definition for aimet_ops.Concat.
     """
