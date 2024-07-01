@@ -137,6 +137,20 @@ class TestUtils:
                 assert bias.name == 'conv1.bias'
                 break
 
+    def test_utils_const_param_model(self):
+        model = models_for_tests.const_param_model()
+        for node in model.graph.node:
+            if node.op_type == 'InstanceNormalization':
+                weights = ParamUtils.get_param(model, node, 1)
+                weights_shape = ParamUtils.get_shape(model, node, 1)
+                bias = ParamUtils.get_param(model, node, 2)
+                bias_shape = ParamUtils.get_shape(model, node, 2)
+                assert bias_shape == [32]
+                assert weights_shape == [32]
+                assert weights.name == '/down_blocks.0/resnets.0/norm1/Constant_1_output_0'
+                assert bias.name == '/down_blocks.0/resnets.0/norm1/Constant_2_output_0'
+                break
+
     def test_remove_node(self):
         """
         Test remove node from model
