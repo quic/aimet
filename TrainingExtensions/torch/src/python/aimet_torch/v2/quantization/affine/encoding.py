@@ -207,13 +207,27 @@ class AffineEncoding(EncodingBase):
         bitwidth = self.bitwidth
         signed = self.signed
         block_size = self.block_size
-        return quantize(input, scale.to(input.dtype), offset.to(input.dtype), bitwidth, signed, block_size=block_size)
+
+        # Subclasses of torch.Tensor with custom __torch_function__ (in our case, QuantizedTensorBase)
+        # is known to introduce substantial CPU overhead.
+        # Cast types of the inputs to plain torch.Tensor for faster execution.
+        return quantize(input.as_subclass(torch.Tensor),
+                        scale.to(input.dtype).as_subclass(torch.Tensor),
+                        offset.to(input.dtype).as_subclass(torch.Tensor),
+                        bitwidth, signed, block_size=block_size)
 
     def dequantize(self, input: torch.Tensor) -> torch.Tensor:
         scale = self.scale
         offset = self.offset
         block_size = self.block_size
-        return dequantize(input, scale.to(input.dtype), offset.to(input.dtype), block_size=block_size)
+
+        # Subclasses of torch.Tensor with custom __torch_function__ (in our case, QuantizedTensorBase)
+        # is known to introduce substantial CPU overhead.
+        # Cast types of the inputs to plain torch.Tensor for faster execution.
+        return dequantize(input.as_subclass(torch.Tensor),
+                          scale.to(input.dtype).as_subclass(torch.Tensor),
+                          offset.to(input.dtype).as_subclass(torch.Tensor),
+                          block_size=block_size)
 
     def _to_legacy_format(self):
         min = self.min.flatten()
