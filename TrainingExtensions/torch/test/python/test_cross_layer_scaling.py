@@ -867,6 +867,10 @@ class TestTrainingExtensionsCrossLayerScalingPythonOnly:
             torch.nn.ConvTranspose2d(10, 10, 3, groups=groups),
             torch.nn.Conv2d(10, 10, 3),
         ).eval()
+
+        with torch.no_grad():
+            model[0].weight *= model[0].weight * 100
+
         model_copy = copy.deepcopy(model).eval()
         dummy_input = torch.rand((1, 10, 32, 32))
         cle.USE_PYTHON_IMPL = True
@@ -876,6 +880,19 @@ class TestTrainingExtensionsCrossLayerScalingPythonOnly:
         for py, mo in zip(py_scale_factors[0].cls_pair_info_list[0].scale_factor,
                           mo_scale_factors[0].cls_pair_info_list[0].scale_factor):
             assert np.isclose(py, mo)
+
+        def _verify_ranges(module_0, module_1):
+            if isinstance(module_0, torch.nn.ConvTranspose2d) and module_0.groups == 1:
+                weight_0 = module_0.weight.detach().permute(1, 0, 2, 3)
+            else:
+                weight_0 = module_0.weight.detach()
+            range_conv1_after_scaling = np.max(np.abs(weight_0.cpu().numpy()), axis=(1, 2, 3))
+            range_conv2_after_scaling = np.max(np.abs(module_1.weight.detach().cpu().numpy()), axis=(0, 2, 3))
+            assert np.allclose(range_conv1_after_scaling, range_conv2_after_scaling)
+
+        # Verify that weights are scaled back to similar ranges
+        _verify_ranges(model[0], model[1])
+        _verify_ranges(model_copy[0], model_copy[1])
 
     @pytest.mark.parametrize("use_python_only_impl", [True, False])
     def test_divide_by_zero(self, use_python_only_impl):

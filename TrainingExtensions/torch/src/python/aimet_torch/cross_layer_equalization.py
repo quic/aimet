@@ -335,24 +335,10 @@ class CrossLayerScaling:
         :param cls_set: Either a pair or regular conv layers or a triplet of depthwise separable layers
         :return: Scaling factor calculated and applied
         """
-        on_gpu = False
-        for module in cls_set:
-            if not isinstance(module, cls_supported_layers):
-                raise ValueError("Only Conv or Transposed Conv layers are supported for cross layer equalization")
-            if module.weight.is_cuda:
-                on_gpu = True
-                module.cpu()
-
-        # Pick implementation version (either MO (c++) or python) depending on the user provided flag.
-        cls_impl = PythonClsImpl() if USE_PYTHON_IMPL else MoClsImpl()
         if len(cls_set) == 3:
-            scale_factor = cls_impl.scale_cls_set_with_depthwise_layers(cls_set)
+            scale_factor = CrossLayerScaling.scale_cls_set_with_depthwise_layers(cls_set)
         else:
-            scale_factor = cls_impl.scale_cls_set_with_conv_layers(cls_set)
-
-        if on_gpu:
-            for module in cls_set:
-                module.to(device="cuda")
+            scale_factor = CrossLayerScaling.scale_cls_set_with_conv_layers(cls_set)
 
         return scale_factor
 
@@ -367,7 +353,8 @@ class CrossLayerScaling:
         on_gpu = False
         for module in cls_set:
             if not isinstance(module, cls_supported_layers):
-                raise ValueError("Only Conv or Transposed Conv layers are supported for cross layer equalization")
+                raise ValueError(f"Only Conv or Transposed Conv layers are supported for cross layer equalization."
+                                 f" Layer class {str(module.__class__)} is not supported.")
             if module.weight.is_cuda:
                 on_gpu = True
                 module.cpu()
@@ -393,7 +380,8 @@ class CrossLayerScaling:
         on_gpu = False
         for module in cls_set:
             if not isinstance(module, cls_supported_layers):
-                raise ValueError("Only conv layers are supported for cross layer equalization")
+                raise ValueError(f"Only Conv or Transposed Conv layers are supported for cross layer equalization."
+                                 f" Layer class {str(module.__class__)} is not supported.")
             if module.weight.is_cuda:
                 on_gpu = True
                 module.cpu()
