@@ -25,6 +25,6 @@ scipy==1.8.1
 setuptools
 spconv-cu118
 tensorboardX==2.4
-torch==2.1.2
-torchvision==0.16.2
+torch==2.2.2
+torchvision==0.17.2
 tqdm
