@@ -237,6 +237,7 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
 
         @functools.wraps(original_forward)
         def forward_wrapper(input):
+            input = input.as_subclass(torch.Tensor)
             batch_statistics = self.encoding_analyzer.update_stats(input)
             num_steps = math.pow(2, self.bitwidth) - 1
             dynamic_min, dynamic_max =\
@@ -290,7 +291,10 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
 
             maxval = _ieee_float_max_representable_value(exponent_bits, mantissa_bits)
 
-        return fake_cast_to_ieee_float(input, maxval, exponent_bits, mantissa_bits)
+        # Subclasses of torch.Tensor with custom __torch_function__ (in our case, QuantizedTensorBase)
+        # is known to introduce substantial CPU overhead.
+        # Cast types of the inputs to plain torch.Tensor for faster execution.
+        return fake_cast_to_ieee_float(input.as_subclass(torch.Tensor), maxval, exponent_bits, mantissa_bits)
 
     def extra_repr(self):
         """
