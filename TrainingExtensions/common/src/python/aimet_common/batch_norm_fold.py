@@ -60,7 +60,7 @@ def make_4d_tensor(tensor: np.ndarray) -> np.ndarray:
 
 
 def batch_norm_fold(weight: np.ndarray, bias: np.ndarray, gamma: np.ndarray, beta: np.ndarray, mu: np.ndarray,
-                    sigma: np.ndarray, fold_backward: bool):
+                    sigma: np.ndarray, fold_backward: bool) -> [np.ndarray, np.ndarray]:
     """
     :param weight: conv/linear weight
     :param bias: conv/linear bias
@@ -69,16 +69,20 @@ def batch_norm_fold(weight: np.ndarray, bias: np.ndarray, gamma: np.ndarray, bet
     :param mu: Batch Norm layer running mean
     :param sigma: Batch Norm layer running variance (calculated as square root of running variance)
     :param fold_backward: True if BatchNorm comes after Conv/Linear layer
+    :return: Updated weight, bias
     """
     assert len(weight.shape) == 4
+
+    assert not np.any(sigma == 0)
     scale = gamma / sigma
 
     if fold_backward:
-        weight *= scale[:, None, None, None]
-        bias += beta - (mu - bias) * gamma / sigma - bias
+        _weight = weight * scale[:, None, None, None]
+        _bias = beta - (mu - bias) * scale
     else:
         _w_2d = weight.sum(3).sum(2)
         mu_hat = np.matmul(_w_2d, mu * scale)
         beta_hat = np.matmul(_w_2d, beta)
-        weight *= scale[None, :, None, None]
-        bias += beta_hat - mu_hat
+        _weight = weight * scale[None, :, None, None]
+        _bias = beta_hat - mu_hat + bias
+    return _weight, _bias

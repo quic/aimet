@@ -150,24 +150,27 @@ class TwoInputs(torch.nn.Module):
 
 class TestTrainingExtensionBnFold:
 
+    @pytest.mark.cuda
+    @pytest.mark.parametrize("device", ['cpu', 'cuda'])
     @pytest.mark.parametrize("use_python_impl", [True, False])
-    def test_fold_resnet18(self, use_python_impl):
+    def test_fold_resnet18(self, use_python_impl, device):
         batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
-        model = models.resnet18()
+        model = models.resnet18().to(device)
         _initialize_bn_params(model)
 
         model = model.eval()
-        random_input = torch.rand(1, 3, 224, 224)
+        random_input = torch.rand(1, 3, 224, 224).to(device)
 
         baseline_output = model(random_input)
 
         layer_list = [(model.layer2[0].conv1, model.layer2[0].bn1)]
-
+        params_before = [param.clone() for param in model.parameters()]
         fold_given_batch_norms(model, layer_list)
-
+        params_after = [param.clone() for param in model.parameters()]
         output_after_fold = model(random_input)
 
+        assert not all(torch.equal(w_prev, w_after) for w_prev, w_after in zip(params_before, params_after))
         assert not isinstance(model.layer2[0].bn1, torch.nn.BatchNorm2d)
         assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
 

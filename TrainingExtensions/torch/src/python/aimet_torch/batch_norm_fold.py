@@ -172,7 +172,10 @@ def _call_py_batch_norm_fold(weight: torch.Tensor,
         _bias = bias.detach().cpu().numpy()
         _weight = make_4d_tensor(_weight)
 
-        batch_norm_fold(_weight, _bias, gamma, beta, mu, sigma, fold_backward)
+        _weight, _bias = batch_norm_fold(_weight, _bias, gamma, beta, mu, sigma, fold_backward)
+
+        bias.copy_(torch.from_numpy(_bias).reshape_as(bias)).to(device=bias.device, dtype=bias.dtype)
+        weight.copy_(torch.from_numpy(_weight).reshape_as(weight)).to(device=weight.device, dtype=weight.dtype)
 
 
 class _BatchNormFoldingNotSupported(RuntimeError):
