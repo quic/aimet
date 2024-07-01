@@ -77,10 +77,9 @@ else:
 op_types_to_ignore = ["branch", "Flatten", "Gather", "Reshape", "Shape", "Unsqueeze", "Squeeze", "Split",
                       "Compress", "Tile", "Transpose", "Identity"]
 
-allowed_op_type_for_per_channel = ['Conv', 'Gemm', 'MatMul', 'ConvTranspose']
+op_types_having_constant_input_tensors = ["Add", "Mul"]
 
-# List of ops whose parameters are not to be quantized
-op_params_to_ignore = ['Resize', 'Pow']
+allowed_op_type_for_per_channel = ['Conv', 'Gemm', 'MatMul', 'ConvTranspose']
 
 data_types_to_quantize = [np.float32]
 
@@ -244,27 +243,28 @@ class QuantizationSimModel:
         :param dummy_input: Sample input to be run through the model
         """
         self.fill_activation_dtypes(dummy_input)
-        for node in self.model.nodes():
-            if node.op_type not in op_types_to_ignore:
-                for name in node.output:
-                    if name not in self.activation_names and name not in self.param_names and \
-                            self._is_op_quantizable(name):
-                        self.activation_names.append(name)
-            for input_name in node.input:
-                if input_name not in self.activation_names and input_name not in self.param_names and \
-                        node.op_type not in op_params_to_ignore:
-                    for tensors in self.model.model.graph.initializer:
-                        if tensors.name == input_name and tensors.data_type == 1: # 1 corresponds to float, dictionary can be found by using onnx.TensorProto.DataType.items()
-                            self.activation_names.append(tensors.name)
-                            self.input_quantizers_name.append(tensors.name)
 
-        # Model inputs
+        # Capture model inputs
         for node in self.model.graph().input:
             name = node.name
             if name not in self.activation_names and name not in self.param_names and self._is_op_quantizable(name):
                 self.activation_names.append(name)
 
-        # Model outputs
+        # Capture intermediate activations and model outputs
+        for node in self.model.nodes():
+            if node.op_type not in op_types_to_ignore:
+                for name in node.output:
+                    if name not in self.activation_names and name not in self.param_names and self._is_op_quantizable(name):
+                        self.activation_names.append(name)
+            if node.op_type in op_types_having_constant_input_tensors:
+                for name in node.input:
+                    if name not in self.activation_names and name not in self.param_names and name in self.model.get_initializer_name_set():
+                        constant_input_tensor = self.model.get_initializer(name)
+                        if constant_input_tensor.data_type == 1:  # 1 corresponds to float, dictionary can be found by using onnx.TensorProto.DataType.items()
+                            self.activation_names.append(name)
+                            self.input_quantizers_name.append(name)
+
+        # Rename model output node
         for node in self.model.graph().output:
             if node.name in self.activation_names:
                 node.name += '_updated'
