@@ -21,13 +21,20 @@ For an end-to-end notebook showing how to use PyTorch QuantAnalyzer, please see 
 Top-level API
 =============
 
-.. autoclass:: aimet_common.utils.CallbackFunc
-|
+
+.. note::
+
+    This module is also available in the experimental :mod:`aimet_torch.v2` namespace with the same top-level API. To
+    learn more about the differences between :mod:`aimet_torch` and :mod:`aimet_torch.v2`, please visit the
+    :ref:`QuantSim v2 Overview<ug-aimet-torch-v2-overview>`.
+
 .. autoclass:: aimet_torch.quant_analyzer.QuantAnalyzer
 |
 .. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.enable_per_layer_mse_loss
 |
 .. automethod:: aimet_torch.quant_analyzer.QuantAnalyzer.analyze
+|
+.. autoclass:: aimet_common.utils.CallbackFunc
 |
 
 Run specific utility

@@ -63,6 +63,7 @@ html_logo = '../images/brain_logo.png'
 # Version here refers to the AIMET torch v1/v2 version, not the AIMET release number
 html_context["current_version"] = "PyTorch"
 
+autosummary_generate = True
 
 autosummary_filename_map = {
     "aimet_torch.v2.quantization.affine.quantize": "aimet_torch.v2.quantization.affine.quantize_"
