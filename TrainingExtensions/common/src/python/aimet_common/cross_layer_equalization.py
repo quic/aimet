@@ -623,7 +623,7 @@ class ClsImpl(ABC):
         return s_12, s_23
 
     @staticmethod
-    def compute_scaling_params_for_conv(weight_0, weight_1):
+    def compute_scaling_params_for_conv(weight_0: np.ndarray, weight_1: np.ndarray) -> [np.ndarray, np.ndarray]:
         """
         Compute scaling parameters for conv layer.
         :param weight_0:
@@ -641,7 +641,8 @@ class ClsImpl(ABC):
         return scale_factor
 
     @staticmethod
-    def fold_scaling_params_for_depthwise_conv(weight_0, weight_1, weight_2, bias_0, bias_1, s_12, s_23):
+    def fold_scaling_params_for_depthwise_conv(weight_0: np.ndarray, weight_1: np.ndarray, weight_2: np.ndarray,
+                                               bias_0: np.ndarray, bias_1: np.ndarray, s_12: np.ndarray, s_23: np.ndarray):
         """
         Fold scaling parameters into weight matrices and biases.
 
@@ -653,16 +654,19 @@ class ClsImpl(ABC):
         :param s_12:
         :param s_23:
         """
-        weight_0 *= (1.0 / s_12[:, None, None, None])
-        weight_1 *= s_12[:, None, None, None] * (1.0 / s_23[:, None, None, None])
-        weight_2 *= s_23[None, :, None, None]
+        weight_0 = weight_0 * (1.0 / s_12[:, None, None, None])
+        weight_1 = weight_1 * s_12[:, None, None, None] * (1.0 / s_23[:, None, None, None])
+        weight_2 = weight_2 * s_23[None, :, None, None]
         if bias_0 is not None:
-            bias_0 *= (1.0 / s_12)
+            bias_0 = bias_0 * (1.0 / s_12)
         if bias_1 is not None:
-            bias_1 *= (1.0 / s_23)
+            bias_1 = bias_1 * (1.0 / s_23)
+
+        return weight_0, weight_1, weight_2, bias_0, bias_1
 
     @staticmethod
-    def fold_scaling_params_for_conv(weight_0, weight_1, bias_0, scale_factor):
+    def fold_scaling_params_for_conv(weight_0: np.ndarray, weight_1: np.ndarray, bias_0: Union[np.ndarray, None],
+                                     scale_factor: np.ndarray):
         """
         Fold scaling parameters into weight matrices and biases.
         :param weight_0:
@@ -671,10 +675,12 @@ class ClsImpl(ABC):
         :param scale_factor:
         :return:
         """
-        weight_0 *= (1.0 / scale_factor[:, None, None, None])
-        weight_1 *= scale_factor[None, :, None, None]
+        weight_0 = weight_0 * (1.0 / scale_factor[:, None, None, None])
+        weight_1 = weight_1 * scale_factor[None, :, None, None]
         if bias_0 is not None:
-            bias_0 *= (1.0 / scale_factor)
+            bias_0 = bias_0 * (1.0 / scale_factor)
+
+        return weight_0, weight_1, bias_0
 
 
 class HbfImpl(ABC):
