@@ -46,7 +46,6 @@ import pytest
 import tensorflow as tf
 import numpy as np
 import json
-import shutil
 from packaging import version
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Conv2D, BatchNormalization, Flatten, AvgPool2D, MaxPool2D

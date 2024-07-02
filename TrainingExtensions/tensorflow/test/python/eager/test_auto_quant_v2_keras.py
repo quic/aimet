@@ -38,7 +38,6 @@
 import contextlib
 from dataclasses import dataclass
 import os
-import shutil
 import tempfile
 from typing import Callable, Union
 from unittest.mock import MagicMock, patch

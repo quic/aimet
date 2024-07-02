@@ -35,8 +35,6 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-import os
-import shutil
 import random
 import tempfile
 from typing import Callable

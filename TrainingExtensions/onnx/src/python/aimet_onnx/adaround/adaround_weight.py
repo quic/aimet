@@ -39,7 +39,6 @@
 """ Top level API for Adaptive Rounding - Post-Training Quantization (PTQ) """
 import copy
 import os
-import shutil
 import tempfile
 import json
 from typing import Tuple, Dict, List, Callable

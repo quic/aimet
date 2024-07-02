@@ -40,7 +40,6 @@ import logging
 from itertools import chain
 import json as json
 import os
-import shutil
 import tempfile
 from pathlib import Path
 import unittest.mock

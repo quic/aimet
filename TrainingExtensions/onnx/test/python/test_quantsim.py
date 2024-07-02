@@ -36,7 +36,6 @@
 # =============================================================================
 import json
 import os
-import shutil
 import tempfile
 
 import onnx.numpy_helper

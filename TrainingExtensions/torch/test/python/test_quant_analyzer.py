@@ -39,7 +39,6 @@ import pytest
 import tempfile
 import json
 import os.path
-import shutil
 import torch
 from torch.utils.data import Dataset, DataLoader
 

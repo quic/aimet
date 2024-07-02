@@ -35,8 +35,6 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-import os
-import shutil
 import logging
 import unittest
 import unittest.mock

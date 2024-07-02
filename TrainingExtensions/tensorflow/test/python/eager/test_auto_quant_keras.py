@@ -37,7 +37,6 @@
 """ Unit tests for Auto Quant Keras """
 import contextlib
 import os
-import shutil
 import tempfile
 from dataclasses import dataclass
 from typing import Callable, Union

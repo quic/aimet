@@ -43,7 +43,6 @@ from unittest.mock import patch, MagicMock
 import os
 from bs4 import BeautifulSoup
 import pytest
-import shutil
 from typing import Callable, Dict, List
 
 import onnx

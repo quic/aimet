@@ -41,7 +41,6 @@ import os
 import contextlib
 import itertools
 import json
-import shutil
 import tempfile
 from typing import Tuple, Union, Dict, List, Callable, Any, Optional
 import torch

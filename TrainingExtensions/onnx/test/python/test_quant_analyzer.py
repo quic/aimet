@@ -37,7 +37,6 @@
 import copy
 import json
 import os.path
-import shutil
 import tempfile
 from pathlib import Path
 from typing import Dict

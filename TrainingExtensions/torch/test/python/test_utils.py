@@ -39,7 +39,6 @@ import os
 import pytest
 import unittest.mock
 import numpy as np
-import shutil
 import math
 import torch
 import torch.nn

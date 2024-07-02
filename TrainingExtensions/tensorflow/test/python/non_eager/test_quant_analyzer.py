@@ -36,7 +36,6 @@
 # =============================================================================
 
 """ Unit tests for Quant Analyzer """
-import shutil
 import json
 from typing import Any
 import os

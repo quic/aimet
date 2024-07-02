@@ -37,7 +37,6 @@
 
 import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-import signal
 import shutil
 import unittest
 from unittest.mock import MagicMock
