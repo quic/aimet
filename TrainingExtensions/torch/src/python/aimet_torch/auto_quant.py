@@ -85,6 +85,9 @@ cache = Cache()
 # NOTE: None means "all".
 NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION = None
 
+class _StageSkipped(Exception):
+    pass
+
 
 @dataclass(frozen=True)
 class _QuantSchemePair:
@@ -212,7 +215,8 @@ class AutoQuantBase(abc.ABC): # pylint: disable=too-many-instance-attributes
             config_file: str = None,
             results_dir: str = "/tmp",
             cache_id: str = None,
-            strict_validation: bool = True) -> None:
+            strict_validation: bool = True,
+            model_prepare_required: bool = True) -> None:
         '''
         :param model: Model to be quantized. Assumes model is on the correct device
         :param dummy_input: Dummy input for the model. Assumes that dummy_input is on the correct device
@@ -226,6 +230,7 @@ class AutoQuantBase(abc.ABC): # pylint: disable=too-many-instance-attributes
         :param results_dir: Directory to save the results of PTQ techniques
         :param cache_id: ID associated with cache results
         :param strict_validation: Flag set to True by default.hen False, AutoQuant will proceed with execution and handle errors internally if possible. This may produce unideal or unintuitive results.
+        :param model_prepare_required: Flag set to True by default.If False, AutoQuant will skip model prepare block in the pipeline.
         '''
         _validate_inputs(model, data_loader, eval_callback, dummy_input, results_dir,
                          strict_validation, quant_scheme, param_bw, output_bw, rounding_mode)
@@ -248,6 +253,8 @@ class AutoQuantBase(abc.ABC): # pylint: disable=too-many-instance-attributes
             self.cache_dir = os.path.join(results_dir, ".auto_quant_cache", cache_id)
         else:
             self.cache_dir = None
+
+        self.model_prepare_required = model_prepare_required
 
         def forward_pass_callback(model, _: Any = None):
             device = utils.get_device(model)
@@ -324,8 +331,9 @@ class AutoQuantBase(abc.ABC): # pylint: disable=too-many-instance-attributes
         '''
         model = self.fp32_model
 
-        with self.eval_manager.session("Prepare Model") as sess:
-            model = sess.wrap(self._prepare_model)(self.fp32_model)
+        if self.model_prepare_required:
+            with self.eval_manager.session("Prepare Model") as sess:
+                model = sess.wrap(self._prepare_model)(self.fp32_model)
 
         # Batchnorm Folding
         with self.eval_manager.session("Batchnorm Folding", ptq=True) as sess:
@@ -694,7 +702,7 @@ class AutoQuantBase(abc.ABC): # pylint: disable=too-many-instance-attributes
         # Find the quant scheme that yields the best eval score
         return max(candidates, key=eval_fn)
 
-    def _optimize_main(self, fp32_model: torch.nn.Module, target_acc: float):
+    def _optimize_main(self, fp32_model: torch.nn.Module, target_acc: float): # pylint: disable=too-many-branches
         """
         Helper function of apply().
 
@@ -705,8 +713,13 @@ class AutoQuantBase(abc.ABC): # pylint: disable=too-many-instance-attributes
 
         :return: The best ptq result as a dictionary.
         """
+        fp32_model = self.fp32_model
+
         with self.eval_manager.session("Prepare Model") as sess:
-            fp32_model = sess.wrap(self._prepare_model)(self.fp32_model)
+            if self.model_prepare_required:
+                fp32_model = sess.wrap(self._prepare_model)(self.fp32_model)
+            else:
+                raise _StageSkipped("Skipping Model Preparer")
 
         # Choose quant scheme automatically.
         with self.eval_manager.session("QuantScheme Selection") as sess:
@@ -1077,19 +1090,22 @@ class _EvalSession: # pylint: disable=too-many-instance-attributes
             buffer = io.StringIO()
             traceback.print_exception(exc_type, exc_val, exc_tb, file=buffer)
 
-            if self._strict_validation:
-                print(buffer.getvalue())
+            if exc_type == _StageSkipped:
+                print(exc_val.args[0])
             else:
-                print(
-                    "################################################################\n"
-                    "################################################################\n"
-                    "################################################################\n"
-                    "WARNING: The following exception was raised but ignored:\n\n"
-                    f"{buffer.getvalue()}"
-                    "################################################################\n"
-                    "################################################################\n"
-                    "################################################################\n"
-                )
+                if self._strict_validation:
+                    print(buffer.getvalue())
+                else:
+                    print(
+                        "################################################################\n"
+                        "################################################################\n"
+                        "################################################################\n"
+                        "WARNING: The following exception was raised but ignored:\n\n"
+                        f"{buffer.getvalue()}"
+                        "################################################################\n"
+                        "################################################################\n"
+                        "################################################################\n"
+                    )
 
         self._stdout_redirect.stop()
         self.diagnostics.add(self._log.getvalue())
@@ -1097,6 +1113,9 @@ class _EvalSession: # pylint: disable=too-many-instance-attributes
         self.result["error"] = exc_val
         if not exc_val:
             self.result["status"] = "success"
+        elif exc_type == _StageSkipped:
+            self.result["status"] = "discarded"
+            return True
         elif self._strict_validation:
             self.result["status"] = "error-failed"
         else:
