@@ -552,6 +552,13 @@ class TransposedConvModel(torch.nn.Module):
         x = self.bn2(x)
         return x
 
+class DepthwiseTransposedConvModel(TransposedConvModel):
+
+    def __init__(self):
+        super(DepthwiseTransposedConvModel, self).__init__()
+        self.conv1 = torch.nn.ConvTranspose2d(10, 10, 3, groups=10)
+        self.conv2 = torch.nn.ConvTranspose2d(10, 20, 3, groups=10)
+
 
 class TransposedConvModelWithoutBN(torch.nn.Module):
     """
@@ -1119,6 +1126,23 @@ def transposed_conv_model():
                       output_names=['output'])
     model = ONNXModel(load_model('./model_transposed_conv.onnx'))
     return model
+
+def depthwise_transposed_conv_model():
+    x = torch.randn(10, 10, 4, 4, requires_grad=True)
+    model = DepthwiseTransposedConvModel()
+
+    # Export the model
+    torch.onnx.export(model,  # model being run
+                      x,  # model input (or a tuple for multiple inputs)
+                      "./model_transposed_conv.onnx",  # where to save the model (can be a file or file-like object)
+                      export_params=True,  # store the trained parameter weights inside the model file
+                      opset_version=12,  # the ONNX version to export the model to
+                      do_constant_folding=True,  # whether to execute constant folding for optimization
+                      input_names=['input'],  # the model's input names
+                      output_names=['output'])
+    model = ONNXModel(load_model('./model_transposed_conv.onnx'))
+    return model
+
 
 def transposed_conv_model_without_bn():
     x = torch.randn(10, 10, 4, 4, requires_grad=True)

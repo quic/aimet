@@ -55,7 +55,7 @@ from aimet_onnx.qc_quantize_op import OpMode
 from aimet_onnx.utils import make_dummy_input
 from models.models_for_tests import SingleResidual
 from models.models_for_tests import build_dummy_model, single_residual_model, BNAfterConv, multi_input_with_constant_model , multi_output_model, custom_add_model, build_lstm_gru_dummy_model, \
-    transposed_conv_model
+    transposed_conv_model, depthwise_transposed_conv_model
 
 
 class DummyModel(SingleResidual):
@@ -441,8 +441,9 @@ class TestQuantSim:
                         assert encoding.bw == 8
                         assert encoding.min != encoding.max
 
-    def test_per_channel_quant_conv_transpose(self):
-        model = transposed_conv_model()
+    @pytest.mark.parametrize("model_factory", (transposed_conv_model, depthwise_transposed_conv_model))
+    def test_per_channel_quant_conv_transpose(self, model_factory):
+        model = model_factory()
         conv_transpose_weight_names = []
         for node in model.graph().node:
             if node.op_type == "ConvTranspose":
