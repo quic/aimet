@@ -51,7 +51,7 @@ from safetensors import safe_open
 from peft.tuners.lora.layer import LoraLayer as PeftLoraLayer
 
 from aimet_torch.utils import replace_modules_of_type1_using_constructor
-from aimet_torch.elementwise_ops import Add
+from aimet_torch.elementwise_ops import Add, Multiply
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.quantsim import ExportableQuantModule
 from aimet_torch.v2.nn import BaseQuantizationMixin
@@ -82,6 +82,7 @@ class LoraLayer(torch.nn.Module):
         self.in_features = lora_layer.in_features
         self.out_features = lora_layer.out_features
         self.add_lora_to_res = Add()
+        self.mul_scale = Multiply()
 
     def _swap_module_dict_with_list(self, lora_layer):
         for index, adapter_name in enumerate(lora_layer.lora_A):
@@ -109,7 +110,7 @@ class LoraLayer(torch.nn.Module):
             scaling = self.scaling[active_adapter]
             x = x.to(lora_A.weight.dtype)
 
-            result = self.add_lora_to_res(result, lora_B(lora_A(dropout(x)) * scaling))
+            result = self.add_lora_to_res(result, lora_B(self.mul_scale(lora_A(dropout(x)), scaling)))
 
         result = result.to(torch_result_dtype)
         return result
