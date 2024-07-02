@@ -110,6 +110,7 @@ RUN apt-get update > /dev/null && \
         libswscale-dev \
         libtinfo5 \
         libunwind-14 \
+        libc++-dev \
         libxtst6 \
         lsb-release \
         meld \
