@@ -1,0 +1,10 @@
+{
+    "dtype": "float16",
+    "zero": {
+        "stage": 3,
+        "overlap_comm": true
+    },
+    "quant": {
+        "enabled": false
+    }
+}
