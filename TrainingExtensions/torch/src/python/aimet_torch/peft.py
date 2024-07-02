@@ -127,34 +127,6 @@ def replace_lora_layers_with_quantizable_layers(model: torch.nn.Module):
     replace_modules_of_type1_using_constructor(model, PeftConv2d, LoraLayer)
 
 
-def save_lora_weights_after_adaptation(model: torch.nn.Module, path: str, filename_prefix: str):
-    """
-    Utility to save model weights after model adaptations
-
-    :param model: PEFT model
-    :param path: path where to store model pth and encodings
-    :param filename_prefix: Prefix to use for filenames
-    """
-    param_to_name = {}
-
-    for name, param in model.named_parameters():
-        param_to_name[param] = name
-
-    lora_weights = {}
-    for name, module in model.named_modules():
-        if isinstance(module, LoraLayer):
-            for _, param in module.lora_A.named_parameters():
-                name = param_to_name[param]
-                lora_weights[name] = param
-            for _, param in module.lora_B.named_parameters():
-                name = param_to_name[param]
-                lora_weights[name] = param
-
-    filename_prefix = filename_prefix + '.safetensor'
-    model_params_path = os.path.join(path, filename_prefix)
-    save_file(lora_weights, model_params_path)
-
-
 class AdapterMetaData:
     """
     Tracks meta data for lora layers. Tracks names of lora_a & b as well as alpha values
@@ -407,21 +379,19 @@ class PeftQuantUtils:
         :param adapter_weights_path: Path to adapter weights (adapter weights should be either bin file or safetensor)
         :param use_safetensor: True if adapter weights path point to a safetensor file. False if points to bin file
         """
-        tensors = {}
-        if use_safetensor:
-            with safe_open(adapter_weights_path, framework="pt", device=0) as f:
-                for key in f.keys():
-                    tensors[key] = f.get_tensor(key)
-        else:
-            tensors = torch.load(adapter_weights_path)
-
+        tensors = _load_weights(adapter_weights_path, use_safetensor)
+        lora_layer_names_set = set(self.lora_layers)
         onnx_names_tensors = {}
         for key in tensors.keys():
             tensor_name = key
+            temp_key = key[0:key.find('.weight')]
             if self.prepared_name_to_pt_name:
-                temp_key = key[0:key.find('.weight')]
                 tensor_name = self.pt_name_to_prepared_name[self.lora_to_pt_name[temp_key]] + '.weight'
+            lora_layer_names_set.remove(temp_key)
             onnx_names_tensors[tensor_name] = tensors[key]
+
+        if lora_layer_names_set:
+            raise KeyError("Lora layer weights missing for the following names", lora_layer_names_set)
 
         sim.model.load_state_dict(onnx_names_tensors, strict=False)
 
@@ -445,3 +415,21 @@ class PeftQuantUtils:
                         tensors[tensor_name] = torch.zeros_like(param)
 
         sim.model.load_state_dict(tensors, strict=False)
+
+
+def _load_weights(adapter_weights_path: str, use_safetensor: bool = True) -> Dict:
+    """
+    Util to load weights
+
+    :param adapter_weights_path: Path to adapter weights (adapter weights should be either bin file or safetensor)
+    :param use_safetensor: True if adapter weights path point to a safetensor file. False if points to bin file
+    """
+    tensors = {}
+    if use_safetensor:
+        with safe_open(adapter_weights_path, framework="pt", device=0) as f:
+            for key in f.keys():
+                tensors[key] = f.get_tensor(key)
+    else:
+        tensors = torch.load(adapter_weights_path)
+
+    return tensors
