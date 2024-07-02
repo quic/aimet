@@ -152,7 +152,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         and output quantizers of an op
         """
         op_to_quantizers = {}
-        for name, op in self._conn_graph.get_all_ops().items():
+        for _, op in self._conn_graph.get_all_ops().items():
             node = op.get_module()
             if node is None:
                 continue
