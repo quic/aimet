@@ -112,6 +112,7 @@ RUN apt-get update > /dev/null && \
         libtinfo5 \
         libxtst6 \
         libunwind-14 \
+        libc++-dev \
         lsb-release \
         meld \
         nano \
