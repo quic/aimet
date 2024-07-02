@@ -697,7 +697,8 @@ class HbfImpl(ABC):
         """
 
     @staticmethod
-    def _absorb_bias(activation_is_relu, beta, gamma, weight, bias_curr_layer, bias_prev_layer):
+    def _absorb_bias(activation_is_relu, beta, gamma, weight, bias_curr_layer, bias_prev_layer)\
+            -> (np.ndarray, np.ndarray):
         """
 
         :param activation_is_relu:
@@ -723,6 +724,6 @@ class HbfImpl(ABC):
             bias_correction = np.matmul(weight_matrix, absorb_bias)
 
         # Update bias for previous and current layers.
-        # inplace modifications on detached tensor(s) will update the original tensor(s).
-        bias_prev_layer -= absorb_bias
-        bias_curr_layer += bias_correction
+        bias_prev_layer = bias_prev_layer - absorb_bias
+        bias_curr_layer = bias_curr_layer + bias_correction
+        return bias_prev_layer, bias_curr_layer

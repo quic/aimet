@@ -664,7 +664,7 @@ class MoClsImpl(ClsImpl):
         if isinstance(module, (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
             layer_param.weightShape = layer_param.weightShape[:-1]
         module.weight.data = torch.from_numpy(np.reshape(layer_param.weight,
-                                                             layer_param.weightShape))
+                                                         layer_param.weightShape))
         module.weight.data = module.weight.data.type(torch.FloatTensor)
 
         # Transpose weight back to N, C, H, W for transposed Conv2D/1D
@@ -885,8 +885,8 @@ class MoHbfImpl(HbfImpl):
         scaling_parameter = cls_pair_info.scale_factor
 
         # Scaling gamma and beta parameter of batch norm layer
-        prev_layer_bn_params.gamma = bn_layers[cls_pair_info.layer1].weight.detach().numpy().reshape(-1)
-        prev_layer_bn_params.beta = bn_layers[cls_pair_info.layer1].bias.detach().numpy().reshape(-1)
+        prev_layer_bn_params.gamma = bn_layers[cls_pair_info.layer1].weight.detach().cpu().numpy().reshape(-1)
+        prev_layer_bn_params.beta = bn_layers[cls_pair_info.layer1].bias.detach().cpu().numpy().reshape(-1)
 
         if len(scaling_parameter) != len(prev_layer_bn_params.gamma) or \
                 len(scaling_parameter) != len(prev_layer_bn_params.beta):
@@ -904,7 +904,7 @@ class MoHbfImpl(HbfImpl):
         :param curr_layer_params: Data structure to pack current layer parameters.
         """
         prev_layer_params.activationIsRelu = cls_pair_info.relu_activation_between_layers
-        prev_layer_params.bias = cls_pair_info.layer1.bias.detach().numpy()
+        prev_layer_params.bias = cls_pair_info.layer1.bias.detach().cpu().numpy()
 
         weight = cls_pair_info.layer2.weight
 
@@ -916,8 +916,8 @@ class MoHbfImpl(HbfImpl):
                 cls_pair_info.layer2.groups == 1:
             weight = weight.permute(1, 0, 2, 3)
 
-        curr_layer_params.bias = cls_pair_info.layer2.bias.detach().numpy()
-        curr_layer_params.weight = weight.detach().numpy().reshape(-1)
+        curr_layer_params.bias = cls_pair_info.layer2.bias.detach().cpu().numpy()
+        curr_layer_params.weight = weight.detach().cpu().numpy().reshape(-1)
         curr_layer_params.weightShape = np.array(weight.shape)
 
     @staticmethod
@@ -936,13 +936,14 @@ class MoHbfImpl(HbfImpl):
                 (cls_pair_info.layer1.groups == 1):
             prev_layer_bias_shape = cls_pair_info.layer1.weight.shape[1]
 
-        cls_pair_info.layer1.bias.data = torch.from_numpy(np.reshape(prev_layer_params.bias,
-                                                                     prev_layer_bias_shape))
-        cls_pair_info.layer1.bias.data = cls_pair_info.layer1.bias.data.type(torch.FloatTensor)
+        with torch.no_grad():
+            cls_pair_info.layer1.bias.copy_(
+                torch.from_numpy(np.reshape(prev_layer_params.bias, prev_layer_bias_shape))).to(
+                device=cls_pair_info.layer1.bias.device, dtype=cls_pair_info.layer1.bias.dtype)
 
-        cls_pair_info.layer2.bias.data = torch.from_numpy(np.reshape(curr_layer_params.bias,
-                                                                     curr_layer_params.weightShape[0]))
-        cls_pair_info.layer2.bias.data = cls_pair_info.layer2.bias.data.type(torch.FloatTensor)
+            cls_pair_info.layer2.bias.copy_(
+                torch.from_numpy(np.reshape(curr_layer_params.bias, curr_layer_params.weightShape[0]))).to(
+                device=cls_pair_info.layer2.bias.device, dtype=cls_pair_info.layer2.bias.dtype)
 
 
 class PythonHbfImpl(HbfImpl):
@@ -975,8 +976,14 @@ class PythonHbfImpl(HbfImpl):
         bias_curr_layer = cls_pair_info.layer2.bias.detach().cpu().numpy()
 
         # Absorb high biases
-        self._absorb_bias(activation_is_relu, beta, gamma, weight, bias_curr_layer, bias_prev_layer)
+        _bias_prev_layer, _bias_curr_layer = (
+            self._absorb_bias(activation_is_relu, beta, gamma, weight, bias_curr_layer, bias_prev_layer))
 
+        with torch.no_grad():
+            cls_pair_info.layer1.bias.copy_(torch.from_numpy(_bias_prev_layer).reshape_as(cls_pair_info.layer1.bias)).to(
+                device=cls_pair_info.layer1.bias.device, dtype=cls_pair_info.layer1.bias.dtype)
+            cls_pair_info.layer2.bias.copy_(torch.from_numpy(_bias_curr_layer).reshape_as(cls_pair_info.layer2.bias)).to(
+                device=cls_pair_info.layer2.bias.device, dtype=cls_pair_info.layer2.bias.dtype)
 
 def equalize_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]] = None,
                    dummy_input: Union[torch.Tensor, Tuple] = None):
