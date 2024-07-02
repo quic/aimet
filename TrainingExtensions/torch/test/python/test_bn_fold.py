@@ -160,7 +160,6 @@ class TestTrainingExtensionBnFold:
     @pytest.mark.cuda
     @pytest.mark.parametrize("device", ['cpu', 'cuda'])
     def test_fold_resnet18(self, use_python_impl, device):
-        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = models.resnet18().to(device)
         _initialize_bn_params(model)
@@ -198,7 +197,6 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
-        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -238,7 +236,6 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
-        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -275,7 +272,6 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
-        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -311,7 +307,6 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
-        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -382,7 +377,6 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
-        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -420,7 +414,6 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
-        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -453,7 +446,6 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
-        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -486,7 +478,6 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
-        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -519,7 +510,6 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
-        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -555,7 +545,6 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
-        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -588,7 +577,6 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
-        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -624,7 +612,6 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
-        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -643,7 +630,6 @@ class TestTrainingExtensionBnFold:
         assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
 
     def test_find_batch_norms_to_fold(self, use_python_impl):
-        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         model = MyModel().eval()
         _initialize_bn_params(model)
 
@@ -659,7 +645,7 @@ class TestTrainingExtensionBnFold:
         assert len(bn_picked) == 2
 
     def test_bn_fold_auto_mode_transposed_conv2d(self, use_python_impl):
-        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
+
         torch.manual_seed(10)
         model = TransposedConvModel().eval()
         _initialize_bn_params(model)
@@ -678,7 +664,6 @@ class TestTrainingExtensionBnFold:
         assert len(folded_pairs) == 2
 
     def test_find_batch_norms_to_fold_multi_input(self, use_python_impl):
-        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         model = TwoInputs().eval()
         _initialize_bn_params(model)
         inp_shapes = [(1, 3, 32, 32), (1, 3, 20, 20)]
@@ -695,7 +680,6 @@ class TestTrainingExtensionBnFold:
         assert (model.conv2, model.bn2) in conv_bn_pairs
 
     def test_bn_fold_auto_mode(self, use_python_impl):
-        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
 
         model = MyModel().eval()
@@ -727,7 +711,6 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
-        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         model = MyModel().eval()
         _initialize_bn_params(model)
 
@@ -761,7 +744,6 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
-        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         model = MyModel().eval()
         _initialize_bn_params(model)
 
@@ -793,7 +775,6 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
-        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         model = MyModel().eval()
         _initialize_bn_params(model)
 
@@ -813,7 +794,6 @@ class TestTrainingExtensionBnFold:
 
     @pytest.mark.cuda
     def test_multi_gpu(self, use_python_impl):
-        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel()
         model.eval()
@@ -843,7 +823,6 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
-        batch_norm_fold.USE_PYTHON_IMPL =use_python_impl
         torch.manual_seed(10)
         model = MyModel().eval()
         _initialize_bn_params(model)
@@ -875,7 +854,6 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
-        batch_norm_fold.USE_PYTHON_IMPL = use_python_impl
         torch.manual_seed(10)
         model = MyModel()
         _initialize_bn_params(model)
