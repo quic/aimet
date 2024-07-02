@@ -104,7 +104,17 @@ else ()
         GIT_REPOSITORY https://github.com/google/googletest.git
         GIT_TAG        release-1.12.1
     )
-    FetchContent_MakeAvailable(googletest)
+
+    # michof: We need to revert to this older style of getting the dependency to include the
+    # EXCLUDE_FROM_ALL keyword below. This implies that install rules will be ignored, which is
+    # intended.
+    # CMake 3.28 or later supports adding EXCLUDE_FROM_ALL to the FetchContent_Declare call; then,
+    # we can just call FetchContent_MakeAvailable() instead of the below.
+    FetchContent_GetProperties(googletest)
+    if (NOT googletest_POPULATED)
+        FetchContent_Populate(googletest)
+        add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR} EXCLUDE_FROM_ALL)
+    endif ()
 endif ()
 
 ########
