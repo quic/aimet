@@ -233,7 +233,7 @@ class QuantizationSimModel:
 
         :return: Connected graph ops
         """
-        valid_ops = [op for op in self.connected_graph.get_all_ops().values() if op.type not in ['BatchNormalization']]
+        valid_ops = list(self.connected_graph.get_all_ops().values())
         return valid_ops
 
     def _get_activations_to_quantize(self, dummy_input: Dict[str, np.ndarray]):
