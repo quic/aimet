@@ -87,9 +87,10 @@ class TestEncodingAnalyzer():
 
     @pytest.mark.parametrize('dtype', [torch.float, torch.half])
     @pytest.mark.parametrize('symmetric', [True, False])
+    @pytest.mark.cuda
     def test_continuity(self, symmetric, dtype, encoding_analyzers):
         for encoding_analyzer in encoding_analyzers:
-            normal_range = torch.arange(-128, 128).to(dtype) / 256
+            normal_range = torch.arange(-128, 128).to(dtype).cuda() / 256
             eps = torch.finfo(dtype).eps
 
             num_steps = math.pow(2, 8) - 2
