@@ -686,17 +686,13 @@ class PythonClsImpl(ClsImpl):
                         Second Conv layer is a depth-wise conv and third conv layer is point-wise conv
         :return: Scaling factors S_12 and S_23 : numpy arrays
         """
-        weight_0 = cls_set[0].weight.detach().cpu()
-        weight_0 = self._transpose_tensor_in_common_format(cls_set[0], weight_0)
-        weight_0 = self._make_4d_tensor(cls_set[0], weight_0).numpy()
-
-        weight_1 = cls_set[1].weight.detach().cpu()
+        weight_0 = self._prepare_params(cls_set[0])
         assert cls_set[1].groups > 1
-        weight_1 = self._make_4d_tensor(cls_set[1], weight_1).numpy()
-
-        weight_2 = cls_set[2].weight.detach().cpu()
-        weight_2 = self._transpose_tensor_in_common_format(cls_set[2], weight_2)
-        weight_2 = self._make_4d_tensor(cls_set[2], weight_2).numpy()
+        weight_1 = self._prepare_params(cls_set[1])
+        weight_2 = self._prepare_params(cls_set[2])
+        weight_0 = weight_0.numpy()
+        weight_1 = weight_1.numpy()
+        weight_2 = weight_2.numpy()
 
         bias_0 = None
         if cls_set[0].bias is not None:
@@ -705,8 +701,22 @@ class PythonClsImpl(ClsImpl):
         if cls_set[1].bias is not None:
             bias_1 = cls_set[1].bias.detach().cpu().numpy()
 
+        # compute scaling factors and folded parameters.
         s_12, s_23 = self.compute_scaling_params_for_depthwise_conv(weight_0, weight_1, weight_2)
-        self.fold_scaling_params_for_depthwise_conv(weight_0, weight_1, weight_2, bias_0, bias_1, s_12, s_23)
+        _weight_0, _weight_1, _weight_2, _bias_0, _bias_1 = (
+            self.fold_scaling_params_for_depthwise_conv(weight_0, weight_1, weight_2, bias_0, bias_1, s_12, s_23))
+
+        with torch.no_grad():
+            self._restore_params(cls_set[0], torch.from_numpy(_weight_0))
+            self._restore_params(cls_set[1], torch.from_numpy(_weight_1))
+            self._restore_params(cls_set[2], torch.from_numpy(_weight_2))
+
+            if cls_set[0].bias is not None:
+                cls_set[0].bias.copy_(torch.from_numpy(_bias_0).reshape_as(cls_set[0].bias)).to(device=cls_set[0].bias.device,
+                                                                                                dtype=cls_set[0].bias.dtype)
+            if cls_set[1].bias is not None:
+                cls_set[1].bias.copy_(torch.from_numpy(_bias_1).reshape_as(cls_set[1].bias)).to(device=cls_set[1].bias.device,
+                                                                                                dtype=cls_set[1].bias.dtype)
         return s_12, s_23
 
     def scale_cls_set_with_conv_layers(self, cls_set) -> np.ndarray:
@@ -716,39 +726,48 @@ class PythonClsImpl(ClsImpl):
         :param cls_set: Consecutive Conv layers Tuple whose weights and biases need to be equalized
         :return: Scaling factor S_12 for each conv layer pair: numpy array
         """
-        weight_0 = cls_set[0].weight.detach().cpu()
-        weight_0 = self._transpose_tensor_in_common_format(cls_set[0], weight_0)
-        weight_0 = self._make_4d_tensor(cls_set[0], weight_0).numpy()
-
-        weight_1 = cls_set[1].weight.detach().cpu()
-        weight_1 = self._transpose_tensor_in_common_format(cls_set[1], weight_1)
-        weight_1 = self._make_4d_tensor(cls_set[1], weight_1).numpy()
+        weight_0 = self._prepare_params(cls_set[0])
+        weight_1 = self._prepare_params(cls_set[1])
+        weight_0 = weight_0.numpy()
+        weight_1 = weight_1.numpy()
 
         bias_0 = None
         if cls_set[0].bias is not None:
             bias_0 = cls_set[0].bias.detach().cpu().numpy()
 
+        # compute scaling factors and folded parameters.
         scale_factor = self.compute_scaling_params_for_conv(weight_0, weight_1)
-        self.fold_scaling_params_for_conv(weight_0, weight_1, bias_0, scale_factor)
+        _weight_0, _weight_1, _bias_0 = (
+            self.fold_scaling_params_for_conv(weight_0, weight_1, bias_0, scale_factor))
 
+        with torch.no_grad():
+            self._restore_params(cls_set[0], torch.from_numpy(_weight_0))
+            self._restore_params(cls_set[1], torch.from_numpy(_weight_1))
+            if cls_set[0].bias is not None:
+                cls_set[0].bias.copy_(torch.from_numpy(_bias_0).reshape_as(cls_set[0].bias)).to(device=cls_set[0].bias.device,
+                                                                                                dtype=cls_set[0].bias.dtype)
         return scale_factor
 
     @staticmethod
-    def _transpose_tensor_in_common_format(module: torch.nn.Module, tensor: torch.Tensor) -> torch.Tensor:
+    def _transpose_tensor(module: torch.nn.Module, tensor: torch.Tensor) -> torch.Tensor:
         """
-        Transpose tensor in the common format [Noc, Nin, Kh, Kw].
-        For transposed conv, weight are stored in [Nin, Noc, Kh, Kw] format.
+        During preparation:
+        For TransposeConv2d, Transpose tensor in the common format [Noc, Nin, Kh, Kw].
+        For TransposeConv1d, Transpose tensor in common format [Noc, Nin, K].
+
+        During restoration:
+        For TransposeConv2d, Transpose tensor in the original format [Nin, Noc, Kh, Kw].
+        For TransposeConv1d, Transpose tensor in back in original format [Nin, Noc, K].
 
         :param module: Module.
         :param tensor: Input tensor.
         :return: Output tensor.
         """
-        # Transpose weights to Noc, Nin, Kh, Kw from Nin, Noc, Kh, kw since axis are flipped for transposed conv2d
         if isinstance(module, torch.nn.ConvTranspose2d) and module.groups == 1:
-            tensor = tensor.permute(1, 0, 2, 3)
-        # Transpose weights to Noc, Nin, K from Nin, Noc, K since axis are flipped for transposed conv1d
+            tensor = tensor.permute(1, 0, 2, 3).contiguous()
+
         if isinstance(module, torch.nn.ConvTranspose1d) and module.groups == 1:
-            tensor = tensor.permute(1, 0, 2)
+            tensor = tensor.permute(1, 0, 2).contiguous()
         return tensor
 
     @staticmethod
@@ -764,6 +783,32 @@ class PythonClsImpl(ClsImpl):
             assert len(tensor.shape) == 3, "Module should have 3d weight tensor."
             tensor = torch.unsqueeze(tensor, dim=-1)
         return tensor
+
+    def _prepare_params(self, module: torch.nn.Module) -> torch.Tensor:
+        """
+        Prepare weight parameters for CLS.
+
+        :param module: PyTorch module.
+        :return: Prepared weight.
+        """
+        weight = module.weight.detach().cpu()
+        weight = self._transpose_tensor(module, weight)
+        weight = self._make_4d_tensor(module, weight)
+        return weight
+
+    def _restore_params(self, module: torch.nn.Module, tensor: torch.Tensor):
+        """
+        Restore the weight parameters.
+
+        :param module: PyTorch module.
+        :param tensor: updated parameters.
+        """
+        if isinstance(module, (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
+            tensor = torch.squeeze(tensor, dim=-1)
+
+        _weight_0 = self._transpose_tensor(module, tensor)
+        module.weight.copy_(_weight_0.reshape_as(module.weight)).to(device=module.weight.device,
+                                                                    dtype=module.weight.dtype)
 
 
 class HighBiasFold:
