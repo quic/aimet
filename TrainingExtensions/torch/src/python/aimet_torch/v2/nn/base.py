@@ -80,7 +80,7 @@ class BaseQuantizationMixin(abc.ABC):
         self.__quant_init__()
 
     def __quant_init__(self):
-        """Initializer for quantized module. This method will be invoked right after __init__.
+        """Initializer for quantized module. This method will be invoked right after :meth:`__init__`.
 
         This method initializes the :attr:`input_quantizers`, :attr:`output_quantizers`, and :attr:`param_quantizers`
         structures to the appropriate sizes based on the number of input tensors, output tensors, and parameters of the
