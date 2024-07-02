@@ -182,13 +182,32 @@ def set_activation_quantizers_to_float(sim: QuantizationSimModel, arg, exponent_
 
     :param sim: Quantsim to set activation quantizers for
     :param arg: Argument determining which modules to set. This can consist of either:
+
         1. A list of torch.nn.Module types, in which case all modules whose type is in the list will be set
+
         2. A list of torch.nn.Modules, in which case all modules in the list will be set
+
         3. A callable function which takes a torch.nn.Module as input and returns True if the module is to be set, False
            otherwise
     :param exponent_bits: Number of exponent bits to simulate
     :param mantissa_bits: Number of mantissa bits to simulate
     :param dtype: torch.dtype to simulate. This argument is mutually exclusive with exponent_bits and mantissa_bits.
+
+    Examples:
+
+        >>> # Assume 'sim' is a QuantizationSimModel object imported from aimet_torch.v2.quantsim
+        >>> # Allows setting of all Linear and Conv output quantizers to floating point activation quantization:
+        >>> set_activation_quantizers_to_float(sim=sim,
+        ...                                    arg=[torch.nn.Linear, torch.nn.Conv2d],
+        ...                                    dtype=torch.float16)
+        >>> # Allows setting of specific model layers' output quantizers to floating point activation quantization:
+        >>> set_activation_quantizers_to_float(sim=sim,
+        ...                                    arg=[sim.model.conv2, sim.model.linear1],
+        ...                                    dtype=torch.float16)
+        >>> # Allows setting of only Convolution layers with input channels dim == 128 to floating point activation quantization:
+        >>> set_activation_quantizers_to_float(sim=sim,
+        ...                                    arg=lambda module: isinstance(module, torch.nn.Conv2d) and module.weight.shape[1] == 128,
+        ...                                    dtype=torch.float16)
     """
 
     condition = _parse_arg_for_condition(arg)
@@ -235,8 +254,11 @@ def set_blockwise_quantization_for_weights(sim: QuantizationSimModel, arg, bitwi
 
     :param sim: Quantsim to set activation quantizers for
     :param arg: Argument determining which modules to set. This can consist of either:
+
         1. A list of torch.nn.Module types, in which case all modules whose type is in the list will be set
+
         2. A list of torch.nn.Modules, in which case all modules in the list will be set
+
         3. A callable function which takes a torch.nn.Module as input and returns True if the module is to be set, False
            otherwise
     :param bitwidth: Bitwidth for affine quantization
@@ -244,8 +266,32 @@ def set_blockwise_quantization_for_weights(sim: QuantizationSimModel, arg, bitwi
     :param block_size: Block size for affine quantization. This can be an array in which case all layers identified
         by arg must have weight shapes compatible with the array length, or can be an integer value, in which case the
         block size will be applied to the weight's in_channels dimension, and per channel will be used for the weight's
-        out_channels dimension. A block size value of -1 for a particular dimension is equivalent to a block size equal
+        out_channels dimension.
+
+        A block size value of -1 for a particular dimension is equivalent to a block size equal
         to the size of that particular dimension.
+
+    Examples:
+
+        >>> # Assume 'sim' is a QuantizationSimModel object imported from aimet_torch.v2.quantsim
+        >>> # Allows setting of all Linear and Conv weight quantizers to block_size 64 in the input_channels dimension:
+        >>> set_blockwise_quantization_for_weights(sim=sim,
+        ...                                        arg=[torch.nn.Linear, torch.nn.Conv2d],
+        ...                                        bitwidth=4,
+        ...                                        symmetric=True,
+        ...                                        block_size=64)
+        >>> # Allows setting of specific model layers' weight quantizer block_size to 64 in the input_channels dimension:
+        >>> set_blockwise_quantization_for_weights(sim=sim,
+        ...                                        arg=[sim.model.conv2, sim.model.linear1],
+        ...                                        bitwidth=4,
+        ...                                        symmetric=True,
+        ...                                        block_size=64)
+        >>> # Allows setting of only Convolution layers with input channels dim == 128 to block_size 64 in the input_channels dimension
+        >>> set_blockwise_quantization_for_weights(sim=sim,
+        ...                                        arg=lambda module: isinstance(module, torch.nn.Conv2d) and module.weight.shape[1] == 128,
+        ...                                        bitwidth=4,
+        ...                                        symmetric=True,
+        ...                                        block_size=64)
     """
     condition = _parse_arg_for_condition(arg)
     _set_blockwise_quantization_for_weights(sim, condition, bitwidth, symmetric, block_size)
@@ -317,8 +363,11 @@ def set_grouped_blockwise_quantization_for_weights(sim: QuantizationSimModel, ar
 
     :param sim: Quantsim to set activation quantizers for
     :param arg: Argument determining which modules to set. This can consist of either:
+
         1. A list of torch.nn.Module types, in which case all modules whose type is in the list will be set
+
         2. A list of torch.nn.Modules, in which case all modules in the list will be set
+
         3. A callable function which takes a torch.nn.Module as input and returns True if the module is to be set, False
            otherwise
     :param bitwidth: Bitwidth for affine quantization
@@ -327,13 +376,45 @@ def set_grouped_blockwise_quantization_for_weights(sim: QuantizationSimModel, ar
     :param block_size: Block size for affine quantization. This can be an array in which case all layers identified
         by arg must have weight shapes compatible with the array length, or can be an integer value, in which case the
         block size will be applied to the weight's in_channels dimension and per channel will be used for the weight's
-        out_channels dimension. A block size value of -1 for a particular dimension is equivalent to a block size equal
+        out_channels dimension.
+
+        A block size value of -1 for a particular dimension is equivalent to a block size equal
         to the size of that particular dimension.
     :param block_grouping: Block grouping for grouped block quantization. This can be an array in which case all layers
         identified by arg must have weight shapes compatible with the array length, or can be an integer value, in which
         case the block grouping will be applied to the weight's in_channels dimension, and no other dimensions will
-        experience block grouping. A block grouping value of -1 for a particular dimension is equivalent to a block
+        experience block grouping.
+
+        A block grouping value of -1 for a particular dimension is equivalent to a block
         grouping equal to the number of blocks for that particular dimension.
+
+    Examples:
+
+        >>> # Assume 'sim' is a QuantizationSimModel object imported from aimet_torch.v2.quantsim
+        >>> # Allows setting of all Linear and Conv weight quantizers to LPBQ with block_size 64 in the input_channels dimension:
+        >>> set_grouped_blockwise_quantization_for_weights(sim=sim,
+        ...                                                arg=[torch.nn.Linear, torch.nn.Conv2d],
+        ...                                                bitwidth=4,
+        ...                                                symmetric=True,
+        ...                                                decompressed_bw=8,
+        ...                                                block_size=64,
+        ...                                                block_grouping=-1)
+        >>> # Allows setting of specific model layers' weight quantizer to LPBQ with block_size 64 in the input_channels dimension:
+        >>> set_grouped_blockwise_quantization_for_weights(sim=sim,
+        ...                                                arg=[sim.model.conv2, sim.model.linear1],
+        ...                                                bitwidth=4,
+        ...                                                symmetric=True,
+        ...                                                decompressed_bw=8,
+        ...                                                block_size=64,
+        ...                                                block_grouping=-1)
+        >>> # Allows setting of only Convolution layers with input channels dim == 128 to LPBQ with block_size 64 in the input_channels dimension:
+        >>> set_grouped_blockwise_quantization_for_weights(sim=sim,
+        ...                                                arg=lambda module: isinstance(module, torch.nn.Conv2d) and module.weight.shape[1] == 128,
+        ...                                                bitwidth=4,
+        ...                                                symmetric=True,
+        ...                                                decompressed_bw=8,
+        ...                                                block_size=64,
+        ...                                                block_grouping=-1)
     """
     condition = _parse_arg_for_condition(arg)
     _set_grouped_blockwise_quantization_for_weights(sim, condition, bitwidth, symmetric, decompressed_bw, block_size,
