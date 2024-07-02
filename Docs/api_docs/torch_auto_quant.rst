@@ -16,6 +16,13 @@ For an end-to-end notebook showing how to use PyTorch AutoQuant, please see :doc
 
 Top-level API
 =============
+
+.. note::
+
+    This module is also available in the experimental :mod:`aimet_torch.v2` namespace with the same top-level API. To
+    learn more about the differences between :mod:`aimet_torch` and :mod:`aimet_torch.v2`, please visit the
+    :ref:`QuantSim v2 Overview<ug-aimet-torch-v2-overview>`.
+
 .. autoclass:: aimet_torch.auto_quant_v2.AutoQuant
     :members:
     :member-order: bysource
