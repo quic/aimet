@@ -39,6 +39,8 @@
 import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import copy
+import tempfile
+from pathlib import Path
 import unittest
 import pytest
 import tensorflow as tf
@@ -701,9 +703,9 @@ quant_scheme_map = {
 
 def quantsim(session, start_op_names, output_op_names, dummy_input, quantsim_config=None,
              quant_scheme=QuantScheme.training_range_learning_with_tf_init):
-    config_file_path = "/tmp/quantsim_config.json"
-    quantsim_config = quantsim_config or symmetric_quantsim_config
-    try:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        config_file_path = Path(tmp_dir, "quantsim_config.json")
+        quantsim_config = quantsim_config or symmetric_quantsim_config
         with open(config_file_path, 'w') as f:
             json.dump(quantsim_config, f)
 
@@ -720,12 +722,6 @@ def quantsim(session, start_op_names, output_op_names, dummy_input, quantsim_con
 
         sim.compute_encodings(forward_pass_callback, None)
         return sim
-
-    finally:
-        try:
-            os.remove(config_file_path)
-        except FileNotFoundError:
-            pass
 
 def _get_inp_out_tensor(session, inp_tensor_name, out_tensor_name):
     inp_tensor = session.graph.get_tensor_by_name(inp_tensor_name[0] + ':0')
@@ -1425,19 +1421,13 @@ class TestTrainingExtensionBnFoldToScale:
         assert np.allclose(baseline_output, output_after_fold, atol=1e-03)
 
         # Verify that activations encodings are correctly exported.
-        results_dir = os.path.abspath('./tmp/')
-        os.makedirs(results_dir, exist_ok=True)
-        try:
+        with tempfile.TemporaryDirectory() as results_dir:
             sim.export(results_dir, filename_prefix='fold_to_scale')
-            with open(results_dir + '/fold_to_scale.encodings') as json_file:
+            with open(Path(results_dir, "fold_to_scale.encodings")) as json_file:
                 encoding_data = json.load(json_file)
 
             # Total 2 encodings for activations. (input_1_quantized, conv2d/BiasAdd_quantized)
             assert len(encoding_data["activation_encodings"]) == 2
-
-        finally:
-            if os.path.isdir(results_dir):
-                shutil.rmtree(results_dir)
 
         sess.close()
         sim.session.close()

@@ -36,6 +36,8 @@
 
 import json
 import unittest.mock
+import tempfile
+from pathlib import Path
 
 import tensorflow as tf
 from packaging import version
@@ -44,7 +46,7 @@ import numpy as np
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel, QuantScheme
 
 
-def save_config_file_bias_quantized_for_per_channel_quantization():
+def save_config_file_bias_quantized_for_per_channel_quantization(target_dir: Path) -> Path:
     quantsim_config = {
         "defaults": {
             "ops": {
@@ -64,8 +66,10 @@ def save_config_file_bias_quantized_for_per_channel_quantization():
         "model_output": {}
     }
 
-    with open('./quantsim_config.json', 'w') as f:
+    target_file = Path(target_dir, 'quantsim_config.json')
+    with open(target_file, 'w') as f:
         json.dump(quantsim_config, f)
+    return target_file
 
 
 class TestIntLayerKeras(unittest.TestCase):
@@ -89,43 +93,44 @@ class TestIntLayerKeras(unittest.TestCase):
             model = tf.keras.Model(inputs=[img], outputs=[output])
             model.summary()
 
-            save_config_file_bias_quantized_for_per_channel_quantization()
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                config_file = save_config_file_bias_quantized_for_per_channel_quantization(Path(tmp_dir))
 
-            qsim = QuantizationSimModel(model, quant_scheme=QuantScheme.training_range_learning_with_tf_init,
-                                        default_param_bw=8, default_output_bw=8, config_file='./quantsim_config.json')
+                qsim = QuantizationSimModel(model, quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                            default_param_bw=8, default_output_bw=8, config_file=config_file)
 
-            for wrapper in qsim.quant_wrappers():
-                wrapper.input_quantizers[0].disable()
+                for wrapper in qsim.quant_wrappers():
+                    wrapper.input_quantizers[0].disable()
 
-            input_shape = img.shape.as_list()
-            batches = 64
+                input_shape = img.shape.as_list()
+                batches = 64
 
-            input_data = np.random.rand(batches, input_shape[1], input_shape[2], input_shape[3])
-            labels = np.random.randint(10, size=batches)
-            one_hot_labels = np.eye(10)[labels]
+                input_data = np.random.rand(batches, input_shape[1], input_shape[2], input_shape[3])
+                labels = np.random.randint(10, size=batches)
+                one_hot_labels = np.eye(10)[labels]
 
-            model.predict(input_data)
+                model.predict(input_data)
 
-            qsim.compute_encodings(lambda m, _: m.predict(input_data), None)
-            qsim.model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
-                               loss=tf.keras.losses.MeanSquaredError())
+                qsim.compute_encodings(lambda m, _: m.predict(input_data), None)
+                qsim.model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+                                loss=tf.keras.losses.MeanSquaredError())
 
-            _get_value = tf.keras.backend.get_value
+                _get_value = tf.keras.backend.get_value
 
-            argmax_output_encoding_max_before_training = _get_value(
-                qsim.model.layers[4].output_quantizers[0]._encoding_max)
-            cast_input_encoding_max_before_training = _get_value(qsim.model.layers[5].input_quantizers[0]._encoding_max)
-            dense_output_encoding_max_before_train = _get_value(qsim.model.layers[7].output_quantizers[0]._encoding_max)
+                argmax_output_encoding_max_before_training = _get_value(
+                    qsim.model.layers[4].output_quantizers[0]._encoding_max)
+                cast_input_encoding_max_before_training = _get_value(qsim.model.layers[5].input_quantizers[0]._encoding_max)
+                dense_output_encoding_max_before_train = _get_value(qsim.model.layers[7].output_quantizers[0]._encoding_max)
 
-            for _ in range(10):
-                _ = qsim.model.fit(input_data, one_hot_labels)
+                for _ in range(10):
+                    _ = qsim.model.fit(input_data, one_hot_labels)
 
-            argmax_output_encoding_max_after_training = _get_value(
-                qsim.model.layers[4].output_quantizers[0]._encoding_max)
-            cast_input_encoding_max_after_training = _get_value(qsim.model.layers[5].input_quantizers[0]._encoding_max)
+                argmax_output_encoding_max_after_training = _get_value(
+                    qsim.model.layers[4].output_quantizers[0]._encoding_max)
+                cast_input_encoding_max_after_training = _get_value(qsim.model.layers[5].input_quantizers[0]._encoding_max)
 
-            dense_output_encoding_max_after_train = _get_value(qsim.model.layers[7].output_quantizers[0]._encoding_max)
+                dense_output_encoding_max_after_train = _get_value(qsim.model.layers[7].output_quantizers[0]._encoding_max)
 
-            assert argmax_output_encoding_max_before_training == argmax_output_encoding_max_after_training
-            assert cast_input_encoding_max_before_training == cast_input_encoding_max_after_training
-            assert not dense_output_encoding_max_before_train == dense_output_encoding_max_after_train
+                assert argmax_output_encoding_max_before_training == argmax_output_encoding_max_after_training
+                assert cast_input_encoding_max_before_training == cast_input_encoding_max_after_training
+                assert not dense_output_encoding_max_before_train == dense_output_encoding_max_after_train

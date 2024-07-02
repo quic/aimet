@@ -40,6 +40,7 @@
 import copy
 import os
 import shutil
+import tempfile
 import json
 from typing import Tuple, Dict, List, Callable
 from onnx import onnx_pb
@@ -64,7 +65,6 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 # The following modules with weights are supported by Adaround
 AdaroundSupportedModules = ['Conv', 'ConvTranspose', 'MatMul', 'Gemm']
-WORKING_DIR = '/tmp/adaround/'
 
 
 class AdaroundParameters:
@@ -230,9 +230,9 @@ class Adaround:
             else:
                 num_iterations = 10000
 
-        try:
-            # Cache model input data to WORKING_DIR
-            cached_dataset = utils.CachedDataset(params.data_loader, params.num_batches, WORKING_DIR)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Cache model input data to temporary directory
+            cached_dataset = utils.CachedDataset(params.data_loader, params.num_batches, tmp_dir)
 
             # Optimization Hyper parameters
             opt_params = AdaroundHyperParameters(num_iterations, params.reg_param, params.beta_range,
@@ -253,11 +253,6 @@ class Adaround:
                                                       model, quant_sim.model, act_func,
                                                       cached_dataset, opt_params, param_to_tensor_quantizer_dict,
                                                       use_cuda, device, user_onnx_libs)
-
-        finally:
-            if os.path.exists(WORKING_DIR):
-                logger.info('Deleting model inputs from location: %s', WORKING_DIR)
-                shutil.rmtree(WORKING_DIR)
 
     @staticmethod
     def _compute_param_encodings(quant_sim: QuantizationSimModel, params: AdaroundParameters):

@@ -38,6 +38,7 @@
 import contextlib
 import os
 import shutil
+import tempfile
 from dataclasses import dataclass
 from typing import Callable, Union
 from unittest.mock import MagicMock, patch
@@ -291,7 +292,7 @@ class TestAutoQuant:
     @staticmethod
     def _do_test_apply_auto_quant(auto_quant, model, allowed_accuracy_drop,
                                   bn_folded_acc, cle_acc, adaround_acc):
-        with create_tmp_directory() as results_dir:
+        with tempfile.TemporaryDirectory() as results_dir:
             target_acc = FP32_ACC - allowed_accuracy_drop
 
             output_model, acc, encoding_path = auto_quant.apply(model,
@@ -325,7 +326,7 @@ class TestAutoQuant:
                                    eval_callback=mocks.eval_callback,
                                    unlabeled_dataset=unlabeled_dataset)
 
-            with create_tmp_directory() as results_dir:
+            with tempfile.TemporaryDirectory() as results_dir:
                 cache_id = "unittest"
                 cache_files = [
                     os.path.join(results_dir, ".auto_quant_cache", cache_id, key)
@@ -346,19 +347,3 @@ class TestAutoQuant:
 
                 assert mocks.equalize_model.call_count == 1
                 assert mocks.apply_adaround.call_count == 1
-
-
-@contextlib.contextmanager
-def create_tmp_directory(dirname: str = "/tmp/.aimet_unittest"):
-    success = False
-    try:
-        os.makedirs(dirname, exist_ok=True)
-        success = True
-    except FileExistsError:
-        raise
-
-    try:
-        yield dirname
-    finally:
-        if success:
-            shutil.rmtree(dirname)

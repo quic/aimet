@@ -42,6 +42,7 @@ import contextlib
 import itertools
 import json
 import shutil
+import tempfile
 from typing import Tuple, Union, Dict, List, Callable, Any, Optional
 import torch
 from torch.utils.data import DataLoader
@@ -68,7 +69,6 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 # The following modules with weights are supported by Adaround
 AdaroundSupportedModules = (torch.nn.Conv2d, torch.nn.ConvTranspose2d, torch.nn.Linear)
-WORKING_DIR = '/tmp/adaround/'
 
 
 class AdaroundParameters:
@@ -223,9 +223,10 @@ class Adaround:
                 num_iterations = 15000
             else:
                 num_iterations = 10000
-        try:
-            # Cache model input data to WORKING_DIR
-            cached_dataset = utils.CachedDataset(params.data_loader, params.num_batches, WORKING_DIR)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Cache model input data to temporary directory
+            cached_dataset = utils.CachedDataset(params.data_loader, params.num_batches, tmp_dir)
 
             # Optimization Hyper parameters
             opt_params = AdaroundHyperParameters(num_iterations, params.reg_param, params.beta_range,
@@ -255,7 +256,7 @@ class Adaround:
                                                                                breakpoint_module_name,
                                                                                cached_dataset, cache_on_cpu,
                                                                                params.forward_fn, params.num_batches,
-                                                                               WORKING_DIR)
+                                                                               tmp_dir)
                     # Get the device of model to latter be used to place input tensor on the same device
                     device = utils.get_device(model)
                     model.cpu()
@@ -282,7 +283,7 @@ class Adaround:
                         if i < len(sub_fp_models) - 1:
                             get_block_outputs(fp_block, quant_sim_block, static_input,
                                               cached_fp_dataset, cached_quant_dataset, cache_on_cpu,
-                                              fwd_mod_ls, device, WORKING_DIR)
+                                              fwd_mod_ls, device, tmp_dir)
 
                     # After finishing Adaround, placing the quant model back to its original device
                     quant_sim.model.to(device)
@@ -306,7 +307,7 @@ class Adaround:
                                                                                        cached_dataset, cache_on_cpu,
                                                                                        params.forward_fn,
                                                                                        params.num_batches,
-                                                                                       WORKING_DIR,
+                                                                                       tmp_dir,
                                                                                        incl_kwargs=True)
 
                             def block_fwd(_model, x):
@@ -321,12 +322,6 @@ class Adaround:
                 modules = utils.get_ordered_list_of_modules(model, dummy_input)
                 cls._run_adaround_model(modules, model, quant_sim.model, module_act_func_pair, opt_params,
                                         params.forward_fn, cached_dataset)
-        finally:
-            try:
-                logger.info('Deleting model inputs from location: %s', WORKING_DIR)
-                shutil.rmtree(WORKING_DIR)
-            except FileNotFoundError:
-                pass
 
     @classmethod
     def _run_adaround_model(cls, modules: List, model: torch.nn.Module, quant_sim_model: torch.nn.Module,

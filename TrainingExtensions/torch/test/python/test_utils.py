@@ -46,6 +46,7 @@ import torch.nn
 import torchvision
 import torch.nn.functional as F
 import tempfile
+from pathlib import Path
 
 import aimet_torch.model_validator.validation_checks
 import aimet_torch.utils
@@ -430,17 +431,17 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         # create fake data loader with image size (1, 2, 2)
         data_loader = utils.create_fake_data_loader(dataset_size=dataset_size, batch_size=batch_size,
                                                     image_size=(1, 2, 2))
-        num_batches = 6
-        path = '/tmp/test_cached_dataset/'
-        cached_dataset = utils.CachedDataset(data_loader, num_batches, path)
-        self.assertEqual(len(cached_dataset), 6)
 
-        # Try creating cached data loader by more than possible batches from data loader and expect ValueError
-        possible_batches = math.ceil(dataset_size / batch_size)
-        with pytest.raises(ValueError):
-            utils.CachedDataset(data_loader, possible_batches + 1, path)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            num_batches = 6
+            path = Path(tmp_dir, "test_cached_dataset/")
+            cached_dataset = utils.CachedDataset(data_loader, num_batches, path)
+            self.assertEqual(len(cached_dataset), 6)
 
-        shutil.rmtree('/tmp/test_cached_dataset/')
+            # Try creating cached data loader by more than possible batches from data loader and expect ValueError
+            possible_batches = math.ceil(dataset_size / batch_size)
+            with pytest.raises(ValueError):
+                utils.CachedDataset(data_loader, possible_batches + 1, path)
 
     def test_find_num_inout_map(self):
         """

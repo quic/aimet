@@ -41,6 +41,8 @@ from collections import namedtuple
 from typing import Dict, List
 
 import os
+import tempfile
+from pathlib import Path
 import torch.nn.functional as F
 from torch import nn as nn
 from torchvision.ops import roi_align
@@ -1095,13 +1097,14 @@ def multi_output_model():
     model = MultipleOutputModel()
     sample_input = np.random.rand(128, 3, 32, 32).astype(np.float32)
 
-    onnx_filename = "/tmp/dummy_model_multiple_outputs.onnx"
-    input_names = ["input"]
-    output_names = ["output_mul", "output_add"]
-    torch.onnx.export(model, torch.as_tensor(sample_input), onnx_filename, verbose=True, input_names=input_names,
-                      output_names=output_names)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        onnx_filename = Path(tmp_dir, "dummy_model_multiple_outputs.onnx")
+        input_names = ["input"]
+        output_names = ["output_mul", "output_add"]
+        torch.onnx.export(model, torch.as_tensor(sample_input), str(onnx_filename), verbose=True, input_names=input_names,
+                        output_names=output_names)
 
-    model = ONNXModel(load_model(onnx_filename))
+        model = ONNXModel(load_model(onnx_filename))
     return model
 
 def transposed_conv_model():

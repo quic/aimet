@@ -37,6 +37,7 @@
 import os
 import shutil
 import tempfile
+from pathlib import Path
 
 import pytest
 import torch
@@ -645,11 +646,11 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
 
         model = ModelWithTwoInputs().eval()
 
-        with tempfile.TemporaryDirectory() as tempdir:
-            save_config_file_for_per_channel_quantization(tempdir)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_file = save_config_file_for_per_channel_quantization(Path(temp_dir))
             sim = QuantizationSimModel(model, dummy_input=dummy_input,
                                        quant_scheme=QuantScheme.training_range_learning_with_tf_init,
-                                       config_file=os.path.join(tempdir, 'quantsim_config.json'))
+                                       config_file=config_file)
             # Quantize
             sim.compute_encodings(forward_pass, None)
             assert len(sim.model.conv1_a.param_quantizers['weight'].encoding) == 10
@@ -663,9 +664,9 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
             assert sim.model.fc2.param_quantizers['weight'].encoding[0] != \
                    sim.model.fc2.param_quantizers['weight'].encoding[1]
 
-            sim.export(tempdir, 'two_input_model_per_channel', dummy_input)
+            sim.export(temp_dir, 'two_input_model_per_channel', dummy_input)
 
-            with open(os.path.join(tempdir, "two_input_model_per_channel.encodings"), "r") as encodings_file:
+            with open(os.path.join(temp_dir, "two_input_model_per_channel.encodings"), "r") as encodings_file:
                 encodings = json.load(encodings_file)
             assert len(encodings['param_encodings']) == 5
             assert len(encodings['param_encodings']['conv1_a.weight']) == 10
@@ -683,20 +684,20 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
 
         model = ModelWithTwoInputs().eval()
 
-        with tempfile.TemporaryDirectory() as tempdir:
-            save_config_file_for_per_channel_quantization(tempdir)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            save_config_file_for_per_channel_quantization(temp_dir)
             sim = QuantizationSimModel(model, dummy_input=dummy_input,
                                        default_param_bw=16, default_output_bw=16,
                                        default_data_type=QuantizationDataType.float,
-                                       config_file=os.path.join(tempdir, 'quantsim_config.json'))
+                                       config_file=os.path.join(temp_dir, 'quantsim_config.json'))
 
             # Quantize
             sim.compute_encodings(forward_pass, None)
             model(*dummy_input)
 
-            sim.export(tempdir, 'results', dummy_input)
+            sim.export(temp_dir, 'results', dummy_input)
 
-            with open(os.path.join(tempdir, "results.encodings"), "r") as encodings_file:
+            with open(os.path.join(temp_dir, "results.encodings"), "r") as encodings_file:
                 encodings = json.load(encodings_file)
             assert len(encodings['param_encodings']) == 5
             assert len(encodings['activation_encodings']) == 15
@@ -729,9 +730,9 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
                 model(*dummy_input)
 
         model = ModelWithTwoInputs().eval()
-        with tempfile.TemporaryDirectory() as tempdir:
-            save_config_file_for_per_channel_quantization(tempdir)
-            sim = QuantizationSimModel(model, dummy_input=dummy_input, config_file=os.path.join(tempdir, 'quantsim_config.json'))
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_file = save_config_file_for_per_channel_quantization(Path(temp_dir))
+            sim = QuantizationSimModel(model, dummy_input=dummy_input, config_file=config_file)
 
             sim.model.conv1_a.param_quantizers['weight'].bitwidth = 16
             sim.model.conv1_a.param_quantizers['weight'].data_type = QuantizationDataType.float
@@ -739,9 +740,9 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
             # Quantize
             sim.compute_encodings(forward_pass, None)
             model(*dummy_input)
-            sim.export(tempdir, 'results', dummy_input)
+            sim.export(temp_dir, 'results', dummy_input)
 
-            with open(os.path.join(tempdir, "results.encodings"), "r") as encodings_file:
+            with open(os.path.join(temp_dir, "results.encodings"), "r") as encodings_file:
                 encodings = json.load(encodings_file)
             assert len(encodings['param_encodings']) == 5
             assert len(encodings['param_encodings']['conv1_a.weight']) == 1
@@ -762,7 +763,7 @@ def create_learned_grid_wrapper():
     return wrapper
 
 
-def save_config_file_for_per_channel_quantization(path):
+def save_config_file_for_per_channel_quantization(path: Path) -> Path:
     quantsim_config = {
         "defaults": {
             "ops": {
@@ -786,5 +787,7 @@ def save_config_file_for_per_channel_quantization(path):
         "model_output": {}
     }
 
-    with open(os.path.join(path, 'quantsim_config.json'), 'w') as f:
+    target_file = Path(path, 'quantsim_config.json')
+    with open(target_file, 'w') as f:
         json.dump(quantsim_config, f)
+    return target_file
