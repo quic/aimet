@@ -798,7 +798,9 @@ class TestTrainingExtensionsCrossLayerScalingPythonOnly:
         # Verify the weights
         assert torch.allclose(model.model[0][0].weight, model_copy.model[0][0].weight)
 
-    def test_bias_fold_using_python_impl(self):
+    @pytest.mark.cuda
+    @pytest.mark.parametrize('device', ['cpu', 'cuda'])
+    def test_bias_fold_using_python_impl(self, device):
         """ Verify bias fold API using python implementation """
         class Model(torch.nn.Module):
             def __init__(self):
@@ -835,19 +837,27 @@ class TestTrainingExtensionsCrossLayerScalingPythonOnly:
                 [ClsSetInfo(ClsSetInfo.ClsSetLayerPairInfo(model.conv1, model.conv2, scaling_factor_list[0], True)),
                  ClsSetInfo(ClsSetInfo.ClsSetLayerPairInfo(model.conv2, model.conv3, scaling_factor_list[1], True))]
 
+            conv1_bias_before = model.conv1.bias.clone().cpu()
+            conv2_bias_before = model.conv2.bias.clone().cpu()
+            conv3_bias_before = model.conv3.bias.clone().cpu()
+
             # Fold the biases.
             HighBiasFold.bias_fold(cls_set_info_list, bn_dict)
 
             conv1_bias = model.conv1.bias.detach().cpu()
             conv2_bias = model.conv2.bias.detach().cpu()
-            conv3_bias = model.conv2.bias.detach().cpu()
+            conv3_bias = model.conv3.bias.detach().cpu()
+
+            assert not torch.equal(conv1_bias_before, conv1_bias)
+            assert not torch.equal(conv2_bias_before, conv2_bias)
+            assert not torch.equal(conv3_bias_before, conv3_bias)
 
             return conv1_bias, conv2_bias, conv3_bias
 
         torch.manual_seed(10)
-        model = Model().eval()
-        model_copy = copy.deepcopy(model)
-        dummy_input = torch.randn(1, 3, 10, 10)
+        model = Model().eval().to(device)
+        model_copy = copy.deepcopy(model).to(device)
+        dummy_input = torch.randn(1, 3, 10, 10).to(device)
 
         # invoke with MO (c++) implementation
         cle.USE_PYTHON_IMPL = False
