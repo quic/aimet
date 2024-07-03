@@ -879,6 +879,44 @@ class TestTrainingExtensionBnFold:
         assert model.conv1d.weight.device == model.conv1d.bias.device
         assert model.conv1d.weight.dtype == model.conv1d.bias.dtype
 
+    def test_bn_fold_conv3d_fold_backward(self, use_python_impl):
+
+        torch.random.manual_seed(10)
+        model = Conv3dModel()
+        inp = torch.randn(1, 3, 24, 24, 24)
+        model.bn1.weight.data = torch.randn(model.bn1.weight.shape)
+        model.bn2.weight.data = torch.randn(model.bn2.weight.shape)
+
+        # eval
+        model = model.eval()
+        orig_out = model(inp)
+        _ = fold_all_batch_norms(model, input_shapes=(1, 3, 24, 24, 24), dummy_input=inp)
+        new_out = model(inp)
+
+        assert torch.allclose(orig_out, new_out, atol=1e-5)
+        bn_modules = [m for m in model.modules() if isinstance(m, torch.nn.BatchNorm3d)]
+        assert not bn_modules
+
+    def test_bn_fold_conv3d_fold_forward(self, use_python_impl):
+
+        torch.random.manual_seed(10)
+        model = Conv3dModel1()
+        inp = torch.randn(1, 3, 24, 24, 24)
+        model.bn1.weight.data = torch.randn(model.bn1.weight.shape)
+        model.bn2.weight.data = torch.randn(model.bn2.weight.shape)
+
+        # eval
+        model = model.eval()
+        orig_out = model(inp)
+        _ = fold_all_batch_norms(model, input_shapes=(1, 3, 24, 24, 24), dummy_input=inp)
+        new_out = model(inp)
+
+        assert torch.allclose(orig_out, new_out, atol=1e-5)
+        bn_modules = [m for m in model.modules() if isinstance(m, torch.nn.BatchNorm3d)]
+        assert len(bn_modules) == 1
+        assert isinstance(model.bn1, torch.nn.Identity)
+        assert isinstance(model.bn2, torch.nn.BatchNorm3d)
+
 
 symmetric_quantsim_config ={
     "defaults": {
@@ -1704,41 +1742,3 @@ class TestTrainingExtensionBnFoldToScale:
 
         with pytest.raises(RuntimeError):
             fold_given_batch_norms(model, layer_list)
-
-    def test_bn_fold_conv3d_fold_backward(self):
-
-        torch.random.manual_seed(10)
-        model = Conv3dModel()
-        inp = torch.randn(1, 3, 24, 24, 24)
-        model.bn1.weight.data = torch.randn(model.bn1.weight.shape)
-        model.bn2.weight.data = torch.randn(model.bn2.weight.shape)
-
-        # eval
-        model = model.eval()
-        orig_out = model(inp)
-        _ = fold_all_batch_norms(model, input_shapes=(1, 3, 24, 24, 24), dummy_input=inp)
-        new_out = model(inp)
-
-        assert torch.allclose(orig_out, new_out, atol=1e-5)
-        bn_modules = [m for m in model.modules() if isinstance(m, torch.nn.BatchNorm3d)]
-        assert not bn_modules
-
-    def test_bn_fold_conv3d_fold_forward(self):
-
-        torch.random.manual_seed(10)
-        model = Conv3dModel1()
-        inp = torch.randn(1, 3, 24, 24, 24)
-        model.bn1.weight.data = torch.randn(model.bn1.weight.shape)
-        model.bn2.weight.data = torch.randn(model.bn2.weight.shape)
-
-        # eval
-        model = model.eval()
-        orig_out = model(inp)
-        _ = fold_all_batch_norms(model, input_shapes=(1, 3, 24, 24, 24), dummy_input=inp)
-        new_out = model(inp)
-
-        assert torch.allclose(orig_out, new_out, atol=1e-5)
-        bn_modules = [m for m in model.modules() if isinstance(m, torch.nn.BatchNorm3d)]
-        assert len(bn_modules) == 1
-        assert isinstance(model.bn1, torch.nn.Identity)
-        assert isinstance(model.bn2, torch.nn.BatchNorm3d)

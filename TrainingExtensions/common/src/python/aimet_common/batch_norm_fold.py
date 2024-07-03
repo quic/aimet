@@ -37,26 +37,35 @@
 
 """ Batch normalization fold """
 
+import math
+from typing import List, Tuple, Union
 import numpy as np
 
-def make_4d_tensor(tensor: np.ndarray) -> np.ndarray:
-    """
-    Return 4 dimensional tensor by adding a dimension if the tensor is not 4d.
-    :param tensor: Input tensor.
-    :return: Output tensor.
-    """
-    dims = len(tensor.shape)
 
-    if dims > 4:
+def expand_shape_to_4d(shape: Tuple) -> Union[List, np.ndarray]:
+    """
+    Expand the shape of the weight into 4d.
+
+    :param shape:
+    :return: 4d shape.
+    """
+    shape = list(shape)
+    dims = len(shape)
+
+    if dims > 5:
         raise RuntimeError
 
     if dims == 4:
-        return tensor
+        _4d_shape = shape
 
-    while len(tensor.shape) < 4:
-        tensor = tensor[..., None]
-
-    return tensor
+    else:
+        if dims < 4:
+            # If we have less dimensions, we add 1s to make 4 dimensions
+            _4d_shape = np.append(shape, [1 for _ in range(4 - dims)]).astype(int)
+        else:
+            # If we have more dimensions, we concatenate all the dimensions beyond 3 into one dimension
+            _4d_shape = np.array(shape[:3] + [math.prod(shape[3:])])
+    return _4d_shape
 
 
 def batch_norm_fold(weight: np.ndarray, bias: np.ndarray, gamma: np.ndarray, beta: np.ndarray, mu: np.ndarray,

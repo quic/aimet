@@ -37,8 +37,6 @@
 
 """ Optimization code to fold batch-norm layers """
 
-import contextlib
-import math
 from typing import List, Tuple, Union, Dict, Iterable, Set, Any
 import numpy as np
 import torch
@@ -47,8 +45,7 @@ from torch.nn.modules.batchnorm import BatchNorm1d, BatchNorm2d
 from torch.nn.modules.conv import _ConvTransposeNd
 
 import aimet_common.libpymo as libpymo
-
-from aimet_common.batch_norm_fold import batch_norm_fold, make_4d_tensor
+from aimet_common.batch_norm_fold import batch_norm_fold, expand_shape_to_4d
 from aimet_common.bias_correction import ConvBnPatternHandler, CONV_OP_TYPES, LINEAR_OP_TYPES, BN_OP_TYPES
 from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.graph_searcher import GraphSearcher
@@ -82,33 +79,6 @@ def _delete_bn_from_model(model: torch.nn.Module, bn_layer_list: Iterable[BatchN
     utils.replace_modules_with_instances_of_new_type(model, bn_layer_list, torch.nn.Identity)
 
 
-@contextlib.contextmanager
-def _expand_shape_to_4d(weight_tensor: libpymo.TensorParams):
-    """ Expand the shape of the weight into 4d.  """
-    dims = len(weight_tensor.shape)
-
-    if dims > 5:
-        raise RuntimeError
-
-    if dims == 4:
-        yield weight_tensor
-
-    else:
-        orig_shape = weight_tensor.shape
-        if dims < 4:
-            # If we have less dimensions, we add 1s to make 4 dimensions
-            _4d_shape = np.append(orig_shape, [1 for _ in range(4-dims)]).astype(int)
-        else:
-            # If we have more dimensions, we concatenate all the dimensions beyond 3 into one dimension
-            _4d_shape = np.array(orig_shape[:3] + [math.prod(orig_shape[3:])])
-
-        try:
-            weight_tensor.shape = _4d_shape
-            yield weight_tensor
-        finally:
-            weight_tensor.shape = orig_shape
-
-
 def _call_mo_batch_norm_fold(weight: torch.Tensor,
                              bias: torch.Tensor,
                              bn: BatchNormType,
@@ -130,22 +100,24 @@ def _call_mo_batch_norm_fold(weight: torch.Tensor,
         bn_params.runningVar = sigma.detach().cpu().numpy().reshape(-1)
 
         weight_tensor = libpymo.TensorParams()
-
         weight_tensor.data = weight.detach().cpu().numpy().reshape(-1)
         weight_tensor.shape = np.array(weight.shape)
 
         bias_tensor = libpymo.TensorParams()
-
         bias_tensor.data = bias.detach().cpu().numpy().reshape(-1)
         bias_tensor.shape = np.array(bias.shape)
         is_bias_valid = True
 
-        with _expand_shape_to_4d(weight_tensor):
+        _4d_shape = expand_shape_to_4d(weight_tensor.shape)
+        try:
+            orig_shape = weight_tensor.shape
+            weight_tensor.shape = _4d_shape
             _bias = libpymo.fold(bn_params, weight_tensor, bias_tensor, is_bias_valid, fold_backward)
+        finally:
+            weight_tensor.shape = orig_shape
 
         bias.copy_(torch.tensor(_bias, device=bias.device, dtype=bias.dtype)
                    .reshape_as(bias))
-
         weight.copy_(torch.tensor(weight_tensor.data, device=weight.device, dtype=weight.dtype)
                      .reshape_as(weight))
 
@@ -170,9 +142,9 @@ def _call_py_batch_norm_fold(weight: torch.Tensor,
 
         _weight = weight.detach().cpu().numpy()
         _bias = bias.detach().cpu().numpy()
-        _weight = make_4d_tensor(_weight)
 
-        _weight, _bias = batch_norm_fold(_weight, _bias, gamma, beta, mu, sigma, fold_backward)
+        _4d_shape = expand_shape_to_4d(_weight.shape)
+        _weight, _bias = batch_norm_fold(_weight.reshape(_4d_shape), _bias, gamma, beta, mu, sigma, fold_backward)
 
         bias.copy_(torch.from_numpy(_bias).reshape_as(bias)).to(device=bias.device, dtype=bias.dtype)
         weight.copy_(torch.from_numpy(_weight).reshape_as(weight)).to(device=weight.device, dtype=weight.dtype)
