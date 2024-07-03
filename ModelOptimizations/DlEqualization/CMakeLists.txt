@@ -77,7 +77,7 @@ target_compile_options(MoDlEqualization
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/DlEqualization
-        DESTINATION ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu/include)
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/x86_64-linux-gnu/include)
 
 if (ENABLE_TESTS)
     add_subdirectory(test)

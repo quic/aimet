@@ -209,6 +209,7 @@ fi
 echo "Starting AIMET build and test..."
 workspaceFolder=`readlink -f ${workspaceFolder}`
 buildFolder=$workspaceFolder/build
+installFolder=$workspaceFolder/build/staging/universal
 artifactsFolder=$buildFolder/artifacts
 AIMET_TORCH_HOME=${buildFolder}/torch_pretrain_data
 
@@ -427,7 +428,7 @@ if [ $run_build -eq 1 ]; then
     fi
     # Do not exit on failure by default from this point forward
     set +e
-    cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ${extra_opts} ..
+    cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_INSTALL_PREFIX=${installFolder} ${extra_opts} ..
 
     make -j 8
     check_stage $? "Build" "true"

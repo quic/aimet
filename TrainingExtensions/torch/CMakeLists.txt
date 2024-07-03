@@ -104,8 +104,8 @@ if (ENABLE_TESTS)
 endif()
 
 install(DIRECTORY ${CMAKE_BINARY_DIR}/artifacts/aimet_common/
-      DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_common
-      FILES_MATCHING PATTERN "AimetTensorQuantizer*.so"
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/python/aimet_common
+        FILES_MATCHING PATTERN "AimetTensorQuantizer*.so"
       )
 
 add_custom_target(whl_prep_cp_torch

@@ -39,6 +39,8 @@ cmake_minimum_required(VERSION 3.19)
 
 project(aimet)
 
+include(GNUInstallDirs)
+
 include(cmake/PreparePyTorch.cmake)
 include(cmake/PrepareONNX.cmake)
 include(cmake/PrepareTensorFlow.cmake)
@@ -51,7 +53,7 @@ set(CMAKE_CXX_EXTENSIONS OFF CACHE BOOL "Boolean specifying whether compiler spe
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-set(AIMET_INSTALL_DIR ${CMAKE_BINARY_DIR}/staging/universal)
+message(NOTICE "CMAKE_INSTALL_PREFIX = ${CMAKE_INSTALL_PREFIX} (for install target)")
 
 if(NOT DEFINED AIMET_PYTHONPATH)
     set(AIMET_PYTHONPATH "PYTHONPATH=${CMAKE_BINARY_DIR}/artifacts" CACHE STRING "python path")
@@ -243,9 +245,9 @@ endif()
 
 # Set the packaging path (if not already set)
 if(NOT DEFINED AIMET_PACKAGE_PATH)
-  set(AIMET_PACKAGE_PATH "\"${AIMET_INSTALL_DIR}\"")
-  message(STATUS "Set AIMET_PACKAGE_PATH = ${AIMET_PACKAGE_PATH}")
-endif(NOT DEFINED AIMET_PACKAGE_PATH)
+    set(AIMET_PACKAGE_PATH ${CMAKE_INSTALL_PREFIX})
+    message(STATUS "Set AIMET_PACKAGE_PATH = ${AIMET_PACKAGE_PATH}")
+endif()
 
 set(remote_url_cmake_opt "-DREMOTE_URL=\"\"")
 
@@ -293,18 +295,6 @@ add_subdirectory(Docs)
 if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks")
   add_subdirectory(Benchmarks)
 endif()
-
-# -------------------------------
-# Packaging - deprecated
-# -------------------------------
-set(CPACK_PACKAGE_NAME "aimet")
-set(CPACK_PACKAGE_VERSION_MAJOR 0)
-set(CPACK_PACKAGE_VERSION_MINOR 1)
-set(CPACK_PACKAGE_VERSION_PATCH 1)
-set(CPACK_SYSTEM_NAME "build-0.0.0.0")
-set(CPACK_GENERATOR "TGZ")
-set(CPACK_INSTALLED_DIRECTORIES ${AIMET_INSTALL_DIR} .)
-include(CPack)
 
 # -------------------------------
 # Upload pip packages

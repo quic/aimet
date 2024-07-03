@@ -37,7 +37,7 @@
 #=============================================================================
 
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-         DESTINATION ${AIMET_INSTALL_DIR}/lib
-         PATTERN "__pycache*" EXCLUDE
-         PATTERN "CMakeLists.txt" EXCLUDE
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        PATTERN "__pycache*" EXCLUDE
+        PATTERN "CMakeLists.txt" EXCLUDE
       )
