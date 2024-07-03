@@ -53,31 +53,23 @@ target_include_directories(TrainingExtensionsTf PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../common/include
         )
 
+target_link_libraries(TrainingExtensionsTf PUBLIC
+        MoDlCompression
+        MoDlQuantization
+        TensorFlow
+        PyWrapTensorFlowInternal
+        ${Python_LIBRARIES}
+        )
+
 if (ENABLE_CUDA)
-    target_compile_options(TrainingExtensionsTf
-            PRIVATE
+    target_compile_options(TrainingExtensionsTf PRIVATE
             -DGOOGLE_CUDA=1
             )
 
     target_link_libraries(TrainingExtensionsTf PUBLIC
-          MoDlCompression
-          MoDlQuantization
-          MoDlQuantizationCuda
-          TensorFlow
-          TrainingExtensionsTfCuda
-          PyWrapTensorFlowInternal
-          ${Python_LIBRARIES}
-          )
-
-else(ENABLE_CUDA)
-    target_link_libraries(TrainingExtensionsTf PUBLIC
-            MoDlCompression
-            MoDlQuantization
-            TensorFlow
-            PyWrapTensorFlowInternal
-            ${Python_LIBRARIES}
+            MoDlQuantizationCuda
+            TrainingExtensionsTfCuda
             )
-
 endif(ENABLE_CUDA)
 
 set_target_properties(TrainingExtensionsTf PROPERTIES
@@ -152,13 +144,13 @@ if (ENABLE_CUDA)
     else ()
         set(ABI_VALUE "0")
     endif ()
-    target_compile_options(TrainingExtensionsTfCuda
-            PRIVATE
-            -Xcompiler -fPIC -D_GLIBCXX_USE_CXX11_ABI=${ABI_VALUE}
+    target_compile_options(TrainingExtensionsTfCuda PRIVATE
+            -Xcompiler
+            -D_GLIBCXX_USE_CXX11_ABI=${ABI_VALUE}
             -DGOOGLE_CUDA=1
-            -I ${TF_LIB_DIR}/include --expt-relaxed-constexpr
+            -I ${TF_LIB_DIR}/include
+            --expt-relaxed-constexpr
             )
-
 endif(ENABLE_CUDA)
 
 

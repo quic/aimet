@@ -50,7 +50,7 @@ if (ENABLE_CUDA)
              MoDlCompression
 
             CUDA::cublas
-             ${OPENCV_LINK_LIBRARIES}
+            ${OPENCV_LINK_LIBRARIES}
              z
           )
 

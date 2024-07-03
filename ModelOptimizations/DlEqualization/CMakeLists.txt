@@ -64,13 +64,14 @@ target_include_directories(MoDlEqualization
       ${CMAKE_CURRENT_SOURCE_DIR}/include
       )
 
-target_link_libraries(MoDlEqualization
-      PUBLIC PYBIND11 ${OPENCV_LINK_LIBRARIES}
-      )
+target_link_libraries(MoDlEqualization PUBLIC
+    pybind11
+    ${OPENCV_LINK_LIBRARIES}
+    )
 
 target_compile_options(MoDlEqualization
         PRIVATE
-            -DUSE_OPENCV
+        -DUSE_OPENCV
         )
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
