@@ -59,7 +59,7 @@ from aimet_common.utils import AimetLogger, Handle, log_with_error_and_assert_if
 from aimet_common.utils import profile as _profile
 import aimet_common.libpymo as libpymo
 from aimet_torch import elementwise_ops
-from aimet_torch.tensor_quantizer import TensorQuantizer
+from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridPerChannelQuantizer, StaticGridPerTensorQuantizer
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
@@ -1213,6 +1213,44 @@ def _validate_is_symmetric_flag(quantizer: TensorQuantizer, encoding_dict: Dict,
                                      "quantizer setting (set to %s)" % (is_symmetric, quantizer.use_symmetric_encodings))
     else:
         raise AttributeError("Provided encoding doesn't have 'is_symmetric' flag")
+
+
+def get_per_channel_quantizer_from_per_tensor(quantizer: TensorQuantizer, original_module: torch.nn.Module):
+    """ Get PerChannel Quantizer with same settings as given PerTensor Quantizer """
+    channel_axis = 0
+    if isinstance(original_module, (torch.nn.ConvTranspose1d,
+                          torch.nn.ConvTranspose2d,
+                          torch.nn.ConvTranspose3d)):
+        if len(original_module.weight.shape) > 1:
+            channel_axis = 1
+
+    num_channels = original_module.weight.shape[channel_axis]
+    use_strict_symmetric = quantizer.use_strict_symmetric
+    use_unsigned_symmetric = quantizer.use_unsigned_symmetric
+    quantizer = StaticGridPerChannelQuantizer(quantizer.bitwidth, quantizer.round_mode,
+                                              quantizer.quant_scheme,
+                                              quantizer.use_symmetric_encodings,
+                                              num_channels=num_channels,
+                                              enabled_by_default=quantizer.enabled,
+                                              ch_axis=channel_axis,
+                                              data_type=quantizer.data_type)
+    quantizer.use_strict_symmetric = use_strict_symmetric
+    quantizer.use_unsigned_symmetric = use_unsigned_symmetric
+    return quantizer
+
+
+def get_per_tensor_quantizer_from_per_channel(quantizer: TensorQuantizer):
+    """ Get PerTensor Quantizer with same settings as given PerChannel Quantizer """
+    use_strict_symmetric = quantizer.use_strict_symmetric
+    use_unsigned_symmetric = quantizer.use_unsigned_symmetric
+    quantizer = StaticGridPerTensorQuantizer(quantizer.bitwidth, quantizer.round_mode,
+                                             quantizer.quant_scheme,
+                                             quantizer.use_symmetric_encodings,
+                                             enabled_by_default=quantizer.enabled,
+                                             data_type=quantizer.data_type)
+    quantizer.use_strict_symmetric = use_strict_symmetric
+    quantizer.use_unsigned_symmetric = use_unsigned_symmetric
+    return quantizer
 
 
 def validate_is_symmetric_flag(quantizer: TensorQuantizer, encoding_dict: Dict, strict: bool = True):
