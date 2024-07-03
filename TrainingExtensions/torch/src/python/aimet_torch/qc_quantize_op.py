@@ -508,7 +508,7 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
             ...
         }
         """
-        # pylint: disable=too-many-branches
+        # pylint: disable=too-many-branches, too-many-statements
         for param_name, quantizer in self.param_quantizers.items():
             if quantizer._is_encoding_frozen: # pylint: disable=protected-access
                 continue
@@ -523,11 +523,27 @@ class QcQuantizeWrapper(nn.Module): # pylint: disable=too-many-public-methods
             if quantizer.enabled:
                 # pylint: disable=protected-access
                 if isinstance(quantizer, StaticGridPerChannelQuantizer) and len(quantizer._cppOp) != len(encoding):
-                    raise ValueError(f"Invalid PerChannel encodings for {param_name}, the quantizer is a "
-                                     f"PerChannelQuantizer. To avoid this, disable per_channel_quantization")
-                if isinstance(quantizer, StaticGridPerTensorQuantizer) and len(encoding) != 1:
-                    raise ValueError(f"Invalid PerTensor encodings for {param_name}, the quantizer is a "
-                                     f"PerTensorQuantizer. To avoid this, enable per_channel_quantization")
+                    assert len(encoding) == 1, (f'Number of Per Channel encodings provided ({len(encoding)}) is '
+                                                f'not same as number of channels ({len(quantizer._cppOp)})')
+                    if strict:
+                        raise ValueError(f"Invalid PerChannel encodings for {param_name}, the quantizer is a "
+                                         f"PerChannelQuantizer. To avoid this, disable per_channel_quantization")
+                    # Modifying PerChannel quantizer to PerTensor
+                    _logger.warning('Replacing PerChannel Quantizer with PerTensor based on encoding provided')
+                    quantizer = utils.get_per_tensor_quantizer_from_per_channel(quantizer)
+                    self.param_quantizers[param_name] = quantizer
+                elif isinstance(quantizer, StaticGridPerTensorQuantizer) and len(encoding) != 1:
+                    if strict:
+                        raise ValueError(f"Invalid PerTensor encodings for {param_name}, the quantizer is a "
+                                         f"PerTensorQuantizer. To avoid this, enable per_channel_quantization")
+                    # Modifying PerTensor quantizer to PerChannel
+                    _logger.warning('Replacing PerTensor Quantizer with PerChannel based on encoding provided..')
+                    quantizer = utils.get_per_channel_quantizer_from_per_tensor(quantizer, self.get_original_module())
+                    assert len(quantizer._cppOp) == len(encoding), (f'Number of per channel encodings ({len(encoding)})'
+                                                                    f' should much with number of output '
+                                                                    f'channels ({len(quantizer._cppOp)})')
+                    self.param_quantizers[param_name] = quantizer
+
                 if encoding[0]['dtype'] == 'int':
                     # Validate and set symmetric flags before computing partial encodings
                     validate_is_symmetric_flag(quantizer, encoding[0], strict)
