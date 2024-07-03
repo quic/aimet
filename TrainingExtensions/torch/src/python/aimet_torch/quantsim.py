@@ -850,6 +850,63 @@ class QuantizationSimModel:
 
         return downstream_modules
 
+
+    @staticmethod
+    def _get_torch_encodings_for_missing_layers(layer: ExportableQuantModule, layer_name: str,# pylint: disable=too-many-branches
+                                                missing_activation_encodings_torch: Dict,
+                                                missing_param_encodings: Dict,
+                                                valid_param_set: set):
+        """
+        Add given layer param and activation encodings to respective dictionaries to be used for exporting torch encodings
+        :param layer: layer as torch.nn.Module
+        :param layer_name: Name of the layer
+        :param missing_activation_encodings_torch: dictionary of activation encodings which maps pytorch names to encodings
+        :param missing_param_encodings: dictionary of param encodings
+        :param valid_param_set: a set of valid param input names in model
+        """
+        if isinstance(layer, ExportableQuantModule):
+            # --------------------------------------
+            # Update encodings for Input activations
+            # --------------------------------------
+            input_encodings = layer.export_input_encodings()
+            # skip layer if it has no input encodings.
+            if all(encoding is None for encoding in input_encodings):
+                return
+
+            for index, encoding in enumerate(input_encodings):
+                if encoding is not None:
+                    if layer_name not in missing_activation_encodings_torch:
+                        missing_activation_encodings_torch[layer_name] = {}
+                    if QUANTIZER_TYPE_INPUT not in missing_activation_encodings_torch[layer_name]:
+                        missing_activation_encodings_torch[layer_name][QUANTIZER_TYPE_INPUT] = {}
+                    # Store encodings for a particular index so that they can be used to check if a quantizer was
+                    # enabled or not
+                    missing_activation_encodings_torch[layer_name][QUANTIZER_TYPE_INPUT][index] = encoding[0]
+
+            # ---------------------------------------
+            # Update encodings for output activations
+            # ---------------------------------------
+            output_encodings = layer.export_output_encodings()
+            for index, encoding in enumerate(output_encodings):
+                if encoding is not None:
+                    if layer_name not in missing_activation_encodings_torch:
+                        missing_activation_encodings_torch[layer_name] = {}
+                    if QUANTIZER_TYPE_OUTPUT not in missing_activation_encodings_torch[layer_name]:
+                        missing_activation_encodings_torch[layer_name][QUANTIZER_TYPE_OUTPUT] = {}
+                    missing_activation_encodings_torch[layer_name][QUANTIZER_TYPE_OUTPUT][index] = encoding[0]
+
+            # ---------------------------
+            # Update encodings for Params
+            # ---------------------------
+            for orig_param_name, param_encoding in layer.export_param_encodings().items():
+                param_name = layer_name + '.' + orig_param_name
+                if param_encoding is None:
+                    continue
+                if param_name not in valid_param_set:
+                    logger.error('Param tensor {%s} not found in valid param set', param_name)
+                    continue
+                missing_param_encodings[param_name] = param_encoding
+
     @staticmethod
     def _export_encodings_to_files(sim_model: torch.nn.Module, path: str, filename_prefix: str,
                                    op_to_io_tensor_map: Dict, valid_param_set: set, excluded_layer_names,
@@ -874,7 +931,9 @@ class QuantizationSimModel:
         # Create a dictionary to export to JSON
         activation_encodings_onnx = {}
         activation_encodings_torch = {}
+        missing_activation_encodings_torch = {}
         param_encodings = {}
+        missing_param_encodings = {}
         layers_to_onnx_op_names = onnx_utils.get_layers_in_io_tensor_map(op_to_io_tensor_map)
         tensor_to_consumer_map = onnx_utils.get_tensor_to_consumer_map(op_to_io_tensor_map)
         layer_names_not_found = []
@@ -893,6 +952,10 @@ class QuantizationSimModel:
 
             if layer_name not in layers_to_onnx_op_names.keys():
                 layer_names_not_found.append(layer_name)
+                QuantizationSimModel._get_torch_encodings_for_missing_layers(layer, layer_name,
+                                                        missing_activation_encodings_torch,
+                                                        missing_param_encodings,valid_param_set
+                                                        )
             else:
                 QuantizationSimModel._update_encoding_dicts_for_layer(layer, layer_name, activation_encodings_onnx,
                                                                       activation_encodings_torch,
@@ -903,7 +966,8 @@ class QuantizationSimModel:
 
         if layer_names_not_found:
             logger.warning("The following layers were not found in the exported onnx model. Encodings for these layers"
-                           " will not appear in the exported encodings file:\n"
+                           " will not appear in the exported encodings file, however it will continue to"
+                           " exist in torch encoding file:\n"
                            "%s\n"
                            "This can be due to several reasons:\n"
                            "\t- The layer is set to quantize with float datatype, but was not exercised in compute "
@@ -931,6 +995,9 @@ class QuantizationSimModel:
                              excluded_layer_names, quantizer_args)
 
         # Export torch.encodings used for saving/loading common to 0.6.1 and 1.0.0 versions
+
+        param_encodings.update(missing_param_encodings)
+        activation_encodings_torch.update(missing_activation_encodings_torch)
         encodings_dict_pytorch = {'version': quantsim.encoding_version,
                                   'activation_encodings': activation_encodings_torch,
                                   'param_encodings': param_encodings,
