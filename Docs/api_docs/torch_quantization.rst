@@ -22,6 +22,7 @@ whether AIMET Quantization features can be applied on PyTorch model.
     AutoQuant API<torch_auto_quant>
     BN Re-estimation APIs<torch_batchnorm_re_estimation>
     Multi-GPU guidelines<torch_multi_gpu>
+    PEFT LoRA APIs<torch_peft_lora>
 
 Users should first invoke Model Preparer API before using any of the AIMET Quantization features.
    - :ref:`Model Guidelines<api-torch-model-guidelines>`: Guidelines for defining PyTorch models
@@ -37,6 +38,7 @@ AIMET Quantization for PyTorch Models provides the following functionality.
    - :ref:`Bias Correction API<api-torch-bias-correction>`: Post-training quantization technique to correct shift in layer outputs due to quantization noise
    - :ref:`AutoQuant API<api-torch-auto-quant>`: Unified API that integrates the post-training quantization techniques provided by AIMET
    - :ref:`BN Re-estimation APIs<api-torch-bn-reestimation>`: APIs that Re-estimate BN layers' statistics and fold the BN layers
+   - :ref:`PEFT LoRA APIs<api-torch-peft-lora>`: APIs to integrate PEFT LoRA with AIMET Quantization flow
 
 If a user wants to use Multi-GPU with CLE or QAT, they can refer to:
     - :ref:`Multi-GPU guidelines<api-torch-multi-gpu>`: Guidelines to use PyTorch DataParallel API with AIMET features

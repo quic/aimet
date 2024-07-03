@@ -46,7 +46,8 @@ import copy
 
 from peft.tuners.lora.layer import LoraLayer as PeftLoraLayer
 from peft import LoraConfig, get_peft_model
-from aimet_torch.peft import replace_lora_layers_with_quantizable_layers, track_lora_meta_data, LoraLayer, PeftQuantUtils, save_lora_weights_after_adaptation
+from aimet_torch.peft import replace_lora_layers_with_quantizable_layers, track_lora_meta_data, LoraLayer, \
+    PeftQuantUtils
 from aimet_torch.v2.quantsim import QuantizationSimModel
 
 def rsetattr(obj, attr, val):
@@ -163,26 +164,6 @@ class TestLoraAdapterPeft:
                 new_count_lora_layer += 1
         assert new_count_lora_layer == 0
         assert count_qc_lora_layer == count_lora_layer
-
-    def test_save_weights_after_adaptation(self):
-        model = one_adapter_model()
-        replace_lora_layers_with_quantizable_layers(model)
-        model = replace_linears_with_convs(model)
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            save_lora_weights_after_adaptation(model, tmpdir, 'lora_weights')
-            tensor_name = []
-            with safe_open(os.path.join(tmpdir, 'lora_weights.safetensor'), framework="pt", device=0) as f:
-                for key in f.keys():
-                    tensor_name.append(key)
-
-            assert len(tensor_name) == 2
-            tensors = ['base_model.model.linear.lora_A.0.conv2d.weight',
-                       'base_model.model.linear.lora_B.0.conv2d.weight']
-            assert sorted(tensor_name) == sorted(tensors)
-
-            meta_data = track_lora_meta_data(model, tmpdir, 'meta_data', ConvInplaceLinear)
-            assert meta_data['default'].lora_A == ['base_model.model.linear.lora_A.0.conv2d']
 
     def test_track_adapter_meta_data(self):
         model = two_adapter_model()
