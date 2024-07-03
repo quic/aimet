@@ -612,6 +612,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             "GRU": create_recurrent_type_params,
             "BatchNormalization": create_batchnorm_params,
             "InstanceNormalization": create_batchnorm_params,
+            "LayerNormalization": create_batchnorm_params,
             "MatMul": create_matmul_params
         }
 
