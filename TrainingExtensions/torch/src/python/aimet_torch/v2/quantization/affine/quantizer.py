@@ -55,7 +55,7 @@ from aimet_torch.v2.quantization.affine.backends import quantize, quantize_dequa
 from aimet_torch.v2.utils import ste_round
 
 
-__all__ = ['AffineQuantizerBase', 'MinMaxQuantizer', 'Quantize', 'QuantizeDequantize', 'Dequantize',
+__all__ = ['AffineQuantizerBase', 'MinMaxQuantizer', 'Quantize', 'QuantizeDequantize',
            'GroupedBlockQuantizeDequantize']
 
 
@@ -628,18 +628,6 @@ class QuantizeDequantize(MinMaxQuantizer):
         output.encoding = encoding
         return output
 
-
-class Dequantize(torch.nn.Module):
-    """
-    Applies dequantization to the input
-    """
-    def forward(self, input: QuantizedTensor) -> DequantizedTensor:
-        # pylint: disable=no-self-use
-        """
-        :param input: Input to dequantize
-        :return: Dequantized output
-        """
-        return input.dequantize()
 
 class GroupedBlockQuantizeDequantize(QuantizeDequantize):
     """ Class for performing Grouped Block Quantize Dequantize """
