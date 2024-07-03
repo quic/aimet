@@ -94,6 +94,7 @@ RUN dpkg --add-architecture i386
 RUN apt-get update > /dev/null && \
     apt-get install --no-install-recommends -y \
         build-essential \
+        cmake \
         emacs \
         environment-modules \
         less \
@@ -178,15 +179,6 @@ RUN python3 -m pip --no-cache-dir install \
         transformers==4.38.1 \
         wget && \
     python3 -m ipykernel.kernelspec
-
-# Install cmake
-RUN mkdir -p /opt/cmake  &&  \
-    wget -P /tmp https://github.com/Kitware/CMake/releases/download/v3.19.3/cmake-3.19.3-Linux-x86_64.sh && \
-    sh /tmp/cmake-3.19.3-Linux-x86_64.sh --prefix=/opt/cmake --skip-license && \
-    rm -f /tmp/cmake-3.19.3-Linux-x86_64.sh && \
-    ln -fs /opt/cmake/bin/cmake /usr/local/bin/cmake && \
-    ln -fs /opt/cmake/bin/ctest /usr/local/bin/ctest && \
-    ln -fs /opt/cmake/bin/cpack /usr/local/bin/cpack
 
 ENV PATH=/usr/local/bin:$PATH
 
