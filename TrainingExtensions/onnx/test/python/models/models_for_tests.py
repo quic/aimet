@@ -41,6 +41,7 @@ from collections import namedtuple
 from typing import Dict, List
 
 import os
+import tempfile
 import torch.nn.functional as F
 from torch import nn as nn
 from torchvision.ops import roi_align
@@ -1112,35 +1113,37 @@ def multi_output_model():
     return model
 
 def transposed_conv_model():
-    x = torch.randn(10, 10, 4, 4, requires_grad=True)
-    model = TransposedConvModel()
-
-    # Export the model
-    torch.onnx.export(model,  # model being run
-                      x,  # model input (or a tuple for multiple inputs)
-                      "./model_transposed_conv.onnx",  # where to save the model (can be a file or file-like object)
-                      export_params=True,  # store the trained parameter weights inside the model file
-                      opset_version=12,  # the ONNX version to export the model to
-                      do_constant_folding=True,  # whether to execute constant folding for optimization
-                      input_names=['input'],  # the model's input names
-                      output_names=['output'])
-    model = ONNXModel(load_model('./model_transposed_conv.onnx'))
+    with tempfile.TemporaryDirectory() as save_dir:
+        x = torch.randn(10, 10, 4, 4, requires_grad=True)
+        model = TransposedConvModel()
+        save_path = os.path.join(save_dir, "model_transposed_conv.onnx")
+        # Export the model
+        torch.onnx.export(model,  # model being run
+                          x,  # model input (or a tuple for multiple inputs)
+                          save_path,  # where to save the model (can be a file or file-like object)
+                          export_params=True,  # store the trained parameter weights inside the model file
+                          opset_version=12,  # the ONNX version to export the model to
+                          do_constant_folding=True,  # whether to execute constant folding for optimization
+                          input_names=['input'],  # the model's input names
+                          output_names=['output'])
+        model = ONNXModel(load_model(save_path))
     return model
 
 def depthwise_transposed_conv_model():
-    x = torch.randn(10, 10, 4, 4, requires_grad=True)
-    model = DepthwiseTransposedConvModel()
-
-    # Export the model
-    torch.onnx.export(model,  # model being run
-                      x,  # model input (or a tuple for multiple inputs)
-                      "./model_transposed_conv.onnx",  # where to save the model (can be a file or file-like object)
-                      export_params=True,  # store the trained parameter weights inside the model file
-                      opset_version=12,  # the ONNX version to export the model to
-                      do_constant_folding=True,  # whether to execute constant folding for optimization
-                      input_names=['input'],  # the model's input names
-                      output_names=['output'])
-    model = ONNXModel(load_model('./model_transposed_conv.onnx'))
+    with tempfile.TemporaryDirectory() as save_dir:
+        x = torch.randn(10, 10, 4, 4, requires_grad=True)
+        model = DepthwiseTransposedConvModel()
+        save_path = os.path.join(save_dir, "model_transposed_conv.onnx")
+        # Export the model
+        torch.onnx.export(model,  # model being run
+                          x,  # model input (or a tuple for multiple inputs)
+                          save_path,  # where to save the model (can be a file or file-like object)
+                          export_params=True,  # store the trained parameter weights inside the model file
+                          opset_version=12,  # the ONNX version to export the model to
+                          do_constant_folding=True,  # whether to execute constant folding for optimization
+                          input_names=['input'],  # the model's input names
+                          output_names=['output'])
+        model = ONNXModel(load_model(save_path))
     return model
 
 
