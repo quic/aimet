@@ -35,6 +35,8 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Module for testing quantsim config feature """
+import tempfile
+
 import pytest
 import json
 import os
@@ -2248,3 +2250,72 @@ class TestQuantsimConfig:
                     assert sim.model.conv1.param_quantizers['weight'].use_symmetric_encodings
                 else:
                     assert not sim.model.conv1.param_quantizers['weight'].use_symmetric_encodings
+
+    def test_load_encodings_to_allow_modifying_quantizer_type(self):
+        """ Test load encodings API to allow modifying quantizer type based on encoding """
+        model = test_models.TinyModelWithNoMathInvariantOps()
+        dummy_input = torch.randn([1, 3, 24, 24])
+
+        sample_act_enc = {"min": -4, "max": 4, "bitwidth": 8, "dtype": "int", "is_symmetric": "False"}
+        sample_param_enc = {"min": -4, "max": 4, "bitwidth": 8, "dtype": "int", "is_symmetric": "True"}
+
+        encodings = {"activation_encodings": {"conv1": {"input": {"0": sample_act_enc}},
+                                              "mul1": {"output": {"0": sample_act_enc}}},
+                     "param_encodings": {}}
+
+        pcq_config = {
+            "defaults":{
+                "ops":{
+                    "is_output_quantized": "True"
+                },
+                "params":{
+                    "is_quantized": "True",
+                    "is_symmetric": "True"
+                },
+                "strict_symmetric": "False",
+                "per_channel_quantization": "True"
+            },
+            "params": {},
+            "op_type": {},
+            "model_input":{
+                "is_input_quantized": "True"
+            },
+            "supergroups": [],
+            "model_output": {}
+        }
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            pcq_config_file = os.path.join(tmp_dir, 'pcq_quantsim_config.json')
+            with open(pcq_config_file, 'w') as f:
+                json.dump(pcq_config, f)
+
+            for config_file in [None, pcq_config_file]:
+                if config_file is None:
+                    # PTQ to PCQ case, initial quantizer is PTQ, but the encodings are of PCQ
+                    encodings['param_encodings']['conv1.weight'] = [sample_param_enc for i in range(16)]
+                else:
+                    # PCQ to PTQ case, initial quantizer is PCQ, but the encodings are of PTQ
+                    encodings['param_encodings']['conv1.weight'] = [sample_param_enc]
+
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    with open(os.path.join(tmp_dir, 'replace_quantizer_with_enc.json'), 'w') as f:
+                        json.dump(encodings, f)
+
+                    sim = QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf, config_file=config_file)
+
+                    # Checking Quantizer type before loading encodings to Quantsim
+                    if config_file is None:
+                        assert isinstance(sim.model.conv1.param_quantizers['weight'], StaticGridPerTensorQuantizer)
+                    else:
+                        assert isinstance(sim.model.conv1.param_quantizers['weight'], StaticGridPerChannelQuantizer)
+
+                    sim.load_and_freeze_encodings(os.path.join(tmp_dir, 'replace_quantizer_with_enc.json'),
+                                                  ignore_when_quantizer_disabled=True)
+
+                    sim.compute_encodings(lambda m, _: m(dummy_input), None)
+
+                    # Checking whether the quantizer is modifed to required type after laoding encodings
+                    if config_file is None:
+                        assert isinstance(sim.model.conv1.param_quantizers['weight'], StaticGridPerChannelQuantizer)
+                    else:
+                        assert isinstance(sim.model.conv1.param_quantizers['weight'], StaticGridPerTensorQuantizer)
