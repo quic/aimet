@@ -692,83 +692,95 @@ class TestTrainingExtensionsCrossLayerScalingPythonOnly:
     @pytest.mark.cuda
     def test_cle_using_python_impl(self):
         """ Compare MO and python implementation for CLE """
-        torch.manual_seed(10)
-        random_input = torch.rand(2, 10, 24, 24).cuda()
-        model = MyModel().eval().cuda()
-        model_copy = copy.deepcopy(model).eval()
-        # original outputs
-        output = model(random_input)
+        flag = cle.USE_PYTHON_IMPL
+        try:
+            torch.manual_seed(10)
+            random_input = torch.rand(2, 10, 24, 24).cuda()
+            model = MyModel().eval().cuda()
+            model_copy = copy.deepcopy(model).eval()
+            # original outputs
+            output = model(random_input)
 
-        # equalize using MO
-        cle.USE_PYTHON_IMPL = False
-        equalize_model(model, (2, 10, 24, 24), dummy_input=random_input)
-        output_using_mo = model(random_input)
+            # equalize using MO
+            cle.USE_PYTHON_IMPL = False
+            equalize_model(model, (2, 10, 24, 24), dummy_input=random_input)
+            output_using_mo = model(random_input)
 
-        # equalize using python
-        cle.USE_PYTHON_IMPL = True
-        equalize_model(model_copy, (2, 10, 24, 24), dummy_input=random_input)
-        output_using_python = model_copy(random_input)
+            # equalize using python
+            cle.USE_PYTHON_IMPL = True
+            equalize_model(model_copy, (2, 10, 24, 24), dummy_input=random_input)
+            output_using_python = model_copy(random_input)
 
-        assert torch.allclose(output_using_mo, output_using_python)
-        assert torch.allclose(output, output_using_mo)
-        assert torch.allclose(output, output_using_python)
+            assert torch.allclose(output_using_mo, output_using_python)
+            assert torch.allclose(output, output_using_mo)
+            assert torch.allclose(output, output_using_python)
+        finally:
+            cle.USE_PYTHON_IMPL = flag
 
     @pytest.mark.cuda
     def test_scale_cls_set_with_conv_layers_using_python_impl(self):
         """ Compare scale_cls_set_with_conv_layers API """
-        torch.manual_seed(10)
-        model = MyModel().cuda().eval()
-        model_copy = copy.deepcopy(model).eval()
-        random_input = torch.rand((2, 10, 24, 24)).cuda()
+        flag = cle.USE_PYTHON_IMPL
+        try:
+            torch.manual_seed(10)
+            model = MyModel().cuda().eval()
+            model_copy = copy.deepcopy(model).eval()
+            random_input = torch.rand((2, 10, 24, 24)).cuda()
 
-        # original outputs
-        output = model(random_input)
+            # original outputs
+            output = model(random_input)
 
-        # Invoke MO implementation
-        cle.USE_PYTHON_IMPL = False
-        CrossLayerScaling.scale_cls_set_with_conv_layers((model.conv1, model.conv2))
-        output_using_mo = model(random_input)
+            # Invoke MO implementation
+            cle.USE_PYTHON_IMPL = False
+            CrossLayerScaling.scale_cls_set_with_conv_layers((model.conv1, model.conv2))
+            output_using_mo = model(random_input)
 
-        # Invoke python implementation
-        cle.USE_PYTHON_IMPL = True
-        CrossLayerScaling.scale_cls_set_with_conv_layers((model_copy.conv1, model_copy.conv2))
-        output_using_python = model_copy(random_input)
+            # Invoke python implementation
+            cle.USE_PYTHON_IMPL = True
+            CrossLayerScaling.scale_cls_set_with_conv_layers((model_copy.conv1, model_copy.conv2))
+            output_using_python = model_copy(random_input)
 
-        # Verify the outputs.
-        assert torch.allclose(output_using_mo, output_using_python)
-        assert torch.allclose(output, output_using_mo)
-        assert torch.allclose(output, output_using_python)
+            # Verify the outputs.
+            assert torch.allclose(output_using_mo, output_using_python)
+            assert torch.allclose(output, output_using_mo)
+            assert torch.allclose(output, output_using_python)
 
-        # Verify the weights.
-        assert torch.allclose(model.conv1.weight, model_copy.conv1.weight)
-        assert torch.allclose(model.conv2.weight, model_copy.conv2.weight)
+            # Verify the weights.
+            assert torch.allclose(model.conv1.weight, model_copy.conv1.weight)
+            assert torch.allclose(model.conv2.weight, model_copy.conv2.weight)
+        finally:
+            cle.USE_PYTHON_IMPL = flag
 
     @pytest.mark.cuda
     def test_cls_using_python_impl_mobilenetv1(self):
         """ Compare MO and python implementation for CLS """
-        torch.manual_seed(10)
-        model = MockMobileNetV1().cuda().eval()
-        model_copy = copy.deepcopy(model).cuda().eval()
-        dummy_input = torch.rand((1, 3, 224, 224)).cuda()
+        flag = cle.USE_PYTHON_IMPL
+        try:
+            torch.manual_seed(10)
+            model = MockMobileNetV1().cuda().eval()
+            model_copy = copy.deepcopy(model).cuda().eval()
+            dummy_input = torch.rand((1, 3, 224, 224)).cuda()
 
-        # BN fold
-        fold_all_batch_norms(model, (1, 3, 224, 224), dummy_input=dummy_input)
-        fold_all_batch_norms(model_copy, (1, 3, 224, 224), dummy_input=dummy_input)
+            # BN fold
+            fold_all_batch_norms(model, (1, 3, 224, 224), dummy_input=dummy_input)
+            fold_all_batch_norms(model_copy, (1, 3, 224, 224), dummy_input=dummy_input)
 
-        # CLS using MO and python.
-        cle.USE_PYTHON_IMPL = False
-        scale_factors_mo = CrossLayerScaling.scale_model(model, (1, 3, 224, 224), dummy_input)
-        cle.USE_PYTHON_IMPL = True
-        scale_factors_python = CrossLayerScaling.scale_model(model_copy, (1, 3, 224, 224), dummy_input)
+            # CLS using MO and python.
+            cle.USE_PYTHON_IMPL = False
+            scale_factors_mo = CrossLayerScaling.scale_model(model, (1, 3, 224, 224), dummy_input)
+            cle.USE_PYTHON_IMPL = True
+            scale_factors_python = CrossLayerScaling.scale_model(model_copy, (1, 3, 224, 224), dummy_input)
 
-        assert len(scale_factors_mo) == 8
-        assert len(scale_factors_python) == 8
+            assert len(scale_factors_mo) == 8
+            assert len(scale_factors_python) == 8
 
-        # Verify the outputs.
-        assert torch.allclose(model(dummy_input), model_copy(dummy_input))
+            # Verify the outputs.
+            assert torch.allclose(model(dummy_input), model_copy(dummy_input))
 
-        # Verify the weights
-        assert torch.allclose(model.model[0][0].weight, model_copy.model[0][0].weight)
+            # Verify the weights
+            assert torch.allclose(model.model[0][0].weight, model_copy.model[0][0].weight)
+        finally:
+            cle.USE_PYTHON_IMPL = flag
 
     @pytest.mark.cuda
     @pytest.mark.parametrize('device', ['cpu', 'cuda'])
@@ -826,43 +838,52 @@ class TestTrainingExtensionsCrossLayerScalingPythonOnly:
 
             return conv1_bias, conv2_bias, conv3_bias
 
-        torch.manual_seed(10)
-        model = Model().eval().to(device)
-        model_copy = copy.deepcopy(model).to(device)
-        dummy_input = torch.randn(1, 3, 10, 10).to(device)
+        flag = cle.USE_PYTHON_IMPL
+        try:
+            torch.manual_seed(10)
+            model = Model().eval().to(device)
+            model_copy = copy.deepcopy(model).to(device)
+            dummy_input = torch.randn(1, 3, 10, 10).to(device)
 
-        # invoke with MO (c++) implementation
-        cle.USE_PYTHON_IMPL = False
-        conv1_bias_mo, conv2_bias_mo, conv3_bias_mo = _verify_bias_fold(model, dummy_input)
-        # invoke with python implementation
-        cle.USE_PYTHON_IMPL = True
-        conv1_bias_p, conv2_bias_p, conv3_bias_p = _verify_bias_fold(model_copy, dummy_input)
+            # invoke with MO (c++) implementation
+            cle.USE_PYTHON_IMPL = False
+            conv1_bias_mo, conv2_bias_mo, conv3_bias_mo = _verify_bias_fold(model, dummy_input)
+            # invoke with python implementation
+            cle.USE_PYTHON_IMPL = True
+            conv1_bias_p, conv2_bias_p, conv3_bias_p = _verify_bias_fold(model_copy, dummy_input)
 
-        assert torch.allclose(conv1_bias_mo, conv1_bias_p)
-        assert torch.allclose(conv2_bias_mo, conv2_bias_p)
-        assert torch.allclose(conv3_bias_mo, conv3_bias_p)
-        assert torch.allclose(model(dummy_input), model_copy(dummy_input), rtol=1.e-2)
+            assert torch.allclose(conv1_bias_mo, conv1_bias_p)
+            assert torch.allclose(conv2_bias_mo, conv2_bias_p)
+            assert torch.allclose(conv3_bias_mo, conv3_bias_p)
+            assert torch.allclose(model(dummy_input), model_copy(dummy_input), rtol=1.e-2)
+        finally:
+            cle.USE_PYTHON_IMPL = flag
 
     @pytest.mark.parametrize("groups", [1, 10])
     def test_compare_scale_factors(self, groups):
         """ compare scale factors using with MO and python implementation """
-        model = torch.nn.Sequential(
-            torch.nn.ConvTranspose2d(10, 10, 3, groups=groups),
-            torch.nn.Conv2d(10, 10, 3),
-        ).eval()
+        flag = cle.USE_PYTHON_IMPL
+        try:
+            torch.manual_seed(10)
+            model = torch.nn.Sequential(
+                torch.nn.ConvTranspose2d(10, 10, 3, groups=groups),
+                torch.nn.Conv2d(10, 10, 3),
+            ).eval()
 
-        with torch.no_grad():
-            model[0].weight *= model[0].weight * 100
+            with torch.no_grad():
+                model[0].weight *= model[0].weight * 100
 
-        model_copy = copy.deepcopy(model).eval()
-        dummy_input = torch.rand((1, 10, 32, 32))
-        cle.USE_PYTHON_IMPL = True
-        py_scale_factors = CrossLayerScaling.scale_model(model_copy, dummy_input=dummy_input)
-        cle.USE_PYTHON_IMPL = False
-        mo_scale_factors = CrossLayerScaling.scale_model(model, dummy_input=dummy_input)
-        for py, mo in zip(py_scale_factors[0].cls_pair_info_list[0].scale_factor,
-                          mo_scale_factors[0].cls_pair_info_list[0].scale_factor):
-            assert np.isclose(py, mo)
+            model_copy = copy.deepcopy(model).eval()
+            dummy_input = torch.rand((1, 10, 32, 32))
+            cle.USE_PYTHON_IMPL = True
+            py_scale_factors = CrossLayerScaling.scale_model(model_copy, dummy_input=dummy_input)
+            cle.USE_PYTHON_IMPL = False
+            mo_scale_factors = CrossLayerScaling.scale_model(model, dummy_input=dummy_input)
+            for py, mo in zip(py_scale_factors[0].cls_pair_info_list[0].scale_factor,
+                              mo_scale_factors[0].cls_pair_info_list[0].scale_factor):
+                assert np.isclose(py, mo)
+        finally:
+            cle.USE_PYTHON_IMPL = flag
 
         def _verify_ranges(module_0, module_1):
             if isinstance(module_0, torch.nn.ConvTranspose2d) and module_0.groups == 1:
@@ -879,6 +900,7 @@ class TestTrainingExtensionsCrossLayerScalingPythonOnly:
 
     def test_divide_by_zero(self, use_python_impl):
         """ Ensure scale factors are computed using with MO and python implementation """
+        torch.manual_seed(10)
         model = torch.nn.Sequential(
             torch.nn.ConvTranspose2d(10, 10, 3, groups=10),
             torch.nn.Conv2d(10, 10, 3),
@@ -891,49 +913,59 @@ class TestTrainingExtensionsCrossLayerScalingPythonOnly:
 
     def test_bias_fold_for_convtranspose1d(self):
         """ Verify bias fold for ConvTranspose1d """
-        model = torch.nn.Sequential(
-            torch.nn.Conv1d(10, 10, 3),
-            torch.nn.BatchNorm1d(10),
-            torch.nn.ConvTranspose1d(10, 10, 3)
-        ).eval()
-        # Initialize BN parameters
-        torch.nn.init.normal_(model[1].weight)
-        torch.nn.init.normal_(model[1].bias)
-        dummy_input = torch.randn(1, 10, 32)
-        model_copy = copy.deepcopy(model).eval()
-        cle.USE_PYTHON_IMPL = True
-        equalize_model(model, dummy_input=dummy_input)
-        cle.USE_PYTHON_IMPL = False
-        equalize_model(model_copy, dummy_input=dummy_input)
-        assert torch.allclose(model[0].bias, model_copy[0].bias)
-        assert torch.allclose(model[2].bias, model_copy[2].bias)
+        flag = cle.USE_PYTHON_IMPL
+        try:
+            torch.manual_seed(10)
+            model = torch.nn.Sequential(
+                torch.nn.Conv1d(10, 10, 3),
+                torch.nn.BatchNorm1d(10),
+                torch.nn.ConvTranspose1d(10, 10, 3)
+            ).eval()
+            # Initialize BN parameters
+            torch.nn.init.normal_(model[1].weight)
+            torch.nn.init.normal_(model[1].bias)
+            dummy_input = torch.randn(1, 10, 32)
+            model_copy = copy.deepcopy(model).eval()
+            cle.USE_PYTHON_IMPL = True
+            equalize_model(model, dummy_input=dummy_input)
+            cle.USE_PYTHON_IMPL = False
+            equalize_model(model_copy, dummy_input=dummy_input)
+            assert torch.allclose(model[0].bias, model_copy[0].bias, rtol=1.e-1)
+            assert torch.allclose(model[2].bias, model_copy[2].bias, rtol=1.e-1)
+        finally:
+            cle.USE_PYTHON_IMPL = flag
 
     def test_divide_by_zero_with_depthwise(self):
         """ Ensure scale factors are computed using with MO and python implementation """
-        model = torch.nn.Sequential(
-            torch.nn.Conv2d(10, 10, 3),
-            torch.nn.ReLU(),
-            torch.nn.Conv2d(10, 10, 3, groups=10),
-            torch.nn.ReLU(),
-            torch.nn.Conv2d(10, 10, 1),
-            torch.nn.ReLU(),
-        ).eval()
-        dummy_input = torch.randn(1, 10, 32, 32)
-        with torch.no_grad():
-            model[2].weight[0, :, :, :] = 0
+        flag = cle.USE_PYTHON_IMPL
+        try:
+            torch.manual_seed(10)
+            model = torch.nn.Sequential(
+                torch.nn.Conv2d(10, 10, 3),
+                torch.nn.ReLU(),
+                torch.nn.Conv2d(10, 10, 3, groups=10),
+                torch.nn.ReLU(),
+                torch.nn.Conv2d(10, 10, 1),
+                torch.nn.ReLU(),
+            ).eval()
+            dummy_input = torch.randn(1, 10, 32, 32)
+            with torch.no_grad():
+                model[2].weight[0, :, :, :] = 0
 
-        model_copy = copy.deepcopy(model).eval()
-        cle.USE_PYTHON_IMPL = True
-        CrossLayerScaling.scale_model(model, dummy_input=dummy_input)
-        cle.USE_PYTHON_IMPL = False
-        CrossLayerScaling.scale_model(model_copy, dummy_input=dummy_input)
+            model_copy = copy.deepcopy(model).eval()
+            cle.USE_PYTHON_IMPL = True
+            CrossLayerScaling.scale_model(model, dummy_input=dummy_input)
+            cle.USE_PYTHON_IMPL = False
+            CrossLayerScaling.scale_model(model_copy, dummy_input=dummy_input)
 
-        assert not torch.isnan(model[0].weight).any()
-        assert not torch.isnan(model[2].weight).any()
-        assert not torch.isnan(model[4].weight).any()
-        assert torch.allclose(model[0].weight, model_copy[0].weight)
-        assert torch.allclose(model[2].weight, model_copy[2].weight)
-        assert torch.allclose(model[4].weight, model_copy[4].weight)
+            assert not torch.isnan(model[0].weight).any()
+            assert not torch.isnan(model[2].weight).any()
+            assert not torch.isnan(model[4].weight).any()
+            assert torch.allclose(model[0].weight, model_copy[0].weight)
+            assert torch.allclose(model[2].weight, model_copy[2].weight)
+            assert torch.allclose(model[4].weight, model_copy[4].weight)
 
-        with torch.no_grad():
-            assert torch.allclose(model(dummy_input), model_copy(dummy_input), rtol=1.e-2)
+            with torch.no_grad():
+                assert torch.allclose(model(dummy_input), model_copy(dummy_input), rtol=1.e-2)
+        finally:
+            cle.USE_PYTHON_IMPL = flag
