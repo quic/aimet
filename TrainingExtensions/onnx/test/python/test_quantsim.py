@@ -43,6 +43,7 @@ import onnx.numpy_helper
 import torch
 import numpy as np
 from onnx import load_model
+import onnx
 import onnxruntime as ort
 import pytest
 from packaging import version
@@ -691,3 +692,46 @@ class TestQuantSim:
                 # Ensure that the encodings for the second input of Add op (bias) isn't present in JSON file.
                 assert len(encoding_data['activation_encodings']) == 3
                 assert len(encoding_data['param_encodings']) == 1
+
+    def test_large_model(self):
+        """
+        When: Model is > 2GB
+        Then: 1) We can still run the model
+              2) We can still export the model
+              3) Exported model contains all weights
+        """
+        # First create a model with is >= 2GB
+        # Model size: (2 ** 5 layers) * (2 ** 15 * 2 ** 15 weights/layer) * (4 bytes/weight) = 2 ** 31 bytes
+        num_layers = 2 ** 5
+        weight_shape = [2 ** 12, 2 ** 12]
+        weights = []
+        layers = []
+        for idx in range(num_layers):
+            layers.append(
+                onnx.helper.make_node("MatMul", inputs=[f"act{idx}", f"weight_{idx}"], outputs=[f"act{idx+1}_relu"], name=f"matmul_{idx}")
+            )
+            layers.append(
+                onnx.helper.make_node("Relu", inputs=[f"act{idx+1}_relu"], outputs=[f"act{idx + 1}"],
+                                      name=f"relu_{idx}")
+            )
+            data = np.empty(weight_shape, dtype=np.float32)
+            data[0][0] = idx # Prevents simplifier from combining weights
+            weights.append(
+                onnx.numpy_helper.from_array(data, name=f"weight_{idx}")
+            )
+
+        input_tensor = onnx.helper.make_tensor_value_info("act0", onnx.TensorProto.FLOAT, [1, weight_shape[0]])
+        output_tensor = onnx.helper.make_tensor_value_info(f"act{num_layers}", onnx.TensorProto.FLOAT, [1, weight_shape[1]])
+        graph = onnx.helper.make_graph(layers, "large_graph", initializer=weights, inputs=[input_tensor], outputs=[output_tensor])
+        model = onnx.helper.make_model(graph)
+
+        assert model.ByteSize() > onnx.checker.MAXIMUM_PROTOBUF
+        with tempfile.TemporaryDirectory() as tempdir:
+            sim = QuantizationSimModel(model, path=tempdir)
+            sim.export(tempdir, "large_model")
+            loaded_model = onnx.load(os.path.join(tempdir, "large_model.onnx"))
+            # Check that all weights are contained in the loaded model
+            assert len(loaded_model.graph.initializer) == len(model.graph.initializer)
+            assert loaded_model.ByteSize() > onnx.checker.MAXIMUM_PROTOBUF
+            assert sim.model.model.ByteSize() > onnx.checker.MAXIMUM_PROTOBUF
+
