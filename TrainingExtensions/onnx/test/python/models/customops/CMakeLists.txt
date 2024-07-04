@@ -34,25 +34,26 @@
 #  @@-COPYRIGHT-END-@@
 #==============================================================================
 
-cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
-
 find_package(Torch REQUIRED)
-set(CMAKE_CXX_STANDARD 14)
 
-add_library(torch_custom_add SHARED torch_custom_add.cpp)
-target_compile_features(torch_custom_add PRIVATE cxx_std_14)
-target_link_libraries(torch_custom_add "${TORCH_LIBRARIES}")
+# ----
+
+add_library(torch_custom_add SHARED
+        torch_custom_add.cpp)
+
+target_link_libraries(torch_custom_add PUBLIC "${TORCH_LIBRARIES}")
 set_target_properties(torch_custom_add PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts/aimet_common/customops"
         )
 
-find_path(ONNXRUNTIME_INC "onnxruntime_cxx_api.h" PATH_SUFFIXES onnxruntime_headers/include)
-find_library(ONNXRUNTIME_LIBRARY NAMES libonnxruntime.so PATH_SUFFIXES /onnxruntime_headers/lib)
+# ----
 
-add_library(onnx_custom_add SHARED onnx_custom_add.cpp onnx_custom_add.h)
-target_compile_features(onnx_custom_add PRIVATE cxx_std_14)
-target_include_directories(onnx_custom_add PRIVATE ${ONNXRUNTIME_INC})
-target_link_libraries(onnx_custom_add PUBLIC ${ONNXRUNTIME_LIBRARY})
+add_library(onnx_custom_add SHARED
+        onnx_custom_add.cpp
+        onnx_custom_add.h)
+
+target_include_directories(onnx_custom_add PRIVATE ${ONNXRUNTIME_INCLUDE_DIR})
+target_link_libraries(onnx_custom_add PUBLIC ${ONNXRUNTIME_LIBRARIES})
 set_target_properties(onnx_custom_add PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts/aimet_common/customops"
         )

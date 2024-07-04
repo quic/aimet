@@ -3,7 +3,7 @@
 .. currentmodule:: aimet_torch.v2.nn
 
 .. warning::
-    This feature is under heavy development and API changes may occur without notice in future verions.
+    This feature is under heavy development and API changes may occur without notice in future versions.
 
 =================
 Quantized Modules
@@ -35,7 +35,7 @@ Top-level API
 =============
 
 .. autoclass:: aimet_torch.v2.nn.base.BaseQuantizationMixin
-   :members: __quant_init__, quantized_forward, compute_encodings
+   :members: __quant_init__, forward, compute_encodings
 
 Configuration
 =============

@@ -46,13 +46,15 @@ target_include_directories(MoDlCompression
       PUBLIC
          ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-target_link_libraries(MoDlCompression
-      PUBLIC PYBIND11 ${LAPACKE_LINK_LIBRARIES} ${OPENCV_LINK_LIBRARIES}
-      )
+target_link_libraries(MoDlCompression PUBLIC
+    pybind11
+    ${LAPACKE_LINK_LIBRARIES}
+    ${OPENCV_LINK_LIBRARIES}
+    )
 
 target_compile_options(MoDlCompression
         PRIVATE
-            -DUSE_OPENCV)
+        -DUSE_OPENCV)
 
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)

@@ -40,8 +40,10 @@ import torch
 import torch.nn.functional as F
 from aimet_torch.v2.quantization.affine.backends import quantize_dequantize
 from aimet_torch.v2.quantization.affine import QuantizeDequantize
-from aimet_torch.v2.nn import FakeQuantizedSoftmax
+from aimet_torch.v2.nn import FakeQuantizedSoftmax, FakeQuantizedReshape
+from aimet_torch.v2.quantization.affine.encoding import AffineEncoding
 from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
+from aimet_torch.v2.quantization.tensor import DequantizedTensor
 
 
 @pytest.fixture
@@ -50,9 +52,9 @@ def input():
 
 
 class TestFakeQuantizedSoftmax:
-    def test_no_spec(self, input):
+    def test_no_qtzr(self, input):
         """
-        Given: Instantiate a fake-, true-, or auto-quantized module without specific spec
+        Given: Fake-quantized softmax module without any quantizer
         """
 
         """
@@ -68,7 +70,24 @@ class TestFakeQuantizedSoftmax:
         Then: The output should be equal to that of the base FP module.
         """
         expected_output = F.softmax(input, quant_softmax.dim)
-        assert torch.equal(quant_softmax(input), expected_output)
+        output = quant_softmax(input)
+        assert torch.equal(output, expected_output)
+
+        """
+        Given: Fake-quantized reshape module without any quantizer
+        When: Run forward with an input x
+        Then: The output should hold the same encoding as input
+        """
+        input = input.as_subclass(DequantizedTensor)
+        input.encoding = AffineEncoding(scale=torch.ones([]), offset=torch.zeros([]), bitwidth=8)
+        output = FakeQuantizedReshape()(input, (100,))
+
+        assert isinstance(output, DequantizedTensor)
+        assert torch.equal(input.encoding.scale, output.encoding.scale)
+        assert torch.equal(input.encoding.offset, output.encoding.offset)
+        assert input.encoding.bitwidth == output.encoding.bitwidth
+        assert input.encoding.symmetry == output.encoding.symmetry
+        assert input.encoding.signed == output.encoding.signed
 
     def test_input_qtzn(self, input):
         """

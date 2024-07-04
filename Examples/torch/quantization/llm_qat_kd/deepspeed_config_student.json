@@ -1,0 +1,46 @@
+{
+    "steps_per_print": 10,
+    "gradient_clipping": 0.5,
+    "wall_clock_breakdown": false,
+
+    "fp16": {
+        "enabled": true,
+        "loss_scale": 0,
+        "loss_scale_window": 1000,
+        "initial_scale_power": 16,
+        "hysteresis": 1,
+        "min_loss_scale": 1
+    },
+    "zero_optimization": {
+        "stage": 3,
+        "offload_optimizer": null,
+        "contiguous_gradients": true,
+        "overlap_comm": true
+    },
+    "optimizer": {
+        "type": "AdamW",
+        "params": {
+            "lr": 1e-06,
+            "betas": [
+                0.9,
+                0.999
+            ],
+            "eps": 1e-06,
+            "weight_decay": 0.1
+        }
+    },
+    "scheduler": {
+        "type": "WarmupDecayLR",
+        "params": {
+            "warmup_min_lr": 0,
+            "warmup_max_lr": 1e-06,
+            "warmup_num_steps": 0,
+            "total_num_steps": 31385
+        }
+    },
+    "tensorboard": {
+        "enabled": true,
+        "output_path": "./tb_logs",
+        "job_name": "train_llm"
+    }
+}

@@ -46,7 +46,7 @@ from torch import nn
 from torch.optim import SGD, RMSprop, Adagrad, Adam, AdamW
 from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 from aimet_torch.v2.quantization.affine import AffineQuantizerBase, Quantize, \
-    QuantizeDequantize, Dequantize, GroupedBlockQuantizeDequantize
+    QuantizeDequantize, GroupedBlockQuantizeDequantize
 from aimet_torch.v2.quantization import affine
 import aimet_torch.v2.quantization as Q
 
@@ -906,15 +906,14 @@ def test_is_initialized_with_deepspeed_zero3(init_process_group, deepspeed_zero3
 def test_quantize_dequantize_then_quantize_and_dequantize_equality(x, symmetric):
     qdq = QuantizeDequantize((1,), 8, symmetric)
     q = Quantize((1,), 8, symmetric)
-    dq = Dequantize()
 
     with qdq.compute_encodings(), q.compute_encodings():
         _ = qdq(x)
         _ = q(x)
 
     a = qdq(x)
-    b = dq(q(x))
-    assert torch.allclose(a, b)
+    b = q(x).dequantize()
+    assert torch.equal(a, b)
 
 
 @pytest.mark.cuda

@@ -96,10 +96,10 @@ target_include_directories(MoDlQuantization
         ${CMAKE_CURRENT_SOURCE_DIR}/include
       )
 
-target_link_libraries(MoDlQuantization
-      PUBLIC PYBIND11
-      pugixml
-      )
+target_link_libraries(MoDlQuantization PUBLIC
+    pybind11
+    pugixml
+    )
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 if (ENABLE_CUDA)
