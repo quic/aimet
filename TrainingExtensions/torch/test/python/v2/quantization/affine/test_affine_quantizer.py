@@ -41,6 +41,7 @@ import pickle
 import pytest
 import numpy as np
 import random
+import tempfile
 import torch
 from torch import nn
 from torch.optim import SGD, RMSprop, Adagrad, Adam, AdamW
@@ -1204,3 +1205,15 @@ def test_import_signed_flag():
     symmetric_quantizer.set_legacy_encodings(asymmetric_quantizer.get_legacy_encodings())
     assert not symmetric_quantizer.signed
     assert not symmetric_quantizer.symmetric
+
+
+def test_onnx_export():
+    """
+    When: torch.onnx.export a quantizer
+    Then: export shouldn't throw error
+    """
+    qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
+    qdq.load_state_dict({'min': -torch.ones(10), 'max': torch.ones(10)})
+    with tempfile.TemporaryDirectory() as tempdir:
+        with open(os.path.join(tempdir, 'qtzr.onnx'), 'wb') as f:
+            torch.onnx.export(qdq, torch.randn(10, 10), f)
