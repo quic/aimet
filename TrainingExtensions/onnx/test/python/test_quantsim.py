@@ -735,3 +735,7 @@ class TestQuantSim:
             assert loaded_model.ByteSize() > onnx.checker.MAXIMUM_PROTOBUF
             assert sim.model.model.ByteSize() > onnx.checker.MAXIMUM_PROTOBUF
 
+        # Check that the model data is unchanged
+        for idx in range(num_layers):
+            assert onnx.numpy_helper.to_array(sim.model.graph().initializer[idx])[0][0] == idx
+
