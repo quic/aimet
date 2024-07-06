@@ -34,7 +34,4 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
-# pylint: disable=missing-docstring
-from . import onnx
-from .quantsim_utils import *  # pylint: disable=import-error
+""" Utility APIs for onnx export """
