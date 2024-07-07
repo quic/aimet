@@ -86,11 +86,18 @@ class TestConnectedGraph:
     def test_transposed_conv_model(self):
         if version.parse(torch.__version__) >= version.parse("1.13"):
             model = models_for_tests.transposed_conv_model()
+
+            activations = set()
+            for node in model.graph().node:
+                if node.op_type != "Identity":
+                    activations.add(node.input[0])
+                    activations.add(node.output[0])
+
             conn_graph = ConnectedGraph(model)
             assert len(conn_graph.get_all_ops()) == 5
 
             products = conn_graph.get_all_products()
-            assert len(products) == 12
+            assert len(products) == len(activations) + len(model.graph().initializer)
             assert {'bn1.weight',
                     'bn1.bias'}.issubset({product for product in products})
 

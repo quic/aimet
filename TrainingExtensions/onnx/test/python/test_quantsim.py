@@ -54,7 +54,8 @@ from aimet_onnx.quantsim import QuantizationSimModel, load_encodings_to_sim
 from aimet_onnx.qc_quantize_op import OpMode
 from aimet_onnx.utils import make_dummy_input
 from models.models_for_tests import SingleResidual
-from models.models_for_tests import build_dummy_model, single_residual_model, BNAfterConv, multi_input_with_constant_model , multi_output_model, custom_add_model, build_lstm_gru_dummy_model
+from models.models_for_tests import build_dummy_model, single_residual_model, BNAfterConv, multi_input_with_constant_model , multi_output_model, custom_add_model, build_lstm_gru_dummy_model, \
+    transposed_conv_model, depthwise_transposed_conv_model
 
 
 class DummyModel(SingleResidual):
@@ -439,6 +440,37 @@ class TestQuantSim:
                     for encoding in qc_op.encodings:
                         assert encoding.bw == 8
                         assert encoding.min != encoding.max
+
+    @pytest.mark.parametrize("model_factory", (transposed_conv_model, depthwise_transposed_conv_model))
+    def test_per_channel_quant_conv_transpose(self, model_factory):
+        model = model_factory()
+        conv_transpose_weight_names = []
+        for node in model.graph().node:
+            if node.op_type == "ConvTranspose":
+                conv_transpose_weight_names.append(node.input[1])
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            sim = QuantizationSimModel(model, use_cuda=False, config_file=get_path_for_per_channel_config(),
+                                       path=tempdir)
+
+            def dummy_callback(session, args):
+                in_tensor = {'input': np.random.rand(10, 10, 4, 4).astype(np.float32)}
+                session.run(None, in_tensor)
+
+            for param_name in sim.param_names:
+                if param_name in conv_transpose_weight_names:
+                    for weight in sim.model.graph().initializer:
+                        if weight.name == param_name:
+                            break
+                    else:
+                        raise RuntimeError(f"Param {param_name} not found in model")
+                    qc_op = sim.qc_quantize_op_dict[param_name]
+                    assert qc_op.quant_info.usePerChannelMode
+                    assert qc_op.quant_info.enabled
+                    assert qc_op.quant_info.channelAxis == 1
+                    assert len(qc_op.encodings) == weight.dims[1]
+
+            sim.compute_encodings(dummy_callback, None)
 
     def test_load_encodings_ptq(self):
         model = single_residual_model().model

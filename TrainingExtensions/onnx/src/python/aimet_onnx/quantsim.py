@@ -351,7 +351,8 @@ class QuantizationSimModel:
             tensor_quantizer_params.num_output_channels = param_shape[0]
         else:
             tensor_quantizer_params.axis = self._get_quantization_axis(op)
-            tensor_quantizer_params.num_output_channels = param_shape[quant_info.channelAxis]
+            tensor_quantizer_params.num_output_channels = param_shape[tensor_quantizer_params.axis]
+        quant_info.channelAxis = tensor_quantizer_params.axis
 
         return quant_info, tensor_quantizer_params
 

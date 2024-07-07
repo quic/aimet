@@ -41,6 +41,7 @@ from collections import namedtuple
 from typing import Dict, List
 
 import os
+import tempfile
 import torch.nn.functional as F
 from torch import nn as nn
 from torchvision.ops import roi_align
@@ -538,8 +539,8 @@ class TransposedConvModel(torch.nn.Module):
         self.bn1 = torch.nn.BatchNorm2d(10)
         self.relu1 = torch.nn.ReLU()
 
-        self.conv2 = torch.nn.ConvTranspose2d(10, 10, 3)
-        self.bn2 = torch.nn.BatchNorm2d(10)
+        self.conv2 = torch.nn.ConvTranspose2d(10, 20, 3)
+        self.bn2 = torch.nn.BatchNorm2d(20)
 
     # pylint: disable=arguments-differ
     def forward(self, x):
@@ -551,6 +552,13 @@ class TransposedConvModel(torch.nn.Module):
         x = self.conv2(x)
         x = self.bn2(x)
         return x
+
+class DepthwiseTransposedConvModel(TransposedConvModel):
+
+    def __init__(self):
+        super(DepthwiseTransposedConvModel, self).__init__()
+        self.conv1 = torch.nn.ConvTranspose2d(10, 10, 3, groups=10)
+        self.conv2 = torch.nn.ConvTranspose2d(10, 20, 3, groups=10)
 
 
 class TransposedConvModelWithoutBN(torch.nn.Module):
@@ -1105,20 +1113,39 @@ def multi_output_model():
     return model
 
 def transposed_conv_model():
-    x = torch.randn(10, 10, 4, 4, requires_grad=True)
-    model = TransposedConvModel()
-
-    # Export the model
-    torch.onnx.export(model,  # model being run
-                      x,  # model input (or a tuple for multiple inputs)
-                      "./model_transposed_conv.onnx",  # where to save the model (can be a file or file-like object)
-                      export_params=True,  # store the trained parameter weights inside the model file
-                      opset_version=12,  # the ONNX version to export the model to
-                      do_constant_folding=True,  # whether to execute constant folding for optimization
-                      input_names=['input'],  # the model's input names
-                      output_names=['output'])
-    model = ONNXModel(load_model('./model_transposed_conv.onnx'))
+    with tempfile.TemporaryDirectory() as save_dir:
+        x = torch.randn(10, 10, 4, 4, requires_grad=True)
+        model = TransposedConvModel()
+        save_path = os.path.join(save_dir, "model_transposed_conv.onnx")
+        # Export the model
+        torch.onnx.export(model,  # model being run
+                          x,  # model input (or a tuple for multiple inputs)
+                          save_path,  # where to save the model (can be a file or file-like object)
+                          export_params=True,  # store the trained parameter weights inside the model file
+                          opset_version=12,  # the ONNX version to export the model to
+                          do_constant_folding=True,  # whether to execute constant folding for optimization
+                          input_names=['input'],  # the model's input names
+                          output_names=['output'])
+        model = ONNXModel(load_model(save_path))
     return model
+
+def depthwise_transposed_conv_model():
+    with tempfile.TemporaryDirectory() as save_dir:
+        x = torch.randn(10, 10, 4, 4, requires_grad=True)
+        model = DepthwiseTransposedConvModel()
+        save_path = os.path.join(save_dir, "model_transposed_conv.onnx")
+        # Export the model
+        torch.onnx.export(model,  # model being run
+                          x,  # model input (or a tuple for multiple inputs)
+                          save_path,  # where to save the model (can be a file or file-like object)
+                          export_params=True,  # store the trained parameter weights inside the model file
+                          opset_version=12,  # the ONNX version to export the model to
+                          do_constant_folding=True,  # whether to execute constant folding for optimization
+                          input_names=['input'],  # the model's input names
+                          output_names=['output'])
+        model = ONNXModel(load_model(save_path))
+    return model
+
 
 def transposed_conv_model_without_bn():
     x = torch.randn(10, 10, 4, 4, requires_grad=True)
