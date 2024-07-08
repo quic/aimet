@@ -469,12 +469,14 @@ class QuantizationSimModel:
         path = path if path else tempfile.mkdtemp()
         if not os.path.exists(path):
             os.makedirs(path, exist_ok=True)
-        save_as_external_data = model.ByteSize() >= onnx.checker.MAXIMUM_PROTOBUF
+        model_size = model.ByteSize()
+        save_as_external_data = model_size >= onnx.checker.MAXIMUM_PROTOBUF
         output_path = os.path.join(path, 'model.onnx')
         if save_as_external_data:
             # Note: Saving as external data mutates the saved model, removing all initializer data
             onnx.save_model(model, output_path, save_as_external_data=True, location=Path(output_path).name + ".data")
             onnx.load_external_data_for_model(model, base_dir=path)
+            assert model.ByteSize() == model_size
 
         path_or_bytes = output_path if save_as_external_data else model.SerializeToString()
         session = InferenceSession(
