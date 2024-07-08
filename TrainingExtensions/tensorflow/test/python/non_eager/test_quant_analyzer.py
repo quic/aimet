@@ -36,10 +36,11 @@
 # =============================================================================
 
 """ Unit tests for Quant Analyzer """
-import shutil
 import json
 from typing import Any
 import os
+import tempfile
+from pathlib import Path
 import pytest
 import numpy as np
 import tensorflow as tf
@@ -96,140 +97,130 @@ def test_export_per_layer_stats_histogram(cpu_session):
 
     sim, quant_analyzer = get_quantsim_and_quantanalyzer(cpu_session)
 
-    try:
-        #pylint: disable=protected-access
-        quant_analyzer._export_per_layer_stats_histogram(sim, results_dir="./tmp/")
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        try:
+            #pylint: disable=protected-access
+            quant_analyzer._export_per_layer_stats_histogram(sim, results_dir=tmp_dir)
 
-        # Check if it is exported to correct html file.
-        assert os.path.exists("./tmp/activations_pdf")
-        assert os.path.exists("./tmp/weights_pdf")
-        assert os.path.isfile("./tmp/activations_pdf/conv2d_input_quantized_0.html")
-        assert os.path.isfile("./tmp/activations_pdf/batch_normalization_cond_Identity_quantized_0.html")
-        assert os.path.isfile("./tmp/weights_pdf/conv2d_Conv2D_ReadVariableOp_quantized/"
-                              "conv2d_Conv2D_ReadVariableOp_quantized_0.html")
-    finally:
-        sim.session.close()
-        cpu_session.close()
-        if os.path.isdir("./tmp/"):
-            shutil.rmtree("./tmp/")
+            # Check if it is exported to correct html file.
+            assert os.path.exists(Path(tmp_dir, "activations_pdf"))
+            assert os.path.exists(Path(tmp_dir, "weights_pdf"))
+            assert os.path.isfile(Path(tmp_dir, "activations_pdf", "conv2d_input_quantized_0.html"))
+            assert os.path.isfile(Path(tmp_dir, "activations_pdf", "batch_normalization_cond_Identity_quantized_0.html"))
+            assert os.path.isfile(Path(tmp_dir, "weights_pdf", "conv2d_Conv2D_ReadVariableOp_quantized",
+                                "conv2d_Conv2D_ReadVariableOp_quantized_0.html"))
+        finally:
+            sim.session.close()
+            cpu_session.close()
 
 #pylint: disable=redefined-outer-name
 def test_export_per_layer_stats_histogram_per_channel(cpu_session):
     """ test export_per_layer_stats_histogram() for per channel quantization"""
 
-    results_dir = os.path.abspath("./tmp/")
-    os.makedirs(results_dir, exist_ok=True)
-
-    quantsim_config = {
-        "defaults": {
-            "ops": {
-                "is_output_quantized": "True"
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True"
+                },
+                "params": {
+                    "is_quantized": "True"
+                },
+                "per_channel_quantization": "True",
             },
-            "params": {
-                "is_quantized": "True"
-            },
-            "per_channel_quantization": "True",
-        },
-        "params": {},
-        "op_type": {},
-        "supergroups": [],
-        "model_input": {},
-        "model_output": {}
-    }
-    with open("./tmp/quantsim_config.json", 'w') as f:
-        json.dump(quantsim_config, f)
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open(Path(tmp_dir, "quantsim_config.json"), 'w') as f:
+            json.dump(quantsim_config, f)
 
-    sim = QuantizationSimModel(cpu_session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False,
-                               config_file="./tmp/quantsim_config.json")
-    sim.compute_encodings(forward_pass_callback, None)
-    quant_analyzer = QuantAnalyzer(cpu_session, start_op_names=['conv2d_input'],
-                                   output_op_names=['keras_model/Softmax'],
-                                   forward_pass_callback=CallbackFunc(forward_pass_callback),
-                                   eval_callback=CallbackFunc(forward_pass_callback), use_cuda=False)
+        sim = QuantizationSimModel(cpu_session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False,
+                                config_file=Path(tmp_dir, "quantsim_config.json"))
+        sim.compute_encodings(forward_pass_callback, None)
+        quant_analyzer = QuantAnalyzer(cpu_session, start_op_names=['conv2d_input'],
+                                    output_op_names=['keras_model/Softmax'],
+                                    forward_pass_callback=CallbackFunc(forward_pass_callback),
+                                    eval_callback=CallbackFunc(forward_pass_callback), use_cuda=False)
 
-    try:
-        #pylint: disable=protected-access
-        quant_analyzer._export_per_layer_stats_histogram(sim, results_dir="./tmp/")
+        try:
+            #pylint: disable=protected-access
+            quant_analyzer._export_per_layer_stats_histogram(sim, results_dir=tmp_dir)
 
-        # Check if it is exported to correct html file.
-        assert os.path.exists("./tmp/activations_pdf")
-        assert os.path.exists("./tmp/weights_pdf")
-        assert os.path.isfile("./tmp/activations_pdf/batch_normalization_cond_Identity_quantized_0.html")
-        assert os.path.isfile("./tmp/weights_pdf/conv2d_Conv2D_ReadVariableOp_quantized/"
-                              "conv2d_Conv2D_ReadVariableOp_quantized_0.html")
-        assert os.path.isfile("./tmp/weights_pdf/conv2d_Conv2D_ReadVariableOp_quantized/"
-                              "conv2d_Conv2D_ReadVariableOp_quantized_7.html")
-    finally:
-        sim.session.close()
-        cpu_session.close()
-        if os.path.isdir("./tmp/"):
-            shutil.rmtree("./tmp/")
+            # Check if it is exported to correct html file.
+            assert os.path.exists(Path(tmp_dir, "activations_pdf"))
+            assert os.path.exists(Path(tmp_dir, "weights_pdf"))
+            assert os.path.isfile(Path(tmp_dir, "activations_pdf", "batch_normalization_cond_Identity_quantized_0.html"))
+            assert os.path.isfile(Path(tmp_dir, "weights_pdf", "conv2d_Conv2D_ReadVariableOp_quantized", 
+                                "conv2d_Conv2D_ReadVariableOp_quantized_0.html"))
+            assert os.path.isfile(Path(tmp_dir, "weights_pdf", "conv2d_Conv2D_ReadVariableOp_quantized",
+                                "conv2d_Conv2D_ReadVariableOp_quantized_7.html"))
+        finally:
+            sim.session.close()
+            cpu_session.close()
 
 #pylint: disable=redefined-outer-name
 def test_export_per_layer_encoding_min_max_range(cpu_session):
     """ test export_per_layer_encoding_min_max_range() """
 
-    sim, quant_analyzer = get_quantsim_and_quantanalyzer(cpu_session)
+    with tempfile.TemporaryDirectory() as results_dir:
+        sim, quant_analyzer = get_quantsim_and_quantanalyzer(cpu_session)
 
-    try:
-        #pylint: disable=protected-access
-        quant_analyzer._export_per_layer_encoding_min_max_range(sim, results_dir="./tmp/")
-        assert os.path.isfile("./tmp/min_max_ranges/weights.html")
-        assert os.path.isfile("./tmp/min_max_ranges/activations.html")
-    finally:
-        sim.session.close()
-        cpu_session.close()
-        if os.path.isdir("./tmp/"):
-            shutil.rmtree("./tmp/")
+        try:
+            #pylint: disable=protected-access
+            quant_analyzer._export_per_layer_encoding_min_max_range(sim, results_dir=results_dir)
+            assert os.path.isfile(Path(results_dir, "min_max_ranges", "weights.html"))
+            assert os.path.isfile(Path(results_dir, "min_max_ranges", "activations.html"))
+        finally:
+            sim.session.close()
+            cpu_session.close()
 
 #pylint: disable=redefined-outer-name
 def test_export_per_layer_encoding_min_max_range_per_channel(cpu_session):
     """ test export_per_layer_encoding_min_max_range() for per channel quantization """
 
-    results_dir = os.path.abspath("./tmp/")
-    os.makedirs(results_dir, exist_ok=True)
-
-    quantsim_config = {
-        "defaults": {
-            "ops": {
-                "is_output_quantized": "True"
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True"
+                },
+                "params": {
+                    "is_quantized": "True"
+                },
+                "per_channel_quantization": "True",
             },
             "params": {
-                "is_quantized": "True"
+                "bias": {
+                    "is_quantized": "False"
+                }
             },
-            "per_channel_quantization": "True",
-        },
-        "params": {
-            "bias": {
-                "is_quantized": "False"
-            }
-        },
-        "op_type": {},
-        "supergroups": [],
-        "model_input": {},
-        "model_output": {}
-    }
-    with open("./tmp/quantsim_config.json", 'w') as f:
-        json.dump(quantsim_config, f)
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open(Path(tmp_dir, "quantsim_config.json"), 'w') as f:
+            json.dump(quantsim_config, f)
 
-    sim = QuantizationSimModel(cpu_session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False,
-                               config_file="./tmp/quantsim_config.json")
-    sim.compute_encodings(forward_pass_callback, None)
-    quant_analyzer = QuantAnalyzer(cpu_session, start_op_names=['conv2d_input'],
-                                   output_op_names=['keras_model/Softmax'],
-                                   forward_pass_callback=CallbackFunc(forward_pass_callback),
-                                   eval_callback=CallbackFunc(forward_pass_callback), use_cuda=False)
-    try:
-        #pylint: disable=protected-access
-        quant_analyzer._export_per_layer_encoding_min_max_range(sim, results_dir="./tmp/")
-        assert os.path.isfile("./tmp/min_max_ranges/activations.html")
-        assert os.path.isfile("./tmp/min_max_ranges/conv2d_Conv2D_ReadVariableOp_quantized.html")
-        assert os.path.isfile("./tmp/min_max_ranges/keras_model_MatMul_ReadVariableOp_quantized.html")
-    finally:
-        sim.session.close()
-        cpu_session.close()
-        if os.path.isdir("./tmp/"):
-            shutil.rmtree("./tmp/")
+        sim = QuantizationSimModel(cpu_session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False,
+                                config_file=Path(tmp_dir, "quantsim_config.json"))
+        sim.compute_encodings(forward_pass_callback, None)
+        quant_analyzer = QuantAnalyzer(cpu_session, start_op_names=['conv2d_input'],
+                                    output_op_names=['keras_model/Softmax'],
+                                    forward_pass_callback=CallbackFunc(forward_pass_callback),
+                                    eval_callback=CallbackFunc(forward_pass_callback), use_cuda=False)
+        try:
+            #pylint: disable=protected-access
+            quant_analyzer._export_per_layer_encoding_min_max_range(sim, results_dir=tmp_dir)
+            assert os.path.isfile(Path(tmp_dir, "min_max_ranges", "activations.html"))
+            assert os.path.isfile(Path(tmp_dir, "min_max_ranges", "conv2d_Conv2D_ReadVariableOp_quantized.html"))
+            assert os.path.isfile(Path(tmp_dir, "min_max_ranges", "keras_model_MatMul_ReadVariableOp_quantized.html"))
+        finally:
+            sim.session.close()
+            cpu_session.close()
 
 #pylint: disable=redefined-outer-name
 def test_model_sensitivity_to_quantization(cpu_session):
@@ -291,34 +282,32 @@ def test_get_enabled_quantizer_groups(cpu_session):
 #pylint: disable=redefined-outer-name
 def test_perform_per_layer_analysis_by_enabling_quant_ops(cpu_session):
     """test _perform_per_op_analysis_by_enabling_quant_ops()"""
-    sim, quant_analyzer = get_quantsim_and_quantanalyzer(cpu_session)
-    try:
-        #pylint: disable=protected-access
-        #pylint: disable=no-member
-        quant_analyzer._perform_per_op_analysis_by_enabling_quant_ops(sim, results_dir="./tmp/")
-        assert os.path.isfile("./tmp/per_op_quant_enabled.html")
-        assert os.path.isfile("./tmp/per_op_quant_enabled.json")
-    finally:
-        sim.session.close()
-        cpu_session.close()
-        if os.path.isdir("./tmp/"):
-            shutil.rmtree("./tmp/")
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        sim, quant_analyzer = get_quantsim_and_quantanalyzer(cpu_session)
+        try:
+            #pylint: disable=protected-access
+            #pylint: disable=no-member
+            quant_analyzer._perform_per_op_analysis_by_enabling_quant_ops(sim, results_dir=tmp_dir)
+            assert os.path.isfile(Path(tmp_dir, "per_op_quant_enabled.html"))
+            assert os.path.isfile(Path(tmp_dir, "per_op_quant_enabled.json"))
+        finally:
+            sim.session.close()
+            cpu_session.close()
 
 #pylint: disable=redefined-outer-name
 def test_perform_per_layer_analysis_by_disabling_quant_ops(cpu_session):
     """test _perform_per_op_analysis_by_disabling_quant_ops()"""
-    sim, quant_analyzer = get_quantsim_and_quantanalyzer(cpu_session)
-    try:
-        #pylint: disable=protected-access
-        #pylint: disable=no-member
-        quant_analyzer._perform_per_op_analysis_by_disabling_quant_ops(sim, results_dir="./tmp/")
-        assert os.path.isfile("./tmp/per_op_quant_disabled.html")
-        assert os.path.isfile("./tmp/per_op_quant_disabled.json")
-    finally:
-        sim.session.close()
-        cpu_session.close()
-        if os.path.isdir("./tmp/"):
-            shutil.rmtree("./tmp/")
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        sim, quant_analyzer = get_quantsim_and_quantanalyzer(cpu_session)
+        try:
+            #pylint: disable=protected-access
+            #pylint: disable=no-member
+            quant_analyzer._perform_per_op_analysis_by_disabling_quant_ops(sim, results_dir=tmp_dir)
+            assert os.path.isfile(Path(tmp_dir, "per_op_quant_disabled.html"))
+            assert os.path.isfile(Path(tmp_dir, "per_op_quant_disabled.json"))
+        finally:
+            sim.session.close()
+            cpu_session.close()
 
 def test_export_per_op_mse_loss(cpu_session):
     """ test _perform_per_op_mse_loss() """
@@ -329,14 +318,14 @@ def test_export_per_op_mse_loss(cpu_session):
     dataset = tf.data.Dataset.from_tensor_slices(input_data)
     quant_analyzer._unlabeled_dataset = dataset.batch(batch_size=batch_size)
     quant_analyzer._num_batches = 4
-    try:
-        quant_analyzer._perform_per_op_mse_loss(sim, results_dir="./tmp/")
-        assert os.path.isfile("./tmp/per_op_mse_loss.html")
-    finally:
-        sim.session.close()
-        cpu_session.close()
-        if os.path.isdir("./tmp/"):
-            shutil.rmtree("./tmp/")
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        try:
+            quant_analyzer._perform_per_op_mse_loss(sim, results_dir=tmp_dir)
+            assert os.path.isfile(Path(tmp_dir, "per_op_mse_loss.html"))
+        finally:
+            sim.session.close()
+            cpu_session.close()
 
 def test_analyze(cpu_session):
     """ test analyze() in Tensorflow quant analyzer"""
@@ -348,18 +337,18 @@ def test_analyze(cpu_session):
     batch_size = 32
     input_data = np.random.rand(dataset_size, 16, 16, 3)
     dataset = tf.data.Dataset.from_tensor_slices(input_data)
-    try:
-        quant_analyzer.analyze(results_dir='./tmp',
-                               unlabeled_dataset=dataset.batch(batch_size=batch_size),
-                               num_batches=4)
-        assert os.path.isfile("./tmp/per_op_quant_disabled.html")
-        assert os.path.isfile("./tmp/per_op_quant_enabled.html")
-        assert os.path.exists("./tmp/activations_pdf")
-        assert os.path.exists("./tmp/weights_pdf")
-        assert os.path.isfile("./tmp/min_max_ranges/weights.html")
-        assert os.path.isfile("./tmp/min_max_ranges/activations.html")
-        assert os.path.isfile("./tmp/per_op_mse_loss.html")
-    finally:
-        cpu_session.close()
-        if os.path.isdir("./tmp/"):
-            shutil.rmtree("./tmp/")
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        try:
+            quant_analyzer.analyze(results_dir=tmp_dir,
+                                unlabeled_dataset=dataset.batch(batch_size=batch_size),
+                                num_batches=4)
+            assert os.path.isfile(Path(tmp_dir, "per_op_quant_disabled.html"))
+            assert os.path.isfile(Path(tmp_dir, "per_op_quant_enabled.html"))
+            assert os.path.exists(Path(tmp_dir, "activations_pdf"))
+            assert os.path.exists(Path(tmp_dir, "weights_pdf"))
+            assert os.path.isfile(Path(tmp_dir, "min_max_ranges", "weights.html"))
+            assert os.path.isfile(Path(tmp_dir, "min_max_ranges", "activations.html"))
+            assert os.path.isfile(Path(tmp_dir, "per_op_mse_loss.html"))
+        finally:
+            cpu_session.close()

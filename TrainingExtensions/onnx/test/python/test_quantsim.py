@@ -36,7 +36,6 @@
 # =============================================================================
 import json
 import os
-import shutil
 import tempfile
 
 import onnx.numpy_helper
@@ -308,9 +307,6 @@ class TestQuantSim:
     @pytest.mark.cuda
     def test_compare_encodings_cpu_gpu(self):
         """Test to compare encodings with PT"""
-        if not os.path.exists('/tmp'):
-            os.mkdir('/tmp')
-
         def onnx_callback(session, inputs):
             in_tensor = {'input': inputs}
             session.run(None, in_tensor)

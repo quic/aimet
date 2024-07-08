@@ -38,6 +38,7 @@ import os
 
 import numpy as np
 import pytest
+import tempfile
 import torch
 from onnx import load_model
 from torchvision import models
@@ -47,8 +48,6 @@ from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
 from torch_utils import get_cifar10_data_loaders, train_cifar10
-
-WORKING_DIR = '/tmp/quantsim'
 
 image_size = 32
 batch_size = 64
@@ -79,42 +78,41 @@ class TestQuantizeAcceptance:
     @pytest.mark.parametrize("config_file", [None, get_path_for_per_channel_config()])
     @pytest.mark.cuda
     def test_quantized_accuracy(self, config_file):
-        if not os.path.exists(WORKING_DIR):
-            os.makedirs(WORKING_DIR)
-        np.random.seed(0)
-        torch.manual_seed(0)
-        model = models.resnet18(pretrained=False, num_classes=10)
-        if torch.cuda.is_available():
-            device = torch.device('cuda:0')
-            model.to(device)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            np.random.seed(0)
+            torch.manual_seed(0)
+            model = models.resnet18(pretrained=False, num_classes=10)
+            if torch.cuda.is_available():
+                device = torch.device('cuda:0')
+                model.to(device)
 
-        train_cifar10(model, 2)
-        train_loader, val_loader = get_cifar10_data_loaders(drop_last=False)
+            train_cifar10(model, 2)
+            train_loader, val_loader = get_cifar10_data_loaders(drop_last=False)
 
-        torch.onnx.export(model, torch.rand(batch_size, 3, 32, 32).cuda(), os.path.join(WORKING_DIR, 'resnet18.onnx'),
-                          training=torch.onnx.TrainingMode.PRESERVE,
-                          input_names=['input'], output_names=['output'],
-                          dynamic_axes={
-                              'input': {0: 'batch_size'},
-                              'output': {0: 'batch_size'},
-                          }
-                          )
+            torch.onnx.export(model, torch.rand(batch_size, 3, 32, 32).cuda(), os.path.join(tmp_dir, 'resnet18.onnx'),
+                            training=torch.onnx.TrainingMode.PRESERVE,
+                            input_names=['input'], output_names=['output'],
+                            dynamic_axes={
+                                'input': {0: 'batch_size'},
+                                'output': {0: 'batch_size'},
+                            }
+                            )
 
-        onnx_model = load_model(os.path.join(WORKING_DIR, 'resnet18.onnx'))
-        dummy_input = make_dummy_input(onnx_model)
-        sim = QuantizationSimModel(onnx_model, dummy_input, quant_scheme=QuantScheme.post_training_tf, default_param_bw=8,
-                                   default_activation_bw=8, use_cuda=True, config_file=config_file)
+            onnx_model = load_model(os.path.join(tmp_dir, 'resnet18.onnx'))
+            dummy_input = make_dummy_input(onnx_model)
+            sim = QuantizationSimModel(onnx_model, dummy_input, quant_scheme=QuantScheme.post_training_tf, default_param_bw=8,
+                                    default_activation_bw=8, use_cuda=True, config_file=config_file)
 
-        def onnx_callback(session, iters):
-            for i, batch in enumerate(train_loader):
-                x = batch[0].detach().cpu().numpy()
-                in_tensor = {'input': x}
-                session.run(None, in_tensor)
-                if i >= iters:
-                    break
+            def onnx_callback(session, iters):
+                for i, batch in enumerate(train_loader):
+                    x = batch[0].detach().cpu().numpy()
+                    in_tensor = {'input': x}
+                    session.run(None, in_tensor)
+                    if i >= iters:
+                        break
 
-        sim.compute_encodings(onnx_callback, 10)
+            sim.compute_encodings(onnx_callback, 10)
 
-        onnx_qs_acc = model_eval_onnx(sim.session, val_loader)
+            onnx_qs_acc = model_eval_onnx(sim.session, val_loader)
 
-        assert onnx_qs_acc > 0.5
+            assert onnx_qs_acc > 0.5

@@ -38,11 +38,11 @@
 import contextlib
 from dataclasses import dataclass
 import itertools
+import tempfile
 from unittest.mock import patch, MagicMock
 import os
 from bs4 import BeautifulSoup
 import pytest
-import shutil
 from typing import Callable, Dict, List
 
 import onnx
@@ -317,7 +317,7 @@ class TestAutoQuant:
         with patch_ptq_techniques(
             bn_folded_acc, None, None
         ) as mocks:
-            with create_tmp_directory() as results_dir:
+            with tempfile.TemporaryDirectory() as results_dir:
                 auto_quant = AutoQuant(onnx_model,
                                        dummy_input,
                                        unlabeled_data_loader,
@@ -345,7 +345,7 @@ class TestAutoQuant:
         with patch_ptq_techniques(
             bn_folded_acc, cle_acc, adaround_acc
         ) as mocks:
-            with create_tmp_directory() as results_dir:
+            with tempfile.TemporaryDirectory() as results_dir:
                 auto_quant = AutoQuant(onnx_model,
                                        dummy_input,
                                        unlabeled_data_loader,
@@ -363,7 +363,7 @@ class TestAutoQuant:
         with patch_ptq_techniques(
             bn_folded_acc, cle_acc, adaround_acc
         ) as mocks:
-            with create_tmp_directory() as results_dir:
+            with tempfile.TemporaryDirectory() as results_dir:
                 auto_quant = AutoQuant(onnx_model,
                                        dummy_input,
                                        unlabeled_data_loader,
@@ -395,7 +395,7 @@ class TestAutoQuant:
         with patch_ptq_techniques(
             bn_folded_acc, cle_acc, adaround_acc
         ) as mocks:
-            with create_tmp_directory() as results_dir:
+            with tempfile.TemporaryDirectory() as results_dir:
                 auto_quant = AutoQuant(model,
                                        dummy_input,
                                        unlabeled_data_loader,
@@ -471,7 +471,7 @@ class TestAutoQuant:
         with patch_ptq_techniques(
             bn_folded_acc, None, None, raw_quantsim_acc=raw_quantsim_acc
         ) as mocks:
-            with create_tmp_directory() as results_dir:
+            with tempfile.TemporaryDirectory() as results_dir:
                 auto_quant = AutoQuant(onnx_model,
                                        dummy_input,
                                        unlabeled_data_loader,
@@ -496,7 +496,7 @@ class TestAutoQuant:
         with patch_ptq_techniques(
             bn_folded_acc, cle_acc, adaround_acc
         ) as mocks:
-            with create_tmp_directory() as results_dir:
+            with tempfile.TemporaryDirectory() as results_dir:
 
                 auto_quant = AutoQuant(onnx_model,
                                        dummy_input,
@@ -599,7 +599,7 @@ class TestAutoQuant:
         allowed_accuracy_drop = 0.1
         w32_acc = FP32_ACC - (allowed_accuracy_drop * 2)
 
-        with create_tmp_directory() as results_dir:
+        with tempfile.TemporaryDirectory() as results_dir:
             with patch_ptq_techniques(
                 bn_folded_acc=0, cle_acc=0, adaround_acc=0, w32_acc=w32_acc
             ) as mocks:
@@ -634,7 +634,7 @@ class TestAutoQuant:
         with patch_ptq_techniques(
             bn_folded_acc, cle_acc, adaround_acc
         ) as mocks:
-            with create_tmp_directory() as results_dir:
+            with tempfile.TemporaryDirectory() as results_dir:
                 auto_quant = AutoQuant(onnx_model,
                                        dummy_input,
                                        unlabeled_data_loader,
@@ -735,19 +735,3 @@ class TestAutoQuant:
             adaround_args, _ = mocks.apply_adaround.call_args
             _, _, actual_adaround_params = adaround_args
             assert adaround_params == actual_adaround_params
-
-
-@contextlib.contextmanager
-def create_tmp_directory(dirname: str = "/tmp/.aimet_unittest"):
-    success = False
-    try:
-        os.makedirs(dirname, exist_ok=True)
-        success = True
-    except FileExistsError:
-        raise
-
-    try:
-        yield dirname
-    finally:
-        if success:
-            shutil.rmtree(dirname)

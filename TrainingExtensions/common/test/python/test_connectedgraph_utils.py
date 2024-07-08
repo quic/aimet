@@ -38,6 +38,8 @@
 
 import json
 import os
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 from aimet_common.connected_graph.connectedgraph import ConnectedGraph
 from aimet_common.connected_graph.operation import Op
@@ -149,22 +151,20 @@ def test_serialize_products():
 
 @patch("aimet_common.connected_graph.connectedgraph.ConnectedGraph.__abstractmethods__", set())
 def test_export_connected_graph():
-    conn_graph = get_dummy_connected_graph()
-    connectedgraph_utils.export_connected_graph(conn_graph, '/tmp/', 'dummy_cg_export')
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        conn_graph = get_dummy_connected_graph()
+        connectedgraph_utils.export_connected_graph(conn_graph, tmp_dir, 'dummy_cg_export')
 
-    with open('/tmp/dummy_cg_export.json', 'r') as cg_export_file:
-        cg_export = json.load(cg_export_file)
+        with open(Path(tmp_dir, "dummy_cg_export.json"), 'r') as cg_export_file:
+            cg_export = json.load(cg_export_file)
 
-    assert 'ops' in cg_export
-    assert 'products' in cg_export
-    assert 'activations' in cg_export['products']
-    assert 'parameters' in cg_export['products']
-    assert len(cg_export['ops']) == 5
-    assert len(cg_export['products']['activations']) == 5
-    assert len(cg_export['products']['parameters']) == 3
-
-    if os.path.exists('/tmp/dummy_cg_export.json'):
-        os.remove('/tmp/dummy_cg_export.json')
+        assert 'ops' in cg_export
+        assert 'products' in cg_export
+        assert 'activations' in cg_export['products']
+        assert 'parameters' in cg_export['products']
+        assert len(cg_export['ops']) == 5
+        assert len(cg_export['products']['activations']) == 5
+        assert len(cg_export['products']['parameters']) == 3
 
 def get_dummy_connected_graph():
     """

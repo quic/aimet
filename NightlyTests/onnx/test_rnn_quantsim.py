@@ -38,6 +38,7 @@ import os
 
 import numpy as np
 import pytest
+import tempfile
 import torch
 from onnx import load_model
 from torchaudio import models
@@ -47,8 +48,6 @@ from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
 from torch_utils import get_librispeech_data_loaders, train_librispeech
-
-WORKING_DIR = '/tmp/quantsim'
 
 batch_size = 64
 n_feature = 128
@@ -87,44 +86,43 @@ class TestQuantizeAcceptance:
     @pytest.mark.parametrize("config_file", [None, get_path_for_per_channel_config()])
     @pytest.mark.cuda
     def test_quantized_accuracy(self, config_file):
-        if not os.path.exists(WORKING_DIR):
-            os.makedirs(WORKING_DIR)
-        np.random.seed(0)
-        torch.manual_seed(0)
-        model = models.DeepSpeech(n_feature=n_feature, n_class=n_class)
-        if torch.cuda.is_available():
-            device = torch.device('cuda:0')
-            model.to(device)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            np.random.seed(0)
+            torch.manual_seed(0)
+            model = models.DeepSpeech(n_feature=n_feature, n_class=n_class)
+            if torch.cuda.is_available():
+                device = torch.device('cuda:0')
+                model.to(device)
 
-        train_librispeech(model, 1, max_batches=30)
+            train_librispeech(model, 1, max_batches=30)
 
-        train_loader, val_loader = get_librispeech_data_loaders(batch_size=batch_size, drop_last=False)
+            train_loader, val_loader = get_librispeech_data_loaders(batch_size=batch_size, drop_last=False)
 
-        torch.onnx.export(model, torch.rand(1, 1, 1, 128).cuda(), os.path.join(WORKING_DIR, 'deepspeech.onnx'),
-                          training=torch.onnx.TrainingMode.PRESERVE,
-                          input_names=['input'], output_names=['output'],
-                          dynamic_axes={
-                              'input': {0: 'batch_size', 2: 'time'},
-                              'output': {0: 'batch_size', 1: 'time'},
-                          }
-                          )
+            torch.onnx.export(model, torch.rand(1, 1, 1, 128).cuda(), os.path.join(tmp_dir, 'deepspeech.onnx'),
+                            training=torch.onnx.TrainingMode.PRESERVE,
+                            input_names=['input'], output_names=['output'],
+                            dynamic_axes={
+                                'input': {0: 'batch_size', 2: 'time'},
+                                'output': {0: 'batch_size', 1: 'time'},
+                            }
+                            )
 
-        onnx_model = load_model(os.path.join(WORKING_DIR, 'deepspeech.onnx'))
-        dummy_input = make_dummy_input(onnx_model)
-        sim = QuantizationSimModel(onnx_model, dummy_input, quant_scheme=QuantScheme.post_training_tf, default_param_bw=8,
-                                   default_activation_bw=8, use_cuda=True, config_file=config_file)
+            onnx_model = load_model(os.path.join(tmp_dir, 'deepspeech.onnx'))
+            dummy_input = make_dummy_input(onnx_model)
+            sim = QuantizationSimModel(onnx_model, dummy_input, quant_scheme=QuantScheme.post_training_tf, default_param_bw=8,
+                                    default_activation_bw=8, use_cuda=True, config_file=config_file)
 
-        def onnx_callback(session, iters):
-            for i, batch in enumerate(train_loader):
-                x = batch[0].detach().cpu().numpy()
-                in_tensor = {'input': x}
-                session.run(None, in_tensor)
-                print(i, '/', iters)
-                if i+1 >= iters:
-                    break
+            def onnx_callback(session, iters):
+                for i, batch in enumerate(train_loader):
+                    x = batch[0].detach().cpu().numpy()
+                    in_tensor = {'input': x}
+                    session.run(None, in_tensor)
+                    print(i, '/', iters)
+                    if i+1 >= iters:
+                        break
 
-        sim.compute_encodings(onnx_callback, 1)
+            sim.compute_encodings(onnx_callback, 1)
 
-        onnx_qs_test_loss = model_eval_onnx(sim.session, val_loader, max_batches=1)
+            onnx_qs_test_loss = model_eval_onnx(sim.session, val_loader, max_batches=1)
 
-        assert onnx_qs_test_loss < 0.1
+            assert onnx_qs_test_loss < 0.1

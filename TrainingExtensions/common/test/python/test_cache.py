@@ -35,9 +35,8 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-import os
-import shutil
 import random
+import tempfile
 from typing import Callable
 
 import numpy as np
@@ -61,11 +60,7 @@ def _test_cache(fn,
     if not assert_equal_fn:
         assert_equal_fn = _assert_equal_default
 
-    cache_dir = "/tmp/test_dir"
-    if os.path.exists(cache_dir):
-        shutil.rmtree(cache_dir)
-
-    try:
+    with tempfile.TemporaryDirectory() as cache_dir:
         cache = Cache()
 
         call_count = 0
@@ -84,9 +79,6 @@ def _test_cache(fn,
 
         assert_equal_fn(ret, _ret)
         assert call_count == 1
-    finally:
-        if os.path.exists(cache_dir):
-            shutil.rmtree(cache_dir)
 
 
 def test_cache_number():

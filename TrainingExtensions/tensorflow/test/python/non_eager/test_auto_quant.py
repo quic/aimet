@@ -41,7 +41,6 @@ from dataclasses import dataclass
 from unittest.mock import patch, MagicMock
 import os
 import pytest
-import shutil
 from typing import Callable
 import tensorflow as tf
 

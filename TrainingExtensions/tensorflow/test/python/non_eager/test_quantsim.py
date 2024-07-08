@@ -36,6 +36,8 @@
 
 import shutil
 import os
+import tempfile
+from pathlib import Path
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import time
 import numpy as np
@@ -232,9 +234,10 @@ class TestQuantSim(unittest.TestCase):
         conv2d_weight_quant_op = sim.session.graph.get_operation_by_name('conv2d_transpose/conv2d_transpose/ReadVariableOp_quantized')
         assert int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize) == sim.session.run(conv2d_weight_quant_op.inputs[1])
 
-        sim.export('/tmp', 'quant_sim_model')
-        with open('/tmp/quant_sim_model.encodings') as json_file:
-            encoding_data = json.load(json_file)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, 'quant_sim_model')
+            with open(Path(tmp_dir, "quant_sim_model.encodings")) as json_file:
+                encoding_data = json.load(json_file)
 
         param_keys = list(encoding_data["param_encodings"].keys())
         assert param_keys[0] == "conv2d_transpose/conv2d_transpose/ReadVariableOp:0"
@@ -289,10 +292,11 @@ class TestQuantSim(unittest.TestCase):
                 self.assertTrue(int(libpymo.TensorQuantizerOpMode.quantizeDequantize),
                                 sim.session.run(name + op_mode_name_suffix))
 
-        sim.export('/tmp', 'quant_sim_model_fp16')
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, 'quant_sim_model_fp16')
 
-        with open('/tmp/quant_sim_model_fp16.encodings') as json_file:
-            encoding_data = json.load(json_file)
+            with open(Path(tmp_dir, "quant_sim_model_fp16.encodings")) as json_file:
+                encoding_data = json.load(json_file)
 
         generated_encoding_version = encoding_data["version"]
         self.assertEqual(encoding_version, generated_encoding_version)
@@ -790,9 +794,10 @@ class TestQuantSim(unittest.TestCase):
                                    quant_scheme=QuantScheme.post_training_tf_enhanced, default_output_bw=16,
                                    default_param_bw=4)
 
-        sim.export('/tmp', 'quant_sim_with_quantizer_args')
-        with open('/tmp/quant_sim_with_quantizer_args.encodings') as json_file:
-             encoding_data = json.load(json_file)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, 'quant_sim_with_quantizer_args')
+            with open(Path(tmp_dir, "quant_sim_with_quantizer_args.encodings")) as json_file:
+                encoding_data = json.load(json_file)
 
         assert "quantizer_args" in encoding_data
         quantizer_args = encoding_data["quantizer_args"]
@@ -839,39 +844,41 @@ class TestQuantSim(unittest.TestCase):
         all_op_types = [op.type for op in sim.session.graph.get_operations()]
         self.assertIn('QcQuantize', all_op_types)
 
-        sim.export('/tmp', 'quant_sim_model')
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, 'quant_sim_model')
 
-        with open('/tmp/quant_sim_model.encodings') as json_file:
-            encoding_data = json.load(json_file)
-        activation_keys = list(encoding_data["activation_encodings"].keys())
-        self.assertTrue(activation_keys[0] == "conv2d/Relu:0")
-        self.assertTrue(isinstance(encoding_data["activation_encodings"]["conv2d/Relu:0"], list))
-        act_encoding_keys = encoding_data["activation_encodings"]["conv2d/Relu:0"][0].keys()
-        self.assertTrue("bitwidth" in act_encoding_keys)
-        self.assertTrue("is_symmetric" in act_encoding_keys)
-        self.assertTrue("max" in act_encoding_keys)
-        self.assertTrue("min" in act_encoding_keys)
-        self.assertTrue("offset" in act_encoding_keys)
-        self.assertTrue("scale" in act_encoding_keys)
+            with open(Path(tmp_dir, "quant_sim_model.encodings")) as json_file:
+                encoding_data = json.load(json_file)
 
-        param_keys = list(encoding_data["param_encodings"].keys())
-        self.assertTrue(param_keys[0] == "conv2d/Conv2D/ReadVariableOp:0")
-        self.assertTrue(isinstance(encoding_data["param_encodings"]["conv2d/Conv2D/ReadVariableOp:0"], list))
-        param_encoding_keys = encoding_data["param_encodings"]["conv2d/Conv2D/ReadVariableOp:0"][0].keys()
-        self.assertTrue("bitwidth" in param_encoding_keys)
-        self.assertTrue("is_symmetric" in param_encoding_keys)
-        self.assertTrue("max" in param_encoding_keys)
-        self.assertTrue("min" in param_encoding_keys)
-        self.assertTrue("offset" in param_encoding_keys)
-        self.assertTrue("scale" in param_encoding_keys)
+            activation_keys = list(encoding_data["activation_encodings"].keys())
+            self.assertTrue(activation_keys[0] == "conv2d/Relu:0")
+            self.assertTrue(isinstance(encoding_data["activation_encodings"]["conv2d/Relu:0"], list))
+            act_encoding_keys = encoding_data["activation_encodings"]["conv2d/Relu:0"][0].keys()
+            self.assertTrue("bitwidth" in act_encoding_keys)
+            self.assertTrue("is_symmetric" in act_encoding_keys)
+            self.assertTrue("max" in act_encoding_keys)
+            self.assertTrue("min" in act_encoding_keys)
+            self.assertTrue("offset" in act_encoding_keys)
+            self.assertTrue("scale" in act_encoding_keys)
 
-        new_sess = load_model_from_meta('/tmp/quant_sim_model.meta')
-        first_bias_tensor = new_sess.graph.get_tensor_by_name('conv2d/BiasAdd/ReadVariableOp:0')
-        first_bias_tensor_val = new_sess.run(first_bias_tensor)
-        self.assertTrue(np.any(first_bias_tensor_val == 1))
+            param_keys = list(encoding_data["param_encodings"].keys())
+            self.assertTrue(param_keys[0] == "conv2d/Conv2D/ReadVariableOp:0")
+            self.assertTrue(isinstance(encoding_data["param_encodings"]["conv2d/Conv2D/ReadVariableOp:0"], list))
+            param_encoding_keys = encoding_data["param_encodings"]["conv2d/Conv2D/ReadVariableOp:0"][0].keys()
+            self.assertTrue("bitwidth" in param_encoding_keys)
+            self.assertTrue("is_symmetric" in param_encoding_keys)
+            self.assertTrue("max" in param_encoding_keys)
+            self.assertTrue("min" in param_encoding_keys)
+            self.assertTrue("offset" in param_encoding_keys)
+            self.assertTrue("scale" in param_encoding_keys)
 
-        all_op_types = [op.type for op in new_sess.graph.get_operations()]
-        self.assertNotIn('QcQuantize', all_op_types)
+            new_sess = load_model_from_meta(str(Path(tmp_dir, "quant_sim_model.meta")))
+            first_bias_tensor = new_sess.graph.get_tensor_by_name('conv2d/BiasAdd/ReadVariableOp:0')
+            first_bias_tensor_val = new_sess.run(first_bias_tensor)
+            self.assertTrue(np.any(first_bias_tensor_val == 1))
+
+            all_op_types = [op.type for op in new_sess.graph.get_operations()]
+            self.assertNotIn('QcQuantize', all_op_types)
         sess.close()
         sim.session.close()
         del sim
@@ -1592,63 +1599,65 @@ class TestQuantSim(unittest.TestCase):
             model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
             model.summary()
 
-        sess = tf.compat.v1.Session()
-        initialize_uninitialized_vars(sess)
-        # Make some changes to model parameters to see if they are part of the exported model
-        with sess.graph.as_default():
-            first_conv_tensor_var = [var for var in tf.compat.v1.global_variables() if var.name == 'conv2d/kernel:0'][0]
-            first_conv_tensor_var.load(np.ones([3,3,3,32]), sess)
-            saver = tf.compat.v1.train.Saver()
-        saver.save(sess, save_path='/tmp/quantsim/'+'orig_model_before_quantsim')
-        sim = QuantizationSimModel(sess, [model.input.op.name], [model.output.op.name], use_cuda=False)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sess = tf.compat.v1.Session()
+            initialize_uninitialized_vars(sess)
+            # Make some changes to model parameters to see if they are part of the exported model
+            with sess.graph.as_default():
+                first_conv_tensor_var = [var for var in tf.compat.v1.global_variables() if var.name == 'conv2d/kernel:0'][0]
+                first_conv_tensor_var.load(np.ones([3,3,3,32]), sess)
+                saver = tf.compat.v1.train.Saver()
+            saver.save(sess, save_path=os.path.join(tmp_dir, "quantsim", "orig_model_before_quantsim"))
+            sim = QuantizationSimModel(sess, [model.input.op.name], [model.output.op.name], use_cuda=False)
 
-        def dummy_forward_pass(sess, args):
-            model_output = sess.graph.get_tensor_by_name(model.output.name)
-            model_output = model_output.consumers()[0].outputs[0]
-            model_input = sess.graph.get_tensor_by_name(model.input.name)
-            dummy_input = np.random.randn(20, 28, 28, 3)
-            sess.run(model_output, feed_dict={model_input: dummy_input})
+            def dummy_forward_pass(sess, args):
+                model_output = sess.graph.get_tensor_by_name(model.output.name)
+                model_output = model_output.consumers()[0].outputs[0]
+                model_input = sess.graph.get_tensor_by_name(model.input.name)
+                dummy_input = np.random.randn(20, 28, 28, 3)
+                sess.run(model_output, feed_dict={model_input: dummy_input})
 
-        sim.compute_encodings(dummy_forward_pass, None)
-        encoding = libpymo.TfEncoding()
-        encoding.bw = 8
-        encoding.max = 1.0
-        sim._param_quantizers['conv2d/Conv2D/ReadVariableOp_quantized'].set_encoding(encoding)
+            sim.compute_encodings(dummy_forward_pass, None)
+            encoding = libpymo.TfEncoding()
+            encoding.bw = 8
+            encoding.max = 1.0
+            sim._param_quantizers['conv2d/Conv2D/ReadVariableOp_quantized'].set_encoding(encoding)
 
-        all_op_types = [op.type for op in sim.session.graph.get_operations()]
-        self.assertIn('QcQuantize', all_op_types)
-        self.assertNotIn('FakeQuantWithMinMaxVars', all_op_types)
+            all_op_types = [op.type for op in sim.session.graph.get_operations()]
+            self.assertIn('QcQuantize', all_op_types)
+            self.assertNotIn('FakeQuantWithMinMaxVars', all_op_types)
 
-        # Save model without encodings file
-        sim.save_model_with_embedded_quantization_nodes(os.path.join('/tmp', 'tf_fakequant_model'))
+            # Save model without encodings file
+            sim.save_model_with_embedded_quantization_nodes(os.path.join(tmp_dir, 'tf_fakequant_model'))
 
-        new_sess = load_model_from_meta('/tmp/tf_fakequant_model_embedded_quant_nodes.meta')
-        first_conv_tensor = new_sess.graph.get_tensor_by_name('conv2d/Conv2D/ReadVariableOp:0')
-        first_conv_tensor_val = new_sess.run(first_conv_tensor)
-        self.assertTrue(np.any(first_conv_tensor_val == 1))
-        first_conv_tensor_fakequant_max_tensor = new_sess.graph.get_tensor_by_name('conv2d/Conv2D/ReadVariableOp_quantized/max:0')
-        first_conv_tensor_fakequant_max_val = new_sess.run(first_conv_tensor_fakequant_max_tensor)
-        self.assertTrue(first_conv_tensor_fakequant_max_val == 1)
+            new_sess = load_model_from_meta(os.path.join(tmp_dir, 'tf_fakequant_model_embedded_quant_nodes.meta'))
+            first_conv_tensor = new_sess.graph.get_tensor_by_name('conv2d/Conv2D/ReadVariableOp:0')
+            first_conv_tensor_val = new_sess.run(first_conv_tensor)
+            self.assertTrue(np.any(first_conv_tensor_val == 1))
+            first_conv_tensor_fakequant_max_tensor = new_sess.graph.get_tensor_by_name('conv2d/Conv2D/ReadVariableOp_quantized/max:0')
+            first_conv_tensor_fakequant_max_val = new_sess.run(first_conv_tensor_fakequant_max_tensor)
+            self.assertTrue(first_conv_tensor_fakequant_max_val == 1)
 
-        all_op_types = [op.type for op in new_sess.graph.get_operations()]
-        self.assertNotIn('QcQuantize', all_op_types)
-        self.assertIn('FakeQuantWithMinMaxVars', all_op_types)
+            all_op_types = [op.type for op in new_sess.graph.get_operations()]
+            self.assertNotIn('QcQuantize', all_op_types)
+            self.assertIn('FakeQuantWithMinMaxVars', all_op_types)
 
-        # Save model with encodings file
-        sim._export_encodings('/tmp/tf_fakequant_model.encodings')
-        sim.save_model_with_embedded_quantization_nodes(os.path.join('/tmp', 'tf_fakequant_model'), '/tmp/tf_fakequant_model.encodings')
+            # Save model with encodings file
+            sim._export_encodings(os.path.join(tmp_dir, 'tf_fakequant_model.encodings'))
+            sim.save_model_with_embedded_quantization_nodes(os.path.join(tmp_dir, 'tf_fakequant_model'), os.path.join(tmp_dir, 'tf_fakequant_model.encodings'))
 
-        new_sess = load_model_from_meta('/tmp/tf_fakequant_model_embedded_quant_nodes.meta')
-        first_conv_tensor = new_sess.graph.get_tensor_by_name('conv2d/Conv2D/ReadVariableOp:0')
-        first_conv_tensor_val = new_sess.run(first_conv_tensor)
-        self.assertTrue(np.any(first_conv_tensor_val == 1))
-        first_conv_tensor_fakequant_max_tensor = new_sess.graph.get_tensor_by_name('conv2d/Conv2D/ReadVariableOp_quantized/max:0')
-        first_conv_tensor_fakequant_max_val = new_sess.run(first_conv_tensor_fakequant_max_tensor)
-        self.assertTrue(first_conv_tensor_fakequant_max_val == 1)
+            new_sess = load_model_from_meta(os.path.join(tmp_dir, 'tf_fakequant_model_embedded_quant_nodes.meta'))
+            first_conv_tensor = new_sess.graph.get_tensor_by_name('conv2d/Conv2D/ReadVariableOp:0')
+            first_conv_tensor_val = new_sess.run(first_conv_tensor)
+            self.assertTrue(np.any(first_conv_tensor_val == 1))
+            first_conv_tensor_fakequant_max_tensor = new_sess.graph.get_tensor_by_name('conv2d/Conv2D/ReadVariableOp_quantized/max:0')
+            first_conv_tensor_fakequant_max_val = new_sess.run(first_conv_tensor_fakequant_max_tensor)
+            self.assertTrue(first_conv_tensor_fakequant_max_val == 1)
 
-        all_op_types = [op.type for op in new_sess.graph.get_operations()]
-        self.assertNotIn('QcQuantize', all_op_types)
-        self.assertIn('FakeQuantWithMinMaxVars', all_op_types)
+            all_op_types = [op.type for op in new_sess.graph.get_operations()]
+            self.assertNotIn('QcQuantize', all_op_types)
+            self.assertIn('FakeQuantWithMinMaxVars', all_op_types)
+
         sess.close()
         sim.session.close()
         new_sess.close()
@@ -1888,7 +1897,8 @@ class TestQuantSim(unittest.TestCase):
                 if v.enabled and v.data_type == QuantizationDataType.int:
                     baseline_encodings[k] = v.get_encoding()
 
-            sim.export('/tmp', 'quant_sim_model')
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                sim.export(tmp_dir, 'quant_sim_model')
             after_sim_export_output = sim.session.run(logits, feed_dict={inp_tensor: inp_data})
 
             after_sim_export_encodings = {}
@@ -2542,7 +2552,8 @@ class TestQuantSimRangeLearning:
 
 
             baseline = sim.session.run(logits, feed_dict={inp_tensor: inp_data})
-            sim.export('/tmp', 'quant_sim_model')
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                sim.export(tmp_dir, 'quant_sim_model')
             after_sim_export = sim.session.run(logits, feed_dict={inp_tensor: inp_data})
             assert np.allclose(baseline, after_sim_export)
 
@@ -2599,30 +2610,31 @@ class TestQuantSimRangeLearning:
             # post_training scheme doesn't calibrate min value. encoding_min == -encoding_max - delta
             assert initialized_encoding_min != -initialized_encoding_max
 
-        sim.export("/tmp/", "quant_sim_model")
-        with open("/tmp/quant_sim_model.encodings") as json_file:
-            encoding_data = json.load(json_file)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, "quant_sim_model")
+            with open(Path(tmp_dir, "quant_sim_model.encodings")) as json_file:
+                encoding_data = json.load(json_file)
 
-            param_encodings = encoding_data["param_encodings"]
-            for encodings in param_encodings.values():
-                for encoding_info in encodings:
-                    encoding_min = encoding_info["min"]
-                    encoding_max = encoding_info["max"]
-                    scale = encoding_info["scale"]
-                    offset = encoding_info["offset"]
+                param_encodings = encoding_data["param_encodings"]
+                for encodings in param_encodings.values():
+                    for encoding_info in encodings:
+                        encoding_min = encoding_info["min"]
+                        encoding_max = encoding_info["max"]
+                        scale = encoding_info["scale"]
+                        offset = encoding_info["offset"]
 
-                    # Default HTP config is non-strict symmetric when parameter quantization
-                    # Non-strict symmetric should have
-                    # encoding_min == -encoding_max - scale (one more bin)
-                    # offset as -128
-                    if quant_scheme in RANGE_LEARNING_SCHEMES:
-                        assert encoding_min == -encoding_max - scale
-                    else:
-                        # In post training scheme case, it doesn't seem to match exactly due to floating point arithmetic
-                        assert np.isclose(encoding_min, -encoding_max - scale)
-                    assert offset == -128
-                    assert np.isclose(encoding_min, scale * offset, atol=1e-6)
-                    assert np.isclose(encoding_max, encoding_min + scale * 255, atol=1e-6)
+                        # Default HTP config is non-strict symmetric when parameter quantization
+                        # Non-strict symmetric should have
+                        # encoding_min == -encoding_max - scale (one more bin)
+                        # offset as -128
+                        if quant_scheme in RANGE_LEARNING_SCHEMES:
+                            assert encoding_min == -encoding_max - scale
+                        else:
+                            # In post training scheme case, it doesn't seem to match exactly due to floating point arithmetic
+                            assert np.isclose(encoding_min, -encoding_max - scale)
+                        assert offset == -128
+                        assert np.isclose(encoding_min, scale * offset, atol=1e-6)
+                        assert np.isclose(encoding_max, encoding_min + scale * 255, atol=1e-6)
 
     @pytest.mark.cuda
     @pytest.mark.parametrize(
@@ -2703,27 +2715,28 @@ class TestQuantSimRangeLearning:
             # post_training scheme doesn't calibrate min value. encoding_min == -encoding_max - delta
             assert not all(initialized_encoding_min == -initialized_encoding_max)
 
-        sim.export("/tmp/", "quant_sim_model")
-        with open("/tmp/quant_sim_model.encodings") as json_file:
-            encoding_data = json.load(json_file)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, "quant_sim_model")
+            with open(Path(tmp_dir, "quant_sim_model.encodings")) as json_file:
+                encoding_data = json.load(json_file)
 
-            param_encodings = encoding_data["param_encodings"]
-            for encodings in param_encodings.values():
-                for encoding_info in encodings:
-                    encoding_min = encoding_info["min"]
-                    encoding_max = encoding_info["max"]
-                    scale = encoding_info["scale"]
-                    offset = encoding_info["offset"]
+                param_encodings = encoding_data["param_encodings"]
+                for encodings in param_encodings.values():
+                    for encoding_info in encodings:
+                        encoding_min = encoding_info["min"]
+                        encoding_max = encoding_info["max"]
+                        scale = encoding_info["scale"]
+                        offset = encoding_info["offset"]
 
-                    # Default HTP config is non-strict symmetric when parameter quantization
-                    # Non-strict symmetric should have
-                    # encoding_min == -encoding_max - scale (one more bin)
-                    # offset as -128
-                    if quant_scheme in RANGE_LEARNING_SCHEMES:
-                        assert encoding_min == -encoding_max - scale
-                    else:
-                        # In post training scheme case, it doesn't seem to match exactly due to floating point arithmetic
-                        assert np.isclose(encoding_min, -encoding_max - scale)
-                    assert offset == -128
-                    assert np.isclose(encoding_min, scale * offset, atol=1e-6)
-                    assert np.isclose(encoding_max, encoding_min + scale * 255, atol=1e-6)
+                        # Default HTP config is non-strict symmetric when parameter quantization
+                        # Non-strict symmetric should have
+                        # encoding_min == -encoding_max - scale (one more bin)
+                        # offset as -128
+                        if quant_scheme in RANGE_LEARNING_SCHEMES:
+                            assert encoding_min == -encoding_max - scale
+                        else:
+                            # In post training scheme case, it doesn't seem to match exactly due to floating point arithmetic
+                            assert np.isclose(encoding_min, -encoding_max - scale)
+                        assert offset == -128
+                        assert np.isclose(encoding_min, scale * offset, atol=1e-6)
+                        assert np.isclose(encoding_max, encoding_min + scale * 255, atol=1e-6)
