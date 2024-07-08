@@ -162,3 +162,10 @@ class TestConnectedGraph:
         model = models_for_tests.instance_norm_model()
         cg = ConnectedGraph(model)
         assert cg.ordered_ops[1].type == 'InstanceNormalization'
+
+    def test_layer_norm_model(self):
+        model = models_for_tests.layernorm_model()
+        cg = ConnectedGraph(model)
+        layernorm_cg_op = cg.ordered_ops[2]
+        assert layernorm_cg_op.type == 'LayerNormalization'
+        assert ['layernorm.scale', 'layernorm.bias'] == list(layernorm_cg_op.parameters.keys())

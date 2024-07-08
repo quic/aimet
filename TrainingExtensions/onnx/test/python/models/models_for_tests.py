@@ -35,7 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Models for use in unit testing """
-
+import onnx
 # pylint: skip-file
 from collections import namedtuple
 from typing import Dict, List
@@ -1967,3 +1967,62 @@ def weight_gemm_model(in_features, out_features, transposed_weight=False):
     return model
 
 
+def layernorm_model():
+    model = helper.make_model(
+        graph=helper.make_graph(
+            name='LayerNormModel',
+            inputs=[helper.make_tensor_value_info('model_input', TensorProto.FLOAT, shape=[1, 4, 64, 64])],
+            outputs=[helper.make_tensor_value_info('model_output', TensorProto.FLOAT, shape=[1, 32, 40960])],
+            initializer=[
+                numpy_helper.from_array(np.random.randn(320, 4, 3, 3).astype('float32'), name='conv_in.weight'),
+                numpy_helper.from_array(np.random.randn(320).astype('float32'), name='conv_in.bias'),
+                numpy_helper.from_array(np.random.randn(32).astype('float32'), name='layernorm.scale'),
+                numpy_helper.from_array(np.random.randn(32).astype('float32'), name='layernorm.bias'),
+            ],
+            value_info=[
+                helper.make_tensor_value_info('/conv_in/Conv_output_0', TensorProto.FLOAT, shape=[1, 320, 64, 64]),
+                helper.make_tensor_value_info('/down_blocks.0/resnets.0/norm1/Constant_output_0', TensorProto.INT64, shape=[3]),
+                helper.make_tensor_value_info('/down_blocks.0/resnets.0/norm1/Reshape_output_0', TensorProto.FLOAT, shape=[1, 32, 40960])
+            ],
+            nodes=[
+                helper.make_node(
+                    'Conv',
+                    inputs=['model_input', 'conv_in.weight', 'conv_in.bias'],
+                    outputs=['/conv_in/Conv_output_0'],
+                    name='/conv_in/Conv',
+                    doc_string='',
+                    dilations=[1, 1],
+                    group=1,
+                    kernel_shape=[3, 3],
+                    pads=[1, 1, 1, 1],
+                    strides=[1, 1],
+                ),
+                helper.make_node(
+                    'Constant',
+                    inputs=[],
+                    outputs=['/down_blocks.0/resnets.0/norm1/Constant_output_0'],
+                    name='/down_blocks.0/resnets.0/norm1/Constant',
+                    doc_string='',
+                    value=numpy_helper.from_array(np.array([0, 32, -1], dtype='int64'), name=''),
+                ),
+                helper.make_node(
+                    'Reshape',
+                    inputs=['/conv_in/Conv_output_0', '/down_blocks.0/resnets.0/norm1/Constant_output_0'],
+                    outputs=['/down_blocks.0/resnets.0/norm1/Reshape_output_0'],
+                    name='/down_blocks.0/resnets.0/norm1/Reshape',
+                    doc_string='',
+                    allowzero=0,
+                ),
+                helper.make_node(
+                    'LayerNormalization',
+                    inputs=['/down_blocks.0/resnets.0/norm1/Reshape_output_0', 'layernorm.scale', 'layernorm.bias'],
+                    outputs=['model_output'],
+                    name='/down_blocks.0/resnets.0/norm1/LayerNormalization',
+                    doc_string='',
+                    epsilon=9.999999747378752e-06,
+                ),
+            ],
+        ),
+    )
+
+    return model
