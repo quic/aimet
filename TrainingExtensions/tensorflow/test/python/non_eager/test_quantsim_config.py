@@ -39,6 +39,8 @@
 import json
 import os
 import pytest
+import tempfile
+from pathlib import Path
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import unittest
 import tensorflow as tf
@@ -968,51 +970,50 @@ class TestQuantsimConfig:
             "model_output": {}
         }
 
-        config_file = '/tmp/quantsim_config.json'
-        with open(config_file, 'w') as f:
-            json.dump(quantsim_config, f)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_file = Path(tmp_dir, "quantsim_config.json")
+            with open(config_file, 'w') as f:
+                json.dump(quantsim_config, f)
 
-        tf.compat.v1.reset_default_graph()
-        with tf.device('/cpu:0'):
-            model = tf.keras.Sequential()
-            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
-            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
-            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
-            model.summary()
+            tf.compat.v1.reset_default_graph()
+            with tf.device('/cpu:0'):
+                model = tf.keras.Sequential()
+                model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+                model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+                model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+                model.summary()
 
-        starting_op_names = [input.op.name for input in model.inputs]
-        output_op_names = [output.op.name for output in model.outputs]
+            starting_op_names = [input.op.name for input in model.inputs]
+            output_op_names = [output.op.name for output in model.outputs]
 
-        qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
+            qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
 
-        sess = tf.compat.v1.Session()
-        initialize_uninitialized_vars(sess)
+            sess = tf.compat.v1.Session()
+            initialize_uninitialized_vars(sess)
 
-        sim = QuantizationSimModel(sess, starting_op_names, output_op_names, default_data_type=QuantizationDataType.int,
-                                   default_output_bw=8, default_param_bw=8,
-                                   config_file=config_file)
+            sim = QuantizationSimModel(sess, starting_op_names, output_op_names, default_data_type=QuantizationDataType.int,
+                                    default_output_bw=8, default_param_bw=8,
+                                    config_file=config_file)
 
-        conv2d_weight_quantizer = 'conv2d/Conv2D/ReadVariableOp_quantized'
-        assert sim._param_quantizers[conv2d_weight_quantizer].enabled
-        assert sim._param_quantizers[conv2d_weight_quantizer].bitwidth == 8
-        assert sim._param_quantizers[conv2d_weight_quantizer].data_type == QuantizationDataType.int
-        conv2d_bias_quantizer = 'conv2d/BiasAdd/ReadVariableOp_quantized'
-        assert not sim._param_quantizers[conv2d_bias_quantizer].enabled
-        assert sim._param_quantizers[conv2d_bias_quantizer].bitwidth == 8
-        assert sim._param_quantizers[conv2d_bias_quantizer].data_type == QuantizationDataType.int
-        conv2d_output_quantizer = 'conv2d/Relu_quantized'
-        assert sim._activation_quantizers[conv2d_output_quantizer].enabled
-        assert sim._activation_quantizers[conv2d_output_quantizer].bitwidth == 8
-        assert sim._activation_quantizers[conv2d_output_quantizer].data_type == QuantizationDataType.int
-        max_pooling_output_quantizer = 'max_pooling2d/MaxPool_quantized'
-        assert sim._activation_quantizers[max_pooling_output_quantizer].enabled
-        assert sim._activation_quantizers[max_pooling_output_quantizer].bitwidth == 8
-        assert sim._activation_quantizers[max_pooling_output_quantizer].data_type == QuantizationDataType.int
+            conv2d_weight_quantizer = 'conv2d/Conv2D/ReadVariableOp_quantized'
+            assert sim._param_quantizers[conv2d_weight_quantizer].enabled
+            assert sim._param_quantizers[conv2d_weight_quantizer].bitwidth == 8
+            assert sim._param_quantizers[conv2d_weight_quantizer].data_type == QuantizationDataType.int
+            conv2d_bias_quantizer = 'conv2d/BiasAdd/ReadVariableOp_quantized'
+            assert not sim._param_quantizers[conv2d_bias_quantizer].enabled
+            assert sim._param_quantizers[conv2d_bias_quantizer].bitwidth == 8
+            assert sim._param_quantizers[conv2d_bias_quantizer].data_type == QuantizationDataType.int
+            conv2d_output_quantizer = 'conv2d/Relu_quantized'
+            assert sim._activation_quantizers[conv2d_output_quantizer].enabled
+            assert sim._activation_quantizers[conv2d_output_quantizer].bitwidth == 8
+            assert sim._activation_quantizers[conv2d_output_quantizer].data_type == QuantizationDataType.int
+            max_pooling_output_quantizer = 'max_pooling2d/MaxPool_quantized'
+            assert sim._activation_quantizers[max_pooling_output_quantizer].enabled
+            assert sim._activation_quantizers[max_pooling_output_quantizer].bitwidth == 8
+            assert sim._activation_quantizers[max_pooling_output_quantizer].data_type == QuantizationDataType.int
 
-        # remove test config created
-        qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
-        if os.path.exists(config_file):
-            os.remove(config_file)
+            # remove test config created
+            qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
 
     def test_default_quantsim_config_in_default_config_file_enforce_true(self):
         """
@@ -1104,51 +1105,50 @@ class TestQuantsimConfig:
             "model_output": {}
         }
 
-        config_file = '/tmp/quantsim_config.json'
-        with open(config_file, 'w') as f:
-            json.dump(quantsim_config, f)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_file = Path(tmp_dir, "quantsim_config.json")
+            with open(config_file, 'w') as f:
+                json.dump(quantsim_config, f)
 
-        tf.compat.v1.reset_default_graph()
-        with tf.device('/cpu:0'):
-            model = tf.keras.Sequential()
-            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
-            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
-            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
-            model.summary()
+            tf.compat.v1.reset_default_graph()
+            with tf.device('/cpu:0'):
+                model = tf.keras.Sequential()
+                model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+                model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+                model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+                model.summary()
 
-        starting_op_names = [input.op.name for input in model.inputs]
-        output_op_names = [output.op.name for output in model.outputs]
+            starting_op_names = [input.op.name for input in model.inputs]
+            output_op_names = [output.op.name for output in model.outputs]
 
-        qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = True
+            qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = True
 
-        sess = tf.compat.v1.Session()
-        initialize_uninitialized_vars(sess)
+            sess = tf.compat.v1.Session()
+            initialize_uninitialized_vars(sess)
 
-        sim = QuantizationSimModel(sess, starting_op_names, output_op_names, default_data_type=QuantizationDataType.int,
-                                   default_output_bw=8, default_param_bw=8,
-                                   config_file=config_file)
+            sim = QuantizationSimModel(sess, starting_op_names, output_op_names, default_data_type=QuantizationDataType.int,
+                                    default_output_bw=8, default_param_bw=8,
+                                    config_file=config_file)
 
-        conv2d_weight_quantizer = 'conv2d/Conv2D/ReadVariableOp_quantized'
-        assert sim._param_quantizers[conv2d_weight_quantizer].enabled
-        assert sim._param_quantizers[conv2d_weight_quantizer].bitwidth == 16
-        assert sim._param_quantizers[conv2d_weight_quantizer].data_type == QuantizationDataType.float
-        conv2d_bias_quantizer = 'conv2d/BiasAdd/ReadVariableOp_quantized'
-        assert not sim._param_quantizers[conv2d_bias_quantizer].enabled
-        assert sim._param_quantizers[conv2d_bias_quantizer].bitwidth == 16
-        assert sim._param_quantizers[conv2d_bias_quantizer].data_type == QuantizationDataType.float
-        conv2d_output_quantizer = 'conv2d/Relu_quantized'
-        assert sim._activation_quantizers[conv2d_output_quantizer].enabled
-        assert sim._activation_quantizers[conv2d_output_quantizer].bitwidth == 16
-        assert sim._activation_quantizers[conv2d_output_quantizer].data_type == QuantizationDataType.float
-        max_pooling_output_quantizer = 'max_pooling2d/MaxPool_quantized'
-        assert sim._activation_quantizers[max_pooling_output_quantizer].enabled
-        assert sim._activation_quantizers[max_pooling_output_quantizer].bitwidth == 16
-        assert sim._activation_quantizers[max_pooling_output_quantizer].data_type == QuantizationDataType.float
+            conv2d_weight_quantizer = 'conv2d/Conv2D/ReadVariableOp_quantized'
+            assert sim._param_quantizers[conv2d_weight_quantizer].enabled
+            assert sim._param_quantizers[conv2d_weight_quantizer].bitwidth == 16
+            assert sim._param_quantizers[conv2d_weight_quantizer].data_type == QuantizationDataType.float
+            conv2d_bias_quantizer = 'conv2d/BiasAdd/ReadVariableOp_quantized'
+            assert not sim._param_quantizers[conv2d_bias_quantizer].enabled
+            assert sim._param_quantizers[conv2d_bias_quantizer].bitwidth == 16
+            assert sim._param_quantizers[conv2d_bias_quantizer].data_type == QuantizationDataType.float
+            conv2d_output_quantizer = 'conv2d/Relu_quantized'
+            assert sim._activation_quantizers[conv2d_output_quantizer].enabled
+            assert sim._activation_quantizers[conv2d_output_quantizer].bitwidth == 16
+            assert sim._activation_quantizers[conv2d_output_quantizer].data_type == QuantizationDataType.float
+            max_pooling_output_quantizer = 'max_pooling2d/MaxPool_quantized'
+            assert sim._activation_quantizers[max_pooling_output_quantizer].enabled
+            assert sim._activation_quantizers[max_pooling_output_quantizer].bitwidth == 16
+            assert sim._activation_quantizers[max_pooling_output_quantizer].data_type == QuantizationDataType.float
 
-        # remove test config created
-        qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
-        if os.path.exists(config_file):
-            os.remove(config_file)
+            # remove test config created
+            qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
 
     def test_check_correctness_of_dtype_bw_rules_valid_case(self):
         """
@@ -1227,37 +1227,34 @@ class TestQuantsimConfig:
             "model_output": {}
         }
 
-        config_file = '/tmp/quantsim_config.json'
-        with open(config_file, 'w') as f:
-            json.dump(quantsim_config, f)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_file = Path(tmp_dir, "quantsim_config.json")
+            with open(config_file, 'w') as f:
+                json.dump(quantsim_config, f)
 
-        tf.compat.v1.reset_default_graph()
-        with tf.device('/cpu:0'):
-            model = tf.keras.Sequential()
-            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
-            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
-            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
-            model.summary()
+            tf.compat.v1.reset_default_graph()
+            with tf.device('/cpu:0'):
+                model = tf.keras.Sequential()
+                model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+                model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+                model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+                model.summary()
 
-        sess = tf.compat.v1.Session()
+            sess = tf.compat.v1.Session()
 
-        starting_op_names = [input.op.name for input in model.inputs]
-        output_op_names = [output.op.name for output in model.outputs]
-        connected_graph = ConnectedGraph(sess.graph, starting_op_names, output_op_names)
+            starting_op_names = [input.op.name for input in model.inputs]
+            output_op_names = [output.op.name for output in model.outputs]
+            connected_graph = ConnectedGraph(sess.graph, starting_op_names, output_op_names)
 
-        qsim_config = QuantSimConfigurator(sess.graph, connected_graph, config_file,
-                                           quantsim_output_bw=8, quantsim_param_bw=8,
-                                           quantsim_data_type=QuantizationDataType.int)
+            qsim_config = QuantSimConfigurator(sess.graph, connected_graph, config_file,
+                                            quantsim_output_bw=8, quantsim_param_bw=8,
+                                            quantsim_data_type=QuantizationDataType.int)
 
-        qsim_dtype_bw = QuantDtypeBwInfo(act_dtype=QuantizationDataType.int,
-                                         act_bw=8,
-                                         param_dtype=QuantizationDataType.int,
-                                         param_bw=8)
-        assert qsim_config.check_correctness_of_dtype_bw_rules(qsim_dtype_bw)
-
-        # remove test config created
-        if os.path.exists(config_file):
-            os.remove(config_file)
+            qsim_dtype_bw = QuantDtypeBwInfo(act_dtype=QuantizationDataType.int,
+                                            act_bw=8,
+                                            param_dtype=QuantizationDataType.int,
+                                            param_bw=8)
+            assert qsim_config.check_correctness_of_dtype_bw_rules(qsim_dtype_bw)
 
     def test_target_rule_enforced_apply_default_and_op_level_overrides_valid_case(self):
         """
@@ -1349,55 +1346,54 @@ class TestQuantsimConfig:
             "model_output": {}
         }
 
-        config_file = '/tmp/quantsim_config.json'
-        with open(config_file, 'w') as f:
-            json.dump(quantsim_config, f)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_file = Path(tmp_dir, "quantsim_config.json")
+            with open(config_file, 'w') as f:
+                json.dump(quantsim_config, f)
 
-        tf.compat.v1.reset_default_graph()
-        with tf.device('/cpu:0'):
-            model = tf.keras.Sequential()
-            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
-            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
-            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
-            model.summary()
+            tf.compat.v1.reset_default_graph()
+            with tf.device('/cpu:0'):
+                model = tf.keras.Sequential()
+                model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+                model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+                model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+                model.summary()
 
-        starting_op_names = [input.op.name for input in model.inputs]
-        output_op_names = [output.op.name for output in model.outputs]
+            starting_op_names = [input.op.name for input in model.inputs]
+            output_op_names = [output.op.name for output in model.outputs]
 
-        qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = True
+            qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = True
 
-        sess = tf.compat.v1.Session()
-        initialize_uninitialized_vars(sess)
+            sess = tf.compat.v1.Session()
+            initialize_uninitialized_vars(sess)
 
-        sim = QuantizationSimModel(sess, starting_op_names, output_op_names, default_data_type=QuantizationDataType.int,
-                                   default_output_bw=4, default_param_bw=4,
-                                   config_file=config_file)
+            sim = QuantizationSimModel(sess, starting_op_names, output_op_names, default_data_type=QuantizationDataType.int,
+                                    default_output_bw=4, default_param_bw=4,
+                                    config_file=config_file)
 
-        # enforce is set to true
-        # default supported kernels at index DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX (=0 in this case)
-        # is not same as default quantsim bw and dtype(int 4/int4), apply default overrides (int8/ int8).
+            # enforce is set to true
+            # default supported kernels at index DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX (=0 in this case)
+            # is not same as default quantsim bw and dtype(int 4/int4), apply default overrides (int8/ int8).
 
-        conv2d_weight_quantizer = 'conv2d/Conv2D/ReadVariableOp_quantized'
-        assert sim._param_quantizers[conv2d_weight_quantizer].enabled
-        assert sim._param_quantizers[conv2d_weight_quantizer].bitwidth == 16
-        assert sim._param_quantizers[conv2d_weight_quantizer].data_type == QuantizationDataType.float
-        conv2d_bias_quantizer = 'conv2d/BiasAdd/ReadVariableOp_quantized'
-        assert not sim._param_quantizers[conv2d_bias_quantizer].enabled
-        assert sim._param_quantizers[conv2d_bias_quantizer].bitwidth == 16
-        assert sim._param_quantizers[conv2d_bias_quantizer].data_type == QuantizationDataType.float
-        conv2d_output_quantizer = 'conv2d/Relu_quantized'
-        assert sim._activation_quantizers[conv2d_output_quantizer].enabled
-        assert sim._activation_quantizers[conv2d_output_quantizer].bitwidth == 8
-        assert sim._activation_quantizers[conv2d_output_quantizer].data_type == QuantizationDataType.int
-        max_pooling_output_quantizer = 'max_pooling2d/MaxPool_quantized'
-        assert sim._activation_quantizers[max_pooling_output_quantizer].enabled
-        assert sim._activation_quantizers[max_pooling_output_quantizer].bitwidth == 8
-        assert sim._activation_quantizers[max_pooling_output_quantizer].data_type == QuantizationDataType.int
+            conv2d_weight_quantizer = 'conv2d/Conv2D/ReadVariableOp_quantized'
+            assert sim._param_quantizers[conv2d_weight_quantizer].enabled
+            assert sim._param_quantizers[conv2d_weight_quantizer].bitwidth == 16
+            assert sim._param_quantizers[conv2d_weight_quantizer].data_type == QuantizationDataType.float
+            conv2d_bias_quantizer = 'conv2d/BiasAdd/ReadVariableOp_quantized'
+            assert not sim._param_quantizers[conv2d_bias_quantizer].enabled
+            assert sim._param_quantizers[conv2d_bias_quantizer].bitwidth == 16
+            assert sim._param_quantizers[conv2d_bias_quantizer].data_type == QuantizationDataType.float
+            conv2d_output_quantizer = 'conv2d/Relu_quantized'
+            assert sim._activation_quantizers[conv2d_output_quantizer].enabled
+            assert sim._activation_quantizers[conv2d_output_quantizer].bitwidth == 8
+            assert sim._activation_quantizers[conv2d_output_quantizer].data_type == QuantizationDataType.int
+            max_pooling_output_quantizer = 'max_pooling2d/MaxPool_quantized'
+            assert sim._activation_quantizers[max_pooling_output_quantizer].enabled
+            assert sim._activation_quantizers[max_pooling_output_quantizer].bitwidth == 8
+            assert sim._activation_quantizers[max_pooling_output_quantizer].data_type == QuantizationDataType.int
 
-        # remove test config created
-        qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
-        if os.path.exists(config_file):
-            os.remove(config_file)
+            # remove test config created
+            qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
 
     def test_target_rule_enforced_apply_op_level_overrides_fp16(self):
         """
@@ -1460,55 +1456,54 @@ class TestQuantsimConfig:
             "model_output": {}
         }
 
-        config_file = '/tmp/quantsim_config.json'
-        with open(config_file, 'w') as f:
-            json.dump(quantsim_config, f)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_file = Path(tmp_dir, "quantsim_config.json")
+            with open(config_file, 'w') as f:
+                json.dump(quantsim_config, f)
 
-        tf.compat.v1.reset_default_graph()
-        with tf.device('/cpu:0'):
-            model = tf.keras.Sequential()
-            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='gelu'))
-            model.add(tf.keras.layers.LayerNormalization(epsilon=1e-12))
-            model.summary()
+            tf.compat.v1.reset_default_graph()
+            with tf.device('/cpu:0'):
+                model = tf.keras.Sequential()
+                model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='gelu'))
+                model.add(tf.keras.layers.LayerNormalization(epsilon=1e-12))
+                model.summary()
 
-        starting_op_names = [input.op.name for input in model.inputs]
-        output_op_names = [output.op.name for output in model.outputs]
+            starting_op_names = [input.op.name for input in model.inputs]
+            output_op_names = [output.op.name for output in model.outputs]
 
-        qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = True
+            qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = True
 
-        sess = tf.compat.v1.Session()
-        initialize_uninitialized_vars(sess)
+            sess = tf.compat.v1.Session()
+            initialize_uninitialized_vars(sess)
 
-        sim = QuantizationSimModel(sess, starting_op_names, output_op_names, default_data_type=QuantizationDataType.int,
-                                   default_output_bw=8, default_param_bw=8,
-                                   config_file=config_file)
+            sim = QuantizationSimModel(sess, starting_op_names, output_op_names, default_data_type=QuantizationDataType.int,
+                                    default_output_bw=8, default_param_bw=8,
+                                    config_file=config_file)
 
-        # LayerNorm params should be set to FP 16, while output is maintained at quantsim defaults (int8)
-        ln_output_name = 'layer_normalization/batchnorm/add_1_quantized'
-        ln_output_quantinfo = sim._activation_quantizers[ln_output_name]
-        assert ln_output_quantinfo.bitwidth == 8
-        assert ln_output_quantinfo.data_type == QuantizationDataType.int
+            # LayerNorm params should be set to FP 16, while output is maintained at quantsim defaults (int8)
+            ln_output_name = 'layer_normalization/batchnorm/add_1_quantized'
+            ln_output_quantinfo = sim._activation_quantizers[ln_output_name]
+            assert ln_output_quantinfo.bitwidth == 8
+            assert ln_output_quantinfo.data_type == QuantizationDataType.int
 
-        beta_name = 'layer_normalization/batchnorm/ReadVariableOp_quantized'
-        beta_quantinfo = sim._param_quantizers[beta_name]
-        assert beta_quantinfo.bitwidth == 16
-        assert beta_quantinfo.data_type == QuantizationDataType.float
-        gamma_name = 'layer_normalization/batchnorm/mul/ReadVariableOp_quantized'
-        gamma_quantinfo = sim._param_quantizers[gamma_name]
-        assert gamma_quantinfo.bitwidth == 16
-        assert gamma_quantinfo.data_type == QuantizationDataType.float
+            beta_name = 'layer_normalization/batchnorm/ReadVariableOp_quantized'
+            beta_quantinfo = sim._param_quantizers[beta_name]
+            assert beta_quantinfo.bitwidth == 16
+            assert beta_quantinfo.data_type == QuantizationDataType.float
+            gamma_name = 'layer_normalization/batchnorm/mul/ReadVariableOp_quantized'
+            gamma_quantinfo = sim._param_quantizers[gamma_name]
+            assert gamma_quantinfo.bitwidth == 16
+            assert gamma_quantinfo.data_type == QuantizationDataType.float
 
-        # gelu output should be retained at quantsim defaults (int8) although it has supported_kernels = FP16
-        # as this op doesn't have params
-        gelu_name = 'conv2d/Gelu/mul_1_quantized'
-        gelu_quantinfo = sim._activation_quantizers[gelu_name]
-        assert gelu_quantinfo.bitwidth == 8
-        assert gelu_quantinfo.data_type == QuantizationDataType.int
+            # gelu output should be retained at quantsim defaults (int8) although it has supported_kernels = FP16
+            # as this op doesn't have params
+            gelu_name = 'conv2d/Gelu/mul_1_quantized'
+            gelu_quantinfo = sim._activation_quantizers[gelu_name]
+            assert gelu_quantinfo.bitwidth == 8
+            assert gelu_quantinfo.data_type == QuantizationDataType.int
 
-        # remove test config created
-        qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
-        if os.path.exists(config_file):
-            os.remove(config_file)
+            # remove test config created
+            qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
 
     @pytest.mark.cuda
     @pytest.mark.parametrize("is_fused", [True, False])

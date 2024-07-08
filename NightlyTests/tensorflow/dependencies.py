@@ -46,7 +46,6 @@ import sys
 import wget
 import zipfile
 import tarfile
-import shutil
 from transformers import BertTokenizer, DistilBertTokenizer
 from aimet_common.utils import AimetLogger
 

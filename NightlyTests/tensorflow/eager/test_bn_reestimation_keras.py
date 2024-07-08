@@ -36,6 +36,8 @@
 # =============================================================================
 """ Keras bn_reestimation Nightly Tests """
 import json
+import tempfile
+from Pathlib import Path
 import tensorflow as tf
 import numpy as np
 from aimet_common.defs import QuantScheme
@@ -114,11 +116,14 @@ def _qsim_setup_for_fold_scale(model, dummy_inputs):
             {}
     }
 
-    with open("/tmp/default_config_per_channel.json", "w") as f:
-        json.dump(default_config_per_channel, f)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        config_filename = Path(tmp_dir, "default_config_per_channel.json")
+        with open(config_filename, "w") as f:
+            json.dump(default_config_per_channel, f)
 
-    qsim = QuantizationSimModel(model, quant_scheme=QuantScheme.training_range_learning_with_tf_init,
-                                config_file="/tmp/default_config_per_channel.json")
+        qsim = QuantizationSimModel(model,
+                                    quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                    config_file=config_filename)
 
 
     qsim.compute_encodings(lambda m, _: m.predict(dummy_inputs), None)

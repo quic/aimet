@@ -40,6 +40,8 @@ import math
 import pytest
 import json
 import os
+import tempfile
+from pathlib import Path
 from contextlib import contextmanager
 import torch
 from torchvision import models
@@ -953,29 +955,23 @@ quantsim_config_map = {
 }
 
 def quantsim(model, dummy_input, quantsim_config=None):
-    config_file_path = "/tmp/quantsim_config.json"
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        config_file_path = Path(tmp_dir, "quantsim_config.json")
 
-    quantsim_config = quantsim_config or symmetric_quantsim_config
-    try:
+        quantsim_config = quantsim_config or symmetric_quantsim_config
         with open(config_file_path, 'w') as f:
             json.dump(quantsim_config, f)
 
         sim = QuantizationSimModel(model,
-                                   dummy_input.clone(),
-                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init,
-                                   config_file=config_file_path)
+                                dummy_input.clone(),
+                                quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                config_file=config_file_path)
 
         def forward_pass_callback(model, _):
             model(dummy_input.clone())
 
         sim.compute_encodings(forward_pass_callback, None)
         return sim
-
-    finally:
-        try:
-            os.remove(config_file_path)
-        except FileNotFoundError:
-            pass
 
 
 class TestTrainingExtensionBnFoldToScale:

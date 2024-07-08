@@ -38,6 +38,7 @@
 """ AdaRound Weights Unit Test Cases """
 
 import tempfile
+from pathlib import Path
 import pytest
 import os
 import json
@@ -180,7 +181,7 @@ class MultiDataLoaders:
         yield from dl2_iter
 
 
-def save_config_file_for_per_channel_quantization(path):
+def save_config_file_for_per_channel_quantization(path: Path) -> Path:
     quantsim_config = {
         "defaults": {
             "ops": {
@@ -202,8 +203,10 @@ def save_config_file_for_per_channel_quantization(path):
         "model_output": {}
     }
 
-    with open(os.path.join(path, 'quantsim_config.json'), 'w') as f:
+    target_file = Path(path, 'quantsim_config.json')
+    with open(target_file, 'w') as f:
         json.dump(quantsim_config, f)
+    return target_file
 
 
 class SplittableModel(torch.nn.Module):
@@ -717,17 +720,17 @@ class TestAdaround:
                                     default_reg_param=0.01, default_beta_range=(20, 2))
 
 
-        with tempfile.TemporaryDirectory() as tempdir:
-            save_config_file_for_per_channel_quantization(tempdir)
-            ada_model = Adaround.apply_adaround(model, inp_tensor_list, params, path=tempdir, filename_prefix='dummy',
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_file = save_config_file_for_per_channel_quantization(Path(temp_dir))
+            ada_model = Adaround.apply_adaround(model, inp_tensor_list, params, path=temp_dir, filename_prefix='dummy',
                                                 default_param_bw=param_bit_width,
                                                 default_quant_scheme=QuantScheme.post_training_tf,
-                                                default_config_file=os.path.join(tempdir, 'quantsim_config.json'))
+                                                default_config_file=config_file)
 
             # Test that forward pass works for the AdaRounded model
             _ = ada_model(*inp_tensor_list)
 
-            with open(os.path.join(tempdir, 'dummy.encodings')) as json_file:
+            with open(os.path.join(temp_dir, 'dummy.encodings')) as json_file:
                 encoding_data = json.load(json_file)['param_encodings']
 
             assert len(encoding_data['trans_conv1.weight']) == 2
@@ -752,13 +755,13 @@ class TestAdaround:
         # Create the override list with non-default parameter bitwidths 8 and 16
         param_bw_override_list = [(model.conv2, 8), (model.conv4, 16)]
 
-        with tempfile.TemporaryDirectory() as tempdir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             ada_rounded_model = Adaround.apply_adaround(model=model, dummy_input=inp_tensor_list, params=params,
-                                                        path=tempdir, filename_prefix='dummy',
+                                                        path=temp_dir, filename_prefix='dummy',
                                                         param_bw_override_list=param_bw_override_list)
 
             # Read exported param encodings JSON file
-            with open(os.path.join(tempdir, 'dummy.encodings')) as json_file:
+            with open(os.path.join(temp_dir, 'dummy.encodings')) as json_file:
                 encoding_data = json.load(json_file)['param_encodings']
 
             # Verify Conv2 weight encoding bitwidth is set to 8
@@ -787,13 +790,13 @@ class TestAdaround:
 
         # Keep the parameter override list as empty
         param_bw_override_list = []
-        with tempfile.TemporaryDirectory() as tempdir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             ada_rounded_model = Adaround.apply_adaround(model=model, dummy_input=inp_tensor_list, params=params,
-                                                        path=tempdir, filename_prefix='dummy',
+                                                        path=temp_dir, filename_prefix='dummy',
                                                         param_bw_override_list=param_bw_override_list)
 
             # Read exported param encodings JSON file
-            with open(os.path.join(tempdir, 'dummy.encodings')) as json_file:
+            with open(os.path.join(temp_dir, 'dummy.encodings')) as json_file:
                 encoding_data = json.load(json_file)['param_encodings']
 
             # Verify Conv2 weight encoding bitwidth is set to the default value of 4
@@ -852,16 +855,16 @@ class TestAdaround:
         params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=5)
 
         ignore_quant_ops_list = [model.relu1, model.bn2]
-        with tempfile.TemporaryDirectory() as tempdir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             ada_model = Adaround.apply_adaround(model=model, dummy_input=inp_tensor_list, params=params,
-                                                path=tempdir, filename_prefix='dummy',
+                                                path=temp_dir, filename_prefix='dummy',
                                                 ignore_quant_ops_list=ignore_quant_ops_list)
 
             # Make sure model forwatd pass works.
             _ = ada_model(*inp_tensor_list)
 
             # Read exported param encodings JSON file
-            with open(os.path.join(tempdir, 'dummy.encodings')) as json_file:
+            with open(os.path.join(temp_dir, 'dummy.encodings')) as json_file:
                 encoding_data = json.load(json_file)['param_encodings']
 
             # Verify Conv2 weight encoding bitwidth is set to the default value of 4
@@ -914,16 +917,16 @@ class TestAdaround:
         params = AdaroundParameters(data_loader=multi_data_loader, num_batches=4, default_num_iterations=5)
 
         ignore_quant_ops_list = [model.relu1, model.bn2]
-        with tempfile.TemporaryDirectory() as tempdir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             ada_model = Adaround.apply_adaround(model=model, dummy_input=inp_tensor_list, params=params,
-                                                path=tempdir, filename_prefix='dummy',
+                                                path=temp_dir, filename_prefix='dummy',
                                                 ignore_quant_ops_list=ignore_quant_ops_list)
 
             # Make sure model forwatd pass works.
             _ = ada_model(*inp_tensor_list)
 
             # Read exported param encodings JSON file
-            with open(os.path.join(tempdir, 'dummy.encodings')) as json_file:
+            with open(os.path.join(temp_dir, 'dummy.encodings')) as json_file:
                 encoding_data = json.load(json_file)['param_encodings']
 
             # Verify Conv2 weight encoding bitwidth is set to the default value of 4
@@ -949,14 +952,14 @@ class TestAdaround:
         out_before_ada = model(*dummy_input)
 
         params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=50)
-        with tempfile.TemporaryDirectory() as tempdir:
-            ada_rounded_model = Adaround.apply_adaround(model, dummy_input, params, tempdir, 'dummy')
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ada_rounded_model = Adaround.apply_adaround(model, dummy_input, params, temp_dir, 'dummy')
             out_after_ada = ada_rounded_model(*dummy_input)
 
             assert not torch.all(torch.eq(out_before_ada, out_after_ada))
 
             # Test export functionality
-            with open(os.path.join(tempdir, 'dummy.encodings')) as json_file:
+            with open(os.path.join(temp_dir, 'dummy.encodings')) as json_file:
                 encoding_data = json.load(json_file)['param_encodings']
                 print(encoding_data)
 
@@ -984,14 +987,14 @@ class TestAdaround:
         out_before_ada = model(*dummy_input)
 
         params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=5)
-        with tempfile.TemporaryDirectory() as tempdir:
-            ada_rounded_model = Adaround.apply_adaround(model, dummy_input, params, tempdir, 'dummy')
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ada_rounded_model = Adaround.apply_adaround(model, dummy_input, params, temp_dir, 'dummy')
             out_after_ada = ada_rounded_model(*dummy_input)
 
             assert not torch.all(torch.eq(out_before_ada, out_after_ada))
 
             # Test export functionality
-            with open(os.path.join(tempdir, 'dummy.encodings')) as json_file:
+            with open(os.path.join(temp_dir, 'dummy.encodings')) as json_file:
                 encoding_data = json.load(json_file)['param_encodings']
                 print(encoding_data)
 
@@ -1007,11 +1010,11 @@ class TestAdaround:
         dummy_input = torch.randn(input_shape)
         data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=input_shape[1:])
         params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=5)
-        with tempfile.TemporaryDirectory() as tempdir:
-            _ = Adaround.apply_adaround(model, dummy_input, params, path=tempdir, filename_prefix='resnet18',
+        with tempfile.TemporaryDirectory() as temp_dir:
+            _ = Adaround.apply_adaround(model, dummy_input, params, path=temp_dir, filename_prefix='resnet18',
                                         ignore_quant_ops_list=[model.layer1, model.layer2, model.layer3,
                                                                model.layer4, model.fc])
-            with open(os.path.join(tempdir, 'resnet18.encodings')) as json_file:
+            with open(os.path.join(temp_dir, 'resnet18.encodings')) as json_file:
                 encoding_data = json.load(json_file)['param_encodings']
             assert len(encoding_data) == 1 # Only model.conv1 layer is adarounded.
 
@@ -1079,12 +1082,12 @@ class TestAdaround:
         model.eval()
 
         adaround_params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=5)
-        with tempfile.TemporaryDirectory() as tempdir:
+        with tempfile.TemporaryDirectory() as temp_dir:
             ada_model = Adaround.apply_adaround(model, dummy_input, adaround_params,
-                                                path=tempdir, filename_prefix='conv_with_standalone_bn_ada')
+                                                path=temp_dir, filename_prefix='conv_with_standalone_bn_ada')
 
             sim = QuantizationSimModel(ada_model, dummy_input)
-            sim.set_and_freeze_param_encodings(os.path.join(tempdir, 'conv_with_standalone_bn_ada.encodings'))
+            sim.set_and_freeze_param_encodings(os.path.join(temp_dir, 'conv_with_standalone_bn_ada.encodings'))
 
             for _, module in sim.model.named_modules():
                 if isinstance(module, QcQuantizeWrapper) and 'weight' in module.param_quantizers:

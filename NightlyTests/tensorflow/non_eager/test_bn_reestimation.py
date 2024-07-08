@@ -36,6 +36,8 @@
 # =============================================================================
 
 import pytest
+import tempfile
+from pathlib import Path
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import logging
@@ -246,39 +248,40 @@ class TestBNReEstimation:
                 {}
         }
 
-        config_file_path = "/tmp/default_config_per_channel.json"
-        with open(config_file_path, "w") as f:
-            json.dump(default_config_per_channel, f)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_file_path = Path(tmp_dir, "default_config_per_channel.json")
+            with open(config_file_path, "w") as f:
+                json.dump(default_config_per_channel, f)
 
-        sim = QuantizationSimModel(sess, start_op_names, end_op_names, use_cuda=True,
-                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init,
-                                   config_file=config_file_path)
-        def dummy_forward_pass(sess, args):
-            model_input = sess.graph.get_tensor_by_name("input_1:0")
-            model_output = sess.graph.get_tensor_by_name('predictions/Softmax:0')
-            dummy_val = np.random.randn(1, *model_input.shape[1:])
-            sess.run(model_output, feed_dict={model_input: dummy_val})
-        sim.compute_encodings(dummy_forward_pass, None)
+            sim = QuantizationSimModel(sess, start_op_names, end_op_names, use_cuda=True,
+                                    quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                    config_file=config_file_path)
+            def dummy_forward_pass(sess, args):
+                model_input = sess.graph.get_tensor_by_name("input_1:0")
+                model_output = sess.graph.get_tensor_by_name('predictions/Softmax:0')
+                dummy_val = np.random.randn(1, *model_input.shape[1:])
+                sess.run(model_output, feed_dict={model_input: dummy_val})
+            sim.compute_encodings(dummy_forward_pass, None)
 
-        # check bn_re_estimation
-        self._reestimate_and_compare_results(sim, bn_re_estimation_dataset, bn_num_batches, start_op_names, end_op_names)
+            # check bn_re_estimation
+            self._reestimate_and_compare_results(sim, bn_re_estimation_dataset, bn_num_batches, start_op_names, end_op_names)
 
-        # check bn_fold
-        model_input = sim.session.graph.get_tensor_by_name("input_1:0")
-        model_output = sim.session.graph.get_tensor_by_name('predictions/Softmax:0')
-        dummy_val = np.random.randn(128, *model_input.shape[1:])
+            # check bn_fold
+            model_input = sim.session.graph.get_tensor_by_name("input_1:0")
+            model_output = sim.session.graph.get_tensor_by_name('predictions/Softmax:0')
+            dummy_val = np.random.randn(128, *model_input.shape[1:])
 
-        output_baseline = sim.session.run(model_output, feed_dict={model_input: dummy_val})
+            output_baseline = sim.session.run(model_output, feed_dict={model_input: dummy_val})
 
-        fold_all_batch_norms_to_scale(sim, start_op_names, end_op_names)
+            fold_all_batch_norms_to_scale(sim, start_op_names, end_op_names)
 
-        model_input_after_fold = sim.session.graph.get_tensor_by_name("input_1:0")
-        model_output_after_fold = sim.session.graph.get_tensor_by_name('predictions/Softmax:0')
+            model_input_after_fold = sim.session.graph.get_tensor_by_name("input_1:0")
+            model_output_after_fold = sim.session.graph.get_tensor_by_name('predictions/Softmax:0')
 
-        output_fold_after_fold = sim.session.run(model_output_after_fold, feed_dict={model_input_after_fold: dummy_val})
+            output_fold_after_fold = sim.session.run(model_output_after_fold, feed_dict={model_input_after_fold: dummy_val})
 
-        assert np.allclose(output_baseline, output_fold_after_fold, atol=1e-2)
-        sim.session.close()
+            assert np.allclose(output_baseline, output_fold_after_fold, atol=1e-2)
+            sim.session.close()
 
     def test_remove_bn_update_ops_with_training_ops(self):
         """ verify that the BNs UPDATE_OPS are removed correctly after training ops are added (QAT) """

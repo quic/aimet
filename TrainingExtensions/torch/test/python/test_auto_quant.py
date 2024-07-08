@@ -44,7 +44,6 @@ import os
 from bs4 import BeautifulSoup
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
 import pytest
-import shutil
 from typing import Callable
 import torch
 from torch.utils.data import Dataset, DataLoader

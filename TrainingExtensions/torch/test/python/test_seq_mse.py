@@ -38,6 +38,8 @@
 
 import json
 import pytest
+import tempfile
+from pathlib import Path
 import numpy
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -79,7 +81,7 @@ def calibrate(model, inputs):
         model(*inputs)
 
 
-def save_config_file_for_checkpoints():
+def save_config_file_for_checkpoints(target_dir: Path) -> Path:
     checkpoints_config = {
         "grouped_modules": {
             "0": ["conv1", "bn1", "relu1", "maxpool"],
@@ -96,8 +98,10 @@ def save_config_file_for_checkpoints():
         "cache_on_cpu": "False"
     }
 
-    with open('./test_checkpoints.json', 'w') as f:
+    target_file = Path(target_dir, 'test_checkpoints.json')
+    with open(target_file, 'w') as f:
         json.dump(checkpoints_config, f)
+    return target_file
 
 
 class SplittableModel(torch.nn.Module):
@@ -261,7 +265,6 @@ class TestSeqMse:
 
         data_loader = create_fake_data_loader(dataset_size=2, batch_size=1, image_size=(3, 32, 32))
         model = SplittableModel().eval()
-        save_config_file_for_checkpoints()
         dummy_input = torch.randn(1, 3, 32, 32)
         sim_without = QuantizationSimModel(model, dummy_input, default_param_bw=4,
                                            quant_scheme=qscheme)
@@ -276,11 +279,13 @@ class TestSeqMse:
         without_checkpoints_enc = sim_without.model.fc2.param_quantizers['weight'].encoding
 
         # Apply Sequential MSE with checkpoints config
-        apply_seq_mse(model, sim_with, data_loader, params, checkpoints_config="./test_checkpoints.json",
-                      modules_to_exclude=[model.fc1])
-        assert not sim_with.model.fc1.param_quantizers['weight'].is_encoding_frozen
-        assert sim_with.model.fc2.param_quantizers['weight'].is_encoding_frozen
-        with_checkpoints_enc = sim_with.model.fc2.param_quantizers['weight'].encoding
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            checkpoints_config = save_config_file_for_checkpoints(Path(tmp_dir))
+            apply_seq_mse(model, sim_with, data_loader, params, checkpoints_config=checkpoints_config,
+                        modules_to_exclude=[model.fc1])
+            assert not sim_with.model.fc1.param_quantizers['weight'].is_encoding_frozen
+            assert sim_with.model.fc2.param_quantizers['weight'].is_encoding_frozen
+            with_checkpoints_enc = sim_with.model.fc2.param_quantizers['weight'].encoding
 
         # encodings should be bit-exact
         assert without_checkpoints_enc.min == with_checkpoints_enc.min

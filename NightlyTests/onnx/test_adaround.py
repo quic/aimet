@@ -39,6 +39,7 @@ from packaging import version
 import json
 import numpy as np
 import pytest
+import tempfile
 import torch
 from onnx import load_model
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
@@ -51,8 +52,6 @@ from torch_utils import get_cifar10_data_loaders, train_cifar10
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 
 from aimet_onnx.adaround.adaround_weight import Adaround, AdaroundParameters
-
-WORKING_DIR = '/tmp/quantsim'
 
 image_size = 32
 batch_size = 64

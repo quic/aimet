@@ -35,13 +35,12 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-import os
-import shutil
 import logging
 import unittest
 import unittest.mock
 import pytest
 import numpy as np
+import tempfile
 import torch
 import torch.nn
 import torch.nn.functional as functional
@@ -95,9 +94,8 @@ class TestAdaroundOptimizer(unittest.TestCase):
                 inputs, _ = inputs
                 model(inputs)
 
-            path = './tmp/cached_dataset/'
-            try:
-                cached_dataset = CachedDataset(data_loader, dataset_size // batch_size, path)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                cached_dataset = CachedDataset(data_loader, dataset_size // batch_size, tmp_dir)
                 opt_params = AdaroundHyperParameters(num_iterations=10, reg_param=0.01, beta_range=(20, 2),
                                                      warm_start=warm_start)
                 AdaroundOptimizer.adaround_module(module, adaround_wrapper, model, sim.model, None, cached_dataset, forward_fn,
@@ -109,9 +107,6 @@ class TestAdaroundOptimizer(unittest.TestCase):
 
                 # alpha's gradient should not be None
                 self.assertTrue(adaround_wrapper.alpha.grad is not None)
-            finally:
-                if os.path.isdir(path):
-                    shutil.rmtree(path)
 
     def test_optimize_rounding_with_only_recons_loss(self):
         """ test optimize layer rounding with reconstruction loss """

@@ -41,6 +41,8 @@ import pytest
 import copy
 import json
 import os
+import tempfile
+from pathlib import Path
 from packaging import version
 import tensorflow as tf
 import numpy as np
@@ -1152,17 +1154,16 @@ quantsim_config_map = {
 
 
 def create_quantsim_model_and_compute_encodings(model, dummy_input, quantsim_config=None):
-    from pathlib import Path
-    Path("/tmp/test_batch_norm_fold_to_scale").mkdir(parents=True, exist_ok=True)
-    config_file_path = "/tmp/test_batch_norm_fold_to_scale/quantsim_config.json"
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        config_file_path = Path(tmp_dir, "quantsim_config.json")
 
-    quantsim_config = quantsim_config or symmetric_quantsim_config
-    with open(config_file_path, 'w') as f:
-        json.dump(quantsim_config, f)
+        quantsim_config = quantsim_config or symmetric_quantsim_config
+        with open(config_file_path, 'w') as f:
+            json.dump(quantsim_config, f)
 
-    sim = QuantizationSimModel(model,
-                               quant_scheme=QuantScheme.training_range_learning_with_tf_init,
-                               config_file=config_file_path)
+        sim = QuantizationSimModel(model,
+                                quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                config_file=config_file_path)
 
     def forward_pass_callback(model, _):
         model(dummy_input)
@@ -1185,14 +1186,6 @@ class TestBatchNormFoldToScale:
         else:
             np.random.seed(43)
         yield
-
-    @pytest.fixture(scope="session", autouse=True)
-    def cleanup(request):
-        import shutil
-        try:
-            shutil.rmtree("/tmp/test_batch_norm_fold_to_scale", ignore_errors=True)
-        except FileNotFoundError:
-            pass
 
     def _test_output_quantizers_enabled_and_quant_mode_is_quantize_dequantize(self, model, layer_nums_to_check):
         for layer_num in layer_nums_to_check:
@@ -1332,7 +1325,8 @@ class TestBatchNormFoldToScale:
         output_after_fold = model(random_input)
 
         # Check to make sure rebuild Quantization Sim Model working properly
-        sim.export(path="/tmp", filename_prefix="temp_bn_fold_to_scale")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(path=tmp_dir, filename_prefix="temp_bn_fold_to_scale")
 
         # Check bn is deleted
         for wrapper in model.layers[1:]:
@@ -1544,7 +1538,8 @@ class TestBatchNormFoldToScale:
         model = sim.model
         output_after_fold = model(random_input)
         # Check to make sure rebuild Quantization Sim Model working properly
-        sim.export(path="/tmp", filename_prefix="temp_bn_fold_to_scale")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(path=tmp_dir, filename_prefix="temp_bn_fold_to_scale")
 
         # Check bn is deleted
         for wrapper in model.layers[1:]:
@@ -1617,7 +1612,8 @@ class TestBatchNormFoldToScale:
         output_after_fold = model(random_input)
 
         # Check to make sure rebuild Quantization Sim Model working properly
-        sim.export(path="/tmp", filename_prefix="temp_bn_fold_to_scale")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(path=tmp_dir, filename_prefix="temp_bn_fold_to_scale")
 
         # Check bn is deleted
         for wrapper in model.layers[1:]:

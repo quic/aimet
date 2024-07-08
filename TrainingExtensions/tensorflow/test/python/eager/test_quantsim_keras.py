@@ -37,6 +37,7 @@
 import json
 import os
 import tempfile
+from pathlib import Path
 from typing import List
 
 import aimet_common.libpymo as libpymo
@@ -1256,30 +1257,31 @@ def test_initialization_and_export_non_strict_symmetric(quant_scheme) -> None:
         # post_training scheme doesn't calibrate min value. encoding_min == -encoding_max - delta
         assert initialized_encoding_min != -initialized_encoding_max
 
-    sim.export("/tmp/", "quant_sim_model")
-    with open("/tmp/quant_sim_model.encodings") as json_file:
-        encoding_data = json.load(json_file)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        sim.export(tmp_dir, "quant_sim_model")
+        with open(Path(tmp_dir, "quant_sim_model.encodings")) as json_file:
+            encoding_data = json.load(json_file)
 
-        param_encodings = encoding_data["param_encodings"]
-        for encodings in param_encodings.values():
-            for encoding_info in encodings:
-                encoding_min = encoding_info["min"]
-                encoding_max = encoding_info["max"]
-                scale = encoding_info["scale"]
-                offset = encoding_info["offset"]
+            param_encodings = encoding_data["param_encodings"]
+            for encodings in param_encodings.values():
+                for encoding_info in encodings:
+                    encoding_min = encoding_info["min"]
+                    encoding_max = encoding_info["max"]
+                    scale = encoding_info["scale"]
+                    offset = encoding_info["offset"]
 
-                # Default HTP config is non-strict symmetric when parameter quantization
-                # Non-strict symmetric should have
-                # encoding_min == -encoding_max - scale (one more bin)
-                # offset as -128
-                if quant_scheme in RANGE_LEARNING_SCHEMES:
-                    assert encoding_min == -encoding_max - scale
-                else:
-                    # In post training scheme case, it doesn't seem to match exactly due to floating point arithmetic
-                    assert np.isclose(encoding_min, -encoding_max - scale)
-                assert offset == -128
-                assert np.isclose(encoding_min, scale * offset, atol=1e-6)
-                assert np.isclose(encoding_max, encoding_min + scale * 255, atol=1e-6)
+                    # Default HTP config is non-strict symmetric when parameter quantization
+                    # Non-strict symmetric should have
+                    # encoding_min == -encoding_max - scale (one more bin)
+                    # offset as -128
+                    if quant_scheme in RANGE_LEARNING_SCHEMES:
+                        assert encoding_min == -encoding_max - scale
+                    else:
+                        # In post training scheme case, it doesn't seem to match exactly due to floating point arithmetic
+                        assert np.isclose(encoding_min, -encoding_max - scale)
+                    assert offset == -128
+                    assert np.isclose(encoding_min, scale * offset, atol=1e-6)
+                    assert np.isclose(encoding_max, encoding_min + scale * 255, atol=1e-6)
 
 
 @pytest.mark.cuda
@@ -1346,30 +1348,31 @@ def test_initialization_and_export_non_strict_symmetric_per_channel(quant_scheme
         # post_training scheme doesn't calibrate min value. encoding_min == -encoding_max - delta
         assert not all(initialized_encoding_min == -initialized_encoding_max)
 
-    sim.export("/tmp/", "quant_sim_model")
-    with open("/tmp/quant_sim_model.encodings") as json_file:
-        encoding_data = json.load(json_file)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        sim.export(tmp_dir, "quant_sim_model")
+        with open(Path(tmp_dir, "quant_sim_model.encodings")) as json_file:
+            encoding_data = json.load(json_file)
 
-        param_encodings = encoding_data["param_encodings"]
-        for encodings in param_encodings.values():
-            for encoding_info in encodings:
-                encoding_min = encoding_info["min"]
-                encoding_max = encoding_info["max"]
-                scale = encoding_info["scale"]
-                offset = encoding_info["offset"]
+            param_encodings = encoding_data["param_encodings"]
+            for encodings in param_encodings.values():
+                for encoding_info in encodings:
+                    encoding_min = encoding_info["min"]
+                    encoding_max = encoding_info["max"]
+                    scale = encoding_info["scale"]
+                    offset = encoding_info["offset"]
 
-                # Default HTP config is non-strict symmetric when parameter quantization
-                # Non-strict symmetric should have
-                # encoding_min == -encoding_max - scale (one more bin)
-                # offset as -128
-                if quant_scheme in RANGE_LEARNING_SCHEMES:
-                    assert encoding_min == -encoding_max - scale
-                else:
-                    # In post training scheme case, it doesn't seem to match exactly due to floating point arithmetic
-                    assert np.isclose(encoding_min, -encoding_max - scale)
-                assert offset == -128
-                assert np.isclose(encoding_min, scale * offset, atol=1e-6)
-                assert np.isclose(encoding_max, encoding_min + scale * 255, atol=1e-6)
+                    # Default HTP config is non-strict symmetric when parameter quantization
+                    # Non-strict symmetric should have
+                    # encoding_min == -encoding_max - scale (one more bin)
+                    # offset as -128
+                    if quant_scheme in RANGE_LEARNING_SCHEMES:
+                        assert encoding_min == -encoding_max - scale
+                    else:
+                        # In post training scheme case, it doesn't seem to match exactly due to floating point arithmetic
+                        assert np.isclose(encoding_min, -encoding_max - scale)
+                    assert offset == -128
+                    assert np.isclose(encoding_min, scale * offset, atol=1e-6)
+                    assert np.isclose(encoding_max, encoding_min + scale * 255, atol=1e-6)
 
 
 def test_quant_scheme_percentile():

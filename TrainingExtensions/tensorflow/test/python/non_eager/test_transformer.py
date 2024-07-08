@@ -37,6 +37,7 @@
 import unittest
 import pytest
 import os
+import tempfile
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 import json
 import tensorflow as tf
@@ -258,87 +259,85 @@ class TransformerQuantizationUnittests(unittest.TestCase):
             'int': True
         })
 
-        sim.export('/tmp', 'tf_hf_bert_model')
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sim.export(tmp_dir, 'tf_hf_bert_model')
 
-        with open('/tmp/tf_hf_bert_model.encodings') as json_file:
-            encoding_data = json.load(json_file)
+            with open(os.path.join(tmp_dir, "tf_hf_bert_model.encodings")) as json_file:
+                encoding_data = json.load(json_file)
 
-        activation_tensors = []
-        parameter_tensors = []
-        bias_tensors = []
+            activation_tensors = []
+            parameter_tensors = []
+            bias_tensors = []
 
-        # Add Embedding quant ops
-        embedding_path = 'tf_bert_model/bert_1/embeddings'
-        embedding_add_1_tensor = '{}/add_1:0'.format(embedding_path)
-        embedding_add_tensor = '{}/add:0'.format(embedding_path)
-        embedding_token_tensor = '{}/Gather_2:0'.format(embedding_path)
-        embedding_position_tensor = '{}/Identity_1:0'.format(embedding_path)
-        embedding_word_tensor = '{}/Gather:0'.format(embedding_path)
+            # Add Embedding quant ops
+            embedding_path = 'tf_bert_model/bert_1/embeddings'
+            embedding_add_1_tensor = '{}/add_1:0'.format(embedding_path)
+            embedding_add_tensor = '{}/add:0'.format(embedding_path)
+            embedding_token_tensor = '{}/Gather_2:0'.format(embedding_path)
+            embedding_position_tensor = '{}/Identity_1:0'.format(embedding_path)
+            embedding_word_tensor = '{}/Gather:0'.format(embedding_path)
 
-        activation_tensors += [embedding_add_tensor, embedding_add_1_tensor]
-        parameter_tensors += [embedding_token_tensor, embedding_word_tensor, embedding_position_tensor]
+            activation_tensors += [embedding_add_tensor, embedding_add_1_tensor]
+            parameter_tensors += [embedding_token_tensor, embedding_word_tensor, embedding_position_tensor]
 
-        # Add LayerNorm quant ops
-        layernorm_paths = ['tf_bert_model/bert_1/embeddings', 'tf_bert_model/bert_1/encoder/layer_._0/attention/output',
-                           'tf_bert_model/bert_1/encoder/layer_._0/output']
+            # Add LayerNorm quant ops
+            layernorm_paths = ['tf_bert_model/bert_1/embeddings', 'tf_bert_model/bert_1/encoder/layer_._0/attention/output',
+                            'tf_bert_model/bert_1/encoder/layer_._0/output']
 
-        for layernorm_path in layernorm_paths:
-            output_tensor = '{}/LayerNorm/batchnorm/add_1:0'.format(layernorm_path)
-            beta_tensor = '{}/LayerNorm/batchnorm/ReadVariableOp:0'.format(layernorm_path)
-            gamma_tensor = '{}/LayerNorm/batchnorm/mul/ReadVariableOp:0'.format(layernorm_path)
+            for layernorm_path in layernorm_paths:
+                output_tensor = '{}/LayerNorm/batchnorm/add_1:0'.format(layernorm_path)
+                beta_tensor = '{}/LayerNorm/batchnorm/ReadVariableOp:0'.format(layernorm_path)
+                gamma_tensor = '{}/LayerNorm/batchnorm/mul/ReadVariableOp:0'.format(layernorm_path)
+
+                activation_tensors += [output_tensor]
+                parameter_tensors += [gamma_tensor]
+                bias_tensors += [beta_tensor]
+
+            # Add GeLU quant ops
+            gelu_path = 'tf_bert_model/bert_1/encoder/layer_._0/intermediate'
+            output_tensor = '{}/Gelu/mul_1:0'.format(gelu_path)
 
             activation_tensors += [output_tensor]
-            parameter_tensors += [gamma_tensor]
-            bias_tensors += [beta_tensor]
 
-        # Add GeLU quant ops
-        gelu_path = 'tf_bert_model/bert_1/encoder/layer_._0/intermediate'
-        output_tensor = '{}/Gelu/mul_1:0'.format(gelu_path)
+            # Add Query, Key, and Value quant ops
+            self_attention_path = 'tf_bert_model/bert_1/encoder/layer_._0/attention/self'
+            for dense_type in ['query', 'key', 'value']:
+                output_tensor = '{}/{}/BiasAdd:0'.format(self_attention_path, dense_type)
+                weight_tensor = '{}/{}/Tensordot/ReadVariableOp:0'.format(self_attention_path, dense_type)
+                bias_tensor = '{}/{}/BiasAdd/ReadVariableOp:0'.format(self_attention_path, dense_type)
 
-        activation_tensors += [output_tensor]
+                # No need to check input_quant_op as those are output quantize ops of layer norm
+                activation_tensors += [output_tensor]
+                parameter_tensors += [weight_tensor]
+                bias_tensors += [bias_tensor]
 
-        # Add Query, Key, and Value quant ops
-        self_attention_path = 'tf_bert_model/bert_1/encoder/layer_._0/attention/self'
-        for dense_type in ['query', 'key', 'value']:
-            output_tensor = '{}/{}/BiasAdd:0'.format(self_attention_path, dense_type)
-            weight_tensor = '{}/{}/Tensordot/ReadVariableOp:0'.format(self_attention_path, dense_type)
-            bias_tensor = '{}/{}/BiasAdd/ReadVariableOp:0'.format(self_attention_path, dense_type)
+            for activation_tesnor in activation_tensors:
+                self.assertTrue(activation_tesnor in encoding_data['activation_encodings'])
+                act_encoding_keys = encoding_data['activation_encodings'][activation_tesnor][0].keys()
+                self.assertTrue('bitwidth' in act_encoding_keys)
+                self.assertTrue('is_symmetric' in act_encoding_keys)
+                self.assertTrue('max' in act_encoding_keys)
+                self.assertTrue('min' in act_encoding_keys)
+                self.assertTrue('offset' in act_encoding_keys)
+                self.assertTrue('scale' in act_encoding_keys)
 
-            # No need to check input_quant_op as those are output quantize ops of layer norm
-            activation_tensors += [output_tensor]
-            parameter_tensors += [weight_tensor]
-            bias_tensors += [bias_tensor]
+            for parameter_tensor in parameter_tensors:
+                self.assertTrue(parameter_tensor in encoding_data['param_encodings'])
+                param_encoding_keys = encoding_data['param_encodings'][parameter_tensor][0].keys()
+                self.assertTrue('bitwidth' in param_encoding_keys)
+                self.assertTrue('is_symmetric' in param_encoding_keys)
+                self.assertTrue('max' in param_encoding_keys)
+                self.assertTrue('min' in param_encoding_keys)
+                self.assertTrue('offset' in param_encoding_keys)
+                self.assertTrue('scale' in param_encoding_keys)
 
-        for activation_tesnor in activation_tensors:
-            self.assertTrue(activation_tesnor in encoding_data['activation_encodings'])
-            act_encoding_keys = encoding_data['activation_encodings'][activation_tesnor][0].keys()
-            self.assertTrue('bitwidth' in act_encoding_keys)
-            self.assertTrue('is_symmetric' in act_encoding_keys)
-            self.assertTrue('max' in act_encoding_keys)
-            self.assertTrue('min' in act_encoding_keys)
-            self.assertTrue('offset' in act_encoding_keys)
-            self.assertTrue('scale' in act_encoding_keys)
+            new_sess = load_model_from_meta(os.path.join(tmp_dir, "tf_hf_bert_model.meta"))
 
-        for parameter_tensor in parameter_tensors:
-            self.assertTrue(parameter_tensor in encoding_data['param_encodings'])
-            param_encoding_keys = encoding_data['param_encodings'][parameter_tensor][0].keys()
-            self.assertTrue('bitwidth' in param_encoding_keys)
-            self.assertTrue('is_symmetric' in param_encoding_keys)
-            self.assertTrue('max' in param_encoding_keys)
-            self.assertTrue('min' in param_encoding_keys)
-            self.assertTrue('offset' in param_encoding_keys)
-            self.assertTrue('scale' in param_encoding_keys)
+            all_op_types = [op.type for op in new_sess.graph.get_operations()]
+            self.assertNotIn('QcQuantize', all_op_types)
 
-        new_sess = load_model_from_meta('/tmp/tf_hf_bert_model.meta')
-
-        all_op_types = [op.type for op in new_sess.graph.get_operations()]
-        self.assertNotIn('QcQuantize', all_op_types)
-
-        del sim
-        sess.close()
-
-        if os.path.exists('/tmp/tf_hf_bert_model'):
-            os.remove('/tmp/tf_hf_bert_model')
+            del sim
+            sess.close()
 
     def test_save_load_chkpt_hf_bert(self):
         tf.compat.v1.reset_default_graph()
@@ -357,8 +356,9 @@ class TransformerQuantizationUnittests(unittest.TestCase):
 
         sim = QuantizationSimModel(sess, [input_tensor.op.name], [output_tensor['pooler_output'].op.name], use_cuda=False)
 
-        save_checkpoint(sim, '/tmp', 'orig_tf_hf_bert_model')
-        new_quantsim = load_checkpoint('/tmp', 'orig_tf_hf_bert_model')
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            save_checkpoint(sim, tmp_dir, "orig_tf_hf_bert_model")
+            new_quantsim = load_checkpoint(tmp_dir, "orig_tf_hf_bert_model")
 
         self.assertNotEqual(sim, new_quantsim)
         self.assertTrue(new_quantsim.session)
@@ -372,9 +372,9 @@ class TransformerQuantizationUnittests(unittest.TestCase):
             self.assertNotEqual(sim._param_quantizers[quantize_op].session,
                                 new_quantsim._param_quantizers[quantize_op].session)
             self.assertEqual(sim._param_quantizers[quantize_op].tensor_quantizer.getQuantScheme(),
-                             new_quantsim._param_quantizers[quantize_op].tensor_quantizer.getQuantScheme())
+                            new_quantsim._param_quantizers[quantize_op].tensor_quantizer.getQuantScheme())
             self.assertEqual(sim._param_quantizers[quantize_op].tensor_quantizer.roundingMode,
-                             new_quantsim._param_quantizers[quantize_op].tensor_quantizer.roundingMode)
+                            new_quantsim._param_quantizers[quantize_op].tensor_quantizer.roundingMode)
             self.assertFalse(sim._param_quantizers[quantize_op].tensor_quantizer.isEncodingValid)
             self.assertFalse(new_quantsim._param_quantizers[quantize_op].tensor_quantizer.isEncodingValid)
 
@@ -382,18 +382,15 @@ class TransformerQuantizationUnittests(unittest.TestCase):
             self.assertNotEqual(sim._activation_quantizers[quantize_op].session,
                                 new_quantsim._activation_quantizers[quantize_op].session)
             self.assertEqual(sim._activation_quantizers[quantize_op].tensor_quantizer.getQuantScheme(),
-                             new_quantsim._activation_quantizers[quantize_op].tensor_quantizer.getQuantScheme())
+                            new_quantsim._activation_quantizers[quantize_op].tensor_quantizer.getQuantScheme())
             self.assertEqual(sim._activation_quantizers[quantize_op].tensor_quantizer.roundingMode,
-                             new_quantsim._activation_quantizers[quantize_op].tensor_quantizer.roundingMode)
+                            new_quantsim._activation_quantizers[quantize_op].tensor_quantizer.roundingMode)
             self.assertFalse(sim._activation_quantizers[quantize_op].tensor_quantizer.isEncodingValid)
             self.assertFalse(new_quantsim._activation_quantizers[quantize_op].tensor_quantizer.isEncodingValid)
 
         del sim
         del new_quantsim
         sess.close()
-
-        if os.path.exists('/tmp/orig_tf_hf_bert_model'):
-            os.remove('/tmp/orig_tf_hf_bert_model')
 
     def test_custom_hw_config_hf_bert(self):
         tf.compat.v1.reset_default_graph()
@@ -410,11 +407,12 @@ class TransformerQuantizationUnittests(unittest.TestCase):
         sess = tf.compat.v1.Session()
         initialize_uninitialized_vars(sess)
 
-        file_path = "/tmp/tf_hf_custom_quantsim_config.json"
-        generate_custom_quantsim_config(file_path)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            file_path = os.path.join(tmp_dir, "tf_hf_custom_quantsim_config.json")
+            generate_custom_quantsim_config(file_path)
 
-        sim = QuantizationSimModel(sess, [input_tensor.op.name], [output_tensor['pooler_output'].op.name],
-                                   use_cuda=False, config_file=file_path)
+            sim = QuantizationSimModel(sess, [input_tensor.op.name], [output_tensor['pooler_output'].op.name],
+                                    use_cuda=False, config_file=file_path)
 
         sim.compute_encodings(random_input_forward_pass, {
             'input_tensor': 'input_ids:0',
@@ -475,9 +473,6 @@ class TransformerQuantizationUnittests(unittest.TestCase):
         # quant_ops should not contain any LayerNorm, GeLU, and QKV quant ops as those should have been popped
         for quant_op_name in quant_ops.keys():
             self.assertTrue(all(x not in quant_op_name for x in ['LayerNorm', 'Gelu', 'query', 'key', 'value']))
-
-        if os.path.exists(file_path):
-            os.remove(file_path)
 
     def test_batching_hf_bert(self):
         tf.compat.v1.reset_default_graph()
@@ -759,10 +754,11 @@ class TransformerQuantizationUnittests(unittest.TestCase):
         sess = tf.compat.v1.Session()
         initialize_uninitialized_vars(sess)
 
-        file_path = "/tmp/tf_hf_custom_quantsim_config.json"
-        generate_custom_quantsim_config(file_path)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            file_path = os.path.join(tmp_dir, "tf_hf_custom_quantsim_config.json")
+            generate_custom_quantsim_config(file_path)
 
-        sim = QuantizationSimModel(sess, [input_ids.op.name, token_type_ids.op.name], [outputs.op.name], use_cuda=False, config_file=file_path)
+            sim = QuantizationSimModel(sess, [input_ids.op.name, token_type_ids.op.name], [outputs.op.name], use_cuda=False, config_file=file_path)
 
         sim.compute_encodings(random_input_forward_pass, {
             'input_tensor': 'input_ids:0',

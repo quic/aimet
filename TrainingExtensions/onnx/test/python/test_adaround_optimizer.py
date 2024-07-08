@@ -36,6 +36,7 @@
 # =============================================================================
 import copy
 import pytest
+import tempfile
 from packaging import version
 import torch
 import numpy as np
@@ -72,24 +73,24 @@ class TestAdaroundOptimizer:
 
             data_loader = dataloader()
 
-            path = './tmp/cached_dataset/'
-            cached_dataset = CachedDataset(data_loader, 1, path)
-            opt_params = AdaroundHyperParameters(num_iterations=10, reg_param=0.01, beta_range=(20, 2),
-                                                 warm_start=warm_start)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                cached_dataset = CachedDataset(data_loader, 1, tmp_dir)
+                opt_params = AdaroundHyperParameters(num_iterations=10, reg_param=0.01, beta_range=(20, 2),
+                                                    warm_start=warm_start)
 
-            AdaroundOptimizer.adaround_module(quant_module, 'input_updated',
-                                              model, sim.model, 'Relu', cached_dataset, opt_params,
-                                              param_to_tq_dict, True, 0)
+                AdaroundOptimizer.adaround_module(quant_module, 'input_updated',
+                                                model, sim.model, 'Relu', cached_dataset, opt_params,
+                                                param_to_tq_dict, True, 0)
 
-            new_weights = torch.from_numpy(numpy_helper.to_array(quant_module.params['weight'].tensor))
-            weight_name = quant_module.params['weight'].name
-            for tensor in sim.model.model.graph.initializer:
-                if tensor.name == weight_name:
-                    quantized_weight = torch.from_numpy(numpy_helper.to_array(tensor))
-                    break
-            assert not torch.all(quantized_weight.eq(new_weights))
-            assert torch.all(old_weights.eq(new_weights))
-            assert torch.all(param_to_tq_dict[quant_module.params['weight'].name].alpha)
+                new_weights = torch.from_numpy(numpy_helper.to_array(quant_module.params['weight'].tensor))
+                weight_name = quant_module.params['weight'].name
+                for tensor in sim.model.model.graph.initializer:
+                    if tensor.name == weight_name:
+                        quantized_weight = torch.from_numpy(numpy_helper.to_array(tensor))
+                        break
+                assert not torch.all(quantized_weight.eq(new_weights))
+                assert torch.all(old_weights.eq(new_weights))
+                assert torch.all(param_to_tq_dict[quant_module.params['weight'].name].alpha)
 
     def test_compute_recons_metrics(self):
         if version.parse(torch.__version__) >= version.parse("1.13"):

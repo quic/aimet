@@ -39,6 +39,7 @@
 
 import pytest
 import tempfile
+from pathlib import Path
 import os
 import json
 import logging
@@ -164,7 +165,7 @@ class MultiDataLoaders:
         yield from dl2_iter
 
 
-def save_config_file_for_per_channel_quantization(path):
+def save_config_file_for_per_channel_quantization(target_dir: Path) -> Path:
     quantsim_config = {
         "defaults": {
             "ops": {
@@ -186,8 +187,10 @@ def save_config_file_for_per_channel_quantization(path):
         "model_output": {}
     }
 
-    with open(os.path.join(path, 'quantsim_config.json'), 'w') as f:
+    target_file = Path(target_dir, "quantsim_config.json")
+    with open(target_file, 'w') as f:
         json.dump(quantsim_config, f)
+    return target_file
 
 
 class SplittableModel(torch.nn.Module):
@@ -702,17 +705,17 @@ class TestAdaround:
         params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=100,
                                     default_reg_param=0.01, default_beta_range=(20, 2))
 
-        with tempfile.TemporaryDirectory() as tempdir:
-            save_config_file_for_per_channel_quantization(tempdir)
-            ada_model = Adaround.apply_adaround(model, inp_tensor_list, params, path=tempdir, filename_prefix='dummy',
+        with tempfile.TemporaryDirectory() as temp_dir:
+            save_config_file_for_per_channel_quantization(Path(temp_dir))
+            ada_model = Adaround.apply_adaround(model, inp_tensor_list, params, path=temp_dir, filename_prefix='dummy',
                                                 default_param_bw=param_bit_width,
                                                 default_quant_scheme=QuantScheme.post_training_tf,
-                                                default_config_file=os.path.join(tempdir, 'quantsim_config.json'))
+                                                default_config_file=os.path.join(temp_dir, 'quantsim_config.json'))
 
             # Test that forward pass works for the AdaRounded model
             _ = ada_model(*inp_tensor_list)
 
-            with open(os.path.join(tempdir, 'dummy.encodings')) as json_file:
+            with open(os.path.join(temp_dir, 'dummy.encodings')) as json_file:
                 encoding_data = json.load(json_file)['param_encodings']
 
             assert len(encoding_data['trans_conv1.weight']) == 2

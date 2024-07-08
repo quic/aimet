@@ -36,6 +36,8 @@
 import os
 import unittest
 import json
+import tempfile
+from pathlib import Path
 import torch
 from torch import nn
 import spconv.pytorch as spconv
@@ -153,22 +155,23 @@ class TestSparseConv(unittest.TestCase):
             "model_input": {},
             "model_output": {}
         }
-        config_file_path = "/tmp/quantsim_config.json"
-        with open(config_file_path, "w") as f:
-            json.dump(quantsim_config, f)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_file_path = Path(tmp_dir, "quantsim_config.json")
+            with open(config_file_path, "w") as f:
+                json.dump(quantsim_config, f)
 
-        dummy_input = torch.rand(1, 1, 5, 5)
-        spconv_model = SpconvModel()
+            dummy_input = torch.rand(1, 1, 5, 5)
+            spconv_model = SpconvModel()
 
-        def dummy_forward(model, args):
-            model.eval()
-            with torch.no_grad():
-                model(dummy_input)
+            def dummy_forward(model, args):
+                model.eval()
+                with torch.no_grad():
+                    model(dummy_input)
 
-        sim = QuantizationSimModel(spconv_model, dummy_input,
-                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init,
-                                   config_file=config_file_path)
-        sim.compute_encodings(dummy_forward, None)
+            sim = QuantizationSimModel(spconv_model, dummy_input,
+                                    quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                    config_file=config_file_path)
+            sim.compute_encodings(dummy_forward, None)
 
         # Check if correct Quantizers are created
         self.assertTrue(isinstance(sim.model.conv, LearnedGridQuantWrapper))

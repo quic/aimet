@@ -36,7 +36,6 @@
 # =============================================================================
 """ Acceptance tests for various compression techniques """
 
-import pytest
 import math
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'

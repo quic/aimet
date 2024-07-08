@@ -37,6 +37,7 @@
 import json
 import os
 import tempfile
+from pathlib import Path
 
 import pytest
 import unittest
@@ -184,41 +185,39 @@ class QuantizerCpuGpu(unittest.TestCase):
             "model_input": {},
             "model_output": {}
         }
-        config_file_path = "/tmp/quantsim_config.json"
-        with open(config_file_path, "w") as f:
-            json.dump(quantsim_config, f)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_file_path = Path(tmp_dir, "quantsim_config.json")
+            with open(config_file_path, "w") as f:
+                json.dump(quantsim_config, f)
 
-        dummy_input = (torch.rand(32, 1, 100, 100).cuda(), torch.rand(32, 10, 22, 22).cuda())
+            dummy_input = (torch.rand(32, 1, 100, 100).cuda(), torch.rand(32, 10, 22, 22).cuda())
 
-        def forward_pass(sim_model, _):
-            sim_model.eval()
-            with torch.no_grad():
-                sim_model(*dummy_input)
+            def forward_pass(sim_model, _):
+                sim_model.eval()
+                with torch.no_grad():
+                    sim_model(*dummy_input)
 
-        model = ModelWithTwoInputsOneToAdd().cuda()
+            model = ModelWithTwoInputsOneToAdd().cuda()
 
-        sim = QuantizationSimModel(model, dummy_input=dummy_input,
-                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init,
-                                   config_file=config_file_path)
-        # Enable input parameters to add (multiple input parameter exist)
-        sim.model.add.input_quantizers[0].enabled = True
-        sim.model.add.input_quantizers[1].enabled = True
+            sim = QuantizationSimModel(model, dummy_input=dummy_input,
+                                    quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                    config_file=config_file_path)
+            # Enable input parameters to add (multiple input parameter exist)
+            sim.model.add.input_quantizers[0].enabled = True
+            sim.model.add.input_quantizers[1].enabled = True
 
-        sim.compute_encodings(forward_pass, forward_pass_callback_args=None)
+            sim.compute_encodings(forward_pass, forward_pass_callback_args=None)
 
-        assert len(sim.model.add.input_quantizers) == 2
+            assert len(sim.model.add.input_quantizers) == 2
 
-        out = sim.model(*dummy_input)
-        for _, params in sim.model.named_parameters():
-            assert params.grad is None
+            out = sim.model(*dummy_input)
+            for _, params in sim.model.named_parameters():
+                assert params.grad is None
 
-        optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.05, momentum=0.5)
-        loss = out.flatten().sum()
-        loss.backward()
-        optimizer.step()
-        # All parameters should have a gradient
-        for params in sim.model.parameters():
-            assert params.grad is not None
-
-        if os.path.exists(config_file_path):
-            os.remove(config_file_path)
+            optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.05, momentum=0.5)
+            loss = out.flatten().sum()
+            loss.backward()
+            optimizer.step()
+            # All parameters should have a gradient
+            for params in sim.model.parameters():
+                assert params.grad is not None
