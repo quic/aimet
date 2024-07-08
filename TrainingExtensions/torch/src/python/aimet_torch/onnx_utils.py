@@ -1580,7 +1580,8 @@ def save_initializer_restored_onnx_graph(original_model_path: str,
     """
     model = onnx.load(original_model_path)
     restored_model = restore_onnx_graph_initializers(model, inplace=True)
-    onnx.save(restored_model, restored_model_path)
+    save_as_external_data = model.ByteSize() >= onnx.checker.MAXIMUM_PROTOBUF
+    onnx.save(restored_model, restored_model_path, save_as_external_data=save_as_external_data)
 
 
 def restore_onnx_graph_initializers(model: onnx.ModelProto,
