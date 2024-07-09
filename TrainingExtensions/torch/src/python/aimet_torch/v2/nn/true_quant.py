@@ -540,24 +540,6 @@ class QuantizedConstantPad2d(_QuantizedUnaryOpMixin, nn.ConstantPad2d):
         return (x, self.padding, "constant", self.value,), {}
 
 
-@QuantizationMixin.implements(nn.BatchNorm2d)
-class QuantizedBatchNorm2d(_QuantizedUnaryOpMixin, nn.BatchNorm2d):
-    """ Quantized BatchNorm2d """
-
-    def get_functional_args(self, x):
-        return (x, self.running_mean, self.running_var, self.weight, self.bias, self.training, self.momentum,
-                self.eps), {}
-
-
-@QuantizationMixin.implements(nn.InstanceNorm2d)
-class QuantizedInstanceNorm2d(_QuantizedUnaryOpMixin, nn.InstanceNorm2d):
-    """ Quantized InstanceNorm2d """
-
-    def get_functional_args(self, x):
-        return (x, self.running_mean, self.running_var, self.weight, self.bias, self.training, self.momentum,
-                self.eps), {}
-
-
 @QuantizationMixin.implements(nn.Hardtanh)
 class QuantizedHardtanh(_QuantizedUnaryOpMixin, nn.Hardtanh):
     """ Quantized Hardtanh """
