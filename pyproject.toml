@@ -1,0 +1,40 @@
+[build-system]
+requires = [
+  "scikit-build-core[wheels]>=0.9",
+]
+build-backend = "scikit_build_core.build"
+
+[project]
+#name = "aimet"
+requires-python = ">=3.8"
+dynamic = ["name", "dependencies", "version"]
+
+[project.optional-dependencies]
+dev = [
+  # duplicate build-system.requires for editable mode (non-isolated)
+  "scikit-build-core[wheels]>=0.9",
+  # and the rest
+]
+test = [
+  "pytest",
+]
+docs = [
+]
+
+[tool.scikit-build]
+experimental = true
+metadata.name = { provider = "aimet", provider-path = "packaging/plugins/local" }
+metadata.dependencies = { provider = "aimet", provider-path = "packaging/plugins/local" }
+metadata.version = { provider="aimet", provider-path = "packaging/plugins/local" }
+build-dir = "build"
+sdist.cmake = false
+logging.level = "DEBUG"
+strict-config = false
+wheel.license-files=[]
+wheel.packages=["TrainingExtensions/common/src/python/aimet_common"]
+
+[tool.scikit-build.cmake.define]
+CMAKE_BUILD_TYPE="RelWithDebInfo"
+CMAKE_CUDA_ARCHITECTURES="70;75;80"
+CMAKE_CUDA_FLAGS="--threads=8"
+
