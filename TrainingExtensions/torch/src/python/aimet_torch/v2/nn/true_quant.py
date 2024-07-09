@@ -595,8 +595,7 @@ class QuantizedAvgPool2d(_QuantizedUnaryOpMixin, aimet_ops.AvgPool2d):
     """ Quantized AvgPool2d """
 
     def get_functional_args(self, x):
-        return (x, self.kernel_size, self.stride, self.padding, self.ceil_mode, self.count_include_pad,
-                self.divisor_override), {}
+        return (x,), {}
 
 
 @QuantizationMixin.implements(aimet_ops.Reshape)
