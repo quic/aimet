@@ -545,7 +545,7 @@ class QuantizedHardtanh(_QuantizedUnaryOpMixin, nn.Hardtanh):
     """ Quantized Hardtanh """
 
     def get_functional_args(self, x):
-        return (x, self.min_val, self.max_val,), {}
+        return (x, self.min_val, self.max_val, self.inplace), {}
 
 
 @QuantizationMixin.implements(nn.MaxPool2d)
