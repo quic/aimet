@@ -574,44 +574,37 @@ class QuantizedPixelShuffle(_QuantizedUnaryOpMixin, nn.PixelShuffle):
         return (x, self.upscale_factor,), {}
 
 
+def _as_is(self, *args, **kwargs): # pylint: disable=unused-argument
+    return args, kwargs
+
 @QuantizationMixin.implements(aimet_ops.Sin)
 class QuantizedSin(_QuantizedUnaryOpMixin, aimet_ops.Sin):
     """ Quantized Sin """
-
-    def get_functional_args(self, x):
-        return (x,), {}
+    get_functional_args = _as_is
 
 
 @QuantizationMixin.implements(aimet_ops.Cos)
 class QuantizedCos(_QuantizedUnaryOpMixin, aimet_ops.Cos):
     """ Quantized Cos """
-
-    def get_functional_args(self, x):
-        return (x,), {}
+    get_functional_args = _as_is
 
 
 @QuantizationMixin.implements(aimet_ops.AvgPool2d)
 class QuantizedAvgPool2d(_QuantizedUnaryOpMixin, aimet_ops.AvgPool2d):
     """ Quantized AvgPool2d """
-
-    def get_functional_args(self, x):
-        return (x,), {}
+    get_functional_args = _as_is
 
 
 @QuantizationMixin.implements(aimet_ops.Reshape)
 class QuantizedReshape(_QuantizedUnaryOpMixin, aimet_ops.Reshape):
     """ Quantized Reshape """
-
-    def get_functional_args(self, x):
-        return (x,), {}
+    get_functional_args = _as_is
 
 
 @QuantizationMixin.implements(aimet_ops.RSqrt)
-class QuantizedRSqRt(_QuantizedUnaryOpMixin, aimet_ops.RSqrt):
+class QuantizedRSqrt(_QuantizedUnaryOpMixin, aimet_ops.RSqrt):
     """ Quantized RSqrt """
-
-    def get_functional_args(self, x):
-        return (x,), {}
+    get_functional_args = _as_is
 
 
 @QuantizationMixin.implements(aimet_ops.Concat)
@@ -641,30 +634,22 @@ class QuantizedConcat(_QuantizedUnaryOpMixin, aimet_ops.Concat):
 @QuantizationMixin.implements(aimet_ops.Add)
 class QuantizedAdd(_QuantizedBinaryOpMixin, aimet_ops.Add):
     """ Quantized Add """
-
-    def get_functional_args(self, x, y):
-        return (x, y), {}
+    get_functional_args = _as_is
 
 
 @QuantizationMixin.implements(aimet_ops.Multiply)
 class QuantizedMultiply(_QuantizedBinaryOpMixin, aimet_ops.Multiply):
     """ Quantized Multiply """
-
-    def get_functional_args(self, x, y):
-        return (x, y), {}
+    get_functional_args = _as_is
 
 
 @QuantizationMixin.implements(aimet_ops.Subtract)
 class QuantizedSubtract(_QuantizedBinaryOpMixin, aimet_ops.Subtract):
     """ Quantized Subtract """
-
-    def get_functional_args(self, x, y):
-        return (x, y), {}
+    get_functional_args = _as_is
 
 
 @QuantizationMixin.implements(aimet_ops.Divide)
 class QuantizedDivide(_QuantizedBinaryOpMixin, aimet_ops.Divide):
     """ Quantized Divide """
-
-    def get_functional_args(self, x, y):
-        return (x, y), {}
+    get_functional_args = _as_is
