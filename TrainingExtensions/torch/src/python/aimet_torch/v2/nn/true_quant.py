@@ -607,9 +607,9 @@ class QuantizedReshape(_QuantizedUnaryOpMixin, aimet_ops.Reshape):
         return (x,), {}
 
 
-@QuantizationMixin.implements(aimet_ops.RSqRt)
-class QuantizedRSqRt(_QuantizedUnaryOpMixin, aimet_ops.RSqRt):
-    """ Quantized RSqRt """
+@QuantizationMixin.implements(aimet_ops.RSqrt)
+class QuantizedRSqRt(_QuantizedUnaryOpMixin, aimet_ops.RSqrt):
+    """ Quantized RSqrt """
 
     def get_functional_args(self, x):
         return (x,), {}
