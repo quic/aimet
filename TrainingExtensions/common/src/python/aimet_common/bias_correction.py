@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -34,7 +34,11 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
 """  holds common code for bias correction """
+
+import numpy as np
+from scipy.stats import norm
 
 from aimet_common.defs import ActivationType
 from aimet_common.utils import AimetLogger
@@ -45,6 +49,7 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 CONV_OP_TYPES = ['Conv1d', 'Conv2D', 'DepthwiseConv2dNative', 'Conv', 'ConvTranspose', 'Conv3d']
 LINEAR_OP_TYPES = ['Dense', 'Gemm', 'MatMul']
 BN_OP_TYPES = ['FusedBatchNormV3', 'FusedBatchNorm', 'BatchNormalization', 'BatchNorm3d']
+
 
 class ConvBnInfoType:
     """
@@ -139,3 +144,62 @@ def get_op_dict_key(op: Op):
     if module.__hash__ is None:
         return op
     return module
+
+
+def empirical_bias_correction(quantized_outputs: np.ndarray,
+                              reference_outputs: np.ndarray,
+                              bias: np.ndarray) -> np.ndarray:
+    """
+    Empirical bias correction.
+
+    :param quantized_outputs:
+    :param reference_outputs:
+    :param bias:
+    :return: Updated bias
+    """
+    error = quantized_outputs - reference_outputs
+    error = error.mean(3).mean(2).mean(0)
+    _bias = bias - error
+    return _bias
+
+
+def analytical_bias_correction(fp_weight: np.ndarray,
+                               q_dq_weight: np.ndarray,
+                               bias: np.ndarray,
+                               beta: np.ndarray,
+                               gamma: np.ndarray,
+                               activation_type: ActivationType) -> np.ndarray:
+    """
+    Analytical bias correction.
+
+    :param fp_weight:
+    :param q_dq_weight:
+    :param bias:
+    :param beta:
+    :param gamma:
+    :param activation_type:
+    :return: Updated bias
+    """
+    diff = q_dq_weight - fp_weight
+    epsilon = diff.sum(3).sum(2)
+
+    if activation_type == ActivationType.no_activation:
+        e_x = beta
+    elif activation_type == ActivationType.relu:
+        e_x = beta * (1 - norm.cdf(-beta / gamma)) + gamma * norm.pdf(-beta / gamma)
+    elif activation_type == ActivationType.relu6:
+        b = 6
+        z = norm.pdf(-beta / gamma) - norm.pdf((b - beta) / gamma)
+        Z = norm.cdf((b - beta) / gamma) - norm.cdf(-beta / gamma)
+        e_x = gamma * z + beta * Z + b * (1 - norm.cdf((b - beta) / gamma))
+    else:
+        raise ValueError('Unsupported activation type: ', activation_type)
+
+    if epsilon.shape[1] == 1:
+        ep = epsilon.reshape(epsilon.shape[0])
+        error = np.multiply(ep, e_x)
+    else:
+        error = np.matmul(epsilon, e_x)
+
+    updated_bias = bias - error
+    return updated_bias
