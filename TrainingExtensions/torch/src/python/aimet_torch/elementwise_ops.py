@@ -160,6 +160,17 @@ class Add(torch.nn.Module):
             out = x + y
         return out
 
+class GridSample(torch.nn.Module):
+    def __init__(self, mode='bilinear', padding_mode='zeros', align_corners=None):
+        super().__init__()
+        self._mode = mode
+        self._padding_mode = padding_mode
+        self._align_corners = align_corners
+
+    def forward(self, inputs, grid):
+        return torch.nn.functional.grid_sample(inputs, grid, mode=self._mode, padding_mode=self._padding_mode,
+                                               align_corners=self._align_corners)
+
 class Multiply(torch.nn.Module):
     """ Multiply module for a functional multiply"""
     # pylint:disable=arguments-differ
