@@ -521,7 +521,7 @@ class QuantizedReLU(_QuantizedUnaryOpMixin, nn.ReLU):
     """ Quantized ReLU """
 
     def get_functional_args(self, x):
-        return (x,), {}
+        return (x,), {"inplace": self.inplace}
 
 
 @QuantizationMixin.implements(nn.PReLU)
