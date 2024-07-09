@@ -47,7 +47,6 @@ from weakref import WeakKeyDictionary
 import torch
 import torch.nn as nn
 from torch import Tensor
-from torch.utils._pytree import tree_map
 
 import aimet_torch.elementwise_ops as aimet_ops
 from aimet_torch.v2.quantization import affine
@@ -605,30 +604,6 @@ class QuantizedReshape(_QuantizedUnaryOpMixin, aimet_ops.Reshape):
 class QuantizedRSqrt(_QuantizedUnaryOpMixin, aimet_ops.RSqrt):
     """ Quantized RSqrt """
     get_functional_args = _as_is
-
-
-@QuantizationMixin.implements(aimet_ops.Concat)
-class QuantizedConcat(_QuantizedUnaryOpMixin, aimet_ops.Concat):
-    """ Quantized Concat """
-
-    def forward(self, *x):  # pylint: disable=arguments-differ
-        """
-        Quantized forward impl for aimet_ops.Concat.
-        """
-        if self.input_quantizers[0]:
-            # Use same input quantizer for all the input tensors
-            quantize_fn = lambda inp: self.input_quantizers[0](inp) if inp.is_floating_point() else inp
-            x = tree_map(quantize_fn, x)
-
-        output = super().forward(*x)
-
-        if output.is_floating_point() and self.output_quantizers[0]:
-            output = self.output_quantizers[0](output)
-
-        return output
-
-    def get_functional_args(self, *x):
-        return (*x,), {}
 
 
 @QuantizationMixin.implements(aimet_ops.Add)
