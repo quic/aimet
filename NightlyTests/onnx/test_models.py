@@ -38,11 +38,11 @@ import torch
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
 from onnx import load_model
 
-from torchvision.models import MobileNetV2, mobilenet_v3_large
+from torchvision import models
 
 def mobilenetv2():
     x = torch.randn(1, 3, 224, 224, requires_grad=True)
-    model = MobileNetV2().eval()
+    model = models.MobileNetV2().eval()
 
     torch.onnx.export(model,  # model being run
                       x,  # model input (or a tuple for multiple inputs)
@@ -62,7 +62,7 @@ def mobilenetv2():
 
 def mobilenetv3_large_model():
     x = torch.randn(1, 3, 224, 224, requires_grad=True)
-    model = mobilenet_v3_large().eval()
+    model = models.mobilenet_v3_large().eval()
 
     torch.onnx.export(model,  # model being run
                       x,  # model input (or a tuple for multiple inputs)
@@ -78,4 +78,20 @@ def mobilenetv3_large_model():
                       }
                       )
     model = ONNXModel(load_model('./model_mobilenetv3.onnx'))
+    return model
+
+def resnet18():
+    x = torch.randn(1, 3, 224, 224, requires_grad=True)
+    model = models.resnet18(pretrained=True).eval()
+
+    # Export the model
+    torch.onnx.export(model,  # model being run
+                      x,  # model input (or a tuple for multiple inputs)
+                      "./model_resnet.onnx",  # where to save the model (can be a file or file-like object)
+                      export_params=True,  # store the trained parameter weights inside the model file
+                      opset_version=12,  # the ONNX version to export the model to
+                      do_constant_folding=True,  # whether to execute constant folding for optimization
+                      input_names=['input'],  # the model's input names
+                      output_names=['output'])
+    model = ONNXModel(load_model('./model_resnet.onnx'))
     return model
