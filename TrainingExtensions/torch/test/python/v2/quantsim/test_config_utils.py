@@ -62,7 +62,7 @@ def test_set_activation_quantizers_to_float():
     other_layers = []
     relu_layers = []
     for _, module in qsim.named_qmodules():
-        if isinstance(module, aimet_nn.FakeQuantizedReLU):
+        if isinstance(module, aimet_nn.QuantizedReLU):
             relu_layers.append(module)
         elif hasattr(module, 'output_quantizers') and len(module.output_quantizers) > 0 and \
                 module.output_quantizers[0] is not None:
@@ -93,7 +93,7 @@ def test_set_activation_quantizers_to_float():
     for relu_layer in relu_layers[2:]:
         assert isinstance(relu_layer.output_quantizers[0], QuantizeDequantize)
 
-    set_activation_quantizers_to_float(qsim, [aimet_nn.FakeQuantizedReLU], dtype=torch.float16)
+    set_activation_quantizers_to_float(qsim, [aimet_nn.QuantizedReLU], dtype=torch.float16)
     for relu_layer in relu_layers:
         assert isinstance(relu_layer.output_quantizers[0], FloatQuantizeDequantize)
 
