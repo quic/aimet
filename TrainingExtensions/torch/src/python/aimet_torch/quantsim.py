@@ -1705,9 +1705,6 @@ class QuantizationSimModel:
     def set_and_freeze_param_encodings(self, encoding_path: str):
         """
         Set and freeze parameter encodings from encodings JSON file.
-        .. note:
-            The loaded json file should contain ONLY weight encodings. This is different from the json file used in
-            `load_and_freeze_encodings`, which contains both weight and activation dictionaries.
 
         :param encoding_path: path from where to load parameter encodings file
         """
