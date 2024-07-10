@@ -710,7 +710,7 @@ class TestQuantizationSimStaticGrad:
         assert isinstance(sim.model.layers[2], aimet_nn.QuantizedConv2d)
 
         assert isinstance(sim.model.layers_deep[0][0], aimet_nn.FakeQuantizedBatchNorm2d)
-        assert isinstance(sim.model.layers_deep[0][1], aimet_nn.FakeQuantizedReLU)
+        assert isinstance(sim.model.layers_deep[0][1], aimet_nn.QuantizedReLU)
 
         assert type(sim.model.layers_deep[1]) == nn.Linear # layer ignored, so no QcQuantizeWrapper wrapper
         assert isinstance(sim.model.layers_deep[2], aimet_nn.QuantizedLinear)

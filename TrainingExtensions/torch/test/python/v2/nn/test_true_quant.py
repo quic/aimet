@@ -39,10 +39,12 @@ import functools
 
 import pytest
 import torch
-from torch import nn
+from torch import nn, randn
 import torch.nn.functional as F
+from torch.utils._pytree import tree_map
 from aimet_torch.v2.quantization.affine.backends import quantize, quantize_dequantize, dequantize
 from aimet_torch.v2.quantization.affine import Quantize, QuantizeDequantize
+import aimet_torch.v2 as aimet
 from aimet_torch.v2.nn import (
     QuantizedConv1d,
     QuantizedConv2d,
@@ -564,3 +566,117 @@ class TestQuantizedConvNd:
         convnd = cls(3, 3, 3, padding_mode="reflect")
         with pytest.raises(NotImplementedError):
             _ = QuantizationMixin.from_module(convnd)
+
+
+def _pseudo_integer_kernel_helper(fn):
+    """
+    Helper function for creating a pseudo-integer kernel of ``fn``.
+    Pseudo-integer kernel is a function that takes/returns QuantizedTensors,
+    but internally delegates actual computation to ``fn``.
+    """
+    def pseudo_kernel(*args, **kwargs):
+        assert "output_encodings" in kwargs
+        output_encodings = kwargs.pop("output_encodings")
+
+        def dequantize(t: torch.Tensor):
+            if isinstance(t, torch.Tensor):
+                assert isinstance(t, QuantizedTensor)
+                t = t.dequantize()
+            return t
+
+        # Dequantize quantized input tensors
+        args = tree_map(dequantize, args)
+        kwargs = tree_map(dequantize, kwargs)
+
+        # Delegate actual computation to ``fn``
+        out = fn(*args, **kwargs)
+
+        # Quantize output
+        out = output_encodings.quantize(out).as_subclass(QuantizedTensor)
+        out.encoding = output_encodings
+        return out
+
+    return pseudo_kernel
+
+
+from aimet_torch.v2.nn import (
+    QuantizedReLU,
+    QuantizedPReLU,
+    QuantizedConstantPad2d as QConstantPad2d,
+    QuantizedHardtanh,
+    QuantizedMaxPool2d,
+    QuantizedUpsamplingBilinear2d as QUpsamplingBilinear2d,
+    QuantizedPixelShuffle,
+    QuantizedSin,
+    QuantizedCos,
+    QuantizedAvgPool2d,
+    QuantizedReshape,
+    QuantizedRSqrt,
+    QuantizedAdd,
+    QuantizedMultiply,
+    QuantizedSubtract,
+    QuantizedDivide,
+)
+pseudo_relu_kernel = _pseudo_integer_kernel_helper(F.relu)
+pseudo_prelu_kernel = _pseudo_integer_kernel_helper(F.prelu)
+pseudo_pad_kernel = _pseudo_integer_kernel_helper(F.pad)
+pseudo_hardtanh_kernel = _pseudo_integer_kernel_helper(F.hardtanh)
+pseudo_max_pool2d_kernel = _pseudo_integer_kernel_helper(F.max_pool2d)
+pseudo_interpolate_kernel = _pseudo_integer_kernel_helper(F.interpolate)
+pseudo_pixel_shuffle_kernel = _pseudo_integer_kernel_helper(F.pixel_shuffle)
+pseudo_sin_kernel = _pseudo_integer_kernel_helper(torch.sin)
+pseudo_cos_kernel = _pseudo_integer_kernel_helper(torch.cos)
+pseudo_avg_pool2d_kernel = _pseudo_integer_kernel_helper(F.avg_pool2d)
+pseudo_reshape_kernel = _pseudo_integer_kernel_helper(torch.reshape)
+pseudo_rsqrt_kernel = _pseudo_integer_kernel_helper(torch.rsqrt)
+pseudo_add_kernel = _pseudo_integer_kernel_helper(torch.add)
+pseudo_mul_kernel = _pseudo_integer_kernel_helper(torch.mul)
+pseudo_sub_kernel = _pseudo_integer_kernel_helper(torch.sub)
+pseudo_div_kernel = _pseudo_integer_kernel_helper(torch.div)
+
+
+@pytest.mark.parametrize(
+    "qmodule,                       pseudo_kernel,              inputs",           [
+     (QuantizedReLU(),              pseudo_relu_kernel,         randn(100)),
+     (QuantizedPReLU(),             pseudo_prelu_kernel,        randn(100)),
+     (QConstantPad2d([1,1,1,1], 0), pseudo_pad_kernel,          randn(10,10)),
+     (QuantizedHardtanh(),          pseudo_hardtanh_kernel,     randn(100)),
+     (QuantizedMaxPool2d([3,3]),    pseudo_max_pool2d_kernel,   randn(1,10,10)),
+     (QUpsamplingBilinear2d([2,2]), pseudo_interpolate_kernel,  randn(1,1,10,10)),
+     (QuantizedPixelShuffle(1),     pseudo_pixel_shuffle_kernel,randn(1,1,10,10)),
+     (QuantizedSin(),               pseudo_sin_kernel,          randn(100)),
+     (QuantizedCos(),               pseudo_cos_kernel,          randn(100)),
+     (QuantizedAvgPool2d(),         pseudo_avg_pool2d_kernel,   (randn(1,10,10), 2)),
+     (QuantizedReshape(),           pseudo_reshape_kernel,      (randn(10,10), (100, 1))),
+     (QuantizedRSqrt(),             pseudo_rsqrt_kernel,        randn(100).abs()),
+     (QuantizedAdd(),               pseudo_add_kernel,          (randn(100), randn(100))),
+     (QuantizedMultiply(),          pseudo_mul_kernel,          (randn(100), randn(100))),
+     (QuantizedSubtract(),          pseudo_sub_kernel,          (randn(100), randn(100))),
+     (QuantizedDivide(),            pseudo_div_kernel,          (randn(100), randn(100))),
+])
+def test_sanity(qmodule, pseudo_kernel, inputs):
+    """
+    When: Set qmodule's kernel as pseudo-integer kernel
+    Then: Output of qmodule should be same as that of fake-quantization fallback
+    """
+    if not isinstance(inputs, (tuple, list)):
+        inputs = (inputs,)
+
+    for i, _ in enumerate(qmodule.input_quantizers):
+        qmodule.input_quantizers[i] = Quantize([], 8, False)
+
+    for i, _ in enumerate(qmodule.output_quantizers):
+        qmodule.output_quantizers[i] = Quantize([], 8, False)
+
+    if 'weight' in qmodule.param_quantizers:
+        qmodule.param_quantizers['weight'] = Quantize([], 8, True)
+
+    with qmodule.compute_encodings():
+        _ = qmodule(*inputs)
+
+    out_fakequant = qmodule(*inputs)
+
+    qmodule.set_kernel(pseudo_kernel)
+    out_truequant = qmodule(*inputs)
+
+    assert torch.equal(out_fakequant, out_truequant)
