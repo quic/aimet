@@ -169,8 +169,8 @@ class TestMinMaxEncodingAnalyzer():
 
         num_steps = pow(2, 8) - 1
         asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(num_steps=num_steps, is_symmetric = False)
-        updated_min = torch.finfo(asymmetric_min.dtype).tiny * (2 ** (8 - 1))
-        updated_max = torch.finfo(asymmetric_min.dtype).tiny * ((2 **(8 - 1)) - 1)
+        updated_min = torch.finfo(asymmetric_min.dtype).eps * (2 ** (8 - 1))
+        updated_max = torch.finfo(asymmetric_min.dtype).eps * ((2 **(8 - 1)) - 1)
         assert torch.all(torch.eq(asymmetric_min,  torch.full(tuple(encoding_analyzer.observer.shape), -updated_min)))
         assert torch.all(torch.eq(asymmetric_max, torch.full(tuple(encoding_analyzer.observer.shape), updated_max)))
 
@@ -187,7 +187,7 @@ class TestMinMaxEncodingAnalyzer():
     @pytest.mark.parametrize('symmetric', [True, False])
     def test_overflow(self, symmetric):
         encoding_analyzer = MinMaxEncodingAnalyzer((1,))
-        float_input_min = (torch.arange(10) * torch.finfo(torch.float).tiny)
+        float_input_min = (torch.arange(10) * torch.finfo(torch.float).eps)
         encoding_analyzer.update_stats(float_input_min)
         num_steps = pow(2, 8) - 2
         min, max = encoding_analyzer.compute_encodings(num_steps=num_steps, is_symmetric=symmetric)
@@ -195,7 +195,7 @@ class TestMinMaxEncodingAnalyzer():
 
         # Scale should be at least as large as torch.min
         assert scale != 0
-        assert torch.allclose(scale, torch.tensor(torch.finfo(scale.dtype).tiny), atol=1e-10)
+        assert torch.allclose(scale, torch.tensor(torch.finfo(scale.dtype).eps), rtol=0.01)
 
         float_input_max = (torch.arange(10) * torch.finfo(torch.float).max)
         encoding_analyzer.update_stats(float_input_max)
