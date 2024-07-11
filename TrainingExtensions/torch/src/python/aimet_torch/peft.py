@@ -318,6 +318,18 @@ class PeftQuantUtils:
             if isinstance(module, BaseQuantizationMixin) and module_name in self.pt_to_lora_name:
                 yield module_name, module
 
+    def get_fp_lora_layer(self, model):
+        """
+        This Function can be used to get lora layers for a model
+
+        :param model: FP32 model
+        """
+        for module_name, module in model.named_modules():
+            if self.prepared_name_to_pt_name and module_name in self.prepared_name_to_pt_name:
+                module_name = self.prepared_name_to_pt_name[module_name]
+            if module_name in self.pt_to_lora_name:
+                yield module_name, module
+
     @staticmethod
     def _set_bitwidth_for_module(module: BaseQuantizationMixin, output_bw: int, param_bw: int):
         """
