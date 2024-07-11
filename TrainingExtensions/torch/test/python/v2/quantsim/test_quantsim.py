@@ -39,6 +39,8 @@ import tempfile
 import os
 import json
 import pytest
+import random
+import numpy as np
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
 from aimet_common.defs import QuantizationDataType
 from aimet_torch.quantsim import load_encodings_to_sim, QuantScheme
@@ -58,6 +60,12 @@ def encodings_are_close(quantizer_1: AffineQuantizerBase, quantizer_2: AffineQua
            and torch.allclose(max_1, max_2) \
            and quantizer_1.bitwidth == quantizer_2.bitwidth \
            and quantizer_1.symmetric == quantizer_2.symmetric
+
+@pytest.fixture(autouse=True)
+def set_seed():
+    random.seed(0)
+    torch.manual_seed(0)
+    np.random.seed(0)
 
 
 class ConcatModel(torch.nn.Module):
@@ -101,7 +109,6 @@ class TestQuantsim:
 
     @pytest.mark.parametrize("config_file", (None, get_path_for_per_channel_config()))
     def test_set_and_freeze_param_encodings(self, config_file):
-        torch.manual_seed(0)
         model = test_models.BasicConv2d(kernel_size=3)
         dummy_input = torch.rand(1, 64, 16, 16)
         sim = QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf, config_file=config_file)
@@ -148,7 +155,6 @@ class TestQuantsim:
 
     @pytest.mark.parametrize("config_file", (None, get_path_for_per_channel_config()))
     def test_load_and_freeze_encodings(self, config_file):
-        torch.manual_seed(0)
         model = test_models.TinyModel()
         dummy_input = torch.rand(1, 3, 32, 32)
         sim = QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf, config_file=config_file)
@@ -195,7 +201,6 @@ class TestQuantsim:
 
     def test_load_and_freeze_with_partial_encodings(self):
         """ Test load_and_freeze encoding API with partial_encodings """
-        torch.manual_seed(0)
         model = test_models.TinyModel()
         dummy_input = torch.randn(1, 3, 32, 32)
 
