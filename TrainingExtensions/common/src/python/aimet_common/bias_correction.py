@@ -146,9 +146,7 @@ def get_op_dict_key(op: Op):
     return module
 
 
-def empirical_bias_correction(quantized_outputs: np.ndarray,
-                              reference_outputs: np.ndarray,
-                              bias: np.ndarray) -> np.ndarray:
+def empirical_bias_correction(reference_outputs: np.ndarray, quantized_outputs: np.ndarray, bias: np.ndarray) -> np.ndarray:
     """
     Empirical bias correction.
 
@@ -201,5 +199,5 @@ def analytical_bias_correction(fp_weight: np.ndarray,
     else:
         error = np.matmul(epsilon, e_x)
 
-    updated_bias = bias - error
-    return updated_bias
+    _bias = bias - error
+    return _bias
