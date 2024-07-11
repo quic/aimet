@@ -78,6 +78,21 @@ function(set_torch_cmake_prefix_path)
     message(STATUS "Set TORCH_DIR = ${TORCH_DIR_}")
 endfunction()
 
+function(check_torch_cxx_abi_compatibility)
+    if (NOT ${Python3_FOUND})
+        message(FATAL_ERROR "Need Python3 executable to determine PyTorch version.")
+    endif()
+
+    execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import torch.utils.cpp_extension;print(torch.utils.cpp_extension.get_compiler_abi_compatibility_and_version(\"g++\")[0])"
+            OUTPUT_VARIABLE TORCH_IS_ABI_COMPATIBLE_
+            OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+    message(STATUS "TORCH_IS_ABI_COMPATIBLE_ = ${TORCH_IS_ABI_COMPATIBLE_}")
+    if (NOT TORCH_IS_ABI_COMPATIBLE_)
+        message(FATAL_ERROR "Torch/C++ compiler ABI incompatibility detected.")
+    endif()
+endfunction()
+
 # ----
 
 macro(update_torch_cuda_arch_list)
