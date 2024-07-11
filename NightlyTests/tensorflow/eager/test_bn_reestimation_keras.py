@@ -37,7 +37,7 @@
 """ Keras bn_reestimation Nightly Tests """
 import json
 import tempfile
-from Pathlib import Path
+from pathlib import Path
 import tensorflow as tf
 import numpy as np
 from aimet_common.defs import QuantScheme
