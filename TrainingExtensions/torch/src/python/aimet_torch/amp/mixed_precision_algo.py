@@ -540,27 +540,12 @@ class GreedyMixedPrecisionAlgo(MixedPrecisionAlgo):
         """
         Get the eval score of the model based on whether ENABLE_MP_PROFILE_OPTIMIZE is enabled.
         """
-        if self.ENABLE_MP_PROFILE_OPTIMIZE and self.op_graph:
-            sim_state = self.op_graph.get_sim_state()
 
-            self.op_graph.optimize()
-
-            # Recompute quantizer encodings
-            # pylint: disable=protected-access
-            self._sim.compute_encodings(self.algo_params.forward_pass_callback,
-                                        self.algo_params.forward_pass_callback_args)
-            # Compute new accuracy score using the optimized model
-            eval_score = self.algo_params.eval_callback_for_phase2.func(self._sim.model,
-                                                                        self.algo_params.eval_callback_for_phase2.args)
-
-            self.op_graph.load_sim_state(sim_state)
-
-        else:
-            # Recompute quantizer encodings
-            self._sim.compute_encodings(self.algo_params.forward_pass_callback,
-                                        self.algo_params.forward_pass_callback_args)
-            # Compute new accuracy score
-            eval_score = self.evaluate_model(self.algo_params.eval_callback_for_phase2)
+        # Recompute quantizer encodings
+        self._sim.compute_encodings(self.algo_params.forward_pass_callback,
+                                    self.algo_params.forward_pass_callback_args)
+        # Compute new accuracy score
+        eval_score = self.evaluate_model(self.algo_params.eval_callback_for_phase2)
 
         return eval_score
 
