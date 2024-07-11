@@ -344,7 +344,10 @@ class ScatterND(torch.nn.Module):
         Forward-pass routine for ScatterND op
         """
         if torch.jit.is_tracing():
-            return data
+            # Temporary Fix. Not meant to be merged as of now.
+            output = torch.clone(data)
+            output[indices[:, 0], indices[:, 1], indices[:, 2], :] = updates
+            return output
 
         output = torch.clone(data)
 
