@@ -93,7 +93,7 @@ message(STATUS "** ENABLE_TESTS = ${ENABLE_TESTS}")
 
 if (ENABLE_TORCH AND ENABLE_TENSORFLOW)
     # Remove this once it's proven feasible.
-    message(FATAL_ERROR "AIMET Torch and TensorFlow support currently cannot be built at the same time.")
+    message(WARNING "AIMET Torch and TensorFlow support currently cannot be built at the same time.")
 endif()
 
 if (ENABLE_ONNX AND NOT ENABLE_TORCH)
