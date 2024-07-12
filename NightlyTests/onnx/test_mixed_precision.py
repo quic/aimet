@@ -46,8 +46,7 @@ import json
 import numpy as np
 from test_models import resnet18
 from aimet_onnx.mixed_precision import choose_mixed_precision
-from aimet_common.pro.defs import CallbackFunc
-from aimet_common.defs import QuantizationDataType
+from aimet_common.defs import QuantizationDataType, CallbackFunc
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.defs import DataLoader
 from aimet_onnx.amp import utils as mixed_precision_utils

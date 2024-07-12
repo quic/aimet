@@ -82,7 +82,7 @@ def mobilenetv3_large_model():
 
 def resnet18():
     x = torch.randn(1, 3, 224, 224, requires_grad=True)
-    model = models.resnet18(pretrained=True).eval()
+    model = models.resnet18().eval()
 
     # Export the model
     torch.onnx.export(model,  # model being run

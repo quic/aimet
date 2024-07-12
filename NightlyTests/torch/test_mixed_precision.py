@@ -50,8 +50,7 @@ from torchvision.models import resnet18
 import json
 
 from aimet_torch.mixed_precision import choose_mixed_precision
-from aimet_common.pro.defs import CallbackFunc
-from aimet_common.defs import QuantizationDataType
+from aimet_common.defs import QuantizationDataType, CallbackFunc
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.model_preparer import prepare_model
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
