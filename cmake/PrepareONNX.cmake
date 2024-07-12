@@ -51,11 +51,11 @@ endfunction()
 
 function(set_onnxruntime_variables)
     find_path(ONNXRUNTIME_INCLUDE_DIR_ "onnxruntime_cxx_api.h"
-            PATH_SUFFIXES onnxruntime_headers/include
+            PATHS ${onnxruntime_headers_SOURCE_DIR}/include
             REQUIRED)
     find_library(ONNXRUNTIME_LIBRARIES_
             NAMES libonnxruntime.so
-            PATH_SUFFIXES /onnxruntime_headers/lib
+            PATHS ${onnxruntime_headers_SOURCE_DIR}/lib
             REQUIRED)
 
     message(STATUS "** ONNXRUNTIME_INCLUDE_DIR = ${ONNXRUNTIME_INCLUDE_DIR_}")

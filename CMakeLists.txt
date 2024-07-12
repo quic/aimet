@@ -170,6 +170,8 @@ pkg_search_module(LAPACKE REQUIRED lapacke)
 #find_package(OpenCV REQUIRED)
 pkg_search_module(OPENCV opencv) # in case opencv will not be found, it would be built form source
 
+include(cmake/ThirdPartyDependencies.cmake)
+
 if (ENABLE_TORCH)
     set_torch_version()
     set_torch_cmake_prefix_path()
@@ -197,7 +199,6 @@ add_library_pybind11()
 # michof: We should consider replacing the above macro simply by:
 #find_package(pybind11 CONFIG REQUIRED)
 
-include(cmake/ThirdPartyDependencies.cmake)
 
 # -------------------------------
 # Conditional build for CUDA
