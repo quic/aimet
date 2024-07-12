@@ -34,6 +34,8 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+import tempfile
+
 import pytest
 import itertools
 import json
@@ -219,24 +221,20 @@ def sim_supported_kernel():
         "model_output": {}
     }
 
-    if not os.path.exists("data"):
-        os.mkdir("data")
-    with open('./data/quantsim_config.json', 'w') as f:
-        json.dump(quantsim_config, f)
+    with tempfile.TemporaryDirectory() as tempdir:
+        with open(os.path.join(tempdir, 'quantsim_config.json'), 'w') as f:
+            json.dump(quantsim_config, f)
 
-    sim = QuantizationSimModel(model,
-                               config_file="./data/quantsim_config.json")
-    return sim
+        sim = QuantizationSimModel(model, config_file=os.path.join(tempdir, 'quantsim_config.json'))
+        return sim
 
 
 @pytest.fixture
 def results_dir():
-    path = '/tmp/artifacts'
-    if os.path.exists(path):
-        shutil.rmtree(path)
-    os.makedirs(os.path.join(path, ".cache"))
-    yield path
-    shutil.rmtree(path)
+    with tempfile.TemporaryDirectory() as tempdir:
+        os.makedirs(os.path.join(tempdir, ".cache"))
+        yield tempdir
+        shutil.rmtree(tempdir)
 
 
 class TestAMPv1:
@@ -515,13 +513,11 @@ class TestAMPv1:
                 "model_output": {}
             }
 
-            if not os.path.exists("data"):
-                os.mkdir("data")
-            with open('./data/quantsim_config.json', 'w') as f:
+
+            with open(os.path.join(results_dir, 'quantsim_config.json'), 'w') as f:
                 json.dump(quantsim_config, f)
 
-            sim = QuantizationSimModel(model,
-                                       config_file="./data/quantsim_config.json")
+            sim = QuantizationSimModel(model, config_file=os.path.join(results_dir, 'quantsim_config.json'))
 
             # Create an accuracy list
             algo = GreedyMixedPrecisionAlgo(sim, candidates, eval_callback_phase1, eval_callback_phase2,

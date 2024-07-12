@@ -37,6 +37,7 @@
 
 import copy
 import itertools
+import tempfile
 import unittest
 import unittest.mock
 import os
@@ -212,12 +213,10 @@ def sim(model, dummy_input):
 
 @pytest.fixture
 def results_dir():
-    path = '/tmp/artifacts'
-    if os.path.exists(path):
+    with tempfile.TemporaryDirectory() as path:
+        os.makedirs(os.path.join(path, ".cache"))
+        yield path
         shutil.rmtree(path)
-    os.makedirs(os.path.join(path, ".cache"))
-    yield path
-    shutil.rmtree(path)
 
 
 @pytest.fixture(autouse=True)
@@ -962,35 +961,34 @@ class TestAutoMixedPrecision:
             "model_output": {}
         }
 
-        if not os.path.exists("data"):
-            os.mkdir("data")
-        with open('./data/quantsim_config.json', 'w') as f:
-            json.dump(quantsim_config, f)
+        with tempfile.TemporaryDirectory() as tempdir:
+            with open(os.path.join(tempdir, 'quantsim_config.json'), 'w') as f:
+                json.dump(quantsim_config, f)
 
-        sim = QuantizationSimModel(model,
-                                   default_param_bw=DEFAULT_BITWIDTH,
-                                   default_output_bw=DEFAULT_BITWIDTH,
-                                   dummy_input=dummy_input,
-                                   config_file="./data/quantsim_config.json")
+            sim = QuantizationSimModel(model,
+                                       default_param_bw=DEFAULT_BITWIDTH,
+                                       default_output_bw=DEFAULT_BITWIDTH,
+                                       dummy_input=dummy_input,
+                                       config_file=os.path.join(tempdir, 'quantsim_config.json'))
 
-        sim.compute_encodings(forward_fn, forward_pass_callback_args=None)
+            sim.compute_encodings(forward_fn, forward_pass_callback_args=None)
 
-        # Create an accuracy list
-        algo = GreedyMixedPrecisionAlgo(sim, dummy_input, candidates, eval_callback_phase1, eval_callback_phase2,
-                                        results_dir, True, forward_pass_callback, use_all_amp_candidates=False)
-        algo.run(0.9)
+            # Create an accuracy list
+            algo = GreedyMixedPrecisionAlgo(sim, dummy_input, candidates, eval_callback_phase1, eval_callback_phase2,
+                                            results_dir, True, forward_pass_callback, use_all_amp_candidates=False)
+            algo.run(0.9)
 
-        assert len(algo._supported_candidates_per_quantizer_group.keys()) == 4
+            assert len(algo._supported_candidates_per_quantizer_group.keys()) == 4
 
-        default_supported_kernels = [((16, QuantizationDataType.int), (16, QuantizationDataType.int)),
-                                      ((16, QuantizationDataType.float), (16, QuantizationDataType.float))]
+            default_supported_kernels = [((16, QuantizationDataType.int), (16, QuantizationDataType.int)),
+                                          ((16, QuantizationDataType.float), (16, QuantizationDataType.float))]
 
-        for quantizer, quantizer_candidates in algo._supported_candidates_per_quantizer_group.items():
-            # verify to make sure the candidates returned is always part of amp_candidates and they are part of
-            # "Defaults"
-            for c in quantizer_candidates:
-                assert c in default_supported_kernels
-                assert c in candidates
+            for quantizer, quantizer_candidates in algo._supported_candidates_per_quantizer_group.items():
+                # verify to make sure the candidates returned is always part of amp_candidates and they are part of
+                # "Defaults"
+                for c in quantizer_candidates:
+                    assert c in default_supported_kernels
+                    assert c in candidates
 
     def test_supported_candidates_2(
             self, model, dummy_input, candidates, forward_pass_callback, eval_callback_phase1, eval_callback_phase2, results_dir
@@ -1091,51 +1089,50 @@ class TestAutoMixedPrecision:
             "model_output": {}
         }
 
-        if not os.path.exists("data"):
-            os.mkdir("data")
-        with open('./data/quantsim_config.json', 'w') as f:
-            json.dump(quantsim_config, f)
+        with tempfile.TemporaryDirectory() as tempdir:
+            with open(os.path.join(tempdir, 'quantsim_config.json'), 'w') as f:
+                json.dump(quantsim_config, f)
 
-        sim = QuantizationSimModel(model,
-                                   default_param_bw=DEFAULT_BITWIDTH,
-                                   default_output_bw=DEFAULT_BITWIDTH,
-                                   dummy_input=dummy_input,
-                                   config_file="./data/quantsim_config.json")
+            sim = QuantizationSimModel(model,
+                                       default_param_bw=DEFAULT_BITWIDTH,
+                                       default_output_bw=DEFAULT_BITWIDTH,
+                                       dummy_input=dummy_input,
+                                       config_file=os.path.join(tempdir, 'quantsim_config.json'))
 
-        sim.compute_encodings(forward_fn, forward_pass_callback_args=None)
+            sim.compute_encodings(forward_fn, forward_pass_callback_args=None)
 
-        # Create an accuracy list
-        algo = GreedyMixedPrecisionAlgo(sim, dummy_input, candidates, eval_callback_phase1, eval_callback_phase2,
-                                        results_dir, True, forward_pass_callback, use_all_amp_candidates=False)
-        algo.run(0.9)
+            # Create an accuracy list
+            algo = GreedyMixedPrecisionAlgo(sim, dummy_input, candidates, eval_callback_phase1, eval_callback_phase2,
+                                            results_dir, True, forward_pass_callback, use_all_amp_candidates=False)
+            algo.run(0.9)
 
-        assert len(algo._supported_candidates_per_quantizer_group.keys()) == 4
+            assert len(algo._supported_candidates_per_quantizer_group.keys()) == 4
 
-        # default_supported_kernels and conv_supported_kernels are the configurations added in the json file above.
-        default_supported_kernels = [((16, QuantizationDataType.int), (16, QuantizationDataType.int)),
-                                     ((16, QuantizationDataType.float), (16, QuantizationDataType.float)),
-                                     ((8, QuantizationDataType.float), (16, QuantizationDataType.float))]
+            # default_supported_kernels and conv_supported_kernels are the configurations added in the json file above.
+            default_supported_kernels = [((16, QuantizationDataType.int), (16, QuantizationDataType.int)),
+                                         ((16, QuantizationDataType.float), (16, QuantizationDataType.float)),
+                                         ((8, QuantizationDataType.float), (16, QuantizationDataType.float))]
 
-        conv_supported_kernels = [((16, QuantizationDataType.float), (16, QuantizationDataType.float)),
-                                  ((8, QuantizationDataType.int), (16, QuantizationDataType.int))]
+            conv_supported_kernels = [((16, QuantizationDataType.float), (16, QuantizationDataType.float)),
+                                      ((8, QuantizationDataType.int), (16, QuantizationDataType.int))]
 
-        for quantizer_group, quantizer_candidates in algo._supported_candidates_per_quantizer_group.items():
-            quantizers = sorted(itertools.chain(quantizer_group.get_input_quantizer_modules(),
-                                                quantizer_group.output_quantizers,
-                                                quantizer_group.parameter_quantizers))
-            onnx_types = []
-            for q in quantizers:
-                onnx_types.append(
-                    onnx_utils.map_torch_types_to_onnx.get(type(algo._module_name_dict[q]._module_to_wrap)))
+            for quantizer_group, quantizer_candidates in algo._supported_candidates_per_quantizer_group.items():
+                quantizers = sorted(itertools.chain(quantizer_group.get_input_quantizer_modules(),
+                                                    quantizer_group.output_quantizers,
+                                                    quantizer_group.parameter_quantizers))
+                onnx_types = []
+                for q in quantizers:
+                    onnx_types.append(
+                        onnx_utils.map_torch_types_to_onnx.get(type(algo._module_name_dict[q]._module_to_wrap)))
 
-            # verify to make sure the candidates returned is always part of amp_candidates and they are part of
-            # "Defaults" or "Conv" appropriately
-            for c in quantizer_candidates:
-                assert c in candidates
-                if ['Conv'] in onnx_types:
-                    assert c in conv_supported_kernels
-                else:
-                    assert c in default_supported_kernels
+                # verify to make sure the candidates returned is always part of amp_candidates and they are part of
+                # "Defaults" or "Conv" appropriately
+                for c in quantizer_candidates:
+                    assert c in candidates
+                    if ['Conv'] in onnx_types:
+                        assert c in conv_supported_kernels
+                    else:
+                        assert c in default_supported_kernels
 
     def test_set_quantizer_groups_candidates_1(self, sim, dummy_input, candidates, forward_pass_callback,
                                              eval_callback_phase1, eval_callback_phase2, results_dir):

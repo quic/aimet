@@ -38,6 +38,7 @@
 import os
 import pickle
 import shutil
+import tempfile
 import unittest
 import unittest.mock
 import numpy as np
@@ -210,12 +211,10 @@ def quantizer_groups():
 
 @pytest.fixture
 def results_dir():
-    dirname = '/tmp/artifacts'
-    if os.path.exists(dirname):
-        shutil.rmtree(dirname)
-    os.makedirs(os.path.join(dirname, ".cache"), exist_ok=True)
-    yield dirname
-    shutil.rmtree(dirname)
+    with tempfile.TemporaryDirectory() as tempdir:
+        os.makedirs(os.path.join(tempdir, ".cache"), exist_ok=True)
+        yield tempdir
+        shutil.rmtree(tempdir)
 
 
 @pytest.fixture

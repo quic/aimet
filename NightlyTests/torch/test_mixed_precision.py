@@ -39,6 +39,7 @@
 
 import os
 import pathlib
+import tempfile
 
 import pytest
 import unittest
@@ -95,18 +96,15 @@ class TestMixedPrecision:
         fp32_accuracy = eval_callback.func(model, None)
         forward_pass_call_back = CallbackFunc(forward_pass_callback, input_shape)
 
-        results_dir = './data'
-        if not os.path.exists(results_dir):
-            os.makedirs(results_dir)
+        with tempfile.TemporaryDirectory() as tempdir:
+            pareto_front_list = choose_mixed_precision(sim, dummy_input, candidates, eval_callback, eval_callback,
+                                                       allowed_accuracy_drop, tempdir, True, forward_pass_call_back,
+                                                       amp_search_algo=AMPSearchAlgo.BruteForce)
 
-        pareto_front_list = choose_mixed_precision(sim, dummy_input, candidates, eval_callback, eval_callback,
-                                                   allowed_accuracy_drop, results_dir, True, forward_pass_call_back,
-                                                   amp_search_algo=AMPSearchAlgo.BruteForce)
-
-        assert len(pareto_front_list) == 18
-        # Test that final eval score is still within allowable accuracy range
-        _, eval_score, _, _ = pareto_front_list[-1]
-        assert fp32_accuracy - eval_score < 0.01
+            assert len(pareto_front_list) == 18
+            # Test that final eval score is still within allowable accuracy range
+            _, eval_score, _, _ = pareto_front_list[-1]
+            assert fp32_accuracy - eval_score < 0.01
 
     @pytest.mark.cuda
     def test_quantize_with_mixed_precision_fp16_1(self):
@@ -136,35 +134,32 @@ class TestMixedPrecision:
         eval_callback = CallbackFunc(eval_function(num_candidates=len(candidates)), None)
         forward_pass_call_back = CallbackFunc(forward_pass_callback, input_shape)
 
-        results_dir = './data'
-        if not os.path.exists(results_dir):
-            os.makedirs(results_dir)
+        with tempfile.TemporaryDirectory() as results_dir:
+            pareto_front_list = choose_mixed_precision(sim, dummy_input, candidates, eval_callback, eval_callback,
+                                                       allowed_accuracy_drop, results_dir, True, forward_pass_call_back,
+                                                       amp_search_algo=AMPSearchAlgo.BruteForce)
 
-        pareto_front_list = choose_mixed_precision(sim, dummy_input, candidates, eval_callback, eval_callback,
-                                                   allowed_accuracy_drop, results_dir, True, forward_pass_call_back,
-                                                   amp_search_algo=AMPSearchAlgo.BruteForce)
+            sim.export(os.path.join(results_dir, 'test_quantize_with_mixed_precision_fp16_1'), torch.randn(1, 1, 28, 28))
 
-        sim.export('./data', 'test_quantize_with_mixed_precision_fp16_1', torch.randn(1, 1, 28, 28))
+            assert len(pareto_front_list) == 9
 
-        assert len(pareto_front_list) == 9
+            with open(os.path.join(results_dir, 'test_quantize_with_mixed_precision_fp16_1.encodings'), "r") as encodings_file:
+                encodings = json.load(encodings_file)
 
-        with open("./data/test_quantize_with_mixed_precision_fp16_1.encodings", "r") as encodings_file:
-            encodings = json.load(encodings_file)
+            assert len(encodings['activation_encodings'].keys()) == 8
+            assert len(encodings['param_encodings'].keys()) == 4
 
-        assert len(encodings['activation_encodings'].keys()) == 8
-        assert len(encodings['param_encodings'].keys()) == 4
+            for name in encodings['activation_encodings']:
+                layer_encoding_dict = encodings['activation_encodings'][name][0]
+                assert len(layer_encoding_dict) == 2
+                assert layer_encoding_dict['dtype'] == 'float'
+                assert layer_encoding_dict['bitwidth'] == 16
 
-        for name in encodings['activation_encodings']:
-            layer_encoding_dict = encodings['activation_encodings'][name][0]
-            assert len(layer_encoding_dict) == 2
-            assert layer_encoding_dict['dtype'] == 'float'
-            assert layer_encoding_dict['bitwidth'] == 16
-
-        for name in encodings['param_encodings']:
-            layer_encoding_dict = encodings['param_encodings'][name][0]
-            assert len(layer_encoding_dict) == 2
-            assert layer_encoding_dict['dtype'] == 'float'
-            assert layer_encoding_dict['bitwidth'] == 16
+            for name in encodings['param_encodings']:
+                layer_encoding_dict = encodings['param_encodings'][name][0]
+                assert len(layer_encoding_dict) == 2
+                assert layer_encoding_dict['dtype'] == 'float'
+                assert layer_encoding_dict['bitwidth'] == 16
 
 
     @pytest.mark.cuda
@@ -196,18 +191,15 @@ class TestMixedPrecision:
         fp32_accuracy = eval_callback.func(model, None)
         forward_pass_call_back = CallbackFunc(forward_pass_callback, input_shape)
 
-        results_dir = './data'
-        if not os.path.exists(results_dir):
-            os.makedirs(results_dir)
+        with tempfile.TemporaryDirectory() as tempdir:
+            pareto_front_list = choose_mixed_precision(sim, dummy_input, candidates, eval_callback, eval_callback,
+                                                       allowed_accuracy_drop, tempdir, True, forward_pass_call_back,
+                                                       amp_search_algo=AMPSearchAlgo.BruteForce)
 
-        pareto_front_list = choose_mixed_precision(sim, dummy_input, candidates, eval_callback, eval_callback,
-                                                   allowed_accuracy_drop, results_dir, True, forward_pass_call_back,
-                                                   amp_search_algo=AMPSearchAlgo.BruteForce)
-
-        assert len(pareto_front_list) == 18
-        # Test that final eval score is still within allowable accuracy range
-        _, eval_score, _, _ = pareto_front_list[-1]
-        assert fp32_accuracy - eval_score < 0.01
+            assert len(pareto_front_list) == 18
+            # Test that final eval score is still within allowable accuracy range
+            _, eval_score, _, _ = pareto_front_list[-1]
+            assert fp32_accuracy - eval_score < 0.01
 
 
     @pytest.mark.cuda
@@ -244,49 +236,46 @@ class TestMixedPrecision:
         fp32_accuracy_fp16 = eval_callback.func(sim_fp16.model, None)
         forward_pass_call_back = CallbackFunc(forward_pass_callback, input_shape)
 
-        results_dir = './data'
-        if not os.path.exists(results_dir):
-            os.makedirs(results_dir)
+        with tempfile.TemporaryDirectory() as tempdir:
+            pareto_front_list_fp16 = choose_mixed_precision(sim_fp16, dummy_input, candidates, eval_callback, eval_callback,
+                                                            allowed_accuracy_drop, tempdir, True, forward_pass_call_back,
+                                                            amp_search_algo=AMPSearchAlgo.BruteForce)
 
-        pareto_front_list_fp16 = choose_mixed_precision(sim_fp16, dummy_input, candidates, eval_callback, eval_callback,
-                                                        allowed_accuracy_drop, results_dir, True, forward_pass_call_back,
-                                                        amp_search_algo=AMPSearchAlgo.BruteForce)
-
-        # Test that final eval score is still within allowable accuracy range
-        _, eval_score, _, _ = pareto_front_list_fp16[-1]
-        assert fp32_accuracy_fp16 - eval_score < 0.01
+            # Test that final eval score is still within allowable accuracy range
+            _, eval_score, _, _ = pareto_front_list_fp16[-1]
+            assert fp32_accuracy_fp16 - eval_score < 0.01
 
 
-        sim_int = QuantizationSimModel(model, default_param_bw=default_bitwidth, default_output_bw=default_bitwidth,
-                                        dummy_input=dummy_input, default_data_type=QuantizationDataType.int,
-                                        config_file=get_htp_v75_config())
-        sim_int.compute_encodings(forward_pass_callback, forward_pass_callback_args=input_shape)
-        eval_callback = CallbackFunc(eval_function(num_candidates=len(candidates)), None)
-        fp32_accuracy_int = eval_callback.func(sim_int.model, None)
+            sim_int = QuantizationSimModel(model, default_param_bw=default_bitwidth, default_output_bw=default_bitwidth,
+                                            dummy_input=dummy_input, default_data_type=QuantizationDataType.int,
+                                            config_file=get_htp_v75_config())
+            sim_int.compute_encodings(forward_pass_callback, forward_pass_callback_args=input_shape)
+            eval_callback = CallbackFunc(eval_function(num_candidates=len(candidates)), None)
+            fp32_accuracy_int = eval_callback.func(sim_int.model, None)
 
-        pareto_front_list_int = choose_mixed_precision(sim_int, dummy_input, candidates, eval_callback, eval_callback,
-                                                       allowed_accuracy_drop, results_dir, True,
-                                                       forward_pass_call_back, amp_search_algo=AMPSearchAlgo.BruteForce)
+            pareto_front_list_int = choose_mixed_precision(sim_int, dummy_input, candidates, eval_callback, eval_callback,
+                                                           allowed_accuracy_drop, tempdir, True,
+                                                           forward_pass_call_back, amp_search_algo=AMPSearchAlgo.BruteForce)
 
-        # Test that final eval score is still within allowable accuracy range
-        _, eval_score, _, _ = pareto_front_list_int[-1]
-        assert fp32_accuracy_int - eval_score < 0.01
+            # Test that final eval score is still within allowable accuracy range
+            _, eval_score, _, _ = pareto_front_list_int[-1]
+            assert fp32_accuracy_int - eval_score < 0.01
 
-        # we expect the same behavior for both the QuantSimModel started with float and the int default_data_type
-        assert len(pareto_front_list_int) == len(pareto_front_list_fp16),\
-                "Length of the int pareto front list is not equal to the fp16 pareto front list"
+            # we expect the same behavior for both the QuantSimModel started with float and the int default_data_type
+            assert len(pareto_front_list_int) == len(pareto_front_list_fp16),\
+                    "Length of the int pareto front list is not equal to the fp16 pareto front list"
 
-        # check if pareto front list generated for both int QuantSimModel and fp16 QuantSimModel are the same
-        # (relative_bit_ops, eval_score, quantizer_group, candidate)
-        for i in range(0, len(pareto_front_list_int)):
-            relative_bit_ops_fp16, _, quantizer_group_fp16, candidate_fp16 = pareto_front_list_fp16[i]
-            relative_bit_ops_int, _, quantizer_group_int, candidate_int = pareto_front_list_int[i]
-            assert relative_bit_ops_fp16 == relative_bit_ops_int,\
-                    "relative bit ops differ between int and fp16 pareto lists"
-            assert candidate_fp16 == candidate_int,\
-                    "candidates differ between int and fp16 pareto lists"
-            assert quantizer_group_fp16 == quantizer_group_int,\
-                    "quantizer groups differ between int and fp16 pareto lists"
+            # check if pareto front list generated for both int QuantSimModel and fp16 QuantSimModel are the same
+            # (relative_bit_ops, eval_score, quantizer_group, candidate)
+            for i in range(0, len(pareto_front_list_int)):
+                relative_bit_ops_fp16, _, quantizer_group_fp16, candidate_fp16 = pareto_front_list_fp16[i]
+                relative_bit_ops_int, _, quantizer_group_int, candidate_int = pareto_front_list_int[i]
+                assert relative_bit_ops_fp16 == relative_bit_ops_int,\
+                        "relative bit ops differ between int and fp16 pareto lists"
+                assert candidate_fp16 == candidate_int,\
+                        "candidates differ between int and fp16 pareto lists"
+                assert quantizer_group_fp16 == quantizer_group_int,\
+                        "quantizer groups differ between int and fp16 pareto lists"
 
 
     def test_dummy(self):
@@ -345,24 +334,21 @@ class TestMixedPrecision:
 
         forward_pass_call_back = CallbackFunc(forward_pass_callback, input_shape)
 
-        results_dir = './data'
-        if not os.path.exists(results_dir):
-            os.makedirs(results_dir)
+        with tempfile.TemporaryDirectory() as tempdir:
+            pareto_front_list = choose_mixed_precision(sim, dummy_input, candidates,
+                                                       eval_callback_phase1, eval_callback_phase2,
+                                                       allowed_accuracy_drop, tempdir, True,
+                                                       forward_pass_call_back, search_algo)
+            assert pareto_front_list
 
-        pareto_front_list = choose_mixed_precision(sim, dummy_input, candidates,
-                                                   eval_callback_phase1, eval_callback_phase2,
-                                                   allowed_accuracy_drop, results_dir, True,
-                                                   forward_pass_call_back, search_algo)
-        assert pareto_front_list
+            eval_score = eval_function_v2(sim.model, args)
 
-        eval_score = eval_function_v2(sim.model, args)
+            # Check pareto curve contains the final eval score
+            pareto_eval_scores = [eval_score for _, eval_score, _, _ in pareto_front_list]
+            assert eval_score in pareto_eval_scores
 
-        # Check pareto curve contains the final eval score
-        pareto_eval_scores = [eval_score for _, eval_score, _, _ in pareto_front_list]
-        assert eval_score in pareto_eval_scores
-
-        # Check final eval score is within tolerable range
-        assert fp32_accuracy - eval_score < 0.1
+            # Check final eval score is within tolerable range
+            assert fp32_accuracy - eval_score < 0.1
 
 
 def forward_pass_callback(model, inp_shape):

@@ -38,6 +38,8 @@
 """ Test top level mixed precision api """
 
 import os
+import tempfile
+
 import pytest
 import unittest
 import unittest.mock
@@ -78,18 +80,15 @@ class TestMixedPrecision:
         fp32_accuracy = eval_callback.func(model, None)
         forward_pass_call_back = CallbackFunc(forward_pass_callback, input_shape)
 
-        results_dir = './data'
-        if not os.path.exists(results_dir):
-            os.makedirs(results_dir)
+        with tempfile.TemporaryDirectory() as tempdir:
+            pareto_front_list = choose_mixed_precision(sim, candidates, eval_callback, eval_callback,
+                                                       allowed_accuracy_drop, tempdir, True, forward_pass_call_back,
+                                                       amp_search_algo=AMPSearchAlgo.BruteForce)
 
-        pareto_front_list = choose_mixed_precision(sim, candidates, eval_callback, eval_callback,
-                                                   allowed_accuracy_drop, results_dir, True, forward_pass_call_back,
-                                                   amp_search_algo=AMPSearchAlgo.BruteForce)
-
-        assert len(pareto_front_list) == 66, "Length of the pareto front list is not equal to the expected value: 24"
-        # Test that final eval score is still within allowable accuracy range
-        _, eval_score, _, _ = pareto_front_list[-1]
-        assert fp32_accuracy - eval_score < 0.1
+            assert len(pareto_front_list) == 66, "Length of the pareto front list is not equal to the expected value: 24"
+            # Test that final eval score is still within allowable accuracy range
+            _, eval_score, _, _ = pareto_front_list[-1]
+            assert fp32_accuracy - eval_score < 0.1
 
     @pytest.mark.cuda
     @pytest.mark.parametrize(
@@ -112,48 +111,41 @@ class TestMixedPrecision:
         sim = QuantizationSimModel(model, default_param_bw=default_bitwidth, default_activation_bw=default_bitwidth)
         sim.compute_encodings(forward_pass_callback, forward_pass_callback_args=input_shape)
 
-        results_dir = './data'
-        if not os.path.exists(results_dir):
-            os.makedirs(results_dir)
+        with tempfile.TemporaryDirectory() as tempdir:
+            np.random.seed(0)
+            dummy_input = np.random.rand(1, 3, 224, 224).astype(np.float32)
 
-        np.random.seed(0)
-        dummy_input = np.random.rand(1, 3, 224, 224).astype(np.float32)
+            class _Dataloader(DataLoader):
+                def __init__(self):
+                    super(_Dataloader, self).__init__(dummy_input, 32, 1)
 
-        class _Dataloader(DataLoader):
-            def __init__(self):
-                super(_Dataloader, self).__init__(dummy_input, 32, 1)
+                def __iter__(self):
+                    yield dummy_input
 
-            def __iter__(self):
-                yield dummy_input
+            data_loader = _Dataloader()
 
-        data_loader = _Dataloader()
+            # Use SQNR eval funcion for phase 1
+            eval_callback_phase1 = EvalCallbackFactory(data_loader).sqnr(sim)
 
-        # Use SQNR eval funcion for phase 1
-        eval_callback_phase1 = EvalCallbackFactory(data_loader).sqnr(sim)
+            args = (dummy_input, candidates, sim)
+            # Use full eval function for phase 2
+            eval_callback_phase2 = CallbackFunc(eval_function_v2, args)
 
-        args = (dummy_input, candidates, sim)
-        # Use full eval function for phase 2
-        eval_callback_phase2 = CallbackFunc(eval_function_v2, args)
+            fp32_accuracy = 1.0
 
-        fp32_accuracy = 1.0
+            forward_pass_call_back = CallbackFunc(forward_pass_callback, input_shape)
 
-        forward_pass_call_back = CallbackFunc(forward_pass_callback, input_shape)
+            pareto_front_list = choose_mixed_precision(sim, candidates,
+                                                       eval_callback_phase1, eval_callback_phase2,
+                                                       allowed_accuracy_drop, tempdir, True,
+                                                       forward_pass_call_back, search_algo)
+            assert pareto_front_list
 
-        results_dir = './data'
-        if not os.path.exists(results_dir):
-            os.makedirs(results_dir)
+            eval_score = eval_function_v2(sim.model, args)
 
-        pareto_front_list = choose_mixed_precision(sim, candidates,
-                                                   eval_callback_phase1, eval_callback_phase2,
-                                                   allowed_accuracy_drop, results_dir, True,
-                                                   forward_pass_call_back, search_algo)
-        assert pareto_front_list
-
-        eval_score = eval_function_v2(sim.model, args)
-
-        # Check pareto curve contains the final eval score
-        pareto_eval_scores = [eval_score for _, eval_score, _, _ in pareto_front_list]
-        assert eval_score in pareto_eval_scores
+            # Check pareto curve contains the final eval score
+            pareto_eval_scores = [eval_score for _, eval_score, _, _ in pareto_front_list]
+            assert eval_score in pareto_eval_scores
 
 
 def forward_pass_callback(session, inp_shape):
