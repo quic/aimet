@@ -180,7 +180,7 @@ class TestAffineEncoding:
         with pytest.raises(RuntimeError):
             encoding.to(dtype)
 
-    @pytest.mark.parametrize("shape", ((10, 1), (10,)))
+    @pytest.mark.parametrize("shape", ((10, 1), (10,), (1,)))
     def test_perchannel_encoding(self, shape):
         """
         When: Create an encoding with scale whose shape has more than one element
@@ -195,18 +195,18 @@ class TestAffineEncoding:
         assert encoding.granularity == "perchannel"
         assert encoding.mapping == "affine"
 
-    @pytest.mark.parametrize("shape", (tuple(), (1,)))
-    def test_pertensor_encoding(self, shape):
+    def test_pertensor_encoding(self):
         """
         When: Create an encoding with scale whose shape in {[], [1]}
         Then: encoding.{scale, offset, min, max} have shape == shape
               and granularity == "pertensor"
         """
+        shape = tuple()
         scale = torch.randn(shape)
         offset = torch.randn(shape)
         encoding = AffineEncoding(scale, offset, 8)
         for property in [encoding.min, encoding.max, encoding.scale, encoding.offset]:
-            assert property.shape == tuple()
+            assert property.shape == shape
         assert encoding.granularity == "pertensor"
         assert encoding.mapping == "affine"
 
