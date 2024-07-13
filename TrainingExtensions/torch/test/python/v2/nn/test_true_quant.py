@@ -57,13 +57,8 @@ from aimet_torch.v2.nn import (
     QuantizationMixin,
     QuantizedSigmoid,
     QuantizedSoftmax,
-    QuantizedMatMul,
     QuantizedLayerNorm,
     QuantizedGroupNorm,
-    QuantizedAdd,
-    QuantizedMultiply,
-    QuantizedDivide,
-    QuantizedSubtract,
     FakeQuantizationMixin,
 )
 from aimet_torch.v2.nn.true_quant import _dispatch
@@ -71,6 +66,7 @@ from aimet_torch.v2.quantization.affine import AffineEncoding
 from aimet_torch.v2.quantization.tensor import QuantizedTensorBase, QuantizedTensor, DequantizedTensor
 from aimet_torch.v2.utils import enable_recompute
 import aimet_torch.nn.modules.custom as aimet_ops
+import aimet_torch.v2.nn.quantized.custom as custom
 
 
 def affine_quantize(tensor: torch.Tensor,
@@ -221,7 +217,7 @@ def register_int_norm():
 
 
 @pytest.fixture(autouse=True)
-def register_int_elementwise():
+def register_int_custom():
     def int_elementwise(kernel, x, y, *, output_encodings=None):
         # Implicit dequantization is not supported yet
         if not isinstance(x, QuantizedTensor):
@@ -231,17 +227,17 @@ def register_int_elementwise():
         output = kernel(x.dequantize(), y.dequantize())
         return affine_quantize(output, output_encodings.scale, output_encodings.offset, output_encodings.bitwidth)
 
-    QuantizedAdd.set_default_kernel(functools.partial(int_elementwise, torch.add))
-    QuantizedMultiply.set_default_kernel(functools.partial(int_elementwise, torch.multiply))
-    QuantizedSubtract.set_default_kernel(functools.partial(int_elementwise, torch.subtract))
-    QuantizedDivide.set_default_kernel(functools.partial(int_elementwise, torch.div))
-    QuantizedMatMul.set_default_kernel(functools.partial(int_elementwise, torch.matmul))
+    custom.QuantizedAdd.set_default_kernel(functools.partial(int_elementwise, torch.add))
+    custom.QuantizedMultiply.set_default_kernel(functools.partial(int_elementwise, torch.multiply))
+    custom.QuantizedSubtract.set_default_kernel(functools.partial(int_elementwise, torch.subtract))
+    custom.QuantizedDivide.set_default_kernel(functools.partial(int_elementwise, torch.div))
+    custom.QuantizedMatMul.set_default_kernel(functools.partial(int_elementwise, torch.matmul))
     yield
-    QuantizedMultiply.set_default_kernel(None)
-    QuantizedSubtract.set_default_kernel(None)
-    QuantizedAdd.set_default_kernel(None)
-    QuantizedDivide.set_default_kernel(None)
-    QuantizedMatMul.set_default_kernel(None)
+    custom.QuantizedMultiply.set_default_kernel(None)
+    custom.QuantizedSubtract.set_default_kernel(None)
+    custom.QuantizedAdd.set_default_kernel(None)
+    custom.QuantizedDivide.set_default_kernel(None)
+    custom.QuantizedMatMul.set_default_kernel(None)
 
 
 
@@ -655,15 +651,7 @@ from aimet_torch.v2.nn import (
     QuantizedMaxPool2d,
     QuantizedUpsamplingBilinear2d as QUpsamplingBilinear2d,
     QuantizedPixelShuffle,
-    QuantizedSin,
-    QuantizedCos,
     QuantizedAvgPool2d,
-    QuantizedReshape,
-    QuantizedRSqrt,
-    QuantizedAdd,
-    QuantizedMultiply,
-    QuantizedSubtract,
-    QuantizedDivide,
 )
 pseudo_relu_kernel = _pseudo_integer_kernel_helper(F.relu)
 pseudo_prelu_kernel = _pseudo_integer_kernel_helper(F.prelu)
@@ -692,15 +680,16 @@ pseudo_div_kernel = _pseudo_integer_kernel_helper(torch.div)
      (QuantizedMaxPool2d([3,3]),    pseudo_max_pool2d_kernel,   randn(1,10,10)),
      (QUpsamplingBilinear2d([2,2]), pseudo_interpolate_kernel,  randn(1,1,10,10)),
      (QuantizedPixelShuffle(1),     pseudo_pixel_shuffle_kernel,randn(1,1,10,10)),
-     (QuantizedSin(),               pseudo_sin_kernel,          randn(100)),
-     (QuantizedCos(),               pseudo_cos_kernel,          randn(100)),
-     (QuantizedAvgPool2d(),         pseudo_avg_pool2d_kernel,   (randn(1,10,10), 2)),
-     (QuantizedReshape(),           pseudo_reshape_kernel,      (randn(10,10), (100, 1))),
-     (QuantizedRSqrt(),             pseudo_rsqrt_kernel,        randn(100).abs()),
-     (QuantizedAdd(),               pseudo_add_kernel,          (randn(100), randn(100))),
-     (QuantizedMultiply(),          pseudo_mul_kernel,          (randn(100), randn(100))),
-     (QuantizedSubtract(),          pseudo_sub_kernel,          (randn(100), randn(100))),
-     (QuantizedDivide(),            pseudo_div_kernel,          (randn(100), randn(100))),
+     (QuantizedAvgPool2d(2),        pseudo_avg_pool2d_kernel,   randn(1,10,10)),
+     (custom.QuantizedSin(),        pseudo_sin_kernel,          randn(100)),
+     (custom.QuantizedCos(),        pseudo_cos_kernel,          randn(100)),
+     (custom.QuantizedAvgPool2d(),  pseudo_avg_pool2d_kernel,   (randn(1,10,10), 2)),
+     (custom.QuantizedReshape(),    pseudo_reshape_kernel,      (randn(10,10), (100, 1))),
+     (custom.QuantizedRSqrt(),      pseudo_rsqrt_kernel,        randn(100).abs()),
+     (custom.QuantizedAdd(),        pseudo_add_kernel,          (randn(100), randn(100))),
+     (custom.QuantizedMultiply(),   pseudo_mul_kernel,          (randn(100), randn(100))),
+     (custom.QuantizedSubtract(),   pseudo_sub_kernel,          (randn(100), randn(100))),
+     (custom.QuantizedDivide(),     pseudo_div_kernel,          (randn(100), randn(100))),
 ])
 def test_sanity(qmodule, pseudo_kernel, inputs):
     """

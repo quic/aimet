@@ -437,11 +437,6 @@ class _DispatchMixin(metaclass=_DispatchMeta):
         return wrapper
 
 
-def _binary_quant_init(self):
-    super(type(self), self).__quant_init__()
-    self.input_quantizers = nn.ModuleList([None, None])
-
-
 @QuantizationMixin.implements(nn.Conv1d)
 class QuantizedConv1d(_DispatchMixin, QuantizationMixin, nn.Conv1d):  # pylint: disable=too-many-ancestors
     """ Quantized Conv1d """
@@ -568,66 +563,7 @@ class QuantizedPixelShuffle(_DispatchMixin, QuantizationMixin, nn.PixelShuffle):
     _builtin_torch_fn = F.pixel_shuffle
 
 
-@QuantizationMixin.implements(aimet_ops.Sin)
-class QuantizedSin(_DispatchMixin, QuantizationMixin, aimet_ops.Sin):
-    """ Quantized Sin """
-    _builtin_torch_fn = torch.sin
-
-
-@QuantizationMixin.implements(aimet_ops.Cos)
-class QuantizedCos(_DispatchMixin, QuantizationMixin, aimet_ops.Cos):
-    """ Quantized Cos """
-    _builtin_torch_fn = torch.cos
-
-
-@QuantizationMixin.implements(aimet_ops.AvgPool2d)
-class QuantizedAvgPool2d(_DispatchMixin, QuantizationMixin, aimet_ops.AvgPool2d):
+@QuantizationMixin.implements(torch.nn.AvgPool2d)
+class QuantizedAvgPool2d(_DispatchMixin, QuantizationMixin, nn.AvgPool2d):
     """ Quantized AvgPool2d """
     _builtin_torch_fn = F.avg_pool2d
-
-
-@QuantizationMixin.implements(aimet_ops.Reshape)
-class QuantizedReshape(_DispatchMixin, QuantizationMixin, aimet_ops.Reshape):
-    """ Quantized Reshape """
-    _builtin_torch_fn = torch.reshape
-
-
-@QuantizationMixin.implements(aimet_ops.RSqrt)
-class QuantizedRSqrt(_DispatchMixin, QuantizationMixin, aimet_ops.RSqrt):
-    """ Quantized RSqrt """
-    _builtin_torch_fn = torch.rsqrt
-
-
-@QuantizationMixin.implements(aimet_ops.MatMul)
-class QuantizedMatMul(_DispatchMixin, QuantizationMixin, aimet_ops.MatMul):
-    """ Quantized MatMul """
-    __quant_init__ = _binary_quant_init
-    _builtin_torch_fn = torch.matmul
-
-
-@QuantizationMixin.implements(aimet_ops.Add)
-class QuantizedAdd(_DispatchMixin, QuantizationMixin, aimet_ops.Add):
-    """ Quantized Add """
-    __quant_init__ = _binary_quant_init
-    _builtin_torch_fn = torch.add
-
-
-@QuantizationMixin.implements(aimet_ops.Multiply)
-class QuantizedMultiply(_DispatchMixin, QuantizationMixin, aimet_ops.Multiply):
-    """ Quantized Multiply """
-    __quant_init__ = _binary_quant_init
-    _builtin_torch_fn = torch.mul
-
-
-@QuantizationMixin.implements(aimet_ops.Subtract)
-class QuantizedSubtract(_DispatchMixin, QuantizationMixin, aimet_ops.Subtract):
-    """ Quantized Subtract """
-    __quant_init__ = _binary_quant_init
-    _builtin_torch_fn = torch.sub
-
-
-@QuantizationMixin.implements(aimet_ops.Divide)
-class QuantizedDivide(_DispatchMixin, QuantizationMixin, aimet_ops.Divide):
-    """ Quantized Divide """
-    __quant_init__ = _binary_quant_init
-    _builtin_torch_fn = torch.div
