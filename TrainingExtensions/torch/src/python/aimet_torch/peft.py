@@ -54,6 +54,7 @@ from peft.tuners.lora.layer import Conv2d as PeftConv2d
 from aimet_torch.utils import replace_modules_of_type1_using_constructor
 from aimet_torch.elementwise_ops import Add, Multiply
 from aimet_torch.v2.quantsim import QuantizationSimModel
+from aimet_torch.v2.quantization.affine import QuantizeDequantize
 from aimet_torch.quantsim import ExportableQuantModule
 from aimet_torch.v2.nn import BaseQuantizationMixin
 from aimet_torch.onnx_utils import OnnxSaver, get_layers_in_io_tensor_map
@@ -72,7 +73,8 @@ class LoraLayer(torch.nn.Module):
         self.base_layer = lora_layer.base_layer
         self.r = lora_layer.r
         self.lora_alpha = lora_layer.lora_alpha
-        self.scaling = lora_layer.scaling
+        self.scaling = [torch.nn.Parameter(torch.as_tensor(scale), requires_grad=False).to(self.base_layer.weight.device)
+                        for scale in lora_layer.scaling.values()]
         self.lora_dropout = nn.ModuleList({})
         self.adapter_name_to_index = {}
         self.index_to_adapter_name = {}
@@ -108,10 +110,10 @@ class LoraLayer(torch.nn.Module):
             lora_A = self.lora_A[self.adapter_name_to_index[active_adapter]]
             lora_B = self.lora_B[self.adapter_name_to_index[active_adapter]]
             dropout = self.lora_dropout[self.adapter_name_to_index[active_adapter]]
-            scaling = self.scaling[active_adapter]
+            scaling = self.scaling[self.adapter_name_to_index[active_adapter]]
             x = x.to(lora_A.weight.dtype)
 
-            result = self.add_lora_to_res(result, lora_B(self.mul_scale(lora_A(dropout(x)), scaling)))
+            result = self.add_lora_to_res(result, lora_B(self.mul_scale(lora_A(dropout(x)), scaling.detach())))
 
         result = result.to(torch_result_dtype)
         return result
@@ -137,6 +139,7 @@ class AdapterMetaData:
         self.lora_A = []
         self.lora_B = []
         self.alpha = None
+        self.mul_scale = []
 
 
 def track_lora_meta_data(model: torch.nn.Module, path: str, filename_prefix: str,
@@ -170,6 +173,7 @@ def track_lora_meta_data(model: torch.nn.Module, path: str, filename_prefix: str
                     module_to_name_d[lora_layer])
             for lora_adapter_name in module.lora_alpha:
                 adapter_name_to_meta_data[lora_adapter_name].alpha = module.lora_alpha[lora_adapter_name]
+            adapter_name_to_meta_data[module.index_to_adapter_name[index]].mul_scale.append(module_to_name_d[module.mul_scale])
 
 
     file_name = os.path.join(path, f"{filename_prefix}.pkl")
@@ -196,13 +200,12 @@ class PeftQuantUtils:
         if name_to_module_dict:
             self.pt_name_to_prepared_name, self.prepared_name_to_pt_name = self._get_pytorch_name_to_prepared_name(name_to_module_dict)
             self.lora_to_pt_name, self.pt_to_lora_name = self._get_lora_name_to_pytorch_name()
+            self.mul_names = self._get_prepared_name_for_mul()
 
     @staticmethod
     def _get_pytorch_name_to_prepared_name(name_to_module_dict):
         """
         Gets onnx names to pytorch names mapping and vice versa
-
-        :param model: PT model
         """
         pt_name_to_onnx_name = {}
         onnx_name_to_pt_name = {}
@@ -211,6 +214,41 @@ class PeftQuantUtils:
             pt_name_to_onnx_name[pytorch_name] = onnx_name
             onnx_name_to_pt_name[onnx_name] = pytorch_name
         return pt_name_to_onnx_name, onnx_name_to_pt_name
+
+    def _get_prepared_name_for_mul(self):
+        """
+        Gets onnx names to pytorch names mapping and vice versa
+        """
+        names = set()
+        for adapter_name in self.adapter_name_to_meta_data:
+            adapter_data = self.adapter_name_to_meta_data[adapter_name]
+            for index, _ in enumerate(adapter_data.mul_scale):
+                lora_prepared_name = self.pt_name_to_prepared_name[self.lora_to_pt_name[adapter_data.lora_A[index]]]
+                prepared_name = lora_prepared_name[0:lora_prepared_name.find('_lora_A')] + '_mul_scale_Mul'
+                names.add(prepared_name)
+        return names
+
+    def quantize_lora_scale_with_fixed_range(self, sim, scale_min=0, scale_max=1e-5):
+        """
+        Add input quantizer for scale(alpha/rank) and provide min max values to it
+
+        :param sim: QuantSim model
+        :param scale_min: min value of lora alpha to be used
+        :param scale_max: max value of lora alpha to be used
+        """
+
+        def _create_quantizer():
+            quantizer = QuantizeDequantize(shape=(1,), bitwidth=8, symmetric=False)
+            quantizer.set_range(torch.as_tensor(scale_min), torch.as_tensor(scale_max))
+            self._freeze_quantizer(quantizer)
+            return quantizer
+
+        for name, module in sim.model.named_modules():
+            if not self.prepared_name_to_pt_name:
+                if isinstance(module, LoraLayer):
+                    module.mul_scale.input_quantizers[1] = _create_quantizer()
+            elif name in self.mul_names:
+                module.input_quantizers[1] = _create_quantizer()
 
     def _get_lora_name_to_pytorch_name(self):
         """
