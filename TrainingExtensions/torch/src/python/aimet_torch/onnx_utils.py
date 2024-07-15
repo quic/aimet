@@ -424,8 +424,16 @@ class OnnxSaver:
         for dropout_type in aimet_torch.utils.DROPOUT_TYPES:
             aimet_torch.utils.replace_modules_of_type1_with_type2(pytorch_model, dropout_type, torch.nn.Identity)
 
-        # Obtaining equivalent onnx model
-        cls.set_node_names(onnx_model_path, pytorch_model, dummy_input, is_conditional, module_marker_map, onnx_export_args)
+        if EXPORT_TO_ONNX_DIRECT:
+            cls._export_model_to_onnx(pytorch_model, dummy_input, onnx_model_path, is_conditional, onnx_export_args)
+            onnx_model = cls.load_simply_onnx_model(onnx_model_path)
+
+            cls._fix_initializer_names_for_export_to_onnx_direct(onnx_model, pytorch_model)
+            onnx.save(onnx_model, onnx_model_path)
+        else:
+            # Obtaining equivalent onnx model
+            cls.set_node_names(onnx_model_path, pytorch_model, dummy_input, is_conditional, module_marker_map,
+                               onnx_export_args)
 
     @classmethod
     def set_node_names(cls, onnx_model_path: str, pytorch_model: torch.nn.Module,
@@ -905,6 +913,37 @@ class OnnxSaver:
                         node = onnx_node_map[module_name + node_suffix, op_type]
 
                         cls._replace_param_name(initializers, initializer_names, module_name, node, replace_pairs)
+
+    @classmethod
+    def _fix_initializer_names_for_export_to_onnx_direct(cls, onnx_model: onnx.NodeProto, pt_model: torch.nn.Module):
+        """
+        Parameter names in some case do not reflect the torch param names. This method updates the onnx model
+        with param names using a custom mapping.
+        When exporting a scripted model, all modules with params will need to update their initializer names.
+
+        :param onnx_model: Onnx Model
+        :param pt_model: PyTorch Model
+        """
+        initializers = OnnxSaver._get_all_initializers(onnx_model.graph)
+        initializer_names = [ini.name for ini in initializers]
+        pt_name_to_onnx_nodes = {}
+        for node in onnx_model.graph.node:
+            pt_name = get_pytorch_name_from_onnx_name(node.name)
+            if pt_name not in pt_name_to_onnx_nodes:
+                pt_name_to_onnx_nodes[pt_name] = [node]
+            else:
+                pt_name_to_onnx_nodes[pt_name].append(node)
+
+        for module_name, module_ref in pt_model.named_modules():
+            if type(module_ref) in onnx_subgraph_op_to_pytorch_module_param_name and \
+                    module_name in pt_name_to_onnx_nodes:
+                onnx_nodes = pt_name_to_onnx_nodes[module_name]
+
+                for (_, op_type), replace_pairs in \
+                        onnx_subgraph_op_to_pytorch_module_param_name[type(module_ref)].items():
+                    for node in onnx_nodes:
+                        if node.op_type == op_type:
+                            cls._replace_param_name(initializers, initializer_names, module_name, node, replace_pairs)
 
     @classmethod
     def _replace_param_name(cls, initializers: List[onnx.TensorProto], initializer_names: List[str], module_name: str,

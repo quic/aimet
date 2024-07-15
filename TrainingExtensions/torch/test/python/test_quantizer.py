@@ -34,7 +34,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
+import contextlib
 import copy
 import logging
 from itertools import chain
@@ -64,7 +64,7 @@ from aimet_torch import utils
 import aimet_torch.nn.modules.custom as aimet_modules
 from aimet_torch.model_preparer import prepare_model
 from models.test_models import TwoLayerBidirectionalLSTMModel, SingleLayerRNNModel, \
-    ModelWithTwoInputs, SimpleConditional, RoiModel, InputOutputDictModel, Conv3dModel
+    ModelWithTwoInputs, SimpleConditional, RoiModel, InputOutputDictModel, Conv3dModel, SmallLinearModel
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.onnx_utils import OnnxExportApiArgs
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, \
@@ -77,6 +77,14 @@ from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
 from models import test_models
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
+
+
+@contextlib.contextmanager
+def set_export_to_onnx_direct(export_to_onnx_direct):
+    entry_state = onnx_utils.EXPORT_TO_ONNX_DIRECT
+    onnx_utils.EXPORT_TO_ONNX_DIRECT = export_to_onnx_direct
+    yield
+    onnx_utils.EXPORT_TO_ONNX_DIRECT = entry_state
 
 
 def evaluate(model: torch.nn.Module, dummy_input: torch.Tensor):
@@ -2521,6 +2529,26 @@ class TestQuantizationSimStaticGrad:
                 direct_onnx_act_names = direct_onnx_encodings['activation_encodings'].keys()
                 onnxsaver_act_names = onnxsaver_encodings['activation_encodings'].keys()
                 assert direct_onnx_act_names != onnxsaver_act_names
+
+    def test_export_to_onnx_direct_fixed_param_names(self):
+        torch.manual_seed(0)
+        model = SmallLinearModel()
+        dummy_input = torch.randn(1, 8, 3)
+        with set_export_to_onnx_direct(True):
+            sim = QuantizationSimModel(model, dummy_input)
+            sim.compute_encodings(lambda m, _: m(*dummy_input), None)
+
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                sim.export(tmp_dir, 'single_linear', dummy_input)
+
+                with open(os.path.join(tmp_dir, 'single_linear.encodings'), 'r') as encodings_file:
+                    encodings = json.load(encodings_file)
+
+                param_encodings_set = {name for name in encodings['param_encodings'].keys()}
+
+                for name, _ in model.named_parameters():
+                    if 'bias' not in name:
+                        assert name in param_encodings_set
 
     @pytest.mark.parametrize("num_parameters", [1, 8])
     @pytest.mark.parametrize("config_file", [None, get_path_for_per_channel_config()])

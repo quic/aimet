@@ -70,8 +70,7 @@ from aimet_torch.utils import deprecated
 from aimet_torch.onnx_utils import (
     OnnxSaver,
     OnnxExportApiArgs,
-    CustomMarker,
-    save_initializer_restored_onnx_graph,
+    CustomMarker
 )
 from aimet_torch.meta.connectedgraph import ConnectedGraph, Op
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
@@ -634,19 +633,8 @@ class QuantizationSimModel:
             filename_prefix_encodings = filename_prefix
         onnx_path = os.path.join(path, filename_prefix + '.onnx')
         if export_model:
-            if version.parse(torch.__version__) >= version.parse("1.13.0") and onnx_utils.EXPORT_TO_ONNX_DIRECT:
-                logger.debug('Exporting quantsim using torch.onnx.export directly')
-                original_model.cpu()
-                if isinstance(onnx_export_args, OnnxExportApiArgs):
-                    kwargs = onnx_export_args.kwargs
-                else:
-                    kwargs = onnx_export_args
-                torch.onnx.export(original_model, dummy_input, onnx_path, **kwargs)
-                save_initializer_restored_onnx_graph(onnx_path, onnx_path)
-            else:
-                # Create onnx model and obtain node to i/o tensor name map
-                OnnxSaver.create_onnx_model_with_pytorch_layer_names(onnx_path, original_model, dummy_input, is_conditional,
-                                                                     module_marker_map, onnx_export_args)
+            OnnxSaver.create_onnx_model_with_pytorch_layer_names(onnx_path, original_model, dummy_input, is_conditional,
+                                                                 module_marker_map, onnx_export_args)
 
         assert os.path.exists(onnx_path), 'The onnx model does not exist in the location specified. Please re-run export' \
                                           'with export_model flag as True or check path/file_name'
@@ -1161,19 +1149,25 @@ class QuantizationSimModel:
         """
 
         param_inputs = [layer_name + '.' + param_name for param_name, _ in layer.named_parameters()]
+        for idx, param_input in enumerate(param_inputs):
+            param_inputs[idx] = ''.join(param_input.split('._module_to_wrap'))
         if version.parse(torch.__version__) < version.parse("1.13.0") or not onnx_utils.EXPORT_TO_ONNX_DIRECT:
             start_op_names = [key for key in op_to_io_tensor_map
                               if (key.startswith(layer_name) and '#0' in key) or key == layer_name]
         else:
             assert layers_to_onnx_op_names is not None
             op_names = layers_to_onnx_op_names.get(layer_name, [])
-            op_name_set = set(op_names)
+            onnx_op_outputs = set()
+            for op_name in op_names:
+                for op_output in op_to_io_tensor_map[op_name].outputs:
+                    onnx_op_outputs.add(op_output)
+
             start_op_names = set()
             for op_name in op_names:
                 # For each op's inputs, if the input comes from an op not associated with this layer, add it to
                 # start_op_names.
                 for inp in op_to_io_tensor_map[op_name].inputs:
-                    if inp not in op_name_set:
+                    if inp not in onnx_op_outputs and inp not in param_inputs:
                         start_op_names.add(op_name)
 
         input_tensors = []

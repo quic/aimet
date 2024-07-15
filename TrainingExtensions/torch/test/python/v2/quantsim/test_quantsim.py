@@ -34,6 +34,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+import contextlib
 import torch
 import tempfile
 import os
@@ -43,6 +44,7 @@ import random
 import numpy as np
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
 from aimet_common.defs import QuantizationDataType
+from aimet_torch import onnx_utils
 from aimet_torch.quantsim import load_encodings_to_sim, QuantScheme
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.quantization.encoding_analyzer import PercentileEncodingAnalyzer
@@ -66,6 +68,13 @@ def set_seed():
     random.seed(0)
     torch.manual_seed(0)
     np.random.seed(0)
+
+@contextlib.contextmanager
+def set_export_to_onnx_direct(export_to_onnx_direct):
+    entry_state = onnx_utils.EXPORT_TO_ONNX_DIRECT
+    onnx_utils.EXPORT_TO_ONNX_DIRECT = export_to_onnx_direct
+    yield
+    onnx_utils.EXPORT_TO_ONNX_DIRECT = entry_state
 
 
 class ConcatModel(torch.nn.Module):
@@ -894,6 +903,26 @@ class TestQuantsim:
                                         default_data_type=QuantizationDataType.float)
             assert not hasattr(qsim.model.softmax.output_quantizers[0], 'min')
             assert not hasattr(qsim.model.softmax.output_quantizers[0], 'max')
+
+    def test_export_to_onnx_direct_fixed_param_names(self):
+        torch.manual_seed(0)
+        model = test_models.SmallLinearModel()
+        dummy_input = torch.randn(1, 8, 3)
+        with set_export_to_onnx_direct(True):
+            sim = QuantizationSimModel(model, dummy_input)
+            sim.compute_encodings(lambda m, _: m(*dummy_input), None)
+
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                sim.export(tmp_dir, 'single_linear', dummy_input)
+
+                with open(os.path.join(tmp_dir, 'single_linear.encodings'), 'r') as encodings_file:
+                    encodings = json.load(encodings_file)
+
+                param_encodings_set = {name for name in encodings['param_encodings'].keys()}
+
+                for name, _ in model.named_parameters():
+                    if 'bias' not in name:
+                        assert name in param_encodings_set
 
 
 class TestQuantsimUtilities:
