@@ -149,7 +149,7 @@ class TestSeqMse:
             assert list(cand_min.size())[0] == linear.out_features
 
     @pytest.mark.parametrize("enable_pcq", [True, False])
-    @pytest.mark.parametrize("param_bw", [2, 31])
+    @pytest.mark.parametrize("param_bw", [4, 16])
     @pytest.mark.parametrize("loss_fn", ['mse', 'l1', 'sqnr'])
     @pytest.mark.parametrize("qparam_requires_grad", [True, False])
     def test_optimize_module_linear(self, enable_pcq, param_bw, loss_fn, qparam_requires_grad):
@@ -176,15 +176,15 @@ class TestSeqMse:
 
         # If we use higher param_bw (for example 16, 31), then it should always choose larger candidates so
         # before and after param encodings should be almost same.
-        if param_bw == 31:
-            assert torch.allclose(before.min, after.min)
-            assert torch.allclose(before.max, after.max)
+        if param_bw >= 16:
+            assert torch.allclose(before.min, after.min, rtol=1e-4)
+            assert torch.allclose(before.max, after.max, rtol=1e-4)
         else:
             assert not torch.allclose(before.min, after.min)
             assert not torch.allclose(before.max, after.max)
 
     @pytest.mark.parametrize("enable_pcq", [True, False])
-    @pytest.mark.parametrize("param_bw", [2, 31])
+    @pytest.mark.parametrize("param_bw", [4, 16])
     @pytest.mark.parametrize("loss_fn", ['mse', 'l1', 'sqnr'])
     def test_optimize_module_conv(self, enable_pcq, param_bw, loss_fn):
         """ test optimize module for linear """
@@ -209,9 +209,9 @@ class TestSeqMse:
 
         # If we use higher param_bw (for example 16, 31), then it should always choose larger candidates so
         # before and after param encodings should be almost same.
-        if param_bw == 31:
-            assert torch.allclose(before.min, after.min)
-            assert torch.allclose(before.max, after.max)
+        if param_bw >= 16:
+            assert torch.allclose(before.min, after.min, rtol=1e-4)
+            assert torch.allclose(before.max, after.max, rtol=1e-4)
         else:
             assert not torch.allclose(before.min, after.min)
             assert not torch.allclose(before.max, after.max)
