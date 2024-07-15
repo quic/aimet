@@ -424,3 +424,16 @@ class QuantDtypeBwInfo:
     def get_param(self) -> tuple:
         """ getter method for param candidate"""
         return self.param_dtype, self.param_bw
+
+
+class CallbackFunc:
+    """
+    Class encapsulating call back function and it's arguments
+    """
+    def __init__(self, func: Callable, func_callback_args=None):
+        """
+        :param func: Callable Function
+        :param func_callback_args: Arguments passed to the callable function
+        """
+        self.func = func
+        self.args = func_callback_args
