@@ -37,7 +37,6 @@
 
 """ Custom modules for functional operations defined under torch and torch.nn.functional packages """
 
-import itertools
 from typing import Callable, Any, Tuple, Union, List
 
 import torchvision
