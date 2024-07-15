@@ -161,6 +161,7 @@ class Add(torch.nn.Module):
         return out
 
 class GridSample(torch.nn.Module):
+    """ Add module for a functional GridSample"""
     def __init__(self, mode='bilinear', padding_mode='zeros', align_corners=None):
         super().__init__()
         self._mode = mode
@@ -168,6 +169,9 @@ class GridSample(torch.nn.Module):
         self._align_corners = align_corners
 
     def forward(self, inputs, grid):
+        """
+        Forward-pass routine for GridSample
+        """
         return torch.nn.functional.grid_sample(inputs, grid, mode=self._mode, padding_mode=self._padding_mode,
                                                align_corners=self._align_corners)
 
@@ -343,18 +347,7 @@ class ScatterND(torch.nn.Module):
         """
         Forward-pass routine for ScatterND op
         """
-        if torch.jit.is_tracing():
-            # Temporary Fix. Not meant to be merged as of now.
-            output = torch.clone(data)
-            output[indices[:, 0], indices[:, 1], indices[:, 2], :] = updates
-            return output
-
         output = torch.clone(data)
-
-        # Get multidimensional indices to iterate over the first N-1 dimensions of the indices variable
-        # as the last dimension of the indices variable is partial index into data
-        update_indices = indices.size()[:-1]
-        update_indices = itertools.product(*(range(index) for index in update_indices))
 
         if self.reduction == 1:
             f = torch.add
@@ -363,13 +356,11 @@ class ScatterND(torch.nn.Module):
         else:
             f = None
 
-        # For each index, update output using the updates variable
-        for idx in update_indices:
-            idx_list = tuple(indices[idx].tolist())
-            if f:
-                output[idx_list] = f(output[idx_list], updates[idx])
-            else:
-                output[idx_list] = updates[idx]
+        idx_list = indices.split(split_size=1, dim=-1)
+        if f:
+            output[idx_list] = f(output[idx_list], updates.reshape(output[idx_list].shape))
+        else:
+            output[idx_list] = updates.reshape(output[idx_list].shape)
         return output
 
 
