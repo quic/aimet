@@ -29,8 +29,8 @@ class BatchNormFold(BatchNormFoldV1):
         connected_graph = sim.connected_graph
 
         module_to_qmodule = {
-            module: getattr(sim.model, module_name, None)
-            for module_name, module in sim.connected_graph._name_to_module.items()
+            module: getattr(sim.model, module_name)
+            for module_name, module in sim.connected_graph._name_to_module.items() if hasattr(sim.model, module_name)
             }
         
         conv_bn_pairs, bn_conv_pairs, _ = BatchNormFoldV1._find_all_batch_norms_to_fold(connected_graph)
@@ -59,16 +59,10 @@ class BatchNormFold(BatchNormFoldV1):
         bn_conv_pairs = []
 
         def is_batchnorm(module: torch.nn.Module) -> bool:
-            if isinstance(module, BaseQuantizationMixin):
-                #TODO: get original module
-                #module = module._module_to_wrap
-                return isinstance(module, _supported_batchnorms)
+            return isinstance(module, _supported_batchnorms)
 
         def is_conv_linear(module: torch.nn.Module) -> bool:
-            if isinstance(module, BaseQuantizationMixin):
-                 #TODO: get original module
-                #module = module._module_to_wrap
-                return isinstance(module, _supported_layers)
+            return isinstance(module, _supported_layers)
 
         for x, y in layer_pairs:
             if is_batchnorm(x):
@@ -122,6 +116,7 @@ class BatchNormFold(BatchNormFoldV1):
             else:
                 bn_modules.append(bn if is_quantized else bn)
 
+
         with utils.in_eval_mode(model), torch.no_grad():
             for conv, bn in conv_bn_pairs:
                 _fold(conv, bn, fold_backward=True)
@@ -168,7 +163,6 @@ class BatchNormFold(BatchNormFoldV1):
         #       For example, the user can manually enable quantization of batchnorms, etc...
         #       (FYI: _quantize_params takes effect only when the parameter quantizers are enabled)
         
-        # TODO: with bn._quantize_params():
         BatchNormFold._fold_to_weight(conv, bn, fold_backward=True)
 
         gamma = bn.weight
@@ -191,7 +185,6 @@ class BatchNormFold(BatchNormFoldV1):
         # Copy batchnorm's output quantizers to conv output quantizers
         for conv_output_quantizer, bn_output_quantizer in\
                 zip(conv.output_quantizers, bn.output_quantizers):
-            
             if bn_output_quantizer is None:
                 conv_output_quantizer = None
 
@@ -206,7 +199,6 @@ class BatchNormFold(BatchNormFoldV1):
             bn_output_quantizer = None
 
         if "bias" not in conv.param_quantizers:
-            #TODO: check if this is q or qdq
             bias_quantizer = Q.affine.QuantizeDequantize(shape=weight_quantizer.shape, bitwidth=weight_quantizer.bitwidth, 
                                                symmetric=weight_quantizer._symmetric)
             conv.param_quantizers["bias"] = bias_quantizer
