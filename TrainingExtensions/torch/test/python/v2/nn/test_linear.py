@@ -65,10 +65,10 @@ class TestFakeQuantizedLinear:
         Given: Instantiate a fake-quantized module with input quantizer spec specified
         """
         quant_linear = FakeQuantizedLinear(10, 10)
-        quant_linear.input_quantizers[0] = QuantizeDequantize((1,),
+        quant_linear.input_quantizers[0] = QuantizeDequantize((),
                                                               bitwidth=8,
                                                               symmetric=False,
-                                                              encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
+                                                              encoding_analyzer=MinMaxEncodingAnalyzer(()))
         """
         When: Inspect `input_quantizer` attribute.
         Then: `input_quantizer` is set to `QuantizeDequantize` as a submodule
@@ -107,10 +107,10 @@ class TestFakeQuantizedLinear:
         Given: Instantiate a fake-quantized module with output quantizer spec specified
         """
         quant_linear = FakeQuantizedLinear(10, 10)
-        quant_linear.output_quantizers[0] = QuantizeDequantize((1,),
+        quant_linear.output_quantizers[0] = QuantizeDequantize((),
                                                                bitwidth=8,
                                                                symmetric=False,
-                                                               encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
+                                                               encoding_analyzer=MinMaxEncodingAnalyzer(()))
 
         """
         When: Inspect `output_quantizer` attribute.
@@ -189,14 +189,14 @@ class TestFakeQuantizedLinear:
         """
         fp_linear = nn.Linear(10, 10)
         quant_linear = FakeQuantizationMixin.from_module(fp_linear)
-        quant_linear.input_quantizers[0] = QuantizeDequantize((1,),
+        quant_linear.input_quantizers[0] = QuantizeDequantize((),
                                                               bitwidth=8,
                                                               symmetric=False,
-                                                              encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
-        quant_linear.output_quantizers[0] = QuantizeDequantize((1,),
+                                                              encoding_analyzer=MinMaxEncodingAnalyzer(()))
+        quant_linear.output_quantizers[0] = QuantizeDequantize((),
                                                                bitwidth=8,
                                                                symmetric=False,
-                                                               encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
+                                                               encoding_analyzer=MinMaxEncodingAnalyzer(()))
         quant_linear.param_quantizers['weight'] = QuantizeDequantize((10,),
                                                                      bitwidth=4,
                                                                      symmetric=True,

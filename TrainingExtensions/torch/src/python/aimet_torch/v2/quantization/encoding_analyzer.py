@@ -69,7 +69,7 @@ class _Observer(Generic[_Statistics], ABC):
     def __init__(self, shape: tuple):
         if isinstance(shape, int):
             shape = (shape,)
-        self.shape = shape
+        self.shape = tuple(shape)
 
     @abstractmethod
     def collect_stats(self, input_tensor: torch.Tensor) -> _Statistics:

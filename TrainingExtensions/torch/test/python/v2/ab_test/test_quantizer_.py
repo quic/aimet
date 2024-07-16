@@ -634,10 +634,10 @@ class TestQuantizationSimStaticGrad:
     def test_add_quantization_wrappers_with_modulelist(self):
         """With a one-deep model using ModuleList"""
         q_conv2d = aimet_nn.QuantizedConv2d(1, 10, 5)
-        q_conv2d.output_quantizers[0] = QuantizeDequantize(shape=(1,),
+        q_conv2d.output_quantizers[0] = QuantizeDequantize(shape=(),
                                                            bitwidth=8,
                                                            symmetric=False)
-        q_conv2d.param_quantizers['weight'] = QuantizeDequantize(shape=(1,),
+        q_conv2d.param_quantizers['weight'] = QuantizeDequantize(shape=(),
                                                                  bitwidth=8,
                                                                  symmetric=True)
 
@@ -663,10 +663,10 @@ class TestQuantizationSimStaticGrad:
     def test_add_quantization_wrappers_with_modulelist_two_deep(self):
         """With a two-deep model using ModuleList"""
         q_conv2d = aimet_nn.QuantizedConv2d(1, 10, 5)
-        q_conv2d.output_quantizers[0] = QuantizeDequantize(shape=(1,),
+        q_conv2d.output_quantizers[0] = QuantizeDequantize(shape=(),
                                                            bitwidth=8,
                                                            symmetric=False)
-        q_conv2d.param_quantizers['weight'] = QuantizeDequantize(shape=(1,),
+        q_conv2d.param_quantizers['weight'] = QuantizeDequantize(shape=(),
                                                                  bitwidth=8,
                                                                  symmetric=True)
 
@@ -1079,7 +1079,7 @@ class TestQuantizationSimStaticGrad:
 
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
                                    dummy_input=torch.rand(1, 1, 12, 12))
-        sim.model.conv1.input_quantizers[0] = QuantizeDequantize((1,), 8, False)
+        sim.model.conv1.input_quantizers[0] = QuantizeDequantize((), 8, False)
 
         # Find encodings
         sim.compute_encodings(dummy_forward_pass, None)
@@ -1157,10 +1157,10 @@ class TestQuantizationSimStaticGrad:
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
                                    dummy_input=torch.rand(1, 1, 12, 12))
 
-        sim.model.conv1.output_quantizers[0] = QuantizeDequantize(shape=(1,),
+        sim.model.conv1.output_quantizers[0] = QuantizeDequantize(shape=(),
                                                                   bitwidth=8,
                                                                   symmetric=False)
-        sim.model.conv1.input_quantizers[0] = QuantizeDequantize(shape=(1,),
+        sim.model.conv1.input_quantizers[0] = QuantizeDequantize(shape=(),
                                                                  bitwidth=8,
                                                                  symmetric=False)
 
@@ -1790,16 +1790,16 @@ class TestQuantizationSimStaticGrad:
 
         sim = QuantizationSimModel(model, dummy_input=dummy_input,
                                    quant_scheme=QuantScheme.post_training_tf)
-        sim.model.sfmax.output_quantizers[0] = QuantizeDequantize(shape=(1,),
+        sim.model.sfmax.output_quantizers[0] = QuantizeDequantize(shape=(),
                                                             bitwidth=8,
                                                             symmetric=False)
-        sim.model.sfmax.input_quantizers[0] = QuantizeDequantize(shape=(1,),
+        sim.model.sfmax.input_quantizers[0] = QuantizeDequantize(shape=(),
                                                            bitwidth=8,
                                                            symmetric=False)
-        sim.model.avgpool.output_quantizers[0] = QuantizeDequantize(shape=(1,),
+        sim.model.avgpool.output_quantizers[0] = QuantizeDequantize(shape=(),
                                                             bitwidth=8,
                                                             symmetric=False)
-        sim.model.avgpool.input_quantizers[0] = QuantizeDequantize(shape=(1,),
+        sim.model.avgpool.input_quantizers[0] = QuantizeDequantize(shape=(),
                                                             bitwidth=8,
                                                             symmetric=False)
         sim.compute_encodings(forward_pass, None)
@@ -2739,16 +2739,16 @@ class TestQuantizationSimLearnedGrid:
     def test_qc_trainable_wrapper(self):
         torch.manual_seed(0)
         q_conv1 = aimet_nn.QuantizedConv2d(1, 32, kernel_size=5)
-        q_conv1.param_quantizers['weight'] = QuantizeDequantize(shape=(1,),
+        q_conv1.param_quantizers['weight'] = QuantizeDequantize(shape=(),
                                                                 bitwidth=8,
                                                                 symmetric=False)
-        q_conv1.param_quantizers['bias'] = QuantizeDequantize(shape=(1,),
+        q_conv1.param_quantizers['bias'] = QuantizeDequantize(shape=(),
                                                               bitwidth=8,
                                                               symmetric=False)
-        q_conv1.input_quantizers[0] = QuantizeDequantize(shape=(1,),
+        q_conv1.input_quantizers[0] = QuantizeDequantize(shape=(),
                                                           bitwidth=8,
                                                           symmetric=False)
-        q_conv1.output_quantizers[0] = QuantizeDequantize(shape=(1,),
+        q_conv1.output_quantizers[0] = QuantizeDequantize(shape=(),
                                                            bitwidth=8,
                                                            symmetric=False)
         q_conv1.param_quantizers['weight'].set_range(-1, 1)
@@ -2814,10 +2814,10 @@ class TestQuantizationSimLearnedGrid:
                                        config_file=config_file_path)
 
         # Enable input parameters to add (multiple input parameter exist)
-        sim.model.add.input_quantizers[0] = QuantizeDequantize(shape=(1,),
+        sim.model.add.input_quantizers[0] = QuantizeDequantize(shape=(),
                                                                bitwidth=8,
                                                                symmetric=False)
-        sim.model.add.input_quantizers[1] = QuantizeDequantize(shape=(1,),
+        sim.model.add.input_quantizers[1] = QuantizeDequantize(shape=(),
                                                                bitwidth=8,
                                                                symmetric=False)
 

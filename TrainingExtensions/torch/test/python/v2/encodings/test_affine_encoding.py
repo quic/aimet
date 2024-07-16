@@ -123,8 +123,8 @@ class TestAffineEncoding:
         When: Create an encoding with tensors on device
         Then: encoding.{min, max, scale, offset} are on device
         """
-        scale = torch.ones((1,)).to(device)
-        offset = torch.ones((1,)).to(device)
+        scale = torch.ones([]).to(device)
+        offset = torch.ones([]).to(device)
         encoding = AffineEncoding(scale, offset, bitwidth=8)
         for property in [encoding.min, encoding.max, encoding.scale, encoding.offset]:
             assert property.device == torch.device(device)
@@ -149,8 +149,8 @@ class TestAffineEncoding:
         When: Create an encoding with tensors of type dtype in {torch.float16, torch.float32}
         Then: encoding.{min, max, scale, offset} are dtype
         """
-        scale = torch.ones((1,)).to(dtype)
-        offset = torch.ones((1,)).to(dtype)
+        scale = torch.ones([]).to(dtype)
+        offset = torch.ones([]).to(dtype)
         encoding = AffineEncoding(scale, offset, bitwidth=8)
         for property in [encoding.min, encoding.max, encoding.scale, encoding.offset]:
             assert property.dtype == dtype
@@ -174,8 +174,8 @@ class TestAffineEncoding:
         When: call encoding.to() with invalid dtype in {torch.uint8, torch.int32}
         Then: raises RuntimeError
         """
-        scale = torch.ones((1,), dtype=torch.float32)
-        offset = torch.ones((1,), dtype=torch.float32)
+        scale = torch.ones([], dtype=torch.float32)
+        offset = torch.ones([], dtype=torch.float32)
         encoding = AffineEncoding(scale, offset, bitwidth=8)
         with pytest.raises(RuntimeError):
             encoding.to(dtype)
