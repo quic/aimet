@@ -60,12 +60,109 @@ from aimet_torch.amp.mixed_precision_algo import EvalCallbackFactory
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_common.amp.utils import AMPSearchAlgo, calculate_starting_bit_ops
 
-def get_htp_v75_config():
-    file_dir = pathlib.Path(os.path.realpath(__file__)).parent
-    config_file = 'htp_quantsim_config_v75.json'
-    x = list(pathlib.Path(file_dir).glob(config_file))
-    assert len(x) > 0 and x[0] is not None
-    return str(x[0])
+def get_config(config_dir: str):
+    quantsim_config = {
+        "defaults":
+            {
+                "ops":
+                    {
+                        "is_output_quantized": "True"
+                    },
+                "params":
+                    {
+                        "is_quantized": "True",
+                        "is_symmetric": "True"
+                    },
+                "per_channel_quantization": "True",
+                "strict_symmetric": "False",
+                "unsigned_symmetric": "False"
+            },
+
+        "params":
+            {
+                "bias":
+                    {
+                        "is_quantized": "False"
+                    }
+            },
+
+        "op_type":
+            {
+                "Dropout":
+                    {
+                        "is_output_quantized": "False"
+                    },
+                "Reshape":
+                    {
+                        "is_output_quantized": "False"
+                    },
+                "Gemm":
+                    {
+                        "per_channel_quantization": "False"
+                    },
+                "MaxPool":
+                    {
+                        "is_output_quantized": "False"
+                    },
+                "Sigmoid":
+                    {
+                        "encoding_constraints":
+                            {
+                                "min": 0.0,
+                                "max": 1.0
+                            }
+                    },
+                "Softmax":
+                    {
+                        "encoding_constraints":
+                            {
+                                "min": 0.0,
+                                "max": 1.0
+                            }
+                    },
+                "Transpose":
+                    {
+                        "is_output_quantized": "False"
+                    }
+            },
+
+        "supergroups":
+            [
+                {
+                    "op_list": ["Add", "Relu"]
+                },
+                {
+                    "op_list": ["Conv", "Clip"]
+                },
+                {
+                    "op_list": ["Conv", "HardSwish"]
+                },
+                {
+                    "op_list": ["Conv", "PRelu"]
+                },
+                {
+                    "op_list": ["Conv", "Relu"]
+                },
+                {
+                    "op_list": ["ConvTranspose", "Relu"]
+                },
+                {
+                    "op_list": ["Gemm", "Relu"]
+                }
+            ],
+
+        "model_input":
+            {
+                "is_input_quantized": "True"
+            },
+
+        "model_output":
+            {}
+    }
+
+    with open(os.path.join(config_dir, 'quantsim_config.json'), 'w') as f:
+        json.dump(quantsim_config, f)
+    return os.path.join(config_dir, 'quantsim_config.json')
 
 
 class TestMixedPrecision:
@@ -89,14 +186,14 @@ class TestMixedPrecision:
         allowed_accuracy_drop = None
 
         # Quantize the model to default bitwidth
-        sim = QuantizationSimModel(model, default_param_bw=default_bitwidth, default_output_bw=default_bitwidth,
-                                   dummy_input=dummy_input, config_file=get_htp_v75_config())
-        sim.compute_encodings(forward_pass_callback, forward_pass_callback_args=input_shape)
-        eval_callback = CallbackFunc(eval_function(num_candidates=len(candidates)), None)
-        fp32_accuracy = eval_callback.func(model, None)
-        forward_pass_call_back = CallbackFunc(forward_pass_callback, input_shape)
-
         with tempfile.TemporaryDirectory() as tempdir:
+            sim = QuantizationSimModel(model, default_param_bw=default_bitwidth, default_output_bw=default_bitwidth,
+                                       dummy_input=dummy_input, config_file=get_config(tempdir))
+            sim.compute_encodings(forward_pass_callback, forward_pass_callback_args=input_shape)
+            eval_callback = CallbackFunc(eval_function(num_candidates=len(candidates)), None)
+            fp32_accuracy = eval_callback.func(model, None)
+            forward_pass_call_back = CallbackFunc(forward_pass_callback, input_shape)
+
             pareto_front_list = choose_mixed_precision(sim, dummy_input, candidates, eval_callback, eval_callback,
                                                        allowed_accuracy_drop, tempdir, True, forward_pass_call_back,
                                                        amp_search_algo=AMPSearchAlgo.BruteForce)
@@ -128,22 +225,22 @@ class TestMixedPrecision:
         allowed_accuracy_drop = None
 
         # Quantize the model to default bitwidth
-        sim = QuantizationSimModel(model, default_param_bw=default_bitwidth, default_output_bw=default_bitwidth,
-                                   dummy_input=dummy_input, config_file=get_htp_v75_config())
-        sim.compute_encodings(forward_pass_callback, forward_pass_callback_args=input_shape)
-        eval_callback = CallbackFunc(eval_function(num_candidates=len(candidates)), None)
-        forward_pass_call_back = CallbackFunc(forward_pass_callback, input_shape)
+        with tempfile.TemporaryDirectory() as tempdir:
+            sim = QuantizationSimModel(model, default_param_bw=default_bitwidth, default_output_bw=default_bitwidth,
+                                       dummy_input=dummy_input, config_file=get_config(tempdir))
+            sim.compute_encodings(forward_pass_callback, forward_pass_callback_args=input_shape)
+            eval_callback = CallbackFunc(eval_function(num_candidates=len(candidates)), None)
+            forward_pass_call_back = CallbackFunc(forward_pass_callback, input_shape)
 
-        with tempfile.TemporaryDirectory() as results_dir:
             pareto_front_list = choose_mixed_precision(sim, dummy_input, candidates, eval_callback, eval_callback,
-                                                       allowed_accuracy_drop, results_dir, True, forward_pass_call_back,
+                                                       allowed_accuracy_drop, tempdir, True, forward_pass_call_back,
                                                        amp_search_algo=AMPSearchAlgo.BruteForce)
 
-            sim.export(os.path.join(results_dir, 'test_quantize_with_mixed_precision_fp16_1'), torch.randn(1, 1, 28, 28))
+            sim.export(tempdir, 'test_quantize_with_mixed_precision_fp16_1', torch.randn(1, 1, 28, 28))
 
             assert len(pareto_front_list) == 9
 
-            with open(os.path.join(results_dir, 'test_quantize_with_mixed_precision_fp16_1.encodings'), "r") as encodings_file:
+            with open(os.path.join(tempdir, 'test_quantize_with_mixed_precision_fp16_1.encodings'), "r") as encodings_file:
                 encodings = json.load(encodings_file)
 
             assert len(encodings['activation_encodings'].keys()) == 8
@@ -184,14 +281,14 @@ class TestMixedPrecision:
         allowed_accuracy_drop = None
 
         # Quantize the model to default bitwidth
-        sim = QuantizationSimModel(model, default_param_bw=default_bitwidth, default_output_bw=default_bitwidth,
-                                   dummy_input=dummy_input, config_file=get_htp_v75_config())
-        sim.compute_encodings(forward_pass_callback, forward_pass_callback_args=input_shape)
-        eval_callback = CallbackFunc(eval_function(num_candidates=len(candidates)), None)
-        fp32_accuracy = eval_callback.func(model, None)
-        forward_pass_call_back = CallbackFunc(forward_pass_callback, input_shape)
-
         with tempfile.TemporaryDirectory() as tempdir:
+            sim = QuantizationSimModel(model, default_param_bw=default_bitwidth, default_output_bw=default_bitwidth,
+                                       dummy_input=dummy_input, config_file=get_config(tempdir))
+            sim.compute_encodings(forward_pass_callback, forward_pass_callback_args=input_shape)
+            eval_callback = CallbackFunc(eval_function(num_candidates=len(candidates)), None)
+            fp32_accuracy = eval_callback.func(model, None)
+            forward_pass_call_back = CallbackFunc(forward_pass_callback, input_shape)
+
             pareto_front_list = choose_mixed_precision(sim, dummy_input, candidates, eval_callback, eval_callback,
                                                        allowed_accuracy_drop, tempdir, True, forward_pass_call_back,
                                                        amp_search_algo=AMPSearchAlgo.BruteForce)
@@ -228,15 +325,15 @@ class TestMixedPrecision:
         allowed_accuracy_drop = None
 
         # Quantize the model to default bitwidth
-        sim_fp16 = QuantizationSimModel(model, default_param_bw=default_bitwidth, default_output_bw=default_bitwidth,
-                                        dummy_input=dummy_input, default_data_type=QuantizationDataType.float,
-                                        config_file=get_htp_v75_config())
-        sim_fp16.compute_encodings(forward_pass_callback, forward_pass_callback_args=input_shape)
-        eval_callback = CallbackFunc(eval_function(num_candidates=len(candidates)), None)
-        fp32_accuracy_fp16 = eval_callback.func(sim_fp16.model, None)
-        forward_pass_call_back = CallbackFunc(forward_pass_callback, input_shape)
-
         with tempfile.TemporaryDirectory() as tempdir:
+            sim_fp16 = QuantizationSimModel(model, default_param_bw=default_bitwidth, default_output_bw=default_bitwidth,
+                                            dummy_input=dummy_input, default_data_type=QuantizationDataType.float,
+                                            config_file=get_config(tempdir))
+            sim_fp16.compute_encodings(forward_pass_callback, forward_pass_callback_args=input_shape)
+            eval_callback = CallbackFunc(eval_function(num_candidates=len(candidates)), None)
+            fp32_accuracy_fp16 = eval_callback.func(sim_fp16.model, None)
+            forward_pass_call_back = CallbackFunc(forward_pass_callback, input_shape)
+
             pareto_front_list_fp16 = choose_mixed_precision(sim_fp16, dummy_input, candidates, eval_callback, eval_callback,
                                                             allowed_accuracy_drop, tempdir, True, forward_pass_call_back,
                                                             amp_search_algo=AMPSearchAlgo.BruteForce)
@@ -248,7 +345,7 @@ class TestMixedPrecision:
 
             sim_int = QuantizationSimModel(model, default_param_bw=default_bitwidth, default_output_bw=default_bitwidth,
                                             dummy_input=dummy_input, default_data_type=QuantizationDataType.int,
-                                            config_file=get_htp_v75_config())
+                                            config_file=get_config(tempdir))
             sim_int.compute_encodings(forward_pass_callback, forward_pass_callback_args=input_shape)
             eval_callback = CallbackFunc(eval_function(num_candidates=len(candidates)), None)
             fp32_accuracy_int = eval_callback.func(sim_int.model, None)
