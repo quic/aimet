@@ -93,6 +93,9 @@ class ActivationType(Enum):
     relu6 = 2
     """ ReLU6 activation """
 
+    def __eq__(self, other: "ActivationType"):
+        return self.value == other.value and self.name == other.name # pylint: disable=comparison-with-callable
+
 
 class CostMetric(Enum):
     """ Enumeration of metrics to measure cost of a model/layer """
