@@ -39,7 +39,7 @@
 import torch
 from torch import nn
 
-from aimet_torch import elementwise_ops
+import aimet_torch.nn.modules.custom as aimet_modules
 from aimet_torch.v2.nn import FakeQuantizationMixin
 
 
@@ -281,7 +281,7 @@ class SingleResidualWithModuleAdd(nn.Module):
 
         # The output of Conv2d layer above(conv3) is added with the the residual from
         # MaxPool2d and then fed to the relu layer below.
-        self.add = elementwise_ops.Add()
+        self.add = aimet_modules.Add()
         self.relu3 = nn.ReLU(inplace=True)
 
         self.avgpool = nn.AvgPool2d(3, stride=1)

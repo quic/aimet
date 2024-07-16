@@ -44,11 +44,11 @@ import torch.nn.functional as F
 from torch import nn as nn
 from torchvision.ops import roi_align
 
-import aimet_torch.elementwise_ops as aimet_elementwise
-from aimet_torch import elementwise_ops
+import aimet_torch.nn.modules.custom as aimet_elementwise
+import aimet_torch.nn.modules.custom as aimet_modules
 
 # pylint: disable=too-many-instance-attributes
-from aimet_torch.elementwise_ops import Multiply
+from aimet_torch.nn.modules.custom import Multiply
 
 
 class SingleResidual(nn.Module):
@@ -1109,7 +1109,7 @@ class Conv3dModel1(nn.Module):
 class ModuleWithListInputModel(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        self.reshape = elementwise_ops.Reshape()
+        self.reshape = aimet_modules.Reshape()
         self.conv = torch.nn.Conv2d(in_channels=1,
                                     out_channels=16,
                                     kernel_size=3)
@@ -1207,9 +1207,9 @@ class TinyModelWithNoMathInvariantOps(torch.nn.Module):
     def __init__(self):
         super().__init__()
         self.conv1 = nn.Conv2d(3, 16, kernel_size=2, stride=2, padding=2, bias=False)
-        self.mul1 = elementwise_ops.Multiply()
-        self.mul2 = elementwise_ops.Multiply()
-        self.add1 = elementwise_ops.Add()
+        self.mul1 = aimet_modules.Multiply()
+        self.mul2 = aimet_modules.Multiply()
+        self.add1 = aimet_modules.Add()
 
     def forward(self, x):
         conv_output = self.conv1(x)
@@ -1227,7 +1227,7 @@ class ModelWithMatMul(torch.nn.Module):
         super().__init__()
         self.act1 = nn.PReLU()
         self.act2 = nn.ReLU()
-        self.matmul = elementwise_ops.MatMul()
+        self.matmul = aimet_modules.MatMul()
 
     def forward(self, *inputs):
         x = self.act1(inputs[0])
@@ -1244,7 +1244,7 @@ class ModelWithMatMul2(torch.nn.Module):
         self.act1 = nn.PReLU()
         self.act2 = nn.ReLU()
         self.act3 = nn.Softmax()
-        self.matmul = elementwise_ops.MatMul()
+        self.matmul = aimet_modules.MatMul()
 
     def forward(self, *inputs):
         x = self.act1(inputs[0])
@@ -1306,7 +1306,7 @@ class ModelWithUnusedAdd(torch.nn.Module):
     def __init__(self):
         super().__init__()
         self.identity = torch.nn.Identity()
-        self.add = elementwise_ops.Add()
+        self.add = aimet_modules.Add()
 
     def forward(self, x):
         return self.identity(x)
@@ -1325,7 +1325,7 @@ class ExpandModel(torch.nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.expand = elementwise_ops.Expand()
+        self.expand = aimet_modules.Expand()
         self.linear = torch.nn.Linear(10, 10)
 
     def forward(self, x):

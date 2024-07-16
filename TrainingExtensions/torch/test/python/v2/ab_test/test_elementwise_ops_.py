@@ -41,7 +41,7 @@ import tempfile
 import torch
 import torch.nn as nn
 from aimet_common.defs import QuantScheme
-from aimet_torch import elementwise_ops as aimet_ops
+import aimet_torch.nn.modules.custom as aimet_ops
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch import utils as v1_utils
 
@@ -75,7 +75,7 @@ def dummy_forward(model: torch.nn.Module, input: torch.Tensor):
         model(*input)
 
 
-# From https://github.com/quic/aimet/blob/8ed479b24010834bfea09885cf6879b9bd916e8a/TrainingExtensions/torch/test/python/test_elementwise_ops.py#L101
+# From https://github.com/quic/aimet/blob/8ed479b24010834bfea09885cf6879b9bd916e8a/TrainingExtensions/torch/test/python/test_aimet_modules.py#L101
 class TestTrainingExtensionElementwiseOps:
     def test_quantsim_export(self):
         model = Model2(aimet_ops.Add())

@@ -54,7 +54,7 @@ from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
-from aimet_torch.elementwise_ops import Add
+from aimet_torch.nn.modules.custom import Add
 from models import test_models
 
 class ModelWithBertCustomLayerNormGelu(torch.nn.Module):

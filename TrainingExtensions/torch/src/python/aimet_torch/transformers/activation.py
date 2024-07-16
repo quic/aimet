@@ -137,7 +137,7 @@ import torch
 from torch import Tensor
 from torch import nn
 import torch.nn.functional as nnF
-from aimet_torch import elementwise_ops
+import aimet_torch.nn.modules.custom as aimet_modules
 
 # pylint: disable=too-many-arguments
 class QuantizableMultiheadAttention(nn.MultiheadAttention):
@@ -205,12 +205,12 @@ class QuantizableMultiheadAttention(nn.MultiheadAttention):
         # for the type: ignore, see https://github.com/pytorch/pytorch/issues/58969
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=bias, **factory_kwargs)  # type: ignore[assignment]
 
-        self.div = elementwise_ops.Divide()
-        self.matmul_1 = elementwise_ops.MatMul()
-        self.matmul_2 = elementwise_ops.MatMul()
+        self.div = aimet_modules.Divide()
+        self.matmul_1 = aimet_modules.MatMul()
+        self.matmul_2 = aimet_modules.MatMul()
         self.softmax = torch.nn.Softmax(dim=-1)
 
-        self.mask_add = elementwise_ops.Add()
+        self.mask_add = aimet_modules.Add()
 
     def _get_name(self):
         return 'QuantizableMultiheadAttention'
@@ -498,8 +498,8 @@ class QuantizableTransformerEncoderLayer(nn.TransformerEncoderLayer):
                  batch_first=False, norm_first=False, device=None, dtype=None) -> None:
         super().__init__(d_model, nhead, dim_feedforward, dropout, activation, layer_norm_eps, batch_first)
         self.norm_first = norm_first
-        self.add1 = elementwise_ops.Add()
-        self.add2 = elementwise_ops.Add()
+        self.add1 = aimet_modules.Add()
+        self.add2 = aimet_modules.Add()
 
     # pylint: disable=unused-argument
     # pylint: disable=arguments-differ
@@ -630,9 +630,9 @@ class QuantizableTransformerDecoderLayer(nn.TransformerDecoderLayer):
                  batch_first=False, norm_first=False, device=None, dtype=None) -> None:
         super().__init__(d_model, nhead, dim_feedforward, dropout, activation, layer_norm_eps, batch_first)
         self.norm_first = norm_first
-        self.add1 = elementwise_ops.Add()
-        self.add2 = elementwise_ops.Add()
-        self.add3 = elementwise_ops.Add()
+        self.add1 = aimet_modules.Add()
+        self.add2 = aimet_modules.Add()
+        self.add3 = aimet_modules.Add()
 
     # pylint: disable=unused-argument
     # pylint: disable=arguments-differ

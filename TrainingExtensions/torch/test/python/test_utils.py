@@ -50,7 +50,8 @@ from pathlib import Path
 import aimet_torch.model_validator.validation_checks
 import aimet_torch.utils
 from aimet_common.utils import round_up_to_multiplicity, round_down_to_multiplicity
-from aimet_torch import utils, elementwise_ops
+from aimet_torch import utils
+import aimet_torch.nn.modules.custom as aimet_modules
 
 from aimet_torch.quantsim import QuantizationSimModel
 from models.test_models import TinyModel, MultiInput, ModelWithReusedNodes, SingleResidual, EmbeddingModel
@@ -468,7 +469,7 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
                 self.layer1 = MyLayer()
                 self.conv2 = torch.nn.Conv2d(32, 32, 3)
                 self.conv3 = torch.nn.Conv2d(32, 32, 3)
-                self.add = elementwise_ops.Add()
+                self.add = aimet_modules.Add()
 
             def forward(self, x):
                 x = self.conv1(x)
@@ -587,9 +588,9 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         assert utils.is_torch_nn_module(torch.nn.ModuleList([torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
                                                              torch.nn.ReLU(inplace=True),
                                                              torch.nn.Conv2d(16, 8, kernel_size=2)]))
-        assert not utils.is_torch_nn_module(elementwise_ops.Add())
-        assert not utils.is_torch_nn_module(elementwise_ops.Multiply())
-        assert not utils.is_torch_nn_module(elementwise_ops.Concat())
+        assert not utils.is_torch_nn_module(aimet_modules.Add())
+        assert not utils.is_torch_nn_module(aimet_modules.Multiply())
+        assert not utils.is_torch_nn_module(aimet_modules.Concat())
 
         class CustomModule(torch.nn.Module):
             @staticmethod

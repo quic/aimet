@@ -60,7 +60,8 @@ from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
 from aimet_common.utils import AimetLogger
 from aimet_torch import onnx_utils
-from aimet_torch import utils, elementwise_ops
+from aimet_torch import utils
+import aimet_torch.nn.modules.custom as aimet_modules
 from aimet_torch.model_preparer import prepare_model
 from models.test_models import TwoLayerBidirectionalLSTMModel, SingleLayerRNNModel, \
     ModelWithTwoInputs, SimpleConditional, RoiModel, InputOutputDictModel, Conv3dModel
@@ -223,7 +224,7 @@ class ModelWithTwoInputsOneToAdd(nn.Module):
         self.maxpool1_b = nn.MaxPool2d(2)
         self.relu1_b = nn.ReLU()
 
-        self.add = elementwise_ops.Add()
+        self.add = aimet_modules.Add()
 
         self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
         self.maxpool2 = nn.MaxPool2d(2)
@@ -358,8 +359,8 @@ class CustomOp(torch.nn.Module):
     def __init__(self):
         super().__init__()
         self.size = 8
-        self.mul1 = elementwise_ops.Multiply()
-        self.mul2 = elementwise_ops.Multiply()
+        self.mul1 = aimet_modules.Multiply()
+        self.mul2 = aimet_modules.Multiply()
 
     def forward(self, x):
         y = self.mul1(x, self.size)
@@ -384,9 +385,9 @@ class CustomOpV2(torch.nn.Module):
     def __init__(self):
         super().__init__()
         self.size = 8
-        self.mul = elementwise_ops.Multiply()
-        self.add = elementwise_ops.Add()
-        self.sub = elementwise_ops.Subtract()
+        self.mul = aimet_modules.Multiply()
+        self.add = aimet_modules.Add()
+        self.sub = aimet_modules.Subtract()
         self.clamp = Clamp()
 
     def forward(self, x):
@@ -413,9 +414,9 @@ class Clamp(torch.nn.Module):
 class ModelInputsSharedConstantIntermediate(nn.Module):
     def __init__(self):
         super(ModelInputsSharedConstantIntermediate, self).__init__()
-        self.add1 = elementwise_ops.Add()
-        self.add2 = elementwise_ops.Add()
-        self.mul = elementwise_ops.Multiply()
+        self.add1 = aimet_modules.Add()
+        self.add2 = aimet_modules.Add()
+        self.mul = aimet_modules.Multiply()
         self.register_buffer('tensor1', torch.tensor([2.0]))
 
         self.relu1 = nn.ReLU()
@@ -454,9 +455,9 @@ class ModelWithConstantQuantization(torch.nn.Module):
     def __init__(self):
         super(ModelWithConstantQuantization, self).__init__()
         self.relu = torch.nn.ReLU()
-        self.add = elementwise_ops.Add()
-        self.add2 = elementwise_ops.Add()
-        self.add3 = elementwise_ops.Add()
+        self.add = aimet_modules.Add()
+        self.add2 = aimet_modules.Add()
+        self.add3 = aimet_modules.Add()
         self.tensor1 = 1.0
         self.register_buffer('tensor2', torch.tensor([2.0]))
 
@@ -1292,8 +1293,8 @@ class TestQuantizationSimStaticGrad:
                 self.conv4a = nn.Conv2d(20, 20, kernel_size=5)
                 self.conv4b = nn.Conv2d(20, 20, kernel_size=5)
                 self.conv5 = nn.Conv2d(20, 20, kernel_size=5)
-                self.add1 = elementwise_ops.Add()
-                self.add2 = elementwise_ops.Add()
+                self.add1 = aimet_modules.Add()
+                self.add2 = aimet_modules.Add()
 
             def forward(self, input):
                 x = self.conv1(input)
@@ -2259,7 +2260,7 @@ class TestQuantizationSimStaticGrad:
         class Model(nn.Module):
             def __init__(self):
                 super().__init__()
-                self.add = elementwise_ops.Add()
+                self.add = aimet_modules.Add()
 
             def forward(self, x, y):
                 return self.add(x, y)
@@ -2563,8 +2564,8 @@ class TestQuantizationSimStaticGrad:
         class SecondModel(torch.nn.Module):
             def __init__(self, const_inp_shape):
                 super(SecondModel, self).__init__()
-                self.add = elementwise_ops.Add()
-                self.sub = elementwise_ops.Subtract()
+                self.add = aimet_modules.Add()
+                self.sub = aimet_modules.Subtract()
                 self.batchnorm = torch.nn.BatchNorm1d(10)
                 self.const_tensor = torch.randn(const_inp_shape)
 
@@ -3090,7 +3091,7 @@ class TestQuantizationSimLearnedGrid:
         class ElementwiseAdd(nn.Module):
             def __init__(self):
                 super(ElementwiseAdd, self).__init__()
-                self.add = elementwise_ops.Add()
+                self.add = aimet_modules.Add()
 
             def forward(self, *inputs):
                 return self.add(inputs[0], inputs[1])
@@ -4801,9 +4802,9 @@ class TestQuantizationSimLearnedGrid:
                                                                 producer_output_quantization_enabled):
         device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-        # Temporarily add elementwise_ops.MatMul entry to apply op_type config
+        # Temporarily add aimet_modules.MatMul entry to apply op_type config
         original_map_torch_types_to_onnx = copy.deepcopy(onnx_utils.map_torch_types_to_onnx)
-        onnx_utils.map_torch_types_to_onnx[elementwise_ops.MatMul] = ['MatMul']
+        onnx_utils.map_torch_types_to_onnx[aimet_modules.MatMul] = ['MatMul']
 
         model = test_models.ModelWithMatMul().to(device)
         dummy_input = (torch.randn(10, 3, 4, device=device), torch.randn(10, 5, 4, device=device))

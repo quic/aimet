@@ -48,7 +48,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-import aimet_torch.elementwise_ops as aimet_ops
+import aimet_torch.nn.modules.custom as aimet_ops
 from aimet_torch.v2.quantization import affine
 from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.float import FloatQuantizeDequantize
