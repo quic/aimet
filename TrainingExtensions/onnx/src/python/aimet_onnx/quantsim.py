@@ -37,6 +37,7 @@
 """ Implementation for simulating models running on Quantized hardware """
 
 import tempfile
+import contextlib
 from dataclasses import dataclass
 from pathlib import Path
 import os
@@ -260,7 +261,8 @@ class QuantizationSimModel:
                 for name in node.input:
                     if name not in self.activation_names and name not in self.param_names and name in self.model.get_initializer_name_set():
                         constant_input_tensor = self.model.get_initializer(name)
-                        if constant_input_tensor.data_type == 1:  # 1 corresponds to float, dictionary can be found by using onnx.TensorProto.DataType.items()
+                        # TODO: hitameht: we should find better way to find such patterns and corner cases.
+                        if constant_input_tensor.data_type == 1 and not self._check_matmul_add_patten(node):  # 1 corresponds to float, dictionary can be found by using onnx.TensorProto.DataType.items()
                             self.activation_names.append(name)
                             self.input_quantizers_name.append(name)
 
@@ -280,6 +282,20 @@ class QuantizationSimModel:
         if name not in self.activation_dtypes.keys() or self.activation_dtypes[name] not in data_types_to_quantize:
             return False
         return True
+
+    def _check_matmul_add_patten(self, node: onnx.NodeProto) -> bool:
+        """
+        Check MatMul + Add pattern
+        :param node: Onnx node
+        :return: True if the MatMul + Add pattern is found, False otherwise.
+        """
+        _, output_tensor_to_node = self._create_map_of_tensor_to_node(self.model.model)
+        for inp in node.input:
+            with contextlib.suppress(KeyError):
+                producer_node = output_tensor_to_node[inp]
+                if producer_node.op_type == 'MatMul' and node.op_type == 'Add':
+                    return True
+        return False
 
     def fill_activation_dtypes(self, dummy_input: Dict[str, np.ndarray]):
         """
@@ -599,6 +615,49 @@ class QuantizationSimModel:
             activation_quantizers.append(self.qc_quantize_op_dict[activation])
 
         return param_quantizers, activation_quantizers
+
+    def _create_map_of_tensor_to_node(self, model: onnx.ModelProto) -> Tuple[Dict[str, List[onnx.NodeProto]],
+                                                                            Dict[str, onnx.NodeProto]]:
+        """
+        Create and return two dicts
+            1. Tensor -> list of nodes that consume this tensor
+            2. Tensor -> node that produces this tensor
+
+        :param model: ONNX model object
+        :return: The two dicts described above
+
+        """
+        input_tensor_to_node = {}
+        output_tensor_to_node = {}
+        for node in model.graph.node:
+            self._populate_input_output_tensor_maps(input_tensor_to_node, output_tensor_to_node, node)
+        return input_tensor_to_node, output_tensor_to_node
+
+    def _populate_input_output_tensor_maps(self,
+                                           input_tensor_to_node: Dict[str, List[onnx.NodeProto]],
+                                           output_tensor_to_node: Dict[str, onnx.NodeProto], node: onnx.NodeProto):
+        """
+        Populate input tensor to node and output tensor to node maps given a node. If the node has a graph with nodes,
+        recursively populate the maps for subgraph nodes.
+
+        :param input_tensor_to_node: Dictionary mapping onnx tensor to nodes that consume it
+        :param output_tensor_to_node: Dictionary mapping onnx tensor to node that generated it
+        :param node: Node to extract input and output tensors for to populate maps
+        """
+        for in_tensor in node.input:
+            if in_tensor in input_tensor_to_node:
+                input_tensor_to_node[in_tensor].append(node)
+            else:
+                input_tensor_to_node[in_tensor] = [node]
+
+        for output in node.output:
+            assert output not in output_tensor_to_node, 'More than one node produces the same tensor'
+            output_tensor_to_node[output] = node
+
+        for attribute in node.attribute:
+            if getattr(attribute, 'g', None) is not None:
+                for sub_node in getattr(attribute, 'g').node:
+                    self._populate_input_output_tensor_maps(input_tensor_to_node, output_tensor_to_node, sub_node)
 
 
 def load_encodings_to_sim(quant_sim_model: QuantizationSimModel, onnx_encoding_path: str, strict=True) -> \
