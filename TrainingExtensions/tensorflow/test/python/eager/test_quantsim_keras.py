@@ -1270,18 +1270,17 @@ def test_initialization_and_export_non_strict_symmetric(quant_scheme) -> None:
                     scale = encoding_info["scale"]
                     offset = encoding_info["offset"]
 
-                    # Default HTP config is non-strict symmetric when parameter quantization
-                    # Non-strict symmetric should have
-                    # encoding_min == -encoding_max - scale (one more bin)
-                    # offset as -128
-                    if quant_scheme in RANGE_LEARNING_SCHEMES:
-                        assert encoding_min == -encoding_max - scale
-                    else:
-                        # In post training scheme case, it doesn't seem to match exactly due to floating point arithmetic
-                        assert np.isclose(encoding_min, -encoding_max - scale)
+                # We are enforcing strict symmetric flag to True in case of Range Learning. So encoding_min == -encoding_max.
+                if quant_scheme in RANGE_LEARNING_SCHEMES:
+                    assert encoding_min == -encoding_max
+                    assert offset == -127
+                    assert np.isclose(encoding_max, encoding_min + scale * 254, atol=1e-6)
+                else:
+                    # In post training scheme case, it doesn't seem to match exactly due to floating point arithmetic
+                    assert np.isclose(encoding_min, -encoding_max - scale)
                     assert offset == -128
-                    assert np.isclose(encoding_min, scale * offset, atol=1e-6)
                     assert np.isclose(encoding_max, encoding_min + scale * 255, atol=1e-6)
+                assert np.isclose(encoding_min, scale * offset, atol=1e-6)
 
 
 @pytest.mark.cuda
@@ -1361,18 +1360,17 @@ def test_initialization_and_export_non_strict_symmetric_per_channel(quant_scheme
                     scale = encoding_info["scale"]
                     offset = encoding_info["offset"]
 
-                    # Default HTP config is non-strict symmetric when parameter quantization
-                    # Non-strict symmetric should have
-                    # encoding_min == -encoding_max - scale (one more bin)
-                    # offset as -128
-                    if quant_scheme in RANGE_LEARNING_SCHEMES:
-                        assert encoding_min == -encoding_max - scale
-                    else:
-                        # In post training scheme case, it doesn't seem to match exactly due to floating point arithmetic
-                        assert np.isclose(encoding_min, -encoding_max - scale)
-                    assert offset == -128
-                    assert np.isclose(encoding_min, scale * offset, atol=1e-6)
+                # We are enforcing strict symmetric flag to True in case of Range Learning. So encoding_min == -encoding_max.
+                if quant_scheme in RANGE_LEARNING_SCHEMES:
+                    assert encoding_min == -encoding_max
+                    assert offset == -127
+                    assert np.isclose(encoding_max, encoding_min + scale * 254, atol=1e-6)
+                else:
+                    # In post training scheme case, it doesn't seem to match exactly due to floating point arithmetic
+                    assert np.isclose(encoding_min, -encoding_max - scale)
                     assert np.isclose(encoding_max, encoding_min + scale * 255, atol=1e-6)
+                    assert offset == -128
+                assert np.isclose(encoding_min, scale * offset, atol=1e-6)
 
 
 def test_quant_scheme_percentile():
