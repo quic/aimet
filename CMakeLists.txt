@@ -81,8 +81,11 @@ option(ENABLE_ONNX "Enable AIMET-ONNX build" OFF)
 option(ENABLE_TENSORFLOW "Enable AIMET-TensorFlow build" OFF)
 option(ENABLE_TESTS "Enable building tests" ON)
 
-option(ENABLE_PRE_CXX11_ABI "Compile using pre-C++11 ABI" OFF)
-option(AUTO_ENABLE_PRE_CXX11_ABI "Auto-enable pre-C++11 ABI when deemed necessary" ON)
+option(ENABLE_GCC_PRE_CXX11_ABI "Compile using pre-C++11 ABI" OFF)
+option(AUTO_ENABLE_GCC_PRE_CXX11_ABI "Auto-enable pre-C++11 ABI when deemed necessary" ON)
+
+set(GCC_ABI_VERSION "0" CACHE STRING "Set GCC compiler ABI version (will set -fabi-version; AUTO_SET_GCC_ABI_VERSION=ON will override)")
+option(AUTO_SET_GCC_ABI_VERSION "Automatically try to set GCC compiler ABI version" ON)
 
 message(STATUS "AIMET build configuration:")
 message(STATUS "** ENABLE_CUDA = ${ENABLE_CUDA}")
@@ -90,6 +93,13 @@ message(STATUS "** ENABLE_TORCH = ${ENABLE_TORCH}")
 message(STATUS "** ENABLE_ONNX = ${ENABLE_ONNX}")
 message(STATUS "** ENABLE_TENSORFLOW = ${ENABLE_TENSORFLOW}")
 message(STATUS "** ENABLE_TESTS = ${ENABLE_TESTS}")
+message(STATUS "** ---")
+message(STATUS "** ENABLE_GCC_PRE_CXX11_ABI  = ${ENABLE_GCC_PRE_CXX11_ABI}")
+message(STATUS "** AUTO_ENABLE_GCC_PRE_CXX11_ABI  = ${AUTO_ENABLE_GCC_PRE_CXX11_ABI}")
+message(STATUS "** ---")
+message(STATUS "** GCC_ABI_VERSION = ${GCC_ABI_VERSION}")
+message(STATUS "** AUTO_SET_GCC_ABI_VERSION = ${AUTO_SET_GCC_ABI_VERSION}")
+message(STATUS "** ---")
 
 if (ENABLE_TORCH AND ENABLE_TENSORFLOW)
     # Remove this once it's proven feasible.
@@ -103,28 +113,48 @@ endif()
 
 # Find Python libraries
 find_package(Python3 COMPONENTS Interpreter Development)
-message("Found Python3: ${Python3_FOUND}, at ${Python3_LIBRARIES}")
+message(STATUS "Found Python3: ${Python3_FOUND}, at ${Python3_LIBRARIES}")
 
 # -------------------------------
 # Compilation flags - not (yet) per target
 # -------------------------------
 
-if (ENABLE_TORCH AND AUTO_ENABLE_PRE_CXX11_ABI)
-    set(ENABLE_PRE_CXX11_ABI ON CACHE BOOL "" FORCE)
-    message(NOTICE "** -- Force set ENABLE_PRE_CXX11_ABI = ON (Reason: PyTorch)")
+if (ENABLE_TORCH)
+    if (AUTO_ENABLE_GCC_PRE_CXX11_ABI)
+        # michof: Current PyTorch wheels appear to have been compiled with this setting.
+        # In practice, we don't see C++11 ABI issues when this is disabled.
+        message(NOTICE "** Force set ENABLE_GCC_PRE_CXX11_ABI = ON (Reason: PyTorch)")
+        set(ENABLE_GCC_PRE_CXX11_ABI ON CACHE BOOL "" FORCE)
+    endif()
+
+    if (AUTO_SET_GCC_ABI_VERSION)
+        # See, e.g., https://github.com/pytorch/pytorch/blob/v2.3.1/CMakeLists.txt#L64
+        # michof: Current PyTorch wheels appear to have been compiled with this setting, so this
+        # needs to be set here to ensure pybind11 internals keep working (this will influence
+        # PYBIND11_BUILD_ABI, which should not be set directly).
+        # NB, this ABI version is set in PyTorch only when GLIBCXX_USE_CXX11_ABI==0.
+        message(NOTICE "** Set GCC_ABI_VERSION = 11 (Reason: PyTorch)")
+        set(GCC_ABI_VERSION "11" CACHE STRING "" FORCE)
+    endif()
 endif()
 
 if (ENABLE_TENSORFLOW)
     set_tensorflow_version() # we already need the version right below
-    if (AUTO_ENABLE_PRE_CXX11_ABI AND TF_VERSION VERSION_LESS "2.9")
-        set(ENABLE_PRE_CXX11_ABI ON CACHE BOOL "" FORCE)
-        message(NOTICE "** -- Force set ENABLE_PRE_CXX11_ABI = ON (Reason: TensorFlow <2.9)")
+    if (AUTO_ENABLE_GCC_PRE_CXX11_ABI AND TF_VERSION VERSION_LESS "2.9")
+        # michof: Keep behavior as in previous versions of this file.
+        message(NOTICE "** Set ENABLE_GCC_PRE_CXX11_ABI = ON (Reason: TensorFlow <2.9)")
+        set(ENABLE_GCC_PRE_CXX11_ABI ON CACHE BOOL "" FORCE)
     endif()
 endif()
 
-if (ENABLE_PRE_CXX11_ABI)
-    message(NOTICE "Adding to CXXFLAGS: -D_GLIBCXX_USE_CXX11_ABI=0 -DPYBIND11_BUILD_ABI=\\\"_cxxabi1011\\\"")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=0 -DPYBIND11_BUILD_ABI=\\\"_cxxabi1011\\\"")
+if (ENABLE_GCC_PRE_CXX11_ABI)
+    message(NOTICE "Adding to CXXFLAGS: -D_GLIBCXX_USE_CXX11_ABI=0")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=0")
+endif()
+
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" AND "${GCC_ABI_VERSION}" GREATER "0")
+    message(NOTICE "Adding to CXXFLAGS: -fabi-version=${GCC_ABI_VERSION}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fabi-version=${GCC_ABI_VERSION}")
 endif()
 
 # -------------------------------
@@ -143,15 +173,17 @@ pkg_search_module(OPENCV opencv) # in case opencv will not be found, it would be
 if (ENABLE_TORCH)
     set_torch_version()
     set_torch_cmake_prefix_path()
+    check_torch_cxx_abi_compatibility()
     update_torch_cuda_arch_list()
+
     find_package(Torch REQUIRED)
 endif()
 
 if (ENABLE_ONNX)
     set_onnx_version()
     set_onnxruntime_variables()
+
     find_package(Eigen3 REQUIRED)
-    find_package(Torch REQUIRED)
 endif()
 
 if (ENABLE_TENSORFLOW)
@@ -163,7 +195,7 @@ endif()
 
 add_library_pybind11()
 # michof: We should consider replacing the above macro simply by:
-#find_package(pybind11 CONFIG)
+#find_package(pybind11 CONFIG REQUIRED)
 
 include(cmake/ThirdPartyDependencies.cmake)
 
