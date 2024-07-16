@@ -39,7 +39,6 @@ import copy
 import math
 import pytest
 import json
-import os
 import tempfile
 from pathlib import Path
 from contextlib import contextmanager
@@ -179,7 +178,32 @@ class TestTrainingExtensionBnFold:
 
         assert not torch.equal(params_before, params_after)
         assert not isinstance(model.layer2[0].bn1, torch.nn.BatchNorm2d)
-        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
+        assert torch.allclose(baseline_output, output_after_fold, atol=1.e-3)
+
+    @pytest.mark.cuda
+    @pytest.mark.parametrize("device", ['cpu', 'cuda'])
+    def test_python_impl(self, device):
+        try:
+            flag = batch_norm_fold.USE_PYTHON_IMPL
+            torch.manual_seed(10)
+            model = models.resnet18().eval().to(device)
+            _initialize_bn_params(model)
+            model_copy = copy.deepcopy(model)
+
+            batch_norm_fold.USE_PYTHON_IMPL = True
+            layer_list = [(model.layer2[0].conv1, model.layer2[0].bn1)]
+            fold_given_batch_norms(model, layer_list)
+
+            batch_norm_fold.USE_PYTHON_IMPL = False
+            layer_list = [(model_copy.layer2[0].conv1, model_copy.layer2[0].bn1)]
+            fold_given_batch_norms(model_copy, layer_list)
+
+            # Ensure that the weight parameter is updated correctly after bn fold.
+            assert torch.allclose(model.layer2[0].conv1.weight, model_copy.layer2[0].conv1.weight)
+            assert not isinstance(model.layer2[0].bn1, torch.nn.BatchNorm2d)
+            assert not isinstance(model_copy.layer2[0].bn1, torch.nn.BatchNorm2d)
+        finally:
+            batch_norm_fold.USE_PYTHON_IMPL = flag
 
     def test_fold_bn_before_conv_no_bias(self, use_python_impl):
         class MyModel(torch.nn.Module):
