@@ -42,9 +42,11 @@ from collections import OrderedDict
 import contextlib
 import weakref
 from typing import Optional, List, Dict
+import functools
 
 import torch
 from torch import nn
+from torch.utils._pytree import tree_map
 
 from packaging import version  # pylint: disable=wrong-import-order
 from aimet_torch.v2.quantization.base import EncodingBase
@@ -145,10 +147,10 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
 
     def load_state_dict(self, state_dict, strict: bool = True): # pylint:disable=arguments-differ
         if '_extra_state' not in state_dict:
-            is_initialized = {
-                param_name: True for param_name in state_dict
+            is_initialized = OrderedDict({
+                param_name: torch.tensor(True) for param_name in state_dict
                 if param_name in self._parameters
-            }
+            })
             state_dict['_extra_state'] = is_initialized
 
         ret = super().load_state_dict(state_dict, strict)
@@ -164,10 +166,16 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
         """
         Get extra state that describes which parameters are initialized.
         """
-        return {
-            param_name: self._is_initialized(param_name)
+        extra_state_dict = OrderedDict({
+            param_name: torch.tensor(self._is_initialized(param_name))
             for param_name, _ in self.named_parameters()
-        }
+        })
+
+        # NOTE: This is a hack to bypass a bug in PyTorch onnx export
+        #       where it assumes state dict is always Mapping[str, Tensor]
+        #       and tries to `.detach()` all the values in the state dict.
+        setattr(extra_state_dict, 'detach', functools.partial(tree_map, torch.Tensor.detach, extra_state_dict))
+        return extra_state_dict
 
     @torch.no_grad()
     def set_extra_state(self, state):
