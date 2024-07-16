@@ -40,14 +40,16 @@ import copy
 import numpy as np
 import torch
 import torch.nn as nn
+from contextlib import contextmanager
 
 from aimet_common.defs import QuantScheme
 import aimet_torch.bias_correction
 import aimet_torch.layer_selector
 from aimet_torch import bias_correction
 from aimet_torch.quantsim import QuantParams
-from models.mobilenet import MobileNetV2
 from aimet_torch import batch_norm_fold
+from aimet_torch import bias_correction as bc
+from models.mobilenet import MobileNetV2
 from models.imagenet_dataloader import ImageNetDataLoader
 
 
@@ -62,10 +64,28 @@ def evaluate(model, early_stopping_iterations, use_cuda):
     return model(random_input)
 
 
-class TestBiasCorrection():
+@contextmanager
+def _use_python_impl(flag: bool):
+    orig_flag = bc.USE_PYTHON_IMPL
+    try:
+        bc.USE_PYTHON_IMPL = flag
+        yield
+    finally:
+        bc.USE_PYTHON_IMPL = orig_flag
+
+
+@pytest.fixture(params=[True, False])
+def use_python_impl(request):
+    param: bool = request.param
+
+    with _use_python_impl(param):
+        yield
+
+
+class TestBiasCorrection:
 
     @pytest.mark.cuda
-    def test_bias_correction_empirical(self):
+    def test_bias_correction_empirical(self, use_python_impl):
 
         torch.manual_seed(10)
         model = MobileNetV2().to(torch.device('cpu'))
@@ -95,7 +115,7 @@ class TestBiasCorrection():
         assert isinstance(model.features[11].conv[0], nn.Conv2d)
 
     @pytest.mark.cuda
-    def test_bias_correction_hybrid(self):
+    def test_bias_correction_hybrid(self, use_python_impl):
         torch.manual_seed(10)
 
         model = MobileNetV2().to(torch.device('cpu'))
