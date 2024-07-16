@@ -42,10 +42,12 @@ from aimet_torch.nn.modules.custom import * # pylint: disable=wildcard-import, u
 
 if __name__ != "__main__":
     import aimet_torch.nn.modules.custom as modules
+    from aimet_torch.utils import _red
     import warnings
     warnings.warn(
-        f'Module {__name__} is renamed to {modules.__name__} and will be deprecated soon in the later versions.',
+        _red(f'"{__name__}" is renamed to "{modules.__name__}" and will be deprecated soon in the later versions.'),
         stacklevel=2
     )
     del warnings
+    del _red
     del modules
