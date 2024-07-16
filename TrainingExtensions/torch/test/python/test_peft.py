@@ -182,7 +182,7 @@ class TestLoraAdapterPeft:
 
         sim = QuantizationSimModel(model, dummy_input=dummy_inputs)
 
-        peft_utils.quantize_lora_scale_with_fixed_range(sim, 0.0, 1.0)
+        peft_utils.quantize_lora_scale_with_fixed_range(sim, 16, 0.0, 1.0)
         def forward_pass(model, forward_pass_callback=None):
             return model(dummy_inputs)
         sim.compute_encodings(forward_pass, None)

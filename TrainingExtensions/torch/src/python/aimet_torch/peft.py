@@ -228,17 +228,18 @@ class PeftQuantUtils:
                 names.add(prepared_name)
         return names
 
-    def quantize_lora_scale_with_fixed_range(self, sim, scale_min=0, scale_max=1e-5):
+    def quantize_lora_scale_with_fixed_range(self, sim, bitwidth, scale_min=0, scale_max=1e-5):
         """
         Add input quantizer for scale(alpha/rank) and provide min max values to it
 
         :param sim: QuantSim model
+        :param bitwidth: Bitwidth for input quantizer to Mul/ bitwidth for scale
         :param scale_min: min value of lora alpha to be used
         :param scale_max: max value of lora alpha to be used
         """
 
         def _create_quantizer():
-            quantizer = QuantizeDequantize(shape=(1,), bitwidth=8, symmetric=False)
+            quantizer = QuantizeDequantize(shape=(1,), bitwidth=bitwidth, symmetric=False)
             quantizer.set_range(torch.as_tensor(scale_min), torch.as_tensor(scale_max))
             self._freeze_quantizer(quantizer)
             return quantizer
