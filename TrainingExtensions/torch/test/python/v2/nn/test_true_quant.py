@@ -49,14 +49,19 @@ from aimet_torch.v2.nn import (
     QuantizedConv1d,
     QuantizedConv2d,
     QuantizedConv3d,
+    QuantizedConvTranspose1d,
+    QuantizedConvTranspose2d,
+    QuantizedConvTranspose3d,
     QuantizedGELU,
     QuantizedLinear,
     QuantizationMixin,
     QuantizedSigmoid,
     QuantizedSoftmax,
+    QuantizedMatMul,
     QuantizedLayerNorm,
     QuantizedAdd,
     QuantizedMultiply,
+    QuantizedDivide,
     QuantizedSubtract,
     FakeQuantizationMixin,
 )
@@ -82,7 +87,7 @@ def affine_quantize(tensor: torch.Tensor,
 
 def _input(*shape):
     numel = functools.reduce(lambda x, y: x * y, shape)
-    return torch.arange(numel).view(*shape) / numel
+    return torch.arange(1,numel+1).view(*shape) / numel
 
 
 @pytest.fixture
@@ -119,7 +124,6 @@ def register_int_conv():
 
         input = input.dequantize()
         weight = weight.dequantize()
-
         output = kernel(input, weight, bias, stride, padding, dilation, groups)
         return affine_quantize(output,
                                output_encodings.scale,
@@ -133,6 +137,30 @@ def register_int_conv():
     QuantizedConv3d.set_default_kernel(None)
     QuantizedConv2d.set_default_kernel(None)
     QuantizedConv1d.set_default_kernel(None)
+
+
+@pytest.fixture(autouse=True)
+def register_int_conv():
+    def int_convtransposend(kernel, input, weight, bias=None, stride=1, padding=0, output_padding=0, dilation=1, groups=1, *, output_encodings=None):
+        # Implicit dequantization is not supported yet
+        assert isinstance(input, QuantizedTensor)
+        assert isinstance(weight, QuantizedTensor)
+
+        input = input.dequantize()
+        weight = weight.dequantize()
+        output = kernel(input, weight, bias, stride, padding, output_padding, groups, dilation)
+        return affine_quantize(output,
+                               output_encodings.scale,
+                               output_encodings.offset,
+                               output_encodings.bitwidth)
+
+    QuantizedConvTranspose1d.set_default_kernel(functools.partial(int_convtransposend, F.conv_transpose1d))
+    QuantizedConvTranspose2d.set_default_kernel(functools.partial(int_convtransposend, F.conv_transpose2d))
+    QuantizedConvTranspose3d.set_default_kernel(functools.partial(int_convtransposend, F.conv_transpose3d))
+    yield
+    QuantizedConvTranspose1d.set_default_kernel(None)
+    QuantizedConvTranspose2d.set_default_kernel(None)
+    QuantizedConvTranspose3d.set_default_kernel(None)
 
 
 @pytest.fixture(autouse=True)
@@ -188,10 +216,14 @@ def register_int_elementwise():
     QuantizedAdd.set_default_kernel(functools.partial(int_elementwise, torch.add))
     QuantizedMultiply.set_default_kernel(functools.partial(int_elementwise, torch.multiply))
     QuantizedSubtract.set_default_kernel(functools.partial(int_elementwise, torch.subtract))
+    QuantizedDivide.set_default_kernel(functools.partial(int_elementwise, torch.div))
+    QuantizedMatMul.set_default_kernel(functools.partial(int_elementwise, torch.matmul))
     yield
     QuantizedMultiply.set_default_kernel(None)
     QuantizedSubtract.set_default_kernel(None)
     QuantizedAdd.set_default_kernel(None)
+    QuantizedDivide.set_default_kernel(None)
+    QuantizedMatMul.set_default_kernel(None)
 
 
 
@@ -368,7 +400,9 @@ class TestQuantizedLayers:
                                               (torch.nn.GELU(), (_input(10, 10),)),
                                               (aimet_ops.Add(), (_input(10, 10), _input(10, 10))),
                                               (aimet_ops.Multiply(), (_input(10, 10), _input(10, 10))),
-                                              (aimet_ops.Subtract(), (_input(10, 10), _input(10, 10)))))
+                                              (aimet_ops.Subtract(), (_input(10, 10), _input(10, 10))),
+                                              (aimet_ops.MatMul(), (_input(10, 10), _input(10, 10))),
+                                              (aimet_ops.Divide(), (_input(10, 10), _input(10, 10)))))
     def test_layers_no_params(self, layer, inputs):
         fq_layer = FakeQuantizationMixin.from_module(layer)
         tq_layer = QuantizationMixin.from_module(layer)
@@ -384,7 +418,6 @@ class TestQuantizedLayers:
 
         fq_output = fq_layer(*inputs)
 
-
         with tq_layer.compute_encodings():
             tq_layer(*inputs)
         tq_output = tq_layer(*inputs)
@@ -395,7 +428,10 @@ class TestQuantizedLayers:
                                              (torch.nn.LayerNorm(10), _input(10, 10)),
                                              (torch.nn.Conv1d(3, 3, 3), _input(1, 3, 10)),
                                              (torch.nn.Conv2d(3, 3, 3), _input(1, 3, 10, 10)),
-                                             (torch.nn.Conv3d(3, 3, 3), _input(1, 3, 10, 10, 10))))
+                                             (torch.nn.Conv3d(3, 3, 3), _input(1, 3, 10, 10, 10)),
+                                             (torch.nn.ConvTranspose1d(3, 3, 3), _input(1, 3, 10)),
+                                             (torch.nn.ConvTranspose2d(3, 3, 3), _input(1, 3, 10, 10)),
+                                             (torch.nn.ConvTranspose3d(3, 3, 3), _input(1, 3, 10, 10, 10))))
     def test_layers_with_weight(self, layer, input):
         fq_layer = FakeQuantizationMixin.from_module(layer)
         tq_layer = QuantizationMixin.from_module(layer)
