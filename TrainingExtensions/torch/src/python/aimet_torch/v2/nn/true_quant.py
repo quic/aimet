@@ -445,6 +445,26 @@ class _QuantizedConvNdMixin(_QuantizedUnaryOpMixin):  # pylint: disable=too-many
                   "groups": self.groups}
         return args, kwargs
 
+    # pylint: disable=missing-function-docstring
+    def get_functional_args_convtranspose_base(self, x, num_spatial_dims, *args, **kwargs):
+        output_size = None
+        if "output_size" in kwargs.keys():
+            output_size = kwargs["output_size"]
+        elif args:
+            output_size = args[0]
+        if output_size is not None:
+            assert len(output_size) == len(x.shape)
+        output_padding = self._output_padding(x, output_size, self.stride, self.padding, self.kernel_size,
+                                              num_spatial_dims, self.dilation)
+        new_args = (x, self.weight)
+        kwargs = {"bias": self.bias,
+                  "stride": self.stride,
+                  "padding": self.padding,
+                  "output_padding":output_padding,
+                  "dilation": self.dilation,
+                  "groups": self.groups}
+        return new_args, kwargs
+
 
 @QuantizationMixin.implements(nn.Conv1d)
 class QuantizedConv1d(_QuantizedConvNdMixin, nn.Conv1d):  # pylint: disable=too-many-ancestors
@@ -459,6 +479,27 @@ class QuantizedConv2d(_QuantizedConvNdMixin, nn.Conv2d):  # pylint: disable=too-
 @QuantizationMixin.implements(nn.Conv3d)
 class QuantizedConv3d(_QuantizedConvNdMixin, nn.Conv3d):  # pylint: disable=too-many-ancestors
     """ Quantized Conv3d """
+
+
+@QuantizationMixin.implements(nn.ConvTranspose1d)
+class QuantizedConvTranspose1d(_QuantizedConvNdMixin, nn.ConvTranspose1d): # pylint: disable=too-many-ancestors
+    """ Quantized ConvTranspose1d """
+    def get_functional_args(self, x, *args, **kwargs):
+        return self.get_functional_args_convtranspose_base(x, 1, *args, **kwargs)
+
+
+@QuantizationMixin.implements(nn.ConvTranspose2d)
+class QuantizedConvTranspose2d(_QuantizedConvNdMixin, nn.ConvTranspose2d): # pylint: disable=too-many-ancestors
+    """ Quantized ConvTranspose2d """
+    def get_functional_args(self, x, *args, **kwargs):
+        return self.get_functional_args_convtranspose_base(x, 2, *args, **kwargs)
+
+
+@QuantizationMixin.implements(nn.ConvTranspose3d)
+class QuantizedConvTranspose3d(_QuantizedConvNdMixin, nn.ConvTranspose3d): # pylint: disable=too-many-ancestors
+    """ Quantized ConvTranspose3d """
+    def get_functional_args(self, x, *args, **kwargs):
+        return self.get_functional_args_convtranspose_base(x, 3, *args, **kwargs)
 
 
 @QuantizationMixin.implements(nn.Linear)
@@ -604,6 +645,14 @@ class QuantizedReshape(_QuantizedUnaryOpMixin, aimet_ops.Reshape):
 class QuantizedRSqrt(_QuantizedUnaryOpMixin, aimet_ops.RSqrt):
     """ Quantized RSqrt """
     get_functional_args = _as_is
+
+
+@QuantizationMixin.implements(aimet_ops.MatMul)
+class QuantizedMatMul(_QuantizedBinaryOpMixin, aimet_ops.MatMul):
+    """ Quantized MatMul """
+
+    def get_functional_args(self, x, y):
+        return (x, y), {}
 
 
 @QuantizationMixin.implements(aimet_ops.Add)
