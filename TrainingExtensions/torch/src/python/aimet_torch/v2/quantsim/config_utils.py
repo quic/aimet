@@ -219,15 +219,23 @@ def _set_activation_quantizers_to_float(sim: QuantizationSimModel, condition: Ca
                                         exponent_bits: int = None, mantissa_bits: int = None,
                                         dtype: torch.dtype = None):
     """ Set activation quantizers of all the modules that satisfy the given condition to float. """
-    device = get_device(sim.model)
+    model_device = get_device(sim.model)
     for _, quant_layer in sim.named_qmodules():
         if condition(quant_layer):
             for idx, quantizer in enumerate(quant_layer.input_quantizers):
                 if quantizer is not None:
+                    try:
+                        device = get_device(quantizer)
+                    except StopIteration:
+                        device = model_device
                     quant_layer.input_quantizers[idx] = FloatQuantizeDequantize(exponent_bits, mantissa_bits, dtype).to(device)
 
             for idx, quantizer in enumerate(quant_layer.output_quantizers):
                 if quantizer is not None:
+                    try:
+                        device = get_device(quantizer)
+                    except StopIteration:
+                        device = model_device
                     quant_layer.output_quantizers[idx] = FloatQuantizeDequantize(exponent_bits, mantissa_bits, dtype).to(device)
 
 
@@ -324,10 +332,14 @@ def _get_layers_to_quantizer_shapes_for_block_size(sim, condition, block_size):
 def _set_blockwise_quantization_for_weights(sim: QuantizationSimModel, condition: Callable[[torch.nn.Module], bool],
                                             bitwidth: int, symmetric: bool, block_size: Union[int, Tuple[int, ...]]):
     """ Set weight parameter quantizers of modules that satisfy the given condition to blockwise """
-    device = get_device(sim.model)
+    model_device = get_device(sim.model)
     layer_to_quantizer_shape_dict = _get_layers_to_quantizer_shapes_for_block_size(sim, condition, block_size)
     for layer, quantizer_shape in layer_to_quantizer_shape_dict.items():
         layer_block_size = _get_block_size_array_for_module(layer, block_size)
+        try:
+            device = get_device(layer.param_quantizers['weight'])
+        except StopIteration:
+            device = model_device
         layer.param_quantizers['weight'] = QuantizeDequantize(quantizer_shape, bitwidth, symmetric, None,
                                                               layer_block_size).to(device)
 
@@ -430,11 +442,15 @@ def _set_grouped_blockwise_quantization_for_weights(sim: QuantizationSimModel,
                                                     block_size: Union[int, Tuple[int, ...]],
                                                     block_grouping: Union[int, Tuple[int, ...]]):
     """ Set weight parameter quantizers of modules that satisfy the given condition to grouped blockwise """
-    device = get_device(sim.model)
+    model_device = get_device(sim.model)
     layer_to_quantizer_shape_dict = _get_layers_to_quantizer_shapes_for_block_size(sim, condition, block_size)
     for layer, quantizer_shape in layer_to_quantizer_shape_dict.items():
         layer_block_size = _get_block_size_array_for_module(layer, block_size)
         layer_block_grouping = _get_block_grouping_array_for_module(layer, block_grouping)
+        try:
+            device = get_device(layer.param_quantizers['weight'])
+        except StopIteration:
+            device = model_device
         layer.param_quantizers['weight'] = GroupedBlockQuantizeDequantize(quantizer_shape, bitwidth, symmetric,
                                                                           decompressed_bw, None, layer_block_size,
                                                                           layer_block_grouping).to(device)
