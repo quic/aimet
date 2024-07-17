@@ -142,6 +142,7 @@ BatchNorm = create_wrapper_module('BatchNorm', torch.nn.functional.batch_norm)
 GroupNorm = create_wrapper_module('GroupNorm', torch.nn.functional.group_norm)
 Normalize = create_wrapper_module('Normalize', torch.nn.functional.normalize)
 Pad = create_wrapper_module('Pad', torch.nn.functional.pad)
+GridSample = create_wrapper_module('GridSample', torch.nn.functional.grid_sample)
 
 # following modules are for overloaded operators like + and *,
 # which can operate other than torch.Tensor datatype.
@@ -158,21 +159,6 @@ class Add(torch.nn.Module):
         else:
             out = x + y
         return out
-
-class GridSample(torch.nn.Module):
-    """ Add module for a functional GridSample"""
-    def __init__(self, mode='bilinear', padding_mode='zeros', align_corners=None):
-        super().__init__()
-        self._mode = mode
-        self._padding_mode = padding_mode
-        self._align_corners = align_corners
-
-    def forward(self, inputs, grid):
-        """
-        Forward-pass routine for GridSample
-        """
-        return torch.nn.functional.grid_sample(inputs, grid, mode=self._mode, padding_mode=self._padding_mode,
-                                               align_corners=self._align_corners)
 
 class Multiply(torch.nn.Module):
     """ Multiply module for a functional multiply"""
@@ -355,6 +341,7 @@ class ScatterND(torch.nn.Module):
         else:
             f = None
 
+        indices = indices.type(torch.int64)
         idx_list = indices.split(split_size=1, dim=-1)
         if f:
             output[idx_list] = f(output[idx_list], updates.reshape(output[idx_list].shape))
