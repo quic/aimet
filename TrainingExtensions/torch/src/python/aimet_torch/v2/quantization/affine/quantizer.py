@@ -595,6 +595,12 @@ class QuantizeDequantize(MinMaxQuantizer):
                              1.0039,  0.4157,  0.4392,  0.4863]],
                           grad_fn=<AliasBackward0>)
     """
+    # Deepspeed wrapped function can not be released without this function
+    # pylint: disable=useless-super-delegation
+    def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None,
+                 block_size: Optional[Tuple[int, ...]] = None):
+        super().__init__(shape, bitwidth, symmetric, encoding_analyzer, block_size)
+
     def forward(self, input: torch.Tensor) -> DequantizedTensor:
         """Quantizes and dequantizes the input tensor
 

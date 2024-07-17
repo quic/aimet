@@ -411,7 +411,7 @@ class LazyParamQuantizer(LazyQuantizer):
                  param: torch.nn.Parameter,
                  data_type: QuantizationDataType = QuantizationDataType.int):
         super().__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings, enabled_by_default, data_type)
-        self.param_shape = param.shape
+        self.param_shape = param.shape if not hasattr(param, 'ds_shape') else param.ds_shape
         self.channel_axis = None
 
     def enable_per_channel_quantization(self, channel_axis: int):

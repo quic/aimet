@@ -54,9 +54,11 @@ from aimet_torch.v2.utils import (
     _ContextManager,
     flatten_nn_module_list,
 )
+from aimet_torch.v2.deepspeed_utils import gathered_parameter, shallow_copy
 
 def _no_op(in_tensor):
     return in_tensor
+
 
 class BaseQuantizationMixin(abc.ABC):
     """Mixin that implements quantization on top of regular pytorch modules.
@@ -136,7 +138,7 @@ class BaseQuantizationMixin(abc.ABC):
             if not param_quantizer.is_initialized() or overwrite:
                 param = getattr(self, param_name)
                 if param is not None:
-                    with patch_attr(param_quantizer, "forward", _no_op), param_quantizer.compute_encodings():
+                    with patch_attr(param_quantizer, "forward", _no_op), gathered_parameter(param), param_quantizer.compute_encodings():
                         _ = param_quantizer(param)
 
     def compute_param_encodings(self):
@@ -226,7 +228,7 @@ class BaseQuantizationMixin(abc.ABC):
 
         qtzn_module.__dict__ = module.__dict__.copy()
         qtzn_module._modules = module._modules.copy()
-        qtzn_module._parameters = module._parameters.copy()
+        qtzn_module._parameters = shallow_copy(module._parameters)
         qtzn_module._buffers = module._buffers.copy()
 
         qtzn_module.__quant_init__()
@@ -450,7 +452,7 @@ class BaseQuantizationMixin(abc.ABC):
         orig_module.__dict__ = self.__dict__.copy()
         orig_module.__dict__.pop('forward', None)
 
-        orig_module._parameters = self._parameters.copy()
+        orig_module._parameters = shallow_copy(self._parameters)
         orig_module._buffers = self._buffers.copy()
         orig_module._modules = self._modules.copy()
         del orig_module._modules['input_quantizers']
