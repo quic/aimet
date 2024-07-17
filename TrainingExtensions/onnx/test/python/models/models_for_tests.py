@@ -1177,7 +1177,7 @@ def transposed_conv_model_without_bn():
 def linear_split_into_matmul_add():
     with tempfile.TemporaryDirectory() as save_dir:
         # 3D input will split the linear layer in MatMul + Add in ONNX graph.
-        dummy_input = torch.randn(1, 2, 4, requires_grad=True)
+        dummy_input = torch.randn(1, 2, 4)
 
         class LinearModel(torch.nn.Module):
             def __init__(self):

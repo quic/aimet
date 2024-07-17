@@ -688,5 +688,6 @@ class TestQuantSim:
             sim.export(tempdir, 'linear_matmul_add_pattern')
             with open(os.path.join(tempdir, 'linear_matmul_add_pattern.encodings')) as json_file:
                 encoding_data = json.load(json_file)
+                # Ensure that the encodings for the second input of Add op (bias) isn't present in JSON file.
                 assert len(encoding_data['activation_encodings']) == 3
                 assert len(encoding_data['param_encodings']) == 1
