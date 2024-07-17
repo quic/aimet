@@ -491,6 +491,14 @@ class QuantizedLayerNorm(_QuantizedUnaryOpMixin, nn.LayerNorm):
         return (x, self.normalized_shape,), {"weight": self.weight, "bias": self.bias, "eps": self.eps}
 
 
+@QuantizationMixin.implements(nn.GroupNorm)
+class QuantizedGroupNorm(_QuantizedUnaryOpMixin, nn.GroupNorm):
+    """ Quantized GroupNorm """
+
+    def get_functional_args(self, x):
+        return (x, self.num_groups, self.weight, self.bias, self.eps), {}
+
+
 @QuantizationMixin.implements(nn.Softmax)
 class QuantizedSoftmax(_QuantizedUnaryOpMixin, nn.Softmax):
     """ Quantized Softmax """
