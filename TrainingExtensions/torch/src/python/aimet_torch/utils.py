@@ -905,10 +905,7 @@ def is_torch_nn_module(module: torch.nn.Module) -> bool:
     :param module: PyTorch module.
     :return: True if the module from torch.nn class, False otherwise
     """
-    torch_nn_module = False
-    if "torch.nn" in str(module.__class__):
-        torch_nn_module = True
-    return torch_nn_module
+    return isinstance(module, torch.nn.Module) and type(module) in torch.nn.__dict__.values()
 
 
 def is_torch_nn_leaf_module(module: torch.nn.Module) -> bool:
