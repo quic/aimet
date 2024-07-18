@@ -79,6 +79,7 @@ class DummyModel(torch.nn.Module):
         x = self.linear(x)
         return x
 
+
 def one_adapter_model():
     model = DummyModel()
     lora_config = LoraConfig(
@@ -155,6 +156,7 @@ class TestLoraAdapterPeft:
             if isinstance(module, PeftLoraLayer):
                 count_lora_layer += 1
         replace_lora_layers_with_quantizable_layers(model)
+
         count_qc_lora_layer = 0
         new_count_lora_layer = 0
         for _, module in model.named_modules():
@@ -164,6 +166,30 @@ class TestLoraAdapterPeft:
                 new_count_lora_layer += 1
         assert new_count_lora_layer == 0
         assert count_qc_lora_layer == count_lora_layer
+
+    def test_add_quantizer_and_set_range_for_scale(self):
+        model = one_adapter_model()
+        replace_lora_layers_with_quantizable_layers(model)
+        dummy_inputs = torch.randn(10, 10)
+
+        meta_path = './tmp'
+        if not os.path.exists(meta_path):
+            os.mkdir(meta_path)
+
+        meta_data = track_lora_meta_data(model, './tmp', 'meta_data')
+
+        peft_utils = PeftQuantUtils(meta_data)
+
+        sim = QuantizationSimModel(model, dummy_input=dummy_inputs)
+
+        peft_utils.quantize_lora_scale_with_fixed_range(sim, 16, 0.0, 1.0)
+        def forward_pass(model, forward_pass_callback=None):
+            return model(dummy_inputs)
+        sim.compute_encodings(forward_pass, None)
+        for name, module in sim.model.named_modules():
+            if 'mul_scale' in name and hasattr(module, 'input_quantizers'):
+                assert module.input_quantizers[1].min == 0.0
+                assert module.input_quantizers[1].max == 1.0
 
     def test_track_adapter_meta_data(self):
         model = two_adapter_model()
