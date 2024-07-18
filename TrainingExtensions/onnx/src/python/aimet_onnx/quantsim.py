@@ -187,7 +187,7 @@ class QuantizationSimModel:
         self._get_activations_to_quantize(dummy_input)
 
         # Disable bias quantization
-        self._exclude_param_from_quantization()
+        self._disable_bias_quantization()
 
         self._add_quantization_nodes()
 
@@ -286,7 +286,7 @@ class QuantizationSimModel:
             return False
         return True
 
-    def _exclude_param_from_quantization(self):
+    def _disable_bias_quantization(self):
         """
         Exclude bias params from the quantization.
         """
