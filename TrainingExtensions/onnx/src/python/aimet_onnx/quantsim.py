@@ -290,12 +290,15 @@ class QuantizationSimModel:
         """
         Exclude bias params from the quantization.
         """
-        # TODO: hitameht: we should find better way to find such patterns and corner cases.
+        # TODO: hitameht: we should find better way to find such patterns and corner cases. May be
+        #  belongs to QuantSimConfigurator class.
         for node in self.model.nodes():
             if node.op_type in op_types_having_constant_input_tensors:
                 if self._check_matmul_add_patten(node):
                     for inp_name in node.input:
                         param_name = inp_name
+                        # ensure that the second input of Add op (bias) won't be configured
+                        # with activation precision.
                         if (param_name in self.model.get_initializer_name_set() and
                                 len(self.model.get_initializer(param_name).dims) == 1 and
                                 param_name in self.activation_names):
@@ -306,13 +309,20 @@ class QuantizationSimModel:
         """
         For given node, check if the previous and the current nodes are of type 'MatMul' and 'Add' respectively.
 
+        NOTE:
+        Linear = (Matmul -> Add) gets fused into a single MatMul / FullyConnected HTP op.
+        Second input of Add (Bias) needs to be either uint8 or int32.
+        This utility will find such pattern and help ensure that the second input of Add op (bias) won't be configured
+         with activation precision.
+
         :param node: Onnx node
         :return: True if the MatMul + Add pattern is found, False otherwise.
         """
         cg_op = self.connected_graph.get_op_from_module_name(node.name)
         for inp in cg_op.input_ops:
             prev_cg_op = inp
-            if prev_cg_op.type == 'MatMul' and cg_op.type == 'Add':
+            # Ensure that the MatMul isn't consumed by other op.
+            if prev_cg_op.type == 'MatMul' and cg_op.type == 'Add' and len(prev_cg_op.output_ops) == 1:
                 return True
         return False
 
