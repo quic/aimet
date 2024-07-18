@@ -53,6 +53,7 @@ from aimet_onnx.quantsim import QuantizationSimModel, load_encodings_to_sim
 from aimet_onnx.qc_quantize_op import OpMode
 from aimet_onnx.utils import make_dummy_input
 from models.models_for_tests import SingleResidual
+from models import models_for_tests
 from models.models_for_tests import build_dummy_model, single_residual_model, BNAfterConv, multi_input_with_constant_model , multi_output_model, custom_add_model, build_lstm_gru_dummy_model, \
     transposed_conv_model, depthwise_transposed_conv_model
 
@@ -631,3 +632,44 @@ class TestQuantSim:
             sim.save_model_graph("./quantized_custom_model")
             sim.compute_encodings(dummy_callback, None)
             sim.export(tempdir, 'custom_op_model')
+
+
+    @pytest.mark.parametrize("model", [models_for_tests.weight_matmul_model(10, 20),
+                                       models_for_tests.weight_gemm_model(10, 20, False),
+                                       models_for_tests.weight_gemm_model(10, 20, True)])
+    def test_matmul_quantization_axis(self, model):
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "False",
+                    "is_symmetric": "True"
+                },
+                "strict_symmetric": "False",
+                "per_channel_quantization": "True"
+            },
+            "params": {
+                "weight": {
+                    "is_quantized": "True"
+                }
+            },
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        output_features = model.graph.output[0].type.tensor_type.shape.dim[-1].dim_value
+        dummy_input = make_dummy_input(model)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_file = os.path.join(temp_dir, 'config.json')
+            with open(config_file, 'w') as f:
+                json.dump(quantsim_config, f)
+            sim = QuantizationSimModel(model=model,
+                                       config_file=config_file,
+                                       path=temp_dir)
+
+            sim.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
+            assert len(sim.qc_quantize_op_dict["weight"].encodings) == output_features

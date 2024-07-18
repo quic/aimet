@@ -43,6 +43,8 @@ from typing import Dict, List
 import os
 import tempfile
 from pathlib import Path
+
+import onnx
 import torch.nn.functional as F
 from torch import nn as nn
 from torchvision.ops import roi_align
@@ -1940,3 +1942,28 @@ def const_param_model():
     )
 
     return model
+
+def weight_matmul_model(in_features=10, out_features=20):
+    seq_len = 10
+    matmul_layer = helper.make_node("MatMul", inputs=["input", "weight"], name="matmul", outputs=["output"])
+    weight = numpy_helper.from_array(np.empty((in_features, out_features), dtype=np.float32), name="weight")
+    input_tensor = helper.make_tensor_value_info("input", onnx.TensorProto.FLOAT, [1, seq_len, in_features])
+    output_tensor = helper.make_tensor_value_info("output", onnx.TensorProto.FLOAT, [1, seq_len, out_features])
+    graph = helper.make_graph([matmul_layer], "matmul_graph", initializer=[weight], inputs=[input_tensor], outputs=[output_tensor])
+    model = onnx.helper.make_model(graph)
+    onnx.checker.check_model(model)
+    return model
+
+def weight_gemm_model(in_features, out_features, transposed_weight=False):
+    matmul_layer = helper.make_node("Gemm", inputs=["input", "weight"], name="matmul", outputs=["output"],
+                                    transB=transposed_weight)
+    weight_shape = (in_features, out_features) if not transposed_weight else (out_features, in_features)
+    weight = numpy_helper.from_array(np.empty(weight_shape, dtype=np.float32), name="weight")
+    input_tensor = helper.make_tensor_value_info("input", onnx.TensorProto.FLOAT, [1, in_features])
+    output_tensor = helper.make_tensor_value_info("output", onnx.TensorProto.FLOAT, [1, out_features])
+    graph = helper.make_graph([matmul_layer], "matmul_graph", initializer=[weight], inputs=[input_tensor], outputs=[output_tensor])
+    model = onnx.helper.make_model(graph)
+    onnx.checker.check_model(model)
+    return model
+
+

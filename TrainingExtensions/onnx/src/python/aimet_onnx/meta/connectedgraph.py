@@ -198,7 +198,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             op.groups = get_op_attributes(node, 'group')
 
         if op.type == 'MatMul':
-            op.transposed_params = True
+            op.transposed_params = False
 
         if op.type == 'Gemm':
             op.transposed_params = bool(get_op_attributes(node, 'transB'))
