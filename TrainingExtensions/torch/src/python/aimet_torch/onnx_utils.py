@@ -197,6 +197,23 @@ else:
             }
     }
 
+onnx_subgraph_op_to_pytorch_module_param_name_index_based = {
+    torch.nn.GroupNorm:
+        {
+            (7, 'Mul'): {1: 'weight'},
+            (8, 'Add'): {1: 'bias'}
+        },
+    torch.nn.Linear:
+        {
+            (0, 'MatMul'): {1: 'weight'},
+            (1, 'Add'): {0: 'bias'}
+        },
+    torch.nn.PReLU:
+        {
+            (0, 'PRelu'): {1: 'weight'}
+        }
+}
+
 
 def get_pytorch_name_from_onnx_name(onnx_name: str) -> str:
     """
@@ -898,7 +915,7 @@ class OnnxSaver:
         """
 
         initializers = OnnxSaver._get_all_initializers(onnx_model.graph)
-        initializer_names = [ini.name for ini in initializers]
+        initializer_name_to_index = {initializer.name: idx for idx, initializer in enumerate(initializers)}
         onnx_node_map = OnnxSaver._get_onnx_node_map(onnx_model.graph)
 
         for module_name, module_ref in pt_model.named_modules():
@@ -912,7 +929,8 @@ class OnnxSaver:
                     if (module_name + node_suffix, op_type) in onnx_node_map:
                         node = onnx_node_map[module_name + node_suffix, op_type]
 
-                        cls._replace_param_name(initializers, initializer_names, module_name, node, replace_pairs)
+                        cls._replace_param_name(initializers, initializer_name_to_index, module_name, node,
+                                                replace_pairs)
 
     @classmethod
     def _fix_initializer_names_for_export_to_onnx_direct(cls, onnx_model: onnx.NodeProto, pt_model: torch.nn.Module):
@@ -925,7 +943,12 @@ class OnnxSaver:
         :param pt_model: PyTorch Model
         """
         initializers = OnnxSaver._get_all_initializers(onnx_model.graph)
-        initializer_names = [ini.name for ini in initializers]
+        initializer_name_to_index = {initializer.name: idx for idx, initializer in enumerate(initializers)}
+
+        # Create a dictionary mapping a pytorch module name to one or more ONNX nodes which are associated with that
+        # pytorch module.
+        # The assumption is that all ONNX nodes which are associated with a single pytorch module will share
+        # commonalities in node naming, leading to the same pytorch name extracted by get_pytorch_name_from_onnx_name().
         pt_name_to_onnx_nodes = {}
         for node in onnx_model.graph.node:
             pt_name = get_pytorch_name_from_onnx_name(node.name)
@@ -938,19 +961,19 @@ class OnnxSaver:
             if type(module_ref) in onnx_subgraph_op_to_pytorch_module_param_name and \
                     module_name in pt_name_to_onnx_nodes:
                 onnx_nodes = pt_name_to_onnx_nodes[module_name]
-
-                for (_, op_type), replace_pairs in \
-                        onnx_subgraph_op_to_pytorch_module_param_name[type(module_ref)].items():
-                    for node in onnx_nodes:
-                        if node.op_type == op_type:
-                            cls._replace_param_name(initializers, initializer_names, module_name, node, replace_pairs)
+                for (idx, op_type), replace_pairs in \
+                        onnx_subgraph_op_to_pytorch_module_param_name_index_based[type(module_ref)].items():
+                    if len(onnx_nodes) > idx and onnx_nodes[idx].op_type == op_type:
+                        cls._replace_param_name(initializers, initializer_name_to_index, module_name, onnx_nodes[idx],
+                                                replace_pairs)
 
     @classmethod
-    def _replace_param_name(cls, initializers: List[onnx.TensorProto], initializer_names: List[str], module_name: str,
-                            node: onnx.NodeProto, replace_pairs: Dict[int, str]):
+    def _replace_param_name(cls, initializers: List[onnx.TensorProto], initializer_name_to_index: Dict[str, int],
+                            module_name: str, node: onnx.NodeProto, replace_pairs: Dict[int, str]):
         """
         helper method to replace parameter names at the corresponding input tensor index
-        :param initializer_names: List of model initializer names
+        :param initializers: List of initializers in the onnx model
+        :param initializer_name_to_index: Dictionary mapping initializer names to indices in initializers list
         :param module_name: PyTorch module name
         :param node: Onnx node part of sub-graph that maps to the torch module
         :param replace_pairs: dictionary of input tensor indices and param names
@@ -959,19 +982,19 @@ class OnnxSaver:
             # If bias is not present for example, skip processing for the index
             if len(node.input) > input_index:
                 new_param_name = module_name + '.' + param_name
-                inp_tensor = node.input[input_index]
+                old_param_name = node.input[input_index]
                 # Check if inp_tensor name is already named as a parameter (name.param_name, instead of a number). If so,
                 # sanity check that the name we want to replace it with is the same as the existing name, then continue.
-                if '.' in inp_tensor:
-                    if inp_tensor != new_param_name:
-                        print(f'{inp_tensor} != {new_param_name} expected param name set')
+                if '.' in old_param_name:
+                    if old_param_name != new_param_name:
+                        print(f'{old_param_name} != {new_param_name} expected param name set')
                     continue
-                node.input.remove(inp_tensor)
+                node.input.remove(old_param_name)
                 node.input.insert(input_index, new_param_name)
 
                 # Find the index of the old initializer name and use it to update the corresponding initializer's name
                 # in the actual initializers array
-                initializer_index = initializer_names.index(inp_tensor)
+                initializer_index = initializer_name_to_index[old_param_name]
                 initializers[initializer_index].name = new_param_name
 
     @classmethod
