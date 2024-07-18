@@ -79,6 +79,7 @@ class DummyModel(torch.nn.Module):
         x = self.linear(x)
         return x
 
+
 def one_adapter_model():
     model = DummyModel()
     lora_config = LoraConfig(
@@ -155,6 +156,7 @@ class TestLoraAdapterPeft:
             if isinstance(module, PeftLoraLayer):
                 count_lora_layer += 1
         replace_lora_layers_with_quantizable_layers(model)
+
         count_qc_lora_layer = 0
         new_count_lora_layer = 0
         for _, module in model.named_modules():

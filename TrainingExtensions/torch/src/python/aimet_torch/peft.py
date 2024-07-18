@@ -49,6 +49,7 @@ from safetensors import safe_open
 # pylint: disable=import-error
 # pylint: disable=no-name-in-module
 from peft.tuners.lora.layer import LoraLayer as PeftLoraLayer
+from peft.tuners.lora.layer import Conv2d as PeftConv2d
 
 from aimet_torch.utils import replace_modules_of_type1_using_constructor
 from aimet_torch.elementwise_ops import Add, Multiply
@@ -125,6 +126,7 @@ def replace_lora_layers_with_quantizable_layers(model: torch.nn.Module):
     :param model: PEFT model
     """
     replace_modules_of_type1_using_constructor(model, PeftLoraLayer, LoraLayer)
+    replace_modules_of_type1_using_constructor(model, PeftConv2d, LoraLayer)
 
 
 class AdapterMetaData:
