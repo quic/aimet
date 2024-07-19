@@ -38,9 +38,11 @@
 
 import abc
 import copy
+import itertools
 
 import torch
-from torch.utils._pytree import tree_map, tree_flatten
+from torch.utils._pytree import tree_map
+from torch.overrides import get_overridable_functions
 
 from aimet_torch.v2.quantization.base import EncodingBase
 
@@ -106,6 +108,7 @@ class QuantizedTensorBase(torch.Tensor):
     # Operations that an encoding can always pass through
     _passthrough_ops = {
         torch.Tensor.contiguous,
+        torch.Tensor.share_memory_,
     }
 
     # Operations that a per-tensor encoding can pass through
@@ -135,13 +138,17 @@ class QuantizedTensorBase(torch.Tensor):
         torch.Tensor.reshape,
         torch.Tensor.reshape_as,
         torch.Tensor.resize,
+        torch.Tensor.resize_,
         torch.Tensor.resize_as,
+        torch.Tensor.resize_as_,
         torch.Tensor.select,
         torch.Tensor.split,
         torch.Tensor.squeeze,
+        torch.Tensor.squeeze_,
         torch.Tensor.swapaxes,
         torch.Tensor.swapdims,
         torch.Tensor.t,
+        torch.Tensor.t_,
         torch.Tensor.take,
         torch.Tensor.take_along_dim,
         torch.Tensor.tensor_split,
@@ -149,6 +156,7 @@ class QuantizedTensorBase(torch.Tensor):
         torch.Tensor.transpose,
         torch.Tensor.unflatten,
         torch.Tensor.unsqueeze,
+        torch.Tensor.unsqueeze_,
         torch.Tensor.view,
         torch.Tensor.view_as,
         torch.as_strided,
@@ -189,8 +197,15 @@ class QuantizedTensorBase(torch.Tensor):
         torch.unsqueeze_copy,
         torch.vsplit,
         torch.view_copy,
+        torch.Tensor.requires_grad_,
     }
 
+    # In-place operations
+    # NOTE: This relies on the naming convention of PyTorch
+    _in_place_ops = {
+        func for func in itertools.chain(*get_overridable_functions().values())
+        if func.__qualname__.endswith('_') and not func.__qualname__.endswith('__')
+    }
 
     @abc.abstractmethod
     def quantize(self) -> "QuantizedTensor":
@@ -290,12 +305,6 @@ class QuantizedTensorBase(torch.Tensor):
             return HANDLED_FUNCTIONS[func](*args, **kwargs)
         ret = super().__torch_function__(func, types, args, kwargs)
 
-        flattened_args, _ = tree_flatten((args, kwargs))
-        if any(ret is arg for arg in flattened_args):
-            # Return value is the same object as one of the arguments.
-            # This implies that func is likely (but not necessarily) an in-place operator.
-            return ret
-
         if func in cls._cast_ops:
             if not ret.dtype.is_floating_point:
                 raise RuntimeError(
@@ -314,6 +323,7 @@ class QuantizedTensorBase(torch.Tensor):
         if func in cls._passthrough_ops:
             self, *_ = args
             tree_map(lambda t: propagate_encoding(t, self.encoding), ret)
+            return ret
 
         if func in cls._pertensor_passthrough_ops:
             self, *_ = args
@@ -326,6 +336,13 @@ class QuantizedTensorBase(torch.Tensor):
                 tree_map(lambda t: propagate_encoding(t, None), ret)
             return ret
 
+        if func in cls._in_place_ops:
+            # Non-passthrough in-place functions invalidate the encoding of the input tensor.
+            # Discard the stale encoding.
+            self, *_ = args
+            assert ret is self
+            ret.encoding = None
+            return ret
 
         def set_encoding(qtensor):
             if not hasattr(qtensor, 'encoding'):
