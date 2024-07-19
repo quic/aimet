@@ -541,7 +541,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             self._products[product.name] = product
             my_op.add_param(param_name, product, product_type)
 
-        def create_conv2d_dense_type_params(my_op: Op):
+        def create_weight_bias_params(my_op: Op):
             """ Create products for conv2d, dense, depthwise conv2d, and similar """
             op = my_op.get_module()
 
@@ -604,14 +604,15 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             logger.debug("Nothing to handle for op %s", my_op.name)
 
         switcher = {
-            "Conv": create_conv2d_dense_type_params,
-            "Gemm": create_conv2d_dense_type_params,
-            "ConvTranspose": create_conv2d_dense_type_params,
+            "Conv": create_weight_bias_params,
+            "Gemm": create_weight_bias_params,
+            "ConvTranspose": create_weight_bias_params,
             "RNN": create_recurrent_type_params,
             "LSTM": create_recurrent_type_params,
             "GRU": create_recurrent_type_params,
             "BatchNormalization": create_batchnorm_params,
-            "InstanceNormalization": create_batchnorm_params,
+            "InstanceNormalization": create_weight_bias_params,
+            "LayerNormalization": create_weight_bias_params,
             "MatMul": create_matmul_params
         }
 
