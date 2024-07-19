@@ -284,7 +284,7 @@ class QuantizedTensorBase(torch.Tensor):
         :param memory_format: Desired memory format of the returned tensor (default=torch.preserve_format)
         """
         # Note: use encoding.clone() here instead of deepcopy to propagate gradient through operation
-        encoding_clone = self.encoding._clone() # pylint:disable = protected-access
+        encoding_clone = self.encoding and self.encoding._clone() # pylint:disable = protected-access
         self_clone = super().clone(memory_format=memory_format).as_subclass(self.__class__)
         self_clone.encoding = encoding_clone
         return self_clone
@@ -295,7 +295,7 @@ class QuantizedTensorBase(torch.Tensor):
         Returns a new QuantizedTensorBase with data and encoding detached from the current graph
         """
         self_detached = super().detach().as_subclass(self.__class__)
-        self_detached.encoding = self.encoding._detach() # pylint:disable = protected-access
+        self_detached.encoding = self.encoding and self.encoding._detach() # pylint:disable = protected-access
         return self_detached
 
     @classmethod
