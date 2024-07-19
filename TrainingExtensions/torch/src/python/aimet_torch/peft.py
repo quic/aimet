@@ -239,7 +239,7 @@ class PeftQuantUtils:
         """
 
         def _create_quantizer():
-            quantizer = QuantizeDequantize(shape=(1,), bitwidth=bitwidth, symmetric=False)
+            quantizer = QuantizeDequantize(shape=(), bitwidth=bitwidth, symmetric=False)
             quantizer.set_range(torch.as_tensor(scale_min), torch.as_tensor(scale_max))
             self._freeze_quantizer(quantizer)
             return quantizer

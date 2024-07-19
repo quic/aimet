@@ -153,7 +153,7 @@ class BaseQuantizationMixin(abc.ABC):
         Example:
 
             >>> qlinear = QuantizedLinear(10, 10)
-            >>> qlinear.output_quantizers[0] = Quantize((1, ), 8, symmetric=False)
+            >>> qlinear.output_quantizers[0] = Quantize((), 8, symmetric=False)
             >>> with qlinear.compute_encodings():
             >>>     qlinear(torch.randn(16, 10))
             >>> print(qlinear.output_quantizers[0].is_initialized())
