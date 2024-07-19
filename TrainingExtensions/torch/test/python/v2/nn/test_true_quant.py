@@ -59,6 +59,7 @@ from aimet_torch.v2.nn import (
     QuantizedSoftmax,
     QuantizedMatMul,
     QuantizedLayerNorm,
+    QuantizedGroupNorm,
     QuantizedAdd,
     QuantizedMultiply,
     QuantizedDivide,
@@ -187,20 +188,25 @@ def register_int_activation():
 
 
 @pytest.fixture(autouse=True)
-def register_int_layernorm():
-    def int_layernorm(input, normalized_shape, weight, bias, eps, *, output_encodings=None):
-        # Implicit dequantization is not supported yet
-        assert isinstance(input, QuantizedTensor)
-        assert isinstance(weight, QuantizedTensor)
+def register_int_norm():
+    def wrap_functional(func):
+        def int_norm(input, normalized_shape, weight, bias, eps, *, output_encodings=None):
+            # Implicit dequantization is not supported yet
+            assert isinstance(input, QuantizedTensor)
+            assert isinstance(weight, QuantizedTensor)
 
-        input = input.dequantize()
-        weight = weight.dequantize()
+            input = input.dequantize()
+            weight = weight.dequantize()
 
-        output = F.layer_norm(input.dequantize(), normalized_shape, weight, bias, eps)
-        return affine_quantize(output, output_encodings.scale, output_encodings.offset, output_encodings.bitwidth)
+            output = func(input.dequantize(), normalized_shape, weight, bias, eps)
+            return affine_quantize(output, output_encodings.scale, output_encodings.offset, output_encodings.bitwidth)
 
-    QuantizedLayerNorm.set_default_kernel(int_layernorm)
+        return int_norm
+
+    QuantizedLayerNorm.set_default_kernel(wrap_functional(F.layer_norm))
+    QuantizedGroupNorm.set_default_kernel(wrap_functional(F.group_norm))
     yield
+    QuantizedGroupNorm.set_default_kernel(None)
     QuantizedLayerNorm.set_default_kernel(None)
 
 
@@ -426,6 +432,7 @@ class TestQuantizedLayers:
 
     @pytest.mark.parametrize("layer,input", ((torch.nn.Linear(10, 10), _input(10, 10)),
                                              (torch.nn.LayerNorm(10), _input(10, 10)),
+                                             (torch.nn.GroupNorm(2, 10), _input(10, 10)),
                                              (torch.nn.Conv1d(3, 3, 3), _input(1, 3, 10)),
                                              (torch.nn.Conv2d(3, 3, 3), _input(1, 3, 10, 10)),
                                              (torch.nn.Conv3d(3, 3, 3), _input(1, 3, 10, 10, 10)),
