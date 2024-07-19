@@ -44,7 +44,7 @@ from torch import randn, arange
 import torch.nn.functional as F
 
 from aimet_torch.v2.quantization.affine import quantize, quantize_dequantize
-from aimet_torch.v2.quantization.tensor import QuantizedTensor, DequantizedTensor, QuantizedTensorBase
+from aimet_torch.v2.quantization.tensor import EncodingError, QuantizedTensor, DequantizedTensor, QuantizedTensorBase
 from aimet_torch.v2.quantization.affine import AffineEncoding
 
 
@@ -589,13 +589,15 @@ class TestQuantizedTensor:
                              (Tensor.arctanh_,  [arange(-1., 1., 0.01)]),
     ])
     def test_in_place_functions(self, in_place_func, inputs, scale, offset, bitwidth):
+        """
+        When: Run non-passthrough in-place functions on DequantizedTenosrs
+        Then: The stale encodings must be detached from the tensor
+        """
         x, *others = [affine_quantize(inp, scale, offset, bitwidth).dequantize() for inp in inputs]
 
         y = in_place_func(x, *others)
 
-        assert torch.equal(x, y)
-        assert x.data_ptr() == y.data_ptr()
-        assert type(x) == type(y)
+        assert x is y
         assert y.encoding is None
 
     @pytest.mark.parametrize('in_place_func,         inputs', [
@@ -608,16 +610,52 @@ class TestQuantizedTensor:
                              (Tensor.share_memory_,  [randn(10, 10)]),
     ])
     def test_in_place_passthrough_functions(self, in_place_func, inputs, scale, offset, bitwidth):
+        """
+        When: Run passthrough in-place functions on DequantizedTenosrs
+        Then: The encodings must be preserved
+        """
         x, *others = [affine_quantize(inp, scale, offset, bitwidth).dequantize()
                       if isinstance(inp, Tensor) else inp for inp in inputs]
 
         y = in_place_func(x, *others)
 
-        assert torch.equal(x, y)
-        assert x.data_ptr() == y.data_ptr()
-        assert type(x) == type(y)
-        assert isinstance(y, QuantizedTensorBase)
-        assert torch.equal(x.encoding.scale, y.encoding.scale)
-        assert torch.equal(x.encoding.offset, y.encoding.offset)
-        assert x.encoding.bitwidth == y.encoding.bitwidth
-        assert x.encoding.signed == y.encoding.signed
+        assert x is y
+        assert y.encoding is not None
+
+    def test_qtensor_without_encoding(self, scale, offset, bitwidth):
+        """
+        Given: QuantizedTensor without encoding
+        When: .clone() / .detach() / .quantize() / .dequantize() / .quantized_repr
+        Then:    ok    /    ok     /     ok      /     error     /     error
+        """
+        x = affine_quantize(randn(100), scale, offset, bitwidth)
+        x.encoding = None
+
+        x.clone() # Should't throw error
+        x.detach() # Shouldn't throw error
+        x.quantize() # Shouldn't throw error
+
+        with pytest.raises(EncodingError):
+            x.dequantize()
+
+        with pytest.raises(EncodingError):
+            x.quantized_repr()
+
+        """
+        Given: DequantizedTensor without encoding
+        When: .clone() / .detach() / .quantize() / .dequantize() / .quantized_repr
+        Then:    ok    /    ok     /    error    /      ok       /     error
+        """
+        x = affine_quantize(randn(100), scale, offset, bitwidth).dequantize()
+        x.encoding = None
+
+        x.clone() # Should't throw error
+        x.detach() # Shouldn't throw error
+
+        with pytest.raises(EncodingError):
+            x.quantize()
+
+        x.dequantize() # Shouldn't throw error
+
+        with pytest.raises(EncodingError):
+            x.quantized_repr()
