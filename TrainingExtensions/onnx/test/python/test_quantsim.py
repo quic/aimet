@@ -34,6 +34,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
 import json
 import os
 import tempfile
@@ -55,7 +56,7 @@ from aimet_onnx.utils import make_dummy_input
 from models.models_for_tests import SingleResidual
 from models import models_for_tests
 from models.models_for_tests import build_dummy_model, single_residual_model, BNAfterConv, multi_input_with_constant_model , multi_output_model, custom_add_model, build_lstm_gru_dummy_model, \
-    transposed_conv_model, depthwise_transposed_conv_model
+    transposed_conv_model, depthwise_transposed_conv_model, linear_split_into_matmul_add
 
 
 class DummyModel(SingleResidual):
@@ -673,3 +674,20 @@ class TestQuantSim:
 
             sim.compute_encodings(lambda session, _: session.run(None, dummy_input), None)
             assert len(sim.qc_quantize_op_dict["weight"].encodings) == output_features
+
+    def test_linear_split_into_matmul_add(self):
+        model = linear_split_into_matmul_add()
+        with tempfile.TemporaryDirectory() as tempdir:
+            sim = QuantizationSimModel(model, default_activation_bw=16, path=tempdir)
+
+            def callback(session, dummy_input):
+                session.run(None, dummy_input)
+
+            dummy_tensor = {'input': np.random.rand(1, 2, 4).astype(np.float32)}
+            sim.compute_encodings(callback, dummy_tensor)
+            sim.export(tempdir, 'linear_matmul_add_pattern')
+            with open(os.path.join(tempdir, 'linear_matmul_add_pattern.encodings')) as json_file:
+                encoding_data = json.load(json_file)
+                # Ensure that the encodings for the second input of Add op (bias) isn't present in JSON file.
+                assert len(encoding_data['activation_encodings']) == 3
+                assert len(encoding_data['param_encodings']) == 1

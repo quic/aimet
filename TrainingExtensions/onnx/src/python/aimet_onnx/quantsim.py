@@ -185,7 +185,12 @@ class QuantizationSimModel:
             os.makedirs(self._path, exist_ok=True)
         self._get_param_names()
         self._get_activations_to_quantize(dummy_input)
+
+        # Disable bias quantization
+        self._disable_bias_quantization()
+
         self._add_quantization_nodes()
+
         self.session = QuantizationSimModel.build_session(self.model.model, self.providers,
                                                           user_onnx_libs=self._user_onnx_libs, path=self._path)
         quantsim_configurator = self._add_configuration_(config_file)
@@ -280,6 +285,46 @@ class QuantizationSimModel:
         if name not in self.activation_dtypes.keys() or self.activation_dtypes[name] not in data_types_to_quantize:
             return False
         return True
+
+    def _disable_bias_quantization(self):
+        """
+        Exclude bias params from the quantization.
+        """
+        # TODO: hitameht: we should find better way to find such patterns and corner cases. May be
+        #  belongs to QuantSimConfigurator class.
+        for node in self.model.nodes():
+            if node.op_type in op_types_having_constant_input_tensors:
+                if self._check_matmul_add_patten(node):
+                    for inp_name in node.input:
+                        param_name = inp_name
+                        # ensure that the second input of Add op (bias) won't be configured
+                        # with activation precision.
+                        if (param_name in self.model.get_initializer_name_set() and
+                                len(self.model.get_initializer(param_name).dims) == 1 and
+                                param_name in self.activation_names):
+                            self.activation_names.remove(param_name)
+                            self.input_quantizers_name.remove(param_name)
+
+    def _check_matmul_add_patten(self, node: onnx.NodeProto) -> bool:
+        """
+        For given node, check if the previous and the current nodes are of type 'MatMul' and 'Add' respectively.
+
+        NOTE:
+        Linear = (Matmul -> Add) gets fused into a single MatMul / FullyConnected HTP op.
+        Second input of Add (Bias) needs to be either uint8 or int32.
+        This utility will find such pattern and help ensure that the second input of Add op (bias) won't be configured
+         with activation precision.
+
+        :param node: Onnx node
+        :return: True if the MatMul + Add pattern is found, False otherwise.
+        """
+        cg_op = self.connected_graph.get_op_from_module_name(node.name)
+        for inp in cg_op.input_ops:
+            prev_cg_op = inp
+            # Ensure that the MatMul isn't consumed by other op.
+            if prev_cg_op.type == 'MatMul' and cg_op.type == 'Add' and len(prev_cg_op.output_ops) == 1:
+                return True
+        return False
 
     def fill_activation_dtypes(self, dummy_input: Dict[str, np.ndarray]):
         """
