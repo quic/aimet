@@ -958,14 +958,18 @@ class OnnxSaver:
                 pt_name_to_onnx_nodes[pt_name].append(node)
 
         for module_name, module_ref in pt_model.named_modules():
-            if type(module_ref) in onnx_subgraph_op_to_pytorch_module_param_name and \
-                    module_name in pt_name_to_onnx_nodes:
-                onnx_nodes = pt_name_to_onnx_nodes[module_name]
-                for (idx, op_type), replace_pairs in \
-                        onnx_subgraph_op_to_pytorch_module_param_name_index_based[type(module_ref)].items():
-                    if len(onnx_nodes) > idx and onnx_nodes[idx].op_type == op_type:
-                        cls._replace_param_name(initializers, initializer_name_to_index, module_name, onnx_nodes[idx],
-                                                replace_pairs)
+            if type(module_ref) in onnx_subgraph_op_to_pytorch_module_param_name:
+                if module_name not in pt_name_to_onnx_nodes:
+                    error_str = f'{module_name} of type {module_ref} not found in pt_name_to_onnx_nodes dictionary.' \
+                                f'Unable to rename parameters of {module_name}'
+                    _logger.error(error_str)
+                else:
+                    onnx_nodes = pt_name_to_onnx_nodes[module_name]
+                    for (idx, op_type), replace_pairs in \
+                            onnx_subgraph_op_to_pytorch_module_param_name_index_based[type(module_ref)].items():
+                        if len(onnx_nodes) > idx and onnx_nodes[idx].op_type == op_type:
+                            cls._replace_param_name(initializers, initializer_name_to_index, module_name,
+                                                    onnx_nodes[idx], replace_pairs)
 
     @classmethod
     def _replace_param_name(cls, initializers: List[onnx.TensorProto], initializer_name_to_index: Dict[str, int],

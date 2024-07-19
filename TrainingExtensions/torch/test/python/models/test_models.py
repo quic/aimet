@@ -1407,7 +1407,7 @@ class SmallLinearModel(nn.Module):
     def __init__(self):
         super(SmallLinearModel, self).__init__()
         self.linear = nn.Linear(3, 8)
-        self.linear2 = nn.Linear(8, 3)
+        self.linear2 = nn.Linear(8, 3, bias=False)
         self.innerlinear = InnerLinear()
         self.prelu = nn.PReLU()
         self.prelu2 = nn.PReLU()
