@@ -409,6 +409,8 @@ class QuantizedTensor(QuantizedTensorBase):
     def quantized_repr(self) -> torch.Tensor:
         # FIXME(kyunggeu): This only works for affine encodings.
         #                  Needs to be generalized for any kind of encodings
+        if self.encoding is None:
+            raise EncodingError("Encoding does not exist")
         return self.quantize().as_subclass(torch.Tensor).to(self.encoding.dtype)
 
 
@@ -477,6 +479,8 @@ class DequantizedTensor(QuantizedTensorBase):
         """
         # FIXME(kyunggeu): This only works for affine encodings.
         #                  Needs to be generalized for any kind of encodings
+        if self.encoding is None:
+            raise EncodingError("Encoding does not exist")
         return self.quantize().as_subclass(torch.Tensor).to(self.encoding.dtype)
 
 
