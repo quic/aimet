@@ -373,8 +373,6 @@ class QuantizedTensor(QuantizedTensorBase):
         """
         Returns ``self``
         """
-        if self.encoding is None:
-            raise EncodingError("Encoding does not exist")
         return self
 
     def dequantize(self) -> "DequantizedTensor":
@@ -453,8 +451,6 @@ class DequantizedTensor(QuantizedTensorBase):
         """
         Returns ``self``
         """
-        if self.encoding is None:
-            raise EncodingError("Encoding does not exist")
         return self
 
     def quantized_repr(self) -> torch.Tensor:
