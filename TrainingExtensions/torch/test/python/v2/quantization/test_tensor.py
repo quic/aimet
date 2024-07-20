@@ -616,11 +616,12 @@ class TestQuantizedTensor:
         """
         x, *others = [affine_quantize(inp, scale, offset, bitwidth).dequantize()
                       if isinstance(inp, Tensor) else inp for inp in inputs]
+        orig_encoding = x.encoding
 
         y = in_place_func(x, *others)
 
         assert x is y
-        assert y.encoding is not None
+        assert y.encoding is orig_encoding
 
     def test_qtensor_without_encoding(self, scale, offset, bitwidth):
         """
