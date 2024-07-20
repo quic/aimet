@@ -108,6 +108,7 @@ class QuantizedTensorBase(torch.Tensor):
     # Operations that an encoding can always pass through
     _passthrough_ops = {
         torch.Tensor.contiguous,
+        torch.Tensor.requires_grad_,
         torch.Tensor.share_memory_,
     }
 
@@ -197,7 +198,6 @@ class QuantizedTensorBase(torch.Tensor):
         torch.unsqueeze_copy,
         torch.vsplit,
         torch.view_copy,
-        torch.Tensor.requires_grad_,
     }
 
     # In-place operations
