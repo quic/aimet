@@ -57,7 +57,7 @@ from aimet_common import libquant_info
 from torch.nn.modules.instancenorm import _InstanceNorm
 
 from .mobilenet import MockMobileNetV1, MockMobileNetV11
-import aimet_torch.nn.modules.custom import aimet_modules
+import aimet_torch.nn.modules.custom as aimet_modules
 
 class SingleResidual(nn.Module):
     """ A model with a single residual connection.
