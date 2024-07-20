@@ -40,22 +40,20 @@ import contextlib
 import itertools
 from abc import abstractmethod
 from collections import OrderedDict
-from functools import partial
-from typing import Type, Any, Tuple, Dict, Optional, Callable
+from typing import Type, Any, Optional, Callable, Mapping
 from weakref import WeakKeyDictionary
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch import Tensor
+from torch.overrides import TorchFunctionMode, get_overridable_functions
 
 import aimet_torch.nn.modules.custom as aimet_ops
-from aimet_torch.v2.quantization import affine
 from aimet_torch.v2.quantization.base import QuantizerBase
-from aimet_torch.v2.quantization.float import FloatQuantizeDequantize
 from aimet_torch.v2.quantization.tensor import QuantizedTensorBase
 from aimet_torch.v2.utils import patch_attr, _ContextManager, allow_recompute
-from .base import BaseQuantizationMixin, _BaseQuantizedUnaryOpMixin, \
-    _BaseQuantizedBinaryOpMixin  # pylint: disable=import-error
+from .base import BaseQuantizationMixin
 
 
 def _quantize_if_applicable(data: Any, quantizer: Optional[QuantizerBase]):
@@ -75,6 +73,18 @@ def _quantize_if_applicable(data: Any, quantizer: Optional[QuantizerBase]):
 
 def _dequantize_if_applicable(data: torch.Tensor):
     return data.dequantize() if isinstance(data, QuantizedTensorBase) else data
+
+
+def _quantize_dequantize_if_applicable(data, quantizer):
+    if quantizer and isinstance(data, Tensor) and data.is_floating_point():
+        if isinstance(data, QuantizedTensorBase):
+            data = data.dequantize()
+        data = quantizer(data)
+
+    if isinstance(data, QuantizedTensorBase):
+        return data.dequantize()
+
+    return data
 
 
 _QUANTIZED_MODULES_UNDER_COMPUTE_ENCODINGS = WeakKeyDictionary()
@@ -310,201 +320,109 @@ class QuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-metho
 
         return wrapper
 
-    @contextlib.contextmanager
-    def _unsafe_view_quantizers_as_qdq(self):
 
-        def _view_as_qdq(quantizer):
-            if not quantizer:
-                return contextlib.nullcontext()
-
-            if isinstance(quantizer, affine.QuantizeDequantize):
-                return contextlib.nullcontext()
-
-            if isinstance(quantizer, FloatQuantizeDequantize):
-                return contextlib.nullcontext()
-
-            if 'forward' in quantizer.__dict__:
-                # forward is already monkey-patched probably due to compute_encodings()
-                # Leave it as-is
-                return contextlib.nullcontext()
-
-            return patch_attr(quantizer, 'forward',
-                              partial(affine.QuantizeDequantize.forward, quantizer))
-
-        with contextlib.ExitStack() as stack:
-            for quantizer in itertools.chain(self.input_quantizers,
-                                             self.output_quantizers,
-                                             self.param_quantizers.values()):
-                ctx = _view_as_qdq(quantizer)
-                stack.enter_context(ctx)
-
-            yield
+# pylint: disable=too-many-ancestors
 
 
-# pylint: disable=arguments-differ, abstract-method, too-many-ancestors
-
-class _QuantizedUnaryOpMixin(QuantizationMixin, _BaseQuantizedUnaryOpMixin):
-    def forward(self, *args, **kwargs):  # pylint: disable=missing-function-docstring
-        kernel = self.get_kernel()
-
-        if not kernel or _is_computing_encodings(self):
-            # Fast track: Fall back to fake quantization without further check
-            # Most of the users who never use integer kernels will always end up
-            # taking this path, making QuantizedModule behave the same as FakeQuantizedModule
-            # which is currently much more performant in terms of both speed and memory
-
-            # NOTE: This is a quick temporary solution that may not be robust
-            #       for the quantized modules to be added in the future.
-            with self._unsafe_view_quantizers_as_qdq():
-                return super().forward(*args, **kwargs)
-
-        x, *args = args
-        x = _quantize_if_applicable(x, self.input_quantizers[0])
-
-        if not isinstance(x, QuantizedTensorBase):
-            raise RuntimeError
-
-        with self._patch_quantized_parameters():
-            kernel_args, kernel_kwargs = self.get_functional_args(x, *args, **kwargs)
-            output_encodings = self.output_quantizers[0].get_encoding() if self.output_quantizers[0] else None
-            output = kernel(*kernel_args, **kernel_kwargs, output_encodings=output_encodings)
-
-        return output.dequantize()
-
-    @abstractmethod
-    def get_functional_args(self, x, *args, **kwargs) -> Tuple[Tuple, Dict]:
-        """
-        Return the args and keyword args to the layer's kernel call
-        """
-
-
-class _QuantizedBinaryOpMixin(QuantizationMixin, _BaseQuantizedBinaryOpMixin):
-    def __quant_init__(self):
-        super().__quant_init__()
-        self.input_quantizers = nn.ModuleList([None, None])
+class _DispatchMixin:
+    _builtin_torch_fn: Callable
 
     def forward(self, *args, **kwargs):  # pylint: disable=missing-function-docstring
         kernel = self.get_kernel()
+        builtin_torch_fn = type(self)._builtin_torch_fn
 
         if not kernel or _is_computing_encodings(self):
-            # Fast track: Fall back to fake quantization without further check
-            # Most of the users who never use integer kernels will always end up
-            # taking this path, making QuantizedModule behave the same as FakeQuantizedModule
-            # which is currently much more performant in terms of both speed and memory
-
-            # NOTE: This is a quick temporary solution that may not be robust
-            #       for the quantized modules to be added in the future.
-            with self._unsafe_view_quantizers_as_qdq():
-                return super().forward(*args, **kwargs)
-
-        x, y, *args = args
-        x = _quantize_if_applicable(x, self.input_quantizers[0])
-        y = _quantize_if_applicable(y, self.input_quantizers[1])
-
-        if not isinstance(x, QuantizedTensorBase):
-            raise RuntimeError
-
-        if not isinstance(y, QuantizedTensorBase):
-            raise RuntimeError
+            kernel = self._builtin_torch_fn_helper(builtin_torch_fn)
+        else:
+            kernel = self._custom_kernel_helper(kernel)
 
         with self._patch_quantized_parameters():
-            kernel_args, kernel_kwargs = self.get_functional_args(x, y, *args, **kwargs)
+            with _dispatch(builtin_torch_fn, kernel):
+                output = super().forward(*args, **kwargs)
+
+        return _dequantize_if_applicable(output)
+
+    def _builtin_torch_fn_helper(self, fn: Callable[..., Tensor]):
+        def wrapper(*args, **kwargs):
+            qtzd_args = (
+                _quantize_dequantize_if_applicable(x, qtzr)
+                for x, qtzr in zip(args, self.input_quantizers)
+            )
+            others = (
+                _dequantize_if_applicable(x)
+                for x in args[len(self.input_quantizers):]
+            )
+            kwargs = {
+                key: _dequantize_if_applicable(value)
+                for key, value in kwargs.items()
+            }
+
+            output = fn(*qtzd_args, *others, **kwargs)
+
+            return _quantize_dequantize_if_applicable(output, self.output_quantizers[0])
+
+        return wrapper
+
+    def _custom_kernel_helper(self, fn: Callable[..., QuantizedTensorBase]):
+        def wrapper(*args, **kwargs):
+            qtzd_args = (
+                _quantize_if_applicable(x, qtzr)
+                for x, qtzr in zip(args, self.input_quantizers)
+            )
+            others = args[len(self.input_quantizers):]
+
             output_encodings = self.output_quantizers[0].get_encoding() if self.output_quantizers[0] else None
-            output = kernel(*kernel_args, **kernel_kwargs, output_encodings=output_encodings)
+            kwargs.update(output_encodings=output_encodings)
+            return fn(*qtzd_args, *others, **kwargs)
 
-        return output.dequantize()
-
-    @abstractmethod
-    def get_functional_args(self, x, y, *args, **kwargs) -> Tuple[Tuple, Dict]:
-        """
-        Return the args and keyword args to the layer's kernel call
-        """
+        return wrapper
 
 
-class _QuantizedConvNdMixin(_QuantizedUnaryOpMixin):  # pylint: disable=too-many-ancestors
-    """ Quantized ConvNd """
-
-    def __quant_init__(self):
-        if self.padding_mode != 'zeros':
-            msg = f'padding_mode other than "zeros" is currently not supported. (got {self.padding_mode})'
-            raise NotImplementedError(msg)
-        super().__quant_init__()
-
-    def forward(self, *args, **kwargs):
-        if self.padding_mode != 'zeros':
-            msg = f'padding_mode other than "zeros" is currently not supported. (got {self.padding_mode})'
-            raise NotImplementedError(msg)
-        return super().forward(*args, **kwargs)
-
-    def get_functional_args(self, x):
-        args = (x, self.weight)
-        kwargs = {"bias": self.bias,
-                  "stride": self.stride,
-                  "padding": self.padding,
-                  "dilation": self.dilation,
-                  "groups": self.groups}
-        return args, kwargs
-
-    # pylint: disable=missing-function-docstring
-    def get_functional_args_convtranspose_base(self, x, num_spatial_dims, *args, **kwargs):
-        output_size = None
-        if "output_size" in kwargs.keys():
-            output_size = kwargs["output_size"]
-        elif args:
-            output_size = args[0]
-        if output_size is not None:
-            assert len(output_size) == len(x.shape)
-        output_padding = self._output_padding(x, output_size, self.stride, self.padding, self.kernel_size,
-                                              num_spatial_dims, self.dilation)
-        new_args = (x, self.weight)
-        kwargs = {"bias": self.bias,
-                  "stride": self.stride,
-                  "padding": self.padding,
-                  "output_padding":output_padding,
-                  "dilation": self.dilation,
-                  "groups": self.groups}
-        return new_args, kwargs
+def _binary_quant_init(self):
+    super(type(self), self).__quant_init__()
+    self.input_quantizers = nn.ModuleList([None, None])
 
 
 @QuantizationMixin.implements(nn.Conv1d)
-class QuantizedConv1d(_QuantizedConvNdMixin, nn.Conv1d):  # pylint: disable=too-many-ancestors
+class QuantizedConv1d(_DispatchMixin, QuantizationMixin, nn.Conv1d):  # pylint: disable=too-many-ancestors
     """ Quantized Conv1d """
+    _builtin_torch_fn = F.conv1d
 
 
 @QuantizationMixin.implements(nn.Conv2d)
-class QuantizedConv2d(_QuantizedConvNdMixin, nn.Conv2d):  # pylint: disable=too-many-ancestors
+class QuantizedConv2d(_DispatchMixin, QuantizationMixin, nn.Conv2d):  # pylint: disable=too-many-ancestors
     """ Quantized Conv2d """
+    _builtin_torch_fn = F.conv2d
 
 
 @QuantizationMixin.implements(nn.Conv3d)
-class QuantizedConv3d(_QuantizedConvNdMixin, nn.Conv3d):  # pylint: disable=too-many-ancestors
+class QuantizedConv3d(_DispatchMixin, QuantizationMixin, nn.Conv3d):  # pylint: disable=too-many-ancestors
     """ Quantized Conv3d """
+    _builtin_torch_fn = F.conv3d
 
 
 @QuantizationMixin.implements(nn.ConvTranspose1d)
-class QuantizedConvTranspose1d(_QuantizedConvNdMixin, nn.ConvTranspose1d): # pylint: disable=too-many-ancestors
+class QuantizedConvTranspose1d(_DispatchMixin, QuantizationMixin, nn.ConvTranspose1d): # pylint: disable=too-many-ancestors
     """ Quantized ConvTranspose1d """
-    def get_functional_args(self, x, *args, **kwargs):
-        return self.get_functional_args_convtranspose_base(x, 1, *args, **kwargs)
+    _builtin_torch_fn = F.conv_transpose1d
 
 
 @QuantizationMixin.implements(nn.ConvTranspose2d)
-class QuantizedConvTranspose2d(_QuantizedConvNdMixin, nn.ConvTranspose2d): # pylint: disable=too-many-ancestors
+class QuantizedConvTranspose2d(_DispatchMixin, QuantizationMixin, nn.ConvTranspose2d): # pylint: disable=too-many-ancestors
     """ Quantized ConvTranspose2d """
-    def get_functional_args(self, x, *args, **kwargs):
-        return self.get_functional_args_convtranspose_base(x, 2, *args, **kwargs)
+    _builtin_torch_fn = F.conv_transpose2d
 
 
 @QuantizationMixin.implements(nn.ConvTranspose3d)
-class QuantizedConvTranspose3d(_QuantizedConvNdMixin, nn.ConvTranspose3d): # pylint: disable=too-many-ancestors
+class QuantizedConvTranspose3d(_DispatchMixin, QuantizationMixin, nn.ConvTranspose3d): # pylint: disable=too-many-ancestors
     """ Quantized ConvTranspose3d """
-    def get_functional_args(self, x, *args, **kwargs):
-        return self.get_functional_args_convtranspose_base(x, 3, *args, **kwargs)
+    _builtin_torch_fn = F.conv_transpose3d
 
 
 @QuantizationMixin.implements(nn.Linear)
-class QuantizedLinear(_QuantizedUnaryOpMixin, nn.Linear):
+class QuantizedLinear(_DispatchMixin, QuantizationMixin, nn.Linear):
     """ Quantized Linear """
+    _builtin_torch_fn = F.linear
 
     # Only allow activation recompute (a.k.a activation checkpointing) for QuantizedLinear.
     # This is mainly to reduce memory footprint of QAT of large language models.
@@ -512,176 +430,198 @@ class QuantizedLinear(_QuantizedUnaryOpMixin, nn.Linear):
     def forward(self, *args, **kwargs):
         return super().forward(*args, **kwargs)
 
-    def get_functional_args(self, x):
-        return (x, self.weight), {"bias": self.bias}
-
 
 @QuantizationMixin.implements(nn.GELU)
-class QuantizedGELU(_QuantizedUnaryOpMixin, nn.GELU):
+class QuantizedGELU(_DispatchMixin, QuantizationMixin, nn.GELU):
     """ Quantized GELU """
-
-    def get_functional_args(self, x):
-        return (x,), {"approximate": self.approximate}
+    _builtin_torch_fn = F.gelu
 
 
 @QuantizationMixin.implements(nn.LayerNorm)
-class QuantizedLayerNorm(_QuantizedUnaryOpMixin, nn.LayerNorm):
+class QuantizedLayerNorm(_DispatchMixin, QuantizationMixin, nn.LayerNorm):
     """ Quantized LayerNorm """
-
-    def get_functional_args(self, x):
-        return (x, self.normalized_shape,), {"weight": self.weight, "bias": self.bias, "eps": self.eps}
+    _builtin_torch_fn = F.layer_norm
 
 
 @QuantizationMixin.implements(nn.GroupNorm)
-class QuantizedGroupNorm(_QuantizedUnaryOpMixin, nn.GroupNorm):
+class QuantizedGroupNorm(_DispatchMixin, QuantizationMixin, nn.GroupNorm):
     """ Quantized GroupNorm """
-
-    def get_functional_args(self, x):
-        return (x, self.num_groups, self.weight, self.bias, self.eps), {}
+    _builtin_torch_fn = F.group_norm
 
 
 @QuantizationMixin.implements(nn.Softmax)
-class QuantizedSoftmax(_QuantizedUnaryOpMixin, nn.Softmax):
+class QuantizedSoftmax(_DispatchMixin, QuantizationMixin, nn.Softmax):
     """ Quantized Softmax """
-
-    def get_functional_args(self, x):
-        return (x, self.dim), {}
+    _builtin_torch_fn = F.softmax
 
 
 @QuantizationMixin.implements(nn.Sigmoid)
-class QuantizedSigmoid(_QuantizedUnaryOpMixin, nn.Sigmoid):
+class QuantizedSigmoid(_DispatchMixin, QuantizationMixin, nn.Sigmoid):
     """ Quantized Sigmoid """
-
-    def get_functional_args(self, x):
-        return (x,), {}
+    _builtin_torch_fn = torch.sigmoid
 
 
 @QuantizationMixin.implements(nn.Tanh)
-class QuantizedTanh(_QuantizedUnaryOpMixin, nn.Tanh):
+class QuantizedTanh(_DispatchMixin, QuantizationMixin, nn.Tanh):
     """ Quantized Tanh """
-
-    def get_functional_args(self, x):
-        return (x,), {}
+    _builtin_torch_fn = F.tanh
 
 
 @QuantizationMixin.implements(nn.ReLU)
-class QuantizedReLU(_QuantizedUnaryOpMixin, nn.ReLU):
+class QuantizedReLU(_DispatchMixin, QuantizationMixin, nn.ReLU):
     """ Quantized ReLU """
-
-    def get_functional_args(self, x):
-        return (x,), {"inplace": self.inplace}
+    _builtin_torch_fn = F.relu
 
 
 @QuantizationMixin.implements(nn.PReLU)
-class QuantizedPReLU(_QuantizedUnaryOpMixin, nn.PReLU):
+class QuantizedPReLU(_DispatchMixin, QuantizationMixin, nn.PReLU):
     """ Quantized PReLU """
-
-    def get_functional_args(self, x):
-        return (x, self.weight), {}
+    _builtin_torch_fn = F.prelu
 
 
 @QuantizationMixin.implements(nn.ConstantPad2d)
-class QuantizedConstantPad2d(_QuantizedUnaryOpMixin, nn.ConstantPad2d):
+class QuantizedConstantPad2d(_DispatchMixin, QuantizationMixin, nn.ConstantPad2d):
     """ Quantized ConstantPad2d """
-
-    def get_functional_args(self, x):
-        return (x, self.padding, "constant", self.value,), {}
+    _builtin_torch_fn = F.pad
 
 
 @QuantizationMixin.implements(nn.Hardtanh)
-class QuantizedHardtanh(_QuantizedUnaryOpMixin, nn.Hardtanh):
+class QuantizedHardtanh(_DispatchMixin, QuantizationMixin, nn.Hardtanh):
     """ Quantized Hardtanh """
-
-    def get_functional_args(self, x):
-        return (x, self.min_val, self.max_val, self.inplace), {}
+    _builtin_torch_fn = F.hardtanh
 
 
 @QuantizationMixin.implements(nn.MaxPool2d)
-class QuantizedMaxPool2d(_QuantizedUnaryOpMixin, nn.MaxPool2d):
+class QuantizedMaxPool2d(_DispatchMixin, QuantizationMixin, nn.MaxPool2d):
     """ Quantized MaxPool2d """
-
-    def get_functional_args(self, x):
-        return (x, self.kernel_size, self.stride, self.padding, self.dilation,), \
-            {"ceil_mode": self.ceil_mode, "return_indices": self.return_indices}
+    _builtin_torch_fn = F.max_pool2d
 
 
 @QuantizationMixin.implements(nn.UpsamplingBilinear2d)
-class QuantizedUpsamplingBilinear2d(_QuantizedUnaryOpMixin, nn.UpsamplingBilinear2d):
+class QuantizedUpsamplingBilinear2d(_DispatchMixin, QuantizationMixin, nn.UpsamplingBilinear2d):
     """ Quantized UpsamplingBilinear2d """
-
-    def get_functional_args(self, x):
-        return (x, self.size, self.scale_factor, self.mode, self.align_corners,), \
-            {"recompute_scale_factor": self.recompute_scale_factor}
+    _builtin_torch_fn = F.interpolate
 
 
 @QuantizationMixin.implements(nn.PixelShuffle)
-class QuantizedPixelShuffle(_QuantizedUnaryOpMixin, nn.PixelShuffle):
+class QuantizedPixelShuffle(_DispatchMixin, QuantizationMixin, nn.PixelShuffle):
     """ Quantized PixelShuffle """
+    _builtin_torch_fn = F.pixel_shuffle
 
-    def get_functional_args(self, x):
-        return (x, self.upscale_factor,), {}
-
-
-def _as_is(self, *args, **kwargs): # pylint: disable=unused-argument
-    return args, kwargs
 
 @QuantizationMixin.implements(aimet_ops.Sin)
-class QuantizedSin(_QuantizedUnaryOpMixin, aimet_ops.Sin):
+class QuantizedSin(_DispatchMixin, QuantizationMixin, aimet_ops.Sin):
     """ Quantized Sin """
-    get_functional_args = _as_is
+    _builtin_torch_fn = torch.sin
 
 
 @QuantizationMixin.implements(aimet_ops.Cos)
-class QuantizedCos(_QuantizedUnaryOpMixin, aimet_ops.Cos):
+class QuantizedCos(_DispatchMixin, QuantizationMixin, aimet_ops.Cos):
     """ Quantized Cos """
-    get_functional_args = _as_is
+    _builtin_torch_fn = torch.cos
 
 
 @QuantizationMixin.implements(aimet_ops.AvgPool2d)
-class QuantizedAvgPool2d(_QuantizedUnaryOpMixin, aimet_ops.AvgPool2d):
+class QuantizedAvgPool2d(_DispatchMixin, QuantizationMixin, aimet_ops.AvgPool2d):
     """ Quantized AvgPool2d """
-    get_functional_args = _as_is
+    _builtin_torch_fn = F.avg_pool2d
 
 
 @QuantizationMixin.implements(aimet_ops.Reshape)
-class QuantizedReshape(_QuantizedUnaryOpMixin, aimet_ops.Reshape):
+class QuantizedReshape(_DispatchMixin, QuantizationMixin, aimet_ops.Reshape):
     """ Quantized Reshape """
-    get_functional_args = _as_is
+    _builtin_torch_fn = torch.reshape
 
 
 @QuantizationMixin.implements(aimet_ops.RSqrt)
-class QuantizedRSqrt(_QuantizedUnaryOpMixin, aimet_ops.RSqrt):
+class QuantizedRSqrt(_DispatchMixin, QuantizationMixin, aimet_ops.RSqrt):
     """ Quantized RSqrt """
-    get_functional_args = _as_is
+    _builtin_torch_fn = torch.rsqrt
 
 
 @QuantizationMixin.implements(aimet_ops.MatMul)
-class QuantizedMatMul(_QuantizedBinaryOpMixin, aimet_ops.MatMul):
+class QuantizedMatMul(_DispatchMixin, QuantizationMixin, aimet_ops.MatMul):
     """ Quantized MatMul """
-
-    def get_functional_args(self, x, y):
-        return (x, y), {}
+    __quant_init__ = _binary_quant_init
+    _builtin_torch_fn = torch.matmul
 
 
 @QuantizationMixin.implements(aimet_ops.Add)
-class QuantizedAdd(_QuantizedBinaryOpMixin, aimet_ops.Add):
+class QuantizedAdd(_DispatchMixin, QuantizationMixin, aimet_ops.Add):
     """ Quantized Add """
-    get_functional_args = _as_is
+    __quant_init__ = _binary_quant_init
+    _builtin_torch_fn = torch.add
 
 
 @QuantizationMixin.implements(aimet_ops.Multiply)
-class QuantizedMultiply(_QuantizedBinaryOpMixin, aimet_ops.Multiply):
+class QuantizedMultiply(_DispatchMixin, QuantizationMixin, aimet_ops.Multiply):
     """ Quantized Multiply """
-    get_functional_args = _as_is
+    __quant_init__ = _binary_quant_init
+    _builtin_torch_fn = torch.mul
 
 
 @QuantizationMixin.implements(aimet_ops.Subtract)
-class QuantizedSubtract(_QuantizedBinaryOpMixin, aimet_ops.Subtract):
+class QuantizedSubtract(_DispatchMixin, QuantizationMixin, aimet_ops.Subtract):
     """ Quantized Subtract """
-    get_functional_args = _as_is
+    __quant_init__ = _binary_quant_init
+    _builtin_torch_fn = torch.sub
 
 
 @QuantizationMixin.implements(aimet_ops.Divide)
-class QuantizedDivide(_QuantizedBinaryOpMixin, aimet_ops.Divide):
+class QuantizedDivide(_DispatchMixin, QuantizationMixin, aimet_ops.Divide):
     """ Quantized Divide """
-    get_functional_args = _as_is
+    __quant_init__ = _binary_quant_init
+    _builtin_torch_fn = torch.div
+
+
+
+_dispatch_table: Mapping[Callable, Optional[Callable]]
+_dispatch_table = {
+    torch_fn: None
+    for torch_fn in itertools.chain(*get_overridable_functions().values())
+}
+
+class _Dispatcher(TorchFunctionMode):
+    def __init__(self):
+        super().__init__()
+        self._stack_level = 0
+
+    def __torch_function__(self, func, types, args=(), kwargs=None):
+        kwargs = kwargs or {}
+
+        dispatch = _dispatch_table.get(func, None)
+
+        if dispatch:
+            return dispatch(*args, **kwargs)
+
+        return func(*args, **kwargs)
+
+
+_dispatcher = _Dispatcher()
+_stack_level = 0
+
+@contextlib.contextmanager
+def _dispatch(torch_func: Callable, custom_impl: Callable):
+    # pylint: disable=global-statement
+    global _stack_level
+    orig_level = _stack_level
+
+    try:
+        orig = _dispatch_table[torch_func]
+    except KeyError as e:
+        raise RuntimeError(f"PyTorch doesn't support overriding {torch_func}") from e
+
+    try:
+        _dispatch_table[torch_func] = custom_impl
+
+        if _stack_level == 0:
+            _dispatcher.__enter__()
+        _stack_level += 1
+
+        yield
+    finally:
+        _dispatch_table[torch_func] = orig
+        _stack_level = orig_level
+
+        if _stack_level == 0:
+            _dispatcher.__exit__(None, None, None)
