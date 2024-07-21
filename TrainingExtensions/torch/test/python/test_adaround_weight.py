@@ -255,11 +255,11 @@ class TwoConvModel(torch.nn.Module):
         self.relu = torch.nn.ReLU(inplace=True)
         self.conv2 = torch.nn.Conv2d(4, 4, kernel_size=1, bias=False)
 
-    def forward(self, *inputs):
-        #return self.conv1(inputs[0])
-        #return self.relu(self.conv1(inputs[0]))
-        x = self.conv1(inputs[0])
+    def forward(self, t1, t2=None):
+        x = self.conv1(t1)
         x =  self.relu(x)
+        if t2 is not None:
+            x = x + t2
         return self.conv2(x)
 
 
@@ -277,10 +277,10 @@ class MultiBlockModel(torch.nn.Module):
 
     def forward(self, *inputs):
         x = self.conv1(inputs[0])
-        x = self.block1(x)
+        x = self.block1(t1=x, t2=None)
         x = self.conv2(x)
         x = self.relu(x)
-        x = self.block2(x)
+        x = self.block2(t1=x)
         return self.conv3(x)
 
 class TestAdaround:
