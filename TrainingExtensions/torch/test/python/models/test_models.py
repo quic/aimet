@@ -111,6 +111,12 @@ class ModelWithMatMul5(torch.nn.Module):
     def forward(self, *inputs):
         return self.matmul(inputs[0], inputs[1])
 
+class ModelWithUnusedMatmul(ModelWithMatMul5):
+
+    def __init__(self):
+        super().__init__()
+        self.unused_matmul = aimet_modules.MatMul()
+
 class ModelWithGroupNorm(torch.nn.Module):
     """
     Model with GroupNorm module

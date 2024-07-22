@@ -4962,6 +4962,37 @@ class TestQuantizationSimLearnedGrid:
         else:
             assert not closest_output_quantizer_of_second_input.use_symmetric_encodings
 
+    @pytest.mark.parametrize("hw_version", ['default', 'V75'])
+    def test_exception_for_unused_matmul(self, hw_version):
+        """
+        Check that quantsim init doesn't fail with unused matmul ops
+        """
+        device = "cpu"
+        model = test_models.ModelWithUnusedMatmul().to(device)
+        dummy_input = (torch.randn(10, device=device), torch.randn(10, device=device))
+
+        quantsim_config = {
+            "defaults": {
+                "hw_version": hw_version,
+                "ops": {"is_output_quantized": "True"}, "params": {"is_symmetric": "True"}
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {"is_input_quantized": "True"},
+            "model_output": {},
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = os.path.join(temp_dir, "quantsim_config.json")
+            with open(config_path, "w") as f:
+                json.dump(quantsim_config, f)
+
+            sim = QuantizationSimModel(model, dummy_input,
+                                       config_file=config_path,
+                                       default_output_bw=16,
+                                       default_param_bw=4)
+
     @pytest.mark.parametrize('hw_version', ['default', 'V66', 'V68', 'V73', 'V69', 'V75'])
     @pytest.mark.parametrize('quant_scheme', [QuantScheme.post_training_tf,
                                               QuantScheme.training_range_learning_with_tf_init,
