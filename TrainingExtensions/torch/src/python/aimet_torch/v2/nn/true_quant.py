@@ -47,7 +47,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-from torch.overrides import TorchFunctionMode, get_overridable_functions
+from torch.overrides import BaseTorchFunctionMode, get_overridable_functions
 
 import aimet_torch.nn.modules.custom as aimet_ops
 from aimet_torch.v2.quantization.base import QuantizerBase
@@ -581,16 +581,14 @@ _dispatch_table = {
     for torch_fn in itertools.chain(*get_overridable_functions().values())
 }
 
-class _Dispatcher(TorchFunctionMode):
+class _Dispatcher(BaseTorchFunctionMode):
     def __torch_function__(self, func, types, args=(), kwargs=None):
-        kwargs = kwargs or {}
+        impl = _dispatch_table[func]
 
-        dispatch = _dispatch_table.get(func, None)
+        if impl is None:
+            impl = func
 
-        if dispatch:
-            return dispatch(*args, **kwargs)
-
-        return func(*args, **kwargs)
+        return super().__torch_function__(impl, types, args, kwargs)
 
 
 _dispatcher = _Dispatcher()
