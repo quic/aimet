@@ -40,7 +40,7 @@ import contextlib
 import itertools
 from abc import abstractmethod
 from collections import OrderedDict
-from typing import Type, Any, Optional, Callable, Mapping
+from typing import Type, Any, Optional, Callable, Dict
 from weakref import WeakKeyDictionary
 
 import torch
@@ -575,7 +575,7 @@ class QuantizedDivide(_DispatchMixin, QuantizationMixin, aimet_ops.Divide):
 
 
 
-_dispatch_table: Mapping[Callable, Optional[Callable]]
+_dispatch_table: Dict[Callable, Optional[Callable]]
 _dispatch_table = {
     torch_fn: None
     for torch_fn in itertools.chain(*get_overridable_functions().values())
