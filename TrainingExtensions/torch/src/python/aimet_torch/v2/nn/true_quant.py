@@ -582,10 +582,6 @@ _dispatch_table = {
 }
 
 class _Dispatcher(TorchFunctionMode):
-    def __init__(self):
-        super().__init__()
-        self._stack_level = 0
-
     def __torch_function__(self, func, types, args=(), kwargs=None):
         kwargs = kwargs or {}
 
