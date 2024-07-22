@@ -79,7 +79,7 @@ class TestFakeQuantizedSoftmax:
         Then: The output should hold the same encoding as input
         """
         input = input.as_subclass(DequantizedTensor)
-        input.encoding = AffineEncoding(scale=torch.ones([]), offset=torch.zeros([]), bitwidth=8)
+        input.encoding = AffineEncoding(scale=torch.ones(()), offset=torch.zeros(()), bitwidth=8)
         output = FakeQuantizedReshape()(input, (100,))
 
         assert isinstance(output, DequantizedTensor)
@@ -94,10 +94,10 @@ class TestFakeQuantizedSoftmax:
         Given: Instantiate a fake-quantized module with input quantizer spec specified
         """
         quant_softmax = FakeQuantizedSoftmax()
-        quant_softmax.input_quantizers[0] = QuantizeDequantize((1,),
+        quant_softmax.input_quantizers[0] = QuantizeDequantize((),
                                                                bitwidth=8,
                                                                symmetric=False,
-                                                               encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
+                                                               encoding_analyzer=MinMaxEncodingAnalyzer(()))
 
         """
         When: Inspect `input_quantizer` attribute.
@@ -136,10 +136,10 @@ class TestFakeQuantizedSoftmax:
         Given: Instantiate a fake-quantized module with output quantizer spec specified
         """
         quant_softmax = FakeQuantizedSoftmax()
-        quant_softmax.output_quantizers[0] = QuantizeDequantize((1,),
+        quant_softmax.output_quantizers[0] = QuantizeDequantize((),
                                                                 bitwidth=8,
                                                                 symmetric=False,
-                                                                encoding_analyzer=MinMaxEncodingAnalyzer((1,)))
+                                                                encoding_analyzer=MinMaxEncodingAnalyzer(()))
 
         """
         When: Inspect `output_quantizer` attribute.

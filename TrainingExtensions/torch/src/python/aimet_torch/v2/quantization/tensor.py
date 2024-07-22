@@ -370,7 +370,7 @@ class QuantizedTensor(QuantizedTensorBase):
             >>> from aimet_torch.v2.quantization as Q
             >>> x = torch.tensor([[2.57, -2.312],
             ...                   [0.153, 0.205]])
-            >>> quantizer = Q.affine.Quantize(shape=(1, ), bitwidth=8, symmetric=True)
+            >>> quantizer = Q.affine.Quantize(shape=(), bitwidth=8, symmetric=True)
             >>> quantizer.set_range(-128 * 0.1, 127 * 0.1)
             >>> x_q = quantizer(x)
             >>> x_q
@@ -414,7 +414,7 @@ class DequantizedTensor(QuantizedTensorBase):
 
             >>> import aimet_torch.v2.quantization as Q
             >>> x = torch.tensor([[0.39, 51.0], [3.521, 9.41]])
-            >>> quant_dequant = Q.affine.QuantizeDequantize((1, ), 8, symmetric=False)
+            >>> quant_dequant = Q.affine.QuantizeDequantize(shape=(), bitwidth=8, symmetric=False)
             >>> quant_dequant.set_range(-10, 41)
             >>> x_qdq = quant_dequant(x)
             >>> x_qdq
@@ -452,7 +452,7 @@ class DequantizedTensor(QuantizedTensorBase):
 
             >>> import aimet_torch.v2.quantization as Q
             >>> x = torch.tensor([[0.39, 51.0], [3.521, 9.41]])
-            >>> quant_dequant = Q.affine.QuantizeDequantize((1, ), 8, symmetric=False)
+            >>> quant_dequant = Q.affine.QuantizeDequantize(shape=(), bitwidth=8, symmetric=False)
             >>> quant_dequant.set_range(-10, 41)
             >>> x_qdq = quant_dequant(x)
             >>> x_qdq

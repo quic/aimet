@@ -413,11 +413,11 @@ class TestQuantizedLayers:
         fq_layer = FakeQuantizationMixin.from_module(layer)
         tq_layer = QuantizationMixin.from_module(layer)
         for i, _ in enumerate(inputs):
-            fq_layer.input_quantizers[i] = QuantizeDequantize(shape=(1,), bitwidth=8, symmetric=False)
-            tq_layer.input_quantizers[i] = Quantize(shape=(1,), bitwidth=8, symmetric=False)
+            fq_layer.input_quantizers[i] = QuantizeDequantize(shape=(), bitwidth=8, symmetric=False)
+            tq_layer.input_quantizers[i] = Quantize(shape=(), bitwidth=8, symmetric=False)
 
         fq_layer.output_quantizers[0] = QuantizeDequantize(shape=(1, ), bitwidth=8, symmetric=False)
-        tq_layer.output_quantizers[0] = Quantize(shape=(1,), bitwidth=8, symmetric=False)
+        tq_layer.output_quantizers[0] = Quantize(shape=(), bitwidth=8, symmetric=False)
 
         with fq_layer.compute_encodings():
             fq_layer(*inputs)
@@ -442,12 +442,12 @@ class TestQuantizedLayers:
     def test_layers_with_weight(self, layer, input):
         fq_layer = FakeQuantizationMixin.from_module(layer)
         tq_layer = QuantizationMixin.from_module(layer)
-        fq_layer.input_quantizers[0] = QuantizeDequantize(shape=(1,), bitwidth=8, symmetric=False)
+        fq_layer.input_quantizers[0] = QuantizeDequantize(shape=(), bitwidth=8, symmetric=False)
         fq_layer.output_quantizers[0] = QuantizeDequantize(shape=(1, ), bitwidth=8, symmetric=False)
-        fq_layer.param_quantizers["weight"] = QuantizeDequantize(shape=(1,), bitwidth=8, symmetric=True)
-        tq_layer.input_quantizers[0] = Quantize(shape=(1,), bitwidth=8, symmetric=False)
-        tq_layer.output_quantizers[0] = Quantize(shape=(1,), bitwidth=8, symmetric=False)
-        tq_layer.param_quantizers["weight"] = Quantize(shape=(1,), bitwidth=8, symmetric=True)
+        fq_layer.param_quantizers["weight"] = QuantizeDequantize(shape=(), bitwidth=8, symmetric=True)
+        tq_layer.input_quantizers[0] = Quantize(shape=(), bitwidth=8, symmetric=False)
+        tq_layer.output_quantizers[0] = Quantize(shape=(), bitwidth=8, symmetric=False)
+        tq_layer.param_quantizers["weight"] = Quantize(shape=(), bitwidth=8, symmetric=True)
 
         with fq_layer.compute_encodings():
             fq_layer(input)
@@ -464,9 +464,9 @@ class TestQuantizedLayers:
     @pytest.mark.cuda
     def test_layers_with_recompute(self):
         qlinear = QuantizedLinear(4096, 4096)
-        qlinear.input_quantizers[0] = Quantize(shape=(1,), bitwidth=8, symmetric=False)
-        qlinear.output_quantizers[0] = Quantize(shape=(1,), bitwidth=8, symmetric=False)
-        qlinear.param_quantizers["weight"] = Quantize(shape=(1,), bitwidth=8, symmetric=True)
+        qlinear.input_quantizers[0] = Quantize(shape=(), bitwidth=8, symmetric=False)
+        qlinear.output_quantizers[0] = Quantize(shape=(), bitwidth=8, symmetric=False)
+        qlinear.param_quantizers["weight"] = Quantize(shape=(), bitwidth=8, symmetric=True)
         qlinear.cuda()
 
         # Using dummy backend is no good for testing memory saving in real life.
@@ -531,9 +531,9 @@ class TestQuantizedLayers:
 
     def test_remove_quantizers(self, input):
         qlinear = QuantizedLinear(10, 10, bias=False)
-        qlinear.input_quantizers[0] = input_qtzr = Quantize(shape=(1,), bitwidth=8, symmetric=False)
-        qlinear.output_quantizers[0] = output_qtzr = Quantize(shape=(1,), bitwidth=8, symmetric=False)
-        qlinear.param_quantizers["weight"] = weight_qtzr = Quantize(shape=(1,), bitwidth=8, symmetric=True)
+        qlinear.input_quantizers[0] = input_qtzr = Quantize(shape=(), bitwidth=8, symmetric=False)
+        qlinear.output_quantizers[0] = output_qtzr = Quantize(shape=(), bitwidth=8, symmetric=False)
+        qlinear.param_quantizers["weight"] = weight_qtzr = Quantize(shape=(), bitwidth=8, symmetric=True)
         with qlinear.compute_encodings():
             qlinear(input)
 
@@ -706,13 +706,13 @@ def test_sanity(qmodule, pseudo_kernel, inputs):
         inputs = (inputs,)
 
     for i, _ in enumerate(qmodule.input_quantizers):
-        qmodule.input_quantizers[i] = Quantize([], 8, False)
+        qmodule.input_quantizers[i] = Quantize((), 8, False)
 
     for i, _ in enumerate(qmodule.output_quantizers):
-        qmodule.output_quantizers[i] = Quantize([], 8, False)
+        qmodule.output_quantizers[i] = Quantize((), 8, False)
 
     if 'weight' in qmodule.param_quantizers:
-        qmodule.param_quantizers['weight'] = Quantize([], 8, True)
+        qmodule.param_quantizers['weight'] = Quantize((), 8, True)
 
     with qmodule.compute_encodings():
         _ = qmodule(*inputs)
