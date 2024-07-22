@@ -34,7 +34,6 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-import collections
 import contextlib
 import copy
 import logging
@@ -42,7 +41,7 @@ import os
 import tempfile
 from collections import defaultdict
 
-import aimet_torch.elementwise_ops
+import aimet_torch.nn.modules.custom as aimet_modules
 import onnx
 import pytest
 import torch
@@ -103,7 +102,7 @@ class MultiplyModuleAndFunctional(torch.nn.Module):
 
     def __init__(self, factor):
         super().__init__()
-        self.mul = aimet_torch.elementwise_ops.Multiply()
+        self.mul = aimet_modules.Multiply()
         self.factor = factor
 
     def forward(self, x):
@@ -238,7 +237,7 @@ class TestOnnxUtils:
 
     def test_onnx_export_complex_model(self):
 
-        from aimet_torch.elementwise_ops import Add
+        from aimet_torch.nn.modules.custom import Add
 
         class ResidualLayer1(torch.nn.Module):
             def __init__(self):
@@ -570,7 +569,7 @@ class TestOnnxUtils:
                 assert name in actual_nodes
 
     def test_onnx_custom_param_mapping(self):
-        from aimet_torch.elementwise_ops import Add
+        from aimet_torch.nn.modules.custom import Add
 
         class GroupNormModel(torch.nn.Module):
             def __init__(self):
@@ -821,7 +820,7 @@ class TestOnnxUtils:
         class KwargModel(torch.nn.Module):
             def __init__(self):
                 super().__init__()
-                self.mul = aimet_torch.elementwise_ops.Multiply()
+                self.mul = aimet_modules.Multiply()
 
             def forward(self, a, b, c):
                 ab = a * b

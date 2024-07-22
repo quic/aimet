@@ -47,7 +47,7 @@ from unittest import mock
 
 import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme
-from aimet_torch import elementwise_ops
+import aimet_torch.nn.modules.custom as aimet_modules
 from aimet_torch.quantsim import QuantizationSimModel
 
 
@@ -106,7 +106,7 @@ def evaluate(model: torch.nn.Module, dummy_input: torch.Tensor):
 class TestTrainingExtensionElementwiseOps(unittest.TestCase):
     def test_add_op(self):
         torch.manual_seed(10)
-        model = Model(elementwise_ops.Add())
+        model = Model(aimet_modules.Add())
         input1 = torch.rand((5, 10, 10, 20))
         input2 = torch.rand((5, 10, 10, 20))
         out = model(input1, input2)
@@ -115,7 +115,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_quantsim_export(self):
         torch.manual_seed(10)
-        model = Model2(elementwise_ops.Add())
+        model = Model2(aimet_modules.Add())
         dummy_input = torch.randn(5, 10, 10, 20)
         sim = QuantizationSimModel(model, dummy_input)
         encodings = libpymo.TfEncoding()
@@ -139,7 +139,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_subtract_op(self):
         torch.manual_seed(10)
-        model = Model(elementwise_ops.Subtract())
+        model = Model(aimet_modules.Subtract())
         input1 = torch.rand((5, 10, 10, 20))
         input2 = torch.rand((5, 10, 10, 20))
         out = model(input1, input2)
@@ -148,7 +148,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_multiply_op(self):
         torch.manual_seed(10)
-        model = Model(elementwise_ops.Multiply())
+        model = Model(aimet_modules.Multiply())
         input1 = torch.rand((5, 10, 10, 20))
         input2 = torch.rand((5, 10, 10, 20))
         out = model(input1, input2)
@@ -157,7 +157,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_divide_op(self):
         torch.manual_seed(10)
-        model = Model(elementwise_ops.Divide())
+        model = Model(aimet_modules.Divide())
         input1 = torch.rand((5, 10, 10, 20))
         input2 = torch.rand((5, 10, 10, 20))
         out = model(input1, input2)
@@ -166,7 +166,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_concat_op_two_input_tensors(self):
         torch.manual_seed(10)
-        model = Model3(elementwise_ops.Concat())
+        model = Model3(aimet_modules.Concat())
         input1 = torch.rand((5, 10, 10, 20))
         input2 = torch.rand((5, 10, 10, 20))
         out = model(input1, input2)
@@ -175,7 +175,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_concat_op_four_input_tensors(self):
         torch.manual_seed(10)
-        model = Model3(elementwise_ops.Concat())
+        model = Model3(aimet_modules.Concat())
         input1 = torch.rand((5, 10, 10, 20))
         input2 = torch.rand((5, 10, 10, 20))
         input3 = torch.rand((5, 10, 10, 20))
@@ -186,7 +186,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_concat_compute_encodings(self):
         torch.manual_seed(10)
-        model = Model3(elementwise_ops.Concat())
+        model = Model3(aimet_modules.Concat())
         dummy_input = torch.randn(5, 10, 10, 20)
         sim = QuantizationSimModel(model, dummy_input)
         sim.compute_encodings(dummy_forward_pass, None)
@@ -196,7 +196,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_matmul_op(self):
         torch.manual_seed(10)
-        model = Model(elementwise_ops.MatMul())
+        model = Model(aimet_modules.MatMul())
         tensor1 = torch.randn(10, 3, 4)
         tensor2 = torch.randn(10, 4, 5)
         out = model(tensor1, tensor2)
@@ -217,7 +217,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
                 self.conv2 = nn.Conv2d(10, 10, 5)
                 self.conv3 = nn.Conv2d(10, 10, 5)
                 self.conv4 = nn.Conv2d(10, 10, 1)
-                self.cat = elementwise_ops.Concat(1)
+                self.cat = aimet_modules.Concat(1)
                 self.relu1 = nn.ReLU(inplace=True)
                 self.relu2 = nn.ReLU(inplace=True)
 
@@ -258,8 +258,8 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
             def __init__(self):
                 super(Model, self).__init__()
                 self.conv = nn.Conv2d(10, 20, 5)
-                self.add = elementwise_ops.Add()
-                self.mul = elementwise_ops.Multiply()
+                self.add = aimet_modules.Add()
+                self.mul = aimet_modules.Multiply()
 
             def forward(self, input1):
                 x = self.conv(input1)
@@ -291,8 +291,8 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
             def __init__(self):
                 super(Model, self).__init__()
                 self.conv = nn.Conv2d(10, 20, 5)
-                self.add = elementwise_ops.Add()
-                self.mul = elementwise_ops.Multiply()
+                self.add = aimet_modules.Add()
+                self.mul = aimet_modules.Multiply()
 
             def forward(self, input1):
                 x = self.conv(input1)
@@ -323,7 +323,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         """
         Test gaussian error function
         """
-        model = Model3(elementwise_ops.Erf())
+        model = Model3(aimet_modules.Erf())
         inputs = torch.tensor([0, -1., 10.])
 
         custom_module_out = model(inputs)
@@ -337,8 +337,8 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         class ErfWithOtherOpsModel(nn.Module):
             def __init__(self):
                 super(ErfWithOtherOpsModel, self).__init__()
-                self.erf = elementwise_ops.Erf()
-                self.sqrt = elementwise_ops.Sqrt()
+                self.erf = aimet_modules.Erf()
+                self.sqrt = aimet_modules.Sqrt()
 
             def forward(self, *inputs):
                 return inputs[0] / 2 * (1 + self.erf(inputs[0] / self.sqrt(torch.tensor(2))))
@@ -352,7 +352,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_greater_op(self):
         torch.manual_seed(10)
-        model = Model(elementwise_ops.Greater())
+        model = Model(aimet_modules.Greater())
         input1 = torch.rand((5, 10, 10, 20))
         input2 = torch.rand((5, 10, 10, 20))
         out = model(input1, input2)
@@ -362,7 +362,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_less_op(self):
         torch.manual_seed(10)
-        model = Model(elementwise_ops.Less())
+        model = Model(aimet_modules.Less())
         input1 = torch.rand((5, 10, 10, 20))
         input2 = torch.rand((5, 10, 10, 20))
         out = model(input1, input2)
@@ -372,7 +372,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_greater_equal_op(self):
         torch.manual_seed(10)
-        model = Model(elementwise_ops.GreaterEqual())
+        model = Model(aimet_modules.GreaterEqual())
         input1 = torch.rand((5, 10, 10, 20))
         input2 = torch.rand((5, 10, 10, 20))
         out = model(input1, input2)
@@ -382,7 +382,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_less_equal_op(self):
         torch.manual_seed(10)
-        model = Model(elementwise_ops.LessEqual())
+        model = Model(aimet_modules.LessEqual())
         input1 = torch.rand((5, 10, 10, 20))
         input2 = torch.rand((5, 10, 10, 20))
         out = model(input1, input2)
@@ -392,7 +392,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_not_equal_op(self):
         torch.manual_seed(10)
-        model = Model(elementwise_ops.NotEqual())
+        model = Model(aimet_modules.NotEqual())
         input1 = torch.rand((5, 10, 10, 20))
         input2 = torch.rand((5, 10, 10, 20))
         out = model(input1, input2)
@@ -402,7 +402,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_equal_op(self):
         torch.manual_seed(10)
-        model = Model(elementwise_ops.Equal())
+        model = Model(aimet_modules.Equal())
         input1 = torch.rand((5, 10, 10, 20))
         input2 = torch.rand((5, 10, 10, 20))
         out = model(input1, input2)
@@ -412,7 +412,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_where_op(self):
         torch.manual_seed(10)
-        model = Model3(elementwise_ops.Where())
+        model = Model3(aimet_modules.Where())
         input1 = torch.rand((5, 10, 10, 20))
         input2 = torch.rand((5, 10, 10, 20))
         out = model(input1 > input2, input1, input2)
@@ -422,7 +422,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_mean_op(self):
         torch.manual_seed(10)
-        model = Model3(elementwise_ops.Mean())
+        model = Model3(aimet_modules.Mean())
         input1 = torch.rand((5, 10, 10, 20))
         out = model(input1)
         out1 = torch.mean(input1)
@@ -430,7 +430,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_sum_op(self):
         torch.manual_seed(10)
-        model = Model3(elementwise_ops.Sum())
+        model = Model3(aimet_modules.Sum())
         input1 = torch.rand((5, 10, 10, 20))
         out = model(input1)
         out1 = torch.sum(input1)
@@ -438,7 +438,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_prod_op(self):
         torch.manual_seed(10)
-        model = Model3(elementwise_ops.Prod())
+        model = Model3(aimet_modules.Prod())
         input1 = torch.rand((5, 10, 10, 20))
         out = model(input1)
         out1 = torch.prod(input1)
@@ -446,7 +446,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_log_op(self):
         torch.manual_seed(42)
-        model = Model3(elementwise_ops.Log())
+        model = Model3(aimet_modules.Log())
         inputs = torch.rand(4, 3, 28, 28)
 
         custom_module_out = model(inputs)
@@ -455,7 +455,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_abs_op(self):
         torch.manual_seed(42)
-        model = Model3(elementwise_ops.Abs())
+        model = Model3(aimet_modules.Abs())
         inputs = torch.rand(4, 3, 28, 28)
 
         custom_module_out = model(inputs)
@@ -464,7 +464,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_neg_op(self):
         torch.manual_seed(42)
-        model = Model3(elementwise_ops.Neg())
+        model = Model3(aimet_modules.Neg())
         inputs = torch.rand(4, 3, 28, 28)
 
         custom_module_out = model(inputs)
@@ -473,7 +473,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_slice_op(self):
         torch.manual_seed(42)
-        model = Model3(elementwise_ops.StridedSlice())
+        model = Model3(aimet_modules.StridedSlice())
         input1 = torch.rand(4, 3, 28, 28)
         input2 = [[0,4,2]]
 
@@ -485,7 +485,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         torch.manual_seed(42)
 
         original_module = nn.ChannelShuffle(groups=4)
-        custom_module = Model3(elementwise_ops.ChannelShuffle(groups=4))
+        custom_module = Model3(aimet_modules.ChannelShuffle(groups=4))
 
         dummy_input = torch.rand(4, 16, 28, 28)
         custom_module_out = custom_module(dummy_input)
@@ -494,7 +494,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_logical_or_op(self):
         torch.manual_seed(42)
-        model = Model3(elementwise_ops.LogicalOr())
+        model = Model3(aimet_modules.LogicalOr())
         input1 = torch.rand((5, 10, 10, 20)) > 0.5
         input2 = torch.rand((5, 10, 10, 20)) > 0.5
 
@@ -504,7 +504,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_logical_and_op(self):
         torch.manual_seed(42)
-        model = Model3(elementwise_ops.LogicalAnd())
+        model = Model3(aimet_modules.LogicalAnd())
         input1 = torch.rand((5, 10, 10, 20)) > 0.5
         input2 = torch.rand((5, 10, 10, 20)) > 0.5
 
@@ -514,7 +514,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_logical_not_op(self):
         torch.manual_seed(42)
-        model = Model3(elementwise_ops.LogicalNot())
+        model = Model3(aimet_modules.LogicalNot())
         inputs = torch.rand((5, 10, 10, 20)) > 0.5
 
         custom_module_out = model(inputs)
@@ -526,7 +526,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         dtypes = [torch.int8, torch.uint8, torch.int16, torch.int32, torch.float16]
 
         for dtype in dtypes:
-            model = Model3(elementwise_ops.Cast(dtype))
+            model = Model3(aimet_modules.Cast(dtype))
             inputs = torch.rand((5, 10, 10, 20))
 
             custom_module_out = model(inputs)
@@ -535,7 +535,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_split_ops(self):
         torch.manual_seed(42)
-        model = Model3(elementwise_ops.Split())
+        model = Model3(aimet_modules.Split())
         inputs = torch.rand(10, 10, 10)
 
         for split_size_or_sections, dim in [(3, 0), (3, 1), ([1, 9], 0), ([2, 8], 1)]:
@@ -546,7 +546,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_reshape_op(self):
         torch.manual_seed(42)
-        model = Model3(elementwise_ops.Reshape())
+        model = Model3(aimet_modules.Reshape())
         input1 = torch.rand((5, 10, 10, 20))
         input2 = [5, 10, 200]
 
@@ -556,7 +556,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_permute_op(self):
         torch.manual_seed(42)
-        model = Model3(elementwise_ops.Permute())
+        model = Model3(aimet_modules.Permute())
         input1 = torch.rand((5, 10, 10, 20))
         input2 = [0, 1, 3, 2]
 
@@ -566,7 +566,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_custom_gather_op(self):
         torch.manual_seed(42)
-        model = Model3(elementwise_ops.CustomGather())
+        model = Model3(aimet_modules.CustomGather())
         inputs = torch.rand((5, 10, 20))
         indices_list = [torch.tensor([[0, 1], [1, 2]]), torch.tensor([[0, 1], [-1, -2]])]
         axis = 1
@@ -578,7 +578,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_custom_scatternd_op(self):
         torch.manual_seed(42)
-        model = Model3(elementwise_ops.ScatterND())
+        model = Model3(aimet_modules.ScatterND())
         inputs = torch.rand(1, 2, 3)
         indices = torch.tensor([[[[0, 1, 2]], [[0, 1, 0]], [[0, 0, 2]]]])
         updates = torch.rand(1, 3, 1)
@@ -594,7 +594,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
     def test_gather_nd_jit_trace(self):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        gather_nd = elementwise_ops.GatherNd(batch_dim=0)
+        gather_nd = aimet_modules.GatherNd(batch_dim=0)
         data = torch.tensor([[0, 1], [2, 3]], device=device)
         indices = torch.tensor([[0, 0], [1, 1]], device=device)
 

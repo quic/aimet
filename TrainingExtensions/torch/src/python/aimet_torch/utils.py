@@ -58,7 +58,7 @@ from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEM
 from aimet_common.utils import AimetLogger, Handle, log_with_error_and_assert_if_false
 from aimet_common.utils import profile as _profile
 import aimet_common.libpymo as libpymo
-from aimet_torch import elementwise_ops
+import aimet_torch.nn.modules.custom as aimet_modules
 from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridPerChannelQuantizer, StaticGridPerTensorQuantizer
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
@@ -1115,7 +1115,7 @@ def get_inout_tensors_dtypes_for_cast_modules(model: torch.nn.Module, input_tens
     def record_dtypes(module, inputs, outputs):
 
         # pylint: disable=protected-access
-        if isinstance(module, elementwise_ops.Cast):
+        if isinstance(module, aimet_modules.Cast):
             input_dtype = None
 
             if isinstance(inputs, (list, tuple)):
@@ -1298,18 +1298,18 @@ def compute_partial_encoding(quantizer: TensorQuantizer, encoding_dict: Dict) ->
     return encoding_dict
 
 
+def _red(msg: str):
+    return f'\x1b[31;21m{msg}\x1b[0m'
+
+
 def deprecated(msg: str):
     """
     Wrap a function or class such that a deprecation warning is printed out when invoked
     """
-    def colored(msg: str):
-        # Color the string with red
-        return '\x1b[31;21m' + msg + '\x1b[0m'
-
     def decorator(_callable):
         @functools.wraps(_callable)
         def fn_wrapper(*args, **kwargs):
-            warnings.warn(colored(f'{_callable.__qualname__} will be deprecated soon in the later versions. {msg}'),
+            warnings.warn(_red(f'{_callable.__qualname__} will be deprecated soon in the later versions. {msg}'),
                           DeprecationWarning, stacklevel=2)
             return _callable(*args, **kwargs)
         return fn_wrapper

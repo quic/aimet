@@ -59,7 +59,7 @@ from aimet_common.defs import QuantScheme, QuantizationDataType, SupportedKernel
 from aimet_common.quantsim import validate_quantsim_inputs, extract_global_quantizer_args
 from aimet_common.quant_utils import get_conv_accum_bounds
 
-from aimet_torch import elementwise_ops
+from aimet_torch.nn.modules.custom import MatMul
 from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_torch.qc_quantize_op import QcQuantizeStandAloneBase, QcQuantizeWrapper, QcQuantizeOpMode, \
     StaticGridQuantWrapper, LearnedGridQuantWrapper, NativeTorchQuantWrapper, QUANTIZER_TYPE_INPUT, QUANTIZER_TYPE_OUTPUT
@@ -1871,7 +1871,7 @@ class QuantizationSimModel:
             original_module = wrapper._module_to_wrap
 
             # A module that doesn't require exception rules
-            if not isinstance(original_module, (torch.nn.Embedding, torch.nn.GroupNorm, elementwise_ops.MatMul)):
+            if not isinstance(original_module, (torch.nn.Embedding, torch.nn.GroupNorm, MatMul)):
                 continue
 
             if isinstance(original_module, torch.nn.Embedding):
@@ -1890,7 +1890,7 @@ class QuantizationSimModel:
                     for _, param_quantizer in wrapper.param_quantizers.items():
                         param_quantizer.bitwidth = output_quantizer.bitwidth
                         param_quantizer.use_symmetric_encodings = output_quantizer.use_symmetric_encodings
-            elif isinstance(original_module, elementwise_ops.MatMul):
+            elif isinstance(original_module, MatMul):
                 first_input_quantizer, second_input_quantizer = wrapper.input_quantizers
 
                 op = self.connected_graph._module_to_op_dict[original_module]

@@ -44,13 +44,13 @@ import torch
 
 from aimet_common.cost_calculator import CostCalculator as GenericCostCalculator, Cost
 from aimet_torch.layer_database import Layer
-from aimet_torch import elementwise_ops
+from aimet_torch.nn.modules.custom import Multiply
 
 SUPPORTED_LAYER_TYPES = [torch.nn.modules.conv.Conv2d,
                          torch.nn.modules.linear.Linear,
                          torch.nn.modules.activation.Sigmoid,
                          torch.nn.modules.pooling.AvgPool2d,
-                         elementwise_ops.Multiply]
+                         Multiply]
 
 class CostCalculator(GenericCostCalculator):
     """ This is a specialized implementation of CostCalculator for PyTorch"""

@@ -42,7 +42,8 @@ import torch
 
 from aimet_common.utils import AimetLogger
 import aimet_common.layer_database
-from aimet_torch import utils, elementwise_ops
+from aimet_torch import utils
+import aimet_torch.nn.modules.custom as aimet_modules
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Svd)
 
@@ -265,7 +266,7 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
                             pass a tuple.
         """
 
-        module_type_for_attaching_hook = (torch.nn.Conv2d, torch.nn.Linear, torch.nn.Sigmoid, torch.nn.AvgPool2d, elementwise_ops.Multiply)
+        module_type_for_attaching_hook = (torch.nn.Conv2d, torch.nn.Linear, torch.nn.Sigmoid, torch.nn.AvgPool2d, aimet_modules.Multiply)
         utils.run_hook_for_layers_with_given_input(model, dummy_input,
                                                    hook=self._custom_hook_to_collect_layer_attributes,
                                                    module_type_for_attaching_hook=module_type_for_attaching_hook)

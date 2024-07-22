@@ -138,7 +138,7 @@ import torch.fx
 from aimet_common.utils import AimetLogger
 from aimet_torch.utils import in_eval_mode
 from aimet_torch.utils import replace_modules_of_type1_with_type2
-import aimet_torch.elementwise_ops as elementwise_ops
+import aimet_torch.nn.modules.custom as aimet_modules
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ModelPreparer)
 
@@ -180,42 +180,42 @@ functional_with_stateful_api = {
 
 # Function that requires special transformation.
 functional_with_special_handling = {
-    'cat'           : elementwise_ops.Concat,
+    'cat'           : aimet_modules.Concat,
     'conv2d'        : torch.nn.Conv2d
 }
 
 # In this functional --> module map, corresponding custom module is of type torch.nn and uses stateless API.
 functional_with_stateless_api = {
-    '_pad'                      : elementwise_ops.Pad,
-    'pad'                      : elementwise_ops.Pad,
-    'sum'                       : elementwise_ops.Sum,
-    'add'                       : elementwise_ops.Add,
-    'subtract'                  : elementwise_ops.Subtract,
-    'sub'                       : elementwise_ops.Subtract,
-    'mul'                       : elementwise_ops.Multiply,
-    'div'                       : elementwise_ops.Divide,
-    'truediv'                   : elementwise_ops.Divide,
-    'floordiv'                  : elementwise_ops.FloorDivide,
-    'matmul'                    : elementwise_ops.MatMul,
-    'exp'                       : elementwise_ops.Exponential,
-    'interpolate'               : elementwise_ops.Interpolate,
-    'max_pool2d'                : elementwise_ops.MaxPool2d,
-    'max_pool2d_with_indices'   : elementwise_ops.MaxPool2d,
-    'adaptive_avg_pool2d'       : elementwise_ops.AdaptiveAvgPool2d,
-    'avg_pool2d'                : elementwise_ops.AvgPool2d,
-    'norm'                      : elementwise_ops.Norm,
-    'batch_norm'                : elementwise_ops.BatchNorm,
-    'group_norm'                : elementwise_ops.GroupNorm,
-    'mean'                      : elementwise_ops.Mean,
-    'pow'                       : elementwise_ops.Pow,
-    'where'                     : elementwise_ops.Where,
-    'addmm'                     : elementwise_ops.Addmm,
-    'bmm'                       : elementwise_ops.Bmm,
-    'baddbmm'                   : elementwise_ops.Baddbmm,
-    'cumsum'                    : elementwise_ops.CumSum,
-    'masked_fill'               : elementwise_ops.MaskedFill,
-    'square'                    : elementwise_ops.Square,
-    'rsqrt'                     : elementwise_ops.RSqrt,
+    '_pad'                      : aimet_modules.Pad,
+    'pad'                       : aimet_modules.Pad,
+    'sum'                       : aimet_modules.Sum,
+    'add'                       : aimet_modules.Add,
+    'subtract'                  : aimet_modules.Subtract,
+    'sub'                       : aimet_modules.Subtract,
+    'mul'                       : aimet_modules.Multiply,
+    'div'                       : aimet_modules.Divide,
+    'truediv'                   : aimet_modules.Divide,
+    'floordiv'                  : aimet_modules.FloorDivide,
+    'matmul'                    : aimet_modules.MatMul,
+    'exp'                       : aimet_modules.Exponential,
+    'interpolate'               : aimet_modules.Interpolate,
+    'max_pool2d'                : aimet_modules.MaxPool2d,
+    'max_pool2d_with_indices'   : aimet_modules.MaxPool2d,
+    'adaptive_avg_pool2d'       : aimet_modules.AdaptiveAvgPool2d,
+    'avg_pool2d'                : aimet_modules.AvgPool2d,
+    'norm'                      : aimet_modules.Norm,
+    'batch_norm'                : aimet_modules.BatchNorm,
+    'group_norm'                : aimet_modules.GroupNorm,
+    'mean'                      : aimet_modules.Mean,
+    'pow'                       : aimet_modules.Pow,
+    'where'                     : aimet_modules.Where,
+    'addmm'                     : aimet_modules.Addmm,
+    'bmm'                       : aimet_modules.Bmm,
+    'baddbmm'                   : aimet_modules.Baddbmm,
+    'cumsum'                    : aimet_modules.CumSum,
+    'masked_fill'               : aimet_modules.MaskedFill,
+    'square'                    : aimet_modules.Square,
+    'rsqrt'                     : aimet_modules.RSqrt,
 }
 
 
@@ -303,7 +303,7 @@ def check_dynamic_conv2d(traced_model: torch.fx.GraphModule, module_name: str) -
     for name in module_name.split('.'):
         m = getattr(m, name)
 
-    return isinstance(m, elementwise_ops.DynamicConv2d)
+    return isinstance(m, aimet_modules.DynamicConv2d)
 
 
 def conv2d_create_module(node: torch.fx.node) -> torch.nn.Module:
@@ -328,7 +328,7 @@ def conv2d_create_module(node: torch.fx.node) -> torch.nn.Module:
             break
 
     if use_dynamic_conv2d:
-        module = elementwise_ops.DynamicConv2d(**kwargs)
+        module = aimet_modules.DynamicConv2d(**kwargs)
     else:
         for key, param_node in params.items():
             params[key] = get_node_attr(param_node)
@@ -424,10 +424,10 @@ def concat_create_module(node: torch.fx.node) -> torch.nn.Module:
     if num_args == 1 and 'dim' not in node.kwargs:
         # Handle torch.cat being called with default parameter dim
         kwargs = node.kwargs
-        module = elementwise_ops.Concat()
+        module = aimet_modules.Concat()
     else:
         axis = node.args[1] if num_args > 1 else node.kwargs['dim']
-        module = elementwise_ops.Concat(axis)
+        module = aimet_modules.Concat(axis)
         kwargs = {'axis': axis}
 
     for key, value in kwargs.items():
@@ -560,7 +560,7 @@ def _prepare_traced_model(traced_model: torch.fx.GraphModule,
     _verify_traced_model(traced_model)
 
     # Replace SiLU with CustomSiLU
-    replace_modules_of_type1_with_type2(traced_model, torch.nn.SiLU, elementwise_ops.CustomSiLU)
+    replace_modules_of_type1_with_type2(traced_model, torch.nn.SiLU, aimet_modules.CustomSiLU)
 
 
 def _verify_traced_model(traced_model: torch.fx.GraphModule):

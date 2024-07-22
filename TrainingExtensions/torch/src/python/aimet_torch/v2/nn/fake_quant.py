@@ -48,7 +48,7 @@ from torch.nn.modules.adaptive import _ASMoutput
 from torch.nn.utils.rnn import PackedSequence
 from torch.utils._pytree import tree_map
 
-import aimet_torch.elementwise_ops as aimet_ops
+import aimet_torch.nn.modules.custom as aimet_ops
 
 from .base import BaseQuantizationMixin, _BaseQuantizedUnaryOpMixin, _BaseQuantizedBinaryOpMixin, _BaseQuantizedTernaryOpMixin # pylint: disable=import-error
 

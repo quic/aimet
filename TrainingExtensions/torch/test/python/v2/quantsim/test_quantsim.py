@@ -50,7 +50,7 @@ from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.affine import AffineQuantizerBase, GroupedBlockQuantizeDequantize
 from aimet_torch.v2.experimental import propagate_output_encodings
 from aimet_torch.v2.nn import BaseQuantizationMixin
-import aimet_torch.elementwise_ops as aimet_ops
+import aimet_torch.nn.modules.custom as aimet_ops
 from ..models_ import test_models
 
 def encodings_are_close(quantizer_1: AffineQuantizerBase, quantizer_2: AffineQuantizerBase):

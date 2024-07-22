@@ -41,7 +41,7 @@ import tempfile
 import torch
 import torch.nn as nn
 from aimet_common.defs import QuantScheme
-from aimet_torch import elementwise_ops as aimet_ops
+import aimet_torch.nn.modules.custom as aimet_ops
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch import utils as v1_utils
 

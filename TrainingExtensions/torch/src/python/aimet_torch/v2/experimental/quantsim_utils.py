@@ -41,7 +41,7 @@ import torch
 
 from aimet_common.utils import AimetLogger
 from aimet_common.connected_graph.product import Product
-import aimet_torch.elementwise_ops as aimet_ops
+import aimet_torch.nn.modules.custom as aimet_ops
 from aimet_torch.meta.connectedgraph import Op
 from aimet_torch.v2.nn import BaseQuantizationMixin
 from aimet_torch.v2.quantization.affine.quantizer import AffineQuantizerBase

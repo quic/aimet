@@ -46,7 +46,7 @@ from aimet_torch.model_validator import validation_checks
 from models import test_models
 from aimet_torch.meta import connectedgraph_utils
 from aimet_torch.model_preparer import prepare_model
-from aimet_torch import elementwise_ops
+import aimet_torch.nn.modules.custom as aimet_modules
 
 
 class CustomModule(torch.nn.Module):
@@ -188,10 +188,10 @@ class TestModelValidatorPreparer:
         input_shape = (1, 3, 32, 32)
         dummy_input = torch.randn(*input_shape)
         assert torch.equal(prepared_model(dummy_input), model(dummy_input))
-        assert isinstance(prepared_model.module_sub, elementwise_ops.Subtract)
-        assert isinstance(prepared_model.module_truediv, elementwise_ops.Divide)
-        assert isinstance(prepared_model.module_max_pool2d, elementwise_ops.MaxPool2d)
-        assert isinstance(prepared_model.module_adaptive_avg_pool2d, elementwise_ops.AdaptiveAvgPool2d)
+        assert isinstance(prepared_model.module_sub, aimet_modules.Subtract)
+        assert isinstance(prepared_model.module_truediv, aimet_modules.Divide)
+        assert isinstance(prepared_model.module_max_pool2d, aimet_modules.MaxPool2d)
+        assert isinstance(prepared_model.module_adaptive_avg_pool2d, aimet_modules.AdaptiveAvgPool2d)
 
         # ModelValidator check should be True after.
         assert ModelValidator.validate_model(prepared_model, dummy_input)

@@ -44,7 +44,7 @@ import torch.nn as nn
 from aimet_common import cost_calculator as common_cost_calculator
 from aimet_common.defs import CostMetric, LayerCompRatioPair
 from aimet_common.utils import AimetLogger
-from aimet_torch import elementwise_ops
+import aimet_torch.nn.modules.custom as aimet_modules
 from aimet_torch.channel_pruning.channel_pruner import (
     InputChannelPruner,
     ChannelPruningCostCalculator,
@@ -155,7 +155,7 @@ class TestTrainingExtensionsCostCalculator(unittest.TestCase):
         self.assertEqual(32 * 10 * 15, cost4.mac)
         self.assertEqual(32 * 10 * 15, cost4.memory)
 
-        multiply1 = elementwise_ops.Multiply()
+        multiply1 = aimet_modules.Multiply()
         layer5 = Layer(multiply1, "multiply1", (32, 10, 15), [(32, 10, 15), (32, 10, 15)])
         cost5 = pt_cost_calculator.CostCalculator.compute_layer_cost(layer5)
 
