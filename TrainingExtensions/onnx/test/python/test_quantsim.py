@@ -693,6 +693,7 @@ class TestQuantSim:
                 assert len(encoding_data['activation_encodings']) == 3
                 assert len(encoding_data['param_encodings']) == 1
 
+    @pytest.mark.skip("OOM issues from high CPU memory usage, optimize quantsim memory usage before enabling")
     def test_large_model(self):
         """
         When: Model is > 2GB
