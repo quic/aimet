@@ -107,7 +107,7 @@ class TestFloatEncoding:
         assert encoding.maxval.dtype == dtype
         assert new_encoding.maxval.dtype == new_dtype
 
-    @pytest.mark.parametrize("shape", ((10, 1), (10,)))
+    @pytest.mark.parametrize("shape", ((10, 1), (10,), (1,)))
     def test_perchannel_encoding(self, shape):
         """
         When: Create an encoding with maxval whose shape has more than one element
@@ -122,16 +122,15 @@ class TestFloatEncoding:
         assert encoding.granularity == "perchannel"
         assert encoding.mapping == "float"
 
-    @pytest.mark.parametrize("shape", (tuple(), (1,)))
-    def test_pertensor_encoding(self, shape):
+    def test_pertensor_encoding(self):
         """
-        When: Create an encoding with maxval whose shape in {[], [1]}
+        When: Create an encoding with 0-D maxval
         Then: encoding.maxval have shape == shape
               and granularity == "pertensor"
         """
         mantissa_bits = 5
         exponent_bits = 10
-        maxval = torch.randn(shape)
+        maxval = torch.randn([])
         encoding = FloatEncoding(mantissa_bits, exponent_bits, maxval)
         assert encoding.maxval.shape == tuple()
         assert encoding.granularity == "pertensor"

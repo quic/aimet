@@ -125,7 +125,7 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
         tensor([[ 1.8984, -0.0947], [-1.0859, -0.1729]])
 
         >>> from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
-        >>> encoding_analyzer = MinMaxEncodingAnalyzer(shape=(1,))
+        >>> encoding_analyzer = MinMaxEncodingAnalyzer(shape=[])
         >>> qdq = Q.float.FloatQuantizeDequantize(dtype=torch.float16, encoding_analyzer=encoding_analyzer)
         >>> qdq.is_float16()
         True

@@ -54,10 +54,6 @@ class AffineEncoding(EncodingBase):
     """
     def __init__(self, scale: torch.Tensor, offset: torch.Tensor, bitwidth: int, signed=False, symmetry=False,
                  block_size: Optional[List] = None):
-        if scale.numel() == 1:
-            scale = scale.view([])
-        if offset.numel() == 1:
-            offset = offset.view([])
         self._scale = scale
         self._offset = offset
         self._symmetry = symmetry
@@ -77,11 +73,12 @@ class AffineEncoding(EncodingBase):
         """
         Returns the granularity of the quantizer encoding
         """
-        if self.scale.numel() == 1:
+        if self.scale.dim() == 0:
             return "pertensor"
         if self.block_size is not None:
             return "blockwise"
-        if any(dim > 1 for dim in self.scale.shape):
+        non_singleton_dims = tuple(dim for dim in self.scale.shape if dim > 1)
+        if len(non_singleton_dims) <= 1:
             return "perchannel"
         return "unknown"
 

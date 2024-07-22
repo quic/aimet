@@ -905,8 +905,8 @@ def test_is_initialized_with_deepspeed_zero3(init_process_group, deepspeed_zero3
 @torch.no_grad()
 @pytest.mark.parametrize('symmetric', [True, False])
 def test_quantize_dequantize_then_quantize_and_dequantize_equality(x, symmetric):
-    qdq = QuantizeDequantize((1,), 8, symmetric)
-    q = Quantize((1,), 8, symmetric)
+    qdq = QuantizeDequantize((), 8, symmetric)
+    q = Quantize((), 8, symmetric)
 
     with qdq.compute_encodings(), q.compute_encodings():
         _ = qdq(x)
@@ -986,7 +986,7 @@ def test_bq_compute_encodings_and_forward():
                             bitwidth=4,
                             symmetric=True,
                             block_size=(2, 4, 3))
-    assert bq.encoding_analyzer.observer.shape == [2, 1, 2, 1, 4, 1]
+    assert bq.encoding_analyzer.observer.shape == (2, 1, 2, 1, 4, 1)
 
     bq.eval()
     param_tensor = torch.randn(4, 8, 12)
@@ -1199,7 +1199,7 @@ def test_import_signed_flag():
     When: Load unsigned-asymmetric encodings into signed-symmetric quantizer
     Then: signed-symmetric quantizer becomes unsigned-asymmetric
     """
-    asymmetric_quantizer = QuantizeDequantize((1,), 8, symmetric=False)
+    asymmetric_quantizer = QuantizeDequantize((), 8, symmetric=False)
     with asymmetric_quantizer.compute_encodings():
         asymmetric_quantizer(torch.randn(10))
     symmetric_quantizer.set_legacy_encodings(asymmetric_quantizer.get_legacy_encodings())

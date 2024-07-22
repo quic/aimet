@@ -77,7 +77,7 @@ class AffineQuantizerBase(QuantizerBase):
         super().__init__()
         if isinstance(shape, int):
             shape = (shape,)
-        self.shape = shape
+        self.shape = torch.Size(shape)
         self.block_size = block_size
         self.bitwidth = bitwidth
         self._symmetric = symmetric

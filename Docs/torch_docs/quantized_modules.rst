@@ -65,15 +65,15 @@ Example: Create a linear layer which performs only per-channel weight quantizati
 
 Example: Create an elementwise multiply layer which quantizes only the output and the second input
     >>> qmul = aimet.nn.QuantizedMultiply()
-    >>> qmul.output_quantizers[0] = Q.affine.QuantizeDequantize(shape=(1, ), bitwidth=8, symmetric=False)
-    >>> qmul.input_quantizers[1] = Q.affine.QuantizeDequantize(shape=(1, ), bitwidth=8, symmetric=False)
+    >>> qmul.output_quantizers[0] = Q.affine.QuantizeDequantize(shape=(), bitwidth=8, symmetric=False)
+    >>> qmul.input_quantizers[1] = Q.affine.QuantizeDequantize(shape=(), bitwidth=8, symmetric=False)
 
 In some cases, it may make sense for multiple tensors to share the same quantizer. In this case, we can assign the same
 quantizer to multiple indices.
 
 Example: Create an elementwise add layer which shares the same quantizer between its inputs
     >>> qadd = aimet.nn.QuantizedAdd()
-    >>> quantizer = Q.affine.QuantizeDequantize(shape=(1, ), bitwidth=8, symmetric=False)
+    >>> quantizer = Q.affine.QuantizeDequantize(shape=(), bitwidth=8, symmetric=False)
     >>> qadd.input_quantizers[0] = quantizer
     >>> qadd.input_quantizers[1] = quantizer
 
