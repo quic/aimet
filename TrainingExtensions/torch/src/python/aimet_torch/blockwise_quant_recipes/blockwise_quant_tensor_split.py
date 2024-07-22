@@ -37,7 +37,8 @@
 """ Utilities for implementing blockwise quantization using tensor splitting approach """
 
 import torch
-from aimet_torch import elementwise_ops, utils
+from aimet_torch import utils
+import aimet_torch.nn.modules.custom as aimet_modules
 from aimet_torch.quantsim import QuantizationSimModel
 
 
@@ -54,7 +55,7 @@ class BlockwiseLinear(torch.nn.Module):
         self.linears = torch.nn.ModuleList()
         self.elementwise_adds = torch.nn.ModuleList()
         split_indices = list(range(block_size, linear_module.weight.shape[1], block_size))
-        self.split = elementwise_ops.Split()
+        self.split = aimet_modules.Split()
         split_weights = torch.tensor_split(linear_module.weight, split_indices, 1)
         for idx, split_weight in enumerate(split_weights):
             linear = torch.nn.Linear(split_weight.shape[1],
@@ -64,7 +65,7 @@ class BlockwiseLinear(torch.nn.Module):
             if linear.bias is not None:
                 linear.bias = linear_module.bias
             self.linears.append(linear)
-            self.elementwise_adds.append(elementwise_ops.Add())
+            self.elementwise_adds.append(aimet_modules.Add())
         self.elementwise_adds = self.elementwise_adds[:-1]
         if not self.elementwise_adds:
             self.elementwise_adds = None

@@ -69,7 +69,7 @@ from aimet_torch.v2.nn import (
 from aimet_torch.v2.quantization.affine import AffineEncoding
 from aimet_torch.v2.quantization.tensor import QuantizedTensor, DequantizedTensor
 from aimet_torch.v2.utils import enable_recompute
-import aimet_torch.elementwise_ops as aimet_ops
+import aimet_torch.nn.modules.custom as aimet_ops
 
 
 def affine_quantize(tensor: torch.Tensor,

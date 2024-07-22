@@ -57,7 +57,7 @@ from aimet_common import libquant_info
 from torch.nn.modules.instancenorm import _InstanceNorm
 
 from .mobilenet import MockMobileNetV1, MockMobileNetV11
-from aimet_torch import elementwise_ops
+import aimet_torch.nn.modules.custom as aimet_modules
 
 class SingleResidual(nn.Module):
     """ A model with a single residual connection.
@@ -904,8 +904,8 @@ class ModelWithTransposeConv(nn.Module):
 class ConstantElementwiseInputModel(torch.nn.Module):
     def __init__(self):
         super(ConstantElementwiseInputModel, self).__init__()
-        self.add = elementwise_ops.Add()
-        self.mul = elementwise_ops.Multiply()
+        self.add = aimet_modules.Add()
+        self.mul = aimet_modules.Multiply()
 
     def forward(self, inp):
         x = self.add(inp, torch.tensor(2.0))
@@ -1696,12 +1696,12 @@ class MultiInputWithConstant(torch.nn.Module):
 
     def __init__(self, num_classes=3):
         super(MultiInputWithConstant, self).__init__()
-        self.add0 = elementwise_ops.Add()
+        self.add0 = aimet_modules.Add()
         self.conv1 = torch.nn.Conv2d(3, 16, kernel_size=2, stride=2, padding=3, bias=False)
         self.conv2 = torch.nn.Conv2d(16, 8, kernel_size=3, stride=2, padding=2)
         self.conv3 = torch.nn.Conv2d(3, 8, kernel_size=3, stride=2, padding=2)
-        self.add1 = elementwise_ops.Add()
-        self.add2 = elementwise_ops.Add()
+        self.add1 = aimet_modules.Add()
+        self.add2 = aimet_modules.Add()
 
     def forward(self, *inputs):
         x1 = self.add0(inputs[0], torch.tensor(0.02))

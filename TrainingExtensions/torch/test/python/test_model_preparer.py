@@ -55,7 +55,7 @@ from math import sqrt
 from torch.utils.data import DataLoader
 
 from aimet_common.defs import QuantScheme
-from aimet_torch import elementwise_ops
+import aimet_torch.nn.modules.custom as aimet_modules
 from models.test_models import (
     ModelWithFunctionalReLU,
     SingleResidual,
@@ -163,7 +163,7 @@ class TestFX:
         model_transformed = prepare_model(model)
         print(model_transformed)
 
-        assert isinstance(model_transformed.module_add, elementwise_ops.Add)
+        assert isinstance(model_transformed.module_add, aimet_modules.Add)
         assert torch.allclose(model(input_tensor), model_transformed(input_tensor))
 
     def test_fx_with_duplicate_relu(self):
@@ -332,7 +332,7 @@ class TestFX:
         model_transformed = prepare_model(model)
         print(model_transformed)
 
-        assert isinstance(model_transformed.module_add, elementwise_ops.Add)
+        assert isinstance(model_transformed.module_add, aimet_modules.Add)
         assert torch.allclose(model(input_tensor), model_transformed(input_tensor))
 
         quant_sim_for_modified_model = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
@@ -649,7 +649,7 @@ class TestFX:
             # 8 new ReLUs are added.
             assert node_for_relu == 8 + 9
 
-            # 8 new elementwise_ops.Add are added.
+            # 8 new aimet_modules.Add are added.
             assert node_for_add == 8
 
     def test_fx_with_relu_relu6(self):
@@ -877,7 +877,7 @@ class TestFX:
         assert torch.allclose(model_transformed(input_tensor),
                               model(input_tensor))
 
-        assert isinstance(model_transformed.module_conv2d, elementwise_ops.DynamicConv2d)
+        assert isinstance(model_transformed.module_conv2d, aimet_modules.DynamicConv2d)
 
         sim = QuantizationSimModel(model_transformed, input_tensor)
 
@@ -900,7 +900,7 @@ class TestFX:
         assert torch.allclose(model_transformed(*input_tensor),
                               model(*input_tensor))
 
-        assert isinstance(model_transformed.module_cat, elementwise_ops.Concat)
+        assert isinstance(model_transformed.module_cat, aimet_modules.Concat)
 
         quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
         assert quant_sim.model.module_cat.output_quantizers[0].enabled == True
@@ -930,7 +930,7 @@ class TestFX:
         assert torch.allclose(model_transformed(*input_tensor),
                               model(*input_tensor))
 
-        assert isinstance(model_transformed.module_subtract, elementwise_ops.Subtract)
+        assert isinstance(model_transformed.module_subtract, aimet_modules.Subtract)
 
     def test_fx_with_elementwise_mul(self):
         """
@@ -957,7 +957,7 @@ class TestFX:
         assert torch.allclose(model_transformed(*input_tensor),
                               model(*input_tensor))
 
-        assert isinstance(model_transformed.module_mul, elementwise_ops.Multiply)
+        assert isinstance(model_transformed.module_mul, aimet_modules.Multiply)
 
         quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
         assert quant_sim.model.module_mul.output_quantizers[0].enabled == True
@@ -987,7 +987,7 @@ class TestFX:
         assert torch.allclose(model_transformed(*input_tensor),
                               model(*input_tensor))
 
-        assert isinstance(model_transformed.module_div, elementwise_ops.Divide)
+        assert isinstance(model_transformed.module_div, aimet_modules.Divide)
 
         quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
         assert quant_sim.model.module_div.output_quantizers[0].enabled == True
@@ -1017,7 +1017,7 @@ class TestFX:
         assert torch.allclose(model_transformed(*input_tensor),
                               model(*input_tensor))
 
-        assert isinstance(model_transformed.module_matmul, elementwise_ops.MatMul)
+        assert isinstance(model_transformed.module_matmul, aimet_modules.MatMul)
 
         quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
         assert quant_sim.model.module_matmul.output_quantizers[0].enabled == True
@@ -1047,7 +1047,7 @@ class TestFX:
         assert torch.allclose(model_transformed(*input_tensor),
                               model(*input_tensor))
 
-        assert isinstance(model_transformed.module_cat, elementwise_ops.Concat)
+        assert isinstance(model_transformed.module_cat, aimet_modules.Concat)
 
         quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
         assert quant_sim.model.module_cat.output_quantizers[0].enabled == True
@@ -1077,7 +1077,7 @@ class TestFX:
         assert torch.allclose(model_transformed(*input_tensor),
                               model(*input_tensor))
 
-        assert isinstance(model_transformed.module_cat, elementwise_ops.Concat)
+        assert isinstance(model_transformed.module_cat, aimet_modules.Concat)
 
         quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
         assert quant_sim.model.module_cat.output_quantizers[0].enabled == True
@@ -1095,7 +1095,7 @@ class TestFX:
         assert torch.allclose(model_transformed(*input_tensor),
                               model(*input_tensor))
 
-        assert isinstance(model_transformed.module_mean, elementwise_ops.Mean)
+        assert isinstance(model_transformed.module_mean, aimet_modules.Mean)
 
         quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
         assert quant_sim.model.module_mean.output_quantizers[0].enabled == True
@@ -1239,7 +1239,7 @@ class TestFX:
         assert torch.allclose(model_transformed(*input_tensor),
                               model(*input_tensor))
 
-        assert isinstance(model_transformed.module_add, elementwise_ops.Add)
+        assert isinstance(model_transformed.module_add, aimet_modules.Add)
 
     def test_fx_with_interpolate(self):
         """
@@ -1262,7 +1262,7 @@ class TestFX:
 
         assert torch.allclose(model_transformed(input_tensor), model(input_tensor))
 
-        assert isinstance(model_transformed.module_interpolate, elementwise_ops.Interpolate)
+        assert isinstance(model_transformed.module_interpolate, aimet_modules.Interpolate)
 
     def test_fx_with_duplicate_conv(self):
         """
@@ -1451,11 +1451,11 @@ class TestFX:
 
         # Verify bit exact outputs.
         assert torch.equal(model_transformed(dummy_input), model(dummy_input))
-        assert isinstance(model_transformed.module_interpolate, elementwise_ops.Interpolate)
-        assert isinstance(model_transformed.module_interpolate_1, elementwise_ops.Interpolate)
-        assert isinstance(model_transformed.module_interpolate_2, elementwise_ops.Interpolate)
-        assert isinstance(model_transformed.module_interpolate_3, elementwise_ops.Interpolate)
-        assert isinstance(model_transformed.module_interpolate_4, elementwise_ops.Interpolate)
+        assert isinstance(model_transformed.module_interpolate, aimet_modules.Interpolate)
+        assert isinstance(model_transformed.module_interpolate_1, aimet_modules.Interpolate)
+        assert isinstance(model_transformed.module_interpolate_2, aimet_modules.Interpolate)
+        assert isinstance(model_transformed.module_interpolate_3, aimet_modules.Interpolate)
+        assert isinstance(model_transformed.module_interpolate_4, aimet_modules.Interpolate)
 
         # Verify with Quantization workflow.
         sim = QuantizationSimModel(model_transformed, dummy_input=dummy_input)
@@ -1535,7 +1535,7 @@ class TestFX:
         prepared = prepare_model(model)
         assert hasattr(prepared, "module_softplus") and isinstance(getattr(prepared, "module_softplus"), torch.nn.Softplus)
         assert hasattr(prepared, "module_sigmoid") and isinstance(getattr(prepared, "module_sigmoid"), torch.nn.Sigmoid)
-        assert hasattr(prepared, "module_mul") and isinstance(getattr(prepared, "module_mul"), elementwise_ops.Multiply)
+        assert hasattr(prepared, "module_mul") and isinstance(getattr(prepared, "module_mul"), aimet_modules.Multiply)
 
         # Creat prepared model with exclusion list.
         model = CustomModel().eval()
@@ -1571,10 +1571,10 @@ class TestFX:
         assert torch.equal(model_transformed(dummy_input)[1], model(dummy_input)[1])
 
         # Verify that the modules are added correctly
-        assert isinstance(model_transformed.module_max_pool2d, elementwise_ops.MaxPool2d)
-        assert isinstance(model_transformed.module_max_pool2d_1, elementwise_ops.MaxPool2d)
-        assert isinstance(model_transformed.module_max_pool2d_with_indices, elementwise_ops.MaxPool2d)
-        assert isinstance(model_transformed.module_max_pool2d_with_indices_1, elementwise_ops.MaxPool2d)
+        assert isinstance(model_transformed.module_max_pool2d, aimet_modules.MaxPool2d)
+        assert isinstance(model_transformed.module_max_pool2d_1, aimet_modules.MaxPool2d)
+        assert isinstance(model_transformed.module_max_pool2d_with_indices, aimet_modules.MaxPool2d)
+        assert isinstance(model_transformed.module_max_pool2d_with_indices_1, aimet_modules.MaxPool2d)
 
         # Verify Quantization workflow.
         sim = QuantizationSimModel(model_transformed, dummy_input=dummy_input)
@@ -1618,8 +1618,8 @@ class TestFX:
         assert torch.equal(model_transformed(dummy_input), model(dummy_input))
 
         # Verify that the modules are added correctly
-        assert isinstance(model_transformed.module_batch_norm, elementwise_ops.BatchNorm)
-        assert isinstance(model_transformed.module_batch_norm_1, elementwise_ops.BatchNorm)
+        assert isinstance(model_transformed.module_batch_norm, aimet_modules.BatchNorm)
+        assert isinstance(model_transformed.module_batch_norm_1, aimet_modules.BatchNorm)
 
         # Verify Quantization workflow.
         sim = QuantizationSimModel(model_transformed, dummy_input=dummy_input)
@@ -1656,9 +1656,9 @@ class TestFX:
         prepared_model = prepare_model(model)
 
         # Replace SiLU by CustomSiLU module
-        assert isinstance(prepared_model.silu, elementwise_ops.CustomSiLU)
-        assert isinstance(prepared_model.module_silu_1, elementwise_ops.CustomSiLU)
-        assert isinstance(prepared_model.module_silu_2, elementwise_ops.CustomSiLU)
+        assert isinstance(prepared_model.silu, aimet_modules.CustomSiLU)
+        assert isinstance(prepared_model.module_silu_1, aimet_modules.CustomSiLU)
+        assert isinstance(prepared_model.module_silu_2, aimet_modules.CustomSiLU)
 
         # Verify the outputs (won't be bit-exact).
         assert torch.allclose(model(dummy_input), prepared_model(dummy_input))
@@ -1705,8 +1705,8 @@ class TestFX:
 
         # Verify bit-exact outputs.
         assert torch.equal(model(*dummy_input), prepared_model(*dummy_input))
-        assert isinstance(prepared_model.module_baddbmm, elementwise_ops.Baddbmm)
-        assert isinstance(prepared_model.module_baddbmm_1, elementwise_ops.Baddbmm)
+        assert isinstance(prepared_model.module_baddbmm, aimet_modules.Baddbmm)
+        assert isinstance(prepared_model.module_baddbmm_1, aimet_modules.Baddbmm)
 
         # Verify with Quantization workflow.
         sim = QuantizationSimModel(prepared_model, dummy_input)
@@ -1739,9 +1739,9 @@ class TestFX:
 
         # Verify bit-exact outputs.
         assert torch.equal(model(*dummy_input), prepared_model(*dummy_input))
-        assert isinstance(prepared_model.module_addmm, elementwise_ops.Addmm)
-        assert isinstance(prepared_model.module_addmm_1, elementwise_ops.Addmm)
-        assert isinstance(prepared_model.module_addmm_2, elementwise_ops.Addmm)
+        assert isinstance(prepared_model.module_addmm, aimet_modules.Addmm)
+        assert isinstance(prepared_model.module_addmm_1, aimet_modules.Addmm)
+        assert isinstance(prepared_model.module_addmm_2, aimet_modules.Addmm)
 
         # Verify with Quantization workflow.
         sim = QuantizationSimModel(prepared_model, dummy_input)
@@ -1774,8 +1774,8 @@ class TestFX:
         #
         # Verify bit-exact outputs.
         assert torch.equal(model(*dummy_input), prepared_model(*dummy_input))
-        assert isinstance(prepared_model.module_bmm, elementwise_ops.Bmm)
-        assert isinstance(prepared_model.module_bmm_1, elementwise_ops.Bmm)
+        assert isinstance(prepared_model.module_bmm, aimet_modules.Bmm)
+        assert isinstance(prepared_model.module_bmm_1, aimet_modules.Bmm)
 
         # Verify with Quantization workflow.
         sim = QuantizationSimModel(prepared_model, dummy_input)
@@ -1851,7 +1851,7 @@ class TestFX:
 
         # Verify bit-exact outputs.
         assert torch.equal(model(dummy_input), prepared_model(dummy_input))
-        assert isinstance(prepared_model.module_cumsum, elementwise_ops.CumSum)
+        assert isinstance(prepared_model.module_cumsum, aimet_modules.CumSum)
 
         # Verify with Quantization workflow.
         sim = QuantizationSimModel(prepared_model, dummy_input)

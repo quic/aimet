@@ -47,7 +47,7 @@ import time
 import torch
 import torch.nn as nn
 from aimet_torch.quantsim import QuantizationSimModel, QuantScheme
-from aimet_torch import elementwise_ops
+import aimet_torch.nn.modules.custom as aimet_modules
 from aimet_common.utils import AimetLogger
 from models import mnist_torch_model
 
@@ -67,7 +67,7 @@ class ModelWithTwoInputsOneToAdd(nn.Module):
         self.maxpool1_b = nn.MaxPool2d(2)
         self.relu1_b = nn.ReLU()
 
-        self.add = elementwise_ops.Add()
+        self.add = aimet_modules.Add()
 
         self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
         self.maxpool2 = nn.MaxPool2d(2)

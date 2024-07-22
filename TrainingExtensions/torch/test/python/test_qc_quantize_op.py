@@ -51,7 +51,7 @@ from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, LearnedGridQuantW
 from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, QuantizeDequantizeFunc
 from aimet_torch import utils
-from aimet_torch import elementwise_ops
+import aimet_torch.nn.modules.custom as aimet_modules
 
 
 class TestQcQuantizeOpStaticGrid:
@@ -1067,11 +1067,11 @@ class TestQcQuantizeOpLearnedGrid:
             assert torch.all(linear_wrapper.output0_encoding_max.grad != val)
 
     @pytest.mark.parametrize("wrapper",
-                             [StaticGridQuantWrapper(elementwise_ops.Addmm(),
+                             [StaticGridQuantWrapper(aimet_modules.Addmm(),
                                                      8, 8, 'nearest',
                                                      QuantScheme.post_training_tf_enhanced,
                                                      num_inputs=3, num_outputs=1),
-                              LearnedGridQuantWrapper(elementwise_ops.Addmm(),
+                              LearnedGridQuantWrapper(aimet_modules.Addmm(),
                                                       8, 8, 'nearest',
                                                       QuantScheme.training_range_learning_with_tf_init,
                                                       torch.device('cpu'),

@@ -52,7 +52,7 @@ from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.meta.operation import Op
 from aimet_torch.meta import connectedgraph_utils
 from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
-from aimet_torch import elementwise_ops
+import aimet_torch.nn.modules.custom as aimet_modules
 
 
 class TestConnectedGraph(unittest.TestCase):
@@ -639,39 +639,39 @@ class TestConnectedGraphUtils(unittest.TestCase):
 
     def test_find_nodes_in_forward_pass_for_elementwise_ops(self):
         """ Check _find_nodes_in_forward_pass() method for elementwise_ops """
-        # 1) elementwise_ops.Add()
+        # 1) aimet_modules.Add()
         dummy_input = (torch.randn(1, 3, 4, 4), torch.randn(1, 3, 4, 4))
-        trace = torch.jit.trace(elementwise_ops.Add(), dummy_input)
+        trace = torch.jit.trace(aimet_modules.Add(), dummy_input)
         nodes =  ConnectedGraph._find_aten_nodes_in_forward_pass(trace)
         assert len(nodes) == 1
 
-        # 2) elementwise_ops.Subtract()
+        # 2) aimet_modules.Subtract()
         dummy_input = (torch.randn(1, 3, 4, 4), torch.randn(1, 3, 4, 4))
-        trace = torch.jit.trace(elementwise_ops.Subtract(), dummy_input)
+        trace = torch.jit.trace(aimet_modules.Subtract(), dummy_input)
         nodes = ConnectedGraph._find_aten_nodes_in_forward_pass(trace)
         assert len(nodes) == 1
 
-        # 3) elementwise_ops.Multiply()
+        # 3) aimet_modules.Multiply()
         dummy_input = (torch.randn(1, 3, 4, 4), torch.randn(1, 3, 4, 4))
-        trace = torch.jit.trace(elementwise_ops.Multiply(), dummy_input)
+        trace = torch.jit.trace(aimet_modules.Multiply(), dummy_input)
         nodes = ConnectedGraph._find_aten_nodes_in_forward_pass(trace)
         assert len(nodes) == 1
 
-        # 4) elementwise_ops.Divide()
+        # 4) aimet_modules.Divide()
         dummy_input = (torch.randn(1, 3, 4, 4), torch.randn(1, 3, 4, 4))
-        trace = torch.jit.trace(elementwise_ops.Divide(), dummy_input)
+        trace = torch.jit.trace(aimet_modules.Divide(), dummy_input)
         nodes = ConnectedGraph._find_aten_nodes_in_forward_pass(trace)
         assert len(nodes) == 1
 
-        # 5) elementwise_ops.MatMul()
+        # 5) aimet_modules.MatMul()
         dummy_input = (torch.randn(1, 3, 4, 4), torch.randn(1, 3, 4, 4))
-        trace = torch.jit.trace(elementwise_ops.MatMul(), dummy_input)
+        trace = torch.jit.trace(aimet_modules.MatMul(), dummy_input)
         nodes = ConnectedGraph._find_aten_nodes_in_forward_pass(trace)
         assert len(nodes) == 1
 
-        # 6) elementwise_ops.Concat()
+        # 6) aimet_modules.Concat()
         dummy_input = (torch.randn(1, 3, 4, 4), torch.randn(1, 3, 4, 4))
-        trace = torch.jit.trace(elementwise_ops.Concat(), dummy_input)
+        trace = torch.jit.trace(aimet_modules.Concat(), dummy_input)
         nodes = ConnectedGraph._find_aten_nodes_in_forward_pass(trace)
         assert len(nodes) == 1
 
@@ -789,8 +789,8 @@ class TestConnectedGraphUtils(unittest.TestCase):
         class ConstantElementwiseInputModel(torch.nn.Module):
             def __init__(self):
                 super(ConstantElementwiseInputModel, self).__init__()
-                self.add = elementwise_ops.Add()
-                self.mul = elementwise_ops.Multiply()
+                self.add = aimet_modules.Add()
+                self.mul = aimet_modules.Multiply()
 
             def forward(self, inp):
                 x = self.add(inp, torch.tensor(2.0))
@@ -811,8 +811,8 @@ class TestConnectedGraphUtils(unittest.TestCase):
                 super(ConstantSingleInputModel, self).__init__()
                 self.relu = torch.nn.ReLU()
                 self.relu2 = torch.nn.ReLU()
-                self.add = elementwise_ops.Add()
-                self.add2 = elementwise_ops.Add()
+                self.add = aimet_modules.Add()
+                self.add2 = aimet_modules.Add()
                 self.register_buffer('constant_1', torch.tensor([3.0, 4.0]))
 
             def forward(self, inp):

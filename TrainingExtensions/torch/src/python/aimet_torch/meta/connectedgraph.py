@@ -53,7 +53,7 @@ from aimet_common.connected_graph.product import Product
 from aimet_common.connected_graph.operation import determine_preceding_op_input_product_index_in_multi_input_op
 from aimet_common.model_module import PytorchModelModule
 from aimet_common.utils import AimetLogger
-from aimet_torch import elementwise_ops
+import aimet_torch.nn.modules.custom as aimet_modules
 from aimet_torch.meta.operation import Op
 from aimet_torch.utils import is_leaf_module, run_hook_for_layers_with_given_input, in_eval_mode, \
     is_torch_nn_leaf_module, is_custom_leaf_module, get_torch_tensortype_shape
@@ -82,14 +82,14 @@ op_inputs_dict = {
 
 # When traced, the leaf level module for these ops may have ordering of inputs flipped. We trace into these modules in
 # order to determine the true input ordering.
-MULTI_INPUT_OPS_TO_PARSE = [elementwise_ops.Add, elementwise_ops.Multiply, elementwise_ops.Subtract,
-                            elementwise_ops.Divide, elementwise_ops.Pow, elementwise_ops.IndexSelect]
+MULTI_INPUT_OPS_TO_PARSE = [aimet_modules.Add, aimet_modules.Multiply, aimet_modules.Subtract,
+                            aimet_modules.Divide, aimet_modules.Pow, aimet_modules.IndexSelect]
 
 # We want to consider following operations as leaf nodes while creating op for connected graph.
-SKIP_LIST_FOR_SUBGRAPH_TRACE = [elementwise_ops.StridedSlice, elementwise_ops.GatherNd, elementwise_ops.ScatterND,
-                                elementwise_ops.CustomGather, elementwise_ops.DepthToSpaceDCRMode,
-                                elementwise_ops.RoiAlign, elementwise_ops.ChannelShuffle, elementwise_ops.NonMaxSuppression,
-                                elementwise_ops.DepthToSpaceCRDMode, ]
+SKIP_LIST_FOR_SUBGRAPH_TRACE = [aimet_modules.StridedSlice, aimet_modules.GatherNd, aimet_modules.ScatterND,
+                                aimet_modules.CustomGather, aimet_modules.DepthToSpaceDCRMode,
+                                aimet_modules.RoiAlign, aimet_modules.ChannelShuffle, aimet_modules.NonMaxSuppression,
+                                aimet_modules.DepthToSpaceCRDMode, ]
 
 
 # pylint: disable=too-many-lines
@@ -507,7 +507,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         # Recursive parsing is not needed 1) if the module is leaf module and
         # module is from torch.nn (Conv2d, Linear etc.) 2) if the module is leaf module and
-        # custom module whose forward method has only one functional operation (elementwise_ops.Add()).
+        # custom module whose forward method has only one functional operation (aimet_modules.Add()).
         # Recursive parsing is needed 1) if the module is not leaf module.
         # 2) If the module is leaf module but has multiple functional operations in
         # forward method.
@@ -547,7 +547,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         # pylint: disable=unnecessary-comprehension
         outputs = [output for output in node.outputs()]
 
-        # We don't want to further trace some custom implementation from elementwise_ops
+        # We don't want to further trace some custom implementation from aimet_modules
         if input_name in node_name_to_subgraph_model and \
                 not isinstance(node_name_to_subgraph_model[input_name][0], tuple(SKIP_LIST_FOR_SUBGRAPH_TRACE)):
             elementwise_info = None
@@ -1249,7 +1249,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         Utility to decide whether recursive parsing is needed for given module and it's jit trace.
         Recursive parsing is not needed
         1) if the module is leaf module and from torch.nn class (nn.Conv2d, nn.ReLU, nn.rNN etc.)
-        2) if the module is leaf module and has only one aten node inside forward method (elementwise_ops.Add etc.)
+        2) if the module is leaf module and has only one aten node inside forward method (aimet_modules.Add etc.)
 
         :param module: PyTorch module.
         :param module_to_jit_trace: Dictionary mapping torch modules to their traces
