@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2018-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -40,15 +40,13 @@
 import copy
 
 import aimet_common.libpymo as pymo
-
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import CostMetric
 from aimet_common import cost_calculator
 import aimet_common.svd_pruner
-from aimet_common.pruner import Pruner
 
 from aimet_torch import pymo_utils
-from aimet_torch.svd.svd_splitter import SpatialSvdModuleSplitter, WeightSvdModuleSplitter
+from aimet_torch.svd.svd_splitter import SpatialSvdModuleSplitter, WeightSvdModuleSplitter, PyWeightSvdModuleSplitter
 from aimet_torch.layer_database import LayerDatabase, Layer
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Svd)
@@ -58,7 +56,7 @@ class SpatialSvdPruner(aimet_common.svd_pruner.SpatialSvdPruner):
     """
     Pruner for Spatial-SVD method
     """
-
+    # pylint: disable=no-self-use
     def _perform_svd_and_split_layer(self, layer: Layer, rank: int, comp_layer_db: LayerDatabase):
         """
         Performs spatial svd and splits given layer into two layers
@@ -84,34 +82,23 @@ class SpatialSvdPruner(aimet_common.svd_pruner.SpatialSvdPruner):
         comp_layer_db.replace_layer_with_sequential_of_two_layers(layer, layer_a, layer_b)
 
 
-class WeightSvdPruner(Pruner):
+class WeightSvdPruner(aimet_common.svd_pruner.WeightSvdPruner):
     """
     Pruner for Weight-SVD method
     """
-
-    def _prune_layer(self, orig_layer_db: LayerDatabase, comp_layer_db: LayerDatabase, layer: Layer, comp_ratio: float,
-                     cost_metric: CostMetric):
+    # pylint: disable=no-self-use
+    def _perform_svd_and_split_layer(self, layer: Layer, rank: int, cost_metric: CostMetric,
+                                     comp_layer_db: LayerDatabase):
         """
-        Replaces a given layer within the comp_layer_db with a pruned version of the layer
-        In this case, the replaced layer will be a sequential of two spatial-svd-decomposed layers
-
-        :param cost_metric:
-        :param orig_layer_db: original Layer database
-        :param comp_layer_db: Layer database, will be modified
-        :param layer: Layer to prune
-        :param comp_ratio: Compression-ratio
-        :return: updated compression ratio
+        Performs spatial svd and splits given layer into two layers
+        :param layer: Layer to split
+        :param rank: Rank to use for weight svd splitting
+        :param comp_layer_db: Compressed layer db to update with the split layers
+        :return: None
         """
-
-        # Given a compression ratio, find the appropriate rounded rank
-        rank = cost_calculator.WeightSvdCostCalculator.calculate_rank_given_comp_ratio(layer, comp_ratio, cost_metric)
-
-        logger.info("Weight SVD splitting layer: %s using rank: %s", layer.name, rank)
-
         # For the rounded rank compute the new compression ratio
         comp_ratio = cost_calculator.WeightSvdCostCalculator.calculate_comp_ratio_given_rank(layer, rank,
                                                                                              cost_metric)
-
         # Create a new instance of libpymo and register layers with it
         svd_lib_ref = pymo.GetSVDInstance()
         pymo_utils.PymoSvdUtils.configure_layers_in_pymo_svd([layer], cost_metric, svd_lib_ref)
@@ -125,4 +112,32 @@ class WeightSvdPruner(Pruner):
         layer_b = Layer(module_b, layer.name + '.1', layer.output_shape)
 
         comp_layer_db.replace_layer_with_sequential_of_two_layers(layer, layer_a, layer_b)
+        return comp_ratio
+
+class PyWeightSvdPruner(aimet_common.svd_pruner.WeightSvdPruner):
+    """
+    Pruner for Weight-SVD method using numpy.
+    """
+    # pylint: disable=no-self-use
+    def _perform_svd_and_split_layer(self, layer: Layer, rank: int, cost_metric: CostMetric,
+                                     comp_layer_db: LayerDatabase):
+        """
+        Performs spatial svd and splits given layer into two layers
+        :param layer: Layer to split
+        :param rank: Rank to use for weight svd splitting
+        :param comp_layer_db: Compressed layer db to update with the split layers
+        :return: None
+        """
+        # For the rounded rank compute the new compression ratio
+        comp_ratio = cost_calculator.WeightSvdCostCalculator.calculate_comp_ratio_given_rank(layer, rank,
+                                                                                             cost_metric)
+        # Split module using Weight SVD
+        logger.info("Splitting module: %s with rank: %r", layer.name, rank)
+        module_a, module_b = PyWeightSvdModuleSplitter.split_module(layer.module, rank)
+
+        layer_a = Layer(module_a, layer.name + '.0', layer.output_shape)
+        layer_b = Layer(module_b, layer.name + '.1', layer.output_shape)
+
+        comp_layer_db.replace_layer_with_sequential_of_two_layers(layer, layer_a, layer_b)
+
         return comp_ratio

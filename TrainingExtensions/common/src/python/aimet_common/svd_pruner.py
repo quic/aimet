@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -39,8 +39,8 @@
 
 import abc
 from typing import Tuple
-
 import numpy as np
+from _decimal import Decimal
 
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import CostMetric
@@ -55,7 +55,7 @@ class SpatialSvdPruner(Pruner):
     """
     Pruner for Spatial-SVD method
     """
-
+    # pylint: disable=unused-argument
     def _prune_layer(self, orig_layer_db: LayerDatabase, comp_layer_db: LayerDatabase, layer: Layer,
                      comp_ratio: float, cost_metric: CostMetric):
 
@@ -88,6 +88,7 @@ class SpatialSvdPruner(Pruner):
                             in_channels: int, out_channels: int, height: int, width: int) -> Tuple[np.array, np.array]:
         """
         Splits a weight tensor using spatial svd
+
         :param weight_tensor: Weight tensor in numpy format (shape: out_chan, in_chan, height, width)
         :param rank: Rank to use for svd split
         :param in_channels: Number of in-channels
@@ -119,3 +120,58 @@ class SpatialSvdPruner(Pruner):
         v = np.transpose(v, [3, 0, 2, 1])
 
         return h, v
+
+
+class WeightSvdPruner(Pruner):
+    """
+    Pruner for Weight-SVD method
+    """
+    # pylint: disable=unused-argument
+    def _prune_layer(self, orig_layer_db: LayerDatabase, comp_layer_db: LayerDatabase, layer: Layer,
+                     comp_ratio: Decimal, cost_metric: CostMetric):
+
+        # Given a compression ratio, find the appropriate rounded rank
+        rank = cost_calculator.WeightSvdCostCalculator.calculate_rank_given_comp_ratio(layer, comp_ratio, cost_metric)
+
+        logger.info("Weight SVD splitting layer: %s using rank: %s", layer.name, rank)
+
+        # Perform svd and split the layers
+        comp_ratio = self._perform_svd_and_split_layer(layer, rank, cost_metric, comp_layer_db)
+
+        return comp_ratio
+
+    @abc.abstractmethod
+    def _perform_svd_and_split_layer(self, layer: Layer, rank: int, cost_metric: CostMetric, comp_layer_db: LayerDatabase):
+        """
+        Performs spatial svd and splits given layer into two layers
+
+        :param layer: Layer to split
+        :param rank: Rank to use for spatial svd splitting
+        :param cost_metric: CostMetric to use for calculating cost
+        :param comp_layer_db: Compressed layer db to update with the split layers
+        :return: None
+        """
+
+    @staticmethod
+    def lingalg_weight_svd(weight_tensor: np.ndarray, rank: int):
+        """
+         Splits a weight tensor using weight svd
+
+        :param weight_tensor:
+        :param rank:
+        :return:
+        """
+        # Decompose source matrix
+        if rank > min(weight_tensor.shape[0], weight_tensor.shape[1]):
+            raise ValueError(f"Specified rank: {rank} is invalid.")
+
+        # Singular value decomposition
+        u, s, vt = np.linalg.svd(weight_tensor, full_matrices=False)
+        # Take u matrix as-is.
+        weight_1 = u[:, :rank]
+        # Convert diagonal matrix s into normal matrix.
+        s_matrix = np.diag(s)
+        # Compute s * vT after rank-based truncation
+        weight_2 = np.matmul(s_matrix[:rank, :rank], vt[:rank, :])
+
+        return weight_1, weight_2

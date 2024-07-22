@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2018-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -36,13 +36,15 @@
 # =============================================================================
 
 """ Implementation of layer splitting logic for spatial and weight svd schemes """
+
+import math
 import numpy as np
 import torch
 from torch.nn import Conv2d, Linear
 
 from aimet_torch.winnow.winnow_utils import to_numpy
 from aimet_common.utils import AimetLogger
-from aimet_common.svd_pruner import SpatialSvdPruner
+from aimet_common.svd_pruner import SpatialSvdPruner, WeightSvdPruner
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Svd)
 
@@ -96,13 +98,10 @@ class WeightSvdModuleSplitter:
         :param svd_lib_ref: Reference to pymo
         :return: Two split modules
         """
-
         if isinstance(module, Conv2d):
             split_modules = cls.split_conv_module(module, name, rank, svd_lib_ref)
-
         elif isinstance(module, Linear):
             split_modules = cls.split_fc_module(module, name, rank, svd_lib_ref)
-
         else:
             raise AssertionError('Weight SVD only supports Conv2d and FC modules currently')
 
@@ -118,7 +117,6 @@ class WeightSvdModuleSplitter:
         :param svd_lib_ref: Reference to pymo
         :return: Two split modules
         """
-
         split_weights, weight_sizes = [], []
 
         conv_a_weight_shape = (rank, module.in_channels, 1, 1)
@@ -256,3 +254,108 @@ class WeightSvdModuleSplitter:
         else:
             fc_a.bias = None
             fc_b.bias = None
+
+
+class PyWeightSvdModuleSplitter:
+    """ Weight SVD module splitter using numpy. """
+    @classmethod
+    def split_module(cls, module: torch.nn.Module, rank: int):
+        """
+        Split a given module using weight svd
+        :param module: Module to be split
+        :param rank: Rank to use to split with
+        :return: Two split modules
+        """
+        if isinstance(module, Conv2d):
+            split_modules = cls.split_conv_module(module, rank)
+        elif isinstance(module, Linear):
+            split_modules = cls.split_fc_module(module, rank)
+        else:
+            raise AssertionError('Weight SVD only supports Conv2d and FC modules currently.')
+
+        return split_modules
+
+    @classmethod
+    def split_conv_module(cls, module: torch.nn.Module, rank: int):
+        """
+        Split a given module using weight svd.
+        :param module:
+        :param rank:
+        :return:
+        """
+        weight = module.weight.detach().cpu()
+        weight = weight.permute(1, 0, 2, 3).numpy()
+        nkk_shape = weight.shape[-3:]
+        nkk = math.prod(nkk_shape)
+        weight = weight.reshape(weight.shape[0], nkk)
+
+        # Split weight matrix.
+        weight_1, weight_2 = WeightSvdPruner.lingalg_weight_svd(weight, rank)
+
+        weight_1 = torch.from_numpy(weight_1).unsqueeze(-1).unsqueeze(-1)
+        weight_1 = weight_1.permute(1, 0, 2, 3)
+
+        weight_2 = torch.from_numpy(weight_2)
+        weight_2 = weight_2.reshape(weight_2.shape[0], *nkk_shape)
+        weight_2 = weight_2.permute(1, 0, 2, 3)
+
+        conv_a = torch.nn.Conv2d(in_channels=module.in_channels,
+                                 out_channels=rank,
+                                 kernel_size=(1, 1),
+                                 stride=(1, 1),
+                                 dilation=module.dilation).to(device=module.weight.device,
+                                                              dtype=module.weight.dtype)
+        conv_b = torch.nn.Conv2d(in_channels=rank,
+                                 out_channels=module.out_channels,
+                                 kernel_size=module.kernel_size,
+                                 stride=module.stride,
+                                 padding=module.padding,
+                                 dilation=module.dilation).to(device=module.weight.device,
+                                                              dtype=module.weight.dtype)
+        with torch.no_grad():
+            conv_a.weight.copy_(weight_1).to(device=module.weight.device,
+                                             dtype=module.weight.dtype)
+            assert conv_a.weight.device == module.weight.device
+            conv_b.weight.copy_(weight_2).to(device=module.weight.device,
+                                             dtype=module.weight.dtype)
+            bias = torch.zeros(conv_a.out_channels,
+                               device=module.weight.device,
+                               dtype=module.weight.dtype)
+            conv_a.bias = torch.nn.Parameter(bias)
+            if module.bias is not None:
+                conv_b.bias.copy_(module.bias).to(device=module.bias.device,
+                                                  dtype=module.bias.dtype)
+
+        return conv_a, conv_b
+
+    @classmethod
+    def split_fc_module(cls, module: torch.nn.Module, rank: int):
+        """
+        Split a given module using weight svd.
+        :param module:
+        :param rank:
+        :return:
+        """
+        weight = module.weight.detach().cpu().numpy()
+        weight = weight.transpose(1, 0)
+
+        # Split weight matrix.
+        weight_1, weight_2 = WeightSvdPruner.lingalg_weight_svd(weight, rank)
+
+        weight_1 = torch.from_numpy(weight_1).transpose(1, 0)
+        weight_2 = torch.from_numpy(weight_2).transpose(1, 0)
+        fc_a = torch.nn.Linear(in_features=module.in_features,
+                               out_features=rank).to(device=module.weight.device,
+                                                     dtype=module.weight.dtype)
+        fc_b = torch.nn.Linear(in_features=rank,
+                               out_features=module.out_features).to(device=module.weight.device,
+                                                                    dtype=module.weight.dtype)
+        with torch.no_grad():
+            fc_a.weight.copy_(weight_1).to(device=module.weight.device, dtype=module.weight.dtype)
+            fc_b.weight.copy_(weight_2).to(device=module.weight.device, dtype=module.weight.dtype)
+            bias = torch.zeros(fc_a.out_features, device=module.weight.device, dtype=module.weight.dtype)
+            fc_a.bias = torch.nn.Parameter(bias)
+            if module.bias is not None:
+                fc_b.bias.copy_(module.bias).to(device=module.bias.device, dtype=module.bias.dtype)
+
+        return fc_a, fc_b

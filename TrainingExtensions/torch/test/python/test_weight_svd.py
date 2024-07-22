@@ -39,7 +39,7 @@ import unittest
 from unittest.mock import create_autospec
 import logging
 from decimal import Decimal
-
+import torch
 import torch.nn as nn
 import torch.nn.functional as functional
 import numpy as np
@@ -59,8 +59,7 @@ from aimet_torch.svd import layer_selector_deprecated as ls, svd as svd_intf, sv
 from aimet_torch.layer_database import LayerDatabase, Layer
 from aimet_torch.svd import svd_pruner_deprecated
 from aimet_torch.svd import rank_selector as rank_select
-from aimet_torch.svd.svd_pruner import WeightSvdPruner
-
+from aimet_torch.svd.svd_pruner import WeightSvdPruner, PyWeightSvdPruner
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
 
@@ -110,11 +109,10 @@ class MnistSequentialModel(nn.Module):
         return x
 
 
-class TestTrainingExtensionsSvd(unittest.TestCase):
+class TestTrainingExtensionsSvd:
 
     def test_pick_compression_layers_top_x_percent(self):
 
-        logger.debug(self.id())
         model = MnistModel().to("cpu")
 
         input_shape = (1, 1, 28, 28)
@@ -130,11 +128,10 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
         picked_layers = layer_selector._pick_compression_layers(run_model=mnist_model.evaluate, cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
                                                                 layer_select_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_x_percent,
                                                                 percent_thresh=100)
-
-        self.assertEqual(model.fc1, picked_layers[0].module)
-        self.assertEqual(model.conv2, picked_layers[1].module)
-        self.assertEqual(model.fc2, picked_layers[2].module)
-        self.assertEqual(3, len(picked_layers))
+        assert model.fc1 == picked_layers[0].module
+        assert model.conv2 == picked_layers[1].module
+        assert model.fc2 == picked_layers[2].module
+        assert 3 == len(picked_layers)
 
         # 80% criterion
 
@@ -142,14 +139,13 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
                                                                 layer_select_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_x_percent,
                                                                 percent_thresh=80)
 
-        self.assertEqual(model.conv2, picked_layers[0].module)
-        self.assertEqual(model.fc2, picked_layers[1].module)
-        self.assertEqual(2, len(picked_layers))
+        assert model.conv2 == picked_layers[0].module
+        assert model.fc2 == picked_layers[1].module
+        assert 2 == len(picked_layers)
 
     def test_pick_compression_layers_top_n_layers(self):
 
         # Memory
-        logger.debug(self.id())
         model = MnistModel().to("cpu")
 
         input_shape = (1, 1, 28, 28)
@@ -165,23 +161,20 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
                                                                 cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
                                                                 layer_select_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_n_layers,
                                                                 num_layers=2)
-
-        self.assertEqual(picked_layers[0].module, model.fc1)
-        self.assertEqual(picked_layers[1].module, model.conv2)
-        self.assertEqual(2, len(picked_layers))
+        assert picked_layers[0].module == model.fc1
+        assert picked_layers[1].module == model.conv2
+        assert 2 == len(picked_layers)
 
         # MAC
         picked_layers = layer_selector._pick_compression_layers(run_model=mnist_model.evaluate, cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.mac,
                                                                 layer_select_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_n_layers,
                                                                 num_layers=2)
-
-        self.assertEqual(picked_layers[0].module, model.conv2)
-        self.assertEqual(picked_layers[1].module, model.fc1)
-        self.assertEqual(2, len(picked_layers))
+        assert picked_layers[0].module == model.conv2
+        assert picked_layers[1].module == model.fc1
+        assert 2 == len(picked_layers)
 
     def test_pick_compression_layers_manual(self):
 
-        logger.debug(self.id())
         model = MnistModel().to("cpu")
 
         input_shape = (1, 1, 28, 28)
@@ -196,12 +189,11 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
         picked_layers = layer_selector._pick_compression_layers(run_model=mnist_model.evaluate, cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
                                                                 layer_select_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.manual,
                                                                 layers_to_compress=[model.conv2])
-        self.assertEqual(1, len(picked_layers))
-        self.assertEqual(picked_layers[0].module, model.conv2)
+        assert 1 == len(picked_layers)
+        assert picked_layers[0].module == model.conv2
 
     def test_split_conv_layer_with_mo(self):
 
-        logger.debug(self.id())
         model = mnist_model.Net().to("cpu")
 
         input_shape = (1, 1, 28, 28)
@@ -227,24 +219,22 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
         weight_arr = weight_arr[0:10]
         print(weight_arr)
 
-        self.assertEqual((28, model.conv2.in_channels, 1, 1), conv_a.module.weight.shape)
-        self.assertEqual([28], list(conv_a.module.bias.shape))
-        self.assertEqual((model.conv2.out_channels, 28, 5, 5), conv_b.module.weight.shape)
-        self.assertEqual([model.conv2.out_channels], list(conv_b.module.bias.shape))
+        assert (28, model.conv2.in_channels, 1, 1) == conv_a.module.weight.shape
+        assert [28] == list(conv_a.module.bias.shape)
+        assert (model.conv2.out_channels, 28, 5, 5) == conv_b.module.weight.shape
+        assert [model.conv2.out_channels] == list(conv_b.module.bias.shape)
 
-        self.assertEqual(model.conv2.stride, conv_a.module.stride)
-        self.assertEqual(model.conv2.stride, conv_b.module.stride)
+        assert model.conv2.stride == conv_a.module.stride
+        assert model.conv2.stride == conv_b.module.stride
 
-        self.assertEqual((0, 0), conv_a.module.padding)
-        self.assertEqual(model.conv2.padding, conv_b.module.padding)
+        assert (0, 0) == conv_a.module.padding
+        assert model.conv2.padding == conv_b.module.padding
 
-        self.assertEqual((1, 1), conv_a.module.kernel_size)
-        self.assertEqual(model.conv2.kernel_size, conv_b.module.kernel_size)
+        assert (1, 1) == conv_a.module.kernel_size
+        assert model.conv2.kernel_size == conv_b.module.kernel_size
 
     def test_split_fc_layer_without_mo(self):
 
-        AimetLogger.set_level_for_all_areas(logging.DEBUG)
-        logger.debug(self.id())
         model = MnistModel().to("cpu")
 
         with unittest.mock.patch('aimet_torch.layer_database.LayerDatabase'):
@@ -270,13 +260,13 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
 
         seq, layer_a_attr, layer_b_attr = split_layer.prune_layer(layer_attr, 400, svd_lib_ref=svd._svd_lib_ref)
 
-        self.assertEqual((400, model.fc1.in_features), seq[0].weight.shape)
-        self.assertEqual([400], list(seq[0].bias.shape))
-        self.assertEqual((model.fc1.out_features, 400), seq[1].weight.shape)
-        self.assertEqual([model.fc1.out_features], list(seq[1].bias.shape))
+        assert (400, model.fc1.in_features) == seq[0].weight.shape
+        assert [400] == list(seq[0].bias.shape)
+        assert (model.fc1.out_features, 400) == seq[1].weight.shape
+        assert [model.fc1.out_features] == list(seq[1].bias.shape)
 
-        self.assertEqual(layer_a_attr.module, seq[0])
-        self.assertEqual(layer_b_attr.module, seq[1])
+        assert layer_a_attr.module == seq[0]
+        assert layer_b_attr.module == seq[1]
 
     @unittest.skip
     def test_create_compressed_model(self):
@@ -316,30 +306,29 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
         svd_rank_pair_dict = {'conv2': (31,0), 'fc2': (9,0)}
         c_model, c_layer_attr, _ = svd._create_compressed_model(svd_rank_pair_dict)
 
-        self.assertTrue(c_model is not model)
-        self.assertTrue(c_model.conv1 is not model.conv1)
-        self.assertTrue(c_model.conv2 is not model.conv2)
+        assert c_model is not model
+        assert c_model.conv1 is not model.conv1
+        assert c_model.conv2 is not model.conv2
 
-        self.assertFalse(isinstance(svd._model, nn.Sequential))
-        self.assertEqual((9, 1024), c_model.fc2[0].weight.shape)
-        self.assertEqual([9], list(c_model.fc2[0].bias.shape))
-        self.assertEqual((10, 9), c_model.fc2[1].weight.shape)
-        self.assertEqual([10], list(c_model.fc2[1].bias.shape))
+        assert not isinstance(svd._model, nn.Sequential)
+        assert (9, 1024) == c_model.fc2[0].weight.shape
+        assert [9] == list(c_model.fc2[0].bias.shape)
+        assert (10, 9) == c_model.fc2[1].weight.shape
+        assert [10] == list(c_model.fc2[1].bias.shape)
 
-        self.assertEqual((31, 32, 1, 1), c_model.conv2[0].weight.shape)
-        self.assertEqual([31], list(c_model.conv2[0].bias.shape))
-        self.assertEqual((64, 31, 5, 5), c_model.conv2[1].weight.shape)
-        self.assertEqual([64], list(c_model.conv2[1].bias.shape))
+        assert (31, 32, 1, 1) == c_model.conv2[0].weight.shape
+        assert [31] == list(c_model.conv2[0].bias.shape)
+        assert (64, 31, 5, 5) == c_model.conv2[1].weight.shape
+        assert [64] == list(c_model.conv2[1].bias.shape)
 
-        self.assertEqual(svd._model.conv1.weight.shape, c_model.conv1.weight.shape)
-        self.assertEqual(svd._model.fc1.weight.shape, c_model.fc1.weight.shape)
+        assert svd._model.conv1.weight.shape == c_model.conv1.weight.shape
+        assert svd._model.fc1.weight.shape == c_model.fc1.weight.shape
 
         # Expect double the number of layers in layer_attr_list
-        self.assertEqual(4, len(c_layer_attr))
+        assert 4 == len(c_layer_attr)
 
     def test_svd_with_mo(self):
 
-        logger.debug(self.id())
         model = MnistModel().to("cpu")
 
         svd = s.SvdImpl(model=model, run_model=mnist_model.evaluate, run_model_iterations=1, input_shape=(1, 1, 28, 28),
@@ -358,7 +347,6 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
 
     def test_svd_sequential_with_mo(self):
 
-        logger.debug(self.id())
         model = MnistSequentialModel().to("cpu")
         svd = s.SvdImpl(model=model, run_model=mnist_model.evaluate, run_model_iterations=1, input_shape=(1, 1, 28, 28),
                         compression_type=aimet_torch.svd.svd_intf_defs_deprecated.CompressionTechnique.svd,
@@ -415,11 +403,11 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
         LayerDatabase.set_reference_to_parent_module(model, layers)
 
         # child : model.subnet1.conv2 --> parent : model.subnet1
-        self.assertEqual(model.subnet1, layers[id(model.subnet1.conv2)].parent_module)
+        assert model.subnet1 == layers[id(model.subnet1.conv2)].parent_module
         # child : model.subnet2.conv1 --> parent : model.subnet2
-        self.assertEqual(model.subnet2, layers[id(model.subnet2.conv1)].parent_module)
+        assert model.subnet2 == layers[id(model.subnet2.conv1)].parent_module
         # child : model.fc2 --> parent : model
-        self.assertEqual(model, layers[id(model.fc2)].parent_module)
+        assert model == layers[id(model.fc2)].parent_module
 
     def test_set_attributes_with_sequentials(self):
         """With a one-deep model"""
@@ -461,11 +449,11 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
         LayerDatabase.set_reference_to_parent_module(model, layers)
 
         # child : model.subnet1.2 --> parent : model.subnet1
-        self.assertEqual(model.subnet1, layers[id(model.subnet1[2])].parent_module)
+        assert model.subnet1 == layers[id(model.subnet1[2])].parent_module
         # child : model.subnet2.1 --> parent : model.subnet2
-        self.assertEqual(model.subnet2, layers[id(model.subnet2[0])].parent_module)
+        assert model.subnet2 == layers[id(model.subnet2[0])].parent_module
         # child : model.fc2 --> parent : model
-        self.assertEqual(model, layers[id(model.fc2)].parent_module)
+        assert model == layers[id(model.fc2)].parent_module
 
     def test_set_parent_attribute_with_sequential_two_deep(self):
         """With a two-deep model"""
@@ -503,11 +491,11 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
 
         LayerDatabase.set_reference_to_parent_module(model, layers)
         # child : model.subnet1.0 --> parent : model.subnet1
-        self.assertEqual(model.subnet1, layers[id(model.subnet1[0])].parent_module)
+        assert model.subnet1 == layers[id(model.subnet1[0])].parent_module
         # child : model.subnet1.2.0 --> parent : model.subnet1.2
-        self.assertEqual(model.subnet1[2], layers[id(model.subnet1[2][0])].parent_module)
+        assert model.subnet1[2] == layers[id(model.subnet1[2][0])].parent_module
         # child : model.subnet1.2.2 --> parent : model.subnet1.2
-        self.assertEqual(model.subnet1[2], layers[id(model.subnet1[2][2])].parent_module)
+        assert model.subnet1[2] == layers[id(model.subnet1[2][2])].parent_module
 
     def test_choose_best_ranks(self):
 
@@ -696,7 +684,6 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
     def test_compress_model(self):
 
         AimetLogger.set_level_for_all_areas(logging.DEBUG)
-        logger.debug(self.id())
         model = MnistModel().to("cpu")
 
         c_model, stats = svd_intf.Svd.compress_model(model=model, run_model=mnist_model.evaluate,
@@ -709,20 +696,18 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
                                                      layers_to_compress=[model.conv2, model.fc2], num_rank_indices=20,
                                                      error_margin=100)
 
-        self.assertTrue(c_model.conv2[0].bias is not None)
-        self.assertTrue(c_model.conv2[1].bias is not None)
+        assert c_model.conv2[0].bias is not None
+        assert c_model.conv2[1].bias is not None
 
-        self.assertTrue(c_model.fc2[0].bias is not None)
-        self.assertTrue(c_model.fc2[1].bias is not None)
+        assert c_model.fc2[0].bias is not None
+        assert c_model.fc2[1].bias is not None
 
-        self.assertEqual(2, len(stats.per_rank_index[0].per_selected_layer))
-        self.assertEqual('conv2', stats.per_rank_index[0].per_selected_layer[0].layer_name)
-        self.assertEqual('fc2', stats.per_rank_index[0].per_selected_layer[1].layer_name)
+        assert 2 == len(stats.per_rank_index[0].per_selected_layer)
+        assert 'conv2' == stats.per_rank_index[0].per_selected_layer[0].layer_name
+        assert 'fc2' == stats.per_rank_index[0].per_selected_layer[1].layer_name
 
     def test_compress_model_no_bias(self):
 
-        AimetLogger.set_level_for_all_areas(logging.DEBUG)
-        logger.debug(self.id())
         model = MnistModel().to("cpu")
         model.conv2.bias = None
         model.fc2.bias = None
@@ -737,19 +722,18 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
                                                      layers_to_compress=[model.conv2, model.fc2], num_rank_indices=20,
                                                      error_margin=100)
 
-        self.assertTrue(c_model.conv2[0].bias is None)
-        self.assertTrue(c_model.conv2[1].bias is None)
+        assert c_model.conv2[0].bias is None
+        assert c_model.conv2[1].bias is None
 
-        self.assertTrue(c_model.fc2[0].bias is None)
-        self.assertTrue(c_model.fc2[1].bias is None)
+        assert c_model.fc2[0].bias is None
+        assert c_model.fc2[1].bias is None
 
-        self.assertEqual(2, len(stats.per_rank_index[0].per_selected_layer))
-        self.assertEqual('conv2', stats.per_rank_index[0].per_selected_layer[0].layer_name)
-        self.assertEqual('fc2', stats.per_rank_index[0].per_selected_layer[1].layer_name)
+        assert 2 == len(stats.per_rank_index[0].per_selected_layer)
+        assert 'conv2' == stats.per_rank_index[0].per_selected_layer[0].layer_name
+        assert 'fc2' == stats.per_rank_index[0].per_selected_layer[1].layer_name
 
     def test_compress_model_with_stride(self):
         AimetLogger.set_level_for_all_areas(logging.DEBUG)
-        logger.debug(self.id())
         model = MnistModel().to("cpu")
 
         # Change the model to add a stride to conv2, and adjust the input dimensions of the next layer accordingly
@@ -766,9 +750,9 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
                                                      layers_to_compress=[model.conv2, model.fc2], num_rank_indices=20,
                                                      error_margin=100)
 
-        self.assertEqual(2, len(stats.per_rank_index[0].per_selected_layer))
-        self.assertEqual('conv2', stats.per_rank_index[0].per_selected_layer[0].layer_name)
-        self.assertEqual('fc2', stats.per_rank_index[0].per_selected_layer[1].layer_name)
+        assert 2, len(stats.per_rank_index[0].per_selected_layer)
+        assert 'conv2' == stats.per_rank_index[0].per_selected_layer[0].layer_name
+        assert 'fc2' == stats.per_rank_index[0].per_selected_layer[1].layer_name
 
     @pytest.mark.cuda
     def test_model_allocation_gpu(self):
@@ -780,10 +764,10 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
                         layer_selection_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_n_layers,
                         num_layers=2)
 
-        self.assertTrue(svd._is_model_on_gpu())
+        assert svd._is_model_on_gpu()
         # copy one layer to CPU
         model.conv1.to("cpu")
-        self.assertFalse(svd._is_model_on_gpu())
+        assert not svd._is_model_on_gpu()
 
         model = MnistModel().to("cpu")
         svd = s.SvdImpl(model=model, run_model=mnist_model.evaluate, run_model_iterations=1, input_shape=(1, 1, 28, 28),
@@ -792,15 +776,14 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
                         layer_selection_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_n_layers,
                         num_layers=2)
 
-        self.assertFalse(svd._is_model_on_gpu())
+        assert not svd._is_model_on_gpu()
         # copy entire model on GPU
         model.cuda()
-        self.assertTrue(svd._is_model_on_gpu())
+        assert svd._is_model_on_gpu()
 
     def test_split_manual_rank(self):
         model = MnistModel().to("cpu")
         run_model = mnist_model.evaluate
-        logger.debug(self.id())
 
         intf_defs = aimet_torch.svd.svd_intf_defs_deprecated
 
@@ -832,10 +815,10 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
                                                                                  metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
                                                                                  database=layer_db,
                                                                                  layer_rank_list=layer_rank_list)
-            self.assertEqual(len(svd_rank_pair_dict), 1)
+            assert len(svd_rank_pair_dict) == 1
 
 
-class TestWeightSvdPruning(unittest.TestCase):
+class TestWeightSvdPruning:
 
     def test_prune_layer(self):
 
@@ -856,15 +839,15 @@ class TestWeightSvdPruning(unittest.TestCase):
         conv2_a = comp_layer_db.find_layer_by_name('conv2.0')
         conv2_b = comp_layer_db.find_layer_by_name('conv2.1')
 
-        self.assertEqual((1, 1), conv2_a.module.kernel_size)
-        self.assertEqual(32, conv2_a.module.in_channels)
-        self.assertEqual(15, conv2_a.module.out_channels)
+        assert (1, 1) == conv2_a.module.kernel_size
+        assert 32 == conv2_a.module.in_channels
+        assert 15 == conv2_a.module.out_channels
 
-        self.assertEqual((5, 5), conv2_b.module.kernel_size)
-        self.assertEqual(15, conv2_b.module.in_channels)
-        self.assertEqual(64, conv2_b.module.out_channels)
+        assert (5, 5) == conv2_b.module.kernel_size
+        assert 15 == conv2_b.module.in_channels
+        assert 64 == conv2_b.module.out_channels
 
-        self.assertTrue(isinstance(comp_layer_db.model.conv2, nn.Sequential))
+        assert isinstance(comp_layer_db.model.conv2, nn.Sequential)
 
         for layer in comp_layer_db:
             print("Layer: " + layer.name)
@@ -872,45 +855,79 @@ class TestWeightSvdPruning(unittest.TestCase):
 
         print(comp_layer_db.model)
 
-    def test_prune_model_2_layers(self):
+    @pytest.mark.cuda
+    @pytest.mark.parametrize("device", ['cpu', 'cuda'])
+    @pytest.mark.parametrize("comp_ratio", [Decimal(0.25), Decimal(0.5), Decimal(0.75)])
+    def test_prune_model_fc(self, device, comp_ratio):
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super(Model, self).__init__()
+                self.fc1 = nn.Linear(5, 9)
+                self.fc2 = nn.Linear(9, 6)
 
-        model = mnist_model.NetSmall()
+            def forward(self, x):
+                x = self.fc1(x)
+                x = self.fc2(x)
+                return x
 
-        # Create a layer database
-        input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
+        model = Model().eval().to(device)
+        dummy_input = torch.randn(1, 5).to(device)
         layer_db = LayerDatabase(model, dummy_input)
-
         fc1 = layer_db.find_layer_by_name('fc1')
-        conv2 = layer_db.find_layer_by_name('conv2')
+        layer_comp_ratio_list = [LayerCompRatioPair(fc1, comp_ratio)]
+        # Using MO implementation
         pruner = WeightSvdPruner()
+        mo_layer_db = pruner.prune_model(layer_db, layer_comp_ratio_list, aimet_common.defs.CostMetric.mac,
+                                         trainer=None)
+        # using python implementation
+        pruner = PyWeightSvdPruner()
+        py_layer_db = pruner.prune_model(layer_db, layer_comp_ratio_list, aimet_common.defs.CostMetric.mac,
+                                         trainer=None)
 
-        layer_db = pruner.prune_model(layer_db, [LayerCompRatioPair(fc1, Decimal(0.5)),
-                                                 LayerCompRatioPair(conv2, Decimal(0.5))], aimet_common.defs.CostMetric.mac,
-                                      trainer=None)
+        assert id(mo_layer_db.model) != id(py_layer_db.model)
+        torch.allclose(mo_layer_db.model.fc1[0].weight, py_layer_db.model.fc1[0].weight)
+        torch.allclose(mo_layer_db.model.fc1[0].bias, py_layer_db.model.fc1[0].bias)
+        torch.allclose(mo_layer_db.model.fc1[1].weight, py_layer_db.model.fc1[1].weight)
+        torch.allclose(mo_layer_db.model.fc1[1].bias, py_layer_db.model.fc1[1].bias)
 
-        fc1_a = layer_db.find_layer_by_name('fc1.0')
-        fc1_b = layer_db.find_layer_by_name('fc1.1')
+        with torch.no_grad():
+            assert torch.allclose(mo_layer_db.model(dummy_input), py_layer_db.model(dummy_input), atol=1e-6)
 
-        self.assertEqual(3136, fc1_a.module.in_features)
-        self.assertEqual(128, fc1_b.module.out_features)
+    @pytest.mark.cuda
+    @pytest.mark.parametrize("device", ['cpu', 'cuda'])
+    @pytest.mark.parametrize("comp_ratio", [Decimal(0.25), Decimal(0.5), Decimal(0.75)])
+    def test_prune_model_conv(self, device, comp_ratio):
+        torch.manual_seed(0)
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super(Model, self).__init__()
+                self.conv1 = nn.Conv2d(5, 9, kernel_size=1)
+                self.conv2 = nn.Conv2d(9, 6, kernel_size=1)
 
-        conv2_a = layer_db.find_layer_by_name('conv2.0')
-        conv2_b = layer_db.find_layer_by_name('conv2.1')
+            def forward(self, x):
+                x = self.conv1(x)
+                x = self.conv2(x)
+                return x
 
-        self.assertEqual((1, 1), conv2_a.module.kernel_size)
-        self.assertEqual(32, conv2_a.module.in_channels)
-        self.assertEqual(15, conv2_a.module.out_channels)
+        model = Model().eval().to(device)
+        dummy_input = torch.randn(1, 5, 10, 10).to(device)
+        layer_db = LayerDatabase(model, dummy_input)
+        conv1 = layer_db.find_layer_by_name('conv1')
+        layer_comp_ratio_list = [LayerCompRatioPair(conv1, comp_ratio)]
+        # Using MO implementation
+        pruner = WeightSvdPruner()
+        mo_layer_db = pruner.prune_model(layer_db, layer_comp_ratio_list, aimet_common.defs.CostMetric.mac,
+                                         trainer=None)
+        # using python implementation
+        pruner = PyWeightSvdPruner()
+        py_layer_db = pruner.prune_model(layer_db, layer_comp_ratio_list, aimet_common.defs.CostMetric.mac,
+                                         trainer=None)
 
-        self.assertEqual((5, 5), conv2_b.module.kernel_size)
-        self.assertEqual(15, conv2_b.module.in_channels)
-        self.assertEqual(64, conv2_b.module.out_channels)
+        assert id(mo_layer_db.model) != id(py_layer_db.model)
+        torch.allclose(mo_layer_db.model.conv1[0].weight, py_layer_db.model.conv1[0].weight)
+        torch.allclose(mo_layer_db.model.conv1[0].bias, py_layer_db.model.conv1[0].bias)
+        torch.allclose(mo_layer_db.model.conv1[1].weight, py_layer_db.model.conv1[1].weight)
+        torch.allclose(mo_layer_db.model.conv1[1].bias, py_layer_db.model.conv1[1].bias)
 
-        self.assertTrue(isinstance(layer_db.model.fc1, nn.Sequential))
-        self.assertTrue(isinstance(layer_db.model.conv2, nn.Sequential))
-
-        for layer in layer_db:
-            print("Layer: " + layer.name)
-            print("   Module: " + str(layer.module))
-
-        print(layer_db.model)
+        with torch.no_grad():
+            assert torch.allclose(mo_layer_db.model(dummy_input), py_layer_db.model(dummy_input), atol=1e-6)
