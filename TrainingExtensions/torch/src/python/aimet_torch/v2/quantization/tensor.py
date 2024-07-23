@@ -40,7 +40,7 @@ import abc
 import copy
 
 import torch
-from torch.utils._pytree import tree_map, tree_flatten
+from torch.utils._pytree import tree_map
 
 from aimet_torch.v2.quantization.base import EncodingBase
 
@@ -90,7 +90,7 @@ class QuantizedTensorBase(torch.Tensor):
 
     encoding: EncodingBase
 
-    _cast_ops = [
+    _cast_ops = {
         torch.Tensor.half,
         torch.Tensor.float,
         torch.Tensor.double,
@@ -101,11 +101,13 @@ class QuantizedTensorBase(torch.Tensor):
         torch.Tensor.cuda,
         torch.Tensor.cpu,
         torch.Tensor.to,
-    ]
+    }
 
     # Operations that an encoding can always pass through
     _passthrough_ops = {
         torch.Tensor.contiguous,
+        torch.Tensor.requires_grad_,
+        torch.Tensor.share_memory_,
     }
 
     # Operations that a per-tensor encoding can pass through
@@ -135,13 +137,17 @@ class QuantizedTensorBase(torch.Tensor):
         torch.Tensor.reshape,
         torch.Tensor.reshape_as,
         torch.Tensor.resize,
+        torch.Tensor.resize_,
         torch.Tensor.resize_as,
+        torch.Tensor.resize_as_,
         torch.Tensor.select,
         torch.Tensor.split,
         torch.Tensor.squeeze,
+        torch.Tensor.squeeze_,
         torch.Tensor.swapaxes,
         torch.Tensor.swapdims,
         torch.Tensor.t,
+        torch.Tensor.t_,
         torch.Tensor.take,
         torch.Tensor.take_along_dim,
         torch.Tensor.tensor_split,
@@ -149,6 +155,7 @@ class QuantizedTensorBase(torch.Tensor):
         torch.Tensor.transpose,
         torch.Tensor.unflatten,
         torch.Tensor.unsqueeze,
+        torch.Tensor.unsqueeze_,
         torch.Tensor.view,
         torch.Tensor.view_as,
         torch.as_strided,
@@ -190,7 +197,6 @@ class QuantizedTensorBase(torch.Tensor):
         torch.vsplit,
         torch.view_copy,
     }
-
 
     @abc.abstractmethod
     def quantize(self) -> "QuantizedTensor":
@@ -269,7 +275,7 @@ class QuantizedTensorBase(torch.Tensor):
         :param memory_format: Desired memory format of the returned tensor (default=torch.preserve_format)
         """
         # Note: use encoding.clone() here instead of deepcopy to propagate gradient through operation
-        encoding_clone = self.encoding._clone() # pylint:disable = protected-access
+        encoding_clone = self.encoding and self.encoding._clone() # pylint:disable = protected-access
         self_clone = super().clone(memory_format=memory_format).as_subclass(self.__class__)
         self_clone.encoding = encoding_clone
         return self_clone
@@ -280,21 +286,17 @@ class QuantizedTensorBase(torch.Tensor):
         Returns a new QuantizedTensorBase with data and encoding detached from the current graph
         """
         self_detached = super().detach().as_subclass(self.__class__)
-        self_detached.encoding = self.encoding._detach() # pylint:disable = protected-access
+        self_detached.encoding = self.encoding and self.encoding._detach() # pylint:disable = protected-access
         return self_detached
 
     @classmethod
-    def __torch_function__(cls, func, types, args=(), kwargs=None):
+    def __torch_function__(cls, func, types, args=(), kwargs=None): # pylint: disable=too-many-return-statements
         if func in HANDLED_FUNCTIONS:
             kwargs = kwargs if kwargs is not None else {}
             return HANDLED_FUNCTIONS[func](*args, **kwargs)
         ret = super().__torch_function__(func, types, args, kwargs)
 
-        flattened_args, _ = tree_flatten((args, kwargs))
-        if any(ret is arg for arg in flattened_args):
-            # Return value is the same object as one of the arguments.
-            # This implies that func is likely (but not necessarily) an in-place operator.
-            return ret
+        self, *_ = args
 
         if func in cls._cast_ops:
             if not ret.dtype.is_floating_point:
@@ -304,19 +306,24 @@ class QuantizedTensorBase(torch.Tensor):
                 )
 
             # Outputs of cast ops can inherit the same encoding as its parents
-            self, *_ = args
-            ret.encoding = copy.copy(self.encoding) # shallow copy
+            ret.encoding = self.encoding.to(device=ret.device)
+            return ret
 
         def propagate_encoding(qtensor, encoding):
             if isinstance(qtensor, QuantizedTensorBase):
                 qtensor.encoding = copy.copy(encoding)
 
         if func in cls._passthrough_ops:
-            self, *_ = args
+            if self is ret:
+                return ret
+
             tree_map(lambda t: propagate_encoding(t, self.encoding), ret)
+            return ret
 
         if func in cls._pertensor_passthrough_ops:
-            self, *_ = args
+            if self is ret:
+                return ret
+
             if self.encoding and self.encoding.granularity == "pertensor":
                 # Return a cls object with the same encoding which can later be quantized or dequantized
                 tree_map(lambda t: propagate_encoding(t, self.encoding), ret)
@@ -326,6 +333,11 @@ class QuantizedTensorBase(torch.Tensor):
                 tree_map(lambda t: propagate_encoding(t, None), ret)
             return ret
 
+        if self is ret:
+            # Non-passthrough in-place functions invalidate the encoding of the input tensor.
+            # Discard the stale encoding.
+            ret.encoding = None
+            return ret
 
         def set_encoding(qtensor):
             if not hasattr(qtensor, 'encoding'):
@@ -334,11 +346,6 @@ class QuantizedTensorBase(torch.Tensor):
             if qtensor.encoding is None:
                 # If encoding does not exist, return a plain torch.Tensor
                 return qtensor.as_subclass(torch.Tensor)
-
-            # Change device of encoding
-            # NOTE: We don't change the dtypes of encoding because scale/offset
-            #       are sensitive to dtype
-            qtensor.encoding = qtensor.encoding.to(device=qtensor.device)
 
             return qtensor
 
@@ -356,8 +363,6 @@ class QuantizedTensor(QuantizedTensorBase):
         """
         Returns ``self``
         """
-        if self.encoding is None:
-            raise EncodingError("Encoding does not exist")
         return self
 
     def dequantize(self) -> "DequantizedTensor":
@@ -394,6 +399,8 @@ class QuantizedTensor(QuantizedTensorBase):
     def quantized_repr(self) -> torch.Tensor:
         # FIXME(kyunggeu): This only works for affine encodings.
         #                  Needs to be generalized for any kind of encodings
+        if self.encoding is None:
+            raise EncodingError("Encoding does not exist")
         return self.quantize().as_subclass(torch.Tensor).to(self.encoding.dtype)
 
 
@@ -436,8 +443,6 @@ class DequantizedTensor(QuantizedTensorBase):
         """
         Returns ``self``
         """
-        if self.encoding is None:
-            raise EncodingError("Encoding does not exist")
         return self
 
     def quantized_repr(self) -> torch.Tensor:
@@ -464,6 +469,8 @@ class DequantizedTensor(QuantizedTensorBase):
         """
         # FIXME(kyunggeu): This only works for affine encodings.
         #                  Needs to be generalized for any kind of encodings
+        if self.encoding is None:
+            raise EncodingError("Encoding does not exist")
         return self.quantize().as_subclass(torch.Tensor).to(self.encoding.dtype)
 
 
