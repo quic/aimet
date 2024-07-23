@@ -1891,6 +1891,10 @@ class QuantizationSimModel:
                         param_quantizer.bitwidth = output_quantizer.bitwidth
                         param_quantizer.use_symmetric_encodings = output_quantizer.use_symmetric_encodings
             elif isinstance(original_module, MatMul):
+                # Skip unused modules
+                if original_module not in self.connected_graph._module_to_op_dict.keys():
+                    continue
+
                 first_input_quantizer, second_input_quantizer = wrapper.input_quantizers
 
                 op = self.connected_graph._module_to_op_dict[original_module]
