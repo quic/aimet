@@ -101,6 +101,8 @@ class QuantizedTensorBase(torch.Tensor):
         torch.Tensor.cuda,
         torch.Tensor.cpu,
         torch.Tensor.to,
+        torch.Tensor.type,
+        torch.Tensor.type_as,
     }
 
     # Operations that an encoding can always pass through
