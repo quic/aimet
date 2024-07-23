@@ -53,7 +53,7 @@ import aimet_torch.nn.modules.custom as aimet_ops
 from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.tensor import QuantizedTensorBase
 from aimet_torch.v2.utils import patch_attr, _ContextManager, allow_recompute
-from .base import BaseQuantizationMixin
+from .base import BaseQuantizationMixin # pylint: disable=import-error
 
 
 def _quantize_if_applicable(data: Any, quantizer: Optional[QuantizerBase]):
