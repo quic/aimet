@@ -39,9 +39,12 @@ import copy
 import pickle
 import torch
 from torch import nn
+from torch import Tensor
+from torch import randn, arange
+import torch.nn.functional as F
 
 from aimet_torch.v2.quantization.affine import quantize, quantize_dequantize
-from aimet_torch.v2.quantization.tensor import QuantizedTensor, DequantizedTensor
+from aimet_torch.v2.quantization.tensor import EncodingError, QuantizedTensor, DequantizedTensor, QuantizedTensorBase
 from aimet_torch.v2.quantization.affine import AffineEncoding
 
 
@@ -558,3 +561,102 @@ class TestQuantizedTensor:
         assert qtensor_copy.is_pinned() == qtensor.is_pinned()
 
         assert qtensor_copy.encoding is qtensor.encoding
+
+    @pytest.mark.parametrize('in_place_func,    inputs', [
+                             (Tensor.add_,      [randn(100), randn(100)]),
+                             (Tensor.mul_,      [randn(100), randn(100)]),
+                             (Tensor.sub_,      [randn(100), randn(100)]),
+                             (Tensor.div_,      [randn(100), torch.ones(100)/2]),
+                             (Tensor.square_,   [randn(100)]),
+                             (Tensor.pow_,      [randn(100).abs(), randn(100)]),
+                             (Tensor.relu_,     [randn(100)]),
+                             (Tensor.abs_,      [randn(100)]),
+                             (Tensor.absolute_, [randn(100)]),
+                             (Tensor.round_,    [randn(100)]),
+                             (Tensor.copy_,     [randn(100), randn(100)]),
+                             (Tensor.addmm_,    [randn(10, 10), randn(10, 10), randn(10, 10)]),
+                             (Tensor.sin_,      [arange(-1., 1., 0.01)]),
+                             (Tensor.asin_,     [arange(-1., 1., 0.01)]),
+                             (Tensor.arcsin_,   [arange(-1., 1., 0.01)]),
+                             (Tensor.cos_,      [arange(-1., 1., 0.01)]),
+                             (Tensor.acos_,     [arange(-1., 1., 0.01)]),
+                             (Tensor.arccos_,   [arange(-1., 1., 0.01)]),
+                             (Tensor.tan_,      [arange(-1., 1., 0.01)]),
+                             (Tensor.atan_,     [arange(-1., 1., 0.01)]),
+                             (Tensor.arctan_,   [arange(-1., 1., 0.01)]),
+                             (Tensor.tanh_,     [arange(-1., 1., 0.01)]),
+                             (Tensor.atanh_,    [arange(-1., 1., 0.01)]),
+                             (Tensor.arctanh_,  [arange(-1., 1., 0.01)]),
+    ])
+    def test_in_place_functions(self, in_place_func, inputs, scale, offset, bitwidth):
+        """
+        When: Run non-passthrough in-place functions on DequantizedTenosrs
+        Then: The stale encodings must be detached from the tensor
+        """
+        x, *others = [affine_quantize(inp, scale, offset, bitwidth).dequantize() for inp in inputs]
+
+        y = in_place_func(x, *others)
+
+        assert x is y
+        assert y.encoding is None
+
+    @pytest.mark.parametrize('in_place_func,         inputs', [
+                             (Tensor.requires_grad_, [randn(100), False]),
+                             (Tensor.resize_,        [randn(100), (10, 10)]),
+                             (Tensor.resize_as_,     [randn(100), randn(10, 10)]),
+                             (Tensor.squeeze_,       [randn(1, 100)]),
+                             (Tensor.unsqueeze_,     [randn(100), 0]),
+                             (Tensor.t_,             [randn(10, 10)]),
+                             (Tensor.share_memory_,  [randn(10, 10)]),
+    ])
+    def test_in_place_passthrough_functions(self, in_place_func, inputs, scale, offset, bitwidth):
+        """
+        When: Run passthrough in-place functions on DequantizedTenosrs
+        Then: The encodings must be preserved
+        """
+        x, *others = [affine_quantize(inp, scale, offset, bitwidth).dequantize()
+                      if isinstance(inp, Tensor) else inp for inp in inputs]
+        orig_encoding = x.encoding
+
+        y = in_place_func(x, *others)
+
+        assert x is y
+        assert y.encoding is orig_encoding
+
+    def test_qtensor_without_encoding(self, scale, offset, bitwidth):
+        """
+        Given: QuantizedTensor without encoding
+        When: .clone() / .detach() / .quantize() / .dequantize() / .quantized_repr
+        Then:    ok    /    ok     /     ok      /     error     /     error
+        """
+        x = affine_quantize(randn(100), scale, offset, bitwidth)
+        x.encoding = None
+
+        x.clone() # Should't throw error
+        x.detach() # Shouldn't throw error
+        x.quantize() # Shouldn't throw error
+
+        with pytest.raises(EncodingError):
+            x.dequantize()
+
+        with pytest.raises(EncodingError):
+            x.quantized_repr()
+
+        """
+        Given: DequantizedTensor without encoding
+        When: .clone() / .detach() / .quantize() / .dequantize() / .quantized_repr
+        Then:    ok    /    ok     /    error    /      ok       /     error
+        """
+        x = affine_quantize(randn(100), scale, offset, bitwidth).dequantize()
+        x.encoding = None
+
+        x.clone() # Should't throw error
+        x.detach() # Shouldn't throw error
+
+        with pytest.raises(EncodingError):
+            x.quantize()
+
+        x.dequantize() # Shouldn't throw error
+
+        with pytest.raises(EncodingError):
+            x.quantized_repr()
