@@ -1330,3 +1330,33 @@ class ExpandModel(torch.nn.Module):
 
     def forward(self, x):
         return self.linear(self.expand(x, (1, 10)))
+
+
+class SmallLinearModel(nn.Module):
+    def __init__(self):
+        super(SmallLinearModel, self).__init__()
+        self.linear = nn.Linear(3, 8)
+        self.linear2 = nn.Linear(8, 3)
+        self.innerlinear = InnerLinear()
+        self.prelu = nn.PReLU()
+        self.prelu2 = nn.PReLU()
+        self.groupnorm = nn.GroupNorm(2, 8)
+
+    def forward(self, inp):
+        x = self.linear(inp)
+        x = self.prelu(x)
+        x = self.innerlinear(x)
+        x = self.groupnorm(x)
+        x = self.prelu2(x)
+        return self.linear2(x)
+
+class InnerLinear(nn.Module):
+    def __init__(self):
+        super(InnerLinear, self).__init__()
+        self.in_linear1 = nn.Linear(8, 16)
+        self.linear_modlist = nn.ModuleList([torch.nn.Linear(16, 8)])
+
+    def forward(self, inp):
+        x = self.in_linear1(inp)
+        x = self.linear_modlist[0](x)
+        return x
