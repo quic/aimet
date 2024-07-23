@@ -508,6 +508,42 @@ class QuantizedGroupNorm(_DispatchMixin, QuantizationMixin, nn.GroupNorm):
     _builtin_torch_fn = F.group_norm
 
 
+@QuantizationMixin.implements(nn.BatchNorm1d)
+class QuantizedBatchNorm1d(_DispatchMixin, QuantizationMixin, nn.BatchNorm1d):
+    """ Quantized BatchNorm1d """
+    _builtin_torch_fn = F.batch_norm
+
+
+@QuantizationMixin.implements(nn.BatchNorm2d)
+class QuantizedBatchNorm2d(_DispatchMixin, QuantizationMixin, nn.BatchNorm2d):
+    """ Quantized BatchNorm2d """
+    _builtin_torch_fn = F.batch_norm
+
+
+@QuantizationMixin.implements(nn.BatchNorm3d)
+class QuantizedBatchNorm3d(_DispatchMixin, QuantizationMixin, nn.BatchNorm3d):
+    """ Quantized BatchNorm3d """
+    _builtin_torch_fn = F.batch_norm
+
+
+@QuantizationMixin.implements(nn.InstanceNorm1d)
+class QuantizedInstanceNorm1d(_DispatchMixin, QuantizationMixin, nn.InstanceNorm1d):
+    """ Quantized InstanceNorm1d """
+    _builtin_torch_fn = F.instance_norm
+
+
+@QuantizationMixin.implements(nn.InstanceNorm2d)
+class QuantizedInstanceNorm2d(_DispatchMixin, QuantizationMixin, nn.InstanceNorm2d):
+    """ Quantized InstanceNorm2d """
+    _builtin_torch_fn = F.instance_norm
+
+
+@QuantizationMixin.implements(nn.InstanceNorm3d)
+class QuantizedInstanceNorm3d(_DispatchMixin, QuantizationMixin, nn.InstanceNorm3d):
+    """ Quantized InstanceNorm3d """
+    _builtin_torch_fn = F.instance_norm
+
+
 @QuantizationMixin.implements(nn.Softmax)
 class QuantizedSoftmax(_DispatchMixin, QuantizationMixin, nn.Softmax):
     """ Quantized Softmax """
