@@ -37,7 +37,6 @@
 
 """ Custom modules for functional operations defined under torch and torch.nn.functional packages """
 
-import itertools
 from typing import Callable, Any, Tuple, Union, List
 
 import torchvision
@@ -143,6 +142,7 @@ BatchNorm = create_wrapper_module('BatchNorm', torch.nn.functional.batch_norm)
 GroupNorm = create_wrapper_module('GroupNorm', torch.nn.functional.group_norm)
 Normalize = create_wrapper_module('Normalize', torch.nn.functional.normalize)
 Pad = create_wrapper_module('Pad', torch.nn.functional.pad)
+GridSample = create_wrapper_module('GridSample', torch.nn.functional.grid_sample)
 
 # following modules are for overloaded operators like + and *,
 # which can operate other than torch.Tensor datatype.
@@ -332,15 +332,7 @@ class ScatterND(torch.nn.Module):
         """
         Forward-pass routine for ScatterND op
         """
-        if torch.jit.is_tracing():
-            return data
-
         output = torch.clone(data)
-
-        # Get multidimensional indices to iterate over the first N-1 dimensions of the indices variable
-        # as the last dimension of the indices variable is partial index into data
-        update_indices = indices.size()[:-1]
-        update_indices = itertools.product(*(range(index) for index in update_indices))
 
         if self.reduction == 1:
             f = torch.add
@@ -349,13 +341,12 @@ class ScatterND(torch.nn.Module):
         else:
             f = None
 
-        # For each index, update output using the updates variable
-        for idx in update_indices:
-            idx_list = tuple(indices[idx].tolist())
-            if f:
-                output[idx_list] = f(output[idx_list], updates[idx])
-            else:
-                output[idx_list] = updates[idx]
+        indices = indices.type(torch.int64)
+        idx_list = indices.split(split_size=1, dim=-1)
+        if f:
+            output[idx_list] = f(output[idx_list], updates.reshape(output[idx_list].shape))
+        else:
+            output[idx_list] = updates.reshape(output[idx_list].shape)
         return output
 
 
