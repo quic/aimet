@@ -66,7 +66,6 @@ if (ENABLE_TENSORFLOW)
 endif(ENABLE_TENSORFLOW)
 
 # Create a tarball archive of the Examples code
-install(CODE "execute_process(COMMAND
-                ${CMAKE_COMMAND} -E chdir ${CMAKE_INSTALL_PREFIX}
-                ${CMAKE_COMMAND} -E tar cvzf ${CMAKE_INSTALL_PREFIX}/Examples.tar.gz ${CMAKE_CURRENT_SOURCE_DIR})"
+install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E tar cvzf ${CMAKE_INSTALL_PREFIX}/Examples.tar.gz .
+                              WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})"
         )
