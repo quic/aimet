@@ -43,6 +43,7 @@ import torchvision
 import torch
 import torch.nn
 
+# pylint: disable=no-self-use
 
 def forward_function_wrapper(functional: Callable) -> Any:
     """
@@ -51,12 +52,12 @@ def forward_function_wrapper(functional: Callable) -> Any:
     :param functional: torch.nn.functional
     :return: forward method
     """
-    @staticmethod
-    def forward(*args, **kwargs) -> Any:
+    def forward(self, *args, **kwargs) -> Any: # pylint: disable=unused-argument
         """
         Forward-pass routine for the functional operation.
         """
         return functional(*args, **kwargs)
+
     return forward
 
 def create_wrapper_module(class_name: str, functional: Callable) -> Callable:
@@ -148,8 +149,7 @@ GridSample = create_wrapper_module('GridSample', torch.nn.functional.grid_sample
 class Add(torch.nn.Module):
     """ Add module for a functional add"""
     # pylint:disable=arguments-differ
-    @staticmethod
-    def forward(x: Any, y: Any) -> Any:
+    def forward(self, x: Any, y: Any) -> Any:
         """
         Forward-pass routine for add op
         """
@@ -162,8 +162,7 @@ class Add(torch.nn.Module):
 class Multiply(torch.nn.Module):
     """ Multiply module for a functional multiply"""
     # pylint:disable=arguments-differ
-    @staticmethod
-    def forward(x: Any, y: Any) -> Any:
+    def forward(self, x: Any, y: Any) -> Any:
         """
         Forward-pass routine for multiply op
         """
@@ -205,8 +204,7 @@ class DynamicConv2d(torch.nn.Module):
 class Pow(torch.nn.Module):
     """ Pow module for a functional pow """
     # pylint:disable=arguments-differ
-    @staticmethod
-    def forward(x: Any, y: Any) -> Any:
+    def forward(self, x: Any, y: Any) -> Any:
         """
         Forward-pass routine for Pow op
         """
@@ -229,8 +227,7 @@ class CustomSiLU(torch.nn.Module):
 
 class StridedSlice(torch.nn.Module):
     """Custom module for a functional slice"""
-    @staticmethod
-    def forward(*args) -> torch.Tensor:
+    def forward(self, *args) -> torch.Tensor:
         """
         Forward-pass routine for StridedSlice op
         """
@@ -271,8 +268,7 @@ class Cast(torch.nn.Module):
 
 class CustomGather(torch.nn.Module):
     """ Custom module for ONNX Gather """
-    @staticmethod
-    def forward(data: torch.Tensor, indices: torch.Tensor, axis: int = 0) -> torch.Tensor:
+    def forward(self, data: torch.Tensor, indices: torch.Tensor, axis: int = 0) -> torch.Tensor:
         """
         Forward-pass routine for ONNX Gather op
         """
@@ -544,8 +540,7 @@ class OneHot(torch.nn.Module):
 
 class Expand(torch.nn.Module):
     """Custom module for a Expand op"""
-    @staticmethod
-    def forward(tensor: torch.Tensor, *args) -> torch.Tensor:
+    def forward(self, tensor: torch.Tensor, *args) -> torch.Tensor:
         """
         Forward-pass routine for Expand op
         """

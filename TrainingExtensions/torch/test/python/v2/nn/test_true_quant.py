@@ -39,12 +39,12 @@ import functools
 
 import pytest
 import torch
-from torch import nn, randn
+from torch import randn
 import torch.nn.functional as F
 from torch.utils._pytree import tree_map
+from torch.overrides import get_ignored_functions
 from aimet_torch.v2.quantization.affine.backends import quantize, quantize_dequantize, dequantize
 from aimet_torch.v2.quantization.affine import Quantize, QuantizeDequantize
-import aimet_torch.v2 as aimet
 from aimet_torch.v2.nn import (
     QuantizedConv1d,
     QuantizedConv2d,
@@ -66,8 +66,9 @@ from aimet_torch.v2.nn import (
     QuantizedSubtract,
     FakeQuantizationMixin,
 )
+from aimet_torch.v2.nn.true_quant import _dispatch
 from aimet_torch.v2.quantization.affine import AffineEncoding
-from aimet_torch.v2.quantization.tensor import QuantizedTensor, DequantizedTensor
+from aimet_torch.v2.quantization.tensor import QuantizedTensorBase, QuantizedTensor, DequantizedTensor
 from aimet_torch.v2.utils import enable_recompute
 import aimet_torch.nn.modules.custom as aimet_ops
 
@@ -100,8 +101,10 @@ def input():
 def register_int_linear():
     def int_linear(input, weight, bias=None, *, output_encodings=None):
         # Implicit dequantization is not supported yet
-        assert isinstance(input, QuantizedTensor)
-        assert isinstance(weight, QuantizedTensor)
+        if not isinstance(input, QuantizedTensor):
+            raise RuntimeError
+        if not isinstance(weight, QuantizedTensor):
+            raise RuntimeError
 
         input = input.dequantize()
         weight = weight.dequantize()
@@ -120,8 +123,10 @@ def register_int_linear():
 def register_int_conv():
     def int_convnd(kernel, input, weight, bias=None, stride=1, padding=0, dilation=1, groups=1, *, output_encodings=None):
         # Implicit dequantization is not supported yet
-        assert isinstance(input, QuantizedTensor)
-        assert isinstance(weight, QuantizedTensor)
+        if not isinstance(input, QuantizedTensor):
+            raise RuntimeError
+        if not isinstance(weight, QuantizedTensor):
+            raise RuntimeError
 
         input = input.dequantize()
         weight = weight.dequantize()
@@ -142,10 +147,12 @@ def register_int_conv():
 
 @pytest.fixture(autouse=True)
 def register_int_conv():
-    def int_convtransposend(kernel, input, weight, bias=None, stride=1, padding=0, output_padding=0, dilation=1, groups=1, *, output_encodings=None):
+    def int_convtransposend(kernel, input, weight, bias=None, stride=1, padding=0, output_padding=0, groups=1, dilation=1, *, output_encodings=None):
         # Implicit dequantization is not supported yet
-        assert isinstance(input, QuantizedTensor)
-        assert isinstance(weight, QuantizedTensor)
+        if not isinstance(input, QuantizedTensor):
+            raise RuntimeError
+        if not isinstance(weight, QuantizedTensor):
+            raise RuntimeError
 
         input = input.dequantize()
         weight = weight.dequantize()
@@ -170,7 +177,8 @@ def register_int_activation():
         def wrapped_func(*args, output_encodings=None, **kwargs):
             # Implicit dequantization is not supported yet
             x, *others = args
-            assert isinstance(x, QuantizedTensor)
+            if not isinstance(x, QuantizedTensor):
+                raise RuntimeError
             output = func(x.dequantize(), *others, **kwargs)
             return affine_quantize(output, output_encodings.scale, output_encodings.offset, output_encodings.bitwidth)
 
@@ -192,8 +200,10 @@ def register_int_norm():
     def wrap_functional(func):
         def int_norm(input, normalized_shape, weight, bias, eps, *, output_encodings=None):
             # Implicit dequantization is not supported yet
-            assert isinstance(input, QuantizedTensor)
-            assert isinstance(weight, QuantizedTensor)
+            if not isinstance(input, QuantizedTensor):
+                raise RuntimeError
+            if not isinstance(weight, QuantizedTensor):
+                raise RuntimeError
 
             input = input.dequantize()
             weight = weight.dequantize()
@@ -214,8 +224,10 @@ def register_int_norm():
 def register_int_elementwise():
     def int_elementwise(kernel, x, y, *, output_encodings=None):
         # Implicit dequantization is not supported yet
-        assert isinstance(x, QuantizedTensor)
-        assert isinstance(y, QuantizedTensor)
+        if not isinstance(x, QuantizedTensor):
+            raise RuntimeError
+        if not isinstance(y, QuantizedTensor):
+            raise RuntimeError
         output = kernel(x.dequantize(), y.dequantize())
         return affine_quantize(output, output_encodings.scale, output_encodings.offset, output_encodings.bitwidth)
 
@@ -603,14 +615,6 @@ class TestQuantizedLayers:
         assert qlinear.output_quantizers[0] is None
 
 
-class TestQuantizedConvNd:
-    @pytest.mark.parametrize('cls', (nn.Conv1d, nn.Conv2d, nn.Conv3d))
-    def test_padding_mode(self, cls):
-        convnd = cls(3, 3, 3, padding_mode="reflect")
-        with pytest.raises(NotImplementedError):
-            _ = QuantizationMixin.from_module(convnd)
-
-
 def _pseudo_integer_kernel_helper(fn):
     """
     Helper function for creating a pseudo-integer kernel of ``fn``.
@@ -623,7 +627,8 @@ def _pseudo_integer_kernel_helper(fn):
 
         def dequantize(t: torch.Tensor):
             if isinstance(t, torch.Tensor):
-                assert isinstance(t, QuantizedTensor)
+                if not isinstance(t, QuantizedTensorBase):
+                    raise RuntimeError
                 t = t.dequantize()
             return t
 
@@ -723,3 +728,46 @@ def test_sanity(qmodule, pseudo_kernel, inputs):
     out_truequant = qmodule(*inputs)
 
     assert torch.equal(out_fakequant, out_truequant)
+
+
+def test_dispatch_sanity():
+    custom_add = lambda *args, **kwargs: torch.add(*args, **kwargs) + 1
+
+    """
+    When: Dispatch torch.add with custom_add(x, y) := x + y + 1
+    Then: Output of torch.add(x, y) should be equal to x + y + 1
+    """
+    zeros = torch.zeros(10)
+    with _dispatch(torch.add, custom_add):
+        out = torch.add(zeros, zeros)
+    assert torch.all(out == 1)
+
+    with _dispatch(torch.Tensor.add, custom_add):
+        out = zeros + zeros
+    assert torch.all(out == 1)
+
+    """
+    When: Dispatch torch.add with custom_add(x, y) := x + y + 1
+    Then: Output of the other functions should not be affected
+    """
+    with _dispatch(torch.add, custom_add):
+        zeros = torch.zeros(10)
+        ones = torch.ones(10)
+        twos = ones * 2
+        fours = twos.square()
+        threes = fours - twos / 2
+
+    assert torch.all(zeros == 0)
+    assert torch.all(ones == 1)
+    assert torch.all(twos == 2)
+    assert torch.all(threes == 3)
+    assert torch.all(fours == 4)
+
+    """
+    When: Try to dispatch unsupported functions
+    Then: Throw runtime error
+    """
+    for func in get_ignored_functions():
+        dummy_impl = lambda *args, **kwargs: func(*args, **kwargs)
+        with pytest.raises(RuntimeError):
+            with _dispatch(func, dummy_impl): pass

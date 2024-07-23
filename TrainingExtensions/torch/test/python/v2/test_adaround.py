@@ -1006,7 +1006,6 @@ class TestAdaround:
             assert len(encoding_data) == 1 # Only model.conv1 layer is adarounded.
 
     def test_adaround_default_values(self):
-        # import pudb; pudb.set_trace()
         model = models.resnet18().eval()
         input_shape = (1, 3, 224, 224)
         dummy_input = torch.randn(input_shape)
