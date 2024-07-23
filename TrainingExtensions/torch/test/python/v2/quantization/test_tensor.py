@@ -121,7 +121,8 @@ class TestQuantizedTensor:
         assert qtensor_dq.encoding.signed == qtensor.encoding.signed
 
 
-        for cast_fn in [torch.Tensor.half, torch.Tensor.double, torch.Tensor.cuda]:
+        for cast_fn in [torch.Tensor.half, torch.Tensor.double, torch.Tensor.cuda,
+                        lambda t: t.type(torch.half), lambda t: t.type_as(data.half())]:
             """
             Given: QuantizedTensor with fp32 dtype on cpu
             When: Cast to different dtype or device
@@ -167,7 +168,8 @@ class TestQuantizedTensor:
         with pytest.raises(RuntimeError):
             _ = qtensor_cls(data)
 
-        for cast_fn in [torch.Tensor.char, torch.Tensor.short, torch.Tensor.int, torch.Tensor.long]:
+        for cast_fn in [torch.Tensor.char, torch.Tensor.short, torch.Tensor.int, torch.Tensor.long,
+                        lambda t: t.type(torch.int), lambda t: t.type_as(data.int())]:
             """
             Given: QuantizedTensor
             When: Cast to non-floating point dtypes
