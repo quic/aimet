@@ -322,7 +322,7 @@ class QuantizedTensorBase(torch.Tensor):
             tree_map(lambda t: propagate_encoding(t, self.encoding), ret)
             return ret
 
-        if func in cls._pertensor_passthrough_ops:
+        if func in cls._pertensor_passthrough_ops and isinstance(self, QuantizedTensorBase):
             if self is ret:
                 return ret
 
