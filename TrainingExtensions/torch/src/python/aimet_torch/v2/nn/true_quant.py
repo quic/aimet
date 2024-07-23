@@ -324,6 +324,53 @@ class QuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-metho
 # pylint: disable=too-many-ancestors
 
 
+_dispatch_table: Dict[Callable, Optional[Callable]]
+_dispatch_table = {
+    torch_fn: None
+    for torch_fn in itertools.chain(*get_overridable_functions().values())
+}
+
+
+class _Dispatcher(BaseTorchFunctionMode):
+    def __torch_function__(self, func, types, args=(), kwargs=None):
+        impl = _dispatch_table[func]
+
+        if impl is None:
+            impl = func
+
+        return super().__torch_function__(impl, types, args, kwargs)
+
+
+_dispatcher = _Dispatcher()
+_stack_level = 0
+
+@contextlib.contextmanager
+def _dispatch(torch_func: Callable, custom_impl: Callable):
+    # pylint: disable=global-statement
+    global _stack_level
+    orig_level = _stack_level
+
+    try:
+        orig = _dispatch_table[torch_func]
+    except KeyError as e:
+        raise RuntimeError(f"PyTorch doesn't support overriding {torch_func}") from e
+
+    try:
+        _dispatch_table[torch_func] = custom_impl
+
+        if _stack_level == 0:
+            _dispatcher.__enter__()
+        _stack_level += 1
+
+        yield
+    finally:
+        _dispatch_table[torch_func] = orig
+        _stack_level = orig_level
+
+        if _stack_level == 0:
+            _dispatcher.__exit__(None, None, None)
+
+
 class _DispatchMixin:
     _builtin_torch_fn: Callable
 
@@ -572,50 +619,3 @@ class QuantizedDivide(_DispatchMixin, QuantizationMixin, aimet_ops.Divide):
     """ Quantized Divide """
     __quant_init__ = _binary_quant_init
     _builtin_torch_fn = torch.div
-
-
-
-_dispatch_table: Dict[Callable, Optional[Callable]]
-_dispatch_table = {
-    torch_fn: None
-    for torch_fn in itertools.chain(*get_overridable_functions().values())
-}
-
-class _Dispatcher(BaseTorchFunctionMode):
-    def __torch_function__(self, func, types, args=(), kwargs=None):
-        impl = _dispatch_table[func]
-
-        if impl is None:
-            impl = func
-
-        return super().__torch_function__(impl, types, args, kwargs)
-
-
-_dispatcher = _Dispatcher()
-_stack_level = 0
-
-@contextlib.contextmanager
-def _dispatch(torch_func: Callable, custom_impl: Callable):
-    # pylint: disable=global-statement
-    global _stack_level
-    orig_level = _stack_level
-
-    try:
-        orig = _dispatch_table[torch_func]
-    except KeyError as e:
-        raise RuntimeError(f"PyTorch doesn't support overriding {torch_func}") from e
-
-    try:
-        _dispatch_table[torch_func] = custom_impl
-
-        if _stack_level == 0:
-            _dispatcher.__enter__()
-        _stack_level += 1
-
-        yield
-    finally:
-        _dispatch_table[torch_func] = orig
-        _stack_level = orig_level
-
-        if _stack_level == 0:
-            _dispatcher.__exit__(None, None, None)
