@@ -42,6 +42,7 @@ import torch
 from torch import randn
 import torch.nn.functional as F
 from torch.utils._pytree import tree_map
+from torch.overrides import get_ignored_functions
 from aimet_torch.v2.quantization.affine.backends import quantize, quantize_dequantize, dequantize
 from aimet_torch.v2.quantization.affine import Quantize, QuantizeDequantize
 from aimet_torch.v2.nn import (
@@ -65,6 +66,7 @@ from aimet_torch.v2.nn import (
     QuantizedSubtract,
     FakeQuantizationMixin,
 )
+from aimet_torch.v2.nn.true_quant import _dispatch
 from aimet_torch.v2.quantization.affine import AffineEncoding
 from aimet_torch.v2.quantization.tensor import QuantizedTensorBase, QuantizedTensor, DequantizedTensor
 from aimet_torch.v2.utils import enable_recompute
@@ -726,3 +728,46 @@ def test_sanity(qmodule, pseudo_kernel, inputs):
     out_truequant = qmodule(*inputs)
 
     assert torch.equal(out_fakequant, out_truequant)
+
+
+def test_dispatch_sanity():
+    custom_add = lambda *args, **kwargs: torch.add(*args, **kwargs) + 1
+
+    """
+    When: Dispatch torch.add with custom_add(x, y) := x + y + 1
+    Then: Output of torch.add(x, y) should be equal to x + y + 1
+    """
+    zeros = torch.zeros(10)
+    with _dispatch(torch.add, custom_add):
+        out = torch.add(zeros, zeros)
+    assert torch.all(out == 1)
+
+    with _dispatch(torch.Tensor.add, custom_add):
+        out = zeros + zeros
+    assert torch.all(out == 1)
+
+    """
+    When: Dispatch torch.add with custom_add(x, y) := x + y + 1
+    Then: Output of the other functions should not be affected
+    """
+    with _dispatch(torch.add, custom_add):
+        zeros = torch.zeros(10)
+        ones = torch.ones(10)
+        twos = ones * 2
+        fours = twos.square()
+        threes = fours - twos / 2
+
+    assert torch.all(zeros == 0)
+    assert torch.all(ones == 1)
+    assert torch.all(twos == 2)
+    assert torch.all(threes == 3)
+    assert torch.all(fours == 4)
+
+    """
+    When: Try to dispatch unsupported functions
+    Then: Throw runtime error
+    """
+    for func in get_ignored_functions():
+        dummy_impl = lambda *args, **kwargs: func(*args, **kwargs)
+        with pytest.raises(RuntimeError):
+            with _dispatch(func, dummy_impl): pass

@@ -333,7 +333,7 @@ _dispatch_table = {
 
 class _Dispatcher(BaseTorchFunctionMode):
     def __torch_function__(self, func, types, args=(), kwargs=None):
-        impl = _dispatch_table[func]
+        impl = _dispatch_table.get(func, None)
 
         if impl is None:
             impl = func
