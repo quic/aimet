@@ -38,7 +38,7 @@
 
 import contextlib
 import itertools
-from abc import abstractmethod
+from abc import abstractmethod, ABCMeta
 from collections import OrderedDict
 from typing import Type, Any, Optional, Callable, Dict
 from weakref import WeakKeyDictionary
@@ -371,7 +371,19 @@ def _dispatch(torch_func: Callable, custom_impl: Callable):
             _dispatcher.__exit__(None, None, None)
 
 
-class _DispatchMixin:
+class _DispatchMeta(ABCMeta):
+    def __new__(mcs, name, bases, namespace, **kwargs):
+        """
+        Sanity check for class definitions of dispatch-based quantized modules
+        """
+        if '_builtin_torch_fn' in namespace:
+            torch_fn = namespace['_builtin_torch_fn']
+            if torch_fn not in _dispatch_table:
+                raise RuntimeError(f"PyTorch doesn't support overriding {torch_fn}")
+        return super().__new__(mcs, name, bases, namespace, **kwargs)
+
+
+class _DispatchMixin(metaclass=_DispatchMeta):
     _builtin_torch_fn: Callable
 
     def forward(self, *args, **kwargs):  # pylint: disable=missing-function-docstring
@@ -511,7 +523,7 @@ class QuantizedSigmoid(_DispatchMixin, QuantizationMixin, nn.Sigmoid):
 @QuantizationMixin.implements(nn.Tanh)
 class QuantizedTanh(_DispatchMixin, QuantizationMixin, nn.Tanh):
     """ Quantized Tanh """
-    _builtin_torch_fn = F.tanh
+    _builtin_torch_fn = torch.tanh
 
 
 @QuantizationMixin.implements(nn.ReLU)
