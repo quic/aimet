@@ -51,7 +51,7 @@ from aimet_common.defs import QuantScheme
 from aimet_torch.v2.quantization import affine
 from aimet_torch.v2.quantization.affine.backends import torch_builtins
 from aimet_torch.v2.quantsim import QuantizationSimModel
-from aimet_torch.v2.nn import FakeQuantizationMixin
+from aimet_torch.v2.nn import BaseQuantizationMixin
 from aimet_torch.utils import get_named_module, is_leaf_module
 
 
@@ -89,7 +89,7 @@ def resnet18():
 def get_quantized_modules(model: torch.nn.Module):
     module_names = []
     for _, module in model.named_children():
-        if isinstance(module, FakeQuantizationMixin):
+        if isinstance(module, BaseQuantizationMixin):
             module_names.append(module)
 
         elif not is_leaf_module(module):
@@ -97,7 +97,7 @@ def get_quantized_modules(model: torch.nn.Module):
 
     return module_names
 
-def get_enabled_quantizers_from_quantized_module(module: FakeQuantizationMixin):
+def get_enabled_quantizers_from_quantized_module(module: BaseQuantizationMixin):
     quantizers = module.input_quantizers + module.output_quantizers \
         + list(module.param_quantizers.values())
     return [quantizer for quantizer in quantizers if quantizer is not None]
