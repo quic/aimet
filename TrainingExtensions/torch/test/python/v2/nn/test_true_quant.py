@@ -59,6 +59,14 @@ from aimet_torch.v2.nn import (
     QuantizedSoftmax,
     QuantizedLayerNorm,
     QuantizedGroupNorm,
+    QuantizedReLU,
+    QuantizedPReLU,
+    QuantizedConstantPad2d as QConstantPad2d,
+    QuantizedHardtanh,
+    QuantizedMaxPool2d,
+    QuantizedUpsamplingBilinear2d as QUpsamplingBilinear2d,
+    QuantizedPixelShuffle,
+    QuantizedAvgPool2d,
     FakeQuantizationMixin,
 )
 from aimet_torch.v2.nn.true_quant import _dispatch
@@ -643,16 +651,6 @@ def _pseudo_integer_kernel_helper(fn):
     return pseudo_kernel
 
 
-from aimet_torch.v2.nn import (
-    QuantizedReLU,
-    QuantizedPReLU,
-    QuantizedConstantPad2d as QConstantPad2d,
-    QuantizedHardtanh,
-    QuantizedMaxPool2d,
-    QuantizedUpsamplingBilinear2d as QUpsamplingBilinear2d,
-    QuantizedPixelShuffle,
-    QuantizedAvgPool2d,
-)
 pseudo_relu_kernel = _pseudo_integer_kernel_helper(F.relu)
 pseudo_prelu_kernel = _pseudo_integer_kernel_helper(F.prelu)
 pseudo_pad_kernel = _pseudo_integer_kernel_helper(F.pad)
