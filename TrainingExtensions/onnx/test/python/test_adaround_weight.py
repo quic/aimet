@@ -113,11 +113,13 @@ class TestAdaround:
         if version.parse(torch.__version__) >= version.parse("1.13"):
             assert 'conv.weight' in param_keys
 
-    @pytest.mark.parametrize("model", [models_for_tests.weight_gemm_model(10, 20, True)])
-    def test_adaround_matmul_gemm(self, model, tmpdir):
-        data_loader = dataloader((1, 10, ), 1)
+    @pytest.mark.parametrize("model, input_shape", [(models_for_tests.weight_gemm_model(10, 20, True), (1, 10)),
+                                                    (models_for_tests.weight_gemm_model(10, 20, False), (1, 10)),
+                                                    (models_for_tests.weight_matmul_model(10, 20), (1, 10, 10))])
+    def test_adaround_matmul_gemm(self, model, input_shape, tmpdir):
+        data_loader = dataloader(input_shape, input_shape[0])
         def callback(session, args):
-            in_tensor = {'input': np.random.rand(1, 10).astype(np.float32)}
+            in_tensor = {'input': np.random.rand(*input_shape).astype(np.float32)}
             session.run(None, in_tensor)
 
         params = AdaroundParameters(data_loader=data_loader, num_batches=1, default_num_iterations=5,
