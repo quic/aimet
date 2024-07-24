@@ -116,12 +116,6 @@ macro(update_torch_cuda_arch_list)
                     )
     message(STATUS "** Updated CMAKE_CUDA_ARCHITECTURES to ${CMAKE_CUDA_ARCHITECTURES} **")
 
-    # We remove certain architectures that are not supported
-    set(UNSUPPORTED_CUDA_ARCHITECTURES_TORCH 90)
-    list(REMOVE_ITEM CMAKE_CUDA_ARCHITECTURES ${UNSUPPORTED_CUDA_ARCHITECTURES_TORCH})
-    message(STATUS "** Removed unsupported archs (${UNSUPPORTED_CUDA_ARCHITECTURES_TORCH})")
-    message(STATUS "** Now CMAKE_CUDA_ARCHITECTURES = ${CMAKE_CUDA_ARCHITECTURES}")
-
     # Set torch cuda architecture list variable
     # Convert to the proper format (Reference: https://stackoverflow.com/a/74962874)
     #   - Insert "." between the digits of the architecture version (ex. 50 --> 5.0)
