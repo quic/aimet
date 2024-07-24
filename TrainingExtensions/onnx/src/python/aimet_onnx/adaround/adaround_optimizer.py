@@ -294,7 +294,9 @@ class AdaroundOptimizer:
             out_data = functional.conv_transpose2d(inp_data, adarounded_weights, bias=bias, stride=attributes['strides'],
                                                    dilation=attributes['dilations'], groups=attributes['group'])
         elif quant_module.type in ['Gemm', 'MatMul']:
-            bias = torch.from_numpy(numpy_helper.to_array(quant_module.params['bias'].tensor)).to(device)
+            bias = None
+            if 'bias' in quant_module.params:
+                bias = torch.from_numpy(numpy_helper.to_array(quant_module.params['bias'].tensor)).to(device)
             out_data = functional.linear(inp_data, adarounded_weights, bias=bias)
 
         else:

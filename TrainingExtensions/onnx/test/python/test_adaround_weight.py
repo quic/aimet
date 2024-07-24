@@ -48,6 +48,7 @@ from aimet_common import libquant_info
 
 from aimet_onnx.adaround.adaround_weight import Adaround, AdaroundParameters
 import models.models_for_tests as test_models
+from models import models_for_tests
 
 class TestAdaround:
     """
@@ -112,8 +113,28 @@ class TestAdaround:
         if version.parse(torch.__version__) >= version.parse("1.13"):
             assert 'conv.weight' in param_keys
 
+    @pytest.mark.parametrize("model", [models_for_tests.weight_gemm_model(10, 20, True)])
+    def test_adaround_matmul_gemm(self, model, tmpdir):
+        data_loader = dataloader((1, 10, ), 1)
+        def callback(session, args):
+            in_tensor = {'input': np.random.rand(1, 10).astype(np.float32)}
+            session.run(None, in_tensor)
 
-def dataloader(input_shape: tuple):
+        params = AdaroundParameters(data_loader=data_loader, num_batches=1, default_num_iterations=5,
+                                    forward_fn=callback,
+                                    forward_pass_callback_args=None)
+
+        Adaround.apply_adaround(model, params, tmpdir, 'dummy')
+
+        with open(os.path.join(tmpdir, 'dummy.encodings')) as json_file:
+            encoding_data = json.load(json_file)
+
+        param_keys = list(encoding_data.keys())
+        assert 'weight' in param_keys
+
+
+
+def dataloader(input_shape: tuple, batch_size=2):
     class DataLoader:
         """
         Example of a Dataloader which can be used for running AMPv2
@@ -133,7 +154,7 @@ def dataloader(input_shape: tuple):
         def __len__(self):
             return 4
 
-    dummy_dataloader = DataLoader(batch_size=2, input_shape=input_shape)
+    dummy_dataloader = DataLoader(batch_size=batch_size, input_shape=input_shape)
     return dummy_dataloader
 
 
