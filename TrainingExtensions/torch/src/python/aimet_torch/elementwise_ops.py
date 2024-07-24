@@ -561,3 +561,24 @@ class DynamicLinear(torch.nn.Module):
         Forward-pass routine for Dynamic Linear Op
         """
         return torch.nn.functional.linear(x, weight, bias)
+
+
+# TODO: Can be removed once AIMET supports torch >= 2.4
+class RmsNorm(torch.nn.Module):
+    """Custom module for RmsNorm"""
+    def __init__(self, input_shape: list, axes: list, epsilon: float):
+        super().__init__()
+        self.epsilon = epsilon
+        self.axes = axes
+        normalized_shape = tuple(input_shape[i] for i in axes)
+        self.weight = torch.nn.Parameter(torch.ones(normalized_shape))
+        self.bias = torch.nn.Parameter(torch.zeros(normalized_shape))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass for RmsNorm
+        """
+        squared_mean = torch.mean(x * x, dim=self.axes, keepdim=True)
+        rms = torch.sqrt(squared_mean + self.epsilon)
+        res = torch.div(x, rms) * self.weight + self.bias
+        return res
