@@ -171,8 +171,8 @@ class AdaroundOptimizer:
         for iteration in range(opt_params.num_iterations):
             if use_cache_acts_data and AdaroundOptimizer.enable_caching_acts_data():
                 indices = torch.randperm(all_inp_data.size(0))[:BATCH_SIZE]
-                inp_data = all_inp_data[indices].to(device)
-                orig_out_data = all_orig_out_data[indices].to(device)
+                inp_data = all_inp_data[indices].to(torch_device)
+                orig_out_data = all_orig_out_data[indices].to(torch_device)
             else:
                 model_inputs = cached_dataset[np.random.randint(len(cached_dataset))]
                 inp_data, orig_out_data = act_sampler.sample_acts(create_input_dict(orig_model.model, model_inputs))

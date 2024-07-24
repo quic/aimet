@@ -56,7 +56,8 @@ class TestAdaround:
     """
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="This unit-test is meant to be run on GPU")
-    def test_apply_adaround(self):
+    @pytest.mark.parametrize("use_cuda", (True, False))
+    def test_apply_adaround(self, use_cuda):
         np.random.seed(0)
         torch.manual_seed(0)
         model = test_models.single_residual_model()
@@ -70,7 +71,7 @@ class TestAdaround:
 
         params = AdaroundParameters(data_loader=data_loader, num_batches=1, default_num_iterations=5, forward_fn=callback,
                                     forward_pass_callback_args=None)
-        ada_rounded_model = Adaround.apply_adaround(model, params, './', 'dummy')
+        ada_rounded_model = Adaround.apply_adaround(model, params, './', 'dummy', use_cuda=use_cuda)
         sess = build_session(ada_rounded_model, None)
         out_after_ada = sess.run(None, dummy_input)
         assert not np.array_equal(out_before_ada[0], out_after_ada[0])
