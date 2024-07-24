@@ -56,7 +56,8 @@ from aimet_common import quantsim
 from aimet_common.connected_graph.connectedgraph_utils import CG_SPLIT
 from aimet_common.utils import AimetLogger, save_json_yaml, log_with_error_and_assert_if_false
 from aimet_common.defs import QuantScheme, QuantizationDataType, SupportedKernelsAction, QuantDtypeBwInfo
-from aimet_common.quantsim import validate_quantsim_inputs, extract_global_quantizer_args
+from aimet_common.quantsim import validate_quantsim_inputs, extract_global_quantizer_args, exception_for_embedding, \
+    exception_for_groupnorm, exception_for_matmul
 from aimet_common.quant_utils import get_conv_accum_bounds
 
 from aimet_torch.nn.modules.custom import MatMul
@@ -1870,21 +1871,9 @@ class QuantizationSimModel:
                 continue
 
             if isinstance(original_module, torch.nn.Embedding):
-                if self._hw_version not in {'V73', 'V75', 'V79'}:
-                    continue
-                weight_quantizer = wrapper.param_quantizers['weight']
-                output_quantizer = wrapper.output_quantizers[0]
-
-                weight_quantizer.bitwidth = output_quantizer.bitwidth
-                weight_quantizer.use_symmetric_encodings = output_quantizer.use_symmetric_encodings
+                exception_for_embedding(self._hw_version, wrapper.param_quantizers, wrapper.output_quantizers)
             elif isinstance(original_module, torch.nn.GroupNorm):
-                if self._hw_version not in {'V73', 'V75', 'V79'}:
-                    continue
-                if 'weight' in wrapper.param_quantizers:
-                    output_quantizer = wrapper.output_quantizers[0]
-                    for _, param_quantizer in wrapper.param_quantizers.items():
-                        param_quantizer.bitwidth = output_quantizer.bitwidth
-                        param_quantizer.use_symmetric_encodings = output_quantizer.use_symmetric_encodings
+                exception_for_groupnorm(self._hw_version, wrapper.param_quantizers, wrapper.output_quantizers)
             elif isinstance(original_module, MatMul):
                 # Skip unused modules
                 if original_module not in self.connected_graph._module_to_op_dict.keys():
@@ -1900,28 +1889,11 @@ class QuantizationSimModel:
                 target_quantizer_for_second_input = self._get_target_quantizer(second_input_quantizer, second_input_op, module_to_quant_wrapper)
 
                 if not target_quantizer_for_second_input:
+                    logger.warning("The target quantizer could not be found. MatMul exception rule does not apply for layer: %s. "
+                                   "If you haven't used model preparer, consider using it.", str(original_module))
                     continue
 
-                # According to opdef for Matmul in HTP:
-                # 16bit Weight(second input for dynamic MatMul) must have 16bit Activation(first input for dynamic MatMul).
-                # 16bit Activation and 16bit Weight require minimum arch V73.
-                # 16bit Weight must be symmetric quantized.
-
-                # Below are the possible combinations for MatMul with 8/16 bitwidth:
-                # If version is V73/V75: {input0->8, input1->8 symm/asymm} {input0->16 , input1->8 symm/asymm} {input0->16, input1->16 symmetric}
-                # If version is lesser than V73: {input0->8, input1->8 symmetric} {input0->16, input1->8 symmetric}
-
-                if self._hw_version in {'V66', 'V68', 'V69'}:
-                    target_quantizer_for_second_input.use_symmetric_encodings = True
-                    target_quantizer_for_second_input.bitwidth = 8
-                elif self._hw_version in {'V73', 'V75', 'V79'}:
-                    if target_quantizer_for_second_input.bitwidth == 16:
-                        target_quantizer_for_second_input.use_symmetric_encodings = True
-                        if target_quantizer_for_first_input:
-                            target_quantizer_for_first_input.bitwidth = 16
-                else:
-                    raise ValueError(f'Not expected hardware version to apply exception rules: {self._hw_version}')
-
+                exception_for_matmul(self._hw_version, target_quantizer_for_first_input, target_quantizer_for_second_input)
             else:
                 raise ValueError(f'A module not expected to apply exception rules: {name}')
 
@@ -1943,9 +1915,6 @@ class QuantizationSimModel:
             )
             if closest_producer_wrapper:
                 target_quantizer = closest_producer_wrapper.output_quantizers[0]
-            else:
-                logger.warning("The closest wrapper could not be found. MatMul exception rule does not apply. "
-                               "If you haven't used model preparer, consider using it.")
         return target_quantizer
 
 

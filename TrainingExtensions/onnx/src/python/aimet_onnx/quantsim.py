@@ -56,7 +56,7 @@ from packaging import version
 from aimet_common import libpymo
 from aimet_common import libquant_info
 from aimet_common.defs import QuantScheme, QuantizationDataType
-from aimet_common.quantsim import encoding_version, extract_global_quantizer_args
+from aimet_common.quantsim import encoding_version, extract_global_quantizer_args, exception_for_groupnorm, exception_for_matmul
 from aimet_common.utils import save_json_yaml, AimetLogger
 from aimet_onnx import utils
 from aimet_onnx.meta.operations import Op
@@ -200,10 +200,13 @@ class QuantizationSimModel:
                                                           user_onnx_libs=self._user_onnx_libs, path=self._path)
         quantsim_configurator = self._add_configuration_(config_file)
 
+        self._hw_version = quantsim_configurator._get_hw_version()
         self._supported_kernels = quantsim_configurator.get_supported_kernels()
         self._op_to_supported_kernel = quantsim_configurator.get_op_to_supported_kernels()
 
         self.quant_args = extract_global_quantizer_args(quant_scheme, quantsim_configurator)
+
+        self._apply_exception_rules()
 
     def get_supported_kernels(self) -> Dict:
         """
@@ -503,6 +506,114 @@ class QuantizationSimModel:
         Return dict of qc quantize ops
         """
         return self.qc_quantize_op_dict
+
+    def get_op_quantizers(self, op: Op) -> (List, List, Dict):
+        """
+        This function returns the input, output and param quantizers of the given connected graph op.
+
+        :param op: Connected Graph Op
+        :return: list of input quantizers, list of output quantizers and dictionary of param quantizers
+        """
+        input_quantizers = []
+        output_quantizers = []
+        param_quantizers = {}
+
+        # Capture input quantizers if the op is a starting op
+        if op in self.connected_graph.starting_ops:
+            cg_products = [cg_product for cg_product in op.inputs if cg_product.is_model_input]
+            for cg_product in cg_products:
+                assert len(cg_product.tensor_dict) == 1
+                input_name = list(cg_product.tensor_dict.values())[0]
+                if input_name in self.qc_quantize_op_dict:
+                    input_quantizers.append(self.qc_quantize_op_dict[input_name])
+
+        # Capture output quantizers of the op
+        if op.output_ops and op.output_ops[0].type == 'branch':
+            # op having multiple outputs
+            cg_product = op.output_ops[0].output
+        else:
+            # op having single output
+            cg_product = op.output
+        for output_name in set(cg_product.tensor_dict.values()):
+            if output_name in self.qc_quantize_op_dict:
+                output_quantizers.append(self.qc_quantize_op_dict[output_name])
+
+        # Capture param quantizers of the op
+        for param_name, (_, param_type) in op.parameters.items():
+            if param_name in self.qc_quantize_op_dict:
+                param_quantizers[param_type] = self.qc_quantize_op_dict[param_name]
+
+        return (input_quantizers, output_quantizers, param_quantizers)
+
+    def _apply_exception_rules(self):
+        """
+        Apply exception rules to specific op. For example, a rule can override high bitwidth to GroupNorm op.
+        """
+        if self._hw_version not in {'V66', 'V68', 'V69', 'V73', 'V75', 'V79'}:
+            return
+
+        for op in self.connected_graph.ordered_ops:
+            if op.type not in ['GroupNormalization', 'MatMul']:
+                continue
+            input_quantizers, output_quantizers, param_quantizers = self.get_op_quantizers(op)
+
+            if op.type == 'GroupNormalization':
+                exception_for_groupnorm(self._hw_version, param_quantizers, output_quantizers)
+            elif op.type == 'MatMul':
+                first_input_quantizer = input_quantizers[0] if input_quantizers else None
+                second_input_quantizer = list(param_quantizers.values())[0]
+
+                first_input_op = op.input_ops[0] if not first_input_quantizer else None
+                second_input_op = op.input_ops[1] if not second_input_quantizer else None
+
+                target_quantizer_for_first_input = self._get_target_quantizer(first_input_quantizer, first_input_op)
+                target_quantizer_for_second_input = self._get_target_quantizer(second_input_quantizer, second_input_op)
+
+                if target_quantizer_for_second_input is None:
+                    logger.warning("The target quantizers could not be found. MatMul exception rule does not apply for op: %s.", op.name)
+                    continue
+
+                exception_for_matmul(self._hw_version, target_quantizer_for_first_input, target_quantizer_for_second_input)
+            else:
+                raise ValueError(f'An op not expected to apply exception rules: {op.name}')
+
+    def _get_target_quantizer(self, input_quantizer: QcQuantizeOp, input_op: Op) -> QcQuantizeOp:
+        """
+        Returns input quantizer if enabled otherwise returns closest enabled parent output quantizer.
+
+        :param input_quantizer: Input quantizer
+        :param input_op: CG op
+        :return: Target quantizer
+        """
+        target_quantizer = None
+        if input_quantizer:
+            if input_quantizer.enabled:
+                target_quantizer = input_quantizer
+        else:
+            target_quantizer = self._get_closest_target_quantizer(input_op)
+        return target_quantizer
+
+    # pylint: disable=inconsistent-return-statements
+    def _get_closest_target_quantizer(self, op: Op) -> QcQuantizeOp:
+        """
+        Returns the closest parent output quantizer.
+
+        :param op: CG op whose output quantizer is to be analyzed
+        :return: Target quantizer
+        """
+        onnx_op = op.get_module()
+        output_tensor = onnx_op.output[0]
+        target_quantizer = self.qc_quantize_op_dict.get(output_tensor, None)
+
+        if target_quantizer and target_quantizer.enabled:
+            return target_quantizer
+
+        if target_quantizer is None or not target_quantizer.enabled:
+            if len(op.input_ops) == 1:
+                return self._get_closest_target_quantizer(op.input_ops[0])
+            logger.warning("The op: %s with output quantization disabled has no input or more than one input exists. "
+                           "It's ambiguous to find the closest target quantizer in this case", op.name)
+            return None
 
     def save_model_graph(self, filename_prefix: str):
         """

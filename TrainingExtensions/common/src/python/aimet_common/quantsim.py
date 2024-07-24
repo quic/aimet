@@ -283,3 +283,66 @@ def extract_global_quantizer_args(quant_scheme: Union[str, QuantScheme],
                        "per_channel_quantization": is_per_channel_quant
                        })
     return quant_args
+
+
+def exception_for_embedding(hw_version: str, param_quantizers: dict, output_quantizers):
+    """
+    Configures the quantizers of embedding layer w.r.t backend rules
+    :param hw_version: backend hardware version
+    :param param_quantizers: param quantizers of embedding layer
+    :param output_quantizers: output quantizers of embedding layer
+    :return:
+    """
+    if hw_version not in {'V73', 'V75', 'V79'}:
+        return
+    weight_quantizer = param_quantizers['weight']
+    output_quantizer = output_quantizers[0]
+
+    weight_quantizer.bitwidth = output_quantizer.bitwidth
+    weight_quantizer.use_symmetric_encodings = output_quantizer.use_symmetric_encodings
+
+
+def exception_for_groupnorm(hw_version: str, param_quantizers: dict, output_quantizers):
+    """
+    Configures the quantizers of group-norm layer w.r.t backend rules
+    :param hw_version: backend hardware version
+    :param param_quantizers: param quantizers of group-norm layer
+    :param output_quantizers: output quantizers of group-norm layer
+    :return:
+    """
+    if hw_version not in {'V73', 'V75', 'V79'}:
+        return
+    if 'weight' in param_quantizers:
+        output_quantizer = output_quantizers[0]
+        for _, param_quantizer in param_quantizers.items():
+            param_quantizer.bitwidth = output_quantizer.bitwidth
+            param_quantizer.use_symmetric_encodings = output_quantizer.use_symmetric_encodings
+
+
+def exception_for_matmul(hw_version: str, target_quantizer_for_first_input, target_quantizer_for_second_input):
+    """
+    Configures the quantizers of matmul layer w.r.t backend rules
+    :param hw_version: backend hardware version
+    :param target_quantizer_for_first_input: quantizer for first input to matmul
+    :param target_quantizer_for_second_input: quatizer for second input to matmul
+    :return:
+    """
+    # According to opdef for Matmul in HTP:
+    # 16bit Weight(second input for dynamic MatMul) must have 16bit Activation(first input for dynamic MatMul).
+    # 16bit Activation and 16bit Weight require minimum arch V73.
+    # 16bit Weight must be symmetric quantized.
+
+    # Below are the possible combinations for MatMul with 8/16 bitwidth:
+    # If version is V73/V75: {input0->8, input1->8 symm/asymm} {input0->16 , input1->8 symm/asymm} {input0->16, input1->16 symmetric}
+    # If version is lesser than V73: {input0->8, input1->8 symmetric} {input0->16, input1->8 symmetric}
+
+    if hw_version in {'V66', 'V68', 'V69'}:
+        target_quantizer_for_second_input.use_symmetric_encodings = True
+        target_quantizer_for_second_input.bitwidth = 8
+    elif hw_version in {'V73', 'V75', 'V79'}:
+        if target_quantizer_for_second_input.bitwidth == 16:
+            target_quantizer_for_second_input.use_symmetric_encodings = True
+            if target_quantizer_for_first_input:
+                target_quantizer_for_first_input.bitwidth = 16
+    else:
+        raise ValueError(f'Not expected hardware version to apply exception rules: {hw_version}')
