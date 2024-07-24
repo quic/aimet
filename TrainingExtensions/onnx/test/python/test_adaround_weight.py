@@ -135,6 +135,47 @@ class TestAdaround:
         param_keys = list(encoding_data.keys())
         assert 'weight' in param_keys
 
+    @pytest.mark.parametrize("model, input_shape", [(models_for_tests.weight_gemm_model(10, 20, True), (1, 10)),])
+    def test_adaround_with_dict_input(self, model, input_shape, tmpdir):
+
+        class DictDataLoader:
+            """
+            Example of a Dataloader which can be used for running AMPv2
+            """
+
+            def __init__(self, input_shape: tuple, input_name):
+                """
+                :param batch_size: batch size for data loader
+                """
+                self.input_shape = input_shape
+                self.input_name = input_name
+
+            def __iter__(self):
+                """Iterates over dataset"""
+                dummy_input = np.random.rand(*self.input_shape).astype(np.float32)
+                yield {self.input_name: dummy_input}
+
+            def __len__(self):
+                return 4
+
+
+        data_loader = DictDataLoader((1, 10), "input")
+        def callback(session, args):
+            in_tensor = {'input': np.random.rand(*input_shape).astype(np.float32)}
+            session.run(None, in_tensor)
+
+        params = AdaroundParameters(data_loader=data_loader, num_batches=1, default_num_iterations=5,
+                                    forward_fn=callback,
+                                    forward_pass_callback_args=None)
+
+        Adaround.apply_adaround(model, params, tmpdir, 'dummy')
+
+        with open(os.path.join(tmpdir, 'dummy.encodings')) as json_file:
+            encoding_data = json.load(json_file)
+
+        param_keys = list(encoding_data.keys())
+        assert 'weight' in param_keys
+
 
 
 def dataloader(input_shape: tuple, batch_size=2):
