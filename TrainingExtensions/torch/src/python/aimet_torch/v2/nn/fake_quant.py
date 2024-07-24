@@ -667,6 +667,7 @@ _AIMET_V1_UNARY_MODULES = [
     aimet_ops.Shape,
     aimet_ops.Expand,
     aimet_ops.StridedSlice,
+    aimet_ops.RmsNorm
 ]
 _AIMET_V1_BINARY_MODULES = [
     aimet_ops.MatMul,
