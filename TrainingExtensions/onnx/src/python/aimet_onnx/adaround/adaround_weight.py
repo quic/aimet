@@ -245,6 +245,9 @@ class Adaround:
             for module in tqdm(modules):
                 if module.type in AdaroundSupportedModules:
                     name = module.name
+                    if not "weight" in model_data.module_to_info[name].params:
+                        # Skip if layer does not have a constant weight input
+                        continue
                     # Get module's next following activation function
                     act_func = module_act_func_pair[name]
                     quantized_input_name = quantized_layer_to_input_tensor_name[name]

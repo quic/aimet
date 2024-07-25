@@ -2009,6 +2009,28 @@ def weight_gemm_model(in_features, out_features, transposed_weight=False):
     onnx.checker.check_model(model)
     return model
 
+def dynamic_matmul_model(batch_size):
+    class Model(torch.nn.Module):
+
+        def __init__(self):
+            super().__init__()
+            self.linear = torch.nn.Linear(10, 10)
+
+        def forward(self, x):
+            # Add some nonsense operations that will get folded in onnx simplifier
+            y = self.linear(x)
+            return torch.nn.functional.linear(x, y)
+
+    model = Model()
+
+    with tempfile.TemporaryDirectory() as tempdir:
+        fname = os.path.join(tempdir, "model.onnx")
+        torch.onnx.export(model, torch.randn(batch_size, 10), fname, input_names=["input"], output_names=["output"],
+                          do_constant_folding=False)
+        onnx_model = onnx.load(fname)
+
+    return onnx_model
+
 
 def layernorm_model():
     model = helper.make_model(
