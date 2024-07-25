@@ -2032,6 +2032,31 @@ def dynamic_matmul_model(batch_size):
     return onnx_model
 
 
+def simplifiable_model(batch_size=1):
+
+    class Model(torch.nn.Module):
+
+        def __init__(self):
+            super().__init__()
+            self.weight1 = torch.nn.Parameter(torch.empty(10, 10))
+            self.weight2 = torch.nn.Parameter(torch.empty(20, 10))
+
+        def forward(self, x):
+            # Add some nonsense operations that will get folded in onnx simplifier
+            weight3 = torch.nn.functional.linear(self.weight2, self.weight1)
+            return torch.nn.functional.linear(x, weight3)
+
+    model = Model()
+
+    with tempfile.TemporaryDirectory() as tempdir:
+        fname = os.path.join(tempdir, "model.onnx")
+        torch.onnx.export(model, torch.randn(batch_size, 10), fname, input_names=["input"], output_names=["output"],
+                          do_constant_folding=False)
+        onnx_model = onnx.load(fname)
+
+    return onnx_model
+
+
 def layernorm_model():
     model = helper.make_model(
         graph=helper.make_graph(

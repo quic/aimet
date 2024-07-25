@@ -192,6 +192,22 @@ class TestAdaround:
 
         Adaround.apply_adaround(model, params, tmpdir, 'dummy')
 
+    @pytest.mark.parametrize("model, input_shape", [(models_for_tests.simplifiable_model(1), (1, 10))])
+    def test_adaround_simplifiable_model(self, model, input_shape, tmpdir):
+        """
+        AdaRound should not error-out for models which need simplification
+        """
+        data_loader = dataloader(input_shape, input_shape[0])
+        def callback(session, args):
+            in_tensor = {'input': np.random.rand(*input_shape).astype(np.float32)}
+            session.run(None, in_tensor)
+
+        params = AdaroundParameters(data_loader=data_loader, num_batches=1, default_num_iterations=5,
+                                    forward_fn=callback,
+                                    forward_pass_callback_args=None)
+
+        Adaround.apply_adaround(model, params, tmpdir, 'dummy')
+
 
 
 

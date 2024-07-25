@@ -585,17 +585,26 @@ class QuantizationSimModel:
         """
         Remove quantization nodes
         """
+        self.model = self.remove_quantizers(self.model)
+
+    @staticmethod
+    def remove_quantizers(model: ONNXModel):
+        """
+        Removes all QcQuantizeOp layers from model
+        """
         nodes_to_remove = []
-        for node in self.model.nodes():
+        for node in model.nodes():
             if node.op_type == 'QcQuantizeOp':
                 nodes_to_remove.append(node)
             else:
                 for name in node.input:
-                    self.model.replace_input_of_all_nodes(name, name.replace('_qdq', '').replace('_updated', ''))
-        self.model.remove_nodes(nodes_to_remove)
+                    model.replace_input_of_all_nodes(name, name.replace('_qdq', '').replace('_updated', ''))
+        model.remove_nodes(nodes_to_remove)
 
-        for node in self.model.graph().output:
+        for node in model.graph().output:
             node.name = node.name.replace('_updated', '')
+
+        return model
 
     def export(self, path: str, filename_prefix: str):
         """

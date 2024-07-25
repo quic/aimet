@@ -149,6 +149,12 @@ class Adaround:
                                          user_onnx_libs=user_onnx_libs,
                                          use_cuda=use_cuda)
 
+        # TODO: Remove this once we no longer simplify the model within quantsim
+        # There are many assumptions in AdaRound that quantsim.model is the same as model (but with quantizers inserted)
+        # However this is not true, since quant_sim.model has passed through onnxsim.simplify()
+        # As a temporary fix, use the simplified quantsim model and remove the quantizers as `model`
+        model = QuantizationSimModel.remove_quantizers(copy.deepcopy(quant_sim.model))
+
         # For the params in the param_bw_override_list, override the default parameter bitwidths in the QuantSim
         if param_bw_override_list:
             cls._override_param_bitwidth(quant_sim, param_bw_override_list)
