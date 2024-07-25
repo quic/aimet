@@ -2009,6 +2009,45 @@ def weight_gemm_model(in_features, out_features, transposed_weight=False):
     onnx.checker.check_model(model)
     return model
 
+def conv_model(weight_shape, input_shape, output_shape, transpose=False, **kwargs):
+    layer_type = "Conv" if not transpose else "ConvTranspose"
+    conv_layer = helper.make_node(layer_type, inputs=["input", "weight"], name="conv", outputs=["output"],
+                                  **kwargs)
+    weight = numpy_helper.from_array(np.empty(weight_shape, dtype=np.float32), name="weight")
+    input_tensor = helper.make_tensor_value_info("input", onnx.TensorProto.FLOAT, input_shape)
+    output_tensor = helper.make_tensor_value_info("output", onnx.TensorProto.FLOAT, output_shape)
+    graph = helper.make_graph([conv_layer], "conv_graph", initializer=[weight], inputs=[input_tensor], outputs=[output_tensor])
+    model = onnx.helper.make_model(graph)
+    onnx.checker.check_model(model)
+    return model
+
+def pointwise_conv1d(input_shape):
+    return conv_model(weight_shape=(input_shape[1], input_shape[1], 1),
+                      input_shape=input_shape,
+                      output_shape=input_shape,
+                      auto_pad="SAME_UPPER")
+
+def pointwise_conv3d(input_shape):
+    return conv_model(weight_shape=(input_shape[1], input_shape[1], 1, 1, 1),
+                      input_shape=input_shape,
+                      output_shape=input_shape,
+                      auto_pad="SAME_UPPER")
+
+def pointwise_convtranspose1d(input_shape):
+    return conv_model(weight_shape=(input_shape[1], input_shape[1], 1),
+                      input_shape=input_shape,
+                      output_shape=input_shape,
+                      transpose=True,
+                      auto_pad="SAME_UPPER")
+
+def pointwise_convtranspose3d(input_shape):
+    return conv_model(weight_shape=(input_shape[1], input_shape[1], 1, 1, 1),
+                      input_shape=input_shape,
+                      output_shape=input_shape,
+                      transpose=True,
+                      auto_pad="SAME_UPPER")
+
+
 def dynamic_matmul_model(batch_size):
     class Model(torch.nn.Module):
 

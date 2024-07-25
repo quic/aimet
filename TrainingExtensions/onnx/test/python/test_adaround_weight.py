@@ -208,6 +208,27 @@ class TestAdaround:
 
         Adaround.apply_adaround(model, params, tmpdir, 'dummy')
 
+    @pytest.mark.parametrize("model_factory, input_shape", [(models_for_tests.pointwise_conv1d, (1, 10, 32)),
+                                                            (models_for_tests.pointwise_conv3d, (1, 10, 8, 8, 8)),
+                                                            (models_for_tests.pointwise_convtranspose1d, (1, 10, 32)),
+                                                            (models_for_tests.pointwise_convtranspose3d, (1, 10, 8, 4, 3))
+                                                            ])
+    def test_adaround_convNd_model(self, model_factory, input_shape, tmpdir):
+        """
+        AdaRound should not error-out for non-2d Conv/ConvTranspose layers
+        """
+        model = model_factory(input_shape)
+        data_loader = dataloader(input_shape, input_shape[0])
+        def callback(session, args):
+            in_tensor = {'input': np.random.rand(*input_shape).astype(np.float32)}
+            session.run(None, in_tensor)
+
+        params = AdaroundParameters(data_loader=data_loader, num_batches=1, default_num_iterations=5,
+                                    forward_fn=callback,
+                                    forward_pass_callback_args=None)
+
+        Adaround.apply_adaround(model, params, tmpdir, 'dummy')
+
 
 
 
