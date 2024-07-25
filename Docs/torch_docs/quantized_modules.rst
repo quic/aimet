@@ -64,7 +64,7 @@ Example: Create a linear layer which performs only per-channel weight quantizati
     >>> qlinear.param_quantizers["weight"] = per_channel_quantizer
 
 Example: Create an elementwise multiply layer which quantizes only the output and the second input
-    >>> qmul = aimet.nn.QuantizedMultiply()
+    >>> qmul = aimet.nn.custom.QuantizedMultiply()
     >>> qmul.output_quantizers[0] = Q.affine.QuantizeDequantize(shape=(), bitwidth=8, symmetric=False)
     >>> qmul.input_quantizers[1] = Q.affine.QuantizeDequantize(shape=(), bitwidth=8, symmetric=False)
 
@@ -72,7 +72,7 @@ In some cases, it may make sense for multiple tensors to share the same quantize
 quantizer to multiple indices.
 
 Example: Create an elementwise add layer which shares the same quantizer between its inputs
-    >>> qadd = aimet.nn.QuantizedAdd()
+    >>> qadd = aimet.nn.custom.QuantizedAdd()
     >>> quantizer = Q.affine.QuantizeDequantize(shape=(), bitwidth=8, symmetric=False)
     >>> qadd.input_quantizers[0] = quantizer
     >>> qadd.input_quantizers[1] = quantizer
@@ -231,86 +231,86 @@ torch.nn.RNNCell                              FakeQuantizedRNNCell
 torch.nn.LSTM                                 FakeQuantizedLSTM
 torch.nn.LSTMCell                             FakeQuantizedLSTMCell
 torch.nn.AdaptiveLogSoftmaxWithLoss           FakeQuantizedAdaptiveLogSoftmaxWithLoss
-aimet_ops.ChannelShuffle                      FakeQuantizedChannelShuffle
-aimet_ops.MaxPool2d                           FakeQuantizedMaxPool2d
-aimet_ops.AdaptiveAvgPool2d                   FakeQuantizedAdaptiveAvgPool2d
-aimet_ops.AvgPool2d                           FakeQuantizedAvgPool2d
-aimet_ops.Cast                                FakeQuantizedCast
-aimet_ops.DepthToSpaceDCRMode                 FakeQuantizedDepthToSpaceDCRMode
-aimet_ops.OneHot                              FakeQuantizedOneHot
-aimet_ops.Exponential                         FakeQuantizedExponential
-aimet_ops.Erf                                 FakeQuantizedErf
-aimet_ops.Sqrt                                FakeQuantizedSqrt
-aimet_ops.Log                                 FakeQuantizedLog
-aimet_ops.Abs                                 FakeQuantizedAbs
-aimet_ops.Neg                                 FakeQuantizedNeg
-aimet_ops.ElementwiseCeil                     FakeQuantizedElementwiseCeil
-aimet_ops.ElementwiseFloor                    FakeQuantizedElementwiseFloor
-aimet_ops.Sin                                 FakeQuantizedSin
-aimet_ops.Cos                                 FakeQuantizedCos
-aimet_ops.Asin                                FakeQuantizedAsin
-aimet_ops.Atan                                FakeQuantizedAtan
-aimet_ops.Round                               FakeQuantizedRound
-aimet_ops.LogicalNot                          FakeQuantizedLogicalNot
-aimet_ops.NonZero                             FakeQuantizedNonZero
-aimet_ops.ElementwiseUnarySign                FakeQuantizedElementwiseUnarySign
-aimet_ops.RSqrt                               FakeQuantizedRSqrt
-aimet_ops.Square                              FakeQuantizedSquare
-aimet_ops.Mean                                FakeQuantizedMean
-aimet_ops.Sum                                 FakeQuantizedSum
-aimet_ops.Prod                                FakeQuantizedProd
-aimet_ops.Argmin                              FakeQuantizedArgmin
-aimet_ops.Argmax                              FakeQuantizedArgmax
-aimet_ops.Gather                              FakeQuantizedGather
-aimet_ops.Reshape                             FakeQuantizedReshape
-aimet_ops.RoiAlign                            FakeQuantizedRoiAlign
-aimet_ops.Permute                             FakeQuantizedPermute
-aimet_ops.IndexSelect                         FakeQuantizedIndexSelect
-aimet_ops.TopK                                FakeQuantizedTopK
-aimet_ops.Tile                                FakeQuantizedTile
-aimet_ops.Norm                                FakeQuantizedNorm
-aimet_ops.CumSum                              FakeQuantizedCumSum
-aimet_ops.Interpolate                         FakeQuantizedInterpolate
-aimet_ops.Normalize                           FakeQuantizedNormalize
-aimet_ops.Pad                                 FakeQuantizedPad
-aimet_ops.Shape                               FakeQuantizedShape
-aimet_ops.Expand                              FakeQuantizedExpand
-aimet_ops.StridedSlice                        FakeQuantizedStridedSlice
-aimet_ops.MatMul                              FakeQuantizedMatMul
-aimet_ops.Add                                 FakeQuantizedAdd                              QuantizedAdd
-aimet_ops.Multiply                            FakeQuantizedMultiply                         QuantizedMultiply
-aimet_ops.Subtract                            FakeQuantizedSubtract                         QuantizedSubtract
-aimet_ops.Divide                              FakeQuantizedDivide
-aimet_ops.FloorDivide                         FakeQuantizedFloorDivide
-aimet_ops.Greater                             FakeQuantizedGreater
-aimet_ops.Less                                FakeQuantizedLess
-aimet_ops.GreaterEqual                        FakeQuantizedGreaterEqual
-aimet_ops.LessEqual                           FakeQuantizedLessEqual
-aimet_ops.NotEqual                            FakeQuantizedNotEqual
-aimet_ops.Equal                               FakeQuantizedEqual
-aimet_ops.Remainder                           FakeQuantizedRemainder
-aimet_ops.Fmod                                FakeQuantizedFmod
-aimet_ops.Pow                                 FakeQuantizedPow
-aimet_ops.CustomSiLU                          FakeQuantizedCustomSiLU
-aimet_ops.Maximum                             FakeQuantizedMaximum
-aimet_ops.Max                                 FakeQuantizedMax
-aimet_ops.Minimum                             FakeQuantizedMinimum
-aimet_ops.Min                                 FakeQuantizedMin
-aimet_ops.Bmm                                 FakeQuantizedBmm
-aimet_ops.LogicalOr                           FakeQuantizedLogicalOr
-aimet_ops.LogicalAnd                          FakeQuantizedLogicalAnd
-aimet_ops.CustomGather                        FakeQuantizedCustomGather
-aimet_ops.GatherNd                            FakeQuantizedGatherNd
-aimet_ops.Baddbmm                             FakeQuantizedBaddbmm
-aimet_ops.Addmm                               FakeQuantizedAddmm
-aimet_ops.ScatterND                           FakeQuantizedScatterND
-aimet_ops.DynamicConv2d                       FakeQuantizedDynamicConv2d
-aimet_ops.ScatterElements                     FakeQuantizedScatterElements
-aimet_ops.BatchNorm                           FakeQuantizedBatchNorm
-aimet_ops.GroupNorm                           FakeQuantizedAimetGroupNorm
-aimet_ops.NonMaxSuppression                   FakeQuantizedNonMaxSuppression
-aimet_ops.Split                               FakeQuantizedSplit
-aimet_ops.Concat                              FakeQuantizedConcat
-aimet_ops.Where                               FakeQuantizedWhere
-aimet_ops.MaskedFill                          FakeQuantizedMaskedFill
+aimet_torch.v2.nn.custom.ChannelShuffle       FakeQuantizedChannelShuffle
+aimet_torch.v2.nn.custom.MaxPool2d            FakeQuantizedMaxPool2d
+aimet_torch.v2.nn.custom.AdaptiveAvgPool2d    FakeQuantizedAdaptiveAvgPool2d
+aimet_torch.v2.nn.custom.AvgPool2d            FakeQuantizedAvgPool2d
+aimet_torch.v2.nn.custom.Cast                 FakeQuantizedCast
+aimet_torch.v2.nn.custom.DepthToSpaceDCRMode  FakeQuantizedDepthToSpaceDCRMode
+aimet_torch.v2.nn.custom.OneHot               FakeQuantizedOneHot
+aimet_torch.v2.nn.custom.Exponential          FakeQuantizedExponential
+aimet_torch.v2.nn.custom.Erf                  FakeQuantizedErf
+aimet_torch.v2.nn.custom.Sqrt                 FakeQuantizedSqrt
+aimet_torch.v2.nn.custom.Log                  FakeQuantizedLog
+aimet_torch.v2.nn.custom.Abs                  FakeQuantizedAbs
+aimet_torch.v2.nn.custom.Neg                  FakeQuantizedNeg
+aimet_torch.v2.nn.custom.ElementwiseCeil      FakeQuantizedElementwiseCeil
+aimet_torch.v2.nn.custom.ElementwiseFloor     FakeQuantizedElementwiseFloor
+aimet_torch.v2.nn.custom.Sin                  FakeQuantizedSin
+aimet_torch.v2.nn.custom.Cos                  FakeQuantizedCos
+aimet_torch.v2.nn.custom.Asin                 FakeQuantizedAsin
+aimet_torch.v2.nn.custom.Atan                 FakeQuantizedAtan
+aimet_torch.v2.nn.custom.Round                FakeQuantizedRound
+aimet_torch.v2.nn.custom.LogicalNot           FakeQuantizedLogicalNot
+aimet_torch.v2.nn.custom.NonZero              FakeQuantizedNonZero
+aimet_torch.v2.nn.custom.ElementwiseUnarySign FakeQuantizedElementwiseUnarySign
+aimet_torch.v2.nn.custom.RSqrt                FakeQuantizedRSqrt
+aimet_torch.v2.nn.custom.Square               FakeQuantizedSquare
+aimet_torch.v2.nn.custom.Mean                 FakeQuantizedMean
+aimet_torch.v2.nn.custom.Sum                  FakeQuantizedSum
+aimet_torch.v2.nn.custom.Prod                 FakeQuantizedProd
+aimet_torch.v2.nn.custom.Argmin               FakeQuantizedArgmin
+aimet_torch.v2.nn.custom.Argmax               FakeQuantizedArgmax
+aimet_torch.v2.nn.custom.Gather               FakeQuantizedGather
+aimet_torch.v2.nn.custom.Reshape              FakeQuantizedReshape
+aimet_torch.v2.nn.custom.RoiAlign             FakeQuantizedRoiAlign
+aimet_torch.v2.nn.custom.Permute              FakeQuantizedPermute
+aimet_torch.v2.nn.custom.IndexSelect          FakeQuantizedIndexSelect
+aimet_torch.v2.nn.custom.TopK                 FakeQuantizedTopK
+aimet_torch.v2.nn.custom.Tile                 FakeQuantizedTile
+aimet_torch.v2.nn.custom.Norm                 FakeQuantizedNorm
+aimet_torch.v2.nn.custom.CumSum               FakeQuantizedCumSum
+aimet_torch.v2.nn.custom.Interpolate          FakeQuantizedInterpolate
+aimet_torch.v2.nn.custom.Normalize            FakeQuantizedNormalize
+aimet_torch.v2.nn.custom.Pad                  FakeQuantizedPad
+aimet_torch.v2.nn.custom.Shape                FakeQuantizedShape
+aimet_torch.v2.nn.custom.Expand               FakeQuantizedExpand
+aimet_torch.v2.nn.custom.StridedSlice         FakeQuantizedStridedSlice
+aimet_torch.v2.nn.custom.MatMul               FakeQuantizedMatMul
+aimet_torch.v2.nn.custom.Add                  FakeQuantizedAdd                              QuantizedAdd
+aimet_torch.v2.nn.custom.Multiply             FakeQuantizedMultiply                         QuantizedMultiply
+aimet_torch.v2.nn.custom.Subtract             FakeQuantizedSubtract                         QuantizedSubtract
+aimet_torch.v2.nn.custom.Divide               FakeQuantizedDivide
+aimet_torch.v2.nn.custom.FloorDivide          FakeQuantizedFloorDivide
+aimet_torch.v2.nn.custom.Greater              FakeQuantizedGreater
+aimet_torch.v2.nn.custom.Less                 FakeQuantizedLess
+aimet_torch.v2.nn.custom.GreaterEqual         FakeQuantizedGreaterEqual
+aimet_torch.v2.nn.custom.LessEqual            FakeQuantizedLessEqual
+aimet_torch.v2.nn.custom.NotEqual             FakeQuantizedNotEqual
+aimet_torch.v2.nn.custom.Equal                FakeQuantizedEqual
+aimet_torch.v2.nn.custom.Remainder            FakeQuantizedRemainder
+aimet_torch.v2.nn.custom.Fmod                 FakeQuantizedFmod
+aimet_torch.v2.nn.custom.Pow                  FakeQuantizedPow
+aimet_torch.v2.nn.custom.CustomSiLU           FakeQuantizedCustomSiLU
+aimet_torch.v2.nn.custom.Maximum              FakeQuantizedMaximum
+aimet_torch.v2.nn.custom.Max                  FakeQuantizedMax
+aimet_torch.v2.nn.custom.Minimum              FakeQuantizedMinimum
+aimet_torch.v2.nn.custom.Min                  FakeQuantizedMin
+aimet_torch.v2.nn.custom.Bmm                  FakeQuantizedBmm
+aimet_torch.v2.nn.custom.LogicalOr            FakeQuantizedLogicalOr
+aimet_torch.v2.nn.custom.LogicalAnd           FakeQuantizedLogicalAnd
+aimet_torch.v2.nn.custom.CustomGather         FakeQuantizedCustomGather
+aimet_torch.v2.nn.custom.GatherNd             FakeQuantizedGatherNd
+aimet_torch.v2.nn.custom.Baddbmm              FakeQuantizedBaddbmm
+aimet_torch.v2.nn.custom.Addmm                FakeQuantizedAddmm
+aimet_torch.v2.nn.custom.ScatterND            FakeQuantizedScatterND
+aimet_torch.v2.nn.custom.DynamicConv2d        FakeQuantizedDynamicConv2d
+aimet_torch.v2.nn.custom.ScatterElements      FakeQuantizedScatterElements
+aimet_torch.v2.nn.custom.BatchNorm            FakeQuantizedBatchNorm
+aimet_torch.v2.nn.custom.GroupNorm            FakeQuantizedAimetGroupNorm
+aimet_torch.v2.nn.custom.NonMaxSuppression    FakeQuantizedNonMaxSuppression
+aimet_torch.v2.nn.custom.Split                FakeQuantizedSplit
+aimet_torch.v2.nn.custom.Concat               FakeQuantizedConcat
+aimet_torch.v2.nn.custom.Where                FakeQuantizedWhere
+aimet_torch.v2.nn.custom.MaskedFill           FakeQuantizedMaskedFill
 ============================================= ============================================= ============================
