@@ -34,8 +34,8 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-""" Quantized modules"""
 # pylint: disable=too-many-lines, wrong-import-order
+""" Quantized modules"""
 
 from packaging import version
 import contextlib
