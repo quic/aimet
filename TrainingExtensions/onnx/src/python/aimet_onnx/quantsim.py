@@ -77,6 +77,8 @@ else:
 op_types_to_ignore = ["branch", "Flatten", "Gather", "Reshape", "Shape", "Unsqueeze", "Squeeze", "Split",
                       "Compress", "Tile", "Transpose", "Identity"]
 
+op_params_to_ignore = ['Resize', 'Pow']
+
 op_types_having_constant_input_tensors = ["Add", "Mul"]
 
 allowed_op_type_for_per_channel = ['Conv', 'Gemm', 'MatMul', 'ConvTranspose']
@@ -248,6 +250,7 @@ class QuantizationSimModel:
         :param dummy_input: Sample input to be run through the model
         """
         self.fill_activation_dtypes(dummy_input)
+        self.input_name_to_nodes = self.model.input_name_to_nodes()
 
         # Capture model inputs
         for node in self.model.graph().input:
@@ -281,9 +284,15 @@ class QuantizationSimModel:
         :param name: Name of the activation
         :return: True if the activation should be quantized
         """
-        # Check if activation is used as an input to another node
+        # Check if activation tensor data-type can be quantized
         if name not in self.activation_dtypes.keys() or self.activation_dtypes[name] not in data_types_to_quantize:
             return False
+        # Check if activation is param to certain ops (eg: Resize, Pow, etc.)
+        consumer_nodes = self.input_name_to_nodes.get(name, None)
+        if consumer_nodes:
+            for consumer_node in consumer_nodes:
+                if consumer_node.op_type in op_params_to_ignore and consumer_node.input[0] != name:
+                    return False
         return True
 
     def _disable_bias_quantization(self):
