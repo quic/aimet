@@ -73,8 +73,7 @@ from aimet_torch.v2.nn.true_quant import _dispatch
 from aimet_torch.v2.quantization.affine import AffineEncoding
 from aimet_torch.v2.quantization.tensor import QuantizedTensorBase, QuantizedTensor, DequantizedTensor
 from aimet_torch.v2.utils import enable_recompute
-import aimet_torch.nn.modules.custom as aimet_ops
-import aimet_torch.v2.nn.quantized.custom as custom
+from aimet_torch.v2.nn import custom
 
 
 def affine_quantize(tensor: torch.Tensor,
@@ -420,11 +419,11 @@ class TestQuantizedLayers:
     @pytest.mark.parametrize("layer,inputs", ((torch.nn.Softmax(dim=1), (_input(10, 10),)),
                                               (torch.nn.Sigmoid(), (_input(10, 10),)),
                                               (torch.nn.GELU(), (_input(10, 10),)),
-                                              (aimet_ops.Add(), (_input(10, 10), _input(10, 10))),
-                                              (aimet_ops.Multiply(), (_input(10, 10), _input(10, 10))),
-                                              (aimet_ops.Subtract(), (_input(10, 10), _input(10, 10))),
-                                              (aimet_ops.MatMul(), (_input(10, 10), _input(10, 10))),
-                                              (aimet_ops.Divide(), (_input(10, 10), _input(10, 10)))))
+                                              (custom.Add(), (_input(10, 10), _input(10, 10))),
+                                              (custom.Multiply(), (_input(10, 10), _input(10, 10))),
+                                              (custom.Subtract(), (_input(10, 10), _input(10, 10))),
+                                              (custom.MatMul(), (_input(10, 10), _input(10, 10))),
+                                              (custom.Divide(), (_input(10, 10), _input(10, 10)))))
     def test_layers_no_params(self, layer, inputs):
         fq_layer = FakeQuantizationMixin.from_module(layer)
         tq_layer = QuantizationMixin.from_module(layer)
