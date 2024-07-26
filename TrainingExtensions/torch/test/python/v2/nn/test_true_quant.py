@@ -65,7 +65,7 @@ from aimet_torch.v2.nn import (
     QuantizedGroupNorm,
     FakeQuantizationMixin,
 )
-from aimet_torch.v2.nn.true_quant import _dispatch
+from aimet_torch.v2.nn.true_quant import _dispatch, _dispatch_table
 from aimet_torch.v2.quantization.affine import AffineEncoding
 from aimet_torch.v2.quantization.tensor import QuantizedTensorBase, QuantizedTensor, DequantizedTensor
 from aimet_torch.v2.utils import enable_recompute
@@ -673,7 +673,7 @@ def test_dispatch_sanity():
     When: Try to dispatch unsupported functions
     Then: Throw runtime error
     """
-    for func in get_ignored_functions():
+    for func in get_ignored_functions() - _dispatch_table.keys():
         dummy_impl = lambda *args, **kwargs: func(*args, **kwargs)
         with pytest.raises(RuntimeError):
             with _dispatch(func, dummy_impl): pass
@@ -768,8 +768,8 @@ def _create_quantized_module(module):
     (lambda: nn.GaussianNLLLoss(),                    lambda: (randn(1, 100), zeros(1, 100), ones(1, 100))),
     (lambda: nn.GroupNorm(2, 4),                      lambda: randn(1, 4, 25)),
     (lambda: nn.Hardshrink(0),                        lambda: randn(100)),
-    # (lambda: nn.Hardsigmoid(...),                   lambda: ...),
-    # (lambda: nn.Hardswish(...),                     lambda: ...),
+    (lambda: nn.Hardsigmoid(),                        lambda: randn(100)),
+    (lambda: nn.Hardswish(),                          lambda: randn(100)),
     (lambda: nn.Hardtanh(),                           lambda: randn(100)),
     (lambda: nn.HingeEmbeddingLoss(),                 lambda: (randn(10, 10), randn(10).sign().long())),
     (lambda: nn.HuberLoss(),                          lambda: (randn(10, 10), zeros(10, 10))),
@@ -863,7 +863,7 @@ def _create_quantized_module(module):
     # (lambda: nn.TransformerEncoderLayer(...),       lambda: ...),
     (lambda: nn.TripletMarginLoss(),                  lambda: (randn(100), randn(100), randn(100),)),
     (lambda: nn.TripletMarginWithDistanceLoss(),      lambda: (randn(100), randn(100), randn(100),)),
-    # (lambda: nn.Unflatten(...),                     lambda: ...),
+    (lambda: nn.Unflatten(1, (2, 5, 5)),              lambda: randn(2, 50)),
     (lambda: nn.Unfold((2, 3)),                       lambda: randn(2, 5, 3, 4)),
     (lambda: nn.Upsample(scale_factor=2),             lambda: randn(1, 1, 10, 10)),
     (lambda: nn.UpsamplingBilinear2d(scale_factor=2), lambda: randn(1, 1, 10, 10)),
