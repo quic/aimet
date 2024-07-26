@@ -454,7 +454,8 @@ class TestQuantizedLayers:
 
         assert torch.allclose(fq_output, tq_output.dequantize())
 
-    @pytest.mark.usefixtures('register_int_linear', 'register_int_norm', 'register_int_custom', 'register_int_activation')
+    @pytest.mark.usefixtures('register_int_linear', 'register_int_norm', 'register_int_custom', 'register_int_activation',
+                             'register_int_conv', 'register_int_convtranspose')
     @pytest.mark.parametrize(
         "module_factory,                      input_factory", [
         (lambda: nn.Linear(10, 10),           lambda: _input(10, 10)),
