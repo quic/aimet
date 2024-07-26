@@ -211,9 +211,6 @@ _TORCH_NN_UNARY_MODULES = [
     nn.BatchNorm3d,
     nn.CELU,
     nn.ChannelShuffle,
-    nn.CircularPad1d,
-    nn.CircularPad2d,
-    nn.CircularPad3d,
     nn.ConstantPad1d,
     nn.ConstantPad2d,
     nn.ConstantPad3d,
@@ -311,6 +308,9 @@ if version.parse(torch.__version__) >= version.parse("1.12.0"):
 
 if version.parse(torch.__version__) >= version.parse("2.1.0"):
     _TORCH_NN_UNARY_MODULES.extend([
+        nn.CircularPad1d,
+        nn.CircularPad2d,
+        nn.CircularPad3d,
         nn.ZeroPad1d,
         nn.ZeroPad3d,
     ])

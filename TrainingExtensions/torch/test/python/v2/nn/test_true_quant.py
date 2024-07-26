@@ -36,6 +36,8 @@
 # =============================================================================
 
 import functools
+import itertools
+from packaging import version
 
 import pytest
 import torch
@@ -708,7 +710,7 @@ def _create_quantized_module(module):
 
 
 @pytest.mark.parametrize(
-    "module_factory,                                  input_factory", [
+    "module_factory,                                  input_factory", itertools.chain([
     (lambda: nn.AdaptiveAvgPool1d(2),                 lambda: randn(1, 100)),
     (lambda: nn.AdaptiveAvgPool2d(2),                 lambda: randn(1, 10, 10)),
     (lambda: nn.AdaptiveAvgPool3d(2),                 lambda: randn(1, 10, 10, 11)),
@@ -732,9 +734,6 @@ def _create_quantized_module(module):
                                                                full(size=(11,), fill_value=10, dtype=torch.long),
                                                                randint(low=5, high=20, size=(11,), dtype=torch.long))),
     (lambda: nn.ChannelShuffle(2),                    lambda: randn(1, 8, 4, 4)),
-    (lambda: nn.CircularPad1d(2),                     lambda: randn(1, 10, 10)),
-    (lambda: nn.CircularPad2d(2),                     lambda: randn(1, 10, 10)),
-    (lambda: nn.CircularPad3d(2),                     lambda: randn(1, 10, 2, 5)),
     (lambda: nn.ConstantPad1d(2, 3.5),                lambda: randn(1, 10, 10)),
     (lambda: nn.ConstantPad2d(2, 3.5),                lambda: randn(1, 10, 10)),
     (lambda: nn.ConstantPad3d(2, 3.5),                lambda: randn(1, 10, 2, 5)),
@@ -752,7 +751,6 @@ def _create_quantized_module(module):
     (lambda: nn.CrossEntropyLoss(),                   lambda: (randn(10, 10), zeros(10, 10))),
     # (lambda: nn.CrossMapLRN2d(...),                 lambda: ...),
     (lambda: nn.Dropout(),                            lambda: randn(10, 10)),
-    (lambda: nn.Dropout1d(),                          lambda: randn(10, 10)),
     (lambda: nn.Dropout2d(),                          lambda: randn(10, 10)),
     (lambda: nn.Dropout3d(),                          lambda: randn(10, 10)),
     (lambda: nn.ELU(),                                lambda: randn(10, 10)),
@@ -839,7 +837,6 @@ def _create_quantized_module(module):
     (lambda: nn.ReLU6(),                              lambda: randn(100)),
     (lambda: nn.ReflectionPad1d(2),                   lambda: randn(1, 10, 10)),
     (lambda: nn.ReflectionPad2d(2),                   lambda: randn(1, 10, 10)),
-    (lambda: nn.ReflectionPad3d(2),                   lambda: randn(1, 5, 5, 5)),
     (lambda: nn.ReplicationPad1d(2),                  lambda: randn(1, 10, 10)),
     (lambda: nn.ReplicationPad2d(2),                  lambda: randn(1, 10, 10)),
     (lambda: nn.ReplicationPad3d(2),                  lambda: randn(1, 10, 2, 5)),
@@ -871,9 +868,22 @@ def _create_quantized_module(module):
     (lambda: nn.Upsample(scale_factor=2),             lambda: randn(1, 1, 10, 10)),
     (lambda: nn.UpsamplingBilinear2d(scale_factor=2), lambda: randn(1, 1, 10, 10)),
     (lambda: nn.UpsamplingNearest2d(scale_factor=2),  lambda: randn(1, 1, 10, 10)),
-    (lambda: nn.ZeroPad1d(2),                         lambda: randn(1, 10, 10)),
     (lambda: nn.ZeroPad2d(2),                         lambda: randn(1, 10, 10)),
-    (lambda: nn.ZeroPad3d(2),                         lambda: randn(1, 10, 2, 5)),
+],
+[
+    (lambda: nn.ReflectionPad3d(2),                   lambda: randn(1, 5, 5, 5)),
+] if version.parse(torch.__version__) >= version.parse("1.10.0") else [],
+[
+    (lambda: nn.Dropout1d(),                          lambda: randn(10, 10)),
+] if version.parse(torch.__version__) >= version.parse("1.12.0") else [],
+[
+    (lambda: nn.CircularPad1d(2),                     lambda: randn(1, 10, 10)),
+    (lambda: nn.CircularPad2d(2),                     lambda: randn(1, 10, 10)),
+    (lambda: nn.CircularPad3d(2),                     lambda: randn(1, 10, 2, 5)),
+    (lambda: nn.ZeroPad1d(2),                         lambda: randn(1, 10, 10)),
+    (lambda: nn.ZeroPad3d(2),                         lambda: randn(1, 10, 2, 5))
+] if version.parse(torch.__version__) >= version.parse("2.1.0") else [],
+[
     (lambda: custom.Sin(),                            lambda: randn(100)),
     (lambda: custom.Cos(),                            lambda: randn(100)),
     (lambda: custom.AvgPool2d(),                      lambda: (randn(1,10,10), 2)),
@@ -884,7 +894,7 @@ def _create_quantized_module(module):
     (lambda: custom.Subtract(),                       lambda: (randn(100), randn(100))),
     (lambda: custom.Divide(),                         lambda: (randn(100), randn(100))),
     (lambda: custom.Concat(),                         lambda: (randn(1, 100), randn(3, 100))),
-])
+]))
 def test_default_kernel_abtest(module_factory, input_factory):
     module = module_factory()
     inputs = input_factory()

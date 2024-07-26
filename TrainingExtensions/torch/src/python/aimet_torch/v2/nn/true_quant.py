@@ -609,25 +609,26 @@ class QuantizedChannelShuffle(_DispatchMixin, QuantizationMixin, nn.ChannelShuff
     __quant_init__ = __unary__
 
 
-@QuantizationMixin.implements(nn.CircularPad1d)
-class QuantizedCircularPad1d(_DispatchMixin, QuantizationMixin, nn.CircularPad1d):
-    """ Quantized CircularPad1d """
-    _builtin_torch_fn = F.pad
-    __quant_init__ = __unary__
+if version.parse(torch.__version__) >= version.parse("2.1.0"):
+    @QuantizationMixin.implements(nn.CircularPad1d)
+    class QuantizedCircularPad1d(_DispatchMixin, QuantizationMixin, nn.CircularPad1d):
+        """ Quantized CircularPad1d """
+        _builtin_torch_fn = F.pad
+        __quant_init__ = __unary__
 
 
-@QuantizationMixin.implements(nn.CircularPad2d)
-class QuantizedCircularPad2d(_DispatchMixin, QuantizationMixin, nn.CircularPad2d):
-    """ Quantized CircularPad2d """
-    _builtin_torch_fn = F.pad
-    __quant_init__ = __unary__
+    @QuantizationMixin.implements(nn.CircularPad2d)
+    class QuantizedCircularPad2d(_DispatchMixin, QuantizationMixin, nn.CircularPad2d):
+        """ Quantized CircularPad2d """
+        _builtin_torch_fn = F.pad
+        __quant_init__ = __unary__
 
 
-@QuantizationMixin.implements(nn.CircularPad3d)
-class QuantizedCircularPad3d(_DispatchMixin, QuantizationMixin, nn.CircularPad3d):
-    """ Quantized CircularPad3d """
-    _builtin_torch_fn = F.pad
-    __quant_init__ = __unary__
+    @QuantizationMixin.implements(nn.CircularPad3d)
+    class QuantizedCircularPad3d(_DispatchMixin, QuantizationMixin, nn.CircularPad3d):
+        """ Quantized CircularPad3d """
+        _builtin_torch_fn = F.pad
+        __quant_init__ = __unary__
 
 
 @QuantizationMixin.implements(nn.ConstantPad1d)
