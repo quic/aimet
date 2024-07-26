@@ -54,7 +54,7 @@ from aimet_torch.v2.utils import (
     _ContextManager,
     flatten_nn_module_list,
 )
-from aimet_torch.v2.deepspeed_utils import gathered_parameter, shallow_copy
+from aimet_torch.v2.deepspeed_utils import gathered_parameters, shallow_copy
 
 def _no_op(in_tensor):
     return in_tensor
@@ -128,6 +128,8 @@ class BaseQuantizationMixin(abc.ABC):
         :param bool overwrite: If True, the quantizers that are already initialized will also recompute encodings.
             Otherwise, only the uninitialized quantizers will compute encodings.
         """
+        params = {}
+
         for param_name, param_quantizer in self.param_quantizers.items():
             if not param_quantizer:
                 continue
@@ -138,8 +140,15 @@ class BaseQuantizationMixin(abc.ABC):
             if not param_quantizer.is_initialized() or overwrite:
                 param = getattr(self, param_name)
                 if param is not None:
-                    with patch_attr(param_quantizer, "forward", _no_op), gathered_parameter(param), param_quantizer.compute_encodings():
-                        _ = param_quantizer(param)
+                    params[param_quantizer] = param
+
+        if not params:
+            return
+
+        with gathered_parameters(params.values()):
+            for param_qtzr, param in params.items():
+                with patch_attr(param_qtzr, "forward", _no_op), param_qtzr.compute_encodings():
+                    _ = param_qtzr(param)
 
     def compute_param_encodings(self):
         """ Compute encodings of parameter quantizers """

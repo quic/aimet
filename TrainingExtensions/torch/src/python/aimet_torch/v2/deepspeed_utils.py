@@ -41,25 +41,17 @@ import contextlib
 
 import torch
 
-from aimet_torch.v2.utils import (
-    patch_attr,
-    _ContextManager
-)
+from aimet_torch.v2.utils import patch_attr
 from aimet_torch.v2.quantization.affine import MinMaxQuantizer
 
-def gathered_parameter(param)-> _ContextManager:
-    """
-    A context that collects parameters that were partitioned via a
-    :class:`deepspeed.zero.Init` context. The parameters are partitioned
-    again upon exit.
+try:
+    import deepspeed as ds
+    gathered_parameters = ds.runtime.zero.GatheredParameters
+except ImportError:
+    def gathered_parameters(*args, **kwargs): # pylint: disable=unused-argument
+        """ Dummy placeholder in case deepspeed doesn't exist """
+        return contextlib.nullcontext()
 
-    :param The parameter to be gathered and partitioned
-    """
-
-    action = lambda: param.all_gather() if hasattr(param, "ds_id") else None
-    cleanup = lambda: param.partition() if hasattr(param, "ds_id") else None
-
-    return _ContextManager(action, cleanup)
 
 @contextlib.contextmanager
 def transfer_quant_params(model: torch.nn.Module, requires_grad: bool = False):
