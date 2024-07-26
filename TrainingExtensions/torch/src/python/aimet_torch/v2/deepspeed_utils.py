@@ -38,11 +38,7 @@
 
 """ Utilities to use deepspeed """
 import contextlib
-
 import torch
-
-from aimet_torch.v2.utils import patch_attr
-from aimet_torch.v2.quantization.affine import MinMaxQuantizer
 
 try:
     import deepspeed as ds
@@ -53,27 +49,33 @@ except ImportError:
         return contextlib.nullcontext()
 
 
+_ds_ctx = {}
+
+def _all_gather(module, _):
+    ctx = gathered_parameters(module.parameters(recurse=False))
+    ctx.__enter__()
+    _ds_ctx[module] = ctx
+
+def _release(module, *_):
+    ctx = _ds_ctx.pop(module, None)
+    if ctx:
+        ctx.__exit__(None, None, None)
+
 @contextlib.contextmanager
-def transfer_quant_params(model: torch.nn.Module, requires_grad: bool = False):
-    """
-    Context manager to temporarily transfer the quantization parameters to buffer
-    :param connected_graph: Connected graph associated with the model.
-    :param model (torch.nn.Module): The model containing the modules to be modified.
-    :param requires_grad (bool, optional): If the parameter requires gradient. See
-        :ref:`locally-disable-grad-doc` for more details. Default: `False`.
-    """
-    with contextlib.ExitStack() as stack:
-        model_parameters = []
-        for _, module in model.named_modules():
-            if not isinstance(module, MinMaxQuantizer):
-                continue
-            min_val = getattr(module, 'min').data.requires_grad_(requires_grad)
-            max_val = getattr(module, 'max').data.requires_grad_(requires_grad)
-            stack.enter_context(patch_attr(module, 'min', min_val))
-            stack.enter_context(patch_attr(module, 'max', max_val))
-            stack.enter_context(patch_attr(module, '_parameters', {}))
-            model_parameters += [min_val, max_val]
-        yield model_parameters
+def _register_zero3_forward_hooks(model: torch.nn.Module):
+    handles = []
+
+    try:
+        for module in model.modules():
+            handle = module.register_forward_pre_hook(_all_gather)
+            handles.append(handle)
+            handle = module.register_forward_hook(_release)
+            handles.append(handle)
+        yield
+    finally:
+        for handle in handles:
+            handle.remove()
+
 
 def shallow_copy(dict_like):
     """

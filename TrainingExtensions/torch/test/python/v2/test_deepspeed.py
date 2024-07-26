@@ -38,6 +38,7 @@
 
 import random
 import os
+import itertools
 
 import pytest
 import numpy as np
@@ -46,17 +47,19 @@ import torch.nn.functional as functional
 import torch.distributed as dist
 from torch.utils.data import Dataset, DataLoader, RandomSampler
 import deepspeed as ds
+import tempfile
+import json
 
 
+from aimet_common import quantsim_config
 from aimet_common.defs import QuantScheme
+import aimet_torch.v2 as aimet
+from aimet_torch.v2.quantization.affine.quantizer import QuantizeDequantize
+from aimet_torch.v2.quantization.base.quantizer import QuantizerBase
 
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.nn.true_quant import QuantizedLinear
-from aimet_torch.v2.deepspeed_utils import transfer_quant_params
 from .models_.mnist_torch_model import Net
-
-from transformers.utils import ContextManagers
-from transformers.deepspeed import HfDeepSpeedConfig
 
 
 class CustomMPU:
@@ -85,8 +88,9 @@ def set_seed():
     torch.manual_seed(0)
     np.random.seed(0)
 
+
 @pytest.fixture
-def init_process_group(scope='function'):
+def init_process_group():
 
     # https://stackoverflow.com/a/63851681/9201239
     def get_all_subclasses(cls):
@@ -131,12 +135,9 @@ def init_process_group(scope='function'):
         if LOCAL_RANK is not None:
             os.environ['LOCAL_RANK'] = LOCAL_RANK
 
-@pytest.fixture(scope="session")
-def dummy_input():
-    return torch.randn((1, 1, 28, 28))
 
 @pytest.fixture(scope="session")
-def unlabeled_data_loader(dummy_input):
+def unlabeled_data_loader():
     class MyDataset(Dataset):
         def __init__(self, data):
             self.data = data
@@ -147,19 +148,11 @@ def unlabeled_data_loader(dummy_input):
         def __len__(self):
             return len(self.data)
 
-    dataset = MyDataset([dummy_input[0, :] for _ in range(32)])
+    dataset = MyDataset([torch.randn(1, 28, 28) for _ in range(10)])
     # TODO: (huzh) Change RandomSampler to DistributedSampler for testing with multiple GPUs
     sampler = RandomSampler(dataset)
     return DataLoader(dataset, sampler=sampler, batch_size=1)
 
-def calibrate(model, inputs):
-
-    if isinstance(inputs, torch.Tensor):
-        inputs = [inputs]
-
-    model.eval()
-    with torch.no_grad():
-        model(*inputs)
 
 @pytest.fixture
 def deepspeed_zero3_offload_config():
@@ -175,7 +168,7 @@ def deepspeed_zero3_offload_config():
         {
             "type": "AdamW",
             "params": {
-                "lr": 1e-6,
+                "lr": 1e-2,
                 "betas": [0.9, 0.999],
                 "eps": 1e-7,
                 "weight_decay": 1e-5
@@ -183,64 +176,125 @@ def deepspeed_zero3_offload_config():
         }
     }
 
+
+@pytest.fixture
+def per_channel_quantsim_config():
+    with open(os.path.join(quantsim_config.__path__[0], 'default_config_per_channel.json')) as f:
+        config = json.load(f)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        with open(os.path.join(tmp_dir, 'config_file.json'), 'w') as f:
+            json.dump(config, f)
+        yield os.path.join(tmp_dir, 'config_file.json')
+
+
 @pytest.mark.cuda
-@pytest.mark.parametrize("qscheme", [QuantScheme.post_training_tf])
-def test_is_initialized_with_deepspeed_zero3_offload(unlabeled_data_loader, init_process_group, deepspeed_zero3_offload_config, qscheme):
+def test_deepspeed_zero3_offload(unlabeled_data_loader,
+                                 per_channel_quantsim_config,
+                                 init_process_group,
+                                 deepspeed_zero3_offload_config):
+    """
+    Given: Model pre-partitioned with deepspeed zero3 offload
+    """
+    with ds.zero.Init(config_dict_or_path=deepspeed_zero3_offload_config):
+        # ds.zero.Init context pre-partitoins the pytorch models at instantiation time.
+        # PyTorch modules instantiated under this context will only hold a partition
+        # of their parameters
+        model = Net().cuda()
+        assert all(param.numel() == 0 for param in model.parameters())         # sanity check
+        assert all(hasattr(param, 'ds_shape') for param in model.parameters()) # sanity check
 
     """
-    When: Offload parameters into CPU using Zero-offload
-    Then: quantizer.is_initialized() flag should be preserved after pertitioning
+    When: Create quantsim with the model pre-partitioned model
+    Then: Quantizers should be instantiated with correct shape
     """
-    # Initialize DeepSpeed config
-    ds_config = HfDeepSpeedConfig(deepspeed_zero3_offload_config)
-    # Instantiate model
-    init_contexts = []
+    sim = QuantizationSimModel(model,
+                               torch.randn(1, 1, 28, 28).cuda(),
+                               default_param_bw=4,
+                               config_file=per_channel_quantsim_config,
+                               quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                               in_place=True)
 
-    init_contexts = [ds.zero.Init(config_dict_or_path=deepspeed_zero3_offload_config)] + init_contexts
+    assert isinstance(sim.model.conv1.input_quantizers[0], QuantizeDequantize)
+    assert isinstance(sim.model.conv1.param_quantizers['weight'], QuantizeDequantize)
+    assert isinstance(sim.model.conv1.output_quantizers[0], QuantizeDequantize)
+    assert isinstance(sim.model.maxpool1.output_quantizers[0], QuantizeDequantize)
+    assert isinstance(sim.model.relu1.output_quantizers[0], QuantizeDequantize)
+    assert isinstance(sim.model.conv2.param_quantizers['weight'], QuantizeDequantize)
+    assert isinstance(sim.model.conv2.output_quantizers[0], QuantizeDequantize)
+    assert isinstance(sim.model.maxpool2.output_quantizers[0], QuantizeDequantize)
+    assert isinstance(sim.model.relu2.output_quantizers[0], QuantizeDequantize)
+    assert isinstance(sim.model.fc1.param_quantizers['weight'], QuantizeDequantize)
+    assert sim.model.fc1.output_quantizers[0] is None
+    assert isinstance(sim.model.relu3.output_quantizers[0], QuantizeDequantize)
+    assert isinstance(sim.model.fc2.param_quantizers['weight'], QuantizeDequantize)
+    assert isinstance(sim.model.fc2.output_quantizers[0], QuantizeDequantize)
+    assert isinstance(sim.model.log_softmax.output_quantizers[0], QuantizeDequantize)
 
-    torch.manual_seed(0)
-    # TODO: (huzh) Replace with AIMET internal context manager
-    with ContextManagers(init_contexts):
-        # Set model to train mode during training, as it is difficult to change after QSim initialization
-        model = Net().train().cuda()
-    # Ensure parameters are offloaded to CPU
-    assert model.fc1.weight.numel() == 0
-    assert model.fc2.weight.numel() == 0
-    model_parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
-    engine, ds_optimizer, *_ = ds.initialize(model=model, model_parameters=model_parameters, config=deepspeed_zero3_offload_config, mpu=CustomMPU(init_process_group))
+    assert sim.model.conv1.param_quantizers['weight'].shape == (32, 1, 1, 1)
+    assert sim.model.conv2.param_quantizers['weight'].shape == (64, 1, 1, 1)
 
-    dummy_input = torch.randn(1, 1, 28, 28).cuda()
-    sim = QuantizationSimModel(model, dummy_input, default_param_bw=4, quant_scheme=qscheme, in_place=True)
-    sim.model.requires_grad_(True)
-    # Compute encodings
-    sim.compute_encodings(calibrate, dummy_input)
+    # NOTE: default per-channel quantsim config doesn't apply per-channel qtzn to nn.Linear
+    assert sim.model.fc1.param_quantizers['weight'].shape == ()
+    assert sim.model.fc2.param_quantizers['weight'].shape == ()
 
-    # Ensure AIMET quantization parameters have not been initialized by Zero-offload
-    assert sim.model.fc1.param_quantizers['weight'].min.numel() != 0
-    assert sim.model.fc1.param_quantizers['weight'].max.numel() != 0
-    assert sim.model.fc1.param_quantizers['weight'].min.requires_grad
-    assert sim.model.fc1.param_quantizers['weight'].max.requires_grad
-    assert sim.model.fc1.output_quantizers[0].is_initialized()
-    assert sim.model.fc2.output_quantizers[0].is_initialized()
+    assert sim.model.conv1.input_quantizers[0].shape ==\
+           sim.model.conv1.output_quantizers[0].shape ==\
+           sim.model.maxpool1.output_quantizers[0].shape ==\
+           sim.model.relu1.output_quantizers[0].shape ==\
+           sim.model.conv2.output_quantizers[0].shape ==\
+           sim.model.maxpool2.output_quantizers[0].shape ==\
+           sim.model.relu2.output_quantizers[0].shape ==\
+           sim.model.relu3.output_quantizers[0].shape ==\
+           sim.model.fc2.output_quantizers[0].shape ==\
+           sim.model.log_softmax.output_quantizers[0].shape == ()
 
-    # Train model and ensure it works
-    enc_before = sim.model.fc1.param_quantizers['weight'].get_encoding()
+    """
+    When: Initialize quantsim model with deepspeed zero3 offload
+    Then: All parameters must be initialized with deepspeed zero3 parameter partitioning mechanism
+    """
+    engine, ds_optimizer, *_ = ds.initialize(model=sim.model,
+                                             model_parameters=sim.model.parameters(),
+                                             config=deepspeed_zero3_offload_config,
+                                             mpu=CustomMPU(init_process_group))
+    assert all(hasattr(param, 'ds_shape') for param in model.parameters())
 
-    device = next(model.parameters()).device
+    """
+    When: Compute encodings after deepspeed initialization
+    Then: All quantizer encodings must be inititalized
+    """
+    with aimet.nn.compute_encodings(model):
+        for data in itertools.islice(unlabeled_data_loader, 3):
+            _ = sim.model(data.cuda())
 
-    target = torch.ones((1,10)).float().to(device)
-    model.train()
-    with transfer_quant_params(sim.model, requires_grad=True) as model_parameters:
-        optimizer = torch.optim.AdamW(model_parameters, lr=0.01)
+    for qtzr in sim.model.modules():
+        if isinstance(qtzr, QuantizerBase):
+            assert qtzr.is_initialized()
 
-        for _, data in enumerate(unlabeled_data_loader):
-            data = data.to(device)
-            output = model(data)
-            loss = functional.mse_loss(output, target)
-            engine.backward(loss)
-            ds_optimizer.step()
-            optimizer.step()
-            optimizer.zero_grad()
+    """
+    When: Run training loop
+    Then: All trainable parameters must be udpated by training
+    """
+    with ds.runtime.zero.GatheredParameters(sim.model.parameters()):
+        params_before = {
+            name: param.clone().detach() for name, param in sim.model.named_parameters()
+        }
 
-    enc_after = sim.model.fc1.param_quantizers['weight'].get_encoding()
-    assert enc_before.min != enc_after.min
+    target = torch.ones((1, 10)).float().cuda()
+
+    for _, data in enumerate(unlabeled_data_loader):
+        output = sim.model(data.cuda())
+        loss = functional.mse_loss(output, target)
+        engine.backward(loss)
+        ds_optimizer.step()
+
+    with ds.runtime.zero.GatheredParameters(sim.model.parameters()):
+        params_after = {
+            name: param.clone().detach() for name, param in sim.model.named_parameters()
+        }
+
+    assert params_before.keys() == params_after.keys()
+    for param_name in params_before:
+        before = params_before[param_name]
+        after = params_after[param_name]
+        assert not torch.equal(before, after)

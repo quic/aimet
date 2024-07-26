@@ -54,6 +54,7 @@ from aimet_torch.v2.quantization.encoding_analyzer import PercentileEncodingAnal
 from aimet_torch.v2.utils import patch_attr
 from aimet_torch import utils
 from aimet_torch.utils import deprecated
+from aimet_torch.v2.deepspeed_utils import _register_zero3_forward_hooks
 
 
 qc_quantize_modules_dict = {
@@ -67,8 +68,18 @@ class QuantizationSimModel(V1QuantizationSimModel):
     """
     Overriden QuantizationSimModel that does off-target quantization simulation using v2 quantsim blocks.
     """
-    def __init__(self, *args, **kwargs): # pylint: disable=arguments-differ
-        super().__init__(*args, **kwargs)
+    def __init__(self, model, *args, **kwargs): # pylint: disable=arguments-differ
+        with _register_zero3_forward_hooks(model):
+            # NOTE: Register for the model is pre-partitioned by deepspeed zero3 or zero3-offload.
+            #       Pre-partitioned models aren't runnable as-is, but are needed to to be initialized
+            #       with `deepspeed.initialize` before running forward pass.
+            #       However, `deepspeed.initialize` can only come after quantsim is created, since
+            #       quantsim will add additional learnable parameters to the model which also need
+            #       to be initialized by deepspeed.
+            #       Since quantsim constructor relies on torch.jit tracing which involves running
+            #       forward pass of the model, here we register a temporary hook to make
+            #       uninitialized but pre-partitioned models runnable.
+            super().__init__(model, *args, **kwargs)
 
         # Quantization parameters are placed on cpu by default.
         # Move them to cuda device as necessary
