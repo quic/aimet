@@ -467,8 +467,7 @@ TEST_F(TestTensorQuantizer, SANITY_QuantizeTensorPackedAsymmetric)
         EXPECT_EQ(output[i], data_expected[i]);
     }
     // Check encoding
-    TfEncoding encoding_expected;
-    getTfEncoding(-50, 80, bw);
+    TfEncoding encoding_expected = getTfEncoding(-50, 80, bw);
     EXPECT_TRUE(compareEncodings(encoding_expected, encoding));
 }
 
