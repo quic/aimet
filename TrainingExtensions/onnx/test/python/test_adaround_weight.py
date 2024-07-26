@@ -127,7 +127,7 @@ class TestAdaround:
                                     forward_fn=callback,
                                     forward_pass_callback_args=None)
 
-        Adaround.apply_adaround(model, params, tmpdir, 'dummy')
+        Adaround.apply_adaround(model, params, tmpdir, 'dummy', use_cuda=False)
 
         with open(os.path.join(tmpdir, 'dummy.encodings')) as json_file:
             encoding_data = json.load(json_file)
@@ -168,7 +168,7 @@ class TestAdaround:
                                     forward_fn=callback,
                                     forward_pass_callback_args=None)
 
-        Adaround.apply_adaround(model, params, tmpdir, 'dummy')
+        Adaround.apply_adaround(model, params, tmpdir, 'dummy', use_cuda=False)
 
         with open(os.path.join(tmpdir, 'dummy.encodings')) as json_file:
             encoding_data = json.load(json_file)
@@ -190,7 +190,7 @@ class TestAdaround:
                                     forward_fn=callback,
                                     forward_pass_callback_args=None)
 
-        Adaround.apply_adaround(model, params, tmpdir, 'dummy')
+        Adaround.apply_adaround(model, params, tmpdir, 'dummy', use_cuda=False)
 
     @pytest.mark.parametrize("model, input_shape", [(models_for_tests.simplifiable_model(1), (1, 10))])
     def test_adaround_simplifiable_model(self, model, input_shape, tmpdir):
@@ -206,7 +206,7 @@ class TestAdaround:
                                     forward_fn=callback,
                                     forward_pass_callback_args=None)
 
-        Adaround.apply_adaround(model, params, tmpdir, 'dummy')
+        Adaround.apply_adaround(model, params, tmpdir, 'dummy', use_cuda=False)
 
     @pytest.mark.parametrize("model_factory, input_shape", [(models_for_tests.pointwise_conv1d, (1, 10, 32)),
                                                             (models_for_tests.pointwise_conv3d, (1, 10, 8, 8, 8)),
@@ -227,7 +227,7 @@ class TestAdaround:
                                     forward_fn=callback,
                                     forward_pass_callback_args=None)
 
-        Adaround.apply_adaround(model, params, tmpdir, 'dummy')
+        Adaround.apply_adaround(model, params, tmpdir, 'dummy', use_cuda=False)
 
 
 
