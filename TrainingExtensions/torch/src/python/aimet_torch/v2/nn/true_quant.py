@@ -453,7 +453,7 @@ class _DispatchMixin(metaclass=_DispatchMeta):
 
 def __nullary__(self):
     super(type(self), self).__quant_init__()
-    self.input_quantizers = nn.ModuleList([None])
+    self.input_quantizers = nn.ModuleList([])
 
 
 def __unary__(self):
