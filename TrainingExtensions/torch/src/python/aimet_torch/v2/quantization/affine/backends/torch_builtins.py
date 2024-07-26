@@ -39,6 +39,7 @@ from typing import Optional, List
 import torch
 
 from aimet_torch.v2.utils import _is_expandable
+import aimet_torch.v2.experimental.onnx._export as _onnx
 
 
 def _is_value_representable(dtype: torch.dtype, value):
@@ -105,6 +106,7 @@ def _validate_arguments(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
             raise RuntimeError(f"qmin ({qmin}) must be smaller than or equal to qmax ({qmax})")
 
 
+@_onnx.register_symbolic(_onnx.quantize_symbolic)
 def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
              qmin: int, qmax: int, block_size: Optional[List] = None) -> torch.Tensor:
     """
@@ -129,6 +131,9 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
     offset = offset.view(get_encoding_shape_with_blocks(offset.shape, block_size))
     return QuantizeFunc.apply(tensor, scale, offset, qmin, qmax).view(orig_tensor_shape)
 
+
+
+@_onnx.register_symbolic(_onnx.quantize_dequantize_symbolic)
 def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
                         qmin: int, qmax: int, block_size: Optional[List] = None) -> torch.Tensor:
     """
@@ -161,6 +166,7 @@ def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
                                   offset.to(internal_dtype),
                                   qmin, qmax).to(output_dtype).view(orig_tensor_shape)
 
+@_onnx.register_symbolic(_onnx.dequantize_symbolic)
 def dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, block_size: Optional[List] = None) \
         -> torch.Tensor:
     """
