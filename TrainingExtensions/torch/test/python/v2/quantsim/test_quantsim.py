@@ -994,7 +994,7 @@ class TestQuantsimUtilities:
 
 
 class TestEncodingPropagation:
-    def test_encoding_prop_output(self):
+    def test_output(self):
         """
         Given: model as below
 
@@ -1052,7 +1052,7 @@ class TestEncodingPropagation:
         assert q_in2 is orig_q_in2
         assert q_out3 is orig_q_out3
 
-    def test_encoding_prop_math_invariant(self):
+    def test_math_invariant(self):
         """
         Given: model as below
 
@@ -1114,7 +1114,7 @@ class TestEncodingPropagation:
         assert q_in1 is orig_q_in1
         assert q_out3 is orig_q_out3
 
-    def test_encoding_prop_concat_tree(self):
+    def test_concat_tree(self):
         """
         Given: model as below
 
@@ -1193,3 +1193,55 @@ class TestEncodingPropagation:
 
         # q_out3 stay unchanged
         assert q_out3 is orig_q_out3
+
+    def test_variadic_qmodules(self):
+        """
+        Given: model as below
+
+           [x] -+                                                                   +---------------> [output1]
+           [y] -+-> q_in -> concat1 -> q_out1 -> conv -> q_out2 -> split -> q_out3 -+-+
+           [z] -+                                                                   +-+-> concat2 -> q_out4 -> [output2]
+        """
+
+        # NOTE: Input-variadic qmodule Concat and output-variadic qmodule Split
+        #       has only one input/output quantizer that covers variable number of input/output tensors.
+        #       This test checks if propagate_output_encodings can properly handle these variadic operators
+
+        # FIXME: Currently, propagate_output_encodings doesn't work with models with torch.split
+        #        because connected graph fails to create a computation graph of torch.split correctly.
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.cat1 = aimet_ops.Concat()
+                self.conv = torch.nn.Conv2d(3,3,3)
+                # TODO
+                # self.split = aimet_ops.Split()
+                # self.cat2 = aimet_ops.Concat()
+
+            def forward(self, *tensors):
+                t = self.cat1(*tensors)
+                t = self.conv(t)
+                return t
+                # TODO
+                # x, y, z = self.split(t, 1)
+                # return self.cat2(x, y, z)
+
+
+        model = Model()
+        x = torch.randn(1, 3, 24, 24)
+        y = torch.randn(1, 3, 24, 24)
+        z = torch.randn(1, 3, 24, 24)
+        sim = QuantizationSimModel(model, (x, y, z))
+
+        """
+        When: Call propagate_output_encodings
+        Then:
+
+           [x] -+                                                                         +---------------> [output1]
+           [y] -+-> *q_out1* -> concat1 -> q_out1 -> conv -> q_out2 -> split -> *q_out4* -+-+
+           [z] -+                                                                         +-+-> concat2 -> q_out4 -> [output2]
+        """
+        propagate_output_encodings(sim, aimet_ops.Concat)
+        assert sim.model.cat1.input_quantizers[0] is sim.model.cat1.output_quantizers[0]
+        # assert sim.model.split.output_quantizers[0] is sim.model.cat2.output_quantizers[0] TODO
