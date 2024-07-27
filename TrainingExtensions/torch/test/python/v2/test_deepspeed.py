@@ -60,6 +60,7 @@ from aimet_torch.v2.quantization.base.quantizer import QuantizerBase
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.nn.true_quant import QuantizedLinear
 from .models_.mnist_torch_model import Net
+from .models_.test_models import TransposedConvModel
 
 
 class CustomMPU:
@@ -271,3 +272,32 @@ def test_deepspeed_zero3_offload(unlabeled_data_loader,
         before = params_before[param_name]
         after = params_after[param_name]
         assert not torch.equal(before, after)
+
+
+def test_conv_transpose(per_channel_quantsim_config,
+                        init_process_group,
+                        deepspeed_zero3_offload_config):
+    """
+    Given: Model containing ConvTransposeNd, pre-partitioned with deepspeed zero3 offload
+    """
+    with ds.zero.Init(config_dict_or_path=deepspeed_zero3_offload_config):
+        # ds.zero.Init context pre-partitoins the pytorch models at instantiation time.
+        # PyTorch modules instantiated under this context will only hold a partition
+        # of their parameters
+        model = TransposedConvModel().cuda()
+        assert all(param.numel() == 0 for param in model.parameters())         # sanity check
+        assert all(hasattr(param, 'ds_shape') for param in model.parameters()) # sanity check
+
+    """
+    When: Create quantsim with the model pre-partitioned model
+    Then: Quantizers should be instantiated with correct shape
+    """
+    sim = QuantizationSimModel(model,
+                               torch.randn(1, 10, 28, 28).cuda(),
+                               default_param_bw=4,
+                               config_file=per_channel_quantsim_config,
+                               quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                               in_place=True)
+
+    assert sim.model.conv1.param_quantizers['weight'].shape == (1, 10, 1, 1)
+    assert sim.model.conv2.param_quantizers['weight'].shape == (1, 10, 1, 1)

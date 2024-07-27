@@ -118,14 +118,13 @@ class LazyQuantizeWrapper(torch.nn.Module):
         """
         Changes all parameter quantizers (if any) to per-channel mode.
         """
-        for param_name, param in self._module_to_wrap.named_parameters():
+        for param_name, _ in self._module_to_wrap.named_parameters():
             param_quantizer = self.param_quantizers[param_name]
             channel_axis = 0
             if isinstance(self._module_to_wrap, (torch.nn.ConvTranspose1d,
                                                  torch.nn.ConvTranspose2d,
                                                  torch.nn.ConvTranspose3d)):
-                if len(param.shape) > 1:
-                    channel_axis = 1
+                channel_axis = 1
 
             # pylint: disable = protected-access
             param_quantizer.enable_per_channel_quantization(channel_axis)
@@ -410,8 +409,9 @@ class LazyParamQuantizer(LazyQuantizer):
                  use_symmetric_encodings: bool, enabled_by_default: bool,
                  param: torch.nn.Parameter,
                  data_type: QuantizationDataType = QuantizationDataType.int):
+        from aimet_torch.v2.deepspeed_utils import _get_shape
         super().__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings, enabled_by_default, data_type)
-        self.param_shape = param.shape if not hasattr(param, 'ds_shape') else param.ds_shape
+        self.param_shape = _get_shape(param)
         self.channel_axis = None
 
     def enable_per_channel_quantization(self, channel_axis: int):

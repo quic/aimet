@@ -87,3 +87,7 @@ def _shallow_copy(dict_like):
         copy.__dict__.update(dict_like.__dict__)
 
     return copy
+
+
+def _get_shape(tensor: torch.Tensor):
+    return getattr(tensor, 'ds_shape', tensor.shape)
