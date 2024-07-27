@@ -5158,6 +5158,37 @@ def test_fused_qdq_linear(input_dims):
 
     _assert_same_results_with_or_without_recompute(linear_wrapper, x)
 
+def test_multiple_references_to_same_module():
+    class TwoRelu(torch.nn.Module):
+        def __init__(self):
+            super(TwoRelu, self).__init__()
+            self.relu1 = torch.nn.ReLU()
+            self.relu2 = torch.nn.ReLU()
+
+        def forward(self, inp):
+            x = self.relu1(inp)
+            x = self.relu2(x)
+            return x
+
+    class OuterModel(torch.nn.Module):
+        def __init__(self):
+            super(OuterModel, self).__init__()
+            self.two_relu = TwoRelu()
+            self.seq = torch.nn.Sequential(self.two_relu)
+
+        def forward(self, inp):
+            x = self.seq(inp)
+            return x
+
+    model = OuterModel()
+    dummy_input = torch.randn(1, 2)
+
+    qsim = QuantizationSimModel(model, dummy_input)
+    qsim.compute_encodings(lambda m, _: m(dummy_input), None)
+    assert qsim.model.two_relu is qsim.model.seq[0]
+    assert isinstance(qsim.model.two_relu.relu1, StaticGridQuantWrapper)
+    assert isinstance(qsim.model.two_relu.relu1._module_to_wrap, torch.nn.ReLU)
+
 
 def _assert_same_results_with_or_without_recompute(wrapper: LearnedGridQuantWrapper, x):
     with no_recompute():
