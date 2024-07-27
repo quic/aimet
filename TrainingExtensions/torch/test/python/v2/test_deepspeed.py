@@ -56,9 +56,9 @@ from aimet_common.defs import QuantScheme
 import aimet_torch.v2 as aimet
 from aimet_torch.v2.quantization.affine.quantizer import QuantizeDequantize
 from aimet_torch.v2.quantization.base.quantizer import QuantizerBase
+from aimet_torch.v2.quantization import DequantizedTensor
 
 from aimet_torch.v2.quantsim import QuantizationSimModel
-from aimet_torch.v2.nn.true_quant import QuantizedLinear
 from .models_.mnist_torch_model import Net
 from .models_.test_models import TransposedConvModel
 
@@ -225,7 +225,10 @@ def test_deepspeed_zero3_offload(unlabeled_data_loader,
 
     """
     When: Initialize quantsim model with deepspeed zero3 offload
-    Then: All parameters must be initialized with deepspeed zero3 parameter partitioning mechanism
+    Then:
+      1) All parameters must be initialized with deepspeed zero3 parameter partitioning mechanism
+      2) No quantizer encoding is not initialized yet
+      2) get_{encoding, scale, offset, min, max} doesn't throw error but returns None
     """
     engine, ds_optimizer, *_ = ds.initialize(model=sim.model,
                                              model_parameters=sim.model.parameters(),
@@ -233,9 +236,20 @@ def test_deepspeed_zero3_offload(unlabeled_data_loader,
                                              mpu=CustomMPU(init_process_group))
     assert all(hasattr(param, 'ds_shape') for param in model.parameters())
 
+    for qtzr in sim.model.modules():
+        if isinstance(qtzr, QuantizerBase):
+            assert not qtzr.is_initialized()
+            assert qtzr.get_encoding() is None
+            assert qtzr.get_scale() is None
+            assert qtzr.get_offset() is None
+            assert qtzr.get_min() is None
+            assert qtzr.get_max() is None
+
     """
     When: Compute encodings after deepspeed initialization
-    Then: All quantizer encodings must be inititalized
+    Then:
+      1) All quantizer encodings must be inititalized
+      2) get_{encoding, scale, offset, min, max} doesn't throw error but returns empty tensor
     """
     with aimet.nn.compute_encodings(model):
         for data in itertools.islice(unlabeled_data_loader, 3):
@@ -244,6 +258,15 @@ def test_deepspeed_zero3_offload(unlabeled_data_loader,
     for qtzr in sim.model.modules():
         if isinstance(qtzr, QuantizerBase):
             assert qtzr.is_initialized()
+            encoding = qtzr.get_encoding()
+            assert encoding.scale.numel() == 0
+            assert encoding.offset.numel() == 0
+            assert encoding.min.numel() == 0
+            assert encoding.max.numel() == 0
+            assert qtzr.get_scale().numel() == 0
+            assert qtzr.get_offset().numel() == 0
+            assert qtzr.get_min().numel() == 0
+            assert qtzr.get_max().numel() == 0
 
     """
     When: Run training loop
@@ -258,6 +281,10 @@ def test_deepspeed_zero3_offload(unlabeled_data_loader,
 
     for _, data in enumerate(unlabeled_data_loader):
         output = sim.model(data.cuda())
+        assert isinstance(output, DequantizedTensor)
+        assert output.encoding.scale.numel() == 1
+        assert output.encoding.offset.numel() == 1
+
         loss = functional.mse_loss(output, target)
         engine.backward(loss)
         ds_optimizer.step()

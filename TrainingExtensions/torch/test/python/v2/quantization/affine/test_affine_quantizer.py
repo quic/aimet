@@ -118,7 +118,7 @@ def x():
 
 
 @pytest.fixture
-def init_process_group(scope='function'):
+def init_process_group():
     import torch.distributed as dist
 
     LOCAL_RANK = os.getenv('LOCAL_RANK', None)
@@ -828,7 +828,8 @@ def test_is_initialized_with_deepspeed_zero3(init_process_group, deepspeed_zero3
     Then: quantizer.is_initialized() flag should be preserved after pertitioning
     """
     qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
-    engine, *_ = ds.initialize(model=qdq, config=deepspeed_zero3_config, mpu=CustomMPU(init_process_group))
+    engine, *_ = ds.initialize(model=qdq, config=deepspeed_zero3_config,
+                               mpu=CustomMPU(init_process_group))
     qdq_zero3 = engine.module
     assert not qdq_zero3.is_initialized()
 
