@@ -54,7 +54,7 @@ from aimet_torch.v2.utils import (
     _ContextManager,
     flatten_nn_module_list,
 )
-from aimet_torch.v2.deepspeed_utils import gathered_parameters, shallow_copy
+from aimet_torch.v2.deepspeed_utils import gathered_parameters, _shallow_copy
 
 def _no_op(in_tensor):
     return in_tensor
@@ -237,7 +237,7 @@ class BaseQuantizationMixin(abc.ABC):
 
         qtzn_module.__dict__ = module.__dict__.copy()
         qtzn_module._modules = module._modules.copy()
-        qtzn_module._parameters = shallow_copy(module._parameters)
+        qtzn_module._parameters = _shallow_copy(module._parameters)
         qtzn_module._buffers = module._buffers.copy()
 
         qtzn_module.__quant_init__()
@@ -461,7 +461,7 @@ class BaseQuantizationMixin(abc.ABC):
         orig_module.__dict__ = self.__dict__.copy()
         orig_module.__dict__.pop('forward', None)
 
-        orig_module._parameters = shallow_copy(self._parameters)
+        orig_module._parameters = _shallow_copy(self._parameters)
         orig_module._buffers = self._buffers.copy()
         orig_module._modules = self._modules.copy()
         del orig_module._modules['input_quantizers']

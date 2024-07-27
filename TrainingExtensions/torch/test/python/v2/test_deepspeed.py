@@ -91,30 +91,7 @@ def set_seed():
 
 @pytest.fixture
 def init_process_group():
-
-    # https://stackoverflow.com/a/63851681/9201239
-    def get_all_subclasses(cls):
-        subclass_list = []
-
-        def recurse(cl):
-            for subclass in cl.__subclasses__():
-                subclass_list.append(subclass)
-                recurse(subclass)
-
-        recurse(cls)
-
-        return set(subclass_list)
-
     LOCAL_RANK = os.getenv('LOCAL_RANK', None)
-    # Deepspeed can't unpatch below hooks
-    linear_bk = functional.linear
-    # LinearFunctionForZeroStage3 will make F.linear-->torch.addmm or torch.matmul, it's a workaround to resolve it
-    QuantizedLinear._builtin_torch_fn = torch.addmm
-    subclass_lst = get_all_subclasses(torch.nn.modules.module.Module)
-    for subclass in subclass_lst:
-        subclass.old_init = subclass.__init__
-        subclass.old_apply_hook = subclass._apply
-
     try:
         # Create process group of size 2
         dist.init_process_group(backend='nccl',
@@ -124,15 +101,11 @@ def init_process_group():
         os.environ['LOCAL_RANK'] = '0'
         yield dist.new_group(ranks=[0])
     finally:
-        # Restore init function to bypass DeepSpeed bug
-        for subclass in subclass_lst:
-            subclass.__init__ = subclass.old_init
-            subclass._apply = subclass.old_apply_hook
-        torch.nn.functional.linear = linear_bk
-        QuantizedLinear._builtin_torch_fn = linear_bk
         if dist.is_initialized():
             dist.destroy_process_group()
-        if LOCAL_RANK is not None:
+        if LOCAL_RANK is None:
+            del os.environ['LOCAL_RANK']
+        else:
             os.environ['LOCAL_RANK'] = LOCAL_RANK
 
 

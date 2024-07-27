@@ -77,7 +77,7 @@ def _register_zero3_forward_hooks(model: torch.nn.Module):
             handle.remove()
 
 
-def shallow_copy(dict_like):
+def _shallow_copy(dict_like):
     """
     Create a shallow copy for dict-like objects with variables
     """
