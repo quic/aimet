@@ -1245,3 +1245,42 @@ class TestEncodingPropagation:
         propagate_output_encodings(sim, aimet_ops.Concat)
         assert sim.model.cat1.input_quantizers[0] is sim.model.cat1.output_quantizers[0]
         # assert sim.model.split.output_quantizers[0] is sim.model.cat2.output_quantizers[0] TODO
+
+        ########################################################################
+
+        """
+        Given: model as below
+
+           [x] ---> q_in1 -> conv -> q_out1 --+
+           [y] -+-> q_in2 --------------------+-> concat -> q_out2 -> [output]
+           [z] -+
+        """
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv = torch.nn.Conv2d(3,3,3)
+                self.cat = aimet_ops.Concat()
+
+            def forward(self, x, y, z):
+                x = self.conv(x)
+                return self.cat(x, y, z)
+
+
+        model = Model()
+        x = torch.randn(1, 3, 26, 26)
+        y = torch.randn(1, 3, 24, 24)
+        z = torch.randn(1, 3, 24, 24)
+        sim = QuantizationSimModel(model, (x, y, z))
+
+        """
+        When: Call propagate_output_encodings
+        Then:
+
+           [x] ---> q_in1 -> conv -> *q_out2* --+
+           [y] -+-> *q_out2* -------------------+-> concat -> q_out2 -> [output]
+           [z] -+
+        """
+        propagate_output_encodings(sim, aimet_ops.Concat)
+        assert sim.model.conv.output_quantizers[0] is sim.model.cat.output_quantizers[0]
+        assert sim.model.cat.input_quantizers[0] is sim.model.cat.output_quantizers[0]
