@@ -328,6 +328,7 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
         if not self.is_initialized():
             return None
         num_negative_steps = 2 ** (self.bitwidth - 1) if self._signed else 0
+
         return self.get_scale(dtype) * (self.get_offset(dtype) - num_negative_steps)
 
     def get_max(self, dtype=None) -> Optional[torch.Tensor]:

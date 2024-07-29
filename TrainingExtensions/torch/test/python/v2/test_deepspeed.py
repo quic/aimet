@@ -212,6 +212,16 @@ def test_deepspeed_zero3_offload(unlabeled_data_loader,
                                  per_channel_quantsim_config,
                                  init_process_group,
                                  deepspeed_zero3_offload_config):
+    # Baseline model without deepsped
+    model_baseline = Net().cuda().eval()
+    baseline_state_dict = model_baseline.state_dict()
+    sim_baseline = QuantizationSimModel(model_baseline,
+                                        torch.randn(1, 1, 28, 28).cuda(),
+                                        default_param_bw=4,
+                                        config_file=per_channel_quantsim_config,
+                                        quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                        in_place=True)
+
     """
     Given: Model pre-partitioned with deepspeed zero3 offload
     """
@@ -219,54 +229,59 @@ def test_deepspeed_zero3_offload(unlabeled_data_loader,
         # ds.zero.Init context pre-partitoins the pytorch models at instantiation time.
         # PyTorch modules instantiated under this context will only hold a partition
         # of their parameters
-        model = Net().cuda()
+        model = Net().cuda().eval()
         assert all(param.numel() == 0 for param in model.parameters())         # sanity check
         assert all(hasattr(param, 'ds_shape') for param in model.parameters()) # sanity check
+
+    # Copy the parameters/buffers of baseline model to deepspeed pre-partitoined model to assert
+    # outputs to be equal with or without deepspeed
+    with ds.runtime.zero.GatheredParameters(model.parameters(), modifier_rank=0), torch.no_grad():
+        model.load_state_dict(baseline_state_dict)
 
     """
     When: Create quantsim with the model pre-partitioned model
     Then: Quantizers should be instantiated with correct shape
     """
-    sim = QuantizationSimModel(model,
-                               torch.randn(1, 1, 28, 28).cuda(),
-                               default_param_bw=4,
-                               config_file=per_channel_quantsim_config,
-                               quant_scheme=QuantScheme.training_range_learning_with_tf_init,
-                               in_place=True)
+    sim_deepspeed = QuantizationSimModel(model,
+                                         torch.randn(1, 1, 28, 28).cuda(),
+                                         default_param_bw=4,
+                                         config_file=per_channel_quantsim_config,
+                                         quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                         in_place=True)
 
-    assert isinstance(sim.model.conv1.input_quantizers[0], QuantizeDequantize)
-    assert isinstance(sim.model.conv1.param_quantizers['weight'], QuantizeDequantize)
-    assert isinstance(sim.model.conv1.output_quantizers[0], QuantizeDequantize)
-    assert isinstance(sim.model.maxpool1.output_quantizers[0], QuantizeDequantize)
-    assert isinstance(sim.model.relu1.output_quantizers[0], QuantizeDequantize)
-    assert isinstance(sim.model.conv2.param_quantizers['weight'], QuantizeDequantize)
-    assert isinstance(sim.model.conv2.output_quantizers[0], QuantizeDequantize)
-    assert isinstance(sim.model.maxpool2.output_quantizers[0], QuantizeDequantize)
-    assert isinstance(sim.model.relu2.output_quantizers[0], QuantizeDequantize)
-    assert isinstance(sim.model.fc1.param_quantizers['weight'], QuantizeDequantize)
-    assert sim.model.fc1.output_quantizers[0] is None
-    assert isinstance(sim.model.relu3.output_quantizers[0], QuantizeDequantize)
-    assert isinstance(sim.model.fc2.param_quantizers['weight'], QuantizeDequantize)
-    assert isinstance(sim.model.fc2.output_quantizers[0], QuantizeDequantize)
-    assert isinstance(sim.model.log_softmax.output_quantizers[0], QuantizeDequantize)
+    assert isinstance(sim_deepspeed.model.conv1.input_quantizers[0], QuantizeDequantize)
+    assert isinstance(sim_deepspeed.model.conv1.param_quantizers['weight'], QuantizeDequantize)
+    assert isinstance(sim_deepspeed.model.conv1.output_quantizers[0], QuantizeDequantize)
+    assert isinstance(sim_deepspeed.model.maxpool1.output_quantizers[0], QuantizeDequantize)
+    assert isinstance(sim_deepspeed.model.relu1.output_quantizers[0], QuantizeDequantize)
+    assert isinstance(sim_deepspeed.model.conv2.param_quantizers['weight'], QuantizeDequantize)
+    assert isinstance(sim_deepspeed.model.conv2.output_quantizers[0], QuantizeDequantize)
+    assert isinstance(sim_deepspeed.model.maxpool2.output_quantizers[0], QuantizeDequantize)
+    assert isinstance(sim_deepspeed.model.relu2.output_quantizers[0], QuantizeDequantize)
+    assert isinstance(sim_deepspeed.model.fc1.param_quantizers['weight'], QuantizeDequantize)
+    assert sim_deepspeed.model.fc1.output_quantizers[0] is None
+    assert isinstance(sim_deepspeed.model.relu3.output_quantizers[0], QuantizeDequantize)
+    assert isinstance(sim_deepspeed.model.fc2.param_quantizers['weight'], QuantizeDequantize)
+    assert isinstance(sim_deepspeed.model.fc2.output_quantizers[0], QuantizeDequantize)
+    assert isinstance(sim_deepspeed.model.log_softmax.output_quantizers[0], QuantizeDequantize)
 
-    assert sim.model.conv1.param_quantizers['weight'].shape == (32, 1, 1, 1)
-    assert sim.model.conv2.param_quantizers['weight'].shape == (64, 1, 1, 1)
+    assert sim_deepspeed.model.conv1.param_quantizers['weight'].shape == (32, 1, 1, 1)
+    assert sim_deepspeed.model.conv2.param_quantizers['weight'].shape == (64, 1, 1, 1)
 
     # NOTE: default per-channel quantsim config doesn't apply per-channel qtzn to nn.Linear
-    assert sim.model.fc1.param_quantizers['weight'].shape == ()
-    assert sim.model.fc2.param_quantizers['weight'].shape == ()
+    assert sim_deepspeed.model.fc1.param_quantizers['weight'].shape == ()
+    assert sim_deepspeed.model.fc2.param_quantizers['weight'].shape == ()
 
-    assert sim.model.conv1.input_quantizers[0].shape ==\
-           sim.model.conv1.output_quantizers[0].shape ==\
-           sim.model.maxpool1.output_quantizers[0].shape ==\
-           sim.model.relu1.output_quantizers[0].shape ==\
-           sim.model.conv2.output_quantizers[0].shape ==\
-           sim.model.maxpool2.output_quantizers[0].shape ==\
-           sim.model.relu2.output_quantizers[0].shape ==\
-           sim.model.relu3.output_quantizers[0].shape ==\
-           sim.model.fc2.output_quantizers[0].shape ==\
-           sim.model.log_softmax.output_quantizers[0].shape == ()
+    assert sim_deepspeed.model.conv1.input_quantizers[0].shape ==\
+           sim_deepspeed.model.conv1.output_quantizers[0].shape ==\
+           sim_deepspeed.model.maxpool1.output_quantizers[0].shape ==\
+           sim_deepspeed.model.relu1.output_quantizers[0].shape ==\
+           sim_deepspeed.model.conv2.output_quantizers[0].shape ==\
+           sim_deepspeed.model.maxpool2.output_quantizers[0].shape ==\
+           sim_deepspeed.model.relu2.output_quantizers[0].shape ==\
+           sim_deepspeed.model.relu3.output_quantizers[0].shape ==\
+           sim_deepspeed.model.fc2.output_quantizers[0].shape ==\
+           sim_deepspeed.model.log_softmax.output_quantizers[0].shape == ()
 
     """
     When: Initialize quantsim model with deepspeed zero3 offload
@@ -275,13 +290,13 @@ def test_deepspeed_zero3_offload(unlabeled_data_loader,
       2) No quantizer encoding is not initialized yet
       3) get_{encoding, scale, offset, min, max} doesn't throw error but returns None
     """
-    engine, ds_optimizer, *_ = ds.initialize(model=sim.model,
-                                             model_parameters=sim.model.parameters(),
+    engine, ds_optimizer, *_ = ds.initialize(model=sim_deepspeed.model,
+                                             model_parameters=sim_deepspeed.model.parameters(),
                                              config=deepspeed_zero3_offload_config,
                                              mpu=CustomMPU(init_process_group))
     assert all(hasattr(param, 'ds_shape') for param in model.parameters())
 
-    for qtzr in sim.model.modules():
+    for qtzr in sim_deepspeed.model.modules():
         if isinstance(qtzr, QuantizerBase):
             assert not qtzr.is_initialized()
             assert qtzr.get_encoding() is None
@@ -290,17 +305,22 @@ def test_deepspeed_zero3_offload(unlabeled_data_loader,
             assert qtzr.get_min() is None
             assert qtzr.get_max() is None
 
+
     """
     When: Compute encodings after deepspeed initialization
     Then:
       1) All quantizer encodings must be inititalized
-      2) get_{encoding, scale, offset, min, max} doesn't throw error but returns empty tensor
+      2) get_{encoding, scale, offset, min, max} returns real tensors, not empty tensors
+      3) Forward pass outputs must be equal with or without deepspeed
     """
-    with aimet.nn.compute_encodings(model):
+    with aimet.nn.compute_encodings(sim_deepspeed.model),\
+            aimet.nn.compute_encodings(sim_baseline.model):
         for data in itertools.islice(unlabeled_data_loader, 3):
-            _ = sim.model(data.cuda())
+            data = data.cuda()
+            _ = sim_deepspeed.model(data)
+            _ = sim_baseline.model(data)
 
-    for qtzr in sim.model.modules():
+    for qtzr in sim_deepspeed.model.modules():
         if isinstance(qtzr, QuantizerBase):
             assert qtzr.is_initialized()
             encoding = qtzr.get_encoding()
@@ -313,36 +333,43 @@ def test_deepspeed_zero3_offload(unlabeled_data_loader,
             assert qtzr.get_min().numel() == 0
             assert qtzr.get_max().numel() == 0
 
+    with torch.no_grad():
+        for data in unlabeled_data_loader:
+            data = data.cuda()
+            assert torch.equal(sim_deepspeed.model(data), sim_baseline.model(data))
+
     """
     When: Run training loop
     Then: All trainable parameters must be udpated by training
     """
-    with ds.runtime.zero.GatheredParameters(sim.model.parameters()):
-        params_before = {
-            name: param.clone().detach() for name, param in sim.model.named_parameters()
+    with ds.runtime.zero.GatheredParameters(sim_deepspeed.model.parameters()):
+        ds_params_before = {
+            name: param.clone().detach() for name, param in sim_deepspeed.model.named_parameters()
         }
 
     target = torch.ones((1, 10)).float().cuda()
+    sim_deepspeed.model.train()
+    sim_baseline.model.train()
 
     for _, data in enumerate(unlabeled_data_loader):
-        output = sim.model(data.cuda())
+        output = sim_deepspeed.model(data.cuda())
         assert isinstance(output, DequantizedTensor)
         assert output.encoding.scale.numel() == 1
         assert output.encoding.offset.numel() == 1
-
         loss = functional.mse_loss(output, target)
         engine.backward(loss)
         ds_optimizer.step()
+        ds_optimizer.zero_grad()
 
-    with ds.runtime.zero.GatheredParameters(sim.model.parameters()):
-        params_after = {
-            name: param.clone().detach() for name, param in sim.model.named_parameters()
+    with ds.runtime.zero.GatheredParameters(sim_deepspeed.model.parameters()):
+        ds_params_after = {
+            name: param.clone().detach() for name, param in sim_deepspeed.model.named_parameters()
         }
 
-    assert params_before.keys() == params_after.keys()
-    for param_name in params_before:
-        before = params_before[param_name]
-        after = params_after[param_name]
+    assert ds_params_before.keys() == ds_params_after.keys()
+    for param_name in ds_params_before:
+        before = ds_params_before[param_name]
+        after = ds_params_after[param_name]
         assert not torch.equal(before, after)
 
 
@@ -365,12 +392,12 @@ def test_conv_transpose(per_channel_quantsim_config,
     When: Create quantsim with the model pre-partitioned model
     Then: Quantizers should be instantiated with correct shape
     """
-    sim = QuantizationSimModel(model,
-                               torch.randn(1, 10, 28, 28).cuda(),
-                               default_param_bw=4,
-                               config_file=per_channel_quantsim_config,
-                               quant_scheme=QuantScheme.training_range_learning_with_tf_init,
-                               in_place=True)
+    sim_deepspeed = QuantizationSimModel(model,
+                                         torch.randn(1, 10, 28, 28).cuda(),
+                                         default_param_bw=4,
+                                         config_file=per_channel_quantsim_config,
+                                         quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                         in_place=True)
 
-    assert sim.model.conv1.param_quantizers['weight'].shape == (1, 10, 1, 1)
-    assert sim.model.conv2.param_quantizers['weight'].shape == (1, 10, 1, 1)
+    assert sim_deepspeed.model.conv1.param_quantizers['weight'].shape == (1, 10, 1, 1)
+    assert sim_deepspeed.model.conv2.param_quantizers['weight'].shape == (1, 10, 1, 1)

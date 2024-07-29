@@ -41,8 +41,23 @@ import contextlib
 import torch
 
 try:
-    import deepspeed as ds
-    gathered_parameters = ds.runtime.zero.GatheredParameters
+    from deepspeed.runtime.zero import ZeroParamStatus, GatheredParameters
+
+    def gathered_parameters(params, *args, **kwargs):
+        """
+        Shallow wrapper around ref:`GatheredParameters`.
+        Unlike ref:`GatheredParameters`, this function can be also called
+        with parameters that are already all-gathered by deepspeed zero3 or zero-offload runtime.
+        """
+        params = [
+            p for p in params
+            # Ignore if the parameter is already all-gathered.
+            # deepspeed.zero.runtime.GatheredParameters assumes all the parameters to be "NOT_AVAILABLE"
+            # and can fail if some of them were already "AVAILABLE".
+            if getattr(p, 'ds_status', None) == ZeroParamStatus.NOT_AVAILABLE
+        ]
+        return GatheredParameters(params, *args, **kwargs)
+
 except ImportError:
     def gathered_parameters(*args, **kwargs): # pylint: disable=unused-argument
         """ Dummy placeholder in case deepspeed doesn't exist """
