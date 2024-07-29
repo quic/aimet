@@ -300,6 +300,10 @@ class QuantizedTensorBase(torch.Tensor):
 
         self, *_ = args
 
+        if not isinstance(self, QuantizedTensorBase):
+            # If self is not a subclass of QuantizedTensorBase, return a plain torch.Tensor
+            return tree_map(lambda t: t.as_subclass(torch.Tensor), ret)
+
         if func in cls._cast_ops:
             if not ret.dtype.is_floating_point:
                 raise RuntimeError(
@@ -322,7 +326,7 @@ class QuantizedTensorBase(torch.Tensor):
             tree_map(lambda t: propagate_encoding(t, self.encoding), ret)
             return ret
 
-        if func in cls._pertensor_passthrough_ops and isinstance(self, QuantizedTensorBase):
+        if func in cls._pertensor_passthrough_ops:
             if self is ret:
                 return ret
 
