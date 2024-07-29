@@ -326,6 +326,7 @@ def test_deepspeed_zero3_offload(unlabeled_data_loader,
         assert not torch.equal(before, after)
 
 
+@pytest.mark.cuda
 def test_conv_transpose(per_channel_quantsim_config,
                         init_process_group,
                         deepspeed_zero3_offload_config):
