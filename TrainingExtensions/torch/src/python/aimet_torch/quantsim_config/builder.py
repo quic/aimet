@@ -124,7 +124,7 @@ class LazyQuantizeWrapper(torch.nn.Module):
             if isinstance(self._module_to_wrap, (torch.nn.ConvTranspose1d,
                                                  torch.nn.ConvTranspose2d,
                                                  torch.nn.ConvTranspose3d)):
-                channel_axis = 1
+                channel_axis = 1 if param_name == 'weight' else 0
 
             # pylint: disable = protected-access
             param_quantizer.enable_per_channel_quantization(channel_axis)
