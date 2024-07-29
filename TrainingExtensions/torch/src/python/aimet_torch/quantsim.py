@@ -206,6 +206,7 @@ unquantizable_modules = (
     QcQuantizeRecurrent,
     ExportableQuantModule,
     torch.nn.Identity,
+    LazyQuantizeWrapper
 )
 
 
