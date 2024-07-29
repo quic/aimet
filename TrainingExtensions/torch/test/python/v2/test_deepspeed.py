@@ -90,29 +90,54 @@ def set_seed():
     np.random.seed(0)
 
 
+def get_all_subclasses(cls):
+    def _get_all_subclasses(cls):
+        for subcls in cls.__subclasses__():
+            yield from _get_all_subclasses(subcls)
+        yield cls
+    return set(_get_all_subclasses(cls))
+
+
+@pytest.fixture(autouse=True)
+def teardown():
+    """
+    Custom teardown logic to bypass bugs in DeepSpeed.
+    Deepspeed temporarily monkey-patches some attributes of PyTorch classes and subpackages
+    such as <ModuleType>.__init__ or torch.nn.functional.<function> during ``with ds.zero.Init(...):``
+    but fails to restore the original class definitions when exiting the context.
+
+    This is an obvious bug that has to be fixed in deepspeed source code directly.
+    For now, we add our custom teardown logic so this bug in deepspeed doesn't leave
+    permanent side effect to the whole test session, leading other unrelated test cases to fail
+    """
+    orig_cls_defs = {
+        subcls: subcls.__dict__.copy()
+        for subcls in get_all_subclasses(torch.nn.Module)
+    }
+
+    orig_pkg_defs = {
+        subpkg: subpkg.__dict__.copy()
+        for subpkg in (torch, torch.nn, torch.nn.functional)
+    }
+
+    try:
+        yield
+    finally:
+        # Restore original class/package definitions to bypass bugs in deepspeed
+        for cls_or_pkg, orig_attrs in itertools.chain(orig_cls_defs.items(), orig_pkg_defs.items()):
+            for attr_name in tuple(cls_or_pkg.__dict__.keys()):
+                if attr_name == '__dict__':
+                    continue
+                if attr_name in orig_attrs:
+                    setattr(cls_or_pkg, attr_name, orig_attrs[attr_name])
+                else:
+                    delattr(cls_or_pkg, attr_name)
+
+
 @pytest.fixture
 def init_process_group():
-
-    # https://stackoverflow.com/a/63851681/9201239
-    def get_all_subclasses(cls):
-        subclass_list = []
-
-        def recurse(cl):
-            for subclass in cl.__subclasses__():
-                subclass_list.append(subclass)
-                recurse(subclass)
-
-        recurse(cls)
-
-        return set(subclass_list)
-
     LOCAL_RANK = os.getenv('LOCAL_RANK', None)
-    # Deepspeed can't unpatch below hooks, it's a workaround to resolve it
-    linear_bk = functional.linear
-    subclass_lst = get_all_subclasses(torch.nn.modules.module.Module)
-    for subclass in subclass_lst:
-        subclass.old_init = subclass.__init__
-        subclass.old_apply_hook = subclass._apply
+
     try:
         # Create process group of size 2
         dist.init_process_group(backend='nccl',
@@ -122,11 +147,6 @@ def init_process_group():
         os.environ['LOCAL_RANK'] = '0'
         yield dist.new_group(ranks=[0])
     finally:
-        # Restore init function to bypass DeepSpeed bug
-        for subclass in subclass_lst:
-            subclass.__init__ = subclass.old_init
-            subclass._apply = subclass.old_apply_hook
-        torch.nn.functional.linear = linear_bk
         if dist.is_initialized():
             dist.destroy_process_group()
         if LOCAL_RANK is None:
