@@ -387,7 +387,7 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
         """
         Set quantization parameters to the given min-max range
         """
-        with torch.no_grad(), gathered_parameters(self.parameters(recurse=False)):
+        with torch.no_grad(), gathered_parameters(self.parameters(recurse=False), modifier_rank=0):
             self.min.copy_(min)
             self.max.copy_(max)
 
