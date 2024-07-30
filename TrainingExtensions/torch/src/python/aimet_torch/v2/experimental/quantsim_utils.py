@@ -41,9 +41,8 @@ import torch
 
 from aimet_common.utils import AimetLogger
 from aimet_common.connected_graph.product import Product
-import aimet_torch.nn.modules.custom as aimet_ops
 from aimet_torch.meta.connectedgraph import Op
-from aimet_torch.v2.nn import BaseQuantizationMixin
+from aimet_torch.v2.nn import BaseQuantizationMixin, custom
 from aimet_torch.v2.quantization.affine.quantizer import AffineQuantizerBase
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch import utils
@@ -51,11 +50,11 @@ from aimet_torch import utils
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 _MATH_INVARIANT_OPS = (
-    aimet_ops.Reshape,
-    aimet_ops.Permute,
-    aimet_ops.Shape,
-    aimet_ops.Cast,
-    aimet_ops.ChannelShuffle,
+    custom.Reshape,
+    custom.Permute,
+    custom.Shape,
+    custom.Cast,
+    custom.ChannelShuffle,
     torch.nn.ChannelShuffle,
     torch.nn.Identity
 )
@@ -229,7 +228,7 @@ def set_matmul_second_input_producer_to_8bit_symmetric(sim: 'QuantizationSimMode
         return get_closest_producer(op.input_ops[0])
 
     for name, module in quant_modules.items():
-        if isinstance(module, aimet_ops.MatMul):
+        if isinstance(module, custom.MatMul):
             _, target_quantizer = module.input_quantizers
             matmul_op = get_connected_graph_op(sim.connected_graph, model_name, name)
             if not target_quantizer:

@@ -52,7 +52,7 @@ from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.affine import AffineQuantizerBase, GroupedBlockQuantizeDequantize
 from aimet_torch.v2.experimental import propagate_output_encodings
 from aimet_torch.v2.nn import BaseQuantizationMixin
-import aimet_torch.nn.modules.custom as aimet_ops
+import aimet_torch.v2.nn.modules.custom as custom
 from ..models_ import test_models
 
 def encodings_are_close(quantizer_1: AffineQuantizerBase, quantizer_2: AffineQuantizerBase):
@@ -81,7 +81,7 @@ class ConcatModel(torch.nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.cat = aimet_ops.Concat()
+        self.cat = custom.Concat()
 
     def forward(self, *x):
         return self.cat(*x)
@@ -1009,7 +1009,7 @@ class TestEncodingPropagation:
                 self.relu1 = torch.nn.ReLU()
                 self.conv2 = torch.nn.Conv2d(3,3,3)
                 self.relu2 = torch.nn.ReLU()
-                self.cat = aimet_ops.Concat()
+                self.cat = custom.Concat()
 
             def forward(self, x):
                 x1 = x2 = x
@@ -1035,7 +1035,7 @@ class TestEncodingPropagation:
         orig_q_in2 = sim.model.conv2.input_quantizers[0]
         orig_q_out3 = sim.model.cat.output_quantizers[0]
 
-        propagate_output_encodings(sim, aimet_ops.Concat)
+        propagate_output_encodings(sim, custom.Concat)
 
         q_in1 = sim.model.conv1.input_quantizers[0]
         q_in2 = sim.model.conv2.input_quantizers[0]
@@ -1066,10 +1066,10 @@ class TestEncodingPropagation:
                 self.conv1 = torch.nn.Conv2d(3,3,3, padding=1)
                 self.relu1 = torch.nn.ReLU()
 
-                self.reshape = aimet_ops.Reshape()
-                self.permute = aimet_ops.Permute()
+                self.reshape = custom.Reshape()
+                self.permute = custom.Permute()
 
-                self.cat = aimet_ops.Concat()
+                self.cat = custom.Concat()
 
             def forward(self, x):
                 # assert x.shape[1:] == torch.Size([3, 24, 24])
@@ -1099,7 +1099,7 @@ class TestEncodingPropagation:
         orig_q_in1 = sim.model.conv1.input_quantizers[0]
         orig_q_out3 = sim.model.cat.output_quantizers[0]
 
-        propagate_output_encodings(sim, aimet_ops.Concat)
+        propagate_output_encodings(sim, custom.Concat)
 
         q_in1 = sim.model.conv1.input_quantizers[0]
         q_in2 = sim.model.reshape.input_quantizers[0]
@@ -1132,12 +1132,12 @@ class TestEncodingPropagation:
                 self.conv2a = torch.nn.Conv2d(3,3,3)
                 self.conv2b = torch.nn.Conv2d(3,3,3)
 
-                self.reshape = aimet_ops.Reshape()
-                self.permute = aimet_ops.Permute()
+                self.reshape = custom.Reshape()
+                self.permute = custom.Permute()
 
-                self.cat1 = aimet_ops.Concat()
-                self.cat2 = aimet_ops.Concat()
-                self.cat3 = aimet_ops.Concat()
+                self.cat1 = custom.Concat()
+                self.cat2 = custom.Concat()
+                self.cat3 = custom.Concat()
 
             def forward(self, x):
                 # assert x.shape[1:] == torch.Size([3, 24, 24])
@@ -1174,7 +1174,7 @@ class TestEncodingPropagation:
         """
         orig_q_out3 = sim.model.cat3.output_quantizers[0]
 
-        propagate_output_encodings(sim, aimet_ops.Concat)
+        propagate_output_encodings(sim, custom.Concat)
 
         q_out1a = sim.model.conv1a.output_quantizers[0]
         q_out1b = sim.model.conv1b.output_quantizers[0]
