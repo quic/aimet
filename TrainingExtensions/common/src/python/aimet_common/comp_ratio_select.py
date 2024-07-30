@@ -50,8 +50,7 @@ from aimet_common.bokeh_plots import LinePlot
 from aimet_common.bokeh_plots import ProgressBar
 from aimet_common.utils import AimetLogger
 from aimet_common.curve_fit import MonotonicIncreasingCurveFit
-from aimet_common.defs import CostMetric, LayerCompRatioPair, GreedyCompressionRatioSelectionStats, \
-    TarCompressionRatioSelectionStats, LayerCompRatioEvalScore, EvalFunction
+from aimet_common.defs import CostMetric, LayerCompRatioPair, GreedyCompressionRatioSelectionStats, EvalFunction
 from aimet_common.pruner import Pruner
 from aimet_common import cost_calculator as cc
 from aimet_common.layer_database import Layer, LayerDatabase
