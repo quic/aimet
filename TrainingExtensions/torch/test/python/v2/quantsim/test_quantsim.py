@@ -1213,11 +1213,11 @@ class TestEncodingPropagation:
         class Model(torch.nn.Module):
             def __init__(self):
                 super().__init__()
-                self.cat1 = aimet_ops.Concat()
+                self.cat1 = custom.Concat()
                 self.conv = torch.nn.Conv2d(3,3,3)
                 # TODO
-                # self.split = aimet_ops.Split()
-                # self.cat2 = aimet_ops.Concat()
+                # self.split = custom.Split()
+                # self.cat2 = custom.Concat()
 
             def forward(self, *tensors):
                 t = self.cat1(*tensors)
@@ -1242,7 +1242,7 @@ class TestEncodingPropagation:
            [y] -+-> *q_out1* -> concat1 -> q_out1 -> conv -> q_out2 -> split -> *q_out4* -+-+
            [z] -+                                                                         +-+-> concat2 -> q_out4 -> [output2]
         """
-        propagate_output_encodings(sim, aimet_ops.Concat)
+        propagate_output_encodings(sim, custom.Concat)
         assert sim.model.cat1.input_quantizers[0] is sim.model.cat1.output_quantizers[0]
         # assert sim.model.split.output_quantizers[0] is sim.model.cat2.output_quantizers[0] TODO
 
@@ -1260,7 +1260,7 @@ class TestEncodingPropagation:
             def __init__(self):
                 super().__init__()
                 self.conv = torch.nn.Conv2d(3,3,3)
-                self.cat = aimet_ops.Concat()
+                self.cat = custom.Concat()
 
             def forward(self, x, y, z):
                 x = self.conv(x)
@@ -1281,6 +1281,6 @@ class TestEncodingPropagation:
            [y] -+-> *q_out2* -------------------+-> concat -> q_out2 -> [output]
            [z] -+
         """
-        propagate_output_encodings(sim, aimet_ops.Concat)
+        propagate_output_encodings(sim, custom.Concat)
         assert sim.model.conv.output_quantizers[0] is sim.model.cat.output_quantizers[0]
         assert sim.model.cat.input_quantizers[0] is sim.model.cat.output_quantizers[0]
