@@ -41,7 +41,7 @@ import tempfile
 import torch
 import torch.nn as nn
 from aimet_common.defs import QuantScheme
-import aimet_torch.nn.modules.custom as aimet_ops
+import aimet_torch.v2.nn.modules.custom as custom
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch import utils as v1_utils
 
@@ -78,7 +78,7 @@ def dummy_forward(model: torch.nn.Module, input: torch.Tensor):
 # From https://github.com/quic/aimet/blob/8ed479b24010834bfea09885cf6879b9bd916e8a/TrainingExtensions/torch/test/python/test_elementwise_ops.py#L101
 class TestTrainingExtensionElementwiseOps:
     def test_quantsim_export(self):
-        model = Model2(aimet_ops.Add())
+        model = Model2(custom.Add())
         dummy_input = torch.randn(5, 10, 10, 20)
         sim = QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf)
 
@@ -107,7 +107,7 @@ class TestTrainingExtensionElementwiseOps:
 
     def test_concat_compute_encodings(self):
         torch.manual_seed(10)
-        model = Model3(aimet_ops.Concat())
+        model = Model3(custom.Concat())
         dummy_input = torch.randn(5, 10, 10, 20), torch.randn(5, 10, 10, 20)
         sim = QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf)
         sim.compute_encodings(dummy_forward, dummy_input)
@@ -130,7 +130,7 @@ class TestTrainingExtensionElementwiseOps:
                 self.conv2 = nn.Conv2d(10, 10, 5)
                 self.conv3 = nn.Conv2d(10, 10, 5)
                 self.conv4 = nn.Conv2d(10, 10, 1)
-                self.cat = aimet_ops.Concat(1)
+                self.cat = custom.Concat(1)
                 self.relu1 = nn.ReLU(inplace=True)
                 self.relu2 = nn.ReLU(inplace=True)
 
@@ -176,8 +176,8 @@ class TestTrainingExtensionElementwiseOps:
             def __init__(self):
                 super(Model, self).__init__()
                 self.conv = nn.Conv2d(10, 20, 5)
-                self.add = aimet_ops.Add()
-                self.mul = aimet_ops.Multiply()
+                self.add = custom.Add()
+                self.mul = custom.Multiply()
 
             def forward(self, x, y, z):
                 x = self.conv(x)

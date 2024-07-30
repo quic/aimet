@@ -39,7 +39,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-import aimet_torch.nn.modules.custom as custom
+from aimet_torch.nn.modules.custom import * # pylint: disable=wildcard-import, unused-wildcard-import
 from ..true_quant import QuantizationMixin, _DispatchMixin
 
 
@@ -48,66 +48,66 @@ def _binary_quant_init(self):
     self.input_quantizers = nn.ModuleList([None, None])
 
 
-@QuantizationMixin.implements(custom.Sin)
-class QuantizedSin(_DispatchMixin, QuantizationMixin, custom.Sin):
+@QuantizationMixin.implements(Sin)
+class QuantizedSin(_DispatchMixin, QuantizationMixin, Sin):
     """ Quantized Sin """
     _builtin_torch_fn = torch.sin
 
 
-@QuantizationMixin.implements(custom.Cos)
-class QuantizedCos(_DispatchMixin, QuantizationMixin, custom.Cos):
+@QuantizationMixin.implements(Cos)
+class QuantizedCos(_DispatchMixin, QuantizationMixin, Cos):
     """ Quantized Cos """
     _builtin_torch_fn = torch.cos
 
 
-@QuantizationMixin.implements(custom.AvgPool2d)
-class QuantizedAvgPool2d(_DispatchMixin, QuantizationMixin, custom.AvgPool2d):
+@QuantizationMixin.implements(AvgPool2d)
+class QuantizedAvgPool2d(_DispatchMixin, QuantizationMixin, AvgPool2d):
     """ Quantized AvgPool2d """
     _builtin_torch_fn = F.avg_pool2d
 
 
-@QuantizationMixin.implements(custom.Reshape)
-class QuantizedReshape(_DispatchMixin, QuantizationMixin, custom.Reshape):
+@QuantizationMixin.implements(Reshape)
+class QuantizedReshape(_DispatchMixin, QuantizationMixin, Reshape):
     """ Quantized Reshape """
     _builtin_torch_fn = torch.reshape
 
 
-@QuantizationMixin.implements(custom.RSqrt)
-class QuantizedRSqrt(_DispatchMixin, QuantizationMixin, custom.RSqrt):
+@QuantizationMixin.implements(RSqrt)
+class QuantizedRSqrt(_DispatchMixin, QuantizationMixin, RSqrt):
     """ Quantized RSqrt """
     _builtin_torch_fn = torch.rsqrt
 
 
-@QuantizationMixin.implements(custom.MatMul)
-class QuantizedMatMul(_DispatchMixin, QuantizationMixin, custom.MatMul):
+@QuantizationMixin.implements(MatMul)
+class QuantizedMatMul(_DispatchMixin, QuantizationMixin, MatMul):
     """ Quantized MatMul """
     __quant_init__ = _binary_quant_init
     _builtin_torch_fn = torch.matmul
 
 
-@QuantizationMixin.implements(custom.Add)
-class QuantizedAdd(_DispatchMixin, QuantizationMixin, custom.Add):
+@QuantizationMixin.implements(Add)
+class QuantizedAdd(_DispatchMixin, QuantizationMixin, Add):
     """ Quantized Add """
     __quant_init__ = _binary_quant_init
     _builtin_torch_fn = torch.add
 
 
-@QuantizationMixin.implements(custom.Multiply)
-class QuantizedMultiply(_DispatchMixin, QuantizationMixin, custom.Multiply):
+@QuantizationMixin.implements(Multiply)
+class QuantizedMultiply(_DispatchMixin, QuantizationMixin, Multiply):
     """ Quantized Multiply """
     __quant_init__ = _binary_quant_init
     _builtin_torch_fn = torch.mul
 
 
-@QuantizationMixin.implements(custom.Subtract)
-class QuantizedSubtract(_DispatchMixin, QuantizationMixin, custom.Subtract):
+@QuantizationMixin.implements(Subtract)
+class QuantizedSubtract(_DispatchMixin, QuantizationMixin, Subtract):
     """ Quantized Subtract """
     __quant_init__ = _binary_quant_init
     _builtin_torch_fn = torch.sub
 
 
-@QuantizationMixin.implements(custom.Divide)
-class QuantizedDivide(_DispatchMixin, QuantizationMixin, custom.Divide):
+@QuantizationMixin.implements(Divide)
+class QuantizedDivide(_DispatchMixin, QuantizationMixin, Divide):
     """ Quantized Divide """
     __quant_init__ = _binary_quant_init
     _builtin_torch_fn = torch.div

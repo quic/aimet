@@ -41,6 +41,7 @@ import torch
 from .fake_quant import *  # pylint: disable=import-error
 from .true_quant import *  # pylint: disable=import-error
 from .base import * # pylint: disable=import-error
+from .modules import custom # pylint: disable=import-error
 
 
 @contextlib.contextmanager

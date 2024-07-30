@@ -48,9 +48,8 @@ from torch.nn.modules.adaptive import _ASMoutput
 from torch.nn.utils.rnn import PackedSequence
 from torch.utils._pytree import tree_map
 
-import aimet_torch.nn.modules.custom as aimet_ops
-
 from .base import BaseQuantizationMixin, _BaseQuantizedUnaryOpMixin, _BaseQuantizedBinaryOpMixin, _BaseQuantizedTernaryOpMixin # pylint: disable=import-error
+from .modules import custom # pylint: disable=import-error
 
 
 class FakeQuantMeta(abc.ABCMeta):
@@ -617,92 +616,92 @@ class FakeQuantizedAdaptiveLogSoftmaxWithLoss(FakeQuantizationMixin, nn.Adaptive
 
 # These class names are already occupied by torch.nn.Modules.
 # To avoid name collision, we add prefix "Aimet" to the variable names as an ad-hoc workaraound.
-FakeQuantizedAimetChannelShuffle = _FakeQuantizedUnaryOpMixin.wrap(aimet_ops.ChannelShuffle)
-FakeQuantizedAimetMaxPool2d = _FakeQuantizedUnaryOpMixin.wrap(aimet_ops.MaxPool2d)
-FakeQuantizedAimetAdaptiveAvgPool2d = _FakeQuantizedUnaryOpMixin.wrap(aimet_ops.AdaptiveAvgPool2d)
-FakeQuantizedAimetAvgPool2d = _FakeQuantizedUnaryOpMixin.wrap(aimet_ops.AvgPool2d)
+FakeQuantizedAimetChannelShuffle = _FakeQuantizedUnaryOpMixin.wrap(custom.ChannelShuffle)
+FakeQuantizedAimetMaxPool2d = _FakeQuantizedUnaryOpMixin.wrap(custom.MaxPool2d)
+FakeQuantizedAimetAdaptiveAvgPool2d = _FakeQuantizedUnaryOpMixin.wrap(custom.AdaptiveAvgPool2d)
+FakeQuantizedAimetAvgPool2d = _FakeQuantizedUnaryOpMixin.wrap(custom.AvgPool2d)
 
 _AIMET_V1_UNARY_MODULES = [
-    aimet_ops.AMax,
-    aimet_ops.AMin,
-    aimet_ops.Cast,
-    aimet_ops.DepthToSpaceCRDMode,
-    aimet_ops.DepthToSpaceDCRMode,
-    aimet_ops.OneHot,
-    aimet_ops.Exponential,
-    aimet_ops.Erf,
-    aimet_ops.Sqrt,
-    aimet_ops.Log,
-    aimet_ops.Abs,
-    aimet_ops.Neg,
-    aimet_ops.ElementwiseCeil,
-    aimet_ops.ElementwiseFloor,
-    aimet_ops.Sin,
-    aimet_ops.Cos,
-    aimet_ops.Asin,
-    aimet_ops.Atan,
-    aimet_ops.Round,
-    aimet_ops.LogicalNot,
-    aimet_ops.NonZero,
-    aimet_ops.ElementwiseUnarySign,
-    aimet_ops.RSqrt,
-    aimet_ops.Square,
-    aimet_ops.Mean,
-    aimet_ops.Sum,
-    aimet_ops.Prod,
-    aimet_ops.Argmin,
-    aimet_ops.Argmax,
-    aimet_ops.Gather,
-    aimet_ops.Reshape,
-    aimet_ops.RoiAlign,
-    aimet_ops.Permute,
-    aimet_ops.IndexSelect,
-    aimet_ops.TopK,
-    aimet_ops.Tile,
-    aimet_ops.Norm,
-    aimet_ops.CumSum,
-    aimet_ops.Interpolate,
-    aimet_ops.Normalize,
-    aimet_ops.Pad,
-    aimet_ops.Shape,
-    aimet_ops.Expand,
-    aimet_ops.StridedSlice,
-    aimet_ops.RmsNorm
+    custom.AMax,
+    custom.AMin,
+    custom.Cast,
+    custom.DepthToSpaceCRDMode,
+    custom.DepthToSpaceDCRMode,
+    custom.OneHot,
+    custom.Exponential,
+    custom.Erf,
+    custom.Sqrt,
+    custom.Log,
+    custom.Abs,
+    custom.Neg,
+    custom.ElementwiseCeil,
+    custom.ElementwiseFloor,
+    custom.Sin,
+    custom.Cos,
+    custom.Asin,
+    custom.Atan,
+    custom.Round,
+    custom.LogicalNot,
+    custom.NonZero,
+    custom.ElementwiseUnarySign,
+    custom.RSqrt,
+    custom.Square,
+    custom.Mean,
+    custom.Sum,
+    custom.Prod,
+    custom.Argmin,
+    custom.Argmax,
+    custom.Gather,
+    custom.Reshape,
+    custom.RoiAlign,
+    custom.Permute,
+    custom.IndexSelect,
+    custom.TopK,
+    custom.Tile,
+    custom.Norm,
+    custom.CumSum,
+    custom.Interpolate,
+    custom.Normalize,
+    custom.Pad,
+    custom.Shape,
+    custom.Expand,
+    custom.StridedSlice,
+    custom.RmsNorm
 ]
 _AIMET_V1_BINARY_MODULES = [
-    aimet_ops.MatMul,
-    aimet_ops.Add,
-    aimet_ops.Multiply,
-    aimet_ops.Subtract,
-    aimet_ops.Divide,
-    aimet_ops.FloorDivide,
-    aimet_ops.Greater,
-    aimet_ops.Less,
-    aimet_ops.GreaterEqual,
-    aimet_ops.LessEqual,
-    aimet_ops.NotEqual,
-    aimet_ops.Equal,
-    aimet_ops.Remainder,
-    aimet_ops.Fmod,
-    aimet_ops.Pow,
-    aimet_ops.CustomSiLU,
-    aimet_ops.Maximum,
-    aimet_ops.Max,
-    aimet_ops.Minimum,
-    aimet_ops.Min,
-    aimet_ops.Bmm,
-    aimet_ops.LogicalOr,
-    aimet_ops.LogicalAnd,
-    aimet_ops.CustomGather,
-    aimet_ops.GatherNd,
+    custom.MatMul,
+    custom.Add,
+    custom.Multiply,
+    custom.Subtract,
+    custom.Divide,
+    custom.FloorDivide,
+    custom.Greater,
+    custom.Less,
+    custom.GreaterEqual,
+    custom.LessEqual,
+    custom.NotEqual,
+    custom.Equal,
+    custom.Remainder,
+    custom.Fmod,
+    custom.Pow,
+    custom.CustomSiLU,
+    custom.Maximum,
+    custom.Max,
+    custom.Minimum,
+    custom.Min,
+    custom.Bmm,
+    custom.LogicalOr,
+    custom.LogicalAnd,
+    custom.CustomGather,
+    custom.GatherNd,
 ]
 _AIMET_V1_TERNARY_MODULES = [
-    aimet_ops.Baddbmm,
-    aimet_ops.Addmm,
-    aimet_ops.ScatterND,
-    aimet_ops.DynamicConv2d,
-    aimet_ops.DynamicLinear,
-    aimet_ops.ScatterElements,
+    custom.Baddbmm,
+    custom.Addmm,
+    custom.ScatterND,
+    custom.DynamicConv2d,
+    custom.DynamicLinear,
+    custom.ScatterElements,
 ]
 
 # Auto-generate quantized module definitions for regular-patterned modules
@@ -720,10 +719,10 @@ for _module_cls in _AIMET_V1_TERNARY_MODULES:
 
 
 
-@FakeQuantizationMixin.implements(aimet_ops.BatchNorm)
-class FakeQuantizedBatchNorm(FakeQuantizationMixin, aimet_ops.BatchNorm): # pylint: disable=abstract-method
+@FakeQuantizationMixin.implements(custom.BatchNorm)
+class FakeQuantizedBatchNorm(FakeQuantizationMixin, custom.BatchNorm): # pylint: disable=abstract-method
     """
-    Quantized class definition for aimet_ops.BatchNorm.
+    Quantized class definition for custom.BatchNorm.
     """
     def __quant_init__(self):
         super().__quant_init__()
@@ -740,7 +739,7 @@ class FakeQuantizedBatchNorm(FakeQuantizationMixin, aimet_ops.BatchNorm): # pyli
                           momentum: float = 0.1,
                           eps: float = 1e-5) -> Tensor:
         """
-        Quantized forward impl for aimet_ops.BatchNorm.
+        Quantized forward impl for custom.BatchNorm.
         """
         # pylint: disable=redefined-builtin
 
@@ -768,10 +767,10 @@ class FakeQuantizedBatchNorm(FakeQuantizationMixin, aimet_ops.BatchNorm): # pyli
         return output
 
 
-@FakeQuantizationMixin.implements(aimet_ops.GroupNorm)
-class FakeQuantizedAimetGroupNorm(FakeQuantizationMixin, aimet_ops.GroupNorm): # pylint: disable=abstract-method
+@FakeQuantizationMixin.implements(custom.GroupNorm)
+class FakeQuantizedAimetGroupNorm(FakeQuantizationMixin, custom.GroupNorm): # pylint: disable=abstract-method
     """
-    Quantized class definition for aimet_ops.GroupNorm.
+    Quantized class definition for custom.GroupNorm.
     """
     def __quant_init__(self):
         super().__quant_init__()
@@ -785,7 +784,7 @@ class FakeQuantizedAimetGroupNorm(FakeQuantizationMixin, aimet_ops.GroupNorm): #
                           bias: Optional[Tensor] = None,
                           eps: float = 1e-5) -> Tensor:
         """
-        Quantized forward impl for aimet_ops.GroupNorm.
+        Quantized forward impl for custom.GroupNorm.
         """
         # pylint: disable=redefined-builtin
 
@@ -806,10 +805,10 @@ class FakeQuantizedAimetGroupNorm(FakeQuantizationMixin, aimet_ops.GroupNorm): #
         return output
 
 
-@FakeQuantizationMixin.implements(aimet_ops.NonMaxSuppression)
-class FakeQuantizedNonMaxSuppression(FakeQuantizationMixin, aimet_ops.NonMaxSuppression):
+@FakeQuantizationMixin.implements(custom.NonMaxSuppression)
+class FakeQuantizedNonMaxSuppression(FakeQuantizationMixin, custom.NonMaxSuppression):
     """
-    Quantized class definition for aimet_ops.NonMaxSuppression.
+    Quantized class definition for custom.NonMaxSuppression.
     """
     def __quant_init__(self):
         super().__quant_init__()
@@ -819,7 +818,7 @@ class FakeQuantizedNonMaxSuppression(FakeQuantizationMixin, aimet_ops.NonMaxSupp
 
     def forward(self, *args) -> Tensor: # pylint: disable=arguments-differ
         """
-        Quantized forward impl for aimet_ops.NonMaxSuppression.
+        Quantized forward impl for custom.NonMaxSuppression.
         """
         boxes, scores = args # boxes are integer tensors
 
@@ -835,14 +834,14 @@ class FakeQuantizedNonMaxSuppression(FakeQuantizationMixin, aimet_ops.NonMaxSupp
         return output
 
 
-@FakeQuantizationMixin.implements(aimet_ops.Split)
-class FakeQuantizedSplit(FakeQuantizationMixin, aimet_ops.Split):
+@FakeQuantizationMixin.implements(custom.Split)
+class FakeQuantizedSplit(FakeQuantizationMixin, custom.Split):
     """
-    Quantized class definition for aimet_ops.Split.
+    Quantized class definition for custom.Split.
     """
     def forward(self, *args, **kwargs): # pylint: disable=arguments-differ
         """
-        Quantized forward impl for aimet_ops.Split.
+        Quantized forward impl for custom.Split.
         """
         x, *others = args
 
@@ -859,10 +858,10 @@ class FakeQuantizedSplit(FakeQuantizationMixin, aimet_ops.Split):
         return outputs
 
 
-@FakeQuantizationMixin.implements(aimet_ops.Concat)
-class FakeQuantizedConcat(FakeQuantizationMixin, aimet_ops.Concat):
+@FakeQuantizationMixin.implements(custom.Concat)
+class FakeQuantizedConcat(FakeQuantizationMixin, custom.Concat):
     """
-    Quantized class definition for aimet_ops.Concat.
+    Quantized class definition for custom.Concat.
     """
     _num_inputs: int
 
@@ -895,7 +894,7 @@ class FakeQuantizedConcat(FakeQuantizationMixin, aimet_ops.Concat):
 
     def forward(self, *x): # pylint: disable=arguments-differ
         """
-        Quantized forward impl for aimet_ops.Concat.
+        Quantized forward impl for custom.Concat.
         """
         self._num_inputs = len(x)
 
@@ -912,10 +911,10 @@ class FakeQuantizedConcat(FakeQuantizationMixin, aimet_ops.Concat):
         return output
 
 
-@FakeQuantizationMixin.implements(aimet_ops.Where)
-class FakeQuantizedWhere(FakeQuantizationMixin, aimet_ops.Where): # pylint: disable=abstract-method
+@FakeQuantizationMixin.implements(custom.Where)
+class FakeQuantizedWhere(FakeQuantizationMixin, custom.Where): # pylint: disable=abstract-method
     """
-    Quantized class definition for aimet_ops.Where.
+    Quantized class definition for custom.Where.
     """
     def __quant_init__(self):
         super().__quant_init__()
@@ -925,7 +924,7 @@ class FakeQuantizedWhere(FakeQuantizationMixin, aimet_ops.Where): # pylint: disa
 
     def forward(self, condition: Tensor, input, other, **kwargs) -> Tensor: # pylint: disable=arguments-differ
         """
-        Quantized forward impl for aimet_ops.MaskedFill.
+        Quantized forward impl for custom.MaskedFill.
         """
         # pylint: disable=redefined-builtin
 
@@ -943,10 +942,10 @@ class FakeQuantizedWhere(FakeQuantizationMixin, aimet_ops.Where): # pylint: disa
         return output
 
 
-@FakeQuantizationMixin.implements(aimet_ops.MaskedFill)
-class FakeQuantizedMaskedFill(FakeQuantizationMixin, aimet_ops.MaskedFill): # pylint: disable=abstract-method
+@FakeQuantizationMixin.implements(custom.MaskedFill)
+class FakeQuantizedMaskedFill(FakeQuantizationMixin, custom.MaskedFill): # pylint: disable=abstract-method
     """
-    Quantized class definition for aimet_ops.MaskedFill.
+    Quantized class definition for custom.MaskedFill.
     """
     def __quant_init__(self):
         super().__quant_init__()
@@ -956,7 +955,7 @@ class FakeQuantizedMaskedFill(FakeQuantizationMixin, aimet_ops.MaskedFill): # py
 
     def forward(self, mask: Tensor, value) -> Tensor: # pylint: disable=arguments-differ
         """
-        Quantized forward impl for aimet_ops.MaskedFill.
+        Quantized forward impl for custom.MaskedFill.
         """
         if isinstance(value, Tensor) and value.is_floating_point() and self.input_quantizers[1]:
             value = self.input_quantizers[1](value)
