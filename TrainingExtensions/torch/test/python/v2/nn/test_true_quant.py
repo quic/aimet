@@ -634,89 +634,6 @@ class TestQuantizedLayers:
         assert qlinear.output_quantizers[0] is None
 
 
-def _pseudo_integer_kernel_helper(fn):
-    """
-    Helper function for creating a pseudo-integer kernel of ``fn``.
-    Pseudo-integer kernel is a function that takes/returns QuantizedTensors,
-    but internally delegates actual computation to ``fn``.
-    """
-    def pseudo_kernel(*args, **kwargs):
-        assert "output_encodings" in kwargs
-        output_encodings = kwargs.pop("output_encodings")
-
-        def dequantize(t: torch.Tensor):
-            if isinstance(t, torch.Tensor):
-                if not isinstance(t, QuantizedTensorBase):
-                    raise RuntimeError
-                t = t.dequantize()
-            return t
-
-        # Dequantize quantized input tensors
-        args = tree_map(dequantize, args)
-        kwargs = tree_map(dequantize, kwargs)
-
-        # Delegate actual computation to ``fn``
-        out = fn(*args, **kwargs)
-
-        # Quantize output
-        out = output_encodings.quantize(out).as_subclass(QuantizedTensor)
-        out.encoding = output_encodings
-        return out
-
-    return pseudo_kernel
-
-
-pseudo_sin_kernel = _pseudo_integer_kernel_helper(torch.sin)
-pseudo_cos_kernel = _pseudo_integer_kernel_helper(torch.cos)
-pseudo_avg_pool2d_kernel = _pseudo_integer_kernel_helper(F.avg_pool2d)
-pseudo_reshape_kernel = _pseudo_integer_kernel_helper(torch.reshape)
-pseudo_rsqrt_kernel = _pseudo_integer_kernel_helper(torch.rsqrt)
-pseudo_add_kernel = _pseudo_integer_kernel_helper(torch.add)
-pseudo_mul_kernel = _pseudo_integer_kernel_helper(torch.mul)
-pseudo_sub_kernel = _pseudo_integer_kernel_helper(torch.sub)
-pseudo_div_kernel = _pseudo_integer_kernel_helper(torch.div)
-
-
-@pytest.mark.parametrize(
-    "qmodule,                       pseudo_kernel,              inputs",           [
-     (custom.QuantizedSin(),        pseudo_sin_kernel,          randn(100)),
-     (custom.QuantizedCos(),        pseudo_cos_kernel,          randn(100)),
-     (custom.QuantizedAvgPool2d(),  pseudo_avg_pool2d_kernel,   (randn(1,10,10), 2)),
-     (custom.QuantizedReshape(),    pseudo_reshape_kernel,      (randn(10,10), (100, 1))),
-     (custom.QuantizedRSqrt(),      pseudo_rsqrt_kernel,        randn(100).abs()),
-     (custom.QuantizedAdd(),        pseudo_add_kernel,          (randn(100), randn(100))),
-     (custom.QuantizedMultiply(),   pseudo_mul_kernel,          (randn(100), randn(100))),
-     (custom.QuantizedSubtract(),   pseudo_sub_kernel,          (randn(100), randn(100))),
-     (custom.QuantizedDivide(),     pseudo_div_kernel,          (randn(100), randn(100))),
-])
-def test_sanity(qmodule, pseudo_kernel, inputs):
-    """
-    When: Set qmodule's kernel as pseudo-integer kernel
-    Then: Output of qmodule should be same as that of fake-quantization fallback
-    """
-    if not isinstance(inputs, (tuple, list)):
-        inputs = (inputs,)
-
-    for i, _ in enumerate(qmodule.input_quantizers):
-        qmodule.input_quantizers[i] = Quantize((), 8, False)
-
-    for i, _ in enumerate(qmodule.output_quantizers):
-        qmodule.output_quantizers[i] = Quantize((), 8, False)
-
-    if 'weight' in qmodule.param_quantizers:
-        qmodule.param_quantizers['weight'] = Quantize((), 8, True)
-
-    with qmodule.compute_encodings():
-        _ = qmodule(*inputs)
-
-    out_fakequant = qmodule(*inputs)
-
-    qmodule.set_kernel(pseudo_kernel)
-    out_truequant = qmodule(*inputs)
-
-    assert torch.equal(out_fakequant, out_truequant)
-
-
 def test_dispatch_sanity():
     custom_add = lambda *args, **kwargs: torch.add(*args, **kwargs) + 1
 
@@ -951,6 +868,16 @@ def _create_quantized_module(module):
     (lambda: nn.ZeroPad1d(2),                         lambda: randn(1, 10, 10)),
     (lambda: nn.ZeroPad2d(2),                         lambda: randn(1, 10, 10)),
     (lambda: nn.ZeroPad3d(2),                         lambda: randn(1, 10, 2, 5)),
+    (lambda: custom.Sin(),                            lambda: randn(100)),
+    (lambda: custom.Cos(),                            lambda: randn(100)),
+    (lambda: custom.AvgPool2d(),                      lambda: (randn(1,10,10), 2)),
+    (lambda: custom.Reshape(),                        lambda: (randn(10,10), (100, 1))),
+    (lambda: custom.RSqrt(),                          lambda: randn(100).abs()),
+    (lambda: custom.Add(),                            lambda: (randn(100), randn(100))),
+    (lambda: custom.Multiply(),                       lambda: (randn(100), randn(100))),
+    (lambda: custom.Subtract(),                       lambda: (randn(100), randn(100))),
+    (lambda: custom.Divide(),                         lambda: (randn(100), randn(100))),
+    (lambda: custom.Concat(),                         lambda: (randn(1, 100), randn(3, 100))),
 ])
 def test_default_kernel_abtest(module_factory, input_factory):
     module = module_factory()
