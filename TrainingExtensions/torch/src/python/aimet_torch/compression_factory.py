@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2018-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -38,7 +38,6 @@
 """ Provides a factory to construct various AIMET model compression classes based on a scheme """
 
 from typing import Tuple, List
-
 import torch
 
 from aimet_common.defs import CostMetric, RankSelectScheme, EvalFunction, LayerCompRatioPair
@@ -52,10 +51,12 @@ from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 from aimet_torch.defs import SpatialSvdParameters, WeightSvdParameters, ChannelPruningParameters, ModuleCompRatioPair
 from aimet_torch.layer_selector import ConvFcLayerSelector, ConvNoDepthwiseLayerSelector, ManualLayerSelector
 from aimet_torch.layer_database import LayerDatabase
-from aimet_torch.svd.svd_pruner import SpatialSvdPruner, WeightSvdPruner
+from aimet_torch.svd.svd_pruner import SpatialSvdPruner, WeightSvdPruner, PyWeightSvdPruner
 from aimet_torch.channel_pruning.channel_pruner import InputChannelPruner, ChannelPruningCostCalculator
 from aimet_torch import pymo_utils
 
+# Temporary flag to flip underlying implementation. This flag will be removed in the future releases.
+USE_PYTHON_IMPL = True
 
 class CompressionFactory:
     """ Factory to construct various AIMET model compression classes based on a scheme """
@@ -216,7 +217,7 @@ class CompressionFactory:
         use_cuda = next(model.parameters()).is_cuda
 
         # Create a pruner
-        pruner = WeightSvdPruner()
+        pruner = PyWeightSvdPruner() if USE_PYTHON_IMPL else WeightSvdPruner()
         cost_calculator = WeightSvdCostCalculator()
         comp_ratio_rounding_algo = RankRounder(params.multiplicity, cost_calculator)
 

@@ -36,12 +36,12 @@
 # =============================================================================
 
 """Based on the scheme and rank splits a layer"""
-import copy
 
+import copy
 from torch import nn
 
 # Import AIMET specific modules
-from aimet_torch.svd.svd_splitter import WeightSvdModuleSplitter
+from aimet_torch.svd.svd_splitter import MoWeightSvdModuleSplitter
 from aimet_torch import layer_database as lad
 from aimet_torch.svd import model_stats_calculator as MS
 
@@ -63,7 +63,6 @@ class ModelPruner:
         :param model_layers: original model's layers
         :return:
         """
-
         # Create a deep-copy of the model to return
         model_copy = copy.deepcopy(model)
 
@@ -157,13 +156,13 @@ class DeprecatedSvdPruner:
         """
         # Delegate to the right method to split the layer
         if isinstance(original_layer.module, nn.Conv2d):
-            module_a, module_b = WeightSvdModuleSplitter.split_conv_module(original_layer.module, original_layer.name,
-                                                                           rank, svd_lib_ref)
-
+            module_a, module_b = MoWeightSvdModuleSplitter.split_conv_module(original_layer.module, rank,
+                                                                           name=original_layer.name,
+                                                                           svd_lib_ref=svd_lib_ref)
         elif isinstance(original_layer.module, nn.Linear):
-            module_a, module_b = WeightSvdModuleSplitter.split_fc_module(original_layer.module, original_layer.name,
-                                                                         rank, svd_lib_ref)
-
+            module_a, module_b = MoWeightSvdModuleSplitter.split_fc_module(original_layer.module, rank,
+                                                                         name=original_layer.name,
+                                                                         svd_lib_ref=svd_lib_ref)
         else:
             raise TypeError("Only Conv and FC layers are currently supported")
 
