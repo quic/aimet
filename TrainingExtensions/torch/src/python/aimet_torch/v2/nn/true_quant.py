@@ -770,10 +770,77 @@ class QuantizedEmbedding(_DispatchMixin, QuantizationMixin, nn.Embedding):
     __quant_init__ = __nullary__
 
 
-# @QuantizationMixin.implements(nn.EmbeddingBag)
-# class QuantizedEmbeddingBag(_DispatchMixin, QuantizationMixin, nn.EmbeddingBag):
-#     """ Quantized EmbeddingBag """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.EmbeddingBag)
+class QuantizedEmbeddingBag(_DispatchMixin, QuantizationMixin, nn.EmbeddingBag):
+    """ Quantized EmbeddingBag """
+    _builtin_torch_fn = F.embedding_bag
+
+    def _builtin_torch_fn_helper(self, fn: Callable[..., Tensor]):
+        def embedding_bag(input: Tensor, # pylint: disable=redefined-builtin, too-many-arguments
+                          weight: Tensor,
+                          offsets: Optional[Tensor] = None,
+                          max_norm: Optional[float] = None,
+                          norm_type: float = 2,
+                          scale_grad_by_freq: bool = False,
+                          mode: str = "mean",
+                          sparse: bool = False,
+                          per_sample_weights: Optional[Tensor] = None,
+                          include_last_offset: bool = False,
+                          padding_idx: Optional[int] = None):
+
+            if per_sample_weights is not None:
+                qtzr = self.input_quantizers[0]
+                per_sample_weights = _quantize_dequantize_if_applicable(per_sample_weights, qtzr)
+
+            output = fn(input,
+                        weight,
+                        offsets=offsets,
+                        max_norm=max_norm,
+                        norm_type=norm_type,
+                        scale_grad_by_freq=scale_grad_by_freq,
+                        mode=mode,
+                        sparse=sparse,
+                        per_sample_weights=per_sample_weights,
+                        include_last_offset=include_last_offset,
+                        padding_idx=padding_idx)
+
+            return _quantize_dequantize_if_applicable(output, self.output_quantizers[0])
+
+        return embedding_bag
+
+    def _custom_kernel_helper(self, fn: Callable[..., QuantizedTensorBase]):
+        def embedding_bag(input: Tensor, # pylint: disable=redefined-builtin, too-many-arguments
+                          weight: Tensor,
+                          offsets: Optional[Tensor] = None,
+                          max_norm: Optional[float] = None,
+                          norm_type: float = 2,
+                          scale_grad_by_freq: bool = False,
+                          mode: str = "mean",
+                          sparse: bool = False,
+                          per_sample_weights: Optional[Tensor] = None,
+                          include_last_offset: bool = False,
+                          padding_idx: Optional[int] = None):
+
+            if per_sample_weights is not None:
+                qtzr = self.input_quantizers[0]
+                per_sample_weights = _quantize_if_applicable(per_sample_weights, qtzr)
+
+            output_encodings = self.output_quantizers[0].get_encoding() if self.output_quantizers[0] else None
+
+            return fn(input,
+                      weight,
+                      offsets=offsets,
+                      max_norm=max_norm,
+                      norm_type=norm_type,
+                      scale_grad_by_freq=scale_grad_by_freq,
+                      mode=mode,
+                      sparse=sparse,
+                      per_sample_weights=per_sample_weights,
+                      include_last_offset=include_last_offset,
+                      padding_idx=padding_idx,
+                      output_encodings=output_encodings)
+
+        return embedding_bag
 
 
 @QuantizationMixin.implements(nn.FeatureAlphaDropout)

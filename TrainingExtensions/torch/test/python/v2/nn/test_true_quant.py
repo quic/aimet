@@ -755,7 +755,7 @@ def _create_quantized_module(module):
     (lambda: nn.Dropout3d(),                          lambda: randn(10, 10)),
     (lambda: nn.ELU(),                                lambda: randn(10, 10)),
     (lambda: nn.Embedding(100, 100),                  lambda: randint(100, (10,))),
-    # (lambda: nn.EmbeddingBag(...),                  lambda: ...),
+    (lambda: nn.EmbeddingBag(100, 100, mode='sum'),   lambda: (randint(100, (10,)), arange(10), randn(10))),
     (lambda: nn.FeatureAlphaDropout(),                lambda: randn(10, 10)),
     (lambda: nn.Flatten(),                            lambda: randn(10, 10)),
     (lambda: nn.Fold((4, 5), (2, 2)),                 lambda: randn(1, 12, 12)),

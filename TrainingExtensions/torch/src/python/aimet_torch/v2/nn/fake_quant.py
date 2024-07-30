@@ -396,15 +396,15 @@ class FakeQuantizedEmbeddingBag(FakeQuantizationMixin, nn.EmbeddingBag):
         self.output_quantizers = nn.ModuleList([None])
 
     def forward(self, # pylint: disable=arguments-differ
-                          input: Tensor,
-                          offsets: Optional[Tensor] = None,
-                          per_sample_weights: Optional[Tensor] = None) -> Tensor:
+                input: Tensor,
+                offsets: Optional[Tensor] = None,
+                per_sample_weights: Optional[Tensor] = None) -> Tensor:
         """
         Quantized forward impl for nn.EmbeddingBag.
         """
         # pylint: disable=redefined-builtin
 
-        if self.input_quantizers[0]:
+        if self.input_quantizers[0] and per_sample_weights is not None:
             per_sample_weights = self.input_quantizers[0](per_sample_weights)
 
         with self._patch_quantized_parameters():
