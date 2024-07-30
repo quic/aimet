@@ -34,9 +34,10 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+# pylint: disable=too-many-lines, wrong-import-order
 """ Quantized modules"""
-# pylint: disable=too-many-lines
 
+from packaging import version
 import contextlib
 import itertools
 from abc import abstractmethod, ABCMeta
@@ -437,22 +438,22 @@ class _DispatchMixin(metaclass=_DispatchMeta):
         return wrapper
 
 
-# @QuantizationMixin.implements(nn.AdaptiveAvgPool1d)
-# class QuantizedAdaptiveAvgPool1d(_DispatchMixin, QuantizationMixin, nn.AdaptiveAvgPool1d):
-#     """ Quantized AdaptiveAvgPool1d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.AdaptiveAvgPool1d)
+class QuantizedAdaptiveAvgPool1d(_DispatchMixin, QuantizationMixin, nn.AdaptiveAvgPool1d):
+    """ Quantized AdaptiveAvgPool1d """
+    _builtin_torch_fn = F.adaptive_avg_pool1d
 
 
-# @QuantizationMixin.implements(nn.AdaptiveAvgPool2d)
-# class QuantizedAdaptiveAvgPool2d(_DispatchMixin, QuantizationMixin, nn.AdaptiveAvgPool2d):
-#     """ Quantized AdaptiveAvgPool2d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.AdaptiveAvgPool2d)
+class QuantizedAdaptiveAvgPool2d(_DispatchMixin, QuantizationMixin, nn.AdaptiveAvgPool2d):
+    """ Quantized AdaptiveAvgPool2d """
+    _builtin_torch_fn = F.adaptive_avg_pool2d
 
 
-# @QuantizationMixin.implements(nn.AdaptiveAvgPool3d)
-# class QuantizedAdaptiveAvgPool3d(_DispatchMixin, QuantizationMixin, nn.AdaptiveAvgPool3d):
-#     """ Quantized AdaptiveAvgPool3d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.AdaptiveAvgPool3d)
+class QuantizedAdaptiveAvgPool3d(_DispatchMixin, QuantizationMixin, nn.AdaptiveAvgPool3d):
+    """ Quantized AdaptiveAvgPool3d """
+    _builtin_torch_fn = F.adaptive_avg_pool3d
 
 
 # @QuantizationMixin.implements(nn.AdaptiveLogSoftmaxWithLoss)
@@ -461,46 +462,46 @@ class _DispatchMixin(metaclass=_DispatchMeta):
 #     _builtin_torch_fn = ...
 
 
-# @QuantizationMixin.implements(nn.AdaptiveMaxPool1d)
-# class QuantizedAdaptiveMaxPool1d(_DispatchMixin, QuantizationMixin, nn.AdaptiveMaxPool1d):
-#     """ Quantized AdaptiveMaxPool1d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.AdaptiveMaxPool1d)
+class QuantizedAdaptiveMaxPool1d(_DispatchMixin, QuantizationMixin, nn.AdaptiveMaxPool1d):
+    """ Quantized AdaptiveMaxPool1d """
+    _builtin_torch_fn = F.adaptive_max_pool1d
 
 
-# @QuantizationMixin.implements(nn.AdaptiveMaxPool2d)
-# class QuantizedAdaptiveMaxPool2d(_DispatchMixin, QuantizationMixin, nn.AdaptiveMaxPool2d):
-#     """ Quantized AdaptiveMaxPool2d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.AdaptiveMaxPool2d)
+class QuantizedAdaptiveMaxPool2d(_DispatchMixin, QuantizationMixin, nn.AdaptiveMaxPool2d):
+    """ Quantized AdaptiveMaxPool2d """
+    _builtin_torch_fn = F.adaptive_max_pool2d
 
 
-# @QuantizationMixin.implements(nn.AdaptiveMaxPool3d)
-# class QuantizedAdaptiveMaxPool3d(_DispatchMixin, QuantizationMixin, nn.AdaptiveMaxPool3d):
-#     """ Quantized AdaptiveMaxPool3d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.AdaptiveMaxPool3d)
+class QuantizedAdaptiveMaxPool3d(_DispatchMixin, QuantizationMixin, nn.AdaptiveMaxPool3d):
+    """ Quantized AdaptiveMaxPool3d """
+    _builtin_torch_fn = F.adaptive_max_pool3d
 
 
-# @QuantizationMixin.implements(nn.AlphaDropout)
-# class QuantizedAlphaDropout(_DispatchMixin, QuantizationMixin, nn.AlphaDropout):
-#     """ Quantized AlphaDropout """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.AlphaDropout)
+class QuantizedAlphaDropout(_DispatchMixin, QuantizationMixin, nn.AlphaDropout):
+    """ Quantized AlphaDropout """
+    _builtin_torch_fn = F.alpha_dropout
 
 
-# @QuantizationMixin.implements(nn.AvgPool1d)
-# class QuantizedAvgPool1d(_DispatchMixin, QuantizationMixin, nn.AvgPool1d):
-#     """ Quantized AvgPool1d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.AvgPool1d)
+class QuantizedAvgPool1d(_DispatchMixin, QuantizationMixin, nn.AvgPool1d):
+    """ Quantized AvgPool1d """
+    _builtin_torch_fn = F.avg_pool1d
 
 
-@QuantizationMixin.implements(torch.nn.AvgPool2d)
+@QuantizationMixin.implements(nn.AvgPool2d)
 class QuantizedAvgPool2d(_DispatchMixin, QuantizationMixin, nn.AvgPool2d):
     """ Quantized AvgPool2d """
     _builtin_torch_fn = F.avg_pool2d
 
 
-# @QuantizationMixin.implements(nn.AvgPool3d)
-# class QuantizedAvgPool3d(_DispatchMixin, QuantizationMixin, nn.AvgPool3d):
-#     """ Quantized AvgPool3d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.AvgPool3d)
+class QuantizedAvgPool3d(_DispatchMixin, QuantizationMixin, nn.AvgPool3d):
+    """ Quantized AvgPool3d """
+    _builtin_torch_fn = F.avg_pool3d
 
 
 # @QuantizationMixin.implements(nn.BCELoss)
@@ -539,10 +540,10 @@ class QuantizedBatchNorm3d(_DispatchMixin, QuantizationMixin, nn.BatchNorm3d):
 #     _builtin_torch_fn = ...
 
 
-# @QuantizationMixin.implements(nn.CELU)
-# class QuantizedCELU(_DispatchMixin, QuantizationMixin, nn.CELU):
-#     """ Quantized CELU """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.CELU)
+class QuantizedCELU(_DispatchMixin, QuantizationMixin, nn.CELU):
+    """ Quantized CELU """
+    _builtin_torch_fn = F.celu
 
 
 # @QuantizationMixin.implements(nn.CTCLoss)
@@ -551,10 +552,10 @@ class QuantizedBatchNorm3d(_DispatchMixin, QuantizationMixin, nn.BatchNorm3d):
 #     _builtin_torch_fn = ...
 
 
-# @QuantizationMixin.implements(nn.ChannelShuffle)
-# class QuantizedChannelShuffle(_DispatchMixin, QuantizationMixin, nn.ChannelShuffle):
-#     """ Quantized ChannelShuffle """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.ChannelShuffle)
+class QuantizedChannelShuffle(_DispatchMixin, QuantizationMixin, nn.ChannelShuffle):
+    """ Quantized ChannelShuffle """
+    _builtin_torch_fn = F.channel_shuffle
 
 
 # @QuantizationMixin.implements(nn.CircularPad1d)
@@ -575,10 +576,10 @@ class QuantizedBatchNorm3d(_DispatchMixin, QuantizationMixin, nn.BatchNorm3d):
 #     _builtin_torch_fn = ...
 
 
-# @QuantizationMixin.implements(nn.ConstantPad1d)
-# class QuantizedConstantPad1d(_DispatchMixin, QuantizationMixin, nn.ConstantPad1d):
-#     """ Quantized ConstantPad1d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.ConstantPad1d)
+class QuantizedConstantPad1d(_DispatchMixin, QuantizationMixin, nn.ConstantPad1d):
+    """ Quantized ConstantPad2d """
+    _builtin_torch_fn = F.pad
 
 
 @QuantizationMixin.implements(nn.ConstantPad2d)
@@ -587,10 +588,10 @@ class QuantizedConstantPad2d(_DispatchMixin, QuantizationMixin, nn.ConstantPad2d
     _builtin_torch_fn = F.pad
 
 
-# @QuantizationMixin.implements(nn.ConstantPad3d)
-# class QuantizedConstantPad3d(_DispatchMixin, QuantizationMixin, nn.ConstantPad3d):
-#     """ Quantized ConstantPad3d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.ConstantPad3d)
+class QuantizedConstantPad3d(_DispatchMixin, QuantizationMixin, nn.ConstantPad3d):
+    """ Quantized ConstantPad3d """
+    _builtin_torch_fn = F.pad
 
 
 # @QuantizationMixin.implements(nn.Container)
@@ -659,34 +660,35 @@ class QuantizedConvTranspose3d(_DispatchMixin, QuantizationMixin, nn.ConvTranspo
 #     _builtin_torch_fn = ...
 
 
-# @QuantizationMixin.implements(nn.Dropout)
-# class QuantizedDropout(_DispatchMixin, QuantizationMixin, nn.Dropout):
-#     """ Quantized Dropout """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.Dropout)
+class QuantizedDropout(_DispatchMixin, QuantizationMixin, nn.Dropout):
+    """ Quantized Dropout """
+    _builtin_torch_fn = F.dropout
 
 
-# @QuantizationMixin.implements(nn.Dropout1d)
-# class QuantizedDropout1d(_DispatchMixin, QuantizationMixin, nn.Dropout1d):
-#     """ Quantized Dropout1d """
-#     _builtin_torch_fn = ...
+if version.parse(torch.__version__) >= version.parse("1.12.0"):
+    @QuantizationMixin.implements(nn.Dropout1d)
+    class QuantizedDropout1d(_DispatchMixin, QuantizationMixin, nn.Dropout1d):
+        """ Quantized Dropout1d """
+        _builtin_torch_fn = F.dropout1d
 
 
-# @QuantizationMixin.implements(nn.Dropout2d)
-# class QuantizedDropout2d(_DispatchMixin, QuantizationMixin, nn.Dropout2d):
-#     """ Quantized Dropout2d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.Dropout2d)
+class QuantizedDropout2d(_DispatchMixin, QuantizationMixin, nn.Dropout2d):
+    """ Quantized Dropout2d """
+    _builtin_torch_fn = F.dropout2d
 
 
-# @QuantizationMixin.implements(nn.Dropout3d)
-# class QuantizedDropout3d(_DispatchMixin, QuantizationMixin, nn.Dropout3d):
-#     """ Quantized Dropout3d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.Dropout3d)
+class QuantizedDropout3d(_DispatchMixin, QuantizationMixin, nn.Dropout3d):
+    """ Quantized Dropout3d """
+    _builtin_torch_fn = F.dropout3d
 
 
-# @QuantizationMixin.implements(nn.ELU)
-# class QuantizedELU(_DispatchMixin, QuantizationMixin, nn.ELU):
-#     """ Quantized ELU """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.ELU)
+class QuantizedELU(_DispatchMixin, QuantizationMixin, nn.ELU):
+    """ Quantized ELU """
+    _builtin_torch_fn = F.elu
 
 
 # @QuantizationMixin.implements(nn.Embedding)
@@ -701,34 +703,34 @@ class QuantizedConvTranspose3d(_DispatchMixin, QuantizationMixin, nn.ConvTranspo
 #     _builtin_torch_fn = ...
 
 
-# @QuantizationMixin.implements(nn.FeatureAlphaDropout)
-# class QuantizedFeatureAlphaDropout(_DispatchMixin, QuantizationMixin, nn.FeatureAlphaDropout):
-#     """ Quantized FeatureAlphaDropout """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.FeatureAlphaDropout)
+class QuantizedFeatureAlphaDropout(_DispatchMixin, QuantizationMixin, nn.FeatureAlphaDropout):
+    """ Quantized FeatureAlphaDropout """
+    _builtin_torch_fn = F.feature_alpha_dropout
 
 
-# @QuantizationMixin.implements(nn.Flatten)
-# class QuantizedFlatten(_DispatchMixin, QuantizationMixin, nn.Flatten):
-#     """ Quantized Flatten """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.Flatten)
+class QuantizedFlatten(_DispatchMixin, QuantizationMixin, nn.Flatten):
+    """ Quantized Flatten """
+    _builtin_torch_fn = Tensor.flatten
 
 
-# @QuantizationMixin.implements(nn.Fold)
-# class QuantizedFold(_DispatchMixin, QuantizationMixin, nn.Fold):
-#     """ Quantized Fold """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.Fold)
+class QuantizedFold(_DispatchMixin, QuantizationMixin, nn.Fold):
+    """ Quantized Fold """
+    _builtin_torch_fn = F.fold
 
 
-# @QuantizationMixin.implements(nn.FractionalMaxPool2d)
-# class QuantizedFractionalMaxPool2d(_DispatchMixin, QuantizationMixin, nn.FractionalMaxPool2d):
-#     """ Quantized FractionalMaxPool2d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.FractionalMaxPool2d)
+class QuantizedFractionalMaxPool2d(_DispatchMixin, QuantizationMixin, nn.FractionalMaxPool2d):
+    """ Quantized FractionalMaxPool2d """
+    _builtin_torch_fn = F.fractional_max_pool2d
 
 
-# @QuantizationMixin.implements(nn.FractionalMaxPool3d)
-# class QuantizedFractionalMaxPool3d(_DispatchMixin, QuantizationMixin, nn.FractionalMaxPool3d):
-#     """ Quantized FractionalMaxPool3d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.FractionalMaxPool3d)
+class QuantizedFractionalMaxPool3d(_DispatchMixin, QuantizationMixin, nn.FractionalMaxPool3d):
+    """ Quantized FractionalMaxPool3d """
+    _builtin_torch_fn = F.fractional_max_pool3d
 
 
 @QuantizationMixin.implements(nn.GELU)
@@ -737,10 +739,10 @@ class QuantizedGELU(_DispatchMixin, QuantizationMixin, nn.GELU):
     _builtin_torch_fn = F.gelu
 
 
-# @QuantizationMixin.implements(nn.GLU)
-# class QuantizedGLU(_DispatchMixin, QuantizationMixin, nn.GLU):
-#     """ Quantized GLU """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.GLU)
+class QuantizedGLU(_DispatchMixin, QuantizationMixin, nn.GLU):
+    """ Quantized GLU """
+    _builtin_torch_fn = F.glu
 
 
 # @QuantizationMixin.implements(nn.GRU)
@@ -767,10 +769,10 @@ class QuantizedGroupNorm(_DispatchMixin, QuantizationMixin, nn.GroupNorm):
     _builtin_torch_fn = F.group_norm
 
 
-# @QuantizationMixin.implements(nn.Hardshrink)
-# class QuantizedHardshrink(_DispatchMixin, QuantizationMixin, nn.Hardshrink):
-#     """ Quantized Hardshrink """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.Hardshrink)
+class QuantizedHardshrink(_DispatchMixin, QuantizationMixin, nn.Hardshrink):
+    """ Quantized Hardshrink """
+    _builtin_torch_fn = F.hardshrink
 
 
 # @QuantizationMixin.implements(nn.Hardsigmoid)
@@ -839,16 +841,16 @@ class QuantizedInstanceNorm3d(_DispatchMixin, QuantizationMixin, nn.InstanceNorm
 #     _builtin_torch_fn = ...
 
 
-# @QuantizationMixin.implements(nn.LPPool1d)
-# class QuantizedLPPool1d(_DispatchMixin, QuantizationMixin, nn.LPPool1d):
-#     """ Quantized LPPool1d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.LPPool1d)
+class QuantizedLPPool1d(_DispatchMixin, QuantizationMixin, nn.LPPool1d):
+    """ Quantized LPPool1d """
+    _builtin_torch_fn = F.lp_pool1d
 
 
-# @QuantizationMixin.implements(nn.LPPool2d)
-# class QuantizedLPPool2d(_DispatchMixin, QuantizationMixin, nn.LPPool2d):
-#     """ Quantized LPPool2d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.LPPool2d)
+class QuantizedLPPool2d(_DispatchMixin, QuantizationMixin, nn.LPPool2d):
+    """ Quantized LPPool2d """
+    _builtin_torch_fn = F.lp_pool2d
 
 
 # @QuantizationMixin.implements(nn.LSTM)
@@ -947,10 +949,10 @@ class QuantizedLayerNorm(_DispatchMixin, QuantizationMixin, nn.LayerNorm):
 #     _builtin_torch_fn = ...
 
 
-# @QuantizationMixin.implements(nn.LeakyReLU)
-# class QuantizedLeakyReLU(_DispatchMixin, QuantizationMixin, nn.LeakyReLU):
-#     """ Quantized LeakyReLU """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.LeakyReLU)
+class QuantizedLeakyReLU(_DispatchMixin, QuantizationMixin, nn.LeakyReLU):
+    """ Quantized LeakyReLU """
+    _builtin_torch_fn = F.leaky_relu
 
 
 @QuantizationMixin.implements(nn.Linear)
@@ -965,22 +967,22 @@ class QuantizedLinear(_DispatchMixin, QuantizationMixin, nn.Linear):
         return super().forward(*args, **kwargs)
 
 
-# @QuantizationMixin.implements(nn.LocalResponseNorm)
-# class QuantizedLocalResponseNorm(_DispatchMixin, QuantizationMixin, nn.LocalResponseNorm):
-#     """ Quantized LocalResponseNorm """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.LocalResponseNorm)
+class QuantizedLocalResponseNorm(_DispatchMixin, QuantizationMixin, nn.LocalResponseNorm):
+    """ Quantized LocalResponseNorm """
+    _builtin_torch_fn = F.local_response_norm
 
 
-# @QuantizationMixin.implements(nn.LogSigmoid)
-# class QuantizedLogSigmoid(_DispatchMixin, QuantizationMixin, nn.LogSigmoid):
-#     """ Quantized LogSigmoid """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.LogSigmoid)
+class QuantizedLogSigmoid(_DispatchMixin, QuantizationMixin, nn.LogSigmoid):
+    """ Quantized LogSigmoid """
+    _builtin_torch_fn = F.logsigmoid
 
 
-# @QuantizationMixin.implements(nn.LogSoftmax)
-# class QuantizedLogSoftmax(_DispatchMixin, QuantizationMixin, nn.LogSoftmax):
-#     """ Quantized LogSoftmax """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.LogSoftmax)
+class QuantizedLogSoftmax(_DispatchMixin, QuantizationMixin, nn.LogSoftmax):
+    """ Quantized LogSoftmax """
+    _builtin_torch_fn = F.log_softmax
 
 
 # @QuantizationMixin.implements(nn.MSELoss)
@@ -995,10 +997,10 @@ class QuantizedLinear(_DispatchMixin, QuantizationMixin, nn.Linear):
 #     _builtin_torch_fn = ...
 
 
-# @QuantizationMixin.implements(nn.MaxPool1d)
-# class QuantizedMaxPool1d(_DispatchMixin, QuantizationMixin, nn.MaxPool1d):
-#     """ Quantized MaxPool1d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.MaxPool1d)
+class QuantizedMaxPool1d(_DispatchMixin, QuantizationMixin, nn.MaxPool1d):
+    """ Quantized MaxPool1d """
+    _builtin_torch_fn = F.max_pool1d
 
 
 @QuantizationMixin.implements(nn.MaxPool2d)
@@ -1007,34 +1009,34 @@ class QuantizedMaxPool2d(_DispatchMixin, QuantizationMixin, nn.MaxPool2d):
     _builtin_torch_fn = F.max_pool2d
 
 
-# @QuantizationMixin.implements(nn.MaxPool3d)
-# class QuantizedMaxPool3d(_DispatchMixin, QuantizationMixin, nn.MaxPool3d):
-#     """ Quantized MaxPool3d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.MaxPool3d)
+class QuantizedMaxPool3d(_DispatchMixin, QuantizationMixin, nn.MaxPool3d):
+    """ Quantized MaxPool3d """
+    _builtin_torch_fn = F.max_pool3d
 
 
-# @QuantizationMixin.implements(nn.MaxUnpool1d)
-# class QuantizedMaxUnpool1d(_DispatchMixin, QuantizationMixin, nn.MaxUnpool1d):
-#     """ Quantized MaxUnpool1d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.MaxUnpool1d)
+class QuantizedMaxUnpool1d(_DispatchMixin, QuantizationMixin, nn.MaxUnpool1d):
+    """ Quantized MaxUnpool1d """
+    _builtin_torch_fn = F.max_unpool1d
 
 
-# @QuantizationMixin.implements(nn.MaxUnpool2d)
-# class QuantizedMaxUnpool2d(_DispatchMixin, QuantizationMixin, nn.MaxUnpool2d):
-#     """ Quantized MaxUnpool2d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.MaxUnpool2d)
+class QuantizedMaxUnpool2d(_DispatchMixin, QuantizationMixin, nn.MaxUnpool2d):
+    """ Quantized MaxUnpool2d """
+    _builtin_torch_fn = F.max_unpool2d
 
 
-# @QuantizationMixin.implements(nn.MaxUnpool3d)
-# class QuantizedMaxUnpool3d(_DispatchMixin, QuantizationMixin, nn.MaxUnpool3d):
-#     """ Quantized MaxUnpool3d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.MaxUnpool3d)
+class QuantizedMaxUnpool3d(_DispatchMixin, QuantizationMixin, nn.MaxUnpool3d):
+    """ Quantized MaxUnpool3d """
+    _builtin_torch_fn = F.max_unpool3d
 
 
-# @QuantizationMixin.implements(nn.Mish)
-# class QuantizedMish(_DispatchMixin, QuantizationMixin, nn.Mish):
-#     """ Quantized Mish """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.Mish)
+class QuantizedMish(_DispatchMixin, QuantizationMixin, nn.Mish):
+    """ Quantized Mish """
+    _builtin_torch_fn = F.mish
 
 
 # @QuantizationMixin.implements(nn.Module)
@@ -1121,10 +1123,10 @@ class QuantizedPixelShuffle(_DispatchMixin, QuantizationMixin, nn.PixelShuffle):
     _builtin_torch_fn = F.pixel_shuffle
 
 
-# @QuantizationMixin.implements(nn.PixelUnshuffle)
-# class QuantizedPixelUnshuffle(_DispatchMixin, QuantizationMixin, nn.PixelUnshuffle):
-#     """ Quantized PixelUnshuffle """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.PixelUnshuffle)
+class QuantizedPixelUnshuffle(_DispatchMixin, QuantizationMixin, nn.PixelUnshuffle):
+    """ Quantized PixelUnshuffle """
+    _builtin_torch_fn = F.pixel_unshuffle
 
 
 # @QuantizationMixin.implements(nn.PoissonNLLLoss)
@@ -1157,10 +1159,10 @@ class QuantizedPixelShuffle(_DispatchMixin, QuantizationMixin, nn.PixelShuffle):
 #     _builtin_torch_fn = ...
 
 
-# @QuantizationMixin.implements(nn.RReLU)
-# class QuantizedRReLU(_DispatchMixin, QuantizationMixin, nn.RReLU):
-#     """ Quantized RReLU """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.RReLU)
+class QuantizedRReLU(_DispatchMixin, QuantizationMixin, nn.RReLU):
+    """ Quantized RReLU """
+    _builtin_torch_fn = F.rrelu
 
 
 @QuantizationMixin.implements(nn.ReLU)
@@ -1169,52 +1171,53 @@ class QuantizedReLU(_DispatchMixin, QuantizationMixin, nn.ReLU):
     _builtin_torch_fn = F.relu
 
 
-# @QuantizationMixin.implements(nn.ReLU6)
-# class QuantizedReLU6(_DispatchMixin, QuantizationMixin, nn.ReLU6):
-#     """ Quantized ReLU6 """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.ReLU6)
+class QuantizedReLU6(_DispatchMixin, QuantizationMixin, nn.ReLU6):
+    """ Quantized ReLU6 """
+    _builtin_torch_fn = F.hardtanh
 
 
-# @QuantizationMixin.implements(nn.ReflectionPad1d)
-# class QuantizedReflectionPad1d(_DispatchMixin, QuantizationMixin, nn.ReflectionPad1d):
-#     """ Quantized ReflectionPad1d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.ReflectionPad1d)
+class QuantizedReflectionPad1d(_DispatchMixin, QuantizationMixin, nn.ReflectionPad1d):
+    """ Quantized ReflectionPad1d """
+    _builtin_torch_fn = F.pad
 
 
-# @QuantizationMixin.implements(nn.ReflectionPad2d)
-# class QuantizedReflectionPad2d(_DispatchMixin, QuantizationMixin, nn.ReflectionPad2d):
-#     """ Quantized ReflectionPad2d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.ReflectionPad2d)
+class QuantizedReflectionPad2d(_DispatchMixin, QuantizationMixin, nn.ReflectionPad2d):
+    """ Quantized ReflectionPad2d """
+    _builtin_torch_fn = F.pad
 
 
-# @QuantizationMixin.implements(nn.ReflectionPad3d)
-# class QuantizedReflectionPad3d(_DispatchMixin, QuantizationMixin, nn.ReflectionPad3d):
-#     """ Quantized ReflectionPad3d """
-#     _builtin_torch_fn = ...
+if version.parse(torch.__version__) >= version.parse("1.10.0"):
+    @QuantizationMixin.implements(nn.ReflectionPad3d)
+    class QuantizedReflectionPad3d(_DispatchMixin, QuantizationMixin, nn.ReflectionPad3d):
+        """ Quantized ReflectionPad3d """
+        _builtin_torch_fn = F.pad
 
 
-# @QuantizationMixin.implements(nn.ReplicationPad1d)
-# class QuantizedReplicationPad1d(_DispatchMixin, QuantizationMixin, nn.ReplicationPad1d):
-#     """ Quantized ReplicationPad1d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.ReplicationPad1d)
+class QuantizedReplicationPad1d(_DispatchMixin, QuantizationMixin, nn.ReplicationPad1d):
+    """ Quantized ReplicationPad1d """
+    _builtin_torch_fn = F.pad
 
 
-# @QuantizationMixin.implements(nn.ReplicationPad2d)
-# class QuantizedReplicationPad2d(_DispatchMixin, QuantizationMixin, nn.ReplicationPad2d):
-#     """ Quantized ReplicationPad2d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.ReplicationPad2d)
+class QuantizedReplicationPad2d(_DispatchMixin, QuantizationMixin, nn.ReplicationPad2d):
+    """ Quantized ReplicationPad2d """
+    _builtin_torch_fn = F.pad
 
 
-# @QuantizationMixin.implements(nn.ReplicationPad3d)
-# class QuantizedReplicationPad3d(_DispatchMixin, QuantizationMixin, nn.ReplicationPad3d):
-#     """ Quantized ReplicationPad3d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.ReplicationPad3d)
+class QuantizedReplicationPad3d(_DispatchMixin, QuantizationMixin, nn.ReplicationPad3d):
+    """ Quantized ReplicationPad3d """
+    _builtin_torch_fn = F.pad
 
 
-# @QuantizationMixin.implements(nn.SELU)
-# class QuantizedSELU(_DispatchMixin, QuantizationMixin, nn.SELU):
-#     """ Quantized SELU """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.SELU)
+class QuantizedSELU(_DispatchMixin, QuantizationMixin, nn.SELU):
+    """ Quantized SELU """
+    _builtin_torch_fn = F.selu
 
 
 # @QuantizationMixin.implements(nn.Sequential)
@@ -1223,10 +1226,10 @@ class QuantizedReLU(_DispatchMixin, QuantizationMixin, nn.ReLU):
 #     _builtin_torch_fn = ...
 
 
-# @QuantizationMixin.implements(nn.SiLU)
-# class QuantizedSiLU(_DispatchMixin, QuantizationMixin, nn.SiLU):
-#     """ Quantized SiLU """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.SiLU)
+class QuantizedSiLU(_DispatchMixin, QuantizationMixin, nn.SiLU):
+    """ Quantized SiLU """
+    _builtin_torch_fn = F.silu
 
 
 @QuantizationMixin.implements(nn.Sigmoid)
@@ -1253,34 +1256,34 @@ class QuantizedSoftmax(_DispatchMixin, QuantizationMixin, nn.Softmax):
     _builtin_torch_fn = F.softmax
 
 
-# @QuantizationMixin.implements(nn.Softmax2d)
-# class QuantizedSoftmax2d(_DispatchMixin, QuantizationMixin, nn.Softmax2d):
-#     """ Quantized Softmax2d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.Softmax2d)
+class QuantizedSoftmax2d(_DispatchMixin, QuantizationMixin, nn.Softmax2d):
+    """ Quantized Softmax2d """
+    _builtin_torch_fn = F.softmax
 
 
-# @QuantizationMixin.implements(nn.Softmin)
-# class QuantizedSoftmin(_DispatchMixin, QuantizationMixin, nn.Softmin):
-#     """ Quantized Softmin """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.Softmin)
+class QuantizedSoftmin(_DispatchMixin, QuantizationMixin, nn.Softmin):
+    """ Quantized Softmin """
+    _builtin_torch_fn = F.softmin
 
 
-# @QuantizationMixin.implements(nn.Softplus)
-# class QuantizedSoftplus(_DispatchMixin, QuantizationMixin, nn.Softplus):
-#     """ Quantized Softplus """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.Softplus)
+class QuantizedSoftplus(_DispatchMixin, QuantizationMixin, nn.Softplus):
+    """ Quantized Softplus """
+    _builtin_torch_fn = F.softplus
 
 
-# @QuantizationMixin.implements(nn.Softshrink)
-# class QuantizedSoftshrink(_DispatchMixin, QuantizationMixin, nn.Softshrink):
-#     """ Quantized Softshrink """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.Softshrink)
+class QuantizedSoftshrink(_DispatchMixin, QuantizationMixin, nn.Softshrink):
+    """ Quantized Softshrink """
+    _builtin_torch_fn = F.softshrink
 
 
-# @QuantizationMixin.implements(nn.Softsign)
-# class QuantizedSoftsign(_DispatchMixin, QuantizationMixin, nn.Softsign):
-#     """ Quantized Softsign """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.Softsign)
+class QuantizedSoftsign(_DispatchMixin, QuantizationMixin, nn.Softsign):
+    """ Quantized Softsign """
+    _builtin_torch_fn = F.softsign
 
 
 # @QuantizationMixin.implements(nn.SyncBatchNorm)
@@ -1295,16 +1298,17 @@ class QuantizedTanh(_DispatchMixin, QuantizationMixin, nn.Tanh):
     _builtin_torch_fn = torch.tanh
 
 
-# @QuantizationMixin.implements(nn.Tanhshrink)
-# class QuantizedTanhshrink(_DispatchMixin, QuantizationMixin, nn.Tanhshrink):
-#     """ Quantized Tanhshrink """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.Tanhshrink)
+class QuantizedTanhshrink(_DispatchMixin, QuantizationMixin, nn.Tanhshrink):
+    """ Quantized Tanhshrink """
+    _builtin_torch_fn = F.tanhshrink
 
 
 # @QuantizationMixin.implements(nn.Threshold)
-# class QuantizedThreshold(_DispatchMixin, QuantizationMixin, nn.Threshold):
-#     """ Quantized Threshold """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.Threshold)
+class QuantizedThreshold(_DispatchMixin, QuantizationMixin, nn.Threshold):
+    """ Quantized Threshold """
+    _builtin_torch_fn = F.threshold
 
 
 # @QuantizationMixin.implements(nn.Transformer)
@@ -1355,16 +1359,16 @@ class QuantizedTanh(_DispatchMixin, QuantizationMixin, nn.Tanh):
 #     _builtin_torch_fn = ...
 
 
-# @QuantizationMixin.implements(nn.Unfold)
-# class QuantizedUnfold(_DispatchMixin, QuantizationMixin, nn.Unfold):
-#     """ Quantized Unfold """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.Unfold)
+class QuantizedUnfold(_DispatchMixin, QuantizationMixin, nn.Unfold):
+    """ Quantized Unfold """
+    _builtin_torch_fn = F.unfold
 
 
-# @QuantizationMixin.implements(nn.Upsample)
-# class QuantizedUpsample(_DispatchMixin, QuantizationMixin, nn.Upsample):
-#     """ Quantized Upsample """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.Upsample)
+class QuantizedUpsample(_DispatchMixin, QuantizationMixin, nn.Upsample):
+    """ Quantized Upsample """
+    _builtin_torch_fn = F.interpolate
 
 
 @QuantizationMixin.implements(nn.UpsamplingBilinear2d)
@@ -1373,25 +1377,27 @@ class QuantizedUpsamplingBilinear2d(_DispatchMixin, QuantizationMixin, nn.Upsamp
     _builtin_torch_fn = F.interpolate
 
 
-# @QuantizationMixin.implements(nn.UpsamplingNearest2d)
-# class QuantizedUpsamplingNearest2d(_DispatchMixin, QuantizationMixin, nn.UpsamplingNearest2d):
-#     """ Quantized UpsamplingNearest2d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.UpsamplingNearest2d)
+class QuantizedUpsamplingNearest2d(_DispatchMixin, QuantizationMixin, nn.UpsamplingNearest2d):
+    """ Quantized UpsamplingNearest2d """
+    _builtin_torch_fn = F.interpolate
 
 
-# @QuantizationMixin.implements(nn.ZeroPad1d)
-# class QuantizedZeroPad1d(_DispatchMixin, QuantizationMixin, nn.ZeroPad1d):
-#     """ Quantized ZeroPad1d """
-#     _builtin_torch_fn = ...
+if version.parse(torch.__version__) >= version.parse("2.1.0"):
+    @QuantizationMixin.implements(nn.ZeroPad1d)
+    class QuantizedZeroPad1d(_DispatchMixin, QuantizationMixin, nn.ZeroPad1d):
+        """ Quantized ZeroPad1d """
+        _builtin_torch_fn = F.pad
 
 
-# @QuantizationMixin.implements(nn.ZeroPad2d)
-# class QuantizedZeroPad2d(_DispatchMixin, QuantizationMixin, nn.ZeroPad2d):
-#     """ Quantized ZeroPad2d """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.ZeroPad2d)
+class QuantizedZeroPad2d(_DispatchMixin, QuantizationMixin, nn.ZeroPad2d):
+    """ Quantized ZeroPad2d """
+    _builtin_torch_fn = F.pad
 
 
-# @QuantizationMixin.implements(nn.ZeroPad3d)
-# class QuantizedZeroPad3d(_DispatchMixin, QuantizationMixin, nn.ZeroPad3d):
-#     """ Quantized ZeroPad3d """
-#     _builtin_torch_fn = ...
+if version.parse(torch.__version__) >= version.parse("2.1.0"):
+    @QuantizationMixin.implements(nn.ZeroPad3d)
+    class QuantizedZeroPad3d(_DispatchMixin, QuantizationMixin, nn.ZeroPad3d):
+        """ Quantized ZeroPad3d """
+        _builtin_torch_fn = F.pad
