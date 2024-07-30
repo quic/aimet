@@ -40,11 +40,13 @@ import functools
 import pytest
 import torch
 from torch import randn
+import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils._pytree import tree_map
 from torch.overrides import get_ignored_functions
 from aimet_torch.v2.quantization.affine.backends import quantize, quantize_dequantize, dequantize
 from aimet_torch.v2.quantization.affine import Quantize, QuantizeDequantize
+import aimet_torch.v2 as aimet
 from aimet_torch.v2.nn import (
     QuantizedConv1d,
     QuantizedConv2d,
@@ -59,14 +61,6 @@ from aimet_torch.v2.nn import (
     QuantizedSoftmax,
     QuantizedLayerNorm,
     QuantizedGroupNorm,
-    QuantizedReLU,
-    QuantizedPReLU,
-    QuantizedConstantPad2d as QConstantPad2d,
-    QuantizedHardtanh,
-    QuantizedMaxPool2d,
-    QuantizedUpsamplingBilinear2d as QUpsamplingBilinear2d,
-    QuantizedPixelShuffle,
-    QuantizedAvgPool2d,
     FakeQuantizationMixin,
 )
 from aimet_torch.v2.nn.true_quant import _dispatch
@@ -74,6 +68,11 @@ from aimet_torch.v2.quantization.affine import AffineEncoding
 from aimet_torch.v2.quantization.tensor import QuantizedTensorBase, QuantizedTensor, DequantizedTensor
 from aimet_torch.v2.utils import enable_recompute
 from aimet_torch.v2.nn import custom
+
+
+@pytest.fixture(autouse=True)
+def manual_seed():
+    torch.manual_seed(724)
 
 
 def affine_quantize(tensor: torch.Tensor,
@@ -100,7 +99,7 @@ def input():
     return _input(10, 10)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def register_int_linear():
     def int_linear(input, weight, bias=None, *, output_encodings=None):
         # Implicit dequantization is not supported yet
@@ -122,7 +121,7 @@ def register_int_linear():
     QuantizedLinear.set_default_kernel(None)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def register_int_conv():
     def int_convnd(kernel, input, weight, bias=None, stride=1, padding=0, dilation=1, groups=1, *, output_encodings=None):
         # Implicit dequantization is not supported yet
@@ -148,8 +147,8 @@ def register_int_conv():
     QuantizedConv1d.set_default_kernel(None)
 
 
-@pytest.fixture(autouse=True)
-def register_int_conv():
+@pytest.fixture
+def register_int_convtranspose():
     def int_convtransposend(kernel, input, weight, bias=None, stride=1, padding=0, output_padding=0, groups=1, dilation=1, *, output_encodings=None):
         # Implicit dequantization is not supported yet
         if not isinstance(input, QuantizedTensor):
@@ -174,7 +173,7 @@ def register_int_conv():
     QuantizedConvTranspose3d.set_default_kernel(None)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def register_int_activation():
     def wrap_functional(func):
         def wrapped_func(*args, output_encodings=None, **kwargs):
@@ -189,16 +188,14 @@ def register_int_activation():
 
     QuantizedSoftmax.set_default_kernel(wrap_functional(F.softmax))
     QuantizedSigmoid.set_default_kernel(wrap_functional(torch.sigmoid))
-    QuantizedLayerNorm.set_default_kernel(wrap_functional(F.layer_norm))
     QuantizedGELU.set_default_kernel(wrap_functional(F.gelu))
     yield
     QuantizedGELU.set_default_kernel(None)
-    QuantizedLayerNorm.set_default_kernel(None)
     QuantizedSigmoid.set_default_kernel(None)
     QuantizedSoftmax.set_default_kernel(None)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def register_int_norm():
     def wrap_functional(func):
         def int_norm(input, normalized_shape, weight, bias, eps, *, output_encodings=None):
@@ -211,7 +208,7 @@ def register_int_norm():
             input = input.dequantize()
             weight = weight.dequantize()
 
-            output = func(input.dequantize(), normalized_shape, weight, bias, eps)
+            output = func(input, normalized_shape, weight, bias, eps)
             return affine_quantize(output, output_encodings.scale, output_encodings.offset, output_encodings.bitwidth)
 
         return int_norm
@@ -223,7 +220,7 @@ def register_int_norm():
     QuantizedLayerNorm.set_default_kernel(None)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def register_int_custom():
     def int_elementwise(kernel, x, y, *, output_encodings=None):
         # Implicit dequantization is not supported yet
@@ -249,7 +246,7 @@ def register_int_custom():
 
 
 class TestTrueQuantLinear:
-
+    @pytest.mark.usefixtures('register_int_linear')
     def test_no_quantizers(self, input):
         """
         Given: TrueQuantLinear with no input, output, or param quantizers
@@ -278,6 +275,7 @@ class TestTrueQuantLinear:
         with pytest.raises(RuntimeError):
             quant_linear(input)
 
+    @pytest.mark.usefixtures('register_int_linear')
     def test_fully_specified_quantizers(self, input):
         """
         Given: TrueQuantLinear with input, output, and param quantizers
@@ -337,6 +335,7 @@ class TestTrueQuantLinear:
         output_expected = quantize_dequantize(output_fp, *output_enc)
         assert torch.allclose(output.dequantize(), output_expected)
 
+    @pytest.mark.usefixtures('register_int_linear')
     def test_no_input_quantizer(self, input):
         """
         Given: TrueQuantLinear with output and param quantizers and computed encodings
@@ -368,6 +367,7 @@ class TestTrueQuantLinear:
         assert output.encoding.offset == quant_linear.output_quantizers[0].get_offset()
 
 
+    @pytest.mark.usefixtures('register_int_linear')
     def test_from_module(self, input):
         # Analogous to FakeQuantMixin.from_module test case
         """
@@ -415,16 +415,25 @@ class TestTrueQuantLinear:
 
 
 class TestQuantizedLayers:
+    @pytest.mark.usefixtures('register_int_norm', 'register_int_custom', 'register_int_activation')
+    @pytest.mark.parametrize(
+        "module_factory,               input_factory", [
+        (lambda: nn.Softmax(dim=1),    lambda: _input(10, 10)),
+        (lambda: nn.Sigmoid(),         lambda: _input(10, 10)),
+        (lambda: nn.GELU(),            lambda: _input(10, 10)),
+        (lambda: custom.Add(),         lambda: (_input(10, 10), _input(10, 10))),
+        (lambda: custom.Multiply(),    lambda: (_input(10, 10), _input(10, 10))),
+        (lambda: custom.Subtract(),    lambda: (_input(10, 10), _input(10, 10))),
+        (lambda: custom.MatMul(),      lambda: (_input(10, 10), _input(10, 10))),
+        (lambda: custom.Divide(),      lambda: (_input(10, 10), _input(10, 10)))]
+    )
+    def test_layers_no_params(self, module_factory, input_factory):
+        layer = module_factory()
+        inputs = input_factory()
 
-    @pytest.mark.parametrize("layer,inputs", ((torch.nn.Softmax(dim=1), (_input(10, 10),)),
-                                              (torch.nn.Sigmoid(), (_input(10, 10),)),
-                                              (torch.nn.GELU(), (_input(10, 10),)),
-                                              (custom.Add(), (_input(10, 10), _input(10, 10))),
-                                              (custom.Multiply(), (_input(10, 10), _input(10, 10))),
-                                              (custom.Subtract(), (_input(10, 10), _input(10, 10))),
-                                              (custom.MatMul(), (_input(10, 10), _input(10, 10))),
-                                              (custom.Divide(), (_input(10, 10), _input(10, 10)))))
-    def test_layers_no_params(self, layer, inputs):
+        if not isinstance(inputs, (tuple, list)):
+            inputs = (inputs,)
+
         fq_layer = FakeQuantizationMixin.from_module(layer)
         tq_layer = QuantizationMixin.from_module(layer)
         for i, _ in enumerate(inputs):
@@ -445,20 +454,28 @@ class TestQuantizedLayers:
 
         assert torch.allclose(fq_output, tq_output.dequantize())
 
-    @pytest.mark.parametrize("layer,input", ((torch.nn.Linear(10, 10), _input(10, 10)),
-                                             (torch.nn.LayerNorm(10), _input(10, 10)),
-                                             (torch.nn.GroupNorm(2, 10), _input(10, 10)),
-                                             (torch.nn.Conv1d(3, 3, 3), _input(1, 3, 10)),
-                                             (torch.nn.Conv2d(3, 3, 3), _input(1, 3, 10, 10)),
-                                             (torch.nn.Conv3d(3, 3, 3), _input(1, 3, 10, 10, 10)),
-                                             (torch.nn.ConvTranspose1d(3, 3, 3), _input(1, 3, 10)),
-                                             (torch.nn.ConvTranspose2d(3, 3, 3), _input(1, 3, 10, 10)),
-                                             (torch.nn.ConvTranspose3d(3, 3, 3), _input(1, 3, 10, 10, 10))))
-    def test_layers_with_weight(self, layer, input):
+    @pytest.mark.usefixtures('register_int_linear', 'register_int_norm', 'register_int_custom', 'register_int_activation',
+                             'register_int_conv', 'register_int_convtranspose')
+    @pytest.mark.parametrize(
+        "module_factory,                      input_factory", [
+        (lambda: nn.Linear(10, 10),           lambda: _input(10, 10)),
+        (lambda: nn.LayerNorm(10),            lambda: _input(10, 10)),
+        (lambda: nn.GroupNorm(2, 10),         lambda: _input(10, 10)),
+        (lambda: nn.Conv1d(3, 3, 3),          lambda: _input(1, 3, 10)),
+        (lambda: nn.Conv2d(3, 3, 3),          lambda: _input(1, 3, 10, 10)),
+        (lambda: nn.Conv3d(3, 3, 3),          lambda: _input(1, 3, 10, 10, 10)),
+        (lambda: nn.ConvTranspose1d(3, 3, 3), lambda: _input(1, 3, 10)),
+        (lambda: nn.ConvTranspose2d(3, 3, 3), lambda: _input(1, 3, 10, 10)),
+        (lambda: nn.ConvTranspose3d(3, 3, 3), lambda: _input(1, 3, 10, 10, 10))
+    ])
+    def test_layers_with_weight(self, module_factory, input_factory):
+        layer = module_factory()
+        input = input_factory()
+
         fq_layer = FakeQuantizationMixin.from_module(layer)
         tq_layer = QuantizationMixin.from_module(layer)
         fq_layer.input_quantizers[0] = QuantizeDequantize(shape=(), bitwidth=8, symmetric=False)
-        fq_layer.output_quantizers[0] = QuantizeDequantize(shape=(1, ), bitwidth=8, symmetric=False)
+        fq_layer.output_quantizers[0] = QuantizeDequantize(shape=(), bitwidth=8, symmetric=False)
         fq_layer.param_quantizers["weight"] = QuantizeDequantize(shape=(), bitwidth=8, symmetric=True)
         tq_layer.input_quantizers[0] = Quantize(shape=(), bitwidth=8, symmetric=False)
         tq_layer.output_quantizers[0] = Quantize(shape=(), bitwidth=8, symmetric=False)
@@ -477,6 +494,7 @@ class TestQuantizedLayers:
         assert torch.allclose(fq_output, tq_output.dequantize())
 
     @pytest.mark.cuda
+    @pytest.mark.usefixtures('register_int_linear')
     def test_layers_with_recompute(self):
         qlinear = QuantizedLinear(4096, 4096)
         qlinear.input_quantizers[0] = Quantize(shape=(), bitwidth=8, symmetric=False)
@@ -551,8 +569,6 @@ class TestQuantizedLayers:
         qlinear.param_quantizers["weight"] = weight_qtzr = Quantize(shape=(), bitwidth=8, symmetric=True)
         with qlinear.compute_encodings():
             qlinear(input)
-
-        qlinear.set_kernel(None) # Set kernel to None since removing quantizers does not work with integer kernels
 
         """
         When: ``with _remove_{input, param, output, activation, all}_quantizers``
@@ -650,13 +666,6 @@ def _pseudo_integer_kernel_helper(fn):
     return pseudo_kernel
 
 
-pseudo_relu_kernel = _pseudo_integer_kernel_helper(F.relu)
-pseudo_prelu_kernel = _pseudo_integer_kernel_helper(F.prelu)
-pseudo_pad_kernel = _pseudo_integer_kernel_helper(F.pad)
-pseudo_hardtanh_kernel = _pseudo_integer_kernel_helper(F.hardtanh)
-pseudo_max_pool2d_kernel = _pseudo_integer_kernel_helper(F.max_pool2d)
-pseudo_interpolate_kernel = _pseudo_integer_kernel_helper(F.interpolate)
-pseudo_pixel_shuffle_kernel = _pseudo_integer_kernel_helper(F.pixel_shuffle)
 pseudo_sin_kernel = _pseudo_integer_kernel_helper(torch.sin)
 pseudo_cos_kernel = _pseudo_integer_kernel_helper(torch.cos)
 pseudo_avg_pool2d_kernel = _pseudo_integer_kernel_helper(F.avg_pool2d)
@@ -670,14 +679,6 @@ pseudo_div_kernel = _pseudo_integer_kernel_helper(torch.div)
 
 @pytest.mark.parametrize(
     "qmodule,                       pseudo_kernel,              inputs",           [
-     (QuantizedReLU(),              pseudo_relu_kernel,         randn(100)),
-     (QuantizedPReLU(),             pseudo_prelu_kernel,        randn(100)),
-     (QConstantPad2d([1,1,1,1], 0), pseudo_pad_kernel,          randn(10,10)),
-     (QuantizedHardtanh(),          pseudo_hardtanh_kernel,     randn(100)),
-     (QuantizedMaxPool2d([3,3]),    pseudo_max_pool2d_kernel,   randn(1,10,10)),
-     (QUpsamplingBilinear2d([2,2]), pseudo_interpolate_kernel,  randn(1,1,10,10)),
-     (QuantizedPixelShuffle(1),     pseudo_pixel_shuffle_kernel,randn(1,1,10,10)),
-     (QuantizedAvgPool2d(2),        pseudo_avg_pool2d_kernel,   randn(1,10,10)),
      (custom.QuantizedSin(),        pseudo_sin_kernel,          randn(100)),
      (custom.QuantizedCos(),        pseudo_cos_kernel,          randn(100)),
      (custom.QuantizedAvgPool2d(),  pseudo_avg_pool2d_kernel,   (randn(1,10,10), 2)),
@@ -757,3 +758,229 @@ def test_dispatch_sanity():
         dummy_impl = lambda *args, **kwargs: func(*args, **kwargs)
         with pytest.raises(RuntimeError):
             with _dispatch(func, dummy_impl): pass
+
+
+def _create_legacy_fake_quantized_module(module):
+    qmodule = aimet.nn.fake_quant.FakeQuantizationMixin.from_module(module)
+
+    for i, _ in enumerate(qmodule.input_quantizers):
+        qmodule.input_quantizers[i] = QuantizeDequantize([], 8, False)
+
+    for i, _ in enumerate(qmodule.output_quantizers):
+        qmodule.output_quantizers[i] = QuantizeDequantize([], 8, False)
+
+    for name, _ in qmodule.param_quantizers.items():
+        qmodule.param_quantizers[name] = QuantizeDequantize([], 8, True)
+
+    return qmodule
+
+
+def _create_quantized_module(module):
+    qmodule = aimet.nn.QuantizationMixin.from_module(module)
+
+    for i, _ in enumerate(qmodule.input_quantizers):
+        qmodule.input_quantizers[i] = QuantizeDequantize([], 8, False)
+
+    for i, _ in enumerate(qmodule.output_quantizers):
+        qmodule.output_quantizers[i] = QuantizeDequantize([], 8, False)
+
+    for name, _ in qmodule.param_quantizers.items():
+        qmodule.param_quantizers[name] = QuantizeDequantize([], 8, True)
+
+    return qmodule
+
+
+@pytest.mark.parametrize(
+    "module_factory,                                  input_factory", [
+    (lambda: nn.AdaptiveAvgPool1d(2),                 lambda: randn(1, 100)),
+    (lambda: nn.AdaptiveAvgPool2d(2),                 lambda: randn(1, 10, 10)),
+    (lambda: nn.AdaptiveAvgPool3d(2),                 lambda: randn(1, 10, 10, 11)),
+    # (lambda: nn.AdaptiveLogSoftmaxWithLoss(...),    lambda: ...),
+    (lambda: nn.AdaptiveMaxPool1d(2),                 lambda: randn(1, 100)),
+    (lambda: nn.AdaptiveMaxPool2d(2),                 lambda: randn(1, 10, 10)),
+    (lambda: nn.AdaptiveMaxPool3d(2),                 lambda: randn(1, 10, 10, 11)),
+    # (lambda: nn.AlphaDropout(...),                  lambda: ...),
+    (lambda: nn.AvgPool1d(2),                         lambda: randn(1, 100)),
+    (lambda: nn.AvgPool2d(2),                         lambda: randn(1, 10, 10)),
+    (lambda: nn.AvgPool3d(2),                         lambda: randn(1, 10, 10, 11)),
+    # (lambda: nn.BCELoss(...),                       lambda: ...),
+    # (lambda: nn.BCEWithLogitsLoss(...),             lambda: ...),
+    (lambda: nn.BatchNorm1d(10),                      lambda: randn(5, 10, 3)),
+    (lambda: nn.BatchNorm2d(10),                      lambda: randn(5, 10, 3, 2)),
+    (lambda: nn.BatchNorm3d(10),                      lambda: randn(5, 10, 3, 2, 1)),
+    # (lambda: nn.Bilinear(...),                      lambda: ...),
+    (lambda: nn.CELU(),                               lambda: randn(10, 10)),
+    # (lambda: nn.CTCLoss(...),                       lambda: ...),
+    (lambda: nn.ChannelShuffle(2),                    lambda: randn(1, 8, 4, 4)),
+    # (lambda: nn.CircularPad1d(...),                 lambda: ...),
+    # (lambda: nn.CircularPad2d(...),                 lambda: ...),
+    # (lambda: nn.CircularPad3d(...),                 lambda: ...),
+    (lambda: nn.ConstantPad1d(2, 3.5),                lambda: randn(1, 10, 10)),
+    (lambda: nn.ConstantPad2d(2, 3.5),                lambda: randn(1, 10, 10)),
+    (lambda: nn.ConstantPad3d(2, 3.5),                lambda: randn(1, 10, 2, 5)),
+    # (lambda: nn.Container(...),                     lambda: ...),
+    (lambda: nn.Conv1d(3, 3, 3),                      lambda: randn(1, 3, 32)),
+    (lambda: nn.Conv2d(3, 3, 3),                      lambda: randn(1, 3, 16, 16)),
+    (lambda: nn.Conv3d(3, 3, 3),                      lambda: randn(1, 3, 16, 16, 16)),
+    (lambda: nn.ConvTranspose1d(3, 3, 3),             lambda: randn(1, 3, 32)),
+    (lambda: nn.ConvTranspose2d(3, 3, 3),             lambda: randn(1, 3, 16, 16)),
+    (lambda: nn.ConvTranspose3d(3, 3, 3),             lambda: randn(1, 3, 16, 16, 16)),
+    # (lambda: nn.CosineEmbeddingLoss(...),           lambda: ...),
+    # (lambda: nn.CosineSimilarity(...),              lambda: ...),
+    # (lambda: nn.CrossEntropyLoss(...),              lambda: ...),
+    # (lambda: nn.CrossMapLRN2d(...),                 lambda: ...),
+    (lambda: nn.Dropout(),                            lambda: randn(10, 10)),
+    (lambda: nn.Dropout1d(),                          lambda: randn(10, 10)),
+    (lambda: nn.Dropout2d(),                          lambda: randn(10, 10)),
+    (lambda: nn.Dropout3d(),                          lambda: randn(10, 10)),
+    (lambda: nn.ELU(),                                lambda: randn(10, 10)),
+    # (lambda: nn.Embedding(...),                          lambda: ...),
+    # (lambda: nn.EmbeddingBag(...),                       lambda: ...),
+    (lambda: nn.FeatureAlphaDropout(),                lambda: randn(10, 10)),
+    (lambda: nn.Flatten(),                            lambda: randn(10, 10)),
+    (lambda: nn.Fold((4, 5), (2, 2)),                 lambda: randn(1, 12, 12)),
+    (lambda: nn.FractionalMaxPool2d(3, (5, 5)),       lambda: randn(1, 10, 10)),
+    (lambda: nn.FractionalMaxPool3d(3, (5, 5, 5)),    lambda: randn(1, 10, 10, 10)),
+    (lambda: nn.GELU(),                               lambda: randn(100)),
+    (lambda: nn.GLU(),                                lambda: randn(100)),
+    # (lambda: nn.GRU(...),                           lambda: ...),
+    # (lambda: nn.GRUCell(...),                       lambda: ...),
+    # (lambda: nn.GaussianNLLLoss(...),               lambda: ...),
+    (lambda: nn.GroupNorm(2, 4),                      lambda: randn(1, 4, 25)),
+    (lambda: nn.Hardshrink(0),                        lambda: randn(100)),
+    # (lambda: nn.Hardsigmoid(...),                   lambda: ...),
+    # (lambda: nn.Hardswish(...),                     lambda: ...),
+    (lambda: nn.Hardtanh(),                           lambda: randn(100)),
+    # (lambda: nn.HingeEmbeddingLoss(...),            lambda: ...),
+    # (lambda: nn.HuberLoss(...),                     lambda: ...),
+    # (lambda: nn.Identity(...),                      lambda: ...),
+    (lambda: nn.InstanceNorm1d(10),                   lambda: randn(5, 10, 3)),
+    (lambda: nn.InstanceNorm2d(10),                   lambda: randn(5, 10, 3, 2)),
+    (lambda: nn.InstanceNorm3d(10),                   lambda: randn(5, 10, 3, 2, 1)),
+    # (lambda: nn.KLDivLoss(...),                     lambda: ...),
+    # (lambda: nn.L1Loss(...),                        lambda: ...),
+    (lambda: nn.LPPool1d(2, 3),                       lambda: randn(1, 10, 10)),
+    (lambda: nn.LPPool2d(2, 3),                       lambda: randn(1, 10, 10, 10)),
+    # (lambda: nn.LSTM(...),                          lambda: ...),
+    # (lambda: nn.LSTMCell(...),                      lambda: ...),
+    (lambda: nn.LayerNorm((2, 3, 4)),                 lambda: randn(10, 2, 3, 4)),
+    # (lambda: nn.LazyBatchNorm1d(...),               lambda: ...),
+    # (lambda: nn.LazyBatchNorm2d(...),               lambda: ...),
+    # (lambda: nn.LazyBatchNorm3d(...),               lambda: ...),
+    # (lambda: nn.LazyConv1d(...),                    lambda: ...),
+    # (lambda: nn.LazyConv2d(...),                    lambda: ...),
+    # (lambda: nn.LazyConv3d(...),                    lambda: ...),
+    # (lambda: nn.LazyConvTranspose1d(...),           lambda: ...),
+    # (lambda: nn.LazyConvTranspose2d(...),           lambda: ...),
+    # (lambda: nn.LazyConvTranspose3d(...),           lambda: ...),
+    # (lambda: nn.LazyInstanceNorm1d(...),            lambda: ...),
+    # (lambda: nn.LazyInstanceNorm2d(...),            lambda: ...),
+    # (lambda: nn.LazyInstanceNorm3d(...),            lambda: ...),
+    # (lambda: nn.LazyLinear(...),                    lambda: ...),
+    (lambda: nn.LeakyReLU(),                          lambda: randn(100)),
+    (lambda: nn.Linear(10, 10),                       lambda: randn(10, 10)),
+    (lambda: nn.LocalResponseNorm(2),                 lambda: randn(1, 4, 5, 5)),
+    (lambda: nn.LogSigmoid(),                         lambda: randn(100)),
+    (lambda: nn.LogSoftmax(),                         lambda: randn(100)),
+    # (lambda: nn.MSELoss(...),                       lambda: ...),
+    # (lambda: nn.MarginRankingLoss(...),             lambda: ...),
+    (lambda: nn.MaxPool1d(3),                         lambda: randn(1, 10, 10)),
+    (lambda: nn.MaxPool2d(3),                         lambda: randn(1, 10, 10, 10)),
+    (lambda: nn.MaxPool3d(3),                         lambda: randn(1, 1, 10, 10, 10)),
+    (lambda: nn.MaxUnpool1d(2),                       lambda: nn.MaxPool1d(2, return_indices=True)(randn(1, 10, 10))),
+    (lambda: nn.MaxUnpool2d(2),                       lambda: nn.MaxPool2d(2, return_indices=True)(randn(1, 10, 10, 10))),
+    (lambda: nn.MaxUnpool3d(2),                       lambda: nn.MaxPool3d(2, return_indices=True)(randn(1, 1, 10, 10, 10))),
+    (lambda: nn.Mish(),                               lambda: randn(100)),
+    # (lambda: nn.Module(...),                        lambda: ...),
+    # (lambda: nn.ModuleDict(...),                    lambda: ...),
+    # (lambda: nn.ModuleList(...),                    lambda: ...),
+    # (lambda: nn.MultiLabelMarginLoss(...),          lambda: ...),
+    # (lambda: nn.MultiLabelSoftMarginLoss(...),      lambda: ...),
+    # (lambda: nn.MultiMarginLoss(...),               lambda: ...),
+    # (lambda: nn.MultiheadAttention(...),            lambda: ...),
+    # (lambda: nn.NLLLoss(...),                       lambda: ...),
+    # (lambda: nn.NLLLoss2d(...),                     lambda: ...),
+    (lambda: nn.PReLU(),                              lambda: randn(100)),
+    # (lambda: nn.PairwiseDistance(...),              lambda: ...),
+    # (lambda: nn.ParameterDict(...),                 lambda: ...),
+    # (lambda: nn.ParameterList(...),                 lambda: ...),
+    (lambda: nn.PixelShuffle(1),                      lambda: randn(1, 1, 10, 10)),
+    # (lambda: nn.PixelUnshuffle(...),                lambda: ...),
+    # (lambda: nn.PoissonNLLLoss(...),                lambda: ...),
+    # (lambda: nn.RNN(...),                           lambda: ...),
+    # (lambda: nn.RNNBase(...),                       lambda: ...),
+    # (lambda: nn.RNNCell(...),                       lambda: ...),
+    # (lambda: nn.RNNCellBase(...),                   lambda: ...),
+    (lambda: nn.RReLU(),                              lambda: randn(100)),
+    (lambda: nn.ReLU(),                               lambda: randn(100)),
+    (lambda: nn.ReLU6(),                              lambda: randn(100)),
+    (lambda: nn.ReflectionPad1d(2),                   lambda: randn(1, 10, 10)),
+    (lambda: nn.ReflectionPad2d(2),                   lambda: randn(1, 10, 10)),
+    (lambda: nn.ReflectionPad3d(2),                   lambda: randn(1, 5, 5, 5)),
+    (lambda: nn.ReplicationPad1d(2),                  lambda: randn(1, 10, 10)),
+    (lambda: nn.ReplicationPad2d(2),                  lambda: randn(1, 10, 10)),
+    (lambda: nn.ReplicationPad3d(2),                  lambda: randn(1, 10, 2, 5)),
+    (lambda: nn.SELU(),                               lambda: randn(100)),
+    # (lambda: nn.Sequential(...),                         lambda: ...),
+    (lambda: nn.SiLU(),                               lambda: randn(100)),
+    (lambda: nn.Sigmoid(),                            lambda: randn(100)),
+    # (lambda: nn.SmoothL1Loss(...),                       lambda: ...),
+    # (lambda: nn.SoftMarginLoss(...),                     lambda: ...),
+    (lambda: nn.Softmax(),                            lambda: randn(100)),
+    (lambda: nn.Softmax2d(),                          lambda: randn(1, 4, 25)),
+    (lambda: nn.Softmin(),                            lambda: randn(100)),
+    (lambda: nn.Softplus(),                           lambda: randn(100)),
+    (lambda: nn.Softshrink(),                         lambda: randn(100)),
+    (lambda: nn.Softsign(),                           lambda: randn(100)),
+    # (lambda: nn.SyncBatchNorm(...),                      lambda: ...),
+    (lambda: nn.Tanh(),                               lambda: randn(100)),
+    (lambda: nn.Tanhshrink(),                         lambda: randn(100)),
+    (lambda: nn.Threshold(0.1, 20),                   lambda: randn(100)),
+    # (lambda: nn.Transformer(...),                   lambda: ...),
+    # (lambda: nn.TransformerDecoder(...),            lambda: ...),
+    # (lambda: nn.TransformerDecoderLayer(...),       lambda: ...),
+    # (lambda: nn.TransformerEncoder(...),            lambda: ...),
+    # (lambda: nn.TransformerEncoderLayer(...),       lambda: ...),
+    # (lambda: nn.TripletMarginLoss(...),             lambda: ...),
+    # (lambda: nn.TripletMarginWithDistanceLoss(...), lambda: ...),
+    # (lambda: nn.Unflatten(...),                     lambda: ...),
+    (lambda: nn.Unfold((2, 3)),                       lambda: randn(2, 5, 3, 4)),
+    (lambda: nn.Upsample(scale_factor=2),             lambda: randn(1, 1, 10, 10)),
+    (lambda: nn.UpsamplingBilinear2d(scale_factor=2), lambda: randn(1, 1, 10, 10)),
+    (lambda: nn.UpsamplingNearest2d(scale_factor=2),  lambda: randn(1, 1, 10, 10)),
+    (lambda: nn.ZeroPad1d(2),                         lambda: randn(1, 10, 10)),
+    (lambda: nn.ZeroPad2d(2),                         lambda: randn(1, 10, 10)),
+    (lambda: nn.ZeroPad3d(2),                         lambda: randn(1, 10, 2, 5)),
+])
+def test_default_kernel_abtest(module_factory, input_factory):
+    module = module_factory()
+    inputs = input_factory()
+
+    if not isinstance(inputs, (tuple, list)):
+        inputs = (inputs,)
+
+    """
+    When: Run quantized module forward pass with default kernel
+    Then: The output should be equal to that of the legacy fake-quantized modules
+    """
+    legacy_qmodule = _create_legacy_fake_quantized_module(module)
+    qmodule = _create_quantized_module(module)
+
+    # NOTE: Need to fix seed again before every forward pass
+    #       in case the module involves randomized behavior (e.g. RReLU)
+
+    with legacy_qmodule.compute_encodings():
+        torch.manual_seed(0)
+        _ = legacy_qmodule(*inputs)
+
+
+    with qmodule.compute_encodings():
+        torch.manual_seed(0);
+        _ = qmodule(*inputs)
+
+    torch.manual_seed(0)
+    fout = legacy_qmodule(*inputs)
+    torch.manual_seed(0)
+    out = qmodule(*inputs)
+
+    assert torch.equal(out, fout)

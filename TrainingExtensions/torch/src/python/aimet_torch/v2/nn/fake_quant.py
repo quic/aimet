@@ -34,14 +34,16 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-#pylint: disable=too-many-lines
+# pylint: disable=too-many-lines, wrong-import-order
 """Fake-quantized modules"""
 
+from packaging import version
 from collections import OrderedDict
 from typing import Type, Optional, Tuple
 import abc
 import warnings
 
+import torch
 from torch import Tensor
 import torch.nn as nn
 from torch.nn.modules.adaptive import _ASMoutput
@@ -220,7 +222,6 @@ _TORCH_NN_UNARY_MODULES = [
     nn.ConvTranspose3d,
     nn.CrossMapLRN2d,
     nn.Dropout,
-    # nn.Dropout1d, # Not supported in torch < 1.12
     nn.Dropout2d,
     nn.Dropout3d,
     nn.ELU,
@@ -263,7 +264,6 @@ _TORCH_NN_UNARY_MODULES = [
     nn.ReLU6,
     nn.ReflectionPad1d,
     nn.ReflectionPad2d,
-    # nn.ReflectionPad3d, # Not supported in torch < 1.10
     nn.ReplicationPad1d,
     nn.ReplicationPad2d,
     nn.ReplicationPad3d,
@@ -287,6 +287,23 @@ _TORCH_NN_UNARY_MODULES = [
     nn.UpsamplingNearest2d,
     nn.ZeroPad2d,
 ]
+
+if version.parse(torch.__version__) >= version.parse("1.10.0"):
+    _TORCH_NN_UNARY_MODULES.extend([
+        nn.ReflectionPad3d,
+    ])
+
+if version.parse(torch.__version__) >= version.parse("1.12.0"):
+    _TORCH_NN_UNARY_MODULES.extend([
+        nn.Dropout1d,
+    ])
+
+if version.parse(torch.__version__) >= version.parse("2.1.0"):
+    _TORCH_NN_UNARY_MODULES.extend([
+        nn.ZeroPad1d,
+        nn.ZeroPad3d,
+    ])
+
 _TORCH_NN_BINARY_MODULES = [
     nn.BCELoss,
     nn.BCEWithLogitsLoss,
