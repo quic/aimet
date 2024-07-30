@@ -153,12 +153,17 @@ class WeightSvdPruner(Pruner):
         """
 
     @staticmethod
-    def lingalg_weight_svd(weight_tensor: np.ndarray, rank: int):
+    def lingalg_weight_svd(weight_tensor: np.ndarray, rank: int) -> (np.ndarray, np.ndarray):
         """
-         Splits a weight tensor using weight svd
+        Splits a weight tensor using weight svd
 
-        :param weight_tensor:
-        :param rank:
+        NOTE:
+        Different implementations (np.linalg.svd, CV::SVD::Compute and LAPACKE_sgesdd) for SVD produces
+        U and VT matrices with sign flips. But the final resulting matrices are looking correct and final
+        compressed network is performing as expected.
+
+        :param weight_tensor: Weight tensor.
+        :param rank: rank for splitting
         :return:
         """
         # Decompose source matrix

@@ -37,10 +37,10 @@
 
 """ Implementation of layer splitting logic for spatial and weight svd schemes """
 
+import abc
 import math
 import numpy as np
 import torch
-from torch.nn import Conv2d, Linear
 
 from aimet_torch.winnow.winnow_utils import to_numpy
 from aimet_common.utils import AimetLogger
@@ -50,16 +50,17 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Svd)
 
 
 class SpatialSvdModuleSplitter:
-    """ Spatial SVD module splitter"""
-
+    """
+    Spatial SVD module splitter
+    """
     @staticmethod
-    def split_module(module: Conv2d, rank: int):
+    def split_module(module: torch.nn.Module, rank: int):
         """
         :param module: Module to be split
         :param rank: rank for splitting
         :return: Two split modules
         """
-        assert isinstance(module, Conv2d)
+        assert isinstance(module, torch.nn.Conv2d)
         assert module.dilation == (1, 1)
 
         weight_tensor = to_numpy(module.weight)  # n c h w
@@ -85,35 +86,121 @@ class SpatialSvdModuleSplitter:
         return first_module, second_module
 
 
-class WeightSvdModuleSplitter:
-    """ Weight SVD module splitter """
-
+class WeightSvdModuleSplitter(abc.ABC):
+    """
+    Weight SVD module splitter
+    """
     @classmethod
-    def split_module(cls, module, name, rank, svd_lib_ref):
+    def split_module(cls, module: torch.nn.Module, rank: int, **kwargs) -> (torch.nn.Module, torch.nn.Module):
         """
-        Split a given module using weight svd
         :param module: Module to be split
-        :param name: Name of the module
-        :param rank: Rank to use to split with
-        :param svd_lib_ref: Reference to pymo
-        :return: Two split modules
+        :param rank: rank for splitting
+        :param kwargs: Additional keyword arguments
         """
-        if isinstance(module, Conv2d):
-            split_modules = cls.split_conv_module(module, name, rank, svd_lib_ref)
-        elif isinstance(module, Linear):
-            split_modules = cls.split_fc_module(module, name, rank, svd_lib_ref)
+        if isinstance(module, torch.nn.Conv2d):
+            split_modules = cls.split_conv_module(module, rank, **kwargs)
+        elif isinstance(module, torch.nn.Linear):
+            split_modules = cls.split_fc_module(module, rank, **kwargs)
         else:
-            raise AssertionError('Weight SVD only supports Conv2d and FC modules currently')
+            raise AssertionError('Weight SVD only supports Conv2d and FC modules currently.')
 
         return split_modules
 
     @classmethod
-    def split_conv_module(cls, module, name, rank, svd_lib_ref):
+    @abc.abstractmethod
+    def split_conv_module(cls, *args, **kwargs) -> (torch.nn.Module, torch.nn.Module):
+        """
+        :param args:
+        :param kwargs:
+        :return:
+        """
+
+    @classmethod
+    @abc.abstractmethod
+    def split_fc_module(cls, *args, **kwargs) -> (torch.nn.Module, torch.nn.Module):
+        """
+        :param args:
+        :param kwargs:
+        :return:
+        """
+
+    @staticmethod
+    def create_conv_modules(module: torch.nn.Module, rank: int) -> (torch.nn.Module, torch.nn.Module):
+        """
+        Create conv modules.
+
+        :param module: Module to be split
+        :param rank: rank for splitting
+        :return: Two split modules
+        """
+        conv_a = torch.nn.Conv2d(in_channels=module.in_channels,
+                                 out_channels=rank,
+                                 kernel_size=(1, 1),
+                                 stride=(1, 1),
+                                 dilation=module.dilation).to(device=module.weight.device,
+                                                              dtype=module.weight.dtype)
+        conv_b = torch.nn.Conv2d(in_channels=rank,
+                                 out_channels=module.out_channels,
+                                 kernel_size=module.kernel_size,
+                                 stride=module.stride,
+                                 padding=module.padding,
+                                 dilation=module.dilation).to(device=module.weight.device,
+                                                              dtype=module.weight.dtype)
+        return conv_a, conv_b
+
+    @staticmethod
+    def create_fc_modules(module: torch.nn.Module, rank: int) -> (torch.nn.Module, torch.nn.Module):
+        """
+        Create fc modules.
+
+        :param module: Module to be split
+        :param rank: rank for splitting
+        :return: Two split modules
+        """
+        fc_a = torch.nn.Linear(in_features=module.in_features,
+                               out_features=rank).to(device=module.weight.device,
+                                                     dtype=module.weight.dtype)
+        fc_b = torch.nn.Linear(in_features=rank,
+                               out_features=module.out_features).to(device=module.weight.device,
+                                                                    dtype=module.weight.dtype)
+        return fc_a, fc_b
+
+    @staticmethod
+    def _update_weight(module: torch.nn.Module, module_1: torch.nn.Module, module_2: torch.nn.Module,
+                       weight_1: torch.Tensor, weight_2: torch.Tensor):
+        """
+        Update module weight parameters.
+
+        :param module:
+        :param module_1:
+        :param module_2:
+        :param weight_1:
+        :param weight_2:
+        :return:
+        """
+        assert isinstance(module, (torch.nn.Conv2d, torch.nn.Linear))
+
+        with torch.no_grad():
+            module_1.weight.copy_(weight_1).to(device=module.weight.device,
+                                               dtype=module.weight.dtype)
+            module_2.weight.copy_(weight_2).to(device=module.weight.device,
+                                               dtype=module.weight.dtype)
+
+
+class MoWeightSvdModuleSplitter(WeightSvdModuleSplitter):
+    """
+    Weight SVD module splitter using Model Optimizations library. (C++)
+    """
+    # pylint:disable=arguments-differ
+    @classmethod
+    def split_conv_module(cls, module: torch.nn.Module, rank: int, name: str,
+                          svd_lib_ref):
         """
         Split a given Conv2D module using weight svd
+
         :param module: Module to be split
-        :param name: Name of the module
         :param rank: Rank to use to split with
+        :param name: Name of the module
         :param svd_lib_ref: Reference to pymo
         :return: Two split modules
         """
@@ -131,156 +218,113 @@ class WeightSvdModuleSplitter:
         split_weights.append(conv_b_weight.flatten().tolist())
         weight_sizes.append(conv_b_weight.size)
 
-        split_weights = svd_lib_ref.SplitLayerWeights(str(name), split_weights, weight_sizes,
-                                                      [rank])
+        split_weights = svd_lib_ref.SplitLayerWeights(str(name), split_weights, weight_sizes, [rank])
+        weight_1 = torch.from_numpy(np.array(split_weights[0]).reshape(conv_a_weight_shape))
+        weight_2 = torch.from_numpy(np.array(split_weights[1]).reshape(conv_b_weight_shape))
 
         logger.debug("Splitting conv module weight of shape %r into %r and %r",
                      module.weight.shape, conv_a_weight.shape, conv_b_weight.shape)
 
-        # Todo: add sanity check for length of split_weights
-        conv_a = torch.nn.Conv2d(module.in_channels, rank, kernel_size=(1, 1),
-                                 stride=(1, 1), dilation=module.dilation)
-        conv_b = torch.nn.Conv2d(rank, module.out_channels, kernel_size=module.kernel_size,
-                                 stride=module.stride, padding=module.padding, dilation=module.dilation)
+        # Split the Conv into two modules.
+        conv_a, conv_b = cls.create_conv_modules(module, rank)
 
-        conv_a.weight = torch.nn.Parameter(torch.from_numpy(np.array(split_weights[0],
-                                                                     dtype=np.float32).reshape(conv_a_weight_shape)))
-        conv_b.weight = torch.nn.Parameter(torch.from_numpy(np.array(split_weights[1],
-                                                                     dtype=np.float32).reshape(conv_b_weight_shape)))
+        # Update weight parameters.
+        cls._update_weight(module, conv_a, conv_b, weight_1, weight_2)
 
-        if module.weight.is_cuda:
-            conv_a.weight = torch.nn.Parameter(conv_a.weight.cuda())
-            conv_b.weight = torch.nn.Parameter(conv_b.weight.cuda())
-
-        cls._split_conv_bias(conv_a, conv_b, module, name, rank, svd_lib_ref)
+        # Update bias parameters.
+        cls._update_bias(module, conv_a, conv_b, name, rank, svd_lib_ref)
 
         return conv_a, conv_b
 
-    @staticmethod
-    def _split_conv_bias(conv_a, conv_b, module, name, rank, svd_lib_ref):
-        if module.bias is not None:
-            split_biases, bias_sizes = [], []
-
-            conv_a_bias = np.zeros(rank)
-            split_biases.append(conv_a_bias.flatten().tolist())
-            bias_sizes.append(conv_a_bias.size)
-
-            conv_b_bias = np.zeros(module.out_channels)
-            split_biases.append(conv_b_bias.flatten().tolist())
-            bias_sizes.append(conv_b_bias.size)
-
-            split_biases = svd_lib_ref.SplitLayerBiases(str(name), split_biases, bias_sizes,
-                                                        [rank])
-
-            conv_a.bias = torch.nn.Parameter(torch.from_numpy(np.array(split_biases[0], dtype=np.float32)))
-            conv_b.bias = torch.nn.Parameter(torch.from_numpy(np.array(split_biases[1], dtype=np.float32)))
-
-            if module.bias.is_cuda:
-                conv_a.bias = torch.nn.Parameter(conv_a.bias.cuda())
-                conv_b.bias = torch.nn.Parameter(conv_b.bias.cuda())
-
-        else:
-            conv_a.bias = None
-            conv_b.bias = None
-
+    # pylint:disable=arguments-differ
     @classmethod
-    def split_fc_module(cls, module, name, rank, svd_lib_ref):
+    def split_fc_module(cls, module: torch.nn.Module, rank: int, name: str,
+                        svd_lib_ref):
         """
         Split a given Linear module using weight svd
         :param module: Module to be split
-        :param name: Name of the module
         :param rank: Rank to use to split with
+        :param name: Name of the module
         :param svd_lib_ref: Reference to pymo
         :return: Two split modules
         """
-
         split_weights, weight_sizes = [], []
 
         fc_a_weight_shape = (rank, module.in_features)
         fc_a_weight = np.zeros(fc_a_weight_shape)
-
         split_weights.append(fc_a_weight.flatten().tolist())
         weight_sizes.append(fc_a_weight.size)
 
         fc_b_weight_shape = (module.out_features, rank)
         fc_b_weight = np.zeros(fc_b_weight_shape)
-
         split_weights.append(fc_b_weight.flatten().tolist())
         weight_sizes.append(fc_b_weight.size)
 
-        split_weights = svd_lib_ref.SplitLayerWeights(str(name), split_weights, weight_sizes,
-                                                      [rank])
+        split_weights = svd_lib_ref.SplitLayerWeights(str(name), split_weights, weight_sizes, [rank])
+        weight_1 = torch.from_numpy(np.array(split_weights[0]).reshape(fc_a_weight_shape))
+        weight_2 = torch.from_numpy(np.array(split_weights[1]).reshape(fc_b_weight_shape))
 
-        # Todo: add sanity check for length of split_weights
-        fc_a = torch.nn.Linear(module.in_features, rank)
-        fc_b = torch.nn.Linear(rank, module.out_features)
+        # Split FC module into two.
+        fc_a, fc_b = cls.create_fc_modules(module, rank)
 
-        fc_a.weight = torch.nn.Parameter(torch.from_numpy(np.array(split_weights[0],
-                                                                   dtype=np.float32).reshape(fc_a_weight_shape)))
-        fc_b.weight = torch.nn.Parameter(torch.from_numpy(np.array(split_weights[1],
-                                                                   dtype=np.float32).reshape(fc_b_weight_shape)))
+        # Update weight parameters.
+        cls._update_weight(module, fc_a, fc_b, weight_1, weight_2)
 
-        if module.weight.is_cuda:
-            fc_a.weight = torch.nn.Parameter(fc_a.weight.cuda())
-            fc_b.weight = torch.nn.Parameter(fc_b.weight.cuda())
-
-        cls._split_fc_bias(fc_a, fc_b, module, name, rank, svd_lib_ref)
+        # Update bias parameters.
+        cls._update_bias(module, fc_a, fc_b, name, rank, svd_lib_ref)
 
         return fc_a, fc_b
 
     @staticmethod
-    def _split_fc_bias(fc_a, fc_b, module, name, rank, svd_lib_ref):
+    def _update_bias(module: torch.nn.Module, module_1: torch.nn.Module, module_2: torch.nn.Module, name: str,
+                     rank: int, svd_lib_ref):
+        """
+        :param module:
+        :param module_1:
+        :param module_2:
+        :param name:
+        :param rank:
+        :param svd_lib_ref:
+        :return:
+        """
+        assert isinstance(module, (torch.nn.Conv2d, torch.nn.Linear))
+
         if module.bias is not None:
             split_biases, bias_sizes = [], []
 
-            fc_a_bias = np.zeros(rank)
-            split_biases.append(fc_a_bias.flatten().tolist())
-            bias_sizes.append(fc_a_bias.size)
+            module_1_bias = np.zeros(rank)
+            split_biases.append(module_1_bias.flatten().tolist())
+            bias_sizes.append(module_1_bias.size)
 
-            fc_b_bias = np.zeros(module.out_features)
-            split_biases.append(fc_b_bias.flatten().tolist())
-            bias_sizes.append(fc_b_bias.size)
+            module_2_bias = np.zeros(module.out_channels if isinstance(module, torch.nn.Conv2d) else module.out_features)
+            split_biases.append(module_2_bias.flatten().tolist())
+            bias_sizes.append(module_2_bias.size)
 
-            split_biases = svd_lib_ref.SplitLayerBiases(str(name), split_biases, bias_sizes,
-                                                        [rank])
+            split_biases = svd_lib_ref.SplitLayerBiases(str(name), split_biases, bias_sizes, [rank])
+            bias_1 = torch.from_numpy(np.array(split_biases[0]))
+            bias_2 = torch.from_numpy(np.array(split_biases[1]))
 
-            fc_a.bias = torch.nn.Parameter(torch.from_numpy(np.array(split_biases[0], dtype=np.float32)))
-            fc_b.bias = torch.nn.Parameter(torch.from_numpy(np.array(split_biases[1], dtype=np.float32)))
-
-            if module.bias.is_cuda:
-                fc_a.bias = torch.nn.Parameter(fc_a.bias.cuda())
-                fc_b.bias = torch.nn.Parameter(fc_b.bias.cuda())
-
+            with torch.no_grad():
+                module_1.bias.copy_(bias_1).to(device=module.bias.device,
+                                               dtype=module.bias.dtype)
+                module_2.bias.copy_(bias_2).to(device=module.bias.device,
+                                               dtype=module.bias.dtype)
         else:
-            fc_a.bias = None
-            fc_b.bias = None
+            module_1.bias = None
+            module_2.bias = None
 
 
-class PyWeightSvdModuleSplitter:
-    """ Weight SVD module splitter using numpy. """
+class PyWeightSvdModuleSplitter(WeightSvdModuleSplitter):
+    """
+    Weight SVD module splitter using numpy.
+    """
+    # pylint:disable=arguments-differ
     @classmethod
-    def split_module(cls, module: torch.nn.Module, rank: int):
-        """
-        Split a given module using weight svd
-        :param module: Module to be split
-        :param rank: Rank to use to split with
-        :return: Two split modules
-        """
-        if isinstance(module, Conv2d):
-            split_modules = cls.split_conv_module(module, rank)
-        elif isinstance(module, Linear):
-            split_modules = cls.split_fc_module(module, rank)
-        else:
-            raise AssertionError('Weight SVD only supports Conv2d and FC modules currently.')
-
-        return split_modules
-
-    @classmethod
-    def split_conv_module(cls, module: torch.nn.Module, rank: int):
+    def split_conv_module(cls, module: torch.nn.Module, rank: int) -> (torch.nn.Module, torch.nn.Module):
         """
         Split a given module using weight svd.
-        :param module:
-        :param rank:
+        :param module: Module to be split
+        :param rank: rank for splitting
         :return:
         """
         weight = module.weight.detach().cpu()
@@ -299,41 +343,25 @@ class PyWeightSvdModuleSplitter:
         weight_2 = weight_2.reshape(weight_2.shape[0], *nkk_shape)
         weight_2 = weight_2.permute(1, 0, 2, 3)
 
-        conv_a = torch.nn.Conv2d(in_channels=module.in_channels,
-                                 out_channels=rank,
-                                 kernel_size=(1, 1),
-                                 stride=(1, 1),
-                                 dilation=module.dilation).to(device=module.weight.device,
-                                                              dtype=module.weight.dtype)
-        conv_b = torch.nn.Conv2d(in_channels=rank,
-                                 out_channels=module.out_channels,
-                                 kernel_size=module.kernel_size,
-                                 stride=module.stride,
-                                 padding=module.padding,
-                                 dilation=module.dilation).to(device=module.weight.device,
-                                                              dtype=module.weight.dtype)
-        with torch.no_grad():
-            conv_a.weight.copy_(weight_1).to(device=module.weight.device,
-                                             dtype=module.weight.dtype)
-            assert conv_a.weight.device == module.weight.device
-            conv_b.weight.copy_(weight_2).to(device=module.weight.device,
-                                             dtype=module.weight.dtype)
-            bias = torch.zeros(conv_a.out_channels,
-                               device=module.weight.device,
-                               dtype=module.weight.dtype)
-            conv_a.bias = torch.nn.Parameter(bias)
-            if module.bias is not None:
-                conv_b.bias.copy_(module.bias).to(device=module.bias.device,
-                                                  dtype=module.bias.dtype)
+        # Split the Conv into two modules.
+        conv_a, conv_b = cls.create_conv_modules(module, rank)
+
+        # Update weight parameters.
+        cls._update_weight(module, conv_a, conv_b, weight_1, weight_2)
+
+        # Update bias parameters.
+        cls._update_bias(module, conv_a, conv_b)
 
         return conv_a, conv_b
 
+    # pylint:disable=arguments-differ
     @classmethod
-    def split_fc_module(cls, module: torch.nn.Module, rank: int):
+    def split_fc_module(cls, module: torch.nn.Module, rank: int) -> (torch.nn.Module, torch.nn.Module):
         """
         Split a given module using weight svd.
-        :param module:
-        :param rank:
+
+        :param module: Module to be split
+        :param rank: rank for splitting
         :return:
         """
         weight = module.weight.detach().cpu().numpy()
@@ -344,18 +372,39 @@ class PyWeightSvdModuleSplitter:
 
         weight_1 = torch.from_numpy(weight_1).transpose(1, 0)
         weight_2 = torch.from_numpy(weight_2).transpose(1, 0)
-        fc_a = torch.nn.Linear(in_features=module.in_features,
-                               out_features=rank).to(device=module.weight.device,
-                                                     dtype=module.weight.dtype)
-        fc_b = torch.nn.Linear(in_features=rank,
-                               out_features=module.out_features).to(device=module.weight.device,
-                                                                    dtype=module.weight.dtype)
-        with torch.no_grad():
-            fc_a.weight.copy_(weight_1).to(device=module.weight.device, dtype=module.weight.dtype)
-            fc_b.weight.copy_(weight_2).to(device=module.weight.device, dtype=module.weight.dtype)
-            bias = torch.zeros(fc_a.out_features, device=module.weight.device, dtype=module.weight.dtype)
-            fc_a.bias = torch.nn.Parameter(bias)
-            if module.bias is not None:
-                fc_b.bias.copy_(module.bias).to(device=module.bias.device, dtype=module.bias.dtype)
+
+        # Split the FC into two modules.
+        fc_a, fc_b = cls.create_fc_modules(module, rank)
+
+        # Update weight parameters.
+        cls._update_weight(module, fc_a, fc_b, weight_1, weight_2)
+
+        # Update bias parameters.
+        cls._update_bias(module, fc_a, fc_b)
 
         return fc_a, fc_b
+
+    @staticmethod
+    def _update_bias(module: torch.nn.Module, module_1: torch.nn.Module, module_2: torch.nn.Module):
+        """
+        Update the bias parameters.
+
+        :param module: Original module.
+        :param module_1: Split module_1.
+        :param module_2: Split module_2.
+        """
+        assert isinstance(module, (torch.nn.Conv2d, torch.nn.Linear))
+
+        if module.bias is not None:
+            bias = torch.zeros(
+                module_1.out_channels if isinstance(module_1, torch.nn.Conv2d) else module_1.out_features,
+                device=module.weight.device,
+                dtype=module.weight.dtype)
+            module_1.bias = torch.nn.Parameter(bias)
+
+            with torch.no_grad():
+                module_2.bias.copy_(module.bias).to(device=module.bias.device,
+                                                    dtype=module.bias.dtype)
+        else:
+            module_1.bias = None
+            module_2.bias = None

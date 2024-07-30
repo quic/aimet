@@ -45,14 +45,16 @@ import torch.nn.functional as functional
 import numpy as np
 import pytest
 import copy
+from contextlib import contextmanager
 
 import aimet_common.libpymo as pymo
 import aimet_common.defs
 from aimet_common import cost_calculator as cc
 from aimet_common.defs import LayerCompRatioPair
 from aimet_common.utils import AimetLogger
-import aimet_torch.svd.svd_intf_defs_deprecated
 from models import mnist_torch_model as mnist_model
+import aimet_torch.svd.svd_intf_defs_deprecated
+import aimet_torch.compression_factory as cf_svd
 from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 from aimet_torch import pymo_utils
 from aimet_torch.svd import layer_selector_deprecated as ls, svd as svd_intf, svd_impl as s
@@ -60,7 +62,25 @@ from aimet_torch.layer_database import LayerDatabase, Layer
 from aimet_torch.svd import svd_pruner_deprecated
 from aimet_torch.svd import rank_selector as rank_select
 from aimet_torch.svd.svd_pruner import WeightSvdPruner, PyWeightSvdPruner
+
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
+
+@contextmanager
+def _use_python_impl(flag: bool):
+    orig_flag = cf_svd.USE_PYTHON_IMPL
+    try:
+        cf_svd.USE_PYTHON_IMPL = flag
+        yield
+    finally:
+        cf_svd.USE_PYTHON_IMPL = orig_flag
+
+
+@pytest.fixture(params=[True, False])
+def use_python_impl(request):
+    param: bool = request.param
+
+    with _use_python_impl(param):
+        yield
 
 
 class MnistModel(nn.Module):
@@ -667,7 +687,7 @@ class TestTrainingExtensionsSvd:
                                                rank_selection_scheme=aimet_torch.svd.svd_intf_defs_deprecated.RankSelectionScheme.auto,
                                                error_margin=None, num_rank_indices=None)
 
-    def test_compress_model_no_iterations(self):
+    def test_compress_model_no_iterations(self, use_python_impl):
 
         model = MnistModel().to("cpu")
 
@@ -681,7 +701,7 @@ class TestTrainingExtensionsSvd:
                                                layers_to_compress=[model.conv2, model.fc2], num_rank_indices=20,
                                                error_margin=100)
 
-    def test_compress_model(self):
+    def test_compress_model(self, use_python_impl):
 
         AimetLogger.set_level_for_all_areas(logging.DEBUG)
         model = MnistModel().to("cpu")
@@ -706,7 +726,7 @@ class TestTrainingExtensionsSvd:
         assert 'conv2' == stats.per_rank_index[0].per_selected_layer[0].layer_name
         assert 'fc2' == stats.per_rank_index[0].per_selected_layer[1].layer_name
 
-    def test_compress_model_no_bias(self):
+    def test_compress_model_no_bias(self, use_python_impl):
 
         model = MnistModel().to("cpu")
         model.conv2.bias = None
@@ -732,7 +752,7 @@ class TestTrainingExtensionsSvd:
         assert 'conv2' == stats.per_rank_index[0].per_selected_layer[0].layer_name
         assert 'fc2' == stats.per_rank_index[0].per_selected_layer[1].layer_name
 
-    def test_compress_model_with_stride(self):
+    def test_compress_model_with_stride(self, use_python_impl):
         AimetLogger.set_level_for_all_areas(logging.DEBUG)
         model = MnistModel().to("cpu")
 
@@ -820,7 +840,7 @@ class TestTrainingExtensionsSvd:
 
 class TestWeightSvdPruning:
 
-    def test_prune_layer(self):
+    def test_prune_layer(self, use_python_impl):
 
         model = mnist_model.Net()
 
@@ -857,13 +877,15 @@ class TestWeightSvdPruning:
 
     @pytest.mark.cuda
     @pytest.mark.parametrize("device", ['cpu', 'cuda'])
+    @pytest.mark.parametrize("channels", [(16, 32), (32, 16)])
     @pytest.mark.parametrize("comp_ratio", [Decimal(0.25), Decimal(0.5), Decimal(0.75)])
-    def test_prune_model_fc(self, device, comp_ratio):
+    @pytest.mark.parametrize("bias", [True, False])
+    def test_prune_model_fc(self, device, channels, comp_ratio, bias):
         class Model(torch.nn.Module):
             def __init__(self):
                 super(Model, self).__init__()
-                self.fc1 = nn.Linear(5, 9)
-                self.fc2 = nn.Linear(9, 6)
+                self.fc1 = nn.Linear(channels[0], channels[1], bias=bias)
+                self.fc2 = nn.Linear(channels[1], 12, bias=bias)
 
             def forward(self, x):
                 x = self.fc1(x)
@@ -871,7 +893,7 @@ class TestWeightSvdPruning:
                 return x
 
         model = Model().eval().to(device)
-        dummy_input = torch.randn(1, 5).to(device)
+        dummy_input = torch.randn(1, channels[0]).to(device)
         layer_db = LayerDatabase(model, dummy_input)
         fc1 = layer_db.find_layer_by_name('fc1')
         layer_comp_ratio_list = [LayerCompRatioPair(fc1, comp_ratio)]
@@ -879,30 +901,28 @@ class TestWeightSvdPruning:
         pruner = WeightSvdPruner()
         mo_layer_db = pruner.prune_model(layer_db, layer_comp_ratio_list, aimet_common.defs.CostMetric.mac,
                                          trainer=None)
-        # using python implementation
+        # Using python implementation
         pruner = PyWeightSvdPruner()
         py_layer_db = pruner.prune_model(layer_db, layer_comp_ratio_list, aimet_common.defs.CostMetric.mac,
                                          trainer=None)
 
         assert id(mo_layer_db.model) != id(py_layer_db.model)
-        torch.allclose(mo_layer_db.model.fc1[0].weight, py_layer_db.model.fc1[0].weight)
-        torch.allclose(mo_layer_db.model.fc1[0].bias, py_layer_db.model.fc1[0].bias)
-        torch.allclose(mo_layer_db.model.fc1[1].weight, py_layer_db.model.fc1[1].weight)
-        torch.allclose(mo_layer_db.model.fc1[1].bias, py_layer_db.model.fc1[1].bias)
-
         with torch.no_grad():
-            assert torch.allclose(mo_layer_db.model(dummy_input), py_layer_db.model(dummy_input), atol=1e-6)
+            assert torch.allclose(mo_layer_db.model(dummy_input), py_layer_db.model(dummy_input), atol=1e-5)
+
 
     @pytest.mark.cuda
     @pytest.mark.parametrize("device", ['cpu', 'cuda'])
+    @pytest.mark.parametrize("channels", [(16, 32), (32, 16)])
     @pytest.mark.parametrize("comp_ratio", [Decimal(0.25), Decimal(0.5), Decimal(0.75)])
-    def test_prune_model_conv(self, device, comp_ratio):
+    @pytest.mark.parametrize("bias", [True, False])
+    def test_prune_model_conv(self, device, channels, comp_ratio, bias):
         torch.manual_seed(0)
         class Model(torch.nn.Module):
             def __init__(self):
                 super(Model, self).__init__()
-                self.conv1 = nn.Conv2d(5, 9, kernel_size=1)
-                self.conv2 = nn.Conv2d(9, 6, kernel_size=1)
+                self.conv1 = nn.Conv2d(channels[0], channels[1], kernel_size=1, bias=bias)
+                self.conv2 = nn.Conv2d(channels[1], 6, kernel_size=1, bias=bias)
 
             def forward(self, x):
                 x = self.conv1(x)
@@ -910,7 +930,7 @@ class TestWeightSvdPruning:
                 return x
 
         model = Model().eval().to(device)
-        dummy_input = torch.randn(1, 5, 10, 10).to(device)
+        dummy_input = torch.randn(1, channels[0], 10, 10).to(device)
         layer_db = LayerDatabase(model, dummy_input)
         conv1 = layer_db.find_layer_by_name('conv1')
         layer_comp_ratio_list = [LayerCompRatioPair(conv1, comp_ratio)]
@@ -918,16 +938,11 @@ class TestWeightSvdPruning:
         pruner = WeightSvdPruner()
         mo_layer_db = pruner.prune_model(layer_db, layer_comp_ratio_list, aimet_common.defs.CostMetric.mac,
                                          trainer=None)
-        # using python implementation
+        # Using python implementation
         pruner = PyWeightSvdPruner()
         py_layer_db = pruner.prune_model(layer_db, layer_comp_ratio_list, aimet_common.defs.CostMetric.mac,
                                          trainer=None)
 
         assert id(mo_layer_db.model) != id(py_layer_db.model)
-        torch.allclose(mo_layer_db.model.conv1[0].weight, py_layer_db.model.conv1[0].weight)
-        torch.allclose(mo_layer_db.model.conv1[0].bias, py_layer_db.model.conv1[0].bias)
-        torch.allclose(mo_layer_db.model.conv1[1].weight, py_layer_db.model.conv1[1].weight)
-        torch.allclose(mo_layer_db.model.conv1[1].bias, py_layer_db.model.conv1[1].bias)
-
         with torch.no_grad():
-            assert torch.allclose(mo_layer_db.model(dummy_input), py_layer_db.model(dummy_input), atol=1e-6)
+            assert torch.allclose(mo_layer_db.model(dummy_input), py_layer_db.model(dummy_input), atol=1e-5)

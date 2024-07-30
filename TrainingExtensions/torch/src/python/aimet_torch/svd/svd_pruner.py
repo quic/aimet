@@ -46,7 +46,11 @@ from aimet_common import cost_calculator
 import aimet_common.svd_pruner
 
 from aimet_torch import pymo_utils
-from aimet_torch.svd.svd_splitter import SpatialSvdModuleSplitter, WeightSvdModuleSplitter, PyWeightSvdModuleSplitter
+from aimet_torch.svd.svd_splitter import (
+    SpatialSvdModuleSplitter,
+    MoWeightSvdModuleSplitter,
+    PyWeightSvdModuleSplitter
+)
 from aimet_torch.layer_database import LayerDatabase, Layer
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Svd)
@@ -105,8 +109,8 @@ class WeightSvdPruner(aimet_common.svd_pruner.WeightSvdPruner):
 
         # Split module using Weight SVD
         logger.info("Splitting module: %s with rank: %r", layer.name, rank)
-        module_a, module_b = WeightSvdModuleSplitter.split_module(layer.module, layer.name, rank,
-                                                                  svd_lib_ref)
+        module_a, module_b = MoWeightSvdModuleSplitter.split_module(layer.module, rank, name=layer.name,
+                                                                    svd_lib_ref=svd_lib_ref)
 
         layer_a = Layer(module_a, layer.name + '.0', layer.output_shape)
         layer_b = Layer(module_b, layer.name + '.1', layer.output_shape)
