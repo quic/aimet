@@ -177,13 +177,23 @@ if (ENABLE_ONNX)
   )
   file(GLOB_RECURSE ONNXRUNTIME_HEADER_PATH  "/opt/onnxruntime/*onnxruntime_cxx_api.h")
 
-  if (ONNXRUNTIME_NOT_FOUND EQUAL 0 AND NOT ONNXRUNTIME_HEADER_PATH)
-    message(NOTICE "ONNX Runtime: Fetching from external URL")
-    FetchContent_Declare(
-      onnxruntime_headers
-      URL https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}.tgz
-    )
-    FetchContent_MakeAvailable(onnxruntime_headers)
+  if (ONNXRUNTIME_NOT_FOUND EQUAL 0)
+    if (NOT ONNXRUNTIME_HEADER_PATH)
+        message(NOTICE "ONNX Runtime: Fetching from external URL")
+        if (ENABLE_CUDA)
+            set(ONNXRUNTIME_URL https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-x64-gpu-${ONNXRUNTIME_VERSION}.tgz)
+        else (ENABLE_CUDA)
+            set(ONNXRUNTIME_URL https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}.tgz)
+        endif (ENABLE_CUDA)
+        FetchContent_Declare(
+          onnxruntime_headers
+          URL ${ONNXRUNTIME_URL}
+          EXCLUDE_FROM_ALL
+        )
+        FetchContent_MakeAvailable(onnxruntime_headers)
+    else()
+        set(onnxruntime_headers_SOURCE_DIR "/opt/onnxruntime")
+    endif()
     set(CMAKE_INCLUDE_PATH "${CMAKE_INCLUDE_PATH};${onnxruntime_headers_SOURCE_DIR}/include" PARENT_SCOPE)
   endif()
 endif()

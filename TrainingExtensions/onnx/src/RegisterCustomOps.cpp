@@ -38,42 +38,57 @@
 
 #include "RegisterCustomOps.h"
 
+#define ORT_API_MANUAL_INIT
+#include "onnxruntime_cxx_api.h"
+#undef ORT_API_MANUAL_INIT
+
+#include <vector>
+#include <cmath>
+#include <mutex>
+#include <system_error>
+
+#include "QcQuantizeOp.h"
+#include "AimetOpUtils.h"
+#include "onnxruntime_lite_custom_op.h"
+
 static const char* c_OpDomain    = "aimet.customop.cpu";
 static const char* c_OpDomainGPU = "aimet.customop.cuda";
 
+// These definitions are missing from the provided header files in onnxruntime but are used in the provided examples
+#define ORT_TRY if (true)
+#define ORT_CATCH(x) else if (false)
+#define ORT_HANDLE_EXCEPTION(func)
 
 OrtStatus* ORT_API_CALL RegisterCustomOps(OrtSessionOptions* options, const OrtApiBase* api)
 {
-    OrtCustomOpDomain* domain = nullptr;
-    const OrtApi* ortApi      = api->GetApi(ORT_API_VERSION);
 
-    if (auto status = ortApi->CreateCustomOpDomain(c_OpDomain, &domain))
+    Ort::Global<void>::api_ = api->GetApi(ORT_API_VERSION);
+    OrtStatus* result = nullptr;
+    ORT_TRY
     {
-        return status;
-    }
+        Ort::CustomOpDomain domain {c_OpDomain};
+        RegisterOps(domain);
 
-    AddOrtCustomOpDomainToContainer(domain, ortApi);
-    static const QcQuantizeOp c_QcQuantizeOp;
-    if (auto status = ortApi->CustomOpDomain_Add(domain, &c_QcQuantizeOp))
-    {
-        return status;
-    }
+        Ort::UnownedSessionOptions session_options(options);
+        session_options.Add(domain);
+        AddOrtCustomOpDomainToContainer(std::move(domain));
 
 #ifdef ONNX_CUDA
-    OrtCustomOpDomain* cuda_domain = nullptr;
-    if (auto status = ortApi->CreateCustomOpDomain(c_OpDomainGPU, &cuda_domain))
-    {
-        return status;
-    }
-
-    AddOrtCustomOpDomainToContainer(cuda_domain, ortApi);
-    static const QcQuantizeOpGPU c_QcQuantizeOpGPU;
-    if (auto status = ortApi->CustomOpDomain_Add(cuda_domain, &c_QcQuantizeOpGPU))
-    {
-        return status;
-    }
-    ortApi->AddCustomOpDomain(options, cuda_domain);
+        // This is for backward compatibility, in the new custom OP API we do not need separate domains for cpu/gpu
+        Ort::CustomOpDomain cuda_domain {c_OpDomainGPU};
+        RegisterOps(cuda_domain);
+        session_options.Add(cuda_domain);
+        AddOrtCustomOpDomainToContainer(std::move(cuda_domain));
 #endif
+    }
+    ORT_CATCH(const std::exception& e)
+    {
+        ORT_HANDLE_EXCEPTION([&]() {
+            Ort::Status status{e};
+            result = status.release();
+        })
+    }
 
-    return ortApi->AddCustomOpDomain(options, domain);
+    return result;
+
 }

@@ -73,42 +73,14 @@
 // Source:
 // https://github.com/microsoft/onnxruntime/blob/861125ccbc0853b2761bbc268841342550a4ff58/onnxruntime/test/testdata/custom_op_library/custom_op_library.cc#L19-L46
 
-struct OrtTensorDimensions : std::vector<int64_t>
+
+
+static void AddOrtCustomOpDomainToContainer(Ort::CustomOpDomain&& domain)
 {
-    OrtTensorDimensions(Ort::CustomOpApi ort, const OrtValue* value)
-    {
-        OrtTensorTypeAndShapeInfo* info = ort.GetTensorTypeAndShape(value);
-        std::vector<int64_t>::operator=(ort.GetTensorShape(info));
-        ort.ReleaseTensorTypeAndShapeInfo(info);
-    }
-};
-
-
-struct OrtCustomOpDomainDeleter
-{
-    explicit OrtCustomOpDomainDeleter(const OrtApi* ort_api)
-    {
-        ort_api_ = ort_api;
-    }
-    void operator()(OrtCustomOpDomain* domain) const
-    {
-        ort_api_->ReleaseCustomOpDomain(domain);
-    }
-
-    const OrtApi* ort_api_;
-};
-
-
-using OrtCustomOpDomainUniquePtr = std::unique_ptr<OrtCustomOpDomain, OrtCustomOpDomainDeleter>;
-static std::vector<OrtCustomOpDomainUniquePtr> ort_custom_op_domain_container;
-static std::mutex ort_custom_op_domain_mutex;
-
-
-static void AddOrtCustomOpDomainToContainer(OrtCustomOpDomain* domain, const OrtApi* ort_api)
-{
+    static std::vector<Ort::CustomOpDomain> ort_custom_op_domain_container;
+    static std::mutex ort_custom_op_domain_mutex;
     std::lock_guard<std::mutex> lock(ort_custom_op_domain_mutex);
-    auto ptr = std::unique_ptr<OrtCustomOpDomain, OrtCustomOpDomainDeleter>(domain, OrtCustomOpDomainDeleter(ort_api));
-    ort_custom_op_domain_container.push_back(std::move(ptr));
+    ort_custom_op_domain_container.push_back(std::move(domain));
 }
 
 // Code reuse from onnxruntime end

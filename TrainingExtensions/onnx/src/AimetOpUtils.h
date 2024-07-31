@@ -145,7 +145,7 @@ void modeSpecificActionInt(const T* inTensor, size_t count, T* outTensor,
 
 template <typename T>
 void modeSpecificActionPerChannelInt(
-    const T* inTensor, size_t count, T* outTensor, int axis, OrtTensorDimensions& dims,
+    const T* inTensor, size_t count, T* outTensor, int axis, std::vector<long int>& dims,
     std::vector<DlQuantization::TensorQuantizer*>& tensorQuantizers, const DlQuantization::TensorQuantizerOpMode opMode,
     std::vector<DlQuantization::TfEncoding*>& encodings, const bool useSymmetricEncoding,
     DlQuantization::IAllocator* allocator, bool useCuda, void* stream,
