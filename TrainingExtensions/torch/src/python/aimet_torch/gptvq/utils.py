@@ -41,11 +41,10 @@ from typing import Optional, List, Tuple
 
 import torch
 from torch import nn
-from torch.linalg import LinAlgError
 
 import aimet_torch.v2.quantization as Q
 from aimet_torch.gptvq.activation_sampler import ActivationSampler
-from aimet_torch.gptvq.defs import DAMPENING_PERCENTAGE, GPTVQParameters
+from aimet_torch.gptvq.defs import GPTVQParameters
 from aimet_torch.v2.nn import BaseQuantizationMixin
 from aimet_torch.v2.quantsim import QuantizationSimModel
 
@@ -57,8 +56,7 @@ def generate_codebook(weight_block: torch.Tensor,
                       num_of_centroids: int,
                       inverse_hessian_diagonal: Optional[torch.Tensor] = None,
                       assignment_chunk_size: Optional[int] = None,
-                      kmeans_iteration: int = 100,
-                      scale_mahalanobis: bool = True):
+                      kmeans_iteration: int = 100):
     """
     Generate and optimize codebook using K-means and return it
 
@@ -67,10 +65,9 @@ def generate_codebook(weight_block: torch.Tensor,
     :param inverse_hessian_diagonal: Diagonal of inverse Hessian tensor
     :param assignment_chunk_size: Chunk size for better memory management
     :param kmeans_iteration: Number of K-means iterations
-    :param scale_mahalanobis: Flag to apply scaling when computing Mahalanobis distances
     :return: Optimized codebook
     """
-    codebook = hacky_mahalanobis_init(weight_block, num_of_centroids, scale_mahalanobis)
+    codebook = hacky_mahalanobis_init(weight_block, num_of_centroids)
     for _ in range(kmeans_iteration):
         # Expectation step
         assignments = get_assignments(weight_block, codebook, inverse_hessian_diagonal, assignment_chunk_size)
@@ -80,36 +77,19 @@ def generate_codebook(weight_block: torch.Tensor,
     return codebook
 
 
-def hacky_mahalanobis_init(tensor: torch.Tensor, num_of_centroids: int, scale_mahalanobis: bool) -> torch.Tensor:
+def hacky_mahalanobis_init(tensor: torch.Tensor, num_of_centroids: int) -> torch.Tensor:
     """
     Initialize centroids using hacky Mahalanobis
 
     :param tensor: num_blocks_per_column x N x vector_dim weight tensor
     :param num_of_centroids: Number of centroids
-    :param scale_mahalanobis: Flag to apply scaling when computing Mahalanobis distances
     :return: Initialized codebook
     """
     vector_dim = tensor.shape[-1]
     mu = tensor.mean(1).unsqueeze(1)
     x_centered = tensor - mu
 
-    if scale_mahalanobis:
-        sigma = torch.bmm(x_centered.transpose(1, 2), x_centered)  # num_blocks_per_column x vector_dim x vector_dim
-
-        diag = torch.arange(sigma.shape[-1], device=sigma.device)
-        damp = DAMPENING_PERCENTAGE * torch.mean(sigma[:, diag, diag].abs(), dim=-1)
-        sigma[:, diag, diag] += damp[..., None]
-
-        try:
-            lambda_ = torch.linalg.inv(sigma)
-        except LinAlgError:
-            lambda_ = torch.zeros_like(sigma)
-            lambda_[:, diag, diag] = 1.0
-
-        dists = (torch.bmm(x_centered, lambda_) * x_centered).sum(-1)  # num_blocks_per_column x N
-    else:
-        dists = x_centered.pow(2).sum(-1)
-
+    dists = x_centered.pow(2).sum(-1)
     sorted_dists = torch.argsort(dists, dim=1)  # num_blocks_per_column x N
     idx = torch.round(torch.linspace(0, x_centered.shape[1] - 1, num_of_centroids)).long()  # num_of_centroids
 

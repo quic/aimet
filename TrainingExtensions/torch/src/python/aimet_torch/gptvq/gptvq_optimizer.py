@@ -126,8 +126,7 @@ class GPTVQOptimizer:
                     codebook = generate_codebook(weight_block_for_codebook, num_of_centroids,
                                                  inverse_hessian_diagonal=inverse_hessian_diagonal,
                                                  assignment_chunk_size=gptvq_params.assignment_chunk_size,
-                                                 kmeans_iteration=gptvq_params.num_of_kmeans_iterations,
-                                                 scale_mahalanobis=gptvq_params.scale_mahalanobis)
+                                                 kmeans_iteration=gptvq_params.num_of_kmeans_iterations)
 
                     codebook = quantize_dequantize_codebook(
                         codebook,
