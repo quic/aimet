@@ -494,8 +494,8 @@ class FakeQuantizedLSTM(FakeQuantizationMixin, nn.LSTM):
     def __quant_init__(self):
         super().__quant_init__()
         # pylint: disable=attribute-defined-outside-init
-        self.input_quantizers = nn.ModuleList([None, nn.ModuleList([None, None])])
-        self.output_quantizers = nn.ModuleList([None, nn.ModuleList([None, None])])
+        self.input_quantizers = nn.ModuleList([None, None, None])
+        self.output_quantizers = nn.ModuleList([None, None, None])
 
     def forward(self, input, hx: Optional[Tuple[Tensor, Tensor]] = None): # pylint: disable=arguments-differ
         """
@@ -503,14 +503,17 @@ class FakeQuantizedLSTM(FakeQuantizationMixin, nn.LSTM):
         """
         # pylint: disable=redefined-builtin
 
-        if isinstance(input, PackedSequence) and self.input_quantizers[0]:
-            data, *others = input
-            quantized_data = self.input_quantizers[0](data)
-            input = PackedSequence(quantized_data, *others)
+        if self.input_quantizers[0]:
+            if isinstance(input, PackedSequence):
+                data, *others = input
+                quantized_data = self.input_quantizers[0](data)
+                input = PackedSequence(quantized_data, *others)
+            else:
+                input = self.input_quantizers[0](input)
 
         if hx is not None:
             h, c = hx
-            h_quantizer, c_quantizer = self.input_quantizers[1]
+            h_quantizer, c_quantizer = self.input_quantizers[1:]
 
             if h_quantizer:
                 h = h_quantizer(h)
@@ -530,7 +533,7 @@ class FakeQuantizedLSTM(FakeQuantizationMixin, nn.LSTM):
                 output = self.output_quantizers[0](output)
 
         h_n, c_n = hidden
-        h_quantizer, c_quantizer = self.output_quantizers[1]
+        h_quantizer, c_quantizer = self.output_quantizers[1:]
 
         if h_quantizer:
             h_n = h_quantizer(h_n)
@@ -549,8 +552,8 @@ class FakeQuantizedLSTMCell(FakeQuantizationMixin, nn.LSTMCell):
     def __quant_init__(self):
         super().__quant_init__()
         # pylint: disable=attribute-defined-outside-init
-        self.input_quantizers = nn.ModuleList([None, nn.ModuleList([None, None])])
-        self.output_quantizers = nn.ModuleList([None])
+        self.input_quantizers = nn.ModuleList([None, None, None])
+        self.output_quantizers = nn.ModuleList([None, None])
 
     def forward(self, input: Tensor, hx: Optional[Tuple[Tensor, Tensor]] = None): # pylint: disable=arguments-differ
         """
@@ -563,7 +566,7 @@ class FakeQuantizedLSTMCell(FakeQuantizationMixin, nn.LSTMCell):
 
         if hx is not None:
             h, c = hx
-            h_quantizer, c_quantizer = self.input_quantizers[1]
+            h_quantizer, c_quantizer = self.input_quantizers[1:]
             if h_quantizer:
                 h = h_quantizer(h)
             if c_quantizer:
@@ -571,12 +574,15 @@ class FakeQuantizedLSTMCell(FakeQuantizationMixin, nn.LSTMCell):
             hx = (h, c)
 
         with self._patch_quantized_parameters():
-            output = super().forward(input, hx)
+            hx, cx = super().forward(input, hx)
 
         if self.output_quantizers[0]:
-            output = self.output_quantizers[0](output)
+            hx = self.output_quantizers[0](hx)
 
-        return output
+        if self.output_quantizers[1]:
+            cx = self.output_quantizers[1](cx)
+
+        return hx, cx
 
 
 @FakeQuantizationMixin.implements(nn.AdaptiveLogSoftmaxWithLoss)

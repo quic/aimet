@@ -34,7 +34,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-# pylint: disable=too-many-lines, wrong-import-order
+# pylint: disable=too-many-lines, wrong-import-order, redefined-builtin
 """ Quantized modules"""
 
 from packaging import version
@@ -50,6 +50,16 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 from torch.overrides import BaseTorchFunctionMode, get_overridable_functions
+from torch._VF import ( # pylint: disable=no-name-in-module
+    gru as _gru,
+    gru_cell as _gru_cell,
+    lstm as _lstm,
+    lstm_cell as _lstm_cell,
+    rnn_relu as _rnn_relu,
+    rnn_tanh as _rnn_tanh,
+    rnn_relu_cell as _rnn_relu_cell,
+    rnn_tanh_cell as _rnn_tanh_cell,
+)
 
 from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.tensor import QuantizedTensorBase
@@ -379,17 +389,20 @@ class _DispatchMeta(ABCMeta):
         """
         if '_builtin_torch_fn' in namespace:
             torch_fn = namespace['_builtin_torch_fn']
-            if torch_fn not in _dispatch_table:
+            if torch_fn and torch_fn not in _dispatch_table:
                 raise RuntimeError(f"PyTorch doesn't support overriding {torch_fn}")
         return super().__new__(mcs, name, bases, namespace, **kwargs)
 
 
 class _DispatchMixin(metaclass=_DispatchMeta):
-    _builtin_torch_fn: Callable
+    _builtin_torch_fn: Optional[Callable] = None
+
+    def _get_builtin_torch_fn(self):
+        return type(self)._builtin_torch_fn
 
     def forward(self, *args, **kwargs):  # pylint: disable=missing-function-docstring
         kernel = self.get_kernel()
-        builtin_torch_fn = type(self)._builtin_torch_fn
+        builtin_torch_fn = self._get_builtin_torch_fn()
 
         if not kernel or _is_computing_encodings(self):
             kernel = self._builtin_torch_fn_helper(builtin_torch_fn)
@@ -745,16 +758,89 @@ class QuantizedGLU(_DispatchMixin, QuantizationMixin, nn.GLU):
     _builtin_torch_fn = F.glu
 
 
-# @QuantizationMixin.implements(nn.GRU)
-# class QuantizedGRU(_DispatchMixin, QuantizationMixin, nn.GRU):
-#     """ Quantized GRU """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.GRU)
+class QuantizedGRU(_DispatchMixin, QuantizationMixin, nn.GRU):
+    """ Quantized GRU """
+    _builtin_torch_fn = _gru
+
+    def __quant_init__(self):
+        super().__quant_init__()
+        # pylint: disable=attribute-defined-outside-init
+        self.input_quantizers = nn.ModuleList([None, None])
+        self.output_quantizers = nn.ModuleList([None, None])
+
+    def _quantize_inputs(self, args, apply):
+        if args[1].is_floating_point():
+            input, hx, *others = args
+            batch_sizes = None
+        else:
+            input, batch_sizes, hx, *others = args
+
+        input = apply(input, self.input_quantizers[0])
+        hx = apply(hx, self.input_quantizers[1])
+
+        if batch_sizes is None:
+            return input, hx, *others
+        return input, batch_sizes, hx, *others
+
+    def _builtin_torch_fn_helper(self, fn: Callable[..., Tensor]):
+        assert fn == _gru
+        apply = _quantize_dequantize_if_applicable
+
+        def gru(*args):
+            args = self._quantize_inputs(args, apply)
+            output, h_n = fn(*args)
+            return (
+                apply(output, self.output_quantizers[0]),
+                apply(h_n, self.output_quantizers[1]),
+            )
+
+        return gru
+
+    def _custom_kernel_helper(self, fn: Callable[..., QuantizedTensorBase]):
+        apply = _quantize_if_applicable
+
+        def gru(*args):
+            args = self._quantize_inputs(args, apply)
+            output_encodings = tuple(qtzr and qtzr.get_encoding() for qtzr in self.output_quantizers)
+            return fn(*args, output_encodings=output_encodings)
+
+        return gru
 
 
-# @QuantizationMixin.implements(nn.GRUCell)
-# class QuantizedGRUCell(_DispatchMixin, QuantizationMixin, nn.GRUCell):
-#     """ Quantized GRUCell """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.GRUCell)
+class QuantizedGRUCell(_DispatchMixin, QuantizationMixin, nn.GRUCell):
+    """ Quantized GRUCell """
+    _builtin_torch_fn = _gru_cell
+
+    def __quant_init__(self):
+        super().__quant_init__()
+        # pylint: disable=attribute-defined-outside-init
+        self.input_quantizers = nn.ModuleList([None, None])
+        self.output_quantizers = nn.ModuleList([None])
+
+    def _builtin_torch_fn_helper(self, fn: Callable[..., Tensor]):
+        assert fn == _gru_cell
+        apply = _quantize_dequantize_if_applicable
+
+        def gru_cell(input, hx, *args, **kwargs):
+            input = apply(input, self.input_quantizers[0])
+            hx = apply(hx, self.input_quantizers[1])
+            output = fn(input, hx, *args, **kwargs)
+            return apply(output, self.output_quantizers[0])
+
+        return gru_cell
+
+    def _custom_kernel_helper(self, fn: Callable[..., QuantizedTensorBase]):
+        apply = _quantize_if_applicable
+
+        def gru_cell(input, hx, *args, **kwargs):
+            input = apply(input, self.input_quantizers[0])
+            hx = apply(hx, self.input_quantizers[1])
+            output_encodings = self.output_quantizers[0] and self.output_quantizers[0].get_encoding()
+            return fn(input, hx, *args, **kwargs, output_encodings=output_encodings)
+
+        return gru_cell
 
 
 # @QuantizationMixin.implements(nn.GaussianNLLLoss)
@@ -853,16 +939,101 @@ class QuantizedLPPool2d(_DispatchMixin, QuantizationMixin, nn.LPPool2d):
     _builtin_torch_fn = F.lp_pool2d
 
 
-# @QuantizationMixin.implements(nn.LSTM)
-# class QuantizedLSTM(_DispatchMixin, QuantizationMixin, nn.LSTM):
-#     """ Quantized LSTM """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.LSTM)
+class QuantizedLSTM(_DispatchMixin, QuantizationMixin, nn.LSTM):
+    """ Quantized LSTM """
+    _builtin_torch_fn = _lstm
+
+    def __quant_init__(self):
+        super().__quant_init__()
+        # pylint: disable=attribute-defined-outside-init
+        self.input_quantizers = nn.ModuleList([None, None, None])
+        self.output_quantizers = nn.ModuleList([None, None, None])
+
+    def _quantize_inputs(self, args, apply):
+        if isinstance(args[1], Tensor):
+            input, batch_sizes, hx, *others = args
+        else:
+            input, hx, *others = args
+            batch_sizes = None
+
+        input = apply(input, self.input_quantizers[0])
+        h, c = hx
+        h_qtzr, c_qtzr = self.input_quantizers[1:]
+        hx = (apply(h, h_qtzr), apply(c, c_qtzr))
+
+        if batch_sizes is None:
+            return input, hx, *others
+        return input, batch_sizes, hx, *others
+
+    def _builtin_torch_fn_helper(self, fn: Callable[..., Tensor]):
+        assert fn == _lstm
+        apply = _quantize_dequantize_if_applicable
+
+        def lstm(*args):
+            args = self._quantize_inputs(args, apply)
+            output, h_n, c_n = fn(*args)
+            return (
+                apply(output, self.output_quantizers[0]),
+                apply(h_n, self.output_quantizers[1]),
+                apply(c_n, self.output_quantizers[2]),
+            )
+
+        return lstm
+
+    def _custom_kernel_helper(self, fn: Callable[..., QuantizedTensorBase]):
+        apply = _quantize_if_applicable
+
+        def lstm(*args):
+            args = self._quantize_inputs(args, apply)
+            output_encodings = tuple(qtzr and qtzr.get_encoding() for qtzr in self.output_quantizers)
+            return fn(*args, output_encodings=output_encodings)
+
+        return lstm
 
 
-# @QuantizationMixin.implements(nn.LSTMCell)
-# class QuantizedLSTMCell(_DispatchMixin, QuantizationMixin, nn.LSTMCell):
-#     """ Quantized LSTMCell """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.LSTMCell)
+class QuantizedLSTMCell(_DispatchMixin, QuantizationMixin, nn.LSTMCell):
+    """ Quantized LSTMCell """
+    _builtin_torch_fn = _lstm_cell
+
+    def __quant_init__(self):
+        super().__quant_init__()
+        # pylint: disable=attribute-defined-outside-init
+        self.input_quantizers = nn.ModuleList([None, None, None])
+        self.output_quantizers = nn.ModuleList([None, None])
+
+    def _builtin_torch_fn_helper(self, fn: Callable[..., Tensor]):
+        assert fn == _lstm_cell
+        apply = _quantize_dequantize_if_applicable
+
+        def lstm_cell(input, hx, *args, **kwargs):
+            input = apply(input, self.input_quantizers[0])
+            h, c = hx
+            h_qtzr, c_qtzr = self.input_quantizers[1:]
+            hx = (apply(h, h_qtzr), apply(c, c_qtzr))
+
+            hx, cx = fn(input, hx, *args, **kwargs)
+            return (
+                apply(hx, self.output_quantizers[0]),
+                apply(cx, self.output_quantizers[1]),
+            )
+
+        return lstm_cell
+
+    def _custom_kernel_helper(self, fn: Callable[..., QuantizedTensorBase]):
+        apply = _quantize_if_applicable
+
+        def lstm_cell(input, hx, *args, **kwargs):
+            input = apply(input, self.input_quantizers[0])
+            h, c = hx
+            h_qtzr, c_qtzr = self.input_quantizers[1:]
+            hx = (apply(h, h_qtzr), apply(c, c_qtzr))
+
+            output_encodings = tuple(qtzr and qtzr.get_encoding() for qtzr in self.output_quantizers)
+            return fn(input, hx, *args, **kwargs, output_encodings=output_encodings)
+
+        return lstm_cell
 
 
 @QuantizationMixin.implements(nn.LayerNorm)
@@ -1135,10 +1306,58 @@ class QuantizedPixelUnshuffle(_DispatchMixin, QuantizationMixin, nn.PixelUnshuff
 #     _builtin_torch_fn = ...
 
 
-# @QuantizationMixin.implements(nn.RNN)
-# class QuantizedRNN(_DispatchMixin, QuantizationMixin, nn.RNN):
-#     """ Quantized RNN """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.RNN)
+class QuantizedRNN(_DispatchMixin, QuantizationMixin, nn.RNN):
+    """ Quantized RNN """
+    def _get_builtin_torch_fn(self):
+        assert self.mode in ('RNN_TANH', 'RNN_RELU')
+        if self.mode == 'RNN_TANH':
+            return _rnn_tanh
+        return _rnn_relu
+
+    def __quant_init__(self):
+        super().__quant_init__()
+        # pylint: disable=attribute-defined-outside-init
+        self.input_quantizers = nn.ModuleList([None, None])
+        self.output_quantizers = nn.ModuleList([None, None])
+
+    def _quantize_inputs(self, args, apply):
+        if args[1].is_floating_point():
+            input, hx, *others = args
+            batch_sizes = None
+        else:
+            input, batch_sizes, hx, *others = args
+
+        input = apply(input, self.input_quantizers[0])
+        hx = apply(hx, self.input_quantizers[1])
+
+        if batch_sizes is None:
+            return input, hx, *others
+        return input, batch_sizes, hx, *others
+
+    def _builtin_torch_fn_helper(self, fn: Callable[..., Tensor]):
+        assert fn in (_rnn_tanh, _rnn_relu)
+        apply = _quantize_dequantize_if_applicable
+
+        def rnn(*args):
+            args = self._quantize_inputs(args, apply)
+            output, h_n = fn(*args)
+            return (
+                apply(output, self.output_quantizers[0]),
+                apply(h_n, self.output_quantizers[1]),
+            )
+
+        return rnn
+
+    def _custom_kernel_helper(self, fn: Callable[..., QuantizedTensorBase]):
+        apply = _quantize_if_applicable
+
+        def rnn(*args):
+            args = self._quantize_inputs(args, apply)
+            output_encodings = tuple(qtzr and qtzr.get_encoding() for qtzr in self.output_quantizers)
+            return fn(*args, output_encodings=output_encodings)
+
+        return rnn
 
 
 # @QuantizationMixin.implements(nn.RNNBase)
@@ -1147,10 +1366,44 @@ class QuantizedPixelUnshuffle(_DispatchMixin, QuantizationMixin, nn.PixelUnshuff
 #     _builtin_torch_fn = ...
 
 
-# @QuantizationMixin.implements(nn.RNNCell)
-# class QuantizedRNNCell(_DispatchMixin, QuantizationMixin, nn.RNNCell):
-#     """ Quantized RNNCell """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.RNNCell)
+class QuantizedRNNCell(_DispatchMixin, QuantizationMixin, nn.RNNCell):
+    """ Quantized RNNCell """
+    def _get_builtin_torch_fn(self):
+        assert self.nonlinearity in ("tanh", "relu")
+
+        if self.nonlinearity == "tanh":
+            return _rnn_tanh_cell
+        return _rnn_relu_cell
+
+    def __quant_init__(self):
+        super().__quant_init__()
+        # pylint: disable=attribute-defined-outside-init
+        self.input_quantizers = nn.ModuleList([None, None])
+        self.output_quantizers = nn.ModuleList([None])
+
+    def _builtin_torch_fn_helper(self, fn: Callable[..., Tensor]):
+        assert fn in (_rnn_tanh_cell, _rnn_relu_cell)
+        apply = _quantize_dequantize_if_applicable
+
+        def rnn_cell(input, hx, *args, **kwargs):
+            input = apply(input, self.input_quantizers[0])
+            hx = apply(hx, self.input_quantizers[1])
+            output = fn(input, hx, *args, **kwargs)
+            return apply(output, self.output_quantizers[0])
+
+        return rnn_cell
+
+    def _custom_kernel_helper(self, fn: Callable[..., QuantizedTensorBase]):
+        apply = _quantize_if_applicable
+
+        def rnn_cell(input, hx, *args, **kwargs):
+            input = apply(input, self.input_quantizers[0])
+            hx = apply(hx, self.input_quantizers[1])
+            output_encodings = self.output_quantizers[0] and self.output_quantizers[0].get_encoding()
+            return fn(input, hx, *args, **kwargs, output_encodings=output_encodings)
+
+        return rnn_cell
 
 
 # @QuantizationMixin.implements(nn.RNNCellBase)

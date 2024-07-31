@@ -1658,7 +1658,7 @@ class TestQuantizationSimStaticGrad:
 
         sim = QuantizationSimModel(model, dummy_input,
                                    quant_scheme=QuantScheme.post_training_tf)
-        assert isinstance(sim.model.rnn, aimet_nn.FakeQuantizedRNN)
+        assert isinstance(sim.model.rnn, aimet_nn.QuantizedRNN)
 
         sim.compute_encodings(lambda model, _: model(dummy_input), None) # Should not throw error
 
@@ -1669,7 +1669,7 @@ class TestQuantizationSimStaticGrad:
 
         sim = QuantizationSimModel(model, dummy_input,
                                    quant_scheme=QuantScheme.post_training_tf)
-        assert isinstance(sim.model.recurrent, aimet_nn.FakeQuantizedLSTM)
+        assert isinstance(sim.model.recurrent, aimet_nn.QuantizedLSTM)
 
         sim.compute_encodings(lambda model, _: model(dummy_input), None) # Should not throw error
 
