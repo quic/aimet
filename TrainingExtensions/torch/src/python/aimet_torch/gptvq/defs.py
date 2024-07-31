@@ -65,3 +65,4 @@ class GPTVQParameters:
     index_bw: int = 6
     num_of_kmeans_iterations: int = 100
     assignment_chunk_size: Optional[int] = None
+    scale_mahalanobis: bool = True
