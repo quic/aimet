@@ -53,7 +53,6 @@ from aimet_torch.layer_selector import ConvFcLayerSelector, ConvNoDepthwiseLayer
 from aimet_torch.layer_database import LayerDatabase
 from aimet_torch.svd.svd_pruner import SpatialSvdPruner, WeightSvdPruner, PyWeightSvdPruner
 from aimet_torch.channel_pruning.channel_pruner import InputChannelPruner, ChannelPruningCostCalculator
-from aimet_torch import pymo_utils
 
 # Temporary flag to flip underlying implementation. This flag will be removed in the future releases.
 USE_PYTHON_IMPL = True
