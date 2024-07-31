@@ -293,7 +293,7 @@ class AdaroundOptimizer:
                 bias = torch.from_numpy(numpy_helper.to_array(quant_module.params['bias'].tensor)).to(device)
             out_data = functional.conv_transpose2d(inp_data, adarounded_weights, bias=bias, stride=attributes['strides'],
                                                    dilation=attributes['dilations'], groups=attributes['group'])
-        elif quant_module.type in ['Gemm', 'MatMul']:
+        elif quant_module.type in ['Gemm']:
             if not quant_module.transposed_params:
                 # Pytorch requires tranposed weights in functional.linear
                 adarounded_weights = adarounded_weights.t()
@@ -301,6 +301,8 @@ class AdaroundOptimizer:
             if 'bias' in quant_module.params:
                 bias = torch.from_numpy(numpy_helper.to_array(quant_module.params['bias'].tensor)).to(device)
             out_data = functional.linear(inp_data, adarounded_weights, bias=bias)
+        elif quant_module.type in ['MatMul']:
+            out_data = torch.matmul(inp_data, adarounded_weights)
 
         else:
             raise ValueError('AdaRound is not supported for the module type: ', quant_module.type)
