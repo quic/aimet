@@ -35,6 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Unit tests for Auto Quant Keras """
+
 import contextlib
 from dataclasses import dataclass
 import os
@@ -50,7 +51,7 @@ from aimet_tensorflow.keras.auto_quant_v2 import AutoQuant
 from aimet_tensorflow.keras.auto_quant_v2 import PtqResult
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
-from aimet_tensorflow.adaround.adaround_weight import AdaroundParameters
+from aimet_tensorflow.keras.adaround_weight import AdaroundParameters
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper
 from aimet_common.utils import AimetLogger
 import logging

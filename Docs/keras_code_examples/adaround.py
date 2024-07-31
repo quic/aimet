@@ -49,7 +49,7 @@ from aimet_common.defs import QuantScheme
 from aimet_tensorflow.examples.test_models import keras_model
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 from aimet_tensorflow.keras.adaround_weight import Adaround
-from aimet_tensorflow.adaround.adaround_weight import AdaroundParameters
+from aimet_tensorflow.keras.adaround_weight import AdaroundParameters
 
 # End of import statements
 

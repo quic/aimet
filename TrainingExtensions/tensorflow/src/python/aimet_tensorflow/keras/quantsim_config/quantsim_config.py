@@ -63,7 +63,7 @@ from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QuantizerSettings
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQuantizer, ParamPerTensorQuantizer, \
     ParamPerChannelQuantizer
-from aimet_tensorflow.utils.constants import QUANT_ALLOWED_DTYPES
+from aimet_tensorflow.keras.utils.constants import QUANT_ALLOWED_DTYPES
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -75,6 +75,11 @@ AFFECTED_QUANTIZERS = "affected_quantizers"
 INPUT_QUANTIZERS = "input_quantizers"
 OUTPUT_QUANTIZERS = "output_quantizers"
 PARAM_QUANTIZERS = "param_quantizers"
+
+MAP_TF_PARAM_NAME_TO_QUANTSIM_NAME = {
+    "bias": "bias",
+    "weight": "weight"
+}
 
 
 class TreeLikeDictionary(dict):

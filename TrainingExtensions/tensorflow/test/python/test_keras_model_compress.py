@@ -36,14 +36,12 @@
 # =============================================================================
 
 import os
-
 from aimet_tensorflow.keras.compress import ModelCompressor
-
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 from unittest.mock import MagicMock
 import tensorflow as tf
 import aimet_common.defs as aimet_common_defs
-from aimet_tensorflow.defs import SpatialSvdParameters, GreedySelectionParameters
+from aimet_tensorflow.keras.defs import SpatialSvdParameters, GreedySelectionParameters
 
 
 def get_model():

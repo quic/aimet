@@ -46,7 +46,7 @@ import tensorflow as tf
 
 from aimet_common.utils import start_bokeh_server_session
 from aimet_common.defs import CostMetric
-from aimet_tensorflow.defs import SpatialSvdParameters, GreedySelectionParameters
+from aimet_tensorflow.keras.defs import SpatialSvdParameters, GreedySelectionParameters
 from aimet_tensorflow.keras.compression_factory import CompressionFactory
 
 

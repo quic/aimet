@@ -44,7 +44,7 @@ import tensorflow as tf
 import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.examples.test_models import keras_model
-from aimet_tensorflow.adaround.adaround_loss import AdaroundHyperParameters
+from aimet_tensorflow.keras.adaround.adaround_loss import AdaroundHyperParameters
 from aimet_tensorflow.keras.adaround.adaround_wrapper import AdaroundWrapper
 from aimet_tensorflow.keras.adaround.adaround_optimizer import AdaroundOptimizer
 from aimet_tensorflow.keras.adaround_weight import Adaround, AdaroundParameters
@@ -286,7 +286,7 @@ def test_calculate_alpha():
     encoding.offset = -127.0
     encoding.delta = 0.001551126479
 
-    alpha = AdaroundWrapper._calculate_alpha(weight, encoding, per_channel_enabled=False, ch_axis=None)
+    alpha = AdaroundWrapper._calculate_alpha(weight, encoding, enable_per_channel=False, ch_axis=None)
     assert np.isclose(alpha[0, 0, :1, :1], 1.1715, atol=1e-4)
 
 
