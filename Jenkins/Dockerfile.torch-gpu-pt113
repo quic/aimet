@@ -212,7 +212,7 @@ RUN python3 -m pip --no-cache-dir install \
 # Onnxruntime C/C++ package needed to create custom C++ onnx ops for quantsim
 RUN mkdir /opt/onnxruntime && \
     export ONNXRUNTIME_VER=$(python3 -c 'import onnxruntime; print(onnxruntime.__version__)') && \
-    wget -qO- "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VER}/onnxruntime-linux-x64-${ONNXRUNTIME_VER}.tgz" | tar xvz --strip-components 1 -C /opt/onnxruntime && \
+    wget -qO- "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VER}/onnxruntime-linux-x64-gpu-${ONNXRUNTIME_VER}.tgz" | tar xvz --strip-components 1 -C /opt/onnxruntime && \
     ln -s /opt/onnxruntime /usr/local/bin/onnxruntime_headers
 
 ENV PATH=/usr/local/bin:$PATH

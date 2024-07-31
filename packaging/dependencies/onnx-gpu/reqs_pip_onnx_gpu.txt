@@ -1,5 +1,4 @@
 cumm-cu111==0.2.8
-onnxruntime-gpu==1.18.1
 spconv-cu111==2.1.20
 torch==1.13.1+cu117 -f https://download.pytorch.org/whl/torch_stable.html
 torchvision==0.14.1+cu117 -f https://download.pytorch.org/whl/torch_stable.html
