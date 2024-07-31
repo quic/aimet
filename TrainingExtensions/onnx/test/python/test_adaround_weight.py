@@ -55,9 +55,10 @@ class TestAdaround:
     AdaRound Weights Unit Test Cases
     """
 
-    @pytest.mark.skipif(not torch.cuda.is_available(), reason="This unit-test is meant to be run on GPU")
     @pytest.mark.parametrize("use_cuda", (True, False))
     def test_apply_adaround(self, use_cuda):
+        if use_cuda and not torch.cuda.is_available():
+            pytest.skip("Cuda not available")
         np.random.seed(0)
         torch.manual_seed(0)
         model = test_models.single_residual_model()
@@ -83,7 +84,6 @@ class TestAdaround:
         if version.parse(torch.__version__) >= version.parse("1.13"):
             assert 'onnx::Conv_43' in param_keys
 
-    @pytest.mark.skipif(not torch.cuda.is_available(), reason="This unit-test is meant to be run on GPU")
     def test_apply_adaround_for_custom_op(self):
         custom_ops_path = os.path.dirname(libquant_info.__file__)
         custom_ops_path = os.path.join(custom_ops_path, "customops")
@@ -102,7 +102,8 @@ class TestAdaround:
 
         params = AdaroundParameters(data_loader=data_loader, num_batches=1, default_num_iterations=5, forward_fn=callback,
                                     forward_pass_callback_args=None)
-        ada_rounded_model = Adaround.apply_adaround(model, params, './', 'dummy', user_onnx_libs=[onnx_library])
+        ada_rounded_model = Adaround.apply_adaround(model, params, './', 'dummy', user_onnx_libs=[onnx_library],
+                                                    use_cuda=torch.cuda.is_available())
         sess = build_session(ada_rounded_model, [onnx_library])
         out_after_ada = sess.run(None, dummy_input)
         assert not np.array_equal(out_before_ada[0], out_after_ada[0])
