@@ -446,7 +446,8 @@ class OnnxSaver:
             onnx_model = cls.load_simply_onnx_model(onnx_model_path)
 
             cls._fix_initializer_names_for_export_to_onnx_direct(onnx_model, pytorch_model)
-            onnx.save(onnx_model, onnx_model_path)
+            save_as_external_data = onnx_model.ByteSize() >= onnx.checker.MAXIMUM_PROTOBUF
+            onnx.save(onnx_model, onnx_model_path, save_as_external_data=save_as_external_data)
         else:
             # Obtaining equivalent onnx model
             cls.set_node_names(onnx_model_path, pytorch_model, dummy_input, is_conditional, module_marker_map,
