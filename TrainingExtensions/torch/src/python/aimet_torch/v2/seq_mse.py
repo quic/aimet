@@ -38,7 +38,7 @@
 
 """ Sequential MSE implementation """
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import contextlib
 import torch
 from torch import nn
@@ -48,12 +48,24 @@ from aimet_torch.seq_mse import SeqMseParams as V1SeqMseParams
 from aimet_torch.seq_mse import SUPPORTED_MODULES
 from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.affine import AffineQuantizerBase
+from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 from aimet_torch.v2.nn.base import BaseQuantizationMixin
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.utils import reduce, _is_reducible
 
 
 SeqMseParams = V1SeqMseParams
+
+
+def _observe(x_min: torch.Tensor,
+             x_max: torch.Tensor,
+             num_steps: int,
+             symmetric: bool) -> Tuple[torch.Tensor, torch.Tensor]:
+    encoding_analyzer = MinMaxEncodingAnalyzer(x_min.shape)
+    min, max = encoding_analyzer.compute_dynamic_encodings(torch.stack([x_min, x_max]),
+                                                           num_steps=num_steps,
+                                                           is_symmetric=symmetric)
+    return min, max
 
 
 class SequentialMse(V1SequentialMse):
@@ -139,13 +151,19 @@ class SequentialMse(V1SequentialMse):
         assert _is_reducible(x_min.shape, quantizer.min.shape)
         assert _is_reducible(x_max.shape, quantizer.max.shape)
 
-        inp = torch.stack([
-            reduce(x_min, quantizer.shape, torch.min).values,
-            reduce(x_max, quantizer.shape, torch.max).values,
-        ])
+        x_min = reduce(x_min, quantizer.shape, torch.min).values
+        x_max = reduce(x_max, quantizer.shape, torch.max).values
 
-        with quantizer.compute_encodings():
-            _ = quantizer(inp)
+        num_steps = 2 ** quantizer.bitwidth - 1
+        symmetric = quantizer.symmetric
+
+        # The values of x_min and x_max don't necessarily satisfy the symmetry constraints.
+        # Therefore, we need to adjust their values to ensure min and max are in symmetric grids.
+        min, max = _observe(x_min, x_max, num_steps=num_steps, symmetric=symmetric)
+
+        with torch.no_grad():
+            quantizer.min.copy_(min)
+            quantizer.max.copy_(max)
 
     @staticmethod
     def _is_symmetric_quantizer(quantizer: AffineQuantizerBase):
