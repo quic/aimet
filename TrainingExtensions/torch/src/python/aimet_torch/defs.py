@@ -42,7 +42,7 @@ from typing import List, Optional, Union
 
 import torch.utils.data
 
-from aimet_common.defs import GreedySelectionParameters, TarRankSelectionParameters, RankSelectScheme
+from aimet_common.defs import GreedySelectionParameters, RankSelectScheme
 
 
 class ModuleCompRatioPair:
@@ -190,8 +190,7 @@ class WeightSvdParameters:
 
         def __init__(self,
                      rank_select_scheme: RankSelectScheme,
-                     select_params: Union[GreedySelectionParameters,
-                                          TarRankSelectionParameters],
+                     select_params: Union[GreedySelectionParameters, ],
                      modules_to_ignore: Optional[List[torch.nn.Module]] = None):
             """
             :param rank_select_scheme: supports two options greedy and tar
