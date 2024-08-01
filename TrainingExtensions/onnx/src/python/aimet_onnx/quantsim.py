@@ -56,7 +56,7 @@ from packaging import version
 from aimet_common import libpymo
 from aimet_common import libquant_info
 from aimet_common.defs import QuantScheme, QuantizationDataType
-from aimet_common.quantsim import encoding_version, extract_global_quantizer_args, exception_for_groupnorm, exception_for_matmul
+from aimet_common.quantsim import encoding_version, extract_global_quantizer_args
 from aimet_common.utils import save_json_yaml, AimetLogger
 from aimet_onnx import utils
 from aimet_onnx.meta.operations import Op
@@ -68,7 +68,7 @@ from aimet_onnx.utils import make_dummy_input, add_hook_to_get_activation, remov
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
-# pylint: disable=no-name-in-module, ungrouped-imports
+# pylint: disable=no-name-in-module, ungrouped-imports, too-many-lines
 if version.parse(onnx.__version__) >= version.parse("1.14.0"):
     from onnx import ModelProto
 else:
@@ -549,16 +549,17 @@ class QuantizationSimModel:
         """
         Apply exception rules to specific op. For example, a rule can override high bitwidth to GroupNorm op.
         """
-        if self._hw_version not in {'V66', 'V68', 'V69', 'V73', 'V75', 'V79'}:
-            return
-
         for op in self.connected_graph.ordered_ops:
-            if op.type not in ['GroupNormalization', 'MatMul']:
-                continue
             input_quantizers, output_quantizers, param_quantizers = self.get_op_quantizers(op)
 
             if op.type == 'GroupNormalization':
-                exception_for_groupnorm(self._hw_version, param_quantizers, output_quantizers)
+                if self._hw_version not in {'V73', 'V75', 'V79'}:
+                    return
+                if 'weight' in param_quantizers:
+                    output_quantizer = output_quantizers[0]
+                    for _, param_quantizer in param_quantizers.items():
+                        param_quantizer.bitwidth = output_quantizer.bitwidth
+                        param_quantizer.use_symmetric_encodings = output_quantizer.use_symmetric_encodings
             elif op.type == 'MatMul':
                 first_input_quantizer = input_quantizers[0] if input_quantizers else None
                 second_input_quantizer = list(param_quantizers.values())[0]
@@ -569,13 +570,27 @@ class QuantizationSimModel:
                 target_quantizer_for_first_input = self._get_target_quantizer(first_input_quantizer, first_input_op)
                 target_quantizer_for_second_input = self._get_target_quantizer(second_input_quantizer, second_input_op)
 
-                if target_quantizer_for_second_input is None:
-                    logger.warning("The target quantizers could not be found. MatMul exception rule does not apply for op: %s.", op.name)
-                    continue
+                # According to opdef for Matmul in HTP:
+                # 16bit Weight(second input for dynamic MatMul) must have 16bit Activation(first input for dynamic MatMul).
+                # 16bit Activation and 16bit Weight require minimum arch V73.
+                # 16bit Weight must be symmetric quantized.
 
-                exception_for_matmul(self._hw_version, target_quantizer_for_first_input, target_quantizer_for_second_input)
-            else:
-                raise ValueError(f'An op not expected to apply exception rules: {op.name}')
+                # Below are the possible combinations for MatMul with 8/16 bitwidth:
+                # If version is V73/V75: {input0->8, input1->8 symm/asymm} {input0->16 , input1->8 symm/asymm} {input0->16, input1->16 symmetric}
+                # If version is lesser than V73: {input0->8, input1->8 symmetric} {input0->16, input1->8 symmetric}
+
+                if self._hw_version in {'V66', 'V68', 'V69'}:
+                    if target_quantizer_for_second_input is None:
+                        logger.warning("The target quantizer for second input could not be found. MatMul exception rule does not apply for op: %s.", op.name)
+                    else:
+                        target_quantizer_for_second_input.use_symmetric_encodings = True
+                        target_quantizer_for_second_input.bitwidth = 8
+                elif self._hw_version in {'V73', 'V75', 'V79'}:
+                    if target_quantizer_for_first_input is None or target_quantizer_for_second_input is None:
+                        logger.warning("The target quantizers could not be found. MatMul exception rule does not apply for op: %s.", op.name)
+                    elif target_quantizer_for_second_input.bitwidth == 16:
+                        target_quantizer_for_second_input.use_symmetric_encodings = True
+                        target_quantizer_for_first_input.bitwidth = 16
 
     def _get_target_quantizer(self, input_quantizer: QcQuantizeOp, input_op: Op) -> QcQuantizeOp:
         """
