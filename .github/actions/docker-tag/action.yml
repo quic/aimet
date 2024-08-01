@@ -1,0 +1,54 @@
+name: "Docker image tag"
+
+description: "Get a docker image tag based on changes in a docker build context"
+
+inputs:
+  dockercontext:
+    description: "Docker build context"
+    required: false
+    default: "."
+  dockerfile:
+    description: "Dockerfile"
+    required: false
+    default: "Dockerfile"
+  dockerignore:
+    description: "Dockerignore file"
+    required: false
+    default: ".dockerignore"
+  defaulttag:
+    description: "A default docker image tag"
+    required: false
+    default: "latest"
+
+outputs:
+  tag:
+    description: "Docker image tag"
+    value: ${{ steps.tag.outputs.value }}
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/checkout@v4
+
+    - name: "Download '.dockerignore' file parser"
+      shell: bash
+      run: |
+        curl -L "https://github.com/johnstairs/dockerignore-filter/releases/download/v0.1.6/dockerignore-filter_Linux_x86_64" -o dockerignore-filter
+        chmod +x dockerignore-filter
+
+    - name: "Get list of files from the docker build context (including Dockerfile and .dockerignore)"
+      shell: bash
+      run: echo "DOCKER_BUILD_CONTEXT_FILES=$(find ${{ inputs.dockercontext }} -type f | ./dockerignore-filter ${{ inputs.dockercontext }}/${{ inputs.dockerignore }} | tr '\n' ' ') ${{ inputs.dockercontext }}/${{ inputs.dockerfile }} ${{ inputs.dockercontext }}/${{ inputs.dockerignore }}" >> $GITHUB_ENV
+
+    - name: "Get list of changes files in the docker build context"
+      shell: bash
+      run: |
+        git branch --delete --force ${{ github.event.repository.default_branch }} || true
+        git fetch --no-tags --force --prune --no-recurse-submodules --depth=1 origin ${{ github.event.repository.default_branch }}:refs/remotes/origin/${{ github.event.repository.default_branch }}
+        echo "DOCKER_BUILD_CONTEXT_FILES=$(git diff --name-only origin/${{ github.event.repository.default_branch }} -- $DOCKER_BUILD_CONTEXT_FILES | tr '\n' ' ')" >> $GITHUB_ENV
+
+    - name: "Set a docker image tag"
+      id: tag
+      shell: bash
+      run: echo "value=$([[ ! -z \"$DOCKER_BUILD_CONTEXT_FILES\" ]] && echo $(git rev-parse --short HEAD) || echo ${{ inputs.defaulttag }})" >> $GITHUB_OUTPUT
+
