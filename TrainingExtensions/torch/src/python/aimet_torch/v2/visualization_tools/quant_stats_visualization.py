@@ -52,7 +52,7 @@ from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.encoding_analyzer import _MinMaxObserver
 
 
-def visualize_stats(sim: QuantizationSimModel, dummy_input, save_dir: str, save_name: str = None) -> None:
+def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = None) -> None:
     """
     Interactive visualization of min and max activations/weights of all quantized modules in the input QuantSim object.
     The QuantSim object is expected to have been calibrated before using this function.
@@ -60,14 +60,12 @@ def visualize_stats(sim: QuantizationSimModel, dummy_input, save_dir: str, save_
 
     :param sim: QuantSim Object.
     :param dummy_input: Dummy Input.
-    :param save_dir: Directory for saving the visualization.
-    :param save_name: Desired name for the .html file.
+    :param save_path: Path for saving the visualization. Format is 'path_to_dir/file_name.html'
     """
     if not isinstance(sim, QuantizationSimModel):
         raise TypeError(f"Expected type 'aimet_torch.quantization.QuantizationSimModel', got '{type(sim)}'.")
 
-    if not os.path.isdir(save_dir):
-        raise NotADirectoryError(f"{save_dir} is not a directory.")
+    check_path(save_path)
 
     # Flatten the quantized modules into an ordered list for easier indexing in the plots
     ordered_list = (get_ordered_list_of_modules(sim.model, dummy_input))
@@ -77,8 +75,6 @@ def visualize_stats(sim: QuantizationSimModel, dummy_input, save_dir: str, save_
 
     for module in ordered_list:
         if isinstance(module[1], QuantizerBase):
-            if not module[1].is_initialized():
-                raise RuntimeError("Model calibration not performed. Please initialize the quantization parameters using `compute_encodings()`.")
             if isinstance(module[1].encoding_analyzer.observer, _MinMaxObserver):
                 rng = module[1].encoding_analyzer.observer.get_stats()
                 if (rng.min is not None) and (rng.max is not None):
@@ -93,11 +89,20 @@ def visualize_stats(sim: QuantizationSimModel, dummy_input, save_dir: str, save_
     idx = list(range(len(namelist)))
 
     # Save an interactive bokeh plot as a standalone html in the specified directory with the specified name if provided
-    if not save_name:
-        save_name = "quant_stats_visualization.html"
+    if not save_path:
+        save_path = "quant_stats_visualization.html"
+    check_path(save_path)
 
     visualizer = QuantStatsVisualizer(idx, namelist, minlist, maxlist)
-    visualizer.export_plot_as_html(save_dir, save_name)
+    visualizer.export_plot_as_html(save_path)
+
+def check_path(path: str):
+    """ Function for sanity check on the given path """
+    path_to_directory = os.path.dirname(path)
+    if path_to_directory != '' and not os.path.exists(path_to_directory):
+        raise NotADirectoryError(f"'{path_to_directory}' is not a directory.")
+    if not path.endswith('.html'):
+        raise ValueError("'save_path' must end with '.html'.")
 
 
 class DataSources:
@@ -147,7 +152,6 @@ class TableObjects:
 
         min_columns = [
             TableColumn(field="names", title="Layer Name",
-                        # editor=CheckboxEditor,
                         formatter=StringFormatter(font_style="bold"), width=400),
             TableColumn(field="fmt_min_activations", title="Min Activation", width=100),
             TableColumn(field="fmt_max_activations", title="Max Activation", width=100),
@@ -161,7 +165,6 @@ class TableObjects:
 
         max_columns = [
             TableColumn(field="names", title="Layer Name",
-                        # editor=CheckboxEditor,
                         formatter=StringFormatter(font_style="bold"), width=400),
             TableColumn(field="fmt_min_activations", title="Min Activation", width=100),
             TableColumn(field="fmt_max_activations", title="Max Activation", width=100),
@@ -287,6 +290,8 @@ class QuantStatsVisualizer:
                                                    min_name_filter=tableobjects.min_name_filter,
                                                    max_name_filter=tableobjects.max_name_filter,
                                                    ), code="""
+                // Function to adaptively format numerical values in scientific notation
+                // if they are large in magnitude
                 function formatValue(value) {
                     if (Math.abs(value) < 1e-3 || Math.abs(value) > 1e3) {
                         return value.toExponential(2);
@@ -294,6 +299,8 @@ class QuantStatsVisualizer:
                         return value.toFixed(2);
                     }
                 }
+                
+                // Reading values from input widgets and setting plot y axis range  
                 const limits_data = limits_source.data;
                 limits_data['ymax'] = [parseFloat(ymax_input.value)];
                 limits_data['ymin'] = [parseFloat(ymin_input.value)];
@@ -301,15 +308,8 @@ class QuantStatsVisualizer:
                 plot.y_range.end = limits_data['ymax'][0];
                 limits_data['maxclip'] = [parseFloat(maxclip_input.value)];
                 limits_data['minclip'] = [parseFloat(minclip_input.value)];
-                // if (limits_data['maxclip'][0] > limits_data['ymax'][0]) {
-                    // limits_data['maxclip'][0] = limits_data['ymax'][0]/2;
-                    // maxclip_input.value = limits_data['maxclip'][0].toString();
-                // }
-                // if (limits_data['minclip'][0] < limits_data['ymin'][0]) {
-                //     limits_data['minclip'][0] = limits_data['ymin'][0]/2;
-                //     minclip_input.value = limits_data['minclip'][0].toString();
-                // }
-
+                
+                // Updating the min and max marker sources
                 const activation_data = data_source.data;
                 const idx = activation_data['idx'];
                 const minlist = activation_data['minlist'];
@@ -369,11 +369,11 @@ class QuantStatsVisualizer:
                 max_marker_source.data['fmt_min_activations'] = max_marker_fmt_min_activations;
                 max_marker_source.data['fmt_max_activations'] = max_marker_fmt_max_activations;
                 max_name_filter.booleans = new Array(max_marker_names.length).fill(true);
-
+                
+                // Emitting the changes made to ColumnDataSources
                 limits_source.change.emit();
                 min_marker_source.change.emit();
                 max_marker_source.change.emit();
-
             """)
 
         customcallbacks.reset_callback = CustomJS(args=dict(limits_source=datasources.limits_source,
@@ -389,6 +389,8 @@ class QuantStatsVisualizer:
                                             min_name_filter=tableobjects.min_name_filter,
                                             max_name_filter=tableobjects.max_name_filter,
                                             ), code="""
+                // Function to adaptively format numerical values in scientific notation
+                // if they are large in magnitude
                 function formatValue(value) {
                     if (Math.abs(value) < 1e-3 || Math.abs(value) > 1e3) {
                         return value.toExponential(2);
@@ -396,6 +398,8 @@ class QuantStatsVisualizer:
                         return value.toFixed(2);
                     }
                 }
+                
+                // Resetting the limits source with default values
                 limits_source.data['ymax'] = default_values_source.data['default_ymax'];
                 limits_source.data['ymin'] = default_values_source.data['default_ymin'];
                 limits_source.data['xmax'] = default_values_source.data['default_xmax'];
@@ -404,18 +408,19 @@ class QuantStatsVisualizer:
                 limits_source.data['minclip'] = default_values_source.data['default_minclip'];
                 const limits_data = limits_source.data;
 
-                // Set the plot ranges
+                // Resetting the plot ranges
                 plot.y_range.start = limits_data['ymin'][0];
                 plot.y_range.end = limits_data['ymax'][0];
                 plot.x_range.start = limits_data['xmin'][0];
                 plot.x_range.end = limits_data['xmax'][0];
 
-                // Set the input fields
+                // Resetting the input widget values
                 ymax_input.value = limits_data['ymax'][0].toString();
                 ymin_input.value = limits_data['ymin'][0].toString();
                 maxclip_input.value = limits_data['maxclip'][0].toString();
                 minclip_input.value = limits_data['minclip'][0].toString();
-
+                
+                // Updating the min and max marker sources
                 const activation_data = data_source.data;
                 const idx = activation_data['idx'];
                 const minlist = activation_data['minlist'];
@@ -475,20 +480,18 @@ class QuantStatsVisualizer:
                 max_marker_source.data['fmt_min_activations'] = max_marker_fmt_min_activations;
                 max_marker_source.data['fmt_max_activations'] = max_marker_fmt_max_activations;
                 max_name_filter.booleans = new Array(max_marker_names.length).fill(true);
-
+                
+                // Emitting the changes made to ColumnDataSources
                 limits_source.change.emit();
                 min_marker_source.change.emit();
                 max_marker_source.change.emit();
-                const a = limits_source.data['ymax'][0].toString();
-                const b = limits_source.data['ymin'][0].toString();
-                limits_source.data['reset_bool'] = [0];
-
             """)
 
         customcallbacks.min_name_filter_callback = CustomJS(args=dict(marker_source=datasources.min_marker_source,
                                                       text_filter=tableobjects.min_name_filter,
                                                       ),
                                             code="""
+                // Filter all names having entered pattern as a substring
                 text_filter.booleans = Array.from(marker_source.data['names']).map(t => t.includes(cb_obj.value));
                 marker_source.change.emit();
             """)
@@ -497,6 +500,7 @@ class QuantStatsVisualizer:
                                                       text_filter=tableobjects.max_name_filter,
                                                       ),
                                             code="""
+                // Filter all names having entered pattern as a substring
                 text_filter.booleans = Array.from(marker_source.data['names']).map(t => t.includes(cb_obj.value));
                 marker_source.change.emit();
             """)
@@ -528,12 +532,11 @@ class QuantStatsVisualizer:
 
         return layout
 
-    def export_plot_as_html(self, save_dir: str, save_name: str) -> None:
+    def export_plot_as_html(self, save_path: str) -> None:
         """
         Method for constructing the visualization and saving it to the given path.
 
-        :param save_dir: Directory for saving the visualization.
-        :param save_name: Desired name for the .html file.
+        :param save_path: Path for saving the visualization.
         """
 
         curdoc().theme = 'light_minimal'
@@ -596,4 +599,4 @@ class QuantStatsVisualizer:
         layout = self._create_layout(inputwidgets, tableobjects)
 
         # Save as standalone html
-        save(layout, os.path.join(save_dir, save_name))
+        save(layout, save_path)

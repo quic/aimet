@@ -36,5 +36,5 @@
 # =============================================================================
 
 
-# pylint: disable=missing-docstring
+# pylint: disable=all
 from .quant_stats_visualization import visualize_stats
