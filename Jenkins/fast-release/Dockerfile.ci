@@ -1,0 +1,73 @@
+ARG BASE_IMAGE=ubuntu:22.04
+FROM $BASE_IMAGE AS build
+
+ENV CONDA_PREFIX=/opt/conda
+ENV CONDA=${CONDA_PREFIX}/bin/conda
+ENV CONDA_DEFAULT_ENV=dev
+
+RUN apt update && \
+    DEBIAN_FRONTEND=noninteractive apt install --yes --no-install-recommends \
+        acl \
+        ca-certificates \
+        curl \
+        # manylinux2014 requires gcc 10 and cuda doesn't support gcc>11
+        g++-10 \
+        git \
+        jq \
+        make \
+        sudo \
+    && rm -rf /var/lib/apt/lists/* \
+    && echo '%users ALL = (ALL) NOPASSWD: ALL' > /etc/sudoers.d/passwordless \
+    && curl -o /tmp/conda.sh -L 'https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh' \
+    && mkdir -m 777 -p ${CONDA_PREFIX} \
+    && setfacl -d -m o::rwx ${CONDA_PREFIX} \
+    && bash /tmp/conda.sh -u -b -p ${CONDA_PREFIX} \
+    && rm /tmp/conda.sh \
+    && ${CONDA} config --set channel_priority strict \
+    && ${CONDA} init --no-user --system --all \
+    && ${CONDA} install -y conda-devenv \
+    && ${CONDA} clean --yes --all --verbose \
+    && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 10 --slave /usr/bin/g++ g++ /usr/bin/g++-10 --slave /usr/bin/gcov gcov /usr/bin/gcov-10 \
+    && git config --system --add safe.directory '*'
+
+ARG VER_PYTHON=3.8
+ARG VER_CUDA=11.7.1
+ARG VER_TORCH=""
+ARG VER_TENSORFLOW=""
+ARG VER_ONNX=""
+
+COPY Jenkins/fast-release/environment.devenv.yml /tmp/
+RUN export PATH=$PATH:${CONDA_PREFIX}/bin PIP_NO_CACHE_DIR=1 \
+    && ${CONDA} devenv \
+        --env-var ENV_NAME="${CONDA_DEFAULT_ENV}" \
+        --env-var VER_PYTHON="${VER_PYTHON}" \
+        --env-var VER_CUDA="${VER_CUDA}" \
+        --file /tmp/environment.devenv.yml \
+        --output-file /tmp/environment.yml \
+    && cat /tmp/environment.yml \
+    && ${CONDA} clean --yes --all --verbose \
+    && echo "conda activate ${CONDA_DEFAULT_ENV}" >> /etc/profile.d/conda.sh \
+    && rm -rf ~/.conda*
+
+RUN --mount=type=bind,target=/workspace \
+    echo "Install all required dependencies" \
+    && export PIP_CACHE_DIR=/tmp/pip-cache BUILD_DIR=/tmp/build \
+    && mkdir -p $BUILD_DIR \
+    && export PIP_EXTRA_INDEX_URL="https://download.pytorch.org/whl" \
+    && export CMAKE_ARGS="\
+        -DENABLE_TENSORFLOW=$([ -z ${VER_TENSORFLOW} ]; echo $?) \
+        -DENABLE_TORCH=$([ -z ${VER_TORCH} ]; echo $?) \
+        -DENABLE_ONNX=$([ -z ${VER_ONNX} ]; echo $?) \
+        -DENABLE_CUDA=$([ -z ${VER_CUDA} ]; echo $?) \
+       " \
+    && ${CONDA} run --name ${CONDA_DEFAULT_ENV} --live-stream \
+        python3 -m pip install --dry-run --report $BUILD_DIR/pip-report.json -C build-dir="$BUILD_DIR/{wheel_tag}" /workspace \
+    && ${CONDA} run --name ${CONDA_DEFAULT_ENV} --live-stream \
+        python3 -m pip install -c /workspace/packaging/dependencies/constraints.txt $(jq -r '.install[0].metadata.requires_dist[] | split(";") | .[0]' $BUILD_DIR/pip-report.json) \
+    && rm -rf $PIP_CACHE_DIR $BUILD_DIR
+
+ENV PYTHONPYCACHEPREFIX=/tmp
+
+ENTRYPOINT ["/bin/bash", "--login", "-c", "${0#--} \"$@\""]
+CMD ["/bin/bash"]
+

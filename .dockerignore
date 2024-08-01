@@ -1,0 +1,9 @@
+# Ignore everything
+*
+
+# Except few files and directories
+!Jenkins/fast-release/environment.devenv.yml
+!packaging/dependencies
+!packaging/plugins
+!packaging/version.txt
+!pyproject.toml
