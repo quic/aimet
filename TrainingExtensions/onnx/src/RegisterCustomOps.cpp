@@ -54,17 +54,13 @@
 static const char* c_OpDomain    = "aimet.customop.cpu";
 static const char* c_OpDomainGPU = "aimet.customop.cuda";
 
-// These definitions are missing from the provided header files in onnxruntime but are used in the provided examples
-#define ORT_TRY if (true)
-#define ORT_CATCH(x) else if (false)
-#define ORT_HANDLE_EXCEPTION(func)
 
 OrtStatus* ORT_API_CALL RegisterCustomOps(OrtSessionOptions* options, const OrtApiBase* api)
 {
 
     Ort::Global<void>::api_ = api->GetApi(ORT_API_VERSION);
     OrtStatus* result = nullptr;
-    ORT_TRY
+    try
     {
         Ort::CustomOpDomain domain {c_OpDomain};
         RegisterOps(domain);
@@ -81,12 +77,10 @@ OrtStatus* ORT_API_CALL RegisterCustomOps(OrtSessionOptions* options, const OrtA
         AddOrtCustomOpDomainToContainer(std::move(cuda_domain));
 #endif
     }
-    ORT_CATCH(const std::exception& e)
+    catch(const std::exception& e)
     {
-        ORT_HANDLE_EXCEPTION([&]() {
-            Ort::Status status{e};
-            result = status.release();
-        })
+        Ort::Status status{e};
+        result = status.release();
     }
 
     return result;
