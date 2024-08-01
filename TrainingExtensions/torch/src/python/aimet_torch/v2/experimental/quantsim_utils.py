@@ -126,6 +126,12 @@ def _propagate_output_encodings(sim: QuantizationSimModel,
             # In this case, set the input quantizer of the consumer to ``qtzr``
             i = consumer.inputs.index(x)
             qmodule = get_qmodule(consumer)
+            if isinstance(qmodule, custom.Concat):
+                # torch.concat is an input-variadic operation whose number of inputs
+                # can't be predicted statically.
+                # As a workaround, AIMET qconcat module has only one input quantizer
+                # that gets applied to all input tensors
+                i = 0
             qmodule.input_quantizers[i] = qtzr
             assert qmodule.input_quantizers[i] is not None
             return
@@ -137,6 +143,12 @@ def _propagate_output_encodings(sim: QuantizationSimModel,
             # In this case, set the output quantizer of the producer to ``qtzr``
             outputs = getattr(producer, 'output_products', [producer.output])
             i = outputs.index(x)
+            if isinstance(qmodule, custom.Split):
+                # torch.split is an output-variadic operation whose number of outputs
+                # can't be predicted statically.
+                # As a workaround, AIMET qsplit module has only one output quantizer
+                # that gets applied to all output tensors
+                i = 0
             if qmodule.output_quantizers[i] is not None:
                 qmodule.output_quantizers[i] = qtzr
 
