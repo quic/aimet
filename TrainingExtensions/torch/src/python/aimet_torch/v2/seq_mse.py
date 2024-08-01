@@ -35,7 +35,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
+# pylint: disable=redefined-builtin
 """ Sequential MSE implementation """
 
 from typing import List, Optional, Tuple
