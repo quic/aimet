@@ -42,7 +42,7 @@ import torch
 from torch import randn
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils._pytree import tree_map
+from torch.utils._pytree import tree_map, tree_flatten
 from torch.overrides import get_ignored_functions
 from aimet_torch.v2.quantization.affine.backends import quantize, quantize_dequantize, dequantize
 from aimet_torch.v2.quantization.affine import Quantize, QuantizeDequantize
@@ -760,8 +760,8 @@ def _create_quantized_module(module):
     (lambda: nn.FractionalMaxPool3d(3, (5, 5, 5)),    lambda: randn(1, 10, 10, 10)),
     (lambda: nn.GELU(),                               lambda: randn(100)),
     (lambda: nn.GLU(),                                lambda: randn(100)),
-    # (lambda: nn.GRU(...),                           lambda: ...),
-    # (lambda: nn.GRUCell(...),                       lambda: ...),
+    (lambda: nn.GRU(10, 20, 2),                       lambda: (randn(5, 3, 10), randn(2, 3, 20))),
+    (lambda: nn.GRUCell(10, 20),                      lambda: (randn(3, 10), randn(3, 20))),
     # (lambda: nn.GaussianNLLLoss(...),               lambda: ...),
     (lambda: nn.GroupNorm(2, 4),                      lambda: randn(1, 4, 25)),
     (lambda: nn.Hardshrink(0),                        lambda: randn(100)),
@@ -778,8 +778,8 @@ def _create_quantized_module(module):
     # (lambda: nn.L1Loss(...),                        lambda: ...),
     (lambda: nn.LPPool1d(2, 3),                       lambda: randn(1, 10, 10)),
     (lambda: nn.LPPool2d(2, 3),                       lambda: randn(1, 10, 10, 10)),
-    # (lambda: nn.LSTM(...),                          lambda: ...),
-    # (lambda: nn.LSTMCell(...),                      lambda: ...),
+    (lambda: nn.LSTM(10, 20, 2),                      lambda: (randn(5, 3, 10), (randn(2, 3, 20), randn(2, 3, 20)))),
+    (lambda: nn.LSTMCell(10, 20),                     lambda: (randn(3, 10), (randn(3, 20), randn(3, 20)))),
     (lambda: nn.LayerNorm((2, 3, 4)),                 lambda: randn(10, 2, 3, 4)),
     # (lambda: nn.LazyBatchNorm1d(...),               lambda: ...),
     # (lambda: nn.LazyBatchNorm2d(...),               lambda: ...),
@@ -824,9 +824,9 @@ def _create_quantized_module(module):
     (lambda: nn.PixelShuffle(1),                      lambda: randn(1, 1, 10, 10)),
     # (lambda: nn.PixelUnshuffle(...),                lambda: ...),
     # (lambda: nn.PoissonNLLLoss(...),                lambda: ...),
-    # (lambda: nn.RNN(...),                           lambda: ...),
+    (lambda: nn.RNN(10, 20, 2),                       lambda: (randn(5, 3, 10), randn(2, 3, 20))),
     # (lambda: nn.RNNBase(...),                       lambda: ...),
-    # (lambda: nn.RNNCell(...),                       lambda: ...),
+    (lambda: nn.RNNCell(10, 20),                      lambda: (randn(3, 10), randn(3, 20))),
     # (lambda: nn.RNNCellBase(...),                   lambda: ...),
     (lambda: nn.RReLU(),                              lambda: randn(100)),
     (lambda: nn.ReLU(),                               lambda: randn(100)),
@@ -910,4 +910,6 @@ def test_default_kernel_abtest(module_factory, input_factory):
     torch.manual_seed(0)
     out = qmodule(*inputs)
 
-    assert torch.equal(out, fout)
+    for out, fout in zip(tree_flatten(out)[0], tree_flatten(fout)[0]):
+        assert torch.equal(out, fout)
+        assert torch.all(out.isfinite())
