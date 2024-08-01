@@ -139,9 +139,13 @@ class SequentialMse(V1SequentialMse):
         assert _is_reducible(x_min.shape, quantizer.min.shape)
         assert _is_reducible(x_max.shape, quantizer.max.shape)
 
-        with torch.no_grad():
-            quantizer.min.copy_(reduce(x_min, quantizer.shape, torch.min).values)
-            quantizer.max.copy_(reduce(x_max, quantizer.shape, torch.max).values)
+        inp = torch.stack([
+            reduce(x_min, quantizer.shape, torch.min).values,
+            reduce(x_max, quantizer.shape, torch.max).values,
+        ])
+
+        with quantizer.compute_encodings():
+            _ = quantizer(inp)
 
     @staticmethod
     def _is_symmetric_quantizer(quantizer: AffineQuantizerBase):
