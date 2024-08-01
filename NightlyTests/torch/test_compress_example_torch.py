@@ -418,47 +418,6 @@ class SvdAcceptanceTests(unittest.TestCase):
         self.assertFalse(isinstance(compressed_model.fc, torch.nn.Sequential))
 
     @pytest.mark.cuda
-    def test_weight_svd_compress_auto_tar(self):
-
-        torch.cuda.empty_cache()
-        torch.manual_seed(1)
-        numpy.random.seed(1)
-        torch.backends.cudnn.deterministic = True
-
-        AimetLogger.set_level_for_all_areas(logging.DEBUG)
-
-        input_shape = (1, 3, 224, 224)
-        model = models.resnet18(pretrained=True).to(torch.device('cuda'))
-        modules_to_ignore = [model.conv1,
-                             model.layer2[0].downsample[0],
-                             model.layer3[0].downsample[0],
-                             model.layer4[0].downsample[0],
-                             model.layer4[1].conv1,
-                             model.layer4[1].conv2,
-                             model.fc
-                             ]
-
-        tar_params = aimet_common.defs.TarRankSelectionParameters(num_rank_indices=3)
-        rank_select = RankSelectScheme.tar
-        auto_params = aimet_torch.defs.WeightSvdParameters.AutoModeParams(rank_select_scheme=rank_select,
-                                                                          select_params=tar_params,
-                                                                          modules_to_ignore=modules_to_ignore)
-        params = aimet_torch.defs.WeightSvdParameters(aimet_torch.defs.WeightSvdParameters.Mode.auto, auto_params,
-                                                      multiplicity=8)
-
-        results = ModelCompressor.compress_model(model, evaluate, 10, input_shape,
-                                                 aimet_common.defs.CompressionScheme.weight_svd,
-                                                 cost_metric=aimet_common.defs.CostMetric.mac, parameters=params,
-                                                 visualization_url=None)
-
-        compressed_model, stats = results
-        print(compressed_model)
-        print(stats)
-
-        self.assertFalse(isinstance(compressed_model.conv1, torch.nn.Sequential))
-        self.assertFalse(isinstance(compressed_model.fc, torch.nn.Sequential))
-
-    @pytest.mark.cuda
     def test_weight_svd_compress_auto_high_multiplicity(self):
 
         torch.cuda.empty_cache()

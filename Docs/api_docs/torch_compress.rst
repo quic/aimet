@@ -43,13 +43,6 @@ Greedy Selection Parameters
 
 |
 
-TAR Selection Parameters
-========================
-
-.. autoclass:: aimet_torch.defs.TarRankSelectionParameters
-   :members:
-
-|
 
 Spatial SVD Configuration
 =========================

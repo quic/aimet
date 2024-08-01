@@ -36,6 +36,7 @@
 # =============================================================================
 
 """ Common type definitions that are used across aimet """
+
 import io
 from enum import Enum
 from typing import Union, Callable, Any, Optional, Dict, List
@@ -126,9 +127,6 @@ class RankSelectScheme(Enum):
     greedy = 1
     """ Greedy scheme"""
 
-    tar = 2
-    """ TAR scheme """
-
 
 class LayerCompRatioPair:
     """
@@ -167,45 +165,6 @@ class LayerCompRatioEvalScore:
     def __str__(self):
         return 'LayerCompRatioEvalScore: layer={}, comp-ratio={}, eval_score={}'. \
             format(self.layer.name, self.comp_ratio, self.eval_score)
-
-
-class TarPerRankIndexData:
-    """
-    TAR based algo stats require a combination of
-    (layer: nn.Module, CompRatio: Decimal, EvalScore:Decimal) per rank index to be stored
-    """
-
-    def __init__(self, layer: Layer, comp_ratio: Union[Decimal, None], eval_score: Union[Decimal, None]):
-        """
-        Constructor
-        :param layer: Reference to layer
-        :param comp_ratio: Comp-ratio as a floating point number between 0 and 1
-        :param eval_score: Eval score as a floating point number
-        """
-        self.layer = layer
-        self.comp_ratio = comp_ratio
-        self.eval_score = eval_score
-
-    def __str__(self):
-        return 'TarPerRankIndexData: layer={}, comp-ratio={}, eval-score={}'.format(self.layer.name, self.comp_ratio,
-                                                                                    self.eval_score)
-
-
-class TarRankSelectionParameters:
-    """
-    Configuration parameters for the TAR compression-ratio selection algorithm
-
-    :ivar num_rank_indices: Number of rank indices for ratio selection.
-
-    """
-    def __init__(self, num_rank_indices: int):
-
-        # Sanity check
-        if num_rank_indices < 2:
-            raise ValueError("Error: num_rank_indices={}. Need at least 2 candidates for "
-                             "TAR based compression-ratio selection".format(num_rank_indices))
-
-        self.num_rank_indices = num_rank_indices
 
 
 EvalFunction = Callable[[Any, Optional[int], bool], float]
