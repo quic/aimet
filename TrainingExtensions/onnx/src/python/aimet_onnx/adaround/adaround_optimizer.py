@@ -171,8 +171,8 @@ class AdaroundOptimizer:
         for iteration in range(opt_params.num_iterations):
             if use_cache_acts_data and AdaroundOptimizer.enable_caching_acts_data():
                 indices = torch.randperm(all_inp_data.size(0))[:BATCH_SIZE]
-                inp_data = all_inp_data[indices].to(device)
-                orig_out_data = all_orig_out_data[indices].to(device)
+                inp_data = all_inp_data[indices].to(torch_device)
+                orig_out_data = all_orig_out_data[indices].to(torch_device)
             else:
                 model_inputs = cached_dataset[np.random.randint(len(cached_dataset))]
                 inp_data, orig_out_data = act_sampler.sample_acts(create_input_dict(orig_model.model, model_inputs))
@@ -293,9 +293,16 @@ class AdaroundOptimizer:
                 bias = torch.from_numpy(numpy_helper.to_array(quant_module.params['bias'].tensor)).to(device)
             out_data = functional.conv_transpose2d(inp_data, adarounded_weights, bias=bias, stride=attributes['strides'],
                                                    dilation=attributes['dilations'], groups=attributes['group'])
-        elif quant_module.type in ['Gemm', 'MatMul']:
-            bias = torch.from_numpy(numpy_helper.to_array(quant_module.params['bias'].tensor)).to(device)
+        elif quant_module.type in ['Gemm']:
+            if not quant_module.transposed_params:
+                # Pytorch requires tranposed weights in functional.linear
+                adarounded_weights = adarounded_weights.t()
+            bias = None
+            if 'bias' in quant_module.params:
+                bias = torch.from_numpy(numpy_helper.to_array(quant_module.params['bias'].tensor)).to(device)
             out_data = functional.linear(inp_data, adarounded_weights, bias=bias)
+        elif quant_module.type in ['MatMul']:
+            out_data = torch.matmul(inp_data, adarounded_weights)
 
         else:
             raise ValueError('AdaRound is not supported for the module type: ', quant_module.type)

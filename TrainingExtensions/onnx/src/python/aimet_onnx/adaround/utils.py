@@ -57,6 +57,7 @@ class ModuleInfo:
         self.outputs = []
         self.type = None
         self.attributes = None
+        self.transposed_params = False
 
 
 class ModelData:
@@ -77,6 +78,7 @@ class ModelData:
             self.module_to_info[op.name] = ModuleInfo()
             if op.type in ['Conv', 'ConvTranspose', 'Gemm', 'MatMul']:
                 self.module_to_info[op.name].type = op.type
+                self.module_to_info[op.name].transposed_params = op.transposed_params
                 if hasattr(op.get_module(), 'attribute'):
                     self.module_to_info[op.name].attributes = op.get_module().attribute
             for param, param_type in op.parameters.values():

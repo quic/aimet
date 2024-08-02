@@ -44,6 +44,7 @@ import json
 from typing import Tuple, Dict, List, Callable
 from onnx import onnx_pb
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
+import onnxsim
 from tqdm import tqdm
 
 # Import AIMET specific modules
@@ -57,7 +58,7 @@ from aimet_onnx.qc_quantize_op import OpMode
 from aimet_onnx.meta.utils import get_module_act_func_pair, get_ordered_ops
 from aimet_onnx import utils
 from aimet_onnx.adaround.adaround_optimizer import AdaroundOptimizer
-from aimet_onnx.adaround.utils import ModelData
+from aimet_onnx.adaround.utils import ModelData, ModuleInfo
 
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -143,10 +144,15 @@ class Adaround:
         # Create Quant sim with given parameters
         if not isinstance(model, ONNXModel):
             model = ONNXModel(model)
+
+        # TODO: Remove this once we no longer simplify the model within quantsim
+        model.model, _ = onnxsim.simplify(model.model)
         quant_sim = QuantizationSimModel(copy.deepcopy(model), quant_scheme=default_quant_scheme,
                                          default_param_bw=default_param_bw,
                                          config_file=default_config_file,
-                                         user_onnx_libs=user_onnx_libs)
+                                         user_onnx_libs=user_onnx_libs,
+                                         use_cuda=use_cuda,
+                                         simplify_model=False)
 
         # For the params in the param_bw_override_list, override the default parameter bitwidths in the QuantSim
         if param_bw_override_list:
@@ -242,8 +248,8 @@ class Adaround:
             # AdaRound must be applied to modules in the order of occurrence
             modules = get_ordered_ops(model)
             for module in tqdm(modules):
-                if module.type in AdaroundSupportedModules:
-                    name = module.name
+                name = module.name
+                if cls._is_supported_layer_type(model_data.module_to_info[name]):
                     # Get module's next following activation function
                     act_func = module_act_func_pair[name]
                     quantized_input_name = quantized_layer_to_input_tensor_name[name]
@@ -252,6 +258,20 @@ class Adaround:
                                                       model, quant_sim.model, act_func,
                                                       cached_dataset, opt_params, param_to_tensor_quantizer_dict,
                                                       use_cuda, device, user_onnx_libs)
+
+    @classmethod
+    def _is_supported_layer_type(cls, module_info: ModuleInfo):
+        if not module_info.type in AdaroundSupportedModules:
+            return False
+
+        if not "weight" in module_info.params:
+            return False
+
+        if module_info.type in ("Conv", "ConvTranspose"):
+            # Only 2d conv/convtranspose is supported
+            return len(module_info.params["weight"].shape) == 4
+
+        return True
 
     @staticmethod
     def _compute_param_encodings(quant_sim: QuantizationSimModel, params: AdaroundParameters):

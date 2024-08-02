@@ -436,14 +436,17 @@ class CachedDataset:
         logger.info('Caching %d batches from data loader at path location: %s', self._num_batches, self._path)
 
 
-def create_input_dict(model: ModelProto, input_batch: Union[np.ndarray, List[np.ndarray], Tuple[np.ndarray]]) -> Dict:
+def create_input_dict(model: ModelProto, input_batch: Union[Dict, np.ndarray, List[np.ndarray], Tuple[np.ndarray]]) -> Dict:
     """
     Creates input dictionary (input name to input value map) for session.run
 
     :param model: ONNX model
-    :param input_batch: either single numpy array, list or tuple of numpy array
+    :param input_batch: either a dict, single numpy array, list or tuple of numpy array
     :return: input dictionary
     """
+    if isinstance(input_batch, dict):
+        return input_batch
+
     input_names = [input.name for input in model.graph.input]
 
     # single input
@@ -459,7 +462,7 @@ def create_input_dict(model: ModelProto, input_batch: Union[np.ndarray, List[np.
         input_batch_list = list(input_batch)
 
     else:
-        raise ValueError('Input batch should be either numpy array, list or tuple')
+        raise ValueError('Input batch should be either dict, numpy array, list or tuple')
 
     if not len(input_names) == len(input_batch_list):
         raise ValueError('There is mismatch between number of input names and input tensors')
