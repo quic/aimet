@@ -49,7 +49,7 @@ from aimet_torch.utils import create_fake_data_loader
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.nn.fake_quant import FakeQuantizationMixin
 from aimet_torch.v2.quantization.affine import QuantizeDequantize
-from aimet_torch.v2.seq_mse import  apply_seq_mse, get_candidates, optimize_module, SeqMseParams
+from aimet_torch.v2.seq_mse import  apply_seq_mse, get_candidates, optimize_module, SeqMseParams, SequentialMse
 from .models_.mnist_torch_model import Net
 
 @pytest.fixture(scope="session")
@@ -310,3 +310,15 @@ class TestSeqMse:
         assert not sim.model.fc2.param_quantizers['weight'].min.requires_grad
         assert not sim.model.fc2.param_quantizers['weight'].max.requires_grad
         assert not sim.model.fc2.param_quantizers['weight']._allow_overwrite
+
+    @pytest.mark.parametrize('qtzr', [QuantizeDequantize([], 4, True),
+                                      QuantizeDequantize([10], 4, True),
+                                      QuantizeDequantize([10, 10], 4, True)])
+    @pytest.mark.parametrize('range', [(-1., .7), (-.7, 1.)])
+    def test_compute_param_encodings(self, qtzr, range):
+        x_min, x_max = range
+        x_min = torch.full(qtzr.shape, x_min)
+        x_max = torch.full(qtzr.shape, x_max)
+        SequentialMse.compute_param_encodings(qtzr, x_min, x_max)
+        assert torch.all(torch.isclose(qtzr.get_max(), x_max) |
+                         torch.isclose(qtzr.get_min(), x_min))
