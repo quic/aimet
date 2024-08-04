@@ -740,3 +740,9 @@ class TestQuantSim:
         for idx in range(num_layers):
             assert onnx.numpy_helper.to_array(sim.model.graph().initializer[idx])[0][0] == idx
 
+    def test_op_params_to_ignore(self):
+        model = models_for_tests.resize_op_model()
+        with tempfile.TemporaryDirectory() as tempdir:
+            sim = QuantizationSimModel(model, path=tempdir, simplify_model=False)
+            # params of specific ops shouldn't be quantized (here resize op param is testified)
+            assert not sim.qc_quantize_op_dict.get('const_scale', None)
