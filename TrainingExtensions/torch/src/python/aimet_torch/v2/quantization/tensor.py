@@ -308,7 +308,7 @@ class QuantizedTensorBase(torch.Tensor):
                 )
 
             # Outputs of cast ops can inherit the same encoding as its parents
-            ret.encoding = self.encoding.to(device=ret.device)
+            ret.encoding = self.encoding and self.encoding.to(device=ret.device)
             return ret
 
         def propagate_encoding(qtensor, encoding):

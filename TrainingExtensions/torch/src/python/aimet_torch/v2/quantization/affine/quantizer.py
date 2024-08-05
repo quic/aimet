@@ -354,7 +354,7 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
         if not self.is_initialized():
             return None
 
-        dtype = dtype or self.min.dtype
+        dtype = dtype or torch.float32
         num_steps = 2 ** self.bitwidth - 1
 
         scale = (self.max.to(dtype) - self.min.to(dtype)) / num_steps
@@ -370,7 +370,7 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
         if not self.is_initialized():
             return None
 
-        dtype = dtype or self.min.dtype
+        dtype = dtype or torch.float32
 
         if self.symmetric:
             offset = torch.zeros_like(self.min, requires_grad=False, dtype=dtype)
@@ -492,8 +492,8 @@ class Quantize(MinMaxQuantizer):
         input = input.as_subclass(torch.Tensor)
 
         output = quantize(input,
-                          encoding.scale.to(input.dtype),
-                          encoding.offset.to(input.dtype),
+                          encoding.scale,
+                          encoding.offset,
                           encoding.bitwidth,
                           encoding.signed,
                           block_size=self.block_size)
@@ -619,8 +619,8 @@ class QuantizeDequantize(MinMaxQuantizer):
         input = input.as_subclass(torch.Tensor)
 
         output = quantize_dequantize(input,
-                                     encoding.scale.to(input.dtype),
-                                     encoding.offset.to(input.dtype),
+                                     encoding.scale,
+                                     encoding.offset,
                                      encoding.bitwidth,
                                      encoding.signed,
                                      block_size=self.block_size)
