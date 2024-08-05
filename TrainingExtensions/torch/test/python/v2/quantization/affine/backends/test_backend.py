@@ -312,13 +312,13 @@ class TestQuantizationBackends:
 
         """
         When: [qmin, qmax] = [0, 2**32-1]
-        Then: quantize() with float16 input throws runtime error
+        Then: quantize() with both float16 and float32 input throws runtime error
         """
         qmin, qmax = 0, 2**32-1
         with pytest.raises(RuntimeError):
-            # float16 is unable to represent output of [0, 2**32-1]
             backend_module.quantize(random_tensor.to(half), scale.to(half), offset.to(half), qmin, qmax)
-        backend_module.quantize(random_tensor.to(float), scale.to(float), offset.to(float), qmin, qmax)
+        with pytest.raises(RuntimeError):
+            backend_module.quantize(random_tensor.to(float), scale.to(float), offset.to(float), qmin, qmax)
 
         # No runtime error; Internally fall back to float32 to perform qdq
         backend_module.quantize_dequantize(random_tensor.to(half), scale.to(half), offset.to(half), qmin, qmax)

@@ -917,49 +917,6 @@ def test_quantize_dequantize_then_quantize_and_dequantize_equality(x, symmetric)
     assert torch.equal(a, b)
 
 
-@pytest.mark.cuda
-@pytest.mark.parametrize("symmetric", [True, False])
-def test_high_bitwidth(x, symmetric):
-    """
-    Given: QuantizeDequantize of bitwidth=16
-    When: Run forward with input of dtype float16, float32, and bfloat16
-    Then:
-      1) All of them should produce outputs normally without any nan value.
-      2) The output dtype should be the same as the input dtype
-    """
-    x = x.cuda()
-    for param_dtype in (torch.float32, torch.bfloat16, torch.float16):
-        for input_dtype in (torch.float16, torch.float32, torch.bfloat16):
-            qdq = quantize_dequantize(symmetric=symmetric, initialized=True, bitwidth=16).to(param_dtype).cuda()
-            out = qdq(x.to(input_dtype))
-            assert not torch.any(out.isnan())
-            assert out.dtype == input_dtype
-
-    """
-    Given: Quantize of bitwidth=16
-    When: Run forward with input of dtype float32, and bfloat16
-    Then:
-      1) All of them should produce outputs normally without any nan value.
-      2) The output dtype should be the same as the input dtype
-    """
-    for param_dtype in (torch.float32, torch.bfloat16, torch.float16):
-        for input_dtype in (torch.float32, torch.bfloat16):
-            q = quantize(symmetric=symmetric, initialized=True, bitwidth=16).to(param_dtype).cuda()
-            out = q(x.to(input_dtype))
-            assert not torch.any(out.isnan())
-            assert out.dtype == input_dtype
-
-    """
-    Given: Quantize of bitwidth=16
-    When: Run forward with input of dtype float16
-    Then: Throw runtime error. float16 cannot represent the range [0, 2**16-1].
-    """
-    for param_dtype in (torch.float32, torch.bfloat16, torch.float16):
-        for input_dtype in (torch.float16,):
-            q = quantize(symmetric=symmetric, initialized=True, bitwidth=16).to(param_dtype).cuda()
-            with pytest.raises(RuntimeError):
-                out = q(x.to(input_dtype))
-
 @pytest.mark.parametrize("q", (Quantize(_PARAMETER_SHAPE, 8, False),
                                QuantizeDequantize(_PARAMETER_SHAPE, 8, True)))
 def test_allow_overwrite(x, q):
@@ -1263,6 +1220,8 @@ def test_sub_float32_quantize_dequantize(dtype, bitwidth, symmetric, tiny_scale)
     Then: Output should be equal to performing quantize-dequantize in float32
     """
     out = qtzr(x)
+    assert out.dtype == x.dtype
+    assert torch.all(out.isfinite())
     expected = Q.affine.quantize_dequantize(x.float(),
                                             min_scale,
                                             torch.zeros([]).float(),
@@ -1314,6 +1273,8 @@ def test_sub_float32_quantize(dtype, bitwidth, symmetric, tiny_scale):
     Then: Output should be equal to performing quantize in float32
     """
     out = qtzr(x)
+    assert out.dtype == x.dtype
+    assert torch.all(out.isfinite())
     expected = Q.affine.quantize(x.float(),
                                  min_scale,
                                  torch.zeros([]).float(),
