@@ -57,7 +57,6 @@ from aimet_common.data_cache_utility import is_cache_env_set, is_mnist_cache_pre
     copy_cache_mnist_to_local_build
 from aimet_common.compression_algo import CompressionAlgo
 
-import aimet_torch.svd.svd_intf_defs_deprecated
 import aimet_torch.utils
 from aimet_torch.compress import ModelCompressor
 from aimet_torch.defs import ModuleCompRatioPair, ChannelPruningParameters
@@ -65,7 +64,6 @@ from models import mnist_torch_model
 from models.imagenet_dataloader import ImageNetDataLoader
 from models.supervised_classification_pipeline import \
     create_stand_alone_supervised_classification_evaluator
-from aimet_torch.svd import svd as svd_intf
 from aimet_torch.utils import IterFirstX
 from aimet_torch.visualize_serialized_data import VisualizeCompression
 
@@ -459,26 +457,6 @@ class SvdAcceptanceTests(unittest.TestCase):
 
         self.assertFalse(isinstance(compressed_model.conv1, torch.nn.Sequential))
         self.assertFalse(isinstance(compressed_model.fc, torch.nn.Sequential))
-
-    @pytest.mark.cuda
-    def test_svd_manual_rank_sel_weight_svd_deprecated(self):
-
-        torch.cuda.empty_cache()
-
-        AimetLogger.set_level_for_all_areas(logging.DEBUG)
-        # load trained MNIST model
-        model = torch.load(os.path.join('./', 'data', 'mnist_trained_on_CPU.pth'))
-
-        compressed_model, stats = svd_intf.Svd.compress_model(model=model, run_model=mnist_torch_model.evaluate,
-                                                              run_model_iterations=1, input_shape=(1, 1, 28, 28),
-                                                              compression_type=aimet_torch.svd.svd_intf_defs_deprecated.CompressionTechnique.svd,
-                                                              cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.mac,
-                                                              layer_selection_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.manual,
-                                                              rank_selection_scheme=aimet_torch.svd.svd_intf_defs_deprecated.RankSelectionScheme.manual,
-                                                              layer_rank_list=[[model.conv2, 27]])
-        baseline_model_accuracy = stats.baseline_model_accuracy
-        compressed_best_model_accuracy = stats.compressed_model_accuracy
-        self.assertTrue(baseline_model_accuracy >= compressed_best_model_accuracy)
 
     @pytest.mark.cuda
     def test_spatial_svd_with_fine_tuning(self):
