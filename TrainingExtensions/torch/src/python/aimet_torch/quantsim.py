@@ -1857,11 +1857,15 @@ class QuantizationSimModel:
         """
         module_to_quant_wrapper = {}
         for _, wrapper in self.quant_wrappers():
-            original_module = wrapper.module_to_quantize if isinstance(wrapper, QcQuantizeRecurrent) else wrapper._module_to_wrap
+            if isinstance(wrapper, QcQuantizeWrapper):
+                original_module = wrapper._module_to_wrap
+            elif isinstance(wrapper, QcQuantizeRecurrent):
+                original_module = wrapper.module_to_quantize
+            else:
+                continue
             module_to_quant_wrapper[original_module] = wrapper
 
-        for _, wrapper in self.quant_wrappers():
-            original_module = wrapper.module_to_quantize if isinstance(wrapper, QcQuantizeRecurrent) else wrapper._module_to_wrap
+        for original_module, wrapper in module_to_quant_wrapper.items():
 
             if isinstance(original_module, torch.nn.Embedding):
                 if self._hw_version not in {'V73', 'V75', 'V79'}:
