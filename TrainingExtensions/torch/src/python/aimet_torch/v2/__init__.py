@@ -40,3 +40,4 @@ from . import experimental
 from . import nn
 from . import quantization
 from . import quantsim
+from . import visualization_tools
