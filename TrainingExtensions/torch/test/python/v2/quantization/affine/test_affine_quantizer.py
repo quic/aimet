@@ -1237,16 +1237,15 @@ def test_sub_float32_quantize_dequantize(dtype, bitwidth, symmetric, tiny_scale)
     'dtype,          bitwidth,  symmetric', [
     (torch.float16,  4,         True),
     (torch.float16,  8,         True),
-    (torch.float16,  16,        True),
+    (torch.float16,  12,        True),
     (torch.float16,  4,         False),
     (torch.float16,  8,         False),
-    (torch.float16,  15,        False),
+    (torch.float16,  11,        False),
     (torch.bfloat16, 4,         True),
     (torch.bfloat16, 8,         True),
-    (torch.bfloat16, 13,        True),
+    (torch.bfloat16, 9,         True),
     (torch.bfloat16, 4,         False),
     (torch.bfloat16, 8,         False),
-    (torch.bfloat16, 12,        False),
 ])
 def test_sub_float32_quantize(dtype, bitwidth, symmetric, tiny_scale):
     """
@@ -1286,10 +1285,10 @@ def test_sub_float32_quantize(dtype, bitwidth, symmetric, tiny_scale):
 
 @pytest.mark.parametrize(
     'dtype,          bitwidth,  symmetric', [
-    (torch.float16,  16,        False),
-    (torch.float16,  17,        True),
-    (torch.bfloat16, 14,        True),
-    (torch.bfloat16, 13,        False),
+    (torch.float16,  13,        True),
+    (torch.float16,  12,        False),
+    (torch.bfloat16, 10,        True),
+    (torch.bfloat16, 9,         False),
 ])
 def test_sub_float32_error(dtype, bitwidth, symmetric):
     """

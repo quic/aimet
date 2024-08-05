@@ -45,24 +45,21 @@ import aimet_torch.v2.experimental.onnx._export as _onnx
 
 def _is_value_representable(dtype: torch.dtype, value: int):
     """
-    Return whether a value can be represented with the given dtype
+    Return whether an integer value can be represented with the given dtype
     """
-    return torch.tensor(value, dtype=torch.long) == torch.tensor(value, dtype=dtype)
+    dtype_repr = torch.tensor(value, dtype=dtype)
+    return dtype_repr.isfinite() and dtype_repr.long() == value
 
 
 @functools.lru_cache(None)
 def _is_grid_representable(dtype: torch.dtype, qmin: int, qmax: int):
     """
-    Return whether a range can be represented with the given dtype
+    Return whether a range of integers can be represented with the given dtype
     """
-    if not _is_value_representable(dtype, qmax) or \
-            not _is_value_representable(dtype, qmin) or \
-            not _is_value_representable(dtype, qmax - qmin):
-        return False
-
-    grid_long = torch.arange(qmin, qmax + 1, step=max(1, (qmax-qmin)//(2**16-1)), dtype=torch.long)
-    grid_dtype = torch.arange(qmin, qmax + 1, step=max(1, (qmax-qmin)//(2**16-1)), dtype=dtype)
-    return torch.equal(grid_long, grid_dtype)
+    return _is_value_representable(dtype, qmax) and \
+            _is_value_representable(dtype, qmax - 1) and \
+            _is_value_representable(dtype, qmin + 1) and \
+            _is_value_representable(dtype, qmin)
 
 
 def _is_numerically_stable(dtype: torch.dtype, qmin: int, qmax: int):
