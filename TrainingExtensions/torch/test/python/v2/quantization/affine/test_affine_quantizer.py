@@ -1217,3 +1217,130 @@ def test_onnx_export():
     with tempfile.TemporaryDirectory() as tempdir:
         with open(os.path.join(tempdir, 'qtzr.onnx'), 'wb') as f:
             torch.onnx.export(qdq, torch.randn(10, 10), f)
+
+
+def get_qtzn_grid(bitwidth, signed):
+    if signed:
+        qmin = -2 ** (bitwidth - 1)
+        qmax = -qmin - 1
+    else:
+        qmin = 0
+        qmax = 2 ** bitwidth - 1
+
+    return torch.arange(qmin, qmax+1, dtype=torch.long)
+
+
+FLOAT32_EPS = torch.tensor(torch.finfo(torch.float32).eps)
+FLOAT32_TINY = torch.tensor(torch.finfo(torch.float32).tiny)
+
+
+@pytest.mark.parametrize('tiny_scale', [FLOAT32_EPS, FLOAT32_TINY])
+@pytest.mark.parametrize('dtype', [torch.float16, torch.bfloat16])
+@pytest.mark.parametrize('symmetric', [True, False])
+@pytest.mark.parametrize('bitwidth', [4, 8, 16])
+def test_sub_float32_quantize_dequantize(dtype, bitwidth, symmetric, tiny_scale):
+    """
+    Given: Input of range [0, 2**bw) * tiny_scale
+    """
+    min_scale = FLOAT32_EPS
+    x_int = get_qtzn_grid(bitwidth, signed=symmetric)
+    x = (x_int * tiny_scale).to(dtype)
+
+    """
+    When: Compute encodings of QuantizeDequantize
+    Then: qtzr.get_scale() should be no smaller than torch.finfo(float32).eps
+    """
+    qtzr = QuantizeDequantize((), bitwidth, symmetric).to(dtype)
+
+    with qtzr.compute_encodings():
+        _ = qtzr(x)
+
+    assert torch.allclose(qtzr.get_scale(dtype=torch.float32), min_scale)
+    assert torch.allclose(qtzr.get_offset(dtype=torch.float32), torch.zeros([]))
+
+    """
+    When: Run forward
+    Then: Output should be equal to performing quantize-dequantize in float32
+    """
+    out = qtzr(x)
+    expected = Q.affine.quantize_dequantize(x.float(),
+                                            min_scale,
+                                            torch.zeros([]).float(),
+                                            qmin=int(x_int.min()),
+                                            qmax=int(x_int.max())).to(dtype)
+
+    assert torch.equal(out, expected)
+    assert torch.allclose(out, x, atol=float(min_scale)/2)
+
+
+@pytest.mark.parametrize('tiny_scale', [FLOAT32_EPS, FLOAT32_TINY])
+@pytest.mark.parametrize(
+    'dtype,          bitwidth,  symmetric', [
+    (torch.float16,  4,         True),
+    (torch.float16,  8,         True),
+    (torch.float16,  16,        True),
+    (torch.float16,  4,         False),
+    (torch.float16,  8,         False),
+    (torch.float16,  15,        False),
+    (torch.bfloat16, 4,         True),
+    (torch.bfloat16, 8,         True),
+    (torch.bfloat16, 13,        True),
+    (torch.bfloat16, 4,         False),
+    (torch.bfloat16, 8,         False),
+    (torch.bfloat16, 12,        False),
+])
+def test_sub_float32_quantize(dtype, bitwidth, symmetric, tiny_scale):
+    """
+    Given: Input of range [0, 2**bw) * tiny_scale
+    """
+    min_scale = FLOAT32_EPS
+    x_int = get_qtzn_grid(bitwidth, signed=symmetric)
+    x = (x_int * tiny_scale).to(dtype)
+
+    """
+    When: Compute encodings of QuantizeDequantize
+    Then: qtzr.get_scale() should be no smaller than torch.finfo(float32).eps
+    """
+    qtzr = Quantize((), bitwidth, symmetric).to(dtype)
+
+    with qtzr.compute_encodings():
+        _ = qtzr(x)
+
+    assert torch.allclose(qtzr.get_scale(dtype=torch.float32), min_scale)
+    assert torch.allclose(qtzr.get_offset(dtype=torch.float32), torch.zeros([]))
+
+    """
+    When: Run forward
+    Then: Output should be equal to performing quantize in float32
+    """
+    out = qtzr(x)
+    expected = Q.affine.quantize(x.float(),
+                                 min_scale,
+                                 torch.zeros([]).float(),
+                                 qmin=int(x_int.min()),
+                                 qmax=int(x_int.max())).to(dtype)
+
+    assert torch.equal(out.as_subclass(torch.Tensor).long(), expected.long())
+
+
+@pytest.mark.parametrize(
+    'dtype,          bitwidth,  symmetric', [
+    (torch.float16,  16,        False),
+    (torch.float16,  17,        True),
+    (torch.bfloat16, 14,        True),
+    (torch.bfloat16, 13,        False),
+])
+def test_sub_float32_error(dtype, bitwidth, symmetric):
+    """
+    Given: Input of range [0, 2**bw) * scale
+    When: Run Quantize.forward with high bitwidth and sub-float32 dtype
+    Then: Throw runtime error
+    """
+    x_int = get_qtzn_grid(bitwidth, signed=symmetric)
+    x = (x_int.double() / x_int.max().double()).to(dtype)
+
+    qtzr = Quantize((), bitwidth, symmetric).to(dtype)
+
+    with qtzr.compute_encodings():
+        with pytest.raises(RuntimeError):
+            _ = qtzr(x)
