@@ -341,6 +341,13 @@ _dispatch_table = {
     for torch_fn in itertools.chain(*get_overridable_functions().values())
 }
 
+# NOTE: ``torch.overrides.get_overridable_functions()`` doesn't include
+#       F.hardswish, F.hardsigmoid, or Tensor.unflatten, even though
+#       they are implemented in a perfectly dispatchable manner.
+_dispatch_table[F.hardswish] = None
+_dispatch_table[F.hardsigmoid] = None
+_dispatch_table[Tensor.unflatten] = None
+
 
 class _Dispatcher(BaseTorchFunctionMode):
     def __torch_function__(self, func, types, args=(), kwargs=None):
@@ -931,16 +938,18 @@ class QuantizedHardshrink(_DispatchMixin, QuantizationMixin, nn.Hardshrink):
     __quant_init__ = __unary__
 
 
-# @QuantizationMixin.implements(nn.Hardsigmoid)
-# class QuantizedHardsigmoid(_DispatchMixin, QuantizationMixin, nn.Hardsigmoid):
-#     """ Quantized Hardsigmoid """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.Hardsigmoid)
+class QuantizedHardsigmoid(_DispatchMixin, QuantizationMixin, nn.Hardsigmoid):
+    """ Quantized Hardsigmoid """
+    _builtin_torch_fn = F.hardsigmoid
+    __quant_init__ = __unary__
 
 
-# @QuantizationMixin.implements(nn.Hardswish)
-# class QuantizedHardswish(_DispatchMixin, QuantizationMixin, nn.Hardswish):
-#     """ Quantized Hardswish """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.Hardswish)
+class QuantizedHardswish(_DispatchMixin, QuantizationMixin, nn.Hardswish):
+    """ Quantized Hardswish """
+    _builtin_torch_fn = F.hardswish
+    __quant_init__ = __unary__
 
 
 @QuantizationMixin.implements(nn.Hardtanh)
@@ -1736,10 +1745,10 @@ class QuantizedTripletMarginWithDistanceLoss(_DispatchMixin, QuantizationMixin, 
     __quant_init__ = __ternary__
 
 
-# @QuantizationMixin.implements(nn.Unflatten)
-# class QuantizedUnflatten(_DispatchMixin, QuantizationMixin, nn.Unflatten):
-#     """ Quantized Unflatten """
-#     _builtin_torch_fn = ...
+@QuantizationMixin.implements(nn.Unflatten)
+class QuantizedUnflatten(_DispatchMixin, QuantizationMixin, nn.Unflatten):
+    """ Quantized Unflatten """
+    _builtin_torch_fn = Tensor.unflatten
 
 
 @QuantizationMixin.implements(nn.Unfold)
