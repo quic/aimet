@@ -270,7 +270,7 @@ class QuantDequantFunc(torch.autograd.Function):
     def forward(ctx, tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, qmin: int, qmax: int):
         x_round = (tensor / scale).round_().sub_(offset)
         if tensor.requires_grad or scale.requires_grad or offset.requires_grad:
-            mask = (x_round >= qmin) * (x_round <= qmax)
+            mask = (qmin <= x_round) & (x_round <= qmax)
         else:
             mask = None
         x_quant = x_round.clamp_(qmin, qmax)
@@ -303,7 +303,7 @@ class QuantDequantFunc(torch.autograd.Function):
         tensor_grad = grad * mask if ctx.tensor_requires_grad else None
         scale_grad = grad * (x_quant + offset - mask * tensor / scale) \
             if ctx.scale_requires_grad else None
-        offset_grad = -grad * (mask * scale - scale) if ctx.offset_requires_grad else None
+        offset_grad = grad * (~mask * scale) if ctx.offset_requires_grad else None
         return tensor_grad, scale_grad, offset_grad, None, None
 
 def get_encoding_shape_with_blocks(original_encoding_shape: torch.Size, block_size: List[int]):
