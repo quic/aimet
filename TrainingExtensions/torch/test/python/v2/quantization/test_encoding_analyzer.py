@@ -169,18 +169,16 @@ class TestMinMaxEncodingAnalyzer():
 
         num_steps = pow(2, 8) - 1
         asymmetric_min, asymmetric_max = encoding_analyzer.compute_encodings(num_steps=num_steps, is_symmetric = False)
-        updated_min = torch.finfo(asymmetric_min.dtype).eps * (2 ** (8 - 1))
-        updated_max = torch.finfo(asymmetric_min.dtype).eps * ((2 **(8 - 1)) - 1)
+        updated_min = torch.zeros(())
+        updated_max = torch.finfo(torch.float32).eps * num_steps
         assert torch.all(torch.eq(asymmetric_min,  torch.full(tuple(encoding_analyzer.observer.shape), -updated_min)))
         assert torch.all(torch.eq(asymmetric_max, torch.full(tuple(encoding_analyzer.observer.shape), updated_max)))
 
         symmetric_min , symmetric_max = encoding_analyzer.compute_encodings(num_steps=num_steps, is_symmetric = True)
         num_pos_bins = math.floor(num_steps / 2)
         num_neg_bins = math.ceil(num_steps / 2)
-        delta = max(updated_max / num_pos_bins, updated_min / num_neg_bins)
-        offset = -1 * num_neg_bins
-        updated_min = offset * delta
-        updated_max = num_pos_bins * delta
+        updated_min = -torch.finfo(torch.float32).eps * num_neg_bins
+        updated_max = torch.finfo(torch.float32).eps * num_pos_bins
         assert torch.all(torch.eq(symmetric_min, torch.full(tuple(encoding_analyzer.observer.shape), updated_min)))
         assert torch.all(torch.eq(symmetric_max, torch.full(tuple(encoding_analyzer.observer.shape), updated_max)))
     
