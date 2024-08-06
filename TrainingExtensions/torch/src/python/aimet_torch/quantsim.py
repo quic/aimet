@@ -1869,7 +1869,7 @@ class QuantizationSimModel:
 
             if isinstance(original_module, torch.nn.Embedding):
                 if self._hw_version not in {'V73', 'V75', 'V79'}:
-                    return
+                    continue
                 weight_quantizer = wrapper.param_quantizers['weight']
                 output_quantizer = wrapper.output_quantizers[0]
 
@@ -1878,7 +1878,7 @@ class QuantizationSimModel:
 
             elif isinstance(original_module, torch.nn.GroupNorm):
                 if self._hw_version not in {'V73', 'V75', 'V79'}:
-                    return
+                    continue
                 if 'weight' in wrapper.param_quantizers:
                     output_quantizer = wrapper.output_quantizers[0]
                     for _, param_quantizer in wrapper.param_quantizers.items():

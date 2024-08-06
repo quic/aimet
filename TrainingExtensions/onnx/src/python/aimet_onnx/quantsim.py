@@ -161,8 +161,6 @@ class QuantizationSimModel:
             except:
                 logger.info('ONNX Simplifier failed. Proceeding with unsimplified model.')
 
-        onnx.save(self.model.model, 'dynamic_matmul.onnx')
-
         if not dummy_input:
             dummy_input = make_dummy_input(self.model.model)
         self.qc_quantize_op_dict = {}
@@ -556,7 +554,7 @@ class QuantizationSimModel:
 
             if op.type == 'GroupNormalization':
                 if self._hw_version not in {'V73', 'V75', 'V79'}:
-                    return
+                    continue
                 if 'weight' in param_quantizers:
                     output_quantizer = output_quantizers[0]
                     for _, param_quantizer in param_quantizers.items():
