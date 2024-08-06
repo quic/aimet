@@ -1857,7 +1857,7 @@ class QuantizationSimModel:
         """
         module_to_quant_wrapper = {}
         for _, wrapper in self.quant_wrappers():
-            if isinstance(wrapper, QcQuantizeWrapper):
+            if isinstance(wrapper, LazyQuantizeWrapper):
                 original_module = wrapper._module_to_wrap
             elif isinstance(wrapper, QcQuantizeRecurrent):
                 original_module = wrapper.module_to_quantize

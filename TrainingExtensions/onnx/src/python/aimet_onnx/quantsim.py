@@ -161,6 +161,8 @@ class QuantizationSimModel:
             except:
                 logger.info('ONNX Simplifier failed. Proceeding with unsimplified model.')
 
+        onnx.save(self.model.model, 'dynamic_matmul.onnx')
+
         if not dummy_input:
             dummy_input = make_dummy_input(self.model.model)
         self.qc_quantize_op_dict = {}
@@ -562,10 +564,10 @@ class QuantizationSimModel:
                         param_quantizer.use_symmetric_encodings = output_quantizer.use_symmetric_encodings
             elif op.type == 'MatMul':
                 first_input_quantizer = input_quantizers[0] if input_quantizers else None
-                second_input_quantizer = list(param_quantizers.values())[0]
+                second_input_quantizer = list(param_quantizers.values())[0] if param_quantizers else None
 
-                first_input_op = op.input_ops[0] if not first_input_quantizer else None
-                second_input_op = op.input_ops[1] if not second_input_quantizer else None
+                first_input_op = op.inputs[0].producer if not first_input_quantizer else None
+                second_input_op = op.inputs[1].producer if not second_input_quantizer else None
 
                 target_quantizer_for_first_input = self._get_target_quantizer(first_input_quantizer, first_input_op)
                 target_quantizer_for_second_input = self._get_target_quantizer(second_input_quantizer, second_input_op)
