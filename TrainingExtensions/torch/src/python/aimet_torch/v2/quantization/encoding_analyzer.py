@@ -287,14 +287,18 @@ class EncodingAnalyzer(Generic[_Statistics], ABC):
         return self.compute_encodings_from_stats(self.observer.get_stats(), num_steps, is_symmetric)
 
     def compute_dynamic_encodings(self, input_tensor: torch.Tensor, num_steps: int,
-                                  is_symmetric: bool)-> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
+                                  is_symmetric: bool)-> Tuple[torch.Tensor, torch.Tensor]:
         return self.compute_encodings_from_stats(
             self.observer.collect_stats(input_tensor), num_steps, is_symmetric)
 
     @abstractmethod
     def compute_encodings_from_stats(self, stats: _Statistics, num_steps: int, is_symmetric: bool)\
-            -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
+            -> Tuple[torch.Tensor, torch.Tensor]:
         pass
+
+
+_MINIMUM_SCALE = torch.finfo(torch.float32).eps
+
 
 class MinMaxEncodingAnalyzer(EncodingAnalyzer[_MinMaxRange]):
     """
@@ -307,24 +311,27 @@ class MinMaxEncodingAnalyzer(EncodingAnalyzer[_MinMaxRange]):
     #pylint: disable=too-many-locals
     @torch.no_grad()
     def compute_encodings_from_stats(self, stats: _MinMaxRange, num_steps: int, is_symmetric: bool)\
-            -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
+            -> Tuple[torch.Tensor, torch.Tensor]:
         if num_steps <= 0:
             raise ValueError('The number of quantization bins cannot be less than or equal to 0.')
 
         if stats.min is None or stats.max is None:
             raise StatisticsNotFoundError('No statistics present to compute encodings.')
 
-        eps = torch.finfo(stats.min.dtype).eps
         # enforces that 0 is within the min/max
         min_with_zero = torch.clamp(stats.min, max=0)
         max_with_zero = torch.clamp(stats.max, min=0)
 
          # adjusts any min/max pairing that are too close
         tensor_diff = (max_with_zero - min_with_zero) / num_steps
-        adjustment_step = eps * (tensor_diff < eps)
+        adjustment_step = _MINIMUM_SCALE * (tensor_diff < _MINIMUM_SCALE)
 
-        updated_max = max_with_zero + math.floor(num_steps / 2) * adjustment_step
-        updated_min = min_with_zero - math.ceil(num_steps / 2) * adjustment_step
+        if is_symmetric:
+            updated_max = max_with_zero + math.floor(num_steps / 2) * adjustment_step
+            updated_min = min_with_zero - math.ceil(num_steps / 2) * adjustment_step
+        else:
+            updated_max = max_with_zero + num_steps * adjustment_step
+            updated_min = min_with_zero
 
         if is_symmetric:
             num_pos_steps = math.floor(num_steps / 2)
@@ -350,10 +357,13 @@ def adjust_min_max(curr_min, curr_max, num_steps, is_symmetric):
     curr_max.clamp_(min=0, max=torch.finfo(curr_max.dtype).max)
 
     # ensure that min/max aren't too close
-    eps = torch.finfo(curr_min.dtype).eps
     tensor_threshold = (curr_max - curr_min) / num_steps
-    curr_min[tensor_threshold < eps] -= eps * math.ceil(num_steps / 2)
-    curr_max[tensor_threshold < eps] += eps * math.floor(num_steps / 2)
+
+    if is_symmetric:
+        curr_min[tensor_threshold < _MINIMUM_SCALE] -= _MINIMUM_SCALE * math.ceil(num_steps / 2)
+        curr_max[tensor_threshold < _MINIMUM_SCALE] += _MINIMUM_SCALE * math.floor(num_steps / 2)
+    else:
+        curr_max[tensor_threshold < _MINIMUM_SCALE] += _MINIMUM_SCALE * num_steps
 
     if is_symmetric:
         num_pos_steps = math.floor(num_steps / 2)
@@ -400,7 +410,7 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
     # pylint: disable=too-many-locals
     @torch.no_grad()
     def compute_encodings_from_stats(self, stats: List[_Histogram], num_steps: int, is_symmetric: bool)\
-            -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
+            -> Tuple[torch.Tensor, torch.Tensor]:
 
         if num_steps <= 0:
             raise ValueError('The number of quantization bins cannot be less than or equal to 0.')
@@ -477,7 +487,7 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
     # pylint: disable=too-many-locals
     @torch.no_grad()
     def compute_encodings_from_stats(self, stats: List[_Histogram], num_steps: int, is_symmetric: bool)\
-            -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
+            -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Searches for encodings which produce the lowest expected SQNR based on the histograms in stats
 
@@ -510,7 +520,7 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         max_vals = torch.stack([stat.max for stat in stats])
         min_vals = torch.min(min_vals, torch.zeros_like(min_vals))
         max_vals = torch.max(max_vals, torch.zeros_like(max_vals))
-        max_vals = torch.max(max_vals, min_vals + torch.finfo(min_vals.dtype).eps * num_steps)
+        max_vals = torch.max(max_vals, min_vals + _MINIMUM_SCALE * num_steps)
         if symmetric:
             return self._pick_test_candidates_symmetric(min_vals, max_vals, num_steps)
         return self._pick_test_candidates_asymmetric(min_vals, max_vals, num_steps)
@@ -552,7 +562,7 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         test_deltas = max_delta[:, None] * search_space[None, :] / (num_deltas - 1)
         # test_deltas.shape = (num_histograms, num_deltas, 1)
         # test_offsets.shape = (1, 1, 1)
-        min_delta = torch.Tensor([torch.finfo(test_deltas.dtype).eps]).to(**tensor_kwargs)
+        min_delta = torch.Tensor([_MINIMUM_SCALE]).to(**tensor_kwargs)
         test_deltas = torch.max(test_deltas, min_delta)
         return test_deltas[:, :, None], test_offsets[:, None, None]
 
@@ -570,7 +580,7 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         # Recompute delta/offset with clamped min/max
         # Returned delta/offset shapes = (num_histograms, num_deltas, num_offsets)
         test_deltas = (test_max - test_min) / num_steps
-        min_delta = torch.Tensor([torch.finfo(test_deltas.dtype).eps]).to(device=test_deltas.device,
+        min_delta = torch.Tensor([_MINIMUM_SCALE]).to(device=test_deltas.device,
                                                                            dtype=test_deltas.dtype)
         test_deltas = torch.max(test_deltas, min_delta)
         test_offsets = torch.round(test_min / test_deltas)

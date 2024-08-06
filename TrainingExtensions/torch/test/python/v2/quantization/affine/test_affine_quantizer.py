@@ -917,49 +917,6 @@ def test_quantize_dequantize_then_quantize_and_dequantize_equality(x, symmetric)
     assert torch.equal(a, b)
 
 
-@pytest.mark.cuda
-@pytest.mark.parametrize("symmetric", [True, False])
-def test_high_bitwidth(x, symmetric):
-    """
-    Given: QuantizeDequantize of bitwidth=16
-    When: Run forward with input of dtype float16, float32, and bfloat16
-    Then:
-      1) All of them should produce outputs normally without any nan value.
-      2) The output dtype should be the same as the input dtype
-    """
-    x = x.cuda()
-    for param_dtype in (torch.float32, torch.bfloat16, torch.float16):
-        for input_dtype in (torch.float16, torch.float32, torch.bfloat16):
-            qdq = quantize_dequantize(symmetric=symmetric, initialized=True, bitwidth=16).to(param_dtype).cuda()
-            out = qdq(x.to(input_dtype))
-            assert not torch.any(out.isnan())
-            assert out.dtype == input_dtype
-
-    """
-    Given: Quantize of bitwidth=16
-    When: Run forward with input of dtype float32, and bfloat16
-    Then:
-      1) All of them should produce outputs normally without any nan value.
-      2) The output dtype should be the same as the input dtype
-    """
-    for param_dtype in (torch.float32, torch.bfloat16, torch.float16):
-        for input_dtype in (torch.float32, torch.bfloat16):
-            q = quantize(symmetric=symmetric, initialized=True, bitwidth=16).to(param_dtype).cuda()
-            out = q(x.to(input_dtype))
-            assert not torch.any(out.isnan())
-            assert out.dtype == input_dtype
-
-    """
-    Given: Quantize of bitwidth=16
-    When: Run forward with input of dtype float16
-    Then: Throw runtime error. float16 cannot represent the range [0, 2**16-1].
-    """
-    for param_dtype in (torch.float32, torch.bfloat16, torch.float16):
-        for input_dtype in (torch.float16,):
-            q = quantize(symmetric=symmetric, initialized=True, bitwidth=16).to(param_dtype).cuda()
-            with pytest.raises(RuntimeError):
-                out = q(x.to(input_dtype))
-
 @pytest.mark.parametrize("q", (Quantize(_PARAMETER_SHAPE, 8, False),
                                QuantizeDequantize(_PARAMETER_SHAPE, 8, True)))
 def test_allow_overwrite(x, q):
@@ -1217,3 +1174,133 @@ def test_onnx_export():
     with tempfile.TemporaryDirectory() as tempdir:
         with open(os.path.join(tempdir, 'qtzr.onnx'), 'wb') as f:
             torch.onnx.export(qdq, torch.randn(10, 10), f)
+
+
+def get_qtzn_grid(bitwidth, signed):
+    if signed:
+        qmin = -2 ** (bitwidth - 1)
+        qmax = -qmin - 1
+    else:
+        qmin = 0
+        qmax = 2 ** bitwidth - 1
+
+    return torch.arange(qmin, qmax+1, dtype=torch.long)
+
+
+FLOAT32_EPS = torch.tensor(torch.finfo(torch.float32).eps)
+FLOAT32_TINY = torch.tensor(torch.finfo(torch.float32).tiny)
+
+
+@pytest.mark.parametrize('tiny_scale', [FLOAT32_EPS, FLOAT32_TINY])
+@pytest.mark.parametrize('dtype', [torch.float16, torch.bfloat16])
+@pytest.mark.parametrize('symmetric', [True, False])
+@pytest.mark.parametrize('bitwidth', [4, 8, 16])
+def test_sub_float32_quantize_dequantize(dtype, bitwidth, symmetric, tiny_scale):
+    """
+    Given: Input of range [0, 2**bw) * tiny_scale
+    """
+    min_scale = FLOAT32_EPS
+    x_int = get_qtzn_grid(bitwidth, signed=symmetric)
+    x = (x_int * tiny_scale).to(dtype)
+
+    """
+    When: Compute encodings of QuantizeDequantize
+    Then: qtzr.get_scale() should be no smaller than torch.finfo(float32).eps
+    """
+    qtzr = QuantizeDequantize((), bitwidth, symmetric).to(dtype)
+
+    with qtzr.compute_encodings():
+        _ = qtzr(x)
+
+    assert torch.allclose(qtzr.get_scale(dtype=torch.float32), min_scale)
+    assert torch.allclose(qtzr.get_offset(dtype=torch.float32), torch.zeros([]))
+
+    """
+    When: Run forward
+    Then: Output should be equal to performing quantize-dequantize in float32
+    """
+    out = qtzr(x)
+    assert out.dtype == x.dtype
+    assert torch.all(out.isfinite())
+    expected = Q.affine.quantize_dequantize(x.float(),
+                                            min_scale,
+                                            torch.zeros([]).float(),
+                                            qmin=int(x_int.min()),
+                                            qmax=int(x_int.max())).to(dtype)
+
+    assert torch.equal(out, expected)
+    assert torch.allclose(out, x, atol=float(min_scale)/2)
+
+
+@pytest.mark.parametrize('tiny_scale', [FLOAT32_EPS, FLOAT32_TINY])
+@pytest.mark.parametrize(
+    'dtype,          bitwidth,  symmetric', [
+    (torch.float16,  4,         True),
+    (torch.float16,  8,         True),
+    (torch.float16,  12,        True),
+    (torch.float16,  4,         False),
+    (torch.float16,  8,         False),
+    (torch.float16,  11,        False),
+    (torch.bfloat16, 4,         True),
+    (torch.bfloat16, 8,         True),
+    (torch.bfloat16, 9,         True),
+    (torch.bfloat16, 4,         False),
+    (torch.bfloat16, 8,         False),
+])
+def test_sub_float32_quantize(dtype, bitwidth, symmetric, tiny_scale):
+    """
+    Given: Input of range [0, 2**bw) * tiny_scale
+    """
+    min_scale = FLOAT32_EPS
+    x_int = get_qtzn_grid(bitwidth, signed=symmetric)
+    x = (x_int * tiny_scale).to(dtype)
+
+    """
+    When: Compute encodings of QuantizeDequantize
+    Then: qtzr.get_scale() should be no smaller than torch.finfo(float32).eps
+    """
+    qtzr = Quantize((), bitwidth, symmetric).to(dtype)
+
+    with qtzr.compute_encodings():
+        _ = qtzr(x)
+
+    assert torch.allclose(qtzr.get_scale(dtype=torch.float32), min_scale)
+    assert torch.allclose(qtzr.get_offset(dtype=torch.float32), torch.zeros([]))
+
+    """
+    When: Run forward
+    Then: Output should be equal to performing quantize in float32
+    """
+    out = qtzr(x)
+    assert out.dtype == x.dtype
+    assert torch.all(out.isfinite())
+    expected = Q.affine.quantize(x.float(),
+                                 min_scale,
+                                 torch.zeros([]).float(),
+                                 qmin=int(x_int.min()),
+                                 qmax=int(x_int.max())).to(dtype)
+
+    assert torch.equal(out.as_subclass(torch.Tensor).long(), expected.long())
+
+
+@pytest.mark.parametrize(
+    'dtype,          bitwidth,  symmetric', [
+    (torch.float16,  13,        True),
+    (torch.float16,  12,        False),
+    (torch.bfloat16, 10,        True),
+    (torch.bfloat16, 9,         False),
+])
+def test_sub_float32_error(dtype, bitwidth, symmetric):
+    """
+    Given: Input of range [0, 2**bw) * scale
+    When: Run Quantize.forward with high bitwidth and sub-float32 dtype
+    Then: Throw runtime error
+    """
+    x_int = get_qtzn_grid(bitwidth, signed=symmetric)
+    x = (x_int.double() / x_int.max().double()).to(dtype)
+
+    qtzr = Quantize((), bitwidth, symmetric).to(dtype)
+
+    with qtzr.compute_encodings():
+        with pytest.raises(RuntimeError):
+            _ = qtzr(x)

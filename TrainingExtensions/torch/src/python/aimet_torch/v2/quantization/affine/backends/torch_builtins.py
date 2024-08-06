@@ -35,6 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Default quantization backend for quantizing weights and activations """
+import functools
 from typing import Optional, List
 import torch
 
@@ -42,28 +43,30 @@ from aimet_torch.v2.utils import _is_expandable
 import aimet_torch.v2.experimental.onnx._export as _onnx
 
 
-def _is_value_representable(dtype: torch.dtype, value):
+def _is_value_representable(dtype: torch.dtype, value: int):
     """
-    Return whether a value can be represented with the given dtype
+    Return whether an integer value can be represented with the given dtype
     """
-    finfo = torch.finfo(dtype)
-    return finfo.min < value < finfo.max
+    dtype_repr = torch.tensor(value, dtype=dtype)
+    return dtype_repr.isfinite() and dtype_repr.long() == value
 
 
-def _is_range_representable(dtype: torch.dtype, qmin: int, qmax: int):
+@functools.lru_cache(None)
+def _is_grid_representable(dtype: torch.dtype, qmin: int, qmax: int):
     """
-    Return whether a range can be represented with the given dtype
+    Return whether a range of integers can be represented with the given dtype
     """
     return _is_value_representable(dtype, qmax) and \
-            _is_value_representable(dtype, qmin) and \
-            _is_value_representable(dtype, qmax - qmin)
+            _is_value_representable(dtype, qmax - 1) and \
+            _is_value_representable(dtype, qmin + 1) and \
+            _is_value_representable(dtype, qmin)
 
 
 def _is_numerically_stable(dtype: torch.dtype, qmin: int, qmax: int):
     """
     Return whether a range can be **stably** represented with the given dtype
     """
-    if not _is_range_representable(dtype, qmin, qmax):
+    if not _is_grid_representable(dtype, qmin, qmax):
         return False
 
     # Degenerate case
@@ -72,17 +75,14 @@ def _is_numerically_stable(dtype: torch.dtype, qmin: int, qmax: int):
 
     # NOTE: This is a heuristic criteria. It doesn't perfectly guarantee numerical stability
     #       This criteria allows 8-bit quantization of float16, but it needs more discussion
-    if torch.finfo(dtype).tiny > 1e-1 / (qmax - qmin):
+    if torch.finfo(dtype).eps > 1e-1 / (qmax - qmin):
         return False
 
     return True
 
 
-def _validate_arguments(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
+def _validate_arguments(tensor: torch.Tensor, scale: torch.Tensor,
                         qmin: int = None, qmax: int = None, block_size: Optional[List] = None):
-    if not tensor.dtype == scale.dtype == offset.dtype:
-        raise RuntimeError("Data type of tensor, scale, and offset are should be the same")
-
     if block_size is not None:
         if len(scale.shape) != len(block_size):
             raise RuntimeError(f'Length of scale shape {scale.shape} must equal length of block size {block_size}')
@@ -119,9 +119,11 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
     :param qmax: Maximum value of the quantization range
     :param block_size: Block sizes per dimension
     """
-    _validate_arguments(tensor, scale, offset, qmin, qmax, block_size)
+    _validate_arguments(tensor, scale, qmin, qmax, block_size)
 
-    if not _is_range_representable(tensor.dtype, qmin, qmax):
+    output_dtype = internal_dtype = tensor.dtype
+
+    if not _is_grid_representable(tensor.dtype, qmin, qmax):
         msg = f"{tensor.dtype} is unable to represent quantized output of range [{qmin}, {qmax}]."
         raise RuntimeError(msg)
 
@@ -129,7 +131,10 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
     tensor = reshape_tensor_for_blocks(tensor, scale.shape, block_size)
     scale = scale.view(get_encoding_shape_with_blocks(scale.shape, block_size))
     offset = offset.view(get_encoding_shape_with_blocks(offset.shape, block_size))
-    return QuantizeFunc.apply(tensor, scale, offset, qmin, qmax).view(orig_tensor_shape)
+    return QuantizeFunc.apply(tensor.to(internal_dtype),
+                              scale.to(internal_dtype),
+                              offset.to(internal_dtype),
+                              qmin, qmax).to(output_dtype).view(orig_tensor_shape)
 
 
 
@@ -146,14 +151,16 @@ def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
     :param qmax: Maximum value of the quantization range
     :param block_size: Block sizes per dimension
     """
-    _validate_arguments(tensor, scale, offset, qmin, qmax, block_size)
+    _validate_arguments(tensor, scale, qmin, qmax, block_size)
 
     output_dtype = internal_dtype = tensor.dtype
 
     if not _is_numerically_stable(internal_dtype, qmin, qmax):
         internal_dtype = torch.float32
+        if not _is_numerically_stable(internal_dtype, qmin, qmax):
+            internal_dtype = torch.float64
 
-    if not _is_range_representable(internal_dtype, qmin, qmax):
+    if not _is_grid_representable(internal_dtype, qmin, qmax):
         msg = f"{internal_dtype} is unable to represent quantized output of range [{qmin}, {qmax}]."
         raise RuntimeError(msg)
 
@@ -178,12 +185,17 @@ def dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, 
     :param block_size: Block sizes per dimension
     :return: Resulting tensor
     """
-    _validate_arguments(tensor, scale, offset, block_size=block_size)
+    _validate_arguments(tensor, scale, block_size=block_size)
+
+    output_dtype = internal_dtype = tensor.dtype
+
     orig_tensor_shape = tensor.shape
     tensor = reshape_tensor_for_blocks(tensor, scale.shape, block_size)
     scale = scale.view(get_encoding_shape_with_blocks(scale.shape, block_size))
     offset = offset.view(get_encoding_shape_with_blocks(offset.shape, block_size))
-    return DequantizeFunc.apply(tensor, scale, offset).view(orig_tensor_shape)
+    return DequantizeFunc.apply(tensor.to(internal_dtype),
+                                scale.to(internal_dtype),
+                                offset.to(internal_dtype)).to(output_dtype).view(orig_tensor_shape)
 
 
 # pylint: disable=abstract-method
