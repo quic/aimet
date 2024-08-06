@@ -298,10 +298,7 @@ class QuantDequantFunc(torch.autograd.Function):
 
         if ctx.scale_requires_grad:
             tensor = tensor.to(scale.dtype) / scale
-            scale_grad = torch.round(tensor)\
-                              .clamp_(offset + qmin, offset + qmax)\
-                              .sub_(tensor.mul_(mask))\
-                              .mul_(grad)
+            scale_grad = grad * (torch.round(tensor).clamp(offset + qmin, offset + qmax) - (tensor * mask))
         else:
             scale_grad = None
 
