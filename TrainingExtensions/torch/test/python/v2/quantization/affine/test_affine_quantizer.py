@@ -43,6 +43,7 @@ import numpy as np
 import random
 import tempfile
 import torch
+import warnings
 from torch import nn
 from torch.optim import SGD, RMSprop, Adagrad, Adam, AdamW
 from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
@@ -668,6 +669,19 @@ def test_asymmetric_learning(q, x, optim_cls):
     assert not torch.equal(q.get_scale(), original_scale)
     assert not torch.equal(q.get_offset(), original_offset)
 
+def test_extreme_values_warning():
+        extreme_val = torch.finfo(torch.float16).max
+        dummy_input = torch.arange(start = 0, end=extreme_val, dtype=torch.float16)        
+        param_shape = (1,)
+        encoding_shape = (1,)
+        qdq = QuantizeDequantize(param_shape, 8, True, MinMaxEncodingAnalyzer(encoding_shape))
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            with qdq.compute_encodings():
+                qdq(dummy_input)
+            assert len(w) == 1
+            assert issubclass(w[-1].category, UserWarning)
+            assert "Extreme values" in str(w[-1].message)
 
 def test_invalid_encoding_analyzer():
     """

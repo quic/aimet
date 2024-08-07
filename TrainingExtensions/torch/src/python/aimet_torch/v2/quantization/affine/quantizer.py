@@ -47,7 +47,7 @@ import torch
 from torch import nn
 
 from aimet_torch.v2.utils import patch_attr, _is_expandable, StatisticsNotFoundError
-from aimet_torch.v2.quantization.encoding_analyzer import EncodingAnalyzer, MinMaxEncodingAnalyzer
+from aimet_torch.v2.quantization.encoding_analyzer import EncodingAnalyzer, MinMaxEncodingAnalyzer, _flag_extreme_min_max
 from aimet_torch.v2.quantization.affine import AffineEncoding
 from aimet_torch.v2.quantization.tensor import QuantizedTensor, DequantizedTensor
 from aimet_torch.v2.quantization.base import QuantizerBase
@@ -305,6 +305,7 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
                 if self.block_size is not None:
                     enc_min = enc_min.view(self.min.shape)
                     enc_max = enc_max.view(self.max.shape)
+                _flag_extreme_min_max(enc_min, enc_max, self.max.device)
 
             except StatisticsNotFoundError:
                 return
