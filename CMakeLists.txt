@@ -109,6 +109,7 @@ if (ENABLE_TORCH AND ENABLE_TENSORFLOW)
 endif()
 
 # Find Python libraries
+set(Python3_FIND_VIRTUALENV "STANDARD")
 find_package(Python3 COMPONENTS Interpreter Development)
 message(STATUS "Found Python3: ${Python3_FOUND}, at ${Python3_LIBRARIES}")
 
