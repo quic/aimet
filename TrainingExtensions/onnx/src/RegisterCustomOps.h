@@ -43,9 +43,6 @@
 #include "onnxruntime_cxx_api.h"
 #undef ORT_API_MANUAL_INIT
 
-#include "OnnxOpUtils.h"
-#include "QcQuantizeOp.h"
-
 
 extern "C" ORT_EXPORT OrtStatus* ORT_API_CALL RegisterCustomOps(OrtSessionOptions* options, const OrtApiBase* api);
 

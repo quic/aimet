@@ -46,50 +46,31 @@
 #include "QcQuantizeInfo.h"
 
 #ifdef ONNX_CUDA
+// IMPORTANT: cuda_context.h needs to be included before onnxruntime_lite_custom_op.h
+#include "core/providers/cuda/cuda_context.h"
 #include <cuda_runtime_api.h>
 #endif
 
+#include "onnxruntime_lite_custom_op.h"
 
-struct QcQuantizeKernel
+
+struct QcQuantizeOp
 {
-public:
-    QcQuantizeKernel(const OrtApi* api, const OrtKernelInfo* info, bool useCuda);
+    QcQuantizeOp(const OrtApi* api, const OrtKernelInfo* info);
 
-    void Compute(OrtKernelContext* context);
+    void computeImpl(const Ort::Custom::Tensor<float>& input, Ort::Custom::Tensor<float>& output, void* stream,
+                     bool useCuda, DlQuantization::IAllocator* allocator);
+
+protected:
+    struct QcQuantizeInfo* quantInfo;
 
 private:
     std::unique_ptr<DlQuantization::ITensorQuantizationSim<float>> tensorQuantizationSim;
     const OrtKernelInfo* info_;
-    Ort::CustomOpApi api_;
-    struct QcQuantizeInfo* quantInfo;
-    bool useCuda;
+    OrtApi api_;
 };
 
 
-struct QcQuantizeOp : Ort::CustomOpBase<QcQuantizeOp, QcQuantizeKernel>
-{
-    static void* CreateKernel(const OrtApi& api, const OrtKernelInfo* info);
-    static const char* GetName();
-    static size_t GetInputTypeCount();
-    static ONNXTensorElementDataType GetInputType(size_t index);
-    static size_t GetOutputTypeCount();
-    static ONNXTensorElementDataType GetOutputType(size_t index);
-    const char* GetExecutionProviderType() const;
-};
-
-
-#ifdef ONNX_CUDA
-struct QcQuantizeOpGPU : Ort::CustomOpBase<QcQuantizeOpGPU, QcQuantizeKernel>
-{
-    static void* CreateKernel(const OrtApi& api, const OrtKernelInfo* info);
-    static const char* GetName();
-    static size_t GetInputTypeCount();
-    static ONNXTensorElementDataType GetInputType(size_t index);
-    static size_t GetOutputTypeCount();
-    static ONNXTensorElementDataType GetOutputType(size_t index);
-    const char* GetExecutionProviderType() const;
-};
-#endif
-
+void RegisterOps(Ort::CustomOpDomain& domain);
 
 #endif   // AIMET_MAIN_QCQUANTIZEOP_H
