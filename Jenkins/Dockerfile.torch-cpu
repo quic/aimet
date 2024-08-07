@@ -156,10 +156,10 @@ RUN python3 -m pip --no-cache-dir install \
         nbsphinx==0.8.12 \
         networkx \
         'numpy<1.24,>=1.20.5' \
-        onnx==1.14.1 \
+        onnx==1.16.1 \
         onnxscript \
         onnxsim \
-        onnxruntime==1.15.1 \
+        onnxruntime==1.18.1 \
         onnxruntime-extensions \
         opencv-python \
         peft \

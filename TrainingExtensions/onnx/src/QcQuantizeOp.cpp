@@ -49,26 +49,23 @@ static OnnxCudaAllocator cudaAllocator;
 static OnnxCpuAllocator cpuAllocator;
 
 
-QcQuantizeKernel::QcQuantizeKernel(const OrtApi* api, const OrtKernelInfo* info, bool useCuda) :
-    api_(*api), info_(info), useCuda(useCuda)
+QcQuantizeOp::QcQuantizeOp(const OrtApi* api, const OrtKernelInfo* info) : api_(*api), info_(info)
 {
     tensorQuantizationSim = DlQuantization::getTensorQuantizationSim<float>();
-    quantInfo =
-        reinterpret_cast<struct QcQuantizeInfo*>(api_.KernelInfoGetAttribute<std::int64_t>(info_, "quant_info"));
+    int64_t quantInfoPointer;
+    api->KernelInfoGetAttribute_int64(info_, "quant_info", &quantInfoPointer);
+    quantInfo = reinterpret_cast<struct QcQuantizeInfo*>(quantInfoPointer);
 }
 
 
-void QcQuantizeKernel::Compute(OrtKernelContext* context)
+void QcQuantizeOp::computeImpl(const Ort::Custom::Tensor<float>& input, Ort::Custom::Tensor<float>& output,
+                               void* stream, bool useCuda, DlQuantization::IAllocator* allocator)
 {
     // Setup inputs
-    const OrtValue* input = api_.KernelContext_GetInput(context, 0);
-    auto inputData        = api_.GetTensorData<float>(input);
-    OrtTensorDimensions dimensions(api_, input);
-    // Setup outputs
-    OrtValue* output = api_.KernelContext_GetOutput(context, 0, dimensions.data(), dimensions.size());
-    auto result      = api_.GetTensorMutableData<float>(output);
-    OrtTensorTypeAndShapeInfo* outputInfo = api_.GetTensorTypeAndShape(output);
-    size_t size                           = api_.GetTensorShapeElementCount(outputInfo);
+    auto inputData  = input.Data();
+    auto inputShape = input.Shape();
+    size_t size     = input.NumberOfElement();
+    auto result     = output.Allocate(inputShape);
 
     std::vector<DlQuantization::TfEncoding*> encodings = quantInfo->encoding;
 
@@ -79,30 +76,12 @@ void QcQuantizeKernel::Compute(OrtKernelContext* context)
         opMode = DlQuantization::TensorQuantizerOpMode::passThrough;
     }
 
-    api_.ReleaseTensorTypeAndShapeInfo(outputInfo);
-
-    DlQuantization::IAllocator* allocator = &cpuAllocator;
-    void* stream                          = nullptr;
-#ifdef ONNX_CUDA
-    if (useCuda)
-    {
-        allocator = &cudaAllocator;
-        stream    = api_.KernelContext_GetGPUComputeStream(context);
-        if ((opMode == DlQuantization::TensorQuantizerOpMode::updateStats) ||
-            (opMode == DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize))
-        {
-            // updateStats doesn't use cuda stream, must synchronize first to ensure input buffer is populated
-            cudaStreamSynchronize(reinterpret_cast<cudaStream_t>(stream));
-        }
-    }
-#endif
-
     if (quantInfo->isIntDataType)
     {
         if (quantInfo->usePerChannelMode)
         {
             int axis = quantInfo->channelAxis;
-            modeSpecificActionPerChannelInt(inputData, size, result, axis, dimensions, quantInfo->tensorQuantizerRef,
+            modeSpecificActionPerChannelInt(inputData, size, result, axis, inputShape, quantInfo->tensorQuantizerRef,
                                             opMode, encodings, quantInfo->useSymmetricEncoding, allocator, useCuda,
                                             stream, tensorQuantizationSim);
         }
@@ -125,84 +104,49 @@ void QcQuantizeKernel::Compute(OrtKernelContext* context)
 }
 
 
-void* QcQuantizeOp::CreateKernel(const OrtApi& api, const OrtKernelInfo* info)
+struct QcQuantizeOpCpu : QcQuantizeOp
 {
-    return new QcQuantizeKernel(&api, info, false);
+    using QcQuantizeOp::QcQuantizeOp;
+
+    void Compute(const Ort::Custom::Tensor<float>& input, Ort::Custom::Tensor<float>& output)
+    {
+        computeImpl(input, output, nullptr, false, &cpuAllocator);
+    }
 };
 
-
-const char* QcQuantizeOp::GetName()
-{
-    return "QcQuantizeOp";
-};
-
-
-size_t QcQuantizeOp::GetInputTypeCount()
-{
-    return 1;
-};
-
-
-ONNXTensorElementDataType QcQuantizeOp::GetInputType(size_t /*index*/)
-{
-    return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
-};
-
-
-size_t QcQuantizeOp::GetOutputTypeCount()
-{
-    return 1;
-};
-
-
-ONNXTensorElementDataType QcQuantizeOp::GetOutputType(size_t /*index*/)
-{
-    return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
-};
-
-const char* QcQuantizeOp::GetExecutionProviderType() const
-{
-    return "CPUExecutionProvider";
-};
 
 #ifdef ONNX_CUDA
-void* QcQuantizeOpGPU::CreateKernel(const OrtApi& api, const OrtKernelInfo* info)
+
+struct QcQuantizeOpCuda : QcQuantizeOp
 {
-    return new QcQuantizeKernel(&api, info, true);
+    using QcQuantizeOp::QcQuantizeOp;
+
+    void Compute(const Ort::Custom::CudaContext& cuda_ctx, const Ort::Custom::Tensor<float>& input,
+                 Ort::Custom::Tensor<float>& output)
+    {
+        cudaStream_t stream = cuda_ctx.cuda_stream;
+        if ((quantInfo->opMode == DlQuantization::TensorQuantizerOpMode::updateStats) ||
+            (quantInfo->opMode == DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize))
+        {
+            // updateStats doesn't use cuda stream, must synchronize first to ensure input buffer is populated
+            cudaStreamSynchronize(stream);
+        }
+
+        computeImpl(input, output, stream, true, &cudaAllocator);
+    }
 };
 
-
-const char* QcQuantizeOpGPU::GetName()
-{
-    return "QcQuantizeOp";
-};
-
-
-size_t QcQuantizeOpGPU::GetInputTypeCount()
-{
-    return 1;
-};
-
-
-ONNXTensorElementDataType QcQuantizeOpGPU::GetInputType(size_t /*index*/)
-{
-    return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
-};
-
-
-size_t QcQuantizeOpGPU::GetOutputTypeCount()
-{
-    return 1;
-};
-
-
-ONNXTensorElementDataType QcQuantizeOpGPU::GetOutputType(size_t /*index*/)
-{
-    return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
-};
-
-const char* QcQuantizeOpGPU::GetExecutionProviderType() const
-{
-    return "CUDAExecutionProvider";
-};
 #endif
+
+
+void RegisterOps(Ort::CustomOpDomain& domain)
+{
+    static const std::unique_ptr<Ort::Custom::OrtLiteCustomOp> qcQuantCpuOpPointer {
+        Ort::Custom::CreateLiteCustomOp<QcQuantizeOpCpu>("QcQuantizeOp", "CPUExecutionProvider")};
+    domain.Add(qcQuantCpuOpPointer.get());
+#ifdef ONNX_CUDA
+    static const std::unique_ptr<Ort::Custom::OrtLiteCustomOp> qcQuantCudaOpPointer {
+        Ort::Custom::CreateLiteCustomOp<QcQuantizeOpCuda>("QcQuantizeOp", "CUDAExecutionProvider")};
+    domain.Add(qcQuantCudaOpPointer.get());
+#endif
+}
