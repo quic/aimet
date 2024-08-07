@@ -40,6 +40,7 @@ import pytest
 import random
 import torch
 import numpy as np
+import warnings
 from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 from aimet_torch.v2.quantization.float import FloatQuantizeDequantize
 from aimet_torch.v2.quantization.float.quantizer import _ieee_float_max_representable_value
@@ -154,6 +155,7 @@ def test_allow_overwrite(x):
 
     assert torch.equal(q_max, q.maxval)
 
+
 @pytest.mark.parametrize('exponent_1, mantissa_1, encoding_analyzer_1', [(1, 2, MinMaxEncodingAnalyzer((1, 3))),
                                                                          (3, 4, None)])
 @pytest.mark.parametrize('exponent_2, mantissa_2, encoding_analyzer_2', [(5, 6, MinMaxEncodingAnalyzer((1, 3))),
@@ -173,3 +175,17 @@ def test_save_and_load_state_dict(exponent_1, mantissa_1, encoding_analyzer_1, e
     qtzr_1_state_dict = qtzr_1.state_dict()
     qtzr_2.load_state_dict(qtzr_1_state_dict)
     assert torch.equal(qtzr_1(dummy_input), qtzr_2(dummy_input))
+
+def test_extreme_values_warning():
+        extreme_val = torch.finfo(torch.float16).max
+        dummy_input = torch.arange(start = 0, end=extreme_val, dtype=torch.float16)        
+        encoding_shape = (1,)
+        qdq = FloatQuantizeDequantize(dtype=torch.float16, encoding_analyzer=MinMaxEncodingAnalyzer(encoding_shape))
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            with qdq.compute_encodings():
+                qdq(dummy_input)
+            assert len(w) == 1
+            assert issubclass(w[-1].category, UserWarning)
+            assert "Extreme values" in str(w[-1].message) 
+
