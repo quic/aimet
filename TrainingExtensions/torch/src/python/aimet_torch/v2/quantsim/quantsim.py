@@ -45,7 +45,6 @@ import torch
 from aimet_torch.quantsim import QuantizationSimModel as V1QuantizationSimModel, logger
 import aimet_torch.quantsim as quantsim_v1
 from aimet_torch.v2 import nn as aimet_nn
-from aimet_torch.v2.nn import FakeQuantizationMixin
 from aimet_torch.v2.nn import BaseQuantizationMixin
 from aimet_torch.quantsim_config.builder import LazyQuantizeWrapper
 from aimet_torch.v2.quantization.base import QuantizerBase
@@ -111,7 +110,7 @@ class QuantizationSimModel(V1QuantizationSimModel):
             module.to(device=device)
 
     @staticmethod
-    def _realize_quant_wrapper(module: LazyQuantizeWrapper) -> FakeQuantizationMixin:
+    def _realize_quant_wrapper(module: LazyQuantizeWrapper) -> BaseQuantizationMixin:
         """
         Make wrapper builder into v2 quant wrapper
 

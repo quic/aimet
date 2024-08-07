@@ -46,7 +46,7 @@ from packaging import version
 from torchvision.models import resnet18
 
 import aimet_torch.v2.nn as aimet_nn
-from aimet_torch.v2.nn import FakeQuantizationMixin
+from aimet_torch.v2.nn import QuantizationMixin
 from aimet_torch.v2.quantization.affine import QuantizeDequantize
 from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 from aimet_torch.nn.modules.custom import Add
@@ -93,7 +93,7 @@ class TestQuantsimOnnxExport:
         model = DummyModel(in_channels=input_shape[1])
         sim_model = copy.deepcopy(model)
         for name, module in sim_model.named_children():
-            quantized_module = FakeQuantizationMixin.from_module(module)
+            quantized_module = QuantizationMixin.from_module(module)
 
             if name == "conv1":
                 input_quantizer = QuantizeDequantize((),
@@ -148,7 +148,7 @@ class TestQuantsimOnnxExport:
         sim_model = copy.deepcopy(model)
         dummy_input = (torch.rand(1, 1, 28, 28), torch.rand(1, 1, 28, 28))
         for name, module in sim_model.named_children():
-            quantized_module = FakeQuantizationMixin.from_module(module)
+            quantized_module = QuantizationMixin.from_module(module)
 
             if name == "conv1_a":
                 input_quantizer = QuantizeDequantize((),
@@ -207,7 +207,7 @@ class TestQuantsimOnnxExport:
         pixel_shuffle = torch.nn.PixelShuffle(2)
         model = torch.nn.Sequential(pixel_shuffle)
 
-        quantized_pixel_shuffle = FakeQuantizationMixin.from_module(pixel_shuffle)
+        quantized_pixel_shuffle = QuantizationMixin.from_module(pixel_shuffle)
         quantized_pixel_shuffle.input_quantizers[0] = QuantizeDequantize((),
                                                                          bitwidth=8,
                                                                          symmetric=False,
@@ -258,7 +258,7 @@ class TestQuantsimOnnxExport:
         model = ModelWith5Output()
         dummy_input = torch.randn(1, 3, 224, 224)
         sim_model = copy.deepcopy(model)
-        sim_model.cust = FakeQuantizationMixin.from_module(sim_model.cust)
+        sim_model.cust = QuantizationMixin.from_module(sim_model.cust)
         sim_model.cust.input_quantizers[0] = QuantizeDequantize((),
                                                                 bitwidth=8,
                                                                 symmetric=False,
@@ -292,7 +292,7 @@ class TestQuantsimOnnxExport:
         model = SoftMaxAvgPoolModel()
 
         sim_model  = copy.deepcopy(model)
-        sim_model.sfmax = FakeQuantizationMixin.from_module(sim_model.sfmax)
+        sim_model.sfmax = QuantizationMixin.from_module(sim_model.sfmax)
         sim_model.sfmax.input_quantizers[0] = QuantizeDequantize((),
                                                                  bitwidth=8,
                                                                  symmetric=False,
@@ -302,7 +302,7 @@ class TestQuantsimOnnxExport:
                                                                   symmetric=False,
                                                                   encoding_analyzer=MinMaxEncodingAnalyzer(()))
 
-        sim_model.avgpool = FakeQuantizationMixin.from_module(sim_model.avgpool)
+        sim_model.avgpool = QuantizationMixin.from_module(sim_model.avgpool)
         sim_model.avgpool.input_quantizers[0] = QuantizeDequantize((),
                                                                   bitwidth=8,
                                                                   symmetric=False,

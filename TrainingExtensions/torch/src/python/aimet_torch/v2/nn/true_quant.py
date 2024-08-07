@@ -38,12 +38,14 @@
 """ Quantized modules"""
 
 from packaging import version
+import abc
 import contextlib
 import itertools
 from abc import abstractmethod, ABCMeta
 from collections import OrderedDict
 from typing import Type, Any, Optional, Callable, Dict
 from weakref import WeakKeyDictionary
+import warnings
 
 import torch
 import torch.nn as nn
@@ -116,7 +118,20 @@ def _exit_compute_encodings(qmodule):
     _QUANTIZED_MODULES_UNDER_COMPUTE_ENCODINGS[qmodule] -= 1
 
 
-class QuantizationMixin(BaseQuantizationMixin): # pylint: disable=abstract-method
+class QuantizationMixinMeta(abc.ABCMeta):
+    """Sets :meth:`forward` to :meth:`quantized_forward` if only :meth:`quantized_forward` is defined
+    """
+
+    def __new__(mcs, name, bases, namespace, **kwargs):
+        if "quantized_forward" in namespace and "forward" not in namespace:
+            warnings.warn("Support for defining `quantized_forward` in place of `forward` method will be deprecated, "
+                          "please use `forward` instead.",
+                          DeprecationWarning, stacklevel=2)
+            namespace["forward"] = namespace["quantized_forward"]
+        return super().__new__(mcs, name, bases, namespace, **kwargs)
+
+
+class QuantizationMixin(BaseQuantizationMixin, metaclass=QuantizationMixinMeta): # pylint: disable=abstract-method
     """Mixin that adds quantization functionality on top of regular pytorch modules.
 
     :class:`QuantizationMixin` provides all the same behavior as :class:`FakeQuantizationMixin`, and by default, a
@@ -389,7 +404,7 @@ def _dispatch(torch_func: Callable, custom_impl: Callable):
             _dispatcher.__exit__(None, None, None)
 
 
-class _DispatchMeta(ABCMeta):
+class _DispatchMeta(QuantizationMixinMeta):
     def __new__(mcs, name, bases, namespace, **kwargs):
         """
         Sanity check for class definitions of dispatch-based quantized modules

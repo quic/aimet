@@ -532,69 +532,6 @@ class BaseQuantizationMixin(abc.ABC):
         return _ContextManager(action=lambda: None,
                                cleanup=lambda: (ctx_1._cleanup(), ctx_2._cleanup()))
 
-class _BaseQuantizedUnaryOpMixin(BaseQuantizationMixin):
-    def forward(self, *args, **kwargs) -> Tensor: # pylint: disable=missing-function-docstring
-        x, *others = args
-
-        if isinstance(x, Tensor) and x.is_floating_point() and self.input_quantizers[0]:
-            x = self.input_quantizers[0](x)
-
-        with self._patch_quantized_parameters():
-            output = super().forward(x, *others, **kwargs)
-
-        if isinstance(output, Tensor) and output.is_floating_point() and self.output_quantizers[0]:
-            output = self.output_quantizers[0](output)
-
-        return output
-
-class _BaseQuantizedBinaryOpMixin(BaseQuantizationMixin):
-    def __quant_init__(self):
-        super().__quant_init__()
-        self.input_quantizers = nn.ModuleList([None, None])
-
-    def forward(self, *args, **kwargs) -> Tensor: # pylint: disable=missing-function-docstring
-        x, y, *others = args
-
-        if isinstance(x, Tensor) and x.is_floating_point() and self.input_quantizers[0]:
-            x = self.input_quantizers[0](x)
-
-        if isinstance(y, Tensor) and y.is_floating_point() and self.input_quantizers[1]:
-            y = self.input_quantizers[1](y)
-
-        with self._patch_quantized_parameters():
-            output = super().forward(x, y, *others, **kwargs)
-
-        if isinstance(output, Tensor) and output.is_floating_point() and self.output_quantizers[0]:
-            output = self.output_quantizers[0](output)
-
-        return output
-
-
-class _BaseQuantizedTernaryOpMixin(BaseQuantizationMixin):
-    def __quant_init__(self):
-        super().__quant_init__()
-        self.input_quantizers = nn.ModuleList([None, None, None])
-
-    def forward(self, *args, **kwargs) -> Tensor: # pylint: disable=missing-function-docstring
-        x, y, z, *others = args
-
-        if isinstance(x, Tensor) and x.is_floating_point() and self.input_quantizers[0]:
-            x = self.input_quantizers[0](x)
-
-        if isinstance(y, Tensor) and y.is_floating_point() and self.input_quantizers[1]:
-            y = self.input_quantizers[1](y)
-
-        if isinstance(z, Tensor) and z.is_floating_point() and self.input_quantizers[2]:
-            z = self.input_quantizers[2](z)
-
-        with self._patch_quantized_parameters():
-            output = super().forward(x, y, z, *others, **kwargs)
-
-        if isinstance(output, Tensor) and output.is_floating_point() and self.output_quantizers[0]:
-            output = self.output_quantizers[0](output)
-
-        return output
-
 
 def _remove_quantizers(quantizers, keys):
     orig_quantizers = {key: quantizers[key] for key in keys}
