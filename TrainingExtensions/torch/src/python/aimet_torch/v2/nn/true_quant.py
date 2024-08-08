@@ -38,7 +38,6 @@
 """ Quantized modules"""
 
 from packaging import version
-import abc
 import contextlib
 import itertools
 from abc import abstractmethod, ABCMeta
@@ -118,7 +117,7 @@ def _exit_compute_encodings(qmodule):
     _QUANTIZED_MODULES_UNDER_COMPUTE_ENCODINGS[qmodule] -= 1
 
 
-class QuantizationMixinMeta(abc.ABCMeta):
+class QuantizationMixinMeta(ABCMeta):
     """Sets :meth:`forward` to :meth:`quantized_forward` if only :meth:`quantized_forward` is defined
     """
 
