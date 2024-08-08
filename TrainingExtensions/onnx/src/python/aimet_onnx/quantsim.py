@@ -74,9 +74,14 @@ if version.parse(onnx.__version__) >= version.parse("1.14.0"):
 else:
     from onnx.onnx_pb import ModelProto
 
-op_types_to_ignore = ["branch", "Flatten", "Gather", "Reshape", "Shape", "Unsqueeze", "Squeeze", "Split",
-                      "Compress", "Tile", "Transpose", "Identity"]
+# List of ops whose outputs are not to be quantized
+op_outputs_to_ignore = ["branch", "Flatten", "Gather", "Reshape", "Shape", "Unsqueeze", "Squeeze", "Split",
+                        "Compress", "Tile", "Transpose", "Identity"]
 
+# List of ops whose params are not to be quantized
+op_params_to_ignore = ['Resize', 'Pow']
+
+# List of ops having constant input tensors  (eg- element-wise ops)
 op_types_having_constant_input_tensors = ["Add", "Mul"]
 
 allowed_op_type_for_per_channel = ['Conv', 'Gemm', 'MatMul', 'ConvTranspose']
@@ -248,18 +253,19 @@ class QuantizationSimModel:
         :param dummy_input: Sample input to be run through the model
         """
         self.fill_activation_dtypes(dummy_input)
+        self.input_name_to_nodes = self.model.input_name_to_nodes()
 
         # Capture model inputs
         for node in self.model.graph().input:
             name = node.name
-            if name not in self.activation_names and name not in self.param_names and self._is_op_quantizable(name):
+            if name not in self.activation_names and name not in self.param_names and self._is_tensor_quantizable(name):
                 self.activation_names.append(name)
 
         # Capture intermediate activations and model outputs
         for node in self.model.nodes():
-            if node.op_type not in op_types_to_ignore:
+            if node.op_type not in op_outputs_to_ignore:
                 for name in node.output:
-                    if name not in self.activation_names and name not in self.param_names and self._is_op_quantizable(name):
+                    if name not in self.activation_names and name not in self.param_names and self._is_tensor_quantizable(name):
                         self.activation_names.append(name)
             if node.op_type in op_types_having_constant_input_tensors:
                 for name in node.input:
@@ -274,16 +280,23 @@ class QuantizationSimModel:
             if node.name in self.activation_names:
                 node.name += '_updated'
 
-    def _is_op_quantizable(self, name: str) -> bool:
+    def _is_tensor_quantizable(self, name: str) -> bool:
         """
-        Checks whether the given activation should be quantized
+        Checks whether the given tensor should be quantized
 
-        :param name: Name of the activation
-        :return: True if the activation should be quantized
+        :param name: Name of the tensor
+        :return: True if the tensor should be quantized
         """
-        # Check if activation is used as an input to another node
+        # Check if the tensor data-type can be quantized
         if name not in self.activation_dtypes.keys() or self.activation_dtypes[name] not in data_types_to_quantize:
             return False
+        # Check if the tensor is param to certain ops (eg: Resize, Pow, etc.)
+        consumer_nodes = self.input_name_to_nodes.get(name, None)
+        if consumer_nodes:
+            for consumer_node in consumer_nodes:
+                if consumer_node.op_type in op_params_to_ignore and \
+                        consumer_node.input[0] != name:  # except first input rest are params (only valid for unary ops)
+                    return False
         return True
 
     def _disable_bias_quantization(self):

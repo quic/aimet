@@ -2155,3 +2155,44 @@ def layernorm_model():
     )
 
     return model
+
+
+def resize_op_model():
+    model = helper.make_model(
+        graph=helper.make_graph(
+            name='ResizeModel',
+            inputs=[helper.make_tensor_value_info('model_input', TensorProto.FLOAT, shape=[1, 3, 8, 8])],
+            outputs=[helper.make_tensor_value_info('model_output', TensorProto.FLOAT, shape=[1, 1, 12, 12])],
+            initializer=[
+                numpy_helper.from_array(np.random.randn(1, 3, 3, 3).astype('float32'), name='conv_weight')
+            ],
+            value_info=[
+                helper.make_tensor_value_info('conv_output', TensorProto.FLOAT, shape=[1, 1, 6, 6]),
+                helper.make_tensor_value_info('const_scale', TensorProto.FLOAT, shape=[4])
+            ],
+            nodes=[
+                helper.make_node(
+                    'Conv',
+                    inputs=['model_input', 'conv_weight'],
+                    outputs=['conv_output'],
+                    kernel_shape=[3, 3],
+                    name='conv'
+                ),
+                helper.make_node(
+                    'Constant',
+                    inputs=[],
+                    outputs=['const_scale'],
+                    value=numpy_helper.from_array(np.array([1, 1, 2, 2]).astype('float32'), name='')
+                ),
+                helper.make_node(
+                    'Resize',
+                    inputs=['conv_output', '', 'const_scale'],
+                    outputs=['model_output'],
+                    name='resize'
+                )
+            ]
+        )
+    )
+    onnx.checker.check_model(model, True)
+    onnx.save(model, 'resize_model.onnx')
+    return model
