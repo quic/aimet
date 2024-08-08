@@ -48,11 +48,6 @@ from packaging import version
 from .. import true_quant as _nn
 
 FakeQuantizationMixin = _nn.QuantizationMixin
-FakeQuantizationMixin = _nn.QuantizationMixin
-FakeQuantizationMixin = _nn.QuantizationMixin
-FakeQuantizedAdaptiveAvgPool1d = _nn.QuantizedAdaptiveAvgPool1d
-FakeQuantizedAdaptiveAvgPool2d = _nn.QuantizedAdaptiveAvgPool2d
-FakeQuantizedAdaptiveAvgPool3d = _nn.QuantizedAdaptiveAvgPool3d
 FakeQuantizedAdaptiveMaxPool1d = _nn.QuantizedAdaptiveMaxPool1d
 FakeQuantizedAdaptiveMaxPool2d = _nn.QuantizedAdaptiveMaxPool2d
 FakeQuantizedAdaptiveMaxPool3d = _nn.QuantizedAdaptiveMaxPool3d
