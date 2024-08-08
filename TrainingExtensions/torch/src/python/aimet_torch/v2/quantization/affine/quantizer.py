@@ -126,17 +126,6 @@ class AffineQuantizerBase(QuantizerBase):
             raise RuntimeError(f'Encoding analyzer of shape {self.encoding_analyzer.observer.shape} '
                                f'is incompatible with quantizer of shape {self.shape}.')
 
-    @property
-    def bitwidth(self) -> Union[int, float]:
-        bitwidth = math.log2(self.qmax - self.qmin + 1)
-        if int(bitwidth) == bitwidth:
-            bitwidth = int(bitwidth)
-        return bitwidth
-
-    @bitwidth.setter
-    def bitwidth(self, bitwidth: int):
-        self.qmin, self.qmax = _derive_qmin_qmax(bitwidth=bitwidth, signed=self.signed)
-
     @abc.abstractmethod
     def get_min(self, dtype=None) -> torch.Tensor:
         """
@@ -270,6 +259,20 @@ class AffineQuantizerBase(QuantizerBase):
         :param symmetric: If True, use symmetric encodings. Else, use asymmetric encodings
         """
         self._symmetric = symmetric
+
+    @property
+    def bitwidth(self) -> Union[int, float]:
+        """
+        Bitwidth of the quantizer
+        """
+        bitwidth = math.log2(self.qmax - self.qmin + 1)
+        if int(bitwidth) == bitwidth:
+            bitwidth = int(bitwidth)
+        return bitwidth
+
+    @bitwidth.setter
+    def bitwidth(self, bitwidth: int):
+        self.qmin, self.qmax = _derive_qmin_qmax(bitwidth=bitwidth, signed=self.signed)
 
     @property
     def signed(self) -> bool:
