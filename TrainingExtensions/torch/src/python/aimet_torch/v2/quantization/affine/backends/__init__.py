@@ -37,6 +37,7 @@
 # pylint: disable=all
 
 import math
+from itertools import chain, repeat
 from typing import overload, Union, Tuple, Optional
 import torch
 from .utils import *
@@ -54,7 +55,7 @@ def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
     ...
 
 @overload
-def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
+def quantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
              qmin: int, qmax: int, block_size: Optional[Tuple[int, ...]] = None):
     ...
 
@@ -190,7 +191,7 @@ def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch
     ...
 
 @overload
-def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, *,
+def quantize_dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
                         qmin: int, qmax: int, block_size: Optional[Tuple[int, ...]] = None):
     ...
 
@@ -332,33 +333,38 @@ def dequantize(tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor,
 
 def _parse_args(args, kwargs) -> Tuple[int, int, Optional[Tuple[int, ...]]]:
     bitwidth = num_steps = signed = qmin = qmax = None
-    block_size = kwargs.get('block_size')
 
-    if len(args) == 2:
-        bitwidth, signed = args
-    elif len(args) == 1:
-        bitwidth = args[0]
-        signed = kwargs.get('signed', False)
+    # Pad positional args with None's such that len(args) == 3
+    args = tuple(chain(args, repeat(None, 3 - len(args))))
+    arg0 = kwargs.get('qmin', kwargs.get('bitwidth', args[0]))
+    arg1 = kwargs.get('qmax', kwargs.get('signed', args[1]))
+    block_size = kwargs.get('block_size', None) or args[2]
+
+    if arg0 is None:
+        num_steps = kwargs['num_steps']
+        signed = kwargs['signed']
+        qmin, qmax = _derive_qmin_qmax(num_steps=num_steps, signed=signed)
+    elif arg1 is None or isinstance(arg1, bool):
+        bitwidth, signed = arg0, bool(arg1)
+        qmin, qmax = _derive_qmin_qmax(bitwidth=bitwidth, signed=signed)
     else:
-        if 'bitwidth' in kwargs:
-            bitwidth, signed = kwargs['bitwidth'], kwargs.get('signed', False)
-        elif 'num_steps' in kwargs:
-            num_steps, signed = kwargs['num_steps'], kwargs.get('signed', False)
-        else:
-            qmin, qmax = kwargs['qmin'], kwargs['qmax']
-
-    if bitwidth is not None:
-        num_steps = 2 ** bitwidth - 1
-
-    if num_steps is not None:
-        if signed:
-            qmin = -math.ceil(num_steps/2)
-            qmax = math.floor(num_steps/2)
-        else:
-            qmin = 0
-            qmax = num_steps
+        qmin, qmax = arg0, arg1
 
     assert qmin is not None
     assert qmax is not None
 
     return qmin, qmax, block_size
+
+
+def _derive_qmin_qmax(*, bitwidth: int = None, num_steps: int = None, signed: bool):
+    if bitwidth is not None:
+        num_steps = 2 ** bitwidth - 1
+
+    if signed:
+        qmin = -math.ceil(num_steps/2)
+        qmax = math.floor(num_steps/2)
+    else:
+        qmin = 0
+        qmax = num_steps
+
+    return qmin, qmax

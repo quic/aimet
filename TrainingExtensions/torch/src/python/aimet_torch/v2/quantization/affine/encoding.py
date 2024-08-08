@@ -37,12 +37,14 @@
 # pylint: disable=redefined-builtin
 """ Affine encoding definition """
 
-from typing import List, Optional, Dict, Any
+from typing import Tuple, Optional, Dict, Any, overload, Union
+from itertools import chain, repeat
+import math
 import torch
 from torch._C._nn import _parse_to as parse_to_args
 
 from aimet_torch.v2.quantization.base import EncodingBase
-from aimet_torch.v2.quantization.affine.backends import quantize, dequantize
+from aimet_torch.v2.quantization.affine.backends import quantize, dequantize, _derive_qmin_qmax
 
 
 __all__ = ["AffineEncoding", "VectorEncoding"]
@@ -52,13 +54,43 @@ class AffineEncoding(EncodingBase):
     """
     Encoding object for affine quantization
     """
+    @overload
+    def __init__(self, scale: torch.Tensor, offset: torch.Tensor, qmin: int, qmax: int, symmetry=False,
+                 block_size: Optional[Tuple[int, ...]] = None):
+        ...
+
+    @overload
     def __init__(self, scale: torch.Tensor, offset: torch.Tensor, bitwidth: int, signed=False, symmetry=False,
-                 block_size: Optional[List] = None):
+                 block_size: Optional[Tuple[int, ...]] = None):
+        ...
+
+    def __init__(self, scale: torch.Tensor, offset: torch.Tensor, *args, **kwargs):
         self._scale = scale
         self._offset = offset
+
+        # Pad positional args with None's such that len(args) == 4
+        args = tuple(chain(args, repeat(None, 4 - len(args))))
+        arg0 = kwargs.get('qmin', kwargs.get('bitwidth', args[0]))
+        arg1 = kwargs.get('qmax', kwargs.get('signed', args[1]))
+        symmetry = kwargs.get('symmetry', args[2])
+        if symmetry is None:
+            symmetry = False
+        block_size = kwargs.get('block_size', args[3])
+
+        if arg1 is None or isinstance(arg1, bool):
+            # (arg0, arg1) == (bitwidth, signed)
+            bitwidth, signed = arg0, bool(arg1)
+            qmin, qmax = _derive_qmin_qmax(bitwidth=bitwidth, signed=signed)
+        else:
+            # (arg0, arg1) == (qmin, qmax)
+            qmin, qmax = arg0, arg1
+
+        assert qmin is not None
+        assert qmax is not None
+
+        self.qmin = qmin
+        self.qmax = qmax
         self._symmetry = symmetry
-        self._bitwidth = bitwidth
-        self._signed = signed
         self._block_size = block_size
 
     @property
@@ -101,37 +133,21 @@ class AffineEncoding(EncodingBase):
         """
         Returns the number of steps of the quantizer encoding
         """
-        return 2 ** self.bitwidth - 1
-
-    @property
-    def num_negative_steps(self):
-        """
-        Returns the number of negative steps of the quantizer encoding
-        """
-        return self.num_steps - self.num_positive_steps
-
-    @property
-    def num_positive_steps(self):
-        """
-        Returns the number of positive steps of the quantizer encoding
-        """
-        if self._signed:
-            return 2 ** (self.bitwidth - 1) - 1
-        return self.num_steps
+        return self.qmax - self.qmin
 
     @property
     def min(self) -> torch.Tensor:
         """
         Returns the min value of the quantizer encoding
         """
-        return (self.offset - self.num_negative_steps) * self.scale
+        return (self.offset + self.qmin) * self.scale
 
     @property
     def max(self) -> torch.Tensor:
         """
         Returns the max value of the quantizer encoding
         """
-        return (self._offset + self.num_positive_steps) * self.scale
+        return (self.offset + self.qmax) * self.scale
 
     @property
     def symmetry(self) -> bool:
@@ -145,33 +161,36 @@ class AffineEncoding(EncodingBase):
         """
         Returns whether the encoding uses signed integer representation
         """
-        return self._signed
+        return self.qmin < 0 < self.qmax
 
     @property
-    def bitwidth(self) -> int:
+    def bitwidth(self) -> Union[int, float]:
         """
         Returns the bitwidth of the quantizer encoding
         """
-        return self._bitwidth
+        bitwidth = math.log2(self.qmax - self.qmin + 1)
+        if int(bitwidth) == bitwidth:
+            bitwidth = int(bitwidth)
+        return bitwidth
 
     @property
     def dtype(self) -> torch.dtype:
         """
         Returns the dtype of the quantizer encoding
         """
-        if not self._signed:
-            if self.bitwidth <= 8:
-                return torch.uint8
-            # No torch.uint16
-            return torch.int32
-        if self.bitwidth <= 8:
+        if 0 <= self.qmin < self.qmax < 256:
+            return torch.uint8
+
+        if -128 <= self.qmin < self.qmax < 128:
             return torch.int8
-        if self.bitwidth <= 16:
+
+        if -32768 <= self.qmin < self.qmax < 32768:
             return torch.int16
+
         return torch.int32
 
     @property
-    def block_size(self) -> Optional[List]:
+    def block_size(self) -> Optional[Tuple[int, ...]]:
         """
         Returns the block sizes of the quantizer encoding
         """
@@ -196,13 +215,13 @@ class AffineEncoding(EncodingBase):
         scale = self._scale.to(dtype=dtype, device=device)
         offset = self._offset.to(dtype=dtype, device=device)
         properties = self._get_additional_properties()
-        return type(self)(scale, offset, self._bitwidth, self._signed, self._symmetry, **properties)
+        return type(self)(scale, offset, self.qmin, self.qmax, self._symmetry, **properties)
 
     def quantize(self, input: torch.Tensor) -> torch.Tensor:
         scale = self.scale
         offset = self.offset
-        bitwidth = self.bitwidth
-        signed = self.signed
+        qmin = self.qmin
+        qmax = self.qmax
         block_size = self.block_size
 
         # Subclasses of torch.Tensor with custom __torch_function__ (in our case, QuantizedTensorBase)
@@ -211,7 +230,7 @@ class AffineEncoding(EncodingBase):
         return quantize(input.as_subclass(torch.Tensor),
                         scale.to(input.dtype).as_subclass(torch.Tensor),
                         offset.to(input.dtype).as_subclass(torch.Tensor),
-                        bitwidth, signed, block_size=block_size)
+                        qmin, qmax, block_size=block_size)
 
     def dequantize(self, input: torch.Tensor) -> torch.Tensor:
         scale = self.scale
@@ -231,10 +250,8 @@ class AffineEncoding(EncodingBase):
         max = self.max.flatten()
         scale = self.scale.flatten()
 
-        if self._signed: # Legacy behavior is to use offset = 2 ** (bitwidth - 1) for signed symmetric
-            offset = self.offset.flatten() - 2 ** (self.bitwidth - 1)
-        else:
-            offset = self.offset.flatten()
+        # Legacy behavior is to shift offset by qmin
+        offset = self.offset.flatten() + self.qmin
 
         return [
             {'min': float(min_), 'max': float(max_),
@@ -258,7 +275,7 @@ class VectorEncoding(AffineEncoding):
         bitwidth: int,
         signed=False,
         symmetry=False,
-        block_size: Optional[List] = None,
+        block_size: Optional[Tuple[int, ...]] = None,
         **kwargs,
     ):
         super().__init__(scale, offset, bitwidth, signed, symmetry, block_size)

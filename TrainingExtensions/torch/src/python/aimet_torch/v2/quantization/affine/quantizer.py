@@ -38,8 +38,9 @@
 """ Affine quantizers """
 
 import abc
+from itertools import chain, repeat
 import math
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Dict, Tuple, Union, overload
 import contextlib
 import functools
 
@@ -51,12 +52,13 @@ from aimet_torch.v2.quantization.encoding_analyzer import EncodingAnalyzer, MinM
 from aimet_torch.v2.quantization.affine import AffineEncoding
 from aimet_torch.v2.quantization.tensor import QuantizedTensor, DequantizedTensor
 from aimet_torch.v2.quantization.base import QuantizerBase
-from aimet_torch.v2.quantization.affine.backends import quantize, quantize_dequantize, torch_builtins
+from aimet_torch.v2.quantization.affine.backends import quantize, quantize_dequantize, torch_builtins, _derive_qmin_qmax
 from aimet_torch.v2.utils import ste_round
 
 
 __all__ = ['AffineQuantizerBase', 'MinMaxQuantizer', 'Quantize', 'QuantizeDequantize',
            'GroupedBlockQuantizeDequantize']
+
 
 
 class AffineQuantizerBase(QuantizerBase):
@@ -72,17 +74,49 @@ class AffineQuantizerBase(QuantizerBase):
                                                         (default: absolute min-max encoding analyzer)
 
     """
+    @overload
+    def __init__(self, shape, qmin: int, qmax: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None,
+                 block_size: Optional[Tuple[int, ...]] = None):
+        ...
+
+    @overload
     def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None,
                  block_size: Optional[Tuple[int, ...]] = None):
+        ...
+
+    def __init__(self, shape, *args, **kwargs):
         super().__init__()
         if isinstance(shape, int):
             shape = (shape,)
-        self.shape = torch.Size(shape)
-        self.block_size = block_size
-        self.bitwidth = bitwidth
+        self.shape = tuple(shape)
+
+        # Pad positional args with None's such that len(args) == 5
+        args = tuple(chain(args, repeat(None, 5 - len(args))))
+        arg0 = kwargs.get('qmin', kwargs.get('bitwidth', args[0]))
+        arg1 = kwargs.get('qmax', args[1])
+
+        if arg1 is not None and not isinstance(arg1, bool):
+            # (arg0, arg1, arg2) == (qmin, qmax, symmetric)
+            qmin, qmax = arg0, arg1
+            symmetric = kwargs.get('symmetric', args[2])
+            encoding_analyzer = kwargs.get('encoding_analyzer', args[3])
+            block_size = kwargs.get('block_size', args[4])
+        else:
+            # (arg0, arg1) == (bitwidth, symmetric)
+            bitwidth = arg0
+            symmetric = kwargs.get('symmetric', args[1])
+            # We support two quantization modes: (unsigned) asymmetric and signed-symmetric
+            qmin, qmax = _derive_qmin_qmax(bitwidth=bitwidth, signed=symmetric)
+            encoding_analyzer = kwargs.get('encoding_analyzer', args[2])
+            block_size = kwargs.get('block_size', args[3])
+
+        assert qmin is not None
+        assert qmax is not None
+
+        self.qmin = qmin
+        self.qmax = qmax
         self._symmetric = symmetric
-        # We support two quantization modes: (unsigned) asymmetric and signed-symmetric
-        self._signed = symmetric
+        self.block_size = block_size
 
         self.encoding_analyzer = encoding_analyzer or \
                                  MinMaxEncodingAnalyzer(torch_builtins.get_encoding_shape_with_blocks(self.shape,
@@ -91,6 +125,17 @@ class AffineQuantizerBase(QuantizerBase):
         if self.block_size is None and not _is_expandable(self.encoding_analyzer.observer.shape, self.shape):
             raise RuntimeError(f'Encoding analyzer of shape {self.encoding_analyzer.observer.shape} '
                                f'is incompatible with quantizer of shape {self.shape}.')
+
+    @property
+    def bitwidth(self) -> Union[int, float]:
+        bitwidth = math.log2(self.qmax - self.qmin + 1)
+        if int(bitwidth) == bitwidth:
+            bitwidth = int(bitwidth)
+        return bitwidth
+
+    @bitwidth.setter
+    def bitwidth(self, bitwidth: int):
+        self.qmin, self.qmax = _derive_qmin_qmax(bitwidth=bitwidth, signed=self.signed)
 
     @abc.abstractmethod
     def get_min(self, dtype=None) -> torch.Tensor:
@@ -161,7 +206,7 @@ class AffineQuantizerBase(QuantizerBase):
         if self.is_initialized():
             return AffineEncoding(self.get_scale(dtype=torch.float32),
                                   self.get_offset(dtype=torch.float32),
-                                  self.bitwidth, self._signed, self._symmetric, self.block_size)
+                                  self.qmin, self.qmax, self._symmetric, self.block_size)
         return None
 
     @torch.no_grad()
@@ -197,16 +242,18 @@ class AffineQuantizerBase(QuantizerBase):
                 return True
             raise ValueError
 
-        self.bitwidth = encodings[0]['bitwidth']
-        self.symmetric = str_to_bool(encodings[0]['is_symmetric'])
+        bitwidth = encodings[0]['bitwidth']
+        symmetric = str_to_bool(encodings[0]['is_symmetric'])
+        # We support two quantization modes: (unsigned) asymmetric and signed-symmetric
+        self.qmin, self.qmax = _derive_qmin_qmax(bitwidth=bitwidth, signed=symmetric)
+        self.symmetric = symmetric
         # Note: We can only accurately infer signed-ness in the symmetric case, but AIMET uses unsigned for asymmetric
-        self.signed = str_to_bool(encodings[0]['is_symmetric']) and encodings[0]["min"] != 0
         min_ = torch.tensor([e['min'] for e in encodings]).view(self.shape)
         max_ = torch.tensor([e['max'] for e in encodings]).view(self.shape)
         self.set_range(min_, max_)
 
     def extra_repr(self) -> str:
-        return f'shape={self.shape}, bitwidth={self.bitwidth}, symmetric={self.symmetric}'
+        return f'shape={self.shape}, qmin={self.qmin}, qmax={self.qmax}, symmetric={self.symmetric}'
 
     @property
     def symmetric(self) -> bool:
@@ -225,20 +272,11 @@ class AffineQuantizerBase(QuantizerBase):
         self._symmetric = symmetric
 
     @property
-    def signed(self)-> bool:
+    def signed(self) -> bool:
         """
         Indicates whether this quantizer uses signed quantization
         """
-        return self._signed
-
-    @signed.setter
-    def signed(self, signed: bool):
-        """
-        Set the quantizer to use signed or unsigned quantization
-
-        :param signed: If True, use signed encodings, else use unsigned encodings
-        """
-        self._signed = signed
+        return self.qmin < 0 < self.qmax
 
 
 class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
@@ -249,9 +287,8 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
     min: torch.nn.Parameter
     max: torch.nn.Parameter
 
-    def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None,
-                 block_size: Optional[Tuple[int, ...]] = None):
-        super().__init__(shape, bitwidth, symmetric, encoding_analyzer, block_size)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
         self.register_quantization_parameter('min', nn.Parameter(-torch.ones(self.shape)))
         self.register_quantization_parameter('max', nn.Parameter(torch.ones(self.shape)))
@@ -274,7 +311,7 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
             input = input.as_subclass(torch.Tensor)
             expanded_input = torch_builtins.reshape_tensor_for_blocks(input, self.shape, self.block_size)
             batch_statistics = self.encoding_analyzer.update_stats(expanded_input)
-            num_steps = math.pow(2, self.bitwidth) - 1
+            num_steps = self.qmax - self.qmin
             dynamic_min, dynamic_max =\
                     self.encoding_analyzer.compute_encodings_from_stats(batch_statistics,
                                                                         num_steps,
@@ -300,7 +337,7 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
             raise
         else:
             try:
-                num_steps = math.pow(2, self.bitwidth) - 1
+                num_steps = self.qmax - self.qmin
                 enc_min, enc_max = self.encoding_analyzer.compute_encodings(num_steps, self.symmetric)
                 if self.block_size is not None:
                     enc_min = enc_min.view(self.min.shape)
@@ -326,9 +363,7 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
         """
         if not self.is_initialized():
             return None
-        num_negative_steps = 2 ** (self.bitwidth - 1) if self._signed else 0
-
-        return self.get_scale(dtype) * (self.get_offset(dtype) - num_negative_steps)
+        return self.get_scale(dtype) * (self.get_offset(dtype) + self.qmin)
 
     def get_max(self, dtype=None) -> Optional[torch.Tensor]:
         """
@@ -342,8 +377,7 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
         """
         if not self.is_initialized():
             return None
-        num_positive_steps = 2 ** (self.bitwidth - 1) - 1 if self._signed else 2 ** self.bitwidth - 1
-        return self.get_scale(dtype) * (self.get_offset(dtype) + num_positive_steps)
+        return self.get_scale(dtype) * (self.get_offset(dtype) + self.qmax)
 
     def get_scale(self, dtype=None) -> Optional[torch.Tensor]:
         """
@@ -356,7 +390,7 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
             return None
 
         dtype = dtype or torch.float32
-        num_steps = 2 ** self.bitwidth - 1
+        num_steps = self.qmax - self.qmin
 
         scale = (self.max.to(dtype) - self.min.to(dtype)) / num_steps
         return scale.to(dtype)
@@ -376,10 +410,7 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
         if self.symmetric:
             offset = torch.zeros_like(self.min, requires_grad=False, dtype=dtype)
         else:
-            offset = ste_round(self.min.to(dtype) / self.get_scale(dtype))
-
-            if self._signed:
-                offset += 2 ** (self.bitwidth - 1)
+            offset = ste_round(self.min.to(dtype) / self.get_scale(dtype)) - self.qmin
 
         return offset.to(dtype)
 
@@ -503,8 +534,8 @@ class Quantize(MinMaxQuantizer):
         output = quantize(input,
                           encoding.scale,
                           encoding.offset,
-                          encoding.bitwidth,
-                          encoding.signed,
+                          encoding.qmin,
+                          encoding.qmax,
                           block_size=self.block_size)
         output = output.as_subclass(QuantizedTensor)
         output.encoding = encoding
@@ -638,8 +669,8 @@ class QuantizeDequantize(MinMaxQuantizer):
         output = quantize_dequantize(input,
                                      encoding.scale,
                                      encoding.offset,
-                                     encoding.bitwidth,
-                                     encoding.signed,
+                                     encoding.qmin,
+                                     encoding.qmax,
                                      block_size=self.block_size)
         output = output.as_subclass(DequantizedTensor)
         output.encoding = encoding
@@ -721,7 +752,7 @@ class GroupedBlockQuantizeDequantize(QuantizeDequantize):
                                             qmax=2 ** (self.decompressed_bw - self.bitwidth))
         return updated_scale.view(orig_scale_shape)
 
-    def get_expanded_scale_shape(self) -> List[int]:
+    def get_expanded_scale_shape(self) -> Tuple[int, ...]:
         """
         Get expanded scale shape which breaks each scale dimension into a pair of dimensions with sizes
         (original_shape / block_grouping, block_grouping).

@@ -184,8 +184,8 @@ def test_quantize_compute_encodings(quantize: Quantize, x: torch.Tensor):
     expected_x_int = Q.affine.quantize(x,
                                        dynamic_scale,
                                        dynamic_offset,
-                                       quantize.bitwidth,
-                                       quantize._signed)
+                                       quantize.qmin,
+                                       quantize.qmax)
 
     with quantize.compute_encodings():
         x_int = quantize(x)
@@ -230,8 +230,8 @@ def test_qdq_compute_encodings(quantize_dequantize: QuantizeDequantize, x: torch
     expected_output = Q.affine.quantize_dequantize(x,
                                                    dynamic_scale,
                                                    dynamic_offset,
-                                                   quantize_dequantize.bitwidth,
-                                                   quantize_dequantize._signed)
+                                                   quantize_dequantize.qmin,
+                                                   quantize_dequantize.qmax)
 
     with quantize_dequantize.compute_encodings():
         output = quantize_dequantize(x)
@@ -372,8 +372,8 @@ def test_quantize_forward(quantize: Quantize, x: torch.Tensor):
     expected_output = Q.affine.quantize(x,
                                         quantize.get_scale(),
                                         quantize.get_offset(),
-                                        quantize.bitwidth,
-                                        quantize._signed)
+                                        quantize.qmin,
+                                        quantize.qmax)
     assert torch.allclose(output.quantized_repr(), expected_output.to(output.encoding.dtype))
 
 
@@ -396,8 +396,8 @@ def test_qdq_forward(quantize_dequantize: QuantizeDequantize, x: torch.Tensor):
     expected_output = Q.affine.quantize_dequantize(x,
                                                    quantize_dequantize.get_scale(),
                                                    quantize_dequantize.get_offset(),
-                                                   quantize_dequantize.bitwidth,
-                                                   quantize_dequantize._signed)
+                                                   quantize_dequantize.qmin,
+                                                   quantize_dequantize.qmax)
     assert torch.allclose(output, expected_output)
 
 
@@ -958,8 +958,8 @@ def test_bq_compute_encodings_and_forward():
     assert bq.get_min().shape == shape
     assert out.shape == param_tensor.shape
 
-    qdq_out = affine.quantize_dequantize(param_tensor, bq.get_scale(), bq.get_offset(), bitwidth=bq.bitwidth,
-                                         signed=bq.signed, block_size=bq.block_size)
+    qdq_out = affine.quantize_dequantize(param_tensor, bq.get_scale(), bq.get_offset(), bq.qmin, bq.qmax,
+                                         block_size=bq.block_size)
     assert torch.equal(out, qdq_out)
 
 @pytest.mark.parametrize('shape, block_sizes', [[(4, 1, 1), (1, 4, 4)],
@@ -1308,3 +1308,48 @@ def test_sub_float32_error(dtype, bitwidth, symmetric):
     with qtzr.compute_encodings():
         with pytest.raises(RuntimeError):
             _ = qtzr(x)
+
+
+@pytest.mark.parametrize('bitwidth', range(1, 33))
+@pytest.mark.parametrize('symmetric', [True, False])
+def test_getter_setter_symmetry(bitwidth, symmetric):
+    q = Q.affine.Quantize((), bitwidth, symmetric)
+    assert q.bitwidth == bitwidth
+    q.bitwidth += 1
+    assert q.bitwidth == bitwidth + 1
+
+
+@pytest.mark.parametrize(
+    'qmin,   qmax,  bitwidth, symmetric', [
+    (0,      15,    4,        False),
+    (0,      255,   8,        False),
+    (0,      65535, 16,       False),
+    (-8,     7,     4,        True),
+    (-128,   127,   8,        True),
+    (-32768, 32767, 16,       True),
+])
+@pytest.mark.parametrize('qtzr_cls', [Q.affine.Quantize, Q.affine.QuantizeDequantize])
+def test_args_equivalence(qtzr_cls, qmin, qmax, bitwidth, symmetric):
+    x = torch.randn(100, 100)
+    quantizers = [
+        qtzr_cls((), qmin, qmax, symmetric),
+        qtzr_cls((), qmin, qmax, symmetric=symmetric),
+        qtzr_cls((), qmin, qmax=qmax, symmetric=symmetric),
+        qtzr_cls((), qmin=qmin, qmax=qmax, symmetric=symmetric),
+        qtzr_cls((), bitwidth, symmetric),
+        qtzr_cls((), bitwidth, symmetric=symmetric),
+        qtzr_cls((), bitwidth=bitwidth, symmetric=symmetric),
+    ]
+
+    for qtzr in quantizers:
+        with qtzr.compute_encodings():
+            _ = qtzr(x)
+
+    min = quantizers[0].min
+    max = quantizers[0].max
+    out = quantizers[0](x)
+
+    for qtzr in quantizers[1:]:
+        assert torch.equal(qtzr.min, min)
+        assert torch.equal(qtzr.max, max)
+        assert torch.equal(qtzr(x), out)
