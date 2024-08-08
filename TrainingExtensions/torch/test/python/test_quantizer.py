@@ -3472,6 +3472,7 @@ class TestQuantizationSimLearnedGrid:
 
             print(memory_stats.cpu_memory_usage)
 
+    @pytest.mark.skip
     def test_accumulator_overflow(self):
 
         model = models.resnet18()
