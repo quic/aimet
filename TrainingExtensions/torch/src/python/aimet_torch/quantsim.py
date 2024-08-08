@@ -1893,8 +1893,8 @@ class QuantizationSimModel:
                 first_input_quantizer, second_input_quantizer = wrapper.input_quantizers
 
                 op = self.connected_graph._module_to_op_dict[original_module]
-                first_input_op = op.input_ops[0] if (not first_input_quantizer.enabled) else None
-                second_input_op = op.input_ops[1] if (not second_input_quantizer.enabled) else None
+                first_input_op = op.inputs[0].producer if (not first_input_quantizer.enabled) else None
+                second_input_op = op.inputs[1].producer if (not second_input_quantizer.enabled) else None
 
                 target_quantizer_for_first_input = self._get_target_quantizer(first_input_quantizer, first_input_op, module_to_quant_wrapper)
                 target_quantizer_for_second_input = self._get_target_quantizer(second_input_quantizer, second_input_op, module_to_quant_wrapper)
