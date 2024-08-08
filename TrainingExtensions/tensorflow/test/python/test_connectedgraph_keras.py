@@ -149,3 +149,10 @@ class TestConnectedGraph:
         product_dict = connected_graph.get_all_products()
         assert "BatchNormalization_1_to_Relu_2" in product_dict
         assert "Relu_4_to_MaxPool_5" in product_dict
+
+    def test_lambda_model(self):
+        model = test_models_keras.lambda_model()
+        connected_graph = ConnectedGraph(model)
+        assert all(
+            [op.type != "Unknown" for op in connected_graph.get_all_ops().values()]
+        ), "Should not have Unknown for any TFOpLambda layers in this model"
