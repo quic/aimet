@@ -59,6 +59,7 @@ import aimet_common.utils
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
 from aimet_common.utils import AimetLogger
+from aimet_torch import elementwise_ops
 from aimet_torch import onnx_utils
 from aimet_torch import utils
 import aimet_torch.nn.modules.custom as aimet_modules
@@ -5073,6 +5074,63 @@ class TestQuantizationSimLearnedGrid:
         else:
             assert not second_input_quantizer.use_symmetric_encodings
 
+    @pytest.mark.parametrize('hw_version', ['V66', 'V68', 'V73', 'V69', 'V75'])
+    @pytest.mark.parametrize('quant_scheme', [QuantScheme.post_training_tf,
+                                              QuantScheme.training_range_learning_with_tf_init,
+                                              QuantScheme.post_training_tf_enhanced,
+                                              QuantScheme.training_range_learning_with_tf_enhanced_init])
+    @pytest.mark.parametrize('default_output_bw', [8, 16])
+    def test_exception_if_matmul_has_single_input_with_producer_op(self, hw_version, quant_scheme, default_output_bw):
+        device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+
+        model = test_models.ModelWithMatMul6().to(device)
+        dummy_input = (torch.randn((2, 2), device=device), torch.randn((2, 2), device=device))
+
+        quantsim_config = {
+            "defaults": {
+                "hw_version": hw_version,
+                "ops": {"is_output_quantized": "True"}, "params": {"is_symmetric": "True"}
+            },
+            "params": {},
+            "op_type": {
+                "Transpose":
+                {
+                  "is_output_quantized": "False"
+                }
+            },
+            "supergroups": [],
+            "model_input": {"is_input_quantized": "True"},
+            "model_output": {},
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = os.path.join(temp_dir, "quantsim_config.json")
+            with open(config_path, "w") as f:
+                json.dump(quantsim_config, f)
+
+            sim = QuantizationSimModel(model, dummy_input, quant_scheme,
+                                       config_file=config_path,
+                                       default_output_bw=default_output_bw,
+                                       default_param_bw=4)
+
+        sim.compute_encodings(lambda sim_model, _: sim_model(*dummy_input),
+                              forward_pass_callback_args=None)
+
+        first_input_quantizer = sim.model.matmul.input_quantizers[0]
+        closest_output_quantizer_of_second_input = sim.model.act1.output_quantizers[0]
+
+        if sim._hw_version in {'V73', 'V75'}:
+            if closest_output_quantizer_of_second_input.bitwidth == 16:
+                assert closest_output_quantizer_of_second_input.use_symmetric_encodings
+                assert first_input_quantizer.bitwidth == 16
+            else:
+                assert not closest_output_quantizer_of_second_input.use_symmetric_encodings
+        elif sim._hw_version in {'V66', 'V68', 'V69'}:
+            assert closest_output_quantizer_of_second_input.bitwidth == 8
+            assert closest_output_quantizer_of_second_input.use_symmetric_encodings
+        else:
+            assert not closest_output_quantizer_of_second_input.use_symmetric_encodings
+
     @pytest.mark.parametrize('hw_version', ['default', 'V66', 'V68', 'V73', 'V69', 'V75'])
     @pytest.mark.parametrize('quant_scheme', [QuantScheme.post_training_tf,
                                               QuantScheme.training_range_learning_with_tf_init,
@@ -5123,6 +5181,35 @@ class TestQuantizationSimLearnedGrid:
             assert second_input_quantizer.use_symmetric_encodings
         else:
             assert not second_input_quantizer.use_symmetric_encodings
+
+    def test_get_closest_producer_wrapper(self):
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super(Model, self).__init__()
+                self.permute = elementwise_ops.Permute()
+                self.reshape = elementwise_ops.Reshape()
+                self.relu = torch.nn.ReLU()
+
+            def forward(self, inp):
+                x = self.permute(inp, (1, 0))
+                x = self.reshape(x, (3, 4))
+                x = self.relu(x)
+                return x
+
+        model = Model()
+        dummy_input = torch.randn(2, 6)
+
+        qsim = QuantizationSimModel(model, dummy_input)
+        qsim.model.reshape.output_quantizers[0].enabled = False
+        qsim.model.permute.output_quantizers[0].enabled = False
+        qsim.compute_encodings(lambda m, _: m(dummy_input), None)
+
+        module_to_quant_wrapper = {}
+        for _, wrapper in qsim.quant_wrappers():
+            module_to_quant_wrapper[wrapper._module_to_wrap] = wrapper
+        # Use connected graph op corresponding to reshape to test
+        closest_wrapper = qsim._get_closest_producer_wrapper(qsim.connected_graph.ordered_ops[1], module_to_quant_wrapper)
+        assert closest_wrapper == qsim.model.permute
 
 @pytest.mark.cuda
 @pytest.mark.parametrize('input_dims', (2, 3, 4))
