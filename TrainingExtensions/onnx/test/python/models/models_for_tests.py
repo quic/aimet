@@ -2153,7 +2153,62 @@ def layernorm_model():
             ],
         ),
     )
+    onnx.checker.check_model(model)
+    return model
 
+
+def model_with_exceptional_ops():
+    opset = OperatorSetIdProto()
+    opset.version = 18
+    model = helper.make_model(
+        graph=helper.make_graph(
+            name='MatMul_GroupNorm_Model',
+            inputs=[helper.make_tensor_value_info('model_input', TensorProto.FLOAT, shape=[1, 12, 8, 8])],
+            outputs=[helper.make_tensor_value_info('model_output', TensorProto.FLOAT, shape=[1, 12, 6, 6])],
+            initializer=[
+                numpy_helper.from_array(np.random.randn(12, 12, 3, 3).astype('float32'), name='conv_0.weight'),
+                numpy_helper.from_array(np.random.randn(12).astype('float32'), name='conv_0.bias'),
+                numpy_helper.from_array(np.random.randn(1, 12, 6, 6).astype('float32'), name='matmul_0.weight'),
+                numpy_helper.from_array(np.random.randn(2).astype('float32'), name='groupnorm_0.scale'),
+                numpy_helper.from_array(np.random.randn(2).astype('float32'), name='groupnorm_0.bias'),
+            ],
+            value_info=[
+                helper.make_tensor_value_info('/conv_0/output_0', TensorProto.FLOAT, shape=[1, 12, 6, 6]),
+                helper.make_tensor_value_info('/matmul_0/output_0', TensorProto.FLOAT, shape=[1, 12, 6, 6]),
+                helper.make_tensor_value_info('/groupnorm_0/output_0', TensorProto.FLOAT, shape=[1, 12, 6, 6])
+            ],
+            nodes=[
+                helper.make_node(
+                    'Conv',
+                    inputs=['model_input', 'conv_0.weight', 'conv_0.bias'],
+                    outputs=['/conv_0/output_0'],
+                    name='conv_0',
+                    kernel_shape=[3, 3],
+                ),
+                helper.make_node(
+                    'MatMul',
+                    inputs=['/conv_0/output_0', 'matmul_0.weight'],
+                    outputs=['/matmul_0/output_0'],
+                    name='matmul_0',
+                ),
+                helper.make_node(
+                    'GroupNormalization',
+                    inputs=['/matmul_0/output_0', 'groupnorm_0.scale', 'groupnorm_0.bias'],
+                    outputs=['/groupnorm_0/output_0'],
+                    name='groupnorm_0',
+                    num_groups=2,
+                ),
+                helper.make_node(
+                    'Relu',
+                    inputs=['/groupnorm_0/output_0'],
+                    outputs=['model_output'],
+                    name='relu_0',
+                )
+            ],
+        ),
+        opset_imports=[opset],
+    )
+    onnx.checker.check_model(model)
     return model
 
 
