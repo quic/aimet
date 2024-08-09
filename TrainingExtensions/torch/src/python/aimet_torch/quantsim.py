@@ -1940,7 +1940,11 @@ class QuantizationSimModel:
                 input_op, module_to_quant_wrapper
             )
             if closest_producer_wrapper:
-                target_quantizer = closest_producer_wrapper.output_quantizers[0]
+                target_quantizer = closest_producer_wrapper.output_quantizers[0] \
+                        if closest_producer_wrapper.output_quantizers[0] else closest_producer_wrapper.input_quantizers[0]
+            else:
+                logger.warning("The closest wrapper could not be found. MatMul exception rule does not apply. "
+                               "If you haven't used model preparer, consider using it.")
         return target_quantizer
 
 
@@ -1960,27 +1964,26 @@ class QuantizationSimModel:
             return module_to_quant_wrapper.get(module) if module else None
 
         wrapper = get_quant_wrapper()
-        if wrapper and wrapper.output_quantizers[0].enabled:
-            return wrapper
+        if wrapper:
+            if wrapper.output_quantizers[0].enabled or wrapper.input_quantizers[0].enabled:
+                return wrapper
 
-        if wrapper and not wrapper.output_quantizers[0].enabled:
-            # pylint: disable=no-else-return
             if len(op.input_ops) == 1:
                 return self._get_closest_producer_wrapper(op.input_ops[0], module_to_quant_wrapper)
-            else:
-                logger.warning("A wrapper of %s with output quantization disabled has no input or more than one input exists. "
-                               "It's ambiguous to find the nearest producer in this case", str(op.get_module()))
-                return None
 
-        if not wrapper:
-            if not op.input_ops:
-                logger.warning("No input exists for navigation for traversal, it's not possible to find the closest producer")
-                return None
+            logger.warning("A wrapper of %s with output quantization disabled has no input or more than one input "
+                           "exists. It's ambiguous to find the nearest producer in this case", str(op.get_module()))
+            return None
 
-            if len(op.input_ops) > 1:
-                logger.warning("Multiple input ops exist, traversal to find closest producer is performed based on the first input")
+        if not op.input_ops:
+            logger.warning("No input exists for navigation for traversal, it's not possible to find the closest producer")
+            return None
 
-            return self._get_closest_producer_wrapper(op.input_ops[0], module_to_quant_wrapper)
+        if len(op.input_ops) > 1:
+            logger.warning("Multiple input ops exist, traversal to find closest producer is performed based on the "
+                           "first input")
+
+        return self._get_closest_producer_wrapper(op.input_ops[0], module_to_quant_wrapper)
 
     @staticmethod
     def save_model_with_embedded_quantization_nodes(sim_model, path: str, filename_prefix: str, dummy_input: Union[torch.Tensor, Tuple],

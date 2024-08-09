@@ -59,6 +59,7 @@ import aimet_common.utils
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
 from aimet_common.utils import AimetLogger
+from aimet_torch import elementwise_ops
 from aimet_torch import onnx_utils
 from aimet_torch import utils
 import aimet_torch.nn.modules.custom as aimet_modules
@@ -5180,6 +5181,35 @@ class TestQuantizationSimLearnedGrid:
             assert second_input_quantizer.use_symmetric_encodings
         else:
             assert not second_input_quantizer.use_symmetric_encodings
+
+    def test_get_closest_producer_wrapper(self):
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super(Model, self).__init__()
+                self.permute = elementwise_ops.Permute()
+                self.reshape = elementwise_ops.Reshape()
+                self.relu = torch.nn.ReLU()
+
+            def forward(self, inp):
+                x = self.permute(inp, (1, 0))
+                x = self.reshape(x, (3, 4))
+                x = self.relu(x)
+                return x
+
+        model = Model()
+        dummy_input = torch.randn(2, 6)
+
+        qsim = QuantizationSimModel(model, dummy_input)
+        qsim.model.reshape.output_quantizers[0].enabled = False
+        qsim.model.permute.output_quantizers[0].enabled = False
+        qsim.compute_encodings(lambda m, _: m(dummy_input), None)
+
+        module_to_quant_wrapper = {}
+        for _, wrapper in qsim.quant_wrappers():
+            module_to_quant_wrapper[wrapper._module_to_wrap] = wrapper
+        # Use connected graph op corresponding to reshape to test
+        closest_wrapper = qsim._get_closest_producer_wrapper(qsim.connected_graph.ordered_ops[1], module_to_quant_wrapper)
+        assert closest_wrapper == qsim.model.permute
 
 @pytest.mark.cuda
 @pytest.mark.parametrize('input_dims', (2, 3, 4))
