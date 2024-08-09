@@ -40,6 +40,7 @@ import contextlib
 import itertools
 import json
 import os
+import time
 from typing import Union, Tuple, Optional, Dict, List, Set, Iterable
 
 import torch
@@ -50,7 +51,7 @@ from aimet_common.utils import Spinner, AimetLogger
 from aimet_torch import utils
 from aimet_torch.gptvq.defs import GPTVQSupportedModules, GPTVQParameters
 from aimet_torch.gptvq.gptvq_optimizer import GPTVQOptimizer
-from aimet_torch.gptvq.utils import compute_hessian_tensor
+from aimet_torch.gptvq.utils import get_module_name_to_hessian_tensor
 from aimet_torch.quantsim import ExportableQuantModule
 from aimet_torch.save_utils import SaveUtils
 from aimet_torch.utils import get_named_module
@@ -281,7 +282,7 @@ class GPTVQ:
         return ordered_block_level_modules
 
     @classmethod
-    def _apply_gptvq(
+    def _apply_gptvq( # pylint: disable=too-many-locals
             cls,
             original_model: nn.Module,
             sim: QuantizationSimModel,
@@ -303,28 +304,38 @@ class GPTVQ:
         block_level_module_names = cls._get_block_level_module_names(
             original_model, dummy_input, block_level_module_names, module_names_to_exclude
         )
+
+        total_sampling_time = 0
+        total_optimization_time = 0
         for module_names in block_level_module_names:
             name_to_quant_module = cls._get_applicable_name_to_module_dict(
                 module_names, sim, module_names_to_exclude
             )
 
-            name_to_hessian = {}
-            for name, quant_module in name_to_quant_module.items():
-                with Spinner(f"Sampling Hessian tensor of {name}"):
-                    name_to_hessian[name] = compute_hessian_tensor(
-                        quant_module, gptvq_params, sim
-                    )
+            start_sampling_time = time.perf_counter()
+            with Spinner(f"Sampling Hessian tensor of {', '.join(module_names)}"):
+                name_to_hessian = get_module_name_to_hessian_tensor(gptvq_params, sim, module_names)
+            sampling_time = time.perf_counter() - start_sampling_time
+            _logger.info('Took %.4f seconds for Hessian sampling of %s', sampling_time, ', '.join(module_names))
+            total_sampling_time += sampling_time
 
             for name, quant_module in name_to_quant_module.items():
                 assert isinstance(quant_module, BaseQuantizationMixin), "%s is not BaseQuantizationMixin" % quant_module
                 assert quant_module.param_quantizers["weight"], "%s does not have weight quantizer" % quant_module
 
+                start_optimization_time = time.perf_counter()
                 with Spinner(f"Started GPTVQ optimization of {name}"), torch.no_grad():
                     GPTVQOptimizer.weight_update(
                         module=quant_module,
                         gptvq_params=gptvq_params,
                         hessian=name_to_hessian[name],
                     )
+                optimization_time = time.perf_counter() - start_optimization_time
+                _logger.info('Took %.4f seconds for GPTVQ optimization of %s', optimization_time, name)
+                total_optimization_time += optimization_time
+
+        _logger.info('Total %.4f seconds for total Hessian sampling', total_sampling_time)
+        _logger.info('Total %.4f seconds for total GPTVQ optimization', total_optimization_time)
 
     @staticmethod
     def _get_applicable_name_to_module_dict(

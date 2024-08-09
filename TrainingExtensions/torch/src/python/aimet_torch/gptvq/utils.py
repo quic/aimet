@@ -37,7 +37,7 @@
 # pylint: disable=redefined-outer-name
 """Utility methods for working with GPTVQ"""
 import math
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 
 import torch
 from torch import nn
@@ -45,6 +45,7 @@ from torch import nn
 import aimet_torch.v2.quantization as Q
 from aimet_torch.gptvq.activation_sampler import ActivationSampler
 from aimet_torch.gptvq.defs import GPTVQParameters
+from aimet_torch.utils import get_named_module
 from aimet_torch.v2.nn import BaseQuantizationMixin
 from aimet_torch.v2.quantsim import QuantizationSimModel
 
@@ -372,33 +373,42 @@ def quantize_dequantize_codebook(codebook: torch.Tensor,
     return qdq_codebook.reshape(codebook.shape)
 
 
-def compute_hessian_tensor(quant_module: BaseQuantizationMixin,
-                           gptvq_params: GPTVQParameters,
-                           sim: QuantizationSimModel) -> torch.Tensor:
+def get_module_name_to_hessian_tensor(gptvq_params: GPTVQParameters,
+                                      sim: QuantizationSimModel,
+                                      module_names: List[str]) -> Dict[str, torch.Tensor]:
     """
-    Compute Hessian tensor corresponding to quant_module
+    Get module name to Hessian tensor dictionary
 
-    :param quant_module: Quantization module
-    :param gptvq_params: GPTVQ parameters
+    :param gptvq_params: Data carrier holding GPTVQ parameters
     :param sim: QuantizationSimModel object
-    :return: Hessian tensor
+    :param module_names: Topologically ordered module names
+    :return: Module name to Hessian tensor dictionary
     """
-    _, num_cols = get_2d_tensor_shape(quant_module)
-    device = quant_module.weight.device
-    hessian = torch.zeros((num_cols, num_cols)).to(device)
+    name_to_hessian = {}
+    for module_name in module_names:
+        quant_module = get_named_module(sim.model, module_name)
+        _, num_cols = get_2d_tensor_shape(quant_module)
+        device = quant_module.weight.device
+        name_to_hessian[module_name] = torch.zeros((num_cols, num_cols), device=device)
 
-    act_sampler = ActivationSampler(quant_module, sim.model, gptvq_params.forward_fn)
-    # update the Hessian and the number of samples in place
+    act_sampler = ActivationSampler(sim.model, gptvq_params.forward_fn, module_names)
     n_samples = 0
     for current_data in gptvq_params.data_loader:
-        inp_data = act_sampler.sample_acts(current_data)
-        if len(inp_data.shape) == 2:
-            inp_data = inp_data.unsqueeze(0)
-        curr_batch_size = inp_data.shape[0]
-        update_hessian(quant_module, inp_data, n_samples, curr_batch_size, hessian)
+        module_name_to_input_tensor = act_sampler.sample_activation_tensors(current_data)
+
+        curr_batch_size = 0
+        for name, inp_data in module_name_to_input_tensor.items():
+            if len(inp_data.shape) == 2:
+                inp_data = inp_data.unsqueeze(0)
+            curr_batch_size = inp_data.shape[0]
+
+            quant_module = get_named_module(sim.model, name)
+            update_hessian(quant_module, inp_data, n_samples, curr_batch_size, name_to_hessian[name])
+
         n_samples += curr_batch_size
 
-    return hessian
+    return name_to_hessian
+
 
 def get_2d_tensor_shape(quant_module: BaseQuantizationMixin) -> torch.Size:
     """
