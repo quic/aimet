@@ -111,6 +111,21 @@ class ModelWithMatMul5(torch.nn.Module):
     def forward(self, *inputs):
         return self.matmul(inputs[0], inputs[1])
 
+class ModelWithMatMul6(torch.nn.Module):
+    """
+    Model with MatMul module
+    """
+    def __init__(self):
+        super().__init__()
+        self.act1 = nn.ReLU()
+        self.permute = aimet_elementwise.Permute()
+        self.matmul = aimet_modules.MatMul()
+
+    def forward(self, *inputs):
+        x = self.act1(inputs[1])
+        x = self.permute(x, (1, 0))
+        return self.matmul(inputs[0], x)
+
 class ModelWithUnusedMatmul(ModelWithMatMul5):
 
     def __init__(self):

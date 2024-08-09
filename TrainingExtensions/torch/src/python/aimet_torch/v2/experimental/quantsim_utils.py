@@ -244,7 +244,7 @@ def set_matmul_second_input_producer_to_8bit_symmetric(sim: 'QuantizationSimMode
             _, target_quantizer = module.input_quantizers
             matmul_op = get_connected_graph_op(sim.connected_graph, model_name, name)
             if not target_quantizer:
-                input_op = matmul_op.input_ops[1]
+                input_op = matmul_op.inputs[1].producer
                 if input_op:
                     closest_producer_wrapper = get_closest_producer(input_op)
                     if closest_producer_wrapper:
