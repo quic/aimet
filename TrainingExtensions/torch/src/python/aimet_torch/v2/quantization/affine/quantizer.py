@@ -53,7 +53,7 @@ from aimet_torch.v2.quantization.tensor import QuantizedTensor, DequantizedTenso
 from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.affine.backends import quantize, quantize_dequantize, torch_builtins, _derive_qmin_qmax
 from aimet_torch.v2.utils import ste_round
-from ._utils import _GridMixin
+from ._utils import _GridMixin # pylint: disable=import-error
 
 
 __all__ = ['AffineQuantizerBase', 'MinMaxQuantizer', 'Quantize', 'QuantizeDequantize',

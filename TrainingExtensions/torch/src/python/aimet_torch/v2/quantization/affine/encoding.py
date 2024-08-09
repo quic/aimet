@@ -45,7 +45,7 @@ from torch._C._nn import _parse_to as parse_to_args
 from aimet_torch.v2.utils import docstring
 from aimet_torch.v2.quantization.base import EncodingBase
 from aimet_torch.v2.quantization.affine.backends import quantize, dequantize, _derive_qmin_qmax
-from ._utils import _GridMixin
+from ._utils import _GridMixin # pylint: disable=import-error
 
 
 __all__ = ["AffineEncoding", "VectorEncoding"]
