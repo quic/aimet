@@ -1310,13 +1310,93 @@ def test_sub_float32_error(dtype, bitwidth, symmetric):
             _ = qtzr(x)
 
 
-@pytest.mark.parametrize('bitwidth', range(1, 33))
-@pytest.mark.parametrize('symmetric', [True, False])
-def test_getter_setter_symmetry(bitwidth, symmetric):
-    q = Q.affine.Quantize((), bitwidth, symmetric)
-    assert q.bitwidth == bitwidth
-    q.bitwidth += 1
-    assert q.bitwidth == bitwidth + 1
+@pytest.mark.parametrize(
+    'qmin,   qmax,  bitwidth, symmetric', [
+    (0,      15,    4,        False),
+    (-8,     7,     4,        True),
+])
+def test_qmin_qmax_consistency(qmin, qmax, bitwidth, symmetric):
+    """
+    When: Assign new bitwidths
+    Then: qmin, qmax should be updated accordingly
+    """
+    q = Q.affine.Quantize((), qmin, qmax, symmetric)
+    x = torch.arange(2**16, dtype=torch.float)
+    with q.compute_encodings():
+        q(x)
+
+    expected_qmin = qmin
+    expected_qmax = qmax
+    expected_bitwidth = bitwidth
+
+    while q.bitwidth < 16:
+        assert q.qmin == expected_qmin
+        assert q.qmax == expected_qmax
+        assert q.bitwidth == expected_bitwidth
+
+        q.bitwidth += 1
+        expected_qmin *= 2
+        expected_qmax = (expected_qmax + 1) * 2 - 1
+        expected_bitwidth += 1
+
+    while q.bitwidth > 4:
+        assert q.qmin == expected_qmin
+        assert q.qmax == expected_qmax
+        assert q.bitwidth == expected_bitwidth
+
+        q.bitwidth -= 1
+        expected_qmin /= 2
+        expected_qmax = (expected_qmax + 1) / 2 - 1
+        expected_bitwidth -= 1
+
+
+def test_bitwidth_translation():
+    q = Q.affine.Quantize((), qmin=0, qmax=15, symmetric=False)
+
+    """
+    When: Assign fractional value to bitwidth
+    Then: Throw type error
+    """
+    with pytest.raises(TypeError):
+        q.bitwidth = 0.1
+
+    """
+    When: Assign bitwidth < 1
+    Then: Throw value error
+    """
+    with pytest.raises(ValueError):
+        q.bitwidth = 0
+
+    """
+    When: Assign a floating point number that holds integer values
+    Then: Shouldn't throw error
+    """
+    q.bitwidth = 5.0
+    assert q.bitwidth == 5
+
+
+def test_non_integer_bitwidth():
+    """
+    Given: Quantizer whose [qmin, qmax] can be represented in the form of
+           [0, 2**B-1] or [2**(B-1), 2**(B-1)-1] where B is a positive non-integer
+    """
+    # 2**15 - 1 < 0xff7f < 2**16 - 1
+    q = Q.affine.QuantizeDequantize((), qmin=0, qmax=0xff7f, symmetric=False)
+
+    """
+    When: Get bitwidth
+    Then: Should return non-integer bitwidth B
+    """
+    assert 15 < q.bitwidth < 16
+
+    """
+    When: Set bitwidth
+    Then: Should update [qmin, qmax] accordingly
+    """
+    q.bitwidth = 16
+    assert q.bitwidth == 16
+    assert q.qmin == 0
+    assert q.qmax == 2**16 - 1
 
 
 @pytest.mark.parametrize(
@@ -1329,7 +1409,12 @@ def test_getter_setter_symmetry(bitwidth, symmetric):
     (-32768, 32767, 16,       True),
 ])
 @pytest.mark.parametrize('qtzr_cls', [Q.affine.Quantize, Q.affine.QuantizeDequantize])
-def test_args_equivalence(qtzr_cls, qmin, qmax, bitwidth, symmetric):
+def test_parse_args_equivalence(qtzr_cls, qmin, qmax, bitwidth, symmetric):
+    """
+    When: Instantiate quantizers with (qmin, qmax) and (bitwidth, signed)
+          with mathematically equivalent values
+    Then: The output of the quantizers should be equal to each other
+    """
     x = torch.randn(100, 100)
     quantizers = [
         qtzr_cls((), qmin, qmax, symmetric),

@@ -39,18 +39,19 @@
 
 from typing import Tuple, Optional, Dict, Any, overload, Union
 from itertools import chain, repeat
-import math
 import torch
 from torch._C._nn import _parse_to as parse_to_args
 
+from aimet_torch.v2.utils import docstring
 from aimet_torch.v2.quantization.base import EncodingBase
 from aimet_torch.v2.quantization.affine.backends import quantize, dequantize, _derive_qmin_qmax
+from ._utils import _GridMixin
 
 
 __all__ = ["AffineEncoding", "VectorEncoding"]
 
 
-class AffineEncoding(EncodingBase):
+class AffineEncoding(EncodingBase, _GridMixin):
     """
     Encoding object for affine quantization
     """
@@ -164,14 +165,13 @@ class AffineEncoding(EncodingBase):
         return self.qmin < 0 < self.qmax
 
     @property
-    def bitwidth(self) -> Union[int, float]:
-        """
-        Returns the bitwidth of the quantizer encoding
-        """
-        bitwidth = math.log2(self.qmax - self.qmin + 1)
-        if int(bitwidth) == bitwidth:
-            bitwidth = int(bitwidth)
-        return bitwidth
+    @docstring(_GridMixin._get_bitwidth.__doc__)
+    def bitwidth(self) -> Union[int, float]: # pylint: disable=missing-function-docstring
+        return self._get_bitwidth()
+
+    @bitwidth.setter
+    def bitwidth(self, bitwidth: int):
+        self._set_bitwidth(bitwidth)
 
     @property
     def dtype(self) -> torch.dtype:

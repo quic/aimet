@@ -39,7 +39,6 @@
 
 import abc
 from itertools import chain, repeat
-import math
 from typing import Optional, List, Dict, Tuple, Union, overload
 import contextlib
 import functools
@@ -47,13 +46,14 @@ import functools
 import torch
 from torch import nn
 
-from aimet_torch.v2.utils import patch_attr, _is_expandable, StatisticsNotFoundError
+from aimet_torch.v2.utils import patch_attr, _is_expandable, StatisticsNotFoundError, docstring
 from aimet_torch.v2.quantization.encoding_analyzer import EncodingAnalyzer, MinMaxEncodingAnalyzer
 from aimet_torch.v2.quantization.affine import AffineEncoding
 from aimet_torch.v2.quantization.tensor import QuantizedTensor, DequantizedTensor
 from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.affine.backends import quantize, quantize_dequantize, torch_builtins, _derive_qmin_qmax
 from aimet_torch.v2.utils import ste_round
+from ._utils import _GridMixin
 
 
 __all__ = ['AffineQuantizerBase', 'MinMaxQuantizer', 'Quantize', 'QuantizeDequantize',
@@ -61,7 +61,7 @@ __all__ = ['AffineQuantizerBase', 'MinMaxQuantizer', 'Quantize', 'QuantizeDequan
 
 
 
-class AffineQuantizerBase(QuantizerBase):
+class AffineQuantizerBase(QuantizerBase, _GridMixin):
     """
     Base class for linear quantization modules.
 
@@ -261,18 +261,13 @@ class AffineQuantizerBase(QuantizerBase):
         self._symmetric = symmetric
 
     @property
-    def bitwidth(self) -> Union[int, float]:
-        """
-        Bitwidth of the quantizer
-        """
-        bitwidth = math.log2(self.qmax - self.qmin + 1)
-        if int(bitwidth) == bitwidth:
-            bitwidth = int(bitwidth)
-        return bitwidth
+    @docstring(_GridMixin._get_bitwidth.__doc__)
+    def bitwidth(self) -> Union[int, float]: # pylint: disable=missing-function-docstring
+        return self._get_bitwidth()
 
     @bitwidth.setter
     def bitwidth(self, bitwidth: int):
-        self.qmin, self.qmax = _derive_qmin_qmax(bitwidth=bitwidth, signed=self.signed)
+        self._set_bitwidth(bitwidth)
 
     @property
     def signed(self) -> bool:
@@ -680,7 +675,7 @@ class QuantizeDequantize(MinMaxQuantizer):
         return output
 
 
-class GroupedBlockQuantizeDequantize(QuantizeDequantize):
+class GroupedBlockQuantizeDequantize(QuantizeDequantize): # pylint: disable=too-many-ancestors
     """ Class for performing Grouped Block Quantize Dequantize """
     def __init__(self, shape, bitwidth: int, symmetric: bool, decompressed_bw: int,
                  encoding_analyzer: EncodingAnalyzer = None, block_size: Optional[Tuple[int, ...]] = None,
