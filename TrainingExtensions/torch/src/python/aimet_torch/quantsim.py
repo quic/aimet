@@ -1855,19 +1855,17 @@ class QuantizationSimModel:
         """
         Apply exception rules to specific op. For example, a rule can override high bitwidth to Embedding module
         """
-        if self._hw_version not in {'V66', 'V68', 'V69', 'V73', 'V75', 'V79'}:
-            return
-
         module_to_quant_wrapper = {}
         for _, wrapper in self.quant_wrappers():
-            module_to_quant_wrapper[wrapper._module_to_wrap] = wrapper
-
-        for name, wrapper in self.quant_wrappers():
-            original_module = wrapper._module_to_wrap
-
-            # A module that doesn't require exception rules
-            if not isinstance(original_module, (torch.nn.Embedding, torch.nn.GroupNorm, MatMul)):
+            if isinstance(wrapper, LazyQuantizeWrapper):
+                original_module = wrapper._module_to_wrap
+            elif isinstance(wrapper, QcQuantizeRecurrent):
+                original_module = wrapper.module_to_quantize
+            else:
                 continue
+            module_to_quant_wrapper[original_module] = wrapper
+
+        for original_module, wrapper in module_to_quant_wrapper.items():
 
             if isinstance(original_module, torch.nn.Embedding):
                 if self._hw_version not in {'V73', 'V75', 'V79'}:
@@ -1877,6 +1875,7 @@ class QuantizationSimModel:
 
                 weight_quantizer.bitwidth = output_quantizer.bitwidth
                 weight_quantizer.use_symmetric_encodings = output_quantizer.use_symmetric_encodings
+
             elif isinstance(original_module, torch.nn.GroupNorm):
                 if self._hw_version not in {'V73', 'V75', 'V79'}:
                     continue
@@ -1885,6 +1884,7 @@ class QuantizationSimModel:
                     for _, param_quantizer in wrapper.param_quantizers.items():
                         param_quantizer.bitwidth = output_quantizer.bitwidth
                         param_quantizer.use_symmetric_encodings = output_quantizer.use_symmetric_encodings
+
             elif isinstance(original_module, MatMul):
                 # Skip unused modules
                 if original_module not in self.connected_graph._module_to_op_dict.keys():
@@ -1899,31 +1899,29 @@ class QuantizationSimModel:
                 target_quantizer_for_first_input = self._get_target_quantizer(first_input_quantizer, first_input_op, module_to_quant_wrapper)
                 target_quantizer_for_second_input = self._get_target_quantizer(second_input_quantizer, second_input_op, module_to_quant_wrapper)
 
-                if not target_quantizer_for_second_input:
-                    continue
-
                 # According to opdef for Matmul in HTP:
                 # 16bit Weight(second input for dynamic MatMul) must have 16bit Activation(first input for dynamic MatMul).
                 # 16bit Activation and 16bit Weight require minimum arch V73.
                 # 16bit Weight must be symmetric quantized.
 
                 # Below are the possible combinations for MatMul with 8/16 bitwidth:
-                # If version is V73/V75: {input0->8, input1->8 symm/asymm} {input0->16 , input1->8 symm/asymm} {input0->16, input1->16 symmetric}
+                # If version is V73 and higher: {input0->8, input1->8 symm/asymm} {input0->16 , input1->8 symm/asymm} {input0->16, input1->16 symmetric}
                 # If version is lesser than V73: {input0->8, input1->8 symmetric} {input0->16, input1->8 symmetric}
 
                 if self._hw_version in {'V66', 'V68', 'V69'}:
-                    target_quantizer_for_second_input.use_symmetric_encodings = True
-                    target_quantizer_for_second_input.bitwidth = 8
-                elif self._hw_version in {'V73', 'V75', 'V79'}:
-                    if target_quantizer_for_second_input.bitwidth == 16:
+                    if target_quantizer_for_second_input is None:
+                        logger.warning("The target quantizer for second input could not be found. MatMul exception rule does not apply for layer: %s. "
+                                       "If you haven't used model preparer, consider using it.", str(original_module))
+                    else:
                         target_quantizer_for_second_input.use_symmetric_encodings = True
-                        if target_quantizer_for_first_input:
-                            target_quantizer_for_first_input.bitwidth = 16
-                else:
-                    raise ValueError(f'Not expected hardware version to apply exception rules: {self._hw_version}')
-
-            else:
-                raise ValueError(f'A module not expected to apply exception rules: {name}')
+                        target_quantizer_for_second_input.bitwidth = 8
+                elif self._hw_version in {'V73', 'V75', 'V79'}:
+                    if target_quantizer_for_first_input is None or target_quantizer_for_second_input is None:
+                        logger.warning("The target quantizers could not be found. MatMul exception rule does not apply for layer: %s. "
+                                       "If you haven't used model preparer, consider using it.", str(original_module))
+                    elif target_quantizer_for_second_input.bitwidth == 16:
+                        target_quantizer_for_second_input.use_symmetric_encodings = True
+                        target_quantizer_for_first_input.bitwidth = 16
 
     def _get_target_quantizer(self, input_quantizer: TensorQuantizer, input_op: Op, module_to_quant_wrapper: Dict[torch.nn.Module, QcQuantizeWrapper]) -> TensorQuantizer:
         """
@@ -1943,9 +1941,6 @@ class QuantizationSimModel:
             )
             if closest_producer_wrapper:
                 target_quantizer = closest_producer_wrapper.output_quantizers[0]
-            else:
-                logger.warning("The closest wrapper could not be found. MatMul exception rule does not apply. "
-                               "If you haven't used model preparer, consider using it.")
         return target_quantizer
 
 

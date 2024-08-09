@@ -613,6 +613,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             "BatchNormalization": create_batchnorm_params,
             "InstanceNormalization": create_weight_bias_params,
             "LayerNormalization": create_weight_bias_params,
+            "GroupNormalization": create_weight_bias_params,
             "MatMul": create_matmul_params
         }
 

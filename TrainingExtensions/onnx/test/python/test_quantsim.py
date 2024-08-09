@@ -746,3 +746,188 @@ class TestQuantSim:
             sim = QuantizationSimModel(model, path=tempdir, simplify_model=False)
             # params of specific ops shouldn't be quantized (here resize op param is testified)
             assert not sim.qc_quantize_op_dict.get('const_scale', None)
+
+    def test_groupnorm_exception_rule(self):
+        model = models_for_tests.model_with_exceptional_ops()
+        quantsim_config = {
+            "defaults":
+                {
+                    "hw_version": "V73",
+                    "ops":
+                        {
+                            "is_output_quantized": "True"
+                        },
+                    "params":
+                        {
+                            "is_quantized": "True",
+                            "is_symmetric": "True"
+                        },
+                    "per_channel_quantization": "True",
+                    "strict_symmetric": "False",
+                    "unsigned_symmetric": "False"
+                },
+            "params": {
+                "bias":
+                    {
+                        "is_quantized": "False"
+                    }
+            },
+            "op_type": {
+                "GroupNormalization":
+                    {
+                        "per_channel_quantization": "False",
+                        "params": {
+                            "bias":
+                                {
+                                    "is_quantized": "True"
+                                }
+                        }
+                    },
+            },
+            "supergroups": [],
+            "model_input": {
+                "is_input_quantized": "True"
+            },
+            "model_output": {
+                "is_output_quantized": "True"
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            with open(os.path.join(tempdir, 'quantsim_config.json'), 'w') as f:
+                json.dump(quantsim_config, f)
+
+            sim = QuantizationSimModel(model, default_param_bw=8, default_activation_bw=16,
+                                       path=tempdir, config_file=os.path.join(tempdir, 'quantsim_config.json'))
+
+            def callback(session, dummy_input):
+                session.run(None, dummy_input)
+
+            dummy_input = {'model_input': np.random.rand(1, 12, 8, 8).astype(np.float32)}
+            sim.compute_encodings(callback, dummy_input)
+            sim.export(tempdir, 'conv_matmul_groupnorm_model')
+
+            with open(os.path.join(tempdir, 'conv_matmul_groupnorm_model.encodings')) as json_file:
+                encoding_data = json.load(json_file)
+                groupnorm_weight_enc = encoding_data['param_encodings']['groupnorm_0.scale'][0]
+                groupnorm_bias_enc = encoding_data['param_encodings']['groupnorm_0.bias'][0]
+
+                # groupnorm param-encodings should follow output-activation-encoding config
+                assert groupnorm_weight_enc['bitwidth'] == 16
+                assert groupnorm_weight_enc['is_symmetric'] == 'False'
+
+                assert groupnorm_bias_enc['bitwidth'] == 16
+                assert groupnorm_bias_enc['is_symmetric'] == 'False'
+
+    def test_matmul_v73_lower_exception_rule(self):
+        model = models_for_tests.model_with_exceptional_ops()
+        quantsim_config = {
+            "defaults":
+                {
+                    "hw_version": "V66",
+                    "ops":
+                        {
+                            "is_output_quantized": "True"
+                        },
+                    "params":
+                        {
+                            "is_quantized": "True",
+                            "is_symmetric": "False"
+                        },
+                    "per_channel_quantization": "True",
+                    "strict_symmetric": "False",
+                    "unsigned_symmetric": "False"
+                },
+            "params": {
+                "bias":
+                    {
+                        "is_quantized": "False"
+                    }
+            },
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {
+                "is_input_quantized": "True"
+            },
+            "model_output": {
+                "is_output_quantized": "True"
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            with open(os.path.join(tempdir, 'quantsim_config.json'), 'w') as f:
+                json.dump(quantsim_config, f)
+
+            sim = QuantizationSimModel(model, default_param_bw=16, default_activation_bw=8,
+                                       path=tempdir, config_file=os.path.join(tempdir, 'quantsim_config.json'))
+
+            def callback(session, dummy_input):
+                session.run(None, dummy_input)
+
+            dummy_tensor = {'model_input': np.random.rand(1, 12, 8, 8).astype(np.float32)}
+            sim.compute_encodings(callback, dummy_tensor)
+            sim.export(tempdir, 'conv_matmul_groupnorm_model')
+
+            with open(os.path.join(tempdir, 'conv_matmul_groupnorm_model.encodings')) as json_file:
+                encoding_data = json.load(json_file)
+                matmul_second_input = encoding_data['param_encodings']['matmul_0.weight'][0]
+
+                # matmul's second input encoding should be of 8 bitwidth and symmetric
+                assert matmul_second_input['bitwidth'] == 8
+                assert matmul_second_input['is_symmetric'] == 'True'
+
+    def test_matmul_v73_higher_exception_rule(self):
+        model = models_for_tests.model_with_exceptional_ops()
+        quantsim_config = {
+            "defaults":
+                {
+                    "hw_version": "V73",
+                    "ops":
+                        {
+                            "is_output_quantized": "True"
+                        },
+                    "params":
+                        {
+                            "is_quantized": "True",
+                            "is_symmetric": "False"
+                        },
+                    "per_channel_quantization": "True",
+                    "strict_symmetric": "False",
+                    "unsigned_symmetric": "False"
+                },
+            "params": {
+                "bias":
+                    {
+                        "is_quantized": "False"
+                    }
+            },
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {
+                "is_input_quantized": "True"
+            },
+            "model_output": {
+                "is_output_quantized": "True"
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            with open(os.path.join(tempdir, 'quantsim_config.json'), 'w') as f:
+                json.dump(quantsim_config, f)
+
+            sim = QuantizationSimModel(model, default_param_bw=16, default_activation_bw=8,
+                                       path=tempdir, config_file=os.path.join(tempdir, 'quantsim_config.json'))
+
+            def callback(session, dummy_input):
+                session.run(None, dummy_input)
+
+            dummy_tensor = {'model_input': np.random.rand(1, 12, 8, 8).astype(np.float32)}
+            sim.compute_encodings(callback, dummy_tensor)
+            sim.export(tempdir, 'conv_matmul_groupnorm_model')
+
+            with open(os.path.join(tempdir, 'conv_matmul_groupnorm_model.encodings')) as json_file:
+                encoding_data = json.load(json_file)
+                matmul_first_input = encoding_data['activation_encodings']['/conv_0/output_0'][0]
+
+                # if matmul's second input is 16bw then first input should also be 16bw
+                assert matmul_first_input['bitwidth'] == 16
