@@ -79,10 +79,7 @@ op_outputs_to_ignore = ["branch", "Flatten", "Gather", "Reshape", "Shape", "Unsq
                         "Compress", "Tile", "Transpose", "Identity"]
 
 # List of ops whose params are not to be quantized
-op_params_to_ignore = ['Resize', 'Pow']
-
-# List of ops having constant input tensors  (eg- element-wise ops)
-op_types_having_constant_input_tensors = ["Add", "Mul"]
+op_params_to_ignore = ['Resize']
 
 allowed_op_type_for_per_channel = ['Conv', 'Gemm', 'MatMul', 'ConvTranspose']
 
@@ -258,25 +255,16 @@ class QuantizationSimModel:
         self.fill_activation_dtypes(dummy_input)
         self.input_name_to_nodes = self.model.input_name_to_nodes()
 
-        # Capture model inputs
-        for node in self.model.graph().input:
-            name = node.name
-            if name not in self.activation_names and name not in self.param_names and self._is_tensor_quantizable(name):
-                self.activation_names.append(name)
-
-        # Capture intermediate activations and model outputs
+        # Capture input and output activations of each node
         for node in self.model.nodes():
+            for name in node.input:
+                if name not in self.activation_names and name not in self.param_names and self._is_tensor_quantizable(name):
+                    self.activation_names.append(name)
+                    self.input_quantizers_name.append(name)
             if node.op_type not in op_outputs_to_ignore:
                 for name in node.output:
                     if name not in self.activation_names and name not in self.param_names and self._is_tensor_quantizable(name):
                         self.activation_names.append(name)
-            if node.op_type in op_types_having_constant_input_tensors:
-                for name in node.input:
-                    if name not in self.activation_names and name not in self.param_names and name in self.model.get_initializer_name_set():
-                        constant_input_tensor = self.model.get_initializer(name)
-                        if constant_input_tensor.data_type == 1:  # 1 corresponds to float, dictionary can be found by using onnx.TensorProto.DataType.items()
-                            self.activation_names.append(name)
-                            self.input_quantizers_name.append(name)
 
         # Rename model output node
         for node in self.model.graph().output:
@@ -291,9 +279,13 @@ class QuantizationSimModel:
         :return: True if the tensor should be quantized
         """
         # Check if the tensor data-type can be quantized
-        if name not in self.activation_dtypes.keys() or self.activation_dtypes[name] not in data_types_to_quantize:
-            return False
-        # Check if the tensor is param to certain ops (eg: Resize, Pow, etc.)
+        if name in self.model.get_initializer_name_set():  # static activation
+            if self.model.get_initializer(name).data_type != 1:  # 1 corresponds to float, dictionary can be found by using onnx.TensorProto.DataType.items()
+                return False
+        else:  # dynamic activation
+            if name not in self.activation_dtypes.keys() or self.activation_dtypes[name] not in data_types_to_quantize:
+                return False
+        # Check if the tensor is param to certain ops (eg: Resize)
         consumer_nodes = self.input_name_to_nodes.get(name, None)
         if consumer_nodes:
             for consumer_node in consumer_nodes:
@@ -309,7 +301,7 @@ class QuantizationSimModel:
         # TODO: hitameht: we should find better way to find such patterns and corner cases. May be
         #  belongs to QuantSimConfigurator class.
         for node in self.model.nodes():
-            if node.op_type in op_types_having_constant_input_tensors:
+            if node.op_type == 'Add':
                 if self._check_matmul_add_patten(node):
                     for inp_name in node.input:
                         param_name = inp_name
