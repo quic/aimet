@@ -1415,7 +1415,7 @@ def test_parse_args_equivalence(qtzr_cls, qmin, qmax, bitwidth, symmetric):
           with mathematically equivalent values
     Then: The output of the quantizers should be equal to each other
     """
-    x = torch.randn(100, 100)
+    x = torch.arange(qmin, qmax+1, dtype=torch.float32)
     quantizers = [
         qtzr_cls((), qmin, qmax, symmetric),
         qtzr_cls((), qmin, qmax, symmetric=symmetric),
@@ -1430,11 +1430,9 @@ def test_parse_args_equivalence(qtzr_cls, qmin, qmax, bitwidth, symmetric):
         with qtzr.compute_encodings():
             _ = qtzr(x)
 
-    min = quantizers[0].min
-    max = quantizers[0].max
-    out = quantizers[0](x)
-
-    for qtzr in quantizers[1:]:
-        assert torch.equal(qtzr.min, min)
-        assert torch.equal(qtzr.max, max)
-        assert torch.equal(qtzr(x), out)
+    for qtzr in quantizers:
+        assert torch.equal(qtzr.min, torch.tensor(qmin))
+        assert torch.equal(qtzr.max, torch.tensor(qmax))
+        assert torch.equal(qtzr.get_scale(), torch.tensor(1.))
+        assert torch.equal(qtzr.get_offset(), torch.tensor(0.))
+        assert torch.equal(qtzr(x), x)
