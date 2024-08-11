@@ -75,7 +75,7 @@ else:
     from onnx.onnx_pb import ModelProto
 
 # List of ops whose outputs are not to be quantized
-op_outputs_to_ignore = ["branch", "Flatten", "Gather", "Reshape", "Shape", "Unsqueeze", "Squeeze", "Split",
+op_outputs_to_ignore = ["branch", "Flatten", "Reshape", "Shape", "Unsqueeze", "Squeeze", "Split",
                         "Compress", "Tile", "Transpose", "Identity"]
 
 # List of ops whose params are not to be quantized
@@ -552,6 +552,7 @@ class QuantizationSimModel:
 
         return (input_quantizers, output_quantizers, param_quantizers)
 
+    # pylint: disable=too-many-branches
     def _apply_exception_rules(self):
         """
         Apply exception rules to specific op. For example, a rule can override high bitwidth to GroupNorm op.
@@ -559,7 +560,16 @@ class QuantizationSimModel:
         for op in self.connected_graph.ordered_ops:
             input_quantizers, output_quantizers, param_quantizers = self.get_op_quantizers(op)
 
-            if op.type == 'GroupNormalization':
+            if op.type == 'Gather':
+                if self._hw_version not in {'V73', 'V75', 'V79'}:
+                    continue
+                weight_quantizer = param_quantizers['weight']
+                output_quantizer = output_quantizers[0]
+
+                weight_quantizer.bitwidth = output_quantizer.bitwidth
+                weight_quantizer.use_symmetric_encodings = output_quantizer.use_symmetric_encodings
+
+            elif op.type == 'GroupNormalization':
                 if self._hw_version not in {'V73', 'V75', 'V79'}:
                     continue
                 if 'weight' in param_quantizers:
@@ -567,6 +577,7 @@ class QuantizationSimModel:
                     for _, param_quantizer in param_quantizers.items():
                         param_quantizer.bitwidth = output_quantizer.bitwidth
                         param_quantizer.use_symmetric_encodings = output_quantizer.use_symmetric_encodings
+
             elif op.type == 'MatMul':
                 first_input_quantizer = input_quantizers[0] if input_quantizers else None
                 second_input_quantizer = list(param_quantizers.values())[0] if param_quantizers else None

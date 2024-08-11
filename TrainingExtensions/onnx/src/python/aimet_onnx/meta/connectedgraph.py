@@ -70,7 +70,8 @@ BIAS_INDEX = 2
 RECURRENT_WEIGHT_INDEX = 2
 RUNNING_MEAN_INDEX = 3
 RUNNING_VAR_INDEX = 4
-OPS_WITH_PARAMS = ["Conv", "Gemm", "ConvTranspose", "BatchNormalization", "MatMul", "RNN", "LSTM", "GRU"]
+DATA_INDEX = 0
+OPS_WITH_PARAMS = ["Conv", "Gemm", "ConvTranspose", "BatchNormalization", "MatMul", "RNN", "LSTM", "GRU", "Gather"]
 CONSTANT_TYPE = ['Constant', 'ConstantOfShape']
 
 
@@ -350,7 +351,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             logger.debug("Created new product %s", product_name)
 
             producer_op = self._ops[producer_node_name]
-            product.tensor_dict[producer_node_name] = producer_op
+            product.tensor_dict[producer_node_name] = output_tensor_name
 
             # Link producer op, product, and current tensor
             producer_op.output = product
@@ -599,6 +600,14 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             if moving_variance_tensor:
                 create_and_connect_product(moving_variance_tensor.name, moving_variance_tensor.dims, my_op, moving_variance_tensor, None)
 
+        def create_gather_params(my_op: Op):
+            """ Create product for gather """
+            op = my_op.get_module()
+
+            data_tensor = ParamUtils.get_param(self.model, op, DATA_INDEX)
+            if data_tensor:
+                create_and_connect_product(data_tensor.name, data_tensor.dims, my_op, data_tensor, 'weight')
+
         def handle_default(my_op: Op):
             """ Handler for other modules """
             logger.debug("Nothing to handle for op %s", my_op.name)
@@ -614,7 +623,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             "InstanceNormalization": create_weight_bias_params,
             "LayerNormalization": create_weight_bias_params,
             "GroupNormalization": create_weight_bias_params,
-            "MatMul": create_matmul_params
+            "MatMul": create_matmul_params,
+            "Gather": create_gather_params,
         }
 
         for op in self._ops.values():
