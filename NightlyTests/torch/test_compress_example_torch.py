@@ -348,7 +348,7 @@ class SvdAcceptanceTests(unittest.TestCase):
         AimetLogger.set_level_for_all_areas(logging.DEBUG)
 
         input_shape = (1, 3, 224, 224)
-        model = models.resnet18(pretrained=True).to(torch.device('cuda'))
+        model = models.resnet18().to(torch.device('cuda'))
 
         manual_params = aimet_torch.defs.WeightSvdParameters.ManualModeParams(
             [ModuleCompRatioPair(model.layer1[0].conv1, 0.5),
@@ -383,7 +383,7 @@ class SvdAcceptanceTests(unittest.TestCase):
         AimetLogger.set_level_for_all_areas(logging.DEBUG)
 
         input_shape = (1, 3, 224, 224)
-        model = models.resnet18(pretrained=True).to(torch.device('cuda'))
+        model = models.resnet18().to(torch.device('cuda'))
         modules_to_ignore = [model.conv1,
                              model.layer2[0].downsample[0],
                              model.layer3[0].downsample[0],
@@ -426,7 +426,7 @@ class SvdAcceptanceTests(unittest.TestCase):
         AimetLogger.set_level_for_all_areas(logging.DEBUG)
 
         input_shape = (1, 3, 224, 224)
-        model = models.resnet18(pretrained=True).to(torch.device('cuda'))
+        model = models.resnet18().to(torch.device('cuda'))
         modules_to_ignore = [model.conv1,
                              model.layer2[0].downsample[0],
                              model.layer3[0].downsample[0],
@@ -500,7 +500,7 @@ class SvdAcceptanceTests(unittest.TestCase):
         torch.backends.cudnn.deterministic = True
 
         input_shape = (1, 3, 224, 224)
-        model = models.resnet18(pretrained=True).to(torch.device('cuda'))
+        model = models.resnet18().to(torch.device('cuda'))
 
         modules_to_ignore = [model.conv1,
                              model.layer2[0].downsample[0],
@@ -549,7 +549,7 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
 
         data_loader = ImageNetDataLoader(image_dir, image_size, batch_size, num_workers)
         input_shape = (1, 3, 224, 224)
-        model = models.resnet18(pretrained=True).to(torch.device('cuda'))
+        model = models.resnet18().to(torch.device('cuda'))
         manual_params = ChannelPruningParameters.ManualModeParams([ModuleCompRatioPair(model.layer1[0].conv2, 0.3),
                                                                    ModuleCompRatioPair(model.layer2[1].conv1, 0.5)])
         params = ChannelPruningParameters(data_loader.train_loader, 5000,
@@ -631,7 +631,7 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
 
         data_loader = ImageNetDataLoader(image_dir, image_size, batch_size, num_workers)
         input_shape = (1, 3, 224, 224)
-        model = models.resnet18(pretrained=True).to(torch.device('cuda'))
+        model = models.resnet18().to(torch.device('cuda'))
         model.eval()
 
         modules_to_ignore = [model.conv1,
@@ -682,7 +682,7 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
 
         data_loader = ImageNetDataLoader(image_dir, image_size, batch_size, num_workers)
         input_shape = (1, 3, 224, 224)
-        model = models.resnet18(pretrained=True).to(torch.device('cuda'))
+        model = models.resnet18().to(torch.device('cuda'))
         model.eval()
 
         modules_to_ignore = [model.conv1,
