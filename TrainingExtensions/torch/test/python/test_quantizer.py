@@ -3474,7 +3474,8 @@ class TestQuantizationSimLearnedGrid:
 
     def test_accumulator_overflow(self):
 
-        model = models.resnet18(pretrained=True)
+        torch.manual_seed(0)
+        model = models.resnet18()
         model = model.eval()
         layer, range_used = check_accumulator_overflow(model, 8, 32)
 

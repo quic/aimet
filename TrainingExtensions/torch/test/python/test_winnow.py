@@ -957,7 +957,7 @@ class TestTrainingExtensionsWinnow(unittest.TestCase):      # pylint: disable=to
     def test_winnowing_resnet18_onnx_export(self):
         """ Tests winnowing resnet18 with multiple layers  with zero planes. """
 
-        model = models.resnet18(pretrained=True)
+        model = models.resnet18()
         model.eval()
 
         input_shape = [1, 3, 224, 224]
@@ -1082,7 +1082,7 @@ class TestTrainingExtensionsWinnow(unittest.TestCase):      # pylint: disable=to
         """ Tests the winnow_model() API for winnowing resnet18 with
         multiple layers  with zero planes."""
 
-        model = models.resnet18(pretrained=True)
+        model = models.resnet18()
         model.eval()
         zeroed_model = zero_out_select_input_channels(model)
         input_shape = (1, 3, 224, 224)
@@ -1104,7 +1104,7 @@ class TestTrainingExtensionsWinnow(unittest.TestCase):      # pylint: disable=to
         Tests the winnow_model() API and check the memory leak
         """
 
-        model = models.resnet18(pretrained=True).cuda()
+        model = models.resnet18().cuda()
         model.eval()
         zeroed_model = zero_out_select_input_channels(model)
         input_shape = (1, 3, 224, 224)
@@ -1131,7 +1131,7 @@ class TestTrainingExtensionsWinnow(unittest.TestCase):      # pylint: disable=to
         """ Tests the winnow_model() API for winnowing resnet18 with
         multiple layers  with zero planes."""
 
-        model = models.resnet18(pretrained=True)
+        model = models.resnet18()
         zeroed_model = zero_out_select_input_channels(model)
         input_shape = (1, 3, 224, 224)
         # winnow_model() API.
@@ -1150,7 +1150,7 @@ class TestTrainingExtensionsWinnow(unittest.TestCase):      # pylint: disable=to
     def test_winnow_model_inplace_known_zero_planes_api(self):
         """ Tests winnowing resnet18 with multiple layers  with zero planes. """
 
-        model = models.resnet18(pretrained=True)
+        model = models.resnet18()
         model.eval()
         input_shape = (1, 3, 224, 224)
         module_zero_channels_list = create_list_of_modules_to_winnow(model)
@@ -1179,7 +1179,7 @@ class TestTrainingExtensionsWinnow(unittest.TestCase):      # pylint: disable=to
     def test_winnow_copy_of_model_known_zero_planes_api(self):
         """ Tests winnowing resnet18 with multiple layers  with zero planes. """
 
-        model = models.resnet18(pretrained=True)
+        model = models.resnet18()
         model.eval()
         input_shape = (1, 3, 224, 224)
         module_zero_channels_list = create_list_of_modules_to_winnow(model)
@@ -1301,7 +1301,7 @@ class TestTrainingExtensionsWinnow(unittest.TestCase):      # pylint: disable=to
     def test_winnowing_resnet18_on_cuda(self):
         """ Tests winnowing resnet18 with multiple layers  with zero planes. """
 
-        model = models.resnet18(pretrained=True)
+        model = models.resnet18()
         model.eval()
         model = model.cuda()
         input_shape = (1, 3, 224, 224)
@@ -1340,7 +1340,7 @@ class TestTrainingExtensionsWinnow(unittest.TestCase):      # pylint: disable=to
         OpConnectivity.pytorch_dict['adaptive_avg_pool2d'] = ConnectivityType.direct
         OpConnectivity.pytorch_dict['dropout'] = ConnectivityType.direct
         OpConnectivity.pytorch_dict['flatten'] = ConnectivityType.skip
-        model = models.inception_v3(pretrained=True)
+        model = models.inception_v3()
         model.eval()
 
         # Purposefully, model is not switched to CUDA at this time.
@@ -1532,7 +1532,7 @@ class TestTrainingExtensionsWinnow(unittest.TestCase):      # pylint: disable=to
         """ Tests the winnow_model() API for winnowing resnet18 with
         multiple layers  with zero planes."""
 
-        model = models.resnet18(pretrained=True)
+        model = models.resnet18()
         input_shape = (1, 3, 224, 224)
 
         test_conv1 = model.layer2[0].conv1
@@ -1565,7 +1565,7 @@ class TestTrainingExtensionsWinnow(unittest.TestCase):      # pylint: disable=to
 
     def test_resnet18_winnow_first_module(self):
         """ Tests for asserting on winnowing input to first module, using resnet18 """
-        model = models.resnet18(pretrained=True)
+        model = models.resnet18()
         input_shape = (1, 3, 224, 224)
 
         # model.conv1 is first module for resnet18
@@ -1584,7 +1584,7 @@ class TestTrainingExtensionsWinnow(unittest.TestCase):      # pylint: disable=to
 
     def test_resnet18_no_modules_winnowed(self):
         """ Tests for returning unchanged model when no channels are to be winnowed """
-        model = models.resnet18(pretrained=True)
+        model = models.resnet18()
         input_shape = (1, 3, 224, 224)
 
         list_of_modules_to_winnow = [
@@ -1602,7 +1602,7 @@ class TestTrainingExtensionsWinnow(unittest.TestCase):      # pylint: disable=to
 
     def test_resnet18_winnow_non_conv2d_module(self):
         """ Tests for asserting on attempting to winnow non conv2d module """
-        model = models.resnet18(pretrained=True)
+        model = models.resnet18()
         input_shape = (1, 3, 224, 224)
 
         fc_module = model.fc

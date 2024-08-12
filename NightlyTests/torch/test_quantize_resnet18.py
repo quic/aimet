@@ -208,7 +208,7 @@ class QuantizeAcceptanceTests(unittest.TestCase):
 
         # First get baseline numbers
         base_pre_model_load_mark = torch.cuda.memory_allocated()
-        model = models.vgg16(pretrained=True)
+        model = models.vgg16()
         model = model.to(torch.device('cuda'))
         base_model_loaded_mark = torch.cuda.memory_allocated()
 
@@ -225,7 +225,7 @@ class QuantizeAcceptanceTests(unittest.TestCase):
         baseline_leaked_mem = torch.cuda.memory_allocated() - base_pre_model_load_mark
         print("Leaked during train = {}".format(baseline_leaked_mem))
 
-        model = models.vgg16(pretrained=True)
+        model = models.vgg16()
         model = model.to(torch.device('cuda'))
         base_model_loaded_mark = torch.cuda.memory_allocated()
         #
@@ -265,7 +265,7 @@ class QuantizeAcceptanceTests(unittest.TestCase):
 
         # First get baseline numbers
         base_pre_model_load_mark = torch.cuda.memory_allocated()
-        model = models.vgg16(pretrained=True)
+        model = models.vgg16()
         model = model.to(torch.device('cuda'))
         base_model_loaded_mark = torch.cuda.memory_allocated()
 
@@ -281,7 +281,7 @@ class QuantizeAcceptanceTests(unittest.TestCase):
         del model
         print("Leaked during eval = {}".format(torch.cuda.memory_allocated() - base_pre_model_load_mark))
 
-        model = models.vgg16(pretrained=True)
+        model = models.vgg16()
         model = model.to(torch.device('cuda'))
         base_model_loaded_mark = torch.cuda.memory_allocated()
 
