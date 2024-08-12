@@ -2,9 +2,9 @@
 
 .. _api-keras-layer-output-generation:
 
-================================
-AIMET Keras Layer Output Generation API
-================================
+============================================
+AIMET TensorFlow Layer Output Generation API
+============================================
 
 This API captures and saves intermediate layer-outputs of a model. The model can be original (FP32) or quantsim.
 The layer-outputs are named according to the exported Keras model by the quantsim export API. This allows layer-output

@@ -26,7 +26,7 @@ The following table has links to browsable versions of the notebooks for differe
 
    * - Features
      - PyTorch
-     - Keras
+     - TensorFlow
      - ONNX
    * - Quantsim / Quantization-Aware Training (QAT)
      - `Link <../Examples/torch/quantization/qat.ipynb>`_

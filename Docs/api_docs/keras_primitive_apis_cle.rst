@@ -1,8 +1,8 @@
 :orphan:
 
-==================================================
-AIMET Keras Cross Layer Equalization Primitive API
-==================================================
+=======================================================
+AIMET TensorFlow Cross Layer Equalization Primitive API
+=======================================================
 Introduction
 ============
 

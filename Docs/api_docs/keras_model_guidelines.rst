@@ -2,9 +2,9 @@
 
 .. _api-keras-model-guidelines:
 
-========================
-Keras Model Guidelines
-========================
+===========================
+TensorFlow Model Guidelines
+===========================
 
 In order to make full use of AIMET features, there are several guidelines users are encouraged to follow when defining
 Keras models.

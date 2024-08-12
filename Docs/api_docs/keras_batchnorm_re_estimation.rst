@@ -2,9 +2,9 @@
 
 .. _api-keras-bn-reestimation:
 
-===============================================
-AIMET Keras BatchNorm Re-estimation APIs
-===============================================
+=============================================
+AIMET TensorFlow BatchNorm Re-estimation APIs
+=============================================
 
 Examples Notebook Link
 ======================

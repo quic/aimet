@@ -1,6 +1,6 @@
 
 ================================
-AIMET Keras Compression API
+AIMET TensorFlow Compression API
 ================================
 
 Introduction

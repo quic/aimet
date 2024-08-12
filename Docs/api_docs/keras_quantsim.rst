@@ -3,7 +3,7 @@
 .. _api-keras-quantsim:
 
 =====================================
-AIMET Keras Quantization SIM API
+AIMET TensorFlow Quantization SIM API
 =====================================
 
 User Guide Link

@@ -2,9 +2,9 @@
 
 .. _api-keras-adaround:
 
-==================================
-AIMET Keras AdaRound API
-==================================
+=============================
+AIMET TensorFlow AdaRound API
+=============================
 
 User Guide Link
 ===============
