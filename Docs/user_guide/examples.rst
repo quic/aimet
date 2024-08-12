@@ -21,7 +21,7 @@ The following table has links to browsable versions of the notebooks for differe
 **Model Quantization Examples**
 
 .. list-table::
-   :widths: 40 12 12 12 12
+   :widths: 40 12 12 12
    :header-rows: 1
 
    * - Features
@@ -108,4 +108,3 @@ Run the notebooks
   - `Examples/torch/compression/`
   - `Examples/tensorflow/quantization/keras/`
 - Follow the instructions therein to execute the code.
-
