@@ -35,6 +35,8 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+""" Top level API for Adaptive Rounding - Post-Training Quantization (PTQ) """
+
 from typing import Tuple
 import tensorflow as tf
 
