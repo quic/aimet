@@ -2100,6 +2100,7 @@ def load_checkpoint(file_path: str) -> QuantizationSimModel:
         return sim
 
 
+@deprecated("check_accumulator_overflow API will be removed in the future releases.")
 def check_accumulator_overflow(model: torch.nn.Module, quant_bw: int, accum_bw: int):
     """
     Checks for any potential for accumulator overflow across all the layers of the given model

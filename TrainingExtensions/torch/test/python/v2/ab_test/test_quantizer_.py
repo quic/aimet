@@ -2972,9 +2972,9 @@ class TestQuantizationSimLearnedGrid:
         memory_stats = [event for event in prof.key_averages() if event.key == '[memory]'][0]
         assert abs(memory_stats.cpu_memory_usage) < 1.1 * (100 * (10 ** 6))
 
-    @pytest.mark.skip
     def test_accumulator_overflow(self):
 
+        torch.manual_seed(0)
         model = models.resnet18()
         model = model.eval()
         layer, range_used = check_accumulator_overflow(model, 8, 32)
