@@ -45,6 +45,5 @@ AutoQuant API
 Please refer to the links below to view the AutoQuant API for each AIMET variant:
 
 - :ref:`AutoQuant for PyTorch<api-torch-auto-quant>`
-- :ref:`AutoQuant for Tensorflow<api-tf-auto-quant>`
 - :ref:`AutoQuant for ONNX<api-onnx-auto-quant>`
 

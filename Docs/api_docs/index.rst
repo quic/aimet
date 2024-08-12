@@ -11,19 +11,13 @@ to dramatically improve accuracy lost due to quantization and compression.
 AIMET is designed to work generically on any user-provided model. At present, AIMET supports
 TensorFlow, Keras, PyTorch, and ONNX frameworks.
 
-Please follow the links below to see AIMET APIs for either PyTorch, TensorFlow, Keras, or ONNX.
+Please follow the links below to see AIMET APIs for either PyTorch, Keras, or ONNX.
 
 .. toctree::
    :titlesonly:
    :maxdepth: 2
 
    AIMET APIs for PyTorch<torch>
-
-.. toctree::
-   :titlesonly:
-   :maxdepth: 2
-
-   AIMET APIs for TensorFlow<tensorflow>
 
 .. toctree::
    :titlesonly:
