@@ -53,6 +53,7 @@ from aimet_common.defs import QuantScheme, RANGE_LEARNING_SCHEMES
 from aimet_tensorflow.examples.test_models import keras_model
 from aimet_tensorflow.keras.utils.quantizer_utils import SaveModelWithoutQuantsimWrappersCallback
 from aimet_tensorflow.keras.cross_layer_equalization import equalize_model
+from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ParamPerTensorQuantizer, ParamPerChannelQuantizer
 from aimet_tensorflow.keras.quant_sim.qc_mha_wrapper import QcQuantizableMultiHeadAttention
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 from aimet_tensorflow.keras.rnn.qc_quant_LSTM import QuantizedLSTM
@@ -1051,6 +1052,67 @@ def test_load_encodings(param_encodings, activation_encodings):
     # Delete encodings JSON file
     if os.path.exists("./dummy.encodings"):
         os.remove("./dummy.encodings")
+
+@pytest.mark.parametrize('param_encodings', [{'conv2d_1/kernel:0': [{'bitwidth': 16, 'dtype': 'float'}]}])
+@pytest.mark.parametrize('activation_encodings', [{"conv2d_1/Tanh:0":
+                                                       [{"bitwidth": 8, "dtype": "int", "is_symmetric": "False",
+                                                         "max": 5.99380955882352939, "min": -7.77575294117647056,
+                                                         "offset": -144, "scale": 0.05399828431372549}]},
+                                                  {"conv2d_1/Tanh:0": [{'bitwidth': 16, 'dtype': 'float'}]}])
+def test_load_encodings_with_custom_config(param_encodings, activation_encodings):
+    """ Test load encodings functionality """
+    tf.compat.v1.reset_default_graph()
+
+    model = keras_model()
+
+    quantsim_config = {
+        "defaults": {
+            "ops": {
+                "is_output_quantized": "True",
+                "is_symmetric": "True"
+            },
+            "params": {
+                "is_quantized": "True",
+                "is_symmetric": "True"
+            },
+            "per_channel_quantization": "True",
+        },
+        "params": {},
+        "op_type": {},
+        "supergroups": [],
+        "model_input": {},
+        "model_output": {}
+    }
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        custom_config = os.path.join(tmp_dir, 'quantsim_config.json')
+        with open(custom_config, 'w') as f:
+            json.dump(quantsim_config, f)
+
+        sim = QuantizationSimModel(model, config_file=custom_config)
+
+        dummy_encodings = {"activation_encodings": activation_encodings,
+                           "param_encodings": param_encodings}
+
+        # export encodings to JSON file
+        encoding_file_path = os.path.join(tmp_dir, 'dummy.encodings')
+        with open(encoding_file_path, 'w') as encoding_fp:
+            json.dump(dummy_encodings, encoding_fp, sort_keys=True, indent=4)
+
+        # Before loading encodings param quantizer will be PCQ
+        for wrapper in sim.quant_wrappers():
+            for idx, param_quantizer in enumerate(wrapper.param_quantizers):
+                param_name = wrapper._layer_to_wrap.weights[idx].name
+                if param_name == 'conv2d_1/kernel:0':
+                    assert isinstance(param_quantizer, ParamPerChannelQuantizer)
+
+        sim.load_encodings_to_sim(encoding_file_path=encoding_file_path)
+
+        # After loading, as the encoding is float, the quantizer must be modified to PTQ
+        for wrapper in sim.quant_wrappers():
+            for idx, param_quantizer in enumerate(wrapper.param_quantizers):
+                param_name = wrapper._layer_to_wrap.weights[idx].name
+                if param_name == 'conv2d_1/kernel:0':
+                    assert isinstance(param_quantizer, ParamPerTensorQuantizer)
 
 
 def test_load_encodings_with_disabled_param():
