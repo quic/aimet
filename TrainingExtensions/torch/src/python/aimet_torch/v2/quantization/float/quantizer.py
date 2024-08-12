@@ -175,6 +175,31 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
         else:
             self.register_buffer('maxval', None)
 
+    def get_extra_state(self):
+        extra_state_dict = {}
+        extra_state_dict['exponent_bits'] = torch.tensor(self.exponent_bits)
+        extra_state_dict['mantissa_bits'] = torch.tensor(self.mantissa_bits)
+        super_extra_state = super().get_extra_state()
+        extra_state_dict.update(super_extra_state)
+        return extra_state_dict
+
+    def set_extra_state(self, state):
+        self.exponent_bits = state['exponent_bits'].item()
+        self.mantissa_bits = state['mantissa_bits'].item()
+        super().set_extra_state(state)
+
+    def load_state_dict(self, state_dict, strict: bool = True):
+        if 'maxval' in state_dict:
+            if self.maxval is None:
+                del self.maxval
+                self.register_buffer('maxval', state_dict['maxval'])
+        elif self.maxval is not None:
+            del self.maxval
+            self.register_buffer('maxval', None)
+
+        ret = super().load_state_dict(state_dict, strict)
+        return ret
+
     @property
     def bitwidth(self):
         """
