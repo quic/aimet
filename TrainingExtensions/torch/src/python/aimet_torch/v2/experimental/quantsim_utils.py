@@ -170,7 +170,10 @@ def _propagate_output_encodings(sim: QuantizationSimModel,
             continue
 
         if len(qmodule.output_quantizers) != 1:
-            raise RuntimeError
+            msg = 'Encoding propagation is only supported for qmodules with exactly '\
+                  f'1 output quantizer, but found {len(qmodule.output_quantizers)} '\
+                  'output quantizers'
+            raise RuntimeError(msg)
 
         qtzr, = qmodule.output_quantizers
 
