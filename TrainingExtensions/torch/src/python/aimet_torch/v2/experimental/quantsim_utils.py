@@ -136,7 +136,6 @@ def _propagate_output_encodings(sim: QuantizationSimModel,
                 # that gets applied to all input tensors
                 i = 0
             qmodule.input_quantizers[i] = qtzr
-            assert qmodule.input_quantizers[i] is not None
             return
 
         qmodule = get_qmodule(producer)
@@ -179,6 +178,11 @@ def _propagate_output_encodings(sim: QuantizationSimModel,
             raise RuntimeError(msg)
 
         qtzr, = qmodule.output_quantizers
+
+        if qtzr is None:
+            msg = 'Encoding propagation is only supported for qmodules with exactly '\
+                  '1 output quantizer, but found qmodule.output_quantizers[0] == None'
+            raise RuntimeError(msg)
 
         for input in op.inputs:
             _set_src_qtzr(input, consumer=op, qtzr=qtzr)
