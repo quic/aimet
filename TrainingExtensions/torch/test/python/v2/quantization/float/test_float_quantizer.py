@@ -168,10 +168,8 @@ def test_save_and_load_state_dict(exponent_1, mantissa_1, encoding_analyzer_1, e
     qtzr_2 = FloatQuantizeDequantize(exponent_2, mantissa_2, encoding_analyzer=encoding_analyzer_2)
     with qtzr_2.compute_encodings():
         qtzr_2(dummy_input)
-    if torch.allclose(qtzr_1(dummy_input), qtzr_2(dummy_input), atol=1e-7, rtol=1e-7):
-        print('here')
     assert not torch.allclose(qtzr_1(dummy_input), qtzr_2(dummy_input), atol=1e-7, rtol=1e-7)
 
     qtzr_1_state_dict = qtzr_1.state_dict()
     qtzr_2.load_state_dict(qtzr_1_state_dict)
-    assert torch.allclose(qtzr_1(dummy_input), qtzr_2(dummy_input), atol=1e-7, rtol=1e-7)
+    assert torch.equal(qtzr_1(dummy_input), qtzr_2(dummy_input))
