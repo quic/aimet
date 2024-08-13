@@ -49,7 +49,7 @@ class _GridMixin:
     def _get_num_steps(self) -> int:
         return self.qmax - self.qmin
 
-    def _set_num_setps(self, num_steps):
+    def _set_num_steps(self, num_steps):
         self.qmin -= math.ceil(num_steps / 2)
         self.qmax += math.floor(num_steps / 2)
 
@@ -97,8 +97,7 @@ class _GridMixin:
             msg = "Setting bitwidth to a non-integer value {.3f:bitwidth} is not supported. "\
                   "To modify quantization grid with finer granularity, "\
                  f"please consider setting {clsname}.qmin and .qmax to the desired values."
-            raise TypeError(
-            )
+            raise TypeError(msg)
 
         if bitwidth < 1:
             raise ValueError(f"Bitwidth can't be smaller than 1. Got {bitwidth}")
