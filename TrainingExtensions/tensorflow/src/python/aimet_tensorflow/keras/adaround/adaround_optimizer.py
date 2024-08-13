@@ -36,16 +36,18 @@
 # =============================================================================
 
 """ Adaround optimizer """
+
 from typing import Callable
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 import tensorflow.keras.backend as K
+
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger
-from aimet_tensorflow.adaround.adaround_loss import AdaroundLoss, AdaroundHyperParameters
-from aimet_tensorflow.adaround.adaround_wrapper import AdaroundWrapper
-from aimet_tensorflow.keras.adaround.adaround_loss import compute_beta
+from aimet_tensorflow.keras.adaround.adaround_loss import AdaroundLoss, AdaroundHyperParameters
+from aimet_tensorflow.keras.adaround.adaround_wrapper import AdaroundWrapper
+
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 BATCH_SIZE = 32
@@ -95,7 +97,7 @@ class CustomModel(keras.Model):
             warm_start = self.epoch_count < opt_params.num_iterations * opt_params.warm_start
 
             # Compute beta parameter used in regularization function using cosine decay
-            beta = compute_beta(opt_params.num_iterations, self.epoch_count, opt_params.beta_range, opt_params.warm_start)
+            beta = AdaroundLoss.compute_beta(opt_params.num_iterations, self.epoch_count, opt_params.beta_range, opt_params.warm_start)
             recon_loss = AdaroundLoss.compute_recon_loss(adaround_out_tensor, orig_out_tensor, channels_index=channels_index)
             round_loss = AdaroundLoss.compute_round_loss(alpha=wrapper.alpha, reg_param=opt_params.reg_param, warm_start=tf.cast(warm_start, tf.bool), beta=beta)
             total_loss = recon_loss + round_loss

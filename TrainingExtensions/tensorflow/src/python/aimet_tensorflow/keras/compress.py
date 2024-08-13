@@ -43,8 +43,8 @@ import tensorflow as tf
 from aimet_common.defs import CostMetric, CompressionScheme, EvalFunction, CompressionStats
 from aimet_common.bokeh_plots import BokehServerSession
 
-from aimet_tensorflow.utils.graph_saver import keras_wrapper_func, keras_save_and_load_graph, keras_remove_hanging_nodes
-from aimet_tensorflow.defs import SpatialSvdParameters
+from aimet_tensorflow.keras.utils.graph_saver import keras_wrapper_func, keras_save_and_load_graph, keras_remove_hanging_nodes
+from aimet_tensorflow.keras.defs import SpatialSvdParameters
 from aimet_tensorflow.keras.compression_factory import CompressionFactory
 
 

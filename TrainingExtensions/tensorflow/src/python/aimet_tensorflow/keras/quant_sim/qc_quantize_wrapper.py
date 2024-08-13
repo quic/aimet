@@ -47,7 +47,7 @@ import aimet_tensorflow.keras.utils.common as keras_common_utils
 from aimet_tensorflow.keras.model_preparer import _KerasModelPreparer
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQuantizer, \
     ParamPerTensorQuantizer, ParamPerChannelQuantizer, StaticGridPerChannelQuantizer
-from aimet_tensorflow.utils.constants import QUANT_ALLOWED_DTYPES
+from aimet_tensorflow.keras.utils.constants import QUANT_ALLOWED_DTYPES
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 is_tf_or_keras_tensor_input = _KerasModelPreparer._is_tf_or_keras_tensor_input # pylint: disable=protected-access

@@ -3,7 +3,7 @@
 .. _api-keras-cle:
 
 ===============================================
-AIMET Keras Cross Layer Equalization APIs
+AIMET TensorFlow Cross Layer Equalization APIs
 ===============================================
 
 User Guide Link

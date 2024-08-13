@@ -1,7 +1,8 @@
-#==============================================================================
+# -*- mode: python -*-
+# =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2018-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -32,36 +33,10 @@
 #  SPDX-License-Identifier: BSD-3-Clause
 #
 #  @@-COPYRIGHT-END-@@
-#==============================================================================
+# =============================================================================
 
-if (ENABLE_CUDA)
-    add_test(TfTrainingExtensionTest
-            ${Python3_EXECUTABLE} -m pytest ${CMAKE_CURRENT_SOURCE_DIR} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
-            )
+"""  Module for holding all the constants """
 
-else (ENABLE_CUDA)
-    add_test(TfTrainingExtensionTest
-            ${Python3_EXECUTABLE} -m pytest ${CMAKE_CURRENT_SOURCE_DIR} -m "not cuda" --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
-            )
+import tensorflow as tf
 
-endif (ENABLE_CUDA)
-
-set_property(TEST TfTrainingExtensionTest
-      APPEND PROPERTY ENVIRONMENT "${AIMET_PYTHONPATH}")
-
-if(DEFINED ENV{DEPENDENCY_DATA_PATH})
-set_property(TEST TfTrainingExtensionTest
-      APPEND PROPERTY ENVIRONMENT "${DEPENDENCY_DATA_PATH}")
-endif(DEFINED ENV{DEPENDENCY_DATA_PATH})
-
-add_executable(TfTrainingExtensionCppTest
-    TestTfTensorOps.cpp)
-
-target_link_libraries(TfTrainingExtensionCppTest
-        gtest_main
-        TensorFlow
-        TrainingExtensionsTf
-        )
-
-add_test(TfTrainingExtensionCppTest
-        TfTrainingExtensionCppTest --gtest_output=xml:cpp_test_output.xml)
+QUANT_ALLOWED_DTYPES = [tf.float32, tf.float64]

@@ -47,7 +47,7 @@ from aimet_common.comp_ratio_select import GreedyCompRatioSelectAlgo, ManualComp
 from aimet_common.comp_ratio_rounder import RankRounder
 from aimet_common.compression_algo import CompressionAlgo
 
-from aimet_tensorflow.defs import SpatialSvdParameters, ModuleCompRatioPair
+from aimet_tensorflow.keras.defs import SpatialSvdParameters, ModuleCompRatioPair
 from aimet_tensorflow.keras.layer_selector import ConvNoDepthwiseLayerSelector, ManualLayerSelector
 from aimet_tensorflow.keras.layer_database import LayerDatabase
 from aimet_tensorflow.keras.svd_pruner import SpatialSvdPruner

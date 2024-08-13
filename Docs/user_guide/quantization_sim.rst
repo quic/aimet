@@ -150,7 +150,6 @@ Quantization Simulation APIs
 Please refer to the links below to view the Quantization Simulation API for each AIMET variant:
 
 - :ref:`Quantization Simulation for PyTorch<api-torch-quantsim>`
-- :ref:`Quantization Simulation for Tensorflow<api-tf-quantsim>`
 - :ref:`Quantization Simulation for Keras<api-keras-quantsim>`
 - :ref:`Quantization Simulation for ONNX<api-onnx-quantsim>`
 

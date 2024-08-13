@@ -167,16 +167,6 @@ depend on the ML framework the model is written in.
     For more information on model validator and preparer, refer to the corresponding sections in
     :doc:`AIMET PyTorch Quantization APIs<../api_docs/torch_quantization>`.
 
-:hideitem:`Tensorflow`
------------------------
-.. toctree::
-   :titlesonly:
-   :hidden:
-
-    TensorFlow Model Guidelines<../api_docs/tensorflow_model_guidelines>
-
-- Tensorflow:
-    :doc:`TensorFlow Model Guidelines<../api_docs/tensorflow_model_guidelines>`
 
 **2. PTQ/AutoQuant**
 

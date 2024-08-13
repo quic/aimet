@@ -1,6 +1,6 @@
-=============================
-AIMET Keras Quantization APIs
-=============================
+==================================
+AIMET TensorFlow Quantization APIs
+==================================
 
 In order to make full use of AIMET Quantization features, there are several guidelines users are encouraged to follow
 when defining Keras models. AIMET provides APIs which can automate some of the model definition changes and checks

@@ -51,7 +51,7 @@ from aimet_common.cache import Cache
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import validate_quantsim_inputs
 from aimet_common.utils import AimetLogger, Spinner
-from aimet_tensorflow.adaround.adaround_weight import AdaroundParameters
+from aimet_tensorflow.keras.adaround_weight import AdaroundParameters
 from aimet_tensorflow.keras.adaround_weight import Adaround
 from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms
 from aimet_tensorflow.keras.cache import KerasModelSerializationProtocol

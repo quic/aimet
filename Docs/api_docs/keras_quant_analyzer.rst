@@ -2,9 +2,9 @@
 
 .. _api-keras-quant-analyzer:
 
-================================
-AIMET Keras Quant Analyzer API
-================================
+===================================
+AIMET TensorFlow Quant Analyzer API
+===================================
 
 AIMET Keras Quant Analyzer analyzes the Keras model and points out sensitive layers to quantization in the model.
 It checks model sensitivity to weight and activation quantization, performs per layer sensitivity and MSE analysis.

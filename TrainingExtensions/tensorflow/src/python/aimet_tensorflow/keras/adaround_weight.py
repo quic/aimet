@@ -36,32 +36,66 @@
 # =============================================================================
 
 """ Top level API for Adaptive Rounding - Post-Training Quantization (PTQ) """
-from typing import Dict, List, Union, Iterable
+
+import os
+import json
+from typing import Dict, List, Union, Iterable, Tuple
+import numpy as np
 import tensorflow as tf
 from tensorflow.keras.utils import Progbar
 
 import aimet_common.libpymo as libpymo
-
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
-from aimet_tensorflow.adaround.adaround_weight import AdaroundParameters
-from aimet_tensorflow.adaround.adaround_weight import Adaround as TfAdaround
-from aimet_tensorflow.adaround.adaround_loss import AdaroundHyperParameters
+from aimet_common.quantsim_config.json_config_importer import JsonConfigImporter, ConfigDictKeys, ConfigDictType
 from aimet_tensorflow.keras.adaround.activation_sampler import ActivationSampler
+from aimet_tensorflow.keras.adaround.adaround_loss import AdaroundHyperParameters
 from aimet_tensorflow.keras.adaround.adaround_wrapper import AdaroundWrapper
 from aimet_tensorflow.keras.adaround.adaround_optimizer import AdaroundOptimizer
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph, map_keras_types_to_onnx
+from aimet_tensorflow.keras.quantsim_config.quantsim_config import MAP_TF_PARAM_NAME_TO_QUANTSIM_NAME
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 AdaroundSupportedOps = (tf.keras.layers.Conv2D, tf.keras.layers.DepthwiseConv2D, tf.keras.layers.Dense)
 
 
+class AdaroundParameters:
+    """
+    Configuration parameters for Adaround
+    """
+    def __init__(self, data_set: tf.data.Dataset, num_batches: int, default_num_iterations: int = 10000,
+                 default_reg_param: float = 0.01, default_beta_range: Tuple = (20, 2), default_warm_start: float = 0.2):
+        """
+        :param data_set: TF Data set
+        :param num_batches: Number of batches
+        :param default_num_iterations: Number of iterations to adaround each layer. Default 10000
+        :param default_reg_param: Regularization parameter, trading off between rounding loss vs reconstruction loss.
+         Default 0.01
+        :param default_beta_range: Start and stop beta parameter for annealing of rounding loss (start_beta, end_beta).
+         Default (20, 2)
+        :param default_warm_start: warm up period, during which rounding loss has zero effect. Default 20% (0.2)
+        """
+        self.data_set = data_set
+        self.num_batches = num_batches
+        self.num_iterations = default_num_iterations
+        self.reg_param = default_reg_param
+        self.beta_range = default_beta_range
+        self.warm_start = default_warm_start
+
+    def __eq__(self, other: "AdaroundParameters"):
+        return self.data_set == other.data_set and\
+               self.num_batches == other.num_batches and\
+               self.num_iterations == other.num_iterations and\
+               self.reg_param == other.reg_param and\
+               self.beta_range == other.beta_range and\
+               self.warm_start == other.warm_start
+
+
 class Adaround:
     """
     Weight-rounding mechanism for Post Training Quantization (PTQ)
     """
-
     # pylint: disable=too-many-locals
     # pylint: disable=too-many-arguments
     @classmethod
@@ -86,7 +120,7 @@ class Adaround:
         """
 
         # Get parameters from config file. To allow one central place for Adaround and Quantsim
-        configs, strict_symmetric, unsigned_symmetric, per_channel_enabled = TfAdaround.get_config_dict_keys(config_file)
+        configs, strict_symmetric, unsigned_symmetric, per_channel_enabled = cls.get_config_dict_keys(config_file)
 
         # Optimization Hyper parameters
         opt_params = AdaroundHyperParameters(params.num_iterations, params.reg_param, params.beta_range,
@@ -106,7 +140,7 @@ class Adaround:
 
         progbar = Progbar(len(ordered_layer_indices))
         for idx in ordered_layer_indices:
-            use_symmetric_encodings = TfAdaround.get_is_symmetric_flag_for_op_param(configs, model.layers[idx],
+            use_symmetric_encodings = cls.get_is_symmetric_flag_for_op_param(configs, model.layers[idx],
                                                                                     param_name='weight',
                                                                                     framework_to_onnx_type_dict=map_keras_types_to_onnx)
             cls.adaround_layer(act_sampler, use_symmetric_encodings, strict_symmetric, unsigned_symmetric,
@@ -115,7 +149,7 @@ class Adaround:
             progbar.add(1)
 
         # Export quantization encodings to JSON-formatted file at provided path
-        TfAdaround.export_encoding_to_json(path, filename_prefix, param_encodings)
+        cls.export_encoding_to_json(path, filename_prefix, param_encodings)
         return soft_rounded_model
 
     # pylint: disable=too-many-locals
@@ -153,7 +187,7 @@ class Adaround:
         if isinstance(orig_model.layers[idx], tf.keras.layers.Conv2DTranspose):
             data_format = 'NHWC' if orig_model.layers[idx].data_format == 'channels_last' else 'NCHW'
             output_height, output_width, output_channels = \
-                TfAdaround.get_conv2d_transpose_output_tensor_shape(data_format, all_out_data)
+                cls.get_conv2d_transpose_output_tensor_shape(data_format, all_out_data)
 
         wrapper = AdaroundWrapper(orig_model.layers[idx], default_param_bw, default_quant_scheme,
                                   is_symmetric, strict_symmetric, unsigned_symmetric, per_channel_enabled,
@@ -235,3 +269,98 @@ class Adaround:
         :return: List of ordered layer indices to Adaround
         """
         return [idx for idx, layer in enumerate(model.layers) if isinstance(layer, AdaroundSupportedOps)]
+
+    @staticmethod
+    def get_config_dict_keys(config_file: str) -> Tuple[ConfigDictType, bool, bool, bool]:
+        """
+        Get config dictionary keys from config file. Config file will default if no provided one.
+        :param config_file: configuration file.
+        :return: Config dictionary, strict symmetric flag, unsigned symmetric flag, enable per channel flag.
+        """
+        configs = JsonConfigImporter.import_json_config_file(config_file)
+        strict_symmetric = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.STRICT_SYMMETRIC, False)
+        unsigned_symmetric = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.UNSIGNED_SYMMETRIC, False)
+
+        # Read per-channel quantization field. Default = False
+        per_channel_enabled = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.PER_CHANNEL_QUANTIZATION, False)
+
+        return configs, strict_symmetric, unsigned_symmetric, per_channel_enabled
+
+    @staticmethod
+    def get_is_symmetric_flag_for_op_param(configs: ConfigDictType, tf_op_type: str, param_name: str,
+                                           framework_to_onnx_type_dict: dict) -> bool:
+        """
+        NOTE: Checks config file in reverse order of specificity.
+        Returns is_symmetric flag for op's param if it is set in config file else returns
+        False. First check all ops of specific types, second check all params of specific
+        and lastly check for default types. If not specified, it will return default is
+        symmetric False.
+        :param configs: Dictionary containing configs.
+        :param tf_op_type: TF op type.
+        :param param_name: Parameter name.
+        :param framework_to_onnx_type_dict: Dictionary mapping framework type to ONNX type.
+        :return: is_symmetric flag for given op's param.
+        """
+        assert param_name in MAP_TF_PARAM_NAME_TO_QUANTSIM_NAME.keys(), "param name is invalid."
+
+        # third level of specificity which applies to specific op_type's parameters.
+        try:
+            onnx_type = framework_to_onnx_type_dict[tf_op_type]
+            return configs[ConfigDictKeys.OP_TYPE] \
+                [onnx_type] \
+                [ConfigDictKeys.PARAMS] \
+                [param_name] \
+                [ConfigDictKeys.IS_SYMMETRIC]
+        except KeyError:
+            pass
+
+        # Second level of specificity which applies to all parameters only.
+        try:
+            return configs[ConfigDictKeys.PARAMS] \
+                [param_name] \
+                [ConfigDictKeys.IS_SYMMETRIC]
+        except KeyError:
+            pass
+
+        # First level of specificity which applies to all the ops and parameters.
+        try:
+            return configs[ConfigDictKeys.DEFAULTS] \
+                [ConfigDictKeys.PARAMS] \
+                [ConfigDictKeys.IS_SYMMETRIC]
+        except KeyError:
+            pass
+
+        # Default is_symmetric False.
+        return False
+
+    @classmethod
+    def export_encoding_to_json(cls, path: str, filename_prefix: str, param_encodings: Dict):
+        """
+        Save Adadrounded op's parameter encodings to JSON file
+        :param path: path where to store param encodings
+        :param filename_prefix: filename to store exported weight encodings in JSON format
+        :param param_encodings: Parameter encodings dictionary
+        """
+        # export encodings to JSON file
+        os.makedirs(os.path.abspath(path), exist_ok=True)
+        encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
+        with open(encoding_file_path, 'w') as encoding_fp:
+            json.dump(param_encodings, encoding_fp, sort_keys=True, indent=4)
+
+    @staticmethod
+    def get_conv2d_transpose_output_tensor_shape(data_format: str, output_data: np.ndarray):
+        """
+        Get output height, width, and channels from output_data for use in adarounding conv2d transpose op.
+        :param data_format: Data format for the op (NHWC or NCHW)
+        :param output_data: numpy array containing sampled output of the op
+        :return: Tuple containing output height, width, and channels of the op
+        """
+        if data_format == 'NHWC':
+            output_height = output_data.shape[1]
+            output_width = output_data.shape[2]
+            output_channels = output_data.shape[3]
+        else:
+            output_height = output_data.shape[2]
+            output_width = output_data.shape[3]
+            output_channels = output_data.shape[1]
+        return output_height, output_width, output_channels

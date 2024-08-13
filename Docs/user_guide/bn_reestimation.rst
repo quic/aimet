@@ -56,6 +56,5 @@ BN Re-estimation API
 Please refer to the links below to view the BN Re-estimation API for each AIMET variant:
 
 - :ref:`BN Re-estimation for PyTorch<api-torch-bn-reestimation>`
-- :ref:`BN Re-estimation for Tensorflow<api-tensorflow-bn-reestimation>`
 - :ref:`BN Re-estimation for Keras<api-keras-bn-reestimation>`
 

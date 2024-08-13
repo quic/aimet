@@ -45,18 +45,12 @@ endif (ENABLE_TORCH AND NOT ENABLE_ONNX)
 
 if (ENABLE_TENSORFLOW)
     add_dependencies(AcceptanceTests
-            AcceptanceTests.TfNonEager)
-
-    if (NOT TF_VERSION MATCHES "^1.15")
-        add_dependencies(AcceptanceTests
-            AcceptanceTests.TfEager)
-    endif ()
+            AcceptanceTests.Tensorflow)
 endif (ENABLE_TENSORFLOW)
 
 if (ENABLE_TORCH AND NOT ENABLE_ONNX)
     add_subdirectory(torch)
 endif (ENABLE_TORCH AND NOT ENABLE_ONNX)
-
 
 if (ENABLE_TENSORFLOW)
     add_subdirectory(tensorflow)

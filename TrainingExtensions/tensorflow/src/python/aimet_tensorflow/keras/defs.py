@@ -38,6 +38,11 @@
 """ Common type definitions that are used across aimet """
 
 from enum import Enum
+from typing import List, Optional, Union
+import tensorflow as tf
+
+from aimet_common.defs import GreedySelectionParameters
+
 
 # Ways to handle getting number of channels from axes. Default is to get it from the last dimension. For depthwise
 # conv2d, it will be obtained from the last two dimensions.
@@ -48,3 +53,69 @@ class AxisHandling(Enum):
     """
     LAST_AXIS = 0
     LAST_TWO_AXES = 1
+
+
+class ModuleCompRatioPair:
+    """
+    Pair of tf.Operation and a compression-ratio
+    :ivar module: Module of type tf.Operation
+    :ivar comp_ratio: Compression ratio. Compression ratio is the ratio of cost of compressed model
+            to cost of the original model.
+    """
+
+    def __init__(self, module: tf.Operation, comp_ratio: float):
+        self.module = module
+        self.comp_ratio = comp_ratio
+
+
+class SpatialSvdParameters:
+    """ Configuration parameters for spatial svd compression """
+
+    class ManualModeParams:
+        """
+        Configuration parameters for manual-mode spatial svd compression
+        """
+
+        def __init__(self, list_of_module_comp_ratio_pairs: List[ModuleCompRatioPair]):
+            """
+            :param list_of_module_comp_ratio_pairs: List of (module, comp-ratio) pairs
+            """
+            self.list_of_module_comp_ratio_pairs = list_of_module_comp_ratio_pairs
+
+    class AutoModeParams:
+        """
+        Configuration parameters for auto-mode compression
+        """
+
+        def __init__(self, greedy_select_params: GreedySelectionParameters,
+                     modules_to_ignore: Optional[List[tf.Operation]] = None):
+            """
+            :param greedy_select_params: Params for greedy comp-ratio selection algorithm
+            :param modules_to_ignore: List of modules to ignore (None indicates nothing to ignore)
+            """
+            self.greedy_params = greedy_select_params
+            self.modules_to_ignore = [] if modules_to_ignore is None else modules_to_ignore
+
+    class Mode(Enum):
+        """ Mode enumeration """
+
+        manual = 1
+        """ Manual mode """
+
+        auto = 2
+        """ Auto mode """
+
+    def __init__(self, input_op_names: List[str], output_op_names: List[str], mode: Mode,
+                 params: Union[ManualModeParams, AutoModeParams], multiplicity=1):
+        """
+        :param input_op_names: list of input op names to the model
+        :param output_op_names: List of output op names of the model
+        :param mode: Either auto mode or manual mode
+        :param params: Parameters for the mode selected
+        :param multiplicity: The multiplicity to which ranks/input channels will get rounded. Default: 1
+        """
+        self.input_op_names = input_op_names
+        self.output_op_names = output_op_names
+        self.mode = mode
+        self.mode_params = params
+        self.multiplicity = multiplicity

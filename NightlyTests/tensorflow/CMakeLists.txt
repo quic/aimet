@@ -2,7 +2,7 @@
 #
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2018-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -44,34 +44,14 @@ else (ENABLE_CUDA)
     set(USE_CUDA False)
 endif (ENABLE_CUDA)
 
-if (TF_VERSION MATCHES "^1.15")
-    set(TF_VERSION_FLAG "not tf2")
-else ()
-    set(TF_VERSION_FLAG "not tf1")
-endif ()
-
-string(APPEND MARKER_FLAG ${CUDA_FLAG} " and " ${TF_VERSION_FLAG})
-
 add_custom_target(AcceptanceTests.TensorflowDependencies
         COMMAND ${CMAKE_COMMAND} -E env
         "${AIMET_PYTHONPATH}"
         "${Python3_EXECUTABLE}" ${CMAKE_CURRENT_SOURCE_DIR}/dependencies.py ${CMAKE_CURRENT_SOURCE_DIR}/resnet50_eval_scores.csv ${USE_CUDA})
 
-
-
-add_custom_target(AcceptanceTests.TfNonEager
+add_custom_target(AcceptanceTests.Tensorflow
       VERBATIM COMMAND ${CMAKE_COMMAND} -E env
       "${AIMET_PYTHONPATH}"
-      ${Python3_EXECUTABLE} -m pytest -s ${CMAKE_CURRENT_SOURCE_DIR}/non_eager -m ${MARKER_FLAG} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_non_eager_output.xml)
+      ${Python3_EXECUTABLE} -m pytest -s ${CMAKE_CURRENT_SOURCE_DIR} -m ${CUDA_FLAG} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml)
 
-add_dependencies(AcceptanceTests.TfNonEager AcceptanceTests.TensorflowDependencies)
-
-if (NOT TF_VERSION MATCHES "^1.15")
-   add_custom_target(AcceptanceTests.TfEager
-      VERBATIM COMMAND ${CMAKE_COMMAND} -E env
-      "${AIMET_PYTHONPATH}"
-      ${Python3_EXECUTABLE} -m pytest -s ${CMAKE_CURRENT_SOURCE_DIR}/eager -m ${MARKER_FLAG} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_eager_output.xml)
-   add_dependencies(AcceptanceTests.TfEager AcceptanceTests.TensorflowDependencies)
-endif ()
-
-
+add_dependencies(AcceptanceTests.Tensorflow AcceptanceTests.TensorflowDependencies)
