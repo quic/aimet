@@ -93,7 +93,7 @@ def propagate_output_encodings(sim: QuantizationSimModel, arg):
 
     if not sim.connected_graph:
         msg = f"Couldn't find a traced graph from {type(sim).__qualname__}. "\
-              "propagate_output_encodings is only supported when traced grpah is present "\
+              "propagate_output_encodings is only supported when traced graph is present "\
               "as part of quantsim"
         raise RuntimeError(msg)
 
