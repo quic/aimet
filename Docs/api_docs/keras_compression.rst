@@ -1,6 +1,6 @@
 
 ================================
-AIMET Keras Compression API
+AIMET TensorFlow Compression API
 ================================
 
 Introduction
@@ -47,7 +47,7 @@ Greedy Selection Parameters
 Spatial SVD Configuration
 =========================
 
-.. autoclass:: aimet_tensorflow.defs.SpatialSvdParameters
+.. autoclass:: aimet_tensorflow.keras.defs.SpatialSvdParameters
    :members:
 
 |
@@ -70,7 +70,7 @@ Configuration Definitions
 
 |
 
-.. autoclass:: aimet_tensorflow.defs.ModuleCompRatioPair
+.. autoclass:: aimet_tensorflow.keras.defs.ModuleCompRatioPair
    :members:
 
 |

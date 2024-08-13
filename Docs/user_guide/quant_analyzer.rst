@@ -88,6 +88,5 @@ QuantAnalyzer API
 Please refer to the links below to view the QuantAnalyzer API for each AIMET variant:
 
 - :ref:`QuantAnalyzer for PyTorch<api-torch-quant-analyzer>`
-- :ref:`QuantAnalyzer for Tensorflow<api-tensorflow-quant-analyzer>`
 - :ref:`QuantAnalyzer for Keras<api-keras-quant-analyzer>`
 - :ref:`QuantAnalyzer for ONNX<api-onnx-quant-analyzer>`

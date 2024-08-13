@@ -2,9 +2,9 @@
 
 .. _api-keras-model-preparer:
 
-==================
-Model Preparer API
-==================
+=============================
+TensorFlow Model Preparer API
+=============================
 
 AIMET Keras ModelPreparer API is used to prepare a Keras model that is not using the Keras Functional or Sequential API.
 Specifically, it targets models that have been created using the subclassing feature in Keras. The ModelPreparer API will

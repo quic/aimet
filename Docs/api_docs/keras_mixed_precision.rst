@@ -2,7 +2,7 @@
 .. _api-keras-mixed-precision:
 
 ====================================
-Keras TensorFlow Mixed Precision API
+AIMET TensorFlow Mixed Precision API
 ====================================
 
 Top-level API for Regular AMP

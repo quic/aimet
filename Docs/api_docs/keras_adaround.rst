@@ -2,9 +2,9 @@
 
 .. _api-keras-adaround:
 
-==================================
-AIMET Keras AdaRound API
-==================================
+=============================
+AIMET TensorFlow AdaRound API
+=============================
 
 User Guide Link
 ===============
@@ -16,11 +16,11 @@ For an end-to-end notebook showing how to use Keras AdaRound, please see :doc:`h
 
 Top-level API
 =============
-.. autofunction:: aimet_tensorflow.keras.adaround.adaround_weight.Adaround.apply_adaround
+.. autofunction:: aimet_tensorflow.keras.adaround_weight.Adaround.apply_adaround
 
 Adaround Parameters
 ===================
-.. autoclass:: aimet_tensorflow.adaround.adaround_weight.AdaroundParameters
+.. autoclass:: aimet_tensorflow.keras.adaround_weight.AdaroundParameters
     :members:
 
 Enum Definition

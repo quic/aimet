@@ -21,38 +21,32 @@ The following table has links to browsable versions of the notebooks for differe
 **Model Quantization Examples**
 
 .. list-table::
-   :widths: 40 12 12 12 12
+   :widths: 40 12 12 12
    :header-rows: 1
 
    * - Features
      - PyTorch
      - TensorFlow
-     - Keras
      - ONNX
    * - Quantsim / Quantization-Aware Training (QAT)
      - `Link <../Examples/torch/quantization/qat.ipynb>`_
-     - `Link <../Examples/tensorflow/quantization/qat.ipynb>`_
-     -
+     - `Link <../Examples/tensorflow/quantization/keras/qat.ipynb>`_
      - `Link <../Examples/onnx/quantization/quantsim.ipynb>`_  (no training)
    * - QAT with Range Learning
      - `Link <../Examples/torch/quantization/qat_range_learning.ipynb>`_
-     - `Link <../Examples/tensorflow/quantization/qat_range_learning.ipynb>`_
-     -
+     - `Link <../Examples/tensorflow/quantization/keras/qat_range_learning.ipynb>`_
      -
    * - Cross-Layer Equalization (CLE)
      - `Link <../Examples/torch/quantization/cle_bc.ipynb>`_
-     - `Link <../Examples/tensorflow/quantization/cle_bc.ipynb>`_
      - `Link <../Examples/tensorflow/quantization/keras/quantsim_cle.ipynb>`_
-     -
+     - `Link <../Examples/onnx/quantization/cle.ipynb>`_
    * - Adaptive Rounding (AdaRound)
      - `Link <../Examples/torch/quantization/adaround.ipynb>`_
-     - `Link <../Examples/tensorflow/quantization/adaround.ipynb>`_
      - `Link <../Examples/tensorflow/quantization/keras/adaround.ipynb>`_
-     -
+     - `Link <../Examples/onnx/quantization/adaround.ipynb>`_
    * - AutoQuant
      - `Link <../Examples/torch/quantization/autoquant_v2.ipynb>`_
-     - `Link <../Examples/tensorflow/quantization/autoquant.ipynb>`_
-     -
+     - `Link <../Examples/tensorflow/quantization/keras/autoquant.ipynb>`_
      -
 
 |
@@ -64,16 +58,12 @@ The following table has links to browsable versions of the notebooks for differe
 
    * - Features
      - PyTorch
-     - TensorFlow
    * - Channel Pruning
      - `Link <../Examples/torch/compression/channel_pruning.ipynb>`_
-     - `Link <../Examples/tensorflow/compression/channel_pruning.ipynb>`_
    * - Spatial SVD
      - `Link <../Examples/torch/compression/spatial_svd.ipynb>`_
-     - `Link <../Examples/tensorflow/compression/spatial_svd.ipynb>`_
    * - Spatial SVD + Channel Pruning
      - `Link <../Examples/torch/compression/spatial_svd_channel_pruning.ipynb>`_
-     - `Link <../Examples/tensorflow/compression/spatial_svd_channel_pruning.ipynb>`_
 
 
 |
@@ -116,7 +106,5 @@ Run the notebooks
 
   - `Examples/torch/quantization/`
   - `Examples/torch/compression/`
-  - `Examples/tensorflow/quantization/`
-  - `Examples/tensorflow/compression/`
+  - `Examples/tensorflow/quantization/keras/`
 - Follow the instructions therein to execute the code.
-
