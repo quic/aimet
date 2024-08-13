@@ -166,11 +166,11 @@ def _propagate_output_encodings(sim: QuantizationSimModel,
         if not qmodule:
             continue
 
-        if len(qmodule.output_quantizers) != 1:
-            raise RuntimeError
-
         if not condition(qmodule):
             continue
+
+        if len(qmodule.output_quantizers) != 1:
+            raise RuntimeError
 
         qtzr, = qmodule.output_quantizers
 
