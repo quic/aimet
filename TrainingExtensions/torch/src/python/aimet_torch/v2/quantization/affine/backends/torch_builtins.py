@@ -38,7 +38,7 @@
 import functools
 from typing import Optional, List
 import torch
-from aimet_torch.v2.utils import _is_expandable
+from aimet_torch.v2.utils import _is_expandable, _ContextManager
 import aimet_torch.v2.experimental.onnx._export as _onnx
 from packaging import version
 
@@ -209,10 +209,17 @@ class QuantizeFunc(torch.autograd.Function):
     """
     Custom gradient function for quantization
     """
-    # pylint: disable=arguments-differ
+    # pylint: disable=arguments-differ, protected-access
     @staticmethod
-    @_compile
     def forward(ctx, tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, qmin: int, qmax: int):
+        if _USE_COMPILED_IMPL:
+            impl = __class__._compiled_forward_impl
+        else:
+            impl = __class__._forward_impl
+        return impl(ctx, tensor, scale, offset, qmin, qmax)
+
+    @staticmethod
+    def _forward_impl(ctx, tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, qmin: int, qmax: int):
         x_round = (tensor.to(scale.dtype) / scale).round_().sub_(offset)
         if tensor.requires_grad or scale.requires_grad or offset.requires_grad:
             mask = (x_round >= qmin) * (x_round <= qmax)
@@ -225,6 +232,8 @@ class QuantizeFunc(torch.autograd.Function):
                               scale if tensor.requires_grad or scale.requires_grad else None,
                               mask)
         return x_round.clamp_(qmin, qmax)
+
+    _compiled_forward_impl = staticmethod(_compile(_forward_impl.__func__))
 
     # pylint: disable=arguments-differ
     @staticmethod
@@ -243,10 +252,17 @@ class DequantizeFunc(torch.autograd.Function):
     """
     Custom gradient function for dequantization
     """
-    # pylint: disable=arguments-differ
+    # pylint: disable=arguments-differ, protected-access
     @staticmethod
-    @_compile
     def forward(ctx, tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor):
+        if _USE_COMPILED_IMPL:
+            impl = __class__._compiled_forward_impl
+        else:
+            impl = __class__._forward_impl
+        return impl(ctx, tensor, scale, offset)
+
+    @staticmethod
+    def _forward_impl(ctx, tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor):
         x_dequant = (tensor + offset).mul_(scale)
         ctx.tensor_requires_grad = tensor.requires_grad
         ctx.scale_requires_grad = scale.requires_grad
@@ -255,6 +271,8 @@ class DequantizeFunc(torch.autograd.Function):
                               scale if tensor.requires_grad or offset.requires_grad else None,
                               offset if scale.requires_grad else None)
         return x_dequant
+
+    _compiled_forward_impl = staticmethod(_compile(_forward_impl.__func__))
 
     # pylint: disable=arguments-differ
     @staticmethod
@@ -273,10 +291,17 @@ class QuantDequantFunc(torch.autograd.Function):
     """
     Custom gradient function for quant-dequant
     """
-    # pylint: disable=arguments-differ, misplaced-comparison-constant
+    # pylint: disable=arguments-differ, protected-access
     @staticmethod
-    @_compile
     def forward(ctx, tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, qmin: int, qmax: int):
+        if _USE_COMPILED_IMPL:
+            impl = __class__._compiled_forward_impl
+        else:
+            impl = __class__._forward_impl
+        return impl(ctx, tensor, scale, offset, qmin, qmax)
+
+    @staticmethod
+    def _forward_impl(ctx, tensor: torch.Tensor, scale: torch.Tensor, offset: torch.Tensor, qmin: int, qmax: int):
         x_round = (tensor.to(scale.dtype) / scale).round_().sub_(offset)
 
         if tensor.requires_grad or scale.requires_grad or offset.requires_grad:
@@ -297,6 +322,8 @@ class QuantDequantFunc(torch.autograd.Function):
                               offset if scale.requires_grad else None,
                               mask)
         return x_dequant
+
+    _compiled_forward_impl = staticmethod(_compile(_forward_impl.__func__))
 
     # pylint: disable=arguments-differ
     @staticmethod
@@ -374,3 +401,19 @@ def reshape_tensor_for_blocks(tensor: torch.Tensor, encoding_shape: torch.Tensor
     input_reshape = list(tensor.shape[:-len(block_size)]) + input_reshape
 
     return tensor.view(input_reshape)
+
+
+_USE_COMPILED_IMPL = False
+
+def _use_compiled_impl(flag: bool = True):
+    orig = _USE_COMPILED_IMPL
+
+    def action():
+        global _USE_COMPILED_IMPL # pylint: disable=global-statement
+        _USE_COMPILED_IMPL = flag
+
+    def cleanup():
+        global _USE_COMPILED_IMPL # pylint: disable=global-statement
+        _USE_COMPILED_IMPL = orig
+
+    return _ContextManager(action, cleanup)

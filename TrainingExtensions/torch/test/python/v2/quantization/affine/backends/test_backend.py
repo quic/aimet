@@ -256,24 +256,18 @@ def offset():
     return torch.randint(-5, 5, []).to(torch.float32)
 
 
+@pytest.fixture(params=[True, False])
+def use_compiled_impl(request):
+    flag = request.param
+    with torch_builtins._use_compiled_impl(flag):
+        yield
+
+
 @pytest.mark.parametrize('backend_module', [torch_builtins])
 class TestQuantizationBackends:
-    def _test_quantization_backend(self, backend_module, random_tensor, scale, offset, qmin, qmax):
-        expected_quantized_tensor = torch.clamp(torch.round(random_tensor / scale) - torch.round(offset), qmin, qmax)
-        quantized_tensor = backend_module.quantize(random_tensor, scale, offset, qmin, qmax)
-        assert torch.allclose(quantized_tensor, expected_quantized_tensor)
-
-        dequantized_tensor = backend_module.dequantize(expected_quantized_tensor, scale, offset)
-        expected_dequantized_tensor = (expected_quantized_tensor + torch.round(offset)) * scale
-        assert torch.allclose(dequantized_tensor, expected_dequantized_tensor)
-
-        qdq_tensor = backend_module.quantize_dequantize(random_tensor, scale, offset, qmin, qmax)
-        expected_qdq_tensor = (expected_quantized_tensor + torch.round(offset)) * scale
-        assert torch.allclose(qdq_tensor, expected_qdq_tensor)
-
     @pytest.mark.parametrize('qmin, qmax', [(0, 255), (-128, 127)])
     @pytest.mark.parametrize('scale_shape', [(4), (2,), (3, 1), (2, 1, 1)])
-    def test_quantize_using_not_broadcastable_scale(self, backend_module, offset, scale_shape, qmin, qmax):
+    def test_quantize_using_not_broadcastable_scale(self, backend_module, offset, scale_shape, qmin, qmax, use_compiled_impl):
         # Add small value to scale to make scale not equal to 0
         scale = torch.rand(scale_shape)
         scale[scale == 0.0] = 0.1
@@ -343,7 +337,7 @@ class TestQuantizationBackends:
             backend_module.quantize_dequantize(random_tensor.to(float), scale.to(float), offset.to(float), qmin, qmax)
 
     @pytest.mark.cuda
-    def test_quantize_using_parameters_on_different_device(self, backend_module, offset):
+    def test_quantize_using_parameters_on_different_device(self, backend_module, offset, use_compiled_impl):
         qmin, qmax = 0, 255
         scale = torch.tensor([0.2], dtype=torch.float32)
         random_tensor = torch.randn(2, 3, 4, 5)
@@ -371,7 +365,7 @@ class TestQuantizationBackends:
             backend_module.quantize_dequantize(random_tensor, scale, offset.cuda(), qmin, qmax)
 
     @pytest.mark.parametrize('memory_format', [torch.channels_last, torch.channels_last_3d])
-    def test_quantize_using_non_contiguous_tensor(self, backend_module, offset, memory_format):
+    def test_quantize_using_non_contiguous_tensor(self, backend_module, offset, memory_format, use_compiled_impl):
         qmin, qmax = 0, 255
         scale = torch.tensor([0.2], dtype=torch.float32)
         random_tensor = get_round_safe_quantizable_tensor((2, 3, 4, 5), scale, qmin, qmax)
@@ -404,7 +398,7 @@ class TestQuantizationBackends:
         assert torch.allclose(channel_last_qdq_tensor, expected_qdq_tensor)
 
     @pytest.mark.parametrize('scale_shape', [(5, 1, 1, 1, 1), (3, 1, 1)])
-    def test_quantize_using_inversely_broadcastable_scale(self, backend_module, offset, scale_shape):
+    def test_quantize_using_inversely_broadcastable_scale(self, backend_module, offset, scale_shape, use_compiled_impl):
         qmin, qmax = 0, 255
         # Add small value to scale to make scale not equal to 0
         scale = torch.rand(scale_shape)
@@ -424,7 +418,7 @@ class TestQuantizationBackends:
     @pytest.mark.parametrize('scale_requires_grad', [True, False])
     @pytest.mark.parametrize('offset_requires_grad', [True, False])
     @pytest.mark.parametrize('input_requires_grad', [True, False])
-    def test_quantize_backward_pass(self, backend_module, offset, scale_requires_grad, offset_requires_grad, input_requires_grad):
+    def test_quantize_backward_pass(self, backend_module, offset, scale_requires_grad, offset_requires_grad, input_requires_grad, use_compiled_impl):
         qmin, qmax = 0, 255
         scale = torch.rand([])
         scale[scale == 0.0] = 0.1
@@ -460,7 +454,7 @@ class TestQuantizationBackends:
                                           per_channel_8b_test_set))
     @pytest.mark.parametrize("dtype", (torch.float16, torch.float32))
     @pytest.mark.cuda
-    def test_quantize_with_predefined_values(self, backend_module, test_set, dtype):
+    def test_quantize_with_predefined_values(self, backend_module, test_set, dtype, use_compiled_impl):
         test_set = copy_test_set(test_set, device="cuda:0", dtype=dtype)
         test_set.tensor.requires_grad = True
         tensor_q = backend_module.quantize(test_set.tensor, test_set.delta, test_set.offset, test_set.qmin, test_set.qmax)
@@ -477,7 +471,7 @@ class TestQuantizationBackends:
                                           per_channel_8b_test_set))
     @pytest.mark.parametrize("dtype", (torch.float16, torch.float32))
     @pytest.mark.cuda
-    def test_dequantize_with_predefined_values(self, backend_module, test_set, dtype):
+    def test_dequantize_with_predefined_values(self, backend_module, test_set, dtype, use_compiled_impl):
         test_set = copy_test_set(test_set, dtype=dtype, device="cuda")
         tensor_q = test_set.tensor_q
         tensor_qdq = backend_module.dequantize(tensor_q, test_set.delta, test_set.offset)
@@ -489,7 +483,7 @@ class TestQuantizationBackends:
                                           per_channel_8b_test_set))
     @pytest.mark.parametrize("dtype", (torch.float16, torch.float32))
     @pytest.mark.cuda
-    def test_qdq_with_predefined_values(self, backend_module, test_set, dtype):
+    def test_qdq_with_predefined_values(self, backend_module, test_set, dtype, use_compiled_impl):
         test_set = copy_test_set(test_set, dtype=dtype, device="cuda")
         test_set.tensor.requires_grad = True
         tensor_qdq = backend_module.quantize_dequantize(test_set.tensor, test_set.delta, test_set.offset, test_set.qmin, test_set.qmax)
@@ -535,7 +529,7 @@ class TestQuantizationBackends:
         assert torch.all(test_set.tensor.grad[~test_set.mask] == grad_in[~test_set.mask])
 
     @pytest.mark.parametrize('qmin, qmax', [(0, 255), (-128, 127)])
-    def test_compare_quantize_gradients_with_autograd_results(self, backend_module, offset, qmin, qmax):
+    def test_compare_quantize_gradients_with_autograd_results(self, backend_module, offset, qmin, qmax, use_compiled_impl):
         scale = torch.rand([])
         scale[scale == 0.0] = 0.1
         offset = offset.detach().clone()
@@ -565,7 +559,7 @@ class TestQuantizationBackends:
         assert torch.allclose(offset.grad, expected_offset_grad)
 
     @pytest.mark.parametrize('qmin, qmax', [(0, 255), (-128, 127)])
-    def test_compare_dequantize_gradients_with_autograd_results(self, backend_module, offset, qmin, qmax):
+    def test_compare_dequantize_gradients_with_autograd_results(self, backend_module, offset, qmin, qmax, use_compiled_impl):
         scale = torch.rand([])
         scale[scale == 0.0] = 0.1
         offset = offset.detach().clone()
@@ -595,7 +589,7 @@ class TestQuantizationBackends:
         assert torch.allclose(offset.grad, expected_offset_grad)
 
     @pytest.mark.parametrize('qmin, qmax', [(0, 255), (-128, 127)])
-    def test_compare_qdq_gradients_with_autograd_results(self, backend_module, offset, qmin, qmax):
+    def test_compare_qdq_gradients_with_autograd_results(self, backend_module, offset, qmin, qmax, use_compiled_impl):
         scale = torch.rand([])
         scale[scale == 0.0] = 0.1
         offset = offset.detach().clone()
@@ -653,7 +647,7 @@ class TestQuantizationBackends:
                               [torch.tensor([[0.03], [0.02]]), torch.zeros(2, 1), None, torch.tensor([[-40, 80], [-30, -9]])],
                               [torch.tensor([[0.03, 0.02], [0.01, 0.09]]), torch.zeros(2, 2), [1, 1], torch.tensor([[-40, 120], [-60, -2]])]
                               ])
-    def test_block_quant(self, backend_module, scale, offset, block_size, output):
+    def test_block_quant(self, backend_module, scale, offset, block_size, output, use_compiled_impl):
         inp = torch.tensor([[-1.2, 2.4], [-.6, -.18]])
 
         q = affine.quantize(inp, scale, offset.to(scale.dtype), 8, True, block_size=block_size)
@@ -665,7 +659,7 @@ class TestQuantizationBackends:
         qdq = affine.quantize_dequantize(inp, scale, offset.to(scale.dtype), 8, True, block_size=block_size)
         assert torch.allclose(qdq, inp, atol=1e-6)
 
-    def test_block_quant_2(self, backend_module):
+    def test_block_quant_2(self, backend_module, use_compiled_impl):
         inp = torch.randn(3, 5, 4, 6, 12, 9)
         scale = torch.randn(2, 1, 4, 9)
         offset = torch.randint(low=-128, high=127, size=(2, 1, 4, 9)).to(dtype=scale.dtype)
