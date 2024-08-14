@@ -37,7 +37,7 @@
 # pylint: disable=redefined-builtin
 """ Affine encoding definition """
 
-from typing import Tuple, Optional, Dict, Any, overload, Union
+from typing import Tuple, Optional, Dict, Any, overload
 from itertools import chain, repeat
 import torch
 from torch._C._nn import _parse_to as parse_to_args
@@ -159,7 +159,7 @@ class AffineEncoding(EncodingBase, _GridMixin):
 
     @property
     @docstring(_GridMixin._get_bitwidth.__doc__)
-    def bitwidth(self) -> Union[int, float]: # pylint: disable=missing-function-docstring
+    def bitwidth(self) -> int: # pylint: disable=missing-function-docstring
         return self._get_bitwidth()
 
     @bitwidth.setter

@@ -1427,7 +1427,8 @@ def test_non_integer_bitwidth():
     When: Get bitwidth
     Then: Should return non-integer bitwidth B
     """
-    assert 15 < q.bitwidth < 16
+    with pytest.raises(RuntimeError):
+        q.bitwidth
 
     """
     When: Set bitwidth

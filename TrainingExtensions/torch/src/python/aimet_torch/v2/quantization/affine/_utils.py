@@ -35,7 +35,6 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 # pylint: disable=missing-module-docstring
-from typing import Union
 import math
 
 
@@ -61,7 +60,7 @@ class _GridMixin:
         self.qmin = centroid - math.ceil(num_steps / 2)
         self.qmax = centroid + math.floor(num_steps / 2)
 
-    def _get_bitwidth(self) -> Union[int, float]:
+    def _get_bitwidth(self) -> int:
         r"""
         Returns bitwidth of the quantizer.
 
@@ -70,7 +69,7 @@ class _GridMixin:
         .. math::
             bitwidth=
             \begin{cases}
-                B,         & \text{if}\quad \exists_{B \geq 1} \quad (qmin=0, qmax=2^B-1)
+                B,         & \text{if}\quad \exists_{B \in \mathbb{Z}_{>0}} \quad (qmin=0, qmax=2^B-1)
                                             \text{ or } (qmin=-2^{B-1}, qmax=2^{B-1}-1)\\
                 undefined, & \text{otherwise}
             \end{cases}
@@ -82,8 +81,7 @@ class _GridMixin:
         if self.qmin + self.qmax == -1 or self.qmin == 0:
             bitwidth = math.log2(self.qmax - self.qmin + 1)
             if bitwidth == int(bitwidth):
-                bitwidth = int(bitwidth)
-            return bitwidth
+                return int(bitwidth)
 
         msg = self._undefined_attr_error_msg('bitwidth')
         raise RuntimeError(msg)
@@ -128,7 +126,7 @@ class _GridMixin:
         .. math::
             signed=
             \begin{cases}
-                qmin < 0 \leq qmax,  & \text{if}\quad \exists_{B \geq 1} \quad (qmin=0, qmax=2^B-1)
+                qmin < 0 \leq qmax,  & \text{if}\quad \exists_{B \in \mathbb{Z}_{>0}} \quad (qmin=0, qmax=2^B-1)
                                        \text{ or } (qmin=-2^{B-1}, qmax=2^{B-1}-1)\\
                 undefined,           & \text{otherwise}
             \end{cases}
@@ -170,5 +168,5 @@ class _GridMixin:
         qmin = self.qmin
         qmax = self.qmax
         return f"{clsname}.{attr_name} is undefined in the quantization grid [{qmin}, {qmax}]. "\
-               f"Attribute {attr_name} can be defined if and only if there exists some non-negative number `B` such that "\
+               f"Attribute {attr_name} can be defined if and only if there exists a strictly positive integer `B` such that "\
                f"the quantization grid can be expressed in the form of [-2**(B-1), 2**(B-1) - 1] or [0, 2**B - 1]."

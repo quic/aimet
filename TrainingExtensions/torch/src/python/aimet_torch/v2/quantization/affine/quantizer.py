@@ -39,7 +39,7 @@
 
 import abc
 from itertools import chain, repeat
-from typing import Optional, List, Dict, Tuple, Union, overload
+from typing import Optional, List, Dict, Tuple, overload
 import contextlib
 import functools
 
@@ -262,7 +262,7 @@ class AffineQuantizerBase(QuantizerBase, _GridMixin):
 
     @property
     @docstring(_GridMixin._get_bitwidth.__doc__)
-    def bitwidth(self) -> Union[int, float]: # pylint: disable=missing-function-docstring
+    def bitwidth(self) -> int: # pylint: disable=missing-function-docstring
         return self._get_bitwidth()
 
     @bitwidth.setter
