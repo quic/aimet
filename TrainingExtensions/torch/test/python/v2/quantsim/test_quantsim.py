@@ -1052,7 +1052,8 @@ class TestEncodingPropagation:
         assert q_in2 is orig_q_in2
         assert q_out3 is orig_q_out3
 
-    def test_math_invariant(self):
+    @pytest.mark.parametrize('permute_impl', [custom.Permute(), torch.permute])
+    def test_math_invariant(self, permute_impl):
         """
         Given: model as below
 
@@ -1067,7 +1068,7 @@ class TestEncodingPropagation:
                 self.relu1 = torch.nn.ReLU()
 
                 self.reshape = custom.Reshape()
-                self.permute = custom.Permute()
+                self.permute = permute_impl
 
                 self.cat = custom.Concat()
 
@@ -1084,8 +1085,6 @@ class TestEncodingPropagation:
         model = Model()
         x = torch.randn(1, 3, 24, 24)
         sim = QuantizationSimModel(model, x)
-        sim.model.reshape.output_quantizers[0] = None
-        sim.model.permute.output_quantizers[0] = None
 
         """
         When: Call propagate_output_encodings(concat)

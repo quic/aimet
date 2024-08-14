@@ -122,6 +122,10 @@ def _propagate_output_encodings(sim: QuantizationSimModel,
         producer = x.producer
 
         if not producer:
+            if x.shape is None:
+                # ``x`` is a non-tensor root input
+                return
+
             # ``x`` is a root input (i.e. has no producer).
             # In this case, set the input quantizer of the consumer to ``qtzr``
             i = consumer.inputs.index(x)
