@@ -130,6 +130,10 @@ def _propagate_output_encodings(sim: QuantizationSimModel,
             # In this case, set the input quantizer of the consumer to ``qtzr``
             i = consumer.inputs.index(x)
             qmodule = get_qmodule(consumer)
+
+            if not qmodule:
+                return
+
             if isinstance(qmodule, custom.Concat):
                 # torch.concat is an input-variadic operation whose number of inputs
                 # can't be predicted statically.

@@ -1078,7 +1078,7 @@ class TestEncodingPropagation:
                 x1 = self.conv1(x1)
                 x1 = self.relu1(x1)
 
-                x2 = self.reshape(x2, (-1, 24, 24, 3)) 
+                x2 = self.reshape(x2, (-1, 24, 24, 3))
                 x2 = self.permute(x2, (0, 3, 1, 2))
                 return self.cat(x1, x2)
 
@@ -1283,3 +1283,33 @@ class TestEncodingPropagation:
         propagate_output_encodings(sim, custom.Concat)
         assert sim.model.conv.output_quantizers[0] is sim.model.cat.output_quantizers[0]
         assert sim.model.cat.input_quantizers[0] is sim.model.cat.output_quantizers[0]
+
+    def test_functional(self):
+        """
+        Given: Model as below, where reshape and permute are functional operators.
+               Note that there is no parent nn.Module for the second input of concat
+               to propagate the output encoidngs to.
+
+          [input] -> reshape -> permute -> concat -> q_out -> [output]
+        """
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.cat = custom.Concat()
+
+            def forward(self, x):
+                x1 = x2 = x
+                x2 = torch.reshape(x2, (-1, 24, 24, 3))
+                x2 = torch.permute(x2, (0, 3, 1, 2))
+                return self.cat(x1, x2)
+
+        model = Model()
+        x = torch.randn(1, 3, 24, 24)
+        sim = QuantizationSimModel(model, x)
+
+        """
+        When: Call propagate_output_encodings(concat)
+        Then: Shouldn't throw runtime error, even though there is no ancestor
+              to propagate the output encodings to.
+        """
+        propagate_output_encodings(sim, custom.Concat)
