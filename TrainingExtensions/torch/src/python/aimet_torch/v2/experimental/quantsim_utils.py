@@ -122,10 +122,18 @@ def _propagate_output_encodings(sim: QuantizationSimModel,
         producer = x.producer
 
         if not producer:
+            if x.shape is None:
+                # ``x`` is a non-tensor root input
+                return
+
             # ``x`` is a root input (i.e. has no producer).
             # In this case, set the input quantizer of the consumer to ``qtzr``
             i = consumer.inputs.index(x)
             qmodule = get_qmodule(consumer)
+
+            if not qmodule:
+                return
+
             if isinstance(qmodule, custom.Concat):
                 # torch.concat is an input-variadic operation whose number of inputs
                 # can't be predicted statically.
