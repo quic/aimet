@@ -200,7 +200,7 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
         return self_copy
 
     def __getstate__(self):
-        state = self.__dict__.copy()
+        state = super().__getstate__()
         state.pop('_initial_parameters')
         state['is_initialized'] = self.get_extra_state()
         return state
@@ -209,7 +209,7 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
     def __setstate__(self, state):
         self._initial_parameters = OrderedDict()
         is_initialized = state.pop('is_initialized')
-        self.__dict__.update(state)
+        super().__setstate__(state)
         self.set_extra_state(is_initialized)
 
     def allow_overwrite(self, mode: bool):

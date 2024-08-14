@@ -708,7 +708,7 @@ def test_invalid_encoding_analyzer():
 
 @torch.no_grad()
 @pytest.mark.cuda
-def test_is_initialized():
+def test_is_initialized(x):
     """
     When: Instantiate a quantizer object
     Then:
@@ -813,9 +813,11 @@ def test_is_initialized():
 
     qdq = QuantizeDequantize((10,), bitwidth=8, symmetric=True, encoding_analyzer=MinMaxEncodingAnalyzer((10,)))
     qdq.load_state_dict({'min': -torch.ones(10), 'max': torch.ones(10)})
+    out_before = qdq(x.view(-1, 10))
     res = pickle.dumps(qdq)
     qdq = pickle.loads(res)
     assert qdq.is_initialized()
+    assert torch.equal(qdq(x.view(-1, 10)), out_before)
 
 
 @pytest.mark.cuda
