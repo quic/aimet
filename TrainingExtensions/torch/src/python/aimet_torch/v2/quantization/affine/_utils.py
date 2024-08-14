@@ -85,7 +85,7 @@ class _GridMixin:
                 bitwidth = int(bitwidth)
             return bitwidth
 
-        msg = self._invalid_bitwidth_error_msg()
+        msg = self._undefined_attr_error_msg('bitwidth')
         raise RuntimeError(msg)
 
     def _set_bitwidth(self, bitwidth: int):
@@ -113,16 +113,62 @@ class _GridMixin:
         else:
             clsname = type(self).__qualname__
             msg = ' '.join([
-                self._invalid_bitwidth_error_msg(),
+                self._undefined_attr_error_msg('bitwidth'),
                  "To modify quantization grid with finer granularity, "\
                 f"please consider setting {clsname}.qmin and .qmax to the desired values."
             ])
             raise RuntimeError(msg)
 
-    def _invalid_bitwidth_error_msg(self):
+    def _get_signed(self) -> bool:
+        r"""
+        Returns signed-ness of the quantizer.
+
+        Signed-ness is a hardware concept which is defined as below
+
+        .. math::
+            signed=
+            \begin{cases}
+                qmin < 0 \leq qmax,  & \text{if}\quad \exists_{B \geq 1} \quad (qmin=0, qmax=2^B-1)
+                                       \text{ or } (qmin=-2^{B-1}, qmax=2^{B-1}-1)\\
+                undefined,           & \text{otherwise}
+            \end{cases}
+
+        where :math:`qmin` and :math:`qmax` denotes the minimum and maximum values of the quantization grid.
+
+        If signed-ness can't be defined as such, this function will throw a runtime error
+        """
+        if self.qmin + self.qmax == -1 or self.qmin == 0:
+            return self.qmin < 0 <= self.qmax
+
+        msg = self._undefined_attr_error_msg('signed')
+        raise RuntimeError(msg)
+
+    def _set_signed(self, signed: bool):
+        if self.qmin + self.qmax == -1 or self.qmin == 0:
+            was_signed = self._get_signed()
+
+            if was_signed and not signed:
+                shift = self.qmin
+            elif not was_signed and signed:
+                shift = self._get_centroid()
+            else:
+                shift = 0
+
+            self.qmin -= shift
+            self.qmax -= shift
+        else:
+            clsname = type(self).__qualname__
+            msg = ' '.join([
+                self._undefined_attr_error_msg('signed'),
+                 "To modify quantization grid with finer granularity, "\
+                f"please consider setting {clsname}.qmin and .qmax to the desired values."
+            ])
+            raise RuntimeError(msg)
+
+    def _undefined_attr_error_msg(self, attr_name: str):
         clsname = type(self).__qualname__
         qmin = self.qmin
         qmax = self.qmax
-        return f"{clsname}.bitwidth is undefined in the quantization grid [{qmin}, {qmax}]. "\
-               f"Bitwidth can be defined if and only if there exists some non-negative number `B` such that "\
+        return f"{clsname}.{attr_name} is undefined in the quantization grid [{qmin}, {qmax}]. "\
+               f"Attribute {attr_name} can be defined if and only if there exists some non-negative number `B` such that "\
                f"the quantization grid can be expressed in the form of [-2**(B-1), 2**(B-1) - 1] or [0, 2**B - 1]."

@@ -270,11 +270,13 @@ class AffineQuantizerBase(QuantizerBase, _GridMixin):
         self._set_bitwidth(bitwidth)
 
     @property
-    def signed(self) -> bool:
-        """
-        Indicates whether this quantizer uses signed quantization
-        """
-        return self.qmin < 0 < self.qmax
+    @docstring(_GridMixin._get_signed.__doc__)
+    def signed(self) -> bool: # pylint: disable=missing-function-docstring
+        return self._get_signed()
+
+    @signed.setter
+    def signed(self, signed: bool):
+        self._set_signed(signed)
 
 
 class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method

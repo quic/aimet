@@ -158,13 +158,6 @@ class AffineEncoding(EncodingBase, _GridMixin):
         return self._symmetry
 
     @property
-    def signed(self) -> bool:
-        """
-        Returns whether the encoding uses signed integer representation
-        """
-        return self.qmin < 0 < self.qmax
-
-    @property
     @docstring(_GridMixin._get_bitwidth.__doc__)
     def bitwidth(self) -> Union[int, float]: # pylint: disable=missing-function-docstring
         return self._get_bitwidth()
@@ -172,6 +165,15 @@ class AffineEncoding(EncodingBase, _GridMixin):
     @bitwidth.setter
     def bitwidth(self, bitwidth: int):
         self._set_bitwidth(bitwidth)
+
+    @property
+    @docstring(_GridMixin._get_signed.__doc__)
+    def signed(self) -> bool: # pylint: disable=missing-function-docstring
+        return self._get_signed()
+
+    @signed.setter
+    def signed(self, signed: bool):
+        self._set_signed(signed)
 
     @property
     def dtype(self) -> torch.dtype:

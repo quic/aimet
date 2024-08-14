@@ -1350,8 +1350,14 @@ def test_qmin_qmax_consistency(qmin, qmax, bitwidth, symmetric):
         expected_bitwidth -= 1
 
 
-def test_bitwidth_translation():
+def test_attr_translation():
+    """
+    Given: Quantizer with standard quantization grid [0, 15]
+    """
     q = Q.affine.Quantize((), qmin=0, qmax=15, symmetric=False)
+
+    assert q.bitwidth == 4
+    assert not q.signed
 
     """
     When: Assign fractional value to bitwidth
@@ -1368,11 +1374,45 @@ def test_bitwidth_translation():
         q.bitwidth = 0
 
     """
+    When: Assign qtzr.signed = True
+    Then:
+        1) qtzr.signed getter should return True
+        2) qtzr.{qmin, qmax} should be updated accordingly
+        3) Other attributes (qtzr.bitwidth) shouldn't change
+    """
+    q.signed = True
+    assert q.signed
+    assert q.bitwidth == 4
+    assert q.qmin == -8
+    assert q.qmax == 7
+
+    """
     When: Assign a floating point number that holds integer values
-    Then: Shouldn't throw error
+    Then:
+        1) qtzr.bitwidth getter should return 5
+        2) qtzr.{qmin, qmax} should be updated accordingly
+        3) Other attributes (qtzr.signed) shouldn't change
     """
     q.bitwidth = 5.0
     assert q.bitwidth == 5
+    assert q.qmin == -16
+    assert q.qmax == 15
+    assert q.signed
+
+    """
+    Given: Quantizer with non-standard quantization grid [-1, 14]
+    """
+    q = Q.affine.Quantize((), qmin=-1, qmax=14, symmetric=False)
+
+    """
+    When: Call qtzr.{signed, bitwidth} getter
+    Then: Throw runtime error
+    """
+    with pytest.raises(RuntimeError):
+        q.signed
+
+    with pytest.raises(RuntimeError):
+        q.bitwidth
 
 
 def test_non_integer_bitwidth():
