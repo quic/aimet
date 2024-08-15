@@ -200,7 +200,8 @@ class QuantizerBase(abc.ABC, torch.nn.Module):
         return self_copy
 
     def __getstate__(self):
-        state = super().__getstate__()
+        getstate = getattr(super(), '__getstate__', None) or self.__dict__.copy
+        state = getstate()
         state.pop('_initial_parameters')
         state['is_initialized'] = self.get_extra_state()
         return state
