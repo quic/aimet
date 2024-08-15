@@ -153,3 +153,23 @@ def test_allow_overwrite(x):
         q(x * 10)
 
     assert torch.equal(q_max, q.maxval)
+
+@pytest.mark.parametrize('exponent_1, mantissa_1, encoding_analyzer_1', [(1, 2, MinMaxEncodingAnalyzer((1, 3))),
+                                                                         (3, 4, None)])
+@pytest.mark.parametrize('exponent_2, mantissa_2, encoding_analyzer_2', [(5, 6, MinMaxEncodingAnalyzer((1, 3))),
+                                                                         (7, 8, None)])
+def test_save_and_load_state_dict(exponent_1, mantissa_1, encoding_analyzer_1, exponent_2, mantissa_2,
+                                  encoding_analyzer_2):
+    qtzr_1 = FloatQuantizeDequantize(exponent_1, mantissa_1, encoding_analyzer=encoding_analyzer_1)
+    dummy_input = torch.randn(1, 3)
+    with qtzr_1.compute_encodings():
+        qtzr_1(dummy_input)
+
+    qtzr_2 = FloatQuantizeDequantize(exponent_2, mantissa_2, encoding_analyzer=encoding_analyzer_2)
+    with qtzr_2.compute_encodings():
+        qtzr_2(dummy_input)
+    assert not torch.allclose(qtzr_1(dummy_input), qtzr_2(dummy_input), atol=1e-7, rtol=1e-7)
+
+    qtzr_1_state_dict = qtzr_1.state_dict()
+    qtzr_2.load_state_dict(qtzr_1_state_dict)
+    assert torch.equal(qtzr_1(dummy_input), qtzr_2(dummy_input))
