@@ -316,9 +316,23 @@ class DepthToSpaceDCRMode(torch.nn.Module):
         out = torch.reshape(tmp, (b, c // (blocksize**2), h * blocksize, w * blocksize))
         return out
 
+# pylint: disable=abstract-method, arguments-differ, unused-argument
 class CustomSparseConv3d(torch.autograd.Function):
+    '''
+    Custom Sparse Conv3d autograd function
+    '''
     @staticmethod
     def symbolic(g, dense_inputs, weight, bias, all_sp_conv_attrs, name):
+        '''
+        Symbolic method (static) for Custom sparse Conv3d
+        :param g: ONNX graph object
+        :param dense_inputs: Dense inputs
+        :param weight: weight value
+        :param bias: bias value
+        :param all_sp_conv_attrs: spconv attributes
+        :param name: Name of the op
+        :return: Added op to the graph object
+        '''
         attrs = {}
         for k, v in all_sp_conv_attrs.items():
             if v:
@@ -333,6 +347,16 @@ class CustomSparseConv3d(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, dense_inputs, weight, bias, all_sp_conv_attrs, name):
+        '''
+        forward method (static) for Custom sparse Conv3d
+        :param ctx: context object
+        :param dense_inputs: Dense inputs
+        :param weight: weight value
+        :param bias: bias value
+        :param all_sp_conv_attrs: spconv attributes
+        :param name: Name of the custom op
+        :return: Dense tensor
+        '''
         sp_conv_attrs = dict()
         ignore = ['ndim', 'output_bound', 'input_spatial_shape', 'activation', 'subm', 'batch_size', 'spatial_shape',
                   'input_shape', 'inverse', 'transposed', 'rulebook', 'output_shape', 'output_spatial_shape',
@@ -353,8 +377,22 @@ class CustomSparseConv3d(torch.autograd.Function):
         return out
 
 class CustomSparseConv3d_WithIndicesFeatures(torch.autograd.Function):
+    '''
+    Custom Sparse Conv3d (with indices and features as inputs) autograd function
+    '''
     @staticmethod
     def symbolic(g, indices, features, weight, bias, all_sp_conv_attrs, name):
+        '''
+        Symbolic method (static) for Custom sparse Conv3d (with indices and features as inputs)
+        :param g: ONNX graph object
+        :param indices: Indices input
+        :param features: Features input
+        :param weight: weight value
+        :param bias: bias value
+        :param all_sp_conv_attrs: spconv attributes
+        :param name: Name of the op
+        :return: Added op to the graph object
+        '''
         remove = ['spatial_shape', 'batch_size']
         attrs = {}
         for k, v in all_sp_conv_attrs.items():
@@ -371,6 +409,17 @@ class CustomSparseConv3d_WithIndicesFeatures(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, indices, features, weight, bias, all_sp_conv_attrs, name):
+        '''
+        forward method (static) for Custom sparse Conv3d (with indices and features as inputs)
+        :param ctx: context object
+        :param indices: Indices input
+        :param features: Features input
+        :param weight: weight value
+        :param bias: bias value
+        :param all_sp_conv_attrs: spconv attributes
+        :param name: Name of the custom op
+        :return: Dense tensor
+        '''
         sp_conv_attrs = dict()
         ignore = ['ndim', 'output_bound', 'input_spatial_shape', 'activation', 'subm', 'batch_size', 'spatial_shape',
                   'input_shape', 'inverse', 'transposed', 'rulebook', 'output_shape', 'output_spatial_shape',
@@ -392,6 +441,7 @@ class CustomSparseConv3d_WithIndicesFeatures(torch.autograd.Function):
         out = conv3d(dense_inputs)
         return out
 
+# pylint: disable=too-many-arguments, super-with-arguments
 class CustomSparseConv3DLayer(torch.nn.Module):
     '''
     SparseConv3D op implementation
@@ -415,6 +465,12 @@ class CustomSparseConv3DLayer(torch.nn.Module):
                                     groups=groups)
 
     def forward_with_indices_features(self, indices, features):
+        '''
+        forward with indices and features as inputs
+        :param indices: Indices input
+        :param features: Features input
+        :return: Dense tensor output
+        '''
         spatial_shape = [indices[:, 1].max().detach().numpy()+1, indices[:, 2].max().detach().numpy()+1,
                          indices[:, 3].max().detach().numpy()+1]
         batch_size = indices[:, 0].max().detach().numpy()+1
@@ -447,7 +503,7 @@ class CustomSparseConv3DLayer(torch.nn.Module):
         """
         Forward-pass routine for SparseConv3D op
         """
-        if (isinstance(dense_inp, tuple) or isinstance(dense_inp, list)) and len(dense_inp) == 2:
+        if isinstance(dense_inp, (tuple, list)) and len(dense_inp) == 2:
             return self.forward_with_indices_features(*tuple(dense_inp))
 
         if isinstance(dense_inp, spconv.SparseConvTensor):
@@ -487,15 +543,30 @@ class CustomSparseConv3DLayer(torch.nn.Module):
         return dense_outs
 
     def forward(self, *args):
+        '''
+        Forward pass for Custom SparseConv3d layer
+        :param args: Either one dense input of format NCDHW or two inputs (indices, features) both in dense form
+        :return: Dense tensor
+        '''
         if len(args) == 2:
             return self.forward_with_indices_features(*args)
         return self.forward_with_dense_input(*args)
 
+# pylint: disable=useless-super-delegation
 class SparseTensorWrapper(torch.nn.Module):
+    '''
+    Custom SparsetensorWrapper class for SparseConvTensor
+    '''
     def __init__(self):
         super(SparseTensorWrapper, self).__init__()
 
     def forward_with_indices_and_features(self, coords, voxels):
+        '''
+        forward pass with indices and features as inputs
+        :param coords: Indices input
+        :param voxels: Features input
+        :return: Sparse tensor
+        '''
         # dense_inp is expected to be in N C D H W format
         if torch.jit.is_tracing():
             return coords, voxels
@@ -509,6 +580,11 @@ class SparseTensorWrapper(torch.nn.Module):
         )
 
     def forward_with_dense_input(self, dense_inp):
+        '''
+        forward pass with single dense input (NCDHW format)
+        :param dense_inp: Dense input
+        :return: Sparse tensor
+        '''
         if isinstance(dense_inp, tuple) and len(dense_inp) == 2:
             return self.forward_with_indices_and_features(*dense_inp)
 
@@ -531,13 +607,29 @@ class SparseTensorWrapper(torch.nn.Module):
         )
 
     def forward(self, *args):
+        '''
+        Forward pass for SparseConvTensor's custom implementation
+        :param args: Either one dense input of format NCDHW or two inputs (indices, features) both in dense form
+        :return: Sparse tensor
+        '''
         if len(args) == 2:
             return self.forward_with_indices_and_features(*args)
         return self.forward_with_dense_input(*args)
 
 class CustomScatterDense(torch.autograd.Function):
+    '''
+    Custom Scatter Dense autograd function
+    '''
     @staticmethod
     def symbolic(g, dense_inputs, attrs, name):
+        '''
+        Symbolic method (static) for ScatterDense
+        :param g:ONNX graph object
+        :param dense_inputs: Dense inputs
+        :param attrs: ScatterDense attributes
+        :param name: Name of the custom op
+        :return: Added op to the graph object
+        '''
         save_attrs = {}
         for k, v in attrs.items():
             if isinstance(v, str):
@@ -548,13 +640,29 @@ class CustomScatterDense(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, dense_inputs, attrs, name):
+        '''
+        forward method (static) for ScatterDense
+        :param ctx: context object
+        :param dense_inputs: Dense inputs
+        :param attrs: ScatterDense attributes
+        :param name: Name of the custom op
+        :return: Dense tensor
+        '''
         return dense_inputs
 
 class ScatterDense(torch.nn.Module):
+    '''
+    ScatterDense custom implementation
+    '''
     def __init__(self):
         super(ScatterDense, self).__init__()
 
     def forward(self, inputs):
+        '''
+        Forward pass for ScatterDense
+        :param inputs: Sparse Inputs
+        :return: Dense tensor
+        '''
         if torch.jit.is_tracing():
             attrs = {
                 "format": "xyz",
