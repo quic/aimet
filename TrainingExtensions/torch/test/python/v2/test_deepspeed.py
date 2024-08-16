@@ -43,13 +43,14 @@ import itertools
 import pytest
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.nn.functional as functional
 import torch.distributed as dist
-from torch.utils.data import Dataset, DataLoader, RandomSampler
 import deepspeed as ds
 import tempfile
 import json
 
+from torch.utils.data import Dataset, DataLoader, RandomSampler
 
 from aimet_common import quantsim_config
 from aimet_common.defs import QuantScheme
@@ -59,8 +60,44 @@ from aimet_torch.v2.quantization.base.quantizer import QuantizerBase
 from aimet_torch.v2.quantization import DequantizedTensor
 
 from aimet_torch.v2.quantsim import QuantizationSimModel
-from .models_.mnist_torch_model import Net
 from .models_.test_models import TransposedConvModel
+from aimet_torch.v2.quantization.affine import QuantizeDequantize
+from aimet_torch.v2.quantization.base.quantizer import QuantizerBase
+from aimet_torch.v2.quantization import DequantizedTensor
+
+
+class Net(nn.Module):
+    """ Mnist Model """
+    # pylint: disable=too-many-instance-attributes
+
+    def __init__(self):
+        """ Constructor """
+
+        super(Net, self).__init__()
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=5, padding=(2, 2))
+        self.relu1 = nn.ReLU()
+        self.maxpool1 = nn.MaxPool2d(2)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=5, padding=(2, 2))
+        self.relu2 = nn.ReLU()
+        self.maxpool2 = nn.MaxPool2d(2)
+        self.relu3 = nn.ReLU()
+        self.fc1 = nn.Linear(7*7*64, 1024)
+        self.fc2 = nn.Linear(1024, 10)
+        self.log_softmax = nn.LogSoftmax(1)
+
+    def forward(self, *inputs):
+        """
+        Overriden implementation for the forward pass
+        :param inputs: ONe or more inputs for the model
+        :return: Output of the forward pass
+        """
+        x = self.conv1(*inputs)
+        x = self.relu1(self.maxpool1(x))
+        x = self.relu2(self.maxpool2(self.conv2(x)))
+        x = x.view(x.size(0), -1)
+        x = self.relu3(self.fc1(x))
+        x = self.fc2(x)
+        return self.log_softmax(x)
 
 
 class CustomMPU:
@@ -194,7 +231,6 @@ def deepspeed_zero3_offload_config():
             }
         }
     }
-
 
 @pytest.fixture
 def per_channel_quantsim_config():
@@ -340,7 +376,8 @@ def test_deepspeed_zero3_offload(unlabeled_data_loader,
 
     """
     When: Run training loop
-    Then: All trainable parameters must be udpated by training
+    Then: All trainable parameters must be udpated by training in the (almost) same way
+          with or without deepspeed
     """
     with ds.runtime.zero.GatheredParameters(sim_deepspeed.model.parameters()):
         ds_params_before = {
@@ -350,27 +387,54 @@ def test_deepspeed_zero3_offload(unlabeled_data_loader,
     target = torch.ones((1, 10)).float().cuda()
     sim_deepspeed.model.train()
     sim_baseline.model.train()
+    optimizer = torch.optim.AdamW([{
+        'params': sim_baseline.model.parameters(),
+        'lr': ds_optimizer.get_lr(),
+        'weight_decay': ds_optimizer.param_groups[0]['weight_decay'],
+        'betas': ds_optimizer.param_groups[0]['betas'],
+        'eps': ds_optimizer.param_groups[0]['eps'],
+        'bias_correction': True,
+    }])
 
     for _, data in enumerate(unlabeled_data_loader):
         output = sim_deepspeed.model(data.cuda())
+        output_baseline = sim_baseline.model(data.cuda())
+        assert torch.allclose(output, output_baseline, rtol=1e-3)
         assert isinstance(output, DequantizedTensor)
         assert output.encoding.scale.numel() == 1
         assert output.encoding.offset.numel() == 1
         loss = functional.mse_loss(output, target)
+        loss_baseline = functional.mse_loss(output_baseline, target)
         engine.backward(loss)
+        loss_baseline.backward()
+
+        # Gradient checker
+        for param_ds, param_baseline in zip(sim_deepspeed.model.parameters(),
+                                            sim_baseline.model.parameters()):
+            grad_ds = ds.utils.safe_get_full_grad(param_ds)
+            assert torch.allclose(grad_ds, param_baseline.grad, rtol=1e-3)
+
         ds_optimizer.step()
+        optimizer.step()
         ds_optimizer.zero_grad()
+        optimizer.zero_grad()
 
     with ds.runtime.zero.GatheredParameters(sim_deepspeed.model.parameters()):
         ds_params_after = {
             name: param.clone().detach() for name, param in sim_deepspeed.model.named_parameters()
         }
 
+    baseline_params_after = {
+        name: param.clone().detach() for name, param in sim_baseline.model.named_parameters()
+    }
+
     assert ds_params_before.keys() == ds_params_after.keys()
     for param_name in ds_params_before:
-        before = ds_params_before[param_name]
-        after = ds_params_after[param_name]
-        assert not torch.equal(before, after)
+        ds_before = ds_params_before[param_name]
+        ds_after = ds_params_after[param_name]
+        baseline_after = baseline_params_after[param_name]
+        assert not torch.equal(ds_before, ds_after)
+        assert torch.allclose(ds_after, baseline_after, rtol=1e-3)
 
 
 @pytest.mark.cuda
