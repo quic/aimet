@@ -42,6 +42,7 @@ from typing import Callable, Any, Tuple, Union, List
 import torchvision
 import torch
 import torch.nn
+import spconv.pytorch as spconv
 
 # pylint: disable=no-self-use
 
@@ -315,6 +316,254 @@ class DepthToSpaceDCRMode(torch.nn.Module):
         out = torch.reshape(tmp, (b, c // (blocksize**2), h * blocksize, w * blocksize))
         return out
 
+class CustomSparseConv3d(torch.autograd.Function):
+    @staticmethod
+    def symbolic(g, dense_inputs, weight, bias, all_sp_conv_attrs, name):
+        attrs = {}
+        for k, v in all_sp_conv_attrs.items():
+            if v:
+                if isinstance(v, str):
+                    attrs[k+"_s"] = v
+                else:
+                    attrs[k+"_i"] = v
+        name = name.split("self.")[-1]
+        if bias:
+            return g.op(f"CustomSparseConv3D::{name}", dense_inputs, weight, bias, **attrs)
+        return g.op(f"CustomSparseConv3D::{name}", dense_inputs, weight, **attrs)
+
+    @staticmethod
+    def forward(ctx, dense_inputs, weight, bias, all_sp_conv_attrs, name):
+        sp_conv_attrs = dict()
+        ignore = ['ndim', 'output_bound', 'input_spatial_shape', 'activation', 'subm', 'batch_size', 'spatial_shape',
+                  'input_shape', 'inverse', 'transposed', 'rulebook', 'output_shape', 'output_spatial_shape',
+                  'output_padding']
+        for k, v in all_sp_conv_attrs.items():
+            if k in ignore:
+                continue
+            sp_conv_attrs[k] = v
+        sp_conv_attrs['bias'] = sp_conv_attrs.get("bias", False)
+        conv3d = torch.nn.Conv3d(**sp_conv_attrs)
+
+        with torch.no_grad():
+            conv3d.weight.copy_(weight.detach().permute(0, 4, 1, 2, 3))
+            if sp_conv_attrs['bias']:
+                conv3d.bias.copy_(bias.detach())
+
+        out = conv3d(dense_inputs)
+        return out
+
+class CustomSparseConv3d_WithIndicesFeatures(torch.autograd.Function):
+    @staticmethod
+    def symbolic(g, indices, features, weight, bias, all_sp_conv_attrs, name):
+        remove = ['spatial_shape', 'batch_size']
+        attrs = {}
+        for k, v in all_sp_conv_attrs.items():
+            if k not in remove and v:
+                if isinstance(v, str):
+                    attrs[k+"_s"] = v
+                else:
+                    attrs[k+"_i"] = v
+        name = name.split("self.")[-1]
+
+        if bias:
+            return g.op(f"CustomSparseConv3D::{name}", indices, features, weight, bias, **attrs)
+        return g.op(f"CustomSparseConv3D::{name}", indices, features, weight, **attrs)
+
+    @staticmethod
+    def forward(ctx, indices, features, weight, bias, all_sp_conv_attrs, name):
+        sp_conv_attrs = dict()
+        ignore = ['ndim', 'output_bound', 'input_spatial_shape', 'activation', 'subm', 'batch_size', 'spatial_shape',
+                  'input_shape', 'inverse', 'transposed', 'rulebook', 'output_shape', 'output_spatial_shape',
+                  'output_padding']
+        for k, v in all_sp_conv_attrs.items():
+            if k in ignore:
+                continue
+            sp_conv_attrs[k] = v
+        sp_conv_attrs['bias'] = sp_conv_attrs.get("bias", False)
+        conv3d = torch.nn.Conv3d(**sp_conv_attrs)
+
+        with torch.no_grad():
+            conv3d.weight.copy_(weight.detach().permute(0, 4, 1, 2, 3))
+            if sp_conv_attrs['bias']:
+                conv3d.bias.copy_(bias.detach())
+
+        dense_inputs = features.reshape(all_sp_conv_attrs['batch_size'], features.shape[1],
+                                        *all_sp_conv_attrs['spatial_shape'])
+        out = conv3d(dense_inputs)
+        return out
+
+class CustomSparseConv3DLayer(torch.nn.Module):
+    '''
+    SparseConv3D op implementation
+    '''
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True):
+        super(CustomSparseConv3DLayer, self).__init__()
+        activation = "None" #"ReLU"
+        self.sp_conv_3d = spconv.SparseConv3d(in_channels=in_channels, out_channels=out_channels,
+                                              kernel_size=kernel_size, bias=bias, stride=stride, padding=padding,
+                                              dilation=dilation, groups=1) # doesn't support groups as of now
+        self.conv_attrs_dict = dict(in_channels=self.sp_conv_3d.in_channels,
+                                    out_channels=self.sp_conv_3d.out_channels,
+                                    kernel_size=self.sp_conv_3d.kernel_size,
+                                    stride=self.sp_conv_3d.stride,
+                                    padding=self.sp_conv_3d.padding,
+                                    dilation=self.sp_conv_3d.dilation,
+                                    subm=int(self.sp_conv_3d.subm),
+                                    ndim=self.sp_conv_3d.ndim,
+                                    output_bound=20000,
+                                    activation=activation,
+                                    groups=groups)
+
+    def forward_with_indices_features(self, indices, features):
+        spatial_shape = [indices[:, 1].max().detach().numpy()+1, indices[:, 2].max().detach().numpy()+1,
+                         indices[:, 3].max().detach().numpy()+1]
+        batch_size = indices[:, 0].max().detach().numpy()+1
+        if torch.jit.is_tracing():
+            self.conv_attrs_dict['spatial_shape'] = spatial_shape
+            self.conv_attrs_dict['batch_size'] = batch_size
+            self.conv_attrs_dict['input_spatial_shape'] = spatial_shape
+            self.conv_attrs_dict['output_bound'] = features.shape[0]
+            self.conv_attrs_dict['input_shape'] = features.shape
+            self.conv_attrs_dict['rulebook'] = "subm" + str(self.conv_attrs_dict['subm'])
+            self.conv_attrs_dict['transposed'] = 0
+            self.conv_attrs_dict['inverse'] = 0
+
+            bias_data = self.sp_conv_3d.bias
+            if bias_data is None:
+                bias_data = torch.nn.Parameter(torch.zeros(self.sp_conv_3d.out_channels))
+
+            self.conv_attrs_dict = dict(sorted(self.conv_attrs_dict.items(), key=lambda x: (x[0], x[1])))
+            torch.Tensor.dense = lambda inp: inp # Adding a lambda function for the dense() call in a torch.Tensor
+            return CustomSparseConv3d_WithIndicesFeatures.apply(indices, features, self.sp_conv_3d.weight,
+                                                                bias_data, self.conv_attrs_dict, "")
+
+        sp_tensor = spconv.SparseConvTensor(features=features, indices=indices, spatial_shape=spatial_shape,
+                                            batch_size=batch_size)
+        sp_conv_outs = self.sp_conv_3d(sp_tensor)
+        dense_outs = sp_conv_outs.dense()
+        return dense_outs
+
+    def forward_with_dense_input(self, dense_inp):
+        """
+        Forward-pass routine for SparseConv3D op
+        """
+        if (isinstance(dense_inp, tuple) or isinstance(dense_inp, list)) and len(dense_inp) == 2:
+            return self.forward_with_indices_features(*tuple(dense_inp))
+
+        if isinstance(dense_inp, spconv.SparseConvTensor):
+            dense_inp = dense_inp.dense(channels_first=True)
+
+        if torch.jit.is_tracing():
+            self.conv_attrs_dict['input_spatial_shape'] = dense_inp.shape[2:]
+            self.conv_attrs_dict['spatial_shape'] = dense_inp.shape[2:]
+            self.conv_attrs_dict['batch_size'] = dense_inp.shape[0]
+            self.conv_attrs_dict['output_bound'] = dense_inp.shape[0] * dense_inp.shape[2] * dense_inp.shape[3] * \
+                                                   dense_inp.shape[4]
+            self.conv_attrs_dict['input_shape'] = [self.conv_attrs_dict['output_bound'], dense_inp.shape[1]]
+            self.conv_attrs_dict['rulebook'] = "subm" + str(self.conv_attrs_dict['subm'])
+            self.conv_attrs_dict['transposed'] = 0
+            self.conv_attrs_dict['inverse'] = 0
+
+            bias_data = self.sp_conv_3d.bias
+            if bias_data is None:
+                bias_data = torch.nn.Parameter(torch.zeros(self.sp_conv_3d.out_channels))
+            self.conv_attrs_dict = dict(sorted(self.conv_attrs_dict.items(), key=lambda x: (x[0], x[1])))
+            outs = CustomSparseConv3d.apply(dense_inp, self.sp_conv_3d.weight, bias_data, self.conv_attrs_dict, "")
+            torch.Tensor.dense = lambda inp: inp # Adding a lambda function for the dense() call in a torch.Tensor
+            return outs
+
+        # Dense to Sparse Conversion
+        dense_inp = dense_inp.permute(0, 2, 3, 4, 1) # N D H W C
+        indices = torch.stack(torch.meshgrid(torch.arange(dense_inp.shape[0]), torch.arange(dense_inp.shape[1]),
+                                             torch.arange(dense_inp.shape[2]), torch.arange(dense_inp.shape[3]),
+                                             indexing='ij'), dim=-1).reshape(-1, 4).int()
+        features = dense_inp.reshape(-1, dense_inp.shape[4])
+        spatial_shape = dense_inp.shape[1:-1]
+        batch_size = dense_inp.shape[0]
+        sp_tensor = spconv.SparseConvTensor(features=features, indices=indices, spatial_shape=spatial_shape,
+                                            batch_size=batch_size)
+        sp_conv_outs = self.sp_conv_3d(sp_tensor)
+        dense_outs = sp_conv_outs.dense()
+        return dense_outs
+
+    def forward(self, *args):
+        if len(args) == 2:
+            return self.forward_with_indices_features(*args)
+        return self.forward_with_dense_input(*args)
+
+class SparseTensorWrapper(torch.nn.Module):
+    def __init__(self):
+        super(SparseTensorWrapper, self).__init__()
+
+    def forward_with_indices_and_features(self, coords, voxels):
+        # dense_inp is expected to be in N C D H W format
+        if torch.jit.is_tracing():
+            return coords, voxels
+
+        spatial_shape = [coords[:, 1].max()+1, coords[:, 2].max()+1, coords[:, 3].max()+1]
+        return spconv.SparseConvTensor(
+            features=voxels,
+            indices=coords,
+            spatial_shape=spatial_shape,
+            batch_size=coords[:, 0].max()+1
+        )
+
+    def forward_with_dense_input(self, dense_inp):
+        if isinstance(dense_inp, tuple) and len(dense_inp) == 2:
+            return self.forward_with_indices_and_features(*dense_inp)
+
+        # dense_inp is expected to be in N C D H W format
+        if torch.jit.is_tracing():
+            return dense_inp
+
+        dense_inp = dense_inp.permute(0, 2, 3, 4, 1)
+        # Considering all indices as dense
+        indices = torch.stack(torch.meshgrid(torch.arange(dense_inp.shape[0]), torch.arange(dense_inp.shape[1]),
+                                             torch.arange(dense_inp.shape[2]), torch.arange(dense_inp.shape[3]),
+                                             indexing='ij'), dim=-1).reshape(-1, 4).int()
+        features = dense_inp.view(-1, dense_inp.shape[4])
+        spatial_shape = dense_inp.shape[1:-1]
+        return spconv.SparseConvTensor(
+            features=features,
+            indices=indices,
+            spatial_shape=spatial_shape,
+            batch_size=dense_inp.shape[0]
+        )
+
+    def forward(self, *args):
+        if len(args) == 2:
+            return self.forward_with_indices_and_features(*args)
+        return self.forward_with_dense_input(*args)
+
+class CustomScatterDense(torch.autograd.Function):
+    @staticmethod
+    def symbolic(g, dense_inputs, attrs, name):
+        save_attrs = {}
+        for k, v in attrs.items():
+            if isinstance(v, str):
+                save_attrs[k+"_s"] = v
+            else:
+                save_attrs[k+"_i"] = v
+        return g.op(f"CustomScatterDense::{name}", dense_inputs, **save_attrs)
+
+    @staticmethod
+    def forward(ctx, dense_inputs, attrs, name):
+        return dense_inputs
+
+class ScatterDense(torch.nn.Module):
+    def __init__(self):
+        super(ScatterDense, self).__init__()
+
+    def forward(self, inputs):
+        if torch.jit.is_tracing():
+            attrs = {
+                "format": "xyz",
+                "input_spatial_shape": inputs.detach().numpy().shape[2:],
+                "output_shape": inputs.detach().numpy().shape
+            }
+            return CustomScatterDense.apply(inputs, attrs, "")
+
+        return inputs.dense()
 
 class ScatterND(torch.nn.Module):
     """ ScatterND op implementation """
