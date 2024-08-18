@@ -43,8 +43,9 @@ import torch
 from bokeh.events import DocumentReady, Reset
 from bokeh.layouts import row, column
 from bokeh.models import ColumnDataSource, TextInput, CustomJS, Range1d, HoverTool, CustomJSHover, Div, \
-    BooleanFilter, CDSView, Spacer, DataTable, StringFormatter, TableColumn
+    BooleanFilter, CDSView, Spacer, DataTable, StringFormatter, ScientificFormatter, TableColumn, Tooltip, Select
 from bokeh.models.tools import ResetTool
+from bokeh.models.dom import HTML
 from bokeh.plotting import figure, save, curdoc
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.utils import get_ordered_list_of_modules
@@ -56,15 +57,18 @@ def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = Non
     """
     Interactive visualization of min and max activations/weights of all quantized modules in the input QuantSim object.
     The QuantSim object is expected to have been calibrated before using this function.
-    Saves the visualization as a .html in the given directory with the given name.
+    Saves the visualization as a .html at the provided path.
 
     :param sim: QuantSim Object.
     :param dummy_input: Dummy Input.
     :param save_path: Path for saving the visualization. Format is 'path_to_dir/file_name.html'
     """
+
+    # Ensure that sim is an instance of aimet_torch.quantsim.QuantizationSimModel
     if not isinstance(sim, QuantizationSimModel):
         raise TypeError(f"Expected type 'aimet_torch.quantization.QuantizationSimModel', got '{type(sim)}'.")
 
+    # Ensure that the path is valid
     check_path(save_path)
 
     # Flatten the quantized modules into an ordered list for easier indexing in the plots
@@ -73,19 +77,19 @@ def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = Non
     minlist = []
     maxlist = []
 
+    # Collect stats from observers
     for module in ordered_list:
-        if isinstance(module[1], QuantizerBase):
-            if isinstance(module[1].encoding_analyzer.observer, _MinMaxObserver):
-                rng = module[1].encoding_analyzer.observer.get_stats()
-                if (rng.min is not None) and (rng.max is not None):
-                    namelist.append(module[0])
-                    minlist.append(torch.min(rng.min).item())
-                    maxlist.append(torch.max(rng.max).item())
-            # TODO - Handle other quant schemes
+        module_name, module_min, module_max = get_observer_stats(module)
+        if module_name is not None:
+            namelist.append(module_name)
+            minlist.append(module_min)
+            maxlist.append(module_max)
 
+    # Raise an error if no stats were found
     if len(namelist) == 0:
         raise RuntimeError(
             "No stats found to plot. Either there were no quantized modules, or calibration was not performed before calling this function, or observers of type other than _MinMaxObserver were used.")
+
     idx = list(range(len(namelist)))
 
     # Save an interactive bokeh plot as a standalone html in the specified directory with the specified name if provided
@@ -96,6 +100,7 @@ def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = Non
     visualizer = QuantStatsVisualizer(idx, namelist, minlist, maxlist)
     visualizer.export_plot_as_html(save_path)
 
+
 def check_path(path: str):
     """ Function for sanity check on the given path """
     path_to_directory = os.path.dirname(path)
@@ -105,21 +110,38 @@ def check_path(path: str):
         raise ValueError("'save_path' must end with '.html'.")
 
 
+def get_observer_stats(module):
+    """
+    Extract stats from observer
+    """
+    if isinstance(module[1], QuantizerBase):
+        if isinstance(module[1].encoding_analyzer.observer, _MinMaxObserver):
+            rng = module[1].encoding_analyzer.observer.get_stats()
+            if (rng.min is not None) and (rng.max is not None):
+                return module[0], torch.min(rng.min).item(), torch.max(rng.max).item()
+        # TODO - Handle other quant schemes
+
+    return None, None, None
+
+
 class DataSources:
     """
     Class to hold the Bokeh ColumnDataSource objects needed in the visualization.
     """
+
     def __init__(self,
-                 idx:list,
-                 namelist:list,
-                 minlist:list,
-                 maxlist:list,
-                 p: figure,
+                 idx: list,
+                 namelist: list,
+                 minlist: list,
+                 maxlist: list,
+                 plot: figure,
                  default_values: dict,
                  ):
-
         self.data_source = ColumnDataSource(
-            data=dict(idx=idx, namelist=namelist, minlist=minlist, maxlist=maxlist))
+            data=dict(idx=idx, namelist=namelist, minlist=minlist, maxlist=maxlist,
+                      marker_yminlist=[default_values['default_ymin']] * len(idx),
+                      marker_ymaxlist=[default_values['default_ymax']] * len(idx),
+                      selected=[False] * len(idx)))
         self.default_values_source = ColumnDataSource(
             data=dict(default_ymax=[default_values['default_ymax']],
                       default_ymin=[default_values['default_ymin']],
@@ -129,58 +151,69 @@ class DataSources:
                       default_xmin=[default_values['default_xmin']]))
         self.limits_source = ColumnDataSource(
             data=dict(ymax=[default_values['default_ymax']], ymin=[default_values['default_ymin']],
-                      xmin=[p.x_range.start], xmax=[p.x_range.end],
+                      xmin=[plot.x_range.start], xmax=[plot.x_range.end],
                       minclip=[default_values['default_minclip']],
                       maxclip=[default_values['default_maxclip']]))
-        self.min_marker_source = ColumnDataSource(
-            data=dict(x=[], y=[], names=[], min_activations=[], max_activations=[], fmt_min_activations=[],
-                      fmt_max_activations=[]))
-        self.max_marker_source = ColumnDataSource(
-            data=dict(x=[], y=[], names=[], min_activations=[], max_activations=[], fmt_min_activations=[],
-                      fmt_max_activations=[]))
+        self.table_data_source = ColumnDataSource(
+            data=dict(idx=[], namelist=[], minlist=[], maxlist=[]))
+        self.selected_data_source = ColumnDataSource(
+            data=dict(idx=[], namelist=[], floor=[], ceil=[], minlist=[], maxlist=[])
+        )
+
+
+class TableFilters:
+    """
+    Class for holding data filters.
+    """
+    def __init__(self, data_sources: DataSources):
+        self.name_filter = BooleanFilter()
+        self.name_filter.booleans = [True for _ in range(len(data_sources.data_source.data['idx']))]
+        self.min_thresh_filter = BooleanFilter()
+        self.min_thresh_filter.booleans = [True for _ in range(len(data_sources.data_source.data['idx']))]
+        self.max_thresh_filter = BooleanFilter()
+        self.max_thresh_filter.booleans = [True for _ in range(len(data_sources.data_source.data['idx']))]
+
+
+class TableViews:
+    """
+    Class for holding views of the data sources.
+    """
+    def __init__(self, tablefilters: TableFilters):
+        self.min_thresh_view = CDSView(filter=tablefilters.min_thresh_filter)
+        self.max_thresh_view = CDSView(filter=tablefilters.max_thresh_filter)
 
 
 class TableObjects:
     """
     Class for holding various objects related to the table elements in the visualization.
     """
+
     def __init__(self, datasources: DataSources):
-        self.min_name_filter = BooleanFilter()
-        self.max_name_filter = BooleanFilter()
-        self.min_name_view = CDSView(filter=self.min_name_filter)
-        self.max_name_view = CDSView(filter=self.max_name_filter)
+        self.filters = TableFilters(datasources)
+        self.views = TableViews(self.filters)
 
-        min_columns = [
-            TableColumn(field="names", title="Layer Name",
-                        formatter=StringFormatter(font_style="bold"), width=400),
-            TableColumn(field="fmt_min_activations", title="Min Activation", width=100),
-            TableColumn(field="fmt_max_activations", title="Max Activation", width=100),
+        columns = [
+            TableColumn(field="idx", title="Layer Index", width=QuantStatsVisualizer.table_column_widths["Layer Index"]),
+            TableColumn(field="namelist", title="Layer Name",
+                        formatter=StringFormatter(font_style="bold"), width=QuantStatsVisualizer.table_column_widths["Layer Name"]),
+            TableColumn(field="minlist", title="Min Activation",
+                        formatter=ScientificFormatter(precision=3), width=QuantStatsVisualizer.table_column_widths["Min Activation"]),
+            TableColumn(field="maxlist", title="Max Activation",
+                        formatter=ScientificFormatter(precision=3), width=QuantStatsVisualizer.table_column_widths["Max Activation"]),
         ]
 
-        self.min_data_table = DataTable(source=datasources.min_marker_source, view=self.min_name_view, columns=min_columns,
-                                        editable=True,
-                                        sortable=True, selectable="checkbox", width=800,
-                                        index_position=-1, index_header="row index", index_width=60,
-                                        )
-
-        max_columns = [
-            TableColumn(field="names", title="Layer Name",
-                        formatter=StringFormatter(font_style="bold"), width=400),
-            TableColumn(field="fmt_min_activations", title="Min Activation", width=100),
-            TableColumn(field="fmt_max_activations", title="Max Activation", width=100),
-        ]
-
-        self.max_data_table = DataTable(source=datasources.max_marker_source, view=self.max_name_view, columns=max_columns,
-                                        editable=True,
-                                        sortable=True, selectable="checkbox", width=800,
-                                        index_position=-1, index_header="row index", index_width=60,
-                                        )
+        self.data_table = DataTable(source=datasources.table_data_source, columns=columns,
+                                    sortable=True, width=QuantStatsVisualizer.plot_dims["table_width"],
+                                    selectable="checkbox",
+                                    index_position=None,
+                                    )
 
 
 class InputWidgets:
     """
     Class to hold various input widgets.
     """
+
     def __init__(self, default_values: dict):
         self.ymin_input = TextInput(value=str(default_values['default_ymin']),
                                     title="Enter lower display limit of the plot")
@@ -191,19 +224,40 @@ class InputWidgets:
         self.maxclip_input = TextInput(value=str(default_values['default_maxclip']),
                                        title="Enter upper threshold value for activations/weights")
 
-        self.min_name_input = TextInput(value="", title="Enter name filter")
-        self.max_name_input = TextInput(value="", title="Enter name filter")
+        self.name_input = TextInput(value="", title="Enter Name Filter")
+
+        tooltip_table_mode = Tooltip(content=HTML("""
+                                                <h3> Select Table View </h3>
+                                                <p> Following table views are available </p>
+                                                <ol>
+                                                <li> <b> All: </b> All quantized layers </li>
+                                                <li> <b> Min: </b> Quantized layers with min activation below lower threshold value </li>
+                                                <li> <b> Max: </b> Quantized layers with max activation above upper threshold value </li>
+                                                <li> <b> Min | Max: </b> Union of Min and Max </li>
+                                                <li> <b> Min & Max: </b> Intersection of Min and Max </li>
+                                                </ol>  
+                                            """),
+                                     position="right")
+        self.table_view_select = Select(title="Select Table View",
+                                        value="Min | Max",
+                                        options=["All", "Min", "Max", "Min | Max", "Min & Max"],
+                                        width=200,
+                                        # margin = (5, 5, 5, 80),
+                                        description=tooltip_table_mode
+                                        )
 
 
 class CustomCallbacks:
     """
     Class to hold Custom JavaScript Callbacks for interactivity in the visualization.
     """
+
     def __init__(self):
         self.limit_change_callback = None
         self.reset_callback = None
-        self.min_name_filter_callback = None
-        self.max_name_filter_callback = None
+        self.name_filter_callback = None
+        self.select_table_view_callback = None
+        self.table_selection_callback = None
 
 
 class QuantStatsVisualizer:
@@ -215,35 +269,85 @@ class QuantStatsVisualizer:
     :param minlist: List containing min activations of the ordered list of quantized modules.
     :param maxlist: List containing max activations of the ordered list of quantized modules.
     """
+
+    # Class level constants
+    plot_dims = {"plot_width": 700, "plot_height": 400, "table_width": 800}
+    initial_vals = {"default_ymin": -1e5, "default_ymax": 1e5}
+    spacer_dims = {"sp1_width": 50, "sp1_height": 40}
+    table_column_widths = {"Layer Index": 100,
+                           "Layer Name": 400,
+                           "Min Activation": 100,
+                           "Max Activation": 100}
+
     def __init__(self, idx: list, namelist: list, minlist: list, maxlist: list):
         self.idx = idx
         self.namelist = namelist
         self.minlist = minlist
         self.maxlist = maxlist
-        self.p = None
+        self.plot = figure(
+            title="Min Max Activations/Weights of quantized modules for given model",
+            x_axis_label="Layer index",
+            y_axis_label="Activation/Weight",
+            tools="pan,wheel_zoom,box_zoom")
         self.default_values = dict()
 
     def _add_plot_lines(self, datasources: DataSources):
-        self.p.segment(x0='xmin', x1='xmax', y0='ymin', y1='ymin', line_width=4, line_color='black', source=datasources.limits_source)
-        self.p.segment(x0='xmin', x1='xmax', y0='ymax', y1='ymax', line_width=4, line_color='black', source=datasources.limits_source)
-        self.p.segment(x0='xmin', x1='xmax', y0='minclip', y1='minclip', line_width=2, line_color='black',
-                  line_dash='dashed',
-                  source=datasources.limits_source)
-        self.p.segment(x0='xmin', x1='xmax', y0='maxclip', y1='maxclip', line_width=2, line_color='black',
-                  line_dash='dashed',
-                  source=datasources.limits_source)
-        self.p.line('idx', 'maxlist', source=datasources.data_source, legend_label="Max Activation", line_width=2, line_color="red")
-        self.p.line('idx', 'minlist', source=datasources.data_source, legend_label="Min Activation", line_width=2, line_color="blue")
+        self.plot.segment(x0='xmin', x1='xmax', y0='ymin', y1='ymin', line_width=4, line_color='black',
+                       source=datasources.limits_source)
+        self.plot.segment(x0='xmin', x1='xmax', y0='ymax', y1='ymax', line_width=4, line_color='black',
+                       source=datasources.limits_source)
+        self.plot.segment(x0='xmin', x1='xmax', y0='minclip', y1='minclip', line_width=2, line_color='black',
+                       line_dash='dashed',
+                       source=datasources.limits_source)
+        self.plot.segment(x0='xmin', x1='xmax', y0='maxclip', y1='maxclip', line_width=2, line_color='black',
+                       line_dash='dashed',
+                       source=datasources.limits_source)
+        self.plot.line('idx', 'maxlist', source=datasources.data_source, legend_label="Max Activation", line_width=2,
+                    line_color="red")
+        self.plot.line('idx', 'minlist', source=datasources.data_source, legend_label="Min Activation", line_width=2,
+                    line_color="blue")
+        selections = self.plot.segment(x0='idx', x1='idx', y0='floor', y1='ceil', line_width=2, line_color='yellow',
+                                    line_alpha=0.3, source=datasources.selected_data_source)
 
+        return selections
 
-    def _add_min_max_markers(self, datasources: DataSources):
-        min_markers = self.p.circle_x('x', 'y', source=datasources.min_marker_source, size=10, color='orange', line_color="navy")
-        max_markers = self.p.circle_x('x', 'y', source=datasources.max_marker_source, size=10, color='orange', line_color="navy")
+    def _add_min_max_markers(self, datasources: DataSources, tableobjects: TableObjects):
+        min_markers = self.plot.circle_x('idx', 'marker_yminlist', source=datasources.data_source, size=10, color='orange',
+                                      line_color="navy")
+        min_markers.view = tableobjects.views.min_thresh_view
+        max_markers = self.plot.circle_x('idx', 'marker_ymaxlist', source=datasources.data_source, size=10, color='orange',
+                                      line_color="navy")
+        max_markers.view = tableobjects.views.max_thresh_view
 
-        return  min_markers, max_markers
+        return min_markers, max_markers
 
     @staticmethod
     def _get_min_max_hovertools(min_markers, max_markers):
+        format_code = """
+                    if (Math.abs(value) < 1e-3 || Math.abs(value) > 1e5) {
+                    return value.toExponential(3);
+                    } else {
+                    return value.toFixed(3);
+                    }
+                """
+
+        format_hover = CustomJSHover(code=format_code)
+
+        marker_hover = HoverTool(renderers=[min_markers, max_markers], tooltips=[
+            ("Layer Index", "@idx"),
+            ("Name", "@namelist"),
+            ("Max Activation", "@maxlist{custom}"),
+            ("Min Activation", "@minlist{custom}"),
+        ], formatters={
+            "@minlist": format_hover,
+            "@maxlist": format_hover,
+        })
+
+        return marker_hover
+
+
+    @staticmethod
+    def _get_selection_hovertool(selections):
         format_code = """
                     if (Math.abs(value) < 1e-3 || Math.abs(value) > 1e3) {
                     return value.toExponential(2);
@@ -254,42 +358,38 @@ class QuantStatsVisualizer:
 
         format_hover = CustomJSHover(code=format_code)
 
-        min_hover = HoverTool(renderers=[min_markers], tooltips=[
-            ("Name", "@names"),
-            ("Max Activation", "@max_activations{custom}"),
-            ("Min Activation", "@min_activations{custom}"),
+        selection_hover = HoverTool(renderers=[selections], tooltips=[
+            ("Layer Index", "@idx"),
+            ("Name", "@namelist"),
+            ("Max Activation", "@maxlist{custom}"),
+            ("Min Activation", "@minlist{custom}"),
         ], formatters={
-            "@min_activations": format_hover,
-            "@max_activations": format_hover,
+            "@minlist": format_hover,
+            "@maxlist": format_hover,
         })
 
-        max_hover = HoverTool(renderers=[max_markers], tooltips=[
-            ("Name", "@names"),
-            ("Max Activation", "@max_activations{custom}"),
-            ("Min Activation", "@min_activations{custom}"),
-        ], formatters={
-            "@min_activations": format_hover,
-            "@max_activations": format_hover,
-        })
-
-        return min_hover, max_hover
-
+        return selection_hover
 
     def _define_callbacks(self, datasources, tableobjects, inputwidgets):
         customcallbacks = CustomCallbacks()
 
-        customcallbacks.limit_change_callback = CustomJS(args=dict(limits_source=datasources.limits_source,
-                                                   data_source=datasources.data_source,
-                                                   min_marker_source=datasources.min_marker_source,
-                                                   max_marker_source=datasources.max_marker_source,
-                                                   ymax_input=inputwidgets.ymax_input,
-                                                   ymin_input=inputwidgets.ymin_input,
-                                                   maxclip_input=inputwidgets.maxclip_input,
-                                                   minclip_input=inputwidgets.minclip_input,
-                                                   plot=self.p,
-                                                   min_name_filter=tableobjects.min_name_filter,
-                                                   max_name_filter=tableobjects.max_name_filter,
-                                                   ), code="""
+        customcallbacks.limit_change_callback = CustomJS(args=dict(
+            limits_source=datasources.limits_source,
+            data_source=datasources.data_source,
+            table_data_source=datasources.table_data_source,
+            selected_data_source=datasources.selected_data_source,
+            min_marker_source=datasources.data_source,
+            max_marker_source=datasources.data_source,
+            ymax_input=inputwidgets.ymax_input,
+            ymin_input=inputwidgets.ymin_input,
+            maxclip_input=inputwidgets.maxclip_input,
+            minclip_input=inputwidgets.minclip_input,
+            plot=self.plot,
+            min_thresh_filter=tableobjects.filters.min_thresh_filter,
+            max_thresh_filter=tableobjects.filters.max_thresh_filter,
+            name_filter=tableobjects.filters.name_filter,
+            select=inputwidgets.table_view_select,
+        ), code="""
                 // Function to adaptively format numerical values in scientific notation
                 // if they are large in magnitude
                 function formatValue(value) {
@@ -299,96 +399,113 @@ class QuantStatsVisualizer:
                         return value.toFixed(2);
                     }
                 }
-                
+
+                function booleanAnd(arr1, arr2) {
+                    return arr1.map((value, index) => value && arr2[index]);
+                }
+
+                function booleanOr(arr1, arr2) {
+                    return arr1.map((value, index) => value || arr2[index]);
+                }
+
+                function findMin(a, b) {
+                    if (a<=b) {
+                        return a;
+                    }
+                    return b;
+                }
+
+                function findMax(a, b) {
+                    if (a>=b) {
+                        return a;
+                    }
+                    return b;
+                }
+
+
                 // Reading values from input widgets and setting plot y axis range  
                 const limits_data = limits_source.data;
                 limits_data['ymax'] = [parseFloat(ymax_input.value)];
                 limits_data['ymin'] = [parseFloat(ymin_input.value)];
-                plot.y_range.start = limits_data['ymin'][0];
-                plot.y_range.end = limits_data['ymax'][0];
+                plot.y_range.start = limits_data['ymin'][0]*1.05;
+                plot.y_range.end = limits_data['ymax'][0]*1.05;
                 limits_data['maxclip'] = [parseFloat(maxclip_input.value)];
                 limits_data['minclip'] = [parseFloat(minclip_input.value)];
-                
-                // Updating the min and max marker sources
-                const activation_data = data_source.data;
-                const idx = activation_data['idx'];
-                const minlist = activation_data['minlist'];
-                const maxlist = activation_data['maxlist'];
-                const namelist = activation_data['namelist'];
-                const min_marker_x = [];
-                const min_marker_y = [];
-                const min_marker_names = [];
-                const min_marker_min_activations = [];
-                const min_marker_max_activations = [];
-                const min_marker_fmt_min_activations = [];
-                const min_marker_fmt_max_activations = [];
-                for (let i = 0; i < idx.length; i++) {
-                    if (minlist[i] < limits_data['minclip'][0]) {
-                        min_marker_x.push(idx[i]);
-                        min_marker_y.push(limits_data['minclip'][0]);
-                        min_marker_names.push(namelist[i]);
-                        min_marker_min_activations.push(minlist[i]);
-                        min_marker_max_activations.push(maxlist[i]);
-                        min_marker_fmt_min_activations.push(formatValue(minlist[i]));
-                        min_marker_fmt_max_activations.push(formatValue(maxlist[i]));
-                    }
-                }
-                min_marker_source.data['x'] = min_marker_x;
-                min_marker_source.data['y'] = min_marker_y;
-                min_marker_source.data['names'] = min_marker_names;
-                min_marker_source.data['min_activations'] = min_marker_min_activations;
-                min_marker_source.data['max_activations'] = min_marker_max_activations;
-                min_marker_source.data['fmt_min_activations'] = min_marker_fmt_min_activations;
-                min_marker_source.data['fmt_max_activations'] = min_marker_fmt_max_activations;
-                min_name_filter.booleans = new Array(min_marker_names.length).fill(true);
 
-                const max_marker_x = [];
-                const max_marker_y = [];
-                const max_marker_names = [];
-                const max_marker_min_activations = [];
-                const max_marker_max_activations = [];
-                const max_marker_fmt_min_activations = [];
-                const max_marker_fmt_max_activations = [];
+                const source_data = data_source.data;
+                const idx = source_data['idx'];
+                const minlist = source_data['minlist'];
+                const maxlist = source_data['maxlist'];
+                const namelist = source_data['namelist'];
+                source_data['marker_yminlist'] = source_data['minlist'].map(t => findMax(t, limits_data['ymin'][0]));
+                source_data['marker_ymaxlist'] = source_data['maxlist'].map(t => findMin(t, limits_data['ymax'][0]));
+                
+                // Updating the filters for finding layers that cross the min or max thresholds
+                min_thresh_filter.booleans = minlist.map(t => t <= limits_data['minclip'][0]);
+                max_thresh_filter.booleans = maxlist.map(t => t >= limits_data['maxclip'][0]);
+
+                let table_booleans;
+                const table_idx = [];
+                const table_namelist = [];
+                const table_minlist = [];
+                const table_maxlist = [];
+
+                var view = select.value;
+                if (view == "All") {
+                    table_booleans = name_filter.booleans;
+                } else if (view == "Min") {
+                    table_booleans = booleanAnd(name_filter.booleans, min_thresh_filter.booleans);
+                } else if (view == "Max") {
+                    table_booleans = booleanAnd(name_filter.booleans, max_thresh_filter.booleans);
+                } else if (view == "Min | Max") {
+                    table_booleans = booleanAnd(name_filter.booleans, booleanOr(min_thresh_filter.booleans, max_thresh_filter.booleans));
+                } else if (view == "Min & Max") {
+                    table_booleans = booleanAnd(name_filter.booleans, booleanAnd(min_thresh_filter.booleans, max_thresh_filter.booleans));
+                }
+
                 for (let i = 0; i < idx.length; i++) {
-                    if (maxlist[i] > limits_data['maxclip'][0]) {
-                        max_marker_x.push(idx[i]);
-                        max_marker_y.push(limits_data['maxclip'][0]);
-                        max_marker_names.push(namelist[i]);
-                        max_marker_min_activations.push(minlist[i]);
-                        max_marker_max_activations.push(maxlist[i]);
-                        max_marker_fmt_min_activations.push(formatValue(minlist[i]));
-                        max_marker_fmt_max_activations.push(formatValue(maxlist[i]));
+                    if (table_booleans[i] == true) {
+                        table_idx.push(idx[i]);
+                        table_namelist.push(namelist[i]);
+                        table_minlist.push(minlist[i]);
+                        table_maxlist.push(maxlist[i]);
                     }
                 }
 
-                max_marker_source.data['x'] = max_marker_x;
-                max_marker_source.data['y'] = max_marker_y;
-                max_marker_source.data['names'] = max_marker_names;
-                max_marker_source.data['min_activations'] = max_marker_min_activations;
-                max_marker_source.data['max_activations'] = max_marker_max_activations;
-                max_marker_source.data['fmt_min_activations'] = max_marker_fmt_min_activations;
-                max_marker_source.data['fmt_max_activations'] = max_marker_fmt_max_activations;
-                max_name_filter.booleans = new Array(max_marker_names.length).fill(true);
-                
+                table_data_source.data["idx"] = table_idx;
+                table_data_source.data["namelist"] = table_namelist;
+                table_data_source.data["minlist"] = table_minlist;
+                table_data_source.data["maxlist"] = table_maxlist;
+
+                selected_data_source.data["floor"].push(limits_source.data['ymin'][0]*1.05);
+                selected_data_source.data["ceil"].push(limits_source.data['ymax'][0]*1.05);  
+
                 // Emitting the changes made to ColumnDataSources
                 limits_source.change.emit();
-                min_marker_source.change.emit();
-                max_marker_source.change.emit();
+                data_source.change.emit();
+                table_data_source.change.emit();
+                selected_data_source.change.emit();
             """)
 
-        customcallbacks.reset_callback = CustomJS(args=dict(limits_source=datasources.limits_source,
-                                            data_source=datasources.data_source,
-                                            default_values_source=datasources.default_values_source,
-                                            min_marker_source=datasources.min_marker_source,
-                                            max_marker_source=datasources.max_marker_source,
-                                            ymax_input=inputwidgets.ymax_input,
-                                            ymin_input=inputwidgets.ymin_input,
-                                            maxclip_input=inputwidgets.maxclip_input,
-                                            minclip_input=inputwidgets.minclip_input,
-                                            plot=self.p,
-                                            min_name_filter=tableobjects.min_name_filter,
-                                            max_name_filter=tableobjects.max_name_filter,
-                                            ), code="""
+        customcallbacks.reset_callback = CustomJS(args=dict(
+            limits_source=datasources.limits_source,
+            data_source=datasources.data_source,
+            table_data_source=datasources.table_data_source,
+            selected_data_source=datasources.selected_data_source,
+            default_values_source=datasources.default_values_source,
+            min_marker_source=datasources.data_source,
+            max_marker_source=datasources.data_source,
+            ymax_input=inputwidgets.ymax_input,
+            ymin_input=inputwidgets.ymin_input,
+            maxclip_input=inputwidgets.maxclip_input,
+            minclip_input=inputwidgets.minclip_input,
+            select=inputwidgets.table_view_select,
+            name_input=inputwidgets.name_input,
+            plot=self.plot,
+            min_thresh_filter=tableobjects.filters.min_thresh_filter,
+            max_thresh_filter=tableobjects.filters.max_thresh_filter,
+            name_filter=tableobjects.filters.name_filter,
+        ), code="""
                 // Function to adaptively format numerical values in scientific notation
                 // if they are large in magnitude
                 function formatValue(value) {
@@ -398,7 +515,29 @@ class QuantStatsVisualizer:
                         return value.toFixed(2);
                     }
                 }
-                
+
+                function booleanAnd(arr1, arr2) {
+                    return arr1.map((value, index) => value && arr2[index]);
+                }
+
+                function booleanOr(arr1, arr2) {
+                    return arr1.map((value, index) => value || arr2[index]);
+                }
+
+                function findMin(a, b) {
+                    if (a<=b) {
+                        return a;
+                    }
+                    return b;
+                }
+
+                function findMax(a, b) {
+                    if (a>=b) {
+                        return a;
+                    }
+                    return b;
+                }
+
                 // Resetting the limits source with default values
                 limits_source.data['ymax'] = default_values_source.data['default_ymax'];
                 limits_source.data['ymin'] = default_values_source.data['default_ymin'];
@@ -409,8 +548,8 @@ class QuantStatsVisualizer:
                 const limits_data = limits_source.data;
 
                 // Resetting the plot ranges
-                plot.y_range.start = limits_data['ymin'][0];
-                plot.y_range.end = limits_data['ymax'][0];
+                plot.y_range.start = limits_data['ymin'][0]*1.05;
+                plot.y_range.end = limits_data['ymax'][0]*1.05;
                 plot.x_range.start = limits_data['xmin'][0];
                 plot.x_range.end = limits_data['xmax'][0];
 
@@ -419,116 +558,286 @@ class QuantStatsVisualizer:
                 ymin_input.value = limits_data['ymin'][0].toString();
                 maxclip_input.value = limits_data['maxclip'][0].toString();
                 minclip_input.value = limits_data['minclip'][0].toString();
-                
-                // Updating the min and max marker sources
-                const activation_data = data_source.data;
-                const idx = activation_data['idx'];
-                const minlist = activation_data['minlist'];
-                const maxlist = activation_data['maxlist'];
-                const namelist = activation_data['namelist'];
-                const min_marker_x = [];
-                const min_marker_y = [];
-                const min_marker_names = [];
-                const min_marker_min_activations = [];
-                const min_marker_max_activations = [];
-                const min_marker_fmt_min_activations = [];
-                const min_marker_fmt_max_activations = [];
-                for (let i = 0; i < idx.length; i++) {
-                    if (minlist[i] < limits_data['minclip'][0]) {
-                        min_marker_x.push(idx[i]);
-                        min_marker_y.push(limits_data['minclip'][0]);
-                        min_marker_names.push(namelist[i]);
-                        min_marker_min_activations.push(minlist[i]);
-                        min_marker_max_activations.push(maxlist[i]);
-                        min_marker_fmt_min_activations.push(formatValue(minlist[i]));
-                        min_marker_fmt_max_activations.push(formatValue(maxlist[i]));
-                    }
-                }
-                min_marker_source.data['x'] = min_marker_x;
-                min_marker_source.data['y'] = min_marker_y;
-                min_marker_source.data['names'] = min_marker_names;
-                min_marker_source.data['min_activations'] = min_marker_min_activations;
-                min_marker_source.data['max_activations'] = min_marker_max_activations;
-                min_marker_source.data['fmt_min_activations'] = min_marker_fmt_min_activations;
-                min_marker_source.data['fmt_max_activations'] = min_marker_fmt_max_activations;
-                min_name_filter.booleans = new Array(min_marker_names.length).fill(true);
 
-                const max_marker_x = [];
-                const max_marker_y = [];
-                const max_marker_names = [];
-                const max_marker_min_activations = [];
-                const max_marker_max_activations = [];
-                const max_marker_fmt_min_activations = [];
-                const max_marker_fmt_max_activations = [];
+                const source_data = data_source.data;
+                const idx = source_data['idx'];
+                const minlist = source_data['minlist'];
+                const maxlist = source_data['maxlist'];
+                const namelist = source_data['namelist'];
+
+                source_data['marker_yminlist'] = source_data['minlist'].map(t => findMax(t, limits_data['ymin'][0]));
+                source_data['marker_ymaxlist'] = source_data['maxlist'].map(t => findMin(t, limits_data['ymax'][0]));
+
+                min_thresh_filter.booleans = minlist.map(t => t <= limits_data['minclip'][0]);
+                max_thresh_filter.booleans = maxlist.map(t => t >= limits_data['maxclip'][0]);
+
+                name_filter.booleans = Array(idx.length).fill(true);
+                name_input.value = "";
+
+                let table_booleans;
+                const table_idx = [];
+                const table_namelist = [];
+                const table_minlist = [];
+                const table_maxlist = [];
+
+                select.value = "Min | Max";
+                var view = select.value;
+                if (view == "All") {
+                    table_booleans = name_filter.booleans;
+                } else if (view == "Min") {
+                    table_booleans = booleanAnd(name_filter.booleans, min_thresh_filter.booleans);
+                } else if (view == "Max") {
+                    table_booleans = booleanAnd(name_filter.booleans, max_thresh_filter.booleans);
+                } else if (view == "Min | Max") {
+                    table_booleans = booleanAnd(name_filter.booleans, booleanOr(min_thresh_filter.booleans, max_thresh_filter.booleans));
+                } else if (view == "Min & Max") {
+                    table_booleans = booleanAnd(name_filter.booleans, booleanAnd(min_thresh_filter.booleans, max_thresh_filter.booleans));
+                }
+
                 for (let i = 0; i < idx.length; i++) {
-                    if (maxlist[i] > limits_data['maxclip'][0]) {
-                        max_marker_x.push(idx[i]);
-                        max_marker_y.push(limits_data['maxclip'][0]);
-                        max_marker_names.push(namelist[i]);
-                        max_marker_min_activations.push(minlist[i]);
-                        max_marker_max_activations.push(maxlist[i]);
-                        max_marker_fmt_min_activations.push(formatValue(minlist[i]));
-                        max_marker_fmt_max_activations.push(formatValue(maxlist[i]));
+                    if (table_booleans[i] == true) {
+                        table_idx.push(idx[i]);
+                        table_namelist.push(namelist[i]);
+                        table_minlist.push(minlist[i]);
+                        table_maxlist.push(maxlist[i]);
                     }
                 }
 
-                max_marker_source.data['x'] = max_marker_x;
-                max_marker_source.data['y'] = max_marker_y;
-                max_marker_source.data['names'] = max_marker_names;
-                max_marker_source.data['min_activations'] = max_marker_min_activations;
-                max_marker_source.data['max_activations'] = max_marker_max_activations;
-                max_marker_source.data['fmt_min_activations'] = max_marker_fmt_min_activations;
-                max_marker_source.data['fmt_max_activations'] = max_marker_fmt_max_activations;
-                max_name_filter.booleans = new Array(max_marker_names.length).fill(true);
-                
+                table_data_source.data["idx"] = table_idx;
+                table_data_source.data["namelist"] = table_namelist;
+                table_data_source.data["minlist"] = table_minlist;
+                table_data_source.data["maxlist"] = table_maxlist;
+
+                table_data_source.selected.indices = [];
+                data_source.data["selected"] = Array(data_source.data["idx"].length).fill(false);
+
+                selected_data_source.data["idx"] = [];
+                selected_data_source.data["namelist"] = [];
+                selected_data_source.data["floor"] = [];
+                selected_data_source.data["ceil"] = [];
+                selected_data_source.data["minlist"] = [];
+                selected_data_source.data["maxlist"] = [];
+
                 // Emitting the changes made to ColumnDataSources
                 limits_source.change.emit();
-                min_marker_source.change.emit();
-                max_marker_source.change.emit();
+                data_source.change.emit();
+                table_data_source.change.emit();
+                selected_data_source.change.emit();
             """)
 
-        customcallbacks.min_name_filter_callback = CustomJS(args=dict(marker_source=datasources.min_marker_source,
-                                                      text_filter=tableobjects.min_name_filter,
-                                                      ),
-                                            code="""
+        customcallbacks.name_filter_callback = CustomJS(args=dict(
+            data_source=datasources.data_source,
+            table_data_source=datasources.table_data_source,
+            limits_source=datasources.limits_source,
+            min_thresh_filter=tableobjects.filters.min_thresh_filter,
+            max_thresh_filter=tableobjects.filters.max_thresh_filter,
+            name_filter=tableobjects.filters.name_filter,
+            select=inputwidgets.table_view_select,
+        ), code="""
+                function booleanAnd(arr1, arr2) {
+                    return arr1.map((value, index) => value && arr2[index]);
+                }
+
+                function booleanOr(arr1, arr2) {
+                    return arr1.map((value, index) => value || arr2[index]);
+                }
                 // Filter all names having entered pattern as a substring
-                text_filter.booleans = Array.from(marker_source.data['names']).map(t => t.includes(cb_obj.value));
-                marker_source.change.emit();
+                name_filter.booleans = Array.from(data_source.data['namelist']).map(t => t.includes(cb_obj.value));
+
+                const limits_data = limits_source.data;
+                const source_data = data_source.data;
+                const idx = source_data['idx'];
+                const minlist = source_data['minlist'];
+                const maxlist = source_data['maxlist'];
+                const namelist = source_data['namelist'];
+
+                let table_booleans;
+                const table_idx = [];
+                const table_namelist = [];
+                const table_minlist = [];
+                const table_maxlist = [];
+
+                var view = select.value;
+                if (view == "All") {
+                    table_booleans = name_filter.booleans;
+                } else if (view == "Min") {
+                    table_booleans = booleanAnd(name_filter.booleans, min_thresh_filter.booleans);
+                } else if (view == "Max") {
+                    table_booleans = booleanAnd(name_filter.booleans, max_thresh_filter.booleans);
+                } else if (view == "Min | Max") {
+                    table_booleans = booleanAnd(name_filter.booleans, booleanOr(min_thresh_filter.booleans, max_thresh_filter.booleans));
+                } else if (view == "Min & Max") {
+                    table_booleans = booleanAnd(name_filter.booleans, booleanAnd(min_thresh_filter.booleans, max_thresh_filter.booleans));
+                }
+
+                for (let i = 0; i < idx.length; i++) {
+                    if (table_booleans[i] == true) {
+                        table_idx.push(idx[i]);
+                        table_namelist.push(namelist[i]);
+                        table_minlist.push(minlist[i]);
+                        table_maxlist.push(maxlist[i]);
+                    }
+                }
+
+                table_data_source.data["idx"] = table_idx;
+                table_data_source.data["namelist"] = table_namelist;
+                table_data_source.data["minlist"] = table_minlist;
+                table_data_source.data["maxlist"] = table_maxlist; 
+
+                table_data_source.change.emit();
+
+                const selected_indices = [];
+                var layer_idx;
+                for (let i = 0; i < table_idx.length; i++) {
+                    layer_idx = table_idx[i];
+                    if (data_source.data["selected"][layer_idx] == true) {
+                        selected_indices.push(i);
+                    }
+                }
+
+                table_data_source.selected.indices = selected_indices;
+
+                table_data_source.change.emit();
+                table.name = "placeholder_1";
+                table.name = "placeholder_0";
             """)
 
-        customcallbacks.max_name_filter_callback = CustomJS(args=dict(marker_source=datasources.max_marker_source,
-                                                      text_filter=tableobjects.max_name_filter,
-                                                      ),
-                                            code="""
-                // Filter all names having entered pattern as a substring
-                text_filter.booleans = Array.from(marker_source.data['names']).map(t => t.includes(cb_obj.value));
-                marker_source.change.emit();
-            """)
+        customcallbacks.select_table_view_callback = CustomJS(args=dict(
+            data_source=datasources.data_source,
+            table_data_source=datasources.table_data_source,
+            select=inputwidgets.table_view_select,
+            min_thresh_filter=tableobjects.filters.min_thresh_filter,
+            max_thresh_filter=tableobjects.filters.max_thresh_filter,
+            name_filter=tableobjects.filters.name_filter,
+            table=tableobjects.data_table
+        ), code="""
+                function booleanAnd(arr1, arr2) {
+                    return arr1.map((value, index) => value && arr2[index]);
+                }
+
+                function booleanOr(arr1, arr2) {
+                    return arr1.map((value, index) => value || arr2[index]);
+                }
+
+                const source_data = data_source.data;
+                const idx = source_data['idx'];
+                const minlist = source_data['minlist'];
+                const maxlist = source_data['maxlist'];
+                const namelist = source_data['namelist'];
+
+                let table_booleans;
+                const table_idx = [];
+                const table_namelist = [];
+                const table_minlist = [];
+                const table_maxlist = [];
+
+                var view = select.value;
+                if (view == "All") {
+                    table_booleans = name_filter.booleans;
+                } else if (view == "Min") {
+                    table_booleans = booleanAnd(name_filter.booleans, min_thresh_filter.booleans);
+                } else if (view == "Max") {
+                    table_booleans = booleanAnd(name_filter.booleans, max_thresh_filter.booleans);
+                } else if (view == "Min | Max") {
+                    table_booleans = booleanAnd(name_filter.booleans, booleanOr(min_thresh_filter.booleans, max_thresh_filter.booleans));
+                } else if (view == "Min & Max") {
+                    table_booleans = booleanAnd(name_filter.booleans, booleanAnd(min_thresh_filter.booleans, max_thresh_filter.booleans));
+                }
+
+                for (let i = 0; i < idx.length; i++) {
+                    if (table_booleans[i] == true) {
+                        table_idx.push(idx[i]);
+                        table_namelist.push(namelist[i]);
+                        table_minlist.push(minlist[i]);
+                        table_maxlist.push(maxlist[i]);
+                    }
+                }
+
+                table_data_source.data["idx"] = table_idx;
+                table_data_source.data["namelist"] = table_namelist;
+                table_data_source.data["minlist"] = table_minlist;
+                table_data_source.data["maxlist"] = table_maxlist;
+
+                table_data_source.change.emit();
+
+                const selected_indices = [];
+                var layer_idx; 
+                for (let i = 0; i < table_idx.length; i++) {
+                    layer_idx = table_idx[i];
+                    if (data_source.data["selected"][layer_idx] == true) {
+                        selected_indices.push(i);
+                    }
+                }
+
+                table_data_source.selected.indices = selected_indices;
+
+                table_data_source.change.emit();
+                
+                // Force redraw of table by making an inert change to table properties
+                table.name = "placeholder_1";
+                table.name = "placeholder_0";
+        """)
+
+        customcallbacks.table_selection_callback = CustomJS(args=dict(
+            data_source=datasources.data_source,
+            table_data_source=datasources.table_data_source,
+            selected_data_source=datasources.selected_data_source,
+            limits_source=datasources.limits_source,
+        ), code="""
+                table_data_source.data["idx"].forEach(i => {
+                    data_source.data["selected"][i] = false;
+                });
+                table_data_source.selected.indices.forEach(i => {
+                    let layer_idx = table_data_source.data["idx"][i];
+                    data_source.data["selected"][layer_idx] = true;
+                });
+                data_source.change.emit();
+
+                selected_data_source.data["namelist"] = [];
+                selected_data_source.data["idx"] = [];
+                selected_data_source.data["floor"] = [];
+                selected_data_source.data["ceil"] = [];
+                selected_data_source.data["minlist"] = [];
+                selected_data_source.data["maxlist"] = [];
+                selected_data_source.change.emit();
+
+                data_source.data["selected"].forEach((bool,index) => {
+                    if (bool==true) {
+                        selected_data_source.data["namelist"].push(data_source.data["namelist"][index]);
+                        selected_data_source.data["idx"].push(index);
+                        selected_data_source.data["floor"].push(limits_source.data['ymin'][0]*1.05);
+                        selected_data_source.data["ceil"].push(limits_source.data['ymax'][0]*1.05);
+                        selected_data_source.data["minlist"].push(data_source.data["minlist"][index]);
+                        selected_data_source.data["maxlist"].push(data_source.data["maxlist"][index]);
+                    }
+                })
+                selected_data_source.change.emit();
+        """)
 
         return customcallbacks
 
-    def _attach_callbacks(self, inputwidgets, customcallbacks):
-        self.p.js_on_event(Reset, customcallbacks.reset_callback)
+    def _attach_callbacks(self, datasources, inputwidgets, customcallbacks):
+        self.plot.js_on_event(Reset, customcallbacks.reset_callback)
         inputwidgets.ymax_input.js_on_change('value', customcallbacks.limit_change_callback)
         inputwidgets.ymin_input.js_on_change('value', customcallbacks.limit_change_callback)
         inputwidgets.maxclip_input.js_on_change('value', customcallbacks.limit_change_callback)
         inputwidgets.minclip_input.js_on_change('value', customcallbacks.limit_change_callback)
-        inputwidgets.min_name_input.js_on_change("value", customcallbacks.min_name_filter_callback)
-        inputwidgets.max_name_input.js_on_change("value", customcallbacks.max_name_filter_callback)
+        inputwidgets.name_input.js_on_change("value", customcallbacks.name_filter_callback)
+        inputwidgets.table_view_select.js_on_change('value', customcallbacks.select_table_view_callback)
+        datasources.table_data_source.selected.js_on_change('indices', customcallbacks.table_selection_callback)
 
 
     def _create_layout(self, inputwidgets, tableobjects):
         heading_1 = Div(text="<h2>Quant Stats Visualizer</h2>")
-        heading_2 = Div(text="<h2>List of layers with Min activation/weight lesser than lower threshold</h2>")
-        heading_3 = Div(text="<h2>List of layers with Max activation/weight higher than upper threshold</h2>")
+        heading_2 = Div(text="<h2>Quant Stats Data Table</h2>")
 
-        sp1 = Spacer(width=50, height=40)
+        sp1 = Spacer(width=QuantStatsVisualizer.spacer_dims["sp1_width"], height=QuantStatsVisualizer.spacer_dims["sp1_height"])
         row1 = row(inputwidgets.ymin_input, inputwidgets.ymax_input)
         row2 = row(inputwidgets.minclip_input, inputwidgets.maxclip_input)
         inputs1 = column(row1, row2)
-        layout = column(heading_1, inputs1, sp1, self.p,
-                        row(column(heading_2, inputwidgets.min_name_input, tableobjects.min_data_table),
-                            column(heading_3, inputwidgets.max_name_input, tableobjects.max_data_table)))
+        layout = column(heading_1, inputs1, sp1, self.plot,
+                        column(heading_2, row(inputwidgets.table_view_select, inputwidgets.name_input),
+                               tableobjects.data_table))
 
         return layout
 
@@ -541,49 +850,46 @@ class QuantStatsVisualizer:
 
         curdoc().theme = 'light_minimal'
 
-        self.p = figure(width=700,
-               height=400,
-               title="Min Max Activations/Weights of quantized modules for given model",
-               x_axis_label="Layer index",
-               y_axis_label="Activation/Weight",
-               tools="pan,wheel_zoom,box_zoom")
+        self.plot.width = QuantStatsVisualizer.plot_dims["plot_width"]
+        self.plot.height = QuantStatsVisualizer.plot_dims["plot_height"]
 
         # Defining the default values of plotting parameters
-        self.default_values['default_ymax'] = 1e5
-        self.default_values['default_ymin'] = -1e5
+        self.default_values['default_ymax'] = QuantStatsVisualizer.initial_vals["default_ymax"]
+        self.default_values['default_ymin'] = QuantStatsVisualizer.initial_vals["default_ymin"]
         self.default_values['default_xmax'] = len(self.idx) - 1
         self.default_values['default_xmin'] = 0
         self.default_values['default_maxclip'] = self.default_values['default_ymax'] / 2
         self.default_values['default_minclip'] = self.default_values['default_ymin'] / 2
 
-        self.p.x_range = Range1d(0, len(self.idx))
-        self.p.y_range = Range1d(self.default_values['default_ymax'], self.default_values['default_ymin'])
+        self.plot.x_range = Range1d(0, len(self.idx))
+        self.plot.y_range = Range1d(self.default_values['default_ymax'] * 1.05, self.default_values['default_ymin'] * 1.05)
 
         # Creating and adding a reset tool
         rt = ResetTool()
-        self.p.add_tools(rt)
+        self.plot.add_tools(rt)
 
         # Defining Bokeh ColumnDataSources
         datasources = DataSources(idx=self.idx,
                                   namelist=self.namelist,
                                   minlist=self.minlist,
                                   maxlist=self.maxlist,
-                                  p=self.p,
+                                  plot=self.plot,
                                   default_values=self.default_values,
                                   )
 
         # Creating plot objects
-        self._add_plot_lines(datasources)
-
-        # Marker points to see which layers cross the thresholds
-        min_markers, max_markers = self._add_min_max_markers(datasources)
-
-        # Defining a hover functionality to see layer details on hovering on the marker points
-        min_hover, max_hover = self._get_min_max_hovertools(min_markers, max_markers)
-        self.p.add_tools(min_hover, max_hover)
+        selections = self._add_plot_lines(datasources)
 
         # Defining the table objects and name filter views
         tableobjects = TableObjects(datasources)
+
+        # Marker points to see which layers cross the thresholds
+        min_markers, max_markers = self._add_min_max_markers(datasources, tableobjects)
+
+        # Defining a hover functionality to see layer details on hovering on the marker points and selections
+        marker_hover = self._get_min_max_hovertools(min_markers, max_markers)
+        selection_hover = self._get_selection_hovertool(selections)
+        self.plot.add_tools(marker_hover, selection_hover)
 
         # Creating the input widgets
         inputwidgets = InputWidgets(self.default_values)
@@ -593,7 +899,7 @@ class QuantStatsVisualizer:
 
         # Attach events to corresponding callbacks
         curdoc().js_on_event(DocumentReady, customcallbacks.reset_callback)
-        self._attach_callbacks(inputwidgets, customcallbacks)
+        self._attach_callbacks(datasources, inputwidgets, customcallbacks)
 
         # Define the formatting
         layout = self._create_layout(inputwidgets, tableobjects)
