@@ -77,12 +77,12 @@ class Net(nn.Module):
         self.conv1 = nn.Conv2d(1, 32, kernel_size=5, padding=(2, 2))
         self.relu1 = nn.ReLU()
         self.maxpool1 = nn.MaxPool2d(2)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=5, padding=(2, 2))
+        self.conv2 = nn.Conv2d(32, 32, kernel_size=5, padding=(2, 2))
         self.relu2 = nn.ReLU()
         self.maxpool2 = nn.MaxPool2d(2)
         self.relu3 = nn.ReLU()
-        self.fc1 = nn.Linear(7*7*64, 1024)
-        self.fc2 = nn.Linear(1024, 10)
+        self.fc1 = nn.Linear(7*7*64, 256)
+        self.fc2 = nn.Linear(256, 10)
         self.log_softmax = nn.LogSoftmax(1)
 
     def forward(self, *inputs):
