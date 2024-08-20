@@ -489,7 +489,6 @@ class CustomSparseConv3DLayer(torch.nn.Module):
                 bias_data = torch.nn.Parameter(torch.zeros(self.sp_conv_3d.out_channels))
 
             self.conv_attrs_dict = dict(sorted(self.conv_attrs_dict.items(), key=lambda x: (x[0], x[1])))
-            torch.Tensor.dense = lambda inp: inp # Adding a lambda function for the dense() call in a torch.Tensor
             return CustomSparseConv3d_WithIndicesFeatures.apply(indices, features, self.sp_conv_3d.weight,
                                                                 bias_data, self.conv_attrs_dict, "")
 
@@ -525,7 +524,6 @@ class CustomSparseConv3DLayer(torch.nn.Module):
                 bias_data = torch.nn.Parameter(torch.zeros(self.sp_conv_3d.out_channels))
             self.conv_attrs_dict = dict(sorted(self.conv_attrs_dict.items(), key=lambda x: (x[0], x[1])))
             outs = CustomSparseConv3d.apply(dense_inp, self.sp_conv_3d.weight, bias_data, self.conv_attrs_dict, "")
-            torch.Tensor.dense = lambda inp: inp # Adding a lambda function for the dense() call in a torch.Tensor
             return outs
 
         # Dense to Sparse Conversion
@@ -671,7 +669,7 @@ class ScatterDense(torch.nn.Module):
             }
             return CustomScatterDense.apply(inputs, attrs, "")
 
-        return inputs.dense()
+        return inputs.dense() if isinstance(inputs, spconv.SparseConvTensor) else inputs
 
 class ScatterND(torch.nn.Module):
     """ ScatterND op implementation """
