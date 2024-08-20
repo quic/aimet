@@ -1,9 +1,46 @@
+# -*- mode: python -*-
+# =============================================================================
+#  @@-COPYRIGHT-START-@@
+#
+#  Copyright (c) 2019-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+#
+#  Redistribution and use in source and binary forms, with or without
+#  modification, are permitted provided that the following conditions are met:
+#
+#  1. Redistributions of source code must retain the above copyright notice,
+#     this list of conditions and the following disclaimer.
+#
+#  2. Redistributions in binary form must reproduce the above copyright notice,
+#     this list of conditions and the following disclaimer in the documentation
+#     and/or other materials provided with the distribution.
+#
+#  3. Neither the name of the copyright holder nor the names of its contributors
+#     may be used to endorse or promote products derived from this software
+#     without specific prior written permission.
+#
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+#  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+#  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+#  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+#  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+#  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+#  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+#  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+#  POSSIBILITY OF SUCH DAMAGE.
+#
+#  SPDX-License-Identifier: BSD-3-Clause
+#
+#  @@-COPYRIGHT-END-@@
+# =============================================================================
+
 """This module enables batch norm folding in QuantSim v2"""
 from typing import List, Tuple, Iterable
 import torch
 from aimet_torch import utils
 from aimet_torch.batch_norm_fold import BatchNormFold as BatchNormFoldV1
-from aimet_torch.batch_norm_fold import _BatchNormFoldingNotSupported, LayerType, BatchNormType, _supported_batchnorms, _supported_layers
+from aimet_torch.batch_norm_fold import _BatchNormFoldingNotSupported, LayerType, BatchNormType
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.nn import FakeQuantizationMixin
 from torch.nn.modules.conv import _ConvTransposeNd
@@ -54,40 +91,6 @@ class BatchNormFold(BatchNormFoldV1):
         return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs]
 
     @staticmethod
-    def fold_given_batch_norms(model, layer_pairs):
-        """
-        Fold a given set of batch_norm layers into conv layers
-
-        :param model: Model
-        :param layer_pairs: Pairs of conv and batch_norm layers to use for folding
-        :return: None
-        """
-        # pylint: disable=protected-access
-        conv_bn_pairs = []
-        bn_conv_pairs = []
-
-        def is_batchnorm(module: torch.nn.Module) -> bool:
-            return isinstance(module, _supported_batchnorms)
-
-        def is_conv_linear(module: torch.nn.Module) -> bool:
-            return isinstance(module, _supported_layers)
-
-        for x, y in layer_pairs:
-            if is_batchnorm(x):
-                assert is_conv_linear(y)
-                bn = x
-                conv = y
-                bn_conv_pairs.append((bn, conv))
-            else:
-                assert is_conv_linear(x)
-                assert is_batchnorm(y)
-                conv = x
-                bn = y
-                conv_bn_pairs.append((conv, bn))
-
-        BatchNormFold._fold_given_batch_norms(model, conv_bn_pairs, bn_conv_pairs)
-
-    @staticmethod
     def _fold_given_batch_norms(model,
                                 conv_bn_pairs: Iterable[Tuple[torch.nn.Module, torch.nn.Module]],
                                 bn_conv_pairs: Iterable[Tuple[torch.nn.Module, torch.nn.Module]]):
@@ -134,6 +137,7 @@ class BatchNormFold(BatchNormFoldV1):
 
             BatchNormFold._delete_bn_from_model(model, bn_modules)
 
+    # pylint: disable=arguments-differ
     @staticmethod
     def _fold_to_scale(conv: BaseQuantizationMixin, bn: BaseQuantizationMixin):
         """
@@ -171,24 +175,25 @@ class BatchNormFold(BatchNormFoldV1):
         #       For example, the user can manually enable quantization of batchnorms, etc...
         #       (FYI: _quantize_params takes effect only when the parameter quantizers are enabled)
 
-        BatchNormFold._fold_to_weight(conv, bn, fold_backward=True)
+        with conv._patch_quantized_parameters():
+            BatchNormFold._fold_to_weight(conv, bn, fold_backward=True)
 
-        gamma = bn.weight
-        sigma = torch.sqrt(bn.running_var + bn.eps)
-        result = gamma / sigma
-        new_encoding_min = torch.zeros_like(weight_quantizer.min)
-        new_encoding_max = torch.zeros_like(weight_quantizer.max)
+            gamma = bn.weight
+            sigma = torch.sqrt(bn.running_var + bn.eps)
+            result = gamma / sigma
+            new_encoding_min = torch.zeros_like(weight_quantizer.min)
+            new_encoding_max = torch.zeros_like(weight_quantizer.max)
 
-        for i, elem in enumerate(weight_quantizer.min):
-            if result[i] >= 0:
-                new_encoding_max[i] = weight_quantizer.max[i] * result[i]
-                new_encoding_min[i] = elem * result[i]
-            else:
-                new_encoding_max[i] = weight_quantizer.min[i] * result[i]
-                new_encoding_min[i] = weight_quantizer.max[i] * result[i]
+            for i, elem in enumerate(weight_quantizer.min):
+                if result[i] >= 0:
+                    new_encoding_max[i] = weight_quantizer.max[i] * result[i]
+                    new_encoding_min[i] = elem * result[i]
+                else:
+                    new_encoding_max[i] = weight_quantizer.min[i] * result[i]
+                    new_encoding_min[i] = weight_quantizer.max[i] * result[i]
 
         weight_quantizer.min.copy_(new_encoding_min)
-        weight_quantizer.min.copy_(new_encoding_max)
+        weight_quantizer.max.copy_(new_encoding_max)
 
         # Copy batchnorm's output quantizers to conv output quantizers
         for conv_output_quantizer, bn_output_quantizer in\

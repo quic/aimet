@@ -79,6 +79,7 @@ class _BatchNormFoldingNotSupported(RuntimeError):
     pass
 
 class BatchNormFold:
+    """Handles batch norm folding logic"""
     @staticmethod
     def _call_mo_batch_norm_fold(weight: torch.Tensor,
                                 bias: torch.Tensor,
@@ -212,7 +213,6 @@ class BatchNormFold:
 
             new_encodings = []
             for old_encoding, c in zip(encodings, gamma/sigma):
-                print(c)
                 new_encoding = libpymo.TfEncoding()
                 new_encoding.delta = old_encoding.delta * abs(c)
                 if c >= 0:
@@ -651,5 +651,6 @@ class BatchNormFold:
 fold_all_batch_norms = BatchNormFold.fold_all_batch_norms_to_weight
 fold_all_batch_norms_to_scale = BatchNormFold.fold_all_batch_norms_to_scale
 fold_given_batch_norms = BatchNormFold.fold_given_batch_norms
+# pylint: disable=protected-access
 _is_valid_bn_fold = BatchNormFold._is_valid_bn_fold
 _find_all_batch_norms_to_fold = BatchNormFold._find_all_batch_norms_to_fold
