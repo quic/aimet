@@ -140,13 +140,6 @@ depend on the ML framework the model is written in.
 
 :hideitem:`PyTorch`
 --------------------
-.. toctree::
-   :titlesonly:
-   :hidden:
-   
-    PyTorch Model Guidelines <../api_docs/torch_model_guidelines>
-    AIMET PyTorch Quantization APIs <../api_docs/torch_quantization>
-
 - Pytorch:
     
    :doc:`PyTorch Model Guidelines<../api_docs/torch_model_guidelines>`
