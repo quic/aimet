@@ -288,7 +288,7 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
                 num_steps = math.pow(2, self.bitwidth) - 1
                 min, max = self.encoding_analyzer.compute_encodings(num_steps,
                                                                     is_symmetric=False)
-                _flag_extreme_min_max(min, max, self.maxval.device)
+                _flag_extreme_min_max(min, max)
             except StatisticsNotFoundError:
                 return
 

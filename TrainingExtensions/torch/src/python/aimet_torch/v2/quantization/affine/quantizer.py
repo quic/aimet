@@ -305,7 +305,7 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
                 if self.block_size is not None:
                     enc_min = enc_min.view(self.min.shape)
                     enc_max = enc_max.view(self.max.shape)
-                _flag_extreme_min_max(enc_min, enc_max, self.max.device)
+                _flag_extreme_min_max(enc_min, enc_max)
 
             except StatisticsNotFoundError:
                 return
