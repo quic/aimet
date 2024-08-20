@@ -351,7 +351,7 @@ class MinMaxEncodingAnalyzer(EncodingAnalyzer[_MinMaxRange]):
 
 def _flag_extreme_min_max(curr_min, curr_max):
     extreme_val = torch.full_like(curr_min, torch.finfo(curr_min.dtype).max)
-    if not (torch.isfinite(curr_min) and torch.isfinite()):
+    if not (torch.all(torch.isfinite(curr_min)) and torch.all(torch.isfinite(curr_max))):
         warnings.warn('Infinite or NaN values detected within input! This may skew the associated encodings')
 
     if torch.any(torch.isclose(torch.abs(curr_min), extreme_val, rtol=0.05)) or torch.any(torch.isclose(torch.abs(curr_max), extreme_val, rtol=0.05)):
