@@ -484,7 +484,7 @@ class OnnxSaver:
         # SparseConv3D name conflicts resolve
         for node in onnx_model.graph.node:
             if node.domain == "spconv" and node.op_type == "SparseConvolution":
-                node.name = node.name[:-1] + ".sp_conv_3d"
+                node.name = node.name + ".sp_conv_3d"
         onnx.save(onnx_model, onnx_model_path, save_as_external_data=save_as_external_data)
 
     @classmethod
@@ -1664,9 +1664,7 @@ def modify_custom_ops(temp_file: str):
     for node in onnx_model.graph.node:
         if node.domain in modification_dict:
             node.op_type = modification_dict[node.domain]['op_type']
-            node.name = node.name[1:]
-            if node.name[-1] == "/":
-                node.name = node.name[:-1] + "_"
+            node.name = node.name[1:-1]
             node.domain = modification_dict[node.domain]['domain']
             is_modified = True
 
