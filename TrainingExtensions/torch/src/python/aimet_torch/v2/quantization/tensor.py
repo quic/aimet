@@ -315,6 +315,11 @@ class QuantizedTensorBase(torch.Tensor):
             ret.encoding = self.encoding and self.encoding.to(device=ret.device)
             return ret
 
+        self, *_ = args
+        if not isinstance(self, QuantizedTensorBase):
+            # If self is not a subclass of QuantizedTensorBase, return a plain torch.Tensor
+            return tree_map(lambda t: t.as_subclass(torch.Tensor) if isinstance(t, QuantizedTensorBase) else t, ret)
+
         def propagate_encoding(qtensor, encoding):
             if isinstance(qtensor, QuantizedTensorBase):
                 qtensor.encoding = copy.copy(encoding)

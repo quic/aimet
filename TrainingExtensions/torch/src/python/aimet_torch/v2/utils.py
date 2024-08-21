@@ -39,7 +39,7 @@
 from typing import Callable, Tuple, Any
 import functools
 import itertools
-
+import numpy as np
 import torch
 
 
@@ -48,6 +48,10 @@ def _is_expandable(src_shape: Tuple[int, ...],
     """
     Returns true if source shape can be expanded as target shape
     """
+
+    if np.prod(src_shape) == np.prod(target_shape):
+        return True
+
     if len(src_shape) > len(target_shape):
         return False
 
@@ -79,6 +83,9 @@ def reduce(input: torch.Tensor, shape: Tuple[int, ...], reduce_op: Callable):
             f"Input of shape {list(input.shape)} can't be reduced to shape {list(shape)}"
         )
 
+    if np.prod(input.shape) == np.prod(shape):
+        return input.reshape(shape)
+
     padded_shape = (
         *itertools.repeat(1, len(input.shape) - len(shape)),
         *shape
@@ -87,7 +94,7 @@ def reduce(input: torch.Tensor, shape: Tuple[int, ...], reduce_op: Callable):
     other_dims = tuple(axis for axis, dim in enumerate(padded_shape) if dim > 1)
     permute_dims = reduce_dims + other_dims
 
-    return reduce_op(input.permute(permute_dims).reshape(-1, *shape), dim=0, keepdim=False)
+    return reduce_op(input.permute(permute_dims).reshape(-1, *shape), dim=0, keepdim=False).values
 
 
 class _ContextManager:

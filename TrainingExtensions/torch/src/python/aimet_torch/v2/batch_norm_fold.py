@@ -236,7 +236,7 @@ class BatchNormFold(BatchNormFoldV1):
                             device=conv_linear.weight.device,
                             dtype=conv_linear.weight.dtype)
             conv_linear.bias = torch.nn.Parameter(bias)
-
+       
         BatchNormFoldV1._call_py_batch_norm_fold(conv_linear.weight, conv_linear.bias, bn, fold_backward=fold_backward)
 
         # Transpose weight back to N, C, H, W for transposed Conv2D, for non-depthwise layers
