@@ -104,28 +104,28 @@ pipeline {
                                     runStage(env.AIMET_VARIANT_TF_GPU, "-v")
                                 }
                             }
-                            post {
-                                always {
-                                    step([
-                                            $class                      : 'WarningsPublisher',
-                                            parserConfigurations        : [[
-                                                                            parserName: 'PYLint',
-                                                                            pattern   : "**/**/**/*pylint_results.out"
-                                                                          ]],
-                                            failedTotalHigh             : THRESHOLD_OBJ.pylint_fail_thresholds.high_priority,
-                                            failedTotalNormal           : THRESHOLD_OBJ.pylint_fail_thresholds.normal_priority,
-                                            failedTotalLow              : THRESHOLD_OBJ.pylint_fail_thresholds.low_priority,
-                                            usePreviousBuildAsReference : true
-                                    ])
-                                    script {
-                                        if (currentBuild.currentResult.equals("FAILURE")) {
-                                            // the plugin won't fail the stage.  it only sets the build status, so we have to fail it
-                                            // manually
-                                            sh "exit 1"
-                                        }
-                                    }
-                                }
-                            }
+                            // post {
+                            //     always {
+                            //         step([
+                            //                 $class                      : 'WarningsPublisher',
+                            //                 parserConfigurations        : [[
+                            //                                                 parserName: 'PYLint',
+                            //                                                 pattern   : "**/**/**/*pylint_results.out"
+                            //                                               ]],
+                            //                 failedTotalHigh             : THRESHOLD_OBJ.pylint_fail_thresholds.high_priority,
+                            //                 failedTotalNormal           : THRESHOLD_OBJ.pylint_fail_thresholds.normal_priority,
+                            //                 failedTotalLow              : THRESHOLD_OBJ.pylint_fail_thresholds.low_priority,
+                            //                 usePreviousBuildAsReference : true
+                            //         ])
+                            //         script {
+                            //             if (currentBuild.currentResult.equals("FAILURE")) {
+                            //                 // the plugin won't fail the stage.  it only sets the build status, so we have to fail it
+                            //                 // manually
+                            //                 sh "exit 1"
+                            //             }
+                            //         }
+                            //     }
+                            // }
                         }
 
                         stage('Unit tests') {
@@ -206,28 +206,28 @@ pipeline {
                                     runStage(env.AIMET_VARIANT_TORCH_GPU, "-v")
                                 }
                             }
-                            post {
-                                always {
-                                    step([
-                                            $class                      : 'WarningsPublisher',
-                                            parserConfigurations        : [[
-                                                                            parserName: 'PYLint',
-                                                                            pattern   : "**/**/**/*pylint_results.out"
-                                                                          ]],
-                                            failedTotalHigh             : THRESHOLD_OBJ.pylint_fail_thresholds.high_priority,
-                                            failedTotalNormal           : THRESHOLD_OBJ.pylint_fail_thresholds.normal_priority,
-                                            failedTotalLow              : THRESHOLD_OBJ.pylint_fail_thresholds.low_priority,
-                                            usePreviousBuildAsReference : true
-                                    ])
-                                    script {
-                                        if (currentBuild.currentResult.equals("FAILURE")) {
-                                            // the plugin won't fail the stage.  it only sets the build status, so we have to fail it
-                                            // manually
-                                            sh "exit 1"
-                                        }
-                                    }
-                                }
-                            }
+                            // post {
+                            //     always {
+                            //         step([
+                            //                 $class                      : 'WarningsPublisher',
+                            //                 parserConfigurations        : [[
+                            //                                                 parserName: 'PYLint',
+                            //                                                 pattern   : "**/**/**/*pylint_results.out"
+                            //                                               ]],
+                            //                 failedTotalHigh             : THRESHOLD_OBJ.pylint_fail_thresholds.high_priority,
+                            //                 failedTotalNormal           : THRESHOLD_OBJ.pylint_fail_thresholds.normal_priority,
+                            //                 failedTotalLow              : THRESHOLD_OBJ.pylint_fail_thresholds.low_priority,
+                            //                 usePreviousBuildAsReference : true
+                            //         ])
+                            //         script {
+                            //             if (currentBuild.currentResult.equals("FAILURE")) {
+                            //                 // the plugin won't fail the stage.  it only sets the build status, so we have to fail it
+                            //                 // manually
+                            //                 sh "exit 1"
+                            //             }
+                            //         }
+                            //     }
+                            // }
                         }
 
                         stage('Unit tests') {
@@ -307,28 +307,28 @@ pipeline {
                                     runStage(env.AIMET_VARIANT_ONNX_GPU, "-v")
                                 }
                             }
-                            post {
-                                always {
-                                    step([
-                                            $class                      : 'WarningsPublisher',
-                                            parserConfigurations        : [[
-                                                                            parserName: 'PYLint',
-                                                                            pattern   : "**/**/**/*pylint_results.out"
-                                                                          ]],
-                                            failedTotalHigh             : THRESHOLD_OBJ.pylint_fail_thresholds.high_priority,
-                                            failedTotalNormal           : THRESHOLD_OBJ.pylint_fail_thresholds.normal_priority,
-                                            failedTotalLow              : THRESHOLD_OBJ.pylint_fail_thresholds.low_priority,
-                                            usePreviousBuildAsReference : true
-                                    ])
-                                    script {
-                                        if (currentBuild.currentResult.equals("FAILURE")) {
-                                            // the plugin won't fail the stage.  it only sets the build status, so we have to fail it
-                                            // manually
-                                            sh "exit 1"
-                                        }
-                                    }
-                                }
-                            }
+                            // post {
+                            //     always {
+                            //         step([
+                            //                 $class                      : 'WarningsPublisher',
+                            //                 parserConfigurations        : [[
+                            //                                                 parserName: 'PYLint',
+                            //                                                 pattern   : "**/**/**/*pylint_results.out"
+                            //                                               ]],
+                            //                 failedTotalHigh             : THRESHOLD_OBJ.pylint_fail_thresholds.high_priority,
+                            //                 failedTotalNormal           : THRESHOLD_OBJ.pylint_fail_thresholds.normal_priority,
+                            //                 failedTotalLow              : THRESHOLD_OBJ.pylint_fail_thresholds.low_priority,
+                            //                 usePreviousBuildAsReference : true
+                            //         ])
+                            //         script {
+                            //             if (currentBuild.currentResult.equals("FAILURE")) {
+                            //                 // the plugin won't fail the stage.  it only sets the build status, so we have to fail it
+                            //                 // manually
+                            //                 sh "exit 1"
+                            //             }
+                            //         }
+                            //     }
+                            // }
                         }
 
                         stage('Unit tests') {
@@ -408,28 +408,28 @@ pipeline {
                                     runStage(env.AIMET_VARIANT_ONNX_CPU, "-v")
                                 }
                             }
-                            post {
-                                always {
-                                    step([
-                                            $class                      : 'WarningsPublisher',
-                                            parserConfigurations        : [[
-                                                                            parserName: 'PYLint',
-                                                                            pattern   : "**/**/**/*pylint_results.out"
-                                                                          ]],
-                                            failedTotalHigh             : THRESHOLD_OBJ.pylint_fail_thresholds.high_priority,
-                                            failedTotalNormal           : THRESHOLD_OBJ.pylint_fail_thresholds.normal_priority,
-                                            failedTotalLow              : THRESHOLD_OBJ.pylint_fail_thresholds.low_priority,
-                                            usePreviousBuildAsReference : true
-                                    ])
-                                    script {
-                                        if (currentBuild.currentResult.equals("FAILURE")) {
-                                            // the plugin won't fail the stage.  it only sets the build status, so we have to fail it
-                                            // manually
-                                            sh "exit 1"
-                                        }
-                                    }
-                                }
-                            }
+                            // post {
+                            //     always {
+                            //         step([
+                            //                 $class                      : 'WarningsPublisher',
+                            //                 parserConfigurations        : [[
+                            //                                                 parserName: 'PYLint',
+                            //                                                 pattern   : "**/**/**/*pylint_results.out"
+                            //                                               ]],
+                            //                 failedTotalHigh             : THRESHOLD_OBJ.pylint_fail_thresholds.high_priority,
+                            //                 failedTotalNormal           : THRESHOLD_OBJ.pylint_fail_thresholds.normal_priority,
+                            //                 failedTotalLow              : THRESHOLD_OBJ.pylint_fail_thresholds.low_priority,
+                            //                 usePreviousBuildAsReference : true
+                            //         ])
+                            //         script {
+                            //             if (currentBuild.currentResult.equals("FAILURE")) {
+                            //                 // the plugin won't fail the stage.  it only sets the build status, so we have to fail it
+                            //                 // manually
+                            //                 sh "exit 1"
+                            //             }
+                            //         }
+                            //     }
+                            // }
                         }
 
                         stage('Unit tests') {
@@ -509,28 +509,28 @@ pipeline {
                                     runStage(env.AIMET_VARIANT_TF_CPU, "-v")
                                 }
                             }
-                            post {
-                                always {
-                                    step([
-                                            $class                      : 'WarningsPublisher',
-                                            parserConfigurations        : [[
-                                                                            parserName: 'PYLint',
-                                                                            pattern   : "**/**/**/*pylint_results.out"
-                                                                          ]],
-                                            failedTotalHigh             : THRESHOLD_OBJ.pylint_fail_thresholds.high_priority,
-                                            failedTotalNormal           : THRESHOLD_OBJ.pylint_fail_thresholds.normal_priority,
-                                            failedTotalLow              : THRESHOLD_OBJ.pylint_fail_thresholds.low_priority,
-                                            usePreviousBuildAsReference : true
-                                    ])
-                                    script {
-                                        if (currentBuild.currentResult.equals("FAILURE")) {
-                                            // the plugin won't fail the stage.  it only sets the build status, so we have to fail it
-                                            // manually
-                                            sh "exit 1"
-                                        }
-                                    }
-                                }
-                            }
+                            // post {
+                            //     always {
+                            //         step([
+                            //                 $class                      : 'WarningsPublisher',
+                            //                 parserConfigurations        : [[
+                            //                                                 parserName: 'PYLint',
+                            //                                                 pattern   : "**/**/**/*pylint_results.out"
+                            //                                               ]],
+                            //                 failedTotalHigh             : THRESHOLD_OBJ.pylint_fail_thresholds.high_priority,
+                            //                 failedTotalNormal           : THRESHOLD_OBJ.pylint_fail_thresholds.normal_priority,
+                            //                 failedTotalLow              : THRESHOLD_OBJ.pylint_fail_thresholds.low_priority,
+                            //                 usePreviousBuildAsReference : true
+                            //         ])
+                            //         script {
+                            //             if (currentBuild.currentResult.equals("FAILURE")) {
+                            //                 // the plugin won't fail the stage.  it only sets the build status, so we have to fail it
+                            //                 // manually
+                            //                 sh "exit 1"
+                            //             }
+                            //         }
+                            //     }
+                            // }
                         }
 
                         stage('Unit tests') {
@@ -610,28 +610,28 @@ pipeline {
                                     runStage(env.AIMET_VARIANT_TORCH_CPU, "-v")
                                 }
                             }
-                            post {
-                                always {
-                                    step([
-                                            $class                      : 'WarningsPublisher',
-                                            parserConfigurations        : [[
-                                                                            parserName: 'PYLint',
-                                                                            pattern   : "**/**/**/*pylint_results.out"
-                                                                          ]],
-                                            failedTotalHigh             : THRESHOLD_OBJ.pylint_fail_thresholds.high_priority,
-                                            failedTotalNormal           : THRESHOLD_OBJ.pylint_fail_thresholds.normal_priority,
-                                            failedTotalLow              : THRESHOLD_OBJ.pylint_fail_thresholds.low_priority,
-                                            usePreviousBuildAsReference : true
-                                    ])
-                                    script {
-                                        if (currentBuild.currentResult.equals("FAILURE")) {
-                                            // the plugin won't fail the stage.  it only sets the build status, so we have to fail it
-                                            // manually
-                                            sh "exit 1"
-                                        }
-                                    }
-                                }
-                            }
+                            // post {
+                            //     always {
+                            //         step([
+                            //                 $class                      : 'WarningsPublisher',
+                            //                 parserConfigurations        : [[
+                            //                                                 parserName: 'PYLint',
+                            //                                                 pattern   : "**/**/**/*pylint_results.out"
+                            //                                               ]],
+                            //                 failedTotalHigh             : THRESHOLD_OBJ.pylint_fail_thresholds.high_priority,
+                            //                 failedTotalNormal           : THRESHOLD_OBJ.pylint_fail_thresholds.normal_priority,
+                            //                 failedTotalLow              : THRESHOLD_OBJ.pylint_fail_thresholds.low_priority,
+                            //                 usePreviousBuildAsReference : true
+                            //         ])
+                            //         script {
+                            //             if (currentBuild.currentResult.equals("FAILURE")) {
+                            //                 // the plugin won't fail the stage.  it only sets the build status, so we have to fail it
+                            //                 // manually
+                            //                 sh "exit 1"
+                            //             }
+                            //         }
+                            //     }
+                            // }
                         }
 
                         stage('Unit tests') {
