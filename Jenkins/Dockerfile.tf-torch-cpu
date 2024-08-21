@@ -116,6 +116,7 @@ RUN apt-get update > /dev/null && \
         python3-tk \
         sox \
         tree \
+        unzip \
         vim && \
         rm -rf /var/lib/apt/lists/*
 
