@@ -43,10 +43,9 @@ import torch.nn
 # Import AIMET specific modules
 import aimet_common.aimet_tensor_quantizer as AimetTensorQuantizer
 from aimet_common.defs import AdaroundConstants, QuantizationDataType, QuantScheme, MAP_QUANT_SCHEME_TO_PYMO
-from aimet_torch.tensor_quantizer import TensorQuantizer
-from aimet_torch.quantsim_straight_through_grad import broadcast_to_tensor
 
-class AdaroundTensorQuantizer(TensorQuantizer):
+
+class AdaroundTensorQuantizer: # pylint: disable=too-many-instance-attributes
     """
     Simulates quantization for the given tensor post training using Adaround
     """
@@ -61,53 +60,21 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
         :param channel_axis: Channel axis of parameter tensor. Only used during per channel Adaround.
         """
-        #TODO Remove the hardcoding of data_type
-        super().__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
-                         enabled_by_default, QuantizationDataType.int)
+        self._round_mode = round_mode
+        self._quant_scheme = quant_scheme
+        self.use_symmetric_encodings = use_symmetric_encodings
+        self.use_strict_symmetric = False
+        self.use_unsigned_symmetric = False
+        self.bitwidth = bitwidth
+        self._enabled = enabled_by_default
+        self._data_type = QuantizationDataType.int
         self.encoding = None
-        # V in System HLD
         self.alpha = None
         self.use_soft_rounding = True
         self._ch_axis = channel_axis
         self._cppOp = AimetTensorQuantizer.AimetTensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[quant_scheme])
         self.broadcasted_delta = None
         self.broadcasted_offset = None
-
-    def quantize_dequantize(self, tensor: torch.Tensor, _) -> torch.Tensor:
-        """
-        Quantize-dequantize the tensor, using the saved encoding for this tensor
-        :param tensor: Tensor to quantize-dequantize
-        :param _: Rounding mode parameter is not used
-        :return: Resulting tensor
-        """
-        if self.enabled:
-            quantized_tensor = self.adaround_weights(tensor)
-        else:
-            quantized_tensor = tensor
-
-        return quantized_tensor
-
-    def update_encoding_stats(self, tensor: torch.Tensor):
-        """
-        Update the stats for computing encoding
-        :param tensor: Tensor to use for updating the encodings stats
-        """
-        # No action required for AdaroundTensorQuantizer.
-        # Function is in place if QcQuantizeWrapper calls while in Training mode
-
-    def compute_encoding(self):
-        """
-        Compute the quantization encoding for this tensor
-        """
-        # No action required for AdaroundTensorQuantizer.
-        # Function is in place if QcQuantizeWrapper calls while in Training mode
-
-    def reset_encoding_stats(self):
-        """
-        Resets the encodings stats
-        """
-        # No action required for AdaroundTensorQuantizer.
-        # Function is in place if QcQuantizeWrapper calls while in Training mode
 
     def adaround_weights(self, tensor: torch.Tensor) -> torch.Tensor:
         """
@@ -117,12 +84,12 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         """
         assert self.encoding, 'Encoding needs to be set before Adaround the weight tensor.'
 
-        self._broadcast_offset_delta(tensor)
+        self.broadcast_offset_delta(tensor)
 
         # alpha is the "V" parameter in Equation 2 of the Systems HLD which is defined as a FP32 tensor of the
         # same shape as the weight tensor
         if self.alpha is None:
-            self._initialize_alpha(tensor, self.broadcasted_delta)
+            self.initialize_alpha(tensor, self.broadcasted_delta)
 
         alpha = self.alpha.to(device=tensor.device, dtype=tensor.dtype)
 
@@ -138,7 +105,6 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         else:
             h_alpha = (alpha >= 0).to(tensor.dtype)
 
-
         # Adaround the tensor
         tensor = tensor + h_alpha
 
@@ -148,7 +114,7 @@ class AdaroundTensorQuantizer(TensorQuantizer):
 
         return tensor_dequant
 
-    def _broadcast_offset_delta(self, tensor: torch.Tensor):
+    def broadcast_offset_delta(self, tensor: torch.Tensor):
         """
         Broadcast offset and delta
 
@@ -163,10 +129,10 @@ class AdaroundTensorQuantizer(TensorQuantizer):
                 delta = self.encoding.delta
                 offset = self.encoding.offset
 
-            self.broadcasted_delta = broadcast_to_tensor(tensor, delta, self._ch_axis).to(tensor.dtype)
-            self.broadcasted_offset = broadcast_to_tensor(tensor, offset, self._ch_axis).to(tensor.dtype)
+            self.broadcasted_delta = self.broadcast_to_tensor(tensor, delta, self._ch_axis).to(tensor.dtype)
+            self.broadcasted_offset = self.broadcast_to_tensor(tensor, offset, self._ch_axis).to(tensor.dtype)
 
-    def _initialize_alpha(self, tensor: torch.Tensor, delta):
+    def initialize_alpha(self, tensor: torch.Tensor, delta):
         """
         Initializes alpha parameter, same shape as the weight tensor
         :param tensor: The weight tensor to be ada rounded
@@ -179,3 +145,29 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         # Even if the input is float16, alpha has to be kept in float32
         # in order to be updated by the optimizer
         self.alpha = torch.nn.Parameter(alpha.float(), requires_grad=True)
+
+    @staticmethod
+    def broadcast_to_tensor(tensor, encoding, ch_axis: int):
+        """
+        This helper method takes n-dimension tensor and a 1-dimension encoding. And the encoding is broad-casted to
+        match the n-dimensional tensor
+
+        :param tensor: Tensor to use as target for the broadcasting operation
+        :param encoding: Encoding 1-dimensional tensor to broadcast
+        :param ch_axis: Channel axis along which broadcasting happens
+        :return: Broad-casted tensor
+        """
+        if not isinstance(encoding, torch.Tensor):
+            encoding = torch.tensor(encoding).to(tensor.device)  # convert encoding to a tensor
+
+        assert len(encoding.shape) <= 1  # Should be 1-dimensional tensor
+
+        if encoding.numel() == 1:
+            return encoding
+
+        # Shape of encoding should match the channel dimension of the input
+        assert encoding.numel() == tensor.shape[ch_axis]
+
+        shape = tuple(dim if axis == ch_axis else 1
+                      for axis, dim in enumerate(tensor.shape))
+        return encoding.view(shape)

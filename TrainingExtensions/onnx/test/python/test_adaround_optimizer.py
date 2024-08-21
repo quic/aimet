@@ -34,6 +34,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
 import copy
 import pytest
 import tempfile
@@ -41,8 +42,8 @@ from packaging import version
 import torch
 import numpy as np
 from onnx import numpy_helper
-from aimet_torch.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer
-from aimet_torch.adaround.adaround_loss import AdaroundHyperParameters
+from aimet_onnx.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer
+from aimet_onnx.adaround.adaround_loss import AdaroundHyperParameters
 from aimet_onnx.adaround.adaround_optimizer import AdaroundOptimizer
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.adaround.utils import ModelData

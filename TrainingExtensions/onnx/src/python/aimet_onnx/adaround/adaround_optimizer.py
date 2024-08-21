@@ -133,9 +133,8 @@ class AdaroundOptimizer:
         weights = torch.from_numpy(numpy_helper.to_array(module.params['weight'].tensor)).to(torch_device)
         enable_grad(weights)
 
-        # pylint: disable=protected-access
-        adaround_quantizer._broadcast_offset_delta(weights)
-        adaround_quantizer._initialize_alpha(weights, adaround_quantizer.broadcasted_delta)
+        adaround_quantizer.broadcast_offset_delta(weights)
+        adaround_quantizer.initialize_alpha(weights, adaround_quantizer.broadcasted_delta)
 
         assert adaround_quantizer.use_soft_rounding, 'optimization should use soft rounding only.'
         assert adaround_quantizer.alpha is not None, 'alpha parameter should be initialized.'
@@ -163,6 +162,7 @@ class AdaroundOptimizer:
             all_inp_data, all_orig_out_data = act_sampler.sample_and_place_all_acts_on_cpu(cached_dataset)
             all_inp_data, all_orig_out_data = torch.from_numpy(all_inp_data[0]), \
                                          torch.from_numpy(all_orig_out_data[0])
+
             # Try to put all cached activations data on GPU for faster optimization if possible.
             if use_cuda:
                 all_inp_data, all_orig_out_data = cls._place_cached_acts_data(all_inp_data, all_orig_out_data,
