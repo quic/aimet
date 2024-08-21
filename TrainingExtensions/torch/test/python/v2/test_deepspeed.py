@@ -81,7 +81,7 @@ class Net(nn.Module):
         self.relu2 = nn.ReLU()
         self.maxpool2 = nn.MaxPool2d(2)
         self.relu3 = nn.ReLU()
-        self.fc1 = nn.Linear(7*7*64, 256)
+        self.fc1 = nn.Linear(7*7*32, 256)
         self.fc2 = nn.Linear(256, 10)
         self.log_softmax = nn.LogSoftmax(1)
 
