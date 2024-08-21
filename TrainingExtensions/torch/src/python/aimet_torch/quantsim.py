@@ -952,10 +952,13 @@ class QuantizationSimModel:
 
             if layer_name not in layers_to_onnx_op_names.keys():
                 layer_names_not_found.append(layer_name)
+                # Some layers like transpose etc. may get removed after onnx export due to internal onnx optimization.
+                # An error will be thrown if the exported encodings(without missing layers's encoding) are loaded back
+                # to the sim model because the layers will be present in the sim model whereas the
+                # corresponding encodings will not be present in the encoding file.
                 QuantizationSimModel._get_torch_encodings_for_missing_layers(layer, layer_name,
-                                                        missing_activation_encodings_torch,
-                                                        missing_param_encodings,valid_param_set
-                                                        )
+                                                                             missing_activation_encodings_torch,
+                                                                             missing_param_encodings,valid_param_set)
             else:
                 QuantizationSimModel._update_encoding_dicts_for_layer(layer, layer_name, activation_encodings_onnx,
                                                                       activation_encodings_torch,
