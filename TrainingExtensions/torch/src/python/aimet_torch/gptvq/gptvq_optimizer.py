@@ -73,10 +73,12 @@ class GPTVQOptimizer:
         :param gptvq_params: Data carrier including GPTVQ parameters
         :param hessian: Hessian tensor to be used for computing GPTVQ optimization
         """
-        # NOTE: Removed `Tensor::clone` as we are not using codebook fine-tune feature for now
-        # But, it may be needed to clone weight and Hessian tensors when we decide to use codebook fine-tune in the future
-        original_weight = module.weight
-        original_hessian = hessian
+        if gptvq_utils.DO_CODEBOOK_FINE_TUNING:
+            original_weight = module.weight.clone()
+            original_hessian = hessian.clone()
+        else:
+            original_weight = module.weight
+            original_hessian = hessian
 
         num_rows, num_cols = get_2d_tensor_shape(module)
         assert num_rows % gptvq_params.rows_per_block == 0, f"The number of rows in weight (#: {num_rows}) should be divided by rows per block (#: {gptvq_params.rows_per_block})"
