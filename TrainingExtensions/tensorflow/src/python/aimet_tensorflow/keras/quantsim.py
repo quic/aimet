@@ -556,6 +556,7 @@ class QuantizationSimModel(tf.keras.Model):
         for quant_wrapper in self.quant_wrappers():
             quant_wrapper.set_and_freeze_param_encoding(param_encodings)
 
+    # pylint: disable=too-many-nested-blocks
     def load_encodings_to_sim(self, encoding_file_path: str):
         """
         Loads the saved encodings to quant sim model
@@ -614,14 +615,25 @@ class QuantizationSimModel(tf.keras.Model):
                         _logger.info("Not loading encodings for parameter: %s as quantizer is disabled", param_name)
                         continue
                     if isinstance(param_quantizer, StaticGridPerChannelQuantizer):
-                        assert param_encodings[param_name][0]['dtype'] != 'float', "PerChannel Quantizers can't be set to float"
-                        encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(
-                            param_encodings[param_name])
-                        for tensor_quantizer in param_quantizer.tensor_quantizer:
-                            tensor_quantizer.isEncodingValid = True
-                        bw = encoding[0].bw
-                        param_quantizer.set_quantizer_encodings(bw, is_symmetric, encoding,
-                                                                libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
+                        if param_encodings[param_name][0]['dtype'] == 'float':
+                            wrapper.param_quantizers[idx] = ParamPerTensorQuantizer(layer=param_quantizer._original_layer,
+                                                                                    name=param_quantizer.name,
+                                                                                    quant_scheme=param_quantizer._quant_scheme,
+                                                                                    round_mode='nearest',
+                                                                                    bitwidth=param_encodings[param_name][0]['bitwidth'],
+                                                                                    data_type=QuantizationDataType.float,
+                                                                                    is_symmetric=param_quantizer.is_symmetric,
+                                                                                    use_strict_symmetric=param_quantizer.use_strict_symmetric,
+                                                                                    use_unsigned_symmetric=param_quantizer.use_unsigned_symmetric,
+                                                                                    enabled=False)
+                        else:
+                            encoding, is_symmetric = keras_common_utils.create_encoding_from_dict(
+                                param_encodings[param_name])
+                            for tensor_quantizer in param_quantizer.tensor_quantizer:
+                                tensor_quantizer.isEncodingValid = True
+                            bw = encoding[0].bw
+                            param_quantizer.set_quantizer_encodings(bw, is_symmetric, encoding,
+                                                                    libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
                         _logger.info("Setting encodings for : %s", param_name)
                     else:
                         encoding_dict = param_encodings[param_name][0]
