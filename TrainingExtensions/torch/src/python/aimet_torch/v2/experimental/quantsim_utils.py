@@ -92,7 +92,10 @@ def propagate_output_encodings(sim: QuantizationSimModel, arg):
         condition = arg
 
     if not sim.connected_graph:
-        raise RuntimeError
+        msg = f"Couldn't find a traced graph from {type(sim).__qualname__}. "\
+              "propagate_output_encodings is only supported when traced graph is present "\
+              "as part of quantsim"
+        raise RuntimeError(msg)
 
     _propagate_output_encodings(sim, condition)
 
@@ -141,7 +144,6 @@ def _propagate_output_encodings(sim: QuantizationSimModel,
                 # that gets applied to all input tensors
                 i = 0
             qmodule.input_quantizers[i] = qtzr
-            assert qmodule.input_quantizers[i] is not None
             return
 
         qmodule = get_qmodule(producer)
@@ -174,13 +176,21 @@ def _propagate_output_encodings(sim: QuantizationSimModel,
         if not qmodule:
             continue
 
-        if len(qmodule.output_quantizers) != 1:
-            raise RuntimeError
-
         if not condition(qmodule):
             continue
 
+        if len(qmodule.output_quantizers) != 1:
+            msg = 'Encoding propagation is only supported for qmodules with exactly '\
+                  f'1 output quantizer, but found {len(qmodule.output_quantizers)} '\
+                  'output quantizers'
+            raise RuntimeError(msg)
+
         qtzr, = qmodule.output_quantizers
+
+        if qtzr is None:
+            msg = 'Encoding propagation is only supported for qmodules with exactly '\
+                  '1 output quantizer, but found qmodule.output_quantizers[0] == None'
+            raise RuntimeError(msg)
 
         for input in op.inputs:
             _set_src_qtzr(input, consumer=op, qtzr=qtzr)
