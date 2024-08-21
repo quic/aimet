@@ -91,6 +91,37 @@ __global__ void quantizeDequantizePerChannelKernel(const DTYPE* in, int numChann
     }
 }
 
+
+
+template <typename DTYPE>
+__global__ void quantizeDequantizeBroadcastKernel(const DTYPE* in, DTYPE* out, int64_t numElements, int64_t numDims,
+                                                  const int64_t* inputStrides, const int64_t* encodingStrides,
+                                                  const DTYPE* encodingMin, const DTYPE* encodingMax,
+                                                  const DTYPE* encodingDelta, const DTYPE* encodingOffset)
+{
+    CUDA_KERNEL_LOOP(i, numElements)
+    {
+        int encodingIdx = 0;
+        int remainder   = i;
+        for (auto dim = 0; dim < numDims; dim++)
+        {
+            int dimIdx = remainder / inputStrides[dim];
+            remainder = remainder - dimIdx * inputStrides[dim];
+            // encodingStrides will be 0 along broadcast dimensions
+            encodingIdx += encodingStrides[dim] * dimIdx;
+        }
+
+        auto delta  = *(encodingDelta + encodingIdx);
+        auto offset = *(encodingOffset + encodingIdx);
+        auto min    = *(encodingMin + encodingIdx);
+        auto max    = *(encodingMax + encodingIdx);
+
+        quantizeToFxpDevice<DTYPE>(in + i, out + i, min, max, delta, offset, ROUND_NEAREST, i);
+        dequantizeFromFxpDevice<DTYPE>(out + i, delta, offset);
+    }
+}
+
+
 template <typename DTYPE>
 void quantizeDequantizeGpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode,
                            void* stream)
@@ -141,6 +172,19 @@ void quantizeDequantizePerChannelGpu(const DTYPE* in, int numChannel, int numEle
             encodingOffset, roundingMode);
 }
 
+template <typename DTYPE>
+void quantizeDequantizeBroadcastGpu(const DTYPE* in, DTYPE* out, int64_t numElements, int64_t numDims,
+                                    const int64_t* inputStrides, const int64_t* encodingStrides,
+                                    const DTYPE* encodingMin, const DTYPE* encodingMax, const DTYPE* encodingDelta,
+                                    const DTYPE* encodingOffset, void* stream)
+{
+    quantizeDequantizeBroadcastKernel<DTYPE>
+        <<<CUDA_NUM_BLOCKS(numElements), CUDA_NUM_THREADS, 0, reinterpret_cast<cudaStream_t>(stream)>>>(
+            in, out, numElements, numDims, inputStrides, encodingStrides, encodingMin, encodingMax, encodingDelta,
+            encodingOffset);
+}
+
+
 // Explicit instantiations
 template void quantizeDequantizeGpu(const double* in, int cnt, const TfEncoding& encoding, double* out,
                                     RoundingMode rounding_mode, void* stream);
@@ -163,5 +207,10 @@ template void quantizeDequantizePerChannelGpu(const double* in, int numChannel, 
                                               int numElementPerChannel, double* out, double* encodingMin,
                                               double* encodingMax, double* encodingDelta, double* encodingOffset,
                                               RoundingMode roundingMode, void* stream);
+
+template void quantizeDequantizeBroadcastGpu(const float* in, float* out, int64_t numElementS, int64_t numDims,
+                                             const int64_t* inputStrides, const int64_t* encodingStrides,
+                                             const float* encodingMin, const float* encodingMax,
+                                             const float* encodingDelta, const float* encodingOffset, void* stream);
 
 }   // End of namespace DlQuantization

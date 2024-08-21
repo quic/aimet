@@ -40,6 +40,7 @@
 #ifndef QUANTIZATION_HPP
 #define QUANTIZATION_HPP
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 namespace DlQuantization
@@ -146,6 +147,39 @@ enum RoundingMode
     ROUND_NEAREST,
     ROUND_STOCHASTIC
 };
+
+/**
+ * @brief Performs quantize-dequantize using numpy-style broadcasting between input and encodings
+ *
+ * @tparam DTYPE Floating point data type of input/output/encodings
+ * @param in Pointer to input data
+ * @param out Pointer to output data, must be on same device as input
+ * @param numElement Number of elements in tensor
+ * @param numDims Number of tensor dimensions
+ * @param inputStrides Pointer to input stride data, must be on same device as input and length numDims
+ * @param encodingStrides Pointer to encoding stride data, must be on same device as input and length numDims. Should be
+ * 0 along broadcast dimensions
+ * @param encodingMin Pointer to min encoding data (on same device as input)
+ * @param encodingMax Pointer to max encoding data (on same device as input)
+ * @param encodingDelta Pointer to delta encoding data (on same device as input)
+ * @param encodingOffset Pointer to offset encoding data (on same device as input)
+ * @param modeCpuGpu Indicates whether tensors exist on CPU or GPU
+ * @param stream Cuda stream on which to launch kernel in GPU mode
+ */
+template <typename DTYPE>
+void quantizeDequantizeBroadcast(
+    const DTYPE* in,
+    DTYPE* out,
+    int64_t numElement,
+    int64_t numDims,
+    const int64_t* inputStrides,
+    const int64_t* encodingStrides,
+    const DTYPE* encodingMin,
+    const DTYPE* encodingMax,
+    const DTYPE* encodingDelta,
+    const DTYPE* encodingOffset,
+    ComputationMode modeCpuGpu,
+    void* stream);
 
 }   // End of namespace DlQuantization.
 

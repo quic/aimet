@@ -98,6 +98,14 @@ void quantizeDequantizePerChannel(const DTYPE* in, int numChannel, int numElemen
                                   DTYPE* encodingMin, DTYPE* encodingMax, DTYPE* encodingDelta, DTYPE* encodingOffset,
                                   ComputationMode modeCpuGpu, RoundingMode roundingMode, void* stream);
 
+
+template <typename DTYPE>
+void quantizeDequantizeBroadcastCpu(const DTYPE* in, DTYPE* out, int64_t numElement, int64_t numDims,
+                                    const int64_t* inputStrides, const int64_t* encodingStrides,
+                                    const DTYPE* encodingMin, const DTYPE* encodingMax, const DTYPE* encodingDelta,
+                                    const DTYPE* encodingOffset);
+
+
 // GPU implementations ...
 #ifdef GPU_QUANTIZATION_ENABLED
 
@@ -113,6 +121,12 @@ template <typename DTYPE>
 void quantizeDequantizePerChannelGpu(const DTYPE* in, int numChannel, int numElement, int numElementPerChannel,
                                      DTYPE* out, DTYPE* encodingMin, DTYPE* encodingMax, DTYPE* encodingDelta,
                                      DTYPE* encodingOffset, RoundingMode roundingMode, void* stream);
+
+template <typename DTYPE>
+void quantizeDequantizeBroadcastGpu(const DTYPE* in, DTYPE* out, int64_t numElement, int64_t numDims,
+                                    const int64_t* inputStrides, const int64_t* encodingStrides,
+                                    const DTYPE* encodingMin, const DTYPE* encodingMax, const DTYPE* encodingDelta,
+                                    const DTYPE* encodingOffset, void* stream);
 
 #endif   // GPU_QUANTIZATION_ENABLED
 
