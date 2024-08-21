@@ -212,6 +212,25 @@ def sequential_in_functional():
     return tf.keras.Model(inputs=inputs, outputs=outputs)
 
 
+def lambda_model():
+    """ Model using TF functional calls """
+
+    inputs = tf.keras.Input(batch_size= 1, shape=(32, 32, 3))
+
+    conv1 = tf.keras.layers.Conv2D(16, kernel_size=3)(inputs)
+    conv2 = tf.keras.layers.Conv2D(16, kernel_size=3)(inputs)
+    x = tf.concat([conv1, conv2], axis=1)
+    shape = tf.shape(x)
+    
+    y = [tf.multiply(2, s) for s in shape]
+    y = y[0]  # getitem
+    y = tf.cast(y, tf.float32)
+    y = tf.reshape(y, [1,-1])
+    x = tf.add(x, y)
+
+    return tf.keras.Model(inputs=inputs, outputs=x)
+
+
 def tiny_conv_net():
     """
     Simple convolution network
