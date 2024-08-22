@@ -53,7 +53,6 @@ from aimet_torch.v2.quantization.tensor import QuantizedTensor, DequantizedTenso
 from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.affine.backends import quantize, quantize_dequantize, torch_builtins
 from aimet_torch.v2.utils import ste_round
-from aimet_torch.v2.deepspeed_utils import gathered_parameters
 
 
 __all__ = ['AffineQuantizerBase', 'MinMaxQuantizer', 'Quantize', 'QuantizeDequantize',
@@ -388,7 +387,7 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
         """
         Set quantization parameters to the given min-max range
         """
-        with torch.no_grad(), gathered_parameters(self.parameters(recurse=False), modifier_rank=0):
+        with torch.no_grad():
             self.min.copy_(min)
             self.max.copy_(max)
 
