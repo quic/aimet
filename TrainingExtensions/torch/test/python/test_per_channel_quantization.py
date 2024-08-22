@@ -545,7 +545,8 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
             assert abs(enc.max - 1e-5) < 1e-6
 
     @pytest.mark.cuda
-    def test_compute_gradients_Parameter_Quantizer(self):
+    @pytest.mark.parametrize('dtype', (torch.float32, torch.float16, torch.bfloat16))
+    def test_compute_gradients_Parameter_Quantizer(self, dtype):
         torch.manual_seed(0)
         wrapper = create_learned_grid_wrapper()
         encodings = []
@@ -557,13 +558,13 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
         wrapper.param_quantizers['weight'].encoding = encodings
         param_quantizer = wrapper.param_quantizers['weight']
 
-        encoding_min = torch.nn.Parameter(torch.FloatTensor([0.0, 0.0, 0.0]).to('cuda'), requires_grad=True)
-        encoding_max = torch.nn.Parameter(torch.FloatTensor([1.0, 2.5, 3.5]).to('cuda'), requires_grad=True)
+        encoding_min = torch.nn.Parameter(torch.FloatTensor([0.0, 0.0, 0.0]).to('cuda', dtype), requires_grad=True)
+        encoding_max = torch.nn.Parameter(torch.FloatTensor([1.0, 2.5, 3.5]).to('cuda', dtype), requires_grad=True)
 
         param_quantizer.scaling, param_quantizer.offset = param_quantizer.compute_scaling_offset(encoding_min, encoding_max)
 
-        tensor = torch.ones((3, 1, 1, 2)).to('cuda')
-        grad = torch.randn(3, 1, 1, 2).to('cuda')
+        tensor = torch.ones((3, 1, 1, 2)).to('cuda', dtype)
+        grad = torch.randn(3, 1, 1, 2).to('cuda', dtype)
         _, intermediate_result = calculate_forward_pass(tensor, param_quantizer, encoding_min, encoding_max)
         enc_min_grad, enc_max_grad = ParameterQuantizer.compute_gradients(tensor, grad, intermediate_result,
                                                                           param_quantizer.channel_axis)
@@ -572,19 +573,20 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
         assert torch.all(torch.eq(enc_max_grad, -enc_min_grad))
 
     @pytest.mark.cuda
-    def test_compute_gradients_Parameter_Quantizer_bias(self):
+    @pytest.mark.parametrize('dtype', (torch.float32, torch.float16, torch.bfloat16))
+    def test_compute_gradients_Parameter_Quantizer_bias(self, dtype):
         torch.manual_seed(0)
         wrapper = create_learned_grid_wrapper()
 
         param_quantizer = wrapper.param_quantizers['bias']
 
-        encoding_min = torch.nn.Parameter(torch.FloatTensor([0.0, 0.0, 0.0]).to('cuda'), requires_grad=True)
-        encoding_max = torch.nn.Parameter(torch.FloatTensor([1.0, 2.5, 3.5]).to('cuda'), requires_grad=True)
+        encoding_min = torch.nn.Parameter(torch.FloatTensor([0.0, 0.0, 0.0]).to('cuda', dtype), requires_grad=True)
+        encoding_max = torch.nn.Parameter(torch.FloatTensor([1.0, 2.5, 3.5]).to('cuda', dtype), requires_grad=True)
 
         param_quantizer.scaling, param_quantizer.offset = param_quantizer.compute_scaling_offset(encoding_min, encoding_max)
 
-        tensor = torch.ones(3).to('cuda')
-        grad = torch.randn(3).to('cuda')
+        tensor = torch.ones(3).to('cuda', dtype)
+        grad = torch.randn(3).to('cuda', dtype)
         _, intermediate_result = calculate_forward_pass(tensor, param_quantizer, encoding_min, encoding_max)
         enc_min_grad, enc_max_grad = ParameterQuantizer.compute_gradients(tensor, grad, intermediate_result, param_quantizer.channel_axis)
 
