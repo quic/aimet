@@ -340,8 +340,8 @@ class CustomSparseConv3d(torch.autograd.Function):
                 else:
                     attrs[k+"_i"] = v
         if bias:
-            return g.op(f"spconv::SparseConvolution", dense_inputs, weight, bias, **attrs)
-        return g.op(f"spconv::SparseConvolution", dense_inputs, weight, **attrs)
+            return g.op("spconv::SparseConvolution", dense_inputs, weight, bias, **attrs)
+        return g.op("spconv::SparseConvolution", dense_inputs, weight, **attrs)
 
     @staticmethod
     def forward(ctx, dense_inputs, weight, bias, all_sp_conv_attrs):
@@ -398,8 +398,8 @@ class CustomSparseConv3d_WithIndicesFeatures(torch.autograd.Function):
                 else:
                     attrs[k+"_i"] = v
         if bias:
-            return g.op(f"spconv::SparseConvolution", indices, features, weight, bias, **attrs)
-        return g.op(f"spconv::SparseConvolution", indices, features, weight, **attrs)
+            return g.op("spconv::SparseConvolution", indices, features, weight, bias, **attrs)
+        return g.op("spconv::SparseConvolution", indices, features, weight, **attrs)
 
     @staticmethod
     def forward(ctx, indices, features, weight, bias, all_sp_conv_attrs):
@@ -626,7 +626,7 @@ class CustomScatterDense(torch.autograd.Function):
                 save_attrs[k+"_s"] = v
             else:
                 save_attrs[k+"_i"] = v
-        return g.op(f"spconv::ScatterDense", dense_inputs, **save_attrs)
+        return g.op("spconv::ScatterDense", dense_inputs, **save_attrs)
 
     @staticmethod
     def forward(ctx, dense_inputs, attrs):
