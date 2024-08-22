@@ -39,7 +39,7 @@ add_custom_target(copy_examples
 
 #TODO Remove the OPTIONAL flag after Common Examples code gets added
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/common
-    DESTINATION ${AIMET_EXAMPLES_DEST}
+    DESTINATION Examples
     OPTIONAL
     PATTERN "__pycache*" EXCLUDE
     PATTERN "CMakeLists.txt" EXCLUDE
@@ -47,7 +47,7 @@ install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/common
 
 if (ENABLE_TORCH)
     install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/torch
-    DESTINATION ${AIMET_EXAMPLES_DEST}
+    DESTINATION Examples
     PATTERN "__pycache*" EXCLUDE
     PATTERN "CMakeLists.txt" EXCLUDE
     )
@@ -57,7 +57,7 @@ endif(ENABLE_TORCH)
 if (ENABLE_TENSORFLOW)
     #TODO Remove the OPTIONAL flag after TensorFlow Examples code gets added
     install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tensorflow
-    DESTINATION ${AIMET_EXAMPLES_DEST}
+    DESTINATION Examples
     OPTIONAL
     PATTERN "__pycache*" EXCLUDE
     PATTERN "CMakeLists.txt" EXCLUDE
