@@ -242,7 +242,6 @@ class InputWidgets:
                                         value="Min | Max",
                                         options=["All", "Min", "Max", "Min | Max", "Min & Max"],
                                         width=200,
-                                        # margin = (5, 5, 5, 80),
                                         description=tooltip_table_mode
                                         )
 
@@ -322,7 +321,7 @@ class QuantStatsVisualizer:
         return min_markers, max_markers
 
     @staticmethod
-    def _get_min_max_hovertools(min_markers, max_markers):
+    def _get_marker_hovertool(min_markers, max_markers):
         format_code = """
                     if (Math.abs(value) < 1e-3 || Math.abs(value) > 1e5) {
                     return value.toExponential(3);
@@ -887,7 +886,7 @@ class QuantStatsVisualizer:
         min_markers, max_markers = self._add_min_max_markers(datasources, tableobjects)
 
         # Defining a hover functionality to see layer details on hovering on the marker points and selections
-        marker_hover = self._get_min_max_hovertools(min_markers, max_markers)
+        marker_hover = self._get_marker_hovertool(min_markers, max_markers)
         selection_hover = self._get_selection_hovertool(selections)
         self.plot.add_tools(marker_hover, selection_hover)
 
