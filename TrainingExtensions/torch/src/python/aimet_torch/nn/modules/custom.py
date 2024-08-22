@@ -322,7 +322,7 @@ class CustomSparseConv3d(torch.autograd.Function):
     Custom Sparse Conv3d autograd function
     '''
     @staticmethod
-    def symbolic(g, dense_inputs, weight, bias, all_sp_conv_attrs, name):
+    def symbolic(g, dense_inputs, weight, bias, all_sp_conv_attrs):
         '''
         Symbolic method (static) for Custom sparse Conv3d
         :param g: ONNX graph object
@@ -330,7 +330,6 @@ class CustomSparseConv3d(torch.autograd.Function):
         :param weight: weight value
         :param bias: bias value
         :param all_sp_conv_attrs: spconv attributes
-        :param name: Name of the op
         :return: Added op to the graph object
         '''
         attrs = {}
@@ -340,13 +339,12 @@ class CustomSparseConv3d(torch.autograd.Function):
                     attrs[k+"_s"] = v
                 else:
                     attrs[k+"_i"] = v
-        name = name.split("self.")[-1]
         if bias:
-            return g.op(f"CustomSparseConv3D::{name}", dense_inputs, weight, bias, **attrs)
-        return g.op(f"CustomSparseConv3D::{name}", dense_inputs, weight, **attrs)
+            return g.op("spconv::SparseConvolution", dense_inputs, weight, bias, **attrs)
+        return g.op("spconv::SparseConvolution", dense_inputs, weight, **attrs)
 
     @staticmethod
-    def forward(ctx, dense_inputs, weight, bias, all_sp_conv_attrs, name):
+    def forward(ctx, dense_inputs, weight, bias, all_sp_conv_attrs):
         '''
         forward method (static) for Custom sparse Conv3d
         :param ctx: context object
@@ -354,7 +352,6 @@ class CustomSparseConv3d(torch.autograd.Function):
         :param weight: weight value
         :param bias: bias value
         :param all_sp_conv_attrs: spconv attributes
-        :param name: Name of the custom op
         :return: Dense tensor
         '''
         sp_conv_attrs = dict()
@@ -381,7 +378,7 @@ class CustomSparseConv3d_WithIndicesFeatures(torch.autograd.Function):
     Custom Sparse Conv3d (with indices and features as inputs) autograd function
     '''
     @staticmethod
-    def symbolic(g, indices, features, weight, bias, all_sp_conv_attrs, name):
+    def symbolic(g, indices, features, weight, bias, all_sp_conv_attrs):
         '''
         Symbolic method (static) for Custom sparse Conv3d (with indices and features as inputs)
         :param g: ONNX graph object
@@ -390,7 +387,6 @@ class CustomSparseConv3d_WithIndicesFeatures(torch.autograd.Function):
         :param weight: weight value
         :param bias: bias value
         :param all_sp_conv_attrs: spconv attributes
-        :param name: Name of the op
         :return: Added op to the graph object
         '''
         remove = ['spatial_shape', 'batch_size']
@@ -401,14 +397,12 @@ class CustomSparseConv3d_WithIndicesFeatures(torch.autograd.Function):
                     attrs[k+"_s"] = v
                 else:
                     attrs[k+"_i"] = v
-        name = name.split("self.")[-1]
-
         if bias:
-            return g.op(f"CustomSparseConv3D::{name}", indices, features, weight, bias, **attrs)
-        return g.op(f"CustomSparseConv3D::{name}", indices, features, weight, **attrs)
+            return g.op("spconv::SparseConvolution", indices, features, weight, bias, **attrs)
+        return g.op("spconv::SparseConvolution", indices, features, weight, **attrs)
 
     @staticmethod
-    def forward(ctx, indices, features, weight, bias, all_sp_conv_attrs, name):
+    def forward(ctx, indices, features, weight, bias, all_sp_conv_attrs):
         '''
         forward method (static) for Custom sparse Conv3d (with indices and features as inputs)
         :param ctx: context object
@@ -417,7 +411,6 @@ class CustomSparseConv3d_WithIndicesFeatures(torch.autograd.Function):
         :param weight: weight value
         :param bias: bias value
         :param all_sp_conv_attrs: spconv attributes
-        :param name: Name of the custom op
         :return: Dense tensor
         '''
         sp_conv_attrs = dict()
@@ -490,7 +483,7 @@ class CustomSparseConv3DLayer(torch.nn.Module):
 
             self.conv_attrs_dict = dict(sorted(self.conv_attrs_dict.items(), key=lambda x: (x[0], x[1])))
             return CustomSparseConv3d_WithIndicesFeatures.apply(indices, features, self.sp_conv_3d.weight,
-                                                                bias_data, self.conv_attrs_dict, "")
+                                                                bias_data, self.conv_attrs_dict)
 
         sp_tensor = spconv.SparseConvTensor(features=features, indices=indices, spatial_shape=spatial_shape,
                                             batch_size=batch_size)
@@ -523,7 +516,7 @@ class CustomSparseConv3DLayer(torch.nn.Module):
             if bias_data is None:
                 bias_data = torch.nn.Parameter(torch.zeros(self.sp_conv_3d.out_channels))
             self.conv_attrs_dict = dict(sorted(self.conv_attrs_dict.items(), key=lambda x: (x[0], x[1])))
-            outs = CustomSparseConv3d.apply(dense_inp, self.sp_conv_3d.weight, bias_data, self.conv_attrs_dict, "")
+            outs = CustomSparseConv3d.apply(dense_inp, self.sp_conv_3d.weight, bias_data, self.conv_attrs_dict)
             return outs
 
         # Dense to Sparse Conversion
@@ -619,13 +612,12 @@ class CustomScatterDense(torch.autograd.Function):
     Custom Scatter Dense autograd function
     '''
     @staticmethod
-    def symbolic(g, dense_inputs, attrs, name):
+    def symbolic(g, dense_inputs, attrs):
         '''
         Symbolic method (static) for ScatterDense
         :param g:ONNX graph object
         :param dense_inputs: Dense inputs
         :param attrs: ScatterDense attributes
-        :param name: Name of the custom op
         :return: Added op to the graph object
         '''
         save_attrs = {}
@@ -634,16 +626,15 @@ class CustomScatterDense(torch.autograd.Function):
                 save_attrs[k+"_s"] = v
             else:
                 save_attrs[k+"_i"] = v
-        return g.op(f"CustomScatterDense::{name}", dense_inputs, **save_attrs)
+        return g.op("spconv::ScatterDense", dense_inputs, **save_attrs)
 
     @staticmethod
-    def forward(ctx, dense_inputs, attrs, name):
+    def forward(ctx, dense_inputs, attrs):
         '''
         forward method (static) for ScatterDense
         :param ctx: context object
         :param dense_inputs: Dense inputs
         :param attrs: ScatterDense attributes
-        :param name: Name of the custom op
         :return: Dense tensor
         '''
         return dense_inputs
@@ -667,7 +658,7 @@ class ScatterDense(torch.nn.Module):
                 "input_spatial_shape": inputs.detach().numpy().shape[2:],
                 "output_shape": inputs.detach().numpy().shape
             }
-            return CustomScatterDense.apply(inputs, attrs, "")
+            return CustomScatterDense.apply(inputs, attrs)
 
         return inputs.dense() if isinstance(inputs, spconv.SparseConvTensor) else inputs
 
