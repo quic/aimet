@@ -39,6 +39,34 @@ set(AIMET_EXAMPLES_DEST ${AIMET_INSTALL_DIR}/Examples)
 add_custom_target(copy_examples
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_BINARY_DIR}/Docs_SOURCE/Examples)
 
+#TODO Remove the OPTIONAL flag after Common Examples code gets added
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/common
+    DESTINATION ${AIMET_EXAMPLES_DEST}
+    OPTIONAL
+    PATTERN "__pycache*" EXCLUDE
+    PATTERN "CMakeLists.txt" EXCLUDE
+    )
+
+if (ENABLE_TORCH)
+    install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/torch
+    DESTINATION ${AIMET_EXAMPLES_DEST}
+    PATTERN "__pycache*" EXCLUDE
+    PATTERN "CMakeLists.txt" EXCLUDE
+    )
+
+endif(ENABLE_TORCH)
+
+if (ENABLE_TENSORFLOW)
+    #TODO Remove the OPTIONAL flag after TensorFlow Examples code gets added
+    install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tensorflow
+    DESTINATION ${AIMET_EXAMPLES_DEST}
+    OPTIONAL
+    PATTERN "__pycache*" EXCLUDE
+    PATTERN "CMakeLists.txt" EXCLUDE
+    )
+
+endif(ENABLE_TENSORFLOW)
+
 # Create a tarball archive of the Examples code
 install(CODE "execute_process(COMMAND
                 ${CMAKE_COMMAND} -E chdir ${AIMET_INSTALL_DIR}
