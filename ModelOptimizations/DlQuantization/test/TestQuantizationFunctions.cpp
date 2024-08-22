@@ -119,7 +119,7 @@ void launchBlockQdqKernel(float* in, float* out, int numElements, std::vector<in
 TEST(TestOnnxTensorOps, TestQuantizeDequantizeBroadcast) {
     int numel = 16;
     // inputShape = {2, 2, 2, 2};
-    // encodingShape = {2, 1, 2};
+    // encodingShape = {2, 1, 1, 2};
     const std::vector<int64_t> inputStrides = {8, 4, 2, 1};
     const std::vector<int64_t> encodingStrides = {2, 0, 0, 1};
     const std::vector<float> encodingMax = {63.5, 127.0, 254.0, 508.0};
