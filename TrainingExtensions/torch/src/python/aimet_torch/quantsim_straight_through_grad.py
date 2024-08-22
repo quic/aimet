@@ -200,7 +200,7 @@ def calculate_forward_pass(tensor: torch.Tensor,
     :param encoding_max: Encoding max
     :return: QuantizeDequantize out and intermediate result tuple
     """
-    if tensor.dtype not in (torch.float32, torch.float16):
+    if tensor.dtype not in (torch.float32, torch.float16, torch.bfloat16):
         raise RuntimeError("Invalid input data type. Expected torch.float32 or torch.float16. "
                            f"Got {tensor.dtype}.")
 
@@ -213,7 +213,7 @@ def calculate_forward_pass(tensor: torch.Tensor,
         raise RuntimeError(f'Invalid bitwidth: {tensor_quantizer.bitwidth}')
 
     orig_dtype = tensor.dtype
-    if tensor.dtype == torch.float16 and tensor_quantizer.bitwidth >= 16:
+    if tensor.dtype in (torch.float16, torch.bfloat16) and tensor_quantizer.bitwidth >= 16:
         tensor = tensor.float()
         encoding_min = encoding_min.float()
         encoding_max = encoding_max.float()
