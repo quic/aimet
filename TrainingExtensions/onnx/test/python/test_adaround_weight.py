@@ -36,6 +36,7 @@
 # =============================================================================
 
 """ Unit tests for Adaround Weights """
+
 import os
 import json
 from packaging import version
@@ -45,7 +46,6 @@ from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 import pytest
 
 from aimet_common import libquant_info
-
 from aimet_onnx.adaround.adaround_weight import Adaround, AdaroundParameters
 import models.models_for_tests as test_models
 from models import models_for_tests
