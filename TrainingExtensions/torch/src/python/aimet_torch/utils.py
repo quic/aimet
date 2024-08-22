@@ -522,7 +522,8 @@ def is_leaf_module(module):
     module_list = list(module.modules())
 
     # pylint: disable=unidiomatic-typecheck
-    return bool(len(module_list) == 1) or type(module) in modules_to_treat_as_leaf
+    return bool(len(module_list) == 1) or type(module) in modules_to_treat_as_leaf or \
+        isinstance(module, aimet_modules.CustomSparseConv3DLayer)
 
 
 def get_input_shape_batch_size(data_loader):

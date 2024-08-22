@@ -481,10 +481,6 @@ class OnnxSaver:
 
         save_as_external_data = onnx_model.ByteSize() >= onnx.checker.MAXIMUM_PROTOBUF
 
-        # SparseConv3D name conflicts resolve
-        for node in onnx_model.graph.node:
-            if node.domain == "spconv" and node.op_type == "SparseConvolution":
-                node.name = node.name + ".sp_conv_3d"
         onnx.save(onnx_model, onnx_model_path, save_as_external_data=save_as_external_data)
 
     @classmethod
@@ -1638,38 +1634,8 @@ class OnnxSaver:
                 for key in remove_kwargs:
                     kwargs.pop(key, None)
                 torch.onnx.export(model, dummy_input, temp_file, **kwargs)
-                modify_custom_ops(temp_file)
             except torch.onnx.CheckerError:
                 _logger.warning("ONNX Checker has failed but ONNX graph is still generated.")
-
-def modify_custom_ops(temp_file: str):
-    '''
-    Modify the custom spconv ops that are added explicitly
-    :param temp_file: Onnx model file path
-    :return: None
-    '''
-    onnx_model = onnx.load(temp_file)
-    modification_dict = {
-        "CustomSparseConv3D": {
-            "op_type": "SparseConvolution", #"sparseconvolution",
-            "domain": 'spconv'
-        },
-        "CustomScatterDense": {
-            "op_type": "ScatterDense",
-            "domain": "spconv"
-        },
-    }
-
-    is_modified = False
-    for node in onnx_model.graph.node:
-        if node.domain in modification_dict:
-            node.op_type = modification_dict[node.domain]['op_type']
-            node.name = node.name[1:-1]
-            node.domain = modification_dict[node.domain]['domain']
-            is_modified = True
-
-    if is_modified:
-        onnx.save(onnx_model, temp_file)
 
 def save_initializer_restored_onnx_graph(original_model_path: str,
                                          restored_model_path: str):
