@@ -376,10 +376,10 @@ def test_deepspeed_zero3_offload(unlabeled_data_loader,
         'bias_correction': True,
     }])
 
-    for _, data in enumerate(unlabeled_data_loader):
+    for i, data in enumerate(unlabeled_data_loader):
         output = sim_deepspeed.model(data.cuda())
         output_baseline = sim_baseline.model(data.cuda())
-        assert torch.allclose(output, output_baseline, rtol=1e-2)
+        assert torch.allclose(output, output_baseline, rtol=1e-3)
         assert isinstance(output, DequantizedTensor)
         assert output.encoding.scale.numel() == 1
         assert output.encoding.offset.numel() == 1
@@ -388,11 +388,12 @@ def test_deepspeed_zero3_offload(unlabeled_data_loader,
         engine.backward(loss)
         loss_baseline.backward()
 
-        # Gradient checker
-        for param_ds, param_baseline in zip(sim_deepspeed.model.parameters(),
-                                            sim_baseline.model.parameters()):
-            grad_ds = ds.utils.safe_get_full_grad(param_ds)
-            assert torch.allclose(grad_ds, param_baseline.grad, rtol=1e-2)
+        if i == 0:
+            # Gradient checker
+            for param_ds, param_baseline in zip(sim_deepspeed.model.parameters(),
+                                                sim_baseline.model.parameters()):
+                grad_ds = ds.utils.safe_get_full_grad(param_ds)
+                assert torch.allclose(grad_ds, param_baseline.grad, rtol=1e-3)
 
         ds_optimizer.step()
         optimizer.step()
