@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -38,7 +38,9 @@
 """ Adaround optimizer """
 
 from typing import Union, Tuple, Dict, List
+from functools import reduce
 import numpy as np
+import psutil
 import onnx
 from onnx import numpy_helper
 import torch
@@ -52,10 +54,8 @@ from aimet_onnx.adaround.activation_sampler import ActivationSampler
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.adaround.utils import ModuleInfo, read_attributes_for_op
 from aimet_onnx.utils import create_input_dict
-# pylint: disable=import-error
-from aimet_torch.adaround.adaround_loss import AdaroundLoss, AdaroundHyperParameters
-from aimet_torch.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer
-from aimet_torch.adaround.adaround_optimizer import AdaroundOptimizer as TorchAdaroundOptimizer
+from aimet_onnx.adaround.adaround_loss import AdaroundLoss, AdaroundHyperParameters
+from aimet_onnx.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer
 
 # pylint: disable=no-name-in-module, ungrouped-imports
 if version.parse(onnx.__version__) >= version.parse("1.14.0"):
@@ -133,9 +133,8 @@ class AdaroundOptimizer:
         weights = torch.from_numpy(numpy_helper.to_array(module.params['weight'].tensor)).to(torch_device)
         enable_grad(weights)
 
-        # pylint: disable=protected-access
-        adaround_quantizer._broadcast_offset_delta(weights)
-        adaround_quantizer._initialize_alpha(weights, adaround_quantizer.broadcasted_delta)
+        adaround_quantizer.broadcast_offset_delta(weights)
+        adaround_quantizer.initialize_alpha(weights, adaround_quantizer.broadcasted_delta)
 
         assert adaround_quantizer.use_soft_rounding, 'optimization should use soft rounding only.'
         assert adaround_quantizer.alpha is not None, 'alpha parameter should be initialized.'
@@ -149,8 +148,8 @@ class AdaroundOptimizer:
                                         use_cuda, device, user_onnx_libs)
         inp_data, out_data = act_sampler.sample_acts(create_input_dict(orig_model.model, model_inputs))
         inp_data_torch, out_data_torch = torch.from_numpy(inp_data[0]), torch.from_numpy(out_data[0])
-        use_cache_acts_data = TorchAdaroundOptimizer._can_cache_acts_data(len(cached_dataset), inp_data_torch.shape,
-                                                                          out_data_torch.shape, inp_data_torch.dtype)
+        use_cache_acts_data = cls._can_cache_acts_data(len(cached_dataset), inp_data_torch.shape,
+                                                       out_data_torch.shape, inp_data_torch.dtype)
 
         attributes = read_attributes_for_op(module)
         if 'pads' in attributes:
@@ -163,10 +162,11 @@ class AdaroundOptimizer:
             all_inp_data, all_orig_out_data = act_sampler.sample_and_place_all_acts_on_cpu(cached_dataset)
             all_inp_data, all_orig_out_data = torch.from_numpy(all_inp_data[0]), \
                                          torch.from_numpy(all_orig_out_data[0])
+
             # Try to put all cached activations data on GPU for faster optimization if possible.
             if use_cuda:
-                all_inp_data, all_orig_out_data = TorchAdaroundOptimizer._place_cached_acts_data(all_inp_data, all_orig_out_data,
-                                                                                                 torch_device)
+                all_inp_data, all_orig_out_data = cls._place_cached_acts_data(all_inp_data, all_orig_out_data,
+                                                                              torch_device)
 
         for iteration in range(opt_params.num_iterations):
             if use_cache_acts_data and AdaroundOptimizer.enable_caching_acts_data():
@@ -315,6 +315,82 @@ class AdaroundOptimizer:
         Function to enable/disable caching intermediate activation data. By default, it returns True.
         """
         return True
+
+    @staticmethod
+    def _can_cache_acts_data(num_batches: int, input_shape: torch.Size, output_shape: torch.Size, dtype: torch.dtype) \
+            -> bool:
+        """
+        Function to check whether activations data can be cached and fit in CPU memory for given
+        input and output shape in advance. The threshold CPU memory is determined by multiplying threshold and
+        available CPU memory so that remaining CPU memory is available for other processes.
+
+        NOTE: The threshold value is empirically chosen. Threshold ensures the safety from OOM for remaining run.
+
+        :param num_batches: Number of batches.
+        :param input_shape: Shape of input activations data.
+        :param output_shape: Shape of output activations data.
+        :param dtype: Data type of input/output activations data
+        :return: True if we can cache, false otherwise.
+        """
+        can_cache_data = False
+
+        # Available CPU memory in GB.
+        threshold_mem = psutil.virtual_memory().available / (1024 * 1024 * 1024)
+        threshold_mem = threshold_mem * EMPIRICAL_THRESHOLD
+
+        # required CPU memory in GB.
+        data_size_in_bits = 16 if dtype == torch.half else 32
+        req_mem = 0
+        req_mem += reduce(lambda x, y: x * y, input_shape) * num_batches * data_size_in_bits / (1024 * 1024 * 1024 * 8)
+        req_mem += reduce(lambda x, y: x * y, output_shape) * num_batches * data_size_in_bits / (1024 * 1024 * 1024 * 8)
+
+        if req_mem < threshold_mem:
+            can_cache_data = True
+        logger.debug("Placing cached activations data on CPU: %s, required_memory: %f GB, available_memory: %f GB",
+                     str(can_cache_data), req_mem, threshold_mem)
+
+        return can_cache_data
+
+    @staticmethod
+    def _place_cached_acts_data(inp_data: torch.Tensor, out_data: torch.Tensor, device: torch.device) \
+            -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Function decides whether cached activation data can be placed on device or not. If yes, it puts
+        cached activation data to given device. If there is not enough device memory, it keeps the
+        cached activation data to CPU memory.
+
+        NOTE: The threshold value is empirically chosen. Threshold ensures the safety from OOM for remaining run.
+
+        :param inp_data: Input activations data.
+        :param out_data: Output activations data.
+        :param device: Device.
+        :return: Input and output activations data.
+        """
+        torch.cuda.empty_cache()
+
+        # Available GPU memory in GB
+        threshold_mem = torch.cuda.get_device_properties(device).total_memory - torch.cuda.memory_allocated(device)
+        threshold_mem = threshold_mem / (1024 * 1024 * 1024)
+        threshold_mem = threshold_mem * EMPIRICAL_THRESHOLD
+
+        # required GPU memory in GB
+        data_size_in_bits = 16 if inp_data.dtype == torch.half else 32
+        req_mem = 0
+        req_mem += reduce(lambda x, y: x * y, inp_data.size()) * data_size_in_bits / (1024 * 1024 * 1024 * 8)
+        req_mem += reduce(lambda x, y: x * y, out_data.size()) * data_size_in_bits / (1024 * 1024 * 1024 * 8)
+
+        if req_mem < threshold_mem:
+            try:
+                inp_data = inp_data.to(device)
+                out_data = out_data.to(device)
+                logger.debug("Placed cached activations data on GPU.")
+            except RuntimeError as error:
+                inp_data = inp_data.cpu()
+                out_data = out_data.cpu()
+                logger.debug("Could not place cached activations data on GPU."
+                             " Placed cached activations data on CPU. RuntimeError: %s", str(error))
+
+        return inp_data, out_data
 
 
 def enable_grad(tensor: torch.Tensor):

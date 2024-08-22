@@ -34,12 +34,10 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-""" Models for use in unit testing """
-import onnx
-# pylint: skip-file
-from collections import namedtuple
-from typing import Dict, List
 
+""" Models for use in unit testing """
+
+from typing import Any
 import os
 import tempfile
 from pathlib import Path
@@ -50,14 +48,41 @@ from torch import nn as nn
 from torchvision.ops import roi_align
 import numpy as np
 import torch
-from onnx import helper, numpy_helper, OperatorSetIdProto, TensorProto, load_model, save
-from onnxruntime.quantization.onnx_quantizer import ONNXModel
-from torch.nn.modules.batchnorm import _BatchNorm
-from aimet_common import libquant_info
 from torch.nn.modules.instancenorm import _InstanceNorm
+from torch.nn.modules.batchnorm import _BatchNorm
+from onnx import helper, numpy_helper, OperatorSetIdProto, TensorProto, load_model
+from onnxruntime.quantization.onnx_quantizer import ONNXModel
 
+from aimet_common import libquant_info
 from .mobilenet import MockMobileNetV1, MockMobileNetV11
-import aimet_torch.nn.modules.custom as aimet_modules
+
+
+class Add(torch.nn.Module):
+    """ Add module for a functional add"""
+    # pylint:disable=arguments-differ
+    def forward(self, x: Any, y: Any) -> Any:
+        """
+        Forward-pass routine for add op
+        """
+        if isinstance(x, torch.Tensor) or isinstance(y, torch.Tensor):
+            out = torch.add(x, y)
+        else:
+            out = x + y
+        return out
+
+class Multiply(torch.nn.Module):
+    """ Multiply module for a functional multiply"""
+    # pylint:disable=arguments-differ
+    def forward(self, x: Any, y: Any) -> Any:
+        """
+        Forward-pass routine for multiply op
+        """
+        if isinstance(x, torch.Tensor) or isinstance(y, torch.Tensor):
+            out = torch.mul(x, y)
+        else:
+            out = x * y
+        return out
+
 
 class SingleResidual(nn.Module):
     """ A model with a single residual connection.
@@ -904,8 +929,8 @@ class ModelWithTransposeConv(nn.Module):
 class ConstantElementwiseInputModel(torch.nn.Module):
     def __init__(self):
         super(ConstantElementwiseInputModel, self).__init__()
-        self.add = aimet_modules.Add()
-        self.mul = aimet_modules.Multiply()
+        self.add = Add()
+        self.mul = Multiply()
 
     def forward(self, inp):
         x = self.add(inp, torch.tensor(2.0))
@@ -1696,12 +1721,12 @@ class MultiInputWithConstant(torch.nn.Module):
 
     def __init__(self, num_classes=3):
         super(MultiInputWithConstant, self).__init__()
-        self.add0 = aimet_modules.Add()
+        self.add0 = Add()
         self.conv1 = torch.nn.Conv2d(3, 16, kernel_size=2, stride=2, padding=3, bias=False)
         self.conv2 = torch.nn.Conv2d(16, 8, kernel_size=3, stride=2, padding=2)
         self.conv3 = torch.nn.Conv2d(3, 8, kernel_size=3, stride=2, padding=2)
-        self.add1 = aimet_modules.Add()
-        self.add2 = aimet_modules.Add()
+        self.add1 = Add()
+        self.add2 = Add()
 
     def forward(self, *inputs):
         x1 = self.add0(inputs[0], torch.tensor(0.02))
