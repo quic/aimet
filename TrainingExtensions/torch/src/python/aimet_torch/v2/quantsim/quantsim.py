@@ -69,7 +69,7 @@ class QuantizationSimModel(V1QuantizationSimModel):
     Overriden QuantizationSimModel that does off-target quantization simulation using v2 quantsim blocks.
     """
     def __init__(self, model, *args, **kwargs): # pylint: disable=arguments-differ
-        with _register_zero3_forward_hooks(model):
+        with _register_zero3_forward_hooks(model, use_dummy_params=True):
             # NOTE: Register for the model is pre-partitioned by deepspeed zero3 or zero3-offload.
             #       Pre-partitioned models aren't runnable as-is, but are needed to to be initialized
             #       with `deepspeed.initialize` before running forward pass.
