@@ -34,6 +34,7 @@ API Reference
 -------------
 .. toctree::
    :titlesonly:
+   :maxdepth: 1
 
     Model Guidelines <torch_model_guidelines>
     Architecture Checker API<torch_architecture_checker>
