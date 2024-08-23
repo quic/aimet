@@ -208,8 +208,8 @@ class AdaroundOptimizer:
                                  " Placed cached activations data on CPU. RuntimeError: %s", str(error))
                     all_inp_data = all_inp_data.cpu()
                     all_orig_out_data = all_orig_out_data.cpu()
-                else:
-                    raise error
+                    continue
+                raise error
 
             if dist.is_initialized():
                 dist.all_reduce(quant_module.alpha.grad)
