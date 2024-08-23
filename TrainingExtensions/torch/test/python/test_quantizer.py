@@ -1861,6 +1861,55 @@ class TestQuantizationSimStaticGrad:
                                                  round_mode='nearest', data_type=QuantizationDataType.int)
         assert not QuantizationSimModel._is_quantizable_module(qc_quantize_module)
 
+    def test_exported_weight(self):
+        """
+        Test to check if the exported weight remains unchanged after quantization,
+        regardless of the rounding method used.
+        """
+        model = test_models.BasicConv2d(kernel_size=3)
+        dummy_input = torch.randn(2, 64, 8, 8)
+        param_bitwidth = 8
+
+        # Set model weight to odd numbers so that quantized weights fall between rounding border
+        with torch.no_grad():
+            model.conv.weight.data = torch.randint(-127, 127, model.conv.weight.shape, dtype=torch.float32) * 2 + 1
+
+        sim = QuantizationSimModel(model, dummy_input, default_param_bw=param_bitwidth)
+        sim.compute_encodings(lambda model, _: model(dummy_input), None)
+
+        # Adjust delta of the weight quantizer so that quantized weights fall between rounding border
+        encoding = libpymo.TfEncoding()
+        encoding.bw = 8
+        encoding.max = 254.0
+        encoding.min = -254.0
+        encoding.offset = -254.0
+        encoding.delta = 2.0
+        sim.model.conv.param_quantizers['weight'].encoding = encoding
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            conv_weights = []
+
+            # Gather weights from exported .pth file
+            sim.export(tmp_dir, 'model_for_weight_export', dummy_input)
+            exported_model = torch.load(os.path.join(tmp_dir, 'model_for_weight_export.pth'))
+            conv_weights.append(exported_model.conv.weight.detach())
+
+            # Gather weights from exported .onnx file
+            onnx_model = onnx.load(os.path.join(tmp_dir, 'model_for_weight_export.onnx'))
+            for tensor in onnx_model.graph.initializer:
+                if tensor.name == 'conv.weight':
+                    conv_weights.append(torch.tensor(onnx.numpy_helper.to_array(tensor)))
+                    break
+            else:
+                assert False, "Cannot find conv weight inside ONNX model"
+            
+            # Check exported weight remains unchanged after quantization,
+            # regardless of the rounding method used.
+            for conv_weight in conv_weights:
+                encoding = sim.model.conv.param_quantizers['weight'].encoding
+                assert torch.equal(torch.round(conv_weight / encoding.delta), 
+                                   torch.trunc(conv_weight / encoding.delta + torch.sign(conv_weight) * 0.5))
+
     def test_export_recurrent_model(self):
         """ Test export functionality with recurrent models """
         # models = [TwoLayerBidirectionaRNNModel(), TwoLayerBidirectionalLSTMModel(), TwoLayerBidirectionalGRUModel()]
