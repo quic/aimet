@@ -45,7 +45,7 @@ from torch._C._nn import _parse_to as parse_to_args
 from aimet_torch.v2.utils import docstring
 from aimet_torch.v2.quantization.base import EncodingBase
 from aimet_torch.v2.quantization.affine.backends import quantize, dequantize, _derive_qmin_qmax
-from ._utils import _GridMixin # pylint: disable=import-error
+from ._utils import _GridMixin, _register_signature # pylint: disable=import-error
 
 
 __all__ = ["AffineEncoding", "VectorEncoding"]
@@ -55,12 +55,16 @@ class AffineEncoding(EncodingBase, _GridMixin):
     """
     Encoding object for affine quantization
     """
+    _init_signatures = []
+
     @overload
+    @_register_signature(_init_signatures)
     def __init__(self, scale: torch.Tensor, offset: torch.Tensor, qmin: int, qmax: int, symmetry=False,
                  block_size: Optional[Tuple[int, ...]] = None):
         ...
 
     @overload
+    @_register_signature(_init_signatures)
     def __init__(self, scale: torch.Tensor, offset: torch.Tensor, bitwidth: int, signed=False, symmetry=False,
                  block_size: Optional[Tuple[int, ...]] = None):
         ...
@@ -68,6 +72,7 @@ class AffineEncoding(EncodingBase, _GridMixin):
     def __init__(self, scale: torch.Tensor, offset: torch.Tensor, *args, **kwargs):
         self._scale = scale
         self._offset = offset
+        full_args = (scale, offset, *args)
 
         # Pad positional args with None's such that len(args) == 4
         args = tuple(chain(args, repeat(None, 4 - len(args))))
@@ -81,10 +86,14 @@ class AffineEncoding(EncodingBase, _GridMixin):
         if arg1 is None or isinstance(arg1, bool):
             # (arg0, arg1) == (bitwidth, signed)
             bitwidth, signed = arg0, bool(arg1)
+            if (bitwidth is None) or (signed is None):
+                raise self._arg_parsing_error(full_args, kwargs)
             qmin, qmax = _derive_qmin_qmax(bitwidth=bitwidth, signed=signed)
         else:
             # (arg0, arg1) == (qmin, qmax)
             qmin, qmax = arg0, arg1
+            if (qmin is None) or (qmax is None):
+                raise self._arg_parsing_error(full_args, kwargs)
 
         assert qmin is not None
         assert qmax is not None

@@ -1477,3 +1477,44 @@ def test_parse_args_equivalence(qtzr_cls, qmin, qmax, bitwidth, symmetric):
         assert torch.equal(qtzr.get_scale(), torch.tensor(1.))
         assert torch.equal(qtzr.get_offset(), torch.tensor(0.))
         assert torch.equal(qtzr(x), x)
+
+def test_parse_args_error():
+    """
+    When: Instantiate with ()
+    Then: Throw TypeError
+    """
+    with pytest.raises(TypeError):
+        Quantize()
+
+    """
+    When: Instantiate with (tuple,)
+    Then: Throw TypeError
+    """
+    with pytest.raises(TypeError):
+        Quantize((1, 10))
+
+    """
+    When: Instantiate with (tuple, int)
+    Then: Throw TypeError
+    """
+    with pytest.raises(TypeError):
+        Quantize((1, 10), -128)
+
+    """
+    When: Instantiate with (tuple, int, int)
+    Then: Throw TypeError
+    """
+    with pytest.raises(TypeError):
+        Quantize((1, 10), -128, 127)
+
+    """
+    When: Instantiate with (tuple, int, bool)
+    Then: Create quantizer normally
+    """
+    Quantize((1, 10), 8, True)
+
+    """
+    When: Instantiate with (tuple, int, int, bool)
+    Then: Create quantizer normally
+    """
+    Quantize((1, 10), -128, 127, True)

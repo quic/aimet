@@ -36,6 +36,16 @@
 # =============================================================================
 # pylint: disable=missing-module-docstring
 import math
+from typing import Sequence
+import inspect
+
+
+def _register_signature(signatures):
+    def decorator(fn):
+        sig = inspect.signature(fn)
+        signatures.append(sig)
+        return fn
+    return decorator
 
 
 class _GridMixin:
@@ -44,6 +54,22 @@ class _GridMixin:
     """
     qmin: int
     qmax: int
+    _init_signatures: Sequence[inspect.Signature]
+
+    @classmethod
+    def _arg_parsing_error(cls, args, kwargs) -> TypeError:
+        args = (
+            *args,
+            *(f'{key}={value}' for key, value in kwargs.items())
+        )
+
+        msg = "\n".join((
+            "Unexpected arguments. Expected one of:",
+            *("  * " + str(sig) for sig in cls._init_signatures),
+            "",
+            f"  But got: {args}"
+        ))
+        return TypeError(msg)
 
     def _get_num_steps(self) -> int:
         return self.qmax - self.qmin

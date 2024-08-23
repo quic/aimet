@@ -53,7 +53,7 @@ from aimet_torch.v2.quantization.tensor import QuantizedTensor, DequantizedTenso
 from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.affine.backends import quantize, quantize_dequantize, torch_builtins, _derive_qmin_qmax
 from aimet_torch.v2.utils import ste_round
-from ._utils import _GridMixin # pylint: disable=import-error
+from ._utils import _GridMixin, _register_signature # pylint: disable=import-error
 
 
 __all__ = ['AffineQuantizerBase', 'MinMaxQuantizer', 'Quantize', 'QuantizeDequantize',
@@ -74,12 +74,16 @@ class AffineQuantizerBase(QuantizerBase, _GridMixin):
                                                         (default: absolute min-max encoding analyzer)
 
     """
+    _init_signatures = []
+
     @overload
+    @_register_signature(_init_signatures)
     def __init__(self, shape, qmin: int, qmax: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None,
                  block_size: Optional[Tuple[int, ...]] = None):
         ...
 
     @overload
+    @_register_signature(_init_signatures)
     def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None,
                  block_size: Optional[Tuple[int, ...]] = None):
         ...
@@ -89,6 +93,7 @@ class AffineQuantizerBase(QuantizerBase, _GridMixin):
         if isinstance(shape, int):
             shape = (shape,)
         self.shape = tuple(shape)
+        full_args = (shape, *args)
 
         # Pad positional args with None's such that len(args) == 5
         args = tuple(chain(args, repeat(None, 5 - len(args))))
@@ -99,12 +104,20 @@ class AffineQuantizerBase(QuantizerBase, _GridMixin):
             # (arg0, arg1, arg2) == (qmin, qmax, symmetric)
             qmin, qmax = arg0, arg1
             symmetric = kwargs.get('symmetric', args[2])
+
+            if (qmin is None) or (qmax is None) or (symmetric is None):
+                raise self._arg_parsing_error(full_args, kwargs)
+
             encoding_analyzer = kwargs.get('encoding_analyzer', args[3])
             block_size = kwargs.get('block_size', args[4])
         else:
             # (arg0, arg1) == (bitwidth, symmetric)
             bitwidth = arg0
             symmetric = kwargs.get('symmetric', args[1])
+
+            if (bitwidth is None) or (symmetric is None):
+                raise self._arg_parsing_error(full_args, kwargs)
+
             # We support two quantization modes: (unsigned) asymmetric and signed-symmetric
             qmin, qmax = _derive_qmin_qmax(bitwidth=bitwidth, signed=symmetric)
             encoding_analyzer = kwargs.get('encoding_analyzer', args[2])
