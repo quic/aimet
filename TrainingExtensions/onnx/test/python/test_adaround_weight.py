@@ -39,12 +39,14 @@
 
 import os
 import json
+import tempfile
 from packaging import version
 import numpy as np
 import torch
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 import pytest
 
+from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
 from aimet_common import libquant_info
 from aimet_onnx.adaround.adaround_weight import Adaround, AdaroundParameters
 import models.models_for_tests as test_models
@@ -70,19 +72,21 @@ class TestAdaround:
             in_tensor = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
             session.run(None, in_tensor)
 
-        params = AdaroundParameters(data_loader=data_loader, num_batches=1, default_num_iterations=5, forward_fn=callback,
-                                    forward_pass_callback_args=None)
-        ada_rounded_model = Adaround.apply_adaround(model, params, './', 'dummy', use_cuda=use_cuda)
-        sess = build_session(ada_rounded_model, None)
-        out_after_ada = sess.run(None, dummy_input)
-        assert not np.array_equal(out_before_ada[0], out_after_ada[0])
+        params = AdaroundParameters(data_loader=data_loader, num_batches=1, default_num_iterations=5,
+                                    forward_fn=callback, forward_pass_callback_args=None)
+        with tempfile.TemporaryDirectory() as tempdir:
+            ada_rounded_model = Adaround.apply_adaround(model, params, tempdir, 'dummy',
+                                                        use_cuda=use_cuda)
+            sess = build_session(ada_rounded_model, None)
+            out_after_ada = sess.run(None, dummy_input)
+            assert not np.array_equal(out_before_ada[0], out_after_ada[0])
 
-        with open('./dummy.encodings') as json_file:
-            encoding_data = json.load(json_file)
+            with open(os.path.join(tempdir, 'dummy.encodings')) as json_file:
+                encoding_data = json.load(json_file)
 
-        param_keys = list(encoding_data.keys())
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            assert 'onnx::Conv_43' in param_keys
+            param_keys = list(encoding_data.keys())
+            if version.parse(torch.__version__) >= version.parse("1.13"):
+                assert 'onnx::Conv_43' in param_keys
 
     def test_apply_adaround_for_custom_op(self):
         custom_ops_path = os.path.dirname(libquant_info.__file__)
@@ -230,8 +234,36 @@ class TestAdaround:
 
         Adaround.apply_adaround(model, params, tmpdir, 'dummy', use_cuda=False)
 
+    @pytest.mark.parametrize("use_cuda", (True, False))
+    def test_apply_adaround_per_channel(self, use_cuda):
+        if use_cuda and not torch.cuda.is_available():
+            pytest.skip("Cuda not available")
+        np.random.seed(0)
+        torch.manual_seed(0)
+        model = test_models.single_residual_model()
+        data_loader = dataloader(input_shape=(1, 3, 32, 32))
+        dummy_input = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
+        sess = build_session(model, None)
+        out_before_ada = sess.run(None, dummy_input)
 
+        def callback(session, args):
+            in_tensor = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
+            session.run(None, in_tensor)
 
+        params = AdaroundParameters(data_loader=data_loader, num_batches=1, default_num_iterations=5,
+                                    forward_fn=callback,
+                                    forward_pass_callback_args=None)
+        with tempfile.TemporaryDirectory() as tempdir:
+            ada_rounded_model = Adaround.apply_adaround(model, params, tempdir, 'dummy', use_cuda=use_cuda,
+                                                        default_config_file=get_path_for_per_channel_config())
+            sess = build_session(ada_rounded_model, None)
+            out_after_ada = sess.run(None, dummy_input)
+            assert not np.array_equal(out_before_ada[0], out_after_ada[0])
+
+            with open(os.path.join(tempdir, 'dummy.encodings')) as json_file:
+                encoding_data = json.load(json_file)
+                assert len(encoding_data['conv3.weight']) == 8
+                assert len(encoding_data['conv4.weight']) == 8
 
 def dataloader(input_shape: tuple, batch_size=2):
     class DataLoader:
