@@ -52,11 +52,11 @@ from aimet_onnx.adaround.adaround_weight import Adaround, AdaroundParameters
 import models.models_for_tests as test_models
 from models import models_for_tests
 
+
 class TestAdaround:
     """
     AdaRound Weights Unit Test Cases
     """
-
     @pytest.mark.parametrize("use_cuda", (True, False))
     def test_apply_adaround(self, use_cuda):
         if use_cuda and not torch.cuda.is_available():
@@ -262,8 +262,8 @@ class TestAdaround:
 
             with open(os.path.join(tempdir, 'dummy.encodings')) as json_file:
                 encoding_data = json.load(json_file)
-                assert len(encoding_data['conv3.weight']) == 8
-                assert len(encoding_data['conv4.weight']) == 8
+                assert len(encoding_data['conv3.weight']) == 8 # out_channels
+                assert len(encoding_data['conv4.weight']) == 8 # out_channels
 
 def dataloader(input_shape: tuple, batch_size=2):
     class DataLoader:

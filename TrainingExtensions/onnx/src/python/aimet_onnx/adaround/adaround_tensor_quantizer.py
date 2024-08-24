@@ -118,11 +118,10 @@ class AdaroundTensorQuantizer: # pylint: disable=too-many-instance-attributes
 
         :param tensor: The weight tensor to be adarounded
         """
-        # pylint:disable = protected-access
         if self.broadcasted_delta is None or self.broadcasted_offset is None:
             if isinstance(self.encoding, list):
-                delta = torch.Tensor([enc.delta for enc in self.encoding]).to(tensor.device)
-                offset = torch.Tensor([enc.offset for enc in self.encoding]).to(tensor.device)
+                delta = torch.Tensor([enc.delta for enc in self.encoding]).to(device=tensor.device, dtype=tensor.dtype)
+                offset = torch.Tensor([enc.offset for enc in self.encoding]).to(device=tensor.device, dtype=tensor.dtype)
             else:
                 delta = self.encoding.delta
                 offset = self.encoding.offset
@@ -145,7 +144,7 @@ class AdaroundTensorQuantizer: # pylint: disable=too-many-instance-attributes
         self.alpha = torch.nn.Parameter(alpha.float(), requires_grad=True)
 
     @staticmethod
-    def broadcast_to_tensor(tensor, encoding, ch_axis: int):
+    def broadcast_to_tensor(tensor: torch.Tensor, encoding: torch.Tensor, ch_axis: int):
         """
         This helper method takes n-dimension tensor and a 1-dimension encoding. And the encoding is broad-casted to
         match the n-dimensional tensor
