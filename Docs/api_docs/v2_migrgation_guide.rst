@@ -42,7 +42,7 @@ To migrate to aimet_torch v2, your imports should originate from the :mod:`aimet
 ===================== ====================================================== ==================================================================
 AIMET Classes         :mod:`aimet_torch`                                     :mod:`aimet_torch.v2`
 ===================== ====================================================== ==================================================================
-aimet_torch           :class:`aimet_torch.quantsim.QuantizationSimModel`     :class:`aimet_torch.v2.quantsim.QuantizationSimModel`
+QuantSim              :class:`aimet_torch.quantsim.QuantizationSimModel`     :class:`aimet_torch.v2.quantsim.QuantizationSimModel`
 AdaRound              :class:`aimet_torch.adaround.adaround_weight.AdaRound` :class:`aimet_torch.v2.adaround.AdaRound`
 Sequential MSE        :class:`aimet_torch.seq_mse.apply_seq_mse`             :class:`aimet_torch.v2.seq_mse.apply_seq_mse`
 QuantAnalyzer         :class:`aimet_torch.quant_analyzer.QuantAnalyzer`      :class:`aimet_torch.v2.quant_analyzer.QuantAnalyzer`
