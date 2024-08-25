@@ -2384,3 +2384,27 @@ def gather_op_model():
     )
     onnx.checker.check_model(model, True)
     return model
+
+
+def gather_op_with_int_data_model():
+    model = helper.make_model(
+        graph=helper.make_graph(
+            name='GatherModel',
+            inputs=[helper.make_tensor_value_info('model_input', TensorProto.INT64, shape=[1, 4])],
+            outputs=[helper.make_tensor_value_info('model_output', TensorProto.INT64, shape=[1, 4])],
+            initializer=[
+                numpy_helper.from_array(np.array([1, 3, 224, 224]), name='gather_weight')
+            ],
+            nodes=[
+                helper.make_node(
+                    'Gather',
+                    inputs=['gather_weight', 'model_input'],
+                    outputs=['model_output'],
+                    name='gather'
+                ),
+            ]
+        )
+    )
+    onnx.checker.check_model(model, True)
+    onnx.save(model, 'gather_with_int_data.onnx')
+    return model

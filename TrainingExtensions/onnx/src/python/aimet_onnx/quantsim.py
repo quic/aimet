@@ -563,11 +563,12 @@ class QuantizationSimModel:
             if op.type == 'Gather':
                 if self._hw_version not in {'V73', 'V75', 'V79'}:
                     continue
-                weight_quantizer = param_quantizers['weight']
-                output_quantizer = output_quantizers[0]
+                if param_quantizers and output_quantizers:
+                    weight_quantizer = param_quantizers['weight']
+                    output_quantizer = output_quantizers[0]
 
-                weight_quantizer.bitwidth = output_quantizer.bitwidth
-                weight_quantizer.use_symmetric_encodings = output_quantizer.use_symmetric_encodings
+                    weight_quantizer.bitwidth = output_quantizer.bitwidth
+                    weight_quantizer.use_symmetric_encodings = output_quantizer.use_symmetric_encodings
 
             elif op.type == 'GroupNormalization':
                 if self._hw_version not in {'V73', 'V75', 'V79'}:

@@ -605,7 +605,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             op = my_op.get_module()
 
             data_tensor = ParamUtils.get_param(self.model, op, DATA_INDEX)
-            if data_tensor:
+            if data_tensor and data_tensor.data_type == 1:  # 1 corresponds to float, dictionary can be found by using onnx.TensorProto.DataType.items()
                 create_and_connect_product(data_tensor.name, data_tensor.dims, my_op, data_tensor, 'weight')
 
         def handle_default(my_op: Op):

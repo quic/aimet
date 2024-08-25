@@ -935,20 +935,16 @@ class TestQuantSim:
                     "strict_symmetric": "False",
                     "unsigned_symmetric": "False"
                 },
-            "params": {
-                "bias":
+            "params": {},
+            "op_type": {
+                "Gather":
                     {
-                        "is_quantized": "False"
+                        "is_output_quantized": "False"
                     }
             },
-            "op_type": {},
             "supergroups": [],
-            "model_input": {
-                "is_input_quantized": "True"
-            },
-            "model_output": {
-                "is_output_quantized": "True"
-            }
+            "model_input": {},
+            "model_output": {}
         }
 
         with open(os.path.join(tmpdir, 'quantsim_config.json'), 'w') as f:
