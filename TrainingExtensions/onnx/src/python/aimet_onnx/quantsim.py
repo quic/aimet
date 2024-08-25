@@ -254,6 +254,13 @@ class QuantizationSimModel:
         """
         self.fill_activation_dtypes(dummy_input)
         self.input_name_to_nodes = self.model.input_name_to_nodes()
+        self.output_name_to_node = self.model.output_name_to_node()
+
+        # Capture model inputs
+        for node in self.model.graph().input:
+            name = node.name
+            if name not in self.activation_names and name not in self.param_names and self._is_tensor_quantizable(name):
+                self.activation_names.append(name)
 
         # Capture input and output activations of each node
         for node in self.model.nodes():
@@ -261,10 +268,10 @@ class QuantizationSimModel:
                 if name not in self.activation_names and name not in self.param_names and self._is_tensor_quantizable(name):
                     self.activation_names.append(name)
                     self.input_quantizers_name.append(name)
-            if node.op_type not in op_outputs_to_ignore:
-                for name in node.output:
-                    if name not in self.activation_names and name not in self.param_names and self._is_tensor_quantizable(name):
-                        self.activation_names.append(name)
+
+            for name in node.output:
+                if name not in self.activation_names and name not in self.param_names and self._is_tensor_quantizable(name):
+                    self.activation_names.append(name)
 
         # Rename model output node
         for node in self.model.graph().output:
@@ -285,6 +292,7 @@ class QuantizationSimModel:
         else:  # dynamic activation
             if name not in self.activation_dtypes.keys() or self.activation_dtypes[name] not in data_types_to_quantize:
                 return False
+
         # Check if the tensor is param to certain ops (eg: Resize)
         consumer_nodes = self.input_name_to_nodes.get(name, None)
         if consumer_nodes:
@@ -292,6 +300,12 @@ class QuantizationSimModel:
                 if consumer_node.op_type in op_params_to_ignore and \
                         consumer_node.input[0] != name:  # except first input rest are params (only valid for unary ops)
                     return False
+
+        # Check if the tensor is output of certain ops
+        producer_node = self.output_name_to_node.get(name, None)
+        if producer_node and producer_node.op_type in op_outputs_to_ignore:
+            return False
+
         return True
 
     def _disable_bias_quantization(self):
