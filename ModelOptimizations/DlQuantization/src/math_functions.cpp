@@ -43,6 +43,7 @@
 #include <map>
 #include <stdexcept>
 #include <stdlib.h>
+#include <algorithm>
 
 #include "DlQuantization/Quantization.hpp"
 #include "math_functions.hpp"
@@ -213,13 +214,13 @@ void InitializePdf(PDF& pdf, DTYPE min_val, DTYPE max_val, bool signed_vals)
     }
     // Enlarge the range by factor 3, to be on the safe side.
     DTYPE center = (max_val + min_val) / 2;
-    min_val      = center - 3 * (center - min_val);
-    max_val      = center + 3 * (max_val - center);
+    min_val      = std::max(std::numeric_limits<DTYPE>::lowest(), center - 3 * (center - min_val));
+    max_val      = std::min(std::numeric_limits<DTYPE>::max(), center + 3 * (max_val - center));
     // Initialize the PDF's buckets.
-    DTYPE bucket_size;
+    double bucket_size;
     if (signed_vals)
     {
-        bucket_size = (max_val - min_val) / PDF_SIZE;
+        bucket_size = (static_cast<double>(max_val) - static_cast<double>(min_val)) / PDF_SIZE;
     }
     else
     {

@@ -415,3 +415,32 @@ class TestLearnedGridTensorQuantizer:
         assert np.isclose(e.min, -0.98, rtol=rtol)
         assert np.isclose(e.delta, (e.max-e.min)/(2**e.bw-1), rtol=rtol)
         assert np.isclose(e.offset, e.min/e.delta, rtol=rtol)
+
+    @pytest.mark.cuda
+    @pytest.mark.parametrize("device", ("cpu", "cuda"))
+    @pytest.mark.parametrize("tensor", (torch.tensor([0, -3.4028e38, -3.4028e38]),
+                                        torch.tensor([0, 3.4028e38]),
+                                        torch.tensor([3.4028e38, 0, -3.4028e38])),
+                             )
+    @pytest.mark.parametrize("quant_scheme", (QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced,))
+    @pytest.mark.parametrize("symmetric", (True, False))
+    def test_tensor_quantizer_extreme_values(self, quant_scheme, tensor, device, symmetric):
+        """
+        test get_stats_histogram() for per tensor quantizer.
+        """
+        tensor = tensor.to(device)
+        quantizer = StaticGridPerTensorQuantizer(bitwidth=8, round_mode=libpymo.RoundingMode.ROUND_NEAREST,
+                                                 quant_scheme=quant_scheme,
+                                                 use_symmetric_encodings=symmetric, enabled_by_default=True)
+        quantizer.update_encoding_stats(tensor)
+        quantizer.compute_encoding()
+        encoding = quantizer.encoding
+
+        enc_min = torch.tensor(encoding.min, dtype=torch.float32)
+        enc_max = torch.tensor(encoding.max, dtype=torch.float32)
+        assert not torch.isinf(enc_min)
+        assert not torch.isnan(enc_min)
+        assert not torch.isinf(enc_max)
+        assert not torch.isnan(enc_max)
+        assert enc_min < enc_max
+        assert encoding.delta > 0

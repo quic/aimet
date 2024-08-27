@@ -88,8 +88,8 @@ TfEncoding getComputedEncodings(uint8_t bw, double min, double max, bool useSymm
         unsigned int numPositiveSteps = std::floor(numSteps / 2);
         encoding.delta                = max / numPositiveSteps;
         encoding.offset               = -std::ceil(numSteps / 2);
-        encoding.min                  = encoding.offset * encoding.delta;
-        encoding.max                  = encoding.delta * numPositiveSteps;
+        encoding.min                  = std::max(encoding.offset * encoding.delta, (double) std::numeric_limits<float>::lowest());
+        encoding.max                  = std::min(encoding.delta * numPositiveSteps, (double) std::numeric_limits<float>::max());
     }
     else
     {
@@ -113,6 +113,9 @@ TfEncoding getComputedEncodings(uint8_t bw, double min, double max, bool useSymm
         {
             // One of min or max is guaranteed to be zero, so 0 is exactly quantizable already
             encoding.offset = round(min / encoding.delta);
+            encoding.min = min;
+            encoding.max = max;
+            return encoding;
         }
 
         // Check that the recalculated min/max should be in range of float
