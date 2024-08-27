@@ -13,7 +13,7 @@ for example, changing adapter weights, enabling and disabling adapters. Along wi
 parameters for the adapters alone to get good quantization accuracy.
 
 User flow
-===========
+----------
 
 The user can use the following flow to quantize a model with LoRA adapters.
 
@@ -88,7 +88,7 @@ Step 11: For another adapter with same configration (rank & target module) repea
 
 
 Top-level API
-=============
+-------------
 
 
 .. autoclass:: aimet_torch.peft.AdapterMetaData
