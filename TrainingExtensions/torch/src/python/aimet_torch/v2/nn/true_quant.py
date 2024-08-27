@@ -1294,7 +1294,14 @@ class QuantizedLinear(_DispatchMixin, QuantizationMixin, nn.Linear):
     # This is mainly to reduce memory footprint of QAT of large language models.
     @allow_recompute
     def forward(self, *args, **kwargs):
-        return super().forward(*args, **kwargs)
+        # Workaround for deepspeed.
+        # Deepspeed zero3 sometimes forcefully mokey-patches F.linear to torch.addmm,
+        # which collides with the core assumption of our dispatch mechanism
+        # that nn.Linear invokes F.linear.
+        # To circumvent this issue, we temporarily restore the original F.linear
+        # before running forward.
+        with patch_attr(F, 'linear', type(self)._builtin_torch_fn):
+            return super().forward(*args, **kwargs)
 
 
 @QuantizationMixin.implements(nn.LocalResponseNorm)

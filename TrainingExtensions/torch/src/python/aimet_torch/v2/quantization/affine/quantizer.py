@@ -327,6 +327,7 @@ class MinMaxQuantizer(AffineQuantizerBase): # pylint: disable=abstract-method
         if not self.is_initialized():
             return None
         num_negative_steps = 2 ** (self.bitwidth - 1) if self._signed else 0
+
         return self.get_scale(dtype) * (self.get_offset(dtype) - num_negative_steps)
 
     def get_max(self, dtype=None) -> Optional[torch.Tensor]:
@@ -468,6 +469,14 @@ class Quantize(MinMaxQuantizer):
                          [ 63.,  59.,  19., 162.,  30., 255., 109., 255.,   0., 255.]],
                         grad_fn=<AliasBackward0>)
     """
+    # NOTE: Deepspeed has a bug where it will inadvertently patch __init__ method permanently
+    #       unless each leaf class explicitly defines its own __init__ separately.
+    #       As a temporary workaround, we define __init__ to avoid triggering this bug.
+    # pylint: disable=useless-super-delegation
+    def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None,
+                 block_size: Optional[Tuple[int, ...]] = None):
+        super().__init__(shape, bitwidth, symmetric, encoding_analyzer, block_size)
+
     def forward(self, input: torch.Tensor) -> QuantizedTensor:
         """Quantizes the input tensor
 
@@ -595,6 +604,14 @@ class QuantizeDequantize(MinMaxQuantizer):
                              1.0039,  0.4157,  0.4392,  0.4863]],
                           grad_fn=<AliasBackward0>)
     """
+    # NOTE: Deepspeed has a bug where it will inadvertently patch __init__ method permanently
+    #       unless each leaf class explicitly defines its own __init__ separately.
+    #       As a temporary workaround, we define __init__ to avoid triggering this bug.
+    # pylint: disable=useless-super-delegation
+    def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None,
+                 block_size: Optional[Tuple[int, ...]] = None):
+        super().__init__(shape, bitwidth, symmetric, encoding_analyzer, block_size)
+
     def forward(self, input: torch.Tensor) -> DequantizedTensor:
         """Quantizes and dequantizes the input tensor
 
