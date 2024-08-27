@@ -501,3 +501,32 @@ class TestQcQuantizeOp:
                                     ).astype(np.float32)
         output = per_channel_session.run(None, {'input': inp_array})[0]
         assert np.allclose(output, expected_out)
+
+    @pytest.mark.parametrize("input_arr", (np.asarray([0, -3.4028e38]).astype(np.float32),
+                                           np.asarray([0, 3.4028e38]).astype(np.float32),
+                                           np.asarray([0, -3.4028e38, 3.4028e38]).astype(np.float32)))
+    @pytest.mark.parametrize("quant_scheme", (QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced))
+    @pytest.mark.parametrize("symmetric", (True, False))
+    def test_update_stats_extreme_values(self, quant_scheme, input_arr, symmetric):
+
+        quant_info = libquant_info.QcQuantizeInfo()
+        quant_info.isIntDataType = True
+        quant_node = helper.make_node(op_name, inputs=['input'], outputs=['output'],
+                                      domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
+        model = create_model_from_node(quant_node, input_arr.shape)
+        session = build_session(model, available_providers)
+        qc_op = QcQuantizeOp(quant_info=quant_info,
+                             quant_scheme=quant_scheme,
+                             rounding_mode='nearest',
+                             encodings=None,
+                             op_mode=OpMode.updateStats,
+                             bitwidth=8,
+                             use_symmetric_encodings=True,
+                             )
+
+        session.run(None, {'input': input_arr})
+        qc_op.compute_encodings()
+
+        assert qc_op.encodings[0].max >= 0
+        assert qc_op.encodings[0].min <= 0
+        assert qc_op.encodings[0].delta > 0

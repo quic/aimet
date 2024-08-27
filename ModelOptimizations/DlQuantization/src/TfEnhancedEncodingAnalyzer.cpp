@@ -40,6 +40,7 @@
 #include <cmath>
 #include <cstddef>
 #include <vector>
+#include <algorithm>
 
 #include "DlQuantization/Quantization.hpp"
 #include "math_functions.hpp"
@@ -122,7 +123,7 @@ TfEnhancedEncodingAnalyzer<DTYPE>::_findBestCandidate(uint8_t bw,
     // saturation cost.
     // This is a 2d grid search.
 
-    DTYPE bestCost = std::numeric_limits<float>::max();
+    double bestCost = std::numeric_limits<double>::max();
 
     for (auto candidate: testCandidates)
     {
@@ -131,7 +132,7 @@ TfEnhancedEncodingAnalyzer<DTYPE>::_findBestCandidate(uint8_t bw,
 
         std::tie(testDelta, testOffset) = candidate;
 
-        DTYPE cost = _quantAndSatCost(_stats, bw, testDelta, testOffset);
+        double cost = _quantAndSatCost(_stats, bw, testDelta, testOffset);
 
         // Remember the best encoding.
         if (cost < bestCost)
@@ -150,8 +151,8 @@ bool TfEnhancedEncodingAnalyzer<DTYPE>::_clampToObservedMinMax(DTYPE observedMin
                                                                DTYPE& testDelta, int& testOffset) const
 {
     // Calculate observed delta and offset
-    DTYPE testMin = testDelta * testOffset;
-    DTYPE testMax = testMin + testDelta * numSteps;
+    DTYPE testMin = std::max(testDelta * testOffset, std::numeric_limits<DTYPE>::lowest());
+    DTYPE testMax = std::min(testDelta * (testOffset + numSteps), std::numeric_limits<DTYPE>::max());
 
     if ((testMin < observedMin) && (testMax > observedMax))
     {
@@ -161,8 +162,13 @@ bool TfEnhancedEncodingAnalyzer<DTYPE>::_clampToObservedMinMax(DTYPE observedMin
     testMin = std::max(observedMin, testMin);
     testMax = std::min(observedMax, testMax);
 
+    if (testMin == testMax)
+    {
+        return false;
+    }
+
     // Recalculate the test delta and offset
-    testDelta  = (testMax - testMin) / numSteps;
+    testDelta  = (static_cast<double>(testMax) - testMin) / numSteps;
     testOffset = round(testMin / testDelta);
 
     return true;
@@ -173,10 +179,10 @@ void TfEnhancedEncodingAnalyzer<DTYPE>::_pickTestCandidatesAsymmetric(
     DTYPE observedMin, DTYPE observedMax, DTYPE numSteps, std::vector<std::tuple<DTYPE, int>>& testCandidates) const
 {
     // Map observedMin and observedMax to grid points
-    DTYPE observedDelta = (observedMax - observedMin) / numSteps;
+    DTYPE observedDelta = (static_cast<double>(observedMax)  - static_cast<double>(observedMin)) / numSteps;
     int observedOffset  = round(observedMin / observedDelta);
-    observedMin         = observedDelta * observedOffset;
-    observedMax         = observedMin + observedDelta * numSteps;
+    observedMin         = std::max(observedDelta * observedOffset, std::numeric_limits<DTYPE>::lowest());
+    observedMax         = std::min(observedDelta * (observedOffset + numSteps), std::numeric_limits<DTYPE>::max());
 
     // Compute the largest TF delta which would make sense, based on the range
     // [observedMin ... observedMax] we just calculated.
@@ -228,7 +234,7 @@ void TfEnhancedEncodingAnalyzer<DTYPE>::_pickTestCandidatesSymmetric(
     else
     {
         DTYPE absoluteMax = std::max(std::abs(maxVal), std::abs(minVal));
-        deltaMax          = (2 * absoluteMax) / numSteps;
+        deltaMax          = absoluteMax / (numSteps / 2.0);
 
         // Compute the offset - since we are finding symmetric candidates, offset can be computed given the delta
         testOffset = floor(-numSteps / 2);
@@ -285,23 +291,23 @@ std::tuple<DTYPE, DTYPE> TfEnhancedEncodingAnalyzer<DTYPE>::_findRangeOfAggregat
 }
 
 template <typename DTYPE>
-DTYPE TfEnhancedEncodingAnalyzer<DTYPE>::_quantAndSatCost(const PDF& pdf, int bw, DTYPE delta, int offset) const
+double TfEnhancedEncodingAnalyzer<DTYPE>::_quantAndSatCost(const PDF& pdf, int bw, DTYPE delta, int offset) const
 {
     // Given the TensorFlow fixed point format (delta and offset), we calculate
     // the smallest and biggest floating point values we can represent.
     DTYPE minVal   = delta * offset;
     DTYPE stepSize = pow(2, bw) - 1;
-    DTYPE maxVal   = delta * stepSize + minVal;
+    DTYPE maxVal   = delta * (offset + stepSize);
     // Calculate the indices of the smallest and largest representable value.
     DTYPE pdfStart = pdf.xLeft[0];
-    DTYPE pdfStep  = pdf.xLeft[1] - pdf.xLeft[0];
+    double pdfStep  = pdf.xLeft[1] - pdf.xLeft[0];
     int minInd     = (int) std::floor((minVal - pdfStart) / pdfStep);
     minInd         = std::min(std::max(0, minInd), PDF_SIZE - 1);
     int maxInd     = (int) std::floor((maxVal - pdfStart) / pdfStep);
     maxInd         = std::min(std::max(0, maxInd), PDF_SIZE - 1);
 
     // Calculate the saturation cost of the bottom part of the PDF.
-    DTYPE satCostBottom = 0;
+    double satCostBottom = 0;
     // Calculate the smallest value we can represent (middle of respective
     // bucket).
     DTYPE minValMiddleOfBucket = pdfStart + (minInd * pdfStep) + pdfStep / 2;
@@ -309,13 +315,13 @@ DTYPE TfEnhancedEncodingAnalyzer<DTYPE>::_quantAndSatCost(const PDF& pdf, int bw
     for (int i = 0; i < minInd; ++i)
     {
         // Calculate the midpoint of this bin.
-        DTYPE midVal = pdfStart + i * pdfStep + pdfStep / 2;
+        double midVal = pdfStart + i * pdfStep + pdfStep / 2;
         // The saturation cost is the MSE.
         satCostBottom += pdf.pdf[i] * pow(midVal - minValMiddleOfBucket, 2);
     }
 
     // Calculate the saturation cost of the top part of the PDF.
-    DTYPE satCostTop = 0;
+    double satCostTop = 0;
     // Calculate the largest value we can represent (middle of respective
     // bucket).
     DTYPE maxValMiddleOfBucket = pdfStart + (maxInd * pdfStep) + pdfStep / 2;
@@ -323,13 +329,13 @@ DTYPE TfEnhancedEncodingAnalyzer<DTYPE>::_quantAndSatCost(const PDF& pdf, int bw
     for (int i = maxInd; i < PDF_SIZE; ++i)
     {
         // Calculate the midpoint of this bin.
-        DTYPE midVal = pdfStart + i * pdfStep + pdfStep / 2;
+        double midVal = pdfStart + i * pdfStep + pdfStep / 2;
         // The saturation cost is the MSE.
         satCostTop += pdf.pdf[i] * pow(midVal - maxValMiddleOfBucket, 2);
     }
 
     // Calculate the quantization cost in the middle part of the PDF.
-    DTYPE quantCost = 0;
+    double quantCost = 0;
     // Go through all buckets which lie in the range we can represent.
     for (int i = minInd; i < maxInd; ++i)
     {
@@ -344,8 +350,8 @@ DTYPE TfEnhancedEncodingAnalyzer<DTYPE>::_quantAndSatCost(const PDF& pdf, int bw
     }
 
     // Calculate the total cost as the sum of quantization and saturation cost.
-    DTYPE sqnr = GAMMA * (satCostBottom + satCostTop) + quantCost;
-    return sqnr;
+    double sqnr = GAMMA * (satCostBottom + satCostTop) + quantCost;
+    return std::min(sqnr, std::numeric_limits<double>::max());
 }
 
 template <typename DTYPE>
@@ -379,12 +385,15 @@ void TfEnhancedEncodingAnalyzer<DTYPE>::getComputedEncodings(int bw, TfEncoding&
     int bestOffset;
     std::tie(bestDelta, bestOffset) = _findBestCandidate(bw, testCandidates);
 
+    DTYPE bestMin = std::max(bestDelta * bestOffset, std::numeric_limits<DTYPE>::lowest());
+    DTYPE bestMax = std::min(bestDelta * (bestOffset + numSteps), std::numeric_limits<DTYPE>::max());
+
     // Using the best delta and offset, calculate the encoding.
     encoding.delta  = bestDelta;
     encoding.offset = bestOffset;
     encoding.bw     = bw;
-    encoding.min    = bestDelta * bestOffset;
-    encoding.max    = bestDelta * (float) numSteps + encoding.min;
+    encoding.min    = bestMin;
+    encoding.max    = bestMax;
 }
 
 
