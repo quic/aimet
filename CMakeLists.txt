@@ -106,11 +106,6 @@ if (ENABLE_TORCH AND ENABLE_TENSORFLOW)
     message(WARNING "AIMET Torch and TensorFlow support currently cannot be built at the same time.")
 endif()
 
-if (ENABLE_ONNX AND NOT ENABLE_TORCH)
-    message(NOTICE "** Enabling Torch as it is required by ONNX")
-    set(ENABLE_TORCH ON CACHE BOOL "" FORCE)
-endif()
-
 # Find Python libraries
 find_package(Python3 COMPONENTS Interpreter Development)
 message(STATUS "Found Python3: ${Python3_FOUND}, at ${Python3_LIBRARIES}")
@@ -184,6 +179,7 @@ endif()
 if (ENABLE_ONNX)
     set_onnx_version()
     set_onnxruntime_variables()
+    set_torch_cmake_prefix_path()
 
     find_package(Eigen3 REQUIRED)
 endif()

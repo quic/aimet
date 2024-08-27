@@ -41,8 +41,7 @@ import torch
 import torch.nn
 
 # Import AIMET specific modules
-import aimet_common.aimet_tensor_quantizer as AimetTensorQuantizer
-from aimet_common.defs import AdaroundConstants, QuantizationDataType, QuantScheme, MAP_QUANT_SCHEME_TO_PYMO
+from aimet_common.defs import AdaroundConstants, QuantizationDataType, QuantScheme
 
 
 class AdaroundTensorQuantizer: # pylint: disable=too-many-instance-attributes
@@ -72,7 +71,6 @@ class AdaroundTensorQuantizer: # pylint: disable=too-many-instance-attributes
         self.alpha = None
         self.use_soft_rounding = True
         self._ch_axis = channel_axis
-        self._cppOp = AimetTensorQuantizer.AimetTensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[quant_scheme])
         self.broadcasted_delta = None
         self.broadcasted_offset = None
 
@@ -120,11 +118,10 @@ class AdaroundTensorQuantizer: # pylint: disable=too-many-instance-attributes
 
         :param tensor: The weight tensor to be adarounded
         """
-        # pylint:disable = protected-access
         if self.broadcasted_delta is None or self.broadcasted_offset is None:
             if isinstance(self.encoding, list):
-                # pylint:disable = protected-access
-                delta, offset = self._cppOp.makeDeltaOffsetTensor(tensor.device, self.encoding)
+                delta = torch.Tensor([enc.delta for enc in self.encoding]).to(device=tensor.device, dtype=tensor.dtype)
+                offset = torch.Tensor([enc.offset for enc in self.encoding]).to(device=tensor.device, dtype=tensor.dtype)
             else:
                 delta = self.encoding.delta
                 offset = self.encoding.offset
@@ -147,7 +144,7 @@ class AdaroundTensorQuantizer: # pylint: disable=too-many-instance-attributes
         self.alpha = torch.nn.Parameter(alpha.float(), requires_grad=True)
 
     @staticmethod
-    def broadcast_to_tensor(tensor, encoding, ch_axis: int):
+    def broadcast_to_tensor(tensor: torch.Tensor, encoding: torch.Tensor, ch_axis: int):
         """
         This helper method takes n-dimension tensor and a 1-dimension encoding. And the encoding is broad-casted to
         match the n-dimensional tensor
