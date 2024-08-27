@@ -120,6 +120,7 @@ class AdaroundTensorQuantizer: # pylint: disable=too-many-instance-attributes
         """
         if self.broadcasted_delta is None or self.broadcasted_offset is None:
             if isinstance(self.encoding, list):
+                # pylint: disable=not-an-iterable
                 delta = torch.Tensor([enc.delta for enc in self.encoding]).to(device=tensor.device, dtype=tensor.dtype)
                 offset = torch.Tensor([enc.offset for enc in self.encoding]).to(device=tensor.device, dtype=tensor.dtype)
             else:
