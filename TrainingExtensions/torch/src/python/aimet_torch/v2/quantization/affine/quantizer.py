@@ -517,9 +517,8 @@ class Quantize(MinMaxQuantizer):
     #       unless each leaf class explicitly defines its own __init__ separately.
     #       As a temporary workaround, we define __init__ to avoid triggering this bug.
     # pylint: disable=useless-super-delegation
-    def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None,
-                 block_size: Optional[Tuple[int, ...]] = None):
-        super().__init__(shape, bitwidth, symmetric, encoding_analyzer, block_size)
+    def __init__(self, shape, *args, **kwargs):
+        super().__init__(shape, *args, **kwargs)
 
     def forward(self, input: torch.Tensor) -> QuantizedTensor:
         """Quantizes the input tensor
@@ -652,9 +651,8 @@ class QuantizeDequantize(MinMaxQuantizer):
     #       unless each leaf class explicitly defines its own __init__ separately.
     #       As a temporary workaround, we define __init__ to avoid triggering this bug.
     # pylint: disable=useless-super-delegation
-    def __init__(self, shape, bitwidth: int, symmetric: bool, encoding_analyzer: EncodingAnalyzer = None,
-                 block_size: Optional[Tuple[int, ...]] = None):
-        super().__init__(shape, bitwidth, symmetric, encoding_analyzer, block_size)
+    def __init__(self, shape, *args, **kwargs):
+        super().__init__(shape, *args, **kwargs)
 
     def forward(self, input: torch.Tensor) -> DequantizedTensor:
         """Quantizes and dequantizes the input tensor
