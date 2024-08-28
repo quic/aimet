@@ -73,8 +73,12 @@ class GPTVQOptimizer:
         :param gptvq_params: Data carrier including GPTVQ parameters
         :param hessian: Hessian tensor to be used for computing GPTVQ optimization
         """
-        original_weight = module.weight.clone()
-        original_hessian = hessian.clone()
+        if gptvq_utils.DO_CODEBOOK_FINE_TUNING:
+            original_weight = module.weight.clone()
+            original_hessian = hessian.clone()
+        else:
+            original_weight = module.weight
+            original_hessian = hessian
 
         num_rows, num_cols = get_2d_tensor_shape(module)
         assert num_rows % gptvq_params.rows_per_block == 0, f"The number of rows in weight (#: {num_rows}) should be divided by rows per block (#: {gptvq_params.rows_per_block})"
@@ -92,8 +96,6 @@ class GPTVQOptimizer:
 
         # 1-2. After setting dead columns to module weight, compute and overwrite parameter encoding
         module.compute_param_encodings()
-        weight_with_dead_cols = module.weight.clone()
-        weight_with_dead_cols = weight_with_dead_cols.float()
 
         # 2. apply per channel dampening to have stability in hessian inverse computation
         damp = DAMPENING_PERCENTAGE * torch.mean(torch.diag(hessian))
@@ -103,7 +105,7 @@ class GPTVQOptimizer:
 
         vector_dim = gptvq_params.vector_dim
         num_of_centroids = 2 ** gptvq_params.index_bw
-        rounded_weight = torch.zeros_like(weight_with_dead_cols)
+        rounded_weight = module.weight.float()
         codebook = None
         codebooks = []
         assignments = []
@@ -111,14 +113,13 @@ class GPTVQOptimizer:
             block_end_idx = min(block_start_idx + BLOCK_STRIDE, num_cols)
             count = block_end_idx - block_start_idx
 
-            weight_block = weight_with_dead_cols[:, block_start_idx:block_end_idx].clone()
-            rounded_weight_block = torch.zeros_like(weight_block)
-            error_block = torch.zeros_like(weight_block)
+            rounded_weight_block = rounded_weight[:, block_start_idx:block_end_idx]
+            error_block = torch.zeros_like(rounded_weight_block)
             hessian_inverse_block = hessian_inv[block_start_idx:block_end_idx, block_start_idx:block_end_idx]
 
             for i in range(count):
                 if (block_start_idx + i) % columns_per_block == 0:
-                    weight_block_for_codebook = weight_with_dead_cols[:, (block_start_idx + i):(block_start_idx + i + columns_per_block)]
+                    weight_block_for_codebook = rounded_weight[:, (block_start_idx + i):(block_start_idx + i + columns_per_block)]
                     weight_block_for_codebook = weight_block_for_codebook.reshape(num_blocks_per_column, -1, vector_dim)
 
                     hessian_diagonal = torch.diag(hessian_inv)[(block_start_idx + i):(block_start_idx + i + columns_per_block)]
@@ -137,7 +138,7 @@ class GPTVQOptimizer:
                     assignments.append([])
 
                 if i % vector_dim == 0:
-                    original_weight_chunk = weight_block[:, i:i + vector_dim]
+                    original_weight_chunk = rounded_weight_block[:, i:i + vector_dim]
                     diagonal = torch.diag(hessian_inverse_block)[i:i+vector_dim].unsqueeze(0)
 
                     if gptvq_params.vector_dim > 1 and gptvq_utils.HESSIAN_WEIGHTED_LOOKUP:
@@ -161,11 +162,11 @@ class GPTVQOptimizer:
                         hessian_inverse_block[i:i + vector_dim, i + vector_dim:].unsqueeze(1)
                     ).sum(0)
                     rounded_weight_block[:, i:i + vector_dim] = updated_weight_chunk
-                    weight_block[:, i + vector_dim:] -= update
+                    rounded_weight_block[:, i + vector_dim:] -= update
                     error_block[:, i:i + vector_dim] = err
 
             rounded_weight[:, block_start_idx:block_end_idx] = rounded_weight_block
-            weight_with_dead_cols[:, block_end_idx:] -= error_block.matmul(hessian_inv[block_start_idx:block_end_idx, block_end_idx:])
+            rounded_weight[:, block_end_idx:] -= error_block.matmul(hessian_inv[block_start_idx:block_end_idx, block_end_idx:])
 
         if gptvq_utils.DO_CODEBOOK_FINE_TUNING:
             rounded_weight = fine_tune_codebook(
