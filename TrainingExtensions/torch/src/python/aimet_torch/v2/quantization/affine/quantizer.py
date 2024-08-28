@@ -97,34 +97,42 @@ class AffineQuantizerBase(QuantizerBase, _GridMixin):
 
         # Pad positional args with None's such that len(args) == 5
         args = tuple(chain(args, repeat(None, 5 - len(args))))
-        arg0 = kwargs.get('qmin', kwargs.get('bitwidth', args[0]))
-        arg1 = kwargs.get('qmax', args[1])
+        arg0 = kwargs.pop('qmin', kwargs.pop('bitwidth', args[0]))
+        arg1 = kwargs.pop('qmax', args[1])
 
         if arg1 is not None and not isinstance(arg1, bool):
             # (arg0, arg1, arg2) == (qmin, qmax, symmetric)
             qmin, qmax = arg0, arg1
-            symmetric = kwargs.get('symmetric', args[2])
+            symmetric = kwargs.pop('symmetric', args[2])
 
             if (qmin is None) or (qmax is None) or (symmetric is None):
                 raise self._arg_parsing_error(full_args, kwargs)
 
-            encoding_analyzer = kwargs.get('encoding_analyzer', args[3])
-            block_size = kwargs.get('block_size', args[4])
+            encoding_analyzer = kwargs.pop('encoding_analyzer', args[3])
+            block_size = kwargs.pop('block_size', args[4])
         else:
             # (arg0, arg1) == (bitwidth, symmetric)
             bitwidth = arg0
-            symmetric = kwargs.get('symmetric', args[1])
+            symmetric = kwargs.pop('symmetric', args[1])
 
             if (bitwidth is None) or (symmetric is None):
                 raise self._arg_parsing_error(full_args, kwargs)
 
             # We support two quantization modes: (unsigned) asymmetric and signed-symmetric
             qmin, qmax = _derive_qmin_qmax(bitwidth=bitwidth, signed=symmetric)
-            encoding_analyzer = kwargs.get('encoding_analyzer', args[2])
-            block_size = kwargs.get('block_size', args[3])
+            encoding_analyzer = kwargs.pop('encoding_analyzer', args[2])
+            block_size = kwargs.pop('block_size', args[3])
 
         assert qmin is not None
         assert qmax is not None
+
+        if kwargs:
+            cls = type(self).__qualname__
+            unexpected_keys = ', '.join(kwargs.keys())
+            raise TypeError(f"{cls}.__init__ got unexpected keyword argument: {unexpected_keys}")
+
+        if qmin >= qmax:
+            raise ValueError(f"qmax should be strictly larger than qmin. Got qmax={qmax}, qmin={qmin}")
 
         self.qmin = qmin
         self.qmax = qmax

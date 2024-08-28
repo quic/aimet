@@ -1506,6 +1506,22 @@ def test_parse_args_error():
     """
     with pytest.raises(TypeError):
         Quantize((1, 10), -128, 127)
+    """
+    When: Instantiate with (tuple, int, int, bool, 'foo'=any)
+    Then: Throw TypeError
+    """
+    with pytest.raises(TypeError):
+        Quantize((1, 10), -128, 127, True, foo=None)
+
+    """
+    When: Instantiate with qmin >= qmax
+    Then: Throw ValueError
+    """
+    with pytest.raises(ValueError):
+        Quantize((1, 10), 127, -128, True)
+
+    with pytest.raises(ValueError):
+        Quantize((1, 10), 127, 127, True)
 
     """
     When: Instantiate with (tuple, int, bool)
