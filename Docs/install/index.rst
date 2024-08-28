@@ -101,7 +101,6 @@ For previous AIMET releases, browse packages at https://github.com/quic/aimet/re
     <PACKAGE_PREFIX>-<VARIANT>_<VERSION>\ |whl_suffix|
 
 
-.. |version| replace:: 1.31.0
 .. |whl_suffix| replace:: -cp38-cp38-linux_x86_64.whl
 .. |download_url| replace:: \https://github.com/quic/aimet/releases/download/
 

@@ -173,6 +173,7 @@ rst_epilog = """
 .. |author| replace:: {author}
 .. |project| replace:: {project}
 .. |default-quantsim-config-file| replace:: aimet_common/quantsim_config/default_config.json
+.. |version| replace:: {version}
 """.format(project=project, author=author, version=version)
 
 # -- Options for LaTeX output ------------------------------------------------
