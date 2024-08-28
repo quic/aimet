@@ -50,7 +50,10 @@ from bokeh.plotting import figure, save, curdoc
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.utils import get_ordered_list_of_modules
 from aimet_torch.v2.quantization.base import QuantizerBase
-from aimet_torch.v2.quantization.encoding_analyzer import _MinMaxObserver
+from aimet_torch.v2.quantization.encoding_analyzer import _MinMaxObserver, _HistogramObserver
+
+
+PERCENTILES = [1, 25, 50, 75, 99]
 
 
 def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = None) -> None:
@@ -91,37 +94,44 @@ def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = Non
     if not isinstance(sim, QuantizationSimModel):
         raise TypeError(f"Expected type 'aimet_torch.v2.quantsim.QuantizationSimModel', got '{type(sim)}'.")
 
-    # Ensure that the path is valid
-    check_path(save_path)
+    # print("Sim model")
+    # print(sim.model)
 
-    # Flatten the quantized modules into an ordered list for easier indexing in the plots
-    ordered_list = (get_ordered_list_of_modules(sim.model, dummy_input))
-    namelist = []
-    minlist = []
-    maxlist = []
 
-    # Collect stats from observers
-    for module in ordered_list:
-        module_name, module_min, module_max = get_observer_stats(module)
-        if module_name is not None:
-            namelist.append(module_name)
-            minlist.append(module_min)
-            maxlist.append(module_max)
-
-    # Raise an error if no stats were found
-    if len(namelist) == 0:
-        raise RuntimeError(
-            "No stats found to plot. Either there were no quantized modules, or calibration was not performed before calling this function, or observers of type other than _MinMaxObserver were used.")
-
-    idx = list(range(len(namelist)))
-
-    # Save an interactive bokeh plot as a standalone html in the specified directory with the specified name if provided
+    # Ensure that the save path is valid
     if not save_path:
         save_path = "quant_stats_visualization.html"
     check_path(save_path)
 
-    visualizer = QuantStatsVisualizer(idx, namelist, minlist, maxlist)
-    visualizer.export_plot_as_html(save_path)
+    # Flatten the quantized modules into an ordered list for easier indexing in the plots
+    ordered_list = (get_ordered_list_of_modules(sim.model, dummy_input))
+    # print("Ordered List")
+    # print(ordered_list)
+    stats_list = []
+
+    # Collect stats from observers
+    for module in ordered_list:
+        module_stats = get_observer_stats(module, percentile_list=None)
+        if module_stats is not None:
+            stats_list.append(module_stats)
+
+    # Raise an error if no stats were found
+    if len(stats_list) == 0:
+        raise RuntimeError(
+            "No stats found to plot. Either there were no quantized modules, or calibration was not performed before calling this function, or no observers of type _MinMaxObserver or _HistogramObserver are present.")
+
+    stats_dict = dict()
+    keys_list = ["name", 0, 100]
+    stats_dict["idx"] = list(range(len(stats_list)))
+    for key in keys_list:
+        stats_dict[key] = [None] * len(stats_list)
+    for idx, stats in enumerate(stats_list):
+        for key in keys_list:
+            stats_dict[key][idx] = stats_list[idx][key]
+    visualizer = QuantStatsVisualizer(stats_dict)
+
+    # Save an interactive bokeh plot as a standalone html
+    visualizer.export_plot_as_html(save_path, mode="basic_stats")
 
 
 def check_path(path: str):
@@ -133,18 +143,93 @@ def check_path(path: str):
         raise ValueError("'save_path' must end with '.html'.")
 
 
-def get_observer_stats(module):
-    """
-    Extract stats from observer
-    """
-    if isinstance(module[1], QuantizerBase):
-        if isinstance(module[1].encoding_analyzer.observer, _MinMaxObserver):
-            rng = module[1].encoding_analyzer.observer.get_stats()
-            if (rng.min is not None) and (rng.max is not None):
-                return module[0], torch.min(rng.min).item(), torch.max(rng.max).item()
-        # TODO - Handle other quant schemes
+def get_observer_stats(module, percentile_list):
+    # add_key_percentiles_to_list(percentile_list)
 
-    return None, None, None
+    module_name, module_quantizer = module[0], module[1]
+    print(f"Module: {module_name}, Quantizer: {module_quantizer}")
+    if isinstance(module_quantizer, QuantizerBase):
+        if isinstance(module_quantizer.encoding_analyzer.observer, _MinMaxObserver):
+            rng = module_quantizer.encoding_analyzer.observer.get_stats()
+            if (rng.min is not None):
+                stats = dict()
+                stats["name"] = module_name
+                stats[0] = torch.min(rng.min).item()
+                stats[100] = torch.max(rng.max).item()
+                return stats
+
+        elif isinstance(module_quantizer.encoding_analyzer.observer, _HistogramObserver):
+            histogram_list = module_quantizer.encoding_analyzer.observer.get_stats()
+            if len(histogram_list) == 1:
+                histogram = histogram_list[0]
+                if histogram.min is not None:
+                    stats = dict()
+                    stats["name"] = module_name
+                    stats[0] = histogram.min.item()
+                    stats[100] = histogram.max.item()
+                    get_advanced_stats_from_histogram(histogram, stats, percentile_list)
+                    return stats
+            elif len(histogram_list) > 1:
+                stats = dict()
+                stats["name"] = module_name
+                curmin = float("inf")
+                curmax = float("-inf")
+                for histogram in histogram_list:
+                    if histogram.min is not None:
+                        curmin = min(curmin, histogram.min.item())
+                        curmax = max(curmax, histogram.max.item())
+                if curmin < float("inf"):
+                    stats[0] = curmin
+                    stats[100] = curmax
+                    return stats
+
+    return None
+
+
+def add_key_percentiles_to_list(percentiles):
+    percentile_list = percentiles[:]
+    for p in [25, 50, 75]:
+        flag = True
+        for i in percentile_list:
+            if i == p:
+                flag = False
+        if flag:
+            percentile_list.append(p)
+
+
+def get_advanced_stats_from_histogram(histogram, stats, percentile_list):
+    if percentile_list is not None:
+        percentile_stats = get_percentile_stats_from_histogram(histogram, percentile_list)
+        for i in range(len(percentile_list)):
+            stats[percentile_list[i]] = percentile_stats[i]
+
+
+def get_percentile_stats_from_histogram(histogram, percentile_list):
+    if len(percentile_list) == 0:
+        raise RuntimeError("'percentile_list' cannot be empty.'")
+    if not _is_sorted(percentile_list):
+        raise RuntimeError("'percentile_list' must be sorted before calling this function.")
+
+    n = torch.sum(histogram.histogram).item()
+    cum_f = 0
+    idx = 0
+    percentile_stats = []
+    for i in range(len(histogram.histogram)):
+        f = histogram.histogram[i].item()
+        bin_low = histogram.bin_edges[i].item()
+        bin_high = histogram.bin_edges[i + 1].item()
+        if (cum_f + f) / n >= percentile_list[idx] / 100:
+            percentile_stats.append(bin_low + ((n * percentile_list[idx] / 100 - cum_f) / f) * (bin_high - bin_low))
+            idx += 1
+        cum_f += f
+    return percentile_stats
+
+
+def _is_sorted(arr: list):
+    for i in range(len(arr) - 1):
+        if arr[i] > arr[i + 1]:
+            return False
+    return True
 
 
 class DataSources:
@@ -153,18 +238,20 @@ class DataSources:
     """
 
     def __init__(self,
-                 idx: list,
-                 namelist: list,
-                 minlist: list,
-                 maxlist: list,
+                 stats_dict: dict,
                  plot: figure,
                  default_values: dict,
                  ):
         self.data_source = ColumnDataSource(
-            data=dict(idx=idx, namelist=namelist, minlist=minlist, maxlist=maxlist,
-                      marker_yminlist=[default_values['default_ymin']] * len(idx),
-                      marker_ymaxlist=[default_values['default_ymax']] * len(idx),
-                      selected=[False] * len(idx)))
+            data=dict(idx=stats_dict["idx"], namelist=stats_dict["name"], minlist=stats_dict[0],
+                      maxlist=stats_dict[100],
+                      marker_yminlist=[default_values['default_ymin']] * len(stats_dict["idx"]),
+                      marker_ymaxlist=[default_values['default_ymax']] * len(stats_dict["idx"]),
+                      selected=[False] * len(stats_dict["idx"])))
+        for key in stats_dict.keys():
+            if key not in ["idx", "name", 0, 100]:
+                self.data_source.add(data=stats_dict[key], name=str(key) + "%ilelist")
+
         self.default_values_source = ColumnDataSource(
             data=dict(default_ymax=[default_values['default_ymax']],
                       default_ymin=[default_values['default_ymin']],
@@ -172,22 +259,32 @@ class DataSources:
                       default_minclip=[default_values['default_minclip']],
                       default_xmax=[default_values['default_xmax']],
                       default_xmin=[default_values['default_xmin']]))
+
         self.limits_source = ColumnDataSource(
             data=dict(ymax=[default_values['default_ymax']], ymin=[default_values['default_ymin']],
                       xmin=[plot.x_range.start], xmax=[plot.x_range.end],
                       minclip=[default_values['default_minclip']],
                       maxclip=[default_values['default_maxclip']]))
+
         self.table_data_source = ColumnDataSource(
             data=dict(idx=[], namelist=[], minlist=[], maxlist=[]))
+        for key in stats_dict.keys():
+            if key not in ["idx", "name", 0, 100]:
+                self.table_data_source.add(data=[], name=str(key) + "%ilelist")
+
         self.selected_data_source = ColumnDataSource(
             data=dict(idx=[], namelist=[], floor=[], ceil=[], minlist=[], maxlist=[])
         )
+        for key in stats_dict.keys():
+            if key not in ["idx", "name", 0, 100]:
+                self.selected_data_source.add(data=[], name=str(key) + "%ilelist")
 
 
 class TableFilters:
     """
     Class for holding data filters.
     """
+
     def __init__(self, data_sources: DataSources):
         self.name_filter = BooleanFilter()
         self.name_filter.booleans = [True for _ in range(len(data_sources.data_source.data['idx']))]
@@ -201,6 +298,7 @@ class TableViews:
     """
     Class for holding views of the data sources.
     """
+
     def __init__(self, tablefilters: TableFilters):
         self.min_thresh_view = CDSView(filter=tablefilters.min_thresh_filter)
         self.max_thresh_view = CDSView(filter=tablefilters.max_thresh_filter)
@@ -216,13 +314,17 @@ class TableObjects:
         self.views = TableViews(self.filters)
 
         columns = [
-            TableColumn(field="idx", title="Layer Index", width=QuantStatsVisualizer.table_column_widths["Layer Index"]),
+            TableColumn(field="idx", title="Layer Index",
+                        width=QuantStatsVisualizer.table_column_widths["Layer Index"]),
             TableColumn(field="namelist", title="Layer Name",
-                        formatter=StringFormatter(font_style="bold"), width=QuantStatsVisualizer.table_column_widths["Layer Name"]),
+                        formatter=StringFormatter(font_style="bold"),
+                        width=QuantStatsVisualizer.table_column_widths["Layer Name"]),
             TableColumn(field="minlist", title="Min Activation",
-                        formatter=ScientificFormatter(precision=3), width=QuantStatsVisualizer.table_column_widths["Min Activation"]),
+                        formatter=ScientificFormatter(precision=3),
+                        width=QuantStatsVisualizer.table_column_widths["Min Activation"]),
             TableColumn(field="maxlist", title="Max Activation",
-                        formatter=ScientificFormatter(precision=3), width=QuantStatsVisualizer.table_column_widths["Max Activation"]),
+                        formatter=ScientificFormatter(precision=3),
+                        width=QuantStatsVisualizer.table_column_widths["Max Activation"]),
         ]
 
         self.data_table = DataTable(source=datasources.table_data_source, columns=columns,
@@ -301,11 +403,12 @@ class QuantStatsVisualizer:
                            "Min Activation": 100,
                            "Max Activation": 100}
 
-    def __init__(self, idx: list, namelist: list, minlist: list, maxlist: list):
-        self.idx = idx
-        self.namelist = namelist
-        self.minlist = minlist
-        self.maxlist = maxlist
+    def __init__(self, stats_dict: dict):
+        # self.idx = idx
+        # self.namelist = namelist
+        # self.minlist = minlist
+        # self.maxlist = maxlist
+        self.stats_dict = stats_dict
         self.plot = figure(
             title="Min Max Activations/Weights of quantized modules for given model",
             x_axis_label="Layer index",
@@ -315,30 +418,32 @@ class QuantStatsVisualizer:
 
     def _add_plot_lines(self, datasources: DataSources):
         self.plot.segment(x0='xmin', x1='xmax', y0='ymin', y1='ymin', line_width=4, line_color='black',
-                       source=datasources.limits_source)
+                          source=datasources.limits_source)
         self.plot.segment(x0='xmin', x1='xmax', y0='ymax', y1='ymax', line_width=4, line_color='black',
-                       source=datasources.limits_source)
+                          source=datasources.limits_source)
         self.plot.segment(x0='xmin', x1='xmax', y0='minclip', y1='minclip', line_width=2, line_color='black',
-                       line_dash='dashed',
-                       source=datasources.limits_source)
+                          line_dash='dashed',
+                          source=datasources.limits_source)
         self.plot.segment(x0='xmin', x1='xmax', y0='maxclip', y1='maxclip', line_width=2, line_color='black',
-                       line_dash='dashed',
-                       source=datasources.limits_source)
+                          line_dash='dashed',
+                          source=datasources.limits_source)
         self.plot.line('idx', 'maxlist', source=datasources.data_source, legend_label="Max Activation", line_width=2,
-                    line_color="red")
+                       line_color="red")
         self.plot.line('idx', 'minlist', source=datasources.data_source, legend_label="Min Activation", line_width=2,
-                    line_color="blue")
+                       line_color="blue")
         selections = self.plot.segment(x0='idx', x1='idx', y0='floor', y1='ceil', line_width=2, line_color='yellow',
-                                    line_alpha=0.3, source=datasources.selected_data_source)
+                                       line_alpha=0.3, source=datasources.selected_data_source)
 
         return selections
 
     def _add_min_max_markers(self, datasources: DataSources, tableobjects: TableObjects):
-        min_markers = self.plot.circle_x('idx', 'marker_yminlist', source=datasources.data_source, size=10, color='orange',
-                                      line_color="navy")
+        min_markers = self.plot.circle_x('idx', 'marker_yminlist', source=datasources.data_source, size=10,
+                                         color='orange',
+                                         line_color="navy")
         min_markers.view = tableobjects.views.min_thresh_view
-        max_markers = self.plot.circle_x('idx', 'marker_ymaxlist', source=datasources.data_source, size=10, color='orange',
-                                      line_color="navy")
+        max_markers = self.plot.circle_x('idx', 'marker_ymaxlist', source=datasources.data_source, size=10,
+                                         color='orange',
+                                         line_color="navy")
         max_markers.view = tableobjects.views.max_thresh_view
 
         return min_markers, max_markers
@@ -366,7 +471,6 @@ class QuantStatsVisualizer:
         })
 
         return marker_hover
-
 
     @staticmethod
     def _get_selection_hovertool(selections):
@@ -461,7 +565,7 @@ class QuantStatsVisualizer:
                 const namelist = source_data['namelist'];
                 source_data['marker_yminlist'] = source_data['minlist'].map(t => findMax(t, limits_data['ymin'][0]));
                 source_data['marker_ymaxlist'] = source_data['maxlist'].map(t => findMin(t, limits_data['ymax'][0]));
-                
+
                 // Updating the filters for finding layers that cross the min or max thresholds
                 min_thresh_filter.booleans = minlist.map(t => t <= limits_data['minclip'][0]);
                 max_thresh_filter.booleans = maxlist.map(t => t >= limits_data['maxclip'][0]);
@@ -794,7 +898,7 @@ class QuantStatsVisualizer:
                 table_data_source.selected.indices = selected_indices;
 
                 table_data_source.change.emit();
-                
+
                 // Force redraw of table by making an inert change to table properties
                 table.name = "placeholder_1";
                 table.name = "placeholder_0";
@@ -848,12 +952,12 @@ class QuantStatsVisualizer:
         inputwidgets.table_view_select.js_on_change('value', customcallbacks.select_table_view_callback)
         datasources.table_data_source.selected.js_on_change('indices', customcallbacks.table_selection_callback)
 
-
     def _create_layout(self, inputwidgets, tableobjects):
         heading_1 = Div(text="<h2>Quant Stats Visualizer</h2>")
         heading_2 = Div(text="<h2>Quant Stats Data Table</h2>")
 
-        sp1 = Spacer(width=QuantStatsVisualizer.spacer_dims["sp1_width"], height=QuantStatsVisualizer.spacer_dims["sp1_height"])
+        sp1 = Spacer(width=QuantStatsVisualizer.spacer_dims["sp1_width"],
+                     height=QuantStatsVisualizer.spacer_dims["sp1_height"])
         row1 = row(inputwidgets.ymin_input, inputwidgets.ymax_input)
         row2 = row(inputwidgets.minclip_input, inputwidgets.maxclip_input)
         inputs1 = column(row1, row2)
@@ -863,7 +967,7 @@ class QuantStatsVisualizer:
 
         return layout
 
-    def export_plot_as_html(self, save_path: str) -> None:
+    def export_plot_as_html(self, save_path: str, mode: str) -> None:
         """
         Method for constructing the visualization and saving it to the given path.
 
@@ -878,23 +982,21 @@ class QuantStatsVisualizer:
         # Defining the default values of plotting parameters
         self.default_values['default_ymax'] = QuantStatsVisualizer.initial_vals["default_ymax"]
         self.default_values['default_ymin'] = QuantStatsVisualizer.initial_vals["default_ymin"]
-        self.default_values['default_xmax'] = len(self.idx) - 1
+        self.default_values['default_xmax'] = len(self.stats_dict["idx"]) - 1
         self.default_values['default_xmin'] = 0
         self.default_values['default_maxclip'] = self.default_values['default_ymax'] / 2
         self.default_values['default_minclip'] = self.default_values['default_ymin'] / 2
 
-        self.plot.x_range = Range1d(0, len(self.idx))
-        self.plot.y_range = Range1d(self.default_values['default_ymax'] * 1.05, self.default_values['default_ymin'] * 1.05)
+        self.plot.x_range = Range1d(0, len(self.stats_dict["idx"]))
+        self.plot.y_range = Range1d(self.default_values['default_ymax'] * 1.05,
+                                    self.default_values['default_ymin'] * 1.05)
 
         # Creating and adding a reset tool
         rt = ResetTool()
         self.plot.add_tools(rt)
 
         # Defining Bokeh ColumnDataSources
-        datasources = DataSources(idx=self.idx,
-                                  namelist=self.namelist,
-                                  minlist=self.minlist,
-                                  maxlist=self.maxlist,
+        datasources = DataSources(stats_dict=self.stats_dict,
                                   plot=self.plot,
                                   default_values=self.default_values,
                                   )

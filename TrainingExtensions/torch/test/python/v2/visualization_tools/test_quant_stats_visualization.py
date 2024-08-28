@@ -41,9 +41,12 @@ import os.path
 import torch
 from models.test_models import TinyModel
 from models.test_models import ModelWithUnusedMatmul
+from aimet_torch.examples.test_models import SingleResidualWithAvgPool
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.quantsim import QuantScheme
 from aimet_torch.v2.visualization_tools import visualize_stats
+import aimet_torch.v2.nn as aimet_nn
+from aimet_torch.v2.quantsim.config_utils import set_blockwise_quantization_for_weights
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
 
 
@@ -75,11 +78,22 @@ def evaluate_2(model: torch.nn.Module, dummy_input: tuple):
 class TestQuantStatsVisualization:
 
     def test_visualize_stats(self):
-        """ test visualize_stats API"""
+        """ test visualize_stats with minmax observers"""
         input_shape = (1, 3, 32, 32)
         dummy_input = torch.randn(*input_shape)
         model = TinyModel().eval()
         sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=QuantScheme.post_training_tf)
+        sim.compute_encodings(evaluate, dummy_input)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            visualize_stats(sim, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.html"))
+            assert os.path.isfile(os.path.join(tmp_dir, "test_visualize_stats.html"))
+
+    def test_visualize_stats_histogram(self):
+        """ test visualize_stats with histogram observers"""
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(*input_shape)
+        model = TinyModel().eval()
+        sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced)
         sim.compute_encodings(evaluate, dummy_input)
         with tempfile.TemporaryDirectory() as tmp_dir:
             visualize_stats(sim, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.html"))
@@ -92,9 +106,43 @@ class TestQuantStatsVisualization:
         model = TinyModel().eval()
         sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=QuantScheme.post_training_tf, config_file=get_path_for_per_channel_config())
         sim.compute_encodings(evaluate, dummy_input)
+        # with tempfile.TemporaryDirectory() as tmp_dir:
+        #     visualize_stats(sim, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.html"))
+        #     assert os.path.isfile(os.path.join(tmp_dir, "test_visualize_stats.html"))
+        tmp_dir = "/local/mnt/workspace/ipendse/mirror_sync/dev/minmax_visualization"
+        visualize_stats(sim, dummy_input, os.path.join(tmp_dir, "test_perchannel_vis.html"))
+        assert os.path.isfile(os.path.join(tmp_dir, "test_perchannel_vis.html"))
+
+    def test_per_channel_histogram(self):
+        """ test visualize_stats in per channel case with histogram observers"""
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(*input_shape)
+        model = TinyModel().eval()
+        sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced, config_file=get_path_for_per_channel_config())
+        sim.compute_encodings(evaluate, dummy_input)
         with tempfile.TemporaryDirectory() as tmp_dir:
             visualize_stats(sim, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.html"))
             assert os.path.isfile(os.path.join(tmp_dir, "test_visualize_stats.html"))
+
+    def test_blockwise(self):
+        model = SingleResidualWithAvgPool().eval()
+        dummy_input = torch.randn(1, 3, 32, 32)
+        sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=QuantScheme.post_training_tf)
+        sim.compute_encodings(lambda m, _: m(dummy_input), None)
+        conv_layers = [module for module in sim.model.modules() if isinstance(module, aimet_nn.QuantizedConv2d)]
+
+        # exclude the 1st conv layers since its in channels of 3 makes it inconvenient to set blockwise
+        conv_layers = conv_layers[1:]
+        set_blockwise_quantization_for_weights(sim, [conv_layers[0]], 4, True, [1, 4, -1, -1])
+        set_blockwise_quantization_for_weights(sim, lambda m: m == conv_layers[1], 4, True, [1, 4, -1, -1])
+        set_blockwise_quantization_for_weights(sim, [aimet_nn.QuantizedLinear], 4, True, [1, 4])
+        # with tempfile.TemporaryDirectory() as tmp_dir:
+        #     visualize_stats(sim, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.html"))
+        #     assert os.path.isfile(os.path.join(tmp_dir, "test_visualize_stats.html"))
+        tmp_dir = "/local/mnt/workspace/ipendse/mirror_sync/dev/minmax_visualization"
+        visualize_stats(sim, dummy_input, os.path.join(tmp_dir, "test_blockwise_vis.html"))
+        assert os.path.isfile(os.path.join(tmp_dir, "test_blockwise_vis.html"))
+
 
     def test_not_calibrated_error(self):
         """ Check whether an exception is raised if QuantSim is not calibrated """
