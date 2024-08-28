@@ -317,8 +317,7 @@ class TestLoraAdapterPeft:
         with tempfile.TemporaryDirectory() as tmpdir:
             sim.export(tmpdir, 'model', dummy_input=dummy_inputs, export_model=True, filename_prefix_encodings='encodings')
             sim.export(tmpdir, 'model', dummy_input=dummy_inputs, export_model=False, filename_prefix_encodings='encodings_2')
-            model_path = os.path.join(tmpdir, 'model.onnx')
-            peft_utils.export_adapter_weights(sim, tmpdir, 'weight', model_path)
+            peft_utils.export_adapter_weights(sim, tmpdir, 'weight')
             assert os.path.exists(os.path.join(tmpdir, 'encodings.encodings'))
             assert os.path.exists(os.path.join(tmpdir, 'encodings_2.encodings'))
 

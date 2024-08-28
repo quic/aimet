@@ -82,7 +82,7 @@ Step 10: Compute encodings for model & Export
     Note: while exporting the model directory should be the same for base_model export and consecutive exports
 
     >>> sim.export(tmpdir, 'model', dummy_input=dummy_inputs, export_model=False, filename_prefix_encodings='adapter1')
-    >>> peft_utils.export_adapter_weights(sim, tmpdir, 'adapter1_weights', 'tmpdir/model.onnx')
+    >>> peft_utils.export_adapter_weights(sim, tmpdir, 'adapter1_weights')
 
 Step 11: For another adapter with same configration (rank & target module) repeat steps 8-10
 
