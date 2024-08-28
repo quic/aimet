@@ -184,8 +184,8 @@ def test_quantize_compute_encodings(quantize: Quantize, x: torch.Tensor):
     expected_x_int = Q.affine.quantize(x,
                                        dynamic_scale,
                                        dynamic_offset,
-                                       quantize.bitwidth,
-                                       quantize._signed)
+                                       quantize.qmin,
+                                       quantize.qmax)
 
     with quantize.compute_encodings():
         x_int = quantize(x)
@@ -230,8 +230,8 @@ def test_qdq_compute_encodings(quantize_dequantize: QuantizeDequantize, x: torch
     expected_output = Q.affine.quantize_dequantize(x,
                                                    dynamic_scale,
                                                    dynamic_offset,
-                                                   quantize_dequantize.bitwidth,
-                                                   quantize_dequantize._signed)
+                                                   quantize_dequantize.qmin,
+                                                   quantize_dequantize.qmax)
 
     with quantize_dequantize.compute_encodings():
         output = quantize_dequantize(x)
@@ -372,8 +372,8 @@ def test_quantize_forward(quantize: Quantize, x: torch.Tensor):
     expected_output = Q.affine.quantize(x,
                                         quantize.get_scale(),
                                         quantize.get_offset(),
-                                        quantize.bitwidth,
-                                        quantize._signed)
+                                        quantize.qmin,
+                                        quantize.qmax)
     assert torch.allclose(output.quantized_repr(), expected_output.to(output.encoding.dtype))
 
 
@@ -396,8 +396,8 @@ def test_qdq_forward(quantize_dequantize: QuantizeDequantize, x: torch.Tensor):
     expected_output = Q.affine.quantize_dequantize(x,
                                                    quantize_dequantize.get_scale(),
                                                    quantize_dequantize.get_offset(),
-                                                   quantize_dequantize.bitwidth,
-                                                   quantize_dequantize._signed)
+                                                   quantize_dequantize.qmin,
+                                                   quantize_dequantize.qmax)
     assert torch.allclose(output, expected_output)
 
 
@@ -958,8 +958,8 @@ def test_bq_compute_encodings_and_forward():
     assert bq.get_min().shape == shape
     assert out.shape == param_tensor.shape
 
-    qdq_out = affine.quantize_dequantize(param_tensor, bq.get_scale(), bq.get_offset(), bitwidth=bq.bitwidth,
-                                         signed=bq.signed, block_size=bq.block_size)
+    qdq_out = affine.quantize_dequantize(param_tensor, bq.get_scale(), bq.get_offset(), bq.qmin, bq.qmax,
+                                         block_size=bq.block_size)
     assert torch.equal(out, qdq_out)
 
 @pytest.mark.parametrize('shape, block_sizes', [[(4, 1, 1), (1, 4, 4)],
@@ -1308,3 +1308,213 @@ def test_sub_float32_error(dtype, bitwidth, symmetric):
     with qtzr.compute_encodings():
         with pytest.raises(RuntimeError):
             _ = qtzr(x)
+
+
+@pytest.mark.parametrize(
+    'qmin,   qmax,  bitwidth, symmetric', [
+    (0,      15,    4,        False),
+    (-8,     7,     4,        True),
+])
+def test_qmin_qmax_consistency(qmin, qmax, bitwidth, symmetric):
+    """
+    When: Assign new bitwidths
+    Then: qmin, qmax should be updated accordingly
+    """
+    q = Q.affine.Quantize((), qmin, qmax, symmetric)
+    x = torch.arange(2**16, dtype=torch.float)
+    with q.compute_encodings():
+        q(x)
+
+    expected_qmin = qmin
+    expected_qmax = qmax
+    expected_bitwidth = bitwidth
+
+    while q.bitwidth < 16:
+        assert q.qmin == expected_qmin
+        assert q.qmax == expected_qmax
+        assert q.bitwidth == expected_bitwidth
+
+        q.bitwidth += 1
+        expected_qmin *= 2
+        expected_qmax = (expected_qmax + 1) * 2 - 1
+        expected_bitwidth += 1
+
+    while q.bitwidth > 4:
+        assert q.qmin == expected_qmin
+        assert q.qmax == expected_qmax
+        assert q.bitwidth == expected_bitwidth
+
+        q.bitwidth -= 1
+        expected_qmin /= 2
+        expected_qmax = (expected_qmax + 1) / 2 - 1
+        expected_bitwidth -= 1
+
+
+def test_attr_translation():
+    """
+    Given: Quantizer with standard quantization grid [0, 15]
+    """
+    q = Q.affine.Quantize((), qmin=0, qmax=15, symmetric=False)
+
+    assert q.bitwidth == 4
+    assert not q.signed
+
+    """
+    When: Assign fractional value to bitwidth
+    Then: Throw type error
+    """
+    with pytest.raises(TypeError):
+        q.bitwidth = 0.1
+
+    """
+    When: Assign bitwidth < 1
+    Then: Throw value error
+    """
+    with pytest.raises(ValueError):
+        q.bitwidth = 0
+
+    """
+    When: Assign qtzr.signed = True
+    Then:
+        1) qtzr.signed getter should return True
+        2) qtzr.{qmin, qmax} should be updated accordingly
+        3) Other attributes (qtzr.bitwidth) shouldn't change
+    """
+    q.signed = True
+    assert q.signed
+    assert q.bitwidth == 4
+    assert q.qmin == -8
+    assert q.qmax == 7
+
+    """
+    When: Assign a floating point number that holds integer values
+    Then:
+        1) qtzr.bitwidth getter should return 5
+        2) qtzr.{qmin, qmax} should be updated accordingly
+        3) Other attributes (qtzr.signed) shouldn't change
+    """
+    q.bitwidth = 5.0
+    assert q.bitwidth == 5
+    assert q.qmin == -16
+    assert q.qmax == 15
+    assert q.signed
+
+    """
+    Given: Quantizer with non-standard quantization grid [-1, 14]
+    """
+    q = Q.affine.Quantize((), qmin=-1, qmax=14, symmetric=False)
+
+    """
+    When: Call qtzr.{signed, bitwidth} getter
+    Then: Throw runtime error
+    """
+    with pytest.raises(RuntimeError):
+        q.signed
+
+    with pytest.raises(RuntimeError):
+        q.bitwidth
+
+
+def test_non_integer_bitwidth():
+    """
+    Given: Quantizer whose [qmin, qmax] can be represented in the form of
+           [0, 2**B-1] or [2**(B-1), 2**(B-1)-1] where B is a positive non-integer
+    """
+    # 2**15 - 1 < 0xff7f < 2**16 - 1
+    q = Q.affine.QuantizeDequantize((), qmin=0, qmax=0xff7f, symmetric=False)
+
+    """
+    When: Get bitwidth
+    Then: Should return non-integer bitwidth B
+    """
+    with pytest.raises(RuntimeError):
+        q.bitwidth
+
+    """
+    When: Set bitwidth
+    Then: Should update [qmin, qmax] accordingly
+    """
+    q.bitwidth = 16
+    assert q.bitwidth == 16
+    assert q.qmin == 0
+    assert q.qmax == 2**16 - 1
+
+
+@pytest.mark.parametrize(
+    'qmin,   qmax,  bitwidth, symmetric', [
+    (0,      15,    4,        False),
+    (0,      255,   8,        False),
+    (0,      65535, 16,       False),
+    (-8,     7,     4,        True),
+    (-128,   127,   8,        True),
+    (-32768, 32767, 16,       True),
+])
+@pytest.mark.parametrize('qtzr_cls', [Q.affine.Quantize, Q.affine.QuantizeDequantize])
+def test_parse_args_equivalence(qtzr_cls, qmin, qmax, bitwidth, symmetric):
+    """
+    When: Instantiate quantizers with (qmin, qmax) and (bitwidth, signed)
+          with mathematically equivalent values
+    Then: The output of the quantizers should be equal to each other
+    """
+    x = torch.arange(qmin, qmax+1, dtype=torch.float32)
+    quantizers = [
+        qtzr_cls((), qmin, qmax, symmetric),
+        qtzr_cls((), qmin, qmax, symmetric=symmetric),
+        qtzr_cls((), qmin, qmax=qmax, symmetric=symmetric),
+        qtzr_cls((), qmin=qmin, qmax=qmax, symmetric=symmetric),
+        qtzr_cls((), bitwidth, symmetric),
+        qtzr_cls((), bitwidth, symmetric=symmetric),
+        qtzr_cls((), bitwidth=bitwidth, symmetric=symmetric),
+    ]
+
+    for qtzr in quantizers:
+        with qtzr.compute_encodings():
+            _ = qtzr(x)
+
+    for qtzr in quantizers:
+        assert torch.equal(qtzr.min, torch.tensor(qmin))
+        assert torch.equal(qtzr.max, torch.tensor(qmax))
+        assert torch.equal(qtzr.get_scale(), torch.tensor(1.))
+        assert torch.equal(qtzr.get_offset(), torch.tensor(0.))
+        assert torch.equal(qtzr(x), x)
+
+def test_parse_args_error():
+    """
+    When: Instantiate with ()
+    Then: Throw TypeError
+    """
+    with pytest.raises(TypeError):
+        Quantize()
+
+    """
+    When: Instantiate with (tuple,)
+    Then: Throw TypeError
+    """
+    with pytest.raises(TypeError):
+        Quantize((1, 10))
+
+    """
+    When: Instantiate with (tuple, int)
+    Then: Throw TypeError
+    """
+    with pytest.raises(TypeError):
+        Quantize((1, 10), -128)
+
+    """
+    When: Instantiate with (tuple, int, int)
+    Then: Throw TypeError
+    """
+    with pytest.raises(TypeError):
+        Quantize((1, 10), -128, 127)
+
+    """
+    When: Instantiate with (tuple, int, bool)
+    Then: Create quantizer normally
+    """
+    Quantize((1, 10), 8, True)
+
+    """
+    When: Instantiate with (tuple, int, int, bool)
+    Then: Create quantizer normally
+    """
+    Quantize((1, 10), -128, 127, True)

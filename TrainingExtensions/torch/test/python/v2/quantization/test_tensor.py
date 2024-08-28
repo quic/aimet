@@ -41,10 +41,9 @@ import torch
 from torch import nn
 from torch import Tensor
 from torch import randn, arange
-import torch.nn.functional as F
 
 from aimet_torch.v2.quantization.affine import quantize, quantize_dequantize
-from aimet_torch.v2.quantization.tensor import EncodingError, QuantizedTensor, DequantizedTensor, QuantizedTensorBase
+from aimet_torch.v2.quantization.tensor import EncodingError, QuantizedTensor, DequantizedTensor
 from aimet_torch.v2.quantization.affine import AffineEncoding
 
 
@@ -69,8 +68,8 @@ def affine_quantize(tensor: torch.Tensor,
     """
     Quantizes the input tensor into a QuantizedTensor using the quantization parameters
     """
-    tensor_q = quantize(tensor, scale, offset, bitwidth)
-    encoding = AffineEncoding(scale, offset, bitwidth)
+    tensor_q = quantize(tensor, scale, offset, bitwidth, signed)
+    encoding = AffineEncoding(scale, offset, bitwidth, signed)
     qtensor = tensor_q.as_subclass(QuantizedTensor)
     qtensor.encoding = encoding
     return qtensor
@@ -201,7 +200,7 @@ class TestQuantizedTensor:
         """
         Then: 2) Quantized values are equal to calling quantize(tensor, encoding.scale, encoding.offset, encoding.bitwidth)
         """
-        assert torch.allclose(quant_repr.to(torch.float32), quantize(tensor, scale, offset, bitwidth))
+        assert torch.allclose(quant_repr.to(torch.float32), quantize(tensor, scale, offset, bitwidth, signed))
 
     @pytest.mark.cuda()
     @pytest.mark.parametrize("dtype", [torch.float32, torch.float16])

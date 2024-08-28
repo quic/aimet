@@ -273,6 +273,6 @@ def set_matmul_second_input_producer_to_8bit_symmetric(sim: 'QuantizationSimMode
                             "If you haven't used model preparer, consider using it.")
 
             if target_quantizer:
-                target_quantizer.bitwidth = 8
+                target_quantizer.qmin = -128
+                target_quantizer.qmax = 127
                 target_quantizer.symmetric = True
-                target_quantizer.signed = True
