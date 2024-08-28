@@ -96,6 +96,8 @@ class GPTVQ:
         :param config_file_path: Configuration file path for model quantizers
         :return: QuantizationSimModel with GPTVQ applied weights and saves corresponding parameter encodings JSON file at provided path
         """
+        _logger.info(gptvq_params)
+
         if module_names_to_exclude is not None:
             cls._validate_module_names(model, module_names_to_exclude, "module_names_to_exclude")
 
