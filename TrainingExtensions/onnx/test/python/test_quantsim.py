@@ -931,3 +931,56 @@ class TestQuantSim:
 
                 # if matmul's second input is 16bw then first input should also be 16bw
                 assert matmul_first_input['bitwidth'] == 16
+
+    def test_matmul_v73_exception_rule_matmul_branch(self, tmpdir):
+        model = models_for_tests.add_matmul_model()
+        quantsim_config = {
+            "defaults":
+                {
+                    "hw_version": "V73",
+                    "ops":
+                        {
+                            "is_output_quantized": "True"
+                        },
+                    "params":
+                        {
+                            "is_quantized": "True",
+                            "is_symmetric": "False"
+                        },
+                    "per_channel_quantization": "True",
+                    "strict_symmetric": "False",
+                    "unsigned_symmetric": "False"
+                },
+            "params": {
+                "bias":
+                    {
+                        "is_quantized": "False"
+                    }
+            },
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {
+                "is_input_quantized": "True"
+            },
+            "model_output": {
+                "is_output_quantized": "True"
+            }
+        }
+
+        with open(os.path.join(tmpdir, 'quantsim_config.json'), 'w') as f:
+            json.dump(quantsim_config, f)
+
+        sim = QuantizationSimModel(model, default_param_bw=16, default_activation_bw=16,
+                                   path=tmpdir, config_file=os.path.join(tmpdir, 'quantsim_config.json'))
+
+        def callback(session, dummy_input):
+            session.run(None, dummy_input)
+
+        dummy_tensor = {'input': np.random.rand(3, 3).astype(np.float32),
+                        'input_2': np.random.rand(3, 3).astype(np.float32)}
+        sim.compute_encodings(callback, dummy_tensor)
+
+        quantizer_1 = sim.qc_quantize_op_dict.get("added_output")
+        assert quantizer_1.bitwidth == 16
+        assert quantizer_1.use_symmetric_encodings
+        assert len(quantizer_1.encodings) == 1
