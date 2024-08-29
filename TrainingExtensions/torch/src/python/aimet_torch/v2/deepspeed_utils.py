@@ -58,8 +58,35 @@ try:
         ]
         return GatheredParameters(params, *args, **kwargs)
 
+    @contextlib.contextmanager
+    def _do_patch_dummy_parameters(module):
+        orig_data = {
+            name: p.data for name, p in module.named_parameters(recurse=False)
+            # Ignore if the parameter is already all-gathered.
+            # deepspeed.zero.runtime.GatheredParameters assumes all the parameters to be "NOT_AVAILABLE"
+            # and can fail if some of them were already "AVAILABLE".
+            if getattr(p, 'ds_status', None) == ZeroParamStatus.NOT_AVAILABLE
+        }
+
+        try:
+            for name in orig_data:
+                param = getattr(module, name)
+                zeros = torch.zeros(size=param.ds_shape,
+                                    dtype=param.dtype,
+                                    device=param.device,
+                                    requires_grad=param.requires_grad)
+                param.data = zeros
+            yield
+        finally:
+            for name, data in orig_data.items():
+                getattr(module, name).data = data
+
 except ImportError:
     def gathered_parameters(*args, **kwargs): # pylint: disable=unused-argument
+        """ Dummy placeholder in case deepspeed doesn't exist """
+        return contextlib.nullcontext()
+
+    def _do_patch_dummy_parameters(module): # pylint: disable=unused-argument
         """ Dummy placeholder in case deepspeed doesn't exist """
         return contextlib.nullcontext()
 
@@ -80,29 +107,6 @@ def _restore(module, *_):
     ctx = _ds_ctx.pop(module, None)
     if ctx:
         ctx.__exit__(None, None, None)
-
-@contextlib.contextmanager
-def _do_patch_dummy_parameters(module):
-    orig_data = {
-        name: p.data for name, p in module.named_parameters(recurse=False)
-        # Ignore if the parameter is already all-gathered.
-        # deepspeed.zero.runtime.GatheredParameters assumes all the parameters to be "NOT_AVAILABLE"
-        # and can fail if some of them were already "AVAILABLE".
-        if getattr(p, 'ds_status', None) == ZeroParamStatus.NOT_AVAILABLE
-    }
-
-    try:
-        for name in orig_data:
-            param = getattr(module, name)
-            zeros = torch.zeros(size=param.ds_shape,
-                                dtype=param.dtype,
-                                device=param.device,
-                                requires_grad=param.requires_grad)
-            param.data = zeros
-        yield
-    finally:
-        for name, data in orig_data.items():
-            getattr(module, name).data = data
 
 
 @contextlib.contextmanager
