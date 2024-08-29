@@ -43,8 +43,6 @@ import onnxruntime as rt
 import numpy as np
 import torchvision
 import pytest
-from packaging import version
-
 import torch
 
 from aimet_onnx.batch_norm_fold import _find_conv_bn_pairs, find_all_batch_norms_to_fold, fold_all_batch_norms_to_weight
@@ -81,33 +79,32 @@ class TestBatchNormFold:
     """ Test methods for BatchNormFold"""
 
     def test_find_batch_norms_to_fold(self):
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            model = MyModel().eval()
-            initialize_bn_params(model)
+        model = MyModel().eval()
+        initialize_bn_params(model)
 
-            input_shape = (2, 10, 24, 24)
-            x = torch.randn(*input_shape, requires_grad=True)
+        input_shape = (2, 10, 24, 24)
+        x = torch.randn(*input_shape, requires_grad=True)
 
-            # Export the model
-            torch.onnx.export(model,  # model being run
-                              x,  # model input (or a tuple for multiple inputs)
-                              "./model_single_residual.onnx",
-                              # where to save the model (can be a file or file-like object),
-                              training=torch.onnx.TrainingMode.TRAINING,
-                              export_params=True,  # store the trained parameter weights inside the model file
-                              opset_version=12,  # the ONNX version to export the model to
-                              do_constant_folding=False,  # whether to execute constant folding for optimization
-                              input_names=['input'],  # the model's input names
-                              output_names=['output'])
-            model = ONNXModel(load_model('./model_single_residual.onnx'))
+        # Export the model
+        torch.onnx.export(model,  # model being run
+                          x,  # model input (or a tuple for multiple inputs)
+                          "./model_single_residual.onnx",
+                          # where to save the model (can be a file or file-like object),
+                          training=torch.onnx.TrainingMode.TRAINING,
+                          export_params=True,  # store the trained parameter weights inside the model file
+                          opset_version=12,  # the ONNX version to export the model to
+                          do_constant_folding=False,  # whether to execute constant folding for optimization
+                          input_names=['input'],  # the model's input names
+                          output_names=['output'])
+        model = ONNXModel(load_model('./model_single_residual.onnx'))
 
-            connected_graph = ConnectedGraph(model)
-            bn_info = _find_conv_bn_pairs(connected_graph)
-            conv1 = connected_graph.get_op_from_module_name('/conv1/Conv')
-            conv3 = connected_graph.get_op_from_module_name('/conv3/Conv')
-            assert len(bn_info.keys()) == 2
-            assert connected_graph.get_op_from_module_name('/bn1/BatchNormalization') == bn_info[conv1].output_bn
-            assert connected_graph.get_op_from_module_name('/bn2/BatchNormalization') == bn_info[conv3].input_bn
+        connected_graph = ConnectedGraph(model)
+        bn_info = _find_conv_bn_pairs(connected_graph)
+        conv1 = connected_graph.get_op_from_module_name('/conv1/Conv')
+        conv3 = connected_graph.get_op_from_module_name('/conv3/Conv')
+        assert len(bn_info.keys()) == 2
+        assert connected_graph.get_op_from_module_name('/bn1/BatchNormalization') == bn_info[conv1].output_bn
+        assert connected_graph.get_op_from_module_name('/bn2/BatchNormalization') == bn_info[conv3].input_bn
 
     def test_find_bn_before_linear(self):
         x = torch.randn((32, 10))
@@ -119,52 +116,48 @@ class TestBatchNormFold:
         assert 'MatMul' in list(bn_info.keys())[0].name
 
     def test_find_bn_before_flatten(self):
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            x = torch.randn((2, 10, 24, 24))
-            model = BNBeforeFlattenLinear()
-            model = _convert_to_onnx_no_fold(model, x)
-            conn_graph = ConnectedGraph(model)
-            bn_info = _find_conv_bn_pairs(conn_graph)
-            linear_layer = conn_graph.get_op_from_module_name('/fc2/MatMul')
-            assert len(bn_info.keys()) == 1
-            assert linear_layer in bn_info.keys()
-            assert bn_info[linear_layer].input_bn == conn_graph.get_op_from_module_name('/bn1/BatchNormalization')
+        x = torch.randn((2, 10, 24, 24))
+        model = BNBeforeFlattenLinear()
+        model = _convert_to_onnx_no_fold(model, x)
+        conn_graph = ConnectedGraph(model)
+        bn_info = _find_conv_bn_pairs(conn_graph)
+        linear_layer = conn_graph.get_op_from_module_name('/fc2/MatMul')
+        assert len(bn_info.keys()) == 1
+        assert linear_layer in bn_info.keys()
+        assert bn_info[linear_layer].input_bn == conn_graph.get_op_from_module_name('/bn1/BatchNormalization')
 
     def test_find_bn_after_linear(self):
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            x = torch.randn((32, 10))
-            model = BNAfterLinear(bias=True)
-            model = _convert_to_onnx_no_fold(model, x)
-            conn_graph = ConnectedGraph(model)
-            bn_info = _find_conv_bn_pairs(conn_graph)
-            linear_layer = conn_graph.get_op_from_module_name('/fc1/Gemm')
-            assert len(bn_info.keys()) == 1
-            assert linear_layer in bn_info.keys()
-            assert bn_info[linear_layer].output_bn == conn_graph.get_op_from_module_name('/bn1/BatchNormalization')
+        x = torch.randn((32, 10))
+        model = BNAfterLinear(bias=True)
+        model = _convert_to_onnx_no_fold(model, x)
+        conn_graph = ConnectedGraph(model)
+        bn_info = _find_conv_bn_pairs(conn_graph)
+        linear_layer = conn_graph.get_op_from_module_name('/fc1/Gemm')
+        assert len(bn_info.keys()) == 1
+        assert linear_layer in bn_info.keys()
+        assert bn_info[linear_layer].output_bn == conn_graph.get_op_from_module_name('/bn1/BatchNormalization')
 
     def test_find_bn_after_convtranspose(self):
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            x = torch.randn((2, 10, 24, 24))
-            model = BNAfterConvTranspose()
-            model = _convert_to_onnx_no_fold(model, x)
-            conn_graph = ConnectedGraph(model)
-            bn_info = _find_conv_bn_pairs(conn_graph)
-            conv_layer = conn_graph.get_op_from_module_name('/conv1/ConvTranspose')
-            assert len(bn_info.keys()) == 1
-            assert conv_layer in bn_info.keys()
-            assert bn_info[conv_layer].output_bn == conn_graph.get_op_from_module_name('/bn1/BatchNormalization')
+        x = torch.randn((2, 10, 24, 24))
+        model = BNAfterConvTranspose()
+        model = _convert_to_onnx_no_fold(model, x)
+        conn_graph = ConnectedGraph(model)
+        bn_info = _find_conv_bn_pairs(conn_graph)
+        conv_layer = conn_graph.get_op_from_module_name('/conv1/ConvTranspose')
+        assert len(bn_info.keys()) == 1
+        assert conv_layer in bn_info.keys()
+        assert bn_info[conv_layer].output_bn == conn_graph.get_op_from_module_name('/bn1/BatchNormalization')
 
     def test_find_bn_after_conv1d(self):
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            x = torch.randn((2, 10, 24))
-            model = BNAfterConv1d()
-            model = _convert_to_onnx_no_fold(model, x)
-            conn_graph = ConnectedGraph(model)
-            bn_info = _find_conv_bn_pairs(conn_graph)
-            conv_layer = conn_graph.get_op_from_module_name('/conv1/Conv')
-            assert len(bn_info.keys()) == 1
-            assert conv_layer in bn_info.keys()
-            assert bn_info[conv_layer].output_bn == conn_graph.get_op_from_module_name('/bn1/BatchNormalization')
+        x = torch.randn((2, 10, 24))
+        model = BNAfterConv1d()
+        model = _convert_to_onnx_no_fold(model, x)
+        conn_graph = ConnectedGraph(model)
+        bn_info = _find_conv_bn_pairs(conn_graph)
+        conv_layer = conn_graph.get_op_from_module_name('/conv1/Conv')
+        assert len(bn_info.keys()) == 1
+        assert conv_layer in bn_info.keys()
+        assert bn_info[conv_layer].output_bn == conn_graph.get_op_from_module_name('/bn1/BatchNormalization')
 
     def test_filter_bn_before_conv_transpose(self):
         x = torch.randn((2, 10, 24, 24))
@@ -241,51 +234,48 @@ class TestBatchNormFold:
         assert not bn_conv
 
     def test_filter_bn_before_flatten(self):
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            x = torch.randn((2, 10, 24, 24))
-            model = BNBeforeFlattenLinear(bias=True)
-            model = _convert_to_onnx_no_fold(model, x)
-            conn_graph = ConnectedGraph(model)
-            conv_bn, bn_conv = find_all_batch_norms_to_fold(conn_graph)
-            linear_layer = conn_graph.get_op_from_module_name('/fc2/Gemm')
-            assert len(bn_conv) == 1
-            assert linear_layer.get_module() == bn_conv[0][1]
+        x = torch.randn((2, 10, 24, 24))
+        model = BNBeforeFlattenLinear(bias=True)
+        model = _convert_to_onnx_no_fold(model, x)
+        conn_graph = ConnectedGraph(model)
+        conv_bn, bn_conv = find_all_batch_norms_to_fold(conn_graph)
+        linear_layer = conn_graph.get_op_from_module_name('/fc2/Gemm')
+        assert len(bn_conv) == 1
+        assert linear_layer.get_module() == bn_conv[0][1]
 
     def test_fold_bn_before_flatten_no_bias(self):
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            torch.manual_seed(10)
-            torch_model = BNBeforeFlattenLinear()
-            torch_model.eval()
-            initialize_bn_params(torch_model)
+        torch.manual_seed(10)
+        torch_model = BNBeforeFlattenLinear()
+        torch_model.eval()
+        initialize_bn_params(torch_model)
 
-            input_shape = (2, 10, 24, 24)
-            test_data = np.random.randn(*input_shape).astype(np.float32)
+        input_shape = (2, 10, 24, 24)
+        test_data = np.random.randn(*input_shape).astype(np.float32)
 
-            model = _convert_to_onnx(torch_model, torch.randn(input_shape))
-            layers_orig = len(model.graph().node)
-            baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
+        model = _convert_to_onnx(torch_model, torch.randn(input_shape))
+        layers_orig = len(model.graph().node)
+        baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
-            assert pairs[0][0].name == "/fc2/Gemm"
-            assert len(model.graph().node) == layers_orig - 2
-            assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
+        assert pairs[0][0].name == "/fc2/Gemm"
+        assert len(model.graph().node) == layers_orig - 2
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_bn_before_flatten_no_bias_with_transpose(self):
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            torch.manual_seed(10)
-            torch_model = BNBeforeFlattenLinear()
-            torch_model.eval()
-            initialize_bn_params(torch_model)
+        torch.manual_seed(10)
+        torch_model = BNBeforeFlattenLinear()
+        torch_model.eval()
+        initialize_bn_params(torch_model)
 
-            input_shape = (2, 10, 24, 24)
-            test_data = np.random.randn(*input_shape).astype(np.float32)
+        input_shape = (2, 10, 24, 24)
+        test_data = np.random.randn(*input_shape).astype(np.float32)
 
-            model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
-            layers_orig = len(model.graph().node)
-            baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
+        model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
+        layers_orig = len(model.graph().node)
+        baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
-            assert pairs[0][0].name == "/fc2/Gemm"
-            assert len(model.graph().node) == layers_orig - 2
-            assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
+        assert pairs[0][0].name == "/fc2/Gemm"
+        assert len(model.graph().node) == layers_orig - 2
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_resnet18(self):
         torch.manual_seed(10)
@@ -305,22 +295,21 @@ class TestBatchNormFold:
 
     @pytest.mark.parametrize("bias", [True, False])
     def test_fold_bn_before_conv(self, bias):
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            torch.manual_seed(10)
-            torch_model = BNBeforeConv(bias=bias)
-            torch_model.eval()
-            initialize_bn_params(torch_model)
+        torch.manual_seed(10)
+        torch_model = BNBeforeConv(bias=bias)
+        torch_model.eval()
+        initialize_bn_params(torch_model)
 
-            input_shape = (2, 10, 24, 24)
-            test_data = np.random.randn(*input_shape).astype(np.float32)
+        input_shape = (2, 10, 24, 24)
+        test_data = np.random.randn(*input_shape).astype(np.float32)
 
-            model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
-            layers_orig = len(model.graph().node)
-            baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
+        model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
+        layers_orig = len(model.graph().node)
+        baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
-            assert pairs[0][0].name == "/conv2/Conv"
-            assert len(model.graph().node) == layers_orig - 1
-            assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
+        assert pairs[0][0].name == "/conv2/Conv"
+        assert len(model.graph().node) == layers_orig - 1
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_bn_before_conv_depthwise(self):
         torch.manual_seed(10)
@@ -342,146 +331,139 @@ class TestBatchNormFold:
     @pytest.mark.parametrize("padding", [0, 1])
     @pytest.mark.parametrize("groups", [1, 5, 20])
     def test_fold_bn_after_conv_no_bias(self, bias, padding, groups):
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            torch.manual_seed(10)
-            torch_model = BNAfterConv(bias=bias, padding=padding, groups=groups)
-            torch_model.eval()
-            initialize_bn_params(torch_model)
+        torch.manual_seed(10)
+        torch_model = BNAfterConv(bias=bias, padding=padding, groups=groups)
+        torch_model.eval()
+        initialize_bn_params(torch_model)
 
-            input_shape = (2, 10, 24, 24)
-            test_data = np.random.randn(*input_shape).astype(np.float32)
+        input_shape = (2, 10, 24, 24)
+        test_data = np.random.randn(*input_shape).astype(np.float32)
 
-            model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
-            layers_orig = len(model.graph().node)
-            baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
+        model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
+        layers_orig = len(model.graph().node)
+        baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
-            assert pairs[0][0].name == "/conv2/Conv"
-            assert len(model.graph().node) == layers_orig - 1
-            assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
+        assert pairs[0][0].name == "/conv2/Conv"
+        assert len(model.graph().node) == layers_orig - 1
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_bn_after_transposed_conv_depthwise(self):
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            torch.manual_seed(10)
-            torch_model = BNAfterConvTranspose(groups=10)
-            torch_model.eval()
-            initialize_bn_params(torch_model)
+        torch.manual_seed(10)
+        torch_model = BNAfterConvTranspose(groups=10)
+        torch_model.eval()
+        initialize_bn_params(torch_model)
 
-            input_shape = (2, 10, 24, 24)
-            test_data = np.random.randn(*input_shape).astype(np.float32)
+        input_shape = (2, 10, 24, 24)
+        test_data = np.random.randn(*input_shape).astype(np.float32)
 
-            model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
-            layers_orig = len(model.graph().node)
-            baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
+        model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
+        layers_orig = len(model.graph().node)
+        baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
-            assert pairs[0][0].name == "/conv1/ConvTranspose"
-            assert len(model.graph().node) == layers_orig - 1
-            assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
+        assert pairs[0][0].name == "/conv1/ConvTranspose"
+        assert len(model.graph().node) == layers_orig - 1
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_bn_after_transposed_conv1d(self):
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            torch.manual_seed(10)
-            torch_model = BNAfterConvTranspose1d()
-            torch_model.eval()
-            initialize_bn_params(torch_model)
+        torch.manual_seed(10)
+        torch_model = BNAfterConvTranspose1d()
+        torch_model.eval()
+        initialize_bn_params(torch_model)
 
-            input_shape = (2, 10, 24)
-            test_data = np.random.randn(*input_shape).astype(np.float32)
+        input_shape = (2, 10, 24)
+        test_data = np.random.randn(*input_shape).astype(np.float32)
 
-            model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
-            layers_orig = len(model.graph().node)
-            baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
+        model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
+        layers_orig = len(model.graph().node)
+        baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
-            assert pairs[0][0].name == "/conv1/ConvTranspose"
-            assert len(model.graph().node) == layers_orig - 1
-            assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
+        assert pairs[0][0].name == "/conv1/ConvTranspose"
+        assert len(model.graph().node) == layers_orig - 1
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_bn_before_linear_layer_no_bias(self):
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            torch.manual_seed(10)
-            torch_model = BNBeforeLinear(bias=False)
-            torch_model.eval()
-            initialize_bn_params(torch_model)
+        torch.manual_seed(10)
+        torch_model = BNBeforeLinear(bias=False)
+        torch_model.eval()
+        initialize_bn_params(torch_model)
 
-            input_shape = (32, 10)
-            test_data = np.random.randn(*input_shape).astype(np.float32)
+        input_shape = (32, 10)
+        test_data = np.random.randn(*input_shape).astype(np.float32)
 
-            model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
-            layers_orig = len(model.graph().node)
-            baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
+        model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
+        layers_orig = len(model.graph().node)
+        baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
-            assert pairs[0][0].name == "/fc2/Gemm"
-            assert len(model.graph().node) == layers_orig - 1
-            assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
+        assert pairs[0][0].name == "/fc2/Gemm"
+        assert len(model.graph().node) == layers_orig - 1
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
-            model = _convert_to_onnx(torch_model, torch.randn(input_shape))
-            layers_orig = len(model.graph().node)
-            baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
+        model = _convert_to_onnx(torch_model, torch.randn(input_shape))
+        layers_orig = len(model.graph().node)
+        baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
-            assert pairs[0][0].name == "/fc2/Gemm"
-            assert len(model.graph().node) == layers_orig - 1
-            assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
+        assert pairs[0][0].name == "/fc2/Gemm"
+        assert len(model.graph().node) == layers_orig - 1
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_bn_before_linear_layer_with_bias(self):
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            torch.manual_seed(10)
-            torch_model = BNBeforeLinear(bias=True)
-            torch_model.eval()
-            initialize_bn_params(torch_model)
+        torch.manual_seed(10)
+        torch_model = BNBeforeLinear(bias=True)
+        torch_model.eval()
+        initialize_bn_params(torch_model)
 
-            input_shape = (32, 10)
-            test_data = np.random.randn(*input_shape).astype(np.float32)
+        input_shape = (32, 10)
+        test_data = np.random.randn(*input_shape).astype(np.float32)
 
-            model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
-            layers_orig = len(model.graph().node)
-            baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
+        model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
+        layers_orig = len(model.graph().node)
+        baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
-            assert pairs[0][0].name == "/fc2/Gemm"
-            assert len(model.graph().node) == layers_orig - 1
-            assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
+        assert pairs[0][0].name == "/fc2/Gemm"
+        assert len(model.graph().node) == layers_orig - 1
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_bn_after_linear_layer_with_bias(self):
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            torch.manual_seed(10)
-            torch_model = BNAfterLinear(bias=True)
-            torch_model.eval()
-            initialize_bn_params(torch_model)
+        torch.manual_seed(10)
+        torch_model = BNAfterLinear(bias=True)
+        torch_model.eval()
+        initialize_bn_params(torch_model)
 
-            input_shape = (32, 10)
-            test_data = np.random.randn(*input_shape).astype(np.float32)
+        input_shape = (32, 10)
+        test_data = np.random.randn(*input_shape).astype(np.float32)
 
-            model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
-            layers_orig = len(model.graph().node)
-            baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
+        model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
+        layers_orig = len(model.graph().node)
+        baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
-            assert pairs[0][0].name == "/fc1/Gemm"
-            assert len(model.graph().node) == layers_orig - 1
-            assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
+        assert pairs[0][0].name == "/fc1/Gemm"
+        assert len(model.graph().node) == layers_orig - 1
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_bn_after_linear_layer_no_bias(self):
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            torch.manual_seed(10)
-            torch_model = BNAfterLinear(bias=False)
-            torch_model.eval()
-            initialize_bn_params(torch_model)
+        torch.manual_seed(10)
+        torch_model = BNAfterLinear(bias=False)
+        torch_model.eval()
+        initialize_bn_params(torch_model)
 
-            input_shape = (32, 10)
-            test_data = np.random.randn(*input_shape).astype(np.float32)
+        input_shape = (32, 10)
+        test_data = np.random.randn(*input_shape).astype(np.float32)
 
-            model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
-            layers_orig = len(model.graph().node)
-            baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
+        model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
+        layers_orig = len(model.graph().node)
+        baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
-            assert pairs[0][0].name == "/fc1/Gemm"
-            assert len(model.graph().node) == layers_orig - 1
-            assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
+        assert pairs[0][0].name == "/fc1/Gemm"
+        assert len(model.graph().node) == layers_orig - 1
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
-            model = _convert_to_onnx(torch_model, torch.randn(input_shape))
-            layers_orig = len(model.graph().node)
-            baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
+        model = _convert_to_onnx(torch_model, torch.randn(input_shape))
+        layers_orig = len(model.graph().node)
+        baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
-            assert pairs[0][0].name == "/fc1/Gemm"
-            assert len(model.graph().node) == layers_orig - 1
-            assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
+        assert pairs[0][0].name == "/fc1/Gemm"
+        assert len(model.graph().node) == layers_orig - 1
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     @pytest.mark.parametrize("bias", [True, False])
     def test_fold_bn_before_conv1d(self, bias):

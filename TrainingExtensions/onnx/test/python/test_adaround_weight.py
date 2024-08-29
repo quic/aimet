@@ -40,7 +40,6 @@
 import os
 import json
 import tempfile
-from packaging import version
 import numpy as np
 import torch
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
@@ -48,7 +47,7 @@ import pytest
 
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
 from aimet_common import libquant_info
-from aimet_onnx.adaround.adaround_weight import Adaround, AdaroundParameters
+from aimet_onnx.adaround.adaround_weight import Adaround, AdaroundParameters, AdaroundSupportedModules
 import models.models_for_tests as test_models
 from models import models_for_tests
 
@@ -84,10 +83,11 @@ class TestAdaround:
             with open(os.path.join(tempdir, 'dummy.encodings')) as json_file:
                 encoding_data = json.load(json_file)
 
-            param_keys = list(encoding_data.keys())
-            if version.parse(torch.__version__) >= version.parse("1.13"):
-                assert 'onnx::Conv_43' in param_keys
+            param_keys = encoding_data.keys()
+            params = {node.input[1] for node in model.nodes() if node.op_type in AdaroundSupportedModules}
+            assert params.issubset(param_keys)
 
+    @pytest.mark.skip(reason="test requires exact version of torch that the code has built against.")
     def test_apply_adaround_for_custom_op(self):
         custom_ops_path = os.path.dirname(libquant_info.__file__)
         custom_ops_path = os.path.join(custom_ops_path, "customops")
@@ -106,18 +106,20 @@ class TestAdaround:
 
         params = AdaroundParameters(data_loader=data_loader, num_batches=1, default_num_iterations=5, forward_fn=callback,
                                     forward_pass_callback_args=None)
-        ada_rounded_model = Adaround.apply_adaround(model, params, './', 'dummy', user_onnx_libs=[onnx_library],
-                                                    use_cuda=torch.cuda.is_available())
-        sess = build_session(ada_rounded_model, [onnx_library])
-        out_after_ada = sess.run(None, dummy_input)
-        assert not np.array_equal(out_before_ada[0], out_after_ada[0])
 
-        with open('./dummy.encodings') as json_file:
-            encoding_data = json.load(json_file)
+        with tempfile.TemporaryDirectory() as tempdir:
+            ada_rounded_model = Adaround.apply_adaround(model, params, tempdir, 'dummy', user_onnx_libs=[onnx_library],
+                                                        use_cuda=torch.cuda.is_available())
+            sess = build_session(ada_rounded_model, [onnx_library])
+            out_after_ada = sess.run(None, dummy_input)
+            assert not np.array_equal(out_before_ada[0], out_after_ada[0])
 
-        param_keys = list(encoding_data.keys())
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            assert 'conv.weight' in param_keys
+            with open(os.path.join(tempdir, 'dummy.encodings')) as json_file:
+                encoding_data = json.load(json_file)
+
+            param_keys = encoding_data.keys()
+            params = {node.input[1] for node in model.nodes() if node.op_type in AdaroundSupportedModules}
+            assert params.issubset(param_keys)
 
     @pytest.mark.parametrize("model, input_shape", [(models_for_tests.weight_gemm_model(10, 20, True), (1, 10)),
                                                     (models_for_tests.weight_gemm_model(10, 20, False), (1, 10)),
