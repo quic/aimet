@@ -617,6 +617,10 @@ class QuantizationSimModel:
         :return: Target quantizer
         """
         onnx_op = op.get_module()
+
+        if onnx_op is None:
+            return self._get_closest_target_quantizer(op.input_ops[0])
+
         output_tensor = onnx_op.output[0]
         target_quantizer = self.qc_quantize_op_dict.get(output_tensor, None)
 

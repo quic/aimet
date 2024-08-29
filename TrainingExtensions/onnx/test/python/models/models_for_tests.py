@@ -2276,3 +2276,55 @@ def resize_op_model():
     onnx.checker.check_model(model, True)
     onnx.save(model, 'resize_model.onnx')
     return model
+
+def add_matmul_model():
+    # Define the fixed shape input tensor
+    input_tensor = helper.make_tensor_value_info('input', onnx.TensorProto.FLOAT, [3, 3])
+    input_tensor_2 = helper.make_tensor_value_info('input_2', onnx.TensorProto.FLOAT, [3, 3])
+
+    # Define the constant 1D vector to be added to the input
+    constant_vector = np.random.randn(3).astype(np.float32)
+    constant_tensor = helper.make_tensor('constant_vector', onnx.TensorProto.FLOAT, [3], constant_vector)
+
+    # Define the weights for both matmuls
+    weight1 = helper.make_tensor('weight1', onnx.TensorProto.FLOAT, [3, 3], np.random.randn(3, 3).astype(np.float32))
+
+    # Define the Add node
+    add_node = helper.make_node(
+        'Add',  # The operation is an addition
+        ['input', 'constant_vector'],  # The inputs: input and constant vector
+        ['added_output'],  # The output name
+        name='AddNode'
+    )
+
+    # Define the MatMul nodes
+    matmul1 = helper.make_node(
+        'MatMul',  # The operation is a matrix multiplication
+        ['added_output', 'weight1'],  # The inputs: added output and weight1
+        ['output1'],  # The output name
+        name='MatMul1'
+    )
+
+    matmul2 = helper.make_node(
+        'MatMul',  # The operation is a matrix multiplication
+        ['input_2', 'added_output'],  # The inputs: added output and weight2
+        ['output2'],  # The output name
+        name='MatMul2'
+    )
+
+    # Define the output tensors
+    output_tensor1 = helper.make_tensor_value_info('output1', onnx.TensorProto.FLOAT, [3, 3])
+    output_tensor2 = helper.make_tensor_value_info('output2', onnx.TensorProto.FLOAT, [3, 3])
+
+    # Create the graph
+    graph_def = helper.make_graph(
+        [add_node, matmul1, matmul2],  # The list of nodes in the graph
+        'add_matmul_graph',  # A name for the graph
+        [input_tensor, input_tensor_2],  # The list of inputs
+        [output_tensor1, output_tensor2],  # The list of outputs
+        [constant_tensor, weight1]  # Initializers (weights and constants)
+    )
+
+    # Create the model
+    model_def = helper.make_model(graph_def, producer_name='add_matmul')
+    return model_def
