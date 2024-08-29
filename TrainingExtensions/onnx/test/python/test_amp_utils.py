@@ -34,9 +34,8 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
 import pytest
-import torch
-from packaging import version
 
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.amp.utils import find_layer_database_for_mac_calculation, create_mac_dict, find_bit_ops_reduction, \
@@ -47,28 +46,26 @@ from models.test_models import single_residual_model
 
 class TestAMPUtils:
     def test_find_layer_database_and_mac_cost(self):
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            model = single_residual_model()
-            sim = QuantizationSimModel(model.model)
-            layer_db = find_layer_database_for_mac_calculation(sim)
-            assert len(layer_db) == 5
-            assert layer_db['/conv1/Conv'].output_shape == (1, 32, 18, 18)
-            assert layer_db['/conv3/Conv'].weight_shape == [8, 16, 2, 2]
-            mac_dict = create_mac_dict(sim)
-            for node_name in mac_dict:
-                cost = layer_db[node_name].output_shape[2] * layer_db[node_name].output_shape[3] \
-                       * layer_db[node_name].weight_shape[0] * layer_db[node_name].weight_shape[1]
-                if len(layer_db[node_name].weight_shape) == 4:
-                    cost *= layer_db[node_name].weight_shape[2] * layer_db[node_name].weight_shape[3]
-                assert mac_dict[node_name] == cost
+        model = single_residual_model()
+        sim = QuantizationSimModel(model.model)
+        layer_db = find_layer_database_for_mac_calculation(sim)
+        assert len(layer_db) == 5
+        assert layer_db['/conv1/Conv'].output_shape == (1, 32, 18, 18)
+        assert layer_db['/conv3/Conv'].weight_shape == [8, 16, 2, 2]
+        mac_dict = create_mac_dict(sim)
+        for node_name in mac_dict:
+            cost = layer_db[node_name].output_shape[2] * layer_db[node_name].output_shape[3] \
+                   * layer_db[node_name].weight_shape[0] * layer_db[node_name].weight_shape[1]
+            if len(layer_db[node_name].weight_shape) == 4:
+                cost *= layer_db[node_name].weight_shape[2] * layer_db[node_name].weight_shape[3]
+            assert mac_dict[node_name] == cost
 
     def test_find_parent_name_dict(self):
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            model = single_residual_model()
-            sim = QuantizationSimModel(model.model)
-            param_op_name_dict = find_param_name_to_parent_name_dict(sim.connected_graph)
-            assert len(param_op_name_dict) == 5
-            assert '/conv1/Conv' in param_op_name_dict.values()
+        model = single_residual_model()
+        sim = QuantizationSimModel(model.model)
+        param_op_name_dict = find_param_name_to_parent_name_dict(sim.connected_graph)
+        assert len(param_op_name_dict) == 5
+        assert '/conv1/Conv' in param_op_name_dict.values()
 
     def test_calculate_running_bit_ops(self):
         """ Test calculate running bit ops """
@@ -124,9 +121,8 @@ class TestAMPUtils:
 
     @pytest.mark.skip
     def test_get_quantizer_to_op_type_dict(self):
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            model = single_residual_model()
-            sim = QuantizationSimModel(model.model)
-            d = get_quantizer_to_op_type_dict(sim)
-            quantizer_to_op_type = {'input': ['Conv'], 'onnx::Conv_45': ['Conv'], 'onnx::Conv_46': ['Conv'], '/conv1/Conv_output_0': ['Conv'], '/relu1/Relu_output_0': ['Relu'], '/maxpool/MaxPool_output_0': ['MaxPool'], 'onnx::Conv_48': ['Conv'], 'onnx::Conv_49': ['Conv'], '/conv2/Conv_output_0': ['Conv'], '/relu2/Relu_output_0': ['Relu'], 'conv3.weight': ['Conv'], '/conv3/Conv_output_0': ['Conv'], 'conv4.weight': ['Conv'], 'conv4.bias': ['Conv'], '/conv4/Conv_output_0': ['Conv'], '/ada/Pad_output_0': ['Pad'], '/ada/AveragePool_output_0': ['AveragePool'], '/Add_output_0': ['Add'], '/relu3/Relu_output_0': ['Relu'], '/avgpool/Pad_output_0': ['Pad'], '/avgpool/AveragePool_output_0': ['AveragePool'], 'fc.weight': ['Gemm'], 'fc.bias': ['Gemm'], 'output': ['Gemm']}
-            assert d == quantizer_to_op_type
+        model = single_residual_model()
+        sim = QuantizationSimModel(model.model)
+        d = get_quantizer_to_op_type_dict(sim)
+        quantizer_to_op_type = {'input': ['Conv'], 'onnx::Conv_45': ['Conv'], 'onnx::Conv_46': ['Conv'], '/conv1/Conv_output_0': ['Conv'], '/relu1/Relu_output_0': ['Relu'], '/maxpool/MaxPool_output_0': ['MaxPool'], 'onnx::Conv_48': ['Conv'], 'onnx::Conv_49': ['Conv'], '/conv2/Conv_output_0': ['Conv'], '/relu2/Relu_output_0': ['Relu'], 'conv3.weight': ['Conv'], '/conv3/Conv_output_0': ['Conv'], 'conv4.weight': ['Conv'], 'conv4.bias': ['Conv'], '/conv4/Conv_output_0': ['Conv'], '/ada/Pad_output_0': ['Pad'], '/ada/AveragePool_output_0': ['AveragePool'], '/Add_output_0': ['Add'], '/relu3/Relu_output_0': ['Relu'], '/avgpool/Pad_output_0': ['Pad'], '/avgpool/AveragePool_output_0': ['AveragePool'], 'fc.weight': ['Gemm'], 'fc.bias': ['Gemm'], 'output': ['Gemm']}
+        assert d == quantizer_to_op_type

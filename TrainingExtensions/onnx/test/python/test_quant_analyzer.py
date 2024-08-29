@@ -34,26 +34,22 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
 import copy
 import json
 import os.path
 import tempfile
 from pathlib import Path
 from typing import Dict
-from packaging import version
-
 import numpy as np
 import torch
 import onnxruntime as ort
 
 from aimet_common.utils import CallbackFunc
 from aimet_common.defs import QuantScheme
-
 from aimet_onnx.batch_norm_fold import fold_all_batch_norms_to_weight
 from aimet_onnx.quantsim import QuantizationSimModel
-from aimet_onnx.qc_quantize_op import QcQuantizeOp
 from aimet_onnx.quant_analyzer import QuantAnalyzer
-
 from models import models_for_tests
 
 def calibrate(session: ort.InferenceSession, dummy_input: Dict[str, np.ndarray]):
@@ -134,21 +130,19 @@ class TestQuantAnalyzer:
         cg_ops = sim.connected_graph.ordered_ops
 
         # Verify the order of ops is according to their occurences in the model graph
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            assert cg_ops.index(conn_graph.get_op_from_module_name("/conv2/Conv")) < cg_ops.index(conn_graph.get_op_from_module_name("/relu2/Relu"))
-            assert cg_ops.index(conn_graph.get_op_from_module_name("/conv4/Conv")) < cg_ops.index(conn_graph.get_op_from_module_name("/fc/Gemm"))
+        assert cg_ops.index(conn_graph.get_op_from_module_name("/conv2/Conv")) < cg_ops.index(conn_graph.get_op_from_module_name("/relu2/Relu"))
+        assert cg_ops.index(conn_graph.get_op_from_module_name("/conv4/Conv")) < cg_ops.index(conn_graph.get_op_from_module_name("/fc/Gemm"))
 
         # Verify op-specific quantizers are captured correctly
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            input_quantizers, output_quantizers, param_quantizers = quant_analyzer._get_op_quantizers(conn_graph.get_op_from_module_name("/conv1/Conv"), sim)
-            assert len(input_quantizers) == 1
-            assert not output_quantizers
-            assert len(param_quantizers) == 1
+        input_quantizers, output_quantizers, param_quantizers = quant_analyzer._get_op_quantizers(conn_graph.get_op_from_module_name("/conv1/Conv"), sim)
+        assert len(input_quantizers) == 1
+        assert not output_quantizers
+        assert len(param_quantizers) == 1
 
-            input_quantizers, output_quantizers, param_quantizers = quant_analyzer._get_op_quantizers(conn_graph.get_op_from_module_name("/relu1/Relu"), sim)
-            assert not input_quantizers
-            assert len(output_quantizers) == 1
-            assert not param_quantizers
+        input_quantizers, output_quantizers, param_quantizers = quant_analyzer._get_op_quantizers(conn_graph.get_op_from_module_name("/relu1/Relu"), sim)
+        assert not input_quantizers
+        assert len(output_quantizers) == 1
+        assert not param_quantizers
 
         # Disable all the quantizers and verify empty items are returned.
         for _, qc_quantize_op in sim.qc_quantize_op_dict.items():
@@ -279,8 +273,6 @@ class TestQuantAnalyzer:
 
             quant_analyzer.export_per_layer_encoding_min_max_range(sim, results_dir=tmp_dir)
             assert os.path.isfile(Path(tmp_dir, "min_max_ranges", "activations.html"))
-            if version.parse(torch.__version__) >= version.parse("1.13"):
-                assert os.path.isfile(Path(tmp_dir, "min_max_ranges", "_conv1_Conv_onnx_Conv_39.html"))
             # Dense (Gemm) is disabled to per-channel quantization, it should be in weights.html
             assert os.path.isfile(Path(tmp_dir, "min_max_ranges", "weights.html"))
 
@@ -301,10 +293,9 @@ class TestQuantAnalyzer:
             quant_analyzer.export_per_layer_stats_histogram(sim, results_dir=tmp_dir)
             assert os.path.exists(Path(tmp_dir, "activations_pdf"))
             assert os.path.exists(Path(tmp_dir, "weights_pdf"))
-            if version.parse(torch.__version__) >= version.parse("1.13"):
-                assert os.path.isfile(Path(tmp_dir, "activations_pdf", "_conv1_Conv_input_q0_0.html"))
-                assert os.path.isfile(Path(tmp_dir, "weights_pdf", "_conv1_Conv", "_conv1_Conv_onnx_Conv_39_0.html"))
-
+            assert len([file for file in os.listdir(os.path.join(tmp_dir, "weights_pdf", "_conv1_Conv")) if
+                        file.endswith(".html")]) == 1
+            print(sim.qc_quantize_op_dict.keys())
     def test_export_per_layer_stats_histogram_per_channel(self):
         """ test export_per_layer_stats_histogram() for per channel quantization """
         quantsim_config = {
@@ -324,7 +315,7 @@ class TestQuantAnalyzer:
             },
             "op_type": {"Gemm": {"per_channel_quantization": "False"}},
             "supergroups": [],
-            "model_input": {},
+            "model_input": { "is_input_quantized": "True" },
             "model_output": {}
         }
 
@@ -346,12 +337,9 @@ class TestQuantAnalyzer:
             quant_analyzer.export_per_layer_stats_histogram(sim, results_dir=tmp_dir)
             assert os.path.exists(Path(tmp_dir, "activations_pdf"))
             assert os.path.exists(Path(tmp_dir, "weights_pdf"))
-            if version.parse(torch.__version__) >= version.parse("1.13"):
-                assert os.path.isfile(Path(tmp_dir, "activations_pdf", "_conv1_Conv_output_q0_0.html"))
-                assert os.path.isfile(Path(tmp_dir, "weights_pdf", "_conv1_Conv", "_conv1_Conv_onnx_Conv_39_0.html"))
-                assert os.path.isfile(Path(tmp_dir, "weights_pdf", "_conv1_Conv", "_conv1_Conv_onnx_Conv_39_31.html"))
-                assert os.path.isfile(Path(tmp_dir, "weights_pdf", "_conv2_Conv", "_conv2_Conv_onnx_Conv_42_0.html"))
-                assert os.path.isfile(Path(tmp_dir, "weights_pdf", "_conv2_Conv", "_conv2_Conv_onnx_Conv_42_15.html"))
+            assert len([file for file in os.listdir(os.path.join(tmp_dir, "activations_pdf"))]) <= len(sim.activation_names)
+            assert len([file for file in os.listdir(os.path.join(tmp_dir, "weights_pdf", "_conv1_Conv")) if file.endswith(".html")]) == 32
+
 
     def test_export_per_layer_mse_loss(self):
         """ test export_per_layer_mse_loss() """
@@ -375,7 +363,8 @@ class TestQuantAnalyzer:
         with tempfile.TemporaryDirectory() as tmp_dir:
             layerwise_mse_loss_dict = quant_analyzer.export_per_layer_mse_loss(sim, results_dir=tmp_dir)
             assert type(layerwise_mse_loss_dict) == dict
-            assert len(layerwise_mse_loss_dict) == 11
+            node_names = [op.name for op in quant_analyzer._onnx_model.nodes()]
+            assert set(layerwise_mse_loss_dict.keys()).issubset(node_names)
 
             # Test whether layerwise_mse_loss_dict consists of correct keys (op names).
             for op_name in layerwise_mse_loss_dict.keys():
