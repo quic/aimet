@@ -51,7 +51,8 @@ add_executable(MoDlQuantizationTest
       TestUtilities.cpp
       TestPercentileEncodingAnalyzer.cpp
       TestMseEncodingAnalyzer.cpp
-      TestEntropyEncodingAnalyzer.cpp)
+      TestEntropyEncodingAnalyzer.cpp
+      TestQuantizationFunctions.cpp)
 
 if (ENABLE_CUDA)
     target_compile_options(MoDlQuantizationTest
