@@ -146,7 +146,13 @@ class Adaround:
             model = ONNXModel(model)
 
         # TODO: Remove this once we no longer simplify the model within quantsim
-        model.model, _ = onnxsim.simplify(model.model)
+
+        try:
+            model.model, _ = onnxsim.simplify(model.model)
+            # pylint: disable=bare-except
+        except:
+            logger.info('ONNX Simplifier failed. Proceeding with unsimplified model.')
+            
         quant_sim = QuantizationSimModel(copy.deepcopy(model), quant_scheme=default_quant_scheme,
                                          default_param_bw=default_param_bw,
                                          config_file=default_config_file,
