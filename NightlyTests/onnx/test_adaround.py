@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -34,8 +34,8 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
 import os
-from packaging import version
 import json
 import numpy as np
 import pytest
@@ -45,12 +45,9 @@ from onnx import load_model
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
 from torchvision import models
 
-from aimet_onnx.utils import make_dummy_input
 from aimet_common.defs import QuantScheme
 from aimet_onnx.quantsim import QuantizationSimModel
-from torch_utils import get_cifar10_data_loaders, train_cifar10
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
-
 from aimet_onnx.adaround.adaround_weight import Adaround, AdaroundParameters
 
 image_size = 32
@@ -81,33 +78,32 @@ class TestAdaroundAcceptance:
     """ Acceptance test for AIMET ONNX """
     @pytest.mark.cuda
     def test_adaround(self):
-        if version.parse(torch.__version__) >= version.parse("1.13"):
-            np.random.seed(0)
-            torch.manual_seed(0)
+        np.random.seed(0)
+        torch.manual_seed(0)
+        model = get_model()
+        data_loader = dataloader()
+        dummy_input = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
+        sess = build_session(model)
+        out_before_ada = sess.run(None, dummy_input)
+        def callback(session, args):
+            in_tensor = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
+            session.run(None, in_tensor)
 
-            model = get_model()
+        params = AdaroundParameters(data_loader=data_loader, num_batches=1, default_num_iterations=5, forward_fn=callback,
+                                    forward_pass_callback_args=None)
 
-            data_loader = dataloader()
-            dummy_input = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
-            sess = build_session(model)
-            out_before_ada = sess.run(None, dummy_input)
-            def callback(session, args):
-                in_tensor = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
-                session.run(None, in_tensor)
-
-            params = AdaroundParameters(data_loader=data_loader, num_batches=1, default_num_iterations=5, forward_fn=callback,
-                                        forward_pass_callback_args=None)
-            ada_rounded_model = Adaround.apply_adaround(model, params, './', 'dummy')
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ada_rounded_model = Adaround.apply_adaround(model, params, tmpdir, 'dummy')
             sess = build_session(ada_rounded_model)
             out_after_ada = sess.run(None, dummy_input)
             assert not np.array_equal(out_before_ada[0], out_after_ada[0])
 
-            with open('./dummy.encodings') as json_file:
+            with open(os.path.join(tmpdir, 'dummy.encodings')) as json_file:
                 encoding_data = json.load(json_file)
 
             sim = QuantizationSimModel(ada_rounded_model, dummy_input, quant_scheme=QuantScheme.post_training_tf, default_param_bw=8,
                                        default_activation_bw=8, use_cuda=True)
-            sim.set_and_freeze_param_encodings('./dummy.encodings')
+            sim.set_and_freeze_param_encodings(os.path.join(tmpdir, 'dummy.encodings'))
             sim.compute_encodings(callback, None)
             assert sim.qc_quantize_op_dict['fc.weight'].encodings[0].delta == encoding_data['fc.weight'][0]['scale']
 
@@ -150,6 +146,7 @@ def dataloader():
 
     dummy_dataloader = DataLoader(batch_size=2)
     return dummy_dataloader
+
 
 def build_session(model):
     """

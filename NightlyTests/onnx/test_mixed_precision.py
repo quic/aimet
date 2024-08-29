@@ -37,14 +37,10 @@
 
 """ Test top level mixed precision api """
 
-import os
 import tempfile
-
 import pytest
 import unittest
 import unittest.mock
-
-import json
 import numpy as np
 from test_models import resnet18
 from aimet_onnx.mixed_precision import choose_mixed_precision
@@ -59,8 +55,6 @@ from aimet_common.amp.utils import AMPSearchAlgo, calculate_starting_bit_ops
 
 class TestMixedPrecision:
     """ Test case for mixed precision api """
-
-
     @pytest.mark.cuda
     def test_quantize_with_mixed_precision(self):
         """ Test top level quantize_with_mixed_precision api """
@@ -146,7 +140,6 @@ class TestMixedPrecision:
             # Check pareto curve contains the final eval score
             pareto_eval_scores = [eval_score for _, eval_score, _, _ in pareto_front_list]
             assert eval_score in pareto_eval_scores
-
 
 def forward_pass_callback(session, inp_shape):
     """ Call mnist_evaluate setting use_cuda to True, iterations=5 """

@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -34,8 +34,8 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-import os
 
+import os
 import numpy as np
 import pytest
 import tempfile
@@ -44,10 +44,14 @@ from onnx import load_model
 from torchvision import models
 
 from aimet_onnx.utils import make_dummy_input
-from aimet_common.defs import QuantScheme, QuantizationDataType
+from aimet_common.defs import QuantScheme
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
-from torch_utils import get_cifar10_data_loaders, train_cifar10
+try:
+    from torch_utils import get_cifar10_data_loaders, train_cifar10
+except (ImportError, OSError):
+    pass
+    # TODO (hitameht): For onnx-cpu variant, fix OSError: libtorch_hip.so: cannot open shared object file: No such file or directory
 
 image_size = 32
 batch_size = 64
@@ -95,13 +99,14 @@ class TestQuantizeAcceptance:
                             dynamic_axes={
                                 'input': {0: 'batch_size'},
                                 'output': {0: 'batch_size'},
-                            }
+                            },
+                            opset_version = 12,
                             )
 
             onnx_model = load_model(os.path.join(tmp_dir, 'resnet18.onnx'))
             dummy_input = make_dummy_input(onnx_model)
-            sim = QuantizationSimModel(onnx_model, dummy_input, quant_scheme=QuantScheme.post_training_tf, default_param_bw=8,
-                                    default_activation_bw=8, use_cuda=True, config_file=config_file)
+            sim = QuantizationSimModel(onnx_model, dummy_input, quant_scheme=QuantScheme.post_training_tf,
+                                       default_param_bw=8, default_activation_bw=8, use_cuda=True, config_file=config_file)
 
             def onnx_callback(session, iters):
                 for i, batch in enumerate(train_loader):
@@ -112,7 +117,5 @@ class TestQuantizeAcceptance:
                         break
 
             sim.compute_encodings(onnx_callback, 10)
-
             onnx_qs_acc = model_eval_onnx(sim.session, val_loader)
-
             assert onnx_qs_acc > 0.5

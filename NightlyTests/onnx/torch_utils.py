@@ -147,7 +147,6 @@ def get_librispeech_data_loaders(batch_size=64, num_workers=4, drop_last=True):
     return train_loader, val_loader
 
 
-
 def model_train(model: torch.nn.Module, train_loader: DataLoader, epochs: int, optimizer: optim.Optimizer, scheduler):
     """
     Trains the given torch model for the specified number of epochs
