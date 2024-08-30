@@ -5221,7 +5221,7 @@ def test_export_to_safetensors():
     sim = QuantizationSimModel(model, dummy_data)
     sim.compute_encodings(lambda m, itr: m(dummy_data), None)
     with tempfile.TemporaryDirectory() as tempDir:
-        sim.export_weights(tempDir, 'sim_export')
+        sim.export_weights_to_safetensors(tempDir, 'sim_export')
         assert(os.path.exists(os.path.join(tempDir, 'sim_export'+'.safetensors')))
 
 

@@ -649,7 +649,7 @@ class QuantizationSimModel:
                                                         excluded_layer_names, propagate_encodings,
                                                         quantizer_args=quantizer_args)
 
-    def export_weights(self, path: str, filename_prefix: str):
+    def export_weights_to_safetensors(self, path: str, filename_prefix: str):
         """
         Exports the updated weights in the safetensors format
 
