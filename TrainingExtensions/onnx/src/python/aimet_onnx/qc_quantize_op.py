@@ -37,6 +37,8 @@
 """ Custom QcQuantizeOp to quantize weights and activations using ONNXRuntime """
 
 from typing import Union, List, Optional, Dict
+import numpy as np
+
 import aimet_common.libpymo as libpymo
 from aimet_common.libpymo import TensorQuantizerOpMode
 from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantizationDataType, EncodingType
@@ -72,7 +74,7 @@ class QcQuantizeOp:
                  rounding_mode: str = 'nearest',
                  op_mode: Union[OpMode, None] = None,
                  bitwidth: int = 8, use_symmetric_encodings: bool = False,
-                 tensor_quantizer_params: Union[TensorQuantizerParams, None] = None):
+                 tensor_quantizer_params: Union[TensorQuantizerParams, None] = None, use_cuda: bool = False):
         """
         Args:
             quant_info: libquant_info.QcQuantizeInfo object holding quantization parameters passed to the C++ op
@@ -82,6 +84,7 @@ class QcQuantizeOp:
             bitwidth: Quantization bitwidth
             use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
             tensor_quantizer_params: Parameters like number of output channels, axis if per channel quantization is performed
+            use_cuda: True if cuda device is used
         """
         self.quant_info = quant_info
         self.quant_scheme = quant_scheme
@@ -96,6 +99,7 @@ class QcQuantizeOp:
         self._data_type = QuantizationDataType.int
         self.tensor_quantizer_params = tensor_quantizer_params
         self._reset_encodings()
+        self._use_cuda = use_cuda
 
     def is_encoding_frozen(self) -> bool:
         """ Returns is_encoding_frozen var """
@@ -522,3 +526,12 @@ class QcQuantizeOp:
                 enc_dict["block_size"] = self.quant_info.blockSize
 
         return enc_dict
+
+    def update_encoding_stats(self, tensor: np.ndarray):
+        """
+        Update the stats for computing encodings.
+
+        :param tensor: Tensor to use for updating the encodings stats
+        """
+        for tensor_quantizer in self._tensor_quantizer:
+            tensor_quantizer.updateStats(tensor, self._use_cuda)
