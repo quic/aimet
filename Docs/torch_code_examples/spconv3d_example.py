@@ -51,21 +51,52 @@ import tempfile
 class SpConvModel(torch.nn.Module):
     def __init__(self):
         super(SpConvModel, self).__init__()
+
+        # "SparseTensorWrapper" needs to be used to convert a dense tensor to a sparse tensor
         self.spconv_tensor = aimet_torch.nn.modules.custom.SparseTensorWrapper()
+
+        # First SparseConv3D layer
         self.spconv1 = spconv.SparseConv3d(in_channels=3, out_channels=9, kernel_size=2,
                                            bias=False)
+
+        # Second SparseConv3D layer
         self.spconv2 = spconv.SparseConv3d(in_channels=9, out_channels=5, kernel_size=3, bias=False)
+
+        # Normal Conv3D layer
         self.normal_conv3d = torch.nn.Conv3d(in_channels=5, out_channels=3, kernel_size=3, bias=True)
+
+        # "ScatterDense" needs to be used to convert a sparse tensor to a dense tensor
         self.spconv_scatter_dense = aimet_torch.nn.modules.custom.ScatterDense()
+
+        # Adding ReLU activation
         self.relu1 = torch.nn.ReLU()
 
     def forward(self, coords, voxels):
+        '''
+        Forward function for the test SpConvModel
+        :param coords: Dense indices
+        :param voxels: Dense features
+        :return: SpConvModel output (dense tensor)
+        '''
+
+        # Convert dense indices and features to sparse tensor
         sp_tensor = self.spconv_tensor(coords, voxels)
+
+        # Output from SparseConv3D layer 1
         sp_outputs1 = self.spconv1(sp_tensor)
+
+        # Output from SparseConv3D layer 2
         sp_outputs2 = self.spconv2(sp_outputs1)
+
+        # Convert Sparse tensor output to a dense tensor output
         sp_outputs2_dense = self.spconv_scatter_dense(sp_outputs2)
+
+        # Output from Normal Conv3D layer
         sp_outputs = self.normal_conv3d(sp_outputs2_dense)
+
+        # Output from ReLU
         sp_outputs_relu = self.relu1(sp_outputs)
+
         return sp_outputs_relu
 # End Step 1
 
@@ -74,12 +105,17 @@ model = SpConvModel()
 # Step 2. Obtain model inputs
 dense_tensor_sp_inputs = torch.randn(1, 3, 10, 10, 10) # generate a random NCDHW tensor
 dense_tensor_sp_inputs = dense_tensor_sp_inputs.permute(0, 2, 3, 4, 1) # convert NCDHW to NDHWC
+
+# Creating dense indices
 indices = torch.stack(torch.meshgrid(torch.arange(dense_tensor_sp_inputs.shape[0]), torch.arange(dense_tensor_sp_inputs.shape[1]),
                                      torch.arange(dense_tensor_sp_inputs.shape[2]), torch.arange(dense_tensor_sp_inputs.shape[3]),
                                      indexing='ij'), dim=-1).reshape(-1, 4).int()
+
+# Creating dense features
 features = dense_tensor_sp_inputs.view(-1, dense_tensor_sp_inputs.shape[4])
 # End Step 2
 
+# FP32 model inference
 with torch.no_grad():
     orig_output = model(indices, features)
 
@@ -94,6 +130,7 @@ with tempfile.TemporaryDirectory() as dir:
                                                    '--preserve_io', 'datatype', 'indices.1'])
     # End Step 3
 
+# Prepared model inference
 with torch.no_grad():
     prep_output = prepared_model(indices, features)
 
@@ -102,6 +139,7 @@ qsim = QuantizationSimModel(prepared_model, dummy_input=(indices, features),
                             quant_scheme=QuantScheme.post_training_tf)
 # End Step 4
 
+# Dummy forward pass
 def dummy_forward_pass(model, inp):
     with torch.no_grad():
         _ = model(*inp)
@@ -110,9 +148,11 @@ def dummy_forward_pass(model, inp):
 qsim.compute_encodings(dummy_forward_pass, (indices, features))
 # End Step 5
 
+# Qsim model inference
 with torch.no_grad():
     qsim_output = qsim.model(indices, features)
 
+# Qsim model export
 with tempfile.TemporaryDirectory() as dir:
     # Step 6. QuantSim export
     qsim.export(dir, "exported_sp_conv_model", dummy_input=(indices, features),
