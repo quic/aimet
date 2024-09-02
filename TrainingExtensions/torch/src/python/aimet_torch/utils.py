@@ -780,7 +780,7 @@ def get_inout_tensor_shape_per_module(model: torch.nn.Module, input_tensor) -> D
     return inout_tensor_shape_map
 
 
-def create_encoding_from_dict(encoding_dict: dict) -> (libpymo.TfEncoding, bool):
+def create_encoding_from_dict(encoding_dict: dict) -> (libpymo.TfEncoding):
     """
     Create encoding object from encoding dictionary
     :param encoding_dict: Dictionary containing encodings
