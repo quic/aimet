@@ -139,769 +139,6 @@ class TwoInputs(torch.nn.Module):
         return x
 
 
-class TestTrainingExtensionBnFold:
-
-    @pytest.mark.cuda
-    @pytest.mark.parametrize("device", ['cpu', 'cuda'])
-    def test_fold_resnet18(self,device):
-        torch.manual_seed(10)
-        model = models.resnet18().to(device)
-        _initialize_bn_params(model)
-
-        model = model.eval()
-        random_input = torch.rand(1, 3, 224, 224).to(device)
-
-        baseline_output = model(random_input)
-
-        layer_list = [(model.layer2[0].conv1, model.layer2[0].bn1)]
-        params_before = model.layer2[0].conv1.weight.clone()
-        fold_given_batch_norms(model, layer_list)
-        params_after = model.layer2[0].conv1.weight
-        output_after_fold = model(random_input)
-
-        assert not torch.equal(params_before, params_after)
-        assert not isinstance(model.layer2[0].bn1, torch.nn.BatchNorm2d)
-        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-1)
-
-    def test_fold_bn_before_conv_no_bias(self):
-        class MyModel(torch.nn.Module):
-            def __init__(self):
-
-                super(MyModel, self).__init__()
-                self.conv1 = torch.nn.Conv2d(10, 20, 2, bias=False)
-                self.relu1 = torch.nn.ReLU()
-                self.bn1 = torch.nn.BatchNorm2d(20)
-                self.conv2 = torch.nn.Conv2d(20, 40, 2, bias=False)
-
-            def forward(self, x):
-                x = self.conv1(x)
-                x = self.relu1(x)
-                x = self.bn1(x)
-                x = self.conv2(x)
-
-                return x
-
-        torch.manual_seed(10)
-        model = MyModel().eval()
-        _initialize_bn_params(model)
-
-        random_input = torch.rand(20, 10, 4, 4)
-
-        baseline_output = model(random_input)
-
-        layer_list = [(model.bn1, model.conv2)]
-
-        fold_given_batch_norms(model, layer_list)
-
-        output_after_fold = model(random_input)
-
-        assert not isinstance(model.bn1, torch.nn.BatchNorm2d)
-        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
-        assert model.conv2.weight.requires_grad == model.conv2.bias.requires_grad
-        assert model.conv2.weight.device == model.conv2.bias.device
-        assert model.conv2.weight.dtype == model.conv2.bias.dtype
-
-    def test_fold_bn_before_conv_with_bias(self):
-
-        class MyModel(torch.nn.Module):
-            def __init__(self):
-
-                super(MyModel, self).__init__()
-                self.conv1 = torch.nn.Conv2d(10, 20, 3)
-                self.relu1 = torch.nn.ReLU()
-                self.bn1 = torch.nn.BatchNorm2d(20)
-                self.conv2 = torch.nn.Conv2d(20, 30, 3)
-
-            def forward(self, x):
-                x = self.conv1(x)
-                x = self.relu1(x)
-                x = self.bn1(x)
-                x = self.conv2(x)
-
-                return x
-
-        torch.manual_seed(10)
-        model = MyModel().eval()
-        _initialize_bn_params(model)
-
-        random_input = torch.rand(2, 10, 24, 24)
-
-        baseline_output = model(random_input)
-
-        layer_list = [(model.bn1, model.conv2)]
-
-        fold_given_batch_norms(model, layer_list)
-
-        output_after_fold = model(random_input)
-
-        assert not isinstance(model.bn1, torch.nn.BatchNorm2d)
-        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-1)
-
-    def test_fold_bn_before_conv_with_padding(self):
-
-        class MyModel(torch.nn.Module):
-            def __init__(self):
-
-                super(MyModel, self).__init__()
-                self.conv1 = torch.nn.Conv2d(10, 20, 3, padding=1, bias=False)
-                self.relu1 = torch.nn.ReLU()
-                self.bn1 = torch.nn.BatchNorm2d(20)
-                self.conv2 = torch.nn.Conv2d(20, 40, 3, padding=1, bias=False)
-
-            def forward(self, x):
-                x = self.conv1(x)
-                x = self.relu1(x)
-                x = self.bn1(x)
-                x = self.conv2(x)
-
-                return x
-
-        torch.manual_seed(10)
-        model = MyModel().eval()
-        _initialize_bn_params(model)
-
-        random_input = torch.rand(20, 10, 6, 6)
-
-        baseline_output = model(random_input)
-
-        conv_bn = fold_all_batch_norms(model, (20, 10, 6, 6))
-
-        output_after_fold = model(random_input)
-
-        assert not conv_bn
-        assert isinstance(model.bn1, torch.nn.BatchNorm2d)
-        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
-
-    def test_fold_bn_before_conv_transpose(self):
-
-        class MyModel(torch.nn.Module):
-            def __init__(self):
-
-                super(MyModel, self).__init__()
-                self.conv1 = torch.nn.Conv2d(10, 20, 3, padding=1, bias=False)
-                self.relu1 = torch.nn.ReLU()
-                self.bn1 = torch.nn.BatchNorm2d(20)
-                self.conv2 = torch.nn.ConvTranspose2d(20, 40, 3, padding=0, bias=False)
-
-            def forward(self, x):
-                x = self.conv1(x)
-                x = self.relu1(x)
-                x = self.bn1(x)
-                x = self.conv2(x)
-
-                return x
-
-        torch.manual_seed(10)
-        model = MyModel().eval()
-        _initialize_bn_params(model)
-
-        random_input = torch.rand(20, 10, 6, 6)
-
-        baseline_output = model(random_input)
-
-        conv_bn = fold_all_batch_norms(model, (20, 10, 6, 6))
-
-        output_after_fold = model(random_input)
-
-        assert not conv_bn
-        assert isinstance(model.bn1, torch.nn.BatchNorm2d)
-        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
-
-    def test_filter_conv_bn_pair(self):
-        invalid_fold_forward = [torch.nn.Conv2d(10, 20, 3, padding=1),
-                                torch.nn.Conv2d(10, 10, 2, groups=10),
-                                torch.nn.Conv2d(10, 20, 2, groups=2),
-                                torch.nn.Conv1d(10, 20, 3, padding=1),
-                                torch.nn.Conv1d(10, 10, 2, groups=10),
-                                torch.nn.Conv1d(10, 20, 2, groups=2),
-                                torch.nn.ConvTranspose2d(10, 20, 3),
-                                ]
-        is_invalid = [not _is_valid_bn_fold(layer, False) for layer in invalid_fold_forward]
-        assert all(is_invalid)
-
-        invalid_fold_backward = [torch.nn.ConvTranspose2d(10, 20, 2, groups=2)]
-        is_invalid = [not _is_valid_bn_fold(layer, True) for layer in invalid_fold_backward]
-        assert all(is_invalid)
-
-        valid_fold_forward = [torch.nn.Conv2d(10, 20, 3, padding=0),
-                              torch.nn.Linear(10, 10)]
-        is_valid = [_is_valid_bn_fold(layer, False) for layer in valid_fold_forward]
-        assert all(is_valid)
-
-        valid_fold_backward = [torch.nn.Conv2d(10, 20, 2, padding=0),
-                               torch.nn.Conv2d(10, 20, 2, padding=1),
-                               torch.nn.Conv2d(10, 20, 2, groups=2),
-                               torch.nn.Conv2d(10, 10, 2, groups=10),
-                               torch.nn.Conv1d(10, 20, 2, padding=0),
-                               torch.nn.Conv1d(10, 20, 2, padding=1),
-                               torch.nn.Conv1d(10, 20, 2, groups=2),
-                               torch.nn.Conv1d(10, 10, 2, groups=10),
-                               torch.nn.ConvTranspose2d(10, 20, 2, padding=0),
-                               torch.nn.ConvTranspose2d(10, 20, 2, padding=1),
-                               torch.nn.ConvTranspose2d(10, 10, 2, groups=10),
-                               torch.nn.Linear(10, 10),
-                               ]
-        is_valid = [_is_valid_bn_fold(layer, True) for layer in valid_fold_backward]
-        assert all(is_valid)
-
-    def test_fold_bn_after_conv_no_bias(self):
-
-        class MyModel(torch.nn.Module):
-            def __init__(self):
-
-                super(MyModel, self).__init__()
-                self.conv1 = torch.nn.Conv2d(10, 20, 3, bias=False)
-                self.bn1 = torch.nn.BatchNorm2d(20)
-                self.relu1 = torch.nn.ReLU()
-
-            def forward(self, x):
-                x = self.conv1(x)
-                x = self.bn1(x)
-                x = self.relu1(x)
-
-                return x
-
-        torch.manual_seed(10)
-        model = MyModel().eval()
-        _initialize_bn_params(model)
-
-        random_input = torch.rand(2, 10, 24, 24)
-
-        baseline_output = model(random_input)
-
-        layer_list = [(model.conv1, model.bn1)]
-
-        fold_given_batch_norms(model, layer_list)
-
-        output_after_fold = model(random_input)
-
-        assert not isinstance(model.bn1, torch.nn.BatchNorm2d)
-        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
-        assert model.conv1.weight.requires_grad == model.conv1.bias.requires_grad
-        assert model.conv1.weight.device == model.conv1.bias.device
-        assert model.conv1.weight.dtype == model.conv1.bias.dtype
-
-    def test_fold_bn_after_conv_depthwise(self):
-
-        class MyModel(torch.nn.Module):
-            def __init__(self):
-
-                super(MyModel, self).__init__()
-                self.conv1 = torch.nn.Conv2d(10, 10, 3, groups=10)
-                self.bn1 = torch.nn.BatchNorm2d(10)
-                self.relu1 = torch.nn.ReLU()
-
-            def forward(self, x):
-                x = self.conv1(x)
-                x = self.bn1(x)
-                x = self.relu1(x)
-
-                return x
-
-        torch.manual_seed(10)
-        model = MyModel().eval()
-        _initialize_bn_params(model)
-
-        random_input = torch.rand(2, 10, 24, 24)
-
-        baseline_output = model(random_input)
-
-        fold_all_batch_norms(model, (2, 10, 24, 24))
-
-        output_after_fold = model(random_input)
-
-        assert not isinstance(model.bn1, torch.nn.BatchNorm2d)
-        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
-
-    def test_fold_bn_after_transposed_conv_depthwise(self):
-
-        class MyModel(torch.nn.Module):
-            def __init__(self):
-
-                super(MyModel, self).__init__()
-                self.conv1 = torch.nn.ConvTranspose2d(10, 10, 3, groups=10)
-                self.bn1 = torch.nn.BatchNorm2d(10)
-                self.relu1 = torch.nn.ReLU()
-
-            def forward(self, x):
-                x = self.conv1(x)
-                x = self.bn1(x)
-                x = self.relu1(x)
-
-                return x
-
-        torch.manual_seed(10)
-        model = MyModel().eval()
-        _initialize_bn_params(model)
-
-        random_input = torch.rand(2, 10, 24, 24)
-
-        baseline_output = model(random_input)
-
-        fold_all_batch_norms(model, (2, 10, 24, 24))
-
-        output_after_fold = model(random_input)
-
-        assert not isinstance(model.bn1, torch.nn.BatchNorm2d)
-        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
-
-    def test_fold_bn_after_conv_with_bias(self):
-
-        class MyModel(torch.nn.Module):
-            def __init__(self):
-
-                super(MyModel, self).__init__()
-                self.conv1 = torch.nn.Conv2d(10, 20, 3)
-                self.bn1 = torch.nn.BatchNorm2d(20)
-                self.relu1 = torch.nn.ReLU()
-
-            def forward(self, x):
-                x = self.conv1(x)
-                x = self.bn1(x)
-                x = self.relu1(x)
-
-                return x
-
-        torch.manual_seed(10)
-        model = MyModel().eval()
-        _initialize_bn_params(model)
-
-        random_input = torch.rand(2, 10, 24, 24)
-
-        baseline_output = model(random_input)
-
-        layer_list = [(model.conv1, model.bn1)]
-
-        fold_given_batch_norms(model, layer_list)
-
-        output_after_fold = model(random_input)
-
-        assert not isinstance(model.bn1, torch.nn.BatchNorm2d)
-        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
-
-    def test_fold_bn_before_linear_layer_no_bias(self):
-
-        class MyModel(torch.nn.Module):
-            def __init__(self):
-
-                super(MyModel, self).__init__()
-                self.bn1 = torch.nn.BatchNorm1d(10)
-                self.fc1 = torch.nn.Linear(10, 20, bias=False)
-
-            def forward(self, x):
-                x = self.bn1(x)
-                x = self.fc1(x)
-
-                return x
-
-        torch.manual_seed(10)
-        model = MyModel().eval()
-        _initialize_bn_params(model)
-
-        random_input = torch.randn((32, 10))
-
-        baseline_output = model(random_input)
-
-        layer_list = [(model.bn1, model.fc1)]
-
-        fold_given_batch_norms(model, layer_list)
-
-        output_after_fold = model(random_input)
-
-        assert not isinstance(model.bn1, torch.nn.BatchNorm1d)
-        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
-        assert model.fc1.weight.requires_grad == model.fc1.bias.requires_grad
-        assert model.fc1.weight.device == model.fc1.bias.device
-        assert model.fc1.weight.dtype == model.fc1.bias.dtype
-
-    def test_fold_bn_before_linear_layer_with_bias(self):
-
-        class MyModel(torch.nn.Module):
-            def __init__(self):
-
-                super(MyModel, self).__init__()
-                self.bn1 = torch.nn.BatchNorm1d(10)
-                self.fc1 = torch.nn.Linear(10, 20)
-
-            def forward(self, x):
-                x = self.bn1(x)
-                x = self.fc1(x)
-
-                return x
-
-        torch.manual_seed(10)
-        model = MyModel().eval()
-        _initialize_bn_params(model)
-
-        random_input = torch.randn((32, 10))
-
-        baseline_output = model(random_input)
-
-        layer_list = [(model.bn1, model.fc1)]
-
-        fold_given_batch_norms(model, layer_list)
-
-        output_after_fold = model(random_input)
-
-        assert not isinstance(model.bn1, torch.nn.BatchNorm1d)
-        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
-
-    def test_fold_bn_after_linear_layer_no_bias(self):
-
-        class MyModel(torch.nn.Module):
-            def __init__(self):
-
-                super(MyModel, self).__init__()
-                self.fc1 = torch.nn.Linear(10, 20, bias=False)
-                self.bn1 = torch.nn.BatchNorm1d(20)
-
-            def forward(self, x):
-                x = self.fc1(x)
-                x = self.bn1(x)
-
-                return x
-
-        torch.manual_seed(10)
-        model = MyModel().eval()
-        _initialize_bn_params(model)
-
-        random_input = torch.randn((32, 10))
-
-        baseline_output = model(random_input)
-
-        layer_list = [(model.fc1, model.bn1)]
-
-        fold_given_batch_norms(model, layer_list)
-
-        output_after_fold = model(random_input)
-
-        assert not isinstance(model.bn1, torch.nn.BatchNorm1d)
-        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
-        assert model.fc1.weight.requires_grad == model.fc1.bias.requires_grad
-        assert model.fc1.weight.device == model.fc1.bias.device
-        assert model.fc1.weight.dtype == model.fc1.bias.dtype
-
-    def test_fold_bn_after_linear_layer_with_bias(self):
-
-        class MyModel(torch.nn.Module):
-            def __init__(self):
-
-                super(MyModel, self).__init__()
-                self.fc1 = torch.nn.Linear(10, 20)
-                self.bn1 = torch.nn.BatchNorm1d(20)
-
-            def forward(self, x):
-                x = self.fc1(x)
-                x = self.bn1(x)
-
-                return x
-
-        torch.manual_seed(10)
-        model = MyModel().eval()
-        _initialize_bn_params(model)
-
-        random_input = torch.randn((32, 10))
-
-        baseline_output = model(random_input)
-
-        layer_list = [(model.fc1, model.bn1)]
-
-        fold_given_batch_norms(model, layer_list)
-
-        output_after_fold = model(random_input)
-
-        assert not isinstance(model.bn1, torch.nn.BatchNorm1d)
-        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
-
-    def test_find_batch_norms_to_fold(self):
-        model = MyModel().eval()
-        _initialize_bn_params(model)
-
-        input_shape = (2, 10, 24, 24)
-        connected_graph = ConnectedGraph(model,
-                                         create_rand_tensors_given_shapes(input_shape, get_device(model)))
-
-        conv_bn_pairs, bn_conv_pairs, bn_picked = _find_all_batch_norms_to_fold(connected_graph)
-
-        assert len(conv_bn_pairs) == len(bn_conv_pairs) == 1
-        assert (model.conv1, model.bn1) in conv_bn_pairs
-        assert (model.bn2, model.conv3) in bn_conv_pairs
-        assert len(bn_picked) == 2
-
-    def test_bn_fold_auto_mode_transposed_conv2d(self):
-
-        torch.manual_seed(10)
-        model = TransposedConvModel().eval()
-        _initialize_bn_params(model)
-
-        random_input = torch.rand((10, 10, 4, 4))
-
-        baseline_output = model(random_input)
-
-        folded_pairs = fold_all_batch_norms(model, (10, 10, 4, 4))
-
-        output_after_fold = model(random_input)
-
-        assert not isinstance(model.bn1, torch.nn.BatchNorm2d)
-
-        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
-        assert len(folded_pairs) == 2
-
-    def test_find_batch_norms_to_fold_multi_input(self):
-        model = TwoInputs().eval()
-        _initialize_bn_params(model)
-        inp_shapes = [(1, 3, 32, 32), (1, 3, 20, 20)]
-
-        connected_graph = ConnectedGraph(model,
-                                         create_rand_tensors_given_shapes(inp_shapes, get_device(model)))
-
-        conv_bn_pairs, bn_conv_pairs, _ = _find_all_batch_norms_to_fold(connected_graph)
-
-
-        assert len(conv_bn_pairs) == 2
-        assert not bn_conv_pairs
-        assert (model.conv1, model.bn1) in conv_bn_pairs
-        assert (model.conv2, model.bn2) in conv_bn_pairs
-
-    def test_bn_fold_auto_mode(self):
-        torch.manual_seed(10)
-
-        model = MyModel().eval()
-        _initialize_bn_params(model)
-
-        random_input = torch.rand(2, 10, 24, 24)
-
-        baseline_output = model(random_input)
-
-        folded_pairs = fold_all_batch_norms(model, (2, 10, 24, 24))
-
-        output_after_fold = model(random_input)
-
-        assert not isinstance(model.bn1, torch.nn.BatchNorm2d)
-        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
-        assert len(folded_pairs) == 2
-
-    def test_fold_auto_mode_with_bn_after_Conv1d_layer(self):
-        class MyModel(torch.nn.Module):
-            def __init__(self):
-
-                super(MyModel, self).__init__()
-                self.conv1d = torch.nn.Conv1d(10, 20, kernel_size=2)
-                self.bn1 = torch.nn.BatchNorm1d(20)
-
-            def forward(self, x):
-                x = self.conv1d(x)
-                x = self.bn1(x)
-
-                return x
-
-        model = MyModel().eval()
-        _initialize_bn_params(model)
-
-        random_input = torch.randn((2, 10, 32))
-
-        baseline_output = model(random_input)
-        orig_bn = model.bn1
-
-        bn_pairs = fold_all_batch_norms(model, (2, 10, 32))
-        output_after_fold = model(random_input)
-
-        assert not isinstance(model.bn1, torch.nn.BatchNorm1d)
-        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
-
-        assert 1 == len(bn_pairs)
-        assert (model.conv1d, orig_bn) in bn_pairs
-
-    def test_bn_conversion(self):
-        class MyModel(torch.nn.Module):
-            def __init__(self):
-
-                super(MyModel, self).__init__()
-                self.conv1d = torch.nn.Conv1d(10, 20, kernel_size=2)
-                self.relu = torch.nn.ReLU()
-                self.bn1 = torch.nn.BatchNorm1d(20)
-
-            def forward(self, x):
-                x = self.conv1d(x)
-                x = self.relu(x)
-                x = self.bn1(x)
-
-                return x
-
-        model = MyModel().eval()
-        _initialize_bn_params(model)
-
-        random_input = torch.randn((2, 10, 32))
-
-        baseline_output = model(random_input)
-        orig_bn = model.bn1
-
-        bn_pairs = fold_all_batch_norms(model, (2, 10, 32))
-        output_after_fold = model(random_input)
-
-        assert isinstance(model.bn1, torch.nn.BatchNorm1d)
-        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
-
-        assert 0 == len(bn_pairs)
-        assert (model.conv1d, orig_bn) not in bn_pairs
-
-    def test_fold_manual_with_bn_after_Conv1d_layer_no_bias(self):
-        class MyModel(torch.nn.Module):
-            def __init__(self):
-
-                super(MyModel, self).__init__()
-                self.conv1d = torch.nn.Conv1d(10, 20, kernel_size=2, bias=False)
-                self.bn1 = torch.nn.BatchNorm1d(20)
-
-            def forward(self, x):
-                x = self.conv1d(x)
-                x = self.bn1(x)
-
-                return x
-
-        model = MyModel().eval()
-        _initialize_bn_params(model)
-
-        random_input = torch.randn((2, 10, 32))
-
-        baseline_output = model(random_input)
-
-        layer_list = [(model.conv1d, model.bn1)]
-        fold_given_batch_norms(model, layer_list)
-        output_after_fold = (model.conv1d(random_input))
-
-        assert not isinstance(model.bn1, torch.nn.BatchNorm1d)
-        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
-        assert model.conv1d.weight.requires_grad == model.conv1d.bias.requires_grad
-        assert model.conv1d.weight.device == model.conv1d.bias.device
-        assert model.conv1d.weight.dtype == model.conv1d.bias.dtype
-
-    @pytest.mark.cuda
-    def test_multi_gpu(self):
-        torch.manual_seed(10)
-        model = MyModel()
-        model.eval()
-        model = torch.nn.DataParallel(model)
-        model.to(device='cuda:0')
-        random_input = torch.rand(2, 10, 24, 24).to(device='cuda:0')
-        output_before = model(random_input)
-
-        # BN fold
-        fold_all_batch_norms(model, (2, 10, 24, 24))
-
-        output_after = model(random_input)
-        assert torch.allclose(output_before, output_after, rtol=1.e-2)
-
-    def test_fold_bn_before_Conv1d_with_bias(self):
-
-        class MyModel(torch.nn.Module):
-            def __init__(self):
-
-                super(MyModel, self).__init__()
-                self.bn1 = torch.nn.BatchNorm1d(10)
-                self.conv1d = torch.nn.Conv1d(10, 20, kernel_size=2)
-
-            def forward(self, x):
-                x = self.bn1(x)
-                x = self.conv1d(x)
-
-                return x
-
-        torch.manual_seed(10)
-        model = MyModel().eval()
-        _initialize_bn_params(model)
-
-        random_input = torch.randn((2, 10, 32))
-
-        baseline_output = model(random_input)
-        orig_bn = model.bn1
-        bn_pairs = fold_all_batch_norms(model, (2, 10, 32))
-
-        output_after_fold = model(random_input)
-
-        assert 1 == len(bn_pairs)
-        assert (model.conv1d, orig_bn) in bn_pairs
-        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
-
-    def test_fold_bn_before_Conv1d_no_bias(self):
-
-        class MyModel(torch.nn.Module):
-            def __init__(self):
-
-                super(MyModel, self).__init__()
-                self.bn1 = torch.nn.BatchNorm1d(4)
-                self.conv1d = torch.nn.Conv1d(4, 4, kernel_size=2, bias=False)
-
-            def forward(self, x):
-                x = self.bn1(x)
-                x = self.conv1d(x)
-
-                return x
-
-        torch.manual_seed(10)
-        model = MyModel()
-        _initialize_bn_params(model)
-
-        random_input = torch.randn((2, 4, 4))
-
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((2, 4, 4)))
-        model.eval()
-
-        baseline_output = model(random_input)
-
-        layer_list = [(model.bn1, model.conv1d)]
-
-        fold_given_batch_norms(model, layer_list)
-
-        output_after_fold = model(random_input)
-
-        assert not isinstance(model.bn1, torch.nn.BatchNorm1d)
-        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
-        assert model.conv1d.weight.requires_grad == model.conv1d.bias.requires_grad
-        assert model.conv1d.weight.device == model.conv1d.bias.device
-        assert model.conv1d.weight.dtype == model.conv1d.bias.dtype
-
-    def test_bn_fold_conv3d_fold_backward(self):
-
-        torch.random.manual_seed(10)
-        model = Conv3dModel()
-        inp = torch.randn(1, 3, 24, 24, 24)
-        model.bn1.weight.data = torch.randn(model.bn1.weight.shape)
-        model.bn2.weight.data = torch.randn(model.bn2.weight.shape)
-
-        # eval
-        model = model.eval()
-        orig_out = model(inp)
-        _ = fold_all_batch_norms(model, input_shapes=(1, 3, 24, 24, 24), dummy_input=inp)
-        new_out = model(inp)
-
-        assert torch.allclose(orig_out, new_out, atol=1e-5)
-        bn_modules = [m for m in model.modules() if isinstance(m, torch.nn.BatchNorm3d)]
-        assert not bn_modules
-
-    def test_bn_fold_conv3d_fold_forward(self):
-
-        torch.random.manual_seed(10)
-        model = Conv3dModel1()
-        inp = torch.randn(1, 3, 24, 24, 24)
-        model.bn1.weight.data = torch.randn(model.bn1.weight.shape)
-        model.bn2.weight.data = torch.randn(model.bn2.weight.shape)
-
-        # eval
-        model = model.eval()
-        orig_out = model(inp)
-        _ = fold_all_batch_norms(model, input_shapes=(1, 3, 24, 24, 24), dummy_input=inp)
-        new_out = model(inp)
-
-        assert torch.allclose(orig_out, new_out, atol=1e-5)
-        bn_modules = [m for m in model.modules() if isinstance(m, torch.nn.BatchNorm3d)]
-        assert len(bn_modules) == 1
-        assert isinstance(model.bn1, torch.nn.Identity)
-        assert isinstance(model.bn2, torch.nn.BatchNorm3d)
-
-
 symmetric_quantsim_config ={
     "defaults": {
         "ops": { "is_output_quantized": "True" },
@@ -1019,8 +256,6 @@ class TestTrainingExtensionBnFoldToScale:
         # Check quantizers are enabled/disabled properly
         assert not layer2_0.conv1.output_quantizers[0]
         assert layer2_0.conv1.param_quantizers["weight"]
-        assert not layer2_0.bn1.output_quantizers[0]
-        assert not layer2_0.bn1.param_quantizers or not layer2_0.bn1.param_quantizers["weight"]
         assert layer2_0.relu.output_quantizers[0]
 
         # test 1: All final outputs should be contained within 3-tick difference
@@ -1157,8 +392,6 @@ class TestTrainingExtensionBnFoldToScale:
         # Check quantizers are enabled/disabled properly
         assert not model.conv1.output_quantizers[0]
         assert model.conv1.param_quantizers["weight"]
-        assert not model.bn1.output_quantizers[0]
-        assert not model.bn1.param_quantizers or not  model.bn1.param_quantizers["weight"]
         assert model.relu1.output_quantizers[0]
 
         relu_output_encoding = model.relu1.output_quantizers[0]
@@ -1214,8 +447,6 @@ class TestTrainingExtensionBnFoldToScale:
         # Check quantizers are enabled/disabled properly
         assert not model.conv1.output_quantizers[0]
         assert model.conv1.param_quantizers["weight"]
-        assert not model.bn1.output_quantizers[0]
-        assert not model.bn1.param_quantizers
         assert model.relu1.output_quantizers[0]
 
         relu_output = model.relu1.output_quantizers[0]
@@ -1314,8 +545,6 @@ class TestTrainingExtensionBnFoldToScale:
         # Check quantizers are enabled/disabled properly
         assert not model.conv1.output_quantizers[0]
         assert model.conv1.param_quantizers["weight"]
-        assert not model.bn1.output_quantizers[0]
-        assert not model.bn1.param_quantizers or not model.bn1.param_quantizers['weight']
         assert model.relu1.output_quantizers[0]
 
         relu_output_encoding = sim.model.relu1.output_quantizers[0]
@@ -1415,6 +644,7 @@ class TestTrainingExtensionBnFoldToScale:
         assert not model.fc1.output_quantizers[0]
         assert model.fc1.param_quantizers["weight"]
         assert model.bn1.output_quantizers[0]
+        bn_output_quantizer = model.bn1.output_quantizers[0]
         assert not model.bn1.param_quantizers["weight"]
 
         baseline_output = model(random_input)
@@ -1430,15 +660,11 @@ class TestTrainingExtensionBnFoldToScale:
         # Check quantizers are enabled/disabled properly
         assert model.fc1.output_quantizers[0]
         assert model.fc1.param_quantizers["weight"]
-        assert not model.bn1.output_quantizers[0]
-        assert not model.bn1.param_quantizers["weight"]
+        assert  model.fc1.output_quantizers[0] == bn_output_quantizer
 
         # Check batchnorm's output encoding is copied to conv's output encoding
         fc_output_encoding = model.fc1.output_quantizers[0]
-        bn_output_encoding = model.bn1.output_quantizers[0]._compute_updated_encoding()
-        assert fc_output_encoding.max == bn_output_encoding.max and\
-                fc_output_encoding.min == bn_output_encoding.min and\
-                fc_output_encoding.bw == bn_output_encoding.bw
+        assert fc_output_encoding.min == bn_output_quantizer.min and fc_output_encoding.max == bn_output_quantizer.max
 
         fc_output_encoding = model.fc1.output_quantizers[0]
         delta = float((fc_output_encoding.max - fc_output_encoding.min)/255)
@@ -1476,6 +702,7 @@ class TestTrainingExtensionBnFoldToScale:
         assert not model.fc1.output_quantizers[0]
         assert model.fc1.param_quantizers["weight"]
         assert model.bn1.output_quantizers[0]
+        bn_output_quantizer = model.bn1.output_quantizers[0]
         assert not model.bn1.param_quantizers["weight"]
 
         baseline_output = model(random_input)
@@ -1490,16 +717,13 @@ class TestTrainingExtensionBnFoldToScale:
 
         # Check quantizers are enabled/disabled properly
         assert model.fc1.output_quantizers[0]
+        assert  model.fc1.output_quantizers[0] == bn_output_quantizer
         assert model.fc1.param_quantizers["weight"]
-        assert not model.bn1.output_quantizers[0]
-        assert not model.bn1.param_quantizers or not model.bn1.param_quantizers["weight"]
 
         # Check batchnorm's output encoding is copied to conv's output encoding
         fc_output_encoding = model.fc1.output_quantizers[0]
-        bn_output_encoding = model.bn1.output_quantizers[0]._compute_updated_encoding()
-        assert fc_output_encoding.max == bn_output_encoding.max and\
-                fc_output_encoding.min == bn_output_encoding.min and\
-                fc_output_encoding.bw == bn_output_encoding.bw
+        assert fc_output_encoding.max == bn_output_quantizer.max and\
+                fc_output_encoding.min == bn_output_quantizer.min 
 
         fc_output_encoding = model.fc1.output_quantizers[0]
         delta = float((fc_output_encoding.max - fc_output_encoding.min)/255)
@@ -1561,6 +785,7 @@ class TestTrainingExtensionBnFoldToScale:
         assert not model.conv1d.output_quantizers[0]
         assert model.conv1d.param_quantizers["weight"]
         assert model.bn1.output_quantizers[0]
+        bn_output_quantizer = model.bn1.output_quantizers[0]
         assert not model.bn1.param_quantizers["weight"]
 
         baseline_output = model(random_input)
@@ -1573,17 +798,13 @@ class TestTrainingExtensionBnFoldToScale:
 
         # Check quantizers are enabled/disabled properly
         assert model.conv1d.output_quantizers[0]
+        assert model.conv1d.output_quantizers[0] == bn_output_quantizer
         assert model.conv1d.param_quantizers["weight"]
-        assert not model.bn1.output_quantizers[0]
-        assert not model.bn1.param_quantizers["weight"]
 
         # Check batchnorm's output encoding is copied to conv's output encoding
         conv_output_encoding = model.conv1d.output_quantizers[0]
-        bn_output_encoding = model.bn1.output_quantizers[0]._compute_updated_encoding()
-        assert conv_output_encoding.max == bn_output_encoding.max and\
-                conv_output_encoding.min == bn_output_encoding.min and\
-                conv_output_encoding.bw == bn_output_encoding.bw
-
+        assert conv_output_encoding.max == bn_output_quantizer.max and\
+                conv_output_encoding.min == bn_output_quantizer.min
         conv_output_encoding = model.conv1d.output_quantizers[0]
         delta = float((conv_output_encoding.max - conv_output_encoding.min)/255)
         assert torch.allclose(baseline_output, output_after_fold, atol=delta) # Allow 1-tick difference
@@ -1621,27 +842,25 @@ class TestTrainingExtensionBnFoldToScale:
         baseline_output = model(random_input)
 
         layer_list = [(model.conv1d, model.bn1)]
+        bn_output_quantizer = model.bn1.output_quantizers[0]
+        orig_q_weight = model.conv1d.param_quantizers['weight'](model.conv1d.weight)
+
         fold_given_batch_norms(model, layer_list)
         output_after_fold = model(random_input)
-
+        
         assert isinstance(model.bn1, torch.nn.Identity)
 
         # Check quantizers are enabled/disabled properly
         assert model.conv1d.output_quantizers[0]
         assert model.conv1d.param_quantizers["weight"]
-        assert not model.bn1.output_quantizers[0]
-        assert not model.bn1.param_quantizers["weight"]
+        assert model.conv1d.output_quantizers[0] == bn_output_quantizer
 
-        # Check batchnorm's output encoding is copied to conv's output encoding
-        conv_output_encoding = model.conv1d.output_quantizers[0]
-        bn_output_encoding = model.bn1.output_quantizers[0]._compute_updated_encoding()
-        assert conv_output_encoding.max == bn_output_encoding.max and\
-                conv_output_encoding.min == bn_output_encoding.min and\
-                conv_output_encoding.bw == bn_output_encoding.bw
+        q_weight = model.conv1d.param_quantizers['weight'](model.conv1d.weight)
 
-        conv_output_encoding = model.conv1d.output_quantizers[0]
-        delta = float((conv_output_encoding.max - conv_output_encoding.min)/255)
-        assert torch.allclose(baseline_output, output_after_fold, atol=delta) # Allow 1-tick difference
+        assert torch.allclose(orig_q_weight.quantize(), q_weight.quantize())
+
+        conv_output_scale = model.conv1d.output_quantizers[0].get_scale()
+        assert torch.allclose(baseline_output, output_after_fold, atol=conv_output_scale.item()) # Allow 1-tick difference
 
         conv1d = model.conv1d
         assert conv1d.weight.requires_grad == conv1d.bias.requires_grad

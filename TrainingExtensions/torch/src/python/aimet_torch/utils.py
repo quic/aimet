@@ -632,7 +632,7 @@ def replace_modules_of_type1_using_constructor(model, type1, constructor):
 
 
 def replace_modules_with_instances_of_new_type(model: torch.nn.Module, modules_to_replace_list: List[torch.nn.Module],
-                                               new_type: torch.nn.Module):
+                                               new_type: type(torch.nn.Module)):
     """
     Given a model, replaces given modules with instances of new_type
     Note: Since instances of new_type are instantiated using a default constructor (no parameters),
@@ -646,7 +646,7 @@ def replace_modules_with_instances_of_new_type(model: torch.nn.Module, modules_t
     for module_name, module_ref in model.named_children():
 
         if module_ref in modules_to_replace_list:
-            setattr(model, module_name, new_type)
+            setattr(model, module_name, new_type())
 
         children_module_list = list(module_ref.modules())
         if len(children_module_list) != 1:

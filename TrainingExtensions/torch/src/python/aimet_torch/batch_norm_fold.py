@@ -547,7 +547,7 @@ class BatchNormFold:
 
     @staticmethod
     def _delete_bn_from_model(model: torch.nn.Module, bn_layer_list: Iterable[BatchNormType]):
-        utils.replace_modules_with_instances_of_new_type(model, bn_layer_list, torch.nn.Identity())
+        utils.replace_modules_with_instances_of_new_type(model, bn_layer_list, torch.nn.Identity)
 
     @staticmethod
     def _find_all_batch_norms_to_fold(connected_graph: ConnectedGraph) -> Tuple[

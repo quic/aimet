@@ -42,10 +42,8 @@ from aimet_torch import utils
 from aimet_torch.batch_norm_fold import BatchNormFold as BatchNormFoldV1
 from aimet_torch.batch_norm_fold import _BatchNormFoldingNotSupported, LayerType, BatchNormType
 from aimet_torch.v2.quantsim import QuantizationSimModel
-from aimet_torch.v2.nn import FakeQuantizationMixin
-from torch.nn.modules.conv import _ConvTransposeNd
-import aimet_torch.v2.quantization as Q
 from aimet_torch.v2.nn.base import BaseQuantizationMixin
+from torch.nn.modules.conv import _ConvTransposeNd
 from aimet_common.utils import AimetLogger
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.BatchNormFolding)
@@ -135,7 +133,7 @@ class BatchNormFold(BatchNormFoldV1):
             for bn, conv in bn_conv_pairs:
                 _fold(conv, bn, fold_backward=False)
 
-            BatchNormFold._delete_bn_from_model(model, bn_modules)
+            BatchNormFoldV1._delete_bn_from_model(model, bn_modules)
 
     # pylint: disable=arguments-differ
     @staticmethod
@@ -196,25 +194,15 @@ class BatchNormFold(BatchNormFoldV1):
         weight_quantizer.max.copy_(new_encoding_max)
 
         # Copy batchnorm's output quantizers to conv output quantizers
-        for conv_output_quantizer, bn_output_quantizer in\
-                zip(conv.output_quantizers, bn.output_quantizers):
-            if bn_output_quantizer is None:
-                conv_output_quantizer = None
+        for i, (conv_output_quantizer, bn_output_quantizer) in\
+                enumerate(zip(conv.output_quantizers, bn.output_quantizers)):
 
             if bn_output_quantizer:
-                if not conv_output_quantizer:
-                    conv_output_quantizer = Q.affine.QuantizeDequantize(shape=bn_output_quantizer.shape, bitwidth=bn_output_quantizer.bitwidth,
-                                               symmetric=bn_output_quantizer._symmetric)
-                conv_output_quantizer.min.copy_(bn_output_quantizer.min)
-                conv_output_quantizer.max.copy_(bn_output_quantizer.max)
-                conv_output_quantizer.bitwidth = bn_output_quantizer.bitwidth
+                conv_output_quantizer = bn_output_quantizer
 
-            bn_output_quantizer = None
+            conv.output_quantizers[i] = conv_output_quantizer
 
-        if "bias" not in conv.param_quantizers:
-            bias_quantizer = Q.affine.QuantizeDequantize(shape=weight_quantizer.shape, bitwidth=weight_quantizer.bitwidth,
-                                               symmetric=weight_quantizer._symmetric)
-            conv.param_quantizers["bias"] = bias_quantizer
+        conv.param_quantizers["bias"] = None
 
     @staticmethod
     def _fold_to_weight(conv_linear: LayerType, bn: BatchNormType, fold_backward: bool):
@@ -236,17 +224,12 @@ class BatchNormFold(BatchNormFoldV1):
                             device=conv_linear.weight.device,
                             dtype=conv_linear.weight.dtype)
             conv_linear.bias = torch.nn.Parameter(bias)
-       
+
         BatchNormFoldV1._call_py_batch_norm_fold(conv_linear.weight, conv_linear.bias, bn, fold_backward=fold_backward)
 
         # Transpose weight back to N, C, H, W for transposed Conv2D, for non-depthwise layers
         if isinstance(conv_linear, torch.nn.ConvTranspose2d) and conv_linear.groups == 1:
             conv_linear.weight.data = conv_linear.weight.data.permute(1, 0, 2, 3)
-
-    @staticmethod
-    def _delete_bn_from_model(model: torch.nn.Module, bn_layer_list: Iterable[BatchNormType]):
-        quantized_identity = FakeQuantizationMixin.from_module(torch.nn.Identity())
-        utils.replace_modules_with_instances_of_new_type(model, bn_layer_list, quantized_identity)
 
 # Global variables for compatibility
 fold_all_batch_norms = BatchNormFold.fold_all_batch_norms_to_weight

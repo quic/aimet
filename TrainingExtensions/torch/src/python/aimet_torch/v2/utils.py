@@ -39,7 +39,6 @@
 from typing import Callable, Tuple, Any
 import functools
 import itertools
-import numpy as np
 import torch
 
 
@@ -48,9 +47,6 @@ def _is_expandable(src_shape: Tuple[int, ...],
     """
     Returns true if source shape can be expanded as target shape
     """
-
-    if np.prod(src_shape) == np.prod(target_shape):
-        return True
 
     if len(src_shape) > len(target_shape):
         return False
@@ -82,9 +78,6 @@ def reduce(input: torch.Tensor, shape: Tuple[int, ...], reduce_op: Callable):
         raise RuntimeError(
             f"Input of shape {list(input.shape)} can't be reduced to shape {list(shape)}"
         )
-
-    if np.prod(input.shape) == np.prod(shape):
-        return input.reshape(shape)
 
     padded_shape = (
         *itertools.repeat(1, len(input.shape) - len(shape)),
