@@ -178,3 +178,363 @@ class QuantizedConcat(_DispatchMixin, QuantizationMixin, Concat):
             return fn(tensors, dim=dim, out=out, output_encodings=output_encodings)
 
         return cat
+
+
+# @QuantizationMixin.implements(FloorDivide)
+# class QuantizedFloorDivide(_DispatchMixin, QuantizationMixin, FloorDivide):
+#     """ Quantized FloorDivide """
+#     _builtin_torch_fn = torch.floor_divide
+#
+#
+# @QuantizationMixin.implements(Norm)
+# class QuantizedNorm(_DispatchMixin, QuantizationMixin, Norm):
+#     """ Quantized Norm """
+#     _builtin_torch_fn = torch.norm
+#
+#
+# @QuantizationMixin.implements(Exponential)
+# class QuantizedExponential(_DispatchMixin, QuantizationMixin, Exponential):
+#     """ Quantized Exponential """
+#     _builtin_torch_fn = torch.exp
+#
+#
+# @QuantizationMixin.implements(Erf)
+# class QuantizedErf(_DispatchMixin, QuantizationMixin, Erf):
+#     """ Quantized Erf """
+#     _builtin_torch_fn = torch.erf
+#
+#
+# @QuantizationMixin.implements(Sqrt)
+# class QuantizedSqrt(_DispatchMixin, QuantizationMixin, Sqrt):
+#     """ Quantized Sqrt """
+#     _builtin_torch_fn = torch.sqrt
+#
+#
+# @QuantizationMixin.implements(Maximum)
+# class QuantizedMaximum(_DispatchMixin, QuantizationMixin, Maximum):
+#     """ Quantized Maximum """
+#     _builtin_torch_fn = torch.maximum
+#
+#
+# @QuantizationMixin.implements(Max)
+# class QuantizedMax(_DispatchMixin, QuantizationMixin, Max):
+#     """ Quantized Max """
+#     _builtin_torch_fn = torch.max
+#
+# @QuantizationMixin.implements(AMax)
+# class QuantizedAMax(_DispatchMixin, QuantizationMixin, AMax):
+#     """ Quantized AMax """
+#     _builtin_torch_fn = torch.amax
+#
+#
+# @QuantizationMixin.implements(Minimum)
+# class QuantizedMinimum(_DispatchMixin, QuantizationMixin, Minimum):
+#     """ Quantized Minimum """
+#     _builtin_torch_fn = torch.minimum
+#
+#
+# @QuantizationMixin.implements(Min)
+# class QuantizedMin(_DispatchMixin, QuantizationMixin, Min):
+#     """ Quantized Min """
+#     _builtin_torch_fn = torch.min
+#
+# @QuantizationMixin.implements(AMin)
+# class QuantizedAMin(_DispatchMixin, QuantizationMixin, AMin):
+#     """ Quantized AMin """
+#     _builtin_torch_fn = torch.amin
+#
+#
+# @QuantizationMixin.implements(Where)
+# class QuantizedWhere(_DispatchMixin, QuantizationMixin, Where):
+#     """ Quantized Where """
+#     _builtin_torch_fn = torch.where
+#
+#
+# @QuantizationMixin.implements(Greater)
+# class QuantizedGreater(_DispatchMixin, QuantizationMixin, Greater):
+#     """ Quantized Greater """
+#     _builtin_torch_fn = torch.gt
+#
+#
+# @QuantizationMixin.implements(Less)
+# class QuantizedLess(_DispatchMixin, QuantizationMixin, Less):
+#     """ Quantized Less """
+#     _builtin_torch_fn = torch.lt
+#
+#
+# @QuantizationMixin.implements(GreaterEqual)
+# class QuantizedGreaterEqual(_DispatchMixin, QuantizationMixin, GreaterEqual):
+#     """ Quantized GreaterEqual """
+#     _builtin_torch_fn = torch.ge
+#
+#
+# @QuantizationMixin.implements(LessEqual)
+# class QuantizedLessEqual(_DispatchMixin, QuantizationMixin, LessEqual):
+#     """ Quantized LessEqual """
+#     _builtin_torch_fn = torch.le
+#
+#
+# @QuantizationMixin.implements(NotEqual)
+# class QuantizedNotEqual(_DispatchMixin, QuantizationMixin, NotEqual):
+#     """ Quantized NotEqual """
+#     _builtin_torch_fn = torch.ne
+#
+#
+# @QuantizationMixin.implements(Equal)
+# class QuantizedEqual(_DispatchMixin, QuantizationMixin, Equal):
+#     """ Quantized Equal """
+#     _builtin_torch_fn = torch.eq
+#
+#
+# @QuantizationMixin.implements(Bmm)
+# class QuantizedBmm(_DispatchMixin, QuantizationMixin, Bmm):
+#     """ Quantized Bmm """
+#     _builtin_torch_fn = torch.bmm
+#
+#
+# @QuantizationMixin.implements(CumSum)
+# class QuantizedCumSum(_DispatchMixin, QuantizationMixin, CumSum):
+#     """ Quantized CumSum """
+#     _builtin_torch_fn = torch.cumsum
+#
+#
+# @QuantizationMixin.implements(MaskedFill)
+# class QuantizedMaskedFill(_DispatchMixin, QuantizationMixin, MaskedFill):
+#     """ Quantized MaskedFill """
+#     _builtin_torch_fn = torch.Tensor.masked_fill_
+#
+#
+# @QuantizationMixin.implements(Mean)
+# class QuantizedMean(_DispatchMixin, QuantizationMixin, Mean):
+#     """ Quantized Mean """
+#     _builtin_torch_fn = torch.mean
+#
+#
+# @QuantizationMixin.implements(Sum)
+# class QuantizedSum(_DispatchMixin, QuantizationMixin, Sum):
+#     """ Quantized Sum """
+#     _builtin_torch_fn = torch.sum
+#
+#
+# @QuantizationMixin.implements(Prod)
+# class QuantizedProd(_DispatchMixin, QuantizationMixin, Prod):
+#     """ Quantized Prod """
+#     _builtin_torch_fn = torch.prod
+#
+#
+# @QuantizationMixin.implements(Log)
+# class QuantizedLog(_DispatchMixin, QuantizationMixin, Log):
+#     """ Quantized Log """
+#     _builtin_torch_fn = torch.log
+#
+#
+# @QuantizationMixin.implements(Abs)
+# class QuantizedAbs(_DispatchMixin, QuantizationMixin, Abs):
+#     """ Quantized Abs """
+#     _builtin_torch_fn = torch.abs
+#
+#
+# @QuantizationMixin.implements(Neg)
+# class QuantizedNeg(_DispatchMixin, QuantizationMixin, Neg):
+#     """ Quantized Neg """
+#     _builtin_torch_fn = torch.neg
+#
+#
+# @QuantizationMixin.implements(Argmin)
+# class QuantizedArgmin(_DispatchMixin, QuantizationMixin, Argmin):
+#     """ Quantized Argmin """
+#     _builtin_torch_fn = torch.argmin
+#
+#
+# @QuantizationMixin.implements(Argmax)
+# class QuantizedArgmax(_DispatchMixin, QuantizationMixin, Argmax):
+#     """ Quantized Argmax """
+#     _builtin_torch_fn = torch.argmax
+#
+#
+# @QuantizationMixin.implements(ElementwiseCeil)
+# class QuantizedElementwiseCeil(_DispatchMixin, QuantizationMixin, ElementwiseCeil):
+#     """ Quantized ElementwiseCeil """
+#     _builtin_torch_fn = torch.ceil
+#
+#
+# @QuantizationMixin.implements(ElementwiseFloor)
+# class QuantizedElementwiseFloor(_DispatchMixin, QuantizationMixin, ElementwiseFloor):
+#     """ Quantized ElementwiseFloor """
+#     _builtin_torch_fn = torch.floor
+#
+#
+# @QuantizationMixin.implements(Asin)
+# class QuantizedAsin(_DispatchMixin, QuantizationMixin, Asin):
+#     """ Quantized Asin """
+#     _builtin_torch_fn = torch.asin
+#
+#
+# @QuantizationMixin.implements(Atan)
+# class QuantizedAtan(_DispatchMixin, QuantizationMixin, Atan):
+#     """ Quantized Atan """
+#     _builtin_torch_fn = torch.atan
+#
+#
+# @QuantizationMixin.implements(Round)
+# class QuantizedRound(_DispatchMixin, QuantizationMixin, Round):
+#     """ Quantized Round """
+#     _builtin_torch_fn = torch.round
+#
+#
+# @QuantizationMixin.implements(Gather)
+# class QuantizedGather(_DispatchMixin, QuantizationMixin, Gather):
+#     """ Quantized Gather """
+#     _builtin_torch_fn = torch.gather
+#
+#
+# @QuantizationMixin.implements(LogicalOr)
+# class QuantizedLogicalOr(_DispatchMixin, QuantizationMixin, LogicalOr):
+#     """ Quantized LogicalOr """
+#     _builtin_torch_fn = torch.logical_or
+#
+#
+# @QuantizationMixin.implements(LogicalAnd)
+# class QuantizedLogicalAnd(_DispatchMixin, QuantizationMixin, LogicalAnd):
+#     """ Quantized LogicalAnd """
+#     _builtin_torch_fn = torch.logical_and
+#
+#
+# @QuantizationMixin.implements(LogicalNot)
+# class QuantizedLogicalNot(_DispatchMixin, QuantizationMixin, LogicalNot):
+#     """ Quantized LogicalNot """
+#     _builtin_torch_fn = torch.logical_not
+#
+#
+# @QuantizationMixin.implements(Split)
+# class QuantizedSplit(_DispatchMixin, QuantizationMixin, Split):
+#     """ Quantized Split """
+#     _builtin_torch_fn = torch.split
+#
+#
+# @QuantizationMixin.implements(Permute)
+# class QuantizedPermute(_DispatchMixin, QuantizationMixin, Permute):
+#     """ Quantized Permute """
+#     _builtin_torch_fn = torch.permute
+#
+#
+# @QuantizationMixin.implements(Remainder)
+# class QuantizedRemainder(_DispatchMixin, QuantizationMixin, Remainder):
+#     """ Quantized Remainder """
+#     _builtin_torch_fn = torch.remainder
+#
+#
+# @QuantizationMixin.implements(IndexSelect)
+# class QuantizedIndexSelect(_DispatchMixin, QuantizationMixin, IndexSelect):
+#     """ Quantized IndexSelect """
+#     _builtin_torch_fn = torch.index_select
+#
+#
+# @QuantizationMixin.implements(Fmod)
+# class QuantizedFmod(_DispatchMixin, QuantizationMixin, Fmod):
+#     """ Quantized Fmod """
+#     _builtin_torch_fn = torch.fmod
+#
+#
+# @QuantizationMixin.implements(NonZero)
+# class QuantizedNonZero(_DispatchMixin, QuantizationMixin, NonZero):
+#     """ Quantized NonZero """
+#     _builtin_torch_fn = torch.nonzero
+#
+#
+# @QuantizationMixin.implements(TopK)
+# class QuantizedTopK(_DispatchMixin, QuantizationMixin, TopK):
+#     """ Quantized TopK """
+#     _builtin_torch_fn = torch.topk
+#
+#
+# @QuantizationMixin.implements(Shape)
+# class QuantizedShape(_DispatchMixin, QuantizationMixin, Shape):
+#     """ Quantized Shape """
+#     _builtin_torch_fn = torch.Tensor.size
+#
+#
+# @QuantizationMixin.implements(Tile)
+# class QuantizedTile(_DispatchMixin, QuantizationMixin, Tile):
+#     """ Quantized Tile """
+#     _builtin_torch_fn = torch.tile
+#
+#
+# @QuantizationMixin.implements(ElementwiseUnarySign)
+# class QuantizedElementwiseUnarySign(_DispatchMixin, QuantizationMixin, ElementwiseUnarySign):
+#     """ Quantized ElementwiseUnarySign """
+#     _builtin_torch_fn = torch.sign
+#
+#
+# @QuantizationMixin.implements(Baddbmm)
+# class QuantizedBaddbmm(_DispatchMixin, QuantizationMixin, Baddbmm):
+#     """ Quantized Baddbmm """
+#     _builtin_torch_fn = torch.baddbmm
+#
+#
+# @QuantizationMixin.implements(Addmm)
+# class QuantizedAddmm(_DispatchMixin, QuantizationMixin, Addmm):
+#     """ Quantized Addmm """
+#     _builtin_torch_fn = torch.addmm
+#
+#
+# @QuantizationMixin.implements(Square)
+# class QuantizedSquare(_DispatchMixin, QuantizationMixin, Square):
+#     """ Quantized Square """
+#     _builtin_torch_fn = torch.square
+#
+#
+# @QuantizationMixin.implements(Select)
+# class QuantizedSelect(_DispatchMixin, QuantizationMixin, Select):
+#     """ Quantized Select """
+#     _builtin_torch_fn = torch.select
+#
+#
+#
+# # modules for functional operations defined under torch.nn.functional package
+# @QuantizationMixin.implements(Interpolate)
+# class QuantizedInterpolate(_DispatchMixin, QuantizationMixin, Interpolate):
+#     """ Quantized Interpolate """
+#     _builtin_torch_fn = torch.nn.functional.interpolate
+#
+#
+# @QuantizationMixin.implements(MaxPool2d)
+# class QuantizedMaxPool2d(_DispatchMixin, QuantizationMixin, MaxPool2d):
+#     """ Quantized MaxPool2d """
+#     _builtin_torch_fn = torch.nn.functional.max_pool2d
+#
+#
+# @QuantizationMixin.implements(AdaptiveAvgPool2d)
+# class QuantizedAdaptiveAvgPool2d(_DispatchMixin, QuantizationMixin, AdaptiveAvgPool2d):
+#     """ Quantized AdaptiveAvgPool2d """
+#     _builtin_torch_fn = torch.nn.functional.adaptive_avg_pool2d
+#
+#
+# @QuantizationMixin.implements(BatchNorm)
+# class QuantizedBatchNorm(_DispatchMixin, QuantizationMixin, BatchNorm):
+#     """ Quantized BatchNorm """
+#     _builtin_torch_fn = torch.nn.functional.batch_norm
+#
+#
+# @QuantizationMixin.implements(GroupNorm)
+# class QuantizedGroupNorm(_DispatchMixin, QuantizationMixin, GroupNorm):
+#     """ Quantized GroupNorm """
+#     _builtin_torch_fn = torch.nn.functional.group_norm
+#
+#
+# @QuantizationMixin.implements(Normalize)
+# class QuantizedNormalize(_DispatchMixin, QuantizationMixin, Normalize):
+#     """ Quantized Normalize """
+#     _builtin_torch_fn = torch.nn.functional.normalize
+#
+#
+# @QuantizationMixin.implements(Pad)
+# class QuantizedPad(_DispatchMixin, QuantizationMixin, Pad):
+#     """ Quantized Pad """
+#     _builtin_torch_fn = torch.nn.functional.pad
+#
+#
+# @QuantizationMixin.implements(GridSample)
+# class QuantizedGridSample(_DispatchMixin, QuantizationMixin, GridSample):
+#     """ Quantized GridSample """
+#     _builtin_torch_fn = torch.nn.functional.grid_sample
