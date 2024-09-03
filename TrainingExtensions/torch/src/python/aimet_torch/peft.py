@@ -42,7 +42,6 @@ import pickle
 from collections import defaultdict
 import torch.nn as nn
 import torch
-import onnx
 from safetensors.torch import save_file
 from safetensors import safe_open
 
@@ -57,7 +56,6 @@ from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.quantization.affine import QuantizeDequantize
 from aimet_torch.quantsim import ExportableQuantModule
 from aimet_torch.v2.nn import BaseQuantizationMixin
-from aimet_torch.onnx_utils import OnnxSaver, get_layers_in_io_tensor_map
 
 
 class LoraLayer(torch.nn.Module):
@@ -294,8 +292,7 @@ class PeftQuantUtils:
         :param sim: QuantSim model
         """
         for module_name, module in sim.model.named_modules():
-            if self.prepared_name_to_pt_name and module_name in self.prepared_name_to_pt_name:
-                module_name = self.prepared_name_to_pt_name[module_name]
+            module_name = self._get_module_name(module_name)
             if isinstance(module, BaseQuantizationMixin) and module_name not in self.pt_to_lora_name:
                 for _, param_quantizer in module.param_quantizers.items():
                     if param_quantizer:
@@ -308,8 +305,7 @@ class PeftQuantUtils:
         :param sim: QuantSim model
         """
         for module_name, module in sim.model.named_modules():
-            if self.prepared_name_to_pt_name and module_name in self.prepared_name_to_pt_name:
-                module_name = self.prepared_name_to_pt_name[module_name]
+            module_name = self._get_module_name(module_name)
             if isinstance(module, BaseQuantizationMixin) and module_name not in self.pt_to_lora_name:
                 for input_quantizer, output_quantizer in zip(module.input_quantizers, module.output_quantizers):
                     if input_quantizer:
@@ -336,10 +332,18 @@ class PeftQuantUtils:
         :param param_bw: Parameter BW
         """
         for module_name, module in sim.model.named_modules():
-            if self.prepared_name_to_pt_name and module_name in self.prepared_name_to_pt_name:
-                module_name = self.prepared_name_to_pt_name[module_name]
+            module_name = self._get_module_name(module_name)
             if isinstance(module, BaseQuantizationMixin) and module_name in self.pt_to_lora_name:
                 self._set_bitwidth_for_module(module, output_bw, param_bw)
+
+    def _get_module_name(self, module_name: str) -> str:
+        """
+        Gets module name from prepared model's names if prepared model is being used, else returns the pytorch name
+        :param module_name: pytorch name
+        """
+        if self.prepared_name_to_pt_name and module_name in self.prepared_name_to_pt_name:
+            module_name = self.prepared_name_to_pt_name[module_name]
+        return module_name
 
     def get_quantized_lora_layer(self, sim: QuantizationSimModel):
         """
@@ -352,8 +356,7 @@ class PeftQuantUtils:
         :param sim: QuantSim model
         """
         for module_name, module in sim.model.named_modules():
-            if self.prepared_name_to_pt_name and module_name in self.prepared_name_to_pt_name:
-                module_name = self.prepared_name_to_pt_name[module_name]
+            module_name = self._get_module_name(module_name)
             if isinstance(module, BaseQuantizationMixin) and module_name in self.pt_to_lora_name:
                 yield module_name, module
 
@@ -364,8 +367,7 @@ class PeftQuantUtils:
         :param model: FP32 model
         """
         for module_name, module in model.named_modules():
-            if self.prepared_name_to_pt_name and module_name in self.prepared_name_to_pt_name:
-                module_name = self.prepared_name_to_pt_name[module_name]
+            module_name = self._get_module_name(module_name)
             if module_name in self.pt_to_lora_name:
                 yield module_name, module
 
@@ -383,40 +385,28 @@ class PeftQuantUtils:
         for _, param_quantizer in module.param_quantizers.items():
             param_quantizer.bitwidth = param_bw
 
-    def export_adapter_weights(self, sim: QuantizationSimModel, path: str, filename_prefix: str, onnx_model_path: str):
+    def export_adapter_weights(self, sim: QuantizationSimModel, path: str, filename_prefix: str):
         """
         Exports adapter weights to safetensor format
 
         :param sim: QuantSim model
         :param path: path where to store model pth and encodings
         :param filename_prefix: Prefix to use for filenames of the model pth and encodings files
-        :param onnx_model_path: Path from where we can load the exported onnx model. This can be the same path to where
-                                QuantSim exported the ONNX model
         """
-        # pylint: disable=too-many-locals
-        assert os.path.exists(onnx_model_path), 'The onnx model does not exist in the location specified'
-
-        onnx_model = onnx.load(onnx_model_path)
-        onnx_node_to_io_tensor_map, _ = OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
-        layers_to_onnx_op_names = get_layers_in_io_tensor_map(onnx_node_to_io_tensor_map)
-
         tensors = {}
 
         for module_name, module in sim.model.named_modules():
             if not isinstance(module, ExportableQuantModule):
                 continue
-
-            if module_name in layers_to_onnx_op_names:
-                onnx_name = layers_to_onnx_op_names[module_name][0]
-                if self.prepared_name_to_pt_name and module_name in self.prepared_name_to_pt_name:
-                    pt_name = self.prepared_name_to_pt_name[module_name]
-                    if pt_name in self.pt_to_lora_name:
-                        module_name = self.pt_to_lora_name[pt_name]
-                if module_name in self.lora_layers:
-                    for param_name, param in module.named_parameters():
-                        if param_name in ['weight', 'bias']:
-                            tensor_name = onnx_name + '.' + param_name
-                            tensors[tensor_name] = param
+            org_name = module_name
+            pt_name = self._get_module_name(module_name)
+            if self.prepared_name_to_pt_name and pt_name in self.pt_to_lora_name:
+                module_name = self.pt_to_lora_name[pt_name]
+            if module_name in self.lora_layers:
+                for param_name, param in module.named_parameters():
+                    if param_name in ['weight', 'bias']:
+                        tensor_name = org_name + '.' + param_name
+                        tensors[tensor_name] = param
         filename_prefix = filename_prefix + '.safetensor'
         model_params_path = os.path.join(path, filename_prefix)
         save_file(tensors, model_params_path)
@@ -455,10 +445,9 @@ class PeftQuantUtils:
         tensors = {}
         for module_name, module in sim.model.named_modules():
             org_name = module_name
-            if self.prepared_name_to_pt_name and module_name in self.prepared_name_to_pt_name:
-                pt_name = self.prepared_name_to_pt_name[module_name]
-                if pt_name in self.pt_to_lora_name:
-                    module_name = self.pt_to_lora_name[pt_name]
+            pt_name = self._get_module_name(module_name)
+            if self.prepared_name_to_pt_name and pt_name in self.pt_to_lora_name:
+                module_name = self.pt_to_lora_name[pt_name]
             if module_name in self.lora_layers:
                 for param_name, param in module.named_parameters():
                     if param_name in ['weight', 'bias']:
