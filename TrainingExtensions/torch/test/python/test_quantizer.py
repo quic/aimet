@@ -1861,7 +1861,9 @@ class TestQuantizationSimStaticGrad:
                                                  round_mode='nearest', data_type=QuantizationDataType.int)
         assert not QuantizationSimModel._is_quantizable_module(qc_quantize_module)
 
-    def test_exported_weight(self):
+    @pytest.mark.parametrize('quant_scheme', [QuantScheme.post_training_tf,
+                                              QuantScheme.training_range_learning_with_tf_init])
+    def test_exported_weight(self, quant_scheme):
         """
         Test to check if the exported weight remains unchanged after quantization,
         regardless of the rounding method used.
@@ -1874,7 +1876,7 @@ class TestQuantizationSimStaticGrad:
         with torch.no_grad():
             model.conv.weight.data = torch.randint(-127, 127, model.conv.weight.shape, dtype=torch.float32) * 2 + 1
 
-        sim = QuantizationSimModel(model, dummy_input, default_param_bw=param_bitwidth)
+        sim = QuantizationSimModel(model, dummy_input, default_param_bw=param_bitwidth, quant_scheme=quant_scheme)
         sim.compute_encodings(lambda model, _: model(dummy_input), None)
 
         # Adjust delta of the weight quantizer so that quantized weights fall between rounding border

@@ -260,20 +260,6 @@ class QuantizationSimModel(V1QuantizationSimModel):
                     module._patch_dequantized_parameters()
                 cls._update_parameters_by_attr(module)
 
-    @staticmethod
-    def _update_parameters_by_attr(module: torch.nn.Module):
-        """
-        Updates the internal parameters of a PyTorch module by its attributes
-        and remove those attributes from module.__dict__ to avoid onnx export error.
-
-        :param module: The PyTorch module whose parameters need to be updated.
-        """
-        # pylint: disable=protected-access
-        for param_name, _ in module.named_parameters():
-            if param_name in module.__dict__ and param_name in module._parameters:
-                module._parameters[param_name] = module.__dict__[param_name]
-                module.__dict__.pop(param_name)
-
     @deprecated(f'Use {V1QuantizationSimModel.named_qmodules.__qualname__} instead.')
     def quant_wrappers(self): # pylint: disable=missing-docstring
         return super().quant_wrappers()
