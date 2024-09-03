@@ -68,7 +68,7 @@ def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = Non
     Creates an interactive visualization of min and max activations/weights of all quantized modules in the input
     QuantSim object. The features include:
 
-        - Adjustable threshold values to isolate layers containing extreme values/outliers
+        - Adjustable threshold values to flag layers whose min or max activations/weights exceed the set thresholds
         - Tables containing names and ranges for layers exceeding threshold values
 
     Saves the visualization as a .html at the given path.
