@@ -49,6 +49,7 @@ import json
 import torch
 import onnx
 from packaging import version  # pylint: disable=wrong-import-order
+from safetensors.numpy import save_file as save_safetensor_file
 
 import aimet_common.libpymo as libpymo
 from aimet_common import quantsim
@@ -647,6 +648,26 @@ class QuantizationSimModel:
                                                         onnx_node_to_io_tensor_map, valid_param_set,
                                                         excluded_layer_names, propagate_encodings,
                                                         quantizer_args=quantizer_args)
+
+    def export_weights_to_safetensors(self, path: str, filename_prefix: str):
+        """
+        Exports the updated weights in the safetensors format
+
+        :param path: Path to save file
+        :param filename_prefix: Filename to use for saved file
+        """
+
+        def to_numpy(tensor):
+            return tensor.detach().cpu().numpy() if tensor.requires_grad else tensor.cpu().numpy()
+
+        # Save state dict in safetensors file
+        unwrapped_model = QuantizationSimModel.get_original_model(self.model)
+        data = unwrapped_model.state_dict()
+        data = {k: to_numpy(v) for k, v in data.items()}
+        metadata = self.model.mpp_meta if hasattr(self.model, 'mpp_meta') else {}
+
+        file_path = os.path.join(path, filename_prefix + '.safetensors')
+        save_safetensor_file(data, file_path, metadata)
 
     def save_encodings_to_json(self, path: str, filename_prefix: str):
         """
