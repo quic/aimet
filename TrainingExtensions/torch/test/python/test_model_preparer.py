@@ -626,6 +626,9 @@ class TestFX:
             # Check the exported model
             loaded_model = torch.load(os.path.join(tmp_dir, 'modified_resnet18.pth'))
 
+            # Load weights from exported model to load qdq weight
+            model_transformed.load_state_dict(loaded_model.state_dict())
+
             # Eval for both models
             assert torch.allclose(model_transformed(input_tensor),
                                   loaded_model(input_tensor))
