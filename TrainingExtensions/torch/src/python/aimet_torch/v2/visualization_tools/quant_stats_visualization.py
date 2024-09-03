@@ -47,26 +47,49 @@ from bokeh.models import ColumnDataSource, TextInput, CustomJS, Range1d, HoverTo
 from bokeh.models.tools import ResetTool
 from bokeh.models.dom import HTML
 from bokeh.plotting import figure, save, curdoc
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.utils import get_ordered_list_of_modules
 from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.encoding_analyzer import _MinMaxObserver
 
 
-def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = None) -> None:
-    """
-    Interactive visualization of min and max activations/weights of all quantized modules in the input QuantSim object.
-    The QuantSim object is expected to have been calibrated before using this function.
-    Saves the visualization as a .html at the provided path.
+def visualize_stats(sim, dummy_input, save_path: str = None) -> None:
+    """Produces an interactive html to view the stats collected by each quantizer during calibration
 
-    :param sim: QuantSim Object.
-    :param dummy_input: Dummy Input.
-    :param save_path: Path for saving the visualization. Format is 'path_to_dir/file_name.html'
+    .. note::
+
+        The QuantizationSimModel input is expected to have been calibrated before using this function. Stats will only
+        be plotted for activations/parameters with quantizers containing calibration statistics.
+
+        Currently, this tool is only compatible with quantizers containing :class:`MinMaxEncodingAnalyzer` encoding
+        analyzers (i.e., :attr:`QuantScheme.post_training_tf` and :attr:`QuantScheme.training_range_learning_with_tf_init`
+        quant schemes).
+
+    Creates an interactive visualization of min and max activations/weights of all quantized modules in the input
+    QuantSim object. The features include:
+
+        - Adjustable threshold values to isolate layers containing extreme values/outliers
+        - Tables containing names and ranges for layers exceeding threshold values
+
+    Saves the visualization as a .html in the given directory with the given name.
+
+    Example:
+
+        >>> sim = aimet_torch.v2.quantsim.QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf)
+        >>> with aimet_torch.v2.nn.compute_encodings(sim.model):
+        ...     for data, _ in data_loader:
+        ...         sim.model(data)
+        ...
+        >>> visualize_stats(sim, dummy_input, "stats.html")
+
+    :param sim: Calibrated QuantizationSimModel
+    :param dummy_input: Sample input used to trace the model
+    :param save_path: Path for saving the visualization. Default is "quant_stats_visualization.html"
     """
 
     # Ensure that sim is an instance of aimet_torch.quantsim.QuantizationSimModel
     if not isinstance(sim, QuantizationSimModel):
-        raise TypeError(f"Expected type 'aimet_torch.quantization.QuantizationSimModel', got '{type(sim)}'.")
+        raise TypeError(f"Expected type 'aimet_torch.v2.quantsim.QuantizationSimModel', got '{type(sim)}'.")
 
     # Ensure that the path is valid
     check_path(save_path)
