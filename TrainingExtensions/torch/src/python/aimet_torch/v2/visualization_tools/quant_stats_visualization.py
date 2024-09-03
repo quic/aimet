@@ -95,24 +95,25 @@ def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = Non
         raise TypeError(f"Expected type 'aimet_torch.v2.quantsim.QuantizationSimModel', got '{type(sim)}'.")
 
     # Ensure that the save path is valid
-    check_path(save_path)
+    _check_path(save_path)
 
-    # Flatten the quantized modules into an ordered list for easier indexing in the plots
+    # Topologically sort the quantized modules into an ordered list for easier indexing in the plots
     ordered_list = (get_ordered_list_of_modules(sim.model, dummy_input))
     stats_list = []
 
+    # No advanced stats collected in this API
     percentile_list = []
 
     # Collect stats from observers
     for module in ordered_list:
-        module_stats = get_observer_stats(module, percentile_list=percentile_list)
+        module_stats = _get_observer_stats(module, percentile_list=percentile_list)
         if module_stats is not None:
             stats_list.append(module_stats)
 
     # Raise an error if no stats were found
     if len(stats_list) == 0:
         raise RuntimeError(
-            "No stats found to plot. Either there were no quantized modules, or calibration was not performed before calling this function, or no observers of type _MinMaxObserver or _HistogramObserver are present.")
+            "No stats found to plot. Either there were no quantized modules, or calibration was not performed before calling this function, or no observers of type _MinMaxObserver or _HistogramObserver were present.")
 
     stats_dict = dict()
     keys_list = ["name", 0, 100] + percentile_list
@@ -121,7 +122,7 @@ def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = Non
         stats_dict[key] = [None] * len(stats_list)
     for idx, stats in enumerate(stats_list):
         for key in keys_list:
-            stats_dict[key][idx] = stats_list[idx][key]
+            stats_dict[key][idx] = stats[key]
     visualizer = QuantStatsVisualizer(stats_dict)
 
     # Save an interactive bokeh plot as a standalone html
@@ -135,9 +136,9 @@ def visualize_advanced_stats(sim: QuantizationSimModel, dummy_input, save_path: 
     The QuantSim object is expected to have been calibrated before using this function.
     Saves the visualization as a .html at the provided path.
 
-    :param sim: QuantSim Object.
+    :param sim: Calibrated QuantSim Object.
     :param dummy_input: Dummy Input.
-    :param save_path: Path for saving the visualization. Format is 'path_to_dir/file_name.html'
+    :param save_path: Path for saving the visualization. Format is 'path_to_dir/file_name.html'. Default is './quant_stats_visualization.html'.
     """
 
     # Ensure that sim is an instance of aimet_torch.quantsim.QuantizationSimModel
@@ -145,18 +146,18 @@ def visualize_advanced_stats(sim: QuantizationSimModel, dummy_input, save_path: 
         raise TypeError(f"Expected type 'aimet_torch.quantization.QuantizationSimModel', got '{type(sim)}'.")
 
     # Ensure that the save path is valid
-    check_path(save_path)
+    _check_path(save_path)
 
-    # Flatten the quantized modules into an ordered list for easier indexing in the plots
+    # Topologically sort the quantized modules into an ordered list for easier indexing in the plots
     ordered_list = (get_ordered_list_of_modules(sim.model, dummy_input))
     stats_list = []
 
-    percentile_list = add_key_percentiles_to_list(PERCENTILES)
+    percentile_list = _add_key_percentiles_to_list(PERCENTILES)
     percentile_list = sorted(percentile_list)
 
     # Collect stats from observers
     for module in ordered_list:
-        module_stats = get_observer_stats(module, percentile_list=percentile_list)
+        module_stats = _get_observer_stats(module, percentile_list=percentile_list)
         if module_stats is not None:
             stats_list.append(module_stats)
 
@@ -172,14 +173,14 @@ def visualize_advanced_stats(sim: QuantizationSimModel, dummy_input, save_path: 
         stats_dict[key] = [None] * len(stats_list)
     for idx, stats in enumerate(stats_list):
         for key in keys_list:
-            stats_dict[key][idx] = stats_list[idx][key]
+            stats_dict[key][idx] = stats[key]
     visualizer = QuantStatsVisualizer(stats_dict)
 
     # Save an interactive bokeh plot as a standalone html
-    visualizer.export_plot_as_html(save_path, mode="basic_stats")
+    visualizer.export_plot_as_html(save_path, mode="advanced_stats")
 
 
-def check_path(path: str):
+def _check_path(path: str):
     """ Function for sanity check on the given path """
     path_to_directory = os.path.dirname(path)
     if path_to_directory != '' and not os.path.exists(path_to_directory):
@@ -188,14 +189,16 @@ def check_path(path: str):
         raise ValueError("'save_path' must end with '.html'.")
 
 
-def get_observer_stats(module, percentile_list):
-    # add_key_percentiles_to_list(percentile_list)
-
+def _get_observer_stats(module, percentile_list):
+    """
+    Function to extract stats from an observer.
+    Handles observers of types _MinMaxObserver, _HistogramObserver.
+    """
     module_name, module_quantizer = module[0], module[1]
     if isinstance(module_quantizer, QuantizerBase):
         if isinstance(module_quantizer.encoding_analyzer.observer, _MinMaxObserver):
             rng = module_quantizer.encoding_analyzer.observer.get_stats()
-            if (rng.min is not None):
+            if rng.min is not None:
                 stats = dict()
                 stats["name"] = module_name
                 stats[0] = torch.min(rng.min).item()
@@ -213,7 +216,7 @@ def get_observer_stats(module, percentile_list):
                     stats["name"] = module_name
                     stats[0] = histogram.min.item()
                     stats[100] = histogram.max.item()
-                    get_advanced_stats_from_histogram(histogram, stats, percentile_list)
+                    _get_advanced_stats_from_histogram(histogram, stats, percentile_list)
                     return stats
             elif len(histogram_list) > 1:
                 stats = dict()
@@ -234,7 +237,8 @@ def get_observer_stats(module, percentile_list):
     return None
 
 
-def add_key_percentiles_to_list(percentiles):
+def _add_key_percentiles_to_list(percentiles):
+    """ Add percentiles required for boxplot if not already present """
     percentile_list = percentiles[:]
     for p in [25, 50, 75]:
         flag = True
@@ -246,14 +250,16 @@ def add_key_percentiles_to_list(percentiles):
     return percentile_list
 
 
-def get_advanced_stats_from_histogram(histogram, stats, percentile_list):
+def _get_advanced_stats_from_histogram(histogram, stats, percentile_list):
+    """ High level function to extract advanced stats from a histogram object """
     if len(percentile_list) > 0:
-        percentile_stats = get_percentile_stats_from_histogram(histogram, percentile_list)
-        for i in range(len(percentile_list)):
-            stats[percentile_list[i]] = percentile_stats[i]
+        percentile_stats = _get_percentile_stats_from_histogram(histogram, percentile_list)
+        for i, percentile in enumerate(percentile_list):
+            stats[percentile] = percentile_stats[i]
 
 
-def get_percentile_stats_from_histogram(histogram, percentile_list):
+def _get_percentile_stats_from_histogram(histogram, percentile_list):
+    """ Function to extract percentile stats from a histogram object """
     if len(percentile_list) == 0:
         raise RuntimeError("'percentile_list' cannot be empty.'")
     if not _is_sorted(percentile_list):
@@ -277,6 +283,8 @@ def get_percentile_stats_from_histogram(histogram, percentile_list):
                 else:
                     break
         cum_f += f
+
+    return None
 
 
 def _is_sorted(arr: list):
@@ -442,10 +450,7 @@ class QuantStatsVisualizer:
     """
     Class for constructing the visualization with functionality to export the plot as
 
-    :param idx: List with indexing for the ordered list of quantized modules.
-    :param namelist: List containing names of the ordered list of quantized modules.
-    :param minlist: List containing min activations of the ordered list of quantized modules.
-    :param maxlist: List containing max activations of the ordered list of quantized modules.
+    :param stats_dict: Dictionary containing the module names, indices, and other extracted statistics
     """
 
     # Class level constants
@@ -458,10 +463,6 @@ class QuantStatsVisualizer:
                            "Max Activation": 100}
 
     def __init__(self, stats_dict: dict):
-        # self.idx = idx
-        # self.namelist = namelist
-        # self.minlist = minlist
-        # self.maxlist = maxlist
         self.stats_dict = stats_dict
         self.plot = figure(
             title="Min Max Activations/Weights of quantized modules for given model",
@@ -1026,6 +1027,7 @@ class QuantStatsVisualizer:
         Method for constructing the visualization and saving it to the given path.
 
         :param save_path: Path for saving the visualization.
+        :param mode: Whether to plot basic stats or advanced stats.
         """
 
         curdoc().theme = 'light_minimal'
