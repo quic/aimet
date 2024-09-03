@@ -84,7 +84,7 @@ def visualize_stats(sim, dummy_input, save_path: str = None) -> None:
 
     :param sim: Calibrated QuantizationSimModel
     :param dummy_input: Sample input used to trace the model
-    :param save_path: Path for saving the visualization. Default is "quant_stats_visualization.html"
+    :param save_path: Path for saving the visualization. Default is "./quant_stats_visualization.html"
     """
 
     # Ensure that sim is an instance of aimet_torch.quantsim.QuantizationSimModel
