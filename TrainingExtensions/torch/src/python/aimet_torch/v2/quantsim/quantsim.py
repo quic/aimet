@@ -242,9 +242,9 @@ class QuantizationSimModel(V1QuantizationSimModel):
     def _replace_quantization_wrapper_with_native_torch_quantization_nodes(quant_sim_model, device: torch.device):
         raise NotImplementedError()
 
-    @staticmethod
+    @classmethod
     @torch.no_grad()
-    def _apply_qdq_to_model_parameters(model: torch.nn.Module):
+    def _apply_qdq_to_model_parameters(cls, model: torch.nn.Module):
         """
         Applies quant-dequant to the parameters of a PyTorch model
         to avoid rounding error during weight quantization.
@@ -253,10 +253,23 @@ class QuantizationSimModel(V1QuantizationSimModel):
         """
         for module in model.modules():
             if isinstance(module, BaseQuantizationMixin):
-                for param_name, quantizer in module.param_quantizers.items():
-                    if quantizer is not None:
-                        param = getattr(module, param_name)
-                        param.data = quantizer(param.data)
+                # pylint: disable=protected-access
+                module._patch_quantized_parameters()
+                cls._update_parameters_by_attr(module)
+
+    @staticmethod
+    def _update_parameters_by_attr(module: torch.nn.Module):
+        """
+        Updates the internal parameters of a PyTorch module by its attributes
+        and remove those attributes from module.__dict__ to avoid onnx export error.
+
+        :param module: The PyTorch module whose parameters need to be updated.
+        """
+        # pylint: disable=protected-access
+        for param_name, _ in module.named_parameters():
+            if param_name in module.__dict__ and param_name in module._parameters:
+                module._parameters[param_name] = module.__dict__[param_name]
+                module.__dict__.pop(param_name)
 
     @deprecated(f'Use {V1QuantizationSimModel.named_qmodules.__qualname__} instead.')
     def quant_wrappers(self): # pylint: disable=missing-docstring
