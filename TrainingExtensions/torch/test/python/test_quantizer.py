@@ -5212,6 +5212,19 @@ class TestQuantizationSimLearnedGrid:
         closest_wrapper = qsim._get_closest_producer_wrapper(qsim.connected_graph.ordered_ops[1], module_to_quant_wrapper)
         assert closest_wrapper == qsim.model.permute
 
+
+def test_export_to_safetensors():
+    torch.manual_seed(0)
+    model = SmallMnistNoDropoutWithPassThrough()
+    model.eval()
+    dummy_data = torch.randn(1, 1, 32, 32)
+    sim = QuantizationSimModel(model, dummy_data)
+    sim.compute_encodings(lambda m, itr: m(dummy_data), None)
+    with tempfile.TemporaryDirectory() as tempDir:
+        sim.export_weights_to_safetensors(tempDir, 'sim_export')
+        assert(os.path.exists(os.path.join(tempDir, 'sim_export'+'.safetensors')))
+
+
 @pytest.mark.cuda
 @pytest.mark.parametrize('input_dims', (2, 3, 4))
 def test_fused_qdq_linear(input_dims):
