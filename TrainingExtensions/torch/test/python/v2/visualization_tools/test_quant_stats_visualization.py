@@ -44,9 +44,7 @@ from models.test_models import ModelWithUnusedMatmul
 from aimet_torch.examples.test_models import SingleResidualWithAvgPool
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.quantsim import QuantScheme
-from aimet_torch.v2.visualization_tools import visualize_stats
-import aimet_torch.v2.nn as aimet_nn
-from aimet_torch.v2.quantsim.config_utils import set_blockwise_quantization_for_weights
+from aimet_torch.v2.visualization_tools import visualize_stats, visualize_advanced_stats
 from aimet_common.quantsim_config.utils import get_path_for_per_channel_config
 
 
@@ -77,94 +75,57 @@ def evaluate_2(model: torch.nn.Module, dummy_input: tuple):
 
 class TestQuantStatsVisualization:
 
-    def test_visualize_stats(self):
-        """ test visualize_stats with minmax observers"""
+    @pytest.mark.parametrize("quant_scheme", [QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced])
+    @pytest.mark.parametrize("config_file", [None, get_path_for_per_channel_config()])
+    def test_visualize_stats(self, quant_scheme, config_file):
+        """ test visualize_stats API """
         input_shape = (1, 3, 32, 32)
         dummy_input = torch.randn(*input_shape)
         model = TinyModel().eval()
-        sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=QuantScheme.post_training_tf)
+        sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=quant_scheme, config_file=config_file)
         sim.compute_encodings(evaluate, dummy_input)
         with tempfile.TemporaryDirectory() as tmp_dir:
             visualize_stats(sim, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.html"))
             assert os.path.isfile(os.path.join(tmp_dir, "test_visualize_stats.html"))
 
-    def test_visualize_stats_histogram(self):
-        """ test visualize_stats with histogram observers"""
+    @pytest.mark.parametrize("quant_scheme", [QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced])
+    @pytest.mark.parametrize("config_file", [None, get_path_for_per_channel_config()])
+    def test_visualize_advanced_stats(self, quant_scheme, config_file):
+        """ test visualize_advanced_stats API """
         input_shape = (1, 3, 32, 32)
         dummy_input = torch.randn(*input_shape)
         model = TinyModel().eval()
-        sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced)
+        sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=quant_scheme, config_file=config_file)
         sim.compute_encodings(evaluate, dummy_input)
         with tempfile.TemporaryDirectory() as tmp_dir:
-            visualize_stats(sim, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.html"))
+            visualize_advanced_stats(sim, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.html"))
             assert os.path.isfile(os.path.join(tmp_dir, "test_visualize_stats.html"))
 
-    def test_per_channel(self):
-        """ test visualize_stats in per channel case"""
-        input_shape = (1, 3, 32, 32)
-        dummy_input = torch.randn(*input_shape)
-        model = TinyModel().eval()
-        sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=QuantScheme.post_training_tf, config_file=get_path_for_per_channel_config())
-        sim.compute_encodings(evaluate, dummy_input)
-        # with tempfile.TemporaryDirectory() as tmp_dir:
-        #     visualize_stats(sim, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.html"))
-        #     assert os.path.isfile(os.path.join(tmp_dir, "test_visualize_stats.html"))
-        tmp_dir = "/local/mnt/workspace/ipendse/mirror_sync/dev/minmax_visualization"
-        visualize_stats(sim, dummy_input, os.path.join(tmp_dir, "test_perchannel_vis.html"))
-        assert os.path.isfile(os.path.join(tmp_dir, "test_perchannel_vis.html"))
-
-    def test_per_channel_histogram(self):
-        """ test visualize_stats in per channel case with histogram observers"""
-        input_shape = (1, 3, 32, 32)
-        dummy_input = torch.randn(*input_shape)
-        model = TinyModel().eval()
-        sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced, config_file=get_path_for_per_channel_config())
-        sim.compute_encodings(evaluate, dummy_input)
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            visualize_stats(sim, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.html"))
-            assert os.path.isfile(os.path.join(tmp_dir, "test_visualize_stats.html"))
-
-    def test_blockwise(self):
-        model = SingleResidualWithAvgPool().eval()
-        dummy_input = torch.randn(1, 3, 32, 32)
-        sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=QuantScheme.post_training_tf)
-        sim.compute_encodings(lambda m, _: m(dummy_input), None)
-        conv_layers = [module for module in sim.model.modules() if isinstance(module, aimet_nn.QuantizedConv2d)]
-
-        # exclude the 1st conv layers since its in channels of 3 makes it inconvenient to set blockwise
-        conv_layers = conv_layers[1:]
-        set_blockwise_quantization_for_weights(sim, [conv_layers[0]], 4, True, [1, 4, -1, -1])
-        set_blockwise_quantization_for_weights(sim, lambda m: m == conv_layers[1], 4, True, [1, 4, -1, -1])
-        set_blockwise_quantization_for_weights(sim, [aimet_nn.QuantizedLinear], 4, True, [1, 4])
-        # with tempfile.TemporaryDirectory() as tmp_dir:
-        #     visualize_stats(sim, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.html"))
-        #     assert os.path.isfile(os.path.join(tmp_dir, "test_visualize_stats.html"))
-        tmp_dir = "/local/mnt/workspace/ipendse/mirror_sync/dev/minmax_visualization"
-        visualize_stats(sim, dummy_input, os.path.join(tmp_dir, "test_blockwise_vis.html"))
-        assert os.path.isfile(os.path.join(tmp_dir, "test_blockwise_vis.html"))
-
-
-    def test_not_calibrated_error(self):
+    @pytest.mark.parametrize("quant_scheme", [QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced])
+    @pytest.mark.parametrize("function", [visualize_stats, visualize_advanced_stats])
+    def test_not_calibrated_error(self, quant_scheme, function):
         """ Check whether an exception is raised if QuantSim is not calibrated """
         input_shape = (1, 3, 32, 32)
         dummy_input = torch.randn(*input_shape)
         model = TinyModel().eval()
-        sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=QuantScheme.post_training_tf)
+        sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=quant_scheme)
         with tempfile.TemporaryDirectory() as tmp_dir:
             with pytest.raises(RuntimeError):
-                visualize_stats(sim, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.html"))
+                function(sim, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.html"))
 
-    def test_not_quantsim_object_error(self):
+    @pytest.mark.parametrize("function", [visualize_stats, visualize_advanced_stats])
+    def test_not_quantsim_object_error(self, function):
         """ Check whether the input is a QuantizationSimModel instance """
         input_shape = (1, 3, 32, 32)
         dummy_input = torch.randn(*input_shape)
         model = TinyModel().eval()
         with tempfile.TemporaryDirectory() as tmp_dir:
             with pytest.raises(TypeError):
-                visualize_stats(model, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.html"))
+                function(model, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.html"))
 
-    def test_not_a_directory_error(self):
-        """ Raise exception if directory does not exist """
+    @pytest.mark.parametrize("function", [visualize_stats, visualize_advanced_stats])
+    def test_not_a_directory_error(self, function):
+        """ Raise exception if directory corresponding to save_path does not exist """
         input_shape = (1, 3, 32, 32)
         dummy_input = torch.randn(*input_shape)
         model = TinyModel().eval()
@@ -173,9 +134,10 @@ class TestQuantStatsVisualization:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp = tmp_dir
         with pytest.raises(NotADirectoryError, match=f"'{tmp}' is not a directory."):
-            visualize_stats(sim, dummy_input, os.path.join(tmp, "test_visualize_stats.html"))
+            function(sim, dummy_input, os.path.join(tmp, "test_visualize_stats.html"))
 
-    def test_no_html_extension_error(self):
+    @pytest.mark.parametrize("function", [visualize_stats, visualize_advanced_stats])
+    def test_no_html_extension_error(self, function):
         """ Raise exception if provided path does not end with .html """
         input_shape = (1, 3, 32, 32)
         dummy_input = torch.randn(*input_shape)
@@ -184,14 +146,16 @@ class TestQuantStatsVisualization:
         sim.compute_encodings(evaluate, dummy_input)
         with tempfile.TemporaryDirectory() as tmp_dir:
             with pytest.raises(ValueError, match="'save_path' must end with '.html'."):
-                visualize_stats(sim, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.jpg"))
+                function(sim, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.jpg"))
 
-    def test_model_with_unused_matmul(self):
+    @pytest.mark.parametrize("quant_scheme", [QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced])
+    @pytest.mark.parametrize("function", [visualize_stats, visualize_advanced_stats])
+    def test_model_with_unused_matmul(self, quant_scheme, function):
         """ Check that the visualization is generated even when there exists an unused matmul """
         model = ModelWithUnusedMatmul()
         dummy_input = (torch.randn(10), torch.randn(10))
-        sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=QuantScheme.post_training_tf)
+        sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=quant_scheme)
         sim.compute_encodings(evaluate_2, dummy_input)
         with tempfile.TemporaryDirectory() as tmp_dir:
-            visualize_stats(sim, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.html"))
+            function(sim, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.html"))
             assert os.path.isfile(os.path.join(tmp_dir, "test_visualize_stats.html"))
