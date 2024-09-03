@@ -37,7 +37,7 @@
 
 """ Custom modules for functional operations defined under torch and torch.nn.functional packages """
 
-from typing import Callable, Any, Tuple, Union, List
+from typing import Callable, Any, Tuple, Union, List, Type
 
 import torchvision
 import torch
@@ -61,13 +61,12 @@ def forward_function_wrapper(functional: Callable) -> Any:
 
     return forward
 
-def create_wrapper_module(class_name: str, functional: Callable) -> Callable:
+def create_wrapper_module(class_name: str, functional: Callable) -> Type[torch.nn.Module]:
     """
     Dynamically create wrapper module for a functional operation.
 
     :param class_name: Name of the class.
     :param functional: Functional operation.
-    :return: Module.
     """
     wrapped_module = type(class_name, (torch.nn.Module,), {'forward': forward_function_wrapper(functional)})
     return wrapped_module

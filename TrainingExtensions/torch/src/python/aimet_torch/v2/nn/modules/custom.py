@@ -56,6 +56,11 @@ def _binary_quant_init(self):
     self.input_quantizers = nn.ModuleList([None, None])
 
 
+def _ternary_quant_init(self):
+    super(type(self), self).__quant_init__()
+    self.input_quantizers = nn.ModuleList([None, None, None])
+
+
 @QuantizationMixin.implements(Sin)
 class QuantizedSin(_DispatchMixin, QuantizationMixin, Sin):
     """ Quantized Sin """
@@ -284,20 +289,21 @@ class QuantizedConcat(_DispatchMixin, QuantizationMixin, Concat):
 # class QuantizedEqual(_DispatchMixin, QuantizationMixin, Equal):
 #     """ Quantized Equal """
 #     _builtin_torch_fn = torch.eq
-#
-#
-# @QuantizationMixin.implements(Bmm)
-# class QuantizedBmm(_DispatchMixin, QuantizationMixin, Bmm):
-#     """ Quantized Bmm """
-#     _builtin_torch_fn = torch.bmm
-#
-#
-# @QuantizationMixin.implements(CumSum)
-# class QuantizedCumSum(_DispatchMixin, QuantizationMixin, CumSum):
-#     """ Quantized CumSum """
-#     _builtin_torch_fn = torch.cumsum
-#
-#
+
+
+@QuantizationMixin.implements(Bmm)
+class QuantizedBmm(_DispatchMixin, QuantizationMixin, Bmm):
+    """ Quantized Bmm """
+    __quant_init__ = _binary_quant_init
+    _builtin_torch_fn = torch.bmm
+
+
+@QuantizationMixin.implements(CumSum)
+class QuantizedCumSum(_DispatchMixin, QuantizationMixin, CumSum):
+    """ Quantized CumSum """
+    _builtin_torch_fn = torch.cumsum
+
+
 # @QuantizationMixin.implements(MaskedFill)
 # class QuantizedMaskedFill(_DispatchMixin, QuantizationMixin, MaskedFill):
 #     """ Quantized MaskedFill """
@@ -464,20 +470,22 @@ class QuantizedConcat(_DispatchMixin, QuantizationMixin, Concat):
 # class QuantizedElementwiseUnarySign(_DispatchMixin, QuantizationMixin, ElementwiseUnarySign):
 #     """ Quantized ElementwiseUnarySign """
 #     _builtin_torch_fn = torch.sign
-#
-#
-# @QuantizationMixin.implements(Baddbmm)
-# class QuantizedBaddbmm(_DispatchMixin, QuantizationMixin, Baddbmm):
-#     """ Quantized Baddbmm """
-#     _builtin_torch_fn = torch.baddbmm
-#
-#
-# @QuantizationMixin.implements(Addmm)
-# class QuantizedAddmm(_DispatchMixin, QuantizationMixin, Addmm):
-#     """ Quantized Addmm """
-#     _builtin_torch_fn = torch.addmm
-#
-#
+
+
+@QuantizationMixin.implements(Baddbmm)
+class QuantizedBaddbmm(_DispatchMixin, QuantizationMixin, Baddbmm):
+    """ Quantized Baddbmm """
+    __quant_init__ = _ternary_quant_init
+    _builtin_torch_fn = torch.baddbmm
+
+
+@QuantizationMixin.implements(Addmm)
+class QuantizedAddmm(_DispatchMixin, QuantizationMixin, Addmm):
+    """ Quantized Addmm """
+    __quant_init__ = _ternary_quant_init
+    _builtin_torch_fn = torch.addmm
+
+
 # @QuantizationMixin.implements(Square)
 # class QuantizedSquare(_DispatchMixin, QuantizationMixin, Square):
 #     """ Quantized Square """
