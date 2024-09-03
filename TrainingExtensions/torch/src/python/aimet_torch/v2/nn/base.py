@@ -237,6 +237,11 @@ class BaseQuantizationMixin(abc.ABC):
 
         qtzn_module.__dict__ = module.__dict__.copy()
         qtzn_module._modules = module._modules.copy()
+        # NOTE: We use custom copy function _shallow_copy, which is a superset of dict.copy(),
+        #       to circumvent an OOP failure in deepspeed where ZeROOrderedDict.copy()
+        #       throws runtime error.
+        # TODO: Revert this back to `module._parameters.copy()` once the OOP violation is
+        #       fixed in deepspeed
         qtzn_module._parameters = _shallow_copy(module._parameters)
         qtzn_module._buffers = module._buffers.copy()
 
@@ -461,6 +466,11 @@ class BaseQuantizationMixin(abc.ABC):
         orig_module.__dict__ = self.__dict__.copy()
         orig_module.__dict__.pop('forward', None)
 
+        # NOTE: We use custom copy function _shallow_copy, which is a superset of dict.copy(),
+        #       to circumvent an OOP failure in deepspeed where ZeROOrderedDict.copy()
+        #       throws runtime error.
+        # TODO: Revert this back to `module._parameters.copy()` once the OOP violation is
+        #       fixed in deepspeed
         orig_module._parameters = _shallow_copy(self._parameters)
         orig_module._buffers = self._buffers.copy()
         orig_module._modules = self._modules.copy()
