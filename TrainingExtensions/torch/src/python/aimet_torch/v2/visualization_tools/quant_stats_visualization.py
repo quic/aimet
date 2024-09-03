@@ -94,10 +94,6 @@ def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = Non
     if not isinstance(sim, QuantizationSimModel):
         raise TypeError(f"Expected type 'aimet_torch.v2.quantsim.QuantizationSimModel', got '{type(sim)}'.")
 
-    # print("Sim model")
-    # print(sim.model)
-
-
     # Ensure that the save path is valid
     if not save_path:
         save_path = "quant_stats_visualization.html"
@@ -105,13 +101,13 @@ def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = Non
 
     # Flatten the quantized modules into an ordered list for easier indexing in the plots
     ordered_list = (get_ordered_list_of_modules(sim.model, dummy_input))
-    # print("Ordered List")
-    # print(ordered_list)
     stats_list = []
+
+    percentile_list = []
 
     # Collect stats from observers
     for module in ordered_list:
-        module_stats = get_observer_stats(module, percentile_list=None)
+        module_stats = get_observer_stats(module, percentile_list=percentile_list)
         if module_stats is not None:
             stats_list.append(module_stats)
 
@@ -121,7 +117,60 @@ def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = Non
             "No stats found to plot. Either there were no quantized modules, or calibration was not performed before calling this function, or no observers of type _MinMaxObserver or _HistogramObserver are present.")
 
     stats_dict = dict()
-    keys_list = ["name", 0, 100]
+    keys_list = ["name", 0, 100] + percentile_list
+    stats_dict["idx"] = list(range(len(stats_list)))
+    for key in keys_list:
+        stats_dict[key] = [None] * len(stats_list)
+    for idx, stats in enumerate(stats_list):
+        for key in keys_list:
+            stats_dict[key][idx] = stats_list[idx][key]
+    visualizer = QuantStatsVisualizer(stats_dict)
+
+    # Save an interactive bokeh plot as a standalone html
+    visualizer.export_plot_as_html(save_path, mode="basic_stats")
+
+
+def visualize_advanced_stats(sim: QuantizationSimModel, dummy_input, save_path: str = None) -> None:
+    """
+    Interactive visualization of min and max activations/weights of all quantized modules
+    in the input QuantSim object and boxplots of selected quantized modules.
+    The QuantSim object is expected to have been calibrated before using this function.
+    Saves the visualization as a .html at the provided path.
+
+    :param sim: QuantSim Object.
+    :param dummy_input: Dummy Input.
+    :param save_path: Path for saving the visualization. Format is 'path_to_dir/file_name.html'
+    """
+
+    # Ensure that sim is an instance of aimet_torch.quantsim.QuantizationSimModel
+    if not isinstance(sim, QuantizationSimModel):
+        raise TypeError(f"Expected type 'aimet_torch.quantization.QuantizationSimModel', got '{type(sim)}'.")
+
+    # Ensure that the save path is valid
+    if not save_path:
+        save_path = "quant_stats_visualization.html"
+    check_path(save_path)
+
+    # Flatten the quantized modules into an ordered list for easier indexing in the plots
+    ordered_list = (get_ordered_list_of_modules(sim.model, dummy_input))
+    stats_list = []
+
+    percentile_list = add_key_percentiles_to_list(PERCENTILES)
+    percentile_list = sorted(percentile_list)
+
+    # Collect stats from observers
+    for module in ordered_list:
+        module_stats = get_observer_stats(module, percentile_list=percentile_list)
+        if module_stats is not None:
+            stats_list.append(module_stats)
+
+    # Raise an error if no stats were found
+    if len(stats_list) == 0:
+        raise RuntimeError(
+            "No stats found to plot. Either there were no quantized modules, or calibration was not performed before calling this function, or no observers of type _MinMaxObserver or _HistogramObserver are present.")
+
+    stats_dict = dict()
+    keys_list = ["name", 0, 100] + percentile_list
     stats_dict["idx"] = list(range(len(stats_list)))
     for key in keys_list:
         stats_dict[key] = [None] * len(stats_list)
@@ -147,7 +196,6 @@ def get_observer_stats(module, percentile_list):
     # add_key_percentiles_to_list(percentile_list)
 
     module_name, module_quantizer = module[0], module[1]
-    print(f"Module: {module_name}, Quantizer: {module_quantizer}")
     if isinstance(module_quantizer, QuantizerBase):
         if isinstance(module_quantizer.encoding_analyzer.observer, _MinMaxObserver):
             rng = module_quantizer.encoding_analyzer.observer.get_stats()
@@ -156,6 +204,8 @@ def get_observer_stats(module, percentile_list):
                 stats["name"] = module_name
                 stats[0] = torch.min(rng.min).item()
                 stats[100] = torch.max(rng.max).item()
+                for p in percentile_list:
+                    stats[p] = None
                 return stats
 
         elif isinstance(module_quantizer.encoding_analyzer.observer, _HistogramObserver):
@@ -181,6 +231,8 @@ def get_observer_stats(module, percentile_list):
                 if curmin < float("inf"):
                     stats[0] = curmin
                     stats[100] = curmax
+                    for p in percentile_list:
+                        stats[p] = None
                     return stats
 
     return None
@@ -195,10 +247,11 @@ def add_key_percentiles_to_list(percentiles):
                 flag = False
         if flag:
             percentile_list.append(p)
+    return percentile_list
 
 
 def get_advanced_stats_from_histogram(histogram, stats, percentile_list):
-    if percentile_list is not None:
+    if len(percentile_list) > 0:
         percentile_stats = get_percentile_stats_from_histogram(histogram, percentile_list)
         for i in range(len(percentile_list)):
             stats[percentile_list[i]] = percentile_stats[i]
@@ -216,13 +269,18 @@ def get_percentile_stats_from_histogram(histogram, percentile_list):
     percentile_stats = []
     for i in range(len(histogram.histogram)):
         f = histogram.histogram[i].item()
-        bin_low = histogram.bin_edges[i].item()
-        bin_high = histogram.bin_edges[i + 1].item()
-        if (cum_f + f) / n >= percentile_list[idx] / 100:
-            percentile_stats.append(bin_low + ((n * percentile_list[idx] / 100 - cum_f) / f) * (bin_high - bin_low))
-            idx += 1
+        if f > 0:
+            bin_low = histogram.bin_edges[i].item()
+            bin_high = histogram.bin_edges[i + 1].item()
+            while True:
+                if (cum_f + f) / n >= percentile_list[idx] / 100:
+                    percentile_stats.append(bin_low + ((n * percentile_list[idx] / 100 - cum_f) / f) * (bin_high - bin_low))
+                    idx += 1
+                    if idx == len(percentile_list):
+                        return percentile_stats
+                else:
+                    break
         cum_f += f
-    return percentile_stats
 
 
 def _is_sorted(arr: list):
@@ -431,8 +489,8 @@ class QuantStatsVisualizer:
                        line_color="red")
         self.plot.line('idx', 'minlist', source=datasources.data_source, legend_label="Min Activation", line_width=2,
                        line_color="blue")
-        selections = self.plot.segment(x0='idx', x1='idx', y0='floor', y1='ceil', line_width=2, line_color='yellow',
-                                       line_alpha=0.3, source=datasources.selected_data_source)
+        selections = self.plot.segment(x0='idx', x1='idx', y0='floor', y1='ceil', line_width=2, line_color='goldenrod',
+                                       line_alpha=0.5, source=datasources.selected_data_source)
 
         return selections
 
@@ -475,10 +533,10 @@ class QuantStatsVisualizer:
     @staticmethod
     def _get_selection_hovertool(selections):
         format_code = """
-                    if (Math.abs(value) < 1e-3 || Math.abs(value) > 1e3) {
-                    return value.toExponential(2);
+                    if (Math.abs(value) < 1e-3 || Math.abs(value) > 1e5) {
+                    return value.toExponential(3);
                     } else {
-                    return value.toFixed(2);
+                    return value.toFixed(3);
                     }
                 """
 
