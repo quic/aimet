@@ -2,7 +2,7 @@
 #
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2018-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -36,17 +36,15 @@
 #
 #=============================================================================
 
+if (ENABLE_CUDA)
+    set(CUDA_FLAG "not blah")
+    set(USE_CUDA True)
+else (ENABLE_CUDA)
+    set(CUDA_FLAG "not cuda")
+    set(USE_CUDA False)
+endif (ENABLE_CUDA)
 
-add_custom_target( AcceptanceTests.ONNX )
-
-file(GLOB files "${CMAKE_CURRENT_SOURCE_DIR}/test_*.py")
-    message("Start to find tests in ONNX")
-    foreach(filename ${files})
-        message("Find: " ${filename})
-        get_filename_component( testname "${filename}" NAME_WE )
-        add_custom_target(AcceptanceTests.ONNX.${testname}
-            VERBATIM COMMAND ${CMAKE_COMMAND} -E env
-             "${AIMET_PYTHONPATH}"
-             pytest -s ${filename} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output_${testname}.xml)
-
-    endforeach( filename )
+add_custom_target(AcceptanceTests.ONNX
+      VERBATIM COMMAND ${CMAKE_COMMAND} -E env
+      "${AIMET_PYTHONPATH}"
+      ${Python3_EXECUTABLE} -m pytest -s ${CMAKE_CURRENT_SOURCE_DIR} -m ${CUDA_FLAG} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml)
