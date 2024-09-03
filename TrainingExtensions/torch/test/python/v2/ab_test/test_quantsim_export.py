@@ -48,7 +48,7 @@ from torchvision.models import resnet18
 
 import aimet_torch.v2.nn as aimet_nn
 from aimet_torch.v2.nn import QuantizationMixin
-from aimet_torch.v2.quantization.affine import QuantizeDequantize
+from aimet_torch.v2.quantization.affine import Quantize, QuantizeDequantize
 from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 from aimet_torch.nn.modules.custom import Add
 from aimet_torch import onnx_utils
@@ -433,7 +433,8 @@ class TestQuantsimOnnxExport:
         scale = v2_logits.encoding.scale.item()
         assert torch.allclose(v1_logits, v2_logits, atol=scale * 3) # Allow off-by-3 error
 
-    def test_exported_weight(self):
+    @pytest.mark.parametrize('quantizer_cls', [QuantizeDequantize, Quantize])
+    def test_exported_weight(self, quantizer_cls):
         """
         Test to check if the exported weight remains unchanged after quantization,
         regardless of the rounding method used.
@@ -447,6 +448,10 @@ class TestQuantsimOnnxExport:
             model.conv.weight.data = torch.randint(-127, 127, model.conv.weight.shape, dtype=torch.float32) * 2 + 1
 
         sim = QuantizationSimModel(model, dummy_input, default_param_bw=param_bitwidth)
+        
+        # Replace param quantizer with param quantizer of parametrized type
+        param_q = sim.model.conv.param_quantizers['weight']
+        sim.model.conv.param_quantizers['weight'] = quantizer_cls(param_q.shape, param_q.qmin, param_q.qmax, param_q.symmetric)
         sim.compute_encodings(lambda model, _: model(dummy_input), None)
 
         # Adjust delta of the weight quantizer so that quantized weights fall between rounding border
@@ -475,6 +480,7 @@ class TestQuantsimOnnxExport:
                 delta = sim.model.conv.param_quantizers['weight'].get_scale()
                 assert torch.equal(torch.round(conv_weight / delta),
                                    torch.trunc(conv_weight / delta + torch.sign(conv_weight) * 0.5))
+                assert torch.all(conv_weight - model.conv.weight.data <= delta)
 
 
 def _assert_same_structure(v1_saved_encoding, v2_saved_encoding):

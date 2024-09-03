@@ -45,6 +45,7 @@ import torch
 from aimet_torch.quantsim import QuantizationSimModel as V1QuantizationSimModel, logger
 import aimet_torch.quantsim as quantsim_v1
 from aimet_torch.v2 import nn as aimet_nn
+from aimet_torch.v2.nn import QuantizationMixin
 from aimet_torch.v2.nn import BaseQuantizationMixin
 from aimet_torch.quantsim_config.builder import LazyQuantizeWrapper
 from aimet_torch.v2.quantization.base import QuantizerBase
@@ -255,6 +256,8 @@ class QuantizationSimModel(V1QuantizationSimModel):
             if isinstance(module, BaseQuantizationMixin):
                 # pylint: disable=protected-access
                 module._patch_quantized_parameters()
+                if isinstance(module, QuantizationMixin):
+                    module._patch_dequantized_parameters()
                 cls._update_parameters_by_attr(module)
 
     @staticmethod
