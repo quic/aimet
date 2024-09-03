@@ -80,7 +80,7 @@ def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = Non
         ...     for data, _ in data_loader:
         ...         sim.model(data)
         ...
-        >>> visualize_stats(sim, dummy_input, "stats.html")
+        >>> visualize_stats(sim, dummy_input, "./quant_stats_visualization.html")
 
     :param sim: Calibrated QuantizationSimModel
     :param dummy_input: Sample input used to trace the model
