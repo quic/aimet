@@ -37,4 +37,4 @@
 
 
 # pylint: disable=all
-from .quant_stats_visualization import visualize_stats
+from .quant_stats_visualization import visualize_stats, visualize_advanced_stats
