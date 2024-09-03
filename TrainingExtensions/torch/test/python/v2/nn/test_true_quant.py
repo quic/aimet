@@ -63,8 +63,8 @@ from aimet_torch.v2.nn import (
     QuantizedSoftmax,
     QuantizedLayerNorm,
     QuantizedGroupNorm,
-    FakeQuantizationMixin,
 )
+from aimet_torch.v2.nn.fake_quant import _legacy_impl
 from aimet_torch.v2.nn.true_quant import _dispatch, _dispatch_table
 from aimet_torch.v2.quantization.affine import AffineEncoding
 from aimet_torch.v2.quantization.tensor import QuantizedTensorBase, QuantizedTensor, DequantizedTensor
@@ -436,7 +436,7 @@ class TestQuantizedLayers:
         if not isinstance(inputs, (tuple, list)):
             inputs = (inputs,)
 
-        fq_layer = FakeQuantizationMixin.from_module(layer)
+        fq_layer = _legacy_impl.FakeQuantizationMixin.from_module(layer)
         tq_layer = QuantizationMixin.from_module(layer)
         for i, _ in enumerate(inputs):
             fq_layer.input_quantizers[i] = QuantizeDequantize(shape=(), bitwidth=8, symmetric=False)
@@ -474,7 +474,7 @@ class TestQuantizedLayers:
         layer = module_factory()
         input = input_factory()
 
-        fq_layer = FakeQuantizationMixin.from_module(layer)
+        fq_layer = _legacy_impl.FakeQuantizationMixin.from_module(layer)
         tq_layer = QuantizationMixin.from_module(layer)
         fq_layer.input_quantizers[0] = QuantizeDequantize(shape=(), bitwidth=8, symmetric=False)
         fq_layer.output_quantizers[0] = QuantizeDequantize(shape=(), bitwidth=8, symmetric=False)
@@ -680,7 +680,7 @@ def test_dispatch_sanity():
 
 
 def _create_legacy_fake_quantized_module(module):
-    qmodule = aimet.nn.fake_quant.FakeQuantizationMixin.from_module(module)
+    qmodule = _legacy_impl.FakeQuantizationMixin.from_module(module)
 
     for i, _ in enumerate(qmodule.input_quantizers):
         qmodule.input_quantizers[i] = QuantizeDequantize([], 8, False)

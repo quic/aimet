@@ -41,7 +41,7 @@ from torch import nn
 import torch.nn.functional as F
 from aimet_torch.v2.quantization.affine.backends import quantize_dequantize
 from aimet_torch.v2.quantization.affine import QuantizeDequantize
-from aimet_torch.v2.nn import FakeQuantizedLinear, FakeQuantizationMixin
+from aimet_torch.v2.nn.fake_quant._legacy_impl import FakeQuantizedLinear, FakeQuantizationMixin
 from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 
 

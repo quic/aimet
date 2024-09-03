@@ -40,7 +40,7 @@ import torch
 from torch import nn
 
 import aimet_torch.nn.modules.custom as aimet_modules
-from aimet_torch.v2.nn import FakeQuantizationMixin
+from aimet_torch.v2.nn import QuantizationMixin
 
 
 class SimpleConditional(torch.nn.Module):
@@ -398,8 +398,8 @@ class QuantSimTinyModel(nn.Module):
         return x
 
 
-@FakeQuantizationMixin.implements(ModuleWith5Output)
-class FakeQuantizationModuleWith5Output(FakeQuantizationMixin, ModuleWith5Output):
+@QuantizationMixin.implements(ModuleWith5Output)
+class QuantizationModuleWith5Output(QuantizationMixin, ModuleWith5Output):
     def __quant_init__(self):
         super().__quant_init__()
         self.output_quantizers = torch.nn.ModuleList([None, None, None, None, None])

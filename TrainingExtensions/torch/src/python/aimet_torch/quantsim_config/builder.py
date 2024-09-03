@@ -197,11 +197,13 @@ class LazyQuantizeWrapper(torch.nn.Module):
 
         :return: v2 quant wrapper with specified properties
         """
-        from aimet_torch.v2.nn import FakeQuantizationMixin, QuantizationMixin
+        from aimet_torch.v2.nn import QuantizationMixin
+        from aimet_torch.v2.nn.fake_quant import _legacy_impl
+
         if type(self._module_to_wrap) in QuantizationMixin.cls_to_qcls: # pylint: disable=unidiomatic-typecheck
             quantized_module = QuantizationMixin.from_module(self._module_to_wrap)
         else:
-            quantized_module = FakeQuantizationMixin.from_module(self._module_to_wrap)
+            quantized_module = _legacy_impl.FakeQuantizationMixin.from_module(self._module_to_wrap)
 
         def set_recursive(module_list, i, quantizer):
             """

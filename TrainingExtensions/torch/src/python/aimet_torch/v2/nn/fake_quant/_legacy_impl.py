@@ -35,7 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 # pylint: disable=too-many-lines, wrong-import-order
-"""Fake-quantized modules"""
+"""Fake-quantized modules (deprecated)"""
 
 from packaging import version
 from collections import OrderedDict
@@ -50,8 +50,8 @@ from torch.nn.modules.adaptive import _ASMoutput
 from torch.nn.utils.rnn import PackedSequence
 from torch.utils._pytree import tree_map
 
-from .base import BaseQuantizationMixin, _BaseQuantizedUnaryOpMixin, _BaseQuantizedBinaryOpMixin, _BaseQuantizedTernaryOpMixin # pylint: disable=import-error
-from .modules import custom # pylint: disable=import-error
+from ..base import BaseQuantizationMixin # pylint: disable=import-error
+from ..modules import custom # pylint: disable=import-error
 
 
 class FakeQuantMeta(abc.ABCMeta):
@@ -178,14 +178,67 @@ class FakeQuantizationMixin(BaseQuantizationMixin, metaclass=FakeQuantMeta): # p
         return wrapper
 
 
-class _FakeQuantizedUnaryOpMixin(_BaseQuantizedUnaryOpMixin, FakeQuantizationMixin): # pylint: disable=abstract-method
-    pass
+class _FakeQuantizedUnaryOpMixin(FakeQuantizationMixin): # pylint: disable=abstract-method
+    def forward(self, *args, **kwargs) -> Tensor: # pylint: disable=missing-function-docstring
+        x, *others = args
 
-class _FakeQuantizedBinaryOpMixin(_BaseQuantizedBinaryOpMixin, FakeQuantizationMixin): # pylint: disable=abstract-method
-    pass
+        if isinstance(x, Tensor) and x.is_floating_point() and self.input_quantizers[0]:
+            x = self.input_quantizers[0](x)
 
-class _FakeQuantizedTernaryOpMixin(_BaseQuantizedTernaryOpMixin, FakeQuantizationMixin): # pylint: disable=abstract-method
-    pass
+        with self._patch_quantized_parameters():
+            output = super().forward(x, *others, **kwargs)
+
+        if isinstance(output, Tensor) and output.is_floating_point() and self.output_quantizers[0]:
+            output = self.output_quantizers[0](output)
+
+        return output
+
+class _FakeQuantizedBinaryOpMixin(FakeQuantizationMixin): # pylint: disable=abstract-method
+    def __quant_init__(self):
+        super().__quant_init__()
+        self.input_quantizers = nn.ModuleList([None, None])
+
+    def forward(self, *args, **kwargs) -> Tensor: # pylint: disable=missing-function-docstring
+        x, y, *others = args
+
+        if isinstance(x, Tensor) and x.is_floating_point() and self.input_quantizers[0]:
+            x = self.input_quantizers[0](x)
+
+        if isinstance(y, Tensor) and y.is_floating_point() and self.input_quantizers[1]:
+            y = self.input_quantizers[1](y)
+
+        with self._patch_quantized_parameters():
+            output = super().forward(x, y, *others, **kwargs)
+
+        if isinstance(output, Tensor) and output.is_floating_point() and self.output_quantizers[0]:
+            output = self.output_quantizers[0](output)
+
+        return output
+
+class _FakeQuantizedTernaryOpMixin(FakeQuantizationMixin): # pylint: disable=abstract-method
+    def __quant_init__(self):
+        super().__quant_init__()
+        self.input_quantizers = nn.ModuleList([None, None, None])
+
+    def forward(self, *args, **kwargs) -> Tensor: # pylint: disable=missing-function-docstring
+        x, y, z, *others = args
+
+        if isinstance(x, Tensor) and x.is_floating_point() and self.input_quantizers[0]:
+            x = self.input_quantizers[0](x)
+
+        if isinstance(y, Tensor) and y.is_floating_point() and self.input_quantizers[1]:
+            y = self.input_quantizers[1](y)
+
+        if isinstance(z, Tensor) and z.is_floating_point() and self.input_quantizers[2]:
+            z = self.input_quantizers[2](z)
+
+        with self._patch_quantized_parameters():
+            output = super().forward(x, y, z, *others, **kwargs)
+
+        if isinstance(output, Tensor) and output.is_floating_point() and self.output_quantizers[0]:
+            output = self.output_quantizers[0](output)
+
+        return output
 
 
 

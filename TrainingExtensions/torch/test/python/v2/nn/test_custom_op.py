@@ -37,7 +37,7 @@
 
 import pytest
 import torch
-from aimet_torch.v2.nn import FakeQuantizationMixin
+from aimet_torch.v2.nn import QuantizationMixin
 
 
 class CustomOp(torch.nn.Module):
@@ -46,43 +46,43 @@ class CustomOp(torch.nn.Module):
         return input * 2 + 1
 
 
-class TestFakeQuantizedCustomOp:
+class TestQuantizedCustomOp:
     def test_custom_op_from_module_unregistered(self):
         with pytest.raises(RuntimeError):
-            _ = FakeQuantizationMixin.from_module(CustomOp())
+            _ = QuantizationMixin.from_module(CustomOp())
 
     def test_custom_op_from_module_registered(self):
         try:
-            @FakeQuantizationMixin.implements(CustomOp)
-            class FakeQuantizedCustomOp(FakeQuantizationMixin, CustomOp):
+            @QuantizationMixin.implements(CustomOp)
+            class QuantizedCustomOp(QuantizationMixin, CustomOp):
                 def quantized_forward(self, x):
                     x = super().forward(x)
                     return self.output_quantizers[0](x)
 
-            quantized_custom_op = FakeQuantizationMixin.from_module(CustomOp())
-            assert isinstance(quantized_custom_op, FakeQuantizedCustomOp)
+            quantized_custom_op = QuantizationMixin.from_module(CustomOp())
+            assert isinstance(quantized_custom_op, QuantizedCustomOp)
 
-            quantized_custom_op_ = FakeQuantizationMixin.from_module(CustomOp())
-            assert isinstance(quantized_custom_op_, FakeQuantizedCustomOp)
+            quantized_custom_op_ = QuantizationMixin.from_module(CustomOp())
+            assert isinstance(quantized_custom_op_, QuantizedCustomOp)
 
         finally:
             # Unregister CustomOp so as not to affect other test functions
-            FakeQuantizationMixin.cls_to_qcls.pop(CustomOp)
+            QuantizationMixin.cls_to_qcls.pop(CustomOp)
 
     def test_custom_op_wrap_registered(self):
         try:
-            @FakeQuantizationMixin.implements(CustomOp)
-            class FakeQuantizedCustomOp(FakeQuantizationMixin, CustomOp):
+            @QuantizationMixin.implements(CustomOp)
+            class QuantizedCustomOp(QuantizationMixin, CustomOp):
                 def quantized_forward(self, x):
                     x = super().forward(x)
                     return self.output_quantizers[0](x)
 
-            quantized_custom_op_cls = FakeQuantizationMixin.wrap(CustomOp)
-            assert quantized_custom_op_cls is FakeQuantizedCustomOp
+            quantized_custom_op_cls = QuantizationMixin.wrap(CustomOp)
+            assert quantized_custom_op_cls is QuantizedCustomOp
 
-            quantized_custom_op_cls_ = FakeQuantizationMixin.wrap(CustomOp)
-            assert quantized_custom_op_cls_ is FakeQuantizedCustomOp
+            quantized_custom_op_cls_ = QuantizationMixin.wrap(CustomOp)
+            assert quantized_custom_op_cls_ is QuantizedCustomOp
 
         finally:
             # Unregister CustomOp so as not to affect other test functions
-            FakeQuantizationMixin.cls_to_qcls.pop(CustomOp)
+            QuantizationMixin.cls_to_qcls.pop(CustomOp)

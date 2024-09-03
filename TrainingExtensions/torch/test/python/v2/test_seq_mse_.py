@@ -47,7 +47,7 @@ from aimet_common.defs import QuantScheme
 from aimet_torch.utils import create_fake_data_loader
 
 from aimet_torch.v2.quantsim import QuantizationSimModel
-from aimet_torch.v2.nn.fake_quant import FakeQuantizationMixin
+from aimet_torch.v2.nn import QuantizationMixin
 from aimet_torch.v2.quantization.affine import QuantizeDequantize
 from aimet_torch.v2.seq_mse import  apply_seq_mse, get_candidates, optimize_module, SeqMseParams, SequentialMse
 from .models_.mnist_torch_model import Net
@@ -160,7 +160,7 @@ class TestSeqMse:
         """ test optimize module for linear """
         torch.manual_seed(0)
         linear = torch.nn.Linear(64, 128)
-        wrapper = FakeQuantizationMixin.from_module(linear)
+        wrapper = QuantizationMixin.from_module(linear)
         if enable_pcq:
             quantizer_shape = [linear.weight.shape[0], 1]
         else:
@@ -194,7 +194,7 @@ class TestSeqMse:
         """ test optimize module for linear """
         torch.manual_seed(0)
         conv = torch.nn.Conv2d(3, 32, 3)
-        wrapper = FakeQuantizationMixin.from_module(conv)
+        wrapper = QuantizationMixin.from_module(conv)
         if enable_pcq:
             quantizer_shape = [conv.weight.shape[0], 1, 1, 1]
         else:
