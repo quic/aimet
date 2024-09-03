@@ -69,19 +69,19 @@ class AffineEncoding(EncodingBase, _GridMixin):
                  block_size: Optional[Tuple[int, ...]] = None):
         ...
 
-    def __init__(self, scale: torch.Tensor, offset: torch.Tensor, *args, **kwargs):
+    def __init__(self, scale: torch.Tensor, offset: torch.Tensor, *args, **kwargs): # pylint: disable=too-many-locals
         self._scale = scale
         self._offset = offset
         full_args = (scale, offset, *args)
 
         # Pad positional args with None's such that len(args) == 4
         args = tuple(chain(args, repeat(None, 4 - len(args))))
-        arg0 = kwargs.get('qmin', kwargs.get('bitwidth', args[0]))
-        arg1 = kwargs.get('qmax', kwargs.get('signed', args[1]))
-        symmetry = kwargs.get('symmetry', args[2])
+        arg0 = kwargs.pop('qmin', kwargs.pop('bitwidth', args[0]))
+        arg1 = kwargs.pop('qmax', kwargs.pop('signed', args[1]))
+        symmetry = kwargs.pop('symmetry', args[2])
         if symmetry is None:
             symmetry = False
-        block_size = kwargs.get('block_size', args[3])
+        block_size = kwargs.pop('block_size', args[3])
 
         if arg1 is None or isinstance(arg1, bool):
             # (arg0, arg1) == (bitwidth, signed)
@@ -97,6 +97,14 @@ class AffineEncoding(EncodingBase, _GridMixin):
 
         assert qmin is not None
         assert qmax is not None
+
+        if kwargs:
+            cls = type(self).__qualname__
+            unexpected_keys = ', '.join(kwargs.keys())
+            raise TypeError(f"{cls}.__init__ got unexpected keyword argument: {unexpected_keys}")
+
+        if qmin >= qmax:
+            raise ValueError(f"qmax should be strictly larger than qmin. Got qmax={qmax}, qmin={qmin}")
 
         self.qmin = qmin
         self.qmax = qmax
