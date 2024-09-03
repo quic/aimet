@@ -71,7 +71,7 @@ def visualize_stats(sim, dummy_input, save_path: str = None) -> None:
         - Adjustable threshold values to isolate layers containing extreme values/outliers
         - Tables containing names and ranges for layers exceeding threshold values
 
-    Saves the visualization as a .html in the given directory with the given name.
+    Saves the visualization as a .html at the given path.
 
     Example:
 
