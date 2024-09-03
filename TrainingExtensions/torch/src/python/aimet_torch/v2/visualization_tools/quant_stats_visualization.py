@@ -53,7 +53,7 @@ from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.encoding_analyzer import _MinMaxObserver
 
 
-def visualize_stats(sim, dummy_input, save_path: str = None) -> None:
+def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = None) -> None:
     """Produces an interactive html to view the stats collected by each quantizer during calibration
 
     .. note::
