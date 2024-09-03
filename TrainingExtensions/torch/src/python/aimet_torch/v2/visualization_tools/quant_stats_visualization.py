@@ -95,8 +95,6 @@ def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = Non
         raise TypeError(f"Expected type 'aimet_torch.v2.quantsim.QuantizationSimModel', got '{type(sim)}'.")
 
     # Ensure that the save path is valid
-    if not save_path:
-        save_path = "quant_stats_visualization.html"
     check_path(save_path)
 
     # Flatten the quantized modules into an ordered list for easier indexing in the plots
@@ -130,7 +128,7 @@ def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = Non
     visualizer.export_plot_as_html(save_path, mode="basic_stats")
 
 
-def visualize_advanced_stats(sim: QuantizationSimModel, dummy_input, save_path: str = None) -> None:
+def visualize_advanced_stats(sim: QuantizationSimModel, dummy_input, save_path: str = "./quant_stats_visualization.html") -> None:
     """
     Interactive visualization of min and max activations/weights of all quantized modules
     in the input QuantSim object and boxplots of selected quantized modules.
@@ -147,8 +145,6 @@ def visualize_advanced_stats(sim: QuantizationSimModel, dummy_input, save_path: 
         raise TypeError(f"Expected type 'aimet_torch.quantization.QuantizationSimModel', got '{type(sim)}'.")
 
     # Ensure that the save path is valid
-    if not save_path:
-        save_path = "quant_stats_visualization.html"
     check_path(save_path)
 
     # Flatten the quantized modules into an ordered list for easier indexing in the plots
