@@ -57,38 +57,14 @@ from aimet_torch.v2.quantization.encoding_analyzer import _MinMaxObserver, _Hist
 PERCENTILES = [1, 25, 50, 75, 99]
 
 
-def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = None) -> None:
-    """Produces an interactive html to view the stats collected by each quantizer during calibration
+def _visualize(sim: QuantizationSimModel, dummy_input, mode: str, save_path: str = "./quant_stats_visualization.html") -> None:
+    """
+    Helper function for the visualization APIs.
 
-    .. note::
-
-        The QuantizationSimModel input is expected to have been calibrated before using this function. Stats will only
-        be plotted for activations/parameters with quantizers containing calibration statistics.
-
-        Currently, this tool is only compatible with quantizers containing :class:`MinMaxEncodingAnalyzer` encoding
-        analyzers (i.e., :attr:`QuantScheme.post_training_tf` and :attr:`QuantScheme.training_range_learning_with_tf_init`
-        quant schemes).
-
-    Creates an interactive visualization of min and max activations/weights of all quantized modules in the input
-    QuantSim object. The features include:
-
-        - Adjustable threshold values to flag layers whose min or max activations/weights exceed the set thresholds
-        - Tables containing names and ranges for layers exceeding threshold values
-
-    Saves the visualization as a .html at the given path.
-
-    Example:
-
-        >>> sim = aimet_torch.v2.quantsim.QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf)
-        >>> with aimet_torch.v2.nn.compute_encodings(sim.model):
-        ...     for data, _ in data_loader:
-        ...         sim.model(data)
-        ...
-        >>> visualize_stats(sim, dummy_input, "./quant_stats_visualization.html")
-
-    :param sim: Calibrated QuantizationSimModel
-    :param dummy_input: Sample input used to trace the model
-    :param save_path: Path for saving the visualization. Default is "./quant_stats_visualization.html"
+    :param sim: Calibrated QuantSim Object.
+    :param dummy_input: Dummy Input.
+    :param mode: Whether to plot basic or advanced stats.
+    :param save_path: Path for saving the visualization. Format is 'path_to_dir/file_name.html'. Default is './quant_stats_visualization.html'.
     """
 
     # Ensure that sim is an instance of aimet_torch.quantsim.QuantizationSimModel
@@ -102,8 +78,13 @@ def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = Non
     ordered_list = (get_ordered_list_of_modules(sim.model, dummy_input))
     stats_list = []
 
-    # No advanced stats collected in this API
-    percentile_list = []
+    if mode == "basic":
+        percentile_list = []
+    elif mode == "advanced":
+        percentile_list = _add_key_percentiles_to_list(PERCENTILES)
+        percentile_list = sorted(percentile_list)
+    else:
+        raise ValueError(f"Expected mode to be 'basic' or 'advanced', got '{mode}'.")
 
     # Collect stats from observers
     for module in ordered_list:
@@ -130,55 +111,73 @@ def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = Non
     visualizer.export_plot_as_html(save_path)
 
 
-def visualize_advanced_stats(sim: QuantizationSimModel, dummy_input, save_path: str = "./quant_stats_visualization.html") -> None:
+def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = "./quant_stats_visualization.html") -> None:
+    """Produces an interactive html to view the stats collected by each quantizer during calibration
+
+    .. note::
+
+        The QuantizationSimModel input is expected to have been calibrated before using this function. Stats will only
+        be plotted for activations/parameters with quantizers containing calibration statistics.
+
+    Creates an interactive visualization of min and max activations/weights of all quantized modules in the input
+    QuantSim object. The features include:
+
+        - Adjustable threshold values to flag layers whose min or max activations/weights exceed the set thresholds
+        - Tables containing names and ranges for layers exceeding threshold values
+
+    Saves the visualization as a .html at the given path.
+
+    Example:
+
+        >>> sim = aimet_torch.v2.quantsim.QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf)
+        >>> with aimet_torch.v2.nn.compute_encodings(sim.model):
+        ...     for data, _ in data_loader:
+        ...         sim.model(data)
+        ...
+        >>> visualize_stats(sim, dummy_input, "./quant_stats_visualization.html")
+
+    :param sim: Calibrated QuantizationSimModel
+    :param dummy_input: Sample input used to trace the model
+    :param save_path: Path for saving the visualization. Default is "./quant_stats_visualization.html"
     """
-    Interactive visualization of min and max activations/weights of all quantized modules
-    in the input QuantSim object and boxplots of selected quantized modules.
-    The QuantSim object is expected to have been calibrated before using this function.
-    Saves the visualization as a .html at the provided path.
 
-    :param sim: Calibrated QuantSim Object.
-    :param dummy_input: Dummy Input.
-    :param save_path: Path for saving the visualization. Format is 'path_to_dir/file_name.html'. Default is './quant_stats_visualization.html'.
+    _visualize(sim, dummy_input, mode="basic", save_path=save_path)
+
+
+def visualize_advanced_stats(sim: QuantizationSimModel, dummy_input, save_path: str = "./quant_advanced_stats_visualization.html") -> None:
+    """Produces an interactive html to view the advanced stats collected by each quantizer during calibration
+
+    .. note::
+
+        The QuantizationSimModel input is expected to have been calibrated before using this function. Stats will only
+        be plotted for activations/parameters with quantizers containing calibration statistics.
+
+    Creates an interactive visualization of min and max activations/weights of all quantized modules in the input
+    QuantSim object. The features include:
+
+        - Adjustable threshold values to flag layers whose min or max activations/weights exceed the set thresholds
+        - Table containing names and ranges for layers exceeding threshold values
+        - Select different views of the table to group layers exceeding threshold values
+        - Filter layers listed in the table by name
+        - Select one or more layers from the table for advanced analysis
+
+    Saves the visualization as a .html at the given path.
+
+    Example:
+
+        >>> sim = aimet_torch.v2.quantsim.QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced)
+        >>> with aimet_torch.v2.nn.compute_encodings(sim.model):
+        ...     for data, _ in data_loader:
+        ...         sim.model(data)
+        ...
+        >>> visualize_advanced_stats(sim, dummy_input, "./quant_advanced_stats_visualization.html")
+
+    :param sim: Calibrated QuantizationSimModel
+    :param dummy_input: Sample input used to trace the model
+    :param save_path: Path for saving the visualization. Default is "./quant_advanced_stats_visualization.html"
     """
 
-    # Ensure that sim is an instance of aimet_torch.quantsim.QuantizationSimModel
-    if not isinstance(sim, QuantizationSimModel):
-        raise TypeError(f"Expected type 'aimet_torch.quantization.QuantizationSimModel', got '{type(sim)}'.")
-
-    # Ensure that the save path is valid
-    _check_path(save_path)
-
-    # Topologically sort the quantized modules into an ordered list for easier indexing in the plots
-    ordered_list = (get_ordered_list_of_modules(sim.model, dummy_input))
-    stats_list = []
-
-    percentile_list = _add_key_percentiles_to_list(PERCENTILES)
-    percentile_list = sorted(percentile_list)
-
-    # Collect stats from observers
-    for module in ordered_list:
-        module_stats = _get_observer_stats(module, percentile_list=percentile_list)
-        if module_stats is not None:
-            stats_list.append(module_stats)
-
-    # Raise an error if no stats were found
-    if len(stats_list) == 0:
-        raise RuntimeError(
-            "No stats found to plot. Either there were no quantized modules, or calibration was not performed before calling this function, or no observers of type _MinMaxObserver or _HistogramObserver are present.")
-
-    stats_dict = dict()
-    keys_list = ["name", 0, 100] + percentile_list
-    stats_dict["idx"] = list(range(len(stats_list)))
-    for key in keys_list:
-        stats_dict[key] = [None] * len(stats_list)
-    for idx, stats in enumerate(stats_list):
-        for key in keys_list:
-            stats_dict[key][idx] = stats[key]
-    visualizer = QuantStatsVisualizer(stats_dict)
-
-    # Save an interactive bokeh plot as a standalone html
-    visualizer.export_plot_as_html(save_path)
+    _visualize(sim, dummy_input, mode="advanced", save_path=save_path)
 
 
 def _check_path(path: str):
