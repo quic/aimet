@@ -210,6 +210,10 @@ unquantizable_modules = (
     LazyQuantizeWrapper
 )
 
+def _is_quantizable_module(module: torch.nn.Module):
+    # pylint: disable=unidiomatic-typecheck
+    return type(module) != torch.nn.Module and not isinstance(module, unquantizable_modules)
+
 
 class QuantizationSimModel:
     """
@@ -1389,20 +1393,6 @@ class QuantizationSimModel:
                 quantized_layers.append((name, module))
         return quantized_layers
 
-    @staticmethod
-    def _is_quantizable_module(module_ref):
-        """ Function to check if a module is eligible for quantization.
-            If the module is NOT an PyTorch module type or if the module was already
-            Quantized or if the module is in the layers_to_ignore list, don't quantize.
-        """
-
-        if isinstance(module_ref, unquantizable_modules):
-            logger.debug("Module %s not quantizable", module_ref)
-            return False
-
-        logger.debug("Module %s is quantizable", module_ref)
-        return True
-
     def _create_quantizer_module(self, module_to_quantize: torch.nn.Module, num_inout_tensors: Dict,
                                  data_type: QuantizationDataType) -> torch.nn.Module:
         """Instantiates wrapper based on quant scheme
@@ -1439,7 +1429,7 @@ class QuantizationSimModel:
             logger.debug("nn.Module found : %s", module_ref)
 
             # check if the module already quantized then ignore
-            if not self._is_quantizable_module(module_ref):
+            if not _is_quantizable_module(module_ref):
                 continue
 
             # check if the module is leaf or not

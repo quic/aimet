@@ -1302,7 +1302,6 @@ class SmallMnist(nn.Module):
         return self.log_softmax(x)
 
 class ModelWithUnusedAdd(torch.nn.Module):
-
     def __init__(self):
         super().__init__()
         self.identity = torch.nn.Identity()
@@ -1312,7 +1311,6 @@ class ModelWithUnusedAdd(torch.nn.Module):
         return self.identity(x)
 
 class ModelWithUnusedRNN(torch.nn.Module):
-
     def __init__(self):
         super().__init__()
         self.identity = torch.nn.Identity()
@@ -1321,8 +1319,16 @@ class ModelWithUnusedRNN(torch.nn.Module):
     def forward(self, x):
         return self.identity(x)
 
-class ExpandModel(torch.nn.Module):
+class ModelWithUnusedAbstractModule(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.identity = torch.nn.Identity()
+        self.unused = torch.nn.Module()
 
+    def forward(self, x):
+        return self.identity(x)
+
+class ExpandModel(torch.nn.Module):
     def __init__(self):
         super().__init__()
         self.expand = aimet_modules.Expand()
