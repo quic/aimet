@@ -95,6 +95,18 @@ void sliceTensorAlongAxis(const T* inTensor, std::vector<int64_t>& dims, size_t 
 
 
 template <typename T>
+void permuteTensorGPU(const T* inTensor, T* outTensor, int64_t numel, int64_t numDims, const int64_t* inputStrides,
+                      const int64_t* outputStrides);
+
+template <typename T>
+void permuteTensorCPU(const T* inTensor, T* outTensor, int64_t numel, int64_t numDims, const int64_t* inputStrides,
+                      const int64_t* outputStrides);
+
+std::vector<int64_t> shapeToStrides(const std::vector<int64_t>& shape);
+
+int64_t getNumElements(const std::vector<int64_t>& shape);
+
+template <typename T>
 void quantizeDequantizePerChannel(
     const T* inTensor, std::vector<int64_t>& shape, int axis, T* outTensor,
     std::vector<DlQuantization::TfEncoding*>& encodings,
@@ -148,6 +160,142 @@ void quantizeDequantizePerChannel(
     if (useCuda)
     {
         allocator->deleteRaw(encodingVectorDevice);
+    }
+}
+
+
+struct BroadcastShapeInfo
+{
+    BroadcastShapeInfo(const std::vector<int64_t>& inputShape, int channelAxis, int blockAxis, int blockSize);
+
+    std::vector<int64_t> tensorShape;
+    std::vector<int64_t> encodingShape;
+    std::vector<int64_t> tensorStrides;
+    std::vector<int64_t> encodingStrides;
+    int64_t numElements;
+    int64_t numEncodings;
+    int64_t numDims;
+};
+
+// Permutes the input data so each entire encoding block is contiguous in memory
+template <typename T>
+void copyToContiguousBlockLayout(const T* inTensor, T* outTensor, const BroadcastShapeInfo& shapeInfo, bool useCuda)
+{
+    auto encodingStrides = shapeInfo.encodingStrides;
+    auto inputStrides    = shapeInfo.tensorStrides;
+    int64_t numDims      = inputStrides.size();
+    int64_t numel        = shapeInfo.numElements;
+
+    std::vector<int64_t> broadcastDims, nonBroadcastDims;
+
+    // Determine the dim ordering such that all indexes in a single quantization block are contiguous
+    for (int64_t i = 0; i < shapeInfo.numDims; i++)
+    {
+        if (shapeInfo.encodingStrides[i] != 0)
+        {
+            nonBroadcastDims.push_back(i);
+        }
+        else
+        {
+            broadcastDims.push_back(i);
+        }
+    }
+    std::vector<int64_t> dimOrder = nonBroadcastDims;
+    dimOrder.insert(dimOrder.end(), broadcastDims.begin(), broadcastDims.end());
+
+    // Determine what the strides of the output tensor will be in the new dimension ordering
+    std::vector<int64_t> outputStrides(numDims);
+    outputStrides[dimOrder[numDims - 1]] = 1;
+    for (int64_t i = numDims - 2; i >= 0; --i)
+    {
+        outputStrides[dimOrder[i]] = outputStrides[dimOrder[i + 1]] * shapeInfo.tensorShape[dimOrder[i + 1]];
+    }
+
+    if (useCuda)
+    {
+#ifdef ONNX_CUDA
+        permuteTensorGPU(inTensor, outTensor, numel, numDims, shapeInfo.tensorStrides.data(), outputStrides.data());
+#else
+        throw std::runtime_error("Not compiled for GPU mode.");
+#endif
+    }
+    else
+    {
+        permuteTensorCPU(inTensor, outTensor, numel, numDims, shapeInfo.tensorStrides.data(), outputStrides.data());
+    }
+}
+
+
+template <typename T>
+void quantizeDequantizeBroadcast(const T* inTensor, T* outTensor, const BroadcastShapeInfo& shapeInfo,
+                                 std::vector<DlQuantization::TfEncoding*>& encodings, const bool useCuda,
+                                 DlQuantization::IAllocator* allocator, void* stream)
+{
+    if (!shapeInfo.numEncodings == encodings.size())
+        throw std::runtime_error("encodings.size() does not match shapeInfo.numEncodings");
+
+    auto numEncodings              = shapeInfo.numEncodings;
+    auto numDims                   = shapeInfo.numDims;
+    const int64_t* inputStrides    = shapeInfo.tensorStrides.data();
+    const int64_t* encodingStrides = shapeInfo.encodingStrides.data();
+
+    // Kernels expect separate lists for each encoding type
+    T encVec[4][numEncodings];
+    for (int i = 0; i < numEncodings; i++)
+    {
+        encVec[0][i] = encodings[i]->min;
+        encVec[1][i] = encodings[i]->max;
+        encVec[2][i] = encodings[i]->delta;
+        encVec[3][i] = encodings[i]->offset;
+    }
+    T* encodingVectorDevice;
+    int64_t* stridesDevice = nullptr;
+    DlQuantization::ComputationMode mode;
+    if (useCuda)
+    {
+#ifdef ONNX_CUDA
+        // Allocate device memory for strides and encodings
+        stridesDevice        = static_cast<int64_t*>(allocator->allocateRaw(2 * numDims * sizeof(int64_t)));
+        encodingVectorDevice = static_cast<T*>(allocator->allocateRaw(4 * numEncodings * sizeof(T)));
+
+        // Send encoding information to device
+        cudaMemcpyAsync(encodingVectorDevice, encVec, 4 * numEncodings * sizeof(T), cudaMemcpyHostToDevice,
+                        static_cast<cudaStream_t>(stream));
+
+        // Send stride information to device
+        int64_t* strideBuffer[2 * numDims];
+        memcpy(strideBuffer, inputStrides, numDims * sizeof(int64_t));
+        memcpy(strideBuffer + numDims, encodingStrides, numDims * sizeof(int64_t));
+        cudaMemcpyAsync(stridesDevice, strideBuffer, 2 * numDims * sizeof(int64_t), cudaMemcpyHostToDevice,
+                        static_cast<cudaStream_t>(stream));
+        inputStrides    = stridesDevice;
+        encodingStrides = stridesDevice + numDims;
+
+        mode = DlQuantization::ComputationMode::COMP_MODE_GPU;
+#else
+        throw std::runtime_error("Not compiled for GPU mode.");
+#endif
+    }
+    else
+    {
+        mode                 = DlQuantization::ComputationMode::COMP_MODE_CPU;
+        encodingVectorDevice = (T*) (encVec);
+    }
+
+    T* encodingMin    = encodingVectorDevice;
+    T* encodingMax    = encodingVectorDevice + numEncodings;
+    T* encodingDelta  = encodingVectorDevice + 2 * numEncodings;
+    T* encodingOffset = encodingVectorDevice + 3 * numEncodings;
+
+    DlQuantization::quantizeDequantizeBroadcast(inTensor, outTensor, shapeInfo.numElements, numDims, inputStrides,
+                                                encodingStrides, encodingMin, encodingMax, encodingDelta,
+                                                encodingOffset, mode, stream);
+
+
+    if (useCuda)
+    {
+        allocator->deleteRaw(encodingVectorDevice);
+        allocator->deleteRaw(stridesDevice);
     }
 }
 

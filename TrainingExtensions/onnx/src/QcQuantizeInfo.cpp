@@ -56,5 +56,7 @@ PYBIND11_MODULE(libquant_info, m)
         .def_readwrite("useSymmetricEncoding", &QcQuantizeInfo::useSymmetricEncoding)
         .def_readwrite("usePerChannelMode", &QcQuantizeInfo::usePerChannelMode)
         .def_readwrite("isIntDataType", &QcQuantizeInfo::isIntDataType)
-        .def_readwrite("channelAxis", &QcQuantizeInfo::channelAxis);
+        .def_readwrite("channelAxis", &QcQuantizeInfo::channelAxis)
+        .def_readwrite("blockSize", &QcQuantizeInfo::blockSize)
+        .def_readwrite("blockAxis", &QcQuantizeInfo::blockAxis);
 }

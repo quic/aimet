@@ -52,7 +52,8 @@ add_library(OnnxCppOps SHARED
         src/OnnxOpUtils.h
         src/QuantizeDequantizeUtils.hpp
         src/QuantizeDequantizeUtils.cu
-    )
+        src/QuantizeDequantizeUtils.cpp
+)
 
 target_include_directories(OnnxCppOps PRIVATE
         ${EIGEN3_INCLUDE_DIR}
