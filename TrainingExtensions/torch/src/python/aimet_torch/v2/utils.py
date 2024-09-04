@@ -278,3 +278,68 @@ def docstring(doc: str):
         fn_or_cls.__doc__ = doc
         return fn_or_cls
     return decorator
+
+
+def _map_qmodule(modules, func):
+    # pylint: disable=import-outside-toplevel
+    # pylint: disable=protected-access
+    from aimet_torch.v2.nn import BaseQuantizationMixin
+    contexts = []
+    ctx = _ContextManager(action=lambda: None, cleanup=lambda:[context._cleanup() for context in contexts])
+
+    if isinstance(modules, torch.nn.Module):
+        modules = [modules]
+
+    try:
+        for module_elem in modules:
+            for module in module_elem.modules():
+                if isinstance(module, BaseQuantizationMixin):
+                    context = func(module)
+                    contexts.append(context)
+    except Exception:
+        ctx._cleanup()
+        raise
+    else:
+        return ctx
+
+def remove_input_quantizers(modules):
+    '''
+    Removes input quantizers for the modules provided
+    '''
+    # pylint: disable=protected-access
+    return _map_qmodule(modules, lambda qmodule: qmodule._remove_input_quantizers())
+
+def remove_output_quantizers(modules):
+    '''
+    Removes output quantizers for the modules provided
+    '''
+    # pylint: disable=protected-access
+    return _map_qmodule(modules, lambda qmodule: qmodule._remove_output_quantizers())
+
+
+def remove_param_quantizers(modules):
+    '''
+    Removes parameter quantizers for the modules provided
+    '''
+    # pylint: disable=protected-access
+    return _map_qmodule(modules, lambda qmodule: qmodule._remove_param_quantizers())
+
+def remove_activation_quantizers(modules):
+    '''
+    Removes activation quantizers for the modules provided
+    '''
+    context_1 = remove_input_quantizers(modules)
+    context_2 = remove_output_quantizers(modules)
+    # pylint: disable=protected-access
+    return _ContextManager(action=lambda: None,
+                               cleanup=lambda: (context_1._cleanup(), context_2._cleanup()))
+
+def remove_all_quantizers(modules):
+    '''
+    Removes all quantizers for the modules provided
+    '''
+    context_1 = remove_activation_quantizers(modules)
+    context_2 = remove_param_quantizers(modules)
+    # pylint: disable=protected-access
+    return _ContextManager(action=lambda: None,
+                               cleanup=lambda: (context_1._cleanup(), context_2._cleanup()))
