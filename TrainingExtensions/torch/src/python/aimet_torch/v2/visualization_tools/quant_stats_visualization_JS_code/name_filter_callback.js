@@ -1,10 +1,3 @@
-function booleanAnd(arr1, arr2) {
-    return arr1.map((value, index) => value && arr2[index]);
-}
-
-function booleanOr(arr1, arr2) {
-    return arr1.map((value, index) => value || arr2[index]);
-}
 // Filter all names having entered pattern as a substring
 name_filter.booleans = Array.from(data_source.data['namelist']).map(t => t.includes(cb_obj.value));
 
