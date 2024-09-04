@@ -1,4 +1,3 @@
-
 .. _api-torch-encoding-analyzer:
 .. currentmodule:: aimet_torch.v2.quantization.encoding_analyzer
 
@@ -16,6 +15,7 @@ Variants
 
 .. autosummary::
     :toctree: generated
+    :nosignatures:
 
     MinMaxEncodingAnalyzer
     SqnrEncodingAnalyzer

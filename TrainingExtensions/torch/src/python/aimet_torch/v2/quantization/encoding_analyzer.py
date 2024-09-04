@@ -198,7 +198,6 @@ class _HistogramObserver(_Observer[_Histogram]):
             max_val = max_val + 0.5
 
         min_val, max_val = min_val.float(), max_val.float()
-
         step = (max_val - min_val) / self.num_bins
 
         return torch.arange(0, self.num_bins + 1, device=device) * step + min_val
@@ -212,7 +211,6 @@ class _HistogramObserver(_Observer[_Histogram]):
     # pylint: disable=too-many-locals
     @torch.no_grad()
     def merge_stats(self, new_stats_list: List[_Histogram], input_tensor: torch.Tensor):
-
         if self.stats[0].histogram is None:
             self.stats = new_stats_list
             return
@@ -229,7 +227,6 @@ class _HistogramObserver(_Observer[_Histogram]):
             if updated_min == curr_stats.min and updated_max == curr_stats.max:
                 histogram_updates = curr_stats.histogram
             else:
-
                 dest_bin_width = (updated_max - updated_min) / self.num_bins
                 src_bin_width = (curr_stats.max - curr_stats.min) / self.num_bins
                 histogram_updates = torch.zeros(self.num_bins).to(input_tensor.device)
@@ -273,19 +270,42 @@ class _HistogramObserver(_Observer[_Histogram]):
         return self.stats
 
 class EncodingAnalyzer(Generic[_Statistics], ABC):
+    '''
+    Base class that gathers statistics of input data and computes encodings
+    '''
     def __init__(self, observer: _Observer):
         self.observer = observer
 
     @torch.no_grad()
-    def update_stats(self, input_tensor: torch.Tensor) -> _Statistics:
+    def update_stats(self, input_tensor: torch.Tensor):
+        r"""
+        Updates the internal statistics given the input data
+
+        Args:
+            input_tensor (torch.Tensor): Input data
+        """
         new_stats = self.observer.collect_stats(input_tensor)
         self.observer.merge_stats(new_stats)
         return new_stats
 
-    def reset_stats(self) -> None:
+    def reset_stats(self):
+        """
+        Resets the internal stats
+        """
         self.observer.reset_stats()
 
-    def compute_encodings(self, num_steps: int, is_symmetric: bool) -> torch.Tensor:
+    def compute_encodings(self, num_steps: int, is_symmetric: bool):
+        r"""
+        Computes encodings based on the input data & calibration scheme and returns the encoding minimum and maximum value
+
+        Args:
+            num_steps (int): Number of steps used in quantization.
+            is_symmetric (bool): True if encodings are symmetric
+
+        Returns:
+            Encoding min and max as a tuple
+
+        """
         return self.compute_encodings_from_stats(self.observer.get_stats(), num_steps, is_symmetric)
 
     def compute_dynamic_encodings(self, input_tensor: torch.Tensor, num_steps: int,
@@ -303,8 +323,24 @@ _MINIMUM_SCALE = torch.finfo(torch.float32).eps
 
 
 class MinMaxEncodingAnalyzer(EncodingAnalyzer[_MinMaxRange]):
-    """
-    Encoding Analyzer for Min-Max calibration technique
+    r"""
+    EncodingAnalyzer subclass which uses min-max calibration. This involves tracking the minimum and maximum observed values and computing the min-max range as :math:`[min(input), max(input)]`
+
+    Args:
+        shape (tuple): Shape of calculated encoding
+
+    Example:
+
+        >>> from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
+        >>> encoding_analyzer = MinMaxEncodingAnalyzer(shape=(1,))
+        >>> encoding_analyzer.update_stats(torch.randn(100))
+        >>> encoding_analyzer.compute_encodings(num_steps=math.pow(2, 8), is_symmetric=False)
+        (tensor([-2.0991]), tensor([2.3696]))
+        >>> encoding_analyzer.reset_stats()
+        >>> encoding_analyzer.update_stats(torch.randn(100))
+        _MinMaxRange(min=tensor([-2.1721]), max=tensor([2.2592]))
+        >>> encoding_analyzer.compute_encodings(num_steps=math.pow(2, 8), is_symmetric=False)
+        (tensor([-2.1721]), tensor([2.2592]))
     """
     def __init__(self, shape: tuple):
         observer = _MinMaxObserver(shape)
@@ -358,6 +394,7 @@ def _flag_extreme_min_max(curr_min, curr_max):
         warnings.warn('Extreme values detected within input! This may skew the associated encodings')
 
 def adjust_min_max(curr_min, curr_max, num_steps, is_symmetric):
+
     # ensure that 0 is in the range
     curr_min = torch.minimum(curr_min, torch.zeros_like(curr_min))
     curr_max = torch.maximum(curr_max, torch.zeros_like(curr_max))
@@ -384,12 +421,32 @@ def adjust_min_max(curr_min, curr_max, num_steps, is_symmetric):
         curr_min = offset * delta
         curr_max = num_pos_steps * delta
 
+
+
     return curr_min, curr_max
 
 # pylint: disable=arguments-differ
 class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
-    """
-    Encoding Analyzer for Percentile calibration technique
+    r"""
+    EncodingAnalyzer subclass which uses percentile calibration. This involves recording values in a histogram and computing the min-max range given a percentile value :math:`p`. The range would be computed after clipping (100 - :math:`p`)% of the largest and smallest observed values.
+
+    Args:
+        shape (tuple): Shape of calculated encoding
+        num_bins (int): Number of bins used to create the histogram
+        percentile (float): Percentile value which is used to clip values
+
+    Example:
+
+        >>> from aimet_torch.v2.quantization.encoding_analyzer import PercentileEncodingAnalyzer
+        >>> encoding_analyzer = PercentileEncodingAnalyzer(shape=(1,), num_bins = 10, percentile = 80)
+        >>> encoding_analyzer.update_stats(torch.randn(100))
+        >>> encoding_analyzer.compute_encodings(num_steps = math.pow(2, 8), is_symmetric = False)
+        (tensor([-1.1188]), tensor([0.3368]))
+        >>> encoding_analyzer.reset_stats()
+        >>> encoding_analyzer.update_stats(torch.randn(100))
+        [_Histogram(histogram=tensor([ 1.,  1.,  8., 13., 19., 27., 16., 10.,  3.,  2.]), bin_edges=tensor([-2.5710, -2.0989, -1.6269, -1.1548, -0.6827, -0.2106,  0.2614,  0.7335, 1.2056,  1.6776,  2.1497]), min=tensor(-2.5710), max=tensor(2.1497))]
+        >>> encoding_analyzer.compute_encodings(num_steps = math.pow(2, 8), is_symmetric = False)
+        (tensor([-1.1548]), tensor([0.2614]))
     """
     def __init__(self, shape: tuple, num_bins: int = 2048, percentile: float = 100):
         if num_bins <= 0:
@@ -400,11 +457,12 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         self.set_percentile(percentile)
 
     def set_percentile(self, percentile):
-        """
-        Set the clipping percentile of the encoding analyzer. The encoding analyzer will clip the (100% - percentile)
-        largest and smallest observed values from the encoding range when computing encodings.
+        r"""
+        Set the clipping percentile of the encoding analyzer. The encoding analyzer will clip the (100 - :math:`p`)% largest and smallest observed values from the encoding range when computing encodings.
 
-        :param percentile: Value from 50.0 to 100.0 indicating the clipping percentile
+        Args:
+            percentile (float): Percentile value which is used to clip values
+
         """
         if percentile < 50 or percentile > 100:
             raise ValueError('Percentile value must be within 50-100 range')
@@ -413,6 +471,9 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
 
     @torch.no_grad()
     def update_stats(self, input_tensor: torch.Tensor) -> _Statistics:
+        """
+        :meta private:
+        """
         new_stats = self.observer.collect_stats(input_tensor)
         self.observer.merge_stats(new_stats, input_tensor)
         return new_stats
@@ -423,6 +484,7 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
             -> Tuple[torch.Tensor, torch.Tensor]:
 
         if num_steps <= 0:
+
             raise ValueError('The number of quantization bins cannot be less than or equal to 0.')
 
         if stats[0].histogram is None:
@@ -440,6 +502,7 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
             if self.percentile == 100:
                 min_index = 0
                 max_index = -1
+
             curr_min = list_elem.bin_edges[min_index]
             curr_max = list_elem.bin_edges[max_index]
             # adjust min/max
@@ -457,8 +520,31 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
 
 
 class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
-    """
-    Encoding Analyzer for SQNR Calibration technique
+    r"""
+    EncodingAnalyzer subclass which uses SQNR calibration. This involves recording values in a histogram and computing the min-max range based on values that produce the lowest expected SQNR.
+
+    Args:
+        shape (tuple): Shape of calculated encoding
+        num_bins (int): Number of bins used to create the histogram
+        asymmetric_delta_candidates (int): Number of delta values to search over in asymmetric mode
+        symmetric_delta_candidates (int): Number of delta values to search over in symmetric mode
+        offset_candidates (int): Number of offset values to search over in asymmetric mode
+        max_parallelism (int): Maximum number of encodings to process in parallel (higher number results in higher memory usage but faster computation)
+        gamma (float): Weighting factor on clipping noise (higher value results in less clipping noise)
+        percentile (float): Percentile value which is used to clip values
+
+    Example:
+
+        >>> from aimet_torch.v2.quantization.encoding_analyzer import SqnrEncodingAnalyzer
+        >>> encoding_analyzer = SqnrEncodingAnalyzer(shape=(1,), num_bins = 10, gamma = 1)
+        >>> encoding_analyzer.update_stats(torch.randn(100))
+        >>> encoding_analyzer.compute_encodings(num_steps = math.pow(2, 8), is_symmetric = False)
+        (tensor([-2.3612]), tensor([2.8497]))
+        >>> encoding_analyzer.reset_stats()
+        >>> encoding_analyzer.update_stats(torch.randn(100))
+        [_Histogram(histogram=tensor([ 2.,  0.,  8.,  8., 16., 22., 23., 12.,  6.,  3.]), bin_edges=tensor([-2.8907, -2.3625, -1.8343, -1.3061, -0.7779, -0.2497,  0.2784,  0.8066, 1.3348,  1.8630,  2.3912]), min=tensor(-2.8907), max=tensor(2.3912))]
+        >>> encoding_analyzer.compute_encodings(num_steps = math.pow(2, 8), is_symmetric = False)
+        (tensor([-2.7080]), tensor([2.2438]))
     """
     def __init__(self,
                  shape: tuple,
@@ -468,16 +554,6 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
                  offset_candidates=21,
                  max_parallelism=64,
                  gamma=3.0):
-        """
-        :param shape: Shape of calculated encoding
-        :param num_bins: number of bins to use per histogram
-        :param asymmetric_delta_candidates: number of delta values to search over in asymmetric mode
-        :param symmetric_delta_candidates: number of delta values to search over in symmetric mode
-        :param offset_candidates: number of offset values to search over in asymmetric mode
-        :param max_parallelism: maximum number of encodings to process parallely (higher number results in higher
-            memory usage but faster computation)
-        :param gamma: weighting factor on clipping noise (higher value results in less clipping noise)
-        """
         if num_bins <= 0:
             raise ValueError('Number of bins cannot be less than or equal to 0.')
         observer = _HistogramObserver(shape=shape, num_bins=num_bins)
@@ -490,6 +566,9 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
 
     @torch.no_grad()
     def update_stats(self, input_tensor: torch.Tensor) -> _Statistics:
+        """
+        :meta private:
+        """
         new_stats = self.observer.collect_stats(input_tensor)
         self.observer.merge_stats(new_stats, input_tensor)
         return new_stats
@@ -498,14 +577,6 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
     @torch.no_grad()
     def compute_encodings_from_stats(self, stats: List[_Histogram], num_steps: int, is_symmetric: bool)\
             -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Searches for encodings which produce the lowest expected SQNR based on the histograms in stats
-
-        :param stats: A list of _Histogram objects with length equal to the number of encodings to compute
-        :param num_steps: The number of bins the quantized range is split into
-        :param is_symmetric: If True, computes symmetric encodings, else computes asymmetric encodings
-        :return: Tuple of computed encodings (min, max) as tensors with shape self.shape
-        """
         if stats[0].histogram is None:
             raise StatisticsNotFoundError('No statistics present to compute encodings.')
         if num_steps <= 0:
@@ -625,12 +696,12 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         We approximately reconstruct x from hists by assuming all elements within a given bin fall exactly on the
         midpoint of that bin.
 
-        :param stats: list of _Histogram objects of observed input values
-        :param test_deltas: Tensor holding the values of all deltas to search with shape (num_hists, num_deltas, num_offsets)
-        :param test_offsets: Tensor holding values of all offsets to search with shape (num_hists, num_deltas, num_offsets)
-        :param num_steps: Number of quantization steps, i.e., (2 ** bitwidth) - 1
-        :param gamma: Fudge factor to trade off between saturation cost and quantization cost. When gamma=1.0, this
-                      approximates the MSE of the quantization function
+        Args:
+            stats (List): A list of _Histogram objects with length equal to the number of encodings to compute
+            test_deltas (torch.Tensor): Tensor holding the values of all deltas to search with shape (num_hists, num_deltas, num_offsets)
+            test_offsets (torch.Tensor):Tensor holding values of all offsets to search with shape (num_hists, num_deltas, num_offsets)
+            num_steps (int): Number of quantization steps, i.e., (2 ** bitwidth) - 1
+            gamma (float): Fudge factor to trade off between saturation cost and quantization cost. When gamma=1.0, this approximates the MSE of the quantization function
         """
         tensor_kwargs = {"device": test_deltas.device, "dtype": test_deltas.dtype}
         hists = torch.stack([stat.histogram for stat in stats])
