@@ -354,6 +354,8 @@ class CustomSparseConv3d(torch.autograd.Function):
         :param all_sp_conv_attrs: spconv attributes
         :return: Dense tensor
         '''
+        device = weight.device
+        dense_inputs = dense_inputs.to(device)
         sp_conv_attrs = dict()
         ignore = ['ndim', 'output_bound', 'input_spatial_shape', 'activation', 'subm', 'batch_size', 'spatial_shape',
                   'input_shape', 'inverse', 'transposed', 'rulebook', 'output_shape', 'output_spatial_shape',
@@ -369,6 +371,7 @@ class CustomSparseConv3d(torch.autograd.Function):
             conv3d.weight.copy_(weight.detach().permute(0, 4, 1, 2, 3))
             if sp_conv_attrs['bias']:
                 conv3d.bias.copy_(bias.detach())
+        conv3d = conv3d.to(device)
 
         out = conv3d(dense_inputs)
         return out
@@ -413,6 +416,9 @@ class CustomSparseConv3d_WithIndicesFeatures(torch.autograd.Function):
         :param all_sp_conv_attrs: spconv attributes
         :return: Dense tensor
         '''
+        device = weight.device
+        indices = indices.to(device)
+        features = features.to(device)
         sp_conv_attrs = dict()
         ignore = ['ndim', 'output_bound', 'input_spatial_shape', 'activation', 'subm', 'batch_size', 'spatial_shape',
                   'input_shape', 'inverse', 'transposed', 'rulebook', 'output_shape', 'output_spatial_shape',
@@ -428,9 +434,12 @@ class CustomSparseConv3d_WithIndicesFeatures(torch.autograd.Function):
             conv3d.weight.copy_(weight.detach().permute(0, 4, 1, 2, 3))
             if sp_conv_attrs['bias']:
                 conv3d.bias.copy_(bias.detach())
+        conv3d = conv3d.to(device)
 
         dense_inputs = features.reshape(all_sp_conv_attrs['batch_size'], features.shape[1],
                                         *all_sp_conv_attrs['spatial_shape'])
+        dense_inputs = dense_inputs.to(device)
+
         out = conv3d(dense_inputs)
         return out
 
@@ -444,7 +453,7 @@ class CustomSparseConv3DLayer(torch.nn.Module):
         activation = "None" #"ReLU"
         self.sp_conv_3d = spconv.SparseConv3d(in_channels=in_channels, out_channels=out_channels,
                                               kernel_size=kernel_size, bias=bias, stride=stride, padding=padding,
-                                              dilation=dilation, groups=1) # doesn't support groups as of now
+                                              dilation=dilation, groups=1, algo=spconv.ConvAlgo.Native) # doesn't support groups as of now
         self.conv_attrs_dict = dict(in_channels=self.sp_conv_3d.in_channels,
                                     out_channels=self.sp_conv_3d.out_channels,
                                     kernel_size=self.sp_conv_3d.kernel_size,
@@ -464,9 +473,9 @@ class CustomSparseConv3DLayer(torch.nn.Module):
         :param features: Features input
         :return: Dense tensor output
         '''
-        spatial_shape = [indices[:, 1].max().detach().numpy()+1, indices[:, 2].max().detach().numpy()+1,
-                         indices[:, 3].max().detach().numpy()+1]
-        batch_size = indices[:, 0].max().detach().numpy()+1
+        spatial_shape = [indices[:, 1].max().item()+1, indices[:, 2].max().item()+1,
+                         indices[:, 3].max().item()+1]
+        batch_size = indices[:, 0].max().item()+1
         if torch.jit.is_tracing():
             self.conv_attrs_dict['spatial_shape'] = spatial_shape
             self.conv_attrs_dict['batch_size'] = batch_size
@@ -655,8 +664,8 @@ class ScatterDense(torch.nn.Module):
         if torch.jit.is_tracing():
             attrs = {
                 "format": "xyz",
-                "input_spatial_shape": inputs.detach().numpy().shape[2:],
-                "output_shape": inputs.detach().numpy().shape
+                "input_spatial_shape": inputs.shape[2:],
+                "output_shape": inputs.shape
             }
             return CustomScatterDense.apply(inputs, attrs)
 
