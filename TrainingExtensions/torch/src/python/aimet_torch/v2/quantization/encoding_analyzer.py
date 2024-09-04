@@ -41,6 +41,7 @@
 
 from abc import ABC, abstractmethod
 import math
+import warnings
 from dataclasses import dataclass
 from typing import TypeVar, Generic, Tuple, Optional, List
 import itertools
@@ -167,7 +168,8 @@ class _HistogramObserver(_Observer[_Histogram]):
                 index = (hist_num // numel) % dim
                 hist_input = torch.unsqueeze(torch.select(hist_input, axis, index), axis)
 
-            hist_min, hist_max = self._handle_inf_inputs(hist_input)
+            hist_min, hist_max = self._handle_inputs(hist_input)
+
             bin_edges = self._create_bin_edges(min_val=hist_min, max_val=hist_max, device=input_tensor.device)
             histogram = torch.histc(hist_input.to(torch.float), bins=self.num_bins, min=bin_edges[0], max=bin_edges[-1])
 
@@ -180,9 +182,9 @@ class _HistogramObserver(_Observer[_Histogram]):
         return hist_stats
 
     # pylint: disable=no-self-use
-    def _handle_inf_inputs(self, hist_input):
-        if torch.all(torch.isinf(hist_input)):
-            raise ValueError('Input tensor cannot contain only infinite values')
+    def _handle_inputs(self, hist_input):
+        if not torch.any(hist_input.isfinite()):
+            raise ValueError('Input tensor cannot contain only infinite or only NaN values')
 
         min = hist_input[hist_input.isfinite()].min()
         max = hist_input[hist_input.isfinite()].max()
@@ -342,10 +344,18 @@ class MinMaxEncodingAnalyzer(EncodingAnalyzer[_MinMaxRange]):
             updated_max = num_pos_steps * delta
 
         # replace pos and neg inf respectively
-        updated_max = torch.clamp(updated_max, max=torch.finfo(stats.min.dtype).max)
-        updated_min = torch.clamp(updated_min, min=torch.finfo(stats.min.dtype).min)
+        updated_max = torch.clamp(updated_max, max=torch.finfo(stats.min.dtype).max).to(stats.min.dtype)
+        updated_min = torch.clamp(updated_min, min=torch.finfo(stats.max.dtype).min).to(stats.max.dtype)
+
         return updated_min, updated_max
 
+def _flag_extreme_min_max(curr_min, curr_max):
+    extreme_val = torch.full_like(curr_min, torch.finfo(curr_min.dtype).max)
+    if not (torch.all(torch.isfinite(curr_min)) and torch.all(torch.isfinite(curr_max))):
+        warnings.warn('Infinite or NaN values detected within input! This may skew the associated encodings')
+
+    if torch.any(torch.isclose(torch.abs(curr_min), extreme_val, rtol=0.05)) or torch.any(torch.isclose(torch.abs(curr_max), extreme_val, rtol=0.05)):
+        warnings.warn('Extreme values detected within input! This may skew the associated encodings')
 
 def adjust_min_max(curr_min, curr_max, num_steps, is_symmetric):
     # ensure that 0 is in the range
@@ -437,10 +447,10 @@ class PercentileEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
             encoding_min_list.append(updated_min)
             encoding_max_list.append(updated_max)
 
-        encoding_min = torch.tensor(encoding_min_list, device=stats[0].histogram.device)
+        encoding_min = torch.tensor(encoding_min_list, device=stats[0].histogram.device, dtype = stats[0].min.dtype)
         encoding_min = torch.reshape(encoding_min, self.observer.shape)
 
-        encoding_max = torch.tensor(encoding_max_list, device=stats[0].histogram.device)
+        encoding_max = torch.tensor(encoding_max_list, device=stats[0].histogram.device, dtype = stats[0].max.dtype)
         encoding_max = torch.reshape(encoding_max, self.observer.shape)
 
         return encoding_min, encoding_max
@@ -511,8 +521,12 @@ class SqnrEncodingAnalyzer(EncodingAnalyzer[_Histogram]):
         best_delta = torch.cat(best_deltas)
         min_enc = best_offset * best_delta
         max_enc = min_enc + num_steps * best_delta
-        return min_enc.view(self.observer.shape).to(stats[0].max.dtype), \
-               max_enc.view(self.observer.shape).to(stats[0].max.dtype)
+
+        min_enc = min_enc.to(stats[0].min.dtype)
+        max_enc = max_enc.to(stats[0].max.dtype)
+
+        return min_enc.view(self.observer.shape), \
+               max_enc.view(self.observer.shape)
 
     def _pick_test_candidates(self, stats, num_steps, symmetric):
         # min/max.shape = (num_histograms, )

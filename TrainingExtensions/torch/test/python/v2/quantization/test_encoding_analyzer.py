@@ -36,6 +36,7 @@
 # =============================================================================
 import torch
 import math
+import warnings
 import pytest
 import numpy as np
 import random
@@ -79,7 +80,8 @@ class TestEncodingAnalyzer():
             else:
                 assert all(x.min is None for x in encoding_analyzer.observer.stats)
                 assert all(x.max is None for x in encoding_analyzer.observer.stats)
-                
+
+            
     def test_compute_encodings_with_no_stats(self, encoding_analyzers):
         for encoding_analyzer in encoding_analyzers:
             with pytest.raises(RuntimeError):
@@ -107,7 +109,8 @@ class TestEncodingAnalyzer():
             assert torch.allclose(max_2, max_3, atol=eps)
             assert torch.allclose(min_2, min_3, atol=eps)
 
-class TestMinMaxEncodingAnalyzer():
+class TestMinMaxEncodingAnalyzer():    
+
     def test_compute_encodings_asymmetric(self):
         encoding_analyzer = MinMaxEncodingAnalyzer(())
         input_tensor =  torch.arange(start=0, end=26, step=0.5, dtype=torch.float)
@@ -542,7 +545,7 @@ class TestPercentileEncodingAnalyzer():
     @pytest.mark.parametrize("percentile_value", [-1, 49, 5, 101])
     def test_invalid_percentile_value(self, percentile_value):
         with pytest.raises(ValueError):
-            PercentileEncodingAnalyzer((), percentile = percentile_value, num_bins = 3)
+            PercentileEncodingAnalyzer((), percentile = percentile_value, num_bins = 3)  
     
     def test_compute_encodings_asymmetric_normalized(self):
         encoding_analyzer = PercentileEncodingAnalyzer((), percentile = 99)
@@ -650,7 +653,7 @@ class TestPercentileEncodingAnalyzer():
 
 
 class TestSqnrEncodingAnalyzer:
-
+    
     def test_computed_encodings_uniform_dist(self):
         """
         Given: Update stats on an equally spaced input (no outliers)
@@ -876,3 +879,4 @@ class TestSqnrEncodingAnalyzer:
         best_delta, best_offset = encoding_analyzer._select_best_candidates(deltas, offsets, histograms, 255)
         assert torch.equal(best_delta, torch.Tensor([1/255.0, 2/255.0]).view(2, 1))
         assert torch.equal(best_offset, torch.Tensor([-128, 0]).view(2, 1))
+    

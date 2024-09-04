@@ -43,7 +43,7 @@ from typing import Optional, List, Dict
 import math
 
 import torch
-from aimet_torch.v2.quantization.encoding_analyzer import EncodingAnalyzer
+from aimet_torch.v2.quantization.encoding_analyzer import EncodingAnalyzer, _flag_extreme_min_max
 from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.float import FloatEncoding
 from aimet_torch.v2.utils import StatisticsNotFoundError, patch_attr
@@ -288,6 +288,7 @@ class FloatQuantizeDequantize(QuantizerBase): # pylint: disable=abstract-method
                 num_steps = math.pow(2, self.bitwidth) - 1
                 min, max = self.encoding_analyzer.compute_encodings(num_steps,
                                                                     is_symmetric=False)
+                _flag_extreme_min_max(min, max)
             except StatisticsNotFoundError:
                 return
 
