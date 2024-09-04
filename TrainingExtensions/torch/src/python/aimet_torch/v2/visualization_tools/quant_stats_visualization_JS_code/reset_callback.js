@@ -1,35 +1,3 @@
-// Function to adaptively format numerical values in scientific notation
-// if they are large in magnitude
-function formatValue(value) {
-    if (Math.abs(value) < 1e-3 || Math.abs(value) > 1e3) {
-        return value.toExponential(2);
-    } else {
-        return value.toFixed(2);
-    }
-}
-
-function booleanAnd(arr1, arr2) {
-    return arr1.map((value, index) => value && arr2[index]);
-}
-
-function booleanOr(arr1, arr2) {
-    return arr1.map((value, index) => value || arr2[index]);
-}
-
-function findMin(a, b) {
-    if (a<=b) {
-        return a;
-    }
-    return b;
-}
-
-function findMax(a, b) {
-    if (a>=b) {
-        return a;
-    }
-    return b;
-}
-
 // Resetting the limits source with default values
 limits_source.data['ymax'] = default_values_source.data['default_ymax'];
 limits_source.data['ymin'] = default_values_source.data['default_ymin'];

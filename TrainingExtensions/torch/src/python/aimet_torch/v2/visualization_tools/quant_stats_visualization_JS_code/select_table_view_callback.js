@@ -1,11 +1,3 @@
-function booleanAnd(arr1, arr2) {
-    return arr1.map((value, index) => value && arr2[index]);
-}
-
-function booleanOr(arr1, arr2) {
-    return arr1.map((value, index) => value || arr2[index]);
-}
-
 const source_data = data_source.data;
 const idx = source_data['idx'];
 const minlist = source_data['minlist'];

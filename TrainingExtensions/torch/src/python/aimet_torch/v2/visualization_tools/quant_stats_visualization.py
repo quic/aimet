@@ -571,7 +571,7 @@ class QuantStatsVisualizer:
             max_thresh_filter=tableobjects.filters.max_thresh_filter,
             name_filter=tableobjects.filters.name_filter,
             select=inputwidgets.table_view_select,
-        ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/limit_change_callback.js").read_text("utf8"))
+        ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/limit_change_callback.js").read_text("utf8"))
 
         customcallbacks.reset_callback = CustomJS(args=dict(
             limits_source=datasources.limits_source,
@@ -591,7 +591,7 @@ class QuantStatsVisualizer:
             min_thresh_filter=tableobjects.filters.min_thresh_filter,
             max_thresh_filter=tableobjects.filters.max_thresh_filter,
             name_filter=tableobjects.filters.name_filter,
-        ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/reset_callback.js").read_text("utf8"))
+        ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/reset_callback.js").read_text("utf8"))
 
         customcallbacks.name_filter_callback = CustomJS(args=dict(
             data_source=datasources.data_source,
@@ -601,7 +601,7 @@ class QuantStatsVisualizer:
             max_thresh_filter=tableobjects.filters.max_thresh_filter,
             name_filter=tableobjects.filters.name_filter,
             select=inputwidgets.table_view_select,
-        ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/name_filter_callback.js").read_text("utf8"))
+        ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/name_filter_callback.js").read_text("utf8"))
 
         customcallbacks.select_table_view_callback = CustomJS(args=dict(
             data_source=datasources.data_source,
@@ -611,14 +611,14 @@ class QuantStatsVisualizer:
             max_thresh_filter=tableobjects.filters.max_thresh_filter,
             name_filter=tableobjects.filters.name_filter,
             table=tableobjects.data_table
-        ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/select_table_view_callback.js").read_text("utf8"))
+        ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/select_table_view_callback.js").read_text("utf8"))
 
         customcallbacks.table_selection_callback = CustomJS(args=dict(
             data_source=datasources.data_source,
             table_data_source=datasources.table_data_source,
             selected_data_source=datasources.selected_data_source,
             limits_source=datasources.limits_source,
-        ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/table_selection_callback.js").read_text("utf8"))
+        ), code=(Path(__file__).parent / "quant_stats_visualization_JS_code/utils.js").read_text("utf8") + (Path(__file__).parent / "quant_stats_visualization_JS_code/table_selection_callback.js").read_text("utf8"))
 
         return customcallbacks
 
