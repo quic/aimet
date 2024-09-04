@@ -43,7 +43,7 @@ from torch import Tensor
 from torch import randn, arange
 
 from aimet_torch.v2.quantization.affine import quantize, quantize_dequantize
-from aimet_torch.v2.quantization.tensor import EncodingError, QuantizedTensor, DequantizedTensor
+from aimet_torch.v2.quantization.tensor import EncodingError, QuantizedTensor, DequantizedTensor, QuantizedTensorBase
 from aimet_torch.v2.quantization.affine import AffineEncoding
 
 
