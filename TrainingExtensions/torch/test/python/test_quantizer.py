@@ -1863,7 +1863,8 @@ class TestQuantizationSimStaticGrad:
 
     @pytest.mark.parametrize('quant_scheme', [QuantScheme.post_training_tf,
                                               QuantScheme.training_range_learning_with_tf_init])
-    def test_exported_weight(self, quant_scheme):
+    @pytest.mark.parametrize('rounding_dtype', [torch.float32, torch.float64])
+    def test_exported_weight(self, quant_scheme, rounding_dtype):
         """
         Test to check if the exported weight remains unchanged after quantization,
         regardless of the rounding method used.
@@ -1908,9 +1909,14 @@ class TestQuantizationSimStaticGrad:
             # Check exported weight remains unchanged after quantization,
             # regardless of the rounding method used.
             for conv_weight in conv_weights:
-                encoding = sim.model.conv.param_quantizers['weight'].encoding
-                assert torch.equal(torch.round(conv_weight / encoding.delta), 
-                                   torch.trunc(conv_weight / encoding.delta + torch.sign(conv_weight) * 0.5))
+                delta = sim.model.conv.param_quantizers['weight'].encoding.delta
+                assert torch.allclose(conv_weight, model.conv.weight.data, atol=delta)
+
+                conv_weight = conv_weight.to(rounding_dtype)
+                delta = torch.tensor(delta, dtype=rounding_dtype)
+                assert torch.equal(torch.round(conv_weight / delta),
+                                   torch.trunc(conv_weight / delta + torch.sign(conv_weight) * 0.5))
+
 
     def test_export_recurrent_model(self):
         """ Test export functionality with recurrent models """

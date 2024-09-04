@@ -434,7 +434,8 @@ class TestQuantsimOnnxExport:
         assert torch.allclose(v1_logits, v2_logits, atol=scale * 3) # Allow off-by-3 error
 
     @pytest.mark.parametrize('quantizer_cls', [QuantizeDequantize, Quantize])
-    def test_exported_weight(self, quantizer_cls):
+    @pytest.mark.parametrize('rounding_dtype', [torch.float32, torch.float64])
+    def test_exported_weight(self, quantizer_cls, rounding_dtype):
         """
         Test to check if the exported weight remains unchanged after quantization,
         regardless of the rounding method used.
@@ -478,9 +479,12 @@ class TestQuantsimOnnxExport:
             # regardless of the rounding method used.
             for conv_weight in conv_weights:
                 delta = sim.model.conv.param_quantizers['weight'].get_scale()
+                assert torch.allclose(conv_weight, model.conv.weight.data, atol=delta.item())
+
+                conv_weight = conv_weight.to(rounding_dtype)
+                delta = delta.to(rounding_dtype)
                 assert torch.equal(torch.round(conv_weight / delta),
                                    torch.trunc(conv_weight / delta + torch.sign(conv_weight) * 0.5))
-                assert torch.all(conv_weight - model.conv.weight.data <= delta)
 
 
 def _assert_same_structure(v1_saved_encoding, v2_saved_encoding):
