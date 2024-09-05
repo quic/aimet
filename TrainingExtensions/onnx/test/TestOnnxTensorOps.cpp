@@ -325,12 +325,12 @@ TEST(TestOnnxTensorOps, TestBroadcastShapeInfo) {
         EXPECT_EQ(expectedTensorStrides[i], tensorStrides[i]);
     }
 
-    const std::vector<int64_t> expectedEncodingStrides = {3, 1, 0, 0, 0};
+    const std::vector<int64_t> expectedEncodingStrides = {4, 1, 0, 0, 0};
     auto encodingStrides = shapeInfo.encodingStrides;
     EXPECT_EQ(encodingStrides.size(), expectedEncodingStrides.size());
     for (int i = 0; i < expectedEncodingStrides.size(); i++)
     {
-        EXPECT_EQ(expectedTensorStrides[i], tensorStrides[i]);
+        EXPECT_EQ(expectedEncodingStrides[i], encodingStrides[i]);
     }
 
     EXPECT_TRUE(shapeInfo.hasContiguousBlocks());
@@ -367,7 +367,7 @@ TEST(TestOnnxTensorOps, TestBroadcastShapeInfo2) {
     EXPECT_EQ(encodingStrides.size(), expectedEncodingStrides.size());
     for (int i = 0; i < expectedEncodingStrides.size(); i++)
     {
-        EXPECT_EQ(expectedTensorStrides[i], tensorStrides[i]);
+        EXPECT_EQ(expectedEncodingStrides[i], encodingStrides[i]);
     }
 
     EXPECT_FALSE(shapeInfo.hasContiguousBlocks());
@@ -407,7 +407,7 @@ TEST(TestOnnxTensorOps, TestBroadcastShapeInfo3) {
     EXPECT_EQ(encodingStrides.size(), expectedEncodingStrides.size());
     for (int i = 0; i < expectedEncodingStrides.size(); i++)
     {
-        EXPECT_EQ(expectedTensorStrides[i], tensorStrides[i]);
+        EXPECT_EQ(expectedEncodingStrides[i], encodingStrides[i]);
     }
 
     EXPECT_FALSE(shapeInfo.hasContiguousBlocks());

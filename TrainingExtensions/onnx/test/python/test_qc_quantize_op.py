@@ -617,7 +617,7 @@ blockwise_qdq_test_3 = {
     "channel_axis": 0,
     "bitwidth": 8,
     "min": [-1.28, -12.8, -128, -1280, 0, 0, 0, 0],
-    "max": [1.27, 12.7, 127, 1270, 0, 0, 0, 0],
+    "max": [1.27, 12.7, 127, 1270, 2.55, 25.5, 255, 2550],
     "in_tensor": [
         40.23, .0321, # Scale = 0.01
         -40.23, -.0321, # Scale = 0.1
@@ -630,15 +630,15 @@ blockwise_qdq_test_3 = {
         -1, 100000, # scale = 10
     ],
     "expected": [
-        -1.28, .0321, # Scale = 0.01
-        -40.23, -.0321, # Scale = 0.1
-        23.44, -2.3111, # scale = 1
-        23.44, -2.3111, # scale = 10
+        1.27, .03, # Scale = 0.01
+        -12.8, 0.0, # Scale = 0.1
+        23, -2, # scale = 1
+        20., 0, # scale = 10
 
-        -1000.1, 334, # scale = 0.01
-        23.1111, -23.1111, # scale = 0.1
-        23.1111, -23.1111, # scale = 1
-        -1, 100000, # scale = 10
+        0, 2.55, # scale = 0.01
+        23.1, 0., # scale = 0.1
+        23, 0., # scale = 1
+        0, 2550, # scale = 10
     ],
 }
 
@@ -648,7 +648,9 @@ def isclose(x1, x2, atol=1e-4):
 
 class TestBlockwiseQuantizeOp:
 
-    @pytest.mark.parametrize("test_set", (blockwise_qdq_test_1, blockwise_qdq_test_2))
+    @pytest.mark.parametrize("test_set", (blockwise_qdq_test_1,
+                                          blockwise_qdq_test_2,
+                                          blockwise_qdq_test_3))
     def test_blockwise_quantize_dequantize(self, test_set):
         input_shape = test_set["input_shape"]
         block_axis = test_set["block_axis"]
