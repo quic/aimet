@@ -12,7 +12,7 @@ Please note that,
 
 - Only `SparseConvolution3D` is supported as of now
 
-- And, spconv library is `not very stable` because it is found that the inference from the spconv module gives
+- And, spconv library (for cpu) is `not very stable` because it is found that the inference from the spconv module gives
   different outputs for the same inputs in the same runtime
 
 
