@@ -85,7 +85,7 @@ class TestQuantStatsVisualization:
         sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=quant_scheme, config_file=config_file)
         sim.compute_encodings(evaluate, dummy_input)
         with tempfile.TemporaryDirectory() as tmp_dir:
-            visualize_stats(sim, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.html"))
+            visualize_stats(sim, dummy_input, save_path=os.path.join(tmp_dir, "test_visualize_stats.html"))
             assert os.path.isfile(os.path.join(tmp_dir, "test_visualize_stats.html"))
 
     @pytest.mark.parametrize("quant_scheme", [QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced])
@@ -98,7 +98,7 @@ class TestQuantStatsVisualization:
         sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=quant_scheme, config_file=config_file)
         sim.compute_encodings(evaluate, dummy_input)
         with tempfile.TemporaryDirectory() as tmp_dir:
-            visualize_advanced_stats(sim, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.html"))
+            visualize_advanced_stats(sim, dummy_input, save_path=os.path.join(tmp_dir, "test_visualize_stats.html"))
             assert os.path.isfile(os.path.join(tmp_dir, "test_visualize_stats.html"))
 
     @pytest.mark.parametrize("quant_scheme", [QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced])
@@ -111,7 +111,7 @@ class TestQuantStatsVisualization:
         sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=quant_scheme)
         with tempfile.TemporaryDirectory() as tmp_dir:
             with pytest.raises(RuntimeError):
-                function(sim, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.html"))
+                function(sim, dummy_input, save_path=os.path.join(tmp_dir, "test_visualize_stats.html"))
 
     @pytest.mark.parametrize("function", [visualize_stats, visualize_advanced_stats])
     def test_not_quantsim_object_error(self, function):
@@ -121,7 +121,7 @@ class TestQuantStatsVisualization:
         model = TinyModel().eval()
         with tempfile.TemporaryDirectory() as tmp_dir:
             with pytest.raises(TypeError):
-                function(model, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.html"))
+                function(model, dummy_input, save_path=os.path.join(tmp_dir, "test_visualize_stats.html"))
 
     @pytest.mark.parametrize("function", [visualize_stats, visualize_advanced_stats])
     def test_not_a_directory_error(self, function):
@@ -134,7 +134,7 @@ class TestQuantStatsVisualization:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp = tmp_dir
         with pytest.raises(NotADirectoryError, match=f"'{tmp}' is not a directory."):
-            function(sim, dummy_input, os.path.join(tmp, "test_visualize_stats.html"))
+            function(sim, dummy_input, save_path=os.path.join(tmp, "test_visualize_stats.html"))
 
     @pytest.mark.parametrize("function", [visualize_stats, visualize_advanced_stats])
     def test_no_html_extension_error(self, function):
@@ -146,7 +146,7 @@ class TestQuantStatsVisualization:
         sim.compute_encodings(evaluate, dummy_input)
         with tempfile.TemporaryDirectory() as tmp_dir:
             with pytest.raises(ValueError, match="'save_path' must end with '.html'."):
-                function(sim, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.jpg"))
+                function(sim, dummy_input, save_path=os.path.join(tmp_dir, "test_visualize_stats.jpg"))
 
     @pytest.mark.parametrize("quant_scheme", [QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced])
     @pytest.mark.parametrize("function", [visualize_stats, visualize_advanced_stats])
@@ -157,5 +157,5 @@ class TestQuantStatsVisualization:
         sim = QuantizationSimModel(model, dummy_input=dummy_input, quant_scheme=quant_scheme)
         sim.compute_encodings(evaluate_2, dummy_input)
         with tempfile.TemporaryDirectory() as tmp_dir:
-            function(sim, dummy_input, os.path.join(tmp_dir, "test_visualize_stats.html"))
+            function(sim, dummy_input, save_path=os.path.join(tmp_dir, "test_visualize_stats.html"))
             assert os.path.isfile(os.path.join(tmp_dir, "test_visualize_stats.html"))
