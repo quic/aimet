@@ -1,7 +1,7 @@
 .. # =============================================================================
    #  @@-COPYRIGHT-START-@@
    #
-   #  Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+   #  Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
    #
    #  Redistribution and use in source and binary forms, with or without
    #  modification, are permitted provided that the following conditions are met:
@@ -79,39 +79,19 @@ Install GPU packages
     #. ONNX GPU variant: `CUDA Toolkit 11.7.1 <https://developer.nvidia.com/cuda-11-7-1-download-archive>`_
 #. The instructions in the sub-sections below correspond to our tested versions above. Visit this page https://developer.nvidia.com/cuda-toolkit-archive to obtain the correct version of the CUDA toolkit for your environment.
 
-Install GPU packages for PyTorch 2.1 or PyTorch 1.13 or ONNX
+Install GPU packages for PyTorch 2.1 or PyTorch 1.13 or ONNX or TensorFlow
 ============================================================
 
 **NOTE:**
 
-#. Do this section ONLY for the PyTorch 2.1 or PyTorch 1.13 or ONNX variant.
-#. Visit this page https://developer.nvidia.com/cuda-12-1-0-download-archive / https://developer.nvidia.com/cuda-11-7-1-download-archive to obtain the exact and up-to-date installation instructions for your environment.
+#. Do this section ONLY for the PyTorch 2.1 or PyTorch 1.13 or ONNX or TensorFlow variant.
+#. Visit this page https://developer.nvidia.com/cuda-12-1-0-download-archive / https://developer.nvidia.com/cuda-11-8-0-download-archive / https://developer.nvidia.com/cuda-11-7-1-download-archive to obtain the exact and up-to-date installation instructions for your environment.
 
 .. code-block:: bash
 
     apt-get update && apt-get install -y gnupg2
     wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.0-1_all.deb
     dpkg -i cuda-keyring_1.0-1_all.deb
-    apt-get update
-
-Install GPU packages for TensorFlow
-=============================================
-
-**NOTE:**
-
-#. Do this section ONLY for the PyTorch 1.13 or ONNX GPU variants.
-#. Visit this page https://developer.nvidia.com/cuda-11-8-0-download-archive to obtain the exact and up-to-date installation instructions for your environment.
-
-.. code-block:: bash
-
-    apt-get update && apt-get install -y gnupg2
-    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin
-    mv cuda-ubuntu2204.pin /etc/apt/preferences.d/cuda-repository-pin-600
-    wget https://developer.download.nvidia.com/compute/cuda/11.8.0/local_installers/cuda-repo-ubuntu2204-11-8-local_11.8.0-520.61.05-1_amd64.deb
-    apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub
-    dpkg -i cuda-repo-ubuntu2204-11-8-local_11.8.0-520.61.05-1_amd64.deb
-    cp /var/cuda-repo-ubuntu2204-11-8-local/cuda-*-keyring.gpg /usr/share/keyrings/
-    echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64 /" > /etc/apt/sources.list.d/cuda.list
     apt-get update
 
 Install AIMET packages
