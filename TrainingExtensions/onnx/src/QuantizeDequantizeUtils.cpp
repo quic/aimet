@@ -152,3 +152,69 @@ BroadcastShapeInfo::BroadcastShapeInfo(const std::vector<int64_t>& inputShape, c
     if (encodingStrides.size() != numDims)
         throw std::runtime_error("Encoding stride vector length does not match expected number of dimensions");
 }
+
+
+bool BroadcastShapeInfo::hasContiguousBlocks() const
+{
+    bool isPreviousDimBroadcast = false;
+    for (int idx = 0; idx < numDims; idx++)
+    {
+        // If we have a broadcast dimension followed by a non-broadcast dimension, blocks are discontiguous
+        if (isPreviousDimBroadcast and tensorShape[idx] == encodingShape[idx])
+        {
+            return false;
+        }
+        isPreviousDimBroadcast = tensorShape[idx] != encodingShape[idx];
+    }
+    return true;
+}
+
+
+template <typename T>
+void copyToContiguousBlockLayout(const T* inTensor, T* outTensor, const BroadcastShapeInfo& shapeInfo, bool useCuda)
+{
+    auto encodingStrides = shapeInfo.encodingStrides;
+    auto inputStrides    = shapeInfo.tensorStrides;
+    int64_t numDims      = inputStrides.size();
+    int64_t numel        = shapeInfo.numElements;
+
+    std::vector<int64_t> broadcastDims, nonBroadcastDims;
+
+    // Determine the dim ordering such that all indexes in a single quantization block are contiguous
+    for (int64_t i = 0; i < shapeInfo.numDims; i++)
+    {
+        if (shapeInfo.encodingStrides[i] != 0)
+        {
+            nonBroadcastDims.push_back(i);
+        }
+        else
+        {
+            broadcastDims.push_back(i);
+        }
+    }
+    std::vector<int64_t> dimOrder = nonBroadcastDims;
+    dimOrder.insert(dimOrder.end(), broadcastDims.begin(), broadcastDims.end());
+
+    // Determine what the strides of the output tensor will be in the new dimension ordering
+    std::vector<int64_t> outputStrides(numDims);
+    outputStrides[dimOrder[numDims - 1]] = 1;
+    for (int64_t i = numDims - 2; i >= 0; --i)
+    {
+        outputStrides[dimOrder[i]] = outputStrides[dimOrder[i + 1]] * shapeInfo.tensorShape[dimOrder[i + 1]];
+    }
+
+    if (useCuda)
+    {
+#ifdef ONNX_CUDA
+        permuteTensorGPU(inTensor, outTensor, numel, numDims, shapeInfo.tensorStrides.data(), outputStrides.data());
+#else
+        throw std::runtime_error("Not compiled for GPU mode.");
+#endif
+    }
+    else
+    {
+        permuteTensorCPU(inTensor, outTensor, numel, numDims, shapeInfo.tensorStrides.data(), outputStrides.data());
+    }
+}
+
+template void copyToContiguousBlockLayout(const float* inTensor, float* outTensor, const BroadcastShapeInfo& shapeInfo, bool useCuda);
