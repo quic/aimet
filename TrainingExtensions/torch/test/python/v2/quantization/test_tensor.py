@@ -43,7 +43,7 @@ from torch import Tensor
 from torch import randn, arange
 
 from aimet_torch.v2.quantization.affine import quantize, quantize_dequantize
-from aimet_torch.v2.quantization.tensor import EncodingError, QuantizedTensor, DequantizedTensor
+from aimet_torch.v2.quantization.tensor import EncodingError, QuantizedTensor, DequantizedTensor, QuantizedTensorBase
 from aimet_torch.v2.quantization.affine import AffineEncoding
 
 
@@ -661,3 +661,29 @@ class TestQuantizedTensor:
 
         with pytest.raises(EncodingError):
             x.quantized_repr()
+
+    @pytest.mark.parametrize('qtensor_cls', [QuantizedTensor, DequantizedTensor])
+    @pytest.mark.parametrize('callback', [
+        lambda t : torch.randn(2, 128, 1).expand_as(t),
+        lambda t : torch.randn(2, 128, 1).reshape_as(t),
+        lambda t : torch.randn(2, 128, 1).resize_as(t),
+        lambda t : torch.randn(2, 128, 1).view_as(t),
+    ])
+    def test_use_qtensor_arg_for_passthrough_op(self, qtensor_cls, callback, scale, offset, bitwidth):
+        shape = (2, 128, 1)
+        data = torch.empty(shape)
+        qtensor = data.clone().as_subclass(qtensor_cls)
+        qtensor.encoding = AffineEncoding(scale, offset, bitwidth)
+        """
+        Given: Per-tensor quantized tensor object
+        When: Call a 'math invariant' tensor operation on the torch tensor,
+              using a quantized tensor as an argument 
+        Then: 1) Output is a torch tensor
+              2) Output does not have encoding attribute
+        """
+        outputs = callback(qtensor)
+        if not isinstance(outputs, tuple):
+            outputs = outputs,
+        for output in outputs:
+            assert not isinstance(output, QuantizedTensorBase)
+            assert not hasattr(output, 'encoding')
