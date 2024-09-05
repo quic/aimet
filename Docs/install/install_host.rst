@@ -1,7 +1,7 @@
 .. # =============================================================================
    #  @@-COPYRIGHT-START-@@
    #
-   #  Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+   #  Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
    #
    #  Redistribution and use in source and binary forms, with or without
    #  modification, are permitted provided that the following conditions are met:
@@ -84,7 +84,7 @@ Install GPU packages for PyTorch 2.1 or PyTorch 1.13 or ONNX or TensorFlow
 
 **NOTE:**
 
-#. Visit this page https://developer.nvidia.com/cuda-12-1-0-download-archive / https://developer.nvidia.com/cuda-11-8-0-download-archive / https://developer.nvidia.com/cuda-11-7-1-download-archive to obtain the exact and up-to-date installation instructions for your environment.
+#. Visit this page https://developer.nvidia.com/cuda-12-1-0-download-archive or https://developer.nvidia.com/cuda-11-8-0-download-archive or https://developer.nvidia.com/cuda-11-7-1-download-archive to obtain the exact and up-to-date installation instructions for your environment.
 #. Please do not execute the final command "sudo apt-get install cuda" provided in aforementioned NVIDIA documentation links.
 
 .. code-block:: bash
