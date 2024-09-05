@@ -2277,6 +2277,7 @@ def resize_op_model():
     onnx.save(model, 'resize_model.onnx')
     return model
 
+
 def add_matmul_model():
     # Define the fixed shape input tensor
     input_tensor = helper.make_tensor_value_info('input', onnx.TensorProto.FLOAT, [3, 3])
@@ -2328,3 +2329,36 @@ def add_matmul_model():
     # Create the model
     model_def = helper.make_model(graph_def, producer_name='add_matmul')
     return model_def
+
+
+def model_with_initializers_as_activations():
+    model = helper.make_model(
+        graph=helper.make_graph(
+            name='IntializersAsActivationsModel',
+            inputs=[helper.make_tensor_value_info('model_input', TensorProto.FLOAT, shape=[1, 3, 8, 8])],
+            outputs=[helper.make_tensor_value_info('model_output', TensorProto.FLOAT, shape=[1, 3, 8, 8])],
+            initializer=[
+                numpy_helper.from_array(np.random.randn(1,).astype('float32'), name='mul_input2'),
+                numpy_helper.from_array(np.random.randn(1,).astype('float32'), name='add_input2')
+            ],
+            value_info=[
+                helper.make_tensor_value_info('mul_output', TensorProto.FLOAT, shape=[1, 3, 8, 8]),
+            ],
+            nodes=[
+                helper.make_node(
+                    'Mul',
+                    inputs=['model_input', 'mul_input2'],
+                    outputs=['mul_output'],
+                    name='mul_0'
+                ),
+                helper.make_node(
+                    'Add',
+                    inputs=['mul_output', 'add_input2'],
+                    outputs=['model_output'],
+                    name='add_0'
+                )
+            ]
+        )
+    )
+    onnx.checker.check_model(model, True)
+    return model

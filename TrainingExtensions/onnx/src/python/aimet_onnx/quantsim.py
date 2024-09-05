@@ -262,7 +262,7 @@ class QuantizationSimModel:
             if name not in self.activation_names and name not in self.param_names and self._is_tensor_quantizable(name):
                 self.activation_names.append(name)
 
-        # Capture input and output activations of each node
+        # Capture intermediate activations and model outputs
         for node in self.model.nodes():
             for name in node.input:
                 if name not in self.activation_names and name not in self.param_names and self._is_tensor_quantizable(name):
@@ -294,7 +294,7 @@ class QuantizationSimModel:
                 return False
 
         # Check if the tensor is param to certain ops (eg: Resize)
-        consumer_nodes = self.input_name_to_nodes.get(name, None)
+        consumer_nodes = self.input_name_to_nodes.get(name)
         if consumer_nodes:
             for consumer_node in consumer_nodes:
                 if consumer_node.op_type in op_params_to_ignore and \
@@ -302,7 +302,7 @@ class QuantizationSimModel:
                     return False
 
         # Check if the tensor is output of certain ops
-        producer_node = self.output_name_to_node.get(name, None)
+        producer_node = self.output_name_to_node.get(name)
         if producer_node and producer_node.op_type in op_outputs_to_ignore:
             return False
 
