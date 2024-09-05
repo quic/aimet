@@ -63,6 +63,7 @@ from aimet_torch.quantsim_config.builder import LazyQuantizeWrapper
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 MAP_PYTORCH_PARAM_NAME_TO_QUANTSIM_NAME = {
     "bias": "bias",
+    "sp_conv_3d.bias": "bias",
     "weight": "weight"
 }
 
