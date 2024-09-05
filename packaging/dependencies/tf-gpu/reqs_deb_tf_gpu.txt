@@ -1,3 +1,5 @@
+cuda-cudart-dev-11-8
+cuda-cudart-11-8
 libcublas-11-8
 libcufft-11-8
 libcurand-11-8
