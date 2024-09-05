@@ -80,12 +80,12 @@ Install GPU packages
 #. The instructions in the sub-sections below correspond to our tested versions above. Visit this page https://developer.nvidia.com/cuda-toolkit-archive to obtain the correct version of the CUDA toolkit for your environment.
 
 Install GPU packages for PyTorch 2.1 or PyTorch 1.13 or ONNX or TensorFlow
-============================================================
+==========================================================================
 
 **NOTE:**
 
-#. Do this section ONLY for the PyTorch 2.1 or PyTorch 1.13 or ONNX or TensorFlow variant.
 #. Visit this page https://developer.nvidia.com/cuda-12-1-0-download-archive / https://developer.nvidia.com/cuda-11-8-0-download-archive / https://developer.nvidia.com/cuda-11-7-1-download-archive to obtain the exact and up-to-date installation instructions for your environment.
+#. Please do not execute the final command "sudo apt-get install cuda" provided in aforementioned NVIDIA documentation links.
 
 .. code-block:: bash
 
