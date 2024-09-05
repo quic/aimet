@@ -54,16 +54,14 @@ from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.encoding_analyzer import _MinMaxObserver, _HistogramObserver
 
 
-PERCENTILES = [1, 25, 50, 75, 99]
-
-
-def _visualize(sim: QuantizationSimModel, dummy_input, mode: str, save_path: str = "./quant_stats_visualization.html") -> None:
+def _visualize(sim: QuantizationSimModel, dummy_input, mode: str, additional_percentiles: tuple = None, save_path: str = "./quant_stats_visualization.html") -> None:
     """
     Helper function for the visualization APIs.
 
     :param sim: Calibrated QuantSim Object.
     :param dummy_input: Dummy Input.
     :param mode: Whether to plot basic or advanced stats.
+    :param additional_percentiles: Percentiles other than those related to the boxplot (25, 50, 75) to be shown.
     :param save_path: Path for saving the visualization. Format is 'path_to_dir/file_name.html'. Default is './quant_stats_visualization.html'.
     """
 
@@ -75,20 +73,20 @@ def _visualize(sim: QuantizationSimModel, dummy_input, mode: str, save_path: str
     _check_path(save_path)
 
     # Topologically sort the quantized modules into an ordered list for easier indexing in the plots
-    ordered_list = (get_ordered_list_of_modules(sim.model, dummy_input))
+    ordered_list = get_ordered_list_of_modules(sim.model, dummy_input)
     stats_list = []
 
     if mode == "basic":
         percentile_list = []
     elif mode == "advanced":
-        percentile_list = _add_key_percentiles_to_list(PERCENTILES)
+        percentile_list = _add_key_percentiles(additional_percentiles)
         percentile_list = sorted(percentile_list)
     else:
         raise ValueError(f"Expected mode to be 'basic' or 'advanced', got '{mode}'.")
 
     # Collect stats from observers
-    for module in ordered_list:
-        module_stats = _get_observer_stats(module, percentile_list=percentile_list)
+    for i in ordered_list:
+        module_stats = _get_observer_stats(i, percentile_list=percentile_list)
         if module_stats is not None:
             stats_list.append(module_stats)
 
@@ -100,11 +98,12 @@ def _visualize(sim: QuantizationSimModel, dummy_input, mode: str, save_path: str
     stats_dict = dict()
     keys_list = ["name", 0, 100] + percentile_list
     stats_dict["idx"] = list(range(len(stats_list)))
-    for key in keys_list:
-        stats_dict[key] = [None] * len(stats_list)
+    for i in keys_list:
+        stats_dict[i] = [None] * len(stats_list)
     for idx, stats in enumerate(stats_list):
-        for key in keys_list:
-            stats_dict[key][idx] = stats[key]
+        for i in keys_list:
+            stats_dict[i][idx] = stats[i]
+
     visualizer = QuantStatsVisualizer(stats_dict)
 
     # Save an interactive bokeh plot as a standalone html
@@ -141,10 +140,10 @@ def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = "./
     :param save_path: Path for saving the visualization. Default is "./quant_stats_visualization.html"
     """
 
-    _visualize(sim, dummy_input, mode="basic", save_path=save_path)
+    _visualize(sim, dummy_input, mode="basic", additional_percentiles=None, save_path=save_path)
 
 
-def visualize_advanced_stats(sim: QuantizationSimModel, dummy_input, save_path: str = "./quant_advanced_stats_visualization.html") -> None:
+def visualize_advanced_stats(sim: QuantizationSimModel, dummy_input, additional_percentiles: tuple = (1, 99), save_path: str = "./quant_advanced_stats_visualization.html") -> None:
     """Produces an interactive html to view the advanced stats collected by each quantizer during calibration
 
     .. note::
@@ -174,10 +173,11 @@ def visualize_advanced_stats(sim: QuantizationSimModel, dummy_input, save_path: 
 
     :param sim: Calibrated QuantizationSimModel
     :param dummy_input: Sample input used to trace the model
+    :param additional_percentiles: Percentiles other than those related to the boxplot (25, 50, 75) to be shown.
     :param save_path: Path for saving the visualization. Default is "./quant_advanced_stats_visualization.html"
     """
 
-    _visualize(sim, dummy_input, mode="advanced", save_path=save_path)
+    _visualize(sim, dummy_input, mode="advanced", additional_percentiles=additional_percentiles, save_path=save_path)
 
 
 def _check_path(path: str):
@@ -237,15 +237,11 @@ def _get_observer_stats(module, percentile_list):
     return None
 
 
-def _add_key_percentiles_to_list(percentiles):
+def _add_key_percentiles(percentiles: tuple):
     """ Add percentiles required for boxplot if not already present """
-    percentile_list = percentiles[:]
+    percentile_list = list(percentiles)
     for p in [25, 50, 75]:
-        flag = True
-        for i in percentile_list:
-            if i == p:
-                flag = False
-        if flag:
+        if p not in percentile_list:
             percentile_list.append(p)
     return percentile_list
 
