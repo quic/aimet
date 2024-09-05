@@ -498,7 +498,7 @@ class CustomSparseConv3DLayer(torch.nn.Module):
                                             batch_size=batch_size)
         saved_bias_zero = self.sp_conv_3d.bias
         if not self.bias_available:
-             self.sp_conv_3d.bias = None
+            self.sp_conv_3d.bias = None
         sp_conv_outs = self.sp_conv_3d(sp_tensor)
         dense_outs = sp_conv_outs.dense()
         if not self.bias_available:
