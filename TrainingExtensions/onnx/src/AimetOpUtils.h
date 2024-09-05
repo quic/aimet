@@ -241,14 +241,19 @@ void modeSpecificActionBroadcastInt(const T* inTensor, T* outTensor, const Broad
     case DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize:
     {
         T* tempBuffer = static_cast<T*>(allocator->allocateRaw(sizeof(T) * shapeInfo.numElements));
+        const T* buffer = inTensor;
 
-        copyToContiguousBlockLayout(inTensor, tempBuffer, shapeInfo, useCuda);
+        if (not shapeInfo.hasContiguousBlocks())
+        {
+            copyToContiguousBlockLayout(inTensor, tempBuffer, shapeInfo, useCuda);
+            buffer = tempBuffer;
+        }
 
         for (int idx = 0; idx < numEncodings; idx++)
         {
             auto tensorQuantizer = tensorQuantizers[idx];
             tensorQuantizer->resetEncodingStats();
-            tensorQuantizer->updateStats(tempBuffer + idx * blockSize, blockSize, useCuda, allocator);
+            tensorQuantizer->updateStats(buffer + idx * blockSize, blockSize, useCuda, allocator);
             DlQuantization::TfEncoding blockEncoding =
                 tensorQuantizer->computeEncoding(encodings[idx]->bw, useSymmetricEncoding);
             encodings[idx]->min    = blockEncoding.min;
@@ -267,11 +272,17 @@ void modeSpecificActionBroadcastInt(const T* inTensor, T* outTensor, const Broad
     case DlQuantization::TensorQuantizerOpMode::updateStats:
     {
         T* tempBuffer = static_cast<T*>(allocator->allocateRaw(sizeof(T) * shapeInfo.numElements));
-        copyToContiguousBlockLayout(inTensor, tempBuffer, shapeInfo, useCuda);
+        const T* buffer = inTensor;
+
+        if (not shapeInfo.hasContiguousBlocks())
+        {
+            copyToContiguousBlockLayout(inTensor, tempBuffer, shapeInfo, useCuda);
+            buffer = tempBuffer;
+        }
 
         for (int idx = 0; idx < numEncodings; idx++)
         {
-            tensorQuantizers[idx]->updateStats(tempBuffer + idx * blockSize, blockSize, useCuda, allocator);
+            tensorQuantizers[idx]->updateStats(buffer + idx * blockSize, blockSize, useCuda, allocator);
         }
         allocator->deleteRaw(tempBuffer);
         // Continue to passThrough

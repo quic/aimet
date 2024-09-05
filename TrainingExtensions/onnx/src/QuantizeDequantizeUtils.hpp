@@ -168,6 +168,21 @@ struct BroadcastShapeInfo
 {
     BroadcastShapeInfo(const std::vector<int64_t>& inputShape, int channelAxis, int blockAxis, int blockSize);
 
+    bool hasContiguousBlocks() const
+    {
+        bool isPreviousDimBroadcast = false;
+        for (int idx = 0; idx < numDims; idx++)
+        {
+            // If we have a broadcast dimension followed by a non-broadcast dimension, blocks are discontiguous
+            if (isPreviousDimBroadcast and tensorShape[idx] == encodingShape[idx])
+            {
+                return false;
+            }
+            isPreviousDimBroadcast = tensorShape[idx] != encodingShape[idx];
+        }
+        return true;
+    }
+
     std::vector<int64_t> tensorShape;
     std::vector<int64_t> encodingShape;
     std::vector<int64_t> tensorStrides;

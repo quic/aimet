@@ -333,6 +333,8 @@ TEST(TestOnnxTensorOps, TestBroadcastShapeInfo) {
         EXPECT_EQ(expectedTensorStrides[i], tensorStrides[i]);
     }
 
+    EXPECT_TRUE(shapeInfo.hasContiguousBlocks());
+
 
 }
 
@@ -367,6 +369,8 @@ TEST(TestOnnxTensorOps, TestBroadcastShapeInfo2) {
     {
         EXPECT_EQ(expectedTensorStrides[i], tensorStrides[i]);
     }
+
+    EXPECT_FALSE(shapeInfo.hasContiguousBlocks());
 
 
 }
@@ -405,6 +409,8 @@ TEST(TestOnnxTensorOps, TestBroadcastShapeInfo3) {
     {
         EXPECT_EQ(expectedTensorStrides[i], tensorStrides[i]);
     }
+
+    EXPECT_FALSE(shapeInfo.hasContiguousBlocks());
 
 }
 
