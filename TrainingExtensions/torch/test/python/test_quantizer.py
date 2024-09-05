@@ -1912,10 +1912,11 @@ class TestQuantizationSimStaticGrad:
                 delta = sim.model.conv.param_quantizers['weight'].encoding.delta
                 assert torch.allclose(conv_weight, model.conv.weight.data, atol=delta)
 
+                default_quant_result = torch.round(conv_weight / delta)
                 conv_weight = conv_weight.to(rounding_dtype)
                 delta = torch.tensor(delta, dtype=rounding_dtype)
-                assert torch.equal(torch.round(conv_weight / delta),
-                                   torch.trunc(conv_weight / delta + torch.sign(conv_weight) * 0.5))
+                assert torch.equal(default_quant_result,
+                                   torch.trunc(conv_weight / delta + torch.sign(conv_weight) * 0.5).to(torch.float32))
 
 
     def test_export_recurrent_model(self):

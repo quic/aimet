@@ -481,10 +481,11 @@ class TestQuantsimOnnxExport:
                 delta = sim.model.conv.param_quantizers['weight'].get_scale()
                 assert torch.allclose(conv_weight, model.conv.weight.data, atol=delta.item())
 
+                default_quant_result = torch.round(conv_weight / delta)
                 conv_weight = conv_weight.to(rounding_dtype)
                 delta = delta.to(rounding_dtype)
-                assert torch.equal(torch.round(conv_weight / delta),
-                                   torch.trunc(conv_weight / delta + torch.sign(conv_weight) * 0.5))
+                assert torch.equal(default_quant_result,
+                                   torch.trunc(conv_weight / delta + torch.sign(conv_weight) * 0.5).to(torch.float32))
 
 
 def _assert_same_structure(v1_saved_encoding, v2_saved_encoding):
