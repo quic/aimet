@@ -202,10 +202,10 @@ RUN python3 -m pip --no-cache-dir install \
         tensorboard==2.4.0 \
         tensorboardX==2.4 \
         timm==0.4.12 \
-        torch -f https://download.pytorch.org/whl/cu118 \
-        torchaudio -f https://download.pytorch.org/whl/cu118 \
+        torch -f https://download.pytorch.org/whl/cu118/torch \
+        torchaudio -f https://download.pytorch.org/whl/cu118/torchaudio \
         torchtext \
-        torchvision -f https://download.pytorch.org/whl/cu118 \
+        torchvision -f https://download.pytorch.org/whl/cu118/torchvision \
         tqdm \
         transformers==4.27.4 \
         wget && \

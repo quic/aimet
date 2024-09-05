@@ -1,4 +1,4 @@
 cumm-cu118
 spconv-cu118
-torch -f https://download.pytorch.org/whl/cu118
-torchvision -f https://download.pytorch.org/whl/cu118
+torch -f https://download.pytorch.org/whl/cu118/torch
+torchvision -f https://download.pytorch.org/whl/cu118/torchvision
