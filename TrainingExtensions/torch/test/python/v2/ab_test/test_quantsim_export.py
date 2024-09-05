@@ -41,13 +41,14 @@ import torch.nn
 import copy
 import os
 import json
+import onnx
 from packaging import version
 
 from torchvision.models import resnet18
 
 import aimet_torch.v2.nn as aimet_nn
 from aimet_torch.v2.nn import QuantizationMixin
-from aimet_torch.v2.quantization.affine import QuantizeDequantize
+from aimet_torch.v2.quantization.affine import Quantize, QuantizeDequantize
 from aimet_torch.v2.quantization.encoding_analyzer import MinMaxEncodingAnalyzer
 from aimet_torch.nn.modules.custom import Add
 from aimet_torch import onnx_utils
@@ -61,6 +62,7 @@ from ..models_.models_to_test import (
     ModelWithTwoInputs,
     ModelWith5Output,
     SoftMaxAvgPoolModel,
+    BasicConv2d,
 )
 
 
@@ -431,6 +433,59 @@ class TestQuantsimOnnxExport:
         scale = v2_logits.encoding.scale.item()
         assert torch.allclose(v1_logits, v2_logits, atol=scale * 3) # Allow off-by-3 error
 
+    @pytest.mark.parametrize('quantizer_cls', [QuantizeDequantize, Quantize])
+    @pytest.mark.parametrize('rounding_dtype', [torch.float32, torch.float64])
+    def test_exported_weight(self, quantizer_cls, rounding_dtype):
+        """
+        Test to check if the exported weight remains unchanged after quantization,
+        regardless of the rounding method used.
+        """
+        model = BasicConv2d(kernel_size=3)
+        dummy_input = torch.randn(2, 64, 8, 8)
+        param_bitwidth = 8
+
+        # Set model weight to odd numbers so that quantized weights fall between rounding border
+        with torch.no_grad():
+            model.conv.weight.data = torch.randint(-127, 127, model.conv.weight.shape, dtype=torch.float32) * 2 + 1
+
+        sim = QuantizationSimModel(model, dummy_input, default_param_bw=param_bitwidth)
+        
+        # Replace param quantizer with param quantizer of parametrized type
+        param_q = sim.model.conv.param_quantizers['weight']
+        sim.model.conv.param_quantizers['weight'] = quantizer_cls(param_q.shape, param_q.qmin, param_q.qmax, param_q.symmetric)
+        sim.compute_encodings(lambda model, _: model(dummy_input), None)
+
+        # Adjust delta of the weight quantizer so that quantized weights fall between rounding border
+        sim.model.conv.param_quantizers['weight'].set_range(torch.tensor(-255.0), torch.tensor(255.0))
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            conv_weights = []
+
+            # Gather weights from exported .pth file
+            sim.export(tmp_dir, 'model_for_weight_export', dummy_input)
+            exported_model = torch.load(os.path.join(tmp_dir, 'model_for_weight_export.pth'))
+            conv_weights.append(exported_model.conv.weight.detach())
+
+            # Gather weights from exported .onnx file
+            onnx_model = onnx.load(os.path.join(tmp_dir, 'model_for_weight_export.onnx'))
+            for tensor in onnx_model.graph.initializer:
+                if tensor.name == 'conv.weight':
+                    conv_weights.append(torch.tensor(onnx.numpy_helper.to_array(tensor)))
+                    break
+            else:
+                assert False, "Cannot find conv weight inside ONNX model"
+            
+            # Check exported weight remains unchanged after quantization,
+            # regardless of the rounding method used.
+            for conv_weight in conv_weights:
+                delta = sim.model.conv.param_quantizers['weight'].get_scale()
+                assert torch.allclose(conv_weight, model.conv.weight.data, atol=delta.item())
+
+                default_quant_result = torch.round(conv_weight / delta)
+                conv_weight = conv_weight.to(rounding_dtype)
+                delta = delta.to(rounding_dtype)
+                assert torch.equal(default_quant_result,
+                                   torch.trunc(conv_weight / delta + torch.sign(conv_weight) * 0.5).to(torch.float32))
 
 
 def _assert_same_structure(v1_saved_encoding, v2_saved_encoding):

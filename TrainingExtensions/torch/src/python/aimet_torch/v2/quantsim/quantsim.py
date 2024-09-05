@@ -45,6 +45,7 @@ import torch
 from aimet_torch.quantsim import QuantizationSimModel as V1QuantizationSimModel, logger
 import aimet_torch.quantsim as quantsim_v1
 from aimet_torch.v2 import nn as aimet_nn
+from aimet_torch.v2.nn import QuantizationMixin
 from aimet_torch.v2.nn import BaseQuantizationMixin
 from aimet_torch.quantsim_config.builder import LazyQuantizeWrapper
 from aimet_torch.v2.quantization.base import QuantizerBase
@@ -241,6 +242,23 @@ class QuantizationSimModel(V1QuantizationSimModel):
     @staticmethod
     def _replace_quantization_wrapper_with_native_torch_quantization_nodes(quant_sim_model, device: torch.device):
         raise NotImplementedError()
+
+    @classmethod
+    @torch.no_grad()
+    def _apply_qdq_to_model_parameters(cls, model: torch.nn.Module):
+        """
+        Applies quant-dequant to the parameters of a PyTorch model
+        to avoid rounding error during weight quantization.
+
+        :param model: The PyTorch model whose parameters will be quant-dequantized.
+        """
+        for module in model.modules():
+            if isinstance(module, BaseQuantizationMixin):
+                # pylint: disable=protected-access
+                module._patch_quantized_parameters()
+                if isinstance(module, QuantizationMixin):
+                    module._patch_dequantized_parameters()
+                cls._update_parameters_by_attr(module)
 
     @deprecated(f'Use {V1QuantizationSimModel.named_qmodules.__qualname__} instead.')
     def quant_wrappers(self): # pylint: disable=missing-docstring

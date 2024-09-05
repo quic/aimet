@@ -307,14 +307,14 @@ class QuantizationMixin(BaseQuantizationMixin, metaclass=QuantizationMixinMeta):
         with super().compute_encodings(), ctx:
             yield
 
-    @contextlib.contextmanager
     def _patch_dequantized_parameters(self):
-        with contextlib.ExitStack() as stack:
-            for param_name, _ in self.param_quantizers.items():
-                qparam = getattr(self, param_name)
-                ctx = patch_attr(self, param_name, _dequantize_if_applicable(qparam))
-                stack.enter_context(ctx)
-            yield
+        stack = contextlib.ExitStack()
+        for param_name, _ in self.param_quantizers.items():
+            qparam = getattr(self, param_name)
+            ctx = patch_attr(self, param_name, _dequantize_if_applicable(qparam))
+            stack.enter_context(ctx)
+
+        return stack
 
     @classmethod
     def wrap(cls, module_cls: Type[nn.Module]) -> Type[nn.Module]:

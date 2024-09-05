@@ -111,16 +111,16 @@ class BaseQuantizationMixin(abc.ABC):
         """
         return super().forward(*args, **kwargs)
 
-    @contextlib.contextmanager
     def _patch_quantized_parameters(self):
-        with contextlib.ExitStack() as stack:
-            for param_name, param_quantizer in self.param_quantizers.items():
-                if param_quantizer:
-                    orig_param = getattr(self, param_name)
-                    quantized_param = param_quantizer(orig_param)
-                    ctx = patch_attr(self, param_name, quantized_param)
-                    stack.enter_context(ctx)
-            yield
+        stack = contextlib.ExitStack()
+        for param_name, param_quantizer in self.param_quantizers.items():
+            if param_quantizer and param_quantizer.is_initialized():
+                orig_param = getattr(self, param_name)
+                quantized_param = param_quantizer(orig_param)
+                ctx = patch_attr(self, param_name, quantized_param)
+                stack.enter_context(ctx)
+
+        return stack
 
     def _compute_param_encodings(self, overwrite: bool):
         """

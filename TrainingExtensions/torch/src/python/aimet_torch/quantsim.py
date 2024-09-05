@@ -535,7 +535,7 @@ class QuantizationSimModel:
         model_path = os.path.join(path, model_filename)
 
         # Create a version of the model without any quantization ops
-        model_to_export = QuantizationSimModel.get_original_model(self.model)
+        model_to_export = self.get_original_model(self.model, qdq_weights=True)
 
         torch.save(model_to_export, model_path)
 
@@ -1516,17 +1516,55 @@ class QuantizationSimModel:
             if not utils.is_leaf_module(module_ref):
                 cls._remove_quantization_wrappers(module_ref, list_of_modules_to_exclude)
 
-    @staticmethod
-    def get_original_model(model: torch.nn.Module):
+    @classmethod
+    def get_original_model(cls, model: torch.nn.Module, qdq_weights: bool = False):
         """
         This function returns the model with all quantization wrappers removed.
+
+        :param model: The input model with quantization wrappers.
+        :param qdq_weights: Whether to replace weights inside model by qdq weights.
         :return: Model without quantization wrappers.
         """
         original_model = copy.deepcopy(model)
+        if qdq_weights:
+            cls._apply_qdq_to_model_parameters(original_model)
         # pylint: disable=unnecessary-comprehension
         all_modules_in_original_model = [module for module in original_model.modules()]
-        QuantizationSimModel._remove_quantization_wrappers(original_model, all_modules_in_original_model)
+        cls._remove_quantization_wrappers(original_model, all_modules_in_original_model)
         return original_model
+
+    @classmethod
+    @torch.no_grad()
+    def _apply_qdq_to_model_parameters(cls, model: torch.nn.Module):
+        """
+        Applies quant-dequant to the parameters of a PyTorch model
+        to avoid rounding error during weight quantization.
+
+        :param model: The PyTorch model whose parameters will be quant-dequantized.
+        """
+        # pylint: disable=protected-access
+        for module in model.modules():
+            if isinstance(module, (QcQuantizeRecurrent, StaticGridQuantWrapper)):
+                with utils.in_eval_mode(module):
+                    module._quantize_dequantize_params()
+            elif isinstance(module, (LearnedGridQuantWrapper)):
+                with utils.in_eval_mode(module):
+                    module._quantize_params()
+                    cls._update_parameters_by_attr(module._module_to_wrap)
+
+    @staticmethod
+    def _update_parameters_by_attr(module: torch.nn.Module):
+        """
+        Updates the internal parameters of a PyTorch module by its attributes
+        and remove those attributes from module.__dict__ to avoid onnx export error.
+
+        :param module: The PyTorch module whose parameters need to be updated.
+        """
+        # pylint: disable=protected-access
+        for param_name, _ in module.named_parameters():
+            if param_name in module.__dict__ and param_name in module._parameters:
+                module._parameters[param_name] = module.__dict__[param_name]
+                module.__dict__.pop(param_name)
 
     def _get_leaf_module_to_name_map(self):
         """

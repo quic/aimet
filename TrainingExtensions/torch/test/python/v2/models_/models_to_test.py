@@ -412,3 +412,20 @@ class QuantizationModuleWith5Output(QuantizationMixin, ModuleWith5Output):
             quantizer(out) if quantizer else out
             for out, quantizer in zip(outputs, self.output_quantizers)
         )
+
+
+class BasicConv2d(nn.Module):
+    """ A Simple Super Node Model used as building block in Hierarchical Model  """
+
+    def __init__(self, **kwargs):
+        super(BasicConv2d, self).__init__()
+        self.conv = nn.Conv2d(64, 64, bias=False, **kwargs)
+        self.dropout = torch.nn.Dropout(p=0.1)
+        self.bn = nn.BatchNorm2d(64, eps=0.001)
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, *inputs):
+        x = self.conv(inputs[0])
+        x = self.dropout(x)
+        x = self.bn(x)
+        return self.relu(x)
