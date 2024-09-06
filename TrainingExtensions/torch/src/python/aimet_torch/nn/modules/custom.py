@@ -454,6 +454,10 @@ class CustomSparseConv3DLayer(torch.nn.Module):
         self.sp_conv_3d = spconv.SparseConv3d(in_channels=in_channels, out_channels=out_channels,
                                               kernel_size=kernel_size, bias=bias, stride=stride, padding=padding,
                                               dilation=dilation, groups=1, algo=spconv.ConvAlgo.Native) # doesn't support groups as of now
+        self.bias_available = bias
+        if not bias:
+            with torch.no_grad():
+                self.sp_conv_3d.bias = torch.nn.Parameter(torch.zeros(out_channels))
         self.conv_attrs_dict = dict(in_channels=self.sp_conv_3d.in_channels,
                                     out_channels=self.sp_conv_3d.out_channels,
                                     kernel_size=self.sp_conv_3d.kernel_size,
@@ -486,18 +490,19 @@ class CustomSparseConv3DLayer(torch.nn.Module):
             self.conv_attrs_dict['transposed'] = 0
             self.conv_attrs_dict['inverse'] = 0
 
-            bias_data = self.sp_conv_3d.bias
-            if bias_data is None:
-                bias_data = torch.nn.Parameter(torch.zeros(self.sp_conv_3d.out_channels))
-
             self.conv_attrs_dict = dict(sorted(self.conv_attrs_dict.items(), key=lambda x: (x[0], x[1])))
             return CustomSparseConv3d_WithIndicesFeatures.apply(indices, features, self.sp_conv_3d.weight,
-                                                                bias_data, self.conv_attrs_dict)
+                                                                self.sp_conv_3d.bias, self.conv_attrs_dict)
 
         sp_tensor = spconv.SparseConvTensor(features=features, indices=indices, spatial_shape=spatial_shape,
                                             batch_size=batch_size)
+        saved_bias_zero = self.sp_conv_3d.bias
+        if not self.bias_available:
+            self.sp_conv_3d.bias = None
         sp_conv_outs = self.sp_conv_3d(sp_tensor)
         dense_outs = sp_conv_outs.dense()
+        if not self.bias_available:
+            self.sp_conv_3d.bias = saved_bias_zero
         return dense_outs
 
     def forward_with_dense_input(self, dense_inp):
@@ -521,12 +526,8 @@ class CustomSparseConv3DLayer(torch.nn.Module):
             self.conv_attrs_dict['transposed'] = 0
             self.conv_attrs_dict['inverse'] = 0
 
-            bias_data = self.sp_conv_3d.bias
-            if bias_data is None:
-                bias_data = torch.nn.Parameter(torch.zeros(self.sp_conv_3d.out_channels))
             self.conv_attrs_dict = dict(sorted(self.conv_attrs_dict.items(), key=lambda x: (x[0], x[1])))
-            outs = CustomSparseConv3d.apply(dense_inp, self.sp_conv_3d.weight, bias_data, self.conv_attrs_dict)
-            return outs
+            return CustomSparseConv3d.apply(dense_inp, self.sp_conv_3d.weight, self.sp_conv_3d.bias, self.conv_attrs_dict)
 
         # Dense to Sparse Conversion
         dense_inp = dense_inp.permute(0, 2, 3, 4, 1) # N D H W C
@@ -538,8 +539,14 @@ class CustomSparseConv3DLayer(torch.nn.Module):
         batch_size = dense_inp.shape[0]
         sp_tensor = spconv.SparseConvTensor(features=features, indices=indices, spatial_shape=spatial_shape,
                                             batch_size=batch_size)
+
+        saved_bias_zero = self.sp_conv_3d.bias
+        if not self.bias_available:
+            self.sp_conv_3d.bias = None
         sp_conv_outs = self.sp_conv_3d(sp_tensor)
         dense_outs = sp_conv_outs.dense()
+        if not self.bias_available:
+            self.sp_conv_3d.bias = saved_bias_zero
         return dense_outs
 
     def forward(self, *args):
@@ -597,7 +604,7 @@ class SparseTensorWrapper(torch.nn.Module):
         indices = torch.stack(torch.meshgrid(torch.arange(dense_inp.shape[0]), torch.arange(dense_inp.shape[1]),
                                              torch.arange(dense_inp.shape[2]), torch.arange(dense_inp.shape[3]),
                                              indexing='ij'), dim=-1).reshape(-1, 4).int()
-        features = dense_inp.view(-1, dense_inp.shape[4])
+        features = dense_inp.reshape(-1, dense_inp.shape[4])
         spatial_shape = dense_inp.shape[1:-1]
         return spconv.SparseConvTensor(
             features=features,

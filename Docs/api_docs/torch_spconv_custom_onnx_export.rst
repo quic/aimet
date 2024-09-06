@@ -10,10 +10,12 @@ This page gives an idea on how SparseConvolution based models can be used in AIM
 that is used/supported here is `Traveller's SparseConvolution Library`_.
 Please note that,
 
-- Only `SparseConvolution3D` is supported as of now
+- Only `SparseConvolution3D` is supported as of now.
 
-- And, spconv library is `not very stable` because it is found that the inference from the spconv module gives
-  different outputs for the same inputs in the same runtime
+- SpConv library (for `cpu`) is `not very stable` because it is found that the inference from the spconv module gives
+  different outputs for the same inputs in the same runtime.
+
+- If there's `bias` in the SpConv layer, please use `GPU`, as `bias` in SpConv is only supported in GPU.
 
 
 .. _Traveller's SparseConvolution Library: https://github.com/traveller59/spconv
