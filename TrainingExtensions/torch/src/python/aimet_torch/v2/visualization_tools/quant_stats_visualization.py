@@ -54,7 +54,7 @@ from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.encoding_analyzer import _MinMaxObserver, _HistogramObserver
 
 
-def _visualize(sim: QuantizationSimModel, dummy_input, mode: str, additional_percentiles: tuple = None, save_path: str = "./quant_stats_visualization.html") -> None:
+def _visualize(sim: QuantizationSimModel, dummy_input, mode: str, percentile_list: list = None, save_path: str = "./quant_stats_visualization.html") -> None:
     """
     Helper function for the visualization APIs.
 
@@ -69,20 +69,15 @@ def _visualize(sim: QuantizationSimModel, dummy_input, mode: str, additional_per
     if not isinstance(sim, QuantizationSimModel):
         raise TypeError(f"Expected type 'aimet_torch.v2.quantsim.QuantizationSimModel', got '{type(sim)}'.")
 
+    if percentile_list is None:
+        raise ValueError("percentile_list cannot be None. Consider providing an empty percentile_list if needed.")
+
     # Ensure that the save path is valid
     _check_path(save_path)
 
     # Topologically sort the quantized modules into an ordered list for easier indexing in the plots
     ordered_list = get_ordered_list_of_modules(sim.model, dummy_input)
     stats_list = []
-
-    if mode == "basic":
-        percentile_list = []
-    elif mode == "advanced":
-        percentile_list = _add_key_percentiles(additional_percentiles)
-        percentile_list = sorted(percentile_list)
-    else:
-        raise ValueError(f"Expected mode to be 'basic' or 'advanced', got '{mode}'.")
 
     # Collect stats from observers
     for i in ordered_list:
@@ -140,7 +135,8 @@ def visualize_stats(sim: QuantizationSimModel, dummy_input, save_path: str = "./
     :param save_path: Path for saving the visualization. Default is "./quant_stats_visualization.html"
     """
 
-    _visualize(sim, dummy_input, mode="basic", additional_percentiles=None, save_path=save_path)
+    percentile_list = []
+    _visualize(sim, dummy_input, mode="basic", percentile_list=percentile_list, save_path=save_path)
 
 
 def visualize_advanced_stats(sim: QuantizationSimModel, dummy_input, additional_percentiles: tuple = (1, 99), save_path: str = "./quant_advanced_stats_visualization.html") -> None:
@@ -177,7 +173,9 @@ def visualize_advanced_stats(sim: QuantizationSimModel, dummy_input, additional_
     :param save_path: Path for saving the visualization. Default is "./quant_advanced_stats_visualization.html"
     """
 
-    _visualize(sim, dummy_input, mode="advanced", additional_percentiles=additional_percentiles, save_path=save_path)
+    percentile_list = _add_key_percentiles(additional_percentiles)
+    percentile_list = sorted(percentile_list)
+    _visualize(sim, dummy_input, mode="advanced", percentile_list=percentile_list, save_path=save_path)
 
 
 def _check_path(path: str):
