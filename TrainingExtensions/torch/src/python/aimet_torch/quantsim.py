@@ -77,8 +77,6 @@ from aimet_torch.meta.connectedgraph import ConnectedGraph, Op
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.quantsim_config.builder import LazyQuantizeWrapper
 from aimet_torch.experimental.v2.quantsim.export_utils import VALID_ENCODING_VERSIONS, _export_to_1_0_0
-from aimet_torch.v2.quantization.base import QuantizerBase
-from aimet_torch.v2.nn import BaseQuantizationMixin
 
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -209,14 +207,8 @@ unquantizable_modules = (
     QcQuantizeRecurrent,
     ExportableQuantModule,
     LazyQuantizeWrapper,
-    BaseQuantizationMixin,
-    QuantizerBase,
     torch.nn.Identity,
 )
-
-def _is_quantizable_module(module: torch.nn.Module):
-    # pylint: disable=unidiomatic-typecheck
-    return type(module) != torch.nn.Module and not isinstance(module, unquantizable_modules)
 
 
 class QuantizationSimModel:
@@ -1426,13 +1418,18 @@ class QuantizationSimModel:
 
         return quantized_module
 
+    @classmethod
+    def _is_quantizable_module(cls, module: torch.nn.Module):
+        # pylint: disable=unidiomatic-typecheck
+        return type(module) != torch.nn.Module and not isinstance(module, unquantizable_modules)
+
     def _add_quantization_wrappers(self, module, num_inout_tensors, default_data_type: QuantizationDataType):
         """Recursively add quantization wrappers to all appropriate modules starting with module
         """
         for module_name, module_ref in module.named_children():
             logger.debug("nn.Module found : %s", module_ref)
 
-            if _is_quantizable_module(module_ref) and utils.is_leaf_module(module_ref):
+            if self._is_quantizable_module(module_ref) and utils.is_leaf_module(module_ref):
                 # Create a new QcQuantize wrapper module
                 quantized_module = self._create_quantizer_module(module_ref, num_inout_tensors, default_data_type)
                 setattr(module, module_name, quantized_module)

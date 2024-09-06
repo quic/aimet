@@ -245,3 +245,9 @@ class QuantizationSimModel(V1QuantizationSimModel):
     @deprecated(f'Use {V1QuantizationSimModel.named_qmodules.__qualname__} instead.')
     def quant_wrappers(self): # pylint: disable=missing-docstring
         return super().quant_wrappers()
+
+    @classmethod
+    def _is_quantizable_module(cls, module: torch.nn.Module):
+        # pylint: disable=unidiomatic-typecheck
+        return super()._is_quantizable_module(module) and\
+               not isinstance(module, (BaseQuantizationMixin, QuantizerBase))
