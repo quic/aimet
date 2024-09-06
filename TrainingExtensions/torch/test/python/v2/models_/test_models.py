@@ -1319,14 +1319,14 @@ class ModelWithUnusedRNN(torch.nn.Module):
     def forward(self, x):
         return self.identity(x)
 
-class ModelWithUnusedAbstractModule(torch.nn.Module):
+class ModelWithAbstractModule(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        self.identity = torch.nn.Identity()
-        self.unused = torch.nn.Module()
+        self.module = torch.nn.Module()
+        self.module.conv = torch.nn.Conv2d(3, 3, 3)
 
     def forward(self, x):
-        return self.identity(x)
+        return self.module.conv(x)
 
 class ExpandModel(torch.nn.Module):
     def __init__(self):

@@ -77,6 +77,8 @@ from aimet_torch.meta.connectedgraph import ConnectedGraph, Op
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.quantsim_config.builder import LazyQuantizeWrapper
 from aimet_torch.experimental.v2.quantsim.export_utils import VALID_ENCODING_VERSIONS, _export_to_1_0_0
+from aimet_torch.v2.quantization.base import QuantizerBase
+from aimet_torch.v2.nn import BaseQuantizationMixin
 
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -206,8 +208,10 @@ unquantizable_modules = (
     QcQuantizeStandAloneBase,
     QcQuantizeRecurrent,
     ExportableQuantModule,
+    LazyQuantizeWrapper,
+    BaseQuantizationMixin,
+    QuantizerBase,
     torch.nn.Identity,
-    LazyQuantizeWrapper
 )
 
 def _is_quantizable_module(module: torch.nn.Module):
@@ -1428,19 +1432,10 @@ class QuantizationSimModel:
         for module_name, module_ref in module.named_children():
             logger.debug("nn.Module found : %s", module_ref)
 
-            # check if the module already quantized then ignore
-            if not _is_quantizable_module(module_ref):
-                continue
-
-            # check if the module is leaf or not
-            if utils.is_leaf_module(module_ref):
-
+            if _is_quantizable_module(module_ref) and utils.is_leaf_module(module_ref):
                 # Create a new QcQuantize wrapper module
                 quantized_module = self._create_quantizer_module(module_ref, num_inout_tensors, default_data_type)
-
                 setattr(module, module_name, quantized_module)
-
-            # recursively call children modules
             else:
                 self._add_quantization_wrappers(module_ref, num_inout_tensors, default_data_type)
 
