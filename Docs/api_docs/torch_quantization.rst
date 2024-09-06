@@ -107,3 +107,4 @@ API Reference
    ../torch_docs/api/nn.quantization_mixin
    ../torch_docs/api/quantization/affine/index
    ../torch_docs/api/quantization/float/index
+   ../torch_docs/api/visualization_tools
