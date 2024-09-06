@@ -68,9 +68,9 @@ For other aimet variants, install the latest version from the .whl files hosted 
 .. parsed-literal::
 
     # Pytorch 1.13 with CUDA 11.x
-    python3 -m pip install |download_url|\ |version|/aimet_torch-torch_gpu\_\ |version|\ |whl_suffix|
+    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|\ |whl_suffix|
     # Pytorch 1.13 CPU only
-    python3 -m pip install |download_url|\ |version|/aimet_torch-torch_cpu\_\ |version|\ |whl_suffix|
+    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|\ |whl_suffix|
 
 
 **TensorFlow**
@@ -78,9 +78,9 @@ For other aimet variants, install the latest version from the .whl files hosted 
 .. parsed-literal::
 
     # Tensorflow 2.10 GPU with CUDA 11.x
-    python3 -m pip install |download_url|\ |version|/aimet_tensorflow-tf_gpu\_\ |version|\ |whl_suffix|
+    python3 -m pip install |download_url|\ |version|/aimet_tensorflow-\ |version|\ |whl_suffix|
     # Tensorflow 2.10 CPU only
-    python3 -m pip install |download_url|\ |version|/aimet_tensorflow-tf_cpu\_\ |version|\ |whl_suffix|
+    python3 -m pip install |download_url|\ |version|/aimet_tensorflow-\ |version|\ |whl_suffix|
 
 
 **Onnx**
@@ -88,9 +88,9 @@ For other aimet variants, install the latest version from the .whl files hosted 
 .. parsed-literal::
 
     # ONNX 1.14 GPU
-    python3 -m pip install |download_url|\ |version|/aimet_onnx-onnx_gpu\_\ |version|\ |whl_suffix|
+    python3 -m pip install |download_url|\ |version|/aimet_onnx-\ |version|\ |whl_suffix|
     # ONNX 1.14 CPU
-    python3 -m pip install |download_url|\ |version|/aimet_onnx-onnx_cpu\_\ |version|\ |whl_suffix|
+    python3 -m pip install |download_url|\ |version|/aimet_onnx-\ |version|\ |whl_suffix|
 
 For previous AIMET releases, browse packages at https://github.com/quic/aimet/releases. Each release includes multiple python packages of the following format:
 
@@ -101,8 +101,7 @@ For previous AIMET releases, browse packages at https://github.com/quic/aimet/re
     <PACKAGE_PREFIX>-<VARIANT>_<VERSION>\ |whl_suffix|
 
 
-.. |version| replace:: 1.31.0
-.. |whl_suffix| replace:: -cp38-cp38-linux_x86_64.whl
+.. |whl_suffix| replace:: -cp310-cp310-manylinux_2_34_x86_64.whl
 .. |download_url| replace:: \https://github.com/quic/aimet/releases/download/
 
 System Requirements
