@@ -202,12 +202,15 @@ class ExportableQuantModule(Protocol):
 
 # Types of modules which cannot be quantized
 unquantizable_modules = (
+    torch.nn.Identity,
+)
+
+quantized_modules = (
     QcQuantizeWrapper,
     QcQuantizeStandAloneBase,
     QcQuantizeRecurrent,
     ExportableQuantModule,
     LazyQuantizeWrapper,
-    torch.nn.Identity,
 )
 
 
@@ -1421,11 +1424,20 @@ class QuantizationSimModel:
     @classmethod
     def _is_quantizable_module(cls, module: torch.nn.Module):
         # pylint: disable=unidiomatic-typecheck
-        return type(module) != torch.nn.Module and not isinstance(module, unquantizable_modules)
+        return type(module) != torch.nn.Module and\
+               not isinstance(module, unquantizable_modules) and\
+               not cls._is_quantized_module(module)
+
+    @classmethod
+    def _is_quantized_module(cls, module: torch.nn.Module):
+        return isinstance(module, quantized_modules)
 
     def _add_quantization_wrappers(self, module, num_inout_tensors, default_data_type: QuantizationDataType):
         """Recursively add quantization wrappers to all appropriate modules starting with module
         """
+        if self._is_quantized_module(module):
+            return
+
         for module_name, module_ref in module.named_children():
             logger.debug("nn.Module found : %s", module_ref)
 

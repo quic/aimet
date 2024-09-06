@@ -247,7 +247,6 @@ class QuantizationSimModel(V1QuantizationSimModel):
         return super().quant_wrappers()
 
     @classmethod
-    def _is_quantizable_module(cls, module: torch.nn.Module):
-        # pylint: disable=unidiomatic-typecheck
-        return super()._is_quantizable_module(module) and\
-               not isinstance(module, (BaseQuantizationMixin, QuantizerBase))
+    def _is_quantized_module(cls, module: torch.nn.Module):
+        return super()._is_quantized_module(module) or\
+               isinstance(module, (BaseQuantizationMixin, QuantizerBase))
