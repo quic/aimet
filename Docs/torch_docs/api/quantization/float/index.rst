@@ -7,8 +7,9 @@ quantization.float
 .. automodule:: aimet_torch.v2.quantization.float
 
 
-.. autosummary::
-    :nosignatures:
-    
-    FloatQuantizeDequantize <FloatQuantizeDequantize>
-    QuantizeDequantize <FloatQuantizeDequantize>
+Classes
+=======
+
+.. autoclass:: FloatQuantizeDequantize
+
+.. autoclass:: QuantizeDequantize

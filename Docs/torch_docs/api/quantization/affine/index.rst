@@ -12,21 +12,16 @@ quantization.affine
 Classes
 -------
 
-.. autosummary::
-    :toctree: generated
-    :nosignatures:
+.. autoclass:: Quantize
 
-    Quantize
-    QuantizeDequantize
+.. autoclass:: QuantizeDequantize
 
 
 Functions
 ---------
 
-.. autosummary::
-    :toctree: generated
-    :nosignatures:
+.. autofunction:: quantize
 
-    quantize
-    quantize_dequantize
-    dequantize
+.. autofunction:: quantize_dequantize
+
+.. autofunction:: dequantize
