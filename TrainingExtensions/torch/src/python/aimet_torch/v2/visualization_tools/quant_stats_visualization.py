@@ -61,7 +61,7 @@ def _visualize(sim: QuantizationSimModel, dummy_input, mode: str, percentile_lis
     :param sim: Calibrated QuantSim Object.
     :param dummy_input: Dummy Input.
     :param mode: Whether to plot basic or advanced stats.
-    :param additional_percentiles: Percentiles other than those related to the boxplot (25, 50, 75) to be shown.
+    :param percentile_list: Percentiles to be extracted and used.
     :param save_path: Path for saving the visualization. Format is 'path_to_dir/file_name.html'. Default is './quant_stats_visualization.html'.
     """
 
