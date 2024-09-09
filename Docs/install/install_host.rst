@@ -100,73 +100,49 @@ Install AIMET packages
 From PyPI
 =========
 
-Aimet Torch GPU can install from pypi through the following method:
+The default AIMET Torch GPU variant may be installed from PyPI as follows:
+    - Go to https://pypi.org/project/aimet-torch
+    - Browse the Requirements section of each Release to identify the version you wish to install. Following are some tips:
+        - For Pytorch 2.2.2 GPU, use aimet-torch>=1.32.2
+        - For Pytorch 2.1.2 GPU, use aimet-torch==1.32.1.post1
+        - For PyTorch 1.13 GPU, use aimet-torch==1.31.1
 
-Go to https://pypi.org/project/aimet-torch to identify a version you wish to install
-
-    - For PyTorch 1.13 GPU you should use aimet-torch==1.31.1
-    - For Pytorch 2.1.2 GPU you should use aimet-torch >= 1.32.0
+Run the following commands to install the package (prepend with "sudo" and/or package version as needed):
 
 .. code-block:: bash
 
-    sudo apt-get install liblapacke -y
-    pip install aimet-torch
-
+    apt-get install liblapacke -y
+    python3 -m pip install aimet-torch
 
 From Release Package
 ====================
 
-Alternatively, we host .whl packages for each release at https://github.com/quic/aimet/releases. Identify the release tag
-of the package you wish to install, then follow the instructions below to install AIMET from the .whl file.
+We also host python wheel packages for different variants which may be installed as follows:
+    - Go to https://github.com/quic/aimet/releases
+    - Identify the release tag of the package that you wish to install
+    - Identify the .whl file corresponding to the package variant that you wish to install
+    - Follow the instructions below to install AIMET from the .whl file
 
-Set the <variant_string> to ONE of the following depending on your desired variant
-
-#. For the PyTorch 2.1 GPU variant, use "torch_gpu"
-#. For the PyTorch 2.1 CPU variant, use "torch_cpu"
-#. For the PyTorch 1.13 GPU variant, use "torch_gpu_pt113"
-#. For the PyTorch 1.13 CPU variant, use "torch_cpu_pt113"
-#. For the TensorFlow GPU variant, use "tf_gpu"
-#. For the TensorFlow CPU variant, use "tf_cpu"
-#. For the ONNX GPU variant, use "onnx_gpu"
-#. For the ONNX CPU variant, use "onnx_cpu"
+Set the package details as follows:
 
 .. code-block:: bash
 
-    export AIMET_VARIANT=<variant_string>
+    # Set the release tag ex. "1.33.0"
+    export release_tag="<version release tag>"
 
-Replace <release_tag> in the steps below with the appropriate tag:
-
-.. code-block:: bash
-
-    export release_tag=<release_tag>
-
-Set the package download URL as follows:
-
-.. code-block:: bash
-
+    # Construct the download root URL
     export download_url="https://github.com/quic/aimet/releases/download/${release_tag}"
 
-Set the common suffix for the package files as follows:
+    # Set the wheel file name with extension
+    # ex. "aimet_torch_gpu-1.33.0.cu117-cp310-cp310-manylinux_2_34_x86_64.whl"
+    export wheel_file_name="<wheel file name>"
 
-**NOTE:** Set wheel_file_suffix to cp310-cp310-linux_x86_64.whl OR cp38-cp38-linux_x86_64.whl OR cp36-cp36m-linux_x86_64 OR cp37-cp37m-linux_x86_64 OR py3-none-any as appropriate depending on the actual wheel filename(s) on the https://github.com/quic/aimet/releases.
-
-.. code-block:: bash
-
-    export wheel_file_suffix="cp310-cp310-linux_x86_64.whl"
-
-Install the AIMET packages in the order specified below:
-
+Install the selected AIMET package as specified below:
 **NOTE:** Python dependencies will automatically get installed.
 
 .. code-block:: bash
 
-    # Install ONE of the following depending on the variant
-    python3 -m pip install ${download_url}/aimet_torch-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix} -f https://download.pytorch.org/whl/torch_stable.html
-    # OR
-    python3 -m pip install ${download_url}/aimet_tensorflow-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
-    # OR
-    python3 -m pip install ${download_url}/aimet_onnx-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
-
+    python3 -m pip install ${download_url}/${wheel_file_name}
 
 Install common debian packages
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
