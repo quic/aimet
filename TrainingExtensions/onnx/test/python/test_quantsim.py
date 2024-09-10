@@ -943,7 +943,9 @@ class TestQuantSim:
                     }
             },
             "supergroups": [],
-            "model_input": {},
+            "model_input": {
+                "is_input_quantized": "True"
+            },
             "model_output": {}
         }
 
@@ -1107,3 +1109,108 @@ class TestQuantSim:
             assert all(x in [i.name for i in model.graph.initializer] for x in ['add_input2', 'mul_input2'])
             assert encoding_data['activation_encodings']['add_input2']
             assert encoding_data['activation_encodings']['mul_input2']
+
+    def test_gather_exception_rule_for_float_data(self):
+        model = models_for_tests.gather_op_model()
+        quantsim_config = {
+            "defaults":
+                {
+                    "hw_version": "V73",
+                    "ops":
+                        {
+                            "is_output_quantized": "True"
+                        },
+                    "params":
+                        {
+                            "is_quantized": "True",
+                            "is_symmetric": "True"
+                        },
+                    "per_channel_quantization": "False",
+                    "strict_symmetric": "False",
+                    "unsigned_symmetric": "False"
+                },
+            "params": {},
+            "op_type": {
+                "Gather":
+                    {
+                        "is_output_quantized": "False"
+                    }
+            },
+            "supergroups": [],
+            "model_input": {
+                "is_input_quantized": "True"
+            },
+            "model_output": {}
+        }
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            with open(os.path.join(tempdir, 'quantsim_config.json'), 'w') as f:
+                json.dump(quantsim_config, f)
+
+            sim = QuantizationSimModel(model, default_param_bw=8, default_activation_bw=16,
+                                       path=tempdir, config_file=os.path.join(tempdir, 'quantsim_config.json'))
+
+            def callback(session, dummy_input):
+                session.run(None, dummy_input)
+
+            dummy_input = {'model_input': np.asarray([[0, 1, 2, 3]], dtype=np.int64)}
+            sim.compute_encodings(callback, dummy_input)
+            sim.export(tempdir, 'gather_model')
+
+            with open(os.path.join(tempdir, 'gather_model.encodings')) as json_file:
+                encoding_data = json.load(json_file)
+                gather_weight_enc = encoding_data['activation_encodings']['gather_weight'][0]
+
+                # gather param-encodings should follow output-activation-encoding config
+                assert gather_weight_enc['bitwidth'] == 16
+                assert gather_weight_enc['is_symmetric'] == 'False'
+
+    def test_gather_with_int_data(self):
+        model = models_for_tests.gather_op_with_int_data_model()
+        quantsim_config = {
+            "defaults":
+                {
+                    "hw_version": "V73",
+                    "ops":
+                        {
+                            "is_output_quantized": "True"
+                        },
+                    "params":
+                        {
+                            "is_quantized": "True",
+                            "is_symmetric": "True"
+                        },
+                    "per_channel_quantization": "False",
+                    "strict_symmetric": "False",
+                    "unsigned_symmetric": "False"
+                },
+            "params": {},
+            "op_type": {
+                "Gather":
+                    {
+                        "is_output_quantized": "False"
+                    }
+            },
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            with open(os.path.join(tempdir, 'quantsim_config.json'), 'w') as f:
+                json.dump(quantsim_config, f)
+
+            dummy_input = {'model_input': np.asarray([[0, 1, 2, 3]], dtype=np.int64)}
+
+            sim = QuantizationSimModel(model, dummy_input, default_param_bw=8, default_activation_bw=16,
+                                       path=tempdir, config_file=os.path.join(tempdir, 'quantsim_config.json'))
+
+            def callback(session, dummy_input):
+                session.run(None, dummy_input)
+
+            sim.compute_encodings(callback, dummy_input)
+            sim.export(tempdir, 'gather_model')
+
+            with open(os.path.join(tempdir, 'gather_model.encodings')) as json_file:
+                encoding_data = json.load(json_file)
+                assert 'gather_weight' not in encoding_data['activation_encodings'].keys()

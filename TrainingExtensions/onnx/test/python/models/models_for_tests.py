@@ -2406,5 +2406,4 @@ def gather_op_with_int_data_model():
         )
     )
     onnx.checker.check_model(model, True)
-    onnx.save(model, 'gather_with_int_data.onnx')
     return model
