@@ -39,6 +39,7 @@ ARG REGISTRY
 FROM ${REGISTRY}ubuntu:jammy
 
 ARG DEBIAN_FRONTEND=noninteractive
+ARG APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=DontWarn
 
 RUN apt-get update > /dev/null && \
     apt-get install --no-install-recommends -y \

@@ -122,9 +122,9 @@ RUN apt-get update > /dev/null && \
         libstdc++6:i386 \
         libswscale-dev \
         libtinfo5 \
-        libxtst6 \
         libunwind-14 \
         libc++-dev \
+        libxtst6 \
         lsb-release \
         meld \
         nano \
@@ -167,7 +167,7 @@ RUN python3 -m pip --no-cache-dir install \
         lmdb==1.2.1 \
         matplotlib>=3 \
         mock \
-        nbsphinx==0.8.12 \
+        nbsphinx \
         networkx \
         'numpy<1.24,>=1.20.5' \
         onnx==1.16.1 \
@@ -202,10 +202,7 @@ RUN python3 -m pip --no-cache-dir install \
         tensorboard==2.4.0 \
         tensorboardX==2.4 \
         timm==0.4.12 \
-        torch -f https://download.pytorch.org/whl/cu118/torch \
-        torchaudio -f https://download.pytorch.org/whl/cu118/torchaudio \
         torchtext \
-        torchvision -f https://download.pytorch.org/whl/cu118/torchvision \
         tqdm \
         transformers==4.27.4 \
         wget && \
@@ -265,7 +262,15 @@ RUN export ONNXRUNTIME_VER=$(python3 -c 'import onnxruntime; print(onnxruntime._
 RUN python3 -m pip uninstall -y Pillow Pillow-SIMD
 RUN python3 -m pip --no-cache-dir install Pillow-SIMD==9.0.0.post1
 
+# Force-install the LATEST version of Python3 Torch Packages
+RUN unset PIP_CONFIG_FILE && \
+    python3 -m pip install --upgrade --force-reinstall --isolated \
+        torch -f https://download.pytorch.org/whl/cu118/torch \
+        torchaudio -f https://download.pytorch.org/whl/cu118/torchaudio \
+        torchvision -f https://download.pytorch.org/whl/cu118/torchvision
+
 RUN apt-get update && apt-get install -y gnupg2
+# Downloaded from https://apt.llvm.org/
 RUN wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key|sudo apt-key add - && echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-14 main" >> /etc/apt/sources.list
 RUN apt-get update --fix-missing -y && apt upgrade -y && apt-get install -y clang-11 clang-format clang-tidy-11 && \
    rm -rf /var/lib/apt/lists/*
