@@ -67,8 +67,8 @@ For other AIMET variants, install the *latest* version from the .whl files hoste
 
 .. parsed-literal::
 
-    # Pytorch 2.1 with CUDA 11.x
-    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cu118\ |whl_suffix|
+    # Pytorch 2.1 with CUDA 12.x
+    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cu121\ |whl_suffix|
 
     # Pytorch 2.1 CPU only
     python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cpu\ |whl_suffix|
@@ -92,9 +92,10 @@ For other AIMET variants, install the *latest* version from the .whl files hoste
 
 .. parsed-literal::
 
-    # ONNX 1.14 GPU with CUDA 11.x
+    # ONNX 1.16 GPU with CUDA 11.x
     python3 -m pip install |download_url|\ |version|/aimet_onnx-\ |version|.cu117\ |whl_suffix|
-    # ONNX 1.14 CPU
+
+    # ONNX 1.16 CPU
     python3 -m pip install |download_url|\ |version|/aimet_onnx-\ |version|.cpu\ |whl_suffix|
 
 
