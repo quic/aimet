@@ -404,36 +404,40 @@ class QuantizationSimModel:
         """
         quant_info = libquant_info.QcQuantizeInfo()
         quant_info.usePerChannelMode = False
-        tensor_quantizer_params = TensorQuantizerParams()
         op = get_op_given_param_name(self.connected_graph, param_name)
         param_shape = get_param_shape_using_connected_graph(self.connected_graph, param_name)
+        tensor_quantizer_params = TensorQuantizerParams(param_shape)
+
         if len(param_shape) == 1:
-            tensor_quantizer_params.axis = 0
-            tensor_quantizer_params.num_output_channels = param_shape[0]
+            tensor_quantizer_params.channel_axis = 0
+            tensor_quantizer_params.block_axis = -1
         else:
-            tensor_quantizer_params.axis = self._get_quantization_axis(op)
-            tensor_quantizer_params.num_output_channels = param_shape[tensor_quantizer_params.axis]
-        quant_info.channelAxis = tensor_quantizer_params.axis
+            channel_axis, block_axis = self._get_quantization_axes(op)
+            tensor_quantizer_params.channel_axis = channel_axis
+            tensor_quantizer_params.block_axis = block_axis
+
+        quant_info.channelAxis = tensor_quantizer_params.channel_axis
+        quant_info.blockAxis = tensor_quantizer_params.block_axis
 
         return quant_info, tensor_quantizer_params
 
     @staticmethod
-    def _get_quantization_axis(op: Op) -> int:
+    def _get_quantization_axes(op: Op) -> Tuple[int, int]:
         """
-        Gets quantization axis for Per channel quantization
+        Gets quantization axes for per-channel and blockwise quantization
 
         :param op: Connected graph op
         return: axis
         """
         if op.type in ['Conv']:
-            return 0
+            return 0, 1
         if op.type in ['ConvTranspose']:
-            return 1
+            return 1, 0
         if op.type in ['Gemm', 'MatMul'] and op.transposed_params:
-            return 0
+            return 0, 1
         if op.type in ['Gemm', 'MatMul']:
-            return 1
-        return -1
+            return 1, 0
+        return -1, -1
 
     def _insert_activation_quantization_nodes(self):
         """
@@ -1028,3 +1032,50 @@ def get_encoding_mismatch_info(quantizer_name: str, quantizer: QcQuantizeOp,
                                                                      is_unsigned_symmetric)
 
     return encoding_mismatch_info
+
+
+def set_blockwise_quantization_for_weights(sim: QuantizationSimModel,
+                                           op_types: Union[str, Tuple],
+                                           bitwidth: int,
+                                           symmetric: bool,
+                                           block_size: int,
+                                           strict: bool = False):
+    """
+    Set weight parameter quantizers of modules to blockwise.
+
+    :param sim: Quantsim to set activation quantizers for
+    :param op_types: Operator types for which to enable blockwise weight quantizaiton
+    :param bitwidth: Bitwidth for quantization
+    :param symmetric: True if quantization is symmetric, False otherwise
+    :param block_size: Block size for affine quantization. The block size will be applied to the weight's input features
+        dimension, while per-channel will be used for the weight's output features dimension
+    :param strict: If False, only enable blockwise quant for layers with dimensions evenly divisible by block_size.
+        If True, throw an error for layers with incompatible shapes.
+
+    Examples:
+
+        >>> # Assume 'sim' is a QuantizationSimModel object
+        >>> # Allows setting of all Linear and Conv weight quantizers to block_size 64 in the input_channels dimension:
+        >>> set_blockwise_quantization_for_weights(sim=sim,
+        ...                                        arg=("Gemm", "MatMul", "Conv"),
+        ...                                        bitwidth=4,
+        ...                                        symmetric=True,
+        ...                                        block_size=64)
+    """
+
+    if isinstance(op_types, str):
+        op_types = (op_types, )
+
+    for op in sim.connected_graph.ordered_ops:
+        if op.type in op_types:
+            _, _, param_quantizers = sim.get_op_quantizers(op)
+
+            if "weight" in param_quantizers.keys():
+                weight_quantizer: QcQuantizeOp = param_quantizers["weight"]
+                weight_quantizer.set_bitwidth(bitwidth)
+                weight_quantizer.use_symmetric_encodings = symmetric
+                try:
+                    weight_quantizer._enable_blockwise_quantization(block_size) # pylint:disable = protected-access
+                except ValueError as e:
+                    if strict:
+                        raise e

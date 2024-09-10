@@ -50,14 +50,16 @@ class TensorQuantizerParams:
     """
     Per channel quantization parameters
     """
-    def __init__(self, num_output_channels: int = 1, axis: int = -1):
+    def __init__(self, tensor_shape, channel_axis: int = -1, block_axis: int = -1):
         """
 
-        :param num_output_channels: Number of output channels
-        :param axis: Axis along which per channel quantization is performed
+        :param tensor_shape: Shape of the input tensor
+        :param channel_axis: Axis along which per channel quantization is performed
+        :param block_axis: Axis along which blockwise quantization is performed
         """
-        self.num_output_channels = num_output_channels
-        self.axis = axis
+        self.tensor_shape = tensor_shape
+        self.channel_axis = channel_axis
+        self.block_axis = block_axis
 
 
 class QcQuantizeOp:
@@ -110,8 +112,13 @@ class QcQuantizeOp:
         Enables per channel quantization for qc_quantize_op
         """
         self.quant_info.usePerChannelMode = True
+        num_channels = self.tensor_quantizer_params.tensor_shape[self.tensor_quantizer_params.channel_axis]
+        self._create_tensor_quantizers(num_channels)
+        self.quant_info.channelAxis = self.tensor_quantizer_params.channel_axis
+
+    def _create_tensor_quantizers(self, num: int):
         tensor_quantizers = []
-        for _ in range(self.tensor_quantizer_params.num_output_channels):
+        for _ in range(num):
             tensor_quantizer = self._build_tensor_quantizer()
             tensor_quantizer.setStrictSymmetric(self.use_strict_symmetric)
             tensor_quantizer.setUnsignedSymmetric(self.use_unsigned_symmetric)
@@ -121,8 +128,25 @@ class QcQuantizeOp:
         self._tensor_quantizer = tensor_quantizers
         self.quant_info.tensorQuantizerRef = [libpymo.PtrToInt64(tensor_quantizer)
                                               for tensor_quantizer in tensor_quantizers]
-        self.encodings = None
-        self.quant_info.channelAxis = self.tensor_quantizer_params.axis
+
+        self.reset_encoding_stats()
+
+    def _enable_blockwise_quantization(self, block_size):
+        assert self.tensor_quantizer_params is not None
+        tensor_shape = self.tensor_quantizer_params.tensor_shape
+        block_axis = self.tensor_quantizer_params.block_axis
+        channel_axis = self.tensor_quantizer_params.channel_axis
+        assert block_axis != channel_axis
+        if tensor_shape[block_axis] % block_size != 0:
+            raise ValueError(f"Input shape {tensor_shape} not divisible by block size {block_size} at axis {block_axis}")
+
+        num_quantizers = tensor_shape[channel_axis] * tensor_shape[block_axis] // block_size
+        self._create_tensor_quantizers(num_quantizers)
+
+        self.quant_info.usePerChannelMode = True
+        self.quant_info.channelAxis = channel_axis
+        self.quant_info.blockAxis = block_axis
+        self.quant_info.blockSize = block_size
 
     @property
     def data_type(self) -> QuantizationDataType:
