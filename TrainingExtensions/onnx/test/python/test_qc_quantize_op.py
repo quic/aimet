@@ -45,6 +45,7 @@ from aimet_common import libpymo
 from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantizationDataType
 from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode
 from aimet_common import libquant_info
+from aimet_common.quantsim import calculate_delta_offset
 
 
 shared_library = os.path.dirname(libquant_info.__file__)
@@ -115,6 +116,23 @@ def create_model_from_node(quant_node, shape):
     return model
 
 
+def create_encoding(enc_min, enc_max, bitwidth, symmetric):
+    enc_min = enc_min if isinstance(enc_min, list) else [enc_min]
+    enc_max = enc_max if isinstance(enc_max, list) else [enc_max]
+    encodings = []
+
+    for qmin, qmax in zip(enc_min, enc_max):
+        delta, offset = calculate_delta_offset(qmin, qmax, bitwidth, symmetric, False)
+        encoding = libpymo.TfEncoding()
+        encoding.min = qmin
+        encoding.max = qmax
+        encoding.bw = bitwidth
+        encoding.delta = delta
+        encoding.offset = offset
+        encodings.append(encoding)
+
+    return encodings
+
 def build_session(model, providers):
     sess_options = ort.SessionOptions()
     sess_options.register_custom_ops_library(shared_library)
@@ -125,6 +143,14 @@ def build_session(model, providers):
         providers=providers,
     )
     return session
+
+
+def create_qc_quantize_model_session(quant_info, input_shape):
+    quant_node = helper.make_node(op_name, inputs=['input'], outputs=['output'],
+                                  domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
+    model = create_model_from_node(quant_node, input_shape)
+    return build_session(model, available_providers)
+
 
 class TestQcQuantizeOp:
 
@@ -530,3 +556,255 @@ class TestQcQuantizeOp:
         assert qc_op.encodings[0].max >= 0
         assert qc_op.encodings[0].min <= 0
         assert qc_op.encodings[0].delta > 0
+
+
+
+blockwise_qdq_test_1 = {
+    "input_shape": (2, 3, 4),
+    "block_axis": 0,
+    "block_size": 1,
+    "channel_axis": 1,
+    "bitwidth": 8,
+    "min": [0, 0, 0, -2, -2.5, 0],
+    "max": [255. * 0.25, 255.0, 127.5, 508., 245. * 0.25, 2550.],
+    "in_tensor": [
+        0.126, 10.4, -12.3, 10000,
+        0.126, 10.4, -12.3, 10000,
+        0.126, 10.4, -12.3, 10000,
+        0.126, 10.4, -12.3, 10000,
+        0.126, 10.4, -12.3, 10000,
+        0.126, 10.4, -12.3, 10000,
+    ],
+    "expected": [
+        0.25, 10.5, 0, 63.75,       # scale = .25
+        0., 10., 0., 255.,          # scale = 1
+        0., 10.5, 0., 127.5,        # scale = 0.5
+        0., 10., -2., 508.,         # scale = 2. offset=-1
+        0.25, 10.5, -2.5, 61.25,    # scale = .25
+        0., 10., 0, 2550.,          # scale = 10
+    ],
+}
+
+
+blockwise_qdq_test_2 = {
+    "input_shape": (4, 2, 2),
+    "block_axis": 0,
+    "block_size": 2,
+    "channel_axis": 2,
+    "bitwidth": 8,
+    "min": [-64.0, -128.0, -256.0, -512.0],
+    "max": [63.5, 127.0, 254.0, 508.0],
+    "in_tensor": [
+        -125.1, -125.1,    48.3, 48.3,
+        68.3, 68.3,       -3.1, -3.1,
+
+        -125.1, -125.1,    48.3, 48.3,
+        68.3, 68.3,        -3.1, -3.1,
+    ],
+    "expected": [
+        -64.0, -125.0,     48.5, 48.0,
+        63.5, 68.0,       -3.0, -3.0,
+
+        -126.0, -124.0,    48.0, 48.0,
+        68.0, 68.0,        -4.0, -4.0
+    ],
+}
+
+blockwise_qdq_test_3 = {
+    "input_shape": (4, 4),
+    "block_axis": 1,
+    "block_size": 2,
+    "channel_axis": 0,
+    "bitwidth": 8,
+    "min": [-1.28, -12.8, -128, -1280, 0, 0, 0, 0],
+    "max": [1.27, 12.7, 127, 1270, 2.55, 25.5, 255, 2550],
+    "in_tensor": [
+        40.23, .0321, # Scale = 0.01
+        -40.23, -.0321, # Scale = 0.1
+        23.44, -2.3111, # scale = 1
+        23.44, -2.3111, # scale = 10
+
+        -1000.1, 334, # scale = 0.01
+        23.1111, -23.1111, # scale = 0.1
+        23.1111, -23.1111, # scale = 1
+        -1, 100000, # scale = 10
+    ],
+    "expected": [
+        1.27, .03, # Scale = 0.01
+        -12.8, 0.0, # Scale = 0.1
+        23, -2, # scale = 1
+        20., 0, # scale = 10
+
+        0, 2.55, # scale = 0.01
+        23.1, 0., # scale = 0.1
+        23, 0., # scale = 1
+        0, 2550, # scale = 10
+    ],
+}
+
+def isclose(x1, x2, atol=1e-4):
+    return abs(x1 - x2) <= atol
+
+
+class TestBlockwiseQuantizeOp:
+
+    @pytest.mark.parametrize("test_set", (blockwise_qdq_test_1,
+                                          blockwise_qdq_test_2,
+                                          blockwise_qdq_test_3))
+    def test_blockwise_quantize_dequantize(self, test_set):
+        input_shape = test_set["input_shape"]
+        block_axis = test_set["block_axis"]
+        block_size = test_set["block_size"]
+        channel_axis = test_set["channel_axis"]
+        in_tensor = np.array(test_set["in_tensor"], dtype=np.float32).reshape(input_shape)
+        expected_output = np.array(test_set["expected"], dtype=np.float32).reshape(input_shape)
+        encoding_min = test_set["min"]
+        encoding_max = test_set["max"]
+
+        encodings = create_encoding(encoding_min, encoding_max, 8, False)
+
+        tensor_quantizers = [libpymo.TensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                     MAP_ROUND_MODE_TO_PYMO['nearest']) for _ in range(len(encoding_max))]
+
+        for t in tensor_quantizers:
+            t.isEncodingValid = True
+
+        quant_info = create_per_channel_quant_info(encodings, tensor_quantizers, OpMode.quantizeDequantize,
+                                                   useSymmetricEncoding=True, ch_idx=channel_axis)
+
+        quant_info.blockAxis = block_axis
+        quant_info.blockSize = block_size
+
+        session = create_qc_quantize_model_session(quant_info, expected_output.shape)
+        output = session.run(None, {"input": in_tensor})[0]
+
+        assert np.allclose(output, expected_output)
+
+    def test_blockwise_compute_encodings_symmetric(self):
+        input_shape = (2, 6)
+        block_axis = 1
+        block_size = 3
+        channel_axis = 0
+        bitwidth = 8
+        symmetric = True
+
+        input_tensor = np.asarray([
+            -5.4, 10, -2,
+            3.5, 23.1, 2.,
+            -10, -2, -1,
+            -.1, 0.3, 0.1
+        ]).astype(np.float32).reshape(input_shape)
+
+        # Set up the quantizer op
+        cpp_encodings = [libpymo.TfEncoding() for _ in range(4)]
+        tensor_quantizer = [libpymo.TensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                   MAP_ROUND_MODE_TO_PYMO['nearest']) for _ in range(4)]
+        quant_info = create_per_channel_quant_info(cpp_encodings, tensor_quantizer, OpMode.updateStats,
+                                                   useSymmetricEncoding=symmetric, ch_idx=channel_axis)
+        quant_info.blockSize = block_size
+        quant_info.blockAxis = block_axis
+        session = create_qc_quantize_model_session(quant_info, input_shape)
+
+        # Run calibration
+        output_tensor = session.run(None, {'input': input_tensor})[0]
+
+        # Compute encodings
+        encodings = [quantizer.computeEncoding(bitwidth, symmetric) for quantizer in tensor_quantizer]
+
+        # Op should be passthrough in update_stats mode
+        assert np.alltrue(input_tensor == output_tensor)
+
+        # Computed encodings should be symmetric and correspond to the absolute min/max in the block
+        expected_max = np.max(np.abs(input_tensor.reshape(4, 3)), axis=1)
+        for idx, enc in enumerate(encodings):
+            assert isclose(enc.max, expected_max[idx])
+            assert isclose((enc.max + enc.min), -1 * enc.delta)
+            assert enc.offset == -128
+            assert isclose(enc.delta, enc.max / (2 ** (bitwidth - 1) - 1))
+
+    def test_blockwise_compute_encodings_asymmetric(self):
+        input_shape = (6, 2)
+        block_axis = 0
+        block_size = 2
+        channel_axis = 1
+        bitwidth = 8
+        symmetric = False
+
+        input_tensor = np.asarray([
+            -5.4, 10, -2,
+            3.5, 23.1, 2.,
+            -10, -2, -1,
+            -.1, 0.3, 0.1
+        ]).astype(np.float32).reshape(input_shape)
+
+        # Set up the quantizer op
+        cpp_encodings = [libpymo.TfEncoding() for _ in range(6)]
+        tensor_quantizer = [libpymo.TensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                    MAP_ROUND_MODE_TO_PYMO['nearest']) for _ in range(6)]
+        quant_info = create_per_channel_quant_info(cpp_encodings, tensor_quantizer, OpMode.updateStats,
+                                                   useSymmetricEncoding=symmetric, ch_idx=channel_axis)
+        quant_info.blockSize = block_size
+        quant_info.blockAxis = block_axis
+        session = create_qc_quantize_model_session(quant_info, input_shape)
+
+        # Run calibration
+        output_tensor = session.run(None, {'input': input_tensor})[0]
+
+        # Compute encodings
+        encodings = [quantizer.computeEncoding(bitwidth, symmetric) for quantizer in tensor_quantizer]
+
+        # Op should be passthrough in update_stats mode
+        assert np.alltrue(input_tensor == output_tensor)
+
+        # Computed encodings should be symmetric and correspond to the absolute min/max in the block
+        expected_max = np.maximum(np.max(input_tensor.reshape(3, 2, 2), axis=1), 0).flatten()
+        expected_min = np.minimum(np.min(input_tensor.reshape(3, 2, 2), axis=1), 0).flatten()
+        for idx, enc in enumerate(encodings):
+            assert isclose(enc.max, expected_max[idx], atol=enc.delta)
+            assert isclose(enc.min, expected_min[idx], atol=enc.delta)
+            assert isclose(enc.delta, (enc.max - enc.min) / (2 ** bitwidth - 1))
+            assert isclose(enc.offset, enc.min / enc.delta)
+
+    def test_blockwise_one_shot_compute_encodings(self):
+        input_shape = (2, 6)
+        block_axis = 1
+        block_size = 3
+        channel_axis = 0
+        bitwidth = 8
+        symmetric = True
+
+        input_tensor = np.asarray([
+            -5.4, 10, -2,
+            3.5, 23.1, 2.,
+            -10, -2, -1,
+            -.1, 0.3, 0.1
+        ]).astype(np.float32).reshape(input_shape)
+
+        # Set up the quantizer op
+        cpp_encodings = [libpymo.TfEncoding() for _ in range(4)]
+        tensor_quantizer = [libpymo.TensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                    MAP_ROUND_MODE_TO_PYMO['nearest']) for _ in range(4)]
+        quant_info = create_per_channel_quant_info(cpp_encodings, tensor_quantizer, OpMode.oneShotQuantizeDequantize,
+                                                   useSymmetricEncoding=symmetric, ch_idx=channel_axis)
+        quant_info.blockSize = block_size
+        quant_info.blockAxis = block_axis
+        session = create_qc_quantize_model_session(quant_info, input_shape)
+
+        # Run calibration
+        output_tensor = session.run(None, {'input': input_tensor})[0]
+
+        # Computed encodings should be symmetric and correspond to the absolute min/max in the block
+        expected_max = np.max(np.abs(input_tensor.reshape(4, 3)), axis=1)
+        for idx, enc in enumerate(cpp_encodings):
+            assert isclose(enc.max, expected_max[idx])
+            assert isclose((enc.max + enc.min), -1 * enc.delta)
+            assert enc.offset == -128
+            assert isclose(enc.delta, enc.max / (2 ** (bitwidth - 1) - 1))
+
+        # Compute the expected output given the computed encodings
+        delta = np.array([enc.delta for enc in cpp_encodings]).astype(np.float32).reshape(-1, 1)
+        offset = np.array([enc.offset for enc in cpp_encodings]).astype(np.float32).reshape(-1, 1)
+        expected_out = (np.clip(np.round(input_tensor.reshape(4, 3) / delta - offset), 0, 2 ** bitwidth - 1) + offset) * delta
+
+        # Op should produce the quantDequant output
+        assert np.allclose(output_tensor, expected_out.reshape(output_tensor.shape))

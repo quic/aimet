@@ -82,5 +82,56 @@ void sliceTensorChannelGPU(const T* inTensor, T* outTensor, long iters, long cop
 }
 
 
+template <typename DTYPE>
+__global__ void permuteTensorKernel(const DTYPE* in, DTYPE* out, int numElements, int numDims,
+                                    const int64_t* inputStrides, const int64_t* outputStrides)
+{
+    for (size_t i = blockIdx.x * blockDim.x + threadIdx.x; i < numElements; i += blockDim.x * gridDim.x)
+    {
+        size_t outputIdx = 0;
+        size_t remainder = i;
+        for (auto dim = 0; dim < numDims; dim++)
+        {
+            size_t dimIdx = remainder / inputStrides[dim];
+            remainder = remainder - dimIdx * inputStrides[dim];
+            outputIdx += outputStrides[dim] * dimIdx;
+        }
+
+        out[outputIdx] = in[i];
+    }
+}
+
+
+template <typename T>
+void permuteTensorGPU(const T* inTensor, T* outTensor, int64_t numel, int64_t numDims, const int64_t* inputStrides,
+                      const int64_t* outputStrides)
+{
+    int64_t totalThreads = numel;
+    int64_t gridSize     = CUDA_NUM_BLOCKS(totalThreads);
+    int64_t strideData[2][numDims];
+
+    // Copy the stride information to the cuda device
+    for (int i = 0; i < numDims; i++)
+    {
+        strideData[0][i] = inputStrides[i];
+        strideData[1][i] = outputStrides[i];
+    }
+    int64_t* deviceStrideData;
+    cudaMalloc((void**) &deviceStrideData, 2 * numDims * sizeof(int64_t));
+    cudaMemcpy(deviceStrideData, strideData, 2 * numDims * sizeof(int64_t), cudaMemcpyHostToDevice);
+
+    // Launch the cuda kernel
+    permuteTensorKernel<<<gridSize, CUDA_NUM_THREADS>>>(inTensor, outTensor, numel, numDims, deviceStrideData,
+                                                        deviceStrideData + numDims);
+
+    // Free the device stride data
+    cudaFree(deviceStrideData);
+}
+
+
 template void sliceTensorChannelGPU(const float* inTensor, float* outTensor, long iters, long copyWidth,
                                     long inputStride, long outputStride, long inputOffset, long outputOffset);
+
+
+template void permuteTensorGPU(const float* intensor, float* outTensor, int64_t numel, int64_t numDims,
+                               const int64_t* inputStrides, const int64_t* outputStrides);

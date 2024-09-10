@@ -41,6 +41,7 @@
 
 
 #include <vector>
+#include <iostream>
 
 
 #ifdef ONNX_CUDA
@@ -64,7 +65,7 @@ void QcQuantizeOp::computeImpl(const Ort::Custom::Tensor<float>& input, Ort::Cus
     // Setup inputs
     auto inputData  = input.Data();
     auto inputShape = input.Shape();
-    size_t size     = input.NumberOfElement();
+    auto size     = input.NumberOfElement();
     auto result     = output.Allocate(inputShape);
 
     std::vector<DlQuantization::TfEncoding*> encodings = quantInfo->encoding;
@@ -80,10 +81,20 @@ void QcQuantizeOp::computeImpl(const Ort::Custom::Tensor<float>& input, Ort::Cus
     {
         if (quantInfo->usePerChannelMode)
         {
-            int axis = quantInfo->channelAxis;
-            modeSpecificActionPerChannelInt(inputData, size, result, axis, inputShape, quantInfo->tensorQuantizerRef,
-                                            opMode, encodings, quantInfo->useSymmetricEncoding, allocator, useCuda,
-                                            stream, tensorQuantizationSim);
+            const int channelAxis = quantInfo->channelAxis;
+            const int blockSize = quantInfo->blockSize;
+            if (blockSize == 0)
+            {
+                modeSpecificActionPerChannelInt(inputData, size, result, channelAxis, inputShape, quantInfo->tensorQuantizerRef,
+                                                opMode, encodings, quantInfo->useSymmetricEncoding, allocator, useCuda,
+                                                stream, tensorQuantizationSim);
+            }
+            else
+            {
+                const BroadcastShapeInfo shapeInfo {inputShape, channelAxis, quantInfo->blockAxis, blockSize};
+                modeSpecificActionBroadcastInt(inputData, result, shapeInfo, quantInfo->tensorQuantizerRef, opMode,
+                                               encodings, quantInfo->useSymmetricEncoding, allocator, useCuda, stream);
+            }
         }
         else
         {

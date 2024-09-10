@@ -67,5 +67,7 @@ struct QcQuantizeInfo
     bool isIntDataType;
     bool usePerChannelMode;
     int channelAxis;
+    int blockAxis;
+    uint blockSize;
     std::string name;
 };
