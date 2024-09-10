@@ -134,7 +134,7 @@ Set the package details as follows:
     export download_url="https://github.com/quic/aimet/releases/download/${release_tag}"
 
     # Set the wheel file name with extension
-    # ex. "aimet_torch_gpu-1.33.0.cu117-cp310-cp310-manylinux_2_34_x86_64.whl"
+    # ex. "aimet_torch-1.33.0.cu118-cp310-cp310-manylinux_2_34_x86_64.whl"
     export wheel_file_name="<wheel file name>"
 
 Install the selected AIMET package as specified below:

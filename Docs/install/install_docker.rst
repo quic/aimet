@@ -48,7 +48,6 @@ Set the `<variant_string>` to ONE of the following depending on your desired var
     #. For the PyTorch 2.1 GPU variant, use `torch-gpu`
     #. For the PyTorch 2.1 CPU variant, use `torch-cpu`
     #. For the PyTorch 1.13 GPU variant, use `torch-gpu-pt113`
-    #. For the PyTorch 1.13 CPU variant, use `torch-cpu-pt113`
     #. For the TensorFlow GPU variant, use `tf-gpu`
     #. For the TensorFlow CPU variant, use `tf-cpu`
     #. For the ONNX GPU variant, use `onnx-gpu`
@@ -121,18 +120,19 @@ Install AIMET packages
 From PyPI
 =========
 
-Aimet Torch GPU can install from pypi through the following method:
+The default AIMET Torch GPU variant may be installed from PyPI as follows:
+    - Go to https://pypi.org/project/aimet-torch
+    - Browse the Requirements section of each Release to identify the version you wish to install. Following are some tips:
+        - For Pytorch 2.2.2 GPU, use aimet-torch>=1.32.2
+        - For Pytorch 2.1.2 GPU, use aimet-torch==1.32.1.post1
+        - For PyTorch 1.13 GPU, use aimet-torch==1.31.1
 
-Go to https://pypi.org/project/aimet-torch to identify a version you wish to install
-
-    - For PyTorch 1.13 GPU you should use aimet-torch==1.31.1
-    - For Pytorch 2.1.2 GPU you should use aimet-torch >= 1.32.0
+Run the following commands to install the package (prepend with "sudo" and/or package version as needed):
 
 .. code-block:: bash
 
-    sudo apt-get install liblapacke -y
-    pip install aimet-torch
-
+    apt-get install liblapacke -y
+    python3 -m pip install aimet-torch
 
 From Release Package
 ====================
@@ -154,7 +154,7 @@ Set the package details as follows:
     export download_url="https://github.com/quic/aimet/releases/download/${release_tag}"
 
     # Set the wheel file name with extension
-    # ex. "aimet_torch_gpu-1.33.0.cu117-cp310-cp310-manylinux_2_34_x86_64.whl"
+    # ex. "aimet_torch-1.33.0.cu118-cp310-cp310-manylinux_2_34_x86_64.whl"
     export wheel_file_name="<wheel file name>"
 
 Install the selected AIMET package as specified below:
