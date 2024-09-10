@@ -242,12 +242,7 @@ class TestQuantsimOnnxExport:
                 encoding_dict_prop = json.load(f)["activation_encodings"]
 
         assert len(encoding_dict_no_prop) == 2
-        # w/ torch 2.1.2, there are total 7 operators namely:
-        # /0/Reshape_1_output_0, /0/Reshape_2_output_0, /0/Reshape_output_0, /0/Transpose_output_0,
-        # /0/Unsqueeze_output_0, input, output
-        # w/ pytorch 1.13: /0/Reshape_output_0, /0/Transpose_output_0, input, output
-        assert len(encoding_dict_prop) == 4 if version.parse(torch.__version__) < version.parse("2.0")\
-            else len(encoding_dict_prop) == 7
+        assert len(encoding_dict_prop) == 4
 
         filtered_encoding_dict_prop = [{key: val} for key, val in encoding_dict_prop.items() if 'scale' in val[0]]
         assert len(filtered_encoding_dict_prop) == 2
