@@ -256,11 +256,17 @@ def offset():
     return torch.randint(-5, 5, []).to(torch.float32)
 
 
-@pytest.fixture(params=[True, False])
-def use_compiled_impl(request):
-    flag = request.param
-    with torch_builtins._use_compiled_impl(flag):
-        yield
+if torch.cuda.is_available() and torch.cuds.get_device_capability() >= (7, 0):
+    @pytest.fixture(params=[True, False])
+    def use_compiled_impl(request):
+        flag = request.param
+        with torch_builtins._use_compiled_impl(flag):
+            yield
+else:
+    @pytest.fixture
+    def use_compiled_impl():
+        with torch_builtins._use_compiled_impl(False):
+            yield
 
 
 @pytest.mark.parametrize('backend_module', [torch_builtins])
