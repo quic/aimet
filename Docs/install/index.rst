@@ -47,10 +47,10 @@ The AIMET PyTorch GPU PyPI packages are available for environments that meet the
 
 * 64-bit Intel x86-compatible processor
 * Linux Ubuntu 22.04 LTS [Python 3.10] or Ubuntu 20.04 LTS [Python 3.8]
-* Cuda 12.0
+* CUDA 12.0
 * Torch 2.2.2
 
-**Pip install:**
+**Pip install**
 
 .. code-block::
 
@@ -61,16 +61,20 @@ The AIMET PyTorch GPU PyPI packages are available for environments that meet the
 Release Packages
 ~~~~~~~~~~~~~~~~
 
-For other aimet variants, install the latest version from the .whl files hosted at https://github.com/quic/aimet/releases
+For other AIMET variants, install the *latest* version from the .whl files hosted at https://github.com/quic/aimet/releases
 
 **PyTorch**
 
 .. parsed-literal::
 
+    # Pytorch 2.1 with CUDA 12.x
+    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cu121\ |whl_suffix|
+
+    # Pytorch 2.1 CPU only
+    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cpu\ |whl_suffix|
+    
     # Pytorch 1.13 with CUDA 11.x
-    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|\ |whl_suffix|
-    # Pytorch 1.13 CPU only
-    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|\ |whl_suffix|
+    python3 -m pip install |download_url|\ |version|/aimet_torch-\ |version|.cu117\ |whl_suffix|
 
 
 **TensorFlow**
@@ -78,28 +82,24 @@ For other aimet variants, install the latest version from the .whl files hosted 
 .. parsed-literal::
 
     # Tensorflow 2.10 GPU with CUDA 11.x
-    python3 -m pip install |download_url|\ |version|/aimet_tensorflow-\ |version|\ |whl_suffix|
+    python3 -m pip install |download_url|\ |version|/aimet_tensorflow-\ |version|.cu118\ |whl_suffix|
+
     # Tensorflow 2.10 CPU only
-    python3 -m pip install |download_url|\ |version|/aimet_tensorflow-\ |version|\ |whl_suffix|
+    python3 -m pip install |download_url|\ |version|/aimet_tensorflow-\ |version|.cpu\ |whl_suffix|
 
 
 **Onnx**
 
 .. parsed-literal::
 
-    # ONNX 1.14 GPU
-    python3 -m pip install |download_url|\ |version|/aimet_onnx-\ |version|\ |whl_suffix|
-    # ONNX 1.14 CPU
-    python3 -m pip install |download_url|\ |version|/aimet_onnx-\ |version|\ |whl_suffix|
+    # ONNX 1.16 GPU with CUDA 11.x
+    python3 -m pip install |download_url|\ |version|/aimet_onnx-\ |version|.cu117\ |whl_suffix|
 
-For previous AIMET releases, browse packages at https://github.com/quic/aimet/releases. Each release includes multiple python packages of the following format:
+    # ONNX 1.16 CPU
+    python3 -m pip install |download_url|\ |version|/aimet_onnx-\ |version|.cpu\ |whl_suffix|
 
-.. parsed-literal::
 
-    # VARIANT in {torch_gpu, torch_cpu, tf_gpu, tf_cpu, onnx_gpu, onnx_cpu}
-    # PACKAGE_PREFIX in {aimet_torch, aimet_tensorflow, aimet_onnx}
-    <PACKAGE_PREFIX>-<VARIANT>_<VERSION>\ |whl_suffix|
-
+For older versions, please browse the releases at https://github.com/quic/aimet/releases and follow the documentation corresponding to that release to select and install the appropriate package.
 
 .. |whl_suffix| replace:: -cp310-cp310-manylinux_2_34_x86_64.whl
 .. |download_url| replace:: \https://github.com/quic/aimet/releases/download/
