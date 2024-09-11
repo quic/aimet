@@ -103,9 +103,9 @@ From PyPI
 The default AIMET Torch GPU variant may be installed from PyPI as follows:
     - Go to https://pypi.org/project/aimet-torch
     - Browse the Requirements section of each Release to identify the version you wish to install. Following are some tips:
-        - For Pytorch 2.2.2 GPU, use aimet-torch>=1.32.2
-        - For Pytorch 2.1.2 GPU, use aimet-torch==1.32.1.post1
-        - For PyTorch 1.13 GPU, use aimet-torch==1.31.1
+        - For Pytorch 2.2.2 GPU with CUDA 12.1, use aimet-torch>=1.32.2
+        - For Pytorch 2.1.2 GPU with CUDA 12.1, use aimet-torch==1.32.1.post1
+        - For PyTorch 1.13 GPU with CUDA 11.7, use aimet-torch==1.31.2
 
 Run the following commands to install the package (prepend with "sudo" and/or package version as needed):
 
