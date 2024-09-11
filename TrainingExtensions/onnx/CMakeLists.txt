@@ -82,7 +82,8 @@ set_target_properties(OnnxCppOps PROPERTIES
         )
 
 install(TARGETS OnnxCppOps
-        LIBRARY DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_common
+        LIBRARY
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/python/aimet_common
         )
 
 # ----
@@ -110,7 +111,8 @@ set_target_properties(quant_info
         )
 
 install(TARGETS quant_info
-        LIBRARY DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_common
+        LIBRARY
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/python/aimet_common
         )
 
 # ----

@@ -122,7 +122,7 @@ if (ENABLE_CUDA)
 endif (ENABLE_CUDA)
 
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/DlQuantization
-        DESTINATION ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu/include)
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/x86_64-linux-gnu/include)
 
 if (ENABLE_TESTS)
     add_subdirectory(test)

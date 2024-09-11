@@ -40,32 +40,18 @@ Python3_add_library(PyModelOptimizations SHARED
         PyModelOptimizations.cpp
         PyTensorQuantizer.cpp)
 
+target_link_libraries(PyModelOptimizations PUBLIC
+        MoDlQuantization
+        MoDlEqualization
+        MoDlCompression
+        ${OPENCV_LINK_LIBRARIES}
+        )
+
 if (ENABLE_CUDA)
-    target_link_libraries(PyModelOptimizations
-          PUBLIC
-             stdc++
-             MoDlQuantization
-             MoDlEqualization
-             MoDlQuantizationCuda
-             MoDlCompression
-
+    target_link_libraries(PyModelOptimizations PUBLIC
+            MoDlQuantizationCuda
             CUDA::cublas
-            ${OPENCV_LINK_LIBRARIES}
-             z
-          )
-
-else (ENABLE_CUDA)
-    target_link_libraries(PyModelOptimizations
-            PUBLIC
-            stdc++
-            MoDlQuantization
-            MoDlEqualization
-            MoDlCompression
-
-            ${OPENCV_LINK_LIBRARIES}
-            z
             )
-
 endif (ENABLE_CUDA)
 
 set_target_properties(PyModelOptimizations
@@ -77,7 +63,8 @@ set_target_properties(PyModelOptimizations
       )
 
 install(TARGETS PyModelOptimizations
-        LIBRARY DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_common
+        LIBRARY
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/python/aimet_common
 )
 
 add_custom_target(whl_prep_cp_common_PyModelOptimizations

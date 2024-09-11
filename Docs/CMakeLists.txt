@@ -37,7 +37,7 @@
 #=============================================================================
 
 install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-      DESTINATION ${AIMET_INSTALL_DIR}
+      DESTINATION .
       PATTERN "CMakeFiles*" EXCLUDE
       PATTERN "Makefile" EXCLUDE
       PATTERN "*.cmake" EXCLUDE

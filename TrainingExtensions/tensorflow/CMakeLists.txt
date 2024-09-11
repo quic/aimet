@@ -155,11 +155,11 @@ endif(ENABLE_CUDA)
 
 
 install(FILES $<TARGET_FILE:TrainingExtensionsTf>
-      DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_common
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/python/aimet_common
       )
 
 install(DIRECTORY $<TARGET_FILE_DIR:TrainingExtensionsTf>/$<TARGET_FILE_PREFIX:TrainingExtensionsTf>$<TARGET_FILE_BASE_NAME:TrainingExtensionsTf>
-    DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_common
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/python/aimet_common
 )
 
 add_custom_target(whl_prep_cp_tensorflow
