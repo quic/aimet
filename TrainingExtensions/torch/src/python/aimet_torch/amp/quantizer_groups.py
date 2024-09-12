@@ -450,10 +450,15 @@ def find_supported_candidates(quantizer_groups: List[QuantizerGroup],
                                    quantizer)
 
             # pylint: disable=protected-access
-            module = module_name_to_module_dict[quantizer]._module_to_wrap.__class__.__name__
+            module = module_name_to_module_dict[quantizer]._module_to_wrap.__class__
 
-            if module in aimet_op_to_backend_op_name_map and aimet_op_to_backend_op_name_map[module] in supported_kernels:
-                onnx_ops[quantizer] = [aimet_op_to_backend_op_name_map[module]]
+            try:
+                backend_type = aimet_op_to_backend_op_name_map[module.__class__]
+            except KeyError:
+                backend_type = aimet_op_to_backend_op_name_map.get(module.__class__.__name__)
+
+            if backend_type in supported_kernels:
+                onnx_ops[quantizer] = [backend_type]
             else:
                 onnx_types = onnx_utils.map_torch_types_to_onnx.get(
                     type(module_name_to_module_dict[quantizer]._module_to_wrap), [])
