@@ -99,8 +99,8 @@ class _MinMaxObserver(_Observer[_MinMaxRange]):
 
     @torch.no_grad()
     def collect_stats(self, input_tensor: torch.Tensor) -> _MinMaxRange:
-        new_min = reduce(input_tensor, shape=self.shape, reduce_op=torch.min)
-        new_max = reduce(input_tensor, shape=self.shape, reduce_op=torch.max)
+        new_min = reduce(input_tensor, shape=self.shape, reduce_op=torch.min).values
+        new_max = reduce(input_tensor, shape=self.shape, reduce_op=torch.max).values
         return _MinMaxRange(new_min, new_max)
 
     @torch.no_grad()

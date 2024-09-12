@@ -40,7 +40,7 @@ from typing import List, Tuple, Iterable
 import torch
 from aimet_torch import utils
 from aimet_torch.batch_norm_fold import BatchNormFold as BatchNormFoldV1
-from aimet_torch.batch_norm_fold import _BatchNormFoldingNotSupported, LayerType, BatchNormType
+from aimet_torch.batch_norm_fold import _BatchNormFoldingNotSupported
 from aimet_torch.v2.quantsim import QuantizationSimModel
 from aimet_torch.v2.nn.base import BaseQuantizationMixin
 from torch.nn.modules.conv import _ConvTransposeNd
@@ -115,7 +115,7 @@ class BatchNormFold(BatchNormFoldV1):
                     BatchNormFold._fold_to_scale(conv, bn)
                     bn_modules.append(bn)
                 else:
-                    BatchNormFold._fold_to_weight(conv, bn, fold_backward=fold_backward)
+                    BatchNormFoldV1._fold_to_weight(conv, bn, fold_backward=fold_backward)
             except _BatchNormFoldingNotSupported as e:
                 bn_name = utils.get_layer_name(model, bn)
                 conv_name = utils.get_layer_name(model, conv)
@@ -173,8 +173,8 @@ class BatchNormFold(BatchNormFoldV1):
         #       For example, the user can manually enable quantization of batchnorms, etc...
         #       (FYI: _quantize_params takes effect only when the parameter quantizers are enabled)
 
-        with conv._patch_quantized_parameters():
-            BatchNormFold._fold_to_weight(conv, bn, fold_backward=True)
+        with bn._patch_quantized_parameters():
+            BatchNormFoldV1._fold_to_weight(conv, bn, fold_backward=True)
 
             gamma = bn.weight
             sigma = torch.sqrt(bn.running_var + bn.eps)
@@ -203,33 +203,6 @@ class BatchNormFold(BatchNormFoldV1):
             conv.output_quantizers[i] = conv_output_quantizer
 
         conv.param_quantizers["bias"] = None
-
-    @staticmethod
-    def _fold_to_weight(conv_linear: LayerType, bn: BatchNormType, fold_backward: bool):
-        """
-        Fold BatchNorm into the weight and bias of the given layer.
-
-        :param conv_linear: Conv or linear layer to fold BN into.
-        :param bn: BatchNorm to fold.
-        """
-        # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
-        # However depthwise conv layers are always N, 1, H, W whether transposed-conv or not, so no need to transpose
-        if isinstance(conv_linear, torch.nn.ConvTranspose2d) and conv_linear.groups == 1:
-            conv_linear.weight.data = conv_linear.weight.data.permute(1, 0, 2, 3)
-
-        if conv_linear.bias is None:
-            out_channels = conv_linear.out_features if isinstance(conv_linear, torch.nn.Linear)\
-                        else conv_linear.out_channels
-            bias = torch.zeros(out_channels,
-                            device=conv_linear.weight.device,
-                            dtype=conv_linear.weight.dtype)
-            conv_linear.bias = torch.nn.Parameter(bias)
-
-        BatchNormFoldV1._call_py_batch_norm_fold(conv_linear.weight, conv_linear.bias, bn, fold_backward=fold_backward)
-
-        # Transpose weight back to N, C, H, W for transposed Conv2D, for non-depthwise layers
-        if isinstance(conv_linear, torch.nn.ConvTranspose2d) and conv_linear.groups == 1:
-            conv_linear.weight.data = conv_linear.weight.data.permute(1, 0, 2, 3)
 
 # Global variables for compatibility
 fold_all_batch_norms = BatchNormFold.fold_all_batch_norms_to_weight

@@ -205,7 +205,6 @@ class TestTrainingExtensionBnFold:
         finally:
             batch_norm_fold.USE_PYTHON_IMPL = flag
 
-
     def test_fold_bn_before_conv_no_bias(self, use_python_impl):
         class MyModel(torch.nn.Module):
             def __init__(self):
