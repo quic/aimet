@@ -256,7 +256,7 @@ def offset():
     return torch.randint(-5, 5, []).to(torch.float32)
 
 
-if torch.cuda.is_available() and torch.cuds.get_device_capability() >= (7, 0):
+if torch.cuda.is_available() and torch.cuda.get_device_capability() >= (7, 0):
     @pytest.fixture(params=[True, False])
     def use_compiled_impl(request):
         flag = request.param
