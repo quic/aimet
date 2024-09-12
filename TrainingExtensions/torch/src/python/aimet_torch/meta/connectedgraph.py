@@ -514,7 +514,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         # In the case of elementwise ops, we want to express the elementwise op as an Operation, however sometimes
         # it is necessary to parse the interior of the elementwise op's CallMethod to extract information about
         # constants being passed in, or the order in which operands are used.
-        if self._is_recursive_parsing_needed(subgraph_model, module_to_jit_trace) or \
+        if self._is_recursive_parsing_needed(subgraph_model, module_to_jit_trace[subgraph_model]) or \
                 self._is_multi_input_op_to_parse(subgraph_model):
             node_name_to_subgraph_model[getattr_node_info.node_alias] = (subgraph_model, getattr_node_info)
 
@@ -1244,7 +1244,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             consumer_index += 1
 
     def _is_recursive_parsing_needed(self, module: torch.nn.Module,
-                                     module_to_jit_trace: Dict[torch.nn.Module, torch.jit.TracedModule]) -> bool:
+                                     trace: torch.jit.TracedModule) -> bool:
         """
         Utility to decide whether recursive parsing is needed for given module and it's jit trace.
         Recursive parsing is not needed
@@ -1252,12 +1252,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         2) if the module is leaf module and has only one aten node inside forward method (aimet_modules.Add etc.)
 
         :param module: PyTorch module.
-        :param module_to_jit_trace: Dictionary mapping torch modules to their traces
+        :param trace: torch.jit trace of the module
         :return: Boolean whether recursive parsing needed or not. If needed returns True, False otherwise.
         """
         recursive_parsing_needed = True
         if is_torch_nn_leaf_module(module) or \
-                is_custom_leaf_module(module, self.get_all_aten_nodes(module, module_to_jit_trace)) or \
+                is_custom_leaf_module(module, self._find_aten_nodes_in_forward_pass(trace)) or \
                 isinstance(module, tuple(aimet_torch.utils.modules_to_treat_as_leaf)):
             recursive_parsing_needed = False
 
