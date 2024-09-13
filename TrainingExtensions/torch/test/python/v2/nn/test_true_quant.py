@@ -41,10 +41,10 @@ from packaging import version
 
 import pytest
 import torch
-from torch import randn, randint, zeros, full, arange, ones
+from torch import randn, randint, zeros, full, arange, ones, tensor
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils._pytree import tree_map, tree_flatten
+from torch.utils._pytree import tree_flatten
 from torch.overrides import get_ignored_functions
 from aimet_torch.v2.quantization.affine.backends import quantize, quantize_dequantize, dequantize
 from aimet_torch.v2.quantization.affine import Quantize, QuantizeDequantize
@@ -67,7 +67,7 @@ from aimet_torch.v2.nn import (
 from aimet_torch.v2.nn.fake_quant import _legacy_impl
 from aimet_torch.v2.nn.true_quant import _dispatch, _dispatch_table
 from aimet_torch.v2.quantization.affine import AffineEncoding
-from aimet_torch.v2.quantization.tensor import QuantizedTensorBase, QuantizedTensor, DequantizedTensor
+from aimet_torch.v2.quantization.tensor import QuantizedTensor, DequantizedTensor
 from aimet_torch.v2.utils import enable_recompute
 from aimet_torch.v2.nn import custom
 
@@ -886,8 +886,8 @@ def _create_quantized_module(module):
 [
     (lambda: custom.Sin(),                            lambda: randn(100)),
     (lambda: custom.Cos(),                            lambda: randn(100)),
-    (lambda: custom.AvgPool2d(),                      lambda: (randn(1,10,10), 2)),
-    (lambda: custom.Reshape(),                        lambda: (randn(10,10), (100, 1))),
+    (lambda: custom.AvgPool2d(),                      lambda: (randn(1,10,10), (tensor(2),))),
+    (lambda: custom.Reshape(),                        lambda: (randn(10,10), (tensor(100), tensor(1)))),
     (lambda: custom.RSqrt(),                          lambda: randn(100).abs()),
     (lambda: custom.Add(),                            lambda: (randn(100), randn(100))),
     (lambda: custom.Multiply(),                       lambda: (randn(100), randn(100))),
@@ -895,7 +895,7 @@ def _create_quantized_module(module):
     (lambda: custom.Divide(),                         lambda: (randn(100), randn(100))),
     (lambda: custom.Concat(),                         lambda: (randn(1, 100), randn(3, 100))),
 ]))
-def test_default_kernel_abtest(module_factory, input_factory):
+def test_default_kernels(module_factory, input_factory):
     module = module_factory()
     inputs = input_factory()
 
@@ -926,6 +926,18 @@ def test_default_kernel_abtest(module_factory, input_factory):
     torch.manual_seed(0)
     out = qmodule(*inputs)
 
-    for out, fout in zip(tree_flatten(out)[0], tree_flatten(fout)[0]):
-        assert torch.equal(out, fout)
-        assert torch.all(out.isfinite())
+    for out_, fout_ in zip(tree_flatten(out)[0], tree_flatten(fout)[0]):
+        assert torch.equal(out_, fout_)
+        assert torch.all(out_.isfinite())
+
+    """
+    When: Trace a quantized modules with torch.jit.trace
+    Then: 1) Tracing shouldn't fail
+          2) The traced module should produce the same output as the original module
+    """
+    traced = torch.jit.trace(qmodule, inputs)
+    torch.manual_seed(0)
+    tout = traced(*inputs)
+
+    for out_, tout_ in zip(tree_flatten(out)[0], tree_flatten(tout)[0]):
+        assert torch.equal(out_, tout_)

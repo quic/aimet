@@ -874,7 +874,9 @@ class QuantizedFeatureAlphaDropout(_DispatchMixin, QuantizationMixin, nn.Feature
 @QuantizationMixin.implements(nn.Flatten)
 class QuantizedFlatten(_DispatchMixin, QuantizationMixin, nn.Flatten):
     """ Quantized Flatten """
-    _builtin_torch_fn = Tensor.flatten
+    def _get_builtin_torch_fn(self):
+        return Tensor.flatten
+
     __quant_init__ = __unary__
 
 
@@ -1836,7 +1838,8 @@ class QuantizedTripletMarginWithDistanceLoss(_DispatchMixin, QuantizationMixin, 
 @QuantizationMixin.implements(nn.Unflatten)
 class QuantizedUnflatten(_DispatchMixin, QuantizationMixin, nn.Unflatten):
     """ Quantized Unflatten """
-    _builtin_torch_fn = Tensor.unflatten
+    def _get_builtin_torch_fn(self):
+        return Tensor.unflatten
 
 
 @QuantizationMixin.implements(nn.Unfold)
