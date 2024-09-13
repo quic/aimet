@@ -202,12 +202,15 @@ class ExportableQuantModule(Protocol):
 
 # Types of modules which cannot be quantized
 unquantizable_modules = (
+    torch.nn.Identity,
+)
+
+quantized_modules = (
     QcQuantizeWrapper,
     QcQuantizeStandAloneBase,
     QcQuantizeRecurrent,
     ExportableQuantModule,
-    torch.nn.Identity,
-    LazyQuantizeWrapper
+    LazyQuantizeWrapper,
 )
 
 
@@ -1389,20 +1392,6 @@ class QuantizationSimModel:
                 quantized_layers.append((name, module))
         return quantized_layers
 
-    @staticmethod
-    def _is_quantizable_module(module_ref):
-        """ Function to check if a module is eligible for quantization.
-            If the module is NOT an PyTorch module type or if the module was already
-            Quantized or if the module is in the layers_to_ignore list, don't quantize.
-        """
-
-        if isinstance(module_ref, unquantizable_modules):
-            logger.debug("Module %s not quantizable", module_ref)
-            return False
-
-        logger.debug("Module %s is quantizable", module_ref)
-        return True
-
     def _create_quantizer_module(self, module_to_quantize: torch.nn.Module, num_inout_tensors: Dict,
                                  data_type: QuantizationDataType) -> torch.nn.Module:
         """Instantiates wrapper based on quant scheme
@@ -1432,25 +1421,30 @@ class QuantizationSimModel:
 
         return quantized_module
 
+    @classmethod
+    def _is_quantizable_module(cls, module: torch.nn.Module):
+        # pylint: disable=unidiomatic-typecheck
+        return type(module) != torch.nn.Module and\
+               not isinstance(module, unquantizable_modules) and\
+               not cls._is_quantized_module(module)
+
+    @classmethod
+    def _is_quantized_module(cls, module: torch.nn.Module):
+        return isinstance(module, quantized_modules)
+
     def _add_quantization_wrappers(self, module, num_inout_tensors, default_data_type: QuantizationDataType):
         """Recursively add quantization wrappers to all appropriate modules starting with module
         """
+        if self._is_quantized_module(module):
+            return
+
         for module_name, module_ref in module.named_children():
             logger.debug("nn.Module found : %s", module_ref)
 
-            # check if the module already quantized then ignore
-            if not self._is_quantizable_module(module_ref):
-                continue
-
-            # check if the module is leaf or not
-            if utils.is_leaf_module(module_ref):
-
+            if self._is_quantizable_module(module_ref) and utils.is_leaf_module(module_ref):
                 # Create a new QcQuantize wrapper module
                 quantized_module = self._create_quantizer_module(module_ref, num_inout_tensors, default_data_type)
-
                 setattr(module, module_name, quantized_module)
-
-            # recursively call children modules
             else:
                 self._add_quantization_wrappers(module_ref, num_inout_tensors, default_data_type)
 

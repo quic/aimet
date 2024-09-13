@@ -51,7 +51,7 @@ from aimet_torch.v2.quantization.encoding_analyzer import PercentileEncodingAnal
 from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.affine import AffineQuantizerBase, GroupedBlockQuantizeDequantize
 from aimet_torch.v2.experimental import propagate_output_encodings
-from aimet_torch.v2.nn import BaseQuantizationMixin
+from aimet_torch.v2.nn import BaseQuantizationMixin, QuantizedConv2d
 import aimet_torch.v2.nn.modules.custom as custom
 from ..models_ import test_models
 
@@ -821,6 +821,20 @@ class TestQuantsim:
         sim = QuantizationSimModel(model, dummy_input=torch.randn(10, 10))
         assert len(sim.model.rnn.output_quantizers) == 2
         assert type(sim.model.rnn.output_quantizers[0]) is type(sim.model.rnn.output_quantizers[1])
+
+    def test_quantsim_with_abstract_modules(self):
+        """
+        Given: A model with an abstract nn.Module
+        When: Instantiate quantsim
+        Then: 1) No error is not raised
+              2) Abstract modules stay unchanged
+              3) If the abstract module contains non-abstract child modules,
+                 the child modules should be converted to quantized modules.
+        """
+        model = test_models.ModelWithAbstractModule()
+        sim = QuantizationSimModel(model, dummy_input=torch.randn(1, 3, 10, 10))
+        assert type(sim.model.module) == torch.nn.Module
+        assert isinstance(sim.model.module.conv, QuantizedConv2d)
 
     def test_export_concat_encodings(self):
         num_inputs = 3
