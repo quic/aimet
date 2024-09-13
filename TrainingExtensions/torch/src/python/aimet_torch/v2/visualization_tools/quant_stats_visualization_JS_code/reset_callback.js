@@ -108,12 +108,16 @@ table_data_source.data["maxlist"] = table_maxlist;
 table_data_source.selected.indices = [];
 data_source.data["selected"] = Array(data_source.data["idx"].length).fill(false);
 
-selected_data_source.data["idx"] = [];
-selected_data_source.data["namelist"] = [];
 selected_data_source.data["floor"] = [];
 selected_data_source.data["ceil"] = [];
-selected_data_source.data["minlist"] = [];
-selected_data_source.data["maxlist"] = [];
+
+for (let j = 0; j < selection_columns.length; j++) {
+    selected_data_source.data[selection_columns[j]] = [];
+}
+
+if (mode == "advanced") {
+    boxplot.x_range.factors = [];
+}
 
 // Emitting the changes made to ColumnDataSources
 limits_source.change.emit();

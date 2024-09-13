@@ -56,3 +56,27 @@ function findMax(a, b) {
     }
     return b;
 }
+
+function arrayMin(arr) {
+    var min;
+    arr.forEach((val, index) => {
+        if (index==0) {
+            min = val;
+        } else {
+            min = findMin(val, min);
+        }
+    })
+    return min;
+}
+
+function arrayMax(arr) {
+    var max;
+    arr.forEach((val, index) => {
+        if (index==0) {
+            max = val;
+        } else {
+            max = findMax(val, max);
+        }
+    })
+    return max;
+}
