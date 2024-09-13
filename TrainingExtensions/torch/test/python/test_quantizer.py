@@ -74,6 +74,7 @@ from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.quantsim import QuantizationSimModel, check_accumulator_overflow, load_encodings_to_sim, \
     has_valid_encodings, compute_encodings_for_sims
 from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
+from aimet_torch.nn.modules.custom import DynamicConv2d
 
 from models import test_models
 
@@ -5379,3 +5380,23 @@ def _assert_same_results_with_or_without_recompute(wrapper: LearnedGridQuantWrap
     assert weight_grad.equal(weight_grad_with_recompute)
     assert min_grad.equal(min_grad_with_recompute)
     assert max_grad.equal(max_grad_with_recompute)
+
+
+class _DynamicConv2dModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv = DynamicConv2d()
+
+    def forward(self, input, weight, bias=None):
+        return self.conv(input, weight, bias)
+
+def test_dynamic_conv2d_export():
+    model = _DynamicConv2dModel()
+    dummy_input = (torch.randn(1, 3, 10, 10), # input
+                   torch.randn(3, 3, 3, 3))   # weight
+    sim = QuantizationSimModel(model, dummy_input)
+    sim.compute_encodings(lambda model, _: model(*dummy_input), None)
+
+    # Shouldn't throw error during export
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        sim.export(tmp_dir, "dynamic_conv", dummy_input)
