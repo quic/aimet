@@ -656,10 +656,10 @@ class TestQuantizationSimStaticGrad:
                 return self.layers[2](inputs[0])
 
         model = Net()
-        sim = QuantizationSimModel(model, dummy_input=torch.rand(1, 1, 12, 12),
-                                   quant_scheme=QuantScheme.post_training_tf)
+        with pytest.raises(RuntimeError):
+            sim = QuantizationSimModel(model, dummy_input=torch.rand(1, 1, 12, 12),
+                                       quant_scheme=QuantScheme.post_training_tf)
 
-        self.verify_quantization_wrappers(model, sim.model)
 
     def test_add_quantization_wrappers_with_modulelist_two_deep(self):
         """With a two-deep model using ModuleList"""
@@ -691,10 +691,9 @@ class TestQuantizationSimStaticGrad:
                 return self.layers[2](inputs[0])
 
         model = Net()
-        sim = QuantizationSimModel(model, dummy_input=torch.rand(1, 3, 12, 12),
-                                   quant_scheme=QuantScheme.post_training_tf)
-
-        self.verify_quantization_wrappers(model, sim.model)
+        with pytest.raises(RuntimeError):
+            sim = QuantizationSimModel(model, dummy_input=torch.rand(1, 3, 12, 12),
+                                       quant_scheme=QuantScheme.post_training_tf)
 
     def test_add_quantization_wrappers_with_modulelist_with_layers_to_ignore(self):
         """With a two-deep model using ModuleList and layers_to_ignore"""

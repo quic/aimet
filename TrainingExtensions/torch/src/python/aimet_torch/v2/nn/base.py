@@ -209,8 +209,27 @@ class BaseQuantizationMixin(abc.ABC):
         """
 
         def wrapper(quantized_cls):
+            # pylint: disable=import-outside-toplevel
             cls.cls_to_qcls[module_cls] = quantized_cls
             cls.qcls_to_cls[quantized_cls] = module_cls
+
+            # Update the mapping from torch module to onnx op
+            # so v1 connected graph and quantsim configurator can properly handle quantized modules.
+            from aimet_torch.onnx_utils import map_torch_types_to_onnx
+            onnx_type = map_torch_types_to_onnx.get(module_cls, None)
+            if onnx_type:
+                map_torch_types_to_onnx[quantized_cls] = onnx_type
+
+            # Update the mapping from torch module to backend op
+            # so v1 connected graph and quantsim configurator can properly handle quantized modules.
+            # TODO: This unfortunately relies on the **class name** of the module, not the real type
+            #       of the module due to the limitation of v1 implementation.
+            #       Should redefine `aimet_to_to_backend_op_name_map` as `Dict[Type[Module], str]`
+            from aimet_torch.translation_mapping import aimet_op_to_backend_op_name_map
+            backend_op_name = aimet_op_to_backend_op_name_map.get(module_cls.__name__, None)
+            if backend_op_name:
+                aimet_op_to_backend_op_name_map[quantized_cls.__name__] = backend_op_name
+
             return quantized_cls
 
         return wrapper

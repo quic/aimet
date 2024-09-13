@@ -36,6 +36,7 @@
 # =============================================================================
 """ Top level API for performing quantization simulation of a pytorch model """
 
+import copy
 from typing import Union, Tuple, Optional
 import warnings
 import itertools
@@ -44,11 +45,10 @@ import contextlib
 import torch
 
 from aimet_common.defs import QuantScheme, QuantizationDataType
-from aimet_torch.v1.quantsim import QuantizationSimModel as V1QuantizationSimModel, logger
-import aimet_torch.v1.quantsim as quantsim_v1
+from aimet_torch.v1.quantsim import QuantizationSimModel as V1QuantizationSimModel, logger, unquantizable_modules, quantized_modules
 from aimet_torch.v2 import nn as aimet_nn
-from aimet_torch.v2.nn import QuantizationMixin
-from aimet_torch.v2.nn import BaseQuantizationMixin
+from aimet_torch.v2.nn import BaseQuantizationMixin, QuantizationMixin
+from aimet_torch.v2.nn.fake_quant import _legacy_impl
 from aimet_torch.quantsim_config.builder import LazyQuantizeWrapper
 from aimet_torch.v2.quantization.base import QuantizerBase
 from aimet_torch.v2.quantization.affine import AffineQuantizerBase
@@ -59,11 +59,36 @@ from aimet_torch.utils import deprecated, _red
 from aimet_torch.v2.deepspeed_utils import _register_zero3_forward_hooks
 
 
-qc_quantize_modules_dict = {
-    torch.nn.RNN: LazyQuantizeWrapper,
-    torch.nn.LSTM: LazyQuantizeWrapper,
-    torch.nn.GRU: LazyQuantizeWrapper,
-}
+unquantizable_modules = (QuantizerBase, *unquantizable_modules)
+quantized_modules = (BaseQuantizationMixin, *quantized_modules)
+containers = (
+    torch.nn.Container,
+    torch.nn.Sequential,
+    torch.nn.ModuleList,
+    torch.nn.ModuleDict,
+    torch.nn.ParameterList,
+    torch.nn.ParameterDict,
+)
+
+
+def _convert_to_qmodule(module: torch.nn.Module):
+    """
+    Helper function to convert all modules to quantized aimet.nn modules.
+    """
+    if not isinstance(module, (*quantized_modules, *unquantizable_modules, *containers)):
+        try:
+            module = QuantizationMixin.from_module(module)
+        except RuntimeError as e:
+            try:
+                module = _legacy_impl.FakeQuantizationMixin.from_module(module)
+            except RuntimeError:
+                if not tuple(module.children()):
+                    raise e # pylint: disable=raise-missing-from
+
+    for name, child in module.named_children():
+        setattr(module, name, _convert_to_qmodule(child))
+
+    return module
 
 
 class QuantizationSimModel(V1QuantizationSimModel):
@@ -97,6 +122,19 @@ class QuantizationSimModel(V1QuantizationSimModel):
                               DeprecationWarning, stacklevel=2)
             else:
                 raise TypeError("'rounding_mode' parameter is no longer supported.")
+
+        for module in model.modules():
+            if isinstance(module, BaseQuantizationMixin):
+                raise RuntimeError
+
+            if isinstance(module, QuantizerBase):
+                raise RuntimeError
+
+        if not in_place:
+            model = copy.deepcopy(model)
+            in_place = True
+
+        model = _convert_to_qmodule(model)
 
         with _register_zero3_forward_hooks(model, use_dummy_params=True):
             # NOTE: Register for the model is pre-partitioned by deepspeed zero3 or zero3-offload.
@@ -144,16 +182,6 @@ class QuantizationSimModel(V1QuantizationSimModel):
 
             # Set quantization parameters to the device of the original module
             module.to(device=device)
-
-    @staticmethod
-    def _realize_quant_wrapper(module: LazyQuantizeWrapper) -> BaseQuantizationMixin:
-        """
-        Make wrapper builder into v2 quant wrapper
-
-        :param module: wrapper builder to realize
-        :return: realized v2 quant wrapper
-        """
-        return module.realize_v2_wrapper()
 
     def compute_encodings(self, forward_pass_callback, forward_pass_callback_args):
         """
@@ -219,11 +247,6 @@ class QuantizationSimModel(V1QuantizationSimModel):
         finally:
             for h in handles:
                 h.remove()
-
-    def _create_quantizer_module(self, *args, **kwargs): # pylint: disable=arguments-differ
-        # RNN, LSTM, and GRU don't require special handling in aimet V2
-        with patch_attr(quantsim_v1, 'qc_quantize_modules_dict', qc_quantize_modules_dict):
-            return super()._create_quantizer_module(*args, **kwargs)
 
     def set_percentile_value(self, percentile_value: float):
         """
@@ -299,12 +322,20 @@ class QuantizationSimModel(V1QuantizationSimModel):
     def quant_wrappers(self): # pylint: disable=missing-docstring
         return super().quant_wrappers()
 
-    @classmethod
-    def _is_quantizable_module(cls, module: torch.nn.Module):
-        return super()._is_quantizable_module(module) and\
-               not isinstance(module, QuantizerBase)
+    # Overrides V1QuantizationSimModel._add_quantization_wrappers
+    def _add_quantization_wrappers(self, module, num_inout_tensors, default_data_type):
+        # pylint: disable=protected-access
+        for name, child in module.named_children():
+            if isinstance(child, BaseQuantizationMixin):
+                child_wrapper = self._create_quantizer_module(child, num_inout_tensors, default_data_type)
+                setattr(module, name, child_wrapper)
+                child = child_wrapper._module_to_wrap
+            self._add_quantization_wrappers(child, num_inout_tensors, default_data_type)
 
-    @classmethod
-    def _is_quantized_module(cls, module: torch.nn.Module):
-        return super()._is_quantized_module(module) or\
-               isinstance(module, BaseQuantizationMixin)
+    # Overrides V1QuantizationSimModel._realize_quant_wrappers_in_model
+    def _realize_quant_wrappers_in_model(self, model: torch.nn.Module):
+        for name, child in model.named_children():
+            if isinstance(child, LazyQuantizeWrapper):
+                child = child.realize_v2_wrapper()
+                setattr(model, name, child)
+            self._realize_quant_wrappers_in_model(child)

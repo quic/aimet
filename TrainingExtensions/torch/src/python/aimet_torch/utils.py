@@ -778,7 +778,7 @@ def get_inout_tensor_shape_per_module(model: torch.nn.Module, input_tensor) -> D
 
         inout_tensor_shape_map[module] = (input_tensor_shape_list, output_tensor_shape_list)
 
-    run_hook_for_layers_with_given_input(model, input_tensor, record_tensor_shape)
+    run_hook_for_layers_with_given_input(model, input_tensor, record_tensor_shape, leaf_node_only=False)
     return inout_tensor_shape_map
 
 
