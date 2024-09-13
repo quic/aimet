@@ -231,23 +231,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             return self._module_to_op_dict.get(module, None)
         return None
 
-    def get_all_aten_nodes(self, module: torch.nn.Module,
-                           module_to_jit_trace: Dict[torch.nn.Module, torch.jit.TracedModule]) -> List[torch._C.Node]:
-        """
-        Given PyTorch module, Find all the valid aten nodes in forward pass for given trace of model or submodule.
-
-        :param module: PyTorch module.
-        :param module_to_jit_trace: Dictionary mapping torch modules to their traces
-        :return: List of trace graph nodes if node.kind() starts with "aten::".
-        """
-        try:
-            trace = module_to_jit_trace[module]
-        except:
-            raise KeyError(f"Couldn't find corresponding JIT trace for module : {module}")  # pylint: disable=raise-missing-from
-
-        nodes = self._find_aten_nodes_in_forward_pass(trace)
-        return nodes
-
     def _generate_module_lookup_table(self, model: torch.nn.Module):
         """
         Generates a look up dictionary for getting modules from their names.
@@ -1274,8 +1257,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         return isinstance(module, tuple(MULTI_INPUT_OPS_TO_PARSE))
 
-    @staticmethod
-    def _generate_trace_lookup_table(model: torch.nn.Module,
+    def _generate_trace_lookup_table(self,
+                                     model: torch.nn.Module,
                                      trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule]):
         """
         Generate pytorch module names to corresponding JIT trace dictionary. There will be always one to one
@@ -1303,6 +1286,19 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         module_to_jit_trace = {model: trace}
         # Recursively add children modules and corresponding JIT traces.
         _add_jit_trace(model, trace)
+
+        missing_modules = self._module_to_name.keys() - module_to_jit_trace.keys()
+
+        for m in module_to_jit_trace:
+            if isinstance(m, tuple(aimet_torch.utils.modules_to_treat_as_leaf)):
+                missing_modules -= set(m.modules())
+
+        if missing_modules:
+            missing_modules = ', '.join([
+                self._module_to_name[module] for module in missing_modules
+            ])
+            raise RuntimeError(f"Couldn't find corresponding JIT trace for modules: {missing_modules}")
+
         return module_to_jit_trace
 
     @staticmethod
