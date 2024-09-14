@@ -410,14 +410,11 @@ class QuantizationSimModel:
 
         if len(param_shape) == 1:
             tensor_quantizer_params.channel_axis = 0
-            tensor_quantizer_params.block_axis = -1
+            tensor_quantizer_params.block_axis = None
         else:
             channel_axis, block_axis = self._get_quantization_axes(op)
             tensor_quantizer_params.channel_axis = channel_axis
             tensor_quantizer_params.block_axis = block_axis
-
-        quant_info.channelAxis = tensor_quantizer_params.channel_axis
-        quant_info.blockAxis = tensor_quantizer_params.block_axis
 
         return quant_info, tensor_quantizer_params
 
@@ -437,7 +434,7 @@ class QuantizationSimModel:
             return 0, 1
         if op.type in ['Gemm', 'MatMul']:
             return 1, 0
-        return -1, -1
+        return None, None
 
     def _insert_activation_quantization_nodes(self):
         """

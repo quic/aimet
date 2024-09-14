@@ -50,7 +50,7 @@ class TensorQuantizerParams:
     """
     Per channel quantization parameters
     """
-    def __init__(self, tensor_shape, channel_axis: int = -1, block_axis: int = -1):
+    def __init__(self, tensor_shape, channel_axis: int = None, block_axis: int = None):
         """
 
         :param tensor_shape: Shape of the input tensor
@@ -111,10 +111,13 @@ class QcQuantizeOp:
         """
         Enables per channel quantization for qc_quantize_op
         """
+        assert self.tensor_quantizer_params is not None
+        assert self.tensor_quantizer_params.channel_axis is not None
+        channel_axis = self.tensor_quantizer_params.channel_axis
         self.quant_info.usePerChannelMode = True
-        num_channels = self.tensor_quantizer_params.tensor_shape[self.tensor_quantizer_params.channel_axis]
+        num_channels = self.tensor_quantizer_params.tensor_shape[channel_axis]
         self._create_tensor_quantizers(num_channels)
-        self.quant_info.channelAxis = self.tensor_quantizer_params.channel_axis
+        self.quant_info.channelAxis = channel_axis if channel_axis >= 0 else channel_axis + len(self.tensor_quantizer_params.tensor_shape)
 
     def _create_tensor_quantizers(self, num: int):
         tensor_quantizers = []
@@ -136,6 +139,8 @@ class QcQuantizeOp:
         tensor_shape = self.tensor_quantizer_params.tensor_shape
         block_axis = self.tensor_quantizer_params.block_axis
         channel_axis = self.tensor_quantizer_params.channel_axis
+        assert channel_axis is not None
+        assert block_axis is not None
         assert block_axis != channel_axis
         if tensor_shape[block_axis] % block_size != 0:
             raise ValueError(f"Input shape {tensor_shape} not divisible by block size {block_size} at axis {block_axis}")
@@ -144,8 +149,8 @@ class QcQuantizeOp:
         self._create_tensor_quantizers(num_quantizers)
 
         self.quant_info.usePerChannelMode = True
-        self.quant_info.channelAxis = channel_axis
-        self.quant_info.blockAxis = block_axis
+        self.quant_info.channelAxis = channel_axis if channel_axis >= 0 else channel_axis + len(tensor_shape)
+        self.quant_info.blockAxis = block_axis if block_axis >= 0 else block_axis + len(tensor_shape)
         self.quant_info.blockSize = block_size
 
     @property
