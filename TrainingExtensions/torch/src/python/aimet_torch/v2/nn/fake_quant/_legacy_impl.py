@@ -160,23 +160,6 @@ class FakeQuantizationMixin(BaseQuantizationMixin, metaclass=FakeQuantMeta): # p
         quantized_cls = type(quantized_cls_name, base_classes, {'__module__': __name__})
         return cls.implements(module_cls)(quantized_cls)
 
-    @classmethod
-    def implements(cls, module_cls):
-        """Decorator for registering a fake-quantized implementation of the given base class.
-
-        This decorator registers the defined class as the fake-quantized version of module_cls such that calling
-        :meth:`from_module` on an instance of module_cls will output an instance of the decorated class.
-
-        Args:
-            module_cls: The base :class:`torch.nn.Module` class
-
-        """
-        def wrapper(quantized_cls):
-            cls.cls_to_qcls[module_cls] = quantized_cls
-            cls.qcls_to_cls[quantized_cls] = module_cls
-            return quantized_cls
-        return wrapper
-
 
 class _FakeQuantizedUnaryOpMixin(FakeQuantizationMixin): # pylint: disable=abstract-method
     def forward(self, *args, **kwargs) -> Tensor: # pylint: disable=missing-function-docstring

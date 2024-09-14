@@ -76,6 +76,9 @@ class BaseQuantizationMixin(abc.ABC):
     output_quantizers: nn.ModuleList
     param_quantizers: nn.ModuleDict
 
+    cls_to_qcls: dict
+    qcls_to_cls: dict
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__quant_init__()
@@ -198,6 +201,19 @@ class BaseQuantizationMixin(abc.ABC):
         """
         Wrap a regular module class into a quantized module class
         """
+
+    @classmethod
+    def implements(cls, module_cls):
+        """
+        Decorator for registering quantized implementation of the given base class.
+        """
+
+        def wrapper(quantized_cls):
+            cls.cls_to_qcls[module_cls] = quantized_cls
+            cls.qcls_to_cls[quantized_cls] = module_cls
+            return quantized_cls
+
+        return wrapper
 
     @classmethod
     def from_module(cls, module: nn.Module):

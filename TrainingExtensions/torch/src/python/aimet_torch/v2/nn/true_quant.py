@@ -332,19 +332,6 @@ class QuantizationMixin(BaseQuantizationMixin, metaclass=QuantizationMixinMeta):
         quantized_cls = type(quantized_cls_name, base_classes, {'__module__': __name__})
         return cls.implements(module_cls)(quantized_cls)
 
-    @classmethod
-    def implements(cls, module_cls):
-        """
-        Decorator for registering quantized implementation of the given base class.
-        """
-
-        def wrapper(quantized_cls):
-            cls.cls_to_qcls[module_cls] = quantized_cls
-            cls.qcls_to_cls[quantized_cls] = module_cls
-            return quantized_cls
-
-        return wrapper
-
 
 # pylint: disable=too-many-ancestors
 
