@@ -1072,10 +1072,13 @@ def set_blockwise_quantization_for_weights(sim: QuantizationSimModel,
 
             if "weight" in param_quantizers.keys():
                 weight_quantizer: QcQuantizeOp = param_quantizers["weight"]
-                weight_quantizer.set_bitwidth(bitwidth)
-                weight_quantizer.use_symmetric_encodings = symmetric
+
                 try:
                     weight_quantizer._enable_blockwise_quantization(block_size) # pylint:disable = protected-access
                 except ValueError as e:
                     if strict:
                         raise e
+                else:
+                    weight_quantizer.set_bitwidth(bitwidth)
+                    weight_quantizer.use_symmetric_encodings = symmetric
+                    weight_quantizer.data_type = QuantizationDataType.int
