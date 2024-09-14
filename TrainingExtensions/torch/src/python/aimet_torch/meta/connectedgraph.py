@@ -1290,7 +1290,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         missing_modules = self._module_to_name.keys() - module_to_jit_trace.keys()
 
         for m in module_to_jit_trace:
-            if isinstance(m, tuple(aimet_torch.utils.modules_to_treat_as_leaf)):
+            if is_leaf_module(m):
                 missing_modules -= set(m.modules())
 
         if missing_modules:
