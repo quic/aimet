@@ -2,14 +2,14 @@
 
 
 ======================
-AIMET BN Re-estimation
+AIMET Batch Normal Re-estimation
 ======================
 
 Overview
 ========
 
-The BN Re-estimation feature utilizes a small subset of training data to individually re-estimate the statistics of the
-Batch Normalization (BN) layers in a model. These BN statistics are then used to adjust the quantization scale parameters
+The Batch Normal (BN) re-estimation feature utilizes a small subset of training data to individually re-estimate the statistics of the
+BN layers in a model. These BN statistics are then used to adjust the quantization scale parameters
 of the preceeding Convolution or Linear layers. Effectively, the BN layers are folded.
 
 The BN Re-estimation feature is applied after performing Quantization Aware Training (QAT) with Range Learning, with
